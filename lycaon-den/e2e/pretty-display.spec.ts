@@ -1,0 +1,372 @@
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import { expect, type Locator, type Page } from "@playwright/test";
+import { modelIndependentWebE2e, openProjectFilesFixture } from "./helpers.ts";
+
+// One-line JSON arrays whose every seventh item carries a long name, so some
+// visual lines wrap.
+function oneLineJson(items: number): string {
+  const out: string[] = [];
+  for (let i = 0; i < items; i++) {
+    const long = i % 7 === 0 ? "lorem ipsum ".repeat(14) : "";
+    out.push(`{"id":${i},"name":"item ${i} ${long}","tags":["a","b"]}`);
+  }
+  return `[${out.join(",")}]`;
+}
+
+const ITEMS_200_KB = 2_800;
+const ITEMS_1_MB = 14_000;
+
+type Probe = { content: Locator; scroller: Locator };
+
+async function openPretty(page: Page, request: Parameters<typeof openProjectFilesFixture>[1], items: number): Promise<Probe> {
+  const name = `one-line-${items}.json`;
+  const { project } = await openProjectFilesFixture(page, request, {
+    prefix: "pretty-display",
+    name: "Pretty display",
+    seed: (root) => writeFileSync(path.join(root, name), oneLineJson(items)),
+  });
+  await page.getByTestId("files-tree-file").filter({ hasText: name }).click();
+  const host = page.getByTestId("files-editor-host");
+  const content = host.locator(".cm-content");
+  await expect(content).toBeEditable();
+  await page.evaluate(async (projectId) => {
+    const host = await import(/* @vite-ignore */ "/src/files/editor/files-editor-host.ts") as typeof import("../src/files/editor/files-editor-host.ts");
+    const buffers = await import(/* @vite-ignore */ "/src/files/documents/files-buffer-state.ts") as typeof import("../src/files/documents/files-buffer-state.ts");
+    const pretty = await import(/* @vite-ignore */ "/src/components/source/pretty/pretty-view.ts") as typeof import("../src/components/source/pretty/pretty-view.ts");
+    const view = () => host.getFilesEditorView(projectId, buffers.projectFilesState(projectId).activeKey!)!;
+    const breaksIn = (from: number, to: number): number[] => {
+      const out: number[] = [];
+      view().state.facet(pretty.prettyLayoutDecorations).between(from, to, (at, end, value) => {
+        if (at === end && value.spec.widget instanceof pretty.PrettyBreakWidget) out.push(at);
+      });
+      return out;
+    };
+    Object.assign(window, { __pretty: { view, breaksIn, visualLineAt: pretty.prettyVisualLineAt, active: pretty.prettyLayoutActive } });
+  }, project.id);
+  await page.getByTestId("files-editor-pretty-toggle").click();
+  await expect(page.getByTestId("files-editor-pretty-toggle")).toHaveAttribute("aria-pressed", "true");
+  await content.focus();
+  return { content, scroller: host.locator(".cm-scroller") };
+}
+
+type PrettyProbe = {
+  view: () => import("@codemirror/view").EditorView;
+  breaksIn: (from: number, to: number) => number[];
+  visualLineAt: typeof import("../src/components/source/pretty/pretty-view.ts").prettyVisualLineAt;
+  active: typeof import("../src/components/source/pretty/pretty-view.ts").prettyLayoutActive;
+};
+declare global {
+  interface Window { __pretty: PrettyProbe }
+}
+
+const settle = (page: Page) => page.evaluate(() => new Promise<void>((resolve) =>
+  requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+
+async function selection(page: Page) {
+  return page.evaluate(() => {
+    const { main } = window.__pretty.view().state.selection;
+    return { anchor: main.anchor, head: main.head, assoc: main.assoc };
+  });
+}
+
+async function caretTop(page: Page): Promise<number> {
+  await settle(page);
+  return page.evaluate(() => window.__pretty.view().dom.querySelector(".cm-cursor")!.getBoundingClientRect().top);
+}
+
+async function place(page: Page, pos: number) {
+  await page.evaluate((pos) => {
+    window.__pretty.view().dispatch({ selection: { anchor: pos }, scrollIntoView: true });
+  }, pos);
+  await settle(page);
+}
+
+/** Break positions in the rendered viewport, with the characters on each side. */
+async function viewportBreaks(page: Page) {
+  return page.evaluate(() => {
+    const view = window.__pretty.view();
+    const doc = view.state.doc;
+    return window.__pretty.breaksIn(view.viewport.from, view.viewport.to).map((pos) => ({
+      pos,
+      before: doc.sliceString(pos - 1, pos),
+      after: doc.sliceString(pos, pos + 1),
+      line: window.__pretty.visualLineAt(view.state, pos, -1),
+    }));
+  });
+}
+
+async function coords(page: Page, pos: number, side: -1 | 1) {
+  return page.evaluate(({ pos, side }) => {
+    const rect = window.__pretty.view().coordsAtPos(pos, side);
+    return rect && { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom };
+  }, { pos, side });
+}
+
+modelIndependentWebE2e("lays a long one-line document out under soft wrapping", async ({ page, request }) => {
+  const { content } = await openPretty(page, request, 4_000);
+  const facts = await page.evaluate(() => {
+    const view = window.__pretty.view();
+    return {
+      active: view.state.facet(window.__pretty.active),
+      wrap: getComputedStyle(view.contentDOM).whiteSpace,
+      lineNumberOnes: [...view.dom.querySelectorAll(".cm-lineNumbers .cm-gutterElement")]
+        .filter((element) => element.textContent === "1").length,
+    };
+  });
+  expect(facts.active).toBe(true);
+  expect(["pre-wrap", "break-spaces"]).toContain(facts.wrap);
+  expect(facts.lineNumberOnes).toBe(1);
+  await expect(page.getByTestId("files-editor-wrap-toggle")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("files-editor-wrap-toggle")).toBeDisabled();
+  await expect(content).toBeFocused();
+});
+
+modelIndependentWebE2e("places the caret at every kind of visual line end by pointer", async ({ page, request }) => {
+  await openPretty(page, request, 4_000);
+  await place(page, 0);
+  const breaks = await viewportBreaks(page);
+  const pick = (test: (b: (typeof breaks)[number]) => boolean, label: string) => {
+    const found = breaks.find((b) => test(b) && b.line.to - b.line.from < 60);
+    expect(found, label).toBeTruthy();
+    return found!;
+  };
+  const cases = [
+    pick((b) => b.before === "[" || b.before === "{", "after an opener"),
+    pick((b) => b.before === ",", "after a separator"),
+    pick((b) => (b.after === "}" || b.after === "]") && b.before !== "}" && b.before !== "]", "after a value"),
+    pick((b) => b.before === "]" || b.before === "}", "after a closer"),
+  ];
+  for (const b of cases) {
+    const end = await coords(page, b.pos, -1);
+    expect(end).not.toBeNull();
+    await page.mouse.click(end!.right + 40, (end!.top + end!.bottom) / 2);
+    expect(await selection(page), `trailing click at ${b.pos}`).toMatchObject({ head: b.pos, anchor: b.pos, assoc: -1 });
+    expect(Math.abs((await caretTop(page)) - end!.top)).toBeLessThan(3);
+
+    const start = await coords(page, b.pos, 1);
+    await page.mouse.click(start!.left + 1, (start!.top + start!.bottom) / 2);
+    expect(await selection(page), `leading click at ${b.pos}`).toMatchObject({ head: b.pos, assoc: 1 });
+    expect(Math.abs((await caretTop(page)) - start!.top)).toBeLessThan(3);
+    expect(start!.top).toBeGreaterThan(end!.top);
+  }
+
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+  await settle(page);
+  const length = await page.evaluate(() => window.__pretty.view().state.doc.length);
+  const last = await coords(page, length, -1);
+  await page.mouse.click(last!.right + 40, (last!.top + last!.bottom) / 2);
+  expect((await selection(page)).head).toBe(length);
+});
+
+modelIndependentWebE2e("edits at visual line ends and drags across breaks", async ({ page, request }) => {
+  await openPretty(page, request, 4_000);
+  await place(page, 0);
+  const b = (await viewportBreaks(page)).find((x) => x.before === "," && x.line.to - x.line.from < 60)!;
+  const end = await coords(page, b.pos, -1);
+  await page.mouse.click(end!.right + 40, (end!.top + end!.bottom) / 2);
+  const before = await page.evaluate(() => window.__pretty.view().state.doc.toString());
+  await page.keyboard.type("7");
+  expect(await page.evaluate((pos) => window.__pretty.view().state.doc.sliceString(pos, pos + 1), b.pos)).toBe("7");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  expect(await page.evaluate((pos) => window.__pretty.view().state.doc.sliceString(pos - 1, pos + 1), b.pos)).not.toContain(",");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
+  await expect.poll(() => page.evaluate(() => window.__pretty.view().state.doc.toString())).toBe(before);
+
+  await place(page, 0);
+  const breaks = await viewportBreaks(page);
+  const from = breaks[2]!.pos + 2;
+  const to = breaks[8]!.pos + 2;
+  for (const [anchor, head] of [[from, to], [to, from]] as const) {
+    const a = await coords(page, anchor, 1);
+    const h = await coords(page, head, 1);
+    await page.mouse.move(a!.left + 1, (a!.top + a!.bottom) / 2);
+    await page.mouse.down();
+    await page.mouse.move(h!.left + 1, (h!.top + h!.bottom) / 2, { steps: 12 });
+    await page.mouse.up();
+    expect(await selection(page)).toMatchObject({ anchor, head });
+  }
+});
+
+modelIndependentWebE2e("moves by visual rows and stops line keys at the visual line", async ({ page, request }) => {
+  const { content } = await openPretty(page, request, 4_000);
+  await place(page, 0);
+  const breaks = await viewportBreaks(page);
+  const short = breaks.find((b) => b.before === "," && b.line.to - b.line.from > 8 && b.line.to - b.line.from < 40)!;
+  const startPos = short.line.from + 3;
+  const start = await coords(page, startPos, 1);
+  await page.mouse.click(start!.left + 1, (start!.top + start!.bottom) / 2);
+  expect((await selection(page)).head).toBe(startPos);
+
+  let top = await caretTop(page);
+  for (let i = 0; i < 6; i++) {
+    await page.keyboard.press("ArrowDown");
+    const next = await caretTop(page);
+    expect(next).toBeGreaterThan(top);
+    top = next;
+  }
+  for (let i = 0; i < 6; i++) await page.keyboard.press("ArrowUp");
+  expect((await selection(page)).head).toBe(startPos);
+
+  for (const key of ["End", "End", "End"]) {
+    await page.keyboard.press(key);
+    expect((await selection(page)).head).toBe(short.line.to);
+  }
+  for (const key of ["Home", "Home", "Home"]) {
+    await page.keyboard.press(key);
+    expect((await selection(page)).head).toBe(short.line.from);
+  }
+  await page.mouse.click(start!.left + 1, (start!.top + start!.bottom) / 2);
+  await page.keyboard.press("Shift+End");
+  await page.keyboard.press("Shift+End");
+  expect(await selection(page)).toMatchObject({ anchor: startPos, head: short.line.to });
+  if (process.platform === "darwin") {
+    await page.mouse.click(start!.left + 1, (start!.top + start!.bottom) / 2);
+    await page.keyboard.press("Meta+ArrowRight");
+    expect((await selection(page)).head).toBe(short.line.to);
+    await page.keyboard.press("Meta+ArrowLeft");
+    expect((await selection(page)).head).toBe(short.line.from);
+  }
+
+  const wrapped = await page.evaluate(() => {
+    const view = window.__pretty.view();
+    for (const pos of window.__pretty.breaksIn(view.viewport.from, view.viewport.to)) {
+      const line = window.__pretty.visualLineAt(view.state, pos, 1);
+      const first = view.coordsAtPos(line.from, 1);
+      const last = view.coordsAtPos(line.to, -1);
+      if (first && last && last.top - first.top > 4) return line;
+    }
+    return null;
+  });
+  expect(wrapped, "a visual line that wraps").not.toBeNull();
+  const first = await coords(page, wrapped!.from, 1);
+  await page.mouse.click(first!.left + 1, (first!.top + first!.bottom) / 2);
+  await page.keyboard.press("End");
+  const rowEnd = (await selection(page)).head;
+  expect(rowEnd).toBeGreaterThan(wrapped!.from);
+  expect(rowEnd).toBeLessThan(wrapped!.to);
+  await page.keyboard.press("End");
+  expect((await selection(page)).head).toBe(wrapped!.to);
+  await page.keyboard.press("End");
+  expect((await selection(page)).head).toBe(wrapped!.to);
+
+  const rows = await page.evaluate((from) => {
+    const view = window.__pretty.view();
+    const { node } = view.domAtPos(from + 1);
+    const element = (node instanceof Element ? node : node.parentElement)!.closest(".pw-pretty-line")!;
+    return [...element.getClientRects()].map((rect) => rect.left);
+  }, wrapped!.from);
+  expect(rows.length).toBeGreaterThan(1);
+  for (const left of rows) expect(Math.abs(left - rows[0]!)).toBeLessThan(1.5);
+  await expect(content).toBeFocused();
+});
+
+modelIndependentWebE2e("shades exactly the visual line holding the caret", async ({ page, request }) => {
+  await openPretty(page, request, 4_000);
+  await place(page, 0);
+  const breaks = await viewportBreaks(page);
+  for (const b of [breaks[3]!, breaks[9]!]) {
+    const start = await coords(page, b.pos, 1);
+    await page.mouse.click(start!.left + 1, (start!.top + start!.bottom) / 2);
+    await settle(page);
+    const shade = await page.evaluate((pos) => {
+      const view = window.__pretty.view();
+      const markers = [...view.dom.querySelectorAll(".pw-pretty-active-line")];
+      const line = window.__pretty.visualLineAt(view.state, pos, 1);
+      const rect = markers[0]?.getBoundingClientRect();
+      const first = view.coordsAtPos(line.from, 1)!;
+      const last = view.coordsAtPos(line.to, -1)!;
+      const activeLine = view.dom.querySelector(".cm-activeLine");
+      return {
+        count: markers.length,
+        top: rect ? rect.top - first.top : null,
+        bottom: rect ? rect.bottom - last.bottom : null,
+        width: rect ? rect.width - view.contentDOM.clientWidth : null,
+        sourceLineBackground: activeLine ? getComputedStyle(activeLine).backgroundColor : "none",
+      };
+    }, b.pos);
+    expect(shade.count).toBe(1);
+    expect(Math.abs(shade.top!)).toBeLessThan(3);
+    expect(Math.abs(shade.bottom!)).toBeLessThan(3);
+    expect(Math.abs(shade.width!)).toBeLessThan(2);
+    expect(["none", "rgba(0, 0, 0, 0)", "transparent"]).toContain(shade.sourceLineBackground);
+  }
+});
+
+modelIndependentWebE2e("keeps the selection and brings it into view across toggles", async ({ page, request }) => {
+  const { content } = await openPretty(page, request, 2_600);
+  const length = await page.evaluate(() => window.__pretty.view().state.doc.length);
+  const visible = () => page.evaluate(() => {
+    const view = window.__pretty.view();
+    const rect = view.coordsAtPos(view.state.selection.main.head);
+    const port = view.scrollDOM.getBoundingClientRect();
+    return Boolean(rect && rect.bottom > port.top && rect.top < port.bottom);
+  });
+  const toggles: Array<() => Promise<void>> = [
+    () => page.getByTestId("files-editor-pretty-toggle").click(),
+    async () => { await content.focus(); await page.keyboard.press("Alt+KeyP"); },
+  ];
+  for (const fraction of [0.3, 0.5, 0.9]) {
+    for (const toggle of toggles) {
+      const pos = Math.round(length * fraction);
+      await page.evaluate((pos) => {
+        const view = window.__pretty.view();
+        view.dispatch({ selection: { anchor: pos - 5, head: pos }, scrollIntoView: true });
+      }, pos);
+      await settle(page);
+      const before = await selection(page);
+      const docBefore = await page.evaluate(() => window.__pretty.view().state.doc.length);
+      for (let i = 0; i < 2; i++) {
+        await toggle();
+        expect(await selection(page)).toMatchObject({ anchor: before.anchor, head: before.head });
+        await expect.poll(visible, { timeout: 5_000 }).toBe(true);
+      }
+      expect(await page.evaluate(() => window.__pretty.view().state.doc.length)).toBe(docBefore);
+    }
+  }
+});
+
+for (const wrapPref of [false, true]) {
+  modelIndependentWebE2e(`renders source text at every scroll position (Wrap ${wrapPref ? "on" : "off"})`, async ({ page, request }) => {
+    const nodes: number[] = [];
+    for (const items of [ITEMS_200_KB, ITEMS_1_MB]) {
+      const { scroller } = await openPretty(page, request, items);
+      await page.evaluate(async (wrap) => {
+        const prefs = await import(/* @vite-ignore */ "/src/settings/editor/editor-prefs.ts") as typeof import("../src/settings/editor/editor-prefs.ts");
+        await prefs.saveEditorWordWrap(wrap);
+      }, wrapPref);
+      for (const fraction of [0, 0.5, 1]) {
+        await scroller.evaluate((element, fraction) => {
+          element.scrollTop = (element.scrollHeight - element.clientHeight) * fraction;
+        }, fraction);
+        await settle(page);
+        await settle(page);
+        const mismatches = await page.evaluate(() => {
+          const view = window.__pretty.view();
+          const doc = view.state.doc;
+          const bad: string[] = [];
+          for (const line of view.contentDOM.querySelectorAll(".cm-line")) {
+            const text = line.textContent ?? "";
+            if (!text) continue;
+            const from = view.posAtDOM(line, 0);
+            if (doc.sliceString(from, from + text.length) !== text) bad.push(`${from}`);
+          }
+          return bad;
+        });
+        expect(mismatches, `at ${fraction}`).toEqual([]);
+      }
+      await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+      await expect.poll(() => page.evaluate(() => {
+        const view = window.__pretty.view();
+        const head = view.state.selection.main.head;
+        const rect = view.coordsAtPos(head);
+        const port = view.scrollDOM.getBoundingClientRect();
+        return head === view.state.doc.length && Boolean(rect && rect.top < port.bottom && rect.bottom > port.top);
+      }), { timeout: 5_000 }).toBe(true);
+      nodes.push(await page.evaluate(() => window.__pretty.view().contentDOM.querySelectorAll("*").length));
+    }
+    expect(nodes[1]!).toBeLessThan(nodes[0]! * 2 + 2_000);
+  });
+}
