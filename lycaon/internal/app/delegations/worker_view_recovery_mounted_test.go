@@ -14,6 +14,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -144,7 +145,9 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	testutil.FailErr(t, "production coordinator", err)
 	next := f.boot()
 	next.Recovery = coordinator
-	next.Workspace = workspace.NewManager(next.BranchRoot).WithRecovery(coordinator)
+	// The restarted engine selects as production does, with view confinement enforced.
+	confine.TestingSetAutoConfine(t)
+	next.Workspace = workspace.NewManager(next.BranchRoot).WithRecovery(coordinator).WithSelector(workspace.EnforcedWorkspaceSelector())
 	next.Queue.SetWorkerWorkspaceManager(next.Workspace)
 	testutil.FailErr(t, "startup recovery", next.RecoverWorkerViews(t.Context()))
 
