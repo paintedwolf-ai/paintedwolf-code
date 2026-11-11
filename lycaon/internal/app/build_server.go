@@ -265,8 +265,7 @@ func wireFileBriefings(b *serveBuilder, deps *api.Dependencies) error {
 	}
 	deps.Source.FileBriefings = filebriefing.NewService(b.startup.ctx, filebriefing.Dependencies{
 		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.providers.Service, b.sessions.Manager.Coordinator.Model.Cost),
-		Events: b.events.Hub, Settings: b.settings.Service.FileSummaries, Logger: b.startup.logger,
-		Scheduler: b.providers.Briefings.Scheduler, Records: b.providers.Briefings.Store,
+		Events: b.events.Hub, Settings: b.settings.Service.FileSummaries, Logger: b.startup.logger, Scheduler: b.providers.Briefings.Scheduler, Records: b.providers.Briefings.Store,
 	})
 	return nil
 }

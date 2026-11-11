@@ -65,7 +65,7 @@ const (
 	CodeInterrupted      = "interrupted"
 )
 
-// Attempts owns target state. Complete and Fail apply only for the active
+// Attempts keeps target state. Complete and Fail apply only for the active
 // attempt in the current epoch, so a superseded attempt cannot publish over
 // its successor or resurrect a purged target.
 type Attempts interface {

@@ -17,8 +17,8 @@ import (
 const PurposeSectionID = "purpose"
 
 // purposeTemplate names the action_purpose question; bump Version whenever
-// either rationale template changes. The question, not the asking profile,
-// owns the manifest, so an approval and a later step asking it of the same
+// either rationale template changes. The manifest names the question, not the
+// asking profile, so an approval and a later step asking it of the same
 // material share one result.
 var purposeTemplate = Template{ID: "action_purpose", Version: "2"}
 

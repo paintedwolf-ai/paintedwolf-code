@@ -88,7 +88,7 @@ func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, m
 	outcome := Outcome{
 		ProjectID: briefing.ProjectID, RootID: briefing.RootID, Path: briefing.Path, TargetKey: briefing.TargetKey,
 		AttemptID: briefing.AttemptID, Sections: sections, Truncated: truncated, UpdatedAt: time.Now().UTC(),
-		RecordID: s.recordSummary(ctx, briefing, material.Manifest, generatedText, truncated),
+		RecordID: s.recorder.record(ctx, briefing, material.Manifest, generatedText, truncated),
 	}
 	if err := s.store.Complete(ctx, outcome); err != nil {
 		if !errors.Is(err, ErrNotFound) {

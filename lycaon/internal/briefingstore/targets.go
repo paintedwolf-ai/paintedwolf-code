@@ -57,7 +57,7 @@ func regenerateOutcome(request briefing.Request, outcome briefing.RegenerateOutc
 
 // StartAttempt joins the target's pending attempt or starts one. It never
 // clears the record a target already shows.
-func (s *Store) StartAttempt(ctx context.Context, request briefing.Request, epoch int64, hashes []briefing.SectionHash) (briefing.Attempt, error) {
+func (s *Targets) StartAttempt(ctx context.Context, request briefing.Request, epoch int64, hashes []briefing.SectionHash) (briefing.Attempt, error) {
 	var attempt briefing.Attempt
 	err := s.inTx(ctx, func(q *db.Queries) error {
 		if err := checkEpoch(ctx, q, request.ProjectID, epoch); err != nil {
@@ -110,7 +110,7 @@ func targetJSON(request briefing.Request) string {
 
 // CompleteAttempt applies only for the target's active attempt in the
 // current epoch, then releases the record the target showed before.
-func (s *Store) CompleteAttempt(ctx context.Context, request briefing.Request, attemptID string, hashes []briefing.SectionHash, recordID string) (briefing.Settled, error) {
+func (s *Targets) CompleteAttempt(ctx context.Context, request briefing.Request, attemptID string, hashes []briefing.SectionHash, recordID string) (briefing.Settled, error) {
 	var settled briefing.Settled
 	err := s.inTx(ctx, func(q *db.Queries) error {
 		prior, err := q.GetBriefingTarget(ctx, db.GetBriefingTargetParams{ProjectID: request.ProjectID, ProfileID: request.ProfileID, TargetKey: request.TargetKey})
@@ -141,7 +141,7 @@ func (s *Store) CompleteAttempt(ctx context.Context, request briefing.Request, a
 	return settled, err
 }
 
-func (s *Store) FailAttempt(ctx context.Context, request briefing.Request, attemptID string, failure briefing.Failure) (briefing.Settled, error) {
+func (s *Targets) FailAttempt(ctx context.Context, request briefing.Request, attemptID string, failure briefing.Failure) (briefing.Settled, error) {
 	var settled briefing.Settled
 	err := s.inTx(ctx, func(q *db.Queries) error {
 		revision, err := q.FailBriefingTargetAttempt(ctx, db.FailBriefingTargetAttemptParams{
@@ -159,7 +159,7 @@ func (s *Store) FailAttempt(ctx context.Context, request briefing.Request, attem
 
 // Resolve points a target at a record built entirely from stored results.
 // An unchanged target keeps its revision.
-func (s *Store) Resolve(ctx context.Context, request briefing.Request, epoch int64, hashes []briefing.SectionHash, recordID string) (briefing.Settled, error) {
+func (s *Targets) Resolve(ctx context.Context, request briefing.Request, epoch int64, hashes []briefing.SectionHash, recordID string) (briefing.Settled, error) {
 	var settled briefing.Settled
 	err := s.inTx(ctx, func(q *db.Queries) error {
 		if err := checkEpoch(ctx, q, request.ProjectID, epoch); err != nil {
@@ -229,7 +229,7 @@ func releaseRecord(ctx context.Context, q *db.Queries, projectID, recordID strin
 
 // FailInterrupted fails every pending attempt. It runs before the engine
 // accepts work, when no attempt can still be running.
-func (s *Store) FailInterrupted(ctx context.Context) (int64, error) {
+func (s *Targets) FailInterrupted(ctx context.Context) (int64, error) {
 	var failed int64
 	err := s.inTx(ctx, func(q *db.Queries) error {
 		var err error
@@ -238,6 +238,9 @@ func (s *Store) FailInterrupted(ctx context.Context) (int64, error) {
 	})
 	return failed, err
 }
+
+// Targets holds each target's resolution and current attempt.
+type Targets struct{ storeCore }
 
 // Intent is the persisted exact action an approval was asked about.
 type Intent struct {
@@ -249,7 +252,7 @@ type Intent struct {
 
 // LinkApprovalIntent attaches an approval's persisted action to its target
 // without touching sections, record or attempt.
-func (s *Store) LinkApprovalIntent(ctx context.Context, projectID, profileID, targetKey string, intent Intent) error {
+func (s *Targets) LinkApprovalIntent(ctx context.Context, projectID, profileID, targetKey string, intent Intent) error {
 	return s.inTx(ctx, func(q *db.Queries) error {
 		_, err := q.LinkBriefingApprovalIntent(ctx, db.LinkBriefingApprovalIntentParams{
 			IntentText: db.NullString(intent.Text), IntentCheckpointID: db.NullString(intent.CheckpointID),
@@ -262,7 +265,7 @@ func (s *Store) LinkApprovalIntent(ctx context.Context, projectID, profileID, ta
 
 // PinCheckpoint keeps a record and its manifests for as long as the
 // checkpoint exists.
-func (s *Store) PinCheckpoint(ctx context.Context, projectID, checkpointID, recordID string) error {
+func (s *Retention) PinCheckpoint(ctx context.Context, projectID, checkpointID, recordID string) error {
 	return s.inTx(ctx, func(q *db.Queries) error {
 		sections, err := q.ListBriefingRecordSections(ctx, db.ListBriefingRecordSectionsParams{ProjectID: projectID, RecordID: recordID})
 		if err != nil {

@@ -3,6 +3,8 @@ package filebriefing
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"fmt"
 
 	"github.com/lycaon/lycaon/internal/briefing"
 )
@@ -37,4 +39,12 @@ func materialManifest(input Input, facts fileFacts, coverage materialCoverage, p
 func textDigest(text string) string {
 	sum := sha256.Sum256([]byte(text))
 	return hex.EncodeToString(sum[:8])
+}
+
+func jsonString(value any) string {
+	encoded, err := json.Marshal(value)
+	if err != nil {
+		panic(fmt.Sprintf("encode JSON value: %v", err))
+	}
+	return string(encoded)
 }

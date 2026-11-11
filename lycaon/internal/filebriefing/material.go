@@ -2,7 +2,6 @@ package filebriefing
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"unicode/utf8"
@@ -25,8 +24,7 @@ type Material struct {
 	Preview   Preview
 	Locations []Location
 	Prompt    string
-	// Manifest records what the prompt submitted, for the summary's record.
-	Manifest briefing.Manifest
+	Manifest  briefing.Manifest
 }
 
 type fileFacts struct {
@@ -268,14 +266,6 @@ func renderPrompt(input Input, header leadingExcerpt, facts fileFacts, coverage 
 	}
 	out.WriteString("</context_pack_jsonl>")
 	return out.String()
-}
-
-func jsonString(value any) string {
-	encoded, err := json.Marshal(value)
-	if err != nil {
-		panic(fmt.Sprintf("encode JSON value: %v", err))
-	}
-	return string(encoded)
 }
 
 func numberedHeader(source string, maxLines, maxTokens int) leadingExcerpt {

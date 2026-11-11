@@ -43,7 +43,7 @@ type AttemptView struct {
 	Regenerate briefing.RegenerateOutcome
 }
 
-func (s *Store) GetTarget(ctx context.Context, projectID, profileID, targetKey string) (Target, error) {
+func (s *Targets) GetTarget(ctx context.Context, projectID, profileID, targetKey string) (Target, error) {
 	row, err := s.queries.GetBriefingTarget(ctx, db.GetBriefingTargetParams{ProjectID: projectID, ProfileID: profileID, TargetKey: targetKey})
 	if err != nil {
 		return Target{}, err
@@ -52,7 +52,7 @@ func (s *Store) GetTarget(ctx context.Context, projectID, profileID, targetKey s
 }
 
 // ListTargets returns the stored targets among keys; absent keys are omitted.
-func (s *Store) ListTargets(ctx context.Context, projectID, profileID string, keys []string) ([]Target, error) {
+func (s *Targets) ListTargets(ctx context.Context, projectID, profileID string, keys []string) ([]Target, error) {
 	var out []Target
 	for start := 0; start < len(keys); start += lookupChunk {
 		rows, err := s.queries.ListBriefingTargets(ctx, db.ListBriefingTargetsParams{ProjectID: projectID, ProfileID: profileID, TargetKeys: keys[start:min(start+lookupChunk, len(keys))]})

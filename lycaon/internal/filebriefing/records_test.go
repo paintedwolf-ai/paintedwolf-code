@@ -36,7 +36,7 @@ func TestCompletedSummaryIsRecordedWithItsMaterial(t *testing.T) {
 	target.ProjectID, target.RootID = testdbseed.DefaultProjectID, rootID
 	_, err = service.Request(t.Context(), target, "manual")
 	testutil.FailErr(t, "request", err)
-	service.scheduler.Wait(t.Context())
+	service.jobs.scheduler.Wait(t.Context())
 
 	var recordID string
 	testutil.FailErr(t, "read record id", database.QueryRowContext(t.Context(), `SELECT record_id FROM file_briefings WHERE path = 'main.go'`).Scan(&recordID))

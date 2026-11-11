@@ -23,8 +23,27 @@ const (
 	lookupChunk = 64
 )
 
-// Store persists briefing results, records and target state.
+// Store persists briefing state: content-addressed results and records,
+// per-target attempt state, and what retention keeps.
 type Store struct {
+	*Results
+	*Targets
+	*Retention
+}
+
+var _ briefing.Store = (*Store)(nil)
+
+func NewStore(database db.Handle, dataDir string) *Store {
+	core := storeCore{database: database, queries: db.New(database), dataDir: dataDir,
+		now: func() time.Time { return time.Now().UTC() }, newID: uuid.NewString}
+	return &Store{Results: &Results{core}, Targets: &Targets{core}, Retention: &Retention{core}}
+}
+
+// Results holds section results by manifest hash and the records built
+// from them.
+type Results struct{ storeCore }
+
+type storeCore struct {
 	database db.Handle
 	queries  *db.Queries
 	dataDir  string
@@ -32,21 +51,14 @@ type Store struct {
 	newID    func() string
 }
 
-var _ briefing.Store = (*Store)(nil)
-
-func NewStore(database db.Handle, dataDir string) *Store {
-	return &Store{database: database, queries: db.New(database), dataDir: dataDir,
-		now: func() time.Time { return time.Now().UTC() }, newID: uuid.NewString}
-}
-
-func (s *Store) inTx(ctx context.Context, fn func(q *db.Queries) error) error {
+func (s storeCore) inTx(ctx context.Context, fn func(q *db.Queries) error) error {
 	return db.InTx(ctx, s.database, s.queries, nil, func(q *db.Queries, _ *sql.Tx) error { return fn(q) })
 }
 
-func (s *Store) stamp() string { return db.FormatTime(s.now()) }
+func (s storeCore) stamp() string { return db.FormatTime(s.now()) }
 
 // Epoch returns the project's cache epoch, starting it at 1.
-func (s *Store) Epoch(ctx context.Context, projectID string) (int64, error) {
+func (s *Results) Epoch(ctx context.Context, projectID string) (int64, error) {
 	var epoch int64
 	err := s.inTx(ctx, func(q *db.Queries) error {
 		if err := q.EnsureBriefingEpoch(ctx, projectID); err != nil {
@@ -67,7 +79,7 @@ func checkEpoch(ctx context.Context, q *db.Queries, projectID string, epoch int6
 	return err
 }
 
-func (s *Store) GetResults(ctx context.Context, projectID string, hashes []string) (map[string]briefing.Result, error) {
+func (s *Results) GetResults(ctx context.Context, projectID string, hashes []string) (map[string]briefing.Result, error) {
 	out := make(map[string]briefing.Result, len(hashes))
 	for start := 0; start < len(hashes); start += lookupChunk {
 		rows, err := s.queries.ListBriefingResults(ctx, db.ListBriefingResultsParams{ProjectID: projectID, Hashes: hashes[start:min(start+lookupChunk, len(hashes))]})
@@ -90,7 +102,7 @@ func (s *Store) GetResults(ctx context.Context, projectID string, hashes []strin
 
 // PutResult persists the manifest once, then inserts the result or upgrades a
 // fallback. Text over the section's bound is refused at this boundary.
-func (s *Store) PutResult(ctx context.Context, projectID string, epoch int64, manifest briefing.Manifest, hash string, result briefing.Result) error {
+func (s *Results) PutResult(ctx context.Context, projectID string, epoch int64, manifest briefing.Manifest, hash string, result briefing.Result) error {
 	if bound := manifest.Contract.MaxRunes; bound > 0 && utf8.RuneCountInString(result.Text) > bound {
 		return fmt.Errorf("briefing result for %s exceeds %d runes", manifest.SectionID, bound)
 	}
@@ -141,7 +153,7 @@ type manifestBlobRef struct {
 
 // manifestBlob writes the displayable manifest unless it is already stored.
 // A stored manifest reports no size, so its blob row is left alone.
-func (s *Store) manifestBlob(ctx context.Context, projectID string, manifest briefing.Manifest, hash string) (manifestBlobRef, error) {
+func (s *Results) manifestBlob(ctx context.Context, projectID string, manifest briefing.Manifest, hash string) (manifestBlobRef, error) {
 	existing, err := s.queries.GetBriefingManifestBlob(ctx, db.GetBriefingManifestBlobParams{ProjectID: projectID, ManifestHash: hash})
 	if err == nil {
 		return manifestBlobRef{sha: existing}, nil
@@ -164,7 +176,7 @@ func (s *Store) manifestBlob(ctx context.Context, projectID string, manifest bri
 }
 
 // ReadManifest returns a stored manifest's displayable form.
-func (s *Store) ReadManifest(ctx context.Context, projectID, hash string) ([]byte, error) {
+func (s *Results) ReadManifest(ctx context.Context, projectID, hash string) ([]byte, error) {
 	sha, err := s.queries.GetBriefingManifestBlob(ctx, db.GetBriefingManifestBlobParams{ProjectID: projectID, ManifestHash: hash})
 	if err != nil {
 		return nil, err
@@ -174,7 +186,7 @@ func (s *Store) ReadManifest(ctx context.Context, projectID, hash string) ([]byt
 
 // PutRecord stores a record and its ordered sections once; its method is
 // derived from the sections' stored sources.
-func (s *Store) PutRecord(ctx context.Context, projectID string, epoch int64, record briefing.Record) error {
+func (s *Results) PutRecord(ctx context.Context, projectID string, epoch int64, record briefing.Record) error {
 	origin, err := json.Marshal(record.Origin)
 	if err != nil {
 		return err
@@ -248,7 +260,7 @@ type RecordView struct {
 	CreatedAt time.Time
 }
 
-func (s *Store) GetRecord(ctx context.Context, projectID, recordID string) (RecordView, error) {
+func (s *Results) GetRecord(ctx context.Context, projectID, recordID string) (RecordView, error) {
 	row, err := s.queries.GetBriefingRecord(ctx, db.GetBriefingRecordParams{ProjectID: projectID, RecordID: recordID})
 	if err != nil {
 		return RecordView{}, err

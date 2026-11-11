@@ -2,6 +2,7 @@ package filebriefing
 
 import (
 	"context"
+	"log/slog"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/briefing"
@@ -16,13 +17,20 @@ type Records interface {
 	Sweep(ctx context.Context) error
 }
 
-// recordSummary stores the generated text against its manifest and returns
-// the record id, or empty when the summary cannot be recorded.
-func (s *Service) recordSummary(ctx context.Context, b Briefing, manifest briefing.Manifest, text string, truncated bool) string {
+// summaryRecorder writes file summaries as briefing records; without
+// Records it records nothing.
+type summaryRecorder struct {
+	records Records
+	logger  *slog.Logger
+}
+
+// record stores the generated text against its manifest and returns the
+// record id, or empty when the summary cannot be recorded.
+func (s summaryRecorder) record(ctx context.Context, b Briefing, manifest briefing.Manifest, text string, truncated bool) string {
 	if s.records == nil || len(manifest.Items) == 0 {
 		return ""
 	}
-	recordID, err := s.putSummary(ctx, b, manifest, text, truncated)
+	recordID, err := s.put(ctx, b, manifest, text, truncated)
 	if err != nil {
 		s.logger.WarnContext(ctx, "record file briefing", "project_id", b.ProjectID, "path", b.Path, "error", err)
 		return ""
@@ -30,7 +38,14 @@ func (s *Service) recordSummary(ctx context.Context, b Briefing, manifest briefi
 	return recordID
 }
 
-func (s *Service) putSummary(ctx context.Context, b Briefing, manifest briefing.Manifest, text string, truncated bool) (string, error) {
+func (s summaryRecorder) sweep(ctx context.Context) error {
+	if s.records == nil {
+		return nil
+	}
+	return s.records.Sweep(ctx)
+}
+
+func (s summaryRecorder) put(ctx context.Context, b Briefing, manifest briefing.Manifest, text string, truncated bool) (string, error) {
 	hash, err := manifest.Hash()
 	if err != nil {
 		return "", err

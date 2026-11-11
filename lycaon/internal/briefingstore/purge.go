@@ -6,13 +6,16 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 )
 
+// Retention decides which records and manifests outlive their targets.
+type Retention struct{ storeCore }
+
 // sweepBatch bounds the rows one sweep step reads.
 const sweepBatch = 256
 
 // Purge advances the project's epoch, removes the profiles' targets and
 // deletes whatever no remaining target or checkpoint holds. Work admitted
 // under the old epoch can no longer write.
-func (s *Store) Purge(ctx context.Context, projectID string, profileIDs []string) (int64, error) {
+func (s *Retention) Purge(ctx context.Context, projectID string, profileIDs []string) (int64, error) {
 	var epoch int64
 	err := s.inTx(ctx, func(q *db.Queries) error {
 		if err := q.EnsureBriefingEpoch(ctx, projectID); err != nil {
@@ -34,7 +37,7 @@ func (s *Store) Purge(ctx context.Context, projectID string, profileIDs []string
 
 // Sweep deletes every record and manifest in each project that nothing
 // holds, such as results whose attempt was superseded before it recorded.
-func (s *Store) Sweep(ctx context.Context) error {
+func (s *Retention) Sweep(ctx context.Context) error {
 	projects, err := s.queries.ListBriefingProjects(ctx)
 	if err != nil {
 		return err

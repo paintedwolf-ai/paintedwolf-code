@@ -54,19 +54,18 @@ type Dependencies struct {
 
 // Service coordinates briefing admission, generation, retention, and shutdown.
 type Service struct {
-	store         Store
-	config        Config
-	generator     Generator
-	records       Records
-	events        EventPublisher
-	settings      Enablement
-	logger        *slog.Logger
-	gate          sync.RWMutex
-	stopped       bool
-	scheduler     *briefing.Scheduler
-	ownsScheduler bool
-	ctx           context.Context
-	cancel        context.CancelFunc
+	store     Store
+	config    Config
+	generator Generator
+	recorder  summaryRecorder
+	events    EventPublisher
+	settings  Enablement
+	logger    *slog.Logger
+	gate      sync.RWMutex
+	stopped   bool
+	jobs      fileJobs
+	ctx       context.Context
+	cancel    context.CancelFunc
 }
 
 // fileJobPrefix marks this kind's jobs on a shared scheduler.
@@ -78,12 +77,12 @@ func NewService(ctx context.Context, deps Dependencies) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	scheduler, owns := deps.Scheduler, false
+	scheduler, dedicated := deps.Scheduler, false
 	if scheduler == nil {
-		scheduler, owns = briefing.NewScheduler(ctx), true
+		scheduler, dedicated = briefing.NewScheduler(ctx), true
 	}
-	return &Service{store: deps.Store, config: deps.Config, generator: deps.Generator, records: deps.Records,
-		events: deps.Events, settings: deps.Settings, logger: logger, scheduler: scheduler, ownsScheduler: owns, ctx: ctx, cancel: cancel}
+	return &Service{store: deps.Store, config: deps.Config, generator: deps.Generator, recorder: summaryRecorder{records: deps.Records, logger: logger},
+		events: deps.Events, settings: deps.Settings, logger: logger, jobs: fileJobs{scheduler: scheduler, dedicated: dedicated}, ctx: ctx, cancel: cancel}
 }
 
 func (s *Service) Enabled() bool { return s.settings == nil || s.settings.Enabled() }
@@ -168,14 +167,12 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 		return errors.New("file summaries settings are unavailable")
 	}
 	if !enabled {
-		s.scheduler.Cancel(func(job briefing.Job) bool { return strings.HasPrefix(job.Key, fileJobPrefix) })
+		s.jobs.cancel()
 		if err := s.store.Clear(ctx); err != nil {
 			return err
 		}
-		if s.records != nil {
-			if err := s.records.Sweep(ctx); err != nil {
-				return err
-			}
+		if err := s.recorder.sweep(ctx); err != nil {
+			return err
 		}
 	}
 	return s.settings.PutEnabled(enabled)
@@ -192,7 +189,7 @@ func (s *Service) ensureJob(ctx context.Context, target Target, b Briefing, mate
 	if b.Trigger == "automatic" {
 		group = fileJobPrefix + b.ProjectID
 	}
-	joined, err := s.scheduler.Submit(briefing.Job{
+	joined, err := s.jobs.scheduler.Submit(briefing.Job{
 		Key: fileJobPrefix + fileBriefingJobKey(b), Project: b.ProjectID, Group: group, Manual: b.Trigger == "manual",
 		Policy: briefing.Policy{Admission: briefing.Superseding}, Values: ctx,
 		Run: func(jobCtx context.Context) { s.completeFileBriefing(jobCtx, b, material, target.ProjectDir) },
@@ -208,16 +205,33 @@ func (s *Service) Stop() {
 	s.gate.Lock()
 	s.stopped = true
 	s.cancel()
-	if s.ownsScheduler {
-		s.scheduler.Stop()
-	} else {
-		s.scheduler.Cancel(func(job briefing.Job) bool { return strings.HasPrefix(job.Key, fileJobPrefix) })
-	}
+	s.jobs.stop()
 	s.gate.Unlock()
 }
 
-func (s *Service) Wait(ctx context.Context) {
-	if s.ownsScheduler {
-		s.scheduler.Wait(ctx)
+func (s *Service) Wait(ctx context.Context) { s.jobs.wait(ctx) }
+
+// fileJobs is this kind's use of a scheduler it may share with others.
+type fileJobs struct {
+	scheduler *briefing.Scheduler
+	dedicated bool
+}
+
+func (j fileJobs) cancel() {
+	j.scheduler.Cancel(func(job briefing.Job) bool { return strings.HasPrefix(job.Key, fileJobPrefix) })
+}
+
+// stop ends a dedicated scheduler, or only this kind's jobs on a shared one.
+func (j fileJobs) stop() {
+	if j.dedicated {
+		j.scheduler.Stop()
+		return
+	}
+	j.cancel()
+}
+
+func (j fileJobs) wait(ctx context.Context) {
+	if j.dedicated {
+		j.scheduler.Wait(ctx)
 	}
 }
