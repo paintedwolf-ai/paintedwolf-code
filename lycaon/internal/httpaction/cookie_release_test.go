@@ -541,4 +541,3 @@ func (unbackedCookieJar) SetCookies(*url.URL, []*http.Cookie) {}
 func (unbackedCookieJar) Cookies(*url.URL) []*http.Cookie {
 	return []*http.Cookie{{Name: "session", Value: "unreviewed"}}
 }
-

@@ -86,8 +86,8 @@ type requestSpec struct {
 	outgoingHeaders func(string) bool
 	outgoingBody    func(string) bool
 	method          string
-	target   *url.URL
-	headers  []outboundhttp.Header
+	target          *url.URL
+	headers         []outboundhttp.Header
 	// headerSources parallels headers.
 	headerSources []headerSource
 	body          requestBody
@@ -351,7 +351,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		}
 		var exErr *outboundhttp.ExchangeError
 		if reject := toolrejection.AsToolReject(err); reject != nil && (!errors.As(err, &exErr) || (exErr.RequestsStarted == 0 && exErr.ResponsesReceived == 0)) &&
-			(reject.Code == CookieJarFailedCode || reject.Code == TokenJarFailedCode || reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode || strings.HasPrefix(reject.Code, "SECRET_REFERENCE_")) {
+			(reject.Code == CookieJarFailedCode || reject.Code == TokenJarFailedCode || reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode || toolrejection.IsSecretCapabilityCode(reject.Code)) {
 			return exchanged{}, reject
 		}
 		return exchanged{}, &TransportFailure{Reject: sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err), Cause: err}
@@ -474,13 +474,13 @@ func send(
 		Class:  egressclass.AgentHTTPRequest,
 		Method: spec.method, URL: outbound.url, OriginHeaders: outbound.headers, Body: outbound.body, Timeout: timeout,
 		Redirects: outboundhttp.RedirectMode(spec.redirects), DiscardBody: spec.disposition.discard, AllowAddress: allowAddress,
-		UnixSocket:               spec.socket,
-		SocketBinding:            spec.socketBinding,
-		HostHeader:               outbound.hostHeader,
-		Resolve:                  spec.resolve,
-		OnFirstHopConn:           func(local, remote netip.AddrPort) { loopbackObs.onFirstHopConn(ctx, tctx, local, remote) },
-		OnFirstHopHeadersWritten: func() { headerDelivery.Commit(ctx) },
-		OnFirstHopBodyWritten:    func() { bodyDelivery.Commit(ctx) },
+		UnixSocket:                  spec.socket,
+		SocketBinding:               spec.socketBinding,
+		HostHeader:                  outbound.hostHeader,
+		Resolve:                     spec.resolve,
+		OnFirstHopConn:              func(local, remote netip.AddrPort) { loopbackObs.onFirstHopConn(ctx, tctx, local, remote) },
+		OnFirstHopHeadersDispatched: func() { headerDelivery.Commit(ctx) },
+		OnFirstHopBodyDispatched:    func() { bodyDelivery.Commit(ctx) },
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.

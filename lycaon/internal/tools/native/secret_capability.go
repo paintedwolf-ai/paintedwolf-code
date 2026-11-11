@@ -63,16 +63,14 @@ func generateSecret(ctx context.Context, service *secretcap.Service, args map[st
 }
 
 func secretCapabilityFailure(err error) error {
+	if errors.Is(err, secretcap.ErrInvalidReference) {
+		return &toolrejection.ToolReject{Code: "SECRET_REFERENCE_INVALID", Retryable: true}
+	}
+	if reject, ok := toolrejection.SecretCapabilityReject(err); ok {
+		return reject
+	}
 	code, retryable := "SECRET_STORE_UNAVAILABLE", false
 	switch {
-	case errors.Is(err, secretcap.ErrInvalidReference):
-		code, retryable = "SECRET_REFERENCE_INVALID", true
-	case errors.Is(err, secretcap.ErrNotFound):
-		code, retryable = "SECRET_REFERENCE_NOT_FOUND", true
-	case errors.Is(err, secretcap.ErrNotVisible):
-		code, retryable = "SECRET_REFERENCE_OUT_OF_SCOPE", true
-	case errors.Is(err, secretcap.ErrValueMissing):
-		code = "SECRET_REFERENCE_VALUE_UNAVAILABLE"
 	case errors.Is(err, secretcap.ErrHumanAuthored):
 		code = SecretRevokeHumanOwnedCode
 	case errors.Is(err, secretcap.ErrInvalidGenerate):

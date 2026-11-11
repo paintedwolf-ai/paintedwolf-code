@@ -386,5 +386,3 @@ func TestOutboundCookiesFreezeAfterBeforeHopRequestAndPersistAcrossRedirects(t *
 		t.Fatalf("hop 1 sent Cookie %q, want %q", hop1Cookie, "auth=unreviewed-late-mutation; issued=from-hop0")
 	}
 }
-
-

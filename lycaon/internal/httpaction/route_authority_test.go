@@ -475,4 +475,3 @@ func TestPerHopRedirectRouteAdmissionCancellationAndPartialFacts(t *testing.T) {
 		t.Fatalf("approved host_header redirect response = %q redirects=%d", string(got.Response.Body), len(got.Redirects))
 	}
 }
-

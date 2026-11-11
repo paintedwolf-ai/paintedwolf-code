@@ -40,7 +40,7 @@ type hopTracer struct {
 	sent              []Header
 }
 
-func newHopTracer(onConn func(local, remote netip.AddrPort), onReady ...func()) (*hopTracer, *httptrace.ClientTrace) {
+func newHopTracer(onConn func(local, remote netip.AddrPort), onGotConn func()) (*hopTracer, *httptrace.ClientTrace) {
 	t := &hopTracer{}
 	first := func(at *time.Time) {
 		t.mu.Lock()
@@ -49,29 +49,19 @@ func newHopTracer(onConn func(local, remote netip.AddrPort), onReady ...func()) 
 			*at = time.Now()
 		}
 	}
-	notifyReady := func() {
-		for _, fn := range onReady {
-			if fn != nil {
-				fn()
-			}
-		}
-	}
 	trace := &httptrace.ClientTrace{
 		ConnectStart:      func(string, string) { first(&t.tcpStart) },
 		ConnectDone:       func(string, string, error) { first(&t.tcpDone) },
 		TLSHandshakeStart: func() { first(&t.tlsStart) },
-		TLSHandshakeDone: func(_ tls.ConnectionState, err error) {
-			first(&t.tlsDone)
-			if err == nil {
-				notifyReady()
-			}
-		},
-		WroteRequest: func(httptrace.WroteRequestInfo) { first(&t.reqSent) },
+		TLSHandshakeDone:  func(tls.ConnectionState, error) { first(&t.tlsDone) },
+		WroteRequest:      func(httptrace.WroteRequestInfo) { first(&t.reqSent) },
 		GotFirstResponseByte: func() {
 			first(&t.ttfbTime)
 		},
 		GotConn: func(info httptrace.GotConnInfo) {
-			notifyReady()
+			if onGotConn != nil {
+				onGotConn()
+			}
 			if local, ok := info.Conn.LocalAddr().(*net.TCPAddr); ok && onConn != nil {
 				if remote, ok := info.Conn.RemoteAddr().(*net.TCPAddr); ok {
 					onConn(local.AddrPort(), remote.AddrPort())
@@ -149,27 +139,22 @@ func (t *hopTracer) observation(begun, resolved time.Time, method, target string
 	return o
 }
 
-// firstHopWriteObserver observes conservative Hop 0 transport dispatch at
-// existing connection-write and request-body-read boundaries without parsing
-// HTTP framing or TLS records.
-type firstHopWriteObserver struct {
-	mu             sync.Mutex
-	readyForHTTP   bool
-	hasBody        bool
-	bodyRead       bool
-	headersWritten bool
-	bodyWritten    bool
-	onHeaders      func()
-	onBody         func()
+// dispatchObserver reports when request material leaves host custody on the
+// first hop. Headers leave on the first connection write after the transport
+// hands over a ready connection, so dial, proxy and TLS handshake bytes never
+// count. Body bytes leave when the transport first reads the body. Neither
+// event claims the recipient received anything.
+type dispatchObserver struct {
+	mu         sync.Mutex
+	connReady  bool
+	onHeaders  func()
+	onBody     func()
+	headersOut bool
+	bodyOut    bool
 }
 
-func observeFirstHopWrites(transport *http.Transport, cleartext, hasBody bool, onHeaders, onBody func()) *firstHopWriteObserver {
-	obs := &firstHopWriteObserver{
-		readyForHTTP: cleartext,
-		hasBody:      hasBody,
-		onHeaders:    onHeaders,
-		onBody:       onBody,
-	}
+func observeDispatch(transport *http.Transport, onHeaders, onBody func()) *dispatchObserver {
+	obs := &dispatchObserver{onHeaders: onHeaders, onBody: onBody}
 	dial := transport.DialContext
 	if dial == nil {
 		var d net.Dialer
@@ -180,79 +165,64 @@ func observeFirstHopWrites(transport *http.Transport, cleartext, hasBody bool, o
 		if err != nil {
 			return nil, err
 		}
-		return &firstHopWriteConn{Conn: conn, obs: obs}, nil
+		return &dispatchConn{Conn: conn, obs: obs}, nil
 	}
 	return obs
 }
 
-func (o *firstHopWriteObserver) markReadyForHTTP() {
+func (o *dispatchObserver) gotConn() {
 	if o == nil {
 		return
 	}
 	o.mu.Lock()
-	o.readyForHTTP = true
+	o.connReady = true
 	o.mu.Unlock()
 }
 
-func (o *firstHopWriteObserver) recordBodyRead(n int) {
-	if o == nil || n <= 0 {
-		return
-	}
+func (o *dispatchObserver) wrote() {
 	o.mu.Lock()
-	o.bodyRead = true
+	fire := o.connReady && !o.headersOut
+	if fire {
+		o.headersOut = true
+	}
 	o.mu.Unlock()
+	if fire && o.onHeaders != nil {
+		o.onHeaders()
+	}
 }
 
-func (o *firstHopWriteObserver) recordConnWrite(n int) {
-	if o == nil || n <= 0 {
-		return
-	}
-	var fireHeaders, fireBody func()
+func (o *dispatchObserver) bodyRead() {
 	o.mu.Lock()
-	if !o.readyForHTTP {
-		o.mu.Unlock()
-		return
-	}
-	if !o.headersWritten {
-		o.headersWritten = true
-		fireHeaders = o.onHeaders
-	}
-	if o.hasBody && o.bodyRead && !o.bodyWritten {
-		o.bodyWritten = true
-		fireBody = o.onBody
-	}
+	fire := !o.bodyOut
+	o.bodyOut = true
 	o.mu.Unlock()
-	if fireHeaders != nil {
-		fireHeaders()
-	}
-	if fireBody != nil {
-		fireBody()
+	if fire && o.onBody != nil {
+		o.onBody()
 	}
 }
 
-type firstHopWriteConn struct {
+type dispatchConn struct {
 	net.Conn
-	obs *firstHopWriteObserver
+	obs *dispatchObserver
 }
 
-func (c *firstHopWriteConn) Write(p []byte) (int, error) {
+func (c *dispatchConn) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
 	if n > 0 {
-		c.obs.recordConnWrite(n)
+		c.obs.wrote()
 	}
 	return n, err
 }
 
-type firstHopBodyReadCloser struct {
+type dispatchBody struct {
 	io.ReadCloser
-	obs *firstHopWriteObserver
+	obs *dispatchObserver
 }
 
-func (b *firstHopBodyReadCloser) Read(p []byte) (int, error) {
+func (b *dispatchBody) Read(p []byte) (int, error) {
 	n, err := b.ReadCloser.Read(p)
 	if n > 0 {
-		b.obs.recordBodyRead(n)
+		b.obs.bodyRead()
 	}
 	return n, err
 }
-

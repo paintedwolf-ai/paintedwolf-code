@@ -105,13 +105,15 @@ type Request struct {
 	// retains the received block in Response.Wire; TLS headers are normalized.
 	WireHeaders bool
 	// TLS adds this request's trust and client identity to every TLS hop.
-	TLS                      *ClientTLS
-	AllowAddress             func(netip.Addr, uint16) bool
-	BeforeHop                func(context.Context, *url.URL) error
-	BeforeHopRequest         func(context.Context, HopRequest) error
-	OnFirstHopConn           func(local, remote netip.AddrPort)
-	OnFirstHopHeadersWritten func()
-	OnFirstHopBodyWritten    func()
+	TLS              *ClientTLS
+	AllowAddress     func(netip.Addr, uint16) bool
+	BeforeHop        func(context.Context, *url.URL) error
+	BeforeHopRequest func(context.Context, HopRequest) error
+	OnFirstHopConn   func(local, remote netip.AddrPort)
+	// OnFirstHopHeadersDispatched and OnFirstHopBodyDispatched fire once when
+	// that part of the first hop's request leaves host custody.
+	OnFirstHopHeadersDispatched func()
+	OnFirstHopBodyDispatched    func()
 }
 
 // HopRequest describes one HTTP hop presented to BeforeHopRequest before
@@ -286,15 +288,14 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		in.TLS.apply(transport)
 		boundConnect(transport, in.ConnectTimeout)
 		var wire *wireCapture
-		cleartext := current.Scheme == "http" || in.UnixSocket != ""
-		if in.WireHeaders && cleartext {
+		if in.WireHeaders && (current.Scheme == "http" || in.UnixSocket != "") {
 			wire = captureWire(transport)
 		}
-		var writeObs *firstHopWriteObserver
+		var dispatch *dispatchObserver
 		var onConn func(local, remote netip.AddrPort)
 		if hop == 0 {
-			if in.OnFirstHopHeadersWritten != nil || in.OnFirstHopBodyWritten != nil {
-				writeObs = observeFirstHopWrites(transport, cleartext, len(body) > 0, in.OnFirstHopHeadersWritten, in.OnFirstHopBodyWritten)
+			if in.OnFirstHopHeadersDispatched != nil || in.OnFirstHopBodyDispatched != nil {
+				dispatch = observeDispatch(transport, in.OnFirstHopHeadersDispatched, in.OnFirstHopBodyDispatched)
 			}
 			onConn = func(local, remote netip.AddrPort) {
 				firstHopLocal = local
@@ -305,15 +306,15 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			}
 		}
 		client := in.clientForHop(remaining, transport)
-		tracer, trace := newHopTracer(onConn, writeObs.markReadyForHTTP)
+		tracer, trace := newHopTracer(onConn, dispatch.gotConn)
 		req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ioCtx, trace), method, current.String(), bytes.NewReader(body))
 		if err != nil {
 			transport.CloseIdleConnections()
 			ioCancel()
 			return Response{}, err
 		}
-		if writeObs != nil && len(body) > 0 && req.Body != nil {
-			req.Body = &firstHopBodyReadCloser{ReadCloser: req.Body, obs: writeObs}
+		if dispatch != nil && req.Body != nil && req.Body != http.NoBody {
+			req.Body = &dispatchBody{ReadCloser: req.Body, obs: dispatch}
 		}
 		if hostHeader != "" {
 			req.Host = hostHeader
