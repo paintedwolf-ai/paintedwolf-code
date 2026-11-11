@@ -59,6 +59,63 @@ func syncViewGitOverlay(view *managedView) error {
 	return nil
 }
 
+// repoLookup is what a view holds for one repository before initialization decides anything.
+type repoLookup struct {
+	gitDir           string
+	established      bool
+	durable          durableRepoRecord
+	hasDurable       bool
+	hasPriorEvidence bool
+}
+
+// establishedRepoLocked finds an established private repository and checks it once per process:
+// every lookup inside .git reaches here, so after the first check only the store it borrows from must
+// still be there. view.mu is held.
+func establishedRepoLocked(mgr *Manager, view *managedView, repoRel string) (repoLookup, error) {
+	existing := view.repos[repoRel]
+	if existing != nil && existing.verified && existing.privateGitDir != "" {
+		if _, err := os.Stat(mgr.store.ObjectsDir()); err != nil {
+			existing.verified = false
+			return repoLookup{}, fmt.Errorf("%w: %w: retained object store unavailable: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, err)
+		}
+		return repoLookup{gitDir: existing.privateGitDir, established: true}, nil
+	}
+	durable, hasDurable, err := readDurableRepoRecord(mgr, view, view.viewID, repoRel)
+	if err != nil {
+		return repoLookup{}, err
+	}
+	lookup := repoLookup{durable: durable, hasDurable: hasDurable}
+	var priorGitDir string
+	if !hasDurable {
+		priorGitDir, lookup.hasPriorEvidence = discoverPriorPrivateStateEvidence(mgr, view, view.viewID, repoRel)
+	}
+	if (existing == nil || existing.privateGitDir == "") && (!hasDurable || durable.Status != repoStatusEstablished) && priorGitDir == "" {
+		return lookup, nil
+	}
+	gitDir, leaseID, headOID, err := verifyEstablishedPrivateRepo(mgr, view, view.viewID, repoRel, existing, durable, hasDurable, priorGitDir)
+	if err != nil {
+		return repoLookup{}, err
+	}
+	if !hasDurable {
+		if err := writeDurableRepoRecord(mgr, view, view.viewID, durableRepoRecord{
+			RepoRel: repoRel, Status: repoStatusEstablished, PrivateGitDir: gitDir, LeaseID: leaseID, InitialHeadOID: headOID,
+		}); err != nil {
+			return repoLookup{}, err
+		}
+		removeRepoInitIntent(mgr, view.viewID, repoRel)
+	}
+	if existing == nil || existing.privateGitDir == "" {
+		view.repos[repoRel] = &initializedRepo{
+			repoRel: repoRel, worktreeDir: view.worktreeDir, privateGitDir: gitDir, leaseID: leaseID,
+			initialHeadOID: headOID, metrics: InitMetrics{State: StateReady}, verified: true,
+		}
+	} else {
+		existing.verified = true
+	}
+	lookup.gitDir, lookup.established = gitDir, true
+	return lookup, nil
+}
+
 func ensureViewRepoInitialized(
 	ctx context.Context,
 	mgr *Manager,
@@ -70,61 +127,15 @@ func ensureViewRepoInitialized(
 	defer view.mu.Unlock()
 
 	existing := view.repos[repoRel]
-	// Every lookup inside .git reaches here, so a repository is read once per process; after that
-	// only the store it borrows from must still be there.
-	if existing != nil && existing.verified && existing.privateGitDir != "" {
-		if _, err := os.Stat(mgr.store.ObjectsDir()); err != nil {
-			existing.verified = false
-			return fmt.Errorf("%w: %w: retained object store unavailable: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, err)
-		}
-		return nil
-	}
-	durable, hasDurable, dErr := readDurableRepoRecord(mgr, view, view.viewID, repoRel)
-	if dErr != nil {
+	lookup, err := establishedRepoLocked(mgr, view, repoRel)
+	if err != nil {
 		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
-		return dErr
+		return err
 	}
-
-	var priorGitDir string
-	var hasPriorEvidence bool
-	if !hasDurable {
-		priorGitDir, hasPriorEvidence = discoverPriorPrivateStateEvidence(mgr, view, view.viewID, repoRel)
-	}
-
-	if (existing != nil && existing.privateGitDir != "") || (hasDurable && durable.Status == repoStatusEstablished) || priorGitDir != "" {
-		gitDir, leaseID, headOID, vErr := verifyEstablishedPrivateRepo(mgr, view, view.viewID, repoRel, existing, durable, hasDurable, priorGitDir)
-		if vErr != nil {
-			view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
-			return vErr
-		}
-		if !hasDurable {
-			if wErr := writeDurableRepoRecord(mgr, view, view.viewID, durableRepoRecord{
-				RepoRel:        repoRel,
-				Status:         repoStatusEstablished,
-				PrivateGitDir:  gitDir,
-				LeaseID:        leaseID,
-				InitialHeadOID: headOID,
-			}); wErr != nil {
-				view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
-				return wErr
-			}
-			removeRepoInitIntent(mgr, view.viewID, repoRel)
-		}
-		if existing == nil || existing.privateGitDir == "" {
-			view.repos[repoRel] = &initializedRepo{
-				repoRel:        repoRel,
-				worktreeDir:    view.worktreeDir,
-				privateGitDir:  gitDir,
-				leaseID:        leaseID,
-				initialHeadOID: headOID,
-				metrics:        InitMetrics{State: StateReady},
-				verified:       true,
-			}
-		} else {
-			existing.verified = true
-		}
+	if lookup.established {
 		return nil
 	}
+	durable, hasDurable, hasPriorEvidence := lookup.durable, lookup.hasDurable, lookup.hasPriorEvidence
 
 	if (existing != nil && existing.noSourceRepo) || (hasDurable && durable.Status == repoStatusNoSourceRepo) {
 		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, noSourceRepo: true}
