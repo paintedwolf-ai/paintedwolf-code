@@ -132,15 +132,12 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 		cmd: cmd, ep: ep, action: action, subject: subject, decision: decision, facts: facts,
 		detection: det, matches: approvalMatches,
 	}
-	if allowed, handled := e.gatherEgress(ctx, raise); handled {
-		return allowed
-	}
 	final := e.raiseEgressCard(ctx, raise)
 	if final == nil {
 		return false
 	}
 	allowed := hitl.CheckpointAuthorizes(final)
-	e.settleEgressMember(ctx, raise, allowed, final)
+	e.settleEgressDecision(ctx, raise, allowed, final)
 	return allowed
 }
 

@@ -143,7 +143,7 @@ Each gate's quietest posture is its row in `gateFloor` in [`gate/posture.go`](..
 
 A posture is exactly `light`, `balanced`, or `strict`. `gate.ParsePosture` and decoding, the only ways a posture enters the host, refuse any other token rather than reading it as the default, and a value that bypassed them reads as Strict so it can only add asks. An unknown posture in the device `approvals.yaml` stops startup with the file unchanged ([device configuration](compatibility.md#device-configuration)). In a repository `approvals.yaml` it applies Strict and is reported, as are the file's other refused parts ([approvals overlay](project-overlay.md#approvalsyaml--additive-tightening)).
 
-Broader subjects use structural identities: an exact command's mediated network, a configured destination set, or the endpoints observed during one gathering window. Detection evidence and secret exposure can constrain widening. Asking again never increases authority by itself.
+Broader subjects use structural identities: an exact command's mediated network or a configured destination set. Observed endpoints are never gathered into a set; each is its own card. Detection evidence and secret exposure can constrain widening. Asking again never increases authority by itself.
 
 “Off” is not “unconfined”: commands start sandboxed, and leave it only through a requested capability. The sealed context records the posture and grant set even though silent exercises do not produce one event per action.
 
