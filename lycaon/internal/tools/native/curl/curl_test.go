@@ -687,7 +687,7 @@ func TestCurlRedirectAdmissionRouteChangeCancellationAndUnknownHop(t *testing.T)
 	// and still requires target host egress admission.
 	f.hostOverrideAcrossRedirects(t, h, state)
 
-	// 4. Unknown post-send outcome on Hop 1 after Hop 0 completed settles as EffectUnknown without replaying
+	// An unknown second-hop outcome stays unknown and is never replayed.
 	// Hop 0 or Hop 1.
 	f.unknownHopOutcome(t, h)
 }
@@ -971,7 +971,7 @@ func TestCurlCookieJarSelectedSecretAuthorityAndRedirectDenial(t *testing.T) {
 	}
 	h.owners.HTTP.SecretAsk = askFn
 
-	// 2. Withhold on Hop 0 withholds only the secret cookie (sid) while preserving the benign cookie
+	// Withholding drops only the secret cookie and the request continues.
 	// (theme=light) and continuing HTTP.
 	r = h.curl(t.Context(), "-s", "-b", "cookies.txt", origin.URL+"/public")
 	if r.err != nil || r.stdout != "origin-ok\n" || originHits.Load() != 1 {
