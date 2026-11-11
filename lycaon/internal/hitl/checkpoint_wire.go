@@ -315,6 +315,7 @@ func StoredCheckpointToEvent(row StoredCheckpoint) api.CheckpointEvent {
 		ev.ToolApproval = &api.ToolApprovalPayload{ToolCallID: stringField(row.Payload, "tool_call_id"), Plan: wireApprovalPlan(plan)}
 		ev.ToolApproval.AIRationale = stringField(row.Payload, "ai_rationale")
 		ev.ToolApproval.AIRationalePending = boolField(row.Payload, "ai_rationale_pending")
+		ev.ToolApproval.AIRationaleEvidenceRef = rationaleEvidence(row.ProjectID, stringField(row.Payload, "ai_rationale_record_id"))
 		if n := intField(row.Payload, "joined_count"); n > 0 {
 			ev.ToolApproval.JoinedCount = n
 		}

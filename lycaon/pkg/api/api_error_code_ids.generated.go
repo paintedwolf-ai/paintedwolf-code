@@ -142,6 +142,19 @@ const (
 	ApiErrorCodeFeedbackNotPending ApiErrorCode = "feedback_not_pending"
 	// ApiErrorCodeFeedbackResponseRequired feedback resolve had empty response
 	ApiErrorCodeFeedbackResponseRequired ApiErrorCode = "feedback_response_required"
+	// ApiErrorCodeBriefingDisabled summaries are turned off
+	ApiErrorCodeBriefingDisabled ApiErrorCode = "briefing_disabled"
+	// ApiErrorCodeBriefingTargetUnavailable the target cannot be briefed now,
+	// including an activity over its member bound
+	ApiErrorCodeBriefingTargetUnavailable ApiErrorCode = "briefing_target_unavailable"
+	// ApiErrorCodeBriefingBusy the project's briefing queue is full; retry after
+	// the Retry-After delay
+	ApiErrorCodeBriefingBusy ApiErrorCode = "briefing_busy"
+	// ApiErrorCodeBriefingUnavailable briefings are stopping with the engine
+	ApiErrorCodeBriefingUnavailable ApiErrorCode = "briefing_unavailable"
+	// ApiErrorCodeBriefingRecordNotFound no evidence record has that id in this
+	// project
+	ApiErrorCodeBriefingRecordNotFound ApiErrorCode = "briefing_record_not_found"
 	// ApiErrorCodeFileBriefingDisabled file summaries are disabled
 	ApiErrorCodeFileBriefingDisabled ApiErrorCode = "file_briefing_disabled"
 	// ApiErrorCodeFileBriefingNotFound no briefing has been requested for the
@@ -1002,6 +1015,11 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeDelegationLegNotFound,
 	ApiErrorCodeFeedbackNotPending,
 	ApiErrorCodeFeedbackResponseRequired,
+	ApiErrorCodeBriefingDisabled,
+	ApiErrorCodeBriefingTargetUnavailable,
+	ApiErrorCodeBriefingBusy,
+	ApiErrorCodeBriefingUnavailable,
+	ApiErrorCodeBriefingRecordNotFound,
 	ApiErrorCodeFileBriefingDisabled,
 	ApiErrorCodeFileBriefingNotFound,
 	ApiErrorCodeFileBriefingUnavailable,
@@ -1397,6 +1415,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodePromotionNotFound,
 		ApiErrorCodeDelegationNotFound,
 		ApiErrorCodeDelegationLegNotFound,
+		ApiErrorCodeBriefingRecordNotFound,
 		ApiErrorCodeFileBriefingNotFound,
 		ApiErrorCodeChoiceTransitionNotFound,
 		ApiErrorCodeGitRepoNotFound,
@@ -1473,6 +1492,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeProjectBusy,
 		ApiErrorCodeCheckpointNotPending,
 		ApiErrorCodeFeedbackNotPending,
+		ApiErrorCodeBriefingDisabled,
+		ApiErrorCodeBriefingTargetUnavailable,
 		ApiErrorCodeFileBriefingDisabled,
 		ApiErrorCodeChoiceTransitionNotArmed,
 		ApiErrorCodeChoiceTransitionPendingInput,
@@ -1613,7 +1634,8 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeModelRefused,
 		ApiErrorCodeWorkflowValidationFailed:
 		return 422
-	case ApiErrorCodeRateLimited,
+	case ApiErrorCodeBriefingBusy,
+		ApiErrorCodeRateLimited,
 		ApiErrorCodeFileOperationCapacity:
 		return 429
 	case ApiErrorCodeDiagnosticsExportFailed,
@@ -1656,6 +1678,7 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeSourceAnalysisUnavailable,
 		ApiErrorCodeBackupUnavailable,
 		ApiErrorCodeStoreIncompatible,
+		ApiErrorCodeBriefingUnavailable,
 		ApiErrorCodeFileBriefingUnavailable,
 		ApiErrorCodeGitDraftFailed,
 		ApiErrorCodeProviderCatalogUnavailable,

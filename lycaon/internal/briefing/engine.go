@@ -137,6 +137,11 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 	if request.Manual {
 		snap.Regenerate = Started
 	}
+	if started.Joined && !e.scheduler.Has(jobKey(request)) {
+		// No run holds the attempt, so it can never settle: end it and start anew.
+		e.fail(ctx, r, attempt, Failure{Code: CodeInterrupted})
+		return e.Request(ctx, request)
+	}
 	if started.Joined {
 		// A manual request promotes queued work it joins.
 		if request.Manual {
@@ -196,8 +201,23 @@ func (e *Engine) settle(ctx context.Context, r resolved, attempt string, stored 
 
 var errSuperseded = errors.New("briefing attempt was superseded")
 
+// engineJobPrefix marks the engine's jobs on a scheduler shared with others.
+const engineJobPrefix = "briefing\x00"
+
 func jobKey(request Request) string {
-	return request.ProjectID + "\x00" + request.ProfileID + "\x00" + request.TargetKey
+	return engineJobPrefix + request.ProjectID + "\x00" + request.ProfileID + "\x00" + request.TargetKey
+}
+
+// JobProfile names the profile an engine job serves, or empty for any other job.
+func JobProfile(job Job) string {
+	rest, ok := strings.CutPrefix(job.Key, engineJobPrefix)
+	if !ok {
+		return ""
+	}
+	if parts := strings.SplitN(rest, "\x00", 3); len(parts) == 3 {
+		return parts[1]
+	}
+	return ""
 }
 
 func (r resolved) manifest(sectionID string) Manifest {
@@ -210,6 +230,11 @@ func (r resolved) manifest(sectionID string) Manifest {
 }
 
 func (e *Engine) generate(ctx context.Context, r resolved, attempt string, stored map[string]Result) {
+	if limit := r.request.Policy.RunLimit; limit > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, limit)
+		defer cancel()
+	}
 	var failures []string
 	for _, i := range r.missing {
 		section := r.request.Sections[i]
@@ -218,7 +243,8 @@ func (e *Engine) generate(ctx context.Context, r resolved, attempt string, store
 			return e.generateSection(ctx, r, section, hash)
 		})
 		if err != nil {
-			if ctx.Err() != nil {
+			if errors.Is(ctx.Err(), context.Canceled) {
+				e.fail(context.WithoutCancel(ctx), r, attempt, Failure{Code: CodeCancelled})
 				return
 			}
 			failures = append(failures, section.ID+": "+err.Error())

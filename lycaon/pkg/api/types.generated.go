@@ -984,6 +984,125 @@ type BoardWorkerRosterEntry struct {
 	BlockedOnApproval bool `json:"blocked_on_approval,omitempty"`
 }
 
+// BriefingEvent A snapshot of one target, or a reset clearing earlier epochs for the listed profiles.
+type BriefingEvent struct {
+	Kind       string            `json:"kind"`
+	Snapshot   *BriefingSnapshot `json:"snapshot,omitempty"`
+	ProfileIds []string          `json:"profile_ids,omitempty"`
+	CacheEpoch string            `json:"cache_epoch,omitempty"`
+}
+
+// BriefingEvidenceRef An immutable evidence record; its id derives from the ordered section manifest hashes.
+type BriefingEvidenceRef struct {
+	ProjectID string `json:"project_id"`
+	RecordID  string `json:"record_id"`
+}
+
+// BriefingLinkedIntent Provenance only; a purpose section is reused by hash, not from this field.
+type BriefingLinkedIntent struct {
+	Text         string `json:"text"`
+	CheckpointID string `json:"checkpoint_id"`
+	ActionID     string `json:"action_id"`
+	Scope        string `json:"scope"`
+}
+
+// BriefingOutcome
+type BriefingOutcome struct {
+	State     string `json:"state"`
+	ReceiptID string `json:"receipt_id,omitempty"`
+	ExitCode  *int   `json:"exit_code,omitempty"`
+}
+
+// BriefingRecord
+type BriefingRecord struct {
+	RecordID       string                  `json:"record_id"`
+	ProfileID      string                  `json:"profile_id"`
+	ProfileVersion string                  `json:"profile_version"`
+	Method         string                  `json:"method"`
+	AttemptTrigger string                  `json:"attempt_trigger,omitempty"`
+	CreatedAt      string                  `json:"created_at"`
+	Sections       []BriefingRecordSection `json:"sections"`
+}
+
+// BriefingRecordItem
+type BriefingRecordItem struct {
+	Key        string `json:"key"`
+	Role       string `json:"role"`
+	SourceKind string `json:"source_kind"`
+	Ref        string `json:"ref,omitempty"`
+	Revision   string `json:"revision,omitempty"`
+	Inclusion  string `json:"inclusion"`
+	Reason     string `json:"reason,omitempty"`
+	// The excerpt submitted; absent for items that were not sent.
+	Text string `json:"text,omitempty"`
+}
+
+// BriefingRecordSection
+type BriefingRecordSection struct {
+	SectionID    string `json:"section_id"`
+	ManifestHash string `json:"manifest_hash"`
+	// False when the reader cannot read every item this section used.
+	Available       bool                    `json:"available"`
+	Result          *BriefingSummarySection `json:"result,omitempty"`
+	TemplateID      string                  `json:"template_id,omitempty"`
+	TemplateVersion string                  `json:"template_version,omitempty"`
+	Items           []BriefingRecordItem    `json:"items,omitempty"`
+}
+
+// BriefingRequest
+type BriefingRequest struct {
+	ProfileID string `json:"profile_id"`
+	// SourceStepBriefingTarget, ToolActivityBriefingTarget or WorkerResultBriefingTarget, validated against profile_id.
+	TargetRef map[string]any `json:"target_ref"`
+	Trigger   string         `json:"trigger,omitempty"`
+}
+
+// BriefingResult
+type BriefingResult struct {
+	Summary     []BriefingSummarySection `json:"summary"`
+	EvidenceRef BriefingEvidenceRef      `json:"evidence_ref"`
+}
+
+// BriefingSnapshot
+type BriefingSnapshot struct {
+	ProfileID        string         `json:"profile_id"`
+	ProfileVersion   string         `json:"profile_version"`
+	TargetKey        string         `json:"target_key"`
+	ScopeFingerprint string         `json:"scope_fingerprint"`
+	Target           map[string]any `json:"target"`
+	// Decimal integer; compare numerically.
+	CacheEpoch string `json:"cache_epoch"`
+	// Decimal integer; zero only while absent.
+	Revision        string `json:"revision"`
+	Status          string `json:"status"`
+	AttemptID       string `json:"attempt_id,omitempty"`
+	AttemptTrigger  string `json:"attempt_trigger,omitempty"`
+	InvocationClass string `json:"invocation_class,omitempty"`
+	// Present while pending; ask again after it if no terminal event arrived.
+	ReconcileAfter    string                `json:"reconcile_after,omitempty"`
+	Result            *BriefingResult       `json:"result,omitempty"`
+	RegenerateOutcome string                `json:"regenerate_outcome,omitempty"`
+	LinkedIntent      *BriefingLinkedIntent `json:"linked_intent,omitempty"`
+	Outcome           BriefingOutcome       `json:"outcome"`
+	ErrorCode         string                `json:"error_code"`
+	ErrorMessage      string                `json:"error_message"`
+	UpdatedAt         string                `json:"updated_at,omitempty"`
+}
+
+// BriefingSummarySection
+type BriefingSummarySection struct {
+	SectionID    string `json:"section_id"`
+	Text         string `json:"text"`
+	ManifestHash string `json:"manifest_hash"`
+	Source       string `json:"source"`
+	// The result existed before this target asked for it.
+	Reused          bool     `json:"reused"`
+	ProviderID      string   `json:"provider_id"`
+	Model           string   `json:"model"`
+	EvidenceQuality []string `json:"evidence_quality"`
+	CreatedAt       string   `json:"created_at"`
+}
+
 // CLIOpenEvent A `lycaon open` invocation that the host resolved but did not enact. Device-scoped, so it reaches the window whatever project it is showing. `open` names a project that already exists and may be switched to directly — the human typing the command is the explicit action. `create` only proposes a root: minting a project is a durable act that needs trust, so Den confirms rather than the CLI deciding.
 type CLIOpenEvent struct {
 	Action CLIOpenAction `json:"action"`
@@ -3153,6 +3272,8 @@ type FileBriefingEvent struct {
 	Truncated    bool                   `json:"truncated"`
 	Error        string                 `json:"error,omitempty"`
 	UpdatedAt    string                 `json:"updated_at"`
+	// Present when the summary has an evidence record.
+	EvidenceRef *BriefingEvidenceRef `json:"evidence_ref,omitempty"`
 }
 
 // FileBriefingLocation Host-derived declaration location used for exact inline code navigation.
@@ -3199,6 +3320,8 @@ type FileBriefingResponse struct {
 	Truncated    bool   `json:"truncated"`
 	Error        string `json:"error,omitempty"`
 	UpdatedAt    string `json:"updated_at"`
+	// Present when the summary has an evidence record.
+	EvidenceRef *BriefingEvidenceRef `json:"evidence_ref,omitempty"`
 }
 
 // FileBriefingSection
@@ -7674,6 +7797,25 @@ type SourceSeenList struct {
 	NextCursor string `json:"next_cursor,omitempty"`
 }
 
+// SourceStepBriefingScope
+type SourceStepBriefingScope struct {
+	Kind     string   `json:"kind"`
+	BranchID string   `json:"branch_id,omitempty"`
+	RootIds  []string `json:"root_ids"`
+	FileID   string   `json:"file_id,omitempty"`
+}
+
+// SourceStepBriefingTarget
+type SourceStepBriefingTarget struct {
+	Kind      string `json:"kind"`
+	TargetKey string `json:"target_key"`
+	// Frozen scope and membership identity; never the result identity.
+	ScopeFingerprint string                  `json:"scope_fingerprint"`
+	Scope            SourceStepBriefingScope `json:"scope"`
+	// Exact ordered membership; required for outside targets.
+	EffectIds []string `json:"effect_ids,omitempty"`
+}
+
 // SourceStorage
 type SourceStorage struct {
 	Inventory SourceInventoryState `json:"inventory"`
@@ -8235,14 +8377,30 @@ type TokenTotals struct {
 	Completion int `json:"completion"`
 }
 
+// ToolActivityBriefingMember
+type ToolActivityBriefingMember struct {
+	ProgramID  string `json:"program_id"`
+	ActivityID string `json:"activity_id"`
+}
+
+// ToolActivityBriefingTarget
+type ToolActivityBriefingTarget struct {
+	SessionID string `json:"session_id"`
+	// Host-issued activity ids, in order.
+	Members          []ToolActivityBriefingMember `json:"members,omitempty"`
+	ToolCallIds      []string                     `json:"tool_call_ids"`
+	ActivityRevision string                       `json:"activity_revision,omitempty"`
+}
+
 // ToolApprovalPayload
 type ToolApprovalPayload struct {
-	ToolCallID         string       `json:"tool_call_id,omitempty"`
-	Plan               ApprovalPlan `json:"plan"`
-	AIRationale        string       `json:"ai_rationale,omitempty"`
-	AIRationalePending bool         `json:"ai_rationale_pending,omitempty"`
-	JoinedCount        int          `json:"joined_count,omitempty"`
-	JoinedToolCallIDs  []string     `json:"joined_tool_call_ids,omitempty"`
+	ToolCallID             string               `json:"tool_call_id,omitempty"`
+	Plan                   ApprovalPlan         `json:"plan"`
+	AIRationale            string               `json:"ai_rationale,omitempty"`
+	AIRationalePending     bool                 `json:"ai_rationale_pending,omitempty"`
+	AIRationaleEvidenceRef *BriefingEvidenceRef `json:"ai_rationale_evidence_ref,omitempty"`
+	JoinedCount            int                  `json:"joined_count,omitempty"`
+	JoinedToolCallIDs      []string             `json:"joined_tool_call_ids,omitempty"`
 	// Live presentation override for an open card. Raised when joiners escalate via MaxConsequence; mint-time plan.presentation is unchanged.
 	ConsequenceBand ConsequenceBand `json:"consequence_band,omitempty"`
 	// Host-authored consequence line id paired with consequence_band when the live band is high_risk. Prefer over plan.presentation when set.
@@ -9104,6 +9262,13 @@ type WorkerResult struct {
 	HintCode         string                  `json:"hint_code,omitempty"`
 	PolicyFeedback   *WorkerPolicyFeedback   `json:"policy_feedback,omitempty"`
 	HostAssembled    bool                    `json:"host_assembled,omitempty"`
+}
+
+// WorkerResultBriefingTarget
+type WorkerResultBriefingTarget struct {
+	JobID          string `json:"job_id"`
+	AttemptID      string `json:"attempt_id"`
+	ResultRevision string `json:"result_revision"`
 }
 
 // WorkerSummaryMeta

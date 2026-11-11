@@ -325,6 +325,10 @@ paths:
     $ref: paths/projects/source-versions.yaml#/paths/~1v1~1projects~1{id}~1source~1commits~1{commit_sha}~1restore
   /v1/projects/{id}/source/file-briefings:
     $ref: paths/projects/file-briefings.yaml#/paths/~1v1~1projects~1{id}~1source~1file-briefings
+  /v1/projects/{id}/briefings:
+    $ref: paths/projects/briefings.yaml#/paths/~1v1~1projects~1{id}~1briefings
+  /v1/projects/{id}/briefings/records/{record_id}:
+    $ref: paths/projects/briefings.yaml#/paths/~1v1~1projects~1{id}~1briefings~1records~1{record_id}
   /v1/projects/{id}/source/seen:
     $ref: paths/projects/source-presentation.yaml#/paths/~1v1~1projects~1{id}~1source~1seen
   /v1/projects/{id}/source/seen/{file_id}:
@@ -905,6 +909,38 @@ components:
       $ref: components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingResponse
     FileBriefingEvent:
       $ref: components/schemas/project/file-briefings.yaml#/components/schemas/FileBriefingEvent
+    BriefingEvidenceRef:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingEvidenceRef
+    SourceStepBriefingTarget:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/SourceStepBriefingTarget
+    SourceStepBriefingScope:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/SourceStepBriefingScope
+    ToolActivityBriefingTarget:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/ToolActivityBriefingTarget
+    ToolActivityBriefingMember:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/ToolActivityBriefingMember
+    WorkerResultBriefingTarget:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/WorkerResultBriefingTarget
+    BriefingRequest:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingRequest
+    BriefingSummarySection:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingSummarySection
+    BriefingResult:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingResult
+    BriefingLinkedIntent:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingLinkedIntent
+    BriefingOutcome:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingOutcome
+    BriefingSnapshot:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingSnapshot
+    BriefingEvent:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingEvent
+    BriefingRecordItem:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingRecordItem
+    BriefingRecordSection:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingRecordSection
+    BriefingRecord:
+      $ref: components/schemas/project/briefings.yaml#/components/schemas/BriefingRecord
     SourcePin:
       $ref: components/schemas/project/source-comparison.yaml#/components/schemas/SourcePin
     SourcePinList:

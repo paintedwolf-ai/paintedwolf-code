@@ -1,0 +1,228 @@
+components:
+  schemas:
+    BriefingEvidenceRef:
+      x-go-generate: true
+      type: object
+      required: [project_id, record_id]
+      additionalProperties: false
+      description: An immutable evidence record; its id derives from the ordered section manifest hashes.
+      properties:
+        project_id: {type: string, format: uuid}
+        record_id: {type: string, pattern: '^[0-9a-f]{64}$'}
+    SourceStepBriefingTarget:
+      x-go-generate: true
+      type: object
+      required: [kind, target_key, scope_fingerprint, scope]
+      additionalProperties: false
+      properties:
+        kind: {type: string, enum: [effect, command, git, outside]}
+        target_key: {type: string, minLength: 1}
+        scope_fingerprint: {type: string, description: Frozen scope and membership identity; never the result identity.}
+        scope: {$ref: '#/components/schemas/SourceStepBriefingScope'}
+        effect_ids:
+          type: array
+          description: Exact ordered membership; required for outside targets.
+          minItems: 2
+          maxItems: 256
+          items: {type: string}
+    SourceStepBriefingScope:
+      x-go-generate: true
+      type: object
+      required: [kind, root_ids]
+      additionalProperties: false
+      properties:
+        kind: {type: string, enum: [file, command, git, outside]}
+        branch_id: {type: string}
+        root_ids:
+          type: array
+          items: {type: string}
+        file_id: {type: string}
+    ToolActivityBriefingTarget:
+      x-go-generate: true
+      type: object
+      required: [session_id, tool_call_ids]
+      additionalProperties: false
+      properties:
+        session_id: {type: string, format: uuid}
+        members:
+          type: array
+          description: Host-issued activity ids, in order.
+          minItems: 1
+          items: {$ref: '#/components/schemas/ToolActivityBriefingMember'}
+        tool_call_ids:
+          type: array
+          minItems: 1
+          items: {type: string}
+        activity_revision: {type: string}
+    ToolActivityBriefingMember:
+      x-go-generate: true
+      type: object
+      required: [program_id, activity_id]
+      additionalProperties: false
+      properties:
+        program_id: {type: string}
+        activity_id: {type: string}
+    WorkerResultBriefingTarget:
+      x-go-generate: true
+      type: object
+      required: [job_id, attempt_id, result_revision]
+      additionalProperties: false
+      properties:
+        job_id: {type: string, format: uuid}
+        attempt_id: {type: string}
+        result_revision: {type: string}
+    BriefingRequest:
+      x-go-generate: true
+      type: object
+      required: [profile_id, target_ref]
+      additionalProperties: false
+      properties:
+        profile_id: {type: string, enum: [source_step, tool_activity, worker_result]}
+        target_ref:
+          type: object
+          additionalProperties: true
+          description: >-
+            SourceStepBriefingTarget, ToolActivityBriefingTarget or
+            WorkerResultBriefingTarget, validated against profile_id.
+        trigger: {type: string, enum: [automatic, manual], default: automatic}
+    BriefingSummarySection:
+      x-go-generate: true
+      type: object
+      required: [section_id, text, manifest_hash, source, reused, provider_id, model, evidence_quality, created_at]
+      additionalProperties: false
+      properties:
+        section_id: {type: string}
+        text: {type: string}
+        manifest_hash: {type: string, pattern: '^[0-9a-f]{64}$'}
+        source: {type: string, enum: [summarizer, fallback, deterministic]}
+        reused: {type: boolean, description: The result existed before this target asked for it.}
+        provider_id: {type: string}
+        model: {type: string}
+        evidence_quality:
+          type: array
+          items: {type: string, enum: [structural_evidence, causal_evidence, purpose_reused, causal_context_missing, content_binary, content_pruned, content_omitted, evidence_truncated, outcome_unknown, metadata_only, reasoning_included, reasoning_truncated, reasoning_shared, reasoning_unavailable, output_truncated]}
+        created_at: {x-go-type: string, type: string, format: date-time}
+    BriefingResult:
+      x-go-generate: true
+      type: object
+      required: [summary, evidence_ref]
+      additionalProperties: false
+      properties:
+        summary:
+          type: array
+          items: {$ref: '#/components/schemas/BriefingSummarySection'}
+        evidence_ref: {$ref: '#/components/schemas/BriefingEvidenceRef'}
+    BriefingLinkedIntent:
+      x-go-generate: true
+      type: object
+      required: [text, checkpoint_id, action_id, scope]
+      additionalProperties: false
+      description: Provenance only; a purpose section is reused by hash, not from this field.
+      properties:
+        text: {type: string}
+        checkpoint_id: {type: string}
+        action_id: {type: string}
+        scope: {type: string}
+    BriefingOutcome:
+      x-go-generate: true
+      type: object
+      required: [state]
+      additionalProperties: false
+      properties:
+        state: {type: string, enum: [succeeded, failed, interrupted, partial, unknown]}
+        receipt_id: {type: string}
+        exit_code: {x-go-pointer: true, type: integer}
+    BriefingSnapshot:
+      x-go-generate: true
+      type: object
+      required: [profile_id, profile_version, target_key, scope_fingerprint, target, cache_epoch, revision, status, outcome, error_code, error_message]
+      additionalProperties: false
+      properties:
+        profile_id: {type: string, enum: [source_step, tool_activity, worker_result]}
+        profile_version: {type: string}
+        target_key: {type: string}
+        scope_fingerprint: {type: string}
+        target: {type: object, additionalProperties: true}
+        cache_epoch: {type: string, pattern: '^[1-9][0-9]*$', description: Decimal integer; compare numerically.}
+        revision: {type: string, pattern: '^[0-9]+$', description: Decimal integer; zero only while absent.}
+        status: {type: string, enum: [absent, idle, pending, complete, failed, cancelled]}
+        attempt_id: {type: string}
+        attempt_trigger: {type: string, enum: [automatic, manual]}
+        invocation_class: {type: string, enum: [overlay, requested]}
+        reconcile_after:
+          x-go-type: string
+          type: string
+          format: date-time
+          description: Present while pending; ask again after it if no terminal event arrived.
+        result:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingResult'
+        regenerate_outcome: {type: string, enum: [inputs_unchanged, started]}
+        linked_intent:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingLinkedIntent'
+        outcome: {$ref: '#/components/schemas/BriefingOutcome'}
+        error_code: {type: string}
+        error_message: {type: string}
+        updated_at: {x-go-type: string, type: string, format: date-time}
+    BriefingEvent:
+      x-go-generate: true
+      type: object
+      required: [kind]
+      additionalProperties: false
+      description: A snapshot of one target, or a reset clearing earlier epochs for the listed profiles.
+      properties:
+        kind: {type: string, enum: [snapshot, reset]}
+        snapshot:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingSnapshot'
+        profile_ids:
+          type: array
+          items: {type: string, enum: [source_step, tool_activity, worker_result]}
+        cache_epoch: {type: string, pattern: '^[1-9][0-9]*$'}
+    BriefingRecordItem:
+      x-go-generate: true
+      type: object
+      required: [key, role, source_kind, inclusion]
+      additionalProperties: false
+      properties:
+        key: {type: string}
+        role: {type: string, enum: [goal, action, observation, structure, verification, context]}
+        source_kind: {type: string}
+        ref: {type: string}
+        revision: {type: string}
+        inclusion: {type: string, enum: [included, truncated, omitted, unavailable]}
+        reason: {type: string}
+        text: {type: string, description: The excerpt submitted; absent for items that were not sent.}
+    BriefingRecordSection:
+      x-go-generate: true
+      type: object
+      required: [section_id, manifest_hash, available]
+      additionalProperties: false
+      properties:
+        section_id: {type: string}
+        manifest_hash: {type: string, pattern: '^[0-9a-f]{64}$'}
+        available: {type: boolean, description: False when the reader cannot read every item this section used.}
+        result:
+          x-go-pointer: true
+          $ref: '#/components/schemas/BriefingSummarySection'
+        template_id: {type: string}
+        template_version: {type: string}
+        items:
+          type: array
+          items: {$ref: '#/components/schemas/BriefingRecordItem'}
+    BriefingRecord:
+      x-go-generate: true
+      type: object
+      required: [record_id, profile_id, profile_version, method, created_at, sections]
+      additionalProperties: false
+      properties:
+        record_id: {type: string, pattern: '^[0-9a-f]{64}$'}
+        profile_id: {type: string}
+        profile_version: {type: string}
+        method: {type: string, enum: [model, deterministic, mixed]}
+        attempt_trigger: {type: string, enum: [automatic, manual]}
+        created_at: {x-go-type: string, type: string, format: date-time}
+        sections:
+          type: array
+          items: {$ref: '#/components/schemas/BriefingRecordSection'}

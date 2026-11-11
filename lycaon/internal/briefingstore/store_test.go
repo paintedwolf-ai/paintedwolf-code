@@ -270,7 +270,7 @@ func TestApprovalIntentLinksWithoutMovingTheTarget(t *testing.T) {
 	testutil.FailErr(t, "relink", f.store.LinkApprovalIntent(ctx, project, "tool_activity", "a", intent))
 	again, err := f.store.GetTarget(ctx, project, "tool_activity", "a")
 	testutil.FailErr(t, "target again", err)
-	if linked.Intent == nil || *linked.Intent != intent || again.Revision != linked.Revision || again.RecordID != linked.RecordID {
+	if linked.Facts.Intent == nil || *linked.Facts.Intent != intent || again.Revision != linked.Revision || again.RecordID != linked.RecordID {
 		t.Fatalf("link %+v then %+v", linked, again)
 	}
 }

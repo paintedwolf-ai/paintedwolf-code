@@ -40,7 +40,7 @@ func TestCheckpointEventsFollowWorkerRegistration(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "create child approval", err)
-	_, err = manager.PatchPendingToolApprovalAIRationale(testdbseed.OwnerCaller(t, t.Context(), database), response.CheckpointID, "Fixture rationale")
+	_, err = manager.PatchPendingToolApprovalAIRationale(testdbseed.OwnerCaller(t, t.Context(), database), response.CheckpointID, "Fixture rationale", "")
 	testutil.FailErr(t, "update rationale", err)
 	approveCurrentOption(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, "child", response.CheckpointID)
 	select {
@@ -95,7 +95,7 @@ func TestCheckpointMutationRollsBackWhenEventCannotBeCommitted(t *testing.T) {
 	if _, err := requestExplicitApprovalCheckpoint(t, testdbseed.OwnerCaller(t, t.Context(), database), manager, req); err == nil {
 		t.Fatal("checkpoint creation survived failed event commit")
 	}
-	if _, err := manager.PatchPendingToolApprovalAIRationale(testdbseed.OwnerCaller(t, t.Context(), database), response.CheckpointID, "Uncommitted rationale"); err == nil {
+	if _, err := manager.PatchPendingToolApprovalAIRationale(testdbseed.OwnerCaller(t, t.Context(), database), response.CheckpointID, "Uncommitted rationale", ""); err == nil {
 		t.Fatal("checkpoint update survived failed event commit")
 	}
 	if _, err := manager.ResolveCheckpoint(testdbseed.OwnerCaller(t, t.Context(), database), sid, response.CheckpointID, api.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil); err == nil {

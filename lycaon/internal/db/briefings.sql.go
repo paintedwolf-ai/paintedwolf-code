@@ -169,7 +169,7 @@ func (q *Queries) EnsureBriefingEpoch(ctx context.Context, projectID string) err
 
 const failBriefingTargetAttempt = `-- name: FailBriefingTargetAttempt :one
 UPDATE briefing_targets SET
-    attempt_status = 'failed', error_code = ?, error_message = ?,
+    attempt_status = ?, error_code = ?, error_message = ?,
     revision = revision + 1, updated_at = ?
 WHERE project_id = ? AND profile_id = ? AND target_key = ?
   AND attempt_id = ? AND attempt_status = 'pending'
@@ -177,17 +177,19 @@ RETURNING revision
 `
 
 type FailBriefingTargetAttemptParams struct {
-	ErrorCode    string `json:"error_code"`
-	ErrorMessage string `json:"error_message"`
-	UpdatedAt    string `json:"updated_at"`
-	ProjectID    string `json:"project_id"`
-	ProfileID    string `json:"profile_id"`
-	TargetKey    string `json:"target_key"`
-	AttemptID    string `json:"attempt_id"`
+	AttemptStatus string `json:"attempt_status"`
+	ErrorCode     string `json:"error_code"`
+	ErrorMessage  string `json:"error_message"`
+	UpdatedAt     string `json:"updated_at"`
+	ProjectID     string `json:"project_id"`
+	ProfileID     string `json:"profile_id"`
+	TargetKey     string `json:"target_key"`
+	AttemptID     string `json:"attempt_id"`
 }
 
 func (q *Queries) FailBriefingTargetAttempt(ctx context.Context, arg FailBriefingTargetAttemptParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, failBriefingTargetAttempt,
+		arg.AttemptStatus,
 		arg.ErrorCode,
 		arg.ErrorMessage,
 		arg.UpdatedAt,

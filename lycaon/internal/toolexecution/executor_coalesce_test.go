@@ -71,7 +71,7 @@ func (m *coalesceHITL) SessionApprovalDenied(context.Context, string) (bool, err
 func (m *coalesceHITL) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (m *coalesceHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+func (m *coalesceHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
 	return false, nil
 }
 func (m *coalesceHITL) ClearPendingToolApprovalAIRationale(context.Context, string) error {
@@ -144,7 +144,7 @@ func (m *failOnceHITL) SessionApprovalDenied(context.Context, string) (bool, err
 func (m *failOnceHITL) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (m *failOnceHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+func (m *failOnceHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
 	return false, nil
 }
 func (m *failOnceHITL) ClearPendingToolApprovalAIRationale(context.Context, string) error {

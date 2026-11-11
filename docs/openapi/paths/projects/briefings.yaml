@@ -1,0 +1,78 @@
+paths:
+  /v1/projects/{id}/briefings:
+    post:
+      tags: [projects]
+      operationId: requestBriefing
+      x-person-action: none
+      summary: Request or read the briefing for one step, activity or worker result
+      description: >-
+        Returns the target's snapshot: a stored result, an admitted or joined
+        attempt, or a factual fallback. A manual request whose inputs are all
+        answered already returns regenerate_outcome inputs_unchanged and makes
+        no model call.
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: ../../components/schemas/project/briefings.yaml#/components/schemas/BriefingRequest}
+      responses:
+        '200':
+          description: Target snapshot
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/briefings.yaml#/components/schemas/BriefingSnapshot}
+        '429':
+          description: The project's briefing queue is full (briefing_busy)
+          headers:
+            Retry-After: {schema: {type: integer, minimum: 1}}
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        '503':
+          description: Briefings are stopping with the engine (briefing_unavailable)
+          content: {application/json: {schema: {$ref: ../../components/schemas/common.yaml#/components/schemas/Error}}}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound
+        '409':
+          $ref: ../../components/responses.yaml#/components/responses/Conflict
+        '415':
+          $ref: ../../components/responses.yaml#/components/responses/UnsupportedMediaType
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/UnprocessableContent
+  /v1/projects/{id}/briefings/records/{record_id}:
+    get:
+      tags: [projects]
+      operationId: getBriefingRecord
+      summary: Read an immutable briefing evidence record
+      description: >-
+        Lists each section's result and the evidence it was given. A section
+        whose evidence the reader cannot read is marked unavailable and carries
+        neither text nor items.
+      parameters:
+      - {$ref: ../../components/parameters.yaml#/components/parameters/ProjectId}
+      - name: record_id
+        in: path
+        required: true
+        schema: {type: string, pattern: '^[0-9a-f]{64}$'}
+      responses:
+        '200':
+          description: Evidence record
+          content:
+            application/json:
+              schema: {$ref: ../../components/schemas/project/briefings.yaml#/components/schemas/BriefingRecord}
+        default: {$ref: ../../components/responses.yaml#/components/responses/Error}
+        '401':
+          $ref: ../../components/responses.yaml#/components/responses/Unauthorized
+        '400':
+          $ref: ../../components/responses.yaml#/components/responses/BadRequest
+        '403':
+          $ref: ../../components/responses.yaml#/components/responses/Forbidden
+        '404':
+          $ref: ../../components/responses.yaml#/components/responses/NotFound

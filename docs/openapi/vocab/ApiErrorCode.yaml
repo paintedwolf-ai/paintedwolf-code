@@ -193,6 +193,26 @@ values:
     status: 422
     comment: >-
       feedback resolve had empty response
+  - id: briefing_disabled
+    status: 409
+    comment: >-
+      summaries are turned off
+  - id: briefing_target_unavailable
+    status: 409
+    comment: >-
+      the target cannot be briefed now, including an activity over its member bound
+  - id: briefing_busy
+    status: 429
+    comment: >-
+      the project's briefing queue is full; retry after the Retry-After delay
+  - id: briefing_unavailable
+    status: 503
+    comment: >-
+      briefings are stopping with the engine
+  - id: briefing_record_not_found
+    status: 404
+    comment: >-
+      no evidence record has that id in this project
   - id: file_briefing_disabled
     status: 409
     comment: >-

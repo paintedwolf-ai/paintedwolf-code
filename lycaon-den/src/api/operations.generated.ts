@@ -101,6 +101,7 @@ export const API_OPERATIONS = {
   getBackupCapabilities: { method: "GET", path: "/v1/backup/capabilities" },
   getBlueprint: { method: "GET", path: "/v1/projects/{id}/blueprints/{blueprint_id}" },
   getBoard: { method: "GET", path: "/v1/projects/{id}/board" },
+  getBriefingRecord: { method: "GET", path: "/v1/projects/{id}/briefings/records/{record_id}" },
   getChatContent: { method: "GET", path: "/v1/sessions/{id}/messages/{message_id}/content" },
   getChatVault: { method: "GET", path: "/v1/sessions/{id}/vault" },
   getCodeScan: { method: "GET", path: "/v1/projects/{id}/scans/{scan_id}" },
@@ -264,6 +265,7 @@ export const API_OPERATIONS = {
   replaceScannerSlot: { method: "PUT", path: "/v1/scanners/slots/{category}" },
   replaceSourceViewportInterest: { method: "PUT", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
   replaceWebResearchCredential: { method: "PUT", path: "/v1/web-research/providers/{provider_id}/credential" },
+  requestBriefing: { method: "POST", path: "/v1/projects/{id}/briefings" },
   requestFileBriefing: { method: "POST", path: "/v1/projects/{id}/source/file-briefings" },
   resetStore: { method: "POST", path: "/v1/store/reset" },
   resolveCheckpoint: { method: "POST", path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}" },
@@ -447,6 +449,7 @@ export type OperationPathParameters = {
   getBackupCapabilities: Record<string, never>;
   getBlueprint: { id: string | number; blueprint_id: string | number; };
   getBoard: { id: string | number; };
+  getBriefingRecord: { id: string | number; record_id: string | number; };
   getChatContent: { id: string | number; message_id: string | number; };
   getChatVault: { id: string | number; };
   getCodeScan: { id: string | number; scan_id: string | number; };
@@ -610,6 +613,7 @@ export type OperationPathParameters = {
   replaceScannerSlot: { category: string | number; };
   replaceSourceViewportInterest: { id: string | number; view_id: string | number; interest_id: string | number; };
   replaceWebResearchCredential: { provider_id: string | number; };
+  requestBriefing: { id: string | number; };
   requestFileBriefing: { id: string | number; };
   resetStore: Record<string, never>;
   resolveCheckpoint: { id: string | number; checkpoint_id: string | number; };

@@ -144,7 +144,7 @@ func TestPatchPendingAIRationaleNoSSEAfterResolve(t *testing.T) {
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusPending)
 
 	// Successful patch while pending publishes and surfaces ai_rationale.
-	if _, err := mgr.PatchPendingToolApprovalAIRationale(ctx, resp.CheckpointID, "Pushes the fix the user asked for."); err != nil {
+	if _, err := mgr.PatchPendingToolApprovalAIRationale(ctx, resp.CheckpointID, "Pushes the fix the user asked for.", rationaleRecord); err != nil {
 		testutil.FailErr(t, "PatchPending while pending", err)
 	}
 	select {
@@ -159,6 +159,9 @@ func TestPatchPendingAIRationaleNoSSEAfterResolve(t *testing.T) {
 		if ev.ToolApproval == nil || ev.ToolApproval.AIRationale != "Pushes the fix the user asked for." {
 			t.Fatalf("ai_rationale = %+v", ev.ToolApproval)
 		}
+		if ref := ev.ToolApproval.AIRationaleEvidenceRef; ref == nil || ref.RecordID != rationaleRecord || ref.ProjectID != projectID {
+			t.Fatalf("rationale evidence = %+v", ref)
+		}
 	case <-t.Context().Done():
 		t.Fatal("timeout waiting for ai_rationale SSE")
 	}
@@ -167,7 +170,7 @@ func TestPatchPendingAIRationaleNoSSEAfterResolve(t *testing.T) {
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusApproved)
 
 	// Stale patch after resolve must no-op the write and publish no SSE.
-	if _, err := mgr.PatchPendingToolApprovalAIRationale(ctx, resp.CheckpointID, "should not appear"); err != nil {
+	if _, err := mgr.PatchPendingToolApprovalAIRationale(ctx, resp.CheckpointID, "should not appear", ""); err != nil {
 		testutil.FailErr(t, "PatchPending after resolve", err)
 	}
 	select {
@@ -289,3 +292,5 @@ func TestJoinerBandEscalationReachesWire(t *testing.T) {
 		t.Fatalf("plan presentation band = %q want standard (immutable)", payload.Plan.Presentation.ConsequenceBand)
 	}
 }
+
+const rationaleRecord = "1111111111111111111111111111111111111111111111111111111111111111"

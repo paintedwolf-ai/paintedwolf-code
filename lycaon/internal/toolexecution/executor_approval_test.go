@@ -549,7 +549,7 @@ func (m *rejectHITL) SessionApprovalDenied(context.Context, string) (bool, error
 func (m *rejectHITL) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (m *rejectHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+func (m *rejectHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
 	return false, nil
 }
 func (m *rejectHITL) ClearPendingToolApprovalAIRationale(context.Context, string) error {
@@ -601,7 +601,7 @@ func (m *expireHITL) SessionApprovalDenied(context.Context, string) (bool, error
 func (m *expireHITL) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (m *expireHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+func (m *expireHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
 	return false, nil
 }
 func (m *expireHITL) ClearPendingToolApprovalAIRationale(context.Context, string) error {
@@ -651,7 +651,7 @@ func (m *asyncHITL) SessionApprovalDenied(context.Context, string) (bool, error)
 func (m *asyncHITL) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (m *asyncHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+func (m *asyncHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
 	return false, nil
 }
 func (m *asyncHITL) ClearPendingToolApprovalAIRationale(context.Context, string) error {

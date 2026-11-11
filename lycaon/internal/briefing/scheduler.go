@@ -39,13 +39,23 @@ type Policy struct {
 	Active     int
 	// QueueWait bounds how long queued work may wait to start.
 	QueueWait time.Duration
+	// RunLimit bounds one run once started.
+	RunLimit time.Duration
 }
 
+// Deadline is when an attempt started at started must have settled.
+func (p Policy) Deadline(started time.Time) time.Time {
+	return started.Add(p.QueueWait + p.RunLimit + settleMargin)
+}
+
+// settleMargin covers storing and publishing after the run limit.
+const settleMargin = 5 * time.Second
+
 // ApprovalPolicy starts at once: a person is waiting on the card.
-var ApprovalPolicy = Policy{Admission: Immediate}
+var ApprovalPolicy = Policy{Admission: Immediate, RunLimit: 2 * time.Minute}
 
 // QueuedPolicy is the step, activity and worker contract.
-var QueuedPolicy = Policy{Admission: Queued, QueueLimit: 64, Active: 2, QueueWait: 30 * time.Second}
+var QueuedPolicy = Policy{Admission: Queued, QueueLimit: 64, Active: 2, QueueWait: 30 * time.Second, RunLimit: 90 * time.Second}
 
 // Job is one keyed unit of work. Equal keys share one run.
 type Job struct {
@@ -146,6 +156,14 @@ func (s *Scheduler) runContext(job Job) (context.Context, context.CancelFunc) {
 	ctx, cancel := context.WithCancel(context.WithoutCancel(job.Values))
 	stop := context.AfterFunc(s.ctx, cancel)
 	return ctx, func() { stop(); cancel() }
+}
+
+// Has reports whether a run holds key, queued or started.
+func (s *Scheduler) Has(key string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	existing, ok := s.running[key]
+	return ok && existing.ctx.Err() == nil
 }
 
 // Promote marks queued work as manual so it starts ahead of automatic work.

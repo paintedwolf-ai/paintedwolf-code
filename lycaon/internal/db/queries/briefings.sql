@@ -97,7 +97,7 @@ RETURNING revision;
 
 -- name: FailBriefingTargetAttempt :one
 UPDATE briefing_targets SET
-    attempt_status = 'failed', error_code = ?, error_message = ?,
+    attempt_status = ?, error_code = ?, error_message = ?,
     revision = revision + 1, updated_at = ?
 WHERE project_id = ? AND profile_id = ? AND target_key = ?
   AND attempt_id = ? AND attempt_status = 'pending'

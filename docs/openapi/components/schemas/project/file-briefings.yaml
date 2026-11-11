@@ -81,6 +81,10 @@ components:
         truncated: {type: boolean}
         error: {type: string}
         updated_at: { x-go-type: "string", type: string, format: date-time}
+        evidence_ref:
+          x-go-pointer: true
+          description: Present when the summary has an evidence record.
+          $ref: 'briefings.yaml#/components/schemas/BriefingEvidenceRef'
     FileBriefingEvent:
       x-go-generate: true
       type: object
@@ -110,3 +114,7 @@ components:
         truncated: {type: boolean}
         error: {type: string}
         updated_at: { x-go-type: "string", type: string, format: date-time}
+        evidence_ref:
+          x-go-pointer: true
+          description: Present when the summary has an evidence record.
+          $ref: 'briefings.yaml#/components/schemas/BriefingEvidenceRef'

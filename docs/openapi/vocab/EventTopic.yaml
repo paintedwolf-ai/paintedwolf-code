@@ -84,6 +84,11 @@ values:
   - id: file_briefing
     payload: project/file-briefings.yaml#/components/schemas/FileBriefingEvent
     comment: Project file briefing progress.
+  - id: briefing
+    payload: project/briefings.yaml#/components/schemas/BriefingEvent
+    comment: >-
+      Step, activity and worker briefing snapshots, and resets that clear
+      earlier epochs after summaries are turned off.
   - id: artifact
     payload: events.yaml#/components/schemas/ArtifactEvent
     comment: >-

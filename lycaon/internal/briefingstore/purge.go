@@ -35,6 +35,11 @@ func (s *Retention) Purge(ctx context.Context, projectID string, profileIDs []st
 	return epoch, err
 }
 
+// Projects lists the projects that have briefing state.
+func (s *Retention) Projects(ctx context.Context) ([]string, error) {
+	return s.queries.ListBriefingProjects(ctx)
+}
+
 // Sweep deletes every record and manifest in each project that nothing
 // holds, such as results whose attempt was superseded before it recorded.
 func (s *Retention) Sweep(ctx context.Context) error {

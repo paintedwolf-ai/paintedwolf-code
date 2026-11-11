@@ -389,7 +389,7 @@ func (*cannedWriteRootCheckpoints) SessionApprovalDenied(context.Context, string
 func (*cannedWriteRootCheckpoints) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (*cannedWriteRootCheckpoints) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+func (*cannedWriteRootCheckpoints) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
 	return false, nil
 }
 func (*cannedWriteRootCheckpoints) ClearPendingToolApprovalAIRationale(context.Context, string) error {
@@ -420,7 +420,7 @@ func (unusedWriteRootCheckpoints) SessionApprovalDenied(context.Context, string)
 func (unusedWriteRootCheckpoints) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (unusedWriteRootCheckpoints) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+func (unusedWriteRootCheckpoints) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
 	return false, nil
 }
 func (unusedWriteRootCheckpoints) ClearPendingToolApprovalAIRationale(context.Context, string) error {
