@@ -9280,8 +9280,8 @@ type WorkerResult struct {
 
 // WorkerResultBriefingTarget
 type WorkerResultBriefingTarget struct {
-	JobID          string `json:"job_id"`
-	AttemptID      string `json:"attempt_id"`
+	JobID string `json:"job_id"`
+	// The worker's completion time; a rerun is a new revision.
 	ResultRevision string `json:"result_revision"`
 }
 

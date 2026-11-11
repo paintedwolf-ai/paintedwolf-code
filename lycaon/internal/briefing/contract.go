@@ -15,6 +15,9 @@ import (
 type Contract struct {
 	MaxSentences int `json:"max_sentences"`
 	MaxRunes     int `json:"max_runes"`
+	// Labels asks for one labelled block per entry, in order, instead of
+	// sentences; MaxRunes bounds the whole output.
+	Labels []string `json:"labels,omitempty"`
 }
 
 var (
@@ -37,6 +40,9 @@ var (
 // Parse fits model output to the contract: plain text with single-backtick
 // identifiers kept, at most MaxSentences whole sentences, at most MaxRunes.
 func (c Contract) Parse(raw string) (string, error) {
+	if len(c.Labels) > 0 && c.MaxRunes > 0 {
+		return c.parseLabelled(raw)
+	}
 	if c.MaxSentences <= 0 || c.MaxRunes <= 0 {
 		return "", fmt.Errorf("briefing contract %+v is unbounded", c)
 	}
@@ -130,4 +136,36 @@ func clampWords(s string, max int) string {
 		}
 	}
 	return strings.TrimRightFunc(string(runes), unicode.IsSpace) + "…"
+}
+
+// parseLabelled keeps each "Label: text" block in label order. Every label
+// must have text; each block is clamped to its share of the rune bound.
+func (c Contract) parseLabelled(raw string) (string, error) {
+	blocks := map[string]string{}
+	current := ""
+	for _, line := range strings.Split(raw, "\n") {
+		line = strings.TrimSpace(headingMark.ReplaceAllString(listMarker.ReplaceAllString(line, ""), ""))
+		line = emphasis.ReplaceAllString(line, "$2")
+		matched := false
+		for _, label := range c.Labels {
+			if rest, ok := strings.CutPrefix(line, label+":"); ok {
+				current, matched = label, true
+				blocks[label] = strings.TrimSpace(rest)
+				break
+			}
+		}
+		if !matched && current != "" && line != "" {
+			blocks[current] = strings.TrimSpace(blocks[current] + " " + line)
+		}
+	}
+	share := c.MaxRunes/len(c.Labels) - 20
+	out := make([]string, 0, len(c.Labels))
+	for _, label := range c.Labels {
+		text := plainText(blocks[label])
+		if !strings.ContainsFunc(text, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
+			return "", ErrNoText
+		}
+		out = append(out, label+": "+clampWords(text, share))
+	}
+	return strings.Join(out, "\n"), nil
 }

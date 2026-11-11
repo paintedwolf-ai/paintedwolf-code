@@ -18022,17 +18022,15 @@ components:
       type: object
       required:
         - job_id
-        - attempt_id
         - result_revision
       additionalProperties: false
       properties:
         job_id:
           type: string
           format: uuid
-        attempt_id:
-          type: string
         result_revision:
           type: string
+          description: The worker's completion time; a rerun is a new revision.
     BriefingRequest:
       x-go-generate: true
       type: object

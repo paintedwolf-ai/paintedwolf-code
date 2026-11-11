@@ -6846,7 +6846,7 @@ export interface components {
         WorkerResultBriefingTarget: {
             /** Format: uuid */
             job_id: string;
-            attempt_id: string;
+            /** @description The worker's completion time; a rerun is a new revision. */
             result_revision: string;
         };
         BriefingRequest: {

@@ -68,3 +68,21 @@ func TestContractRefusesOutputWithoutText(t *testing.T) {
 		t.Fatal("unbounded contract accepted")
 	}
 }
+
+func TestLabelledContractKeepsEveryBlockInOrder(t *testing.T) {
+	contract := Contract{MaxRunes: 600, Labels: []string{"Contribution", "Verification", "Remaining"}}
+	got, err := contract.Parse("**Verification:** Ran go test.\n- Contribution: Added token refresh\nacross two files.\nRemaining: Nothing.")
+	testutil.FailErr(t, "parse", err)
+	want := "Contribution: Added token refresh across two files.\nVerification: Ran go test.\nRemaining: Nothing."
+	if got != want {
+		t.Fatalf("got %q", got)
+	}
+	if _, err := contract.Parse("Contribution: Added it.\nVerification: Ran tests."); !errors.Is(err, ErrNoText) {
+		t.Fatalf("a missing block parsed: %v", err)
+	}
+	long, err := contract.Parse("Contribution: " + strings.Repeat("word ", 300) + "\nVerification: ok\nRemaining: none")
+	testutil.FailErr(t, "parse long", err)
+	if utf8.RuneCountInString(long) > contract.MaxRunes {
+		t.Fatalf("%d runes exceed the bound", utf8.RuneCountInString(long))
+	}
+}
