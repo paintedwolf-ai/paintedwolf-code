@@ -54,6 +54,9 @@ func (s *Store) PrepareHeldEdit(ctx context.Context, in HeldEdit) (PreparedHeldE
 		return nil, fmt.Errorf("held edit requires content")
 	}
 	release := s.Content.AcquireReferenceLease()
+	if s.contentWithheld(ctx, in.ProjectID, in.RootID, in.Path) {
+		in.Content = nil
+	}
 	object, err := prepareContent(ctx, s.Content, in.SHA256, in.Content, EntryKindFile)
 	if err != nil {
 		release()

@@ -45,11 +45,42 @@ func ControlPlaneTree(path string) bool {
 	if p == "" || p == "." {
 		return false
 	}
-	p = fspath.CanonicalPath(p)
-	if underAny(p, resolveEach(agentWorkspaceRootsUnderControlPlane())) {
-		return false
+	return CurrentControlPlane().Contains(fspath.CanonicalPath(p))
+}
+
+// ControlPlane is a snapshot of the control-plane layout for callers that ask
+// about many paths at once.
+type ControlPlane struct {
+	// Tops are the state tree and each registered worker placement folder.
+	Tops []string
+	// Workspaces are the agent workspaces inside Tops, which are not control plane.
+	Workspaces []string
+}
+
+// CurrentControlPlane resolves the layout from current host facts.
+func CurrentControlPlane() ControlPlane {
+	return ControlPlane{
+		Tops:       resolveEach(controlPlaneReadDenyRoots()),
+		Workspaces: resolveEach(agentWorkspaceRootsUnderControlPlane()),
 	}
-	return underAny(p, resolveEach(controlPlaneReadDenyRoots()))
+}
+
+// Contains reports whether canonical path p is control plane.
+func (c ControlPlane) Contains(p string) bool {
+	return !underAny(p, c.Workspaces) && underAny(p, c.Tops)
+}
+
+// Meets reports whether canonical path p is, contains or lies inside control plane.
+func (c ControlPlane) Meets(p string) bool {
+	if c.Contains(p) {
+		return true
+	}
+	for _, top := range c.Tops {
+		if PathAtOrUnder(top, p) {
+			return true
+		}
+	}
+	return false
 }
 
 // ControlPlanePathDenied is the one verdict the approval gate and the path
