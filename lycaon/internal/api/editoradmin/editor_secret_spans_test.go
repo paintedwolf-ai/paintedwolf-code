@@ -102,6 +102,11 @@ func TestScreenProjectionCompletesInTheBackground(t *testing.T) {
 		t.Fatalf("completed screen = %+v", screen)
 	}
 
+	// The background goroutine keeps publishing after the screen lands in
+	// the memo; drain it before swapping the screener so the swap cannot
+	// race the completion's event work.
+	f.h.background.Wait(t.Context())
+
 	spans := f.h.SecretSpans
 	f.h.SecretSpans = nil
 	status, none := f.h.EditorScreenProjection(t.Context(), d)
