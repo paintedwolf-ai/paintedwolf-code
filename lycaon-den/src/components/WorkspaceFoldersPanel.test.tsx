@@ -30,7 +30,16 @@ describe("WorkspaceFoldersPanel", () => {
   it("marks only the roots the host reports as editor-only", () => {
     const withHome: ProjectRoot[] = [
       ...roots,
-      { ...roots[1], id: "root-home", path: "/home/person", label: "person", admitted: false, admission_code: "write_root_contains_control_plane" },
+      {
+        id: "root-home",
+        path: "/home/person",
+        label: "person",
+        is_primary: false,
+        added_at: "2025-01-01T00:00:00Z",
+        kind: "attached",
+        admitted: false,
+        admission_code: "write_root_contains_control_plane",
+      },
     ];
     const { queryByTestId } = render(() => (
       <WorkspaceFoldersPanel
