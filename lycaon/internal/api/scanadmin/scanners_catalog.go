@@ -47,8 +47,8 @@ func (s *Handler) HandleListProjectScanners(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	projectDir := ""
-	if len(p.Roots) > 0 {
-		projectDir = requestscope.GatedProjectDir(s.Settings, p, p.Roots[0].Path, projectcontrib.SurfaceScanConfig)
+	if primary := project.PrimaryRootPath(p); primary != "" {
+		projectDir = requestscope.GatedProjectDir(s.Settings, p, primary, projectcontrib.SurfaceScanConfig)
 	}
 	cfg, rejected, err := scancatalog.LoadMergedScannerCatalog(s.ModuleRoot, projectDir, homeDir)
 	if err != nil {

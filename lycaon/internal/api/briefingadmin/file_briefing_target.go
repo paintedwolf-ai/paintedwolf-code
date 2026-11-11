@@ -37,6 +37,10 @@ func (s *Handler) resolveFileBriefing(ctx context.Context, p *project.Project, r
 	if req.RootID == "" || req.Path == "" {
 		return resolvedFileBriefing{}, invalidFileBriefingRequest("root_id and path are required")
 	}
+	// A briefing sends file text to a model, so it reads admitted roots only.
+	if projectRootPath(p, req.RootID) == "" {
+		return resolvedFileBriefing{}, projectsource.ErrSourcePathDenied
+	}
 	var resolved resolvedFileBriefing
 	var err error
 	switch req.Presentation {

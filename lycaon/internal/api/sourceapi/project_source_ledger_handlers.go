@@ -259,7 +259,7 @@ func (s *Comparisons) resolveRootRepoPosition(
 	p *project.Project,
 	rootID string,
 ) (string, string, bool) {
-	roots := project.RootRefsFrom(p)
+	roots := p.SourceRoots()
 	rootPath := ""
 	for _, root := range roots {
 		if root.ID == rootID {
