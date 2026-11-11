@@ -9,13 +9,14 @@ import {
   Decoration,
   type DecorationSet,
   EditorView,
-  type KeyBinding,
-  keymap,
   layer,
   type Rect,
   RectangleMarker,
   WidgetType,
 } from "@codemirror/view";
+import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
+import { shortcutPlatform } from "../../../shortcuts/platform.ts";
+import { installedEditingStyle } from "../editor/editor-editing-style-state.ts";
 
 /** Whether Pretty layout is active in the view. */
 export const prettyLayoutActive = Facet.define<boolean, boolean>({
@@ -147,6 +148,8 @@ const prettyActiveLineTheme = EditorView.theme({
   },
 });
 
+const NO_ATTRIBUTES: Record<string, string> = {};
+
 const SEARCH_START = 256;
 
 function previousBreak(set: DecorationSet, lineFrom: number, pos: number, inclusive: boolean): number | null {
@@ -215,12 +218,38 @@ function boundaryMotion(forward: boolean, extend: boolean) {
   };
 }
 
-const prettyBoundaryKeys: readonly KeyBinding[] = [
-  { key: "Home", run: boundaryMotion(false, false), shift: boundaryMotion(false, true) },
-  { key: "End", run: boundaryMotion(true, false), shift: boundaryMotion(true, true) },
-  { mac: "Cmd-ArrowLeft", run: boundaryMotion(false, false), shift: boundaryMotion(false, true) },
-  { mac: "Cmd-ArrowRight", run: boundaryMotion(true, false), shift: boundaryMotion(true, true) },
-];
+type LineKey = { forward: boolean; extend: boolean };
+
+// Line keys of every editing style: Home and End, Cmd+Left and Cmd+Right on
+// macOS, and Control+A and Control+E on macOS outside Vim, where Control+A
+// adjusts a number.
+function lineKey(event: KeyboardEvent, state: EditorState): LineKey | null {
+  const extend = event.shiftKey;
+  if (event.altKey) return null;
+  if (!event.ctrlKey && !event.metaKey && (event.key === "Home" || event.key === "End")) {
+    return { forward: event.key === "End", extend };
+  }
+  if (shortcutPlatform() !== "macos") return null;
+  if (event.metaKey && !event.ctrlKey && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+    return { forward: event.key === "ArrowRight", extend };
+  }
+  const letter = event.key.toLowerCase();
+  if (event.ctrlKey && !event.metaKey && (letter === "a" || letter === "e") && state.facet(installedEditingStyle) !== "vim") {
+    return { forward: letter === "e", extend };
+  }
+  return null;
+}
+
+// Ahead of the editing styles, which send these keys to the source line ends.
+const prettyLineKeys = Prec.highest(EditorView.domEventHandlers({
+  keydown(event, view) {
+    if (!view.state.facet(prettyLayoutActive) || view.composing || isImeComposition(event)) return false;
+    const key = lineKey(event, view.state);
+    if (!key || !boundaryMotion(key.forward, key.extend)(view)) return false;
+    event.preventDefault();
+    return true;
+  },
+}));
 
 const activeVisualLineLayer = layer({
   above: false,
@@ -263,11 +292,11 @@ export const prettyPresentation = [
   prettyTheme,
   prettyActiveLineTheme,
   EditorView.contentAttributes.compute([prettyLayoutActive], (state) =>
-    state.facet(prettyLayoutActive) ? { class: WRAP_CLASS } : {},
+    state.facet(prettyLayoutActive) ? { class: WRAP_CLASS } : NO_ATTRIBUTES,
   ),
   EditorView.editorAttributes.compute([prettyLayoutActive], (state) =>
-    state.facet(prettyLayoutActive) ? { class: ACTIVE_CLASS } : {},
+    state.facet(prettyLayoutActive) ? { class: ACTIVE_CLASS } : NO_ATTRIBUTES,
   ),
-  Prec.high(keymap.of(prettyBoundaryKeys)),
+  prettyLineKeys,
   activeVisualLineLayer,
 ];
