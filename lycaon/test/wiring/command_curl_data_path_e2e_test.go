@@ -1014,7 +1014,3 @@ func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) 
 		t.Fatalf("step 2 hits=%d header=%q cookie=%q, want 1, %s, theme=dark", hits.Load(), seenAuth.Load(), seenCookie.Load(), ignoredHeaderSecret)
 	}
 }
-
-
-
-
