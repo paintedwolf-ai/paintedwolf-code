@@ -67,16 +67,11 @@ func Install(t testing.TB) Facts {
 			t.Fatalf("create fixture folder: %v", err)
 		}
 	}
-	previousKeys := confine.KeyMaterialHomeRelPaths()
-	confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
-	confine.SetCredentialStorePathsSource(func() []string { return []string{"~/.aws/"} })
+	previousKeys := confine.SetKeyMaterialPathsSource(func() []string { return []string{"~/.ssh/"} })
+	previousStores := confine.SetCredentialStorePathsSource(func() []string { return []string{"~/.aws/"} })
 	t.Cleanup(func() {
-		confine.SetCredentialStorePathsSource(nil)
-		if len(previousKeys) == 0 {
-			confine.SetKeyMaterialPathsSource(nil)
-			return
-		}
-		confine.SetKeyMaterialPathsSource(func() []string { return previousKeys })
+		confine.SetKeyMaterialPathsSource(previousKeys)
+		confine.SetCredentialStorePathsSource(previousStores)
 	})
 	return facts
 }
