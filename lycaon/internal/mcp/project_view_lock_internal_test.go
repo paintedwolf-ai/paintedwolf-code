@@ -51,6 +51,8 @@ func TestProjectViewNeverObservesRollbackTransient(t *testing.T) {
 				<-proceedValidate
 				return errors.New("induced validation failure")
 			},
+			nil,
+			nil,
 		)
 	}()
 
