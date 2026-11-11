@@ -55,10 +55,10 @@ const (
 
 // Store records exact effects in the durable source history transaction.
 type Store struct {
-	sqlDB          db.Handle
-	queries        *db.Queries
+	sqlDB   db.Handle
+	queries *db.Queries
 	// withheld names paths whose bytes history never retains.
-	withheld func(ctx context.Context, projectID, rootID, rel string) bool
+	withheld       func(ctx context.Context, projectID, rootID, rel string) bool
 	people         *peoplestore.Store
 	recordMu       sync.Mutex
 	mutationScopes MutationScopeProvider
