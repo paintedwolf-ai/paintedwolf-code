@@ -20,10 +20,13 @@ describe("workspace opening trace", () => {
     capture.record.mockClear();
   });
 
-  it("records each change in what the veil waits on, then its reveal once", () => createRoot((dispose) => {
+  it("records each change in what the veil waits on, then its reveal once", () => {
     const [pending, setPending] = createSignal<readonly string[]>(["session-list", "project/files-stage/tree"]);
     const [revealed, setRevealed] = createSignal(false);
-    traceWorkspaceOpening("project:p1", pending, revealed);
+    const dispose = createRoot((dispose) => {
+      traceWorkspaceOpening("project:p1", pending, revealed);
+      return dispose;
+    });
     setPending(["session-list", "project/files-stage/tree"]);
     setPending(["paint"]);
     setRevealed(true);
@@ -42,7 +45,7 @@ describe("workspace opening trace", () => {
       focused: document.hasFocus(),
     });
     dispose();
-  }));
+  });
 
   it("records nothing while capture is off", () => createRoot((dispose) => {
     capture.enabled = false;
