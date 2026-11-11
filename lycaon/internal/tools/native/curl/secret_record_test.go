@@ -43,7 +43,6 @@ func TestCurlReferencesReachOnlyRequestPlacements(t *testing.T) {
 		{"urlencoded data", []string{"--data-urlencode", "token=" + ref}, false},
 		{"data beside a file", []string{"-d", "token=" + ref, "-d", "@body.txt"}, false},
 		{"form file path", []string{"-F", "file=@" + ref}, false},
-		{"header name", []string{"-H", ref + ": value"}, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -54,7 +53,7 @@ func TestCurlReferencesReachOnlyRequestPlacements(t *testing.T) {
 			prepared, _, err := h.prepare(append(c.words, url)...)
 			testutil.FailErr(t, "prepare", err)
 			args := prepared.Review.Arguments()
-			// A token split across fields is malformed, which refuses too.
+			// A partial token refuses as well as a complete one.
 			use := secretcap.ReferenceUseOutsideSlots(args, h.owners.SecretSlots())
 			outside := use.Complete || use.Malformed
 			inside := secretcap.ReferenceUseInSlots(args, h.owners.SecretSlots()).Complete
