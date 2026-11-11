@@ -228,8 +228,9 @@ export function GeneralSettingsPanel(props: Props) {
               <div class="den-settings-pref-copy">
                 <span class="den-settings-pref-label">{settingLabel("file-summaries")}</span>
                 <p class="den-settings-hint">
-                  Show AI-generated summaries in the file editor. Turning this off
-                  stops summary work and deletes stored summaries.
+                  Show AI-written summaries of files and of activities you open.
+                  Turning this off stops summary work and deletes stored summaries.
+                  Approval explanations have their own setting.
                 </p>
                 <Show when={fileSummariesError()}>
                   {(message) => <p class="den-settings-warn" role="alert">{message()}</p>}

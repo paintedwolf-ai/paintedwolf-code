@@ -126,7 +126,11 @@ func formatSteps(activities []wire.CommandActivity) string {
 	var b strings.Builder
 	for _, activity := range activities {
 		for _, step := range activity.Steps {
-			fmt.Fprintf(&b, "- %s: %s (%d runs)\n", step.Command, step.State, step.Count)
+			runs := "1 run"
+			if step.Count != 1 {
+				runs = fmt.Sprintf("%d runs", step.Count)
+			}
+			fmt.Fprintf(&b, "- %s: %s, %s\n", step.Command, step.State, runs)
 		}
 	}
 	return b.String()

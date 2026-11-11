@@ -89,7 +89,7 @@ const SETTING_SPECS = [
   { ...DISPLAY, id: "code-font", label: "Code font", group: "Type", keywords: ["font", "monospace", "mono font", "typeface"] },
   { ...DISPLAY, id: "message-times", label: "Message times", keywords: ["timestamps", "time sent", "clock"] },
   { ...DISPLAY, id: "collapse-diffs", label: "Collapse diffs by default", keywords: ["diff preview", "file edits", "expand diffs"] },
-  { ...DISPLAY, id: "file-summaries", label: "File summaries", keywords: ["ai summaries", "summarize files"] },
+  { ...DISPLAY, id: "file-summaries", label: "Summaries", keywords: ["ai summaries", "summarize files", "file summaries", "activity summaries"] },
   { ...DISPLAY, id: "diff-word-wrap", label: "Word wrap in diffs", keywords: ["wrap lines", "long lines", "diff"] },
   { ...DISPLAY, id: "show-all-models", label: MODELS_ROLE_FILTER_COPY.showAllModelsLabel, keywords: ["model list", "model picker", "hidden models"] },
   { ...DISPLAY, id: "first-time-tips", label: "Show first-time tips", keywords: ["tips", "hints", "onboarding", "tutorial"] },
