@@ -1346,6 +1346,10 @@ type CommandExecutionOutput struct {
 	// Leading screened bytes of the retained stream as UTF-8. Never the authoritative body.
 	Preview          string `json:"preview"`
 	PreviewTruncated bool   `json:"preview_truncated"`
+	// Last screened whole lines, at most six, when the preview does not reach the end; empty otherwise. Never the authoritative body.
+	TailPreview string `json:"tail_preview"`
+	// Lines in the complete stream. Absent while capture is incomplete.
+	LineCount *int64 `json:"line_count,omitempty"`
 }
 
 // CommandExecutionReceipt Host dynamic execution. It has no assistant message or model tool-call identity.

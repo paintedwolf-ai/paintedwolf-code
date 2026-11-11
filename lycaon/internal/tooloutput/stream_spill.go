@@ -1,6 +1,7 @@
 package tooloutput
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -62,8 +63,12 @@ func (e *StreamSpillLimitError) Error() string {
 // No new durable receipt shape is written here; callers record references using
 // their existing persistence/recovery contract when introduced.
 type StreamSpill struct {
-	Blob           blobstore.Blob
-	Preview        []byte
+	Blob    blobstore.Blob
+	Preview []byte
+	// Tail holds the stream's last bytes whenever a preview was requested.
+	Tail []byte
+	// Lines counts newline-terminated lines plus an unterminated final line.
+	Lines          int64
 	EmittedSHA256  string
 	Complete       bool
 	Failure        error
@@ -77,6 +82,9 @@ type StreamSpill struct {
 
 // RetainedFrameBytes covers a retained blob's framing and filesystem slack.
 const RetainedFrameBytes = 4096
+
+// StreamTailBytes bounds the tail kept beside a preview.
+const StreamTailBytes = 1024
 
 func RetainScreenedStream(ctx context.Context, input ScreenedStream, options StreamSpillOptions) (*StreamSpill, error) {
 	if ctx == nil || input.reader == nil || options.Admission == nil || options.WorkingMemory == nil || options.RetainedState == nil || strings.TrimSpace(options.ClaimID) == "" || options.MaximumBytes <= 0 || options.MaximumBytes > 256<<20 || options.PreviewBytes < 0 || options.PreviewBytes > 16<<10 {
@@ -98,7 +106,11 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	if releaseState == nil {
 		return nil, fmt.Errorf("stream state admission returned no release")
 	}
-	releasePreview, err := options.RetainedState.ReserveProgramState(ctx, int64(options.PreviewBytes)+256)
+	tailBytes := 0
+	if options.PreviewBytes > 0 {
+		tailBytes = StreamTailBytes
+	}
+	releasePreview, err := options.RetainedState.ReserveProgramState(ctx, int64(options.PreviewBytes+tailBytes)+256)
 	if err != nil || releasePreview == nil {
 		releaseState()
 		if err == nil {
@@ -125,7 +137,7 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	store := options.Store
 	store.Dir = ToolOutputSpillDir
 	store.StagedTTL = 7 * 24 * time.Hour
-	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, preview: make([]byte, 0, options.PreviewBytes), digest: sha256.New(), staging: staging}
+	reader := &spillInput{ctx: ctx, source: input.reader, maximum: options.MaximumBytes, previewMaximum: options.PreviewBytes, preview: make([]byte, 0, options.PreviewBytes), tail: tailRing{buf: make([]byte, tailBytes)}, digest: sha256.New(), staging: staging}
 	blob, err := store.PutStream(ctx, "command-stream.bin", reader, bytebound.Materialization(options.MaximumBytes), options.WorkingMemory)
 	staging.Close()
 	if err != nil {
@@ -133,8 +145,9 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	}
 	// The maximum preview is scratch while reading. Once the stream settles,
 	// retain only bytes that were actually captured.
+	tail := reader.tail.bytes()
 	releasePreview()
-	settledPreview, reserveErr := options.RetainedState.ReserveProgramState(ctx, int64(len(reader.preview))+256)
+	settledPreview, reserveErr := options.RetainedState.ReserveProgramState(ctx, int64(len(reader.preview)+len(tail))+256)
 	if reserveErr != nil || settledPreview == nil {
 		err = reserveErr
 		if err == nil {
@@ -159,7 +172,11 @@ func RetainScreenedStream(ctx context.Context, input ScreenedStream, options Str
 	claim := options.ClaimID + ":stream-reference:" + uuid.NewString()
 	reference := RetainedStreamReference{Blob: blob, RetentionClaimID: claim, InitiatingClaimID: strings.Clone(options.ClaimID)}
 	body := &RetainedStreamBody{reference: reference, store: store, release: release, memory: options.WorkingMemory, releaseState: releaseState}
-	out := &StreamSpill{Blob: blob, Preview: reader.preview, EmittedSHA256: hex.EncodeToString(reader.digest.Sum(nil)), Complete: reader.failure == nil && reader.eof, Failure: reader.failure, body: body, reference: reference, releasePreview: releasePreview}
+	lines := reader.newlines
+	if reader.received > 0 && reader.last != '\n' {
+		lines++
+	}
+	out := &StreamSpill{Blob: blob, Preview: reader.preview, Tail: tail, Lines: lines, EmittedSHA256: hex.EncodeToString(reader.digest.Sum(nil)), Complete: reader.failure == nil && reader.eof, Failure: reader.failure, body: body, reference: reference, releasePreview: releasePreview}
 	retained = true
 	if _, err := store.Retain(claim, []string{blob.ID}); err != nil {
 		out.Complete = false
@@ -175,6 +192,9 @@ type spillInput struct {
 	maximum, received int64
 	previewMaximum    int
 	preview           []byte
+	tail              tailRing
+	newlines          int64
+	last              byte
 	digest            hash.Hash
 	failure           error
 	eof               bool
@@ -208,6 +228,11 @@ func (r *spillInput) Read(b []byte) (int, error) {
 	if remaining := r.previewMaximum - len(r.preview); remaining > 0 {
 		r.preview = append(r.preview, b[:min(n, remaining)]...)
 	}
+	if n > 0 {
+		r.tail.write(b[:n])
+		r.newlines += int64(bytes.Count(b[:n], []byte{'\n'}))
+		r.last = b[n-1]
+	}
 	if errors.Is(err, io.EOF) {
 		r.eof = true
 	} else if err != nil {
@@ -216,4 +241,38 @@ func (r *spillInput) Read(b []byte) (int, error) {
 	// Retain an already-screened failure prefix with explicit incomplete metadata;
 	// returning EOF to storage never converts that prefix to a complete result.
 	return n, nil
+}
+
+// tailRing keeps the last len(buf) bytes written.
+type tailRing struct {
+	buf    []byte
+	next   int
+	filled bool
+}
+
+func (t *tailRing) write(b []byte) {
+	if len(t.buf) == 0 {
+		return
+	}
+	if len(b) >= len(t.buf) {
+		copy(t.buf, b[len(b)-len(t.buf):])
+		t.next, t.filled = 0, true
+		return
+	}
+	n := copy(t.buf[t.next:], b)
+	if n < len(b) {
+		copy(t.buf, b[n:])
+		t.filled = true
+	}
+	t.next = (t.next + len(b)) % len(t.buf)
+	if t.next == 0 {
+		t.filled = true
+	}
+}
+
+func (t *tailRing) bytes() []byte {
+	if !t.filled {
+		return append([]byte(nil), t.buf[:t.next]...)
+	}
+	return append(append([]byte(nil), t.buf[t.next:]...), t.buf[:t.next]...)
 }
