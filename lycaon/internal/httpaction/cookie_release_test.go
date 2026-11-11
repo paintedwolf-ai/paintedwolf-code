@@ -432,7 +432,7 @@ func testStandingGrantRevokedAcrossWaitAndRedirect(t *testing.T) {
 		t.Fatalf("step 2 quiet repeat cards=%d hits=%d cookie=%q", review.cards, originHits.Load(), originCookie.Load())
 	}
 
-	// 3. Install a standing grant for targetServer, then redirect originServer -> targetServer while revoking
+	// Revoking the target's standing grant during the first hop makes the second hop ask again.
 	// targetServer's standing grant during Hop 0; Hop 1 must re-ask against the live approval store and withhold
 	// the secret cookie on rejection while completing the redirect.
 	review.mode = "install_grant"
@@ -459,7 +459,7 @@ func testStandingGrantRevokedAcrossWaitAndRedirect(t *testing.T) {
 		t.Fatalf("step 3 hop 1 hits=%d cookie=%q, want 1 with only benign cookie theme=dark", targetHits.Load(), targetCookie.Load())
 	}
 
-	// 4. Revoke originServer's standing grant: explicit "once" approval covers that single admitted operation,
+	// A once approval covers one operation; the next one asks again.
 	// and the next operation must re-ask again.
 	removed, err := authority.RevokeGrant(originGrantID)
 	testutil.FailErr(t, "revoke origin standing grant", err)
