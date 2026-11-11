@@ -52,6 +52,7 @@ func TestProjectViewNeverObservesRollbackTransient(t *testing.T) {
 				return errors.New("induced validation failure")
 			},
 			nil,
+			nil,
 		)
 	}()
 

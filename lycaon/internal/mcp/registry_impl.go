@@ -206,7 +206,7 @@ func (r *ProviderCatalog) Load(ctx context.Context) error {
 	}
 	if strings.TrimSpace(r.globalPath) != "" && !overlayLockAlreadyHeld(ctx, r.globalPath) {
 		return catalogruntime.WithLock(ctx, r.statePath, r.globalPath, func() error {
-			lockedCtx := withOverlayLockHeld(ctx, r.globalPath)
+			lockedCtx, _ := withOverlayLockHeld(ctx, r.globalPath)
 			r.Tools.syncMu.Lock()
 			defer r.Tools.syncMu.Unlock()
 			return r.loadLocked(lockedCtx, true)
@@ -235,7 +235,10 @@ func (r *ProviderCatalog) loadLocked(ctx context.Context, reconcilePending bool)
 		})
 		user = &UserMCPConfig{}
 	} else {
-		hydrated, migErr := migrateAndHydrateUserOverlay(r.statePath, r.globalPath, user, reconcilePending, r.recoveryHook)
+		hydrated, migErr := migrateAndHydrateUserOverlay(
+			r.statePath, r.globalPath, user,
+			reconcilePending, overlayRollbackActive(ctx, r.globalPath), r.recoveryHook,
+		)
 		if migErr != nil {
 			return fmt.Errorf("mcp static credentials: %w", migErr)
 		}

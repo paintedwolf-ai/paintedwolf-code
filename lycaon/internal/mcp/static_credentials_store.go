@@ -19,8 +19,8 @@ const staticCredentialsContext = "mcp static credentials"
 type StaticCredentialStore struct {
 	slot          credentialstore.Slot
 	store         *credentialstore.Store
-	setEntry      func(string, string) error
-	verifyDurable func(credentialstore.Slot, string, string) error
+	SetEntry      func(string, string) error
+	VerifyDurable func(credentialstore.Slot, string, string) error
 }
 
 // DefaultCredentialsSlot returns the default vault slot for MCP static credentials.
@@ -50,7 +50,7 @@ func NewStaticCredentialStoreForDir(dir string) (*StaticCredentialStore, error) 
 	return &StaticCredentialStore{
 		slot:          slot,
 		store:         inner,
-		verifyDurable: credentialstore.VerifyDurable,
+		VerifyDurable: credentialstore.VerifyDurable,
 	}, nil
 }
 
@@ -104,14 +104,14 @@ func (s *StaticCredentialStore) PutVerified(providerID string, rec StaticCredent
 	}
 	payload := string(encoded)
 	prevRaw, hadPrevRaw := s.store.Get(key)
-	setFn := s.setEntry
+	setFn := s.SetEntry
 	if setFn == nil {
 		setFn = s.store.Set
 	}
 	if err := setFn(key, payload); err != nil {
 		return err
 	}
-	verifyFn := s.verifyDurable
+	verifyFn := s.VerifyDurable
 	if verifyFn == nil {
 		verifyFn = credentialstore.VerifyDurable
 	}
@@ -160,7 +160,7 @@ func (s *StaticCredentialStore) RemoveRecord(providerID string) error {
 func migrateAndHydrateUserOverlay(
 	statePath, globalPath string,
 	user *UserMCPConfig,
-	reconcilePending bool,
+	reconcilePending, rollingBack bool,
 	recoveryHook func(stage, providerID string) error,
 ) (*UserMCPConfig, error) {
 	if user == nil {
@@ -307,7 +307,10 @@ func migrateAndHydrateUserOverlay(
 				return nil, getErr
 			}
 			if ok {
-				if rec.PendingCommit != nil && rec.PendingCommit.TargetConfigSHA256 != currentDigest {
+				usePrev := rec.PendingCommit != nil &&
+					(rec.PendingCommit.TargetConfigSHA256 != currentDigest ||
+						(rollingBack && pendingCommitNeedsRollback(rec.PendingCommit, currentDigest)))
+				if usePrev {
 					if rec.PendingCommit.Previous != nil {
 						hydrateOverlayFromRecord(&hydratedOv, recordFromSnapshot(*rec.PendingCommit.Previous))
 					}

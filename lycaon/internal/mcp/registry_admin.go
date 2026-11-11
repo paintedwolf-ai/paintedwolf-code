@@ -20,24 +20,36 @@ func (r *ProviderAdministration) overlayPathFor(scopeProjectDir string) string {
 }
 
 // overlayLockHeldKey marks a context as already holding the catalog
-// transaction lock for one overlay file.
+// transaction lock for one overlay file and tracks whether the transaction is
+// rolling back a rejected or failed candidate.
 type overlayLockHeldKey struct{}
 
+type overlayLockState struct {
+	target      string
+	rollingBack bool
+}
+
 // withOverlayLockHeld prevents nested reads from reacquiring the same transaction lock.
-func withOverlayLockHeld(ctx context.Context, target string) context.Context {
-	return context.WithValue(ctx, overlayLockHeldKey{}, filepath.Clean(target))
+func withOverlayLockHeld(ctx context.Context, target string) (context.Context, *overlayLockState) {
+	state := &overlayLockState{target: filepath.Clean(target)}
+	return context.WithValue(ctx, overlayLockHeldKey{}, state), state
 }
 
 // overlayLockAlreadyHeld reports whether ctx's call chain already holds the
 // transaction lock for target.
 func overlayLockAlreadyHeld(ctx context.Context, target string) bool {
-	held, _ := ctx.Value(overlayLockHeldKey{}).(string)
-	return held != "" && held == filepath.Clean(target)
+	state, _ := ctx.Value(overlayLockHeldKey{}).(*overlayLockState)
+	return state != nil && state.target != "" && state.target == filepath.Clean(target)
+}
+
+func overlayRollbackActive(ctx context.Context, target string) bool {
+	state, _ := ctx.Value(overlayLockHeldKey{}).(*overlayLockState)
+	return state != nil && state.target == filepath.Clean(target) && state.rollingBack
 }
 
 func (r *ProviderAdministration) openCredentialStore() (*StaticCredentialStore, error) {
-	if r.openStaticCredentials != nil {
-		return r.openStaticCredentials(r.Catalog.statePath)
+	if r.OpenStaticCredentials != nil {
+		return r.OpenStaticCredentials(r.Catalog.statePath)
 	}
 	return NewStaticCredentialStoreForDir(r.Catalog.statePath)
 }
@@ -48,15 +60,11 @@ func (r *ProviderAdministration) updateOverlay(
 	apply func(ctx context.Context, path string) error,
 	validate func(ctx context.Context) error,
 	rollback func(ctx context.Context) error,
-	committed ...func() bool,
+	committed func() bool,
 ) error {
-	var committedFn func() bool
-	if len(committed) > 0 {
-		committedFn = committed[0]
-	}
 	path := r.overlayPathFor(scopeProjectDir)
 	// Callbacks share the transaction lock for this overlay.
-	lockedCtx := withOverlayLockHeld(ctx, path)
+	lockedCtx, lockState := withOverlayLockHeld(ctx, path)
 	if err := catalogruntime.UpdateFile(ctx, catalogruntime.FileUpdate{
 		LockRoot: r.Catalog.statePath,
 		Target:   path,
@@ -75,15 +83,20 @@ func (r *ProviderAdministration) updateOverlay(
 			if validate == nil {
 				return nil
 			}
-			return validate(lockedCtx)
+			if err := validate(lockedCtx); err != nil {
+				lockState.rollingBack = true
+				return err
+			}
+			return nil
 		},
 		Rollback: func() error {
+			lockState.rollingBack = true
 			if rollback == nil {
 				return nil
 			}
 			return rollback(lockedCtx)
 		},
-		Committed: committedFn,
+		Committed: committed,
 	}); err != nil {
 		return err
 	}
@@ -154,7 +167,7 @@ func (r *ProviderAdministration) SetProviderEnabled(ctx context.Context, scope C
 			return ErrUnknownMCPProvider(providerID)
 		}
 		return setProviderEnabled(path, providerID, enabled)
-	}, nil, nil)
+	}, nil, nil, nil)
 	return persistErr(err)
 }
 

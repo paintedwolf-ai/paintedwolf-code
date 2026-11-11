@@ -1,6 +1,7 @@
 package mcpadmin
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,7 +14,9 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
@@ -121,4 +124,61 @@ func testHandler(t *testing.T) *Handler {
 	deps := apitestdeps.Deps{}
 	apitestdeps.Fill(t, &deps)
 	return New(deps.MCP, deps.Projects, &httpio.Responder{Notices: usernotice.NewCatalog(cfg)})
+}
+
+func TestHandlerPostCommitFinalizationDeferredReportsSuccessAtAPIBoundary(t *testing.T) {
+	s := testHandler(t)
+	s.administration.OpenStaticCredentials = func(dir string) (*mcp.StaticCredentialStore, error) {
+		store, err := mcp.NewStaticCredentialStoreForDir(dir)
+		if err != nil {
+			return nil, err
+		}
+		verifyCalls := 0
+		store.VerifyDurable = func(slot credentialstore.Slot, key, want string) error {
+			verifyCalls++
+			if verifyCalls == 3 {
+				return errors.New("injected post-commit finalization verification failure")
+			}
+			return credentialstore.VerifyDurable(slot, key, want)
+		}
+		return store, nil
+	}
+	t.Cleanup(func() { s.administration.OpenStaticCredentials = nil })
+
+	createBody := `{"source":"custom","id":"api-deferred","url":"https://mcp.example.com/v1","enabled":false,"token":"tok-v1"}`
+	createReq := httptest.NewRequest(http.MethodPost, "/v1/mcp/providers", strings.NewReader(createBody))
+	createReq.Header.Set("Content-Type", "application/json")
+	createRec := httptest.NewRecorder()
+	s.CreateProvider(createRec, createReq)
+	if createRec.Code != http.StatusCreated {
+		t.Fatalf("CreateProvider status = %d, want 201; body=%s", createRec.Code, createRec.Body.String())
+	}
+	var created wire.McpProvider
+	testutil.FailErr(t, "decode created provider", json.Unmarshal(createRec.Body.Bytes(), &created))
+	if created.ID != "api-deferred" || created.URL != "https://mcp.example.com/v1" || !created.TokenPresent {
+		t.Fatalf("created provider = %+v", created)
+	}
+
+	updateBody := `{"url":"https://mcp.example.com/v2","token":"tok-v2"}`
+	updateReq := httptest.NewRequest(http.MethodPatch, "/v1/mcp/providers/api-deferred", strings.NewReader(updateBody))
+	updateReq.Header.Set("Content-Type", "application/json")
+	route := chi.NewRouteContext()
+	route.URLParams.Add("provider_id", "api-deferred")
+	updateReq = updateReq.WithContext(context.WithValue(updateReq.Context(), chi.RouteCtxKey, route))
+	updateRec := httptest.NewRecorder()
+	s.UpdateProvider(updateRec, updateReq)
+	if updateRec.Code != http.StatusOK {
+		t.Fatalf("UpdateProvider status = %d, want 200; body=%s", updateRec.Code, updateRec.Body.String())
+	}
+	var updated wire.McpProvider
+	testutil.FailErr(t, "decode updated provider", json.Unmarshal(updateRec.Body.Bytes(), &updated))
+	if updated.URL != "https://mcp.example.com/v2" || !updated.TokenPresent {
+		t.Fatalf("updated provider = %+v", updated)
+	}
+
+	testutil.FailErr(t, "Catalog.Load finalizes deferred commit", s.catalog.Load(context.Background()))
+	row, ok := s.catalog.GetProvider(context.Background(), mcp.CallScope{}, "api-deferred")
+	if !ok || row.URL != "https://mcp.example.com/v2" || !row.TokenPresent {
+		t.Fatalf("reloaded provider = %+v (ok=%v)", row, ok)
+	}
 }

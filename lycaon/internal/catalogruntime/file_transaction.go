@@ -119,13 +119,13 @@ func rollbackPublishedUpdate(cause error, update FileUpdate, target string, befo
 	var sideRollbackErr error
 	if fileRollbackErr == nil && update.Rollback != nil {
 		sideRollbackErr = update.Rollback()
-		if errors.Is(sideRollbackErr, ErrSimulatedCrash) {
-			return errors.Join(cause, sideRollbackErr)
-		}
 	}
 	var publishRollbackErr error
 	if fileRollbackErr == nil && update.Publish != nil {
 		publishRollbackErr = update.Publish()
+	}
+	if errors.Is(sideRollbackErr, ErrSimulatedCrash) {
+		return errors.Join(cause, sideRollbackErr)
 	}
 	if sideRollbackErr != nil || fileRollbackErr != nil || publishRollbackErr != nil {
 		return errors.Join(

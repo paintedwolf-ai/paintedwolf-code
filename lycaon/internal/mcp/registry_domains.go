@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 
@@ -38,7 +39,7 @@ type ProviderAdministration struct {
 	Credentials           *ProviderCredentials
 	Tools                 *ToolDiscovery
 	onSettings            func()
-	openStaticCredentials func(dir string) (*StaticCredentialStore, error)
+	OpenStaticCredentials func(dir string) (*StaticCredentialStore, error)
 	beforeConfigWrite     func(op, providerID string) error
 	crashHook             func(stage, op, providerID string) error
 }
@@ -182,7 +183,8 @@ func (tx *credentialOverlayTx) commit() error {
 	finalized := committed
 	finalized.PendingCommit = nil
 	if err := tx.store.PutVerified(tx.providerID, finalized); err != nil {
-		return err
+		slog.Warn("mcp credential commit finalization deferred to startup",
+			"op", tx.op, "provider_id", tx.providerID, "error", err)
 	}
 	return tx.fireCrash("after_finalize")
 }
