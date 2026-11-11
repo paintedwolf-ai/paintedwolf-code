@@ -28,7 +28,10 @@ export interface BracketRule {
   /** Protected text comes from the editor's syntax tree, so only parsed text is laid out. */
   readonly parsed: boolean;
   readonly lexer: () => PrettyLexer;
-  /** Whether a break the rule makes on its own precedes `pos`; such a break keeps an enclosing group from staying flat. */
+  /**
+   * Whether a break the rule makes on its own precedes `pos`; such a break
+   * keeps an enclosing group from staying flat.
+   */
   readonly breaksBefore?: (cursor: ScanCursor, pos: number) => boolean;
 }
 

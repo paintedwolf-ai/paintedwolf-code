@@ -3,7 +3,10 @@ import type { PrettyTokenSource } from "./pretty-tokens.ts";
 
 const CHUNK = 8192;
 
-/** Character access over a document by absolute position, reading it in chunks, with its syntax tokens where a rule reads them. */
+/**
+ * Character access over a document by absolute position, read in chunks,
+ * with its syntax tokens where a rule reads them.
+ */
 export class TextWindow {
   private from = 0;
   private text = "";
