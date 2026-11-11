@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -69,6 +70,8 @@ func authenticatedUploadPack(t *testing.T, repo string) (*httptest.Server, func(
 // the service verifies it as the served Git's own helper.
 func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
 	t.Cleanup(gitexec.TestingUseAgentCredentialStore(fixedCredentialStore{username: "alice", password: "remote-secret"}))
 	remote := t.TempDir()
 	testutil.FailErr(t, "seed remote", os.WriteFile(filepath.Join(remote, "README"), []byte("remote\n"), 0o644))
@@ -87,6 +90,7 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	}
 	runCommandWithApprovals(t, s)
 	got := s.outcome(t, "program-1")
+	t.Logf("ls-remote stderr: %s", got.Stderr)
 	if got.Status != 0 || !strings.Contains(got.Stdout, head) {
 		t.Fatalf("ls-remote under confinement = %+v", got)
 	}
