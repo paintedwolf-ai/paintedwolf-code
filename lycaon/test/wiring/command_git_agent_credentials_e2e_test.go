@@ -158,7 +158,7 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 	gittest.InitCommit(t, ungranted.dir, "work")
 	runCommandWithApprovals(t, ungranted)
 	if got := ungranted.outcome(t, "program-1"); strings.Contains(got.Stderr, sshAgentAnswered) || requests() != 0 {
-		t.Fatalf("SSH agent reached Git without a capability: %d requests, %+v", requests(), got)
+		t.Fatalf("SSH agent reached Git without a capability: %d requests, stderr %q", requests(), got.Stderr)
 	}
 
 	granted := newCommandProgramSession(t, "git ls-remote "+remote, "")
@@ -174,6 +174,6 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 	runCommandWithApprovals(t, granted)
 	got := granted.outcome(t, "program-1")
 	if !strings.Contains(got.Stderr, sshAgentAnswered) || requests() == 0 {
-		t.Fatalf("granted SSH agent unreachable from the confined Git: %d requests, %+v", requests(), got)
+		t.Fatalf("granted SSH agent unreachable from the confined Git: %d requests, stderr %q", requests(), got.Stderr)
 	}
 }
