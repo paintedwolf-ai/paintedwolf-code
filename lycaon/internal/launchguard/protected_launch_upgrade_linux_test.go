@@ -4,11 +4,7 @@ package launchguard
 
 import (
 	"bytes"
-	"crypto/ed25519"
-	"crypto/rand"
-	"crypto/x509"
 	"encoding/json"
-	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -134,23 +130,6 @@ func TestProtectedLaunchUpgradePreservesVaultIdentityCustody(t *testing.T) {
 
 	workflowDir := filepath.Join(homeDir, "profile")
 	testutil.FailErr(t, "mkdir workflow profile", os.MkdirAll(workflowDir, 0o700))
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
-	testutil.FailErr(t, "generate legacy ed25519 key", err)
-	pkcs8, err := x509.MarshalPKCS8PrivateKey(priv)
-	testutil.FailErr(t, "marshal legacy pkcs8", err)
-	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})
-	testutil.FailErr(t, "seed legacy host-identity.pem", os.WriteFile(filepath.Join(workflowDir, "host-identity.pem"), pemBytes, 0o600))
-	legacyMCP := "providers:\n" +
-		"  - id: wf-http\n" +
-		"    url: https://mcp.example.com/workflow\n" +
-		"    enabled: false\n" +
-		"    token: legacy-mcp-bearer-token\n" +
-		"    headers:\n" +
-		"      X-Custom-Auth: legacy-header-secret\n" +
-		"    env:\n" +
-		"      MCP_API_KEY: legacy-env-secret\n"
-	testutil.FailErr(t, "seed legacy mcp.yaml", os.WriteFile(filepath.Join(workflowDir, "mcp.yaml"), []byte(legacyMCP), 0o600))
-	testutil.FailErr(t, "seed legacy api.token", os.WriteFile(filepath.Join(workflowDir, "api.token"), []byte("legacy-api-token\n"), 0o600))
 
 	// Launch session A on generation A (1.0.0) and create a vault identity.
 	launchA := startLaunch(t, f, env)

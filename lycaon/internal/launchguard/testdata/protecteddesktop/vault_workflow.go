@@ -4,7 +4,11 @@ package main
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -48,6 +52,9 @@ func executeSecretWorkflow(op, dir string) (string, error) {
 	case "migrate_and_persist":
 		if err := credentialstore.VerifyIdentityProtection(); err != nil {
 			return "", fmt.Errorf("VerifyIdentityProtection: %w", err)
+		}
+		if err := seedLegacySecretFiles(dir); err != nil {
+			return "", fmt.Errorf("seedLegacySecretFiles: %w", err)
 		}
 		id, err := hostidentity.LoadOrCreate(dir)
 		if err != nil {
@@ -125,9 +132,15 @@ func executeSecretWorkflow(op, dir string) (string, error) {
 		}
 		if rec.Token != "rotated-mcp-token-v2" ||
 			rec.Headers["X-Custom-Auth"] != "legacy-header-secret" ||
-			rec.Env["MCP_API_KEY"] != "legacy-env-secret" ||
 			rec.PendingCommit != nil {
-			return "", fmt.Errorf("unexpected reopened mcp record: %+v", rec)
+			return "", fmt.Errorf("unexpected reopened wf-http mcp record: %+v", rec)
+		}
+		stdioRec, ok, err := store.Get("wf-stdio")
+		if err != nil || !ok {
+			return "", fmt.Errorf("reopen store.Get(wf-stdio) = (ok=%v, err=%v)", ok, err)
+		}
+		if stdioRec.Env["MCP_API_KEY"] != "legacy-env-secret" || stdioRec.PendingCommit != nil {
+			return "", fmt.Errorf("unexpected reopened wf-stdio mcp record: %+v", stdioRec)
 		}
 		tok, err := internalapi.ReadAPIToken()
 		if err != nil {
@@ -138,4 +151,35 @@ func executeSecretWorkflow(op, dir string) (string, error) {
 	default:
 		return "", fmt.Errorf("unknown workflow_op %q", op)
 	}
+}
+
+func seedLegacySecretFiles(dir string) error {
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		return err
+	}
+	pkcs8, err := x509.MarshalPKCS8PrivateKey(priv)
+	if err != nil {
+		return err
+	}
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})
+	if err := os.WriteFile(filepath.Join(dir, hostidentity.FileName), pemBytes, 0o600); err != nil {
+		return err
+	}
+	legacyMCP := "providers:\n" +
+		"  - id: wf-http\n" +
+		"    url: https://mcp.example.com/workflow\n" +
+		"    enabled: false\n" +
+		"    token: legacy-mcp-bearer-token\n" +
+		"    headers:\n" +
+		"      X-Custom-Auth: legacy-header-secret\n" +
+		"  - id: wf-stdio\n" +
+		"    command: /bin/true\n" +
+		"    enabled: false\n" +
+		"    env:\n" +
+		"      MCP_API_KEY: legacy-env-secret\n"
+	if err := os.WriteFile(filepath.Join(dir, "mcp.yaml"), []byte(legacyMCP), 0o600); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, internalapi.LegacyTokenFileName), []byte("legacy-api-token\n"), 0o600)
 }
