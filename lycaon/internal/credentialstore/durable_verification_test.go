@@ -37,7 +37,7 @@ func TestVerifyDurableValidatesSlotAndReadback(t *testing.T) {
 func TestVerifyDurableFailsOnUnreadableVault(t *testing.T) {
 	slot := Slot{Path: filepath.Join(t.TempDir(), VaultBasename), Namespace: NamespaceMCPCredentials, Context: "mcp-credentials"}
 	if err := os.WriteFile(slot.Path, []byte("not an age document"), fileMode); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	err := VerifyDurable(slot, "anthropic", "secret")
 	if err == nil || !errors.Is(err, ErrVaultCorrupt) {
