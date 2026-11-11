@@ -360,15 +360,23 @@ func TestWorkerSnapshotExcludesLinkedWorktreeAndSubmoduleGitlinks(t *testing.T) 
 		return nil
 	}))
 
-	// Running git status inside the copied worktree fails with "not a git repository".
-	cmd := exec.Command(gitBin, "-C", filepath.Join(binding.Root, "worktree"), "status")
-	cmd.Env = append(os.Environ(), "GIT_CEILING_DIRECTORIES="+binding.Root)
-	out, statusErr := cmd.CombinedOutput()
-	if statusErr == nil {
-		t.Fatalf("expected git status in worker branch worktree to fail, got:\n%s", out)
+	// The linked worktree proves its linkage and gets a private repository, never the backing one; the
+	// submodule's gitlink leaves the granted roots and gets none.
+	gitIn := func(dir string, args ...string) (string, error) {
+		cmd := exec.Command(gitBin, append([]string{"-C", filepath.Join(binding.Root, dir)}, args...)...)
+		cmd.Env = append(os.Environ(), "GIT_CEILING_DIRECTORIES="+binding.Root)
+		out, err := cmd.CombinedOutput()
+		return strings.TrimSpace(string(out)), err
 	}
-	if !strings.Contains(strings.ToLower(string(out)), "not a git repository") {
-		t.Fatalf("expected 'not a git repository' error, got: %s", out)
+	gitDir, err := gitIn("worktree", "rev-parse", "--absolute-git-dir")
+	testutil.FailErr(t, "linked worktree repository", err)
+	backingResolved, err := filepath.EvalSymlinks(backingRepo)
+	testutil.FailErr(t, "resolve backing repo", err)
+	if resolved, rErr := filepath.EvalSymlinks(gitDir); rErr != nil || strings.HasPrefix(resolved, backingResolved) {
+		t.Fatalf("the linked worktree reached the backing repository: %s (%v)", gitDir, rErr)
+	}
+	if out, err := gitIn("submodule", "status"); err == nil {
+		t.Fatalf("the external gitlink got a repository:\n%s", out)
 	}
 
 	// OverlaySurveyReadDir also skips gitlink .git files if one is present on disk.

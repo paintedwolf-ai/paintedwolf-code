@@ -210,6 +210,17 @@ func isPathUnderAllowed(target string, allowed []string) bool {
 // worktree of one inside them.
 var errExternalGitlink = errors.New("gitlink target is outside the granted roots")
 
+// claimsLinkedWorktree reports a gitlink target laid out as a worktree's administrative directory,
+// which must prove its linkage rather than be left out as an unrelated repository.
+func claimsLinkedWorktree(gitDir string) bool {
+	for _, marker := range []string{"gitdir", "commondir"} {
+		if _, err := os.Lstat(filepath.Join(gitDir, marker)); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
 func externalGitlinkError() error {
 	return &AdapterError{
 		AdapterID:  AdapterEagerCopy,

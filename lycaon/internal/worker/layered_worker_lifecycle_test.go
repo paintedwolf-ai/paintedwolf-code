@@ -260,7 +260,9 @@ func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
 	}
 	pristine := filepath.Join(enginepaths.PristineTreeForBranchRoot(root), pristineRoots[0].Name())
 	base := filepath.Join(pristine, "main.go")
-	testutil.FailErr(t, "write base", os.WriteFile(base, []byte("package main\n"), 0o600))
+	if _, err := os.Stat(base); err != nil {
+		t.Fatalf("the pristine tree holds no base: %v", err)
+	}
 	neighbour := filepath.Join(fixture.branches, "neighbour")
 	testutil.FailErr(t, "mkdir neighbour", os.MkdirAll(neighbour, 0o700))
 	store := filepath.Join(fixture.branches, ".adapter")

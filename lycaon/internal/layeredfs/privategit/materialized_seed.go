@@ -70,6 +70,15 @@ func ensureViewRepoInitialized(
 	defer view.mu.Unlock()
 
 	existing := view.repos[repoRel]
+	// Every lookup inside .git reaches here, so a repository is read once per process; after that
+	// only the store it borrows from must still be there.
+	if existing != nil && existing.verified && existing.privateGitDir != "" {
+		if _, err := os.Stat(mgr.store.ObjectsDir()); err != nil {
+			existing.verified = false
+			return fmt.Errorf("%w: %w: retained object store unavailable: %v", layeredfs.ErrGitPending, ErrCorruptObjectStore, err)
+		}
+		return nil
+	}
 	durable, hasDurable, dErr := readDurableRepoRecord(mgr, view, view.viewID, repoRel)
 	if dErr != nil {
 		view.repos[repoRel] = &initializedRepo{repoRel: repoRel, metrics: InitMetrics{State: StateFailed}}
@@ -109,7 +118,10 @@ func ensureViewRepoInitialized(
 				leaseID:        leaseID,
 				initialHeadOID: headOID,
 				metrics:        InitMetrics{State: StateReady},
+				verified:       true,
 			}
+		} else {
+			existing.verified = true
 		}
 		return nil
 	}

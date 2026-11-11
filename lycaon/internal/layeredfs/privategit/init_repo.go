@@ -22,6 +22,9 @@ type initializedRepo struct {
 	submoduleRels  []string
 	metrics        InitMetrics
 	noSourceRepo   bool
+	// verified means this process established or checked the repository, so later Git access
+	// trusts it without reading it again.
+	verified bool
 }
 
 func initializePrivateRepo(
@@ -186,6 +189,7 @@ func initializePrivateRepo(
 		initialRefs:    initRefs,
 		submoduleRels:  layout.submoduleRels,
 		metrics:        importMetrics,
+		verified:       true,
 	}, nil
 }
 

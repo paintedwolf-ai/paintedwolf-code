@@ -41,7 +41,9 @@ func New(t *testing.T, kind Kind) (*Volume, bool) {
 	attached := false
 	v := &Volume{Root: mount, image: image}
 	v.eject = func(t *testing.T) {
-		hdiutil(t, "detach", mount, "-quiet")
+		if out, err := runHdiutil("detach", mount, "-quiet"); err != nil {
+			t.Fatalf("eject test volume: %v: %s; this process holds %v", err, out, descriptorsUnder(mount))
+		}
 		attached = false
 	}
 	v.remount = func(t *testing.T) {
@@ -257,4 +259,20 @@ func runHdiutil(args ...string) ([]byte, error) {
 		err = fmt.Errorf("exit %d", code)
 	}
 	return out, err
+}
+
+// descriptorsUnder lists this process's open files inside root, which is what keeps a volume busy.
+func descriptorsUnder(root string) []string {
+	out, _, err := lexec.Run(context.Background(), "/usr/sbin/lsof", []string{"-n", "-P", "-Fn", "-p", strconv.Itoa(os.Getpid())},
+		lexec.ExecOpts{Launch: lexec.HostLaunch("test volume"), Timeout: time.Minute})
+	if err != nil {
+		return []string{"lsof: " + err.Error()}
+	}
+	var held []string
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if name, ok := strings.CutPrefix(line, "n"); ok && (name == root || strings.HasPrefix(name, root+"/")) {
+			held = append(held, name)
+		}
+	}
+	return held
 }
