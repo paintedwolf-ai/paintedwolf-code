@@ -482,3 +482,30 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 		}
 	}
 }
+
+// With the agent's socket capability, Git receives the capability's endpoint
+// reference, which only a confinement resolves; a launch without one never
+// sees the agent's own path.
+func TestSSHAgentReachesGitOnlyThroughItsCapabilityEndpoint(t *testing.T) {
+	h := newHarness(t)
+	h.git("reset", "--hard", "HEAD")
+	h.git("clean", "-fd")
+	bareParent, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "eval bare parent", err)
+	bareDir := filepath.Join(bareParent, "remote.git")
+	if out, errOut, code := h.direct(bareParent, "init", "--bare", "-q", "-b", "main", bareDir); code != 0 {
+		t.Fatalf("init bare: %d %s %s", code, out, errOut)
+	}
+	_, envLog := configureSSHTransport(t, h, bareParent, bareDir)
+	agent := os.Getenv("SSH_AUTH_SOCK")
+	grant, err := confine.ResolveSocketRequest(agent)
+	testutil.FailErr(t, "resolve agent socket grant", err)
+	h.tc.Socket.SocketGrants = []confine.SocketGrant{grant}
+
+	if fetch := h.exec("git", "fetch", "origin"); fetch.err == nil && fetch.result.Status == 0 {
+		t.Fatalf("an unconfined launch resolved the agent's socket reference: %+v", fetch.result)
+	}
+	if env, err := os.ReadFile(envLog); err == nil && strings.Contains(string(env), "SSH_AUTH_SOCK="+agent) {
+		t.Fatalf("Git received the agent's own path:\n%s", env)
+	}
+}
