@@ -20,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
-	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
@@ -269,13 +268,11 @@ func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("state ancestor root was admitted: status=%d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusCreated {
+		t.Fatalf("filesystem root project registration failed: status=%d body=%s", w.Code, w.Body.String())
 	}
-	var refusal map[string]any
-	testutil.FailErr(t, "decode root refusal", json.Unmarshal(w.Body.Bytes(), &refusal))
-	if refusal["code"] != "invalid_path" {
-		t.Fatalf("root refusal lost typed code: %v", refusal)
+	if err := confine.ValidateAttachedWriteRoots([]string{"/"}); err == nil || err.Code != confine.WriteRootCodeContainsState {
+		t.Fatalf("execution boundary admitted state ancestor root /: %v", err)
 	}
 
 	okDir := t.TempDir()
@@ -314,13 +311,11 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("composite (b): status=%d want 400", w.Code)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("composite (b): project registration status=%d want 201", w.Code)
 		}
-		var errResp wire.ErrorResponse
-		testutil.FailErr(t, "decode", json.Unmarshal(w.Body.Bytes(), &errResp))
-		if errResp.Code != confine.WriteRootCodeSecretStore {
-			t.Fatalf("composite (b): code=%q want %q", errResp.Code, confine.WriteRootCodeSecretStore)
+		if err := confine.ValidateAttachedWriteRoots([]string{cfg}); err == nil || err.Code != confine.WriteRootCodeSecretStore {
+			t.Fatalf("composite (b): execution boundary err=%v want code %q", err, confine.WriteRootCodeSecretStore)
 		}
 	})
 }

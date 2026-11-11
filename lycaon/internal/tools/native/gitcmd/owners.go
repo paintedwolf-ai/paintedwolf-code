@@ -9,13 +9,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -29,7 +33,6 @@ type Backend interface {
 	git.GitManager
 	InitCommand(ctx context.Context, dir, target string, config, options []string, stdout io.Writer) ([]byte, int, error)
 	NetworkCommand(ctx context.Context, dir string, args []string, stdout io.Writer) ([]byte, int, error)
-	RemoteURL(ctx context.Context, dir string, args []string) string
 	AddWorktree(ctx context.Context, toplevel, path, branch, baseRef string) error
 	RemoveWorktree(ctx context.Context, toplevel, path string) error
 	PruneWorktrees(ctx context.Context, toplevel string) error
@@ -49,6 +52,9 @@ var readForms = map[string]operandRule{
 type Owners struct {
 	Git      Backend
 	Boundary *sandbox.Boundary
+	// Launch admits the confined launch every Git process of one command runs
+	// under. Without it no Git command runs.
+	Launch AgentLaunch
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -58,6 +64,34 @@ type Owners struct {
 
 	mu     sync.Mutex
 	staged map[string]map[string]bool
+}
+
+// networkForms contact remotes; their Git gets a credential service scoped to
+// the recipients the command is admitted to contact.
+var networkForms = map[string]bool{"git fetch": true, "git push": true, "git pull": true, "git clone": true, "git ls-remote": true}
+
+// AgentLaunch admits one agent Git command's confined launch; release closes
+// its action lease.
+type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string, hostSockets []confine.SocketGrant) (plan exec.LaunchPlan, release func(context.Context), err error)
+
+func (p Prepared) commandLine() string {
+	return strings.Join(append([]string{"git"}, p.command.args...), " ")
+}
+
+// grantedSSHAgent is the user's SSH agent when this call holds a socket
+// capability for it; SSH remotes otherwise authenticate without the agent.
+func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) string {
+	agent := gitexec.HostSSHAgentSocket(ctx)
+	if agent == "" {
+		return ""
+	}
+	resolved := fspath.CanonicalPath(agent)
+	for _, grant := range append(slices.Clone(tc.Socket.SocketGrants), tc.Socket.DurableSocketGrants...) {
+		if grant.ResolvedPath == resolved {
+			return agent
+		}
+	}
+	return ""
 }
 
 // NewOwners binds the frozen catalog's Git command specifications. A command
@@ -202,6 +236,19 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	}
 	if streams.Input != nil {
 		defer func() { _ = streams.Input.Close() }()
+	}
+	if p.owners.Launch == nil {
+		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, gitexec.ErrLaunchAuthorityRequired
+	}
+	// Network forms bind their launch once their remotes are admitted, so the
+	// confinement carries exactly those recipients and local paths.
+	if !networkForms[p.command.spec.Name] {
+		plan, release, err := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
+		if err != nil {
+			return settle(0, err, p.command.spec.Name)
+		}
+		defer release(context.WithoutCancel(ctx))
+		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
 	}
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)

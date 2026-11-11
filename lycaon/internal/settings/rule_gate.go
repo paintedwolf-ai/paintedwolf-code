@@ -66,12 +66,13 @@ func (g *RuleApprovalGate) Evaluate(ctx context.Context, action hitl.ProposedAct
 	facts, citation, matchedRules := g.factsForAction(action, cfg, layers)
 	verdict, decision := gate.Evaluate(facts, cfg.Posture)
 	res := &hitl.ApprovalResult{DetectionCitation: citation}
-	if verdict != gate.Ask {
+	matches := approvalRuleMatches(matchedRules, commandTextForAction(action))
+	if verdict != gate.Ask || hitl.CurrentActionReviewCovers(action, decision, citation, matches) {
 		return res, nil
 	}
 	res.Decision = decision
 	res.FileAccess = g.currentActionFileAccess(action)
-	res.MatchedRules = approvalRuleMatches(matchedRules, commandTextForAction(action))
+	res.MatchedRules = matches
 	res.HostResourceApproval = hostResourceAskPending(g, cfg, layers, action)
 	if !facts.Leased && g.grants != nil && g.grants.hasExactActionSet(action.Scope.ChatSession()) {
 		res.GrantDelta = "This action was not in the approved action set."

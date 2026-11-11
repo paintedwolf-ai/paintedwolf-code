@@ -8340,7 +8340,9 @@ type ToolResult struct {
 	// Producer-stated worker dispatch identity.
 	Dispatch *WorkerDispatch `json:"dispatch,omitempty"`
 	// Producer-stated asynchronous or lifecycle completion fact.
-	Completion         *ToolCompletion         `json:"completion,omitempty"`
+	Completion *ToolCompletion `json:"completion,omitempty"`
+	// Report accepted against this worker job's observations and policy.
+	WorkerReport       *WorkerReportAcceptance `json:"worker_report,omitempty"`
 	FileEditPreview    *FileEditPreview        `json:"file_edit_preview,omitempty"`
 	PromotionPreviews  []FileEditPreview       `json:"promotion_previews,omitempty"`
 	FileEdit           *FileEditSnapshot       `json:"file_edit,omitempty"`
@@ -8900,10 +8902,12 @@ type WorkerChangeReport struct {
 
 // WorkerCompletionFinding
 type WorkerCompletionFinding struct {
-	Path         string `json:"path"`
-	Evidence     string `json:"evidence,omitempty"`
-	Line         int    `json:"line,omitempty"`
-	Excerpt      string `json:"excerpt,omitempty"`
+	Path     string `json:"path"`
+	Evidence string `json:"evidence,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	Excerpt  string `json:"excerpt,omitempty"`
+	// Host-resolved citation the parent can use.
+	Cite         string `json:"cite,omitempty"`
 	Note         string `json:"note,omitempty"`
 	Claim        string `json:"claim,omitempty"`
 	Adversary    string `json:"adversary,omitempty"`
@@ -8913,8 +8917,9 @@ type WorkerCompletionFinding struct {
 
 // WorkerCompletionReport
 type WorkerCompletionReport struct {
-	CoverageGaps   []WorkerCoverageGap `json:"coverage_gaps,omitempty"`
-	CoverageReview *CoverageReview     `json:"coverage_review,omitempty"`
+	CoverageGaps   []WorkerCoverageGap   `json:"coverage_gaps,omitempty"`
+	CoverageReview *CoverageReview       `json:"coverage_review,omitempty"`
+	Verification   *CitationVerification `json:"verification,omitempty"`
 	// Leg status the worker declared; leg_status is the host-graded status.
 	DeclaredLegStatus string `json:"declared_leg_status,omitempty"`
 	// Host-graded leg status.
@@ -9078,6 +9083,14 @@ type WorkerPromotePathStatus struct {
 	BlockedBy        []string                  `json:"blocked_by,omitempty"`
 	PromoteOrderNote string                    `json:"promote_order_note,omitempty"`
 	ConflictTier     WorkerPromoteConflictTier `json:"conflict_tier,omitempty"`
+}
+
+// WorkerReportAcceptance Host-accepted worker report retained with its successful submitting invocation.
+type WorkerReportAcceptance struct {
+	// Worker job whose observations and coverage were validated.
+	WorkerID  string                  `json:"worker_id"`
+	Report    *WorkerCompletionReport `json:"report"`
+	Grounding *CitationGrounding      `json:"grounding"`
 }
 
 // WorkerResult
