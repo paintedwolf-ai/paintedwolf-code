@@ -14,7 +14,15 @@ SELECT m.id, m.ord,
        CAST(COALESCE(length(CAST(m.reasoning_json AS BLOB)), 0) AS INTEGER) AS reasoning_bytes,
        CAST(CASE WHEN m.reasoning_json IS NOT NULL AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(sqlc.arg(reasoning_cap) AS INTEGER)
             THEN m.reasoning_json ELSE '' END AS TEXT) AS reasoning_payload,
-       CAST(json_array_length(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) AS INTEGER) AS call_count
+       CAST(json_array_length(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) AS INTEGER) AS call_count,
+       CAST(COALESCE((
+           SELECT json_extract(c.value, '$.name') FROM json_each(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) c
+           WHERE json_extract(c.value, '$.id') = CAST(sqlc.arg(tool_call_id) AS TEXT)
+       ), '') AS TEXT) AS call_name,
+       CAST(substr(COALESCE((
+           SELECT json_extract(c.value, '$.args') FROM json_each(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) c
+           WHERE json_extract(c.value, '$.id') = CAST(sqlc.arg(tool_call_id) AS TEXT)
+       ), ''), 1, CAST(sqlc.arg(args_bytes) AS INTEGER)) AS TEXT) AS call_args
 FROM messages AS m
 WHERE m.session_id = sqlc.arg(session_id) AND m.role = 'assistant' AND m.ord < sqlc.arg(before_ord)
   AND (CAST(sqlc.arg(worker_job_id) AS TEXT) = '' OR m.worker_job_id = CAST(sqlc.arg(worker_job_id) AS TEXT))
@@ -53,3 +61,14 @@ WHERE session_id = sqlc.arg(session_id) AND role = 'tool'
   AND ord > sqlc.arg(after_ord) AND ord < sqlc.arg(before_ord)
 ORDER BY ord DESC
 LIMIT 3;
+
+-- name: BriefingCallResult :one
+SELECT id,
+       CAST(COALESCE(json_extract(tool_result_json, '$.tool'), '') AS TEXT) AS tool,
+       CAST(COALESCE(json_extract(tool_result_json, '$.outcome'), '') AS TEXT) AS outcome,
+       CAST(substr(COALESCE(json_extract(tool_result_json, '$.content'), ''), 1, CAST(sqlc.arg(content_bytes) AS INTEGER)) AS TEXT) AS content
+FROM messages
+WHERE session_id = sqlc.arg(session_id) AND tool_result_call_id = sqlc.arg(tool_call_id)
+  AND tool_result_json IS NOT NULL AND tool_result_json <> ''
+ORDER BY ord
+LIMIT 1;

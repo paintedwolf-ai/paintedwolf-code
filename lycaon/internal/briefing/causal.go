@@ -12,9 +12,11 @@ import (
 // Read bounds for one action's causal evidence. Text bounds count characters,
 // as SQLite substr does; even four-byte characters keep a read under 48 KiB.
 const (
-	ProseReadChars     = 2048
-	IntentReadChars    = 2048
-	ResultReadChars    = 1024
+	ProseReadChars  = 2048
+	IntentReadChars = 2048
+	ResultReadChars = 1024
+	// ArgsReadChars bounds a call's own arguments.
+	ArgsReadChars      = 2048
 	ReasoningReadBytes = 16 << 10
 	reasoningRunes     = 600
 )
@@ -48,6 +50,15 @@ type CausalRead struct {
 	IntentID       string
 	Intent         string
 	Results        []ResultExcerpt
+	// Call is the action's own name, bounded arguments and result.
+	Call CallExcerpt
+}
+
+// CallExcerpt is one tool call as the transcript recorded it.
+type CallExcerpt struct {
+	Name   string
+	Args   string
+	Result *ResultExcerpt
 }
 
 // CausalReader reads settled transcript material for one action without
