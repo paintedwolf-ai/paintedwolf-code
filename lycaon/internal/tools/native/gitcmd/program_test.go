@@ -441,4 +441,16 @@ func TestProgramEntryBisectRunDispatchesItsCheck(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.dir, ".git", "BISECT_START")); err != nil {
 		t.Fatal("bisect session ended before git bisect reset")
 	}
+
+	// The check is admitted as its own child: one that writes outside the
+	// project is refused like the same command run directly.
+	outside := filepath.Join(t.TempDir(), "copied")
+	out, err = f.call(t, t.Context(), "git bisect reset -q; git bisect start HEAD HEAD~11 && git bisect run cp state "+outside)
+	testutil.FailErr(t, "bisect program with an outside check", err)
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Fatalf("bisect run's check wrote outside the project: %v (%s)", err, out)
+	}
+	if executions := f.executions(t); strings.HasPrefix(executions["copy"], "completed;") {
+		t.Fatalf("outside copy completed: %v", executions)
+	}
 }

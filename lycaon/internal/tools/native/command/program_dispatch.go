@@ -532,8 +532,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 					return ownerFailure(err), err
 				}
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					tracker.w = nonNilWriter(streams.Error)
-					streams.Error = tracker
+					streams.Error = markingWriter{w: nonNilWriter(streams.Error), tracker: tracker}
 					noteJobNative(ctx, request.Argv.Values())
 					res, invokeErr := actual.Invoke(ctx, tc, streams)
 					if invokeErr == nil && res.Status == 0 {

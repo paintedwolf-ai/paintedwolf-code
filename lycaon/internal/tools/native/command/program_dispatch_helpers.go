@@ -299,6 +299,21 @@ func (t *trackingWriter) Write(p []byte) (int, error) {
 	return t.w.Write(p)
 }
 
+// markingWriter records on tracker that the producer wrote, while writing to
+// the stream the producer was given. That stream may already route through
+// tracker, so tracker itself is never rewired to it.
+type markingWriter struct {
+	w       io.Writer
+	tracker *trackingWriter
+}
+
+func (m markingWriter) Write(p []byte) (int, error) {
+	if len(p) > 0 {
+		m.tracker.wrote = true
+	}
+	return m.w.Write(p)
+}
+
 func definitionHasCommand(definition toolcontract.OperationDefinition, name string) bool {
 	for _, cmd := range definition.ReadOnlyFacts().Commands {
 		if cmd.Name == name {
