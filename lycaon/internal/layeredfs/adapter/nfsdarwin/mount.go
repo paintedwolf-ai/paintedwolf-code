@@ -81,6 +81,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 	}
 	for i := range coreRoots {
 		coreRoots[i].Hidden = adapter.HiddenRelsUnder(coreRoots[i].TrunkPath, req.HiddenPaths)
+		coreRoots[i].HiddenNames = req.HiddenNames
 	}
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID:          req.ViewID,

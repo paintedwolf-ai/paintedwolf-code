@@ -62,3 +62,32 @@ func TestHiddenEngineStorageIsAbsentAndCannotBeCreated(t *testing.T) {
 		t.Fatal("created a file inside hidden storage")
 	}
 }
+
+// A placement folder made after the view started stays out of it, wherever it appears.
+func TestPlacementFolderMadeLaterIsHiddenByName(t *testing.T) {
+	t.Parallel()
+	tmp := t.TempDir()
+	trunk := filepath.Join(tmp, "volume")
+	backing := filepath.Join(tmp, "backing")
+	for _, dir := range []string{filepath.Join(trunk, "disk"), backing} {
+		testutil.FailErr(t, "mkdir", os.MkdirAll(dir, 0o755))
+	}
+	const placement = ".paintedwolf-placement-0-0123456789abcdef.noindex"
+	core, err := New(Config{
+		ViewID: "view-late-placement", BackingDir: backing,
+		Roots: []RootSpec{{ID: "primary", Label: "primary", TrunkPath: trunk, IsPrimary: true, HiddenNames: []string{placement}}},
+	})
+	testutil.FailErr(t, "New Core", err)
+	t.Cleanup(func() { _ = core.ReleaseView() })
+
+	late := filepath.Join(trunk, "disk", placement, "worker-branches")
+	testutil.FailErr(t, "make the placement folder", os.MkdirAll(late, 0o700))
+	if _, err := core.Stat(QualifiedPath{RootID: "primary", Rel: "disk/" + placement}); !errors.Is(err, fs.ErrNotExist) {
+		t.Fatalf("a later placement folder resolved: %v", err)
+	}
+	entries, err := core.ReadDir(QualifiedPath{RootID: "primary", Rel: "disk"})
+	testutil.FailErr(t, "list disk", err)
+	if len(entries) != 0 {
+		t.Fatalf("disk lists %+v", entries)
+	}
+}

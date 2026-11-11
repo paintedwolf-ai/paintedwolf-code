@@ -265,6 +265,7 @@ func buildPrepareRequest(req ClaimRequest, kind adapter.PreparationKind) adapter
 		TargetRootDirs:   req.Storage.TargetRootDirs,
 		Grants:           req.Grants,
 		HiddenPaths:      req.HiddenPaths,
+		HiddenNames:      req.HiddenNames,
 		Selection:        req.Selection,
 		TaskPathHints:    append([]string(nil), req.FocusPathHints...),
 		ParentLayers:     req.ParentLayers,

@@ -329,6 +329,15 @@ func firstRegularFile(ctx context.Context, root string, admit sourceAdmit) (stri
 
 // hiddenEnginePaths is engine storage a broad root can contain: the state folder and every
 // reachable placement folder. A view never shows it and a materialization never copies it.
+// hiddenEngineNames names engine storage a view hides wherever it appears: this engine's placement
+// folder, which can be made on a volume after a view of it started.
+func (m *Manager) hiddenEngineNames() []string {
+	if strings.TrimSpace(m.stateRoot) == "" {
+		return nil
+	}
+	return []string{enginepaths.WorkerPlacementDirName(os.Getuid(), m.stateRoot)}
+}
+
 func (m *Manager) hiddenEnginePaths() []string {
 	if strings.TrimSpace(m.stateRoot) == "" {
 		return nil
