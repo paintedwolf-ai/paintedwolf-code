@@ -113,7 +113,7 @@ func (r *SQLRecorder) AttachProgramOutput(ctx context.Context, programID string,
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		text := capturedText{preview: spill.Preview, tail: spill.Tail, lines: spill.Lines, linesKnown: spill.Complete}
+		text := capturedText{StreamDisplay: spill.Display, linesKnown: spill.Complete}
 		if err := insertProgramOutput(ctx, tx, programID, output, reference, string(mappings), text); err != nil {
 			return err
 		}
@@ -163,9 +163,9 @@ func outputTail(tail []byte, size int64) string {
 
 // capturedText is the screened display text recorded beside an output body.
 type capturedText struct {
-	preview, tail []byte
-	lines         int64
-	linesKnown    bool
+	tooloutput.StreamDisplay
+	// linesKnown is false when capture stopped before the stream ended.
+	linesKnown bool
 }
 
 func lastRuneStart(b []byte) int {
@@ -189,14 +189,14 @@ func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output
 	if mappings == "" {
 		mappings = "[]"
 	}
-	preview, truncated := outputPreview(text.preview, reference.Blob.Size)
+	preview, truncated := outputPreview(text.Preview, reference.Blob.Size)
 	tail := ""
 	if truncated {
-		tail = outputTail(text.tail, reference.Blob.Size)
+		tail = outputTail(text.Tail, reference.Blob.Size)
 	}
 	var lines any
 	if text.linesKnown {
-		lines = text.lines
+		lines = text.Lines
 	}
 	events := int64(1 + len(output.Mappings))
 	bytes := int64(len(program) + len(output.ExecutionID) + len(output.Stream) + len(output.Reference) + len(reference.RetentionClaimID) + len(reference.InitiatingClaimID) + len(reference.Blob.ID) + len(blob) + len(mappings) + len(preview) + len(tail))
