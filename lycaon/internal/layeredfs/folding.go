@@ -210,3 +210,25 @@ func lowerSpellingIn(provider LowerProvider, dir, name string, folding NameFoldi
 func (c *Core) NameFolding(rootID string) NameFolding {
 	return c.foldingOf(rootID)
 }
+
+// lowerSpellingOf is a missing path's last component under the spelling its lower directory holds,
+// on a folding root.
+func (c *Core) lowerSpellingOf(qpath QualifiedPath) (QualifiedPath, bool) {
+	c.mu.RLock()
+	folding := c.foldingOf(qpath.RootID)
+	provider := c.roots.providers[qpath.RootID]
+	c.mu.RUnlock()
+	if !folding.Folds() || provider == nil || qpath.Rel == "." {
+		return QualifiedPath{}, false
+	}
+	dir, name := path.Split(qpath.Rel)
+	dir = path.Clean(dir)
+	if dir == "" {
+		dir = "."
+	}
+	lower, ok := lowerSpellingIn(provider, dir, name, folding)
+	if !ok || lower == name {
+		return QualifiedPath{}, false
+	}
+	return QualifiedPath{RootID: qpath.RootID, Rel: joinRel(dir, lower)}, true
+}

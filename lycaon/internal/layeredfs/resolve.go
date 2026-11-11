@@ -172,6 +172,17 @@ func resolveWith(c *Core, qpath QualifiedPath, followFinal, writeIntent, wantXat
 		}
 		isFinal := len(parts) == 0
 		entry, lErr := lookupComponent(c, candPath, walk, isFinal && wantXattrs)
+		if errors.Is(lErr, fs.ErrNotExist) && spelled.Rel == candidateRel {
+			// A folding root folds even in a lower directory that does not: the lower entry under
+			// its own spelling is this name.
+			if lower, ok := c.lowerSpellingOf(spelled); ok {
+				if candPath, err = checkGitAccess(c, lower, writeIntent && isFinal); err != nil {
+					return resolvedLayerEntry{}, err
+				}
+				spelled = lower
+				entry, lErr = lookupComponent(c, candPath, walk, isFinal && wantXattrs)
+			}
+		}
 		if lErr != nil {
 			return resolvedLayerEntry{}, lErr
 		}
