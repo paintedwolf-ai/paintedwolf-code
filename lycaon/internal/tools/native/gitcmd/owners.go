@@ -13,6 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
 	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -289,6 +291,10 @@ func (p Prepared) enterWorkerView(ctx context.Context, tc tools.ToolContext) (fu
 		return noop, err
 	}
 	if !managed {
+		if _, statErr := os.Lstat(filepath.Join(tools.HostWriteRoot(tc), ".git")); errors.Is(statErr, fs.ErrNotExist) {
+			// The branch holds no repository; Git reports that to the form itself.
+			return noop, nil
+		}
 		return noop, &toolrejection.ToolReject{Code: "GIT_OPERATION_PRECONDITION", Data: map[string]any{"reason": "addressed_session_required", "git_addressed_session_required": true}}
 	}
 	return finish, nil
