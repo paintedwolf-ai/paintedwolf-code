@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { EditorState } from "@codemirror/state";
-import { EditorView, runScopeHandlers } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyPrettyNativeConfig, createPrettyNativeDecorationsExtension } from "./pretty-native-layout.ts";
 import { PrettyBreakWidget, prettyLayoutActive, prettyLayoutDecorations, prettyVisualLineAt } from "./pretty-view.ts";
@@ -33,7 +33,9 @@ function breaks(state: EditorState): number[] {
 }
 
 function press(view: EditorView, key: string, shiftKey = false): boolean {
-  return runScopeHandlers(view, new KeyboardEvent("keydown", { key, shiftKey }), "editor");
+  const event = new KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true });
+  view.contentDOM.dispatchEvent(event);
+  return event.defaultPrevented;
 }
 
 describe("Pretty presentation", () => {
