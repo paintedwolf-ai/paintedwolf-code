@@ -20,6 +20,8 @@ import (
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
@@ -262,17 +264,23 @@ func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 
 func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	srv := wiring.BuildForTest(t).Server
-	body := `{"roots":[{"path":"/"}]}`
+	ancestor := rootfacts.Install(t).ContainsState
+	body := `{"roots":[{"path":` + jsonQuote(ancestor) + `}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
 	req.Header.Set("Authorization", api.TestAuthHeader())
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
-		t.Fatalf("filesystem root project registration failed: status=%d body=%s", w.Code, w.Body.String())
+		t.Fatalf("state ancestor project registration failed: status=%d body=%s", w.Code, w.Body.String())
 	}
-	if err := confine.ValidateAttachedWriteRoots([]string{"/"}); err == nil || err.Code != confine.WriteRootCodeContainsState {
-		t.Fatalf("execution boundary admitted state ancestor root /: %v", err)
+	var created wire.Project
+	testutil.FailErr(t, "decode project", json.Unmarshal(w.Body.Bytes(), &created))
+	if len(created.Roots) != 1 || created.Roots[0].Admitted || created.Roots[0].AdmissionCode == nil || *created.Roots[0].AdmissionCode != confine.WriteRootCodeContainsState {
+		t.Fatalf("state ancestor root = %+v, want editor-only with %q", created.Roots, confine.WriteRootCodeContainsState)
+	}
+	if err := confine.ValidateAttachedWriteRoots([]string{ancestor}); err == nil || err.Code != confine.WriteRootCodeContainsState {
+		t.Fatalf("execution boundary admitted state ancestor root: %v", err)
 	}
 
 	okDir := t.TempDir()
