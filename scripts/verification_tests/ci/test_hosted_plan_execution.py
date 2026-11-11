@@ -246,14 +246,16 @@ class HostedPlanTests(unittest.TestCase):
             self.assertTrue(ci.runs_protected_launch("test:race"))
 
     def test_lanes_learn_whether_they_drive_the_native_repository_tools(self):
-        # Without a scope (a dispatched run) the coverage target resolves its own change base and may run every
-        # scripts suite, so every lane carrying it provisions the tools alongside the runner suite.
+        # Without a scope (a dispatched run) the ready lane still resolves its own change base and may run
+        # every scripts suite, so it provisions the tools; other lanes only when they carry the runner or
+        # scripts coverage targets.
         for profile in ci.PROFILES:
             for row in ci.matrix(profile)["include"]:
                 with self.subTest(profile=profile, lane=row["lane"]):
                     self.assertEqual(row["repository_tools"],
-                                     bool({"test:runner", "scripts:coverage:changes"} & set(ci.lanes()[row["lane"]]["targets"])))
-        self.assertFalse(any(row["repository_tools"] for row in ci.matrix("fast")["include"]))
+                                     bool({"test:runner", "scripts:coverage:changes"} & set(ci.lanes()[row["lane"]]["targets"]))
+                                     or row["lane"] == "ready")
+        self.assertEqual([row["lane"] for row in ci.matrix("fast")["include"] if row["repository_tools"]], ["ready"])
         self.assertIn("runner", [row["lane"] for row in ci.matrix("check")["include"] if row["repository_tools"]])
 
         scope = {"base": "base", "head": "head", "paths": ["scripts/ci_policy/hosted_plan.py"], "full": False}

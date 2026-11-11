@@ -310,7 +310,7 @@ Root mutations, naming, deletion, and promotion are host-executed transitions. T
 
 - Project identity is not a filesystem path.
 - Attaching a folder root is explicit human authority; the draft scratch root is the sole host-created exception.
-- Human authority to attach is not authority to attach anything: the host refuses a root it could not honestly contain, with a machine code naming the class.
+- Any existing, resolvable directory may be attached as a project root; confinement and protected-path floors are enforced at execution boundaries rather than folder attachment.
 - A draft's root set is frozen; promotion is the only exit.
 - Lifecycle transitions are exclusive against in-flight work, and forcing one stops that work rather than ignoring it.
 - Filesystem capability derives from the current root set, and root generations invalidate policy and source projections after boundary changes.
@@ -327,7 +327,7 @@ Root mutations, naming, deletion, and promotion are host-executed transitions. T
 | Root identity and resolution | `internal/project`, `internal/projectroot` |
 | Path scope checks against the admitted root set | `internal/sandbox` (canonicalizing; a resolved path is compared against the root) |
 | Descriptor-relative traversal that makes the jail hold | `internal/fseffect` (`openat`/`O_NOFOLLOW` per component) |
-| Attach-time root refusal and its machine codes | `internal/confine` (`AttachedWriteRootRefused`), surfaced by `internal/project` as `RootRefusedError` |
+| Execution-boundary write-root and protected-path confinement | `internal/confine` (`AttachedWriteRootRefused`), enforced by `internal/tools` |
 | Lifecycle exclusivity against running work | `internal/project/mutation_gate.go`, plus the dependent counts in the SQL registry |
 | Deletion and extension cleanup | `internal/projectremoval` |
 | Idle-project storage tiering | `internal/contentblob/density.go`; thresholds in `config/runtime/storage/density.yaml` |

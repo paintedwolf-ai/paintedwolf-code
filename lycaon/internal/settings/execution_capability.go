@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/gate"
@@ -11,26 +12,26 @@ import (
 
 func (g *RuleApprovalGate) executionCapabilityCovers(action hitl.ProposedAction) bool {
 	capabilities := hitl.ExecutionCapabilitiesForAction(action)
-	if len(capabilities) == 0 || g.grants == nil {
+	if len(capabilities) == 0 {
 		return false
 	}
-	live := g.grants.live(action.Scope.ChatSession())
+	var live []hitl.ApprovalGrant
+	if g.grants != nil {
+		live = g.grants.live(action.Scope.ChatSession())
+	}
+	now := time.Now()
 	for _, capability := range capabilities {
-		covered := false
-		for _, grant := range live {
-			if grant.Predicate.Category != hitl.ApprovalGrantCategoryExecutionCapability || grant.Predicate.Pattern != capability {
-				continue
-			}
-			if grant.Scope != hitl.ApprovalGrantScopeChat || grant.ProjectID != action.Scope.ProjectID || grant.ChatSessionID != action.Scope.ChatSession() {
-				continue
-			}
-			if grant.ExpiresAt != nil && !grant.ExpiresAt.After(time.Now()) {
-				continue
-			}
-			covered = true
-			break
+		if slices.Contains(action.Execution.AuthorizedExecutionCapabilities, capability) {
+			continue
 		}
-		if !covered {
+		if !slices.ContainsFunc(live, func(grant hitl.ApprovalGrant) bool {
+			return grant.Predicate.Category == hitl.ApprovalGrantCategoryExecutionCapability &&
+				grant.Predicate.Pattern == capability &&
+				grant.Scope == hitl.ApprovalGrantScopeChat &&
+				grant.ProjectID == action.Scope.ProjectID &&
+				grant.ChatSessionID == action.Scope.ChatSession() &&
+				(grant.ExpiresAt == nil || grant.ExpiresAt.After(now))
+		}) {
 			return false
 		}
 	}

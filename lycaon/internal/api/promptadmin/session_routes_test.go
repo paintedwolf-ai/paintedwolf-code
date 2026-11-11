@@ -26,7 +26,6 @@ type sessionRoutes struct {
 // newSessionRoutes mounts the content and queue routes over one real session.
 func newSessionRoutes(t *testing.T) sessionRoutes {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	var deps apitestdeps.Deps
 	apitestdeps.Fill(t, &deps)
 	p, err := project.CreateWithRoot(t.Context(), deps.Projects, t.TempDir())

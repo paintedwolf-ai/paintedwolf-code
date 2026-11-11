@@ -30,10 +30,10 @@ func (b *memoryBackend) Erase(credential Credential) error {
 }
 
 func TestGetWritesGitCredentialProtocol(t *testing.T) {
-	backend := &memoryBackend{credential: Credential{Username: "octocat", Password: "token"}}
+	Backend := &memoryBackend{credential: Credential{Username: "octocat", Password: "token"}}
 	var out bytes.Buffer
 	testutil.FailErr(t, "get", runWithBackend(
-		"get", strings.NewReader("protocol=https\nhost=github.com\n\n"), &out, backend,
+		"get", strings.NewReader("protocol=https\nhost=github.com\n\n"), &out, Backend,
 	))
 	if got := out.String(); got != "username=octocat\npassword=token\n\n" {
 		t.Fatalf("output = %q", got)
@@ -41,11 +41,11 @@ func TestGetWritesGitCredentialProtocol(t *testing.T) {
 }
 
 func TestStoreRequiresCompleteCredential(t *testing.T) {
-	backend := &memoryBackend{}
+	Backend := &memoryBackend{}
 	request := "protocol=https\nhost=github.com\nusername=octocat\npassword=token\n\n"
-	testutil.FailErr(t, "store", runWithBackend("store", strings.NewReader(request), io.Discard, backend))
-	if backend.stored.Host != "github.com" || backend.stored.Password != "token" {
-		t.Fatalf("stored = %+v", backend.stored)
+	testutil.FailErr(t, "store", runWithBackend("store", strings.NewReader(request), io.Discard, Backend))
+	if Backend.stored.Host != "github.com" || Backend.stored.Password != "token" {
+		t.Fatalf("stored = %+v", Backend.stored)
 	}
 }
 

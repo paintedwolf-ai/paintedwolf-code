@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectsource"
 	"os"
@@ -157,9 +156,6 @@ func ResolveExistingDir(path string) (string, error) {
 	if !info.IsDir() {
 		return "", fmt.Errorf("%w: %s", ErrNotDirectory, resolved)
 	}
-	if refused, code := confine.AttachedWriteRootRefused(resolved); refused {
-		return "", &RootRefusedError{Code: code, Path: resolved}
-	}
 	return resolved, nil
 }
 
@@ -197,7 +193,7 @@ const gitRemoteHashTimeout = 3 * time.Second
 func gitRemoteHash(ctx context.Context, dir string) string {
 	ctx, cancel := context.WithTimeout(ctx, gitRemoteHashTimeout)
 	defer cancel()
-	out, code, err := gitexec.Run(ctx, dir, []string{"remote", "get-url", "origin"}, gitexec.Opts{
+	out, code, err := gitexec.Run(gitexec.WithHostPurpose(ctx, "project_identity"), dir, []string{"remote", "get-url", "origin"}, gitexec.Opts{
 		Profile: gitexec.ProfileHermetic,
 		Timeout: gitRemoteHashTimeout,
 	})
