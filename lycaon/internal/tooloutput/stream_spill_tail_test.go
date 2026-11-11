@@ -71,11 +71,11 @@ func TestStreamSpillTailAndLinesMatchReferenceForAnyChunking(t *testing.T) {
 				state := &retainedPreviewBytes{}
 				out := spillFixture(t, input, 64, seed, state)
 				want := input[max(0, len(input)-StreamTailBytes):]
-				if !bytes.Equal(out.Tail, want) || out.Lines != referenceLines(input) {
-					t.Fatalf("tail %d bytes lines %d; want %d bytes lines %d", len(out.Tail), out.Lines, len(want), referenceLines(input))
+				if !bytes.Equal(out.Display.Tail, want) || out.Display.Lines != referenceLines(input) {
+					t.Fatalf("tail %d bytes lines %d; want %d bytes lines %d", len(out.Display.Tail), out.Display.Lines, len(want), referenceLines(input))
 				}
 				claim := int64(len(fmt.Sprintf("tail-fixture-%d", seed)))
-				if want := 2*claim + 512 + int64(len(out.Preview)+len(out.Tail)) + 256; state.current != want {
+				if want := 2*claim + 512 + int64(len(out.Display.Preview)+len(out.Display.Tail)) + 256; state.current != want {
 					t.Fatalf("settled state %d; want %d for the retained display bytes", state.current, want)
 				}
 				testutil.FailErr(t, "release fixture stream", out.Close())
@@ -90,7 +90,7 @@ func TestStreamSpillTailAndLinesMatchReferenceForAnyChunking(t *testing.T) {
 func TestStreamSpillWithoutPreviewKeepsNoTail(t *testing.T) {
 	out := spillFixture(t, []byte("a\nb\n"), 0, 1, &retainedPreviewBytes{})
 	defer out.Close()
-	if out.Tail != nil || out.Lines != 2 {
-		t.Fatalf("tail %q lines %d", out.Tail, out.Lines)
+	if out.Display.Tail != nil || out.Display.Lines != 2 {
+		t.Fatalf("tail %q lines %d", out.Display.Tail, out.Display.Lines)
 	}
 }
