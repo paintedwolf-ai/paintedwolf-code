@@ -1,7 +1,23 @@
 import { writeFileSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { modelIndependentWebE2e, openProjectFilesFixture } from "./helpers.ts";
+
+// The editor binds the document start to Cmd+Up on macOS and Ctrl+Home elsewhere.
+const DOCUMENT_START = process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home";
+
+/** A computed text color as drawn, since browsers serialize one color in several notations. */
+function drawnColor(element: Locator): Promise<number[]> {
+  return element.evaluate((node) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = canvas.height = 1;
+    const context = canvas.getContext("2d");
+    if (!context) return [];
+    context.fillStyle = getComputedStyle(node).color;
+    context.fillRect(0, 0, 1, 1);
+    return [...context.getImageData(0, 0, 1, 1).data];
+  });
+}
 
 async function selectEditingStyle(page: Page, style: "emacs" | "vim") {
   await page.evaluate(async (style) => {
@@ -25,7 +41,7 @@ modelIndependentWebE2e("keyboard editing preserves the existing chrome and docum
   const editor = page.locator(".den-files-editor:visible .cm-content");
   await expect(editor).toBeVisible();
   await editor.focus();
-  await page.keyboard.press("Control+Home");
+  await page.keyboard.press(DOCUMENT_START);
   await page.keyboard.press("Control+k");
   await expect(editor).not.toContainText("one two");
   await page.keyboard.press("Control+y");
@@ -35,15 +51,16 @@ modelIndependentWebE2e("keyboard editing preserves the existing chrome and docum
   await expect(page.getByTestId("files-editor-editing-state").filter({ visible: true })).toHaveCount(0);
 
   const wrap = page.getByTestId("files-editor-wrap-toggle").filter({ visible: true });
-  const before = await wrap.evaluate(element => getComputedStyle(element).color);
+  const before = await drawnColor(wrap);
+  expect(before).toHaveLength(4);
   const pressed = await wrap.getAttribute("aria-pressed");
   await wrap.focus();
   await page.keyboard.press("Enter");
   await expect(wrap).toHaveAttribute("aria-pressed", pressed === "true" ? "false" : "true");
-  expect(await wrap.evaluate(element => getComputedStyle(element).color)).toBe(before);
+  await expect.poll(async () => (await drawnColor(wrap)).every((channel, index) => Math.abs(channel - before[index]!) <= 1)).toBe(true);
 
   await editor.focus();
-  await page.keyboard.press("Control+Home");
+  await page.keyboard.press(DOCUMENT_START);
   await page.keyboard.type("saved ");
   await page.keyboard.press("Control+x");
   await page.keyboard.press("Control+s");
