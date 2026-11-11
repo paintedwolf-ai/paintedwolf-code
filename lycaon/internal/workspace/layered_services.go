@@ -58,6 +58,25 @@ func OpenPrivateGit(branchRoot string) (*privategit.Manager, error) {
 	return privategit.NewManager(privategit.ManagerConfig{BackingDir: enginepaths.PrivateGitDirUnder(branchRoot)})
 }
 
+// branchRuntimeDir is the adapter runtime directory of a branch's project, beside its branches.
+func branchRuntimeDir(branchRoot string) string {
+	clean := filepath.Clean(branchRoot)
+	return filepath.Join(filepath.Dir(filepath.Dir(clean)), adapterRuntimeDirName, filepath.Base(filepath.Dir(clean)))
+}
+
+// BranchGitObjectStores are the engine's retained object stores a branch's repositories borrow from,
+// which hold the history its checkpoints' own objects build on.
+func BranchGitObjectStores(branchRoot string) []string {
+	if strings.TrimSpace(branchRoot) == "" {
+		return nil
+	}
+	base := filepath.Dir(filepath.Dir(filepath.Clean(branchRoot)))
+	return []string{
+		privategit.RetainedObjectsDir(enginepaths.PrivateGitDirUnder(base)),
+		adapter.RetainedGitObjectsDir(branchRuntimeDir(branchRoot)),
+	}
+}
+
 // WithPrivateGit shares the host's private Git manager, the one the Git tools consult, with this Manager.
 func (m *Manager) WithPrivateGit(mgr *privategit.Manager) *Manager {
 	m.privateGit = mgr

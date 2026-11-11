@@ -232,6 +232,8 @@ type PrepareRequest struct {
 	// HiddenPaths are engine storage a broad root contains, such as the state folder. No view shows
 	// them and no materialization copies them.
 	HiddenPaths []string
+	// HiddenNames are names of engine storage no view shows at any depth.
+	HiddenNames []string
 	// CloneFile replaces the host clone primitive for a fixture.
 	CloneFile       FileCloner
 	QuiesceHook     func(ctx context.Context, viewID string) error

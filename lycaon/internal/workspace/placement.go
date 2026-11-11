@@ -8,13 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
@@ -278,20 +277,7 @@ func (m *Manager) sourceAdmit(sourceRoot string) sourceAdmit {
 	}
 }
 
-// skipUnreadable counts a directory this user cannot list instead of failing the
-// walk. Home directories and volume roots hold such entries.
-func skipUnreadable(count *atomic.Int64) func(rel string, err error) error {
-	return func(rel string, err error) error {
-		if rel == "." || !errors.Is(err, fs.ErrPermission) {
-			return err
-		}
-		if count != nil {
-			count.Add(1)
-		}
-		return nil
-	}
-}
-
+// sourceUnreadable reports a file this user cannot open.
 func sourceUnreadable(path string) bool {
 	file, err := os.Open(path)
 	if err != nil {
@@ -301,34 +287,31 @@ func sourceUnreadable(path string) bool {
 	return false
 }
 
-func sourceChangeSkippable(err error) bool {
-	return errors.Is(err, fs.ErrNotExist)
-}
-
-// firstRegularFile finds a readable file to probe a clone with.
+// firstRegularFile finds a readable file to probe a clone with, reading directories in bounded
+// batches. An unreadable file says nothing about what the volume can clone.
 func firstRegularFile(ctx context.Context, root string, admit sourceAdmit) (string, error) {
-	var sample string
-	err := sandbox.SurveyWalk(ctx, root, sandbox.SurveyOptions{IncludeHidden: true, Admit: admit, OnReadError: skipUnreadable(nil)},
-		func(entry sandbox.SurveyEntry) (sandbox.SurveyAction, error) {
-			info, err := entry.DirEntry.Info()
-			if err != nil {
-				if sourceChangeSkippable(err) {
-					return sandbox.SurveyContinue, nil
-				}
-				return sandbox.SurveyContinue, err
-			}
-			// An unreadable file says nothing about what the volume can clone.
-			if info.Mode().IsRegular() && !sourceUnreadable(entry.Abs) {
-				sample = entry.Abs
-				return sandbox.SurveyStop, nil
-			}
-			return sandbox.SurveyContinue, nil
-		})
+	cleanRoot := filepath.Clean(root)
+	sample, _, err := adapter.FirstRegularFile(ctx, cleanRoot, func(path string, d fs.DirEntry) bool {
+		rel, relErr := filepath.Rel(cleanRoot, path)
+		if relErr != nil || (admit != nil && !admit(filepath.ToSlash(rel), path, d.IsDir())) {
+			return false
+		}
+		return d.IsDir() || !sourceUnreadable(path)
+	})
 	return sample, err
 }
 
 // hiddenEnginePaths is engine storage a broad root can contain: the state folder and every
 // reachable placement folder. A view never shows it and a materialization never copies it.
+// hiddenEngineNames names engine storage a view hides wherever it appears: this engine's placement
+// folder, which can be made on a volume after a view of it started.
+func (m *Manager) hiddenEngineNames() []string {
+	if strings.TrimSpace(m.stateRoot) == "" {
+		return nil
+	}
+	return []string{enginepaths.WorkerPlacementDirName(os.Getuid(), m.stateRoot)}
+}
+
 func (m *Manager) hiddenEnginePaths() []string {
 	if strings.TrimSpace(m.stateRoot) == "" {
 		return nil

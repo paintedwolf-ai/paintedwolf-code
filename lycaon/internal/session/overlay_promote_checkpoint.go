@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -145,7 +146,9 @@ func NewTaskCheckpointPromoter(task *api.WorkerTask, roots []projectroot.RootRef
 	if err != nil {
 		return nil, checkpoint.Manifest{}, nil, true, err
 	}
-	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{Store: store, TargetRoots: targetRoots})
+	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
+		Store: store, TargetRoots: targetRoots, RetainedGitObjects: workspace.BranchGitObjectStores(task.WorkspaceRoot),
+	})
 	if err != nil {
 		return nil, checkpoint.Manifest{}, nil, true, err
 	}

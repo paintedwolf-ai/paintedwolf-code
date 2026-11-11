@@ -287,8 +287,8 @@ func collectStashEntries(ctx context.Context, _ string, gitDir string) ([]StashE
 	return stashes, nil
 }
 
-// ExportCheckpointObjects packs the objects a checkpoint's refs add beyond what the view started
-// with into dst, so promotion can import them without the private repository.
+// ExportCheckpointObjects packs the objects a checkpoint's refs add beyond what the destination holds
+// into dst, so promotion can publish them without the private repository.
 func (m *Manager) ExportCheckpointObjects(ctx context.Context, viewID string, state *CheckpointGitState, dst string) error {
 	view, err := getManagedView(m, viewID)
 	if err != nil {
@@ -323,7 +323,7 @@ func (m *Manager) ExportCheckpointObjects(ctx context.Context, viewID string, st
 	if revisions.Len() == 0 {
 		return nil
 	}
-	for _, oid := range state.InitialRefs {
+	for _, oid := range exportBoundary(ctx, view, repo.privateGitDir, state.InitialRefs) {
 		fmt.Fprintf(&revisions, "^%s\n", oid)
 	}
 	if err := os.MkdirAll(filepath.Join(dst, "pack"), 0o700); err != nil {
@@ -335,4 +335,42 @@ func (m *Manager) ExportCheckpointObjects(ctx context.Context, viewID string, st
 		return errors.Join(err, fmt.Errorf("privategit: export checkpoint objects (exit %d): %s", code, strings.TrimSpace(string(output))))
 	}
 	return nil
+}
+
+// exportBoundary is what the destination already holds: its current ref tips that the private
+// repository also has. History the destination has since deleted travels with the checkpoint. A
+// destination that cannot be read leaves the tips the view started from.
+func exportBoundary(ctx context.Context, view *managedView, privateGitDir string, initial map[string]string) []string {
+	fallback := make([]string, 0, len(initial))
+	for _, oid := range initial {
+		fallback = append(fallback, oid)
+	}
+	out, code, err := gitexec.Run(ctx, view.trunkDir, []string{"for-each-ref", "--format=%(objectname)"}, gitexec.Opts{Profile: gitexec.ProfileHermetic})
+	if err != nil || code != 0 {
+		return fallback
+	}
+	var query bytes.Buffer
+	seen := map[string]bool{}
+	for line := range strings.SplitSeq(string(out), "\n") {
+		if oid := strings.TrimSpace(line); isHexString(oid) && !seen[oid] {
+			seen[oid] = true
+			query.WriteString(oid + "\n")
+		}
+	}
+	if query.Len() == 0 {
+		return nil
+	}
+	var present bytes.Buffer
+	_, code, err = gitexec.RunTo(ctx, privateGitDir, []string{"--git-dir=" + privateGitDir, "cat-file", "--batch-check=%(objectname)"},
+		gitexec.Opts{Profile: gitexec.ProfileHermetic, Input: query.Bytes()}, &present)
+	if err != nil || code != 0 {
+		return fallback
+	}
+	var boundary []string
+	for line := range strings.SplitSeq(present.String(), "\n") {
+		if fields := strings.Fields(line); len(fields) == 1 && isHexString(fields[0]) {
+			boundary = append(boundary, fields[0])
+		}
+	}
+	return boundary
 }

@@ -168,7 +168,9 @@ type ClaimRequest struct {
 	Storage  ClaimStorage
 	Grants   []adapter.RootGrant
 	// HiddenPaths are engine storage inside the granted roots that the view never shows.
-	HiddenPaths         []string
+	HiddenPaths []string
+	// HiddenNames are names of engine storage the view never shows at any depth.
+	HiddenNames         []string
 	Selection           adapter.WorkspaceSelection
 	FocusPathHints      []string
 	ParentLayers        []layeredfs.ParentLayer

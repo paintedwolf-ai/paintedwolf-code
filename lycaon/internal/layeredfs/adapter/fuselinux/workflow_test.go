@@ -150,7 +150,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("CaptureCheckpointGitState: state=%+v err=%v", cpGitState, err)
 	}
 
-	cpStore := publishWorkflowCheckpoint(t, adp, prep.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID, cpGitState)
+	cpStore := publishWorkflowCheckpoint(t, adp, gitMgr, prep.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID, cpGitState)
 
 	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
 	relReceipt, err := adp.Release(t.Context(), viewID)
@@ -161,8 +161,8 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 		t.Fatalf("expected ErrMountedWorktreeUnavailable from Status after Release, got %v", err)
 	}
 
-	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
-	promoteWorkflowCheckpoint(t, gitMgr, cpStore, trunkDir, workerID, checkpointID, cpGitState)
+	// 7. Promote the checkpoint, files and refs, into the trunk.
+	promoteWorkflowCheckpoint(t, cpStore, trunkDir, workerID, checkpointID)
 
 	promotedReadme, err := os.ReadFile(filepath.Join(trunkDir, "README.md"))
 	if err != nil || string(promotedReadme) != "updated by worker over fuse\n" {
@@ -172,10 +172,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	if err != nil || string(promotedFeature) != "package pkg\n" {
 		t.Fatalf("expected promoted pkg/feature.go in trunk, got %q err=%v", string(promotedFeature), err)
 	}
-	importedMainRef, err := privategit.NamespacedRef(workerID, checkpointID, "refs/heads/main")
-	if err != nil {
-		t.Fatalf("NamespacedRef: %v", err)
-	}
+	importedMainRef := "refs/lycaon/checkpoints/" + checkpointID + "/heads/main"
 	resolvedImportedOID := strings.TrimSpace(gittest.Run(t, trunkDir, "rev-parse", importedMainRef))
 	if resolvedImportedOID != workerHeadOID {
 		t.Fatalf("expected imported ref %s in trunk to resolve to %s, got %s", importedMainRef, workerHeadOID, resolvedImportedOID)
@@ -228,6 +225,7 @@ func seedWorkflowTrunk(t *testing.T, trunkDir string) string {
 func publishWorkflowCheckpoint(
 	t *testing.T,
 	adp *fuselinux.Adapter,
+	gitMgr *privategit.Manager,
 	core *layeredfs.Core,
 	cpStoreDir, trunkDir, viewID, workerID, checkpointID string,
 	cpGitState *privategit.CheckpointGitState,
@@ -254,6 +252,10 @@ func publishWorkflowCheckpoint(
 	if err != nil {
 		t.Fatalf("checkpoint.NewPublisher: %v", err)
 	}
+	// Promotion publishes the objects the checkpoint carries, as the workspace exports them.
+	if err := gitMgr.ExportCheckpointObjects(t.Context(), viewID, cpGitState, checkpoint.CheckpointGitObjectsDir(cpStore.RootDir(), checkpointID, "")); err != nil {
+		t.Fatalf("export checkpoint objects: %v", err)
+	}
 	pubRes, err := pub.Publish(t.Context(), checkpoint.PublishRequest{
 		CheckpointID: checkpointID,
 		Trigger:      checkpoint.TriggerExplicitCapture,
@@ -269,13 +271,7 @@ func publishWorkflowCheckpoint(
 	return cpStore
 }
 
-func promoteWorkflowCheckpoint(
-	t *testing.T,
-	gitMgr *privategit.Manager,
-	cpStore *checkpoint.Store,
-	trunkDir, workerID, checkpointID string,
-	cpGitState *privategit.CheckpointGitState,
-) {
+func promoteWorkflowCheckpoint(t *testing.T, cpStore *checkpoint.Store, trunkDir, workerID, checkpointID string) {
 	t.Helper()
 	promoter, err := checkpoint.NewPromoter(checkpoint.PromoterConfig{
 		Store:       cpStore,
@@ -295,17 +291,11 @@ func promoteWorkflowCheckpoint(
 	if err != nil {
 		t.Fatalf("begin promotion: %v", err)
 	}
-	if _, err := txn.ApplyCheckpoint(t.Context(), promoter, checkpoint.ApplyRequest{Preview: preview}); err != nil {
+	if _, err := txn.ApplyCheckpoint(t.Context(), promoter, checkpoint.ApplyRequest{Preview: preview, ImportGitRefs: true}); err != nil {
 		t.Fatalf("apply promotion: %v", err)
 	}
 	if err := txn.Commit(); err != nil {
 		t.Fatalf("commit promotion: %v", err)
-	}
-	imported, err := gitMgr.ImportRefsToTrunk(t.Context(), privategit.RefImportRequest{
-		JobID: workerID, WorkerID: workerID, CheckpointID: checkpointID, TrunkDir: trunkDir, Checkpoint: cpGitState,
-	})
-	if err != nil || len(imported.ImportedRefs) == 0 {
-		t.Fatalf("import refs: res=%+v err=%v", imported, err)
 	}
 }
 

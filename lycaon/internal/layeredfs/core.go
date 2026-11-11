@@ -102,8 +102,10 @@ type rootTable struct {
 }
 
 type statsCounters struct {
-	lowerDirReads     atomic.Int64
-	lowerLookups      atomic.Int64
+	lowerDirReads atomic.Int64
+	lowerLookups  atomic.Int64
+	// lowerContentReads counts lower files opened for their content, outside Git metadata.
+	lowerContentReads atomic.Int64
 	physicalCopyUps   atomic.Int64
 	capturedBaseBytes atomic.Int64
 	journalEntries    atomic.Int64
@@ -337,14 +339,15 @@ func initRootTable(cfg Config) (*rootTable, error) {
 			rt.close()
 			return nil, ErrInvalidRoot
 		}
+		r.Hidden = cleanHiddenRels(r.Hidden)
 		if !r.Folding.Folds() && r.TrunkPath != "" {
 			probe := cfg.FoldingProbe
 			if probe == nil {
 				probe = ProbeNameFolding
 			}
 			r.Folding = probe(r.TrunkPath)
-			rt.specs[i] = r
 		}
+		rt.specs[i] = r
 		rt.byID[r.ID] = r
 		if r.IsPrimary && primaryID == "" {
 			primaryID = r.ID

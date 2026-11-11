@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 )
 
@@ -206,9 +207,7 @@ func refreshMaterializedRepoAlternates(ctx context.Context, services *layeredSer
 		return fmt.Errorf("%w: private Git store is unavailable", recovery.ErrIncompleteCheckpoint)
 	}
 	store := services.privateGit.Store()
-	workerBranchesDir := filepath.Dir(filepath.Dir(branchRoot))
-	projKey := filepath.Base(filepath.Dir(branchRoot))
-	adapterRetainedObjects := filepath.Join(workerBranchesDir, adapterRuntimeDirName, projKey, "retained-git-store", "objects")
+	adapterRetainedObjects := adapter.RetainedGitObjectsDir(branchRuntimeDir(branchRoot))
 
 	for _, at := range gitView.Repos {
 		target, gitDir, altPath, err := resolveConfinedRepoGitDir(branchRoot, gitView.WorktreeDir, gitView.WorktreeRel, at.RepoRel)

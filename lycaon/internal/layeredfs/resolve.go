@@ -166,6 +166,9 @@ func resolveWith(c *Core, qpath QualifiedPath, followFinal, writeIntent, wantXat
 		c.mu.RLock()
 		spelled := c.storedSpelling(QualifiedPath{RootID: qpath.RootID, Rel: candidateRel})
 		c.mu.RUnlock()
+		if c.hiddenRel(spelled) {
+			return resolvedLayerEntry{}, fs.ErrNotExist
+		}
 		candPath, err := checkGitAccess(c, spelled, writeIntent && len(parts) == 0)
 		if err != nil {
 			return resolvedLayerEntry{}, err
@@ -262,6 +265,11 @@ func resolveParentDir(c *Core, qpath QualifiedPath, writeIntent bool) (Qualified
 	}
 	if name == "" || name == "." || name == ".." {
 		return QualifiedPath{}, "", ErrPathEscape
+	}
+	if writeIntent {
+		if err := c.refuseHiddenTarget(qpath); err != nil {
+			return QualifiedPath{}, "", err
+		}
 	}
 	parentRes, err := resolvePath(c, QualifiedPath{RootID: qpath.RootID, Rel: parentRel}, true, writeIntent)
 	if err != nil {
