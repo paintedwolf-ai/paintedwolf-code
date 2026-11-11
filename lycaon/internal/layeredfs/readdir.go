@@ -36,6 +36,8 @@ func (c *Core) ReadDir(qpath QualifiedPath) ([]DirEntry, error) {
 
 func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 	dirPath.Rel = cleanRelPath(dirPath.Rel)
+	// Entries merge by the name the root folds them to, and a private spelling wins.
+	folding := c.foldingOf(dirPath.RootID)
 	merged := make(map[string]DirEntry)
 
 	c.mu.RLock()
@@ -66,7 +68,7 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 				continue
 			}
 			childPath := QualifiedPath{RootID: dirPath.RootID, Rel: joinRel(dirPath.Rel, le.Name)}
-			merged[le.Name] = DirEntry{
+			merged[folding.key(le.Name)] = DirEntry{
 				Name:       le.Name,
 				NodeID:     syntheticNodeID(childPath, le.Ino),
 				Generation: 1,
@@ -86,11 +88,11 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 			}
 			for name, pe := range pEntries {
 				if pe.Kind == EntryAbsent {
-					delete(merged, name)
+					delete(merged, folding.key(name))
 					continue
 				}
 				childPath := QualifiedPath{RootID: dirPath.RootID, Rel: joinRel(dirPath.Rel, name)}
-				merged[name] = DirEntry{
+				merged[folding.key(name)] = DirEntry{
 					Name:       name,
 					NodeID:     syntheticNodeID(childPath, 1),
 					Generation: 1,
@@ -107,16 +109,16 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 	c.mu.Lock()
 	prefix := ""
 	if dirPath.Rel != "." {
-		prefix = dirPath.Rel + "/"
+		prefix = folding.relKey(dirPath.Rel) + "/"
 	}
 	for delPath := range c.state.deletedPaths {
-		if name, ok := immediateChildName(dirPath.RootID, prefix, delPath); ok {
-			delete(merged, name)
+		if name, ok := immediateChildName(dirPath.RootID, prefix, folding, delPath); ok {
+			delete(merged, folding.key(name))
 		}
 	}
 	var gitChildren []QualifiedPath
 	for privPath, nid := range c.state.pathIndex {
-		if _, ok := immediateChildName(dirPath.RootID, prefix, privPath); ok {
+		if _, ok := immediateChildName(dirPath.RootID, prefix, folding, privPath); ok {
 			if node := c.state.nodesByID[nid]; node != nil && !node.flags.unlinked && node.flags.gitHostPath != "" {
 				gitChildren = append(gitChildren, privPath)
 			}
@@ -130,7 +132,7 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 		}
 	}
 	for privPath, nid := range c.state.pathIndex {
-		name, ok := immediateChildName(dirPath.RootID, prefix, privPath)
+		name, ok := immediateChildName(dirPath.RootID, prefix, folding, privPath)
 		if !ok {
 			continue
 		}
@@ -138,7 +140,7 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 		if node == nil || node.flags.unlinked {
 			continue
 		}
-		merged[name] = DirEntry{
+		merged[folding.key(name)] = DirEntry{
 			Name:       name,
 			NodeID:     node.id,
 			OriginID:   node.origin,
@@ -155,40 +157,41 @@ func readDirUnlocked(c *Core, dirPath QualifiedPath) ([]DirEntry, error) {
 	names := sortedNames(merged)
 	out := make([]DirEntry, 0, len(names))
 	for _, name := range names {
+		if c.hiddenRel(QualifiedPath{RootID: dirPath.RootID, Rel: joinRel(dirPath.Rel, merged[name].Name)}) {
+			continue
+		}
 		out = append(out, merged[name])
 	}
 	return out, nil
 }
 
-func immediateChildName(rootID, prefix string, candidate QualifiedPath) (string, bool) {
+// immediateChildName is candidate's name when it sits directly in the directory whose folded path
+// prefix names, with its own spelling.
+func immediateChildName(rootID, prefix string, folding NameFolding, candidate QualifiedPath) (string, bool) {
 	if candidate.RootID != rootID || candidate.Rel == "." {
 		return "", false
 	}
-	var rest string
-	if prefix == "" {
-		rest = candidate.Rel
-	} else {
-		if !strings.HasPrefix(candidate.Rel, prefix) {
-			return "", false
-		}
-		rest = strings.TrimPrefix(candidate.Rel, prefix)
+	dir, name := ".", candidate.Rel
+	if slash := strings.LastIndexByte(candidate.Rel, '/'); slash >= 0 {
+		dir, name = candidate.Rel[:slash], candidate.Rel[slash+1:]
 	}
-	if rest == "" || strings.IndexByte(rest, '/') >= 0 {
+	if name == "" {
 		return "", false
 	}
-	return rest, true
+	if prefix == "" {
+		return name, dir == "."
+	}
+	return name, dir != "." && folding.relKey(dir)+"/" == prefix
 }
 
 func isMaskedByPrivateDeletionOrReplacementLocked(c *Core, qpath QualifiedPath) bool {
-	if _, deleted := c.state.deletedPaths[qpath]; deleted {
-		return true
-	}
 	rel := qpath.Rel
 	for rel != "." {
-		if _, del := c.state.deletedPaths[QualifiedPath{RootID: qpath.RootID, Rel: rel}]; del {
+		spelled := c.storedSpelling(QualifiedPath{RootID: qpath.RootID, Rel: rel})
+		if _, del := c.state.deletedPaths[spelled]; del {
 			return true
 		}
-		if ancID, ok := c.state.pathIndex[QualifiedPath{RootID: qpath.RootID, Rel: rel}]; ok {
+		if ancID, ok := c.state.pathIndex[spelled]; ok {
 			anc := c.state.nodesByID[ancID]
 			if anc != nil && (anc.kind != EntryDirectory || anc.flags.namespaceAdded) {
 				return true

@@ -210,6 +210,7 @@ func (c *Core) Stats() Stats {
 	return Stats{
 		LowerDirReads:     c.counters.lowerDirReads.Load(),
 		LowerLookups:      c.counters.lowerLookups.Load(),
+		LowerContentReads: c.counters.lowerContentReads.Load(),
 		PhysicalCopyUps:   c.counters.physicalCopyUps.Load(),
 		LogicalChanges:    int64(logical),
 		CapturedBaseBytes: c.counters.capturedBaseBytes.Load(),
@@ -251,7 +252,7 @@ func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *p
 		},
 	}
 	c.state.nodesByID[nid] = node
-	c.state.pathIndex[qpath] = nid
+	c.setPrivatePath(qpath, nid)
 	if attr.Layer != LayerPrivate {
 		recordOriginLocked(c, node, attr.NodeID)
 	}
@@ -318,7 +319,7 @@ func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*priv
 			},
 		}
 		c.state.nodesByID[nid] = node
-		c.state.pathIndex[qpath] = nid
+		c.setPrivatePath(qpath, nid)
 		recordOriginLocked(c, node, res.attr.NodeID)
 		c.counters.physicalCopyUps.Add(1)
 		return node, nil

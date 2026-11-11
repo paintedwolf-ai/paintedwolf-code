@@ -195,6 +195,8 @@ type ChooseRequest struct {
 	Disk func() (DiskSpace, error)
 	// Overrun is the copy that just passed its budget, which moves selection past materializing.
 	Overrun *BudgetOverrunError
+	// HiddenPaths are engine storage inside the roots, which no tree holds and the cost leaves out.
+	HiddenPaths []string
 }
 
 // Choice is one worker's provider and the facts that chose it.

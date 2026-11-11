@@ -87,6 +87,7 @@ func (c *Coordinator) ClaimWorkerView(
 	choice, err := c.selector.Choose(ctx, adapter.ChooseRequest{
 		Probe: adapter.ProbeConfig{RuntimeDir: req.Storage.RuntimeDir}, Grants: grants,
 		CloneAvailable: adapter.ProbeCloneAt(req.Storage.RuntimeDir), Disk: req.Materialization.Disk,
+		HiddenPaths: req.HiddenPaths,
 	})
 	if err != nil {
 		snap := c.recordFailedClaim(req, choice.Probe.AdapterID, classifyClaimReason(err), err.Error(), 0, 0)
@@ -264,6 +265,7 @@ func buildPrepareRequest(req ClaimRequest, kind adapter.PreparationKind) adapter
 		TargetRootDirs:   req.Storage.TargetRootDirs,
 		Grants:           req.Grants,
 		HiddenPaths:      req.HiddenPaths,
+		HiddenNames:      req.HiddenNames,
 		Selection:        req.Selection,
 		TaskPathHints:    append([]string(nil), req.FocusPathHints...),
 		ParentLayers:     req.ParentLayers,

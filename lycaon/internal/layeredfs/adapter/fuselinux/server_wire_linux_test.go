@@ -48,6 +48,8 @@ func newWireServer(t *testing.T, cfg ServerConfig) *wireServer {
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID: "wire", BackingDir: w.backing, ActiveRootID: "primary",
 		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: w.trunk, IsPrimary: true}},
+		// The wire server has no private Git, so Git metadata is the trunk's own.
+		GitAllowPassthrough: true,
 		FaultHooks: &layeredfs.FaultHooks{JournalSyncHook: func(string) error {
 			if injected := w.syncErr.Load(); injected != nil {
 				return *injected
@@ -372,7 +374,7 @@ func TestInitGrantsOnlyPinnedCapabilitiesAndRefusesOldKernels(t *testing.T) {
 	}
 	r := w.call(fuseOpInit, 0, initBody(FUSEProtocolMajor, 41, ^uint32(0)))
 	w.wantErrno("init", r, 0)
-	want := uint32(fuseCapPOSIXLocks | fuseCapAtomicOTrunc | fuseCapBigWrites | fuseCapFlockLocks)
+	want := uint32(fuseCapPOSIXLocks | fuseCapAtomicOTrunc | fuseCapBigWrites | fuseCapFlockLocks | fuseCapDoReaddirplus | fuseCapReaddirplusAuto)
 	if got := binary.LittleEndian.Uint32(r.payload[12:16]); got != want {
 		t.Fatalf("granted flags %#x, want exactly %#x", got, want)
 	}

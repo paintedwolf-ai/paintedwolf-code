@@ -15,7 +15,12 @@ import (
 // RetainedGitObjectsDirOfView is the object store the repositories of a materialized view borrow
 // from, shared by every view prepared under the same runtime directory.
 func RetainedGitObjectsDirOfView(runtimeViewDir string) string {
-	return filepath.Join(retainedGitStoreDir(filepath.Dir(filepath.Dir(runtimeViewDir))), "objects")
+	return RetainedGitObjectsDir(filepath.Dir(filepath.Dir(runtimeViewDir)))
+}
+
+// RetainedGitObjectsDir is the object store shared by the materialized views prepared under runtimeDir.
+func RetainedGitObjectsDir(runtimeDir string) string {
+	return filepath.Join(retainedGitStoreDir(runtimeDir), "objects")
 }
 
 func retainedGitStoreDir(runtimeDir string) string {

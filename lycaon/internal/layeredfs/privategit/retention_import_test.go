@@ -68,6 +68,9 @@ func TestTrunkBranchDeleteAndPruneDoesNotBreakWorkerCheckpointOrImport(t *testin
 		t.Fatalf("expected non-empty checkpoint index and HeadOID, got %+v", cp)
 	}
 
+	exported := filepath.Join(t.TempDir(), "exported")
+	testutil.FailErr(t, "export checkpoint objects", mgr.ExportCheckpointObjects(t.Context(), "view-prune", cp, exported))
+
 	// Release the worker view and run GC on the retained store: checkpoint lease must protect history!
 	testutil.FailErr(t, "core.ReleaseView", core.ReleaseView())
 	testutil.FailErr(t, "mgr.ReleaseView", mgr.ReleaseView("view-prune"))
@@ -75,27 +78,23 @@ func TestTrunkBranchDeleteAndPruneDoesNotBreakWorkerCheckpointOrImport(t *testin
 	testutil.FailErr(t, "CollectGarbage with active checkpoint lease", err)
 	testutil.FailErr(t, "VerifyCheckpointHistory after view release & GC", mgr.VerifyCheckpointHistory(t.Context(), cp))
 
-	// Import checkpoint refs back into trunk and verify the pruned commit and its child are now reachable in trunk!
+	// The export carries the history the trunk pruned, so the trunk can take the worker's commits back.
+	packs, err := filepath.Glob(filepath.Join(exported, "pack", "*.pack"))
+	if err != nil || len(packs) != 1 {
+		t.Fatalf("exported packs = %v, %v", packs, err)
+	}
 	trunkWTBefore := gittest.Run(t, fix.trunkDir, "status", "--porcelain")
-	impRes, err := mgr.ImportRefsToTrunk(t.Context(), RefImportRequest{
-		JobID:        "job-prune",
-		WorkerID:     "worker-view-prune",
-		CheckpointID: "cp-prune-1",
-		TrunkDir:     fix.trunkDir,
-		Checkpoint:   cp,
-	})
-	testutil.FailErr(t, "ImportRefsToTrunk after trunk prune", err)
-	wantDest := "refs/paintedwolf/workers/job-prune/cp-prune-1/heads/ephemeral-branch"
-	if impRes.ImportedRefs[wantDest] != cp.HeadOID {
-		t.Fatalf("expected %s -> %s, got %+v", wantDest, cp.HeadOID, impRes.ImportedRefs)
-	}
-	trunkLog := gittest.Run(t, fix.trunkDir, "log", "--oneline", wantDest)
+	raw, err := os.ReadFile(packs[0])
+	testutil.FailErr(t, "read exported pack", err)
+	admitted := filepath.Join(fix.trunkDir, ".git", "objects", "pack", filepath.Base(packs[0]))
+	testutil.FailErr(t, "place exported pack", os.WriteFile(admitted, raw, 0o444))
+	gittest.Run(t, fix.trunkDir, "index-pack", "--strict", admitted)
+	trunkLog := gittest.Run(t, fix.trunkDir, "log", "--oneline", cp.HeadOID)
 	if !strings.Contains(trunkLog, "ephemeral commit") || !strings.Contains(trunkLog, "worker commit on top") {
-		t.Fatalf("expected imported ref in trunk to contain full history, got:\n%s", trunkLog)
+		t.Fatalf("expected the exported history in trunk, got:\n%s", trunkLog)
 	}
-	trunkWTAfter := gittest.Run(t, fix.trunkDir, "status", "--porcelain")
-	if trunkWTBefore != trunkWTAfter {
-		t.Fatalf("ref import must not alter trunk working tree: before=%q after=%q", trunkWTBefore, trunkWTAfter)
+	if trunkWTAfter := gittest.Run(t, fix.trunkDir, "status", "--porcelain"); trunkWTBefore != trunkWTAfter {
+		t.Fatalf("admitting objects altered the trunk working tree: before=%q after=%q", trunkWTBefore, trunkWTAfter)
 	}
 }
 

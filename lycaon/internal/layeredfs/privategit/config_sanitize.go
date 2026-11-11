@@ -73,7 +73,12 @@ func SanitizeGitConfig(raw []byte) []byte {
 		out.WriteByte('\n')
 	}
 
-	out.WriteString("[core]\n\tbare = false\n\tlogallrefupdates = true\n[gc]\n\tauto = 0\n")
+	// A view's files carry the source's size and modification time but their own inode and change
+	// time, so the index trusts only the first two; otherwise a worker's first status reads every file.
+	// Git still re-reads an entry whose time is not older than the index, so an edit in the second the
+	// index was written is caught. A change that keeps both the size and the whole-second time, such as
+	// a same-size replacement that restores the old timestamp, is not.
+	out.WriteString("[core]\n\tbare = false\n\tlogallrefupdates = true\n\tcheckStat = minimal\n\ttrustctime = false\n[gc]\n\tauto = 0\n")
 	return out.Bytes()
 }
 

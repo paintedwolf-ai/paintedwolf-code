@@ -262,12 +262,13 @@ func onPathConf(s *Server, cs *connState, call rpcCallHeader) []byte {
 	var body bytes.Buffer
 	writeUint32(&body, uint32(nfs.NFSStatusOk))
 	writePostOpAttr(&body, &meta, exp.cap.AllowedUID, exp.cap.AllowedGID)
+	folding := coreForView(s, rec.viewID).NameFolding(rec.qpath.RootID)
 	writeUint32(&body, pathconfLinkMax)
 	writeUint32(&body, nfs.MNTNameLen)
-	writeBool(&body, true)
-	writeBool(&body, true)
-	writeBool(&body, false)
-	writeBool(&body, true)
+	writeBool(&body, true)         // no_trunc
+	writeBool(&body, true)         // chown_restricted
+	writeBool(&body, folding.Case) // case_insensitive
+	writeBool(&body, true)         // case_preserving
 	return encodeAcceptedReply(call.XID, nfs.ResponseCodeSuccess, body.Bytes())
 }
 

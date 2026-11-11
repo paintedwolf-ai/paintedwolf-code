@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -479,6 +480,9 @@ func (a *seedAccumulator) overrun(rootID string) error {
 
 // hidden reports engine storage under a source root that no view shows.
 func (a *seedAccumulator) hidden(dir string) bool {
+	if slices.Contains(a.req.HiddenNames, filepath.Base(dir)) {
+		return true
+	}
 	canonical := fspath.CanonicalPath(dir)
 	for _, path := range a.req.HiddenPaths {
 		if canonical == fspath.CanonicalPath(path) {

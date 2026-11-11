@@ -57,8 +57,9 @@ func mountAndStartFUSEServer(ctx context.Context, adapterCfg Config, srvCfg Serv
 }
 
 func (s *Server) start() {
-	s.wg.Add(1 + s.workerCount)
+	s.wg.Add(2 + s.workerCount)
 	go s.serveLoop()
+	go s.evictLoop()
 	for range s.workerCount {
 		go s.ordinaryWorker()
 	}

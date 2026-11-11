@@ -37,6 +37,17 @@ const (
 	VisibilityFixed SourceVisibility = "fixed"
 )
 
+// OtherUserAccess is whether a user other than the worker's can reach a view, such as a command run
+// under sudo or a container daemon binding the workspace.
+type OtherUserAccess string
+
+const (
+	// OtherUserAccessNone: the kernel or the view's server refuses every other user, root included.
+	OtherUserAccessNone OtherUserAccess = "none"
+	// OtherUserAccessFileModes: the view is ordinary files, so their modes decide as they do anywhere.
+	OtherUserAccessFileModes OtherUserAccess = "file_modes"
+)
+
 // ReasonCode is a machine-readable reason for probe failure, fallback, or operation errors.
 type ReasonCode string
 
@@ -106,7 +117,8 @@ type AdapterFacts struct {
 	SupportsPrivateGit        bool                 `json:"supports_private_git"`
 	SupportsCheckpointBarrier bool                 `json:"supports_checkpoint_barrier"`
 	// BarrierHoldBound is how long a checkpoint barrier may hold the view's writes.
-	BarrierHoldBound time.Duration `json:"barrier_hold_bound,omitempty"`
+	BarrierHoldBound time.Duration   `json:"barrier_hold_bound,omitempty"`
+	OtherUserAccess  OtherUserAccess `json:"other_user_access"`
 }
 
 // ProbeConfig configures a real confinement probe of an adapter.
@@ -236,6 +248,8 @@ type PrepareRequest struct {
 	// HiddenPaths are engine storage a broad root contains, such as the state folder. No view shows
 	// them and no materialization copies them.
 	HiddenPaths []string
+	// HiddenNames are names of engine storage no view shows at any depth.
+	HiddenNames []string
 	// CloneFile replaces the host clone primitive for a fixture.
 	CloneFile       FileCloner
 	QuiesceHook     func(ctx context.Context, viewID string) error

@@ -114,6 +114,22 @@ func ensureBaseCaptured(c *Core, qpath QualifiedPath) (BaseCapture, error) {
 	return cloneBaseCapture(captured), nil
 }
 
+// recordAbsentBase records that qpath held nothing in the base, unless a base is already recorded.
+func recordAbsentBase(c *Core, qpath QualifiedPath) (BaseCapture, error) {
+	qpath.Rel = cleanRelPath(qpath.Rel)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.state.released {
+		return BaseCapture{}, ErrViewReleased
+	}
+	if existing, ok := c.state.basesByPath[qpath]; ok {
+		return cloneBaseCapture(existing), nil
+	}
+	absent := BaseCapture{Path: qpath, Layer: LayerTrunk, Kind: EntryAbsent, CapturedAt: time.Now()}
+	c.state.basesByPath[qpath] = absent
+	return absent, nil
+}
+
 func captureFromLowerOrParent(c *Core, qpath QualifiedPath) (BaseCapture, error) {
 	c.mu.RLock()
 	if isMaskedByPrivateDeletionOrReplacementLocked(c, qpath) {
