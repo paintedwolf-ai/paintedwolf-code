@@ -8,7 +8,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // compositionForms wrap one child command in each way a program can reach it.
@@ -29,15 +32,13 @@ var compositionForms = []struct {
 }
 
 // A child effect has the same authority however a program reaches it: every
-// composition form completes an allowed copy and refuses one into a folder
-// that is not attached, leaving it untouched.
+// composition form completes an allowed copy and refuses one into a root that
+// was detached, leaving it untouched.
 func TestCompositionFormsPreserveChildAuthority(t *testing.T) {
-	var directCode string
 	for _, form := range compositionForms {
 		t.Run(form.name, func(t *testing.T) {
 			f := newPathsFixture(t)
-			outside := t.TempDir()
-			denied := filepath.Join(outside, "copied")
+			denied := filepath.Join(f.web.Path, "copied")
 			allowed := "copied-" + form.name
 
 			f.stdout(t, form.wrap(allowed))
@@ -45,19 +46,19 @@ func TestCompositionFormsPreserveChildAuthority(t *testing.T) {
 				t.Fatalf("allowed copy through %s: %q, %v", form.name, data, err)
 			}
 
+			f.history.Record(testdbseed.DefaultProjectID, f.roots, []projectroot.RootRef{f.api})
+			f.roots = []projectroot.RootRef{f.api}
 			out, err := f.Call(t, t.Context(), form.wrap(denied))
 			testutil.FailErr(t, "run denied program", err)
 			outcome := decodeProgramOutcome(t, out)
 			if outcome.Refusal == nil {
-				t.Fatalf("%s reached an unattached folder: status %d stderr %q", form.name, outcome.Status, outcome.Stderr)
+				t.Fatalf("%s reached a detached root: status %d stderr %q", form.name, outcome.Status, outcome.Stderr)
 			}
 			if _, err := os.Stat(denied); !os.IsNotExist(err) {
-				t.Fatalf("%s wrote into an unattached folder: %v", form.name, err)
+				t.Fatalf("%s wrote into a detached root: %v", form.name, err)
 			}
-			if form.name == "direct" {
-				directCode = outcome.Refusal.Code
-			} else if directCode != "" && outcome.Refusal.Code != directCode {
-				t.Fatalf("%s refused with %s, direct with %s", form.name, outcome.Refusal.Code, directCode)
+			if outcome.Refusal.Code != tools.RootNotAttachedCode {
+				t.Fatalf("%s refused with %s, want %s", form.name, outcome.Refusal.Code, tools.RootNotAttachedCode)
 			}
 			if !strings.Contains(outcome.Refusal.Feedback, outcome.Refusal.Code) {
 				t.Fatalf("%s refusal feedback %q omits its code", form.name, outcome.Refusal.Feedback)
