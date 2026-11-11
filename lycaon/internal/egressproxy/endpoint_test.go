@@ -46,3 +46,17 @@ func TestParseSocksEndpoint(t *testing.T) {
 		t.Fatal("zero port must fail")
 	}
 }
+
+// An IPv4-mapped IPv6 literal is the IPv4 host it maps, so rules and
+// decisions written for that address apply to it.
+func TestIPv4MappedLiteralIsTheIPv4Host(t *testing.T) {
+	for _, hostport := range []string{"[::ffff:192.0.2.10]:443", "[::ffff:c000:20a]:443"} {
+		ep, err := ParseHTTPEndpoint(hostport, TransportHTTPConnect)
+		if err != nil {
+			t.Fatalf("%s: %v", hostport, err)
+		}
+		if ep.Host != "192.0.2.10" {
+			t.Fatalf("%s: host %q, want 192.0.2.10", hostport, ep.Host)
+		}
+	}
+}

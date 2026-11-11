@@ -338,12 +338,16 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if reject != nil {
 		return exchanged{}, reject
 	}
-	ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
-		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
-		ActionID: tctx.EffectActionID(),
-	})
-	defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
+	// A caller that already attributes the action (native curl names its
+	// command line) keeps that attribution and its lifetime.
+	if egressgate.From(ctx) == nil {
+		ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
+			SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
+			ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID, Image: "http_request", ToolName: "http_request",
+			ActionID: tctx.EffectActionID(),
+		})
+		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.EffectActionID())
+	}
 	resp, landed, bufferedBody, listenerFact, err := send(ctx, deps, tctx, spec, outbound, jar, tokenJar, tokenJarReq, allowAddress, durationArg(args["timeout_ms"]), opts)
 	if err != nil {
 		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {

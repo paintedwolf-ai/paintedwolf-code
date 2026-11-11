@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -133,6 +135,16 @@ func (inv *invocation) run() error {
 	}
 	inv.started = time.Now()
 	inv.sent = true
+	// The connection card and its detections name this curl command, not the
+	// HTTP owner it runs through.
+	ctx := egressgate.WithAttribution(inv.ctx, confine.EgressCommand{
+		SessionID: inv.tc.Identity.SessionID, RootSessionID: inv.tc.ChatSessionID(), ProjectID: inv.tc.Identity.ProjectID,
+		ProjectDir: inv.tc.ActiveRootPath(), ToolCallID: inv.tc.Identity.ToolCallID, ActionID: inv.tc.EffectActionID(),
+		Image: "curl", ToolName: "command", CommandLine: strings.Join(inv.request.Argv.Values(), " "),
+	})
+	defer confine.ForgetEgressAction(inv.tc.Identity.SessionID, inv.tc.EffectActionID())
+	// A host refusal is read from this attribution when the outcome settles.
+	inv.ctx = ctx
 	ex, err := httpaction.Perform(inv.ctx, inv.owners.HTTP, args, inv.tc, limits)
 	if err != nil {
 		return err
