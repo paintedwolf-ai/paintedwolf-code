@@ -15,17 +15,15 @@ import {
 import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 import { keepPositionInView } from "../editor/editor-settled-scroll.ts";
 import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
+import { PrettyScanner, type PrettySnapshot, snapshotsEqual } from "./pretty-scan.ts";
 import {
   PRETTY_CHECKPOINT_INTERVAL,
   PRETTY_TARGET_COLUMNS,
   PRETTY_TRIGGER_COLUMNS,
   type PrettyBlockFacts,
   type PrettyPlan,
-  PrettyScanner,
   type PrettySink,
-  type PrettySnapshot,
-  snapshotsEqual,
-} from "./pretty-scan.ts";
+} from "./pretty-scan-state.ts";
 import {
   prettyBreakDecoration,
   prettyIndentDecoration,
