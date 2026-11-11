@@ -101,8 +101,10 @@ type rootTable struct {
 }
 
 type statsCounters struct {
-	lowerDirReads     atomic.Int64
-	lowerLookups      atomic.Int64
+	lowerDirReads atomic.Int64
+	lowerLookups  atomic.Int64
+	// lowerContentReads counts lower files opened for their content, outside Git metadata.
+	lowerContentReads atomic.Int64
 	physicalCopyUps   atomic.Int64
 	capturedBaseBytes atomic.Int64
 	journalEntries    atomic.Int64
