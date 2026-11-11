@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
 import type { ToolPartView } from "./tool-part-model.ts";
 import { activityBriefingTarget } from "./activity-briefing.tsx";
