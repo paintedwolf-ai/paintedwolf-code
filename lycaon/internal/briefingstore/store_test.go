@@ -274,3 +274,33 @@ func TestApprovalIntentLinksWithoutMovingTheTarget(t *testing.T) {
 		t.Fatalf("link %+v then %+v", linked, again)
 	}
 }
+
+func TestApprovedRationaleLinksOnlyFromApprovedCards(t *testing.T) {
+	f := newFixture(t)
+	ctx := t.Context()
+	session, err := store.NewSQL(f.database).Create(ctx, api.CreateSessionRequest{}, project)
+	testutil.FailErr(t, "session", err)
+	insert := func(id, status string) {
+		_, err := f.database.ExecContext(ctx, `INSERT INTO checkpoints(id, session_id, project_id, kind, status, payload_json, created_at) VALUES (?, ?, ?, 'tool_approval', ?, ?, ?)`,
+			id, session.ID, project, status, `{"tool_call_id":"call","ai_rationale":"Pushes the fix."}`, db.FormatTime(time.Now().UTC()))
+		testutil.FailErr(t, "checkpoint "+id, err)
+	}
+	settle(t, f, f.epoch(t), "a", "evidence")
+	req, _ := request("a", "change", "evidence")
+	req.Action = &briefing.ActionRef{SessionID: session.ID, ToolCallID: "call"}
+	insert("pending-card", "pending")
+	testutil.FailErr(t, "link pending", f.store.LinkApprovedRationale(ctx, req))
+	if target, _ := f.store.GetTarget(ctx, project, "tool_activity", "a"); target.Facts.Intent != nil {
+		t.Fatalf("a pending card linked: %+v", target.Facts.Intent)
+	}
+	insert("approved-card", "approved")
+	testutil.FailErr(t, "link", f.store.LinkApprovedRationale(ctx, req))
+	linked, err := f.store.GetTarget(ctx, project, "tool_activity", "a")
+	testutil.FailErr(t, "target", err)
+	testutil.FailErr(t, "relink", f.store.LinkApprovedRationale(ctx, req))
+	again, err := f.store.GetTarget(ctx, project, "tool_activity", "a")
+	testutil.FailErr(t, "target again", err)
+	if linked.Facts.Intent == nil || linked.Facts.Intent.CheckpointID != "approved-card" || linked.Facts.Intent.Text != "Pushes the fix." || again.Revision != linked.Revision {
+		t.Fatalf("link %+v then revision %d -> %d", linked.Facts.Intent, linked.Revision, again.Revision)
+	}
+}

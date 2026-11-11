@@ -45,9 +45,12 @@ type Request struct {
 	TargetKind       string
 	TargetJSON       string
 	ScopeFingerprint string
-	Manual           bool
-	Policy           Policy
-	Sections         []SectionPlan
+	// Action is the tool call the target explains, when it has one; an
+	// approved rationale for it is linked as provenance.
+	Action   *ActionRef
+	Manual   bool
+	Policy   Policy
+	Sections []SectionPlan
 }
 
 // SectionState is a section of a target's current resolution.

@@ -101,7 +101,7 @@ func (p *Profile) Resolve(ctx context.Context, target briefing.Target) (briefing
 	return briefing.Request{
 		ProjectID: target.ProjectID, ProjectDir: target.ProjectDir, ProfileID: ProfileID, Version: profileVersion,
 		TargetKey: wanted.TargetKey, TargetKind: wanted.Kind, TargetJSON: string(canonical), ScopeFingerprint: wanted.ScopeFingerprint,
-		Manual: target.Manual, Policy: p.Policy(), Sections: sections,
+		Manual: target.Manual, Policy: p.Policy(), Sections: sections, Action: resolved.action(),
 	}, nil
 }
 
@@ -156,6 +156,13 @@ func (p *Profile) read(ctx context.Context, projectID string, target wire.Source
 		}
 	}
 	return out, nil
+}
+
+func (s step) action() *briefing.ActionRef {
+	if s.session == "" || s.call == "" {
+		return nil
+	}
+	return &briefing.ActionRef{SessionID: s.session, ToolCallID: s.call}
 }
 
 // fingerprint recomputes the frozen scope the rail listed.

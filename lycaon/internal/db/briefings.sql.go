@@ -24,6 +24,35 @@ func (q *Queries) AdvanceBriefingEpoch(ctx context.Context, projectID string) (i
 	return cache_epoch, err
 }
 
+const briefingApprovedRationale = `-- name: BriefingApprovedRationale :one
+SELECT id, CAST(COALESCE(json_extract(payload_json, '$.ai_rationale'), '') AS TEXT) AS rationale
+FROM checkpoints
+WHERE session_id = ?1 AND kind = 'tool_approval' AND status = 'approved'
+  AND json_extract(payload_json, '$.tool_call_id') = CAST(?2 AS TEXT)
+  AND COALESCE(json_extract(payload_json, '$.ai_rationale'), '') <> ''
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type BriefingApprovedRationaleParams struct {
+	SessionID  string `json:"session_id"`
+	ToolCallID string `json:"tool_call_id"`
+}
+
+type BriefingApprovedRationaleRow struct {
+	ID        string `json:"id"`
+	Rationale string `json:"rationale"`
+}
+
+// BriefingApprovedRationale finds the persisted rationale of the approved
+// card that admitted one tool call.
+func (q *Queries) BriefingApprovedRationale(ctx context.Context, arg BriefingApprovedRationaleParams) (BriefingApprovedRationaleRow, error) {
+	row := q.db.QueryRowContext(ctx, briefingApprovedRationale, arg.SessionID, arg.ToolCallID)
+	var i BriefingApprovedRationaleRow
+	err := row.Scan(&i.ID, &i.Rationale)
+	return i, err
+}
+
 const completeBriefingTargetAttempt = `-- name: CompleteBriefingTargetAttempt :one
 UPDATE briefing_targets SET
     sections_json = ?, record_id = ?, attempt_status = 'complete',

@@ -79,6 +79,10 @@ func (s *EngineRoutes) HandleRequestBriefing(w http.ResponseWriter, r *http.Requ
 		s.writeBriefingError(w, r, err)
 		return
 	}
+	// Provenance is best effort: a failed link leaves the briefing as it is.
+	if err := s.services.Host.Store.LinkApprovedRationale(r.Context(), request); err != nil {
+		s.responses.Logger.WarnContext(r.Context(), "link approved rationale", "profile", request.ProfileID, "error", err)
+	}
 	snapshot, err := s.services.Host.Store.Snapshot(r.Context(), briefingstore.SnapshotQuery{
 		ProjectID: p.ID, ProfileID: profile.ID(), Version: profile.Version(), Policy: profile.Policy(), TargetKey: request.TargetKey,
 	})
