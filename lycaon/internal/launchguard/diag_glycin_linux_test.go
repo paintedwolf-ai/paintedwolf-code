@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -92,6 +93,28 @@ func TestDiagGlycinLoaderBwrap(t *testing.T) {
 	// load-time failure reproduces with the loader's stderr captured. The
 	// listener/dial pair gives godbus a unix transport with fd passing.
 	diagGlycinDriveInit(t, loader)
+
+	// Stage 7: replicate the protected namespace's NOEXEC mount posture
+	// around the exact bwrap command. The protected launch sets
+	// MOUNT_ATTR_NOEXEC on "/" recursively and restores exec only on policy
+	// paths through file-typed projection mounts; glycin's single-mount
+	// "--ro-bind /usr /usr" cannot carry those stacked projections into the
+	// sandbox, so the loader's execve should fail EACCES there and bwrap
+	// should exit 1.
+	helper := filepath.Join(t.TempDir(), "diag-noexec-helper")
+	if err := buildBinary(helper, "./testdata/diagnoexec", ""); err != nil {
+		t.Fatalf("build diag noexec helper: %v", err)
+	}
+	for _, mode := range []string{"control", "noexec"} {
+		child := exec.Command(helper, "-mode", mode, "-parent-uid", strconv.Itoa(os.Getuid()), "-parent-gid", strconv.Itoa(os.Getgid()))
+		child.SysProcAttr = &syscall.SysProcAttr{Cloneflags: unix.CLONE_NEWUSER | unix.CLONE_NEWNS}
+		output, err := child.CombinedOutput()
+		if err != nil {
+			t.Logf("stage7-%s: helper failed: %v\n%s", mode, err, output)
+			continue
+		}
+		t.Logf("stage7-%s:\n%s", mode, output)
+	}
 }
 
 // diagGlycinDriveInit spawns the loader under the exact failing bwrap command
@@ -139,7 +162,10 @@ func diagGlycinDriveInit(t *testing.T, loader string) {
 	t.Cleanup(func() { _ = childFile.Close() })
 
 	bwrapLoad := diagGlycinBwrapCommand(t, loader)
-	bwrapLoad.Args = append(bwrapLoad.Args, "--setenv", "RUST_LOG", "debug")
+	// RUST_LOG must precede the payload path: glycin's parser stops at the
+	// first unknown argument after the payload, so options appended later
+	// land in the payload's argv and the loader exits 2.
+	bwrapLoad.Args = append(bwrapLoad.Args[:len(bwrapLoad.Args)-1], "--setenv", "RUST_LOG", "debug", loader)
 	bwrapLoad.ExtraFiles = diagGlycinFillFiles(t, 18)
 	bwrapLoad.ExtraFiles = append(bwrapLoad.ExtraFiles, childFile)
 	bwrapLoad.Args = append(bwrapLoad.Args, "--dbus-fd", "21")
