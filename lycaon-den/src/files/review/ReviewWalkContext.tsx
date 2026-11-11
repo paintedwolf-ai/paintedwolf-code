@@ -7,7 +7,6 @@ import { wholeFileOpChange } from "../../components/source/reader/source-reader-
 import {
   buildReviewWalkDetails,
   reviewWalkFileProgress,
-  type ReviewWalkDetails,
 } from "./review-walk-details.ts";
 import {
   commandWindowAdmissionLabel,
