@@ -214,9 +214,6 @@ func (r *ConnectionPool) deviceProbeRoots() []string {
 // Load reads distro + user overlays into the device catalog and re-syncs tools.
 // An unreadable user overlay is dropped as a rejected row; an unreadable distro catalog is fatal.
 func (r *ProviderCatalog) Load(ctx context.Context) error {
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if strings.TrimSpace(r.globalPath) != "" && !overlayLockAlreadyHeld(ctx, r.globalPath) {
 		return catalogruntime.WithLock(ctx, r.statePath, r.globalPath, func() error {
 			lockedCtx, _ := withOverlayLockHeld(ctx, r.globalPath)

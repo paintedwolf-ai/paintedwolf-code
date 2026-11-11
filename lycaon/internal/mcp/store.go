@@ -212,30 +212,6 @@ func patchProviderOverlay(path, providerID string, mut func(*MCPProviderOverlay)
 	return saveUserMCPConfig(path, *cfg)
 }
 
-func upsertProviderOverlay(path string, ov MCPProviderOverlay) error {
-	cfg, err := LoadUserMCPConfig(path)
-	if err != nil {
-		return err
-	}
-	for i, s := range cfg.Providers {
-		if s.ID == ov.ID {
-			cfg.Providers[i] = ov
-			return saveUserMCPConfig(path, *cfg)
-		}
-	}
-	cfg.Providers = append(cfg.Providers, ov)
-	return saveUserMCPConfig(path, *cfg)
-}
-
-func clearProviderOverride(path, providerID string) error {
-	cfg, err := LoadUserMCPConfig(path)
-	if err != nil {
-		return err
-	}
-	removeProviderOverlayRow(cfg, providerID)
-	return writeOrRemoveUserMCPConfig(path, *cfg)
-}
-
 func findProviderOverlayRow(cfg *UserMCPConfig, providerID string) (MCPProviderOverlay, bool) {
 	if cfg == nil {
 		return MCPProviderOverlay{}, false
