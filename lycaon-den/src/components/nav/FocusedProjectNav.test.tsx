@@ -94,6 +94,8 @@ describe("FocusedProjectNav", () => {
             is_primary: true,
             added_at: "",
             kind: "attached",
+            admitted: true,
+            admission_code: null,
           },
         ]}
         sessions={{ pinned: [], chats: [chatRow()] }}
@@ -234,6 +236,8 @@ describe("FocusedProjectNav", () => {
             is_primary: true,
             added_at: "",
             kind: "attached",
+            admitted: true,
+            admission_code: null,
           },
         ]}
         sessions={{ pinned: [], chats: [] }}
@@ -281,6 +285,8 @@ describe("FocusedProjectNav", () => {
             is_primary: true,
             added_at: "",
             kind: "attached",
+            admitted: true,
+            admission_code: null,
           },
         ]}
         sessions={{ pinned: [], chats: [] }}

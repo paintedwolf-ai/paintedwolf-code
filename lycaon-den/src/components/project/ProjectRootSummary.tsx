@@ -35,6 +35,7 @@ import { createAdaptivePoller } from "../../store/adaptive-poller.ts";
 import { createBoundedDebouncedAsyncScheduler } from "../../store/coalesced-async.ts";
 import { useResidentLive } from "../../ui/resident-activity.ts";
 import { sourceIndexNotes } from "../../search/search-status.ts";
+import { EDITOR_ONLY_LABEL, editorOnlyReason } from "../../project/root-admission.ts";
 
 type Props = {
   projectId: string;
@@ -390,6 +391,17 @@ export function ProjectRootSummary(props: Props) {
             >
               {root().is_primary ? "Primary root" : "Additional root"}
             </span>
+            <Show when={editorOnlyReason(root())}>
+              {(reason) => (
+                <span
+                  class="den-status-mark"
+                  data-testid="files-root-summary-editor-only"
+                  data-tip={reason()}
+                >
+                  {EDITOR_ONLY_LABEL}
+                </span>
+              )}
+            </Show>
             <Show when={!loading() && !git()?.statusPending && git()?.available && git()?.dirty}>
               <button
                 type="button"
