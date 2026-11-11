@@ -52,18 +52,18 @@ type Dependencies struct {
 
 // Service coordinates briefing admission, generation, retention, and shutdown.
 type Service struct {
-	store         Store
-	config        Config
-	generator     Generator
-	events        EventPublisher
-	settings      Enablement
-	logger        *slog.Logger
-	gate          sync.RWMutex
-	stopped       bool
-	scheduler     *briefing.Scheduler
-	ownsScheduler bool
-	ctx           context.Context
-	cancel        context.CancelFunc
+	store              Store
+	config             Config
+	generator          Generator
+	events             EventPublisher
+	settings           Enablement
+	logger             *slog.Logger
+	gate               sync.RWMutex
+	stopped            bool
+	scheduler          *briefing.Scheduler
+	dedicatedScheduler bool
+	ctx                context.Context
+	cancel             context.CancelFunc
 }
 
 // fileJobPrefix marks this kind's jobs on a shared scheduler.
@@ -75,12 +75,12 @@ func NewService(ctx context.Context, deps Dependencies) *Service {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	scheduler, owns := deps.Scheduler, false
+	scheduler, dedicated := deps.Scheduler, false
 	if scheduler == nil {
-		scheduler, owns = briefing.NewScheduler(ctx), true
+		scheduler, dedicated = briefing.NewScheduler(ctx), true
 	}
 	return &Service{store: deps.Store, config: deps.Config, generator: deps.Generator,
-		events: deps.Events, settings: deps.Settings, logger: logger, scheduler: scheduler, ownsScheduler: owns, ctx: ctx, cancel: cancel}
+		events: deps.Events, settings: deps.Settings, logger: logger, scheduler: scheduler, dedicatedScheduler: dedicated, ctx: ctx, cancel: cancel}
 }
 
 func (s *Service) Enabled() bool { return s.settings == nil || s.settings.Enabled() }
@@ -200,7 +200,7 @@ func (s *Service) Stop() {
 	s.gate.Lock()
 	s.stopped = true
 	s.cancel()
-	if s.ownsScheduler {
+	if s.dedicatedScheduler {
 		s.scheduler.Stop()
 	} else {
 		s.scheduler.Cancel(func(job briefing.Job) bool { return strings.HasPrefix(job.Key, fileJobPrefix) })
@@ -209,7 +209,7 @@ func (s *Service) Stop() {
 }
 
 func (s *Service) Wait(ctx context.Context) {
-	if s.ownsScheduler {
+	if s.dedicatedScheduler {
 		s.scheduler.Wait(ctx)
 	}
 }
