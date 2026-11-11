@@ -126,7 +126,7 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 				_ = unlinkBackingFile(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile))
 				delete(c.state.dirtyBackingFiles, base.BackingFile)
 			}
-			delete(c.state.basesByPath, qp)
+			c.dropBase(qp)
 		}
 	}
 
@@ -163,7 +163,7 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 					_ = unlinkBackingFile(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile))
 					delete(c.state.dirtyBackingFiles, base.BackingFile)
 				}
-				delete(c.state.basesByPath, qp)
+				c.dropBase(qp)
 			}
 			delete(node.paths, qp)
 			if len(node.paths) == 0 {
@@ -209,7 +209,7 @@ func (c *Core) SyncGitOverlayTo(rootID, repoRel, privGitDir string) error {
 				_ = unlinkBackingFile(int(c.backing.baseDirFile.Fd()), filepath.Base(base.BackingFile))
 				delete(c.state.dirtyBackingFiles, base.BackingFile)
 			}
-			delete(c.state.basesByPath, qp)
+			c.dropBase(qp)
 		}
 		delete(node.paths, qp)
 		if len(node.paths) == 0 {

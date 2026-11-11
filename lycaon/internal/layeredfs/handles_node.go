@@ -62,6 +62,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 			}
 			c.unmarkDeleted(qpath)
 			c.state.nodesByID[nid] = node
+			c.noteNode(nid)
 			c.setPrivatePath(qpath, nid)
 			markDirtyBackingFileLocked(c, hostPath)
 			if ino := fileInfoIno(info); ino != 0 {
@@ -103,6 +104,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 			}
 			c.unmarkDeleted(qpath)
 			c.state.nodesByID[nid] = node
+			c.noteNode(nid)
 			c.setPrivatePath(qpath, nid)
 			markDirtyBackingFileLocked(c, hostPath)
 			ino := fileInfoIno(info)
@@ -145,6 +147,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 		}
 		c.unmarkDeleted(qpath)
 		c.state.nodesByID[nid] = node
+		c.noteNode(nid)
 		c.setPrivatePath(qpath, nid)
 		markDirtyBackingFileLocked(c, hostPath)
 		if ino := fileInfoIno(cInfo); ino != 0 {
@@ -205,6 +208,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 			},
 		}
 		c.state.nodesByID[nid] = node
+		c.noteNode(nid)
 		c.setPrivatePath(qpath, nid)
 		markDirtyBackingFileLocked(c, workPath)
 		recordOriginLocked(c, node, originNodeID(qpath, base))
@@ -252,6 +256,7 @@ func ensureWritableNodeLocked(c *Core, qpath QualifiedPath, base BaseCapture, fl
 	}
 	c.unmarkDeleted(qpath)
 	c.state.nodesByID[nid] = node
+	c.noteNode(nid)
 	c.setPrivatePath(qpath, nid)
 	bumpParentDirGenLocked(c, qpath)
 	recordJournalLocked(c, JournalOpCreate, qpath, nil, node, 0)

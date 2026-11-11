@@ -118,7 +118,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		coreRoots[i].Hidden = adapter.HiddenRelsUnder(coreRoots[i].TrunkPath, req.HiddenPaths)
 		coreRoots[i].HiddenNames = req.HiddenNames
 	}
-	core, err := layeredfs.New(layeredfs.Config{
+	core, resumed, err := adapter.OpenViewCore(req, layeredfs.Config{
 		ViewID:          req.ViewID,
 		BackingDir:      absBacking,
 		Roots:           coreRoots,
@@ -169,6 +169,7 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 
 	primaryMount := mounts[primaryRoot]
 	prepView := &adapter.PreparedView{
+		Resumed:         resumed,
 		ViewID:          req.ViewID,
 		AdapterID:       adapter.AdapterFUSELinux,
 		Facts:           a.facts,

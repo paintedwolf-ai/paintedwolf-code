@@ -38,7 +38,7 @@ func (c *Core) Open(qpath QualifiedPath, flags OpenFlags, mode os.FileMode) (Han
 		if err := c.barrier.enterMutation(); err != nil {
 			return 0, EntryAttr{}, err
 		}
-		defer c.barrier.leaveMutation()
+		defer c.endMutation()
 	} else {
 		if err := c.barrier.enterOp(); err != nil {
 			return 0, EntryAttr{}, err

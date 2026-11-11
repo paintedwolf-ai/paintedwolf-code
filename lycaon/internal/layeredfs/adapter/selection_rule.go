@@ -92,6 +92,8 @@ type SelectionReason string
 const (
 	SelectionUnderBudget       SelectionReason = "under_budget"
 	SelectionOverBudgetMounted SelectionReason = "over_budget_mounted"
+	// SelectionKeptMounted rebuilds a worker created mounted on its mount, which it keeps for life.
+	SelectionKeptMounted SelectionReason = "kept_mounted"
 )
 
 // SelectionFacts record one worker's selection.

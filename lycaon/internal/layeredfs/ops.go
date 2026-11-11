@@ -26,7 +26,7 @@ func (c *Core) WriteFile(qpath QualifiedPath, data []byte, mode fs.FileMode) (En
 	if err := c.barrier.enterMutation(); err != nil {
 		return EntryAttr{}, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 	hid, _, err := openAdmitted(c, qpath, OpenWriteOnly|OpenCreate|OpenTruncate, mode)
 	if err != nil {
 		return EntryAttr{}, err
@@ -53,7 +53,7 @@ func (c *Core) Truncate(qpath QualifiedPath, size int64) (EntryAttr, error) {
 	if err := c.barrier.enterMutation(); err != nil {
 		return EntryAttr{}, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 	return truncatePathAdmitted(c, qpath, size)
 }
 
@@ -144,7 +144,7 @@ func mkdirPath(c *Core, qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error
 	if err := c.barrier.enterMutation(); err != nil {
 		return EntryAttr{}, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 
 	for {
 		startGen, err := currentNamespaceGen(c)
@@ -224,6 +224,7 @@ func mkdirPath(c *Core, qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error
 		_, wasReplaced := c.state.deletedPaths[targetPath]
 		c.unmarkDeleted(targetPath)
 		c.state.nodesByID[nid] = node
+		c.noteNode(nid)
 		c.setPrivatePath(targetPath, nid)
 		bumpParentDirGenLocked(c, targetPath)
 		opKind := JournalOpMkdir
@@ -249,7 +250,7 @@ func symlinkPath(c *Core, target string, linkPath QualifiedPath) (EntryAttr, err
 	if err := c.barrier.enterMutation(); err != nil {
 		return EntryAttr{}, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 
 	for {
 		startGen, err := currentNamespaceGen(c)
@@ -330,6 +331,7 @@ func symlinkPath(c *Core, target string, linkPath QualifiedPath) (EntryAttr, err
 		_, wasReplaced := c.state.deletedPaths[targetPath]
 		c.unmarkDeleted(targetPath)
 		c.state.nodesByID[nid] = node
+		c.noteNode(nid)
 		c.setPrivatePath(targetPath, nid)
 		bumpParentDirGenLocked(c, targetPath)
 		opKind := JournalOpSymlink

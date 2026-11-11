@@ -99,11 +99,16 @@ func (c *Core) unindexPath(qpath QualifiedPath) {
 }
 
 func (c *Core) setPrivatePath(qpath QualifiedPath, nid NodeID) {
+	if previous, ok := c.state.pathIndex[qpath]; ok {
+		c.noteNode(previous)
+	}
 	c.state.pathIndex[qpath] = nid
 	c.indexPath(qpath)
+	c.notePath(qpath)
 }
 
 func (c *Core) dropPrivatePath(qpath QualifiedPath) {
+	c.notePath(qpath)
 	delete(c.state.pathIndex, qpath)
 	c.unindexPath(qpath)
 }
@@ -111,11 +116,13 @@ func (c *Core) dropPrivatePath(qpath QualifiedPath) {
 func (c *Core) markDeleted(qpath QualifiedPath, state deletedState) {
 	c.state.deletedPaths[qpath] = state
 	c.indexPath(qpath)
+	c.notePath(qpath)
 }
 
 func (c *Core) unmarkDeleted(qpath QualifiedPath) {
 	delete(c.state.deletedPaths, qpath)
 	c.unindexPath(qpath)
+	c.notePath(qpath)
 }
 
 // rebuildSpellings indexes every private path and deletion, after state is loaded whole.

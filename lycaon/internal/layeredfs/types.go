@@ -282,6 +282,8 @@ type Stats struct {
 	Flushes           int64
 	// BarrierExpiries counts checkpoint barriers their hold bound ended.
 	BarrierExpiries int64
+	// WorkingLogRecords counts records appended to the working log.
+	WorkingLogRecords int64
 }
 
 type OpenFlags int

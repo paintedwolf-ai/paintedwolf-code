@@ -257,3 +257,30 @@ func copyWorkingFile(src, dst string) (written int64, err error) {
 	written, copyErr := io.Copy(out, in)
 	return written, errors.Join(copyErr, fssync.File(out), out.Close())
 }
+
+// discardInterruptedCopies removes the preserved copies of a view's working storage once that view
+// resumed the storage itself.
+func (c *Coordinator) discardInterruptedCopies(workerID, viewID string) error {
+	records, err := c.ListInterruptedRecords(workerID)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	for _, rec := range records {
+		if rec.ViewID != viewID {
+			continue
+		}
+		if err := os.RemoveAll(rec.QuarantineDir); err != nil {
+			return err
+		}
+		if err := os.Remove(filepath.Join(c.interruptedDir, rec.ID+".json")); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	dir, err := os.Open(c.interruptedDir)
+	if err != nil {
+		return err
+	}
+	return errors.Join(fssync.File(dir), dir.Close())
+}

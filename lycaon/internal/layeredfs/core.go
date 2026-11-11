@@ -20,6 +20,7 @@ type Core struct {
 	mu      sync.RWMutex
 	state   *viewState
 	barrier *barrierCoordinator
+	wal     *workingLog
 }
 
 type backingWorkspace struct {
@@ -110,6 +111,7 @@ type statsCounters struct {
 	journalEntries    atomic.Int64
 	flushes           atomic.Int64
 	barrierExpiries   atomic.Int64
+	workingLogRecords atomic.Int64
 }
 
 type idAllocator struct {
@@ -213,8 +215,20 @@ type dirCookieState struct {
 	version uint64
 }
 
-// New creates and initializes a layered filesystem Core view.
+// New creates and initializes a layered filesystem Core view over fresh working storage.
 func New(cfg Config) (*Core, error) {
+	c, err := newCore(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if err := c.startWorkingLog(); err != nil {
+		_ = c.closeUnstarted()
+		return nil, err
+	}
+	return c, nil
+}
+
+func newCore(cfg Config) (*Core, error) {
 	if cfg.ViewID == "" || cfg.BackingDir == "" || len(cfg.Roots) == 0 {
 		return nil, fmt.Errorf("layeredfs: ViewID, BackingDir, and at least one RootSpec are required")
 	}
@@ -261,6 +275,7 @@ func New(cfg Config) (*Core, error) {
 			dirtyBackingFiles: make(map[string]uint64),
 		},
 		barrier: barrier,
+		wal:     newWorkingLog(),
 	}, nil
 }
 

@@ -21,7 +21,7 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 
 	if oldPath.RootID != newPath.RootID {
 		return syscall.EXDEV

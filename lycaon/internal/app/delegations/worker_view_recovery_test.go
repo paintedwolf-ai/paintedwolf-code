@@ -87,8 +87,8 @@ func TestRestartAfterCrashInEveryPhaseExposesOnlyCompleteCheckpoints(t *testing.
 				t.Fatal("interrupted bytes were not preserved")
 			}
 
-			// The killed view keeps its one record. The rebuilt view was not released either, so
-			// it reports unknown scope, and holds no second copy of what the checkpoint has.
+			// The killed view keeps its one record. The rebuilt view was not released either; its
+			// working log names its scope, and it holds no second copy of what the checkpoint has.
 			engine = f.boot()
 			testutil.FailErr(t, "repeat startup recovery", engine.RecoverWorkerViews(t.Context()))
 			again, err := engine.Recovery.ListInterruptedRecords(task.ID)
@@ -100,7 +100,7 @@ func TestRestartAfterCrashInEveryPhaseExposesOnlyCompleteCheckpoints(t *testing.
 				if record.ID == records[0].ID {
 					continue
 				}
-				if !record.UnknownScope || quarantineHolds(t, record.QuarantineDir, "checkpoint-A\n") {
+				if record.UnknownScope || quarantineHolds(t, record.QuarantineDir, "checkpoint-A\n") {
 					t.Fatalf("rebuilt view record: %+v", record)
 				}
 			}
@@ -443,7 +443,8 @@ func TestRetentionEvictsVerifiedCheckpointAndLeaseRebuildsIt(t *testing.T) {
 	// A settled worker that has not resumed: an active one holds its rebuilt view and is retained.
 	engine := f.boot()
 	settled := engine.Recovery.RecoverWorkerRuntime(t.Context(), task.ID)
-	if !settled.Deletable() || settled.Interrupted == nil || !settled.Interrupted.UnknownScope {
+	// The view was never released; its working log names what it changed.
+	if !settled.Deletable() || settled.Interrupted == nil || settled.Interrupted.UnknownScope {
 		t.Fatalf("settlement: %+v", settled)
 	}
 	report := sweepSealed(t, engine, task.ID)
