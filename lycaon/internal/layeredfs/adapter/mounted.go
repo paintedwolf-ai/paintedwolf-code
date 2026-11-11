@@ -197,7 +197,7 @@ func (a *MountedAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Prep
 		return nil, &AdapterError{AdapterID: a.cfg.AdapterID, Op: "prepare", ReasonCode: ReasonMountDenied, Diagnostic: err.Error(), Cause: err}
 	}
 
-	rootSpecs, preparedRoots, denyPaths, primaryID, primaryPath, err := buildMountedRoots(runtimeViewDir, req.TargetRootDirs, narrowed)
+	rootSpecs, preparedRoots, denyPaths, primaryID, primaryPath, err := buildMountedRoots(runtimeViewDir, req.TargetRootDirs, narrowed, req.HiddenPaths)
 	if err != nil {
 		_ = os.RemoveAll(runtimeViewDir)
 		return nil, err
@@ -251,7 +251,7 @@ func (a *MountedAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Prep
 	return view, nil
 }
 
-func buildMountedRoots(runtimeViewDir string, targetDirs map[string]string, narrowed []RootGrant) ([]layeredfs.RootSpec, []PreparedRoot, []string, string, string, error) {
+func buildMountedRoots(runtimeViewDir string, targetDirs map[string]string, narrowed []RootGrant, hidden []string) ([]layeredfs.RootSpec, []PreparedRoot, []string, string, string, error) {
 	var specs []layeredfs.RootSpec
 	var prepared []PreparedRoot
 	var denyPaths []string
@@ -271,6 +271,7 @@ func buildMountedRoots(runtimeViewDir string, targetDirs map[string]string, narr
 			TrunkPath: g.SourcePath,
 			Subroot:   g.Subroot,
 			IsPrimary: g.IsPrimary,
+			Hidden:    HiddenRelsUnder(g.SourcePath, hidden),
 		})
 		prepared = append(prepared, PreparedRoot{
 			RootID:        g.RootID,

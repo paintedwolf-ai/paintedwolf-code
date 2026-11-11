@@ -79,6 +79,9 @@ func (a *Adapter) Prepare(ctx context.Context, req adapter.PrepareRequest) (*ada
 		_ = os.RemoveAll(runtimeViewDir)
 		return nil, err
 	}
+	for i := range coreRoots {
+		coreRoots[i].Hidden = adapter.HiddenRelsUnder(coreRoots[i].TrunkPath, req.HiddenPaths)
+	}
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID:          req.ViewID,
 		BackingDir:      absBacking,

@@ -85,7 +85,8 @@ func (m *Manager) chooseWorkspaceAdapter(
 			available, known, err := queryAvailableStorageBytes(filepath.Dir(metaDir))
 			return adapter.DiskSpace{Path: filepath.Dir(metaDir), Available: available, Known: known}, err
 		},
-		Overrun: overrun,
+		Overrun:     overrun,
+		HiddenPaths: m.hiddenEnginePaths(),
 	})
 	if err != nil {
 		return WorkspaceStrategySelection{Probe: choice.Probe}, err

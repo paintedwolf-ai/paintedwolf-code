@@ -319,6 +319,7 @@ func initRootTable(cfg Config) (*rootTable, error) {
 			rt.close()
 			return nil, ErrInvalidRoot
 		}
+		r.Hidden = cleanHiddenRels(r.Hidden)
 		rt.byID[r.ID] = r
 		if r.IsPrimary && primaryID == "" {
 			primaryID = r.ID
