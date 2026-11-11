@@ -27,6 +27,28 @@ const roots: ProjectRoot[] = [
 ];
 
 describe("WorkspaceFoldersPanel", () => {
+  it("marks only the roots the host reports as editor-only", () => {
+    const withHome: ProjectRoot[] = [
+      ...roots,
+      { ...roots[1], id: "root-home", path: "/home/person", label: "person", admitted: false, admission_code: "write_root_contains_control_plane" },
+    ];
+    const { queryByTestId } = render(() => (
+      <WorkspaceFoldersPanel
+        open
+        projectId="proj-1"
+        roots={withHome}
+        onClose={() => undefined}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+        onSetPrimary={vi.fn()}
+        onRenameLabel={vi.fn()}
+      />
+    ));
+    expect(queryByTestId("workspace-folder-editor-only-root-home")).not.toBeNull();
+    expect(queryByTestId("workspace-folder-editor-only-root-a")).toBeNull();
+    expect(queryByTestId("workspace-folder-editor-only-root-b")).toBeNull();
+  });
+
   it("calls detachProjectRoot after remove confirm", async () => {
     const onDetach = vi.fn().mockResolvedValue(undefined);
     const { getByTestId } = render(() => (
