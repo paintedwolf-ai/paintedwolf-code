@@ -72,8 +72,9 @@ func authenticatedRemote(t *testing.T, bin, repo string) (*httptest.Server, *[]s
 }
 
 // An agent network command's Git reaches credentials only through its scoped
-// service: an admitted recipient authenticates, an unadmitted one receives
-// nothing, and the user's store is never written.
+// service: an admitted recipient authenticates once credential use is
+// granted, an ungranted one is recorded as declined, an unadmitted one
+// receives nothing, and the user's store is never written.
 func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 	bin := useBundledGit(t)
 	self, err := os.Executable()
@@ -94,10 +95,11 @@ func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 	}}
 	agentCredentialStore = func() gitcredential.Backend { return store }
 
-	run := func(admit bool) (string, int) {
-		credentials, err := StartAgentCredentials(t.Context())
+	var declined []string
+	run := func(admit, granted bool) (string, int) {
+		credentials, err := StartAgentCredentials(t.Context(), granted)
 		testutil.FailErr(t, "start credentials", err)
-		defer func() { _ = credentials.Close() }()
+		defer func() { declined = credentials.Declined(); _ = credentials.Close() }()
 		if admit {
 			credentials.Admit(server.URL + "/repo.git")
 		}
@@ -109,16 +111,19 @@ func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 		return string(out), code
 	}
 
-	if out, code := run(false); code == 0 {
+	if out, code := run(false, true); code == 0 {
 		t.Fatalf("unadmitted recipient authenticated: %s", out)
+	}
+	if out, code := run(true, false); code == 0 || len(declined) != 1 || declined[0] != server.URL {
+		t.Fatalf("an ungranted recipient: code %d, declined %v, %s", code, declined, out)
 	}
 	for _, header := range *seen {
 		if header != "" {
-			t.Fatalf("credentials reached an unadmitted recipient: %q", header)
+			t.Fatalf("credentials reached an unadmitted or ungranted recipient: %q", header)
 		}
 	}
-	if out, code := run(true); code != 0 {
-		t.Fatalf("admitted recipient failed: code %d %s", code, out)
+	if out, code := run(true, true); code != 0 || len(declined) != 0 {
+		t.Fatalf("admitted, granted recipient failed: code %d, declined %v, %s", code, declined, out)
 	}
 	if store.writes != 0 {
 		t.Fatalf("agent Git wrote the user's credential store %d times", store.writes)

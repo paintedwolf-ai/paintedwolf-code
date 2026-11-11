@@ -71,7 +71,7 @@ var networkForms = map[string]bool{"git fetch": true, "git push": true, "git pul
 
 // AgentLaunch admits one agent Git command's confined launch; release closes
 // its action lease.
-type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string, services []confine.HostService) (plan exec.LaunchPlan, release func(context.Context), err error)
+type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string, services []confine.HostService) (plan exec.LaunchPlan, release func(context.Context, tools.AgentLaunchOutcome), err error)
 
 func (p Prepared) commandLine() string {
 	return strings.Join(append([]string{"git"}, p.command.args...), " ")
@@ -229,7 +229,7 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, filesystem *mutation.
 }
 
 // InvokeOwner runs the bound command once and settles Git's status.
-func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (result toolcontract.ProducerResult, err error) {
 	if p.command == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, errors.New("git command is not prepared")
 	}
@@ -242,11 +242,13 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	// Network forms bind their launch once their remotes are admitted, so the
 	// confinement carries exactly those recipients and local paths.
 	if !networkForms[p.command.spec.Name] {
-		plan, release, err := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
-		if err != nil {
-			return settle(0, err, p.command.spec.Name)
+		plan, release, launchErr := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
+		if launchErr != nil {
+			return settle(0, launchErr, p.command.spec.Name)
 		}
-		defer release(context.WithoutCancel(ctx))
+		defer func() {
+			release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: err != nil || result.Status != 0})
+		}()
 		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
 	}
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
@@ -256,11 +258,11 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.command.spec.Name == "git grep" {
 		run = p.grep
 	}
-	status, err := run(ctx, tc, streams)
-	if err == nil {
-		err = ctx.Err()
+	status, runErr := run(ctx, tc, streams)
+	if runErr == nil {
+		runErr = ctx.Err()
 	}
-	return settle(status, err, p.command.spec.Name)
+	return settle(status, runErr, p.command.spec.Name)
 }
 
 // settle projects Git's exit onto the producer contract. Read commands have

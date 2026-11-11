@@ -331,7 +331,7 @@ esac
 	// must not apply.
 	gitexec.SetHostConfig(sshTestHostConfig{sshCmd: "/bin/false"})
 	t.Cleanup(func() { gitexec.SetHostConfig(nil) })
-	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, services []confine.HostService) (lycexec.LaunchPlan, func(context.Context), error) {
+	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, services []confine.HostService) (lycexec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
 		plan, release, err := UnconfinedLaunch(ctx, tc, subject, line, services)
 		return plan.WithReducedEnvironment().WithExtraEnv("PATH=" + bareParent + string(os.PathListSeparator) + os.Getenv("PATH")), release, err
 	}
