@@ -70,10 +70,14 @@ func (r EffectRequirement) CommandEffects(child *CommandEffects) (CommandEffects
 	if r.Mode == "" {
 		return 0, fmt.Errorf("selected catalog effect mode required")
 	}
+	// An undeclared mode is unclassified, not read-only.
+	if len(r.Requires) == 0 {
+		return 0, fmt.Errorf("catalog effect mode %q declares no requirements", r.Mode)
+	}
 	var effects CommandEffects
 	for _, requirement := range r.Requires {
 		switch requirement {
-		case "read", "read-request-inputs", "platform-metadata-capability", "session-resource-read", "await-owned-job", "confinement", "recovery", "review", "revision", "secret-disclosure":
+		case "pure", "read", "read-request-inputs", "platform-metadata-capability", "session-resource-read", "await-owned-job", "confinement", "recovery", "review", "revision", "secret-disclosure":
 			// These obligations remain with the existing execution/effect boundary.
 		case "write", "session-owned-process-control":
 			effects |= commandEffectBit(CommandMutation)

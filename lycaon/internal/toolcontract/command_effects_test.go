@@ -61,3 +61,15 @@ func TestCommandEffectAdmissionRequiresEveryClassAndBoundChildren(t *testing.T) 
 		t.Fatal("class projection mutates authority")
 	}
 }
+
+// A mode with no declared requirements is unclassified, so a new command or
+// mode cannot slip in as read-only by omission.
+func TestUndeclaredEffectModeIsRefused(t *testing.T) {
+	if _, err := (EffectRequirement{Mode: "always"}).CommandEffects(nil); err == nil {
+		t.Fatal("a mode without requirements compiled")
+	}
+	readonly, _ := NewCommandEffects(CommandReadOnly)
+	if got, err := (EffectRequirement{Mode: "always", Requires: []string{"pure"}}).CommandEffects(nil); err != nil || got != readonly {
+		t.Fatalf("pure mode = %v, %v", got, err)
+	}
+}
