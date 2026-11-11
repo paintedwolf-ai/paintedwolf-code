@@ -30,6 +30,7 @@ export const NATIVE_UI_HANDLER_IDS: readonly string[] = [
   "editor.inlineEdit",
   "editor.insertBlankLine",
   "editor.joinLines",
+  "editor.lineLayoutOff",
   "editor.moveLineDown",
   "editor.moveLineUp",
   "editor.nextChange",

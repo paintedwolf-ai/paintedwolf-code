@@ -47,6 +47,8 @@ export type AppMenuItemSpec = {
   binding: string | null;
   enabled: boolean;
   checked?: boolean;
+  /** A pull-out of these items; the item itself runs nothing. */
+  submenu?: AppMenuItemSpec[];
 };
 
 export type AppMenuSpec = {
@@ -136,7 +138,20 @@ export function buildAppMenuSpec(opts?: {
       };
       if (state !== null && !placement.state_label) item.checked = state;
       const key = placement.group ?? "";
-      byGroup.set(key, [...(byGroup.get(key) ?? []), item]);
+      const group = byGroup.get(key) ?? [];
+      byGroup.set(key, group);
+      if (!placement.submenu) {
+        group.push(item);
+        continue;
+      }
+      const submenuId = `submenu:${slot}:${key}:${placement.submenu}`;
+      let pullOut = group.find((entry) => entry.id === submenuId);
+      if (!pullOut) {
+        pullOut = { id: submenuId, title: placement.submenu, accelerator: null, bindingId: null, binding: null, enabled: false, submenu: [] };
+        group.push(pullOut);
+      }
+      pullOut.submenu?.push(item);
+      pullOut.enabled ||= item.enabled;
     }
     const groups = [...byGroup.keys()]
       .sort()

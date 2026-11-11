@@ -1971,6 +1971,8 @@ type ContributionMenu struct {
 	// Condition the toggle reflects. With state_label the item reads state_label while it holds; without it the item carries a checkmark.
 	State      *ContributionCondition `json:"state,omitempty"`
 	StateLabel string                 `json:"state_label,omitempty"`
+	// Title of a pull-out the item nests under. Items in one slot and group that share a title share the pull-out, ordered by order.
+	Submenu string `json:"submenu,omitempty"`
 }
 
 // ContributionNote

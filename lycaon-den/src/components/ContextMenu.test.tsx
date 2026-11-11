@@ -273,6 +273,41 @@ describe("ContextMenu", () => {
     expect(screen.queryByTestId("ask-explain")).toBeNull();
   });
 
+  it("opens a submenu inside a submenu and runs its item", async () => {
+    const onSelect = vi.fn();
+    const onDismiss = vi.fn();
+    render(() => (
+      <ContextMenu
+        anchor={{ x: 10, y: 10 }}
+        onDismiss={onDismiss}
+        items={[
+          {
+            label: "View",
+            testId: "view-menu",
+            submenu: [
+              { label: "Line layout", testId: "layout-menu", submenu: [{ label: "Wrap", testId: "layout-wrap", checked: false, onSelect }] },
+            ],
+          },
+        ]}
+      />
+    ));
+    await Promise.resolve();
+    fireEvent.keyDown(screen.getByTestId("view-menu"), { key: "ArrowRight" });
+    await Promise.resolve();
+    fireEvent.keyDown(screen.getByTestId("layout-menu"), { key: "ArrowRight" });
+    await Promise.resolve();
+    expect(assertNamedControl(screen.getByTestId("context-menu-submenu-2"), "menu")).toBeTruthy();
+    expect(document.activeElement).toBe(screen.getByTestId("layout-wrap"));
+    fireEvent.keyDown(screen.getByTestId("layout-wrap"), { key: "ArrowLeft" });
+    await Promise.resolve();
+    expect(document.activeElement).toBe(screen.getByTestId("layout-menu"));
+    fireEvent.keyDown(screen.getByTestId("layout-menu"), { key: "ArrowRight" });
+    await Promise.resolve();
+    fireEvent.click(screen.getByTestId("layout-wrap"));
+    expect(onSelect).toHaveBeenCalledOnce();
+    expect(onDismiss).toHaveBeenCalledOnce();
+  });
+
   it("leaves a field focused and selected when opened with retainFocus", async () => {
     const field = document.createElement("textarea");
     field.value = "keep me selected";

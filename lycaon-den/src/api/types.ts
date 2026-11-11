@@ -15472,6 +15472,8 @@ export interface components {
             /** @description Condition the toggle reflects. With state_label the item reads state_label while it holds; without it the item carries a checkmark. */
             state?: components["schemas"]["ContributionCondition"];
             state_label?: string;
+            /** @description Title of a pull-out the item nests under. Items in one slot and group that share a title share the pull-out, ordered by order. */
+            submenu?: string;
         };
         ContributionKeybinding: {
             id: string;

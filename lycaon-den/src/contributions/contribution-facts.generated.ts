@@ -24,6 +24,7 @@ export type ContributionFactId =
   | "files_stage_active"
   | "files_tree_collapsed"
   | "files_version_historical"
+  | "line_layout"
   | "mcp_requirement_ready"
   | "peer_open_available"
   | "peer_views_present"
@@ -63,6 +64,7 @@ export const CONTRIBUTION_FACTS: Record<ContributionFactId, ContributionFactSpec
   "files_stage_active": { plane: "shell", operand: null },
   "files_tree_collapsed": { plane: "shell", operand: null },
   "files_version_historical": { plane: "shell", operand: null },
+  "line_layout": { plane: "shell", operand: "line_layout" },
   "mcp_requirement_ready": { plane: "host", operand: "requirement" },
   "peer_open_available": { plane: "shell", operand: null },
   "peer_views_present": { plane: "shell", operand: null },

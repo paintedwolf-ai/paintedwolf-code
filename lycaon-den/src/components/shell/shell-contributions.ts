@@ -13,6 +13,7 @@ import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { isTauriRuntime } from "../../platform/runtime.ts";
 import { windowSubject } from "../../platform/windows/window-subject.ts";
 import { fileSummariesEnabled, fileSummariesSettingKnown } from "../../settings/editor/file-summary-settings.ts";
+import { editorLineLayoutPref } from "../../settings/editor/editor-prefs.ts";
 import { filesTreeCollapsed } from "../../files/tree/files-tree-window-state.ts";
 import { hiddenSplitPanePref } from "../../shell/workspace-layout.ts";
 import { invokeCommand, isComposerFocused, registerHostCommandInvoker } from "../../shortcuts/dispatcher.ts";
@@ -150,6 +151,7 @@ export function createShellContributions(options: Pick<ShellScope, "shell" | "ap
         isTauriRuntime() && projectId != null && focusedPeerSubject() != null,
       peerViewsPresent: focusedPeerViews().length > 0,
       shellCommandPackaged: shellCommandPackaged(),
+      lineLayout: editorLineLayoutPref(),
       projectOpen: projectId != null,
       sessionExists: chat != null,
       sessionIdle: chat != null && !activityLive,

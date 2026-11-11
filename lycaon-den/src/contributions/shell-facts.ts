@@ -2,6 +2,7 @@
 import type { FactLookup } from "./conditions.ts";
 import type { ContributionFactId } from "./contribution-facts.generated.ts";
 import { createSignal } from "solid-js";
+import type { EditorLineLayout } from "../settings/editor/editor-prefs.ts";
 
 export type ShellEditorFacts = {
   active: boolean;
@@ -40,6 +41,7 @@ export type ShellFactState = {
   peerViewsPresent: boolean;
   /** The system package installs and owns the pw command. */
   shellCommandPackaged: boolean;
+  lineLayout: EditorLineLayout;
   projectOpen: boolean;
   sessionExists: boolean;
   sessionIdle: boolean;
@@ -87,6 +89,7 @@ const FACT_BINDERS: Record<
   peer_open_available: (s) => s.peerOpenAvailable,
   peer_views_present: (s) => s.peerViewsPresent,
   shell_command_packaged: (s) => s.shellCommandPackaged,
+  line_layout: (s, operand) => s.lineLayout === operand,
 };
 
 function shellFactLookup(state: ShellFactState): FactLookup {
