@@ -173,3 +173,37 @@ func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 		t.Fatal("closed owner minted an additional checkpoint")
 	}
 }
+
+// Light offers the command's network as a primary choice beside the host's
+// chat permission, never in its place: the face stays the host, so taking it
+// at Light never leaves more to ask than taking it at Balanced.
+func TestLightOffersCommandNetworkBesideTheHost(t *testing.T) {
+	exec, mgr := gatherExecutor(t)
+	exec.Network.SetEgressPostureSource(func(string) gate.Posture { return gate.PostureLight })
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
+	defer cancel()
+	cmd := confine.EgressCommand{
+		SessionID: "chat-light", RootSessionID: "chat-light", ToolCallID: "tc-light", CommandLine: "curl https://api.example.test/a",
+		ProjectID: "proj", ProjectDir: "/tmp/proj",
+		UserRule: &confine.EgressUserRule{Category: "host", Pattern: "api.example.test", Subject: "api.example.test"},
+	}
+	if !exec.ResolveEgressForTest(ctx, cmd, "api.example.test") {
+		t.Fatal("dial denied")
+	}
+	reqs := mgr.requests()
+	if len(reqs) != 1 {
+		t.Fatalf("checkpoint requests = %d, want 1", len(reqs))
+	}
+	plan, err := hitl.CompileCheckpointApprovalPlan(reqs[0])
+	testutil.FailErr(t, "compile plan", err)
+	face, ok := plan.Option(plan.RecommendedOptionID)
+	if !ok || face.Title == hitl.TitleAllowCommandNetworkForThisChat {
+		t.Fatalf("Light face = %+v, want the host's chat permission", face)
+	}
+	for _, option := range plan.Options {
+		if option.Title == hitl.TitleAllowCommandNetworkForThisChat && option.Group == "" && !option.Disabled {
+			return
+		}
+	}
+	t.Fatalf("Light card lacks the command network as a primary choice: %+v", plan.Options)
+}

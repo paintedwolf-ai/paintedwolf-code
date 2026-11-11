@@ -44,7 +44,10 @@ func egressWidening(raise egressRaise) (face bool, menu bool) {
 	return false, posture.Ladder().Widening == gate.WidenMenuOnly
 }
 
-// Posture determines whether command-network authority is primary or a menu choice.
+// Posture determines whether command-network authority is a primary choice or
+// a menu choice. As a primary choice it sits beside the host's chat permission,
+// never in its place, so a posture that widens never asks more than one that
+// does not.
 func (e *Network) egressOffers(raise egressRaise) []hitl.ApprovalGrantOffer {
 	offers := e.Approvals.grantOffers(raise.action, &hitl.ApprovalResult{Decision: raise.decision})
 	command, ok := hitl.CommandNetworkOffer(raise.action)
@@ -54,7 +57,7 @@ func (e *Network) egressOffers(raise egressRaise) []hitl.ApprovalGrantOffer {
 	face, menu := egressWidening(raise)
 	switch {
 	case face:
-		return replaceChatSlot(offers, command)
+		return besideChatSlot(offers, command)
 	case menu:
 		command.Group = hitl.GroupAlsoAllow
 		return append(offers, command)
@@ -62,19 +65,18 @@ func (e *Network) egressOffers(raise egressRaise) []hitl.ApprovalGrantOffer {
 	return offers
 }
 
-// Preserve the primary chat rung's position when replacing its offer.
-func replaceChatSlot(offers []hitl.ApprovalGrantOffer, wider hitl.ApprovalGrantOffer) []hitl.ApprovalGrantOffer {
+// besideChatSlot places wider right after the primary chat rung.
+func besideChatSlot(offers []hitl.ApprovalGrantOffer, wider hitl.ApprovalGrantOffer) []hitl.ApprovalGrantOffer {
 	out := make([]hitl.ApprovalGrantOffer, 0, len(offers)+1)
-	replaced := false
+	placed := false
 	for _, offer := range offers {
-		if !replaced && offer.Rung == hitl.ApprovalRungChat && strings.TrimSpace(offer.Group) == "" {
-			out = append(out, wider)
-			replaced = true
-			continue
-		}
 		out = append(out, offer)
+		if !placed && offer.Rung == hitl.ApprovalRungChat && strings.TrimSpace(offer.Group) == "" {
+			out = append(out, wider)
+			placed = true
+		}
 	}
-	if !replaced {
+	if !placed {
 		out = append(out, wider)
 	}
 	return out

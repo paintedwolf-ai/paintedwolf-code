@@ -139,7 +139,7 @@ Each gate's quietest posture is its row in `gateFloor` in [`gate/posture.go`](..
 
 | | Light | Balanced | Strict |
 |---|---|---|---|
-| Broader network subject | May be primary from the first card | Explicit menu choice | Explicit menu choice |
+| Broader network subject | Primary choice beside the host's own from the first card | Explicit menu choice | Explicit menu choice |
 
 A posture is exactly `light`, `balanced`, or `strict`. `gate.ParsePosture` and decoding, the only ways a posture enters the host, refuse any other token rather than reading it as the default, and a value that bypassed them reads as Strict so it can only add asks. An unknown posture in the device `approvals.yaml` stops startup with the file unchanged ([device configuration](compatibility.md#device-configuration)). In a repository `approvals.yaml` it applies Strict and is reported, as are the file's other refused parts ([approvals overlay](project-overlay.md#approvalsyaml--additive-tightening)).
 
