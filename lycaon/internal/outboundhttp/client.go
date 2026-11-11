@@ -353,24 +353,8 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		observed := tracer.observation(begun, resolved, method, req.URL.RequestURI())
 		observed.TLS = extractTLSInfo(resp.TLS)
 		if !isRedirect(resp.StatusCode) || redirectMode == RedirectNone {
-			tlsInfo := observed.TLS
-			result, readErr := readResponse(resp, method, current.String(), hops, limit, in.DiscardBody, in.StreamBody, hopTiming)
-			ioElapsed += time.Since(ioStarted)
-			hopTiming.Total = time.Since(ioStarted).Milliseconds()
-			transport.CloseIdleConnections()
-			ioCancel()
-			if in.WireHeaders {
-				result.Headers = responseHeaders(resp.Header, true)
-			}
-			result.DurationMS = ioElapsed.Milliseconds()
-			result.Timing = hopTiming
-			result.TLS = tlsInfo
-			result.Observed, result.Elapsed = observed, time.Since(begun)
-			if wire != nil && readErr == nil {
-				result.Wire = wire.headers(resp.StatusCode)
-			}
-			result.FirstHopLocal, result.FirstHopPeer = firstHopLocal, firstHopPeer
-			return result, readErr
+			return in.finishResponse(resp, method, current, hops, limit, hopTiming, ioStarted, ioElapsed,
+				transport, ioCancel, wire, observed, begun, firstHopLocal, firstHopPeer)
 		}
 		_ = resp.Body.Close()
 		ioElapsed += time.Since(ioStarted)
@@ -393,6 +377,34 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		originHeaders = adv.originHeaders
 		hostHeader = adv.hostHeader
 	}
+}
+
+// finishResponse assembles the terminal result once the hop chain ends without
+// another redirect, releasing this hop's transport and timer budget.
+func (in Request) finishResponse(
+	resp *http.Response, method string, current *url.URL, hops []Hop, limit int64,
+	hopTiming *HopTiming, ioStarted time.Time, ioElapsed time.Duration,
+	transport *http.Transport, ioCancel context.CancelFunc, wire *wireCapture,
+	observed *HopObservation, begun time.Time, firstHopLocal, firstHopPeer netip.AddrPort,
+) (Response, error) {
+	tlsInfo := observed.TLS
+	result, readErr := readResponse(resp, method, current.String(), hops, limit, in.DiscardBody, in.StreamBody, hopTiming)
+	ioElapsed += time.Since(ioStarted)
+	hopTiming.Total = time.Since(ioStarted).Milliseconds()
+	transport.CloseIdleConnections()
+	ioCancel()
+	if in.WireHeaders {
+		result.Headers = responseHeaders(resp.Header, true)
+	}
+	result.DurationMS = ioElapsed.Milliseconds()
+	result.Timing = hopTiming
+	result.TLS = tlsInfo
+	result.Observed, result.Elapsed = observed, time.Since(begun)
+	if wire != nil && readErr == nil {
+		result.Wire = wire.headers(resp.StatusCode)
+	}
+	result.FirstHopLocal, result.FirstHopPeer = firstHopLocal, firstHopPeer
+	return result, readErr
 }
 
 type redirectAdvance struct {

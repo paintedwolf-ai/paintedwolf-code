@@ -25,7 +25,7 @@ type Record struct {
 	Body         []string // result lines for excerpt verification
 	URL          string   // primary observed URL
 
-	Surface          string      // dom | tui | http
+	Surface          string // dom | tui | http
 	ArtifactID       string
 	FrameIndex       int         // positive values identify temporal frames
 	UntrustedContent bool        // true when this record delivered untrusted external content to the model
