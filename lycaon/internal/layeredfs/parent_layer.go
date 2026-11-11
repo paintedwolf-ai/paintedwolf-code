@@ -215,6 +215,7 @@ func (c *Core) Stats() Stats {
 		CapturedBaseBytes: c.counters.capturedBaseBytes.Load(),
 		JournalEntries:    c.counters.journalEntries.Load(),
 		Flushes:           c.counters.flushes.Load(),
+		BarrierExpiries:   c.counters.barrierExpiries.Load(),
 	}
 }
 

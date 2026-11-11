@@ -6,6 +6,7 @@ import (
 	"os"
 	"sort"
 	"sync"
+	"time"
 )
 
 // ReleaseView closes admission to new operations, waits for all in-flight mutations, reads,
@@ -115,7 +116,11 @@ type barrierCoordinator struct {
 	seq         uint64
 	// parked is set while the backing is closed; resume reopens it for the next operation.
 	parked bool
-	resume func() error
+	// expired is the sequence of a barrier its hold bound ended before it was released; stopBound
+	// ends the active barrier's bound when it is released in time.
+	expired   uint64
+	stopBound chan struct{}
+	resume    func() error
 }
 
 // admitLocked reopens a parked backing before an operation uses it.
@@ -230,6 +235,7 @@ func (b *barrierCoordinator) endReleaseAttempt(att *releaseAttempt, err error) {
 	b.curAttempt = nil
 	if err == nil {
 		b.released = true
+		b.endBoundLocked()
 	}
 	b.cond.Broadcast()
 	b.mu.Unlock()
@@ -277,10 +283,17 @@ func (c *Core) BeginCheckpointBarrier(ctx context.Context) (BarrierToken, error)
 		case <-done:
 		}
 	}()
+	c.armBarrierBound(seq)
 
 	for b.inFlight > 0 {
+		if b.expired == seq {
+			b.mu.Unlock()
+			close(done)
+			return BarrierToken{}, ErrBarrierExpired
+		}
 		if b.closing || b.released {
 			b.active = false
+			b.endBoundLocked()
 			b.cond.Broadcast()
 			b.mu.Unlock()
 			close(done)
@@ -288,6 +301,7 @@ func (c *Core) BeginCheckpointBarrier(ctx context.Context) (BarrierToken, error)
 		}
 		if err := ctx.Err(); err != nil {
 			b.active = false
+			b.endBoundLocked()
 			b.cond.Broadcast()
 			b.mu.Unlock()
 			close(done)
@@ -310,12 +324,63 @@ func (c *Core) EndCheckpointBarrier(token BarrierToken) error {
 	b := c.barrier
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	if token.ViewID == b.viewID && token.Seq == b.expired {
+		return ErrBarrierExpired
+	}
 	if !b.active || token.ViewID != b.viewID || token.Seq != b.seq {
 		return ErrBarrierActive
 	}
 	b.active = false
+	b.endBoundLocked()
 	b.cond.Broadcast()
 	return nil
+}
+
+func (b *barrierCoordinator) endBoundLocked() {
+	if b.stopBound != nil {
+		close(b.stopBound)
+		b.stopBound = nil
+	}
+}
+
+// armBarrierBound ends barrier seq if it is still held when its bound passes: mutations are admitted
+// again, and the barrier's holder learns at release that its checkpoint did not hold.
+func (c *Core) armBarrierBound(seq uint64) {
+	expiry := c.barrierExpiry()
+	stop := make(chan struct{})
+	c.barrier.stopBound = stop
+	go func() {
+		select {
+		case <-expiry:
+		case <-stop:
+			return
+		}
+		b := c.barrier
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		if b.active && b.seq == seq {
+			b.active = false
+			b.expired = seq
+			c.counters.barrierExpiries.Add(1)
+			b.cond.Broadcast()
+		}
+	}()
+}
+
+// barrierExpiry fires when a barrier's hold bound passes.
+func (c *Core) barrierExpiry() <-chan time.Time {
+	if c.cfg.FaultHooks != nil && c.cfg.FaultHooks.BarrierExpiry != nil {
+		return c.cfg.FaultHooks.BarrierExpiry()
+	}
+	return time.After(c.BarrierHoldBound())
+}
+
+// BarrierHoldBound is how long a checkpoint barrier of this view may hold its mutations.
+func (c *Core) BarrierHoldBound() time.Duration {
+	if c.cfg.BarrierHoldBound > 0 {
+		return c.cfg.BarrierHoldBound
+	}
+	return DefaultBarrierHoldBound
 }
 
 func flushBackingState(c *Core) error {

@@ -3,6 +3,7 @@ package adapter
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -126,6 +127,12 @@ func executeCheckpointBarrier(
 	releaseFn := func() error {
 		releaseOnce.Do(func() {
 			releaseErr = core.EndCheckpointBarrier(token)
+			if errors.Is(releaseErr, layeredfs.ErrBarrierExpired) {
+				releaseErr = &AdapterError{
+					AdapterID: adapterID, Op: "checkpoint_barrier", ReasonCode: ReasonBarrierExpired,
+					Diagnostic: fmt.Sprintf("the barrier held writes past %s and released them", core.BarrierHoldBound()), Cause: releaseErr,
+				}
+			}
 		})
 		return releaseErr
 	}

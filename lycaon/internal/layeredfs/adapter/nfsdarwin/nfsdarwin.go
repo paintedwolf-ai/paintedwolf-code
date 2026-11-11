@@ -157,6 +157,7 @@ func New(cfg Config) *Adapter {
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
+			BarrierHoldBound:          layeredfs.DefaultBarrierHoldBound,
 		},
 		views:     make(map[string]*viewState),
 		preparing: make(map[string]struct{}),
