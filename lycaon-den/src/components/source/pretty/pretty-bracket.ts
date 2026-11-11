@@ -231,6 +231,7 @@ function fits(cursor: ScanCursor, rule: BracketRule, openPos: number): boolean {
   let pos = openPos;
   for (;;) {
     if (pos >= lineEnd) return false;
+    if (pos > openPos && rule.breaksBefore?.(cursor, pos)) return false;
     const skipped = lexer.skip(text, pos, Math.min(lineEnd, pos + remaining - width + 1), lineEnd);
     if (skipped > pos) {
       state.visits += skipped - pos;
@@ -261,6 +262,7 @@ function fits(cursor: ScanCursor, rule: BracketRule, openPos: number): boolean {
   const parent = state.frames;
   for (;;) {
     if (pos >= lineEnd) return true;
+    if (rule.breaksBefore?.(cursor, pos)) return true;
     const skipped = lexer.skip(text, pos, Math.min(lineEnd, pos + remaining - width + 1), lineEnd);
     if (skipped > pos) {
       state.visits += skipped - pos;

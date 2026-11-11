@@ -9,6 +9,7 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { Decoration, type DecorationSet } from "@codemirror/view";
+import { Tree } from "@lezer/common";
 import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
 import { PrettyScanner, type PrettySnapshot, snapshotsEqual } from "./pretty-scan.ts";
 import {
@@ -152,12 +153,16 @@ function planReadsTree(plan: PrettyPlan): boolean {
   return plan.kind === "fenced" || (plan.kind === "document" && readsSyntaxTree(plan.rule));
 }
 
-/** Where layout may reach: the whole document, or the lines the syntax tree fully covers. */
+/**
+ * Where layout may reach: the whole document, or the lines the syntax tree
+ * fully covers. Fenced text with no grammar loaded has no tree to wait for.
+ */
 function layoutEnd(state: EditorState, plan: PrettyPlan): number {
   const doc = state.doc;
   if (!planReadsTree(plan)) return doc.length;
-  const parsed = syntaxTree(state).length;
-  return parsed >= doc.length ? doc.length : doc.lineAt(parsed).from;
+  const tree = syntaxTree(state);
+  if (plan.kind === "fenced" && tree === Tree.empty) return doc.length;
+  return tree.length >= doc.length ? doc.length : doc.lineAt(tree.length).from;
 }
 
 function tokensFor(state: EditorState, plan: PrettyPlan): TreeTokens | null {

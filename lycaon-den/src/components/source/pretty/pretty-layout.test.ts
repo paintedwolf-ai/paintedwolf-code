@@ -238,9 +238,9 @@ describe("recognition", () => {
 
   it("uses a known path or language and refuses a path without a layout", () => {
     expect(prettyOutcomeOf(open('{"a":[1,2]}', { path: "notes.txt" })).kind).toBe("unavailable");
-    expect(prettyOutcomeOf(open("package main\nfunc main() {}\n", { path: "main.go" })).kind).toBe("unavailable");
+    expect(prettyOutcomeOf(open("echo {a,b}\n", { path: "run.sh" })).kind).toBe("unavailable");
     expect(laidOut('{"a":[1,2]}', { languageHint: "json" })).toBe(true);
-    expect(laidOut('x {"a":[1,2]}', { languageHint: "go" })).toBe(false);
+    expect(laidOut('x {"a":[1,2]}', { languageHint: "shell" })).toBe(false);
   });
 
   it("lays out fenced regions by their language", () => {

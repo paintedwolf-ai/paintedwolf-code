@@ -1,7 +1,6 @@
 import type { Text } from "@codemirror/state";
 import type { Container, Frame } from "./pretty-bracket.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
-import { type ClauseState, INITIAL_CLAUSE } from "./pretty-clause-state.ts";
 import type { MarkupState } from "./pretty-markup.ts";
 import type { TextWindow } from "./pretty-text-window.ts";
 import type { PrettyTokenSource } from "./pretty-tokens.ts";
@@ -29,6 +28,8 @@ export interface BracketRule {
   /** Protected text comes from the editor's syntax tree, so only parsed text is laid out. */
   readonly parsed: boolean;
   readonly lexer: () => PrettyLexer;
+  /** Whether a break the rule makes on its own precedes `pos`; such a break keeps an enclosing group from staying flat. */
+  readonly breaksBefore?: (cursor: ScanCursor, pos: number) => boolean;
 }
 
 /** Breaks between adjacent tags. */
@@ -95,7 +96,8 @@ export class ScanState {
   frames: Frame | null = null;
   containers: Container | null = null;
   markup: MarkupState;
-  clause: ClauseState = INITIAL_CLAUSE;
+  /** Group depth whose commas break as a SQL clause list, or -1. */
+  listDepth = -1;
   fence: Fence | null = null;
   inLine = false;
   /** The current source line is laid out. */
