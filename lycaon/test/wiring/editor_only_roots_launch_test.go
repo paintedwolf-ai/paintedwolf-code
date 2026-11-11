@@ -32,13 +32,14 @@ func TestConfinedLaunchStaysOutOfEditorOnlyRoots(t *testing.T) {
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "create two files")
 	testutil.FailErr(t, "prompt", err)
 
+	outcomes := sessionProgramOutcomes(t, h, sess.ID)
 	if _, err := os.Stat(inside); err != nil {
-		t.Fatalf("the program did not write in the admitted root: %v", err)
+		logToolResults(t, h, sess.ID)
+		t.Fatalf("the program did not write in the admitted root (outcomes %+v): %v", outcomes, err)
 	}
 	if _, err := os.Stat(outside); !os.IsNotExist(err) {
 		t.Fatalf("a program wrote into the editor-only root (stat err %v)", err)
 	}
-	outcomes := sessionProgramOutcomes(t, h, sess.ID)
 	if len(outcomes) != 2 || outcomes[0].state != "completed" || outcomes[1].state == "completed" {
 		t.Fatalf("outcomes = %+v, want the admitted write completed and the editor-only write stopped", outcomes)
 	}
@@ -57,4 +58,15 @@ func sessionProgramOutcomes(t *testing.T, h *Harness, sessionID string) []progra
 	}
 	testutil.FailErr(t, "read programs", rows.Err())
 	return outcomes
+}
+
+func logToolResults(t *testing.T, h *Harness, sessionID string) {
+	t.Helper()
+	messages, err := h.Store.GetMessages(t.Context(), sessionID)
+	testutil.FailErr(t, "messages", err)
+	for _, message := range messages {
+		if message.Role == wire.MessageRoleTool {
+			t.Log(message.Content)
+		}
+	}
 }
