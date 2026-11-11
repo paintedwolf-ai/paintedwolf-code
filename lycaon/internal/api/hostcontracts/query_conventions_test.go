@@ -26,7 +26,6 @@ import (
 )
 
 func TestBoardRequiresProjectID(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := t.TempDir()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
@@ -62,7 +61,6 @@ func TestBoardRequiresProjectID(t *testing.T) {
 }
 
 func TestBoardRequiresSessionIDMissing(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := t.TempDir()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)
@@ -82,7 +80,6 @@ func TestBoardRequiresSessionIDMissing(t *testing.T) {
 }
 
 func TestWorkersRequiresSessionID(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := t.TempDir()
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)

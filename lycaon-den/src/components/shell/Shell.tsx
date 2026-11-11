@@ -68,6 +68,7 @@ import { WorkspaceStage } from "./WorkspaceStage.tsx";
 import { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
 import { ProjectDialogs } from "./ProjectDialogs.tsx";
 import { createShellAttention } from "./shell-attention.ts";
+import { traceShellPresentation } from "./shell-presentation-trace.ts";
 import { WorkspaceOverlays } from "./WorkspaceOverlays.tsx";
 
 export function Shell(props: ShellProps) {
@@ -309,6 +310,9 @@ export function Shell(props: ShellProps) {
     ...scope, showHome, placeableStageId, stageColumn, showChatTabRail, presentedChat,
     workspaceMounted, projectPresentation,
   });
+  traceShellPresentation({ veiled: () => workspaceVeilKey() != null && !workspaceRevealed(),
+    stageStack, chatStack, showStageColumn, contextHidden, conversationHidden, nav, stageScope, presentedSplitLive,
+    navUserCollapsed: windowNavUserCollapsed, navAutomaticallyCollapsed });
 
   createEffect(() => {
     setSplitProjectId(props.shell.state.activeProjectId);

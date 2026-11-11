@@ -1,6 +1,7 @@
 package webresearch
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -8,13 +9,12 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
-	"sync"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/egressgate"
-	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
@@ -50,6 +50,10 @@ func guardedGetWithHopPolicy(
 			}
 		}
 	}
+	hopHeaders := []outboundhttp.Header{
+		{Name: "User-Agent", Value: fetchUserAgent},
+		{Name: "Accept", Value: accept},
+	}
 	for hop := 0; hop <= maxFetchRedirects; hop++ {
 		var releaseHop func()
 		if beforeHop != nil {
@@ -59,71 +63,39 @@ func guardedGetWithHopPolicy(
 				return nil, "", err
 			}
 		}
-		host := current.Hostname()
-		// Redirect targets pass through the same host gate.
-		if err := egressgate.AwaitHost(ctx, host); err != nil {
-			callIfSet(releaseHop)
-			return nil, "", err
-		}
-		ioCtx := ctx
-		var ioCancel context.CancelFunc
-		if egressgate.From(ctx) != nil {
-			// Approval time does not consume the network budget.
-			ioCtx, ioCancel = egressgate.IOContext(ctx, defaultFetchTimeout)
-		}
-		ips, err := resolvePublicIPs(ioCtx, host)
-		if err != nil {
-			if ioCancel != nil {
-				ioCancel()
+		// Each hop is its own door exchange: the door validates, pins, and
+		// gates the dial, and RedirectNone hands the redirect decision back
+		// so every hop is revalidated here.
+		resp, err := outboundhttp.Do(ctx, outboundhttp.Request{
+			Class:        egressclass.WebResearchRequest,
+			Method:       http.MethodGet,
+			URL:          current.String(),
+			HopHeaders:   hopHeaders,
+			Timeout:      defaultFetchTimeout,
+			MaxBodyBytes: fetchBodyByteLimit,
+			AllowAddress: func(addr netip.Addr, _ uint16) bool { return ipAllowed(addr) },
+			BeforeHop: func(hopCtx context.Context, hopURL *url.URL) error {
+				// Redirect targets pass through the same host gate.
+				return egressgate.AwaitHost(hopCtx, hopURL.Hostname())
+			},
+		})
+		var hopResp *http.Response
+		if err == nil {
+			hopResp = guardedHopResponse(resp)
+			if recordHop != nil {
+				recordHop(current, hopResp)
 			}
-			callIfSet(releaseHop)
-			return nil, "", err
 		}
-		transport := egress.PinnedTransport(current, ips, 0)
-		client := httpclient.WithTransport(httpclient.Streaming(egressclass.WebResearchRequest), transport)
-		client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-		req, err := http.NewRequestWithContext(ioCtx, http.MethodGet, current.String(), nil)
-		if err != nil {
-			if ioCancel != nil {
-				ioCancel()
-			}
-			callIfSet(releaseHop)
-			return nil, "", err
-		}
-		req.Header.Set("User-Agent", fetchUserAgent)
-		req.Header.Set("Accept", accept)
-
-		resp, err := client.Do(req)
-		if err != nil {
-			if ioCancel != nil {
-				ioCancel()
-			}
-			callIfSet(releaseHop)
-			return nil, "", err
-		}
-		if recordHop != nil {
-			recordHop(current, resp)
-		}
-		if !isRedirectStatus(resp.StatusCode) {
-			callbacks := make([]func(), 0, 2)
-			if ioCancel != nil {
-				callbacks = append(callbacks, ioCancel)
-			}
-			if releaseHop != nil {
-				callbacks = append(callbacks, releaseHop)
-			}
-			if len(callbacks) > 0 {
-				resp.Body = &callbacksOnCloseBody{ReadCloser: resp.Body, callbacks: callbacks}
-			}
-			return resp, current.String(), nil
-		}
-		loc := resp.Header.Get("Location")
-		_ = resp.Body.Close()
-		if ioCancel != nil {
-			ioCancel()
-		}
+		// The door buffers the body, so the hop's resources are free once it
+		// returns; the polite slot no longer waits on the caller's read.
 		callIfSet(releaseHop)
-		transport.CloseIdleConnections()
+		if err != nil {
+			return nil, "", err
+		}
+		if !isRedirectStatus(resp.Status) {
+			return hopResp, current.String(), nil
+		}
+		loc := responseHeader(resp.Headers, "Location")
 		if loc == "" {
 			return nil, "", fmt.Errorf("redirect without a location header")
 		}
@@ -146,21 +118,29 @@ func callIfSet(fn func()) {
 	}
 }
 
-// callbacksOnCloseBody releases per-hop resources with the response body.
-type callbacksOnCloseBody struct {
-	io.ReadCloser
-	callbacks []func()
-	once      sync.Once
+// guardedHopResponse adapts the door's buffered response to the *http.Response
+// the fetch helpers read.
+func guardedHopResponse(resp outboundhttp.Response) *http.Response {
+	header := make(http.Header, len(resp.Headers))
+	for _, h := range resp.Headers {
+		header.Add(h.Name, h.Value)
+	}
+	return &http.Response{
+		StatusCode:    resp.Status,
+		Header:        header,
+		ContentLength: int64(len(resp.Body)),
+		Body:          io.NopCloser(bytes.NewReader(resp.Body)),
+	}
 }
 
-func (b *callbacksOnCloseBody) Close() error {
-	err := b.ReadCloser.Close()
-	b.once.Do(func() {
-		for _, callback := range b.callbacks {
-			callback()
+// responseHeader returns the first value of the named response header.
+func responseHeader(headers []outboundhttp.Header, name string) string {
+	for _, h := range headers {
+		if strings.EqualFold(h.Name, name) {
+			return h.Value
 		}
-	})
-	return err
+	}
+	return ""
 }
 
 func isRedirectStatus(code int) bool {

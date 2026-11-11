@@ -19,7 +19,6 @@ import (
 )
 
 func TestOptionalCommandBodiesHonorTransportFraming(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := t.TempDir()
 	projects := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), projects, dir)

@@ -29,7 +29,6 @@ func (rejectingProjectOutbox) EnqueueProjectTx(context.Context, *sql.Tx, string,
 func (rejectingProjectOutbox) Notify() {}
 
 func TestDetachRootBumpsGeneration(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	dir := t.TempDir()
 	second := filepath.Join(t.TempDir(), "secondary")
@@ -57,7 +56,6 @@ func TestDetachRootBumpsGeneration(t *testing.T) {
 }
 
 func TestPatchPrimaryDemotesOthers(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	dir := t.TempDir()
 	second := filepath.Join(t.TempDir(), "secondary")
@@ -91,7 +89,6 @@ func TestPatchPrimaryDemotesOthers(t *testing.T) {
 }
 
 func TestSQLRegistryDetachRootBumpsGeneration(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	dir := t.TempDir()
 	second := filepath.Join(t.TempDir(), "secondary")
@@ -130,7 +127,6 @@ func TestSQLRegistryDetachRootBumpsGeneration(t *testing.T) {
 }
 
 func TestSQLLifecycleMutationsRefuseBusyProjectInsideTransaction(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "roots-busy.db")
 	reg := project.NewSQLRegistry(sqlDB)
@@ -168,7 +164,6 @@ func TestSQLLifecycleMutationsRefuseBusyProjectInsideTransaction(t *testing.T) {
 }
 
 func TestSQLLifecycleMutationsProtectDirtyEditorDocuments(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "dirty-document.db")
 	reg := project.NewSQLRegistry(sqlDB)
@@ -212,7 +207,6 @@ func TestSQLLifecycleMutationsProtectDirtyEditorDocuments(t *testing.T) {
 }
 
 func TestSQLRootMutationCommitsWithProjectEvent(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "roots-events.db")
 	reg := project.NewSQLRegistry(sqlDB)
@@ -230,7 +224,6 @@ func TestSQLRootMutationCommitsWithProjectEvent(t *testing.T) {
 }
 
 func TestSQLProjectCreateAndPatchCommitTheirEvents(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "project-events.db")
 	reg := project.NewSQLRegistry(sqlDB)
@@ -262,7 +255,6 @@ func TestSQLProjectCreateAndPatchCommitTheirEvents(t *testing.T) {
 }
 
 func TestSQLProjectTouchEventPreservesQueuedPromotion(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "project-promotion-touch.db")
 	reg := project.NewSQLRegistry(sqlDB)
@@ -296,7 +288,6 @@ func TestSQLProjectTouchEventPreservesQueuedPromotion(t *testing.T) {
 }
 
 func TestSQLProjectCreateRollsBackWithoutItsEvent(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "project-create-rollback.db")
 	reg := project.NewSQLRegistry(sqlDB)
@@ -313,7 +304,6 @@ func TestSQLProjectCreateRollsBackWithoutItsEvent(t *testing.T) {
 }
 
 func TestSQLRootMutationRollsBackWhenEventCannotBeRecorded(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "roots-events-rollback.db")
 	reg := project.NewSQLRegistry(sqlDB)
@@ -342,7 +332,6 @@ func TestDetachRootNotFound(t *testing.T) {
 }
 
 func TestDetachLastRootNoFolder(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	dir := t.TempDir()
 	reg := project.NewMemoryRegistry()
@@ -363,7 +352,6 @@ func TestDetachLastRootNoFolder(t *testing.T) {
 }
 
 func TestRegistryRootLifecycleParity(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	for _, tc := range []struct {
 		name string
 		open func(*testing.T) project.Registry
@@ -407,7 +395,6 @@ func TestRegistryRootLifecycleParity(t *testing.T) {
 
 func TestDraftRootRejectsGenericLifecycleRoutes(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	p, err := reg.Create(t.Context(), project.CreateParams{Draft: true})
 	testutil.FailErr(t, "create draft", err)

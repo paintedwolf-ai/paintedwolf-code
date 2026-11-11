@@ -142,8 +142,10 @@ type programRun struct {
 	baseEnv       []string
 
 	// envelope carries the call's launch capability requests to each launch.
-	envelope map[string]any
-	window   *programWindow
+	envelope   map[string]any
+	window     *programWindow
+	sessions   SessionOwners
+	provenance programProvenanceState
 }
 
 // ProgramOutcome is the command tool's result for a settled program.
@@ -257,7 +259,10 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	ctx = context.WithValue(ctx, programDocumentsKey{}, documents)
 	run.windows = &tools.ProgramWindows{}
 	ctx = tools.WithProgramWindows(ctx, run.windows)
-	ctx = tools.WithCommandReadObserver(ctx, documents.read)
+	ctx = tools.WithCommandReadObserver(ctx, func(ctx context.Context, root, path string) error {
+		run.observeProvenanceFileRead(ctx, root, path)
+		return documents.read(ctx, root, path)
+	})
 	failureAttempt, verification, err := beginProgramAttempt(ctx, r.FailureTracker, tc, args, paths.Cwd().Abs)
 	if err != nil {
 		return "", err
@@ -269,6 +274,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		}
 	}
 	run.executor, run.registry, run.recorder, run.supervisor, run.progress = r.Executor, r.Registry, r.Recorder, r.Supervisor, r.Progress
+	run.sessions = r.Sessions
 	run.externalHidden = r.ExternalHidden
 	run.publishDocument = owners.PublishDocument
 	if err := r.bindProgramCapture(ctx, run); err != nil {
@@ -309,7 +315,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 	}
 	ports := commandprogram.EvaluationPorts{
 		Invocation: run.root, Dispatch: dispatcher, Refusals: dispatcher.reportRefusal, Binder: commandprogram.CatalogBinder{}, Files: projectpaths.GlobFiles{Paths: paths},
-		Publication: publication, Input: owners.Input, Sources: sources,
+		Publication: publication, Input: dispatcher.wrapInputRedirection(owners.Input, paths), Sources: sources,
 		DocumentUnresolvable: func(body string) bool {
 			return secretmatch.ContainsReferenceToken(body) || secretmatch.ContainsMalformedReferenceToken(body)
 		},
@@ -435,7 +441,7 @@ func (r *ProgramRuntime) bindProgramSurface(ctx context.Context, run *programRun
 	builtins["nohup"] = nohupBuiltin(run.commands["nohup"], dispatcher)
 	var publication commandprogram.OutputPublication
 	if owners.Publication != nil {
-		publication = owners.Publication(dispatcher.beginOutput)
+		publication = dispatcher.wrapOutputPublication(owners.Publication(dispatcher.beginOutput), paths)
 	}
 	if r.Builtins != nil {
 		for name, builtin := range r.Builtins(tc, dispatcher, dispatcher) {
