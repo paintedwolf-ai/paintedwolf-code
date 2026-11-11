@@ -409,7 +409,7 @@ export function FilesEditor(props: FilesEditorProps) {
           </>
         }
         indent={menus.indentChip(!historicalActive() && !history.currentAbsent())}
-        eol={menus.eolChip(!historicalActive() && !history.currentAbsent())}
+        eol={menus.eolChip(!historicalActive() && !history.currentAbsent())} pretty={menus.prettyToggle()}
         details={
           <FilesEditorStatusDetails
             historicalActive={historicalActive()}
