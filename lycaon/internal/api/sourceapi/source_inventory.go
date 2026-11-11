@@ -22,8 +22,10 @@ func sourceInventoryRequest(p *project.Project) sourceledger.InventoryRequest {
 	if p == nil {
 		return sourceledger.InventoryRequest{}
 	}
-	roots := make([]sourceledger.RootSpec, 0, len(p.Roots))
-	for _, root := range p.Roots {
+	// An editor-only root is observed on demand, so the eager pass skips it.
+	admitted := project.AdmittedRoots(p)
+	roots := make([]sourceledger.RootSpec, 0, len(admitted))
+	for _, root := range admitted {
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, BranchID: p.BranchForRoot(root.ID), Path: root.Path})
 	}
 	return sourceledger.InventoryRequest{
