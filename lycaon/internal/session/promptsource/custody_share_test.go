@@ -2,6 +2,8 @@ package promptsource
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"slices"
 	"testing"
 
@@ -36,10 +38,17 @@ func TestWorkerCustodyIsSharedWithTheChat(t *testing.T) {
 		committed: map[string][]evidence.ProgramHTTPProvenance{},
 	}
 	m := &Tools{Sessions: repo}
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "out"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "out", "data.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	args := map[string]any{"url": "https://api.example.test/data", "response_path": "out/data.json"}
 	result := `{"status":200,"response_path":"out/data.json","written":true}`
 
-	if err := m.shareCustodyWithChat(t.Context(), "worker", "/work", "http_request", args, result); err != nil {
+	if err := m.shareCustodyWithChat(t.Context(), "worker", dir, "http_request", args, result); err != nil {
 		t.Fatal(err)
 	}
 	got := repo.committed["chat"]
@@ -47,10 +56,10 @@ func TestWorkerCustodyIsSharedWithTheChat(t *testing.T) {
 		t.Fatalf("chat custody = %+v", got)
 	}
 
-	if err := m.shareCustodyWithChat(t.Context(), "chat", "/work", "http_request", args, result); err != nil {
+	if err := m.shareCustodyWithChat(t.Context(), "chat", dir, "http_request", args, result); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.shareCustodyWithChat(t.Context(), "worker", "/work", "read", map[string]any{"path": "a.go"}, "package a"); err != nil {
+	if err := m.shareCustodyWithChat(t.Context(), "worker", dir, "read", map[string]any{"path": "a.go"}, "package a"); err != nil {
 		t.Fatal(err)
 	}
 	if len(repo.committed["chat"]) != 1 {
