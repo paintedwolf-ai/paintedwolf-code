@@ -78,22 +78,25 @@ func (p Prepared) commandLine() string {
 	return strings.Join(append([]string{"git"}, p.command.args...), " ")
 }
 
-// grantedSSHAgent references the user's SSH agent when this call holds a
-// socket capability for it, so the launch dials that capability's endpoint;
-// SSH remotes otherwise authenticate without the agent.
-func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) string {
+// grantedSSHAgent is the socket capability this call, the project or the
+// session holds for the user's SSH agent. A network command never names the
+// agent socket itself, so the capability is found by the agent's identity.
+func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) (confine.SocketGrant, bool) {
 	agent := gitexec.HostSSHAgentSocket(ctx)
 	if agent == "" {
-		return ""
+		return confine.SocketGrant{}, false
 	}
 	resolved := fspath.CanonicalPath(agent)
-	for _, grant := range append(slices.Clone(tc.Socket.SocketGrants), tc.Socket.DurableSocketGrants...) {
+	grants := append(slices.Clone(tc.Socket.SocketGrants), tc.Socket.DurableSocketGrants...)
+	if tc.Socket.SocketCapabilityRuntime != nil {
+		grants = append(grants, tc.Socket.SocketCapabilityRuntime.AppliedGrants(tc.ChatSessionID())...)
+	}
+	for _, grant := range grants {
 		if grant.ResolvedPath == resolved {
-			reference, _ := confine.SocketEndpointReferences(grant.ApprovedPath)
-			return reference
+			return grant, true
 		}
 	}
-	return ""
+	return confine.SocketGrant{}, false
 }
 
 // NewOwners binds the frozen catalog's Git command specifications. A command
