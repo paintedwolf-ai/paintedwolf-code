@@ -24,7 +24,7 @@ func TestSettlingAnUnreleasedViewReportsTheScopeItsWorkingLogNames(t *testing.T)
 		f.publish(task, view, "cp-A")
 		testutil.FailErr(t, "delete after the barrier", view.Core.Unlink(keep, false))
 
-		report := f.boot().Recovery.RecoverWorkerRuntime(t.Context(), task.ID, false)
+		report := f.boot().Recovery.RecoverWorkerRuntime(t.Context(), task.ID)
 		if !report.Deletable() || report.Interrupted == nil || report.Interrupted.UnknownScope || !slices.Contains(report.Interrupted.AffectedPaths, keep) {
 			t.Fatalf("the logged deletion must be reported: %+v", report)
 		}
@@ -40,7 +40,7 @@ func TestSettlingAnUnreleasedViewReportsTheScopeItsWorkingLogNames(t *testing.T)
 		f.publish(task, view, "cp-A")
 		mutate(t, view, "unsealed-after-A\n")
 
-		report := f.boot().Recovery.RecoverWorkerRuntime(t.Context(), task.ID, false)
+		report := f.boot().Recovery.RecoverWorkerRuntime(t.Context(), task.ID)
 		if !report.Deletable() || report.Interrupted == nil || report.Interrupted.UnknownScope || !slices.Contains(report.Interrupted.AffectedPaths, primaryPath) {
 			t.Fatalf("report %+v", report)
 		}
@@ -57,7 +57,7 @@ func TestSettlingAnUnreleasedViewReportsTheScopeItsWorkingLogNames(t *testing.T)
 		testutil.FailErr(t, "delete after the barrier", view.Core.Unlink(keep, false))
 		testutil.FailErr(t, "lose the log", os.Remove(filepath.Join(view.BackingDir, "journal", "working.log")))
 
-		report := f.boot().Recovery.RecoverWorkerRuntime(t.Context(), task.ID, false)
+		report := f.boot().Recovery.RecoverWorkerRuntime(t.Context(), task.ID)
 		if !report.Deletable() || report.Interrupted == nil || !report.Interrupted.UnknownScope {
 			t.Fatalf("lost records must be reported: %+v", report)
 		}

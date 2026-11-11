@@ -420,7 +420,7 @@ func TestRetentionEvictsOnlyWhatARetainedCheckpointCanRebuild(t *testing.T) {
 
 	// Settled, but its working data is the only copy: still refused.
 	f.script.set(adapter.ConnectionAbsent)
-	reports := engine.Recovery.RecoverWorkerRuntime(t.Context(), task.ID, false)
+	reports := engine.Recovery.RecoverWorkerRuntime(t.Context(), task.ID)
 	if !reports.Deletable() || reports.Reason != recovery.ReasonNoCheckpoint {
 		t.Fatalf("settlement: %+v", reports)
 	}
@@ -442,7 +442,7 @@ func TestRetentionEvictsVerifiedCheckpointAndLeaseRebuildsIt(t *testing.T) {
 
 	// A settled worker that has not resumed: an active one holds its rebuilt view and is retained.
 	engine := f.boot()
-	settled := engine.Recovery.RecoverWorkerRuntime(t.Context(), task.ID, false)
+	settled := engine.Recovery.RecoverWorkerRuntime(t.Context(), task.ID)
 	if !settled.Deletable() || settled.Interrupted == nil || !settled.Interrupted.UnknownScope {
 		t.Fatalf("settlement: %+v", settled)
 	}

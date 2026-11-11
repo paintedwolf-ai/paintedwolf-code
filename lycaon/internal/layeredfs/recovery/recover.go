@@ -99,10 +99,13 @@ func recoverWorkerView(ctx context.Context, c *Coordinator, req RecoverRequest) 
 		return nil, err
 	} else if resumed {
 		result, err := finishRecovery(c, req, j, view, checkpoint.Manifest{}, nil, procReceipt, mountReceipt)
-		if result != nil {
-			result.ResumedWorkingState = view.Resumed
+		if err != nil {
+			return nil, err
 		}
-		return result, err
+		result.ResumedWorkingState = view.Resumed
+		// Settlement may have copied this storage aside before recovery chose to resume it; the view
+		// now holds everything the copy does.
+		return result, c.discardInterruptedCopies(req.WorkerID, view.ViewID)
 	}
 
 	cpID := j.LastPublishedCheckpointID

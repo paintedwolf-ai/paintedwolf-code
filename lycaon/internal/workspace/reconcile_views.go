@@ -209,7 +209,7 @@ func (m *Manager) RecoverWorkerViews(ctx context.Context) ([]recovery.WorkerRunt
 		if _, skip := refused[workerID]; skip {
 			continue
 		}
-		report := coord.RecoverWorkerRuntime(ctx, workerID, true)
+		report := coord.RecoverWorkerRuntime(ctx, workerID)
 		if report.Deletable() && report.HadRuntime {
 			if root, ok := roots[workerID]; ok {
 				if err := markBranchNeedsRebuild(root); err != nil {
@@ -272,7 +272,7 @@ func (m *Manager) SettleBranchRuntime(ctx context.Context, jobID, root string) e
 	if err := m.releaseLiveJournaledViews(ctx, jobID, root); err != nil {
 		return err
 	}
-	report := m.recovery.RecoverWorkerRuntime(ctx, jobID, false)
+	report := m.recovery.RecoverWorkerRuntime(ctx, jobID)
 	if !report.Deletable() {
 		return &recovery.RuntimeBlockedError{Report: report}
 	}
