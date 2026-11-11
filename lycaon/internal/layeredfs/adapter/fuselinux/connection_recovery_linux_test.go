@@ -182,3 +182,46 @@ func TestThreadGroupDyingRequiresEveryThreadUnderSIGKILL(t *testing.T) {
 		})
 	}
 }
+
+// TestMountHelperThatAttachedAndThenFailedLeavesNoMount: a helper can fail or be killed after the kernel
+// attached the mount, and no server ever takes the connection, so what it left would be a dead mount.
+func TestMountHelperThatAttachedAndThenFailedLeavesNoMount(t *testing.T) {
+	tmp := t.TempDir()
+	trunk, helper := filepath.Join(tmp, "trunk"), filepath.Join(tmp, "attach-then-fail")
+	testutil.FailErr(t, "create trunk", os.MkdirAll(trunk, 0o755))
+	python, err := exec.LookPath("python3")
+	testutil.FailErr(t, "find python3", err)
+	fusermount, err := exec.LookPath("fusermount3")
+	testutil.FailErr(t, "find fusermount3", err)
+	attached := filepath.Join(tmp, "attached")
+	script := "#!" + python + `
+import os, socket, subprocess, sys
+keep, send = socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)
+os.set_inheritable(send.fileno(), True)
+subprocess.run(["` + fusermount + `", *sys.argv[1:]], env=dict(os.environ, _FUSE_COMMFD=str(send.fileno())), close_fds=False)
+if any(line.split()[4] == sys.argv[-1] for line in open("/proc/self/mountinfo")):
+    open("` + attached + `", "w").close()
+sys.exit(1)
+`
+	testutil.FailErr(t, "write helper", os.WriteFile(helper, []byte(script), 0o755))
+	runtimeDir := filepath.Join(tmp, "runtime")
+	mountPath := filepath.Join(runtimeDir, "view-attached", "mounts", "primary")
+	t.Cleanup(func() { _ = exec.Command(fusermount, "-u", "-z", "--", mountPath).Run() })
+
+	_, err = fuselinux.New(fuselinux.Config{FusermountBin: helper}).Prepare(t.Context(), adapter.PrepareRequest{
+		ViewID: "view-attached", BackingDir: filepath.Join(tmp, "backing"), RuntimeDir: runtimeDir,
+		Grants: []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunk, IsPrimary: true}},
+	})
+	if err == nil {
+		t.Fatal("expected Prepare to report the failed helper")
+	}
+	_, err = os.Stat(attached)
+	testutil.FailErr(t, "helper attached the mount", err)
+	table, err := os.ReadFile("/proc/self/mountinfo")
+	testutil.FailErr(t, "read mount table", err)
+	for line := range strings.Lines(string(table)) {
+		if strings.Fields(line)[4] == mountPath {
+			t.Fatalf("mount remains after failed prepare: %s", line)
+		}
+	}
+}
