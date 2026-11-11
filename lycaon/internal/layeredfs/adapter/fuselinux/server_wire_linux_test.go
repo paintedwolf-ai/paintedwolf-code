@@ -48,6 +48,8 @@ func newWireServer(t *testing.T, cfg ServerConfig) *wireServer {
 	core, err := layeredfs.New(layeredfs.Config{
 		ViewID: "wire", BackingDir: w.backing, ActiveRootID: "primary",
 		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: w.trunk, IsPrimary: true}},
+		// The wire server has no private Git, so Git metadata is the trunk's own.
+		GitAllowPassthrough: true,
 		FaultHooks: &layeredfs.FaultHooks{JournalSyncHook: func(string) error {
 			if injected := w.syncErr.Load(); injected != nil {
 				return *injected
