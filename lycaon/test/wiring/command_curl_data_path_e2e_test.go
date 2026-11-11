@@ -109,18 +109,7 @@ func TestCommandProgramCurlPreservesDataAndScreensModelDelivery(t *testing.T) {
 	}
 }
 
-// approveEgress approves every first contact the gate asks about, for tests
-// about what a request carries rather than whether it may be sent.
-func approveEgress(t *testing.T) {
-	t.Helper()
-	release := confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
-		return true
-	})
-	t.Cleanup(func() { _ = release(context.Background()) })
-}
-
 func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
-	approveEgress(t)
 	body := "external-payload-line-1\nexternal-payload-line-2\n"
 	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasSuffix(r.URL.Path, "/fail") {
@@ -324,11 +313,11 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		}
 	})
 
-	t.Run("downstream_egress_first_contact_asks_with_or_without_ingestion", func(t *testing.T) {
+	t.Run("downstream_egress_policy_contrast_after_curl_ingestion", func(t *testing.T) {
 		balancedRules := "  - category: tool\n    pattern: http_request\n    effect: allow\n"
 
-		// 1. Clean local session: the first contact with sink.external.example, a recipient
-		// nobody configured, asks at Balanced even though the chat has read nothing external.
+		// 1. Clean local session: echo local -> outbound curl to sink.external.example short-circuits under
+		// Balanced/Observe without calling the egress resolver.
 		cleanMock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 			{
 				Pattern:      "clean step 1",
@@ -357,15 +346,15 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		testutil.FailErr(t, "clean step 1", err)
 		_, err = cleanSess.h.Sessions.Manager.Submissions.Prompt(t.Context(), cleanSess.session, "clean step 2")
 		testutil.FailErr(t, "clean step 2", err)
-		if out := cleanSess.outcome(t, "program-2"); out.Refusal == nil {
-			t.Fatalf("expected the denied first contact to refuse in a clean Balanced session, got %+v", out)
+		if out := cleanSess.outcome(t, "program-2"); out.Status != 0 || out.Refusal != nil {
+			t.Fatalf("expected clean Balanced session to allow outbound request without resolver intervention, got %+v (resolverHosts=%v)", out, cleanResolverHosts)
 		}
-		if !slices.Contains(cleanResolverHosts, "sink.external.example") {
-			t.Fatalf("a clean Balanced session must ask about its first contact, got %v", cleanResolverHosts)
+		if len(cleanResolverHosts) != 0 {
+			t.Fatalf("clean Balanced session must not invoke egress resolver, got %v", cleanResolverHosts)
 		}
 
-		// 2. Ingested session: the same first contact asks after reading external content
-		// (denied when rejected, allowed on recovery when approved).
+		// 2. Ingested session: curl external body -> outbound curl to sink.external.example stops short-circuiting
+		// and routes through the egress resolver (denied when rejected, allowed on recovery when approved).
 		ingestedMock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 			{
 				Pattern:      "ingested step 1",
@@ -607,7 +596,6 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 }
 
 func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter(t *testing.T) {
-	approveEgress(t)
 	const cookieSecret = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
 	const unrelatedSecret = "AKIAQYJK5TXV4NZR7SGB"
 
