@@ -25,6 +25,8 @@ func newMemStore() *memStore {
 	return &memStore{results: map[string]Result{}, records: map[string][]SectionHash{}, attempts: map[string]string{}, settled: map[string]string{}}
 }
 
+func (m *memStore) Epoch(context.Context, string) (int64, error) { return 1, nil }
+
 func (m *memStore) GetResults(_ context.Context, _ string, hashes []string) (map[string]Result, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -37,7 +39,7 @@ func (m *memStore) GetResults(_ context.Context, _ string, hashes []string) (map
 	return out, nil
 }
 
-func (m *memStore) PutResult(_ context.Context, _ string, _ Manifest, hash string, result Result) error {
+func (m *memStore) PutResult(_ context.Context, _ string, _ int64, _ Manifest, hash string, result Result) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if prior, ok := m.results[hash]; ok && !(prior.Source == SourceFallback && result.Source == SourceSummarizer) {
@@ -47,43 +49,50 @@ func (m *memStore) PutResult(_ context.Context, _ string, _ Manifest, hash strin
 	return nil
 }
 
-func (m *memStore) StartAttempt(_ context.Context, request Request, _ []SectionHash) (string, bool, error) {
+func (m *memStore) StartAttempt(_ context.Context, request Request, _ int64, _ []SectionHash) (Attempt, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if id, ok := m.attempts[request.TargetKey]; ok {
-		return id, true, nil
+		return Attempt{ID: id, Joined: true}, nil
 	}
 	m.nextID++
 	id := fmt.Sprint(m.nextID)
 	m.attempts[request.TargetKey] = id
-	return id, false, nil
+	return Attempt{ID: id}, nil
 }
 
-func (m *memStore) CompleteAttempt(_ context.Context, request Request, attempt string, _ []SectionHash, recordID string) (bool, error) {
+func (m *memStore) CompleteAttempt(_ context.Context, request Request, attempt string, _ []SectionHash, recordID string) (Settled, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.attempts[request.TargetKey] != attempt {
-		return false, nil
+		return Settled{}, nil
 	}
 	delete(m.attempts, request.TargetKey)
 	m.settled[request.TargetKey] = recordID
-	return true, nil
+	return Settled{Applied: true}, nil
 }
 
-func (m *memStore) FailAttempt(_ context.Context, request Request, attempt, _ string) (bool, error) {
+func (m *memStore) Resolve(_ context.Context, request Request, _ int64, _ []SectionHash, recordID string) (Settled, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.settled[request.TargetKey] = recordID
+	return Settled{Applied: true}, nil
+}
+
+func (m *memStore) FailAttempt(_ context.Context, request Request, attempt string, _ Failure) (Settled, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.attempts[request.TargetKey] != attempt {
-		return false, nil
+		return Settled{}, nil
 	}
 	delete(m.attempts, request.TargetKey)
-	return true, nil
+	return Settled{Applied: true}, nil
 }
 
-func (m *memStore) PutRecord(_ context.Context, _, recordID, _, _ string, sections []SectionHash) error {
+func (m *memStore) PutRecord(_ context.Context, _ string, _ int64, record Record) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.records[recordID] = sections
+	m.records[record.ID] = record.Sections
 	return nil
 }
 

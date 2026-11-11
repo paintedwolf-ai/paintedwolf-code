@@ -200,8 +200,8 @@ func (m *secretScreenHITL) SessionApprovalDenied(context.Context, string) (bool,
 func (m *secretScreenHITL) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (m *secretScreenHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) error {
-	return nil
+func (m *secretScreenHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+	return false, nil
 }
 func (m *secretScreenHITL) ClearPendingToolApprovalAIRationale(context.Context, string) error {
 	return nil

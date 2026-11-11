@@ -10,7 +10,8 @@ import (
 )
 
 // Contract bounds one section's output. It is part of the manifest, so a
-// changed contract is a changed question.
+// changed contract is a changed question. A zero MaxSentences leaves the
+// output's shape to its profile, which Parse refuses.
 type Contract struct {
 	MaxSentences int `json:"max_sentences"`
 	MaxRunes     int `json:"max_runes"`

@@ -1,7 +1,7 @@
 -- name: GetFileBriefing :one
 SELECT project_id, root_id, path, target_key, attempt_id, presentation, source_sha256,
        trigger, status, preview_json, locations_json, sections_json,
-       truncated, error, fallback_text, updated_at, last_accessed_at_ms, storage_bytes
+       truncated, error, fallback_text, updated_at, last_accessed_at_ms, storage_bytes, record_id
 FROM file_briefings
 WHERE project_id = ? AND root_id = ? AND path = ? AND target_key = ?;
 
@@ -19,6 +19,7 @@ ON CONFLICT(project_id, root_id, path, target_key) DO UPDATE SET
     preview_json = excluded.preview_json,
     locations_json = excluded.locations_json,
     sections_json = '[]',
+    record_id = '',
     truncated = 0,
     error = '',
     fallback_text = '',
@@ -33,7 +34,7 @@ WHERE project_id = ? AND root_id = ? AND path = ? AND target_key = ?;
 
 -- name: CompleteFileBriefing :execrows
 UPDATE file_briefings
-SET status = 'complete', sections_json = ?, truncated = ?, error = '', fallback_text = '', updated_at = ?
+SET status = 'complete', sections_json = ?, record_id = ?, truncated = ?, error = '', fallback_text = '', updated_at = ?
 WHERE project_id = ? AND root_id = ? AND path = ? AND target_key = ? AND attempt_id = ?;
 
 -- name: PreviewFileBriefing :execrows

@@ -8,7 +8,10 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/briefing"
+	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/toolapproval"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -61,7 +64,10 @@ func (g *scriptedGenerator) calls() []briefing.Invocation {
 // checkpointEvent is a patch (text) or a clear (empty).
 type checkpointEvent struct{ text string }
 
-type patchCapture struct{ events chan checkpointEvent }
+type patchCapture struct {
+	events   chan checkpointEvent
+	resolved bool
+}
 
 func newPatchCapture() *patchCapture { return &patchCapture{events: make(chan checkpointEvent, 4)} }
 
@@ -80,9 +86,9 @@ func (p *patchCapture) next(t *testing.T) checkpointEvent {
 	}
 }
 
-func (p *patchCapture) PatchPendingToolApprovalAIRationale(_ context.Context, _, text string) error {
+func (p *patchCapture) PatchPendingToolApprovalAIRationale(_ context.Context, _, text string) (bool, error) {
 	p.events <- checkpointEvent{text: text}
-	return nil
+	return !p.resolved, nil
 }
 func (p *patchCapture) ClearPendingToolApprovalAIRationale(context.Context, string) error {
 	p.events <- checkpointEvent{}
@@ -103,7 +109,9 @@ func (p *patchCapture) ListPending(context.Context, string, *api.CheckpointKind)
 func (p *patchCapture) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
 	return nil, nil
 }
-func (p *patchCapture) SessionApprovalDenied(context.Context, string) (bool, error) { return false, nil }
+func (p *patchCapture) SessionApprovalDenied(context.Context, string) (bool, error) {
+	return false, nil
+}
 func (p *patchCapture) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
@@ -114,10 +122,40 @@ func (p *patchCapture) ApprovalReviewSuppressed(context.Context, string, string)
 	return false, nil
 }
 
-func attachRequest() toolapproval.AIRationaleAttachRequest {
+type pinLog struct{ pins chan string }
+
+func (p pinLog) PinCheckpoint(_ context.Context, projectID, checkpointID, recordID string) error {
+	p.pins <- projectID + "/" + checkpointID + "/" + recordID
+	return nil
+}
+
+type harness struct {
+	scheduler *briefing.Scheduler
+	caps      *patchCapture
+	pins      pinLog
+	deps      toolhost.ApprovalRationaleDeps
+}
+
+// newHarness runs the attacher on a real engine and store, as the host does.
+func newHarness(t *testing.T, generator briefing.Generator) harness {
+	t.Helper()
+	database := testdbfixture.Open(t, "approval-rationale.db")
+	testdbseed.InsertProjectRoot(t, database, testdbseed.DefaultProjectID, t.TempDir())
+	scheduler := briefing.NewScheduler(context.Background())
+	t.Cleanup(func() { scheduler.Stop(); scheduler.Wait(context.Background()) })
+	router := briefing.NewRouter()
+	h := harness{scheduler: scheduler, caps: newPatchCapture(), pins: pinLog{pins: make(chan string, 4)}}
+	h.deps = toolhost.ApprovalRationaleDeps{
+		Cause: memCause{read: cause()}, Engine: briefing.NewEngine(scheduler, briefingstore.NewStore(database, t.TempDir()), generator, router, nil),
+		Router: router, Pins: h.pins, Checkpoints: h.caps,
+	}
+	return h
+}
+
+func attachRequest(checkpointID string) toolapproval.AIRationaleAttachRequest {
 	return toolapproval.AIRationaleAttachRequest{
-		CheckpointID: "chk",
-		ToolContext:  tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1", WorkerJobID: "job-1", ToolCallID: "tc1"}},
+		CheckpointID: checkpointID,
+		ToolContext:  tools.ToolContext{Identity: tools.InvocationIdentity{ProjectID: testdbseed.DefaultProjectID, SessionID: "s1", WorkerJobID: "job-1", ToolCallID: "tc1"}},
 		Tool:         "command", Args: map[string]any{"command": "git push"},
 		Explanation: &hitl.ApprovalExplanation{What: "SUPPLIED_WHAT", Who: "SUPPLIED_WHO", IfWrong: "SUPPLIED_IF_WRONG"},
 	}
@@ -129,17 +167,29 @@ func cause() briefing.CausalRead {
 		Results: []briefing.ResultExcerpt{{Tool: "read", Outcome: "success", Content: "SUPPLIED_RESULT"}}}
 }
 
+// settledPin returns the pin, if any, once the generation job has finished.
+func (h harness) settledPin() string {
+	h.scheduler.Wait(context.Background())
+	select {
+	case pin := <-h.pins.pins:
+		return pin
+	default:
+		return ""
+	}
+}
+
 func TestApprovalRationalePatchesOneSentenceFromLiveEvidence(t *testing.T) {
-	caps := newPatchCapture()
 	refs := make(chan briefing.ActionRef, 1)
 	generator := &scriptedGenerator{out: "Pushes the branch the user asked to ship. This advances the goal."}
-	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Cause: memCause{read: cause(), refs: refs}, Workers: memWorkers{task: &api.WorkerTask{Brief: "SUPPLIED_BRIEF"}},
-		Progress: memProgress{content: "- [ ] SUPPLIED_STEP\n"}, Root: rootID{}, Generator: generator, Checkpoints: caps,
-	})
-	attacher.AttachAsync(context.Background(), attachRequest())
-	if got := caps.next(t).text; got != "Pushes the branch the user asked to ship." {
+	h := newHarness(t, generator)
+	h.deps.Cause = memCause{read: cause(), refs: refs}
+	h.deps.Workers, h.deps.Progress, h.deps.Root = memWorkers{task: &api.WorkerTask{Brief: "SUPPLIED_BRIEF"}}, memProgress{content: "- [ ] SUPPLIED_STEP\n"}, rootID{}
+	toolhost.NewApprovalRationaleAttacher(h.deps).AttachAsync(context.Background(), attachRequest("chk"))
+	if got := h.caps.next(t).text; got != "Pushes the branch the user asked to ship." {
 		t.Fatalf("patched %q", got)
+	}
+	if pin := h.settledPin(); !strings.HasPrefix(pin, testdbseed.DefaultProjectID+"/chk/") || len(pin) == len(testdbseed.DefaultProjectID+"/chk/") {
+		t.Fatalf("applied rationale was not pinned with its record: %q", pin)
 	}
 	if ref := <-refs; ref != (briefing.ActionRef{SessionID: "s1", WorkerJobID: "job-1", ToolCallID: "tc1"}) {
 		t.Fatalf("read anchored on %+v", ref)
@@ -155,29 +205,47 @@ func TestApprovalRationalePatchesOneSentenceFromLiveEvidence(t *testing.T) {
 	}
 }
 
+func TestApprovalRationaleReusesStoredResultForEqualEvidence(t *testing.T) {
+	generator := &scriptedGenerator{out: "Pushes the branch."}
+	h := newHarness(t, generator)
+	attacher := toolhost.NewApprovalRationaleAttacher(h.deps)
+	attacher.AttachAsync(context.Background(), attachRequest("first"))
+	first := h.caps.next(t).text
+	attacher.AttachAsync(context.Background(), attachRequest("second"))
+	if second := h.caps.next(t).text; second != first || len(generator.calls()) != 1 {
+		t.Fatalf("equal evidence cost another call: %q then %q, %d calls", first, second, len(generator.calls()))
+	}
+}
+
+func TestApprovalRationaleOnASettledCardIsNotPinned(t *testing.T) {
+	h := newHarness(t, &scriptedGenerator{out: "Pushes the branch."})
+	h.caps.resolved = true
+	toolhost.NewApprovalRationaleAttacher(h.deps).AttachAsync(context.Background(), attachRequest("chk"))
+	h.caps.next(t)
+	if pin := h.settledPin(); pin != "" {
+		t.Fatalf("a card that never showed the sentence pinned it: %s", pin)
+	}
+}
+
 func TestApprovalRationaleClearsTheSlotWhenOutputIsUnusable(t *testing.T) {
-	caps := newPatchCapture()
-	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Cause: memCause{read: cause()}, Generator: &scriptedGenerator{out: "  **  "}, Checkpoints: caps,
-	})
-	attacher.AttachAsync(context.Background(), attachRequest())
-	if event := caps.next(t); event.text != "" {
+	h := newHarness(t, &scriptedGenerator{out: "  **  "})
+	toolhost.NewApprovalRationaleAttacher(h.deps).AttachAsync(context.Background(), attachRequest("chk"))
+	if event := h.caps.next(t); event.text != "" {
 		t.Fatalf("unusable output patched %q", event.text)
 	}
 }
 
 func TestApprovalRationaleDisabledTouchesNothing(t *testing.T) {
-	caps := newPatchCapture()
 	generator := &scriptedGenerator{out: "Unused."}
-	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Cause: memCause{read: cause()}, Generator: generator, Checkpoints: caps, EnabledFn: func() bool { return false },
-	})
+	h := newHarness(t, generator)
+	h.deps.EnabledFn = func() bool { return false }
+	attacher := toolhost.NewApprovalRationaleAttacher(h.deps)
 	if attacher.Enabled() {
 		t.Fatal("Enabled ignored the setting")
 	}
-	attacher.AttachAsync(context.Background(), attachRequest())
+	attacher.AttachAsync(context.Background(), attachRequest("chk"))
 	select {
-	case event := <-caps.events:
+	case event := <-h.caps.events:
 		t.Fatalf("disabled attacher touched the checkpoint: %+v", event)
 	default:
 	}
@@ -186,8 +254,8 @@ func TestApprovalRationaleDisabledTouchesNothing(t *testing.T) {
 	}
 }
 
-func TestApprovalRationaleNeedsAModel(t *testing.T) {
+func TestApprovalRationaleNeedsTheEngine(t *testing.T) {
 	if toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{Cause: memCause{}, Checkpoints: newPatchCapture()}) != nil {
-		t.Fatal("an attacher without a model reserves slots it cannot fill")
+		t.Fatal("an attacher without an engine reserves slots it cannot fill")
 	}
 }

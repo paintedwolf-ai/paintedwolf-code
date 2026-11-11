@@ -48,6 +48,8 @@ type Dependencies struct {
 	// Scheduler is shared with other briefing kinds; nil gives the service
 	// its own.
 	Scheduler *briefing.Scheduler
+	// Records is optional; without it summaries carry no record.
+	Records Records
 }
 
 // Service coordinates briefing admission, generation, retention, and shutdown.
@@ -55,6 +57,7 @@ type Service struct {
 	store         Store
 	config        Config
 	generator     Generator
+	records       Records
 	events        EventPublisher
 	settings      Enablement
 	logger        *slog.Logger
@@ -79,7 +82,7 @@ func NewService(ctx context.Context, deps Dependencies) *Service {
 	if scheduler == nil {
 		scheduler, owns = briefing.NewScheduler(ctx), true
 	}
-	return &Service{store: deps.Store, config: deps.Config, generator: deps.Generator,
+	return &Service{store: deps.Store, config: deps.Config, generator: deps.Generator, records: deps.Records,
 		events: deps.Events, settings: deps.Settings, logger: logger, scheduler: scheduler, ownsScheduler: owns, ctx: ctx, cancel: cancel}
 }
 
@@ -128,7 +131,7 @@ func (s *Service) Request(ctx context.Context, target Target, trigger string) (B
 		return Briefing{}, err
 	}
 	s.maintainFileBriefings(ctx, briefing)
-	s.ensureJob(ctx, target, briefing, material.Prompt)
+	s.ensureJob(ctx, target, briefing, material)
 	return briefing, nil
 }
 
@@ -149,7 +152,7 @@ func (s *Service) Get(ctx context.Context, target Target) (Briefing, error) {
 		if err != nil {
 			return Briefing{}, fmt.Errorf("assemble file briefing: %w", err)
 		}
-		s.ensureJob(ctx, target, briefing, material.Prompt)
+		s.ensureJob(ctx, target, briefing, material)
 	}
 	return briefing, nil
 }
@@ -169,6 +172,11 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 		if err := s.store.Clear(ctx); err != nil {
 			return err
 		}
+		if s.records != nil {
+			if err := s.records.Sweep(ctx); err != nil {
+				return err
+			}
+		}
 	}
 	return s.settings.PutEnabled(enabled)
 }
@@ -176,7 +184,7 @@ func (s *Service) SetEnabled(ctx context.Context, enabled bool) error {
 // ensureJob runs pending work once per attempt. A newer automatic request
 // supersedes the project's earlier automatic work; manual work is never
 // superseded.
-func (s *Service) ensureJob(ctx context.Context, target Target, b Briefing, prompt string) {
+func (s *Service) ensureJob(ctx context.Context, target Target, b Briefing, material Material) {
 	if b.Status != StatusPending {
 		return
 	}
@@ -187,7 +195,7 @@ func (s *Service) ensureJob(ctx context.Context, target Target, b Briefing, prom
 	joined, err := s.scheduler.Submit(briefing.Job{
 		Key: fileJobPrefix + fileBriefingJobKey(b), Project: b.ProjectID, Group: group, Manual: b.Trigger == "manual",
 		Policy: briefing.Policy{Admission: briefing.Superseding}, Values: ctx,
-		Run: func(jobCtx context.Context) { s.completeFileBriefing(jobCtx, b, prompt, target.ProjectDir) },
+		Run: func(jobCtx context.Context) { s.completeFileBriefing(jobCtx, b, material, target.ProjectDir) },
 	})
 	if err != nil || joined {
 		return

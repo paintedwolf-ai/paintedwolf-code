@@ -7,6 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/fileoutline"
 	"github.com/lycaon/lycaon/internal/runeclamp"
 	"github.com/lycaon/lycaon/internal/summarize"
@@ -24,6 +25,8 @@ type Material struct {
 	Preview   Preview
 	Locations []Location
 	Prompt    string
+	// Manifest records what the prompt submitted, for the summary's record.
+	Manifest briefing.Manifest
 }
 
 type fileFacts struct {
@@ -91,10 +94,12 @@ func BuildMaterial(ctx context.Context, input Input, cfg Config) (Material, erro
 	}
 	preview := Preview{Language: outline.Language, LineCount: facts.PhysicalLines}
 	coverage := coverageForMaterial(outline, facts, header, outlineSymbols, result.Pack)
+	prompt := renderPrompt(input, header, facts, coverage, outlineInventory, result.Pack)
 	return Material{
 		Preview:   preview,
 		Locations: locationsFromOutline(outlineSymbols),
-		Prompt:    renderPrompt(input, header, facts, coverage, outlineInventory, result.Pack),
+		Prompt:    prompt,
+		Manifest:  materialManifest(input, facts, coverage, prompt, cfg),
 	}, nil
 }
 

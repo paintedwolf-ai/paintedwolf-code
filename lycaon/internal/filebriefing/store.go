@@ -60,12 +60,12 @@ type Briefing struct {
 
 // Outcome belongs to one generation attempt.
 type Outcome struct {
-	ProjectID, RootID, Path, TargetKey, AttemptID string
-	Error                                         string
-	FallbackText                                  string
-	Sections                                      []Section
-	Truncated                                     bool
-	UpdatedAt                                     time.Time
+	ProjectID, RootID, Path, TargetKey, AttemptID, RecordID string
+	Error                                                   string
+	FallbackText                                            string
+	Sections                                                []Section
+	Truncated                                               bool
+	UpdatedAt                                               time.Time
 }
 
 var ErrNotFound = errors.New("file briefing not found")
@@ -353,7 +353,7 @@ func (s *SQL) Complete(ctx context.Context, outcome Outcome) error {
 		return err
 	}
 	updated, err := s.queries.CompleteFileBriefing(ctx, db.CompleteFileBriefingParams{
-		SectionsJson: string(sectionsJSON), Truncated: boolInt64(outcome.Truncated), UpdatedAt: outcome.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		SectionsJson: string(sectionsJSON), RecordID: outcome.RecordID, Truncated: boolInt64(outcome.Truncated), UpdatedAt: outcome.UpdatedAt.UTC().Format(time.RFC3339Nano),
 		ProjectID: outcome.ProjectID, RootID: outcome.RootID, Path: outcome.Path, TargetKey: outcome.TargetKey, AttemptID: outcome.AttemptID,
 	})
 	if err != nil {

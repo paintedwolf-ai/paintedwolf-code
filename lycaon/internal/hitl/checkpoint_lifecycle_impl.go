@@ -300,31 +300,27 @@ func (m *Checkpoints) resolveCheckpointAdmitted(ctx context.Context, sessionID, 
 }
 
 // PatchPendingToolApprovalAIRationale updates and republishes only still-pending cards.
-func (m *Checkpoints) PatchPendingToolApprovalAIRationale(ctx context.Context, checkpointID, text string) error {
+func (m *Checkpoints) PatchPendingToolApprovalAIRationale(ctx context.Context, checkpointID, text string) (bool, error) {
 	if err := ctx.Err(); err != nil {
-		return err
+		return false, err
 	}
 	text = strings.TrimSpace(text)
 	if checkpointID == "" || text == "" {
-		return nil
+		return false, nil
 	}
 	applied, err := m.Store.SetPendingAIRationale(ctx, checkpointID, text)
 	if err != nil || !applied || m.Store.EventsViaOutbox() {
-		return err
+		return applied, err
 	}
 	row, err := m.Store.Get(ctx, checkpointID)
 	if err != nil {
-		return err
+		return true, err
 	}
 	// Re-check after load: a concurrent resolve can win between the write and Get.
-	if row.Status != DecisionStatusPending {
-		return nil
+	if row.Status == DecisionStatusPending && row.Kind == api.CheckpointKindToolApproval {
+		m.publishEvent(ctx, *row)
 	}
-	if row.Kind != api.CheckpointKindToolApproval {
-		return nil
-	}
-	m.publishEvent(ctx, *row)
-	return nil
+	return true, nil
 }
 
 // ClearPendingToolApprovalAIRationale clears the pending flag after an empty summary.

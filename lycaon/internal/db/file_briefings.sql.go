@@ -12,12 +12,13 @@ import (
 
 const completeFileBriefing = `-- name: CompleteFileBriefing :execrows
 UPDATE file_briefings
-SET status = 'complete', sections_json = ?, truncated = ?, error = '', fallback_text = '', updated_at = ?
+SET status = 'complete', sections_json = ?, record_id = ?, truncated = ?, error = '', fallback_text = '', updated_at = ?
 WHERE project_id = ? AND root_id = ? AND path = ? AND target_key = ? AND attempt_id = ?
 `
 
 type CompleteFileBriefingParams struct {
 	SectionsJson string `json:"sections_json"`
+	RecordID     string `json:"record_id"`
 	Truncated    int64  `json:"truncated"`
 	UpdatedAt    string `json:"updated_at"`
 	ProjectID    string `json:"project_id"`
@@ -30,6 +31,7 @@ type CompleteFileBriefingParams struct {
 func (q *Queries) CompleteFileBriefing(ctx context.Context, arg CompleteFileBriefingParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, completeFileBriefing,
 		arg.SectionsJson,
+		arg.RecordID,
 		arg.Truncated,
 		arg.UpdatedAt,
 		arg.ProjectID,
@@ -237,7 +239,7 @@ func (q *Queries) FailFileBriefing(ctx context.Context, arg FailFileBriefingPara
 const getFileBriefing = `-- name: GetFileBriefing :one
 SELECT project_id, root_id, path, target_key, attempt_id, presentation, source_sha256,
        trigger, status, preview_json, locations_json, sections_json,
-       truncated, error, fallback_text, updated_at, last_accessed_at_ms, storage_bytes
+       truncated, error, fallback_text, updated_at, last_accessed_at_ms, storage_bytes, record_id
 FROM file_briefings
 WHERE project_id = ? AND root_id = ? AND path = ? AND target_key = ?
 `
@@ -276,6 +278,7 @@ func (q *Queries) GetFileBriefing(ctx context.Context, arg GetFileBriefingParams
 		&i.UpdatedAt,
 		&i.LastAccessedAtMs,
 		&i.StorageBytes,
+		&i.RecordID,
 	)
 	return i, err
 }
@@ -425,6 +428,7 @@ ON CONFLICT(project_id, root_id, path, target_key) DO UPDATE SET
     preview_json = excluded.preview_json,
     locations_json = excluded.locations_json,
     sections_json = '[]',
+    record_id = '',
     truncated = 0,
     error = '',
     fallback_text = '',

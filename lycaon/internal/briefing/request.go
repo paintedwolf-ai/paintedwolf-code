@@ -40,9 +40,14 @@ type Request struct {
 	ProfileID  string
 	Version    string
 	TargetKey  string
-	Manual     bool
-	Policy     Policy
-	Sections   []SectionPlan
+	// TargetKind, TargetJSON and ScopeFingerprint describe the target for
+	// storage; they never enter a manifest.
+	TargetKind       string
+	TargetJSON       string
+	ScopeFingerprint string
+	Manual           bool
+	Policy           Policy
+	Sections         []SectionPlan
 }
 
 // SectionState is a section of a target's current resolution.
@@ -70,6 +75,9 @@ type Snapshot struct {
 	AttemptID string
 	Sections  []SectionState
 	RecordID  string
+	Epoch     int64
+	Revision  int64
+	ErrorCode string
 	Error     string
 	// Regenerate answers a manual request: whether any section needed work.
 	Regenerate RegenerateOutcome
@@ -82,3 +90,11 @@ const (
 	InputsUnchanged RegenerateOutcome = "inputs_unchanged"
 	Started         RegenerateOutcome = "started"
 )
+
+// Trigger names who asked for an attempt.
+func (r Request) Trigger() string {
+	if r.Manual {
+		return "manual"
+	}
+	return "automatic"
+}

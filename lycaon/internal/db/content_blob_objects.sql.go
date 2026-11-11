@@ -47,6 +47,11 @@ WHERE project_id = ? AND sha256 = ?
       WHERE er.project_id = content_blob_objects.project_id
         AND er.content_blob_sha256 = content_blob_objects.sha256
   )
+  AND NOT EXISTS (
+      SELECT 1 FROM briefing_manifests bm
+      WHERE bm.project_id = content_blob_objects.project_id
+        AND bm.content_blob_sha256 = content_blob_objects.sha256
+  )
 `
 
 type DeleteUnreferencedContentBlobObjectParams struct {
@@ -74,6 +79,9 @@ SELECT object.project_id, object.sha256, object.byte_size, object.stored_size,
        ) OR EXISTS (
            SELECT 1 FROM evidence_records er
            WHERE er.project_id = object.project_id AND er.content_blob_sha256 = object.sha256
+       ) OR EXISTS (
+           SELECT 1 FROM briefing_manifests bm
+           WHERE bm.project_id = object.project_id AND bm.content_blob_sha256 = object.sha256
        ) AS INTEGER) AS referenced
 FROM content_blob_reclaim_queue queue
 JOIN content_blob_objects object
@@ -201,8 +209,8 @@ type UpsertContentBlobObjectParams struct {
 	CreatedAt  string `json:"created_at"`
 }
 
-// Project-scoped content-addressed body objects for model_outputs and
-// evidence_records, and the reclaim queue their delete triggers populate.
+// Project-scoped content-addressed body objects for model_outputs,
+// evidence_records and briefing_manifests, and the reclaim queue their delete triggers populate.
 func (q *Queries) UpsertContentBlobObject(ctx context.Context, arg UpsertContentBlobObjectParams) error {
 	_, err := q.db.ExecContext(ctx, upsertContentBlobObject,
 		arg.ProjectID,
