@@ -16,7 +16,7 @@ func CloneDirectory(src, dst string) (bool, error) {
 	switch {
 	case err == nil:
 		return true, nil
-	case errors.Is(err, unix.EXDEV), errors.Is(err, unix.ENOTSUP), errors.Is(err, unix.EINVAL), errors.Is(err, unix.ENOSYS):
+	case errors.Is(err, unix.EXDEV), errors.Is(err, unix.ENOTSUP), errors.Is(err, unix.EINVAL), errors.Is(err, unix.ENOSYS), errors.Is(err, unix.ENOTTY):
 		return false, nil
 	default:
 		return false, err
