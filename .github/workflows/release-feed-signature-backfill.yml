@@ -38,7 +38,9 @@ jobs:
         run: bun install --frozen-lockfile
         working-directory: lycaon-den
       - name: Install minisign for cryptographic feed verification
-        run: sudo apt-get update && sudo apt-get install -y minisign
+        uses: ./.github/actions/setup-apt
+        with:
+          packages: minisign
 
       - name: Republish the channel pointer signature
         env:

@@ -94,10 +94,15 @@ func TestReleaseDistributionDocumentFollowsObservedDeliveryBeforeAnnouncement(t 
 		}
 	}
 	notice := workflow.Jobs["notify-website"].text()
-	for _, required := range []string{"signed-distribution/distribution.v1.json", `"distribution_sha256"`, "--distribution-sha256", "install -y minisign", `"publication_channels": plan["channels"]`, "--input"} {
+	for _, required := range []string{"signed-distribution/distribution.v1.json", `"distribution_sha256"`, "--distribution-sha256", `"publication_channels": plan["channels"]`, "--input"} {
 		if !strings.Contains(notice, required) {
 			t.Errorf("website confirmation lacks %s", required)
 		}
+	}
+	if !slices.ContainsFunc(workflow.Jobs["notify-website"].Steps, func(step laneStep) bool {
+		return step.Uses == "./.github/actions/setup-apt" && slices.Contains(strings.Fields(step.With["packages"]), "minisign")
+	}) {
+		t.Error("website confirmation lacks the minisign verifier")
 	}
 	delivery := parseLane(t, ".github/workflows/release-linux-delivery.yml")
 	if !slices.Contains(delivery.Jobs["publish-nix-cache"].artifacts("upload-artifact"), "nix-cache-publication") ||

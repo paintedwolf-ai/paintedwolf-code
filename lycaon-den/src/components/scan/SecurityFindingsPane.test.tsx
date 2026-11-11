@@ -237,8 +237,8 @@ describe("SecurityFindingsPane", () => {
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     const [roots, setRoots] = createSignal([
-      { id: "root-primary", path: "/fixture/primary", label: "Primary fixture", is_primary: true, added_at: "2026-01-01T00:00:00Z", kind: "attached" as const },
-      { id: "root-secondary", path: "/fixture/secondary", label: "Secondary fixture", is_primary: false, added_at: "2026-01-01T00:00:00Z", kind: "attached" as const },
+      { id: "root-primary", path: "/fixture/primary", label: "Primary fixture", is_primary: true, added_at: "2026-01-01T00:00:00Z", kind: "attached" as const, admitted: true, admission_code: null },
+      { id: "root-secondary", path: "/fixture/secondary", label: "Secondary fixture", is_primary: false, added_at: "2026-01-01T00:00:00Z", kind: "attached" as const, admitted: true, admission_code: null },
     ]);
     render(() => <SecurityFindingsPane appStore={appStore} projectId="proj-1" roots={roots()} liveScan={live()} />);
     assertNamedControl(await screen.findByTestId("scans-folder-select"), "button");
@@ -272,7 +272,7 @@ describe("SecurityFindingsPane", () => {
     });
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
-    const folder = () => ({ id: "root-primary", path: "/fixture/primary", label: "Primary fixture", is_primary: true, added_at: "2026-01-01T00:00:00Z", kind: "attached" as const });
+    const folder = () => ({ id: "root-primary", path: "/fixture/primary", label: "Primary fixture", is_primary: true, added_at: "2026-01-01T00:00:00Z", kind: "attached" as const, admitted: true, admission_code: null });
     const [roots, setRoots] = createSignal([folder()]);
     render(() => <SecurityFindingsPane appStore={appStore} projectId="proj-1" roots={roots()} />);
     await waitFor(() => expect(screen.getByTestId("ledger-tab-open").textContent).toBe("Open 3"));

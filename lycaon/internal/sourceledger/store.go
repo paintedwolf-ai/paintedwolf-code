@@ -57,6 +57,7 @@ const (
 type Store struct {
 	sqlDB          db.Handle
 	queries        *db.Queries
+	withheld       func(ctx context.Context, projectID, rootID, rel string) bool
 	people         *peoplestore.Store
 	recordMu       sync.Mutex
 	mutationScopes MutationScopeProvider
@@ -207,7 +208,7 @@ func (s *Store) TrackFile(ctx context.Context, raw TrackInput) (TrackedFile, err
 	}
 	release := s.Content.AcquireReferenceLease()
 	defer release()
-	object, err := prepareContent(ctx, s.Content, in.SHA256, in.Content, in.EntryKind)
+	object, err := s.prepareContentAt(ctx, in.ProjectID, in.RootID, in.Path, in.SHA256, in.Content, in.EntryKind)
 	if err != nil {
 		return TrackedFile{}, err
 	}

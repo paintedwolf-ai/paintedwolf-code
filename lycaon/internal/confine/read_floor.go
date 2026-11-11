@@ -20,7 +20,7 @@ func addControlPlaneReadFloor(rules *FilesystemRules, c Confinement) {
 	if secretReadDenyDisabled() {
 		return
 	}
-	denied := resolveEach(controlPlaneReadDenyRoots())
+	denied := controlPlaneReadDenyRootsResolved()
 	if len(denied) == 0 {
 		return
 	}
@@ -267,6 +267,13 @@ func controlPlaneReadDenyRoots() []string {
 		roots = append(roots, folder.Path)
 	}
 	return roots
+}
+
+// controlPlaneReadDenyRootsResolved canonicalizes the state-tree roots. It
+// resolves live on every call: the config dir may be a symlink retargeted at
+// runtime, and classification must recheck it rather than retain a stale root.
+func controlPlaneReadDenyRootsResolved() []string {
+	return resolveEach(controlPlaneReadDenyRoots())
 }
 
 // resolveEach canonicalizes missing paths through their existing ancestor.
