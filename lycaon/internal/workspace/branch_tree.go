@@ -49,6 +49,14 @@ func BranchTreeChanges(ctx context.Context, branchRoot string, roots []projectro
 			changes = append(changes, workspacebaseline.Change{Path: path, Kind: kind})
 		}
 	}
+	// A path the worker created and then removed was never in the base, so it is no change.
+	addDeleted := func(qp layeredfs.QualifiedPath) error {
+		inBase, err := view.Core.HasBase(qp)
+		if err == nil && inBase {
+			add(qp, workspacebaseline.ChangeDeleted)
+		}
+		return err
+	}
 	if eng, found := consumer.LookupBranchEngine(branchRoot); found && eng != nil {
 		summary, err := eng.ComputeDivergence(ctx, "")
 		if err != nil {
@@ -62,10 +70,14 @@ func BranchTreeChanges(ctx context.Context, branchRoot string, roots []projectro
 			case consumer.DivergenceAdded:
 				add(entry.Path, workspacebaseline.ChangeCreated)
 			case consumer.DivergenceDeleted:
-				add(entry.Path, workspacebaseline.ChangeDeleted)
+				if err := addDeleted(entry.Path); err != nil {
+					return nil, true, err
+				}
 			case consumer.DivergenceRenamed:
 				if entry.PreviousPath != nil {
-					add(*entry.PreviousPath, workspacebaseline.ChangeDeleted)
+					if err := addDeleted(*entry.PreviousPath); err != nil {
+						return nil, true, err
+					}
 				}
 				add(entry.Path, workspacebaseline.ChangeCreated)
 			default:
