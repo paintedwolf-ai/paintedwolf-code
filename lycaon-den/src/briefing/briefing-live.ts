@@ -1,4 +1,4 @@
-import { createSignal, onCleanup, type Accessor } from "solid-js";
+import { createEffect, createSignal, onCleanup, untrack, type Accessor } from "solid-js";
 import type { BriefingEvent, BriefingRequest, BriefingSnapshot } from "../api/types.ts";
 import type { BriefingsClient } from "../api/http-capabilities/briefings.ts";
 
@@ -207,12 +207,15 @@ export function requestBriefing(projectId: string, target: BriefingTarget, opts:
   }, BRIEFING_DEBOUNCE_MS);
 }
 
-/** Watches a target while the caller's owner lives; the request outlives it. */
-export function useBriefing(projectId: Accessor<string>, target: Accessor<BriefingTarget | null>): Accessor<BriefingView> {
+/**
+ * Watches a target while the caller's owner lives; the request outlives it.
+ * A changed target, such as a card settling while open, is asked for anew.
+ */
+export function useBriefing(projectId: Accessor<string | undefined>, target: Accessor<BriefingTarget | null>): Accessor<BriefingView> {
   const [current, setCurrent] = createSignal<Entry | null>(null);
   const attach = (next: Entry | null) => {
     const previous = current();
-    if (previous === next) return;
+    if (previous === next) return false;
     if (previous) {
       previous.users--;
       if (previous.users === 0 && previous.debounce !== undefined) {
@@ -223,16 +226,16 @@ export function useBriefing(projectId: Accessor<string>, target: Accessor<Briefi
     if (next) next.users++;
     setCurrent(next);
     evictInactive();
+    return true;
   };
-  const resolve = () => {
+  createEffect(() => {
     const id = projectId();
     const wanted = target();
-    if (!id || !wanted) return attach(null);
-    const entry = ensureEntry(id, wanted);
-    attach(entry);
-    requestBriefing(id, wanted, { fresh: true });
-  };
-  resolve();
+    untrack(() => {
+      if (!id || !wanted) return attach(null);
+      if (attach(ensureEntry(id, wanted))) requestBriefing(id, wanted, { fresh: true });
+    });
+  });
   onCleanup(() => attach(null));
   return () => current()?.view() ?? { snapshot: null, stalled: false };
 }
