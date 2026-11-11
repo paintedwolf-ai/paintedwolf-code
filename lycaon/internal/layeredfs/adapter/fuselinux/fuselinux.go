@@ -155,6 +155,7 @@ func New(cfg Config) *Adapter {
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
+			BarrierHoldBound:          layeredfs.DefaultBarrierHoldBound,
 			// The mount omits allow_other, so the kernel refuses every other user before the engine sees them.
 			OtherUserAccess: adapter.OtherUserAccessNone,
 		},

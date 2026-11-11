@@ -536,8 +536,6 @@ const (
 	ApiErrorCodeSourceTrashFailed ApiErrorCode = "source_trash_failed"
 	// ApiErrorCodeSourceUnavailable a source root cannot be read right now
 	ApiErrorCodeSourceUnavailable ApiErrorCode = "source_unavailable"
-	// ApiErrorCodeProjectPolicyDenied project open policy denied path
-	ApiErrorCodeProjectPolicyDenied ApiErrorCode = "project_policy_denied"
 	// ApiErrorCodeProviderNotFound LLM provider id not registered
 	ApiErrorCodeProviderNotFound ApiErrorCode = "provider_not_found"
 	// ApiErrorCodeProviderInUse provider is referenced by saved model policy
@@ -1145,7 +1143,6 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeSourceInventoryPending,
 	ApiErrorCodeSourceTrashFailed,
 	ApiErrorCodeSourceUnavailable,
-	ApiErrorCodeProjectPolicyDenied,
 	ApiErrorCodeProviderNotFound,
 	ApiErrorCodeProviderInUse,
 	ApiErrorCodeProviderNotConfigured,
@@ -1387,7 +1384,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeSourcePathDenied,
 		ApiErrorCodeSourcePathProtected,
 		ApiErrorCodeSourceReadOnly,
-		ApiErrorCodeProjectPolicyDenied,
 		ApiErrorCodeForbidden,
 		ApiErrorCodeWorkflowStartRequiresHumanApproval,
 		ApiErrorCodePresenceDenied,

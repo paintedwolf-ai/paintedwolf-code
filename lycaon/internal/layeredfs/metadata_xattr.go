@@ -38,7 +38,7 @@ func setAttrPath(c *Core, qpath QualifiedPath, req SetAttrRequest) (EntryAttr, e
 	if err := c.barrier.enterMutation(); err != nil {
 		return EntryAttr{}, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 
 	if req.Size != nil {
 		attr, err := truncatePathAdmitted(c, qpath, *req.Size)
@@ -179,7 +179,7 @@ func setXattrPath(c *Core, qpath QualifiedPath, name string, value []byte, noFol
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 
 	for {
 		startGen, err := currentNamespaceGen(c)
@@ -231,7 +231,7 @@ func removeXattrPath(c *Core, qpath QualifiedPath, name string, noFollow bool) e
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 
 	for {
 		startGen, err := currentNamespaceGen(c)

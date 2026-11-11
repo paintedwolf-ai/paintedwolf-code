@@ -71,7 +71,7 @@ func (c *Core) WriteHandle(hid HandleID, data []byte, offset int64) (int, error)
 	if err := c.barrier.enterMutation(); err != nil {
 		return 0, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 	return writeHandleAdmitted(c, hid, data, offset)
 }
 

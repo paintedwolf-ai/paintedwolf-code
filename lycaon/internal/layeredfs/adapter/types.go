@@ -67,13 +67,15 @@ const (
 	ReasonProbeReadWriteFailed     ReasonCode = "probe_read_write_failed"
 	ReasonCleanupFailed            ReasonCode = "cleanup_failed"
 	ReasonBarrierFailed            ReasonCode = "barrier_failed"
-	ReasonWorkspaceDoesNotFit      ReasonCode = "workspace_does_not_fit"
-	ReasonCopyPassedBudget         ReasonCode = "copy_passed_budget"
-	ReasonUnauthorizedRoot         ReasonCode = "unauthorized_root"
-	ReasonInvalidSelection         ReasonCode = "invalid_selection"
-	ReasonActiveViewMutated        ReasonCode = "active_view_mutated"
-	ReasonViewNotFound             ReasonCode = "view_not_found"
-	ReasonContextCanceled          ReasonCode = "context_canceled"
+	// ReasonBarrierExpired is a checkpoint barrier that held writes past its bound and let them go.
+	ReasonBarrierExpired      ReasonCode = "barrier_expired"
+	ReasonWorkspaceDoesNotFit ReasonCode = "workspace_does_not_fit"
+	ReasonCopyPassedBudget    ReasonCode = "copy_passed_budget"
+	ReasonUnauthorizedRoot    ReasonCode = "unauthorized_root"
+	ReasonInvalidSelection    ReasonCode = "invalid_selection"
+	ReasonActiveViewMutated   ReasonCode = "active_view_mutated"
+	ReasonViewNotFound        ReasonCode = "view_not_found"
+	ReasonContextCanceled     ReasonCode = "context_canceled"
 )
 
 // CacheRevalidation describes the adapter's attribute/directory cache coherence guarantees.
@@ -114,7 +116,9 @@ type AdapterFacts struct {
 	MetadataCapabilities      MetadataCapabilities `json:"metadata_capabilities"`
 	SupportsPrivateGit        bool                 `json:"supports_private_git"`
 	SupportsCheckpointBarrier bool                 `json:"supports_checkpoint_barrier"`
-	OtherUserAccess           OtherUserAccess      `json:"other_user_access"`
+	// BarrierHoldBound is how long a checkpoint barrier may hold the view's writes.
+	BarrierHoldBound time.Duration   `json:"barrier_hold_bound,omitempty"`
+	OtherUserAccess  OtherUserAccess `json:"other_user_access"`
 }
 
 // ProbeConfig configures a real confinement probe of an adapter.
@@ -254,6 +258,9 @@ type PrepareRequest struct {
 	CloneDirectory  DirectoryCloner
 	QuiesceHook     func(ctx context.Context, viewID string) error
 	FlushClientHook func(ctx context.Context, viewID string) error
+	// ResumeWorkingState reopens the view whose working storage is at BackingDir instead of starting
+	// an empty one. Only a mounted view after an engine exit within the same boot is resumed.
+	ResumeWorkingState bool
 }
 
 // PreparedRoot describes one usable root mapping inside a prepared worker view.
@@ -287,7 +294,22 @@ type PreparedView struct {
 	ObservedBytes   int64                        `json:"observed_bytes"`
 	Selection       SelectionFacts               `json:"selection"`
 	Materialize     MaterializeStats             `json:"materialize"`
-	Core            *layeredfs.Core              `json:"-"`
+	// Resumed reports the working state a resumed view restored.
+	Resumed *layeredfs.ResumeReport `json:"resumed,omitempty"`
+	Core    *layeredfs.Core         `json:"-"`
+}
+
+// OpenViewCore starts a view's core, or resumes the one its working storage holds when req asks.
+func OpenViewCore(req PrepareRequest, cfg layeredfs.Config) (*layeredfs.Core, *layeredfs.ResumeReport, error) {
+	if !req.ResumeWorkingState {
+		core, err := layeredfs.New(cfg)
+		return core, nil, err
+	}
+	core, report, err := layeredfs.Resume(cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+	return core, &report, nil
 }
 
 // CommandAccessSpec supplies mounted/materialized paths and confinement facts to the command launcher.

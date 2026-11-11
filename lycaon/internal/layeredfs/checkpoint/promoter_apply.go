@@ -56,6 +56,8 @@ type ApplyRequest struct {
 func (txn *Transaction) ApplyCheckpoint(ctx context.Context, pr *Promoter, req ApplyRequest) (*PromotionJournalRecord, error) {
 	pr.applyMu.Lock()
 	defer pr.applyMu.Unlock()
+	pr.targets.holdRoots()
+	defer pr.targets.releaseRoots()
 	rec, err := txn.applyCheckpoint(ctx, pr, req)
 	if err != nil {
 		return nil, errors.Join(err, txn.rollback(context.WithoutCancel(ctx)))

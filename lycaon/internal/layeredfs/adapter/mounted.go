@@ -80,6 +80,7 @@ func NewMountedAdapter(cfg MountedAdapterConfig) *MountedAdapter {
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
+			BarrierHoldBound:          layeredfs.DefaultBarrierHoldBound,
 			OtherUserAccess:           OtherUserAccessNone,
 		},
 		views: make(map[string]*mountedViewState),
@@ -204,7 +205,7 @@ func (a *MountedAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Prep
 		return nil, err
 	}
 
-	core, err := layeredfs.New(layeredfs.Config{
+	core, resumed, err := OpenViewCore(req, layeredfs.Config{
 		ViewID:          req.ViewID,
 		BackingDir:      backingDir,
 		Roots:           rootSpecs,
@@ -227,6 +228,7 @@ func (a *MountedAdapter) Prepare(ctx context.Context, req PrepareRequest) (*Prep
 	}
 
 	view := &PreparedView{
+		Resumed:         resumed,
 		ViewID:          req.ViewID,
 		AdapterID:       a.cfg.AdapterID,
 		Facts:           a.facts,

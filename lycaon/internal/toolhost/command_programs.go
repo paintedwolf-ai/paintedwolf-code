@@ -245,6 +245,7 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 	}
 	owners.Boundary = t.boundary
 	owners.PrivateGit = t.privateGit
+	owners.Launch = command.BindAgentLaunch
 	registered := func(tool string) bool {
 		if tool == "" || t.registry == nil {
 			return false

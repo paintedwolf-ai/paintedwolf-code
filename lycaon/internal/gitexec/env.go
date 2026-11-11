@@ -47,7 +47,7 @@ func buildEnv(ctx context.Context, bin string, opts Opts) ([]string, error) {
 		return nil, err
 	}
 	extras = append(extras, trust...)
-	if opts.Profile == ProfileNetwork {
+	if opts.Profile == ProfileNetwork && !agentLaunched(ctx) {
 		if socket := agentSocketResolver(ctx); socket != "" {
 			extras = append(extras, "SSH_AUTH_SOCK="+socket)
 		}

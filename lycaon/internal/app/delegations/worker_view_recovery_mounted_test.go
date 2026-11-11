@@ -17,8 +17,10 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter/platform"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/workspace"
 )
@@ -48,8 +50,10 @@ type helperWorker struct {
 
 // TestRealMountKilledEngineRecoversThroughStartup [process-crash evidence, not physical
 // power-loss proof] kills a real serving process with several mounted workers and a holder inside
-// one mount. A new engine settles every recorded mount through the production startup entrypoint
-// and reconstructs each checkpoint, and leaves a mount it never recorded, beside them, untouched.
+// one mount. A new engine settles every recorded mount through the production startup entrypoint.
+// The worker whose engine exited in this boot resumes its working storage, names and bytes; the one
+// recorded under an earlier boot rebuilds from its checkpoint and keeps the rest aside. A mount the
+// engine never recorded, beside them, is untouched.
 func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	if os.Getenv(realEngineHelperEnv) != "" {
 		runRealEngine(t)
@@ -87,7 +91,7 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	testutil.FailErr(t, "executable", err)
 	engine := exec.Command(exe, "-test.run=^TestRealMountKilledEngineRecoversThroughStartup$")
 	engine.Env = append(os.Environ(), realEngineHelperEnv+"=1",
-		"HELPER_WORKERS="+string(encoded), "HELPER_FOREIGN_ROOT="+foreignRoot, "HELPER_FOREIGN_RUNTIME="+foreignRuntime,
+		"HELPER_WORKERS="+string(encoded), "HELPER_BOOT="+thisBoot(t), "HELPER_FOREIGN_ROOT="+foreignRoot, "HELPER_FOREIGN_RUNTIME="+foreignRuntime,
 		"HELPER_PROJECT="+f.project, "HELPER_STORE="+filepath.Join(enginepaths.WorkerRecoveryRootUnder(f.stateRoot), "checkpoints"),
 		"HELPER_STATE="+filepath.Join(enginepaths.WorkerRecoveryRootUnder(f.stateRoot), "state"))
 	engine.Stderr = os.Stderr
@@ -141,28 +145,47 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	testutil.FailErr(t, "production coordinator", err)
 	next := f.boot()
 	next.Recovery = coordinator
-	next.Workspace = workspace.NewManager(next.BranchRoot).WithRecovery(coordinator)
+	// The restarted engine can mount, so a worker created mounted is rebuilt on its mount.
+	next.Workspace = workspace.NewManager(next.BranchRoot).WithRecovery(coordinator).
+		WithSelector(platform.NewSelector(platform.Config{Confinement: fixtureConfinement{}}))
 	next.Queue.SetWorkerWorkspaceManager(next.Workspace)
 	testutil.FailErr(t, "startup recovery", next.RecoverWorkerViews(t.Context()))
 
 	for i, w := range workers {
-		if err := workspace.RefuseMountedBranch(w.Root); err != nil {
-			t.Fatalf("mount remains after recovery: %v", err)
+		// Each worker is rebuilt on a live mount of its own; the dead one would not answer.
+		if _, err := os.ReadDir(w.Root); err != nil {
+			t.Fatalf("branch does not answer after recovery: %v", err)
 		}
 		if resumed, ok := next.Queue.Get(w.Task); !ok || resumed.Status.IsTerminal() {
-			t.Fatalf("worker did not resume from its checkpoint: %+v", resumed)
+			t.Fatalf("worker did not resume: %+v", resumed)
+		}
+		records, err := next.Recovery.ListInterruptedRecords(w.Task)
+		testutil.FailErr(t, "interrupted", err)
+		idents, err := next.Recovery.ListMountIdentities(w.Task)
+		testutil.FailErr(t, "identities", err)
+		if i == 0 {
+			// Same boot: the view comes back under its own identity with everything the worker did.
+			if got, want := f.readBranch(w.Root, "app.txt"), "unsealed-after-A-0\n"; got != want {
+				t.Fatalf("resumed branch shows %q, want %q", got, want)
+			}
+			if got := f.readBranch(w.Root, "moved.txt"); got != "moved-0\n" {
+				t.Fatalf("resumed branch lost a rename: %q", got)
+			}
+			if _, err := os.Stat(filepath.Join(w.Root, "extra.txt")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("a renamed name came back: %v", err)
+			}
+			if len(records) != 0 || len(idents) != 1 || idents[0].ViewID != w.Task {
+				t.Fatalf("resumed worker: interrupted %+v identities %+v", records, idents)
+			}
+			continue
 		}
 		if got, want := f.readBranch(w.Root, "app.txt"), fmt.Sprintf("checkpoint-A-%d\n", i); got != want {
 			t.Fatalf("rebuilt branch shows %q, want %q", got, want)
 		}
-		records, err := next.Recovery.ListInterruptedRecords(w.Task)
-		testutil.FailErr(t, "interrupted", err)
 		if len(records) != 1 || !quarantineHolds(t, records[0].QuarantineDir, fmt.Sprintf("unsealed-after-A-%d\n", i)) {
 			t.Fatalf("interrupted work: %+v", records)
 		}
-		if idents, err := next.Recovery.ListMountIdentities(w.Task); err != nil {
-			t.Fatalf("identities: %v", err)
-		} else if len(idents) != 1 || idents[0].ViewID == w.Task {
+		if len(idents) != 1 || idents[0].ViewID == w.Task {
 			t.Fatalf("killed view identity must be gone, rebuilt view recorded: %+v", idents)
 		}
 	}
@@ -198,7 +221,7 @@ func runRealEngine(t *testing.T) {
 	testutil.FailErr(t, "helper workers", json.Unmarshal([]byte(os.Getenv("HELPER_WORKERS")), &workers))
 	store, err := checkpoint.NewStore(os.Getenv("HELPER_STORE"))
 	testutil.FailErr(t, "helper store", err)
-	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{RootDir: os.Getenv("HELPER_STATE"), CheckpointStore: store})
+	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{RootDir: os.Getenv("HELPER_STATE"), CheckpointStore: store, CurrentBootID: os.Getenv("HELPER_BOOT")})
 	testutil.FailErr(t, "helper coordinator", err)
 	mountedHost := newRealEngineHost()
 	adp := mountedHost.adapter
@@ -214,8 +237,13 @@ func runRealEngine(t *testing.T) {
 	}
 	for i, w := range workers {
 		view := prepare(w.Task, w.Root, w.Runtime, w.Backing)
+		// The first worker's engine exits in this boot; the second's journal was written in an earlier one.
+		boot := os.Getenv("HELPER_BOOT")
+		if i > 0 {
+			boot = "an-earlier-boot"
+		}
 		testutil.FailErr(t, "helper journal", coordinator.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
-			WorkerID: w.Task, ViewID: w.Task, TaskID: w.Task, ProjectID: w.Key, AdapterID: adp.ID(), BackingDir: view.BackingDir,
+			WorkerID: w.Task, ViewID: w.Task, TaskID: w.Task, ProjectID: w.Key, AdapterID: adp.ID(), BackingDir: view.BackingDir, BootID: boot,
 		}))
 		app := filepath.Join(w.Root, "app.txt")
 		testutil.FailErr(t, "helper write", os.WriteFile(app, fmt.Appendf(nil, "checkpoint-A-%d\n", i), 0o644))
@@ -230,13 +258,29 @@ func runRealEngine(t *testing.T) {
 		testutil.FailErr(t, "helper publish", err)
 		testutil.FailErr(t, "helper journal publish", coordinator.RecordTransition(w.Task, w.Task, recovery.PhasePublication, recovery.StateCommitted, checkpointID, "publish", nil, false))
 		testutil.FailErr(t, "helper unsealed", os.WriteFile(app, fmt.Appendf(nil, "unsealed-after-A-%d\n", i), 0o644))
-		file, err := os.Open(app)
-		testutil.FailErr(t, "helper reopen", err)
-		testutil.FailErr(t, "helper sync", file.Sync())
-		_ = file.Close()
+		extra := filepath.Join(w.Root, "extra.txt")
+		testutil.FailErr(t, "helper create", os.WriteFile(extra, fmt.Appendf(nil, "moved-%d\n", i), 0o644))
+		for _, name := range []string{app, extra} {
+			file, err := os.Open(name)
+			testutil.FailErr(t, "helper reopen", err)
+			testutil.FailErr(t, "helper sync", file.Sync())
+			_ = file.Close()
+		}
+		testutil.FailErr(t, "helper rename", os.Rename(extra, filepath.Join(w.Root, "moved.txt")))
 	}
 	foreignRuntime := os.Getenv("HELPER_FOREIGN_RUNTIME")
 	prepare("foreign", os.Getenv("HELPER_FOREIGN_ROOT"), foreignRuntime, filepath.Join(foreignRuntime, "backing"))
 	fmt.Println("ready")
 	_, _ = os.Stdin.Read(make([]byte, 1))
+}
+
+// thisBoot is the boot identity the production coordinator records, which an engine killed in this
+// boot shares.
+func thisBoot(t *testing.T) string {
+	t.Helper()
+	boot, ok := osprocess.BootID()
+	if !ok {
+		t.Fatal("this host reports no boot identity")
+	}
+	return boot
 }

@@ -122,8 +122,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-				tracker.w = nonNilWriter(streams.Error)
-				streams.Error = tracker
+				streams.Error = markingWriter{w: nonNilWriter(streams.Error), tracker: tracker}
 				return body(ctx, tc, streams)
 			})
 		}}, nil

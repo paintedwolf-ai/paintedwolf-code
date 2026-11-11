@@ -19,7 +19,7 @@ func linkPath(c *Core, oldPath, newPath QualifiedPath) (EntryAttr, error) {
 	if err := c.barrier.enterMutation(); err != nil {
 		return EntryAttr{}, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 
 	if oldPath.RootID != newPath.RootID {
 		return EntryAttr{}, syscall.EXDEV
@@ -131,7 +131,7 @@ func (c *Core) Unlink(qpath QualifiedPath, removeDir bool) error {
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 	return unlinkPathAdmitted(c, qpath, removeDir)
 }
 
@@ -256,7 +256,7 @@ func (c *Core) RemoveAll(qpath QualifiedPath) error {
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 	return removeAllPathAdmitted(c, qpath)
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -197,6 +198,9 @@ type ChooseRequest struct {
 	Overrun *BudgetOverrunError
 	// HiddenPaths are engine storage inside the roots, which no tree holds and the cost leaves out.
 	HiddenPaths []string
+	// KeepMounted rebuilds a worker created mounted: it keeps the mount when the mount is available
+	// and otherwise follows the rule.
+	KeepMounted bool
 }
 
 // Choice is one worker's provider and the facts that chose it.
@@ -213,6 +217,15 @@ type Choice struct {
 // serves when its probe succeeds; when no mounted provider can serve, selection refuses with an
 // actionable error rather than launching an over-limit copy.
 func (s *Selector) Choose(ctx context.Context, req ChooseRequest) (Choice, error) {
+	if req.KeepMounted {
+		if primary := s.primaryForOS(); primary != nil {
+			reason, probe, err := s.probeMount(ctx, primary, req.Probe)
+			if err == nil && reason == ReasonNone {
+				return Choice{Adapter: primary, Probe: probe, Facts: SelectionFacts{Provider: primary.ID(), Reason: SelectionKeptMounted}}, nil
+			}
+			slog.InfoContext(ctx, "mounted worker cannot keep its mount", "adapter_id", primary.ID(), "reason", reason, "diagnostic", probe.Diagnostic, "error", err)
+		}
+	}
 	roots, anyCopyOnly, err := classifyRootClones(ctx, req)
 	if err != nil {
 		return Choice{}, err

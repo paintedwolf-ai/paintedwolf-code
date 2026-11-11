@@ -105,7 +105,6 @@ func TestGitCommitMessageDraftsFromDiff(t *testing.T) {
 }
 
 func TestGitCommitMessageDraftsFromUntrackedOnly(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir, _ := contractfixture.InitCommittedRepo(t)
 	if err := os.WriteFile(filepath.Join(dir, "new.txt"), []byte("brand new file\n"), 0o644); err != nil {
 		t.Fatalf("write new.txt: %v", err)
@@ -189,7 +188,6 @@ func TestGitCheckoutRequiresBranch(t *testing.T) {
 }
 
 func TestGitInitMakesRepoAvailable(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open", err)
@@ -274,7 +272,6 @@ func TestGitInitUnknownRootID(t *testing.T) {
 }
 
 func TestGitReposTwoCheckouts(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	a := contractfixture.InitDirtyRepo(t)
 	b := contractfixture.InitDirtyRepo(t)
 	reg := project.NewMemoryRegistry()
@@ -307,7 +304,6 @@ func TestGitReposTwoCheckouts(t *testing.T) {
 }
 
 func TestGitReposTwoRootsOneCheckout(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	repo := contractfixture.InitDirtyRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(web, 0o755))
@@ -422,7 +418,6 @@ func TestGitStatusAndChangesAnswerFromAnAgedGeneration(t *testing.T) {
 }
 
 func TestGitScopedReadsActOnNamedRepo(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	aDir, aRun := contractfixture.InitCommittedRepo(t)
 	bDir, bRun := contractfixture.InitCommittedRepo(t)
 	aRun("checkout", "-b", "branch-a")
@@ -473,7 +468,6 @@ func TestGitScopedReadsActOnNamedRepo(t *testing.T) {
 }
 
 func TestGitScopedWriteLeavesSiblingUntouched(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	aDir := contractfixture.InitDirtyRepo(t)
 	bDir := contractfixture.InitDirtyRepo(t)
 	reg := project.NewMemoryRegistry()
@@ -506,7 +500,6 @@ func TestGitScopedWriteLeavesSiblingUntouched(t *testing.T) {
 }
 
 func TestGitInitSecondaryRoot(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	primary := contractfixture.InitDirtyRepo(t)
 	secondary := t.TempDir()
 	reg := project.NewMemoryRegistry()
@@ -551,7 +544,6 @@ func TestGitReposUnknownSessionIsRejected(t *testing.T) {
 }
 
 func TestGitFileAttributionLongestNestedRoot(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	repo, run := contractfixture.InitCommittedRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	testutil.FailErr(t, "mkdir web", os.MkdirAll(web, 0o755))
@@ -593,7 +585,6 @@ func TestGitFileAttributionLongestNestedRoot(t *testing.T) {
 }
 
 func TestGitFileAttributionLongestRootAndOutside(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	repo, run := contractfixture.InitCommittedRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	apiDir := filepath.Join(repo, "packages", "api")

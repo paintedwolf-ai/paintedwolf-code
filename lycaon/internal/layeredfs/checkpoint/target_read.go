@@ -13,11 +13,19 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func (tree *promotionTargets) openTargetRoot(id string) (*os.Root, error) {
+// openTargetRoot opens a target root and checks it is the directory its path names. A transaction
+// holding its roots opens and checks each once.
+func (tree *promotionTargets) openTargetRoot(id string) (*targetRoot, error) {
+	tree.mu.Lock()
+	defer tree.mu.Unlock()
+	if held := tree.held[id]; held != nil {
+		return held, nil
+	}
 	name, ok := tree.roots[id]
 	if !ok {
 		return nil, layeredfs.ErrInvalidRoot
 	}
+	tree.ops.add("open_root")
 	before, err := os.Lstat(name)
 	if err != nil {
 		return nil, err
@@ -37,7 +45,38 @@ func (tree *promotionTargets) openTargetRoot(id string) (*os.Root, error) {
 		}
 		return nil, ErrStalePreviewTargetChanged
 	}
-	return root, nil
+	opened := &targetRoot{root: root, ops: tree.ops}
+	if tree.held != nil {
+		opened.held = true
+		tree.held[id] = opened
+	}
+	return opened, nil
+}
+
+// holdRoots keeps each target root open from its first use until the matching releaseRoots. Holds
+// nest, so overlapping passes share the roots and the last release closes them.
+func (tree *promotionTargets) holdRoots() {
+	tree.mu.Lock()
+	defer tree.mu.Unlock()
+	if tree.holds == 0 {
+		tree.held = map[string]*targetRoot{}
+	}
+	tree.holds++
+}
+
+func (tree *promotionTargets) releaseRoots() {
+	tree.mu.Lock()
+	defer tree.mu.Unlock()
+	if tree.holds == 0 {
+		return
+	}
+	if tree.holds--; tree.holds > 0 {
+		return
+	}
+	for _, root := range tree.held {
+		_ = root.root.Close()
+	}
+	tree.held = nil
 }
 
 func (tree *promotionTargets) observeTarget(qpath layeredfs.QualifiedPath) (TargetObservation, error) {

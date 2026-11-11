@@ -343,7 +343,7 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 	}
 	var overrun *adapter.BudgetOverrunError
 	for {
-		choice, err := m.chooseWorkspaceAdapter(ctx, root, grants, journal.ProjectID, decision, overrun)
+		choice, err := m.chooseWorkspaceAdapter(ctx, root, grants, journal.ProjectID, decision, overrun, meta.PreparationKind == adapter.PreparationMounted && overrun == nil)
 		if err != nil {
 			return false, err
 		}
@@ -373,8 +373,10 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 		if err := markSnapshotCompleteWithClaim(root, choice, result.PreparedView, nil, nil); err != nil {
 			return false, err
 		}
-		if err := recordBranchCheckpoint(root, coord.CheckpointStore(), journal.LastPublishedCheckpointID); err != nil {
-			return false, err
+		if journal.LastPublishedCheckpointID != "" {
+			if err := recordBranchCheckpoint(root, coord.CheckpointStore(), journal.LastPublishedCheckpointID); err != nil {
+				return false, err
+			}
 		}
 		if choice.Facts.PreparationKind == adapter.PreparationMounted {
 			if err := m.adoptRecoveredMountedView(ctx, root, jobID, journal.ProjectID, choice.Adapter, result.PreparedView); err != nil {

@@ -1,4 +1,4 @@
-//go:build !linux
+//go:build !linux && !darwin
 
 package gitcredential
 
@@ -8,5 +8,5 @@ import (
 )
 
 func verifyPeer(*net.UnixConn, string, string, servedProcess) error {
-	return errors.New("git credential service peers are verified only on Linux")
+	return errors.New("git credential service peers are verified only on Linux and macOS")
 }

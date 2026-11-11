@@ -43,7 +43,7 @@ func (c *Core) RegisterSeedBase(base BaseCapture) error {
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.state.released {
@@ -51,7 +51,7 @@ func (c *Core) RegisterSeedBase(base BaseCapture) error {
 	}
 	base.Path.Rel = cleanRelPath(base.Path.Rel)
 	if _, exists := c.state.basesByPath[base.Path]; !exists {
-		c.state.basesByPath[base.Path] = cloneBaseCapture(base)
+		c.setBase(base.Path, cloneBaseCapture(base))
 		if base.Kind == EntryRegular && base.Size > 0 {
 			c.counters.capturedBaseBytes.Add(base.Size)
 		}
@@ -104,7 +104,7 @@ func ensureBaseCaptured(c *Core, qpath QualifiedPath) (BaseCapture, error) {
 		}
 		return cloneBaseCapture(existing), nil
 	}
-	c.state.basesByPath[qpath] = captured
+	c.setBase(qpath, captured)
 	if captured.BackingFile != "" {
 		markDirtyBackingFileLocked(c, captured.BackingFile)
 	}
@@ -126,7 +126,7 @@ func recordAbsentBase(c *Core, qpath QualifiedPath) (BaseCapture, error) {
 		return cloneBaseCapture(existing), nil
 	}
 	absent := BaseCapture{Path: qpath, Layer: LayerTrunk, Kind: EntryAbsent, CapturedAt: time.Now()}
-	c.state.basesByPath[qpath] = absent
+	c.setBase(qpath, absent)
 	return absent, nil
 }
 

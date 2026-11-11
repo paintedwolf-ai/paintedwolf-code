@@ -24,7 +24,7 @@ func (c *Core) Mknod(qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error) {
 	if err := c.barrier.enterMutation(); err != nil {
 		return EntryAttr{}, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 	for {
 		startGen, err := currentNamespaceGen(c)
 		if err != nil {
@@ -77,6 +77,7 @@ func (c *Core) Mknod(qpath QualifiedPath, mode fs.FileMode) (EntryAttr, error) {
 		}
 		c.unmarkDeleted(targetPath)
 		c.state.nodesByID[nid] = node
+		c.noteNode(nid)
 		c.setPrivatePath(targetPath, nid)
 		bumpParentDirGenLocked(c, targetPath)
 		recordJournalLocked(c, JournalOpMknod, targetPath, nil, node, 0)
@@ -100,7 +101,7 @@ func (c *Core) SetAttrNode(nodeID NodeID, gen Generation, req SetAttrRequest) (E
 	if err := c.barrier.enterMutation(); err != nil {
 		return EntryAttr{}, err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 
 	lookup := func() (*privateNode, error) {
 		if c.state.released {
@@ -272,6 +273,7 @@ func recordOriginLocked(c *Core, node *privateNode, origin NodeID) {
 // reclaimNodeLocked drops an unlinked node once no handle can reach it, so removing files does not
 // grow view state. The journal keeps what recovery needs.
 func reclaimNodeLocked(c *Core, node *privateNode) {
+	c.noteNode(node.id)
 	if node.flags.backingPath != "" {
 		delete(c.state.dirtyBackingFiles, node.flags.backingPath)
 	}

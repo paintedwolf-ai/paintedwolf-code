@@ -24,8 +24,11 @@ var (
 	ErrSourceChangedDuringCapture = errors.New("layeredfs: source changed during coherent base capture")
 	ErrGitPending                 = errors.New("layeredfs: private git initialization is pending")
 	ErrBarrierActive              = errors.New("layeredfs: checkpoint barrier is active")
-	ErrInvalidRoot                = errors.New("layeredfs: invalid or unknown root")
-	ErrUnsupportedOperation       = errors.New("layeredfs: operation not supported")
+	// ErrBarrierExpired is a checkpoint barrier that held mutations past its bound; it has already
+	// admitted them again.
+	ErrBarrierExpired       = errors.New("layeredfs: checkpoint barrier passed its hold bound")
+	ErrInvalidRoot          = errors.New("layeredfs: invalid or unknown root")
+	ErrUnsupportedOperation = errors.New("layeredfs: operation not supported")
 )
 
 type NodeID uint64
@@ -181,6 +184,8 @@ type ObservationSink interface {
 
 // FaultHooks provides deterministic test hooks for concurrency barriers and fault injection.
 type FaultHooks struct {
+	// BarrierExpiry replaces a barrier's hold-bound timer.
+	BarrierExpiry          func() <-chan time.Time
 	BeforeAppendLock       func(qpath QualifiedPath, data []byte)
 	WriteAtFunc            func(qpath QualifiedPath, file *os.File, data []byte, offset int64) (int, error)
 	LowerXattrHook         func(qpath QualifiedPath) error
@@ -190,7 +195,13 @@ type FaultHooks struct {
 	NamespacePreCommitHook func(op string, qpath QualifiedPath)
 }
 
+// DefaultBarrierHoldBound is how long a checkpoint barrier may hold a view's mutations. A worker's
+// writes wait while it holds, so past this a checkpoint fails rather than stalling the worker.
+const DefaultBarrierHoldBound = 5 * time.Second
+
 type Config struct {
+	// BarrierHoldBound bounds a checkpoint barrier's hold; zero is DefaultBarrierHoldBound.
+	BarrierHoldBound time.Duration
 	// FoldingProbe reads a root's name folding where its spec leaves it unset; nil uses
 	// ProbeNameFolding.
 	FoldingProbe        func(dir string) NameFolding
@@ -269,6 +280,10 @@ type Stats struct {
 	CapturedBaseBytes int64
 	JournalEntries    int64
 	Flushes           int64
+	// BarrierExpiries counts checkpoint barriers their hold bound ended.
+	BarrierExpiries int64
+	// WorkingLogRecords counts records appended to the working log.
+	WorkingLogRecords int64
 }
 
 type OpenFlags int

@@ -2,10 +2,13 @@ package recovery
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
@@ -47,10 +50,9 @@ func settleOwnedRuntimeForRecovery(
 	return procRec, mountRec, backingDir, err
 }
 
-// noteUnreleasedRuntime records that a view's namespace history is incomplete, before settling
-// erases the evidence. Core persists namespace records only at a barrier and at release, so any
-// made since the last barrier of a view that was never released may be lost. A retry after a
-// crash during settlement still reads this.
+// noteUnreleasedRuntime records that a view was never released, before settling erases the
+// evidence. If its working storage cannot be resumed, what changed since its last checkpoint is of
+// unknown scope. A retry after a crash during settlement still reads this.
 func noteUnreleasedRuntime(c *Coordinator, j *WorkerLifecycleJournal) error {
 	if j.ActiveUnknownScope {
 		return nil
@@ -85,9 +87,17 @@ func salvageIfInterruptedOrUnsealed(
 		// Every byte is already in the checkpoint; only the namespace history is unknown.
 		salvageFrom, diagnostic = "", "view was not released; namespace changes since its last barrier are unknown"
 	}
+	paths, unknownScope := j.ActivePaths, j.ActiveUnknownScope
+	if logged, complete := layeredfs.WorkingLogPaths(prevBacking); complete {
+		// The view's working log names every path it changed, so the scope is known.
+		paths, unknownScope = append(append([]layeredfs.QualifiedPath(nil), paths...), logged...), false
+		if salvageFrom == "" {
+			diagnostic = "view was not released; its working log names what changed since its last barrier"
+		}
+	}
 	rec, err := c.PreserveInterruptedWorkingStorage(
 		j.WorkerID, prevViewID, manifest.CheckpointID, salvageFrom,
-		phase, j.ActiveOperation, j.ActivePaths, j.ActiveUnknownScope,
+		phase, j.ActiveOperation, paths, unknownScope,
 		diagnostic,
 	)
 	if err != nil {
@@ -116,6 +126,28 @@ func reconstructViewFromManifest(
 	prepReq adapter.PrepareRequest,
 	manifest checkpoint.Manifest,
 ) (*adapter.PreparedView, error) {
+	if len(manifest.ParentCheckpoints) > 0 && len(prepReq.ParentLayers) == 0 {
+		layers, _, err := c.OpenCheckpointChainLayers(ctx, manifest.ParentCheckpoints)
+		if err != nil {
+			return nil, err
+		}
+		prepReq.ParentLayers = layers
+	}
+	return prepareRecoveredView(ctx, c, workerID, newViewID, adp, prepReq, func(view *adapter.PreparedView) error {
+		return c.ApplyCheckpointToView(ctx, view, manifest)
+	})
+}
+
+// prepareRecoveredView prepares a worker's next view, binds its private Git, lets fill bring it to
+// the state it resumes from, and records its identity.
+func prepareRecoveredView(
+	ctx context.Context,
+	c *Coordinator,
+	workerID, newViewID string,
+	adp adapter.Adapter,
+	prepReq adapter.PrepareRequest,
+	fill func(*adapter.PreparedView) error,
+) (*adapter.PreparedView, error) {
 	if adp == nil {
 		return nil, fmt.Errorf("recovery: Adapter is required")
 	}
@@ -124,13 +156,6 @@ func reconstructViewFromManifest(
 	}
 	if strings.TrimSpace(prepReq.ViewID) == "" {
 		prepReq.ViewID = fmt.Sprintf("view-%s-rec-%d", workerID, c.seq.Add(1))
-	}
-	if len(manifest.ParentCheckpoints) > 0 && len(prepReq.ParentLayers) == 0 {
-		layers, _, err := c.OpenCheckpointChainLayers(ctx, manifest.ParentCheckpoints)
-		if err != nil {
-			return nil, err
-		}
-		prepReq.ParentLayers = layers
 	}
 	if c.cfg.GitManager != nil && prepReq.GitInterceptor == nil {
 		prepReq.GitInterceptor = c.cfg.GitManager
@@ -154,9 +179,11 @@ func reconstructViewFromManifest(
 			return nil, bErr
 		}
 	}
-	if err := c.ApplyCheckpointToView(ctx, view, manifest); err != nil {
-		_, _ = adp.Release(ctx, view.ViewID)
-		return nil, err
+	if fill != nil {
+		if err := fill(view); err != nil {
+			_, _ = adp.Release(ctx, view.ViewID)
+			return nil, err
+		}
 	}
 
 	if err := recordPreparedViewIdentity(c, workerID, adp, view); err != nil {
@@ -239,4 +266,39 @@ func containsString(list []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// resumeWorkingView reopens a mounted worker's working storage after its engine exited in this
+// boot, keeping every name and byte the view held. The view keeps its ID, which names its private
+// Git as well. It reports false when the storage cannot be resumed: after a reboot, during another
+// lifecycle operation, or when its log is unusable.
+func resumeWorkingView(ctx context.Context, c *Coordinator, req RecoverRequest, j WorkerLifecycleJournal, prevViewID, prevBacking string) (*adapter.PreparedView, bool, error) {
+	notResumed := func(reason string, attrs ...any) (*adapter.PreparedView, bool, error) {
+		slog.InfoContext(ctx, "worker working storage not resumed", append([]any{"worker_id", req.WorkerID, "reason", reason}, attrs...)...)
+		return nil, false, nil
+	}
+	switch {
+	case prevViewID == "" || prevBacking == "":
+		return notResumed("no_recorded_view")
+	case j.BootID != c.cfg.CurrentBootID:
+		return notResumed("other_boot")
+	case j.ActivePhase != "" && j.ActivePhase != PhaseActiveMutation:
+		return notResumed("lifecycle_operation", "phase", j.ActivePhase)
+	case req.Adapter == nil || req.Adapter.Facts().PreparationKind != adapter.PreparationMounted:
+		return notResumed("not_mounted")
+	}
+	prepReq := req.PrepareReq
+	prepReq.BackingDir, prepReq.ResumeWorkingState = prevBacking, true
+	if len(j.ParentCheckpointIDs) > 0 && len(prepReq.ParentLayers) == 0 {
+		layers, _, err := c.OpenCheckpointChainLayers(ctx, j.ParentCheckpointIDs)
+		if err != nil {
+			return nil, false, err
+		}
+		prepReq.ParentLayers = layers
+	}
+	view, err := prepareRecoveredView(ctx, c, req.WorkerID, prevViewID, req.Adapter, prepReq, nil)
+	if errors.Is(err, layeredfs.ErrWorkingStateUnusable) {
+		return notResumed("working_state_unusable", "error", err)
+	}
+	return view, err == nil, err
 }

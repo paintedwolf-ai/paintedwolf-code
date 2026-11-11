@@ -6,12 +6,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-func (tree *promotionTargets) ensureTargetParents(root *os.Root, path layeredfs.QualifiedPath) error {
+func (tree *promotionTargets) ensureTargetParents(root *targetRoot, path layeredfs.QualifiedPath) error {
 	var missing []string
 	for parent := filepath.Dir(path.Rel); parent != "."; parent = filepath.Dir(parent) {
 		info, err := root.Stat(parent)
@@ -35,7 +36,7 @@ func (tree *promotionTargets) ensureTargetParents(root *os.Root, path layeredfs.
 	return nil
 }
 
-func (tree *promotionTargets) makeTargetDirectory(root *os.Root, path layeredfs.QualifiedPath, mode os.FileMode, attrs map[string][]byte) error {
+func (tree *promotionTargets) makeTargetDirectory(root *targetRoot, path layeredfs.QualifiedPath, mode os.FileMode, attrs map[string][]byte) error {
 	if err := tree.ensureTargetParents(root, path); err != nil {
 		return err
 	}
@@ -71,7 +72,7 @@ func (tree *promotionTargets) makeTargetDirectory(root *os.Root, path layeredfs.
 }
 
 func createStagedTargetDirectory(
-	root *os.Root,
+	root *targetRoot,
 	path layeredfs.QualifiedPath,
 	mode os.FileMode,
 	attrs map[string][]byte,
@@ -141,4 +142,9 @@ type promotionTargets struct {
 	store           *Store
 	roots           map[string]string
 	recordPostimage func(layeredfs.QualifiedPath, *os.File) error
+	ops             *SourceOps
+
+	mu    sync.Mutex
+	held  map[string]*targetRoot
+	holds int
 }

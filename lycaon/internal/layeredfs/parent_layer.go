@@ -184,7 +184,7 @@ func (c *Core) RegisterLowerProvider(rootID string, provider LowerProvider) erro
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
 	}
-	defer c.barrier.leaveMutation()
+	defer c.endMutation()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.state.released {
@@ -216,6 +216,8 @@ func (c *Core) Stats() Stats {
 		CapturedBaseBytes: c.counters.capturedBaseBytes.Load(),
 		JournalEntries:    c.counters.journalEntries.Load(),
 		Flushes:           c.counters.flushes.Load(),
+		BarrierExpiries:   c.counters.barrierExpiries.Load(),
+		WorkingLogRecords: c.counters.workingLogRecords.Load(),
 	}
 }
 
@@ -251,6 +253,7 @@ func ensurePrivateDirNodeLocked(c *Core, qpath QualifiedPath, attr EntryAttr) *p
 		},
 	}
 	c.state.nodesByID[nid] = node
+	c.noteNode(nid)
 	c.setPrivatePath(qpath, nid)
 	if attr.Layer != LayerPrivate {
 		recordOriginLocked(c, node, attr.NodeID)
@@ -318,6 +321,7 @@ func ensureCopiedUpNode(c *Core, qpath QualifiedPath, expectedGen uint64) (*priv
 			},
 		}
 		c.state.nodesByID[nid] = node
+		c.noteNode(nid)
 		c.setPrivatePath(qpath, nid)
 		recordOriginLocked(c, node, res.attr.NodeID)
 		c.counters.physicalCopyUps.Add(1)

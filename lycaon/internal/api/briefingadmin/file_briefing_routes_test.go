@@ -40,7 +40,6 @@ func (s *switchable) PutEnabled(enabled bool) error { s.enabled = enabled; retur
 func newBriefingRoutes(t *testing.T, setting *switchable) briefingRoutes {
 	t.Helper()
 	t.Setenv("LYCAON_LLM_MOCK", "1")
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	deps := apitest.Dependencies(t, api.Dependencies{})
 	root := t.TempDir()
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "main.go"),

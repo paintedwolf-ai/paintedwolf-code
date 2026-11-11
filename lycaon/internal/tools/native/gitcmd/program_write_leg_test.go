@@ -36,6 +36,7 @@ func newGitProgramFixture(t *testing.T, workerBranch bool) *gitProgramFixture {
 	t.Helper()
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
+	owners.Launch = gitcmd.UnconfinedLaunch
 	f := &gitProgramFixture{out: &tools.ToolInvocationOut{}}
 
 	f.Fixture = programtest.New(t, programtest.Options{Natives: func(string) map[string]command.NativeOperation {

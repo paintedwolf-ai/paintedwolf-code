@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
+	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -112,16 +113,20 @@ func WaitBudget(args map[string]any) time.Duration {
 }
 
 // commandWaitBudget resolves the inline wait budget from wait_ms (clamped to MaxCommandWait),
-// falling back to DefaultCommandWait.
+// falling back to DefaultCommandWait. Verification runners scale the resolved budget
+// with the scheduler's timeout allowance, so race instrumentation does not promote
+// commands that would finish inline uninstrumented.
 func commandWaitBudget(args map[string]any) time.Duration {
+	budget := exec.DefaultCommandWait
 	if v, ok := args["wait_ms"].(float64); ok && v > 0 {
 		d := time.Duration(v) * time.Millisecond
 		if d > exec.MaxCommandWait {
-			return exec.MaxCommandWait
+			budget = exec.MaxCommandWait
+		} else {
+			budget = d
 		}
-		return d
 	}
-	return exec.DefaultCommandWait
+	return budget * time.Duration(runnerbudget.TimeoutScale())
 }
 
 func commandTimeout(args map[string]any, toolName string) time.Duration {
@@ -203,7 +208,7 @@ func runCommandForeground(
 	if err := runner.ValidateStages(ctx, stages); err != nil {
 		return RunOutcome{}, err
 	}
-	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, cmdKey, toolName, confineJob)
+	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, nil, cmdKey, toolName, confineJob)
 	if err != nil {
 		return RunOutcome{}, err
 	}
@@ -354,10 +359,24 @@ func (b commandForegroundConfine) close(ctx context.Context) []confine.EgressHos
 	return b.lease.Close(ctx)
 }
 
+// BindAgentLaunch admits the confined launch for an agent-chosen host program
+// such as the bundled Git. hostSockets are sockets the host serves to that
+// program itself, so they need no user capability. release closes its action
+// lease.
+func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, commandLine string, hostSockets []confine.SocketGrant) (exec.LaunchPlan, func(context.Context), error) {
+	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, hostSockets, commandLine, subject, true)
+	if err != nil {
+		return exec.LaunchPlan{}, nil, err
+	}
+	release := func(ctx context.Context) { bound.close(ctx) }
+	return agentCommandLaunch(tctx, subject, bound.confinement, bound.lease, commandLine), release, nil
+}
+
 func bindCommandForegroundConfine(
 	ctx context.Context,
 	tctx tools.ToolContext,
 	extraWriteRoots []string,
+	hostSockets []confine.SocketGrant,
 	cmdKey string,
 	toolName string,
 	confineJob bool,
@@ -369,6 +388,7 @@ func bindCommandForegroundConfine(
 		if tr != nil {
 			return commandForegroundConfine{}, tr
 		}
+		confReq.SocketGrants = append(confReq.SocketGrants, hostSockets...)
 		resolved, applied := confine.DefaultConfinement(confReq)
 		bound.confinement = resolved
 		if err := confine.RequireApplied(applied); err != nil {
