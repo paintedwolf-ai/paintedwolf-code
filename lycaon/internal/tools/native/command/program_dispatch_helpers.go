@@ -393,63 +393,118 @@ func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecificatio
 	return &effects
 }
 
+// boundChildEffects is the effect set of the command a dispatcher runs, so the
+// outer preflight reviews what the child will do. A child it cannot classify
+// counts as every effect.
 func (d *ProgramDispatcher) boundChildEffects(spec toolcontract.CommandSpecification, request commandprogram.OperationRequest) toolcontract.CommandEffects {
 	readonly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
-	var childArgv []string
+	childArgv, dispatches := d.childArgv(spec, request.Argv)
+	if !dispatches {
+		return readonly
+	}
+	if len(childArgv) == 0 {
+		return readonly
+	}
+	return d.commandEffects(childArgv, 0)
+}
+
+// childArgv is the command line a dispatching utility runs; dispatches is false
+// for a utility that runs none.
+func (d *ProgramDispatcher) childArgv(spec toolcontract.CommandSpecification, argv commandprogram.Fields) ([]string, bool) {
 	switch spec.Name {
 	case "xargs":
-		if bound, err := d.binder.Bind(spec, request.Argv); err == nil {
-			childArgv = bound.Operands().Values()
+		if bound, err := d.binder.Bind(spec, argv); err == nil {
+			return bound.Operands().Values(), true
 		}
-		if len(childArgv) == 0 {
-			return readonly
-		}
+		return nil, true
 	case "env":
-		if bound, err := d.binder.Bind(spec, request.Argv); err == nil {
+		if bound, err := d.binder.Bind(spec, argv); err == nil {
 			for i, op := range bound.Operands() {
 				if idx := strings.IndexByte(op.Value, '='); idx <= 0 {
-					childArgv = bound.Operands()[i:].Values()
-					break
+					return bound.Operands()[i:].Values(), true
 				}
 			}
 		}
-		if len(childArgv) == 0 {
-			return readonly
-		}
+		return nil, true
 	case "find":
-		values := request.Argv.Values()
+		values := argv.Values()
 		for i := 1; i < len(values); i++ {
 			if values[i] == "-exec" && i+1 < len(values) {
-				childArgv = values[i+1:]
-				break
+				return values[i+1:], true
 			}
 		}
-		if len(childArgv) == 0 {
-			return readonly
+		return nil, true
+	}
+	return nil, false
+}
+
+// maxChildDepth bounds dispatchers nested in dispatchers (env FOO=1 xargs ...).
+const maxChildDepth = 4
+
+// commandEffects is the union of what argv's command may do across its modes;
+// sed without -i is a read. A dispatcher contributes its own child's effects.
+func (d *ProgramDispatcher) commandEffects(argv []string, depth int) toolcontract.CommandEffects {
+	every, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress)
+	spec, ok := d.childSpec(argv)
+	if !ok || depth >= maxChildDepth {
+		return every
+	}
+	if spec.Name == "external" {
+		external, _ := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
+		return external
+	}
+	effects := spec.Effects
+	if spec.Name == "sed" && len(effects) > 1 && !slices.Contains(argv[1:], "-i") {
+		effects = effects[:1]
+	}
+	if len(effects) == 0 {
+		return every
+	}
+	var union toolcontract.CommandEffects
+	for _, effect := range effects {
+		var child *toolcontract.CommandEffects
+		if slices.Contains(effect.Requires, "bound-child-effect-set") {
+			nested, dispatches := d.childArgv(spec, valueFields(argv))
+			if !dispatches || len(nested) == 0 {
+				continue
+			}
+			set := d.commandEffects(nested, depth+1)
+			child = &set
 		}
-	default:
+		compiled, err := effect.CommandEffects(child)
+		if err != nil {
+			return every
+		}
+		union |= compiled
+	}
+	if union == 0 {
+		readonly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 		return readonly
 	}
-	childSpec, ok := d.run.commands[childArgv[0]]
-	if !ok || childSpec.Name == "external" {
-		ext, _ := toolcontract.NewCommandEffects(toolcontract.CommandExternalExec)
-		return ext
+	return union
+}
+
+func valueFields(values []string) commandprogram.Fields {
+	fields := make(commandprogram.Fields, len(values))
+	for i, value := range values {
+		fields[i] = commandprogram.Field{Value: value}
 	}
-	if len(childSpec.Effects) == 0 {
-		return readonly
+	return fields
+}
+
+// childSpec resolves a child's command the way dispatch does: a two-word
+// operation such as "git push" before its one-word family.
+func (d *ProgramDispatcher) childSpec(argv []string) (toolcontract.CommandSpecification, bool) {
+	if len(argv) == 0 {
+		return toolcontract.CommandSpecification{}, false
 	}
-	effect := childSpec.Effects[0]
-	if childSpec.Name == "sed" && slices.Contains(childArgv[1:], "-i") && len(childSpec.Effects) > 1 {
-		effect = childSpec.Effects[1]
+	if len(argv) > 1 {
+		if spec, ok := d.run.commands[argv[0]+" "+argv[1]]; ok {
+			return spec, true
+		}
 	}
-	if slices.Contains(effect.Requires, "bound-child-effect-set") {
-		return readonly
-	}
-	compiled, err := effect.CommandEffects(nil)
-	if err != nil {
-		return readonly
-	}
-	return compiled
+	spec, ok := d.run.commands[argv[0]]
+	return spec, ok
 }
 
 // revisionConflict is a COMMAND_REVISION_CONFLICT refusal's typed facts: the
