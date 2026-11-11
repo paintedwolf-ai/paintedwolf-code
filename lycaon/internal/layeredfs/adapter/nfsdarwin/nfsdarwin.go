@@ -163,6 +163,7 @@ func New(cfg Config) *Adapter {
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
+			BarrierHoldBound:          layeredfs.DefaultBarrierHoldBound,
 			// The export admits only the worker's own credentials.
 			OtherUserAccess: adapter.OtherUserAccessNone,
 		},

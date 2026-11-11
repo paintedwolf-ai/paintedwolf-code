@@ -80,6 +80,7 @@ func NewMountedAdapter(cfg MountedAdapterConfig) *MountedAdapter {
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
+			BarrierHoldBound:          layeredfs.DefaultBarrierHoldBound,
 			OtherUserAccess:           OtherUserAccessNone,
 		},
 		views: make(map[string]*mountedViewState),

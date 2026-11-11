@@ -67,13 +67,15 @@ const (
 	ReasonProbeReadWriteFailed     ReasonCode = "probe_read_write_failed"
 	ReasonCleanupFailed            ReasonCode = "cleanup_failed"
 	ReasonBarrierFailed            ReasonCode = "barrier_failed"
-	ReasonWorkspaceDoesNotFit      ReasonCode = "workspace_does_not_fit"
-	ReasonCopyPassedBudget         ReasonCode = "copy_passed_budget"
-	ReasonUnauthorizedRoot         ReasonCode = "unauthorized_root"
-	ReasonInvalidSelection         ReasonCode = "invalid_selection"
-	ReasonActiveViewMutated        ReasonCode = "active_view_mutated"
-	ReasonViewNotFound             ReasonCode = "view_not_found"
-	ReasonContextCanceled          ReasonCode = "context_canceled"
+	// ReasonBarrierExpired is a checkpoint barrier that held writes past its bound and let them go.
+	ReasonBarrierExpired      ReasonCode = "barrier_expired"
+	ReasonWorkspaceDoesNotFit ReasonCode = "workspace_does_not_fit"
+	ReasonCopyPassedBudget    ReasonCode = "copy_passed_budget"
+	ReasonUnauthorizedRoot    ReasonCode = "unauthorized_root"
+	ReasonInvalidSelection    ReasonCode = "invalid_selection"
+	ReasonActiveViewMutated   ReasonCode = "active_view_mutated"
+	ReasonViewNotFound        ReasonCode = "view_not_found"
+	ReasonContextCanceled     ReasonCode = "context_canceled"
 )
 
 // CacheRevalidation describes the adapter's attribute/directory cache coherence guarantees.
@@ -114,7 +116,9 @@ type AdapterFacts struct {
 	MetadataCapabilities      MetadataCapabilities `json:"metadata_capabilities"`
 	SupportsPrivateGit        bool                 `json:"supports_private_git"`
 	SupportsCheckpointBarrier bool                 `json:"supports_checkpoint_barrier"`
-	OtherUserAccess           OtherUserAccess      `json:"other_user_access"`
+	// BarrierHoldBound is how long a checkpoint barrier may hold the view's writes.
+	BarrierHoldBound time.Duration   `json:"barrier_hold_bound,omitempty"`
+	OtherUserAccess  OtherUserAccess `json:"other_user_access"`
 }
 
 // ProbeConfig configures a real confinement probe of an adapter.
