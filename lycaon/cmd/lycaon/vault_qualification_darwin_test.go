@@ -151,7 +151,7 @@ func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPr
 	if err := vaultTokenCmd.Run(); err == nil {
 		t.Fatal("unsigned release `pw token print` succeeded with vault file present")
 	}
-	if vaultTokenStdout.Len() != 0 || !strings.Contains(vaultTokenStderr.String(), "OSStatus -34018") {
+	if vaultTokenStdout.Len() != 0 || !strings.Contains(vaultTokenStderr.String(), "device-only identity in macOS data protection Keychain is missing") {
 		t.Fatalf("unsigned release `pw token print` with vault: stdout=%q stderr=%q", vaultTokenStdout.String(), vaultTokenStderr.String())
 	}
 
