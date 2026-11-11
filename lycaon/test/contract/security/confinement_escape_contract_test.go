@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -338,4 +339,29 @@ func newTestBrokerFor(decide egressproxy.EndpointDecider, resolve egressproxy.Pe
 	b := egressproxy.New(decide)
 	b.SetPeerResolver(resolve)
 	return b
+}
+
+// AC-ER02-3: a confined program gets the agent root reading, so it writes in
+// the admitted root and the boundary refuses a write into an attached
+// editor-only root of each class.
+func TestConfinedLaunchStaysOutOfEditorOnlyRoots(t *testing.T) {
+	self := requireLiveBoundary(t)
+	facts := rootfacts.Install(t)
+	params := project.CreateParams{Roots: []project.AttachRootParams{{Path: facts.Work}}}
+	for _, root := range facts.EditorOnly() {
+		params.Roots = append(params.Roots, project.AttachRootParams{Path: root.Path})
+	}
+	p, err := project.NewMemoryRegistry().Create(t.Context(), params)
+	testutil.FailErr(t, "create project", err)
+	c := confine.Confinement{Roots: project.RootPaths(p)}
+	assertInProjectWriteOK(t, self, c, facts.Work)
+	for _, root := range facts.EditorOnly() {
+		target := filepath.Join(root.Path, "agent-write.txt")
+		if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", target); code == 0 {
+			t.Errorf("%s: a confined program wrote into an editor-only root", root.Name)
+		}
+		if _, err := os.Stat(target); !os.IsNotExist(err) {
+			t.Errorf("%s: %s exists after the refused write (err %v)", root.Name, target, err)
+		}
+	}
 }
