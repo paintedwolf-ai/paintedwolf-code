@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/gitcredential"
+	"github.com/lycaon/lycaon/internal/hostidentity"
 	providercredentials "github.com/lycaon/lycaon/internal/llm/credentials"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/osprocess"
@@ -95,7 +96,11 @@ func allCredentialSlots() ([]credentialstore.Slot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []credentialstore.Slot{provider, research, oauth, fingerprint, managed, git}, nil
+	hostID, err := hostidentity.DefaultSlot()
+	if err != nil {
+		return nil, err
+	}
+	return []credentialstore.Slot{provider, research, oauth, fingerprint, managed, git, hostID}, nil
 }
 
 func describeCredentials(slots []credentialstore.Slot) error {
