@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/filebriefing"
+	"github.com/lycaon/lycaon/internal/stepbriefing"
 )
 
 // wireFileBriefings applies the briefing retention policy and builds the service.
@@ -39,5 +40,12 @@ func registerBriefingProfiles(b *serveBuilder) error {
 	if !ok {
 		return fmt.Errorf("tool activity briefings need program activity reads")
 	}
-	return b.providers.Briefings.Registry.Register(activitybriefing.New(b.storage.Sessions, programs, briefingstore.NewCausal(b.storage.Database)))
+	cause := briefingstore.NewCausal(b.storage.Database)
+	if err := b.providers.Briefings.Registry.Register(activitybriefing.New(b.storage.Sessions, programs, cause)); err != nil {
+		return err
+	}
+	if b.storage.SourceLedger == nil {
+		return nil
+	}
+	return b.providers.Briefings.Registry.Register(stepbriefing.New(stepbriefing.LedgerOf(b.storage.SourceLedger), cause))
 }

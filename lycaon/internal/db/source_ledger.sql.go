@@ -2436,7 +2436,7 @@ WHERE e.project_id = ?1
       UNION
       SELECT g.id FROM source_operations g WHERE g.git_transition_id = CAST(?3 AS TEXT)
   )
-ORDER BY e.ordinal
+ORDER BY e.ordinal, e.id
 LIMIT ?4
 `
 
@@ -2544,7 +2544,7 @@ SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(o.command_window_id, '') AS command_window_id
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = ?1 AND e.id IN (/*SLICE:effect_ids*/?)
-ORDER BY e.ordinal
+ORDER BY e.ordinal, e.id
 `
 
 type ListSourceEffectsByIDsParams struct {

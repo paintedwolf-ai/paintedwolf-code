@@ -1020,7 +1020,7 @@ SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(o.command_window_id, '') AS command_window_id
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = sqlc.arg(project_id) AND e.id IN (sqlc.slice(effect_ids))
-ORDER BY e.ordinal;
+ORDER BY e.ordinal, e.id;
 
 -- name: ListSourceEffectsByGroup :many
 SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
@@ -1038,5 +1038,5 @@ WHERE e.project_id = sqlc.arg(project_id)
       UNION
       SELECT g.id FROM source_operations g WHERE g.git_transition_id = CAST(sqlc.arg(git_transition_id) AS TEXT)
   )
-ORDER BY e.ordinal
+ORDER BY e.ordinal, e.id
 LIMIT sqlc.arg(row_limit);

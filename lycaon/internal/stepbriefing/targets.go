@@ -17,7 +17,7 @@ const ProfileID = "source_step"
 // maxOutsideMembers bounds the effects one outside group may name.
 const maxOutsideMembers = 256
 
-type step struct {
+type railStep struct {
 	key     string
 	ordinal int64
 	target  wire.SourceStepBriefingTarget
@@ -41,7 +41,7 @@ func Targets(page wire.SourceWalkResponse) map[string]wire.SourceStepBriefingTar
 		}
 	}
 	byGit, byCommand := map[string][]wire.SourceWalkEffect{}, map[string][]wire.SourceWalkEffect{}
-	var steps []step
+	var steps []railStep
 	for _, effect := range pageEffects(page) {
 		if id := trimmed(effect.GitChangeID); id != "" {
 			if _, ok := knownGit[id]; ok {
@@ -56,7 +56,7 @@ func Targets(page wire.SourceWalkResponse) map[string]wire.SourceStepBriefingTar
 			}
 		}
 		effect := effect
-		steps = append(steps, step{key: effect.ID, ordinal: effect.Ordinal, effect: &effect, target: wire.SourceStepBriefingTarget{
+		steps = append(steps, railStep{key: effect.ID, ordinal: effect.Ordinal, effect: &effect, target: wire.SourceStepBriefingTarget{
 			Kind: "effect", TargetKey: effect.ID, ScopeFingerprint: fingerprint(effect.ID, effect.AfterVersionID),
 			Scope: wire.SourceStepBriefingScope{Kind: "file", RootIds: []string{effect.RootID}, FileID: effect.FileID},
 		}})
@@ -64,7 +64,7 @@ func Targets(page wire.SourceWalkResponse) map[string]wire.SourceStepBriefingTar
 	for id, change := range knownGit {
 		key := "git:" + id
 		effects := byGit[id]
-		steps = append(steps, step{key: key, ordinal: change.Ordinal, target: groupTarget("git", key, append([]string{change.RootID}, roots(effects)...), effects)})
+		steps = append(steps, railStep{key: key, ordinal: change.Ordinal, target: groupTarget("git", key, append([]string{change.RootID}, roots(effects)...), effects)})
 	}
 	for id, command := range knownCommands {
 		effects, ok := byCommand[id]
@@ -72,9 +72,9 @@ func Targets(page wire.SourceWalkResponse) map[string]wire.SourceStepBriefingTar
 			continue
 		}
 		key := "command:" + id
-		steps = append(steps, step{key: key, ordinal: command.Ordinal, target: groupTarget("command", key, roots(effects), effects)})
+		steps = append(steps, railStep{key: key, ordinal: command.Ordinal, target: groupTarget("command", key, roots(effects), effects)})
 	}
-	slices.SortFunc(steps, func(a, b step) int {
+	slices.SortFunc(steps, func(a, b railStep) int {
 		if a.ordinal != b.ordinal {
 			if a.ordinal < b.ordinal {
 				return -1
@@ -114,10 +114,10 @@ func groupTarget(kind, key string, rootIDs []string, effects []wire.SourceWalkEf
 }
 
 // collapseOutside groups consecutive effects nobody in a session made; a
-// single one stays its own step, and a run over the member bound has no
+// single one stays its own railStep, and a run over the member bound has no
 // target.
-func collapseOutside(steps []step) []step {
-	var out, run []step
+func collapseOutside(steps []railStep) []railStep {
+	var out, run []railStep
 	flush := func() {
 		switch {
 		case len(run) == 1:
@@ -130,7 +130,7 @@ func collapseOutside(steps []step) []step {
 			key := "outside:" + run[0].effect.ID
 			target := groupTarget("outside", key, roots(effects), effects)
 			target.EffectIds = effectIDs(effects)
-			out = append(out, step{key: key, ordinal: run[0].ordinal, target: target})
+			out = append(out, railStep{key: key, ordinal: run[0].ordinal, target: target})
 		}
 		run = nil
 	}
