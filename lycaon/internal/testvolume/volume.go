@@ -32,6 +32,9 @@ const (
 	// Movable is clone-capable on macOS and a tmpfs on Linux, for tests of the
 	// volume going away. Linux tests inject the clone because tmpfs has none.
 	Movable
+	// Folding treats names differing only by case or Unicode form as one: default
+	// APFS on macOS, a casefold tmpfs on Linux.
+	Folding
 )
 
 // ReflinkVolumeEnv names a writable directory on a second reflink-capable Linux
