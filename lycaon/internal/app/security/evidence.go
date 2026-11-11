@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/observability"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/secretharvest"
@@ -117,8 +118,9 @@ func (b *Runtime) InstallEvidence(ctx context.Context, m *secretmatch.Matcher, f
 			if err != nil {
 				return nil, err
 			}
-			roots := make([]projectignore.Root, 0, len(p.Roots))
-			for _, r := range p.Roots {
+			admitted := project.AdmittedRoots(p)
+			roots := make([]projectignore.Root, 0, len(admitted))
+			for _, r := range admitted {
 				roots = append(roots, projectignore.Root{ID: r.ID, Path: r.Path})
 			}
 			return roots, nil

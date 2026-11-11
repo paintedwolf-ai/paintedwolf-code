@@ -141,7 +141,7 @@ func runClean(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), err)
 }
 
-func runWorktree(ctx context.Context, p Prepared, dir string, repo gitrepo.Repo, stderr io.Writer) (toolcontract.ProducerResult, error) {
+func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, stderr io.Writer) (toolcontract.ProducerResult, error) {
 	ops := p.Argv.Operands().Values()
 	switch ops[0] {
 	case "add":
@@ -154,12 +154,20 @@ func runWorktree(ctx context.Context, p Prepared, dir string, repo gitrepo.Repo,
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}
+		ctx, done, err := bindTargetLaunch(ctx, p, tc, writeRoot(bound.Resolved.Abs))
+		if err != nil {
+			return settleMutationError(err, toolcontract.NoEffect)
+		}
+		failed := true
+		defer func() { done(failed) }()
 		baseRef := ""
 		if len(ops) == 3 {
 			baseRef = ops[2]
 		}
-		if err := p.owners.Git.AddWorktree(ctx, repo.Root, bound.Resolved.Abs, branch, baseRef); err != nil {
-			return settleGitError(err, stderr, toolcontract.NoEffect)
+		addErr := p.owners.Git.AddWorktree(ctx, repo.Root, bound.Resolved.Abs, branch, baseRef)
+		failed = addErr != nil
+		if addErr != nil {
+			return settleGitError(addErr, stderr, toolcontract.NoEffect)
 		}
 	case "remove":
 		target := ops[1]
@@ -170,12 +178,28 @@ func runWorktree(ctx context.Context, p Prepared, dir string, repo gitrepo.Repo,
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}
-		if err := p.owners.Git.RemoveWorktree(ctx, repo.Root, bound.Resolved.Abs); err != nil {
-			return settleGitError(err, stderr, toolcontract.NoEffect)
+		ctx, done, err := bindTargetLaunch(ctx, p, tc, writeRoot(bound.Resolved.Abs))
+		if err != nil {
+			return settleMutationError(err, toolcontract.NoEffect)
+		}
+		failed := true
+		defer func() { done(failed) }()
+		removeErr := p.owners.Git.RemoveWorktree(ctx, repo.Root, bound.Resolved.Abs)
+		failed = removeErr != nil
+		if removeErr != nil {
+			return settleGitError(removeErr, stderr, toolcontract.NoEffect)
 		}
 	case "prune":
-		if err := p.owners.Git.PruneWorktrees(ctx, repo.Root); err != nil {
-			return settleGitError(err, stderr, toolcontract.NoEffect)
+		ctx, done, err := bindTargetLaunch(ctx, p, tc)
+		if err != nil {
+			return settleMutationError(err, toolcontract.NoEffect)
+		}
+		failed := true
+		defer func() { done(failed) }()
+		pruneErr := p.owners.Git.PruneWorktrees(ctx, repo.Root)
+		failed = pruneErr != nil
+		if pruneErr != nil {
+			return settleGitError(pruneErr, stderr, toolcontract.NoEffect)
 		}
 	}
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil

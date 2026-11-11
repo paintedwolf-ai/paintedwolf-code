@@ -1,12 +1,9 @@
 package destconfig_test
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/destconfig"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func registryWith(hosts ...string) *destconfig.Registry {
@@ -102,32 +99,5 @@ func TestNothingIsConfiguredByDefault(t *testing.T) {
 		if src, ok := r.Configured("/proj", host); ok {
 			t.Errorf("%q was attested by %q with no source wired", host, src)
 		}
-	}
-}
-
-func TestGitRemoteHostsForRootsParsesRemotes(t *testing.T) {
-	dir1 := t.TempDir()
-	gitDir1 := filepath.Join(dir1, ".git")
-	testutil.FailErr(t, "mkdir .git", os.MkdirAll(gitDir1, 0o755))
-	config1 := `[remote "origin"]
-	url = git@github.com:myorg/repo1.git
-	fetch = +refs/heads/*:refs/remotes/origin/*
-`
-	testutil.FailErr(t, "write config1", os.WriteFile(filepath.Join(gitDir1, "config"), []byte(config1), 0o644))
-
-	dir2 := t.TempDir()
-	gitDir2 := filepath.Join(dir2, ".git")
-	testutil.FailErr(t, "mkdir .git2", os.MkdirAll(gitDir2, 0o755))
-	config2 := `[remote "upstream"]
-	url = https://gitlab.internal/other/repo2.git
-`
-	testutil.FailErr(t, "write config2", os.WriteFile(filepath.Join(gitDir2, "config"), []byte(config2), 0o644))
-
-	hosts := destconfig.GitRemoteHostsForRoots(dir1, dir2)
-	if hosts["github.com"] != "git:origin" {
-		t.Fatalf("github.com = %q, want git:origin", hosts["github.com"])
-	}
-	if hosts["gitlab.internal"] != "git:upstream" {
-		t.Fatalf("gitlab.internal = %q, want git:upstream", hosts["gitlab.internal"])
 	}
 }

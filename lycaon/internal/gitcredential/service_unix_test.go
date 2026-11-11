@@ -211,7 +211,11 @@ func TestScopedServiceAnswersOnlyAdmittedRecipients(t *testing.T) {
 	if out := helperChild(t, service.Path(), "admitted.example"); strings.Contains(out, "password=") {
 		t.Fatalf("answered before admission: %q", out)
 	}
-	scope.Admit(Recipient{Protocol: "https", Host: "admitted.example"})
+	scope.Admit(Recipient{Protocol: "https", Host: "admitted.example", Username: "alice"})
+	if out := helperChild(t, service.Path(), "admitted.example"); strings.Contains(out, "password=") || len(scope.Declined()) != 1 {
+		t.Fatalf("answered an admitted recipient before credential use was granted: %q, declined %v", out, scope.Declined())
+	}
+	scope.Grant()
 	if out := helperChild(t, service.Path(), "admitted.example"); !strings.Contains(out, "password=secret-admitted.example") {
 		t.Fatalf("admitted recipient = %q", out)
 	}

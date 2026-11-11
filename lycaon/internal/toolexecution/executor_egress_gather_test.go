@@ -164,3 +164,28 @@ func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 		t.Fatal("closed owner minted an additional checkpoint")
 	}
 }
+
+func TestSiblingProgramChildrenKeepSeparateObservedEgressReviews(t *testing.T) {
+	executor, manager := gatherExecutor(t)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
+	defer cancel()
+	results := make(chan bool, 2)
+	for i, child := range []string{"first-child", "second-child"} {
+		cmd := confine.EgressCommand{SessionID: "child-session", RootSessionID: "child-session", ToolCallID: "actual-model-call", ActionID: child, ProjectID: "project", ProjectDir: "/fixture/project"}
+		host := []string{"first.invalid", "second.invalid"}[i]
+		go func() { results <- executor.ResolveEgressForTest(ctx, cmd, host) }()
+	}
+	for range 2 {
+		select {
+		case allowed := <-results:
+			if !allowed {
+				t.Fatal("fixture approval did not authorize its action")
+			}
+		case <-ctx.Done():
+			t.Fatal("child review did not settle")
+		}
+	}
+	if requests := manager.requests(); len(requests) != 2 {
+		t.Fatalf("sibling actions combined into one observed-set review: count%d", len(requests))
+	}
+}

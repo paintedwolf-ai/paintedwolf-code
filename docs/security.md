@@ -35,7 +35,7 @@ Confinement answers whether an effect stayed inside permitted capability, not wh
 Light and Balanced keep asks rare so the card that matters is still read. Strict asks more often but never changes what an answer means. Each quiet below is a decision with an accepted cost, not a gap; changing one means revisiting its reason.
 
 - **Recoverable work is quiet.** Source history keeps what the agent changes in attached folders, and the agent's own tools set aside any entry they remove or replace, so a mistaken edit or deletion there is undone, not prevented. The cost is where history stops for commands: very large files, excluded folders, and file metadata they change are not versioned. We accept that rather than ask before every command.
-- **Observed work is quiet.** A destination the broker records against its action can be audited after the fact, so a new host is not a card by itself. Untrusted content in the chat changes that: the agent's choice of destination may no longer be its own.
+- **Observed work is quiet.** A destination the broker records against its action can be audited after the fact, so a new host is not a card by itself. Untrusted content in the chat changes that, for a readable request as for a tunnel: the agent's choice of destination may no longer be its own. A host counts as contacted only when this chat's own dial reached it, not when it appears in content the chat read. A retrieval tool reaching its sources is covered by that tool, and the hosts it reaches never make the agent's own send to them familiar; Strict still confirms each first contact, except an endpoint the capability declared before it ran. One evaluator, the approval gate, decides every dial the confinement does not decide by an authored deny rule, package-execution scope, disabled approvals or an escalating detection.
 - **Unobserved authority asks, once per chat.** When the host cannot witness an effect, only the person can vouch for it, so direct networking, local services, OS credential store reads, process control, and running outside the sandbox ask at every posture. One answer covers the capability for the chat, because re-asking for authority already granted teaches dismissal.
 - **Local development is contained work.** Starting a test server and talking to it is the ordinary shape of the work, so the chat's own servers stay quiet. Services it did not start are someone else's, and asking about them guards against local SSRF.
 - **Default roots follow operating-system conventions.** Toolchains need their caches, and a list of ecosystems would always be one behind. The cost is that a cache can hold a program that later runs; tool homes stay out of the defaults to bound it.
@@ -182,7 +182,7 @@ Third-party processes the host executes on the person's behalf (a local MCP serv
 
 | Direction | Default |
 |-----------|---------|
-| Writes | Attached project roots, approved exact/tree grants, bounded temp/dev/cache locations, and declared host-managed scratch |
+| Writes | Admitted project roots, approved exact/tree grants, bounded temp/dev/cache locations, and declared host-managed scratch |
 | Reads | Broad enough for toolchains, with the app config tree and protected/sensitive locations separately controlled |
 | Symlinks | Followed only while descriptor-relative resolution remains inside the admitted root |
 | Signals | Same-boundary descendants, or the session's own processes through host-mediated process control |
@@ -217,7 +217,7 @@ Process control and OS credential store access require a supported, active sandb
 
 The standard approval card offers chat reuse as the primary action. That permission covers subsequent uses of the named capability in the chat, including different sudo commands; independent rules and detections still apply. Native inspection and signaling have separate chat permissions. Allow once covers only the reviewed invocation, bound to its arguments and boundary and consumed at launch.
 
-Background job receipts and protection banners retain the applied boundary. Revocation prevents future use; it does not stop an existing process. Unknown liveness keeps the warning visible until exit is observed. Command-job handles remain controlled through `command_output`, `wait`, and `command_stop`.
+Background job receipts and protection banners retain the applied boundary. Revocation applies from the next decision: it does not stop a running process, but that process's later mediated connections, and the file operations the host performs for it, are decided without the revoked permission. Effects the kernel already admitted, such as an open file or an established connection, continue. Unknown liveness keeps the warning visible until exit is observed. Command-job handles remain controlled through `command_output`, `wait`, and `command_stop`.
 
 ### Environment switches on the boundary
 
@@ -504,7 +504,7 @@ That catalog is two bundled detection packs, `key-material` and `credential-stor
 
 The managed browser renders untrusted pages under the same floors as any confined process (the protected, agent-policy, and control-plane write floors and the key-material read floor) while its own cache and profile directories stay writable.
 
-A writable root cannot equal or contain the app's state tree. Attached folders, reviewed and durable grants, and session scratch pass that rule before launch; unsafe default temporary and cache roots are excluded. Canonical path comparison covers aliases, and the rule remains active when state reads are enabled. This prevents a program from moving the state tree by renaming an ancestor. Other broad folders may contain protected stores, but cannot be a store or lie inside it. Per-path floors remain independent: the control plane is refused, key material and credential stores need exact-path approval, and agent-policy writes need their own review. Native reads of catalogued protected locations remain reviewable even inside attached roots; a broad read-tree grant never covers them.
+A writable root cannot equal or contain the app's state tree. Admitted folders, reviewed and durable grants, and session scratch pass that rule before launch; unsafe default temporary and cache roots are excluded. Canonical path comparison covers aliases, and the rule remains active when state reads are enabled. This prevents a program from moving the state tree by renaming an ancestor. Other broad folders may contain protected stores, but cannot be a store or lie inside it. Per-path floors remain independent: the control plane is refused, key material and credential stores need exact-path approval, and agent-policy writes need their own review. Native reads of catalogued protected locations remain reviewable even inside attached roots; a broad read-tree grant never covers them.
 
 File-read cards offer host-approved ancestor directory scopes, beginning at the target's containing directory. Each scope has its own opaque option for every duration. Sensitive targets and all writes retain exact-path grants. Choosing a broader directory updates the host-authored coverage and never accepts a caller-written path.
 
@@ -524,7 +524,7 @@ Database files in a project follow ordinary path authority, including Git stagin
 
 Path comparison inside the engine folds case where the filesystem does. Seatbelt already folds on a case-insensitive volume, but the classifiers that decide grants, cards, and refusals run in-process and never meet that boundary, and a byte-exact compare there lets `~/.SSH` walk past a deny list naming `~/.ssh`. Whether to fold is asked of the filesystem itself rather than assumed from the operating system, because a case-sensitive volume can be mounted on a case-insensitive host and the reverse.
 
-Git operations use the bundled hermetic git boundary: hooks, ambient configuration, credential helpers, external filters, and arbitrary drivers do not gain execution through repository configuration. An agent's `git` runs under the agent's own confined launch, not the host's: every remote it will contact is resolved as Git resolves it and admitted before contact, local remotes cross filesystem authority, credentials come from a service that answers only the admitted recipients and never writes the store, and the user's SSH agent reaches it only through a socket capability. A person's Git actions and host bookkeeping keep host launches. See [Agent Git](git.md#agent-git).
+Git operations use the bundled hermetic git boundary: hooks, ambient configuration, credential helpers, external filters, LFS transfer agents and extensions, and arbitrary drivers do not gain execution through repository configuration or its includes. An agent's `git` runs under the agent's own confined launch, not the host's: every remote it will contact is resolved as Git resolves it and admitted before contact, local remotes cross filesystem authority, credentials come from a service that answers only the admitted recipients, only under the person's credential-store grant, and never writes the store, and the user's SSH agent reaches it only through a socket capability. A person's Git actions and host bookkeeping keep host launches. See [Agent Git](git.md#agent-git).
 
 ### Files the window reads and writes
 
@@ -559,6 +559,8 @@ The complete outbound inventory and user controls are in [Privacy](privacy.md).
 ## Untrusted content (inbound)
 
 Fetched pages, search results, tool output, MCP results, project prose, and model output are data unless their structured origin grants instruction authority.
+
+A chat has read network content when text from beyond this machine reaches its transcript: a response body, headers or a write-out variable the server filled, a Git transfer's ref names and remote messages, or the output of a program whose processes connected to a remote destination. Measurements of a transfer (status, sizes, timings, addresses) are not content. Content a read places in the workspace (a saved response, files a pull changed, a cloned directory) is held in external custody instead, and marks the chat only when the chat reads it; custody follows a file until a later whole-file write replaces it, and a worker's custody is recorded for its chat too.
 
 ### Rule of two
 

@@ -441,7 +441,7 @@ describe("ComposerStatusChips project trust state", () => {
   });
 
   it("refreshes trust when a project folder is detached", async () => {
-    const root: ProjectRoot = { id: "root", label: "Folder", path: "/fixture/root", is_primary: true, kind: "attached", added_at: "2026-09-15T00:00:00Z" };
+    const root: ProjectRoot = { id: "root", label: "Folder", path: "/fixture/root", is_primary: true, kind: "attached", admitted: true, admission_code: null, added_at: "2026-09-15T00:00:00Z" };
     const [roots, setRoots] = createSignal<readonly ProjectRoot[]>([root]);
     const getProjectTrust = vi.fn<() => Promise<ProjectTrust>>()
       .mockResolvedValueOnce(emptyTrust)
