@@ -16,6 +16,10 @@ func newDevelopmentIdentityProvider(vaultPath string) identityProvider {
 	return &developmentIdentityProvider{path: developmentIdentityPath(vaultPath)}
 }
 
+func (p *developmentIdentityProvider) custodyKey() providerCustodyKey {
+	return providerCustodyKey{mode: CustodyDevelopment, path: p.path}
+}
+
 func (p *developmentIdentityProvider) Describe() string {
 	return "development-only identity file " + p.path
 }
