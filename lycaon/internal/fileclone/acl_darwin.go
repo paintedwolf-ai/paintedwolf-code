@@ -14,6 +14,11 @@ static int lycaon_copy_acl(const char *src, const char *dst) {
 		// No ACL, or a volume that cannot hold one.
 		return (errno == ENOENT || errno == ENOTSUP || errno == ENOTTY) ? 0 : -1;
 	}
+	acl_entry_t entry;
+	if (acl_get_entry(acl, ACL_FIRST_ENTRY, &entry) != 0) {
+		acl_free(acl);
+		return 0;
+	}
 	int rc = acl_set_link_np(dst, ACL_TYPE_EXTENDED, acl);
 	int saved = errno;
 	acl_free(acl);
