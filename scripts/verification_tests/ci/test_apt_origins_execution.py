@@ -1,6 +1,8 @@
 """CI package installs move off an unreachable Ubuntu origin without hiding other failures."""
 import importlib.util
 import io
+import socket
+import time
 from pathlib import Path
 import subprocess
 import tempfile
@@ -37,11 +39,20 @@ class AptOriginsTests(unittest.TestCase):
         (self.root / "sources.list.d/ubuntu.sources").write_text(DEB822)
         (self.root / "sources.list.d/microsoft-prod.list").write_text(THIRD_PARTY)
         (self.root / "sources.list").write_text("# Ubuntu sources have moved to sources.list.d\n")
-        for name, value in (("APT_ROOT", self.root), ("next_stage", 0)):
-            patcher = patch.object(APT, name, value)
+        self.unresolvable = set()
+
+        def resolve(host, *_arguments, **_options):
+            self.lookups.append(host)
+            if host in self.unresolvable:
+                raise socket.gaierror(socket.EAI_AGAIN, "Temporary failure in name resolution")
+            return []
+        for target, name, value in ((APT, "APT_ROOT", self.root), (APT, "next_stage", 0),
+                                    (APT.socket, "getaddrinfo", resolve)):
+            patcher = patch.object(target, name, value)
             patcher.start()
             self.addCleanup(patcher.stop)
         self.calls = []
+        self.lookups = []
 
     def apt(self, *results):
         """Replay apt-get results in order, recording each argument list."""
@@ -90,6 +101,55 @@ class AptOriginsTests(unittest.TestCase):
         self.assertEqual((self.root / "sources.list").read_text(),
                          "deb https://mirrors.ocf.berkeley.edu/ubuntu-ports noble main\n")
         self.assertEqual((self.root / "sources.list.d/microsoft-prod.list").read_text(), THIRD_PARTY)
+
+    def test_unresolvable_origins_are_skipped_without_an_apt_attempt(self):
+        self.unresolvable = {"azure.archive.ubuntu.com", "archive.ubuntu.com", "security.ubuntu.com"}
+        with self.apt((0, "")), patch("sys.stdout", io.StringIO()):
+            APT.update()
+        self.assertEqual(len(self.calls), 1)
+        self.assertIn("mirrors.edge.kernel.org", self.sources())
+        self.unresolvable |= {"mirrors.edge.kernel.org", "mirrors.ocf.berkeley.edu"}
+        APT.next_stage = 0
+        with self.apt(), patch("sys.stdout", io.StringIO()), \
+                self.assertRaisesRegex(RuntimeError, "attempt 4: cannot resolve mirrors.ocf.berkeley.edu"):
+            APT.update()
+        self.assertEqual(len(self.calls), 1)
+
+    def test_mirror_list_resolves_when_any_mirror_does(self):
+        (self.root / "sources.list.d/ubuntu.sources").write_text(
+            "Types: deb\nURIs: mirror+file:/etc/apt/apt-mirrors.txt\nSuites: noble\n")
+        (self.root / "apt-mirrors.txt").write_text("# runner mirrors\nhttp://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n"
+                                                   "\nhttp://archive.ubuntu.com/ubuntu/\tpriority:2\n")
+        self.unresolvable = {"azure.archive.ubuntu.com"}
+        self.assertEqual(APT.unresolved(), [])
+        self.unresolvable.add("archive.ubuntu.com")
+        self.assertEqual(APT.unresolved(), ["archive.ubuntu.com or azure.archive.ubuntu.com"])
+        (self.root / "apt-mirrors.txt").unlink()
+        self.assertEqual(APT.unresolved(), [""])
+
+    def test_slow_resolution_counts_as_unresolved(self):
+        def slow(host, *_arguments, **_options):
+            time.sleep(0.5)
+            return []
+        with patch.object(APT.socket, "getaddrinfo", slow), patch.object(APT, "RESOLVE_SECONDS", 0.05):
+            self.assertEqual(APT.unresolved(), ["azure.archive.ubuntu.com", "security.ubuntu.com"])
+        (self.root / "sources.list.d/ubuntu.sources").unlink()
+        self.assertEqual(APT.unresolved(), [])
+
+    def test_package_downloads_follow_the_same_fallbacks(self):
+        self.assertEqual(APT.fallback_uris("http://azure.archive.ubuntu.com/ubuntu/pool/main/a/a.deb"), [
+            "http://azure.archive.ubuntu.com/ubuntu/pool/main/a/a.deb",
+            "https://archive.ubuntu.com/ubuntu/pool/main/a/a.deb",
+            "https://mirrors.edge.kernel.org/ubuntu/pool/main/a/a.deb",
+            "https://mirrors.ocf.berkeley.edu/ubuntu/pool/main/a/a.deb"])
+        self.assertEqual(APT.fallback_uris("mirror+file:/etc/apt/apt-mirrors.txt/pool/a.deb")[0],
+                         "https://archive.ubuntu.com/ubuntu/pool/a.deb")
+        self.assertEqual(APT.fallback_uris("http://ports.ubuntu.com/ubuntu-ports/pool/a.deb")[1:], [
+            "https://ports.ubuntu.com/ubuntu-ports/pool/a.deb",
+            "https://mirrors.ocf.berkeley.edu/ubuntu-ports/pool/a.deb",
+            "https://mirror.us.leaseweb.net/ubuntu-ports/pool/a.deb"])
+        self.assertEqual(APT.fallback_uris("https://archive.ubuntu.com/ubuntu/pool/a.deb")[:2], [
+            "https://archive.ubuntu.com/ubuntu/pool/a.deb", "https://mirrors.edge.kernel.org/ubuntu/pool/a.deb"])
 
     def test_other_repository_failures_stay_warnings(self):
         output = ("Err:3 https://packages.microsoft.com/ubuntu/24.04/prod noble InRelease\n"
@@ -149,6 +209,7 @@ class AptOriginsTests(unittest.TestCase):
             APT.install(["minisign"])
         self.assertNotIn("--no-install-recommends", self.calls[-1])
         self.calls.clear()
+        APT.next_stage = len(APT.STAGES)
         with self.apt((0, ""), (100, "")), patch("sys.stdout", io.StringIO()), self.assertRaises(RuntimeError):
             APT.install(["minisign"])
         self.assertEqual(len(self.calls), 2)

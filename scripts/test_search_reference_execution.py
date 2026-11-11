@@ -187,7 +187,7 @@ class RepositoryToolsInputsTest(unittest.TestCase):
                 command.write_text(f"#!{sys.executable}\n{body}\n")
                 command.chmod(0o755)
             environment = {**os.environ, "PATH": str(tools) + os.pathsep + os.environ["PATH"],
-                           "FIXTURE_SYSTEM": system, "FIXTURE_ARCH": architecture}
+                           "FIXTURE_SYSTEM": system, "FIXTURE_ARCH": architecture, "PW_APT_ROOT": str(tools / "apt")}
             result = subprocess.run(["bash", str(runner_tests.SCRIPTS / "ci_policy/provision.sh"),
                                      "repository-tools", *arguments], env=environment, capture_output=True, text=True)
             return result, [json.loads(line) for line in result.stdout.splitlines()]
