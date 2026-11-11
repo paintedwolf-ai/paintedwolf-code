@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/app"
 	"github.com/lycaon/lycaon/internal/app/configuration"
 	"github.com/lycaon/lycaon/internal/mcp"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -76,8 +75,6 @@ func postPromptExpectNotConfigured(t *testing.T, srv *api.Server, sessionID stri
 }
 
 func TestPromptWithoutProviderReturnsNotConfigured(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	t.Cleanup(func() { project.SetDefaultOpenPolicy(project.DefaultOpenPolicy()) })
 
 	_, projectDir := noMockServeEnv(t)
 	serveApp := buildNoMockServeApp(t)
@@ -86,8 +83,6 @@ func TestPromptWithoutProviderReturnsNotConfigured(t *testing.T) {
 }
 
 func TestPromptWithoutProviderLeavesNoAssistantMessage(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	t.Cleanup(func() { project.SetDefaultOpenPolicy(project.DefaultOpenPolicy()) })
 
 	_, projectDir := noMockServeEnv(t)
 	serveApp := buildNoMockServeApp(t)
@@ -122,8 +117,6 @@ func TestPromptWithoutProviderLeavesNoAssistantMessage(t *testing.T) {
 }
 
 func TestPromptAfterCredentialDeleteReturnsNotConfigured(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
-	t.Cleanup(func() { project.SetDefaultOpenPolicy(project.DefaultOpenPolicy()) })
 
 	_, projectDir := noMockServeEnv(t)
 	serveApp := buildNoMockServeApp(t)

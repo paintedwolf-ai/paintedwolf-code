@@ -48,6 +48,7 @@ func TestGitEntryContentReportsOnlyMeasuredOverflow(t *testing.T) {
 			backend := tc.backend
 			owners, err := NewOwners(&backend)
 			testutil.FailErr(t, "compose measured blob owner", err)
+			owners.Launch = UnconfinedLaunch
 			owners.limitOverride = map[string]int64{"stream_bytes": 32}
 			data, err := entryContent(t.Context(), Prepared{owners: owners}, "repo", trackedEntry{oid: "captured-object", path: "file"})
 			reject := toolrejection.AsToolReject(err)

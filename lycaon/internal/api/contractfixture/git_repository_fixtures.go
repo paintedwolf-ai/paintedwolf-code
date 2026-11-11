@@ -161,7 +161,6 @@ func NewGitServer(t *testing.T, reg project.Registry, opts ...TestDeps) *hostapi
 
 func NewGitTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, string) {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := InitDirtyRepo(t)
 	reg := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), reg, dir)

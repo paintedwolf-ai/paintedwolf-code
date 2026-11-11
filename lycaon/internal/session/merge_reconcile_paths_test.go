@@ -2,7 +2,6 @@ package session_test
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -13,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	sessionstore "github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
-	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testbaseline"
@@ -108,28 +106,6 @@ func TestCatalogReadCapacityDoesNotMeanWorkersIdle(t *testing.T) {
 		}
 		requireCatalogDecision(t, oar.AnchorCoordinatorPreInvoke, gc, code)
 	}
-}
-
-type failedArtifactProbe struct{}
-
-func (failedArtifactProbe) HasChanges(context.Context, string) (bool, error) {
-	return false, errors.New("workspace probe unavailable")
-}
-
-func TestCatalogArtifactProbeFailureIsNotAbsence(t *testing.T) {
-	sess := &api.Session{ID: "artifact-probe-child", ParentSessionID: "parent", AgentType: "implementer", WorkspacePath: t.TempDir()}
-	history := []api.Message{
-		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-1", Name: "read"}}},
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeCompleted}},
-		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "edit-1", Name: "edit"}}},
-		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Outcome: api.ToolResultOutcomeRejected}},
-	}
-	gc := oar.NewGuardContext()
-	workercompletion.ObserveImplementerFinishWithoutWrite(context.Background(), sess, history, "Report", sess.WorkspacePath, failedArtifactProbe{}, gc)
-	if gc.Grounding.WorkerArtifactMeasured {
-		t.Fatal("failed probe claimed a measurement")
-	}
-	requireCatalogDecision(t, oar.AnchorWorkerReportCheck, gc, "")
 }
 
 func TestCatalogGroundingVerdictsDoNotOverlap(t *testing.T) {

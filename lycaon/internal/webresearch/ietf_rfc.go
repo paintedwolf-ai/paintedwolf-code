@@ -68,7 +68,7 @@ func (p *ietfRFCProvider) Search(ctx context.Context, s Settings, query string, 
 			return providerOutcome{providerID: ietfRFCProviderID, reason: "parse_error", detail: err.Error()}
 		}
 		go func(rawURL string) {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
+			req, err := newProviderRequest(ctx, http.MethodGet, rawURL, nil)
 			if err != nil {
 				results <- fetchResult{err: err}
 				return

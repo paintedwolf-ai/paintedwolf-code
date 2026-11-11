@@ -10,7 +10,9 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -29,14 +31,15 @@ type registeredTool struct {
 type RuntimeOptions struct {
 	// StatePath overrides the user config directory that holds device-level MCP
 	// state (tool pins). Empty resolves configdir.UserConfigDir.
-	StatePath          string
-	GlobalOverridePath string
-	Connector          SessionConnector
-	BreakerThreshold   uint32
-	OnSettingsChange   func()
-	OAuthStore         *OAuthTokenStore
-	OAuthClient        *OAuthClient
-	OAuthRedirectURI   string
+	StatePath                   string
+	GlobalOverridePath          string
+	Connector                   SessionConnector
+	BreakerThreshold            uint32
+	OnSettingsChange            func()
+	OAuthStore                  *OAuthTokenStore
+	OAuthClient                 *OAuthClient
+	OAuthRedirectURI            string
+	VerifyStaticCredentialWrite func(slot credentialstore.Slot, key, want string) error
 }
 
 // Runtime composes provider catalogs, connections, credentials and tools.
@@ -65,10 +68,14 @@ func NewRuntime(opts RuntimeOptions) (*Runtime, error) {
 	}
 	statePath := strings.TrimSpace(opts.StatePath)
 	if statePath == "" {
-		var err error
-		statePath, err = configdir.UserConfigDir()
-		if err != nil {
-			return nil, fmt.Errorf("mcp config directory: %w", err)
+		if strings.TrimSpace(opts.GlobalOverridePath) != "" {
+			statePath = filepath.Dir(opts.GlobalOverridePath)
+		} else {
+			var err error
+			statePath, err = configdir.UserConfigDir()
+			if err != nil {
+				return nil, fmt.Errorf("mcp config directory: %w", err)
+			}
 		}
 	}
 	globalPath := filepath.Join(statePath, settingsoverlay.BasenameMCP)
@@ -106,6 +113,17 @@ func NewRuntime(opts RuntimeOptions) (*Runtime, error) {
 	r.Credentials.oauth = opts.OAuthClient
 	r.Credentials.recipes = recipes
 	r.Tools.resync = make(chan string, 16)
+	if opts.VerifyStaticCredentialWrite != nil {
+		verifyFn := opts.VerifyStaticCredentialWrite
+		r.Administration.openStaticCredentials = func(dir string) (*StaticCredentialStore, error) {
+			store, openErr := NewStaticCredentialStoreForDir(dir)
+			if openErr != nil {
+				return nil, openErr
+			}
+			store.verifyDurable = verifyFn
+			return store, nil
+		}
+	}
 
 	r.Catalog.Connections = r.Connections
 	r.Catalog.Credentials = r.Credentials
@@ -196,12 +214,20 @@ func (r *ConnectionPool) deviceProbeRoots() []string {
 // Load reads distro + user overlays into the device catalog and re-syncs tools.
 // An unreadable user overlay is dropped as a rejected row; an unreadable distro catalog is fatal.
 func (r *ProviderCatalog) Load(ctx context.Context) error {
+	if strings.TrimSpace(r.globalPath) != "" && !overlayLockAlreadyHeld(ctx, r.globalPath) {
+		return catalogruntime.WithLock(ctx, r.statePath, r.globalPath, func() error {
+			lockedCtx, _ := withOverlayLockHeld(ctx, r.globalPath)
+			r.Tools.syncMu.Lock()
+			defer r.Tools.syncMu.Unlock()
+			return r.loadLocked(lockedCtx, true)
+		})
+	}
 	r.Tools.syncMu.Lock()
 	defer r.Tools.syncMu.Unlock()
-	return r.loadLocked(ctx)
+	return r.loadLocked(ctx, !overlayLockAlreadyHeld(ctx, r.globalPath))
 }
 
-func (r *ProviderCatalog) loadLocked(ctx context.Context) error {
+func (r *ProviderCatalog) loadLocked(ctx context.Context, reconcilePending bool) error {
 	distro, err := LoadDistroMCPConfig()
 	if err != nil {
 		return fmt.Errorf("mcp distro catalog: %w", err)
@@ -218,6 +244,15 @@ func (r *ProviderCatalog) loadLocked(ctx context.Context) error {
 			Class:  ProviderClassWeb,
 		})
 		user = &UserMCPConfig{}
+	} else {
+		hydrated, migErr := migrateAndHydrateUserOverlay(
+			r.statePath, r.globalPath, user,
+			reconcilePending, overlayRollbackActive(ctx, r.globalPath), r.recoveryHook,
+		)
+		if migErr != nil {
+			return fmt.Errorf("mcp static credentials: %w", migErr)
+		}
+		user = hydrated
 	}
 
 	catalog, rejected, err := MergeMCPCatalog(distro, user, nil)

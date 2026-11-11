@@ -27,7 +27,11 @@ func (inv *invocation) writeOut(exit int) error {
 		}
 		b.WriteString(inv.writeOutValue(token.variable, exit))
 	}
-	_, err := io.WriteString(inv.stdout, b.String())
+	rendered := b.String()
+	_, err := io.WriteString(inv.stdout, rendered)
+	if err == nil && inv.exchange != nil && inv.exchange.External && len(rendered) > 0 {
+		inv.provenance.WroteStdout = true
+	}
 	return err
 }
 
