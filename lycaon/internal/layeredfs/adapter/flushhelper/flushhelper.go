@@ -25,7 +25,12 @@ func Request(mountRoot string, paths []string) []byte {
 
 // Serve runs the helper and exits: stdout carries the counts, stderr the failure.
 func Serve(flush Flush) {
-	if pauseFile := os.Getenv(PauseFileEnv); pauseFile != "" {
+	os.Exit(serve(os.Getenv(PauseFileEnv), os.Stdin, os.Stdout, os.Stderr, flush))
+}
+
+// serve answers one request read from in and returns the helper's exit status.
+func serve(pauseFile string, in io.Reader, out, errOut io.Writer, flush Flush) int {
+	if pauseFile != "" {
 		_ = os.WriteFile(pauseFile, fmt.Appendf(nil, "%d\n", os.Getpid()), 0o600)
 		for {
 			if _, err := os.Stat(pauseFile); errors.Is(err, os.ErrNotExist) {
@@ -34,14 +39,14 @@ func Serve(flush Flush) {
 			time.Sleep(10 * time.Millisecond)
 		}
 	}
-	raw, err := io.ReadAll(os.Stdin)
+	raw, err := io.ReadAll(in)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+		_, _ = fmt.Fprintln(errOut, err.Error())
+		return 1
 	}
 	parts := strings.Split(string(raw), "\x00")
 	if parts[0] == "" {
-		os.Exit(2)
+		return 2
 	}
 	paths := make([]string, 0, len(parts)-1)
 	for _, p := range parts[1:] {
@@ -51,11 +56,11 @@ func Serve(flush Flush) {
 	}
 	files, dirs, err := flush(parts[0], paths)
 	if err != nil {
-		_, _ = fmt.Fprintln(os.Stderr, err.Error())
-		os.Exit(1)
+		_, _ = fmt.Fprintln(errOut, err.Error())
+		return 1
 	}
-	_, _ = fmt.Fprintf(os.Stdout, "%d %d\n", files, dirs)
-	os.Exit(0)
+	_, _ = fmt.Fprintf(out, "%d %d\n", files, dirs)
+	return 0
 }
 
 // Reply reads the counts a helper wrote.
