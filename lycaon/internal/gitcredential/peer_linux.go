@@ -20,8 +20,8 @@ import (
 // the kernel checks against the sending process.
 func writeIdentified(conn *net.UnixConn, data []byte) error {
 	pid := os.Getpid()
-	if pid > math.MaxInt32 {
-		return errors.New("process id exceeds the credential message")
+	if pid <= 0 || pid > math.MaxInt32 {
+		return errors.New("process id does not fit the credential message")
 	}
 	credentials := unix.UnixCredentials(&unix.Ucred{Pid: int32(pid), Uid: uint32(os.Getuid()), Gid: uint32(os.Getgid())})
 	n, oobn, err := conn.WriteMsgUnix(data, credentials, nil)
