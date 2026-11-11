@@ -270,7 +270,8 @@ func TestCommandProgramCurlRedirectPartialOutcomeAndNoAutoReplay(t *testing.T) {
 	allow[originHost] = true
 
 	// 1. Denied redirect hop after Hop 0 completed truthfully reports completed initial hop effects
-	// (State=="rejected", CompletedEffects==1, ReplayAvailable==false, command_execution=="observed", program_replay_available==false)
+	// and the program records one completed effect with no replay.
+	// program_replay_available==false)
 	// and never sends a connection or request to the denied redirect target.
 	fDeny := newCurlRecoveryFixture(t, ownedPorts...)
 	raw, err := fDeny.call(t, t.Context(), fmt.Sprintf("curl -s -L '%s'", origin.URL))
@@ -292,7 +293,8 @@ func TestCommandProgramCurlRedirectPartialOutcomeAndNoAutoReplay(t *testing.T) {
 		t.Fatalf("denied redirect hop feedback misrepresented completed initial hop: %q", gotDeny.Refusal.Feedback)
 	}
 
-	// 2. Unknown post-send outcome on Hop 1 settles with UncertainEffects==1 and ReplayAvailable==false, without auto-replaying Hop 0 or Hop 1.
+	// An unknown second-hop outcome stays uncertain and is never replayed.
+	// auto-replaying Hop 0 or Hop 1.
 	originHits.Store(0)
 	targetHits.Store(0)
 	dropHop1AfterRequest.Store(true)
@@ -345,4 +347,3 @@ func TestCommandProgramCurlRedirectPartialOutcomeAndNoAutoReplay(t *testing.T) {
 		t.Fatalf("repeat redirect chain outcome = %+v repeatAsked=%d", gotRepeat, repeatAsked)
 	}
 }
-

@@ -98,12 +98,9 @@ func (s *Service) checkCapabilityActive(ctx context.Context, id string, access R
 	return nil
 }
 
-// Commit settles the prepared secrets as DeliveryHandedOff and consumes the
-// bound unlock once the host hands the material off to the target transport
-// or local sink (the value left or may have left host vault custody). For
-// network transports, Commit records conservative host-side transport dispatch
-// rather than proof of remote peer receipt; uncertain remote effects are
-// tracked separately by the transport/exchange outcome.
+// Commit settles the prepared secrets as handed off and consumes the bound
+// unlock. For a network transport that means the material left host custody,
+// not that the recipient received it.
 func (d *PreparedDelivery) Commit(ctx context.Context) {
 	if d == nil {
 		return

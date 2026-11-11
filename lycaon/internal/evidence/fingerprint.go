@@ -422,12 +422,12 @@ func isLocalHTTPURLWithResolve(rawURL string, rawResolve any) (bool, string) {
 			continue
 		}
 		ipStr, _ := m["ip"].(string)
-		addr, err := netip.ParseAddr(strings.TrimSpace(ipStr))
-		if err != nil {
-			continue
-		}
-		addr = addr.Unmap()
-		if !addr.IsLoopback() {
+		if !egress.LoopbackLiteral(ipStr) {
+			addr, err := netip.ParseAddr(strings.TrimSpace(ipStr))
+			if err != nil {
+				continue
+			}
+			addr = addr.Unmap()
 			mapped := *u
 			if reqPort > 0 {
 				mapped.Host = net.JoinHostPort(addr.String(), strconv.Itoa(reqPort))
@@ -457,4 +457,3 @@ func defaultURLPort(u *url.URL) int {
 		return 0
 	}
 }
-

@@ -471,7 +471,8 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		t.Fatalf("read record = %+v urls=%v, want UntrustedContent=true and propagated ObservedURLs", gotRead, gotURLs)
 	}
 
-	// 3. Partial mutation (edit) preserves external custody on a subsequent read, whereas full replacement (write) clears it; verify SQL and Memory parity.
+	// An edit keeps external custody and a full write clears it, in SQL and memory alike.
+	// clears it; verify SQL and Memory parity.
 	for _, backend := range []struct {
 		name string
 		s    interface {
@@ -507,7 +508,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 			)
 			testutil.FailErr(t, "read after edit", err)
 
-			// Full write replaces external custody so a later read of the replaced file does not inherit stale external provenance.
+			// A full write replaces external custody, so a later read inherits nothing stale.
 			_, _, err = backend.s.CommitEvidenceToolResult(
 				ctx, s2.ID, dir, "write",
 				map[string]any{"path": "item.txt"},
@@ -534,7 +535,8 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 		})
 	}
 
-	// 4. Bounded metadata ledger filtering: non-custody read/grep rows are skipped without retention in buildMetadataLedgerFromRows.
+	// Rows without custody are skipped, not retained.
+	// buildMetadataLedgerFromRows.
 	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
 	testutil.FailErr(t, "ListEvidenceRecords", err)
 	metaLedger, err := buildMetadataLedgerFromRows(rows)
@@ -545,7 +547,8 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 }
 
 func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
-	// 1. Legacy v=1 JSON payload written before untrusted_content/external_custody existed decodes with false flags and intact metadata.
+	// A v=1 payload from before the custody flags decodes with both false.
+	// flags and intact metadata.
 	const legacyRaw = `{"v":1,"ranges":[{"Start":1,"End":5}],"paths_touched":["saved.txt"],"urls_touched":["https://api.external.example/v1/item"],"surface":"http"}`
 	var legacyRec evidence.Record
 	testutil.FailErr(t, "unmarshal legacy v=1 payload", unmarshalEvidenceLineRanges(legacyRaw, &legacyRec))
@@ -561,7 +564,8 @@ func TestStoredLineRangesPayload_LegacyDecodeAndVersionGate(t *testing.T) {
 			evidence.IndexedPathsForRecord(legacyRec), evidence.ObservedURLsForRecord(legacyRec))
 	}
 
-	// 2. Clean records omit untrusted_content, external_custody, and custody_seq keys (omitempty), while provenance/sequenced records persist and round-trip them under v=1.
+	// Clean records omit the custody keys; records that carry them round-trip under v=1.
+	// provenance/sequenced records persist and round-trip them under v=1.
 	cleanRaw, err := marshalEvidenceLineRanges(legacyRec)
 	testutil.FailErr(t, "marshal clean record", err)
 	if strings.Contains(cleanRaw, "untrusted_content") || strings.Contains(cleanRaw, "external_custody") || strings.Contains(cleanRaw, `"custody_seq"`) {
@@ -661,7 +665,8 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 		)
 		testutil.FailErr(t, "insert read/grep rows", err)
 	}
-	// Also insert non-custody command, partial edit (write with source_tool=edit), and inline pathless http_response rows with poisoned LineRanges.
+	// Rows without custody carry poisoned line ranges, which must never be decoded.
+	// http_response rows with poisoned LineRanges.
 	_, err = sqlDB.ExecContext(ctx, `
 		INSERT INTO evidence_records (
 			session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool, marks_untrusted,
@@ -677,7 +682,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	)
 	testutil.FailErr(t, "insert non-custody command/edit/inline-http rows", err)
 
-	// Insert the 2 custody-affecting rows with valid v=1 LineRanges and missing content_blob_sha256 (proving 0 blob reads).
+	// The two custody rows have valid ranges and no content blob, so a blob read would fail.
 	custodyDownloadRec := evidence.BuildEvidenceRecord(
 		dir,
 		"http_request",
@@ -709,8 +714,10 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	)
 	testutil.FailErr(t, "insert custody rows", err)
 
-	// 2. Verify ListEvidenceRecords returns all 125 session rows, while buildMetadataLedgerFromRows decodes only the 2 custody-candidate rows
-	// (succeeding despite poisoned LineRanges on all 123 non-custody rows and missing content blobs on all 125 rows) and retains only those 2 handles.
+	// Listing returns every row while the ledger decodes only the two custody candidates,
+	// the 2 custody-candidate rows
+	// so poisoned ranges and missing blobs elsewhere cannot fail it.
+	// rows) and retains only those 2 handles.
 	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
 	testutil.FailErr(t, "ListEvidenceRecords", err)
 	if len(rows) != 125 {
@@ -728,7 +735,8 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 		t.Fatalf("missing write#2 in metaLedger: %v", evidence.HandlesSorted(metaLedger))
 	}
 
-	// 3. Verify ExternalCustodyURLsForPaths and custody-only loadCommitLedgers (e.g., grep on saved.txt) succeed without decoding non-custody rows or reading blobs.
+	// Custody lookups succeed without decoding other rows or reading blobs.
+	// without decoding non-custody rows or reading blobs.
 	urls, err := store.ExternalCustodyURLsForPaths(ctx, sess.ID, dir, []string{"saved.txt"})
 	testutil.FailErr(t, "ExternalCustodyURLsForPaths", err)
 	if !slices.Equal(urls, []string{"https://api.external.example/v1/payload.txt"}) {
@@ -753,8 +761,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 		t.Fatal("grep exposing lines from external-custody saved.txt must mark untrusted content")
 	}
 
-	// 4. Converse sensitivity check: if a live custody-candidate row (path-bearing http_response or whole-file write) has poisoned LineRanges,
-	// buildMetadataLedgerFromRows DOES decode it and returns a decode error.
+	// A poisoned custody candidate does fail the ledger.
 	poisonedCustodyRows := append([]db.ListEvidenceRecordsRow(nil), rows...)
 	foundWrite := false
 	for i := range poisonedCustodyRows {
@@ -772,18 +779,19 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	}
 }
 
+// chronologyBackend is the store surface exercised by the chronology-skew parity test.
+type chronologyBackend interface {
+	Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
+	CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
+	CommitProgramHTTPProvenance(context.Context, string, string, evidence.ProgramHTTPProvenance) (string, error)
+	ExternalCustodyURLsForPaths(context.Context, string, string, []string) ([]string, error)
+	SessionUntrustedContentResult(context.Context, string) (bool, error)
+	LoadLedger(context.Context, string) (evidence.Ledger, error)
+}
+
 func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
-
-	type storeBackend interface {
-		Create(context.Context, api.CreateSessionRequest, string) (*api.Session, error)
-		CommitEvidenceToolResult(context.Context, string, string, string, map[string]any, string) (string, string, error)
-		CommitProgramHTTPProvenance(context.Context, string, string, evidence.ProgramHTTPProvenance) (string, error)
-		ExternalCustodyURLsForPaths(context.Context, string, string, []string) ([]string, error)
-		SessionUntrustedContentResult(context.Context, string) (bool, error)
-		LoadLedger(context.Context, string) (evidence.Ledger, error)
-	}
 
 	sqlDB := testdbfixture.OpenPath(t, filepath.Join(dir, "chronology_skew.db"))
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, dir)
@@ -791,225 +799,237 @@ func TestEvidenceLedgerStore_CrossKindChronologySkewAndReloadParity(t *testing.T
 
 	for _, tc := range []struct {
 		name   string
-		reopen func() storeBackend
+		reopen func() chronologyBackend
 	}{
 		{
 			name:   "sql_with_reopen",
-			reopen: func() storeBackend { return NewSQL(sqlDB) },
+			reopen: func() chronologyBackend { return NewSQL(sqlDB) },
 		},
 		{
 			name:   "memory",
-			reopen: func() storeBackend { return memStore },
+			reopen: func() chronologyBackend { return memStore },
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s := tc.reopen()
-
-			// Case A: High write ordinal (write#4) followed by fresh external download with lower http_response ordinal (http_response#2).
-			sessA, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "Create sessA", err)
-
-			// Seed initial download on alpha.txt (http_response#1, stale URL) to establish same-kind history.
-			h1, _, err := s.CommitEvidenceToolResult(
-				ctx, sessA.ID, dir, "http_request",
-				map[string]any{"url": "https://stale-alpha.external.example/v0/init.txt", "response_path": "alpha.txt"},
-				`{"status":200,"url":"https://stale-alpha.external.example/v0/init.txt","response_path":"alpha.txt","written":true}`,
-			)
-			testutil.FailErr(t, "initial download alpha.txt", err)
-			if h1 != "http_response#1" {
-				t.Fatalf("h1 = %q, want http_response#1", h1)
-			}
-
-			// Advance write ordinals on unrelated paths (write#1..write#3), then full local write on alpha.txt (write#4, ordinal=4).
-			for i := 1; i <= 3; i++ {
-				unrel := fmt.Sprintf("unrelated_%d.go", i)
-				wh, _, err := s.CommitEvidenceToolResult(
-					ctx, sessA.ID, dir, "write",
-					map[string]any{"path": unrel},
-					fmt.Sprintf(`{"path":%q,"bytes_written":16}`, unrel),
-				)
-				testutil.FailErr(t, "unrelated write", err)
-				if wh != fmt.Sprintf("write#%d", i) {
-					t.Fatalf("wh = %q, want write#%d", wh, i)
-				}
-			}
-			w4, _, err := s.CommitEvidenceToolResult(
-				ctx, sessA.ID, dir, "write",
-				map[string]any{"path": "alpha.txt"},
-				`{"path":"alpha.txt","bytes_written":24}`,
-			)
-			testutil.FailErr(t, "full write alpha.txt", err)
-			if w4 != "write#4" {
-				t.Fatalf("w4 = %q, want write#4", w4)
-			}
-
-			// Reopen/reload store, then commit fresh external download on alpha.txt (http_response#2, ordinal=2 < write#4 ordinal=4).
-			s = tc.reopen()
-			h2, _, err := s.CommitEvidenceToolResult(
-				ctx, sessA.ID, dir, "http_request",
-				map[string]any{"url": "https://fresh-alpha.external.example/v1/fresh.txt", "response_path": "alpha.txt"},
-				`{"status":200,"url":"https://fresh-alpha.external.example/v1/fresh.txt","response_path":"alpha.txt","written":true}`,
-			)
-			testutil.FailErr(t, "fresh download alpha.txt", err)
-			if h2 != "http_response#2" {
-				t.Fatalf("h2 = %q, want http_response#2", h2)
-			}
-
-			// Reopen/reload store and verify alpha.txt retains ONLY the fresh URL and marks a subsequent actual read as untrusted ingestion.
-			s = tc.reopen()
-			alphaURLs, err := s.ExternalCustodyURLsForPaths(ctx, sessA.ID, dir, []string{"alpha.txt"})
-			testutil.FailErr(t, "ExternalCustodyURLsForPaths alpha.txt", err)
-			if !slices.Equal(alphaURLs, []string{"https://fresh-alpha.external.example/v1/fresh.txt"}) {
-				t.Fatalf("ExternalCustodyURLsForPaths(alpha.txt) = %v, want [https://fresh-alpha.external.example/v1/fresh.txt]", alphaURLs)
-			}
-
-			readAlphaHandle, _, err := s.CommitEvidenceToolResult(
-				ctx, sessA.ID, dir, "read",
-				map[string]any{"path": "alpha.txt"},
-				`{"path":"alpha.txt","content":"1|fresh remote payload\n","offset":1,"end_line":1}`,
-			)
-			testutil.FailErr(t, "read alpha.txt", err)
-			untrustedA, err := s.SessionUntrustedContentResult(ctx, sessA.ID)
-			testutil.FailErr(t, "SessionUntrustedContentResult sessA", err)
-			if !untrustedA {
-				t.Fatal("reading alpha.txt after fresh download (http_response#2 after write#4) must mark untrusted ingestion")
-			}
-			ledgerA, err := s.LoadLedger(ctx, sessA.ID)
-			testutil.FailErr(t, "LoadLedger sessA", err)
-			readAlphaRec, ok := evidence.ResolveHandle(ledgerA, readAlphaHandle)
-			if !ok || !readAlphaRec.UntrustedContent || !readAlphaRec.HasExternalCustody() ||
-				!slices.Equal(evidence.ObservedURLsForRecord(readAlphaRec), []string{"https://fresh-alpha.external.example/v1/fresh.txt"}) {
-				t.Fatalf("readAlphaRec = %+v urls=%v, want UntrustedContent=true and only fresh URL",
-					readAlphaRec, evidence.ObservedURLsForRecord(readAlphaRec))
-			}
-			if readAlphaRec.CustodySeq() != 0 {
-				t.Fatalf("readAlphaRec.CustodySeq() = %d, want 0 on non-replacing read record", readAlphaRec.CustodySeq())
-			}
-			w4Rec, ok := evidence.ResolveHandle(ledgerA, w4)
-			h2Rec, ok2 := evidence.ResolveHandle(ledgerA, h2)
-			if !ok || !ok2 || w4Rec.CustodySeq() <= 0 || h2Rec.CustodySeq() <= w4Rec.CustodySeq() {
-				t.Fatalf("expected 0 < w4.CustodySeq (%d) < h2.CustodySeq (%d)", w4Rec.CustodySeq(), h2Rec.CustodySeq())
-			}
-
-			// Case B: High download ordinals (http_response#3 on beta.txt, http_response#4 on gamma.txt) followed by
-			// whole-file local writes with lower write ordinals (write#1 on beta.txt, write#2 on gamma.txt), plus unrelated path other_dl.txt.
-			sessB, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
-			testutil.FailErr(t, "Create sessB", err)
-
-			_, _, err = s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "http_request",
-				map[string]any{"url": "https://other.external.example/v1/keep.txt", "response_path": "other_dl.txt"},
-				`{"status":200,"url":"https://other.external.example/v1/keep.txt","response_path":"other_dl.txt","written":true}`,
-			)
-			testutil.FailErr(t, "download other_dl.txt", err)
-			_, _, err = s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "http_request",
-				map[string]any{"url": "https://beta.external.example/v1/old.txt", "response_path": "beta.txt"},
-				`{"status":200,"url":"https://beta.external.example/v1/old.txt","response_path":"beta.txt","written":true}`,
-			)
-			testutil.FailErr(t, "download beta.txt v1", err)
-			bh3, _, err := s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "http_request",
-				map[string]any{"url": "https://beta.external.example/v2/newer.txt", "response_path": "beta.txt"},
-				`{"status":200,"url":"https://beta.external.example/v2/newer.txt","response_path":"beta.txt","written":true}`,
-			)
-			testutil.FailErr(t, "download beta.txt v2", err)
-			if bh3 != "http_response#3" {
-				t.Fatalf("bh3 = %q, want http_response#3", bh3)
-			}
-			gh4, err := s.CommitProgramHTTPProvenance(ctx, sessB.ID, dir, evidence.ProgramHTTPProvenance{
-				ObservedURLs: []string{"https://gamma.external.example/v1/curl.txt"},
-				CustodyPaths: []string{"gamma.txt"},
-			})
-			testutil.FailErr(t, "CommitProgramHTTPProvenance gamma.txt", err)
-			if gh4 != "http_response#4" {
-				t.Fatalf("gh4 = %q, want http_response#4", gh4)
-			}
-
-			// Reopen/reload store, then overwrite beta.txt (write#1, ordinal=1 < 3) and gamma.txt (write#2, ordinal=2 < 4) with clean local content.
-			s = tc.reopen()
-			bw1, _, err := s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "write",
-				map[string]any{"path": "beta.txt"},
-				`{"path":"beta.txt","bytes_written":12}`,
-			)
-			testutil.FailErr(t, "write beta.txt", err)
-			if bw1 != "write#1" {
-				t.Fatalf("bw1 = %q, want write#1", bw1)
-			}
-			gw2, _, err := s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "write",
-				map[string]any{"path": "gamma.txt"},
-				`{"path":"gamma.txt","bytes_written":12}`,
-			)
-			testutil.FailErr(t, "write gamma.txt", err)
-			if gw2 != "write#2" {
-				t.Fatalf("gw2 = %q, want write#2", gw2)
-			}
-
-			// Reopen/reload store: beta.txt and gamma.txt must be clean, while unrelated other_dl.txt keeps its external custody.
-			s = tc.reopen()
-			if urls, err := s.ExternalCustodyURLsForPaths(ctx, sessB.ID, dir, []string{"beta.txt", "gamma.txt"}); err != nil || len(urls) != 0 {
-				t.Fatalf("ExternalCustodyURLsForPaths(beta.txt, gamma.txt) = %v, err=%v, want empty", urls, err)
-			}
-			if urls, err := s.ExternalCustodyURLsForPaths(ctx, sessB.ID, dir, []string{"other_dl.txt"}); err != nil ||
-				!slices.Equal(urls, []string{"https://other.external.example/v1/keep.txt"}) {
-				t.Fatalf("ExternalCustodyURLsForPaths(other_dl.txt) = %v, err=%v, want [https://other.external.example/v1/keep.txt]", urls, err)
-			}
-
-			readBetaHandle, _, err := s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "read",
-				map[string]any{"path": "beta.txt"},
-				`{"path":"beta.txt","content":"1|clean local beta\n","offset":1,"end_line":1}`,
-			)
-			testutil.FailErr(t, "read beta.txt", err)
-			readGammaHandle, _, err := s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "read",
-				map[string]any{"path": "gamma.txt"},
-				`{"path":"gamma.txt","content":"1|clean local gamma\n","offset":1,"end_line":1}`,
-			)
-			testutil.FailErr(t, "read gamma.txt", err)
-			untrustedB, err := s.SessionUntrustedContentResult(ctx, sessB.ID)
-			testutil.FailErr(t, "SessionUntrustedContentResult sessB after clean reads", err)
-			if untrustedB {
-				t.Fatal("reading beta.txt and gamma.txt after whole-file local writes (write#1, write#2) must not mark untrusted ingestion")
-			}
-
-			ledgerB, err := s.LoadLedger(ctx, sessB.ID)
-			testutil.FailErr(t, "LoadLedger sessB", err)
-			for _, h := range []string{readBetaHandle, readGammaHandle} {
-				rec, ok := evidence.ResolveHandle(ledgerB, h)
-				if !ok || rec.UntrustedContent || rec.HasExternalCustody() || len(evidence.ObservedURLsForRecord(rec)) != 0 {
-					t.Fatalf("clean read record %s = %+v urls=%v, want clean", h, rec, evidence.ObservedURLsForRecord(rec))
-				}
-			}
-
-			// Positive re-download on gamma.txt after local write attaches only the new URL.
-			gh5, _, err := s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "http_request",
-				map[string]any{"url": "https://gamma.external.example/v2/redownload.txt", "response_path": "gamma.txt"},
-				`{"status":200,"url":"https://gamma.external.example/v2/redownload.txt","response_path":"gamma.txt","written":true}`,
-			)
-			testutil.FailErr(t, "re-download gamma.txt", err)
-			if gh5 != "http_response#5" {
-				t.Fatalf("gh5 = %q, want http_response#5", gh5)
-			}
-			s = tc.reopen()
-			readGamma2Handle, _, err := s.CommitEvidenceToolResult(
-				ctx, sessB.ID, dir, "read",
-				map[string]any{"path": "gamma.txt"},
-				`{"path":"gamma.txt","content":"1|redownloaded gamma\n","offset":1,"end_line":1}`,
-			)
-			testutil.FailErr(t, "read gamma.txt after re-download", err)
-			ledgerB2, err := s.LoadLedger(ctx, sessB.ID)
-			testutil.FailErr(t, "LoadLedger sessB after re-download", err)
-			readGamma2Rec, ok := evidence.ResolveHandle(ledgerB2, readGamma2Handle)
-			if !ok || !readGamma2Rec.UntrustedContent || !readGamma2Rec.HasExternalCustody() ||
-				!slices.Equal(evidence.ObservedURLsForRecord(readGamma2Rec), []string{"https://gamma.external.example/v2/redownload.txt"}) {
-				t.Fatalf("readGamma2Rec = %+v urls=%v, want only v2 redownload URL",
-					readGamma2Rec, evidence.ObservedURLsForRecord(readGamma2Rec))
-			}
+			chronologySkewCaseA(t, ctx, s, tc.reopen, dir)
+			chronologySkewCaseB(t, ctx, s, tc.reopen, dir)
 		})
+	}
+}
+
+// chronologySkewCaseA covers a high write ordinal (write#4) followed by a fresh external
+// download with a lower http_response ordinal (http_response#2).
+func chronologySkewCaseA(t *testing.T, ctx context.Context, s chronologyBackend, reopen func() chronologyBackend, dir string) {
+	sessA, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create sessA", err)
+
+	// Seed initial download on alpha.txt (http_response#1, stale URL) to establish same-kind history.
+	h1, _, err := s.CommitEvidenceToolResult(
+		ctx, sessA.ID, dir, "http_request",
+		map[string]any{"url": "https://stale-alpha.external.example/v0/init.txt", "response_path": "alpha.txt"},
+		`{"status":200,"url":"https://stale-alpha.external.example/v0/init.txt","response_path":"alpha.txt","written":true}`,
+	)
+	testutil.FailErr(t, "initial download alpha.txt", err)
+	if h1 != "http_response#1" {
+		t.Fatalf("h1 = %q, want http_response#1", h1)
+	}
+
+	// Unrelated writes advance the write ordinal before alpha.txt is written.
+	// (write#4, ordinal=4).
+	for i := 1; i <= 3; i++ {
+		unrel := fmt.Sprintf("unrelated_%d.go", i)
+		wh, _, err := s.CommitEvidenceToolResult(
+			ctx, sessA.ID, dir, "write",
+			map[string]any{"path": unrel},
+			fmt.Sprintf(`{"path":%q,"bytes_written":16}`, unrel),
+		)
+		testutil.FailErr(t, "unrelated write", err)
+		if wh != fmt.Sprintf("write#%d", i) {
+			t.Fatalf("wh = %q, want write#%d", wh, i)
+		}
+	}
+	w4, _, err := s.CommitEvidenceToolResult(
+		ctx, sessA.ID, dir, "write",
+		map[string]any{"path": "alpha.txt"},
+		`{"path":"alpha.txt","bytes_written":24}`,
+	)
+	testutil.FailErr(t, "full write alpha.txt", err)
+	if w4 != "write#4" {
+		t.Fatalf("w4 = %q, want write#4", w4)
+	}
+
+	// After reopening, a fresh download replaces alpha.txt.
+	// < write#4 ordinal=4).
+	s = reopen()
+	h2, _, err := s.CommitEvidenceToolResult(
+		ctx, sessA.ID, dir, "http_request",
+		map[string]any{"url": "https://fresh-alpha.external.example/v1/fresh.txt", "response_path": "alpha.txt"},
+		`{"status":200,"url":"https://fresh-alpha.external.example/v1/fresh.txt","response_path":"alpha.txt","written":true}`,
+	)
+	testutil.FailErr(t, "fresh download alpha.txt", err)
+	if h2 != "http_response#2" {
+		t.Fatalf("h2 = %q, want http_response#2", h2)
+	}
+
+	// After reopening, alpha.txt carries only the fresh URL and a read ingests it.
+	// read as untrusted ingestion.
+	s = reopen()
+	alphaURLs, err := s.ExternalCustodyURLsForPaths(ctx, sessA.ID, dir, []string{"alpha.txt"})
+	testutil.FailErr(t, "ExternalCustodyURLsForPaths alpha.txt", err)
+	if !slices.Equal(alphaURLs, []string{"https://fresh-alpha.external.example/v1/fresh.txt"}) {
+		t.Fatalf("ExternalCustodyURLsForPaths(alpha.txt) = %v, want [https://fresh-alpha.external.example/v1/fresh.txt]", alphaURLs)
+	}
+
+	readAlphaHandle, _, err := s.CommitEvidenceToolResult(
+		ctx, sessA.ID, dir, "read",
+		map[string]any{"path": "alpha.txt"},
+		`{"path":"alpha.txt","content":"1|fresh remote payload\n","offset":1,"end_line":1}`,
+	)
+	testutil.FailErr(t, "read alpha.txt", err)
+	untrustedA, err := s.SessionUntrustedContentResult(ctx, sessA.ID)
+	testutil.FailErr(t, "SessionUntrustedContentResult sessA", err)
+	if !untrustedA {
+		t.Fatal("reading alpha.txt after fresh download (http_response#2 after write#4) must mark untrusted ingestion")
+	}
+	ledgerA, err := s.LoadLedger(ctx, sessA.ID)
+	testutil.FailErr(t, "LoadLedger sessA", err)
+	readAlphaRec, ok := evidence.ResolveHandle(ledgerA, readAlphaHandle)
+	if !ok || !readAlphaRec.UntrustedContent || !readAlphaRec.HasExternalCustody() ||
+		!slices.Equal(evidence.ObservedURLsForRecord(readAlphaRec), []string{"https://fresh-alpha.external.example/v1/fresh.txt"}) {
+		t.Fatalf("readAlphaRec = %+v urls=%v, want UntrustedContent=true and only fresh URL",
+			readAlphaRec, evidence.ObservedURLsForRecord(readAlphaRec))
+	}
+	if readAlphaRec.CustodySeq() != 0 {
+		t.Fatalf("readAlphaRec.CustodySeq() = %d, want 0 on non-replacing read record", readAlphaRec.CustodySeq())
+	}
+	w4Rec, ok := evidence.ResolveHandle(ledgerA, w4)
+	h2Rec, ok2 := evidence.ResolveHandle(ledgerA, h2)
+	if !ok || !ok2 || w4Rec.CustodySeq() <= 0 || h2Rec.CustodySeq() <= w4Rec.CustodySeq() {
+		t.Fatalf("expected 0 < w4.CustodySeq (%d) < h2.CustodySeq (%d)", w4Rec.CustodySeq(), h2Rec.CustodySeq())
+	}
+}
+
+// chronologySkewCaseB covers high download ordinals (http_response#3 on beta.txt,
+// http_response#4 on gamma.txt) followed by whole-file local writes with lower write ordinals
+// (write#1 on beta.txt, write#2 on gamma.txt), plus unrelated path other_dl.txt.
+func chronologySkewCaseB(t *testing.T, ctx context.Context, s chronologyBackend, reopen func() chronologyBackend, dir string) {
+	sessB, err := s.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "Create sessB", err)
+
+	_, _, err = s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "http_request",
+		map[string]any{"url": "https://other.external.example/v1/keep.txt", "response_path": "other_dl.txt"},
+		`{"status":200,"url":"https://other.external.example/v1/keep.txt","response_path":"other_dl.txt","written":true}`,
+	)
+	testutil.FailErr(t, "download other_dl.txt", err)
+	_, _, err = s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "http_request",
+		map[string]any{"url": "https://beta.external.example/v1/old.txt", "response_path": "beta.txt"},
+		`{"status":200,"url":"https://beta.external.example/v1/old.txt","response_path":"beta.txt","written":true}`,
+	)
+	testutil.FailErr(t, "download beta.txt v1", err)
+	bh3, _, err := s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "http_request",
+		map[string]any{"url": "https://beta.external.example/v2/newer.txt", "response_path": "beta.txt"},
+		`{"status":200,"url":"https://beta.external.example/v2/newer.txt","response_path":"beta.txt","written":true}`,
+	)
+	testutil.FailErr(t, "download beta.txt v2", err)
+	if bh3 != "http_response#3" {
+		t.Fatalf("bh3 = %q, want http_response#3", bh3)
+	}
+	gh4, err := s.CommitProgramHTTPProvenance(ctx, sessB.ID, dir, evidence.ProgramHTTPProvenance{
+		ObservedURLs: []string{"https://gamma.external.example/v1/curl.txt"},
+		CustodyPaths: []string{"gamma.txt"},
+	})
+	testutil.FailErr(t, "CommitProgramHTTPProvenance gamma.txt", err)
+	if gh4 != "http_response#4" {
+		t.Fatalf("gh4 = %q, want http_response#4", gh4)
+	}
+
+	// After reopening, clean local writes replace beta.txt and gamma.txt.
+	// ordinal=2 < 4) with clean local content.
+	s = reopen()
+	bw1, _, err := s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "write",
+		map[string]any{"path": "beta.txt"},
+		`{"path":"beta.txt","bytes_written":12}`,
+	)
+	testutil.FailErr(t, "write beta.txt", err)
+	if bw1 != "write#1" {
+		t.Fatalf("bw1 = %q, want write#1", bw1)
+	}
+	gw2, _, err := s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "write",
+		map[string]any{"path": "gamma.txt"},
+		`{"path":"gamma.txt","bytes_written":12}`,
+	)
+	testutil.FailErr(t, "write gamma.txt", err)
+	if gw2 != "write#2" {
+		t.Fatalf("gw2 = %q, want write#2", gw2)
+	}
+
+	// Reopen/reload store: beta.txt and gamma.txt must be clean, while unrelated other_dl.txt keeps its external custody.
+	s = reopen()
+	if urls, err := s.ExternalCustodyURLsForPaths(ctx, sessB.ID, dir, []string{"beta.txt", "gamma.txt"}); err != nil || len(urls) != 0 {
+		t.Fatalf("ExternalCustodyURLsForPaths(beta.txt, gamma.txt) = %v, err=%v, want empty", urls, err)
+	}
+	if urls, err := s.ExternalCustodyURLsForPaths(ctx, sessB.ID, dir, []string{"other_dl.txt"}); err != nil ||
+		!slices.Equal(urls, []string{"https://other.external.example/v1/keep.txt"}) {
+		t.Fatalf("ExternalCustodyURLsForPaths(other_dl.txt) = %v, err=%v, want [https://other.external.example/v1/keep.txt]", urls, err)
+	}
+
+	readBetaHandle, _, err := s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "read",
+		map[string]any{"path": "beta.txt"},
+		`{"path":"beta.txt","content":"1|clean local beta\n","offset":1,"end_line":1}`,
+	)
+	testutil.FailErr(t, "read beta.txt", err)
+	readGammaHandle, _, err := s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "read",
+		map[string]any{"path": "gamma.txt"},
+		`{"path":"gamma.txt","content":"1|clean local gamma\n","offset":1,"end_line":1}`,
+	)
+	testutil.FailErr(t, "read gamma.txt", err)
+	untrustedB, err := s.SessionUntrustedContentResult(ctx, sessB.ID)
+	testutil.FailErr(t, "SessionUntrustedContentResult sessB after clean reads", err)
+	if untrustedB {
+		t.Fatal("reading beta.txt and gamma.txt after whole-file local writes (write#1, write#2) must not mark untrusted ingestion")
+	}
+
+	ledgerB, err := s.LoadLedger(ctx, sessB.ID)
+	testutil.FailErr(t, "LoadLedger sessB", err)
+	for _, h := range []string{readBetaHandle, readGammaHandle} {
+		rec, ok := evidence.ResolveHandle(ledgerB, h)
+		if !ok || rec.UntrustedContent || rec.HasExternalCustody() || len(evidence.ObservedURLsForRecord(rec)) != 0 {
+			t.Fatalf("clean read record %s = %+v urls=%v, want clean", h, rec, evidence.ObservedURLsForRecord(rec))
+		}
+	}
+
+	// Positive re-download on gamma.txt after local write attaches only the new URL.
+	gh5, _, err := s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "http_request",
+		map[string]any{"url": "https://gamma.external.example/v2/redownload.txt", "response_path": "gamma.txt"},
+		`{"status":200,"url":"https://gamma.external.example/v2/redownload.txt","response_path":"gamma.txt","written":true}`,
+	)
+	testutil.FailErr(t, "re-download gamma.txt", err)
+	if gh5 != "http_response#5" {
+		t.Fatalf("gh5 = %q, want http_response#5", gh5)
+	}
+	s = reopen()
+	readGamma2Handle, _, err := s.CommitEvidenceToolResult(
+		ctx, sessB.ID, dir, "read",
+		map[string]any{"path": "gamma.txt"},
+		`{"path":"gamma.txt","content":"1|redownloaded gamma\n","offset":1,"end_line":1}`,
+	)
+	testutil.FailErr(t, "read gamma.txt after re-download", err)
+	ledgerB2, err := s.LoadLedger(ctx, sessB.ID)
+	testutil.FailErr(t, "LoadLedger sessB after re-download", err)
+	readGamma2Rec, ok := evidence.ResolveHandle(ledgerB2, readGamma2Handle)
+	if !ok || !readGamma2Rec.UntrustedContent || !readGamma2Rec.HasExternalCustody() ||
+		!slices.Equal(evidence.ObservedURLsForRecord(readGamma2Rec), []string{"https://gamma.external.example/v2/redownload.txt"}) {
+		t.Fatalf("readGamma2Rec = %+v urls=%v, want only v2 redownload URL",
+			readGamma2Rec, evidence.ObservedURLsForRecord(readGamma2Rec))
 	}
 }
 
@@ -1038,8 +1058,8 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("ExternalCustodyURLsForPaths(legacy.txt) = %v, err=%v, want legacy URL", urls, err)
 	}
 
-	// 2. Commit a whole-file local write on legacy.txt (write#1). Because the session has 1 existing custody-candidate row,
-	// write#1 receives CustodySeq == 2 (> 0) and supersedes legacy http_response#1 (CustodySeq == 0) across reopen.
+	// A whole-file write takes a later sequence than the legacy download and
+	// supersedes it across a reopen.
 	w1, _, err := store.CommitEvidenceToolResult(
 		ctx, sess.ID, dir, "write",
 		map[string]any{"path": "legacy.txt"},
@@ -1054,8 +1074,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("ExternalCustodyURLsForPaths(legacy.txt) after write#1 = %v, err=%v, want empty", urls, err)
 	}
 
-	// 3. Commit multiple non-custody tool results (command, list_dir, find, inline http_request, read, grep, partial edit,
-	// CommitProgramObservation, inline CommitProgramHTTPProvenance) and verify none allocate CustodySeq or advance nextCustodySeq.
+	// Results without custody, and partial edits, allocate no custody sequence.
 	for _, nc := range []struct {
 		tool    string
 		args    map[string]any
@@ -1080,8 +1099,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 	})
 	testutil.FailErr(t, "inline CommitProgramHTTPProvenance", err)
 
-	// Next custody-replacing download (http_response#4) must receive CustodySeq == 3 (immediately after write#1's CustodySeq == 2,
-	// unaffected by the 9 non-custody / partial-edit commits above).
+	// The next custody-replacing download takes the next sequence.
 	h4, _, err := store.CommitEvidenceToolResult(
 		ctx, sess.ID, dir, "http_request",
 		map[string]any{"url": "https://reseeded.external.example/v1/new.txt", "response_path": "legacy.txt"},
@@ -1122,7 +1140,7 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("duplicate UpsertEvidenceRecord mutated existing record: %+v", got)
 	}
 
-	// 5. Superseded custody row with high CustodySeq (e.g. 20) still bounds subsequent CustodySeq allocation monotonically.
+	// A superseded row with a high sequence still bounds later allocation.
 	highWrite := evidence.Record{
 		Handle:     "write#10",
 		Kind:       "write",
@@ -1146,7 +1164,8 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatalf("CustodySeq after superseded Seq=20 row = %d, want 21", gotSeq)
 	}
 
-	// 6. Deterministic zero-scan & fail-closed oracle: poison live custody row h4's line_ranges JSON with an unsupported version ({"v":99}).
+	// An unsupported line-range version on a live custody row fails closed.
+	// unsupported version ({"v":99}).
 	// Ordinary non-custody writes must still succeed (0 custody scans/decodes), whereas custody reads and
 	// custody-replacing commits must fail closed on the corrupt custody row.
 	_, err = sqlDB.ExecContext(ctx, `UPDATE evidence_records SET line_ranges = '{"v":99}' WHERE session_id = ? AND handle = ?`, sess.ID, h4)
@@ -1174,5 +1193,3 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		t.Fatal("file-saving CommitProgramHTTPProvenance must fail closed when allocating CustodySeq over corrupt custody metadata")
 	}
 }
-
-

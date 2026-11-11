@@ -125,7 +125,8 @@ func TestRecordAuxRoundTripCompatibilityAndExternalCustodySupersession(t *testin
 		t.Fatalf("round-trip lost provenance or custody seq: %+v (seq=%d)", decoded, decoded.CustodySeq())
 	}
 
-	// 3. Partial local mutation (edit) preserves external custody, whereas full local replacement (write/delete) supersedes it.
+	// An edit keeps external custody; a full write or delete replaces it.
+	// (write/delete) supersedes it.
 	dl1 := Record{Handle: "http_response#1", Kind: "http_response", Shape: ShapeSurfaceSnapshot, SourceTool: "http_request", Path: "saved.txt", Custody: FileCustody{External: true}}
 	dl1.touchURL("https://first.external.example/a")
 	partialEdit := Record{Handle: "write#1", Kind: "write", Shape: ShapeStructuredEvent, SourceTool: "edit", Path: "saved.txt"}
@@ -148,4 +149,3 @@ func TestRecordAuxRoundTripCompatibilityAndExternalCustodySupersession(t *testin
 		t.Fatalf("re-download after full write must carry only new URL, got %v", urls)
 	}
 }
-

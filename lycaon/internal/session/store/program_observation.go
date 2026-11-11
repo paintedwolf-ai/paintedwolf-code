@@ -219,4 +219,3 @@ func (ev *memoryEvidence) ExternalCustodyURLsForPaths(ctx context.Context, sessi
 	}
 	return evidence.ExternalCustodyURLs(ledger, normalized), nil
 }
-

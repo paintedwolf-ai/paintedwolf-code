@@ -317,7 +317,8 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 	t.Run("downstream_egress_policy_contrast_after_curl_ingestion", func(t *testing.T) {
 		balancedRules := "  - category: tool\n    pattern: http_request\n    effect: allow\n"
 
-		// 1. Clean local session: echo local -> outbound curl to sink.external.example short-circuits under Balanced/Observe without calling the egress resolver.
+		// A session with no external content sends without asking the egress resolver.
+		// Balanced/Observe without calling the egress resolver.
 		cleanMock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 			{
 				Pattern:      "clean step 1",
@@ -353,7 +354,8 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 			t.Fatalf("clean Balanced session must not invoke egress resolver, got %v", cleanResolverHosts)
 		}
 
-		// 2. Ingested session: curl external body -> outbound curl to sink.external.example stops short-circuiting and routes through the egress resolver (denied when rejected, allowed on recovery when approved).
+		// Once external content is ingested, sending asks the egress resolver.
+		// and routes through the egress resolver (denied when rejected, allowed on recovery when approved).
 		ingestedMock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 			{
 				Pattern:      "ingested step 1",
@@ -534,7 +536,8 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 		t.Fatalf("step 1 refusal feedback misrepresented completed initial hop: %q", outDeny.Refusal.Feedback)
 	}
 
-	// 2. Unknown post-send outcome on Hop 1 through the real native curl adapter settles with UncertainEffects==1 and ReplayAvailable==false, without auto-replaying Hop 0 or Hop 1.
+	// An unknown second-hop outcome stays uncertain and is never replayed.
+	// UncertainEffects==1 and ReplayAvailable==false, without auto-replaying Hop 0 or Hop 1.
 	originHits.Store(0)
 	targetHits.Store(0)
 	dropHop1AfterRequest.Store(true)
@@ -552,7 +555,8 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 			outUnknown, originHits.Load(), targetHits.Load())
 	}
 
-	// 3. Explicit caller retry after Hop 1 is healthy and authorized succeeds cleanly and quiet-repeats under the fixture session grant resolver.
+	// An explicit retry succeeds quietly once the second hop is healthy.
+	// the fixture session grant resolver.
 	originHits.Store(0)
 	targetHits.Store(0)
 	dropHop1AfterRequest.Store(false)
@@ -721,7 +725,8 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		return card, done
 	}
 
-	// 1. Selected cookie in cookies.txt raises a secret approval card naming originHost; approving with RecommendedOptionID installs a persistent secret grant in s.h.Settings.Approvals.
+	// A selected secret cookie asks once; the recommended option stores a standing grant.
+	// RecommendedOptionID installs a persistent secret grant in s.h.Settings.Approvals.
 	card1, done1 := waitCheckpoint("step 1 approve origin cookie")
 	if originHits.Load() != 0 {
 		t.Fatalf("step 1 hit origin before checkpoint resolution: %d", originHits.Load())
@@ -757,7 +762,9 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 2 quiet repeat outcome = %+v originHits=%d cookie=%q", out2, originHits.Load(), lastOriginCookie.Load())
 	}
 
-	// 3. Redirect (-L) from covered origin to uncovered target.cookie.example completes Hop 0 with the secret cookie and then raises a secret approval card for target.cookie.example before Hop 1; rejecting withholds only the secret cookie on Hop 1 while preserving benign cookies and completing the redirect.
+	// A redirect to an uncovered target asks before the second hop.
+	// cookie and then raises a secret approval card for target.cookie.example before Hop 1; rejecting withholds
+	// only the secret cookie on Hop 1 while preserving benign cookies and completing the redirect.
 	originHits.Store(0)
 	targetHits.Store(0)
 	lastOriginCookie.Store("")
@@ -785,7 +792,9 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 3 final hits/cookies: origin=%d target=%d targetCookie=%q, want 1/1 and \"theme=dark\" without secret", originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
 	}
 
-	// 4. Changing recipient override (--connect-to localhost instead of 127.0.0.1) is not covered by the existing grant and asks before Hop 0 dials; rejecting withholds only the secret cookie on Hop 0 while preserving benign cookies.
+	// A changed --connect-to route asks before dialing; rejecting withholds only the cookie.
+	// existing grant and asks before Hop 0 dials; rejecting withholds only the secret cookie on Hop 0 while
+	// preserving benign cookies.
 	originHits.Store(0)
 	lastOriginCookie.Store("")
 	card4, done4 := waitCheckpoint("step 4 connect-to uncovered recipient")
@@ -800,7 +809,10 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 4 connect-to secret withhold outcome = %+v / refusal=%+v originHits=%d originCookie=%q", out4, out4.Refusal, originHits.Load(), lastOriginCookie.Load())
 	}
 
-	// 5. Standing grant revocation mid-redirect in the real approval store: install a standing grant for target.cookie.example, then revoke it while Hop 0 (/redirect) is served; Hop 1 must query the live approval store, raise a checkpoint before targetHits increments, and withhold the secret cookie on rejection while completing the redirect.
+	// Revoking the target's grant during the first hop makes the second hop ask again.
+	// target.cookie.example, then revoke it while Hop 0 (/redirect) is served; Hop 1 must query the live
+	// approval store, raise a checkpoint before targetHits increments, and withhold the secret cookie on
+	// rejection while completing the redirect.
 	targetHits.Store(0)
 	lastTargetCookie.Store("")
 	card5a, done5a := waitCheckpoint("step 5a install target standing grant")
@@ -844,7 +856,8 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 5b outcome = %+v origin=%d target=%d targetCookie=%q, want completed 1/1 and \"theme=dark\"", out5b, originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
 	}
 
-	// 6. Revoke origin.cookie.example's standing grant in the real approval store: explicit "once" approval covers only that single admitted operation and does not persist to the next operation.
+	// A once approval covers one operation and does not persist.
+	// covers only that single admitted operation and does not persist to the next operation.
 	for _, id := range originGrantIDs {
 		removed, revokeErr := s.h.Server.Admin.Capabilities.Access.Gate.RevokeGrant(id)
 		testutil.FailErr(t, "revoke origin standing grant", revokeErr)
@@ -979,8 +992,8 @@ func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) 
 
 	owner := s.h.OwnerCtx(t, t.Context())
 
-	// 1. Header value passes initial screenRequest under active .secretignore classification, then pauses on the Hop 0 cookie release checkpoint in BeforeHopRequest.
-	// Withdrawing the classification while paused on that Hop 0 checkpoint must fail closed before any socket dial with OUTBOUND_SECRET_SCREEN_FAILED when BeforeHopRequest revalidates CheckClassification.
+	// Withdrawing the classification during the first hop's cookie review
+	// refuses before any dial.
 	cookieCard1, done1 := waitCookieCard("step 1 withdraw classification while paused on cookie checkpoint")
 	if hits.Load() != 0 {
 		t.Fatalf("step 1 hit server before cookie checkpoint resolution: %d", hits.Load())
@@ -997,7 +1010,7 @@ func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) 
 		t.Fatalf("step 1 server hits = %d, want 0", hits.Load())
 	}
 
-	// 2. Restoring the classification and withholding the secret cookie allows the curl command to proceed without the denied cookie while preserving the benign cookie and header.
+	// Withholding the secret cookie sends the request without it.
 	ignoreActive.Store(true)
 	hits.Store(0)
 	seenAuth.Store("")
@@ -1014,7 +1027,3 @@ func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) 
 		t.Fatalf("step 2 hits=%d header=%q cookie=%q, want 1, %s, theme=dark", hits.Load(), seenAuth.Load(), seenCookie.Load(), ignoredHeaderSecret)
 	}
 }
-
-
-
-
