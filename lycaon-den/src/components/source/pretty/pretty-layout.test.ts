@@ -1,1102 +1,357 @@
-// @vitest-environment jsdom
-import {
-  deleteCharBackward,
-  deleteCharForward,
-  indentLess,
-  indentMore,
-  insertNewlineAndIndent,
-} from "@codemirror/commands";
-import { css } from "@codemirror/lang-css";
-import { html } from "@codemirror/lang-html";
-import { javascript } from "@codemirror/lang-javascript";
-import { json } from "@codemirror/lang-json";
-import { forceParsing, syntaxTreeAvailable } from "@codemirror/language";
-import { Compartment, EditorState, Text } from "@codemirror/state";
-import { EditorView } from "@codemirror/view";
+import { indentUnit } from "@codemirror/language";
+import { EditorState, type Extension } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import {
-  classifyDocumentFormat,
-  determineDocumentLineEligibility,
-  type LineEligibility,
-  isEnvelopeHeaderLine,
-  isExcerptBarrierLine,
-  isKnownCodeOrMarkupPath,
-  matchEnvelopeOrLogPrefix,
-  parseOpeningFence,
-  resolveFenceLayoutFamily,
-} from "./pretty-classify.ts";
-import { PrettyBudgetTracker } from "./pretty-limits.ts";
-import {
-  applyPrettyNativeConfig,
-  computePrettyNativeLayout,
-  createPrettyNativeDecorationsExtension,
-  prettyNativeStateField,
-} from "./pretty-native-layout.ts";
+  createPrettyExtension,
+  PRETTY_MAX_INPUT,
+  type PrettyConfig,
+  prettyOutcomeOf,
+  prettyWorkOf,
+} from "./pretty-layout.ts";
+import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan.ts";
+import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 
-function docOf(text: string): Text {
-  return Text.of(text.split("\n"));
+type Layout = { breaks: number[]; lines: Array<[number, number, number]> };
+
+function open(doc: string, config: Omit<PrettyConfig, "enabled">, unit = "  ", extra: Extension = []): EditorState {
+  return EditorState.create({
+    doc,
+    extensions: [indentUnit.of(unit), EditorState.tabSize.of(4), createPrettyExtension({ enabled: true, ...config }), extra],
+  });
 }
 
-describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
-  it("FMT-AC-01, FMT-AC-05: computes exact raw-offset lexical boundaries while keeping raw text and token spelling untouched", () => {
-    const raw =
-      '{"id":9007199254740993,"id":1e-05,"s":"\\u0041\\n","empty":{},"arr":[1,2]}';
-    const layout = computePrettyNativeLayout(raw, { path: "payload.json" });
+function layoutOf(state: EditorState): Layout {
+  const breaks: number[] = [];
+  const lines: Array<[number, number, number]> = [];
+  state.facet(prettyLayoutDecorations).between(0, state.doc.length, (from, to, value) => {
+    if (from === to) {
+      expect(value.spec.widget).toBeInstanceOf(PrettyBreakWidget);
+      breaks.push(from);
+    } else {
+      const columns = /pw-pretty-line-(\d+)/.exec(String(value.spec.class))?.[1];
+      expect(columns).toBeDefined();
+      lines.push([from, to, Number(columns)]);
+    }
+  });
+  return { breaks, lines };
+}
 
-    expect(layout.outcome).toBe("formatted");
-    expect(layout.family).toBe("json");
-    expect(layout.boundaries).toEqual([
-      { pos: 1, depth: 1 }, // after opening `{`
-      { pos: 23, depth: 1 }, // after `"id":9007199254740993,`
-      { pos: 34, depth: 1 }, // after `"id":1e-05,`
-      { pos: 49, depth: 1 }, // after `"s":"\\u0041\\n",`
-      { pos: 60, depth: 1 }, // after `"empty":{},` (empty `{}` is not split!)
-      { pos: 67, depth: 2 }, // after `"arr":[`
-      { pos: 69, depth: 2 }, // after `1,`
-      { pos: 70, depth: 1 }, // before `]`
-      { pos: 71, depth: 0 }, // before `}`
+/** The source with each break written out as a newline and its visual line's indentation. */
+function writtenOut(state: EditorState): string {
+  const { breaks, lines } = layoutOf(state);
+  const columnsAt = new Map(lines.map(([from, , columns]) => [from, columns]));
+  const text = state.doc.toString();
+  let out = "";
+  let last = 0;
+  for (const pos of breaks) {
+    out += text.slice(last, pos).replace(/[ \t]+$/, "") + "\n" + " ".repeat(columnsAt.get(pos) ?? 0);
+    last = pos;
+  }
+  return out + text.slice(last);
+}
+
+function pretty(doc: string, path: string, unit = "  "): string {
+  return writtenOut(open(doc, { path }, unit));
+}
+
+function rebuilt(state: EditorState): Layout {
+  return layoutOf(EditorState.create({
+    doc: state.doc,
+    extensions: [indentUnit.of(state.facet(indentUnit)), EditorState.tabSize.of(state.tabSize), createPrettyExtension(currentConfig(state))],
+  }));
+}
+
+const configs = new WeakMap<EditorState, PrettyConfig>();
+function currentConfig(state: EditorState): PrettyConfig {
+  return configs.get(state) ?? { enabled: true };
+}
+
+function edit(state: EditorState, from: number, to: number, insert: string): EditorState {
+  const next = state.update({ changes: { from, to, insert } }).state;
+  configs.set(next, currentConfig(state));
+  return next;
+}
+
+describe("defined layout", () => {
+  it("expands every non-empty data container and leaves empty ones", () => {
+    expect(pretty('{"name":"pw","tags":["a","b"],"deps":{"x":1,"y":[]}}', "data.json")).toBe([
+      "{",
+      '  "name":"pw",',
+      '  "tags":[',
+      '    "a",',
+      '    "b"',
+      "  ],",
+      '  "deps":{',
+      '    "x":1,',
+      '    "y":[]',
+      "  }",
+      "}",
+    ].join("\n"));
+  });
+
+  it("matches the indented serialisation of JSON in line structure and columns", () => {
+    const value = { service: "gateway", ports: [80, 443], nested: { list: [{ a: 1 }, { b: [true, null] }], empty: {} } };
+    const written = pretty(JSON.stringify(value), "data.json");
+    const expected = JSON.stringify(value, null, 2).replace(/": /g, '":');
+    expect(written).toBe(expected);
+  });
+
+  it("adds nothing to a formatted source", () => {
+    const formatted = JSON.stringify({ a: 1, b: { c: [1, 2] } }, null, 2);
+    expect(layoutOf(open(formatted, { path: "data.json" })).breaks).toEqual([]);
+    const module = [
+      'import { a, b } from "x";',
+      "type Item = { id: string; name: string };",
+      "export function f(o: { id: string; name: string }) { if (o) { return o.id; } return a + b; }",
+      "const table = { alpha: 1, beta: [1, 2, 3], gamma: { delta: true } };",
+    ].join("\n");
+    expect(layoutOf(open(module, { path: "module.ts" })).breaks).toEqual([]);
+    expect(layoutOf(open(".a { color: red; } .b { margin: 0 }\n", { path: "s.css" })).breaks).toEqual([]);
+  });
+
+  it("lays out a code line wider than 240 columns and leaves one at 240", () => {
+    const call = (width: number) => {
+      const items: string[] = [];
+      for (let i = 0; 5 + items.join(",").length < width - 40; i++) items.push(`a${i}`);
+      const text = `call(${items.join(",")}`;
+      return `${text}${"x".repeat(width - text.length - 2)});`;
+    };
+    expect(call(240)).toHaveLength(240);
+    expect(layoutOf(open(call(240), { path: "a.js" })).breaks).toEqual([]);
+    expect(layoutOf(open(call(241), { path: "a.js" })).breaks.length).toBeGreaterThan(0);
+  });
+
+  it("breaks minified script at statements, wide groups and after blocks", () => {
+    const source = 'function a(t,e){if(!t)throw new Error("missing");const n=new Map,r=e.items.filter(i=>i.ok);for(const i of r){n.set(i.id,i)}return n}export function b(t){return a(t,{items:[{id:1,ok:!0},{id:2,ok:!1}]})}const c={mode:"fast",retries:3,timeoutMs:30000,onError:function(t){console.error("failed",t)}};export default c;';
+    expect(source.length).toBeGreaterThan(240);
+    expect(pretty(source, "bundle.js")).toBe([
+      "function a(t,e){",
+      '  if(!t)throw new Error("missing");',
+      "  const n=new Map,r=e.items.filter(i=>i.ok);",
+      "  for(const i of r){n.set(i.id,i)}",
+      "  return n",
+      "}",
+      "export function b(t){return a(t,{items:[{id:1,ok:!0},{id:2,ok:!1}]})}",
+      "const c={",
+      '  mode:"fast",',
+      "  retries:3,",
+      "  timeoutMs:30000,",
+      '  onError:function(t){console.error("failed",t)}',
+      "};",
+      "export default c;",
+    ].join("\n"));
+  });
+
+  it("keeps a continuation keyword after a block on its line", () => {
+    const source = `if(a){${"x();".repeat(30)}}else{${"y();".repeat(30)}}try{z()}catch(e){w()}`;
+    const written = pretty(source, "a.js");
+    expect(written).toMatch(/^\}else\{$/m);
+    expect(written).toMatch(/try\{z\(\)\}catch\(e\)\{w\(\)\}/);
+  });
+
+  it("starts every style rule on its own line", () => {
+    const rules = ".btn{color:#fff;background:#0a66c2}.btn:hover{background:#004182}@media (max-width:600px){.btn{padding:4px 8px;font-size:12px;border-radius:2px}.nav{display:none}}:root{--gap:8px}";
+    const source = rules + "a{b:c}".repeat(20);
+    expect(source.length).toBeGreaterThan(240);
+    expect(pretty(source, "site.css").split("\n").slice(0, 7)).toEqual([
+      ".btn{color:#fff;background:#0a66c2}",
+      ".btn:hover{background:#004182}",
+      "@media (max-width:600px){",
+      "  .btn{padding:4px 8px;font-size:12px;border-radius:2px}",
+      "  .nav{display:none}",
+      "}",
+      ":root{--gap:8px}",
     ]);
   });
 
-  it("FMT-AC-03, FMT-AC-16: tolerates malformed intermediate JSON and resets depth per line in JSONL mode", () => {
-    const malformed = '{"a":1"b":[1,2';
-    const res = computePrettyNativeLayout(malformed, { path: "broken.json" });
-    expect(res.outcome).toBe("formatted");
-    expect(res.boundaries).toEqual([
-      { pos: 1, depth: 1 },
-      { pos: 11, depth: 2 },
-      { pos: 13, depth: 2 },
-    ]);
-
-    const jsonl = '{"a":[1,2\n{"b":2}';
-    const jsonlRes = computePrettyNativeLayout(jsonl, { path: "stream.jsonl" });
-    expect(jsonlRes.outcome).toBe("formatted");
-    expect(jsonlRes.lineStates[0]?.startDepth).toBe(0);
-    expect(jsonlRes.lineStates[1]?.startDepth).toBe(0);
+  it("breaks between adjacent tags on a wide markup line", () => {
+    const source = `<ul>${'<li class="item">one</li>'.repeat(12)}</ul>`;
+    const written = pretty(source, "page.html");
+    expect(written.split("\n")).toEqual(["<ul>", ...Array.from({ length: 12 }, () => '  <li class="item">one</li>'), "</ul>"]);
   });
 
-  it("FMT-AC-04, FMT-AC-18: formats JSON-like data with comments and trailing commas (JSONC/JSON5) including malformed edits", () => {
-    const jsonc =
-      '{\n// line comment with {ignored:1}\n"a": /* block {comment} */ [1, 2,],\n}';
-    const res = computePrettyNativeLayout(jsonc, { path: "tsconfig.jsonc" });
-    expect(res.outcome).toBe("formatted");
-    expect(res.family).toBe("jsonc");
-    const line3 = res.lineStates[2]!;
-    expect(line3.relBoundaries.length).toBeGreaterThanOrEqual(3);
-
-    const malformedJsonc = '{"a":1 "b":2, /* unclosed comment { }';
-    const malRes = computePrettyNativeLayout(malformedJsonc, {
-      path: "tsconfig.jsonc",
-    });
-    expect(malRes.outcome).toBe("formatted");
-    expect(malRes.lineStates[0]?.endInBlockComment).toBe(true);
-  });
-
-  it("FMT-AC-04, FMT-AC-18: formats XML/HTML structural tag boundaries while preserving inline text, comments, CDATA, and whitespace-sensitive <pre>/<code>/<script>/<style>", () => {
-    const xml =
-      '<root><item id="1"><name>Alpha</name><flag/></item><!-- <skip/> --><pre>  <span>keep   spaces</span>  </pre></root>';
-    const res = computePrettyNativeLayout(xml, { path: "doc.xml" });
-    expect(res.outcome).toBe("formatted");
-    expect(res.family).toBe("xml-html");
-
-    const breakSubstrings = res.boundaries.map((b) =>
-      xml.slice(b.pos, b.pos + 8),
-    );
-    expect(breakSubstrings.some((s) => s.startsWith("<item"))).toBe(true);
-    expect(breakSubstrings.some((s) => s.startsWith("<name>"))).toBe(true);
-    expect(breakSubstrings.some((s) => s.startsWith("<flag/>"))).toBe(true);
-    expect(breakSubstrings.some((s) => s.startsWith("</item>"))).toBe(true);
-    expect(breakSubstrings.some((s) => s.startsWith("<pre>"))).toBe(true);
-    expect(breakSubstrings.some((s) => s.startsWith("</root>"))).toBe(true);
-    expect(breakSubstrings.some((s) => s.startsWith("Alpha"))).toBe(false);
-    expect(breakSubstrings.some((s) => s.startsWith("<span>"))).toBe(false);
-    expect(breakSubstrings.some((s) => s.startsWith("</span>"))).toBe(false);
-
-    const malformedXml = "<root><item><name>Alpha</name><unclosed";
-    const malXmlRes = computePrettyNativeLayout(malformedXml, {
-      path: "index.html",
-    });
-    expect(malXmlRes.outcome).toBe("formatted");
-    expect(malXmlRes.boundaries.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("FMT-AC-04, FMT-AC-18: formats JavaScript/TypeScript dense objects, arrays, and blocks without splitting for(...) headers, call arguments, regexes, or strings", () => {
-    const tsCode =
-      'const cfg={host:"a;b,c",ports:[80,443],re:/a,b;c/};for(let i=0;i<2;i++){run(i,cfg,{retry:true,max:3});}';
-    const res = computePrettyNativeLayout(tsCode, { path: "snippet.ts" });
-    expect(res.outcome).toBe("formatted");
-    expect(res.family).toBe("javascript");
-
-    const forStart = tsCode.indexOf("for(");
-    const forOpenBrace = tsCode.indexOf("{", forStart);
-    const breaksInsideForHeader = res.boundaries.filter(
-      (b) => b.pos > forStart && b.pos <= forOpenBrace,
-    );
-    expect(breaksInsideForHeader).toEqual([]);
-
-    const retryPos = tsCode.indexOf("retry:true,");
-    expect(
-      res.boundaries.some((b) => b.pos === retryPos + "retry:true,".length),
-    ).toBe(true);
-
-    const malformedTs = "const cfg={a:1 b:2,c:[3,4};";
-    const malTsRes = computePrettyNativeLayout(malformedTs, {
-      path: "snippet.ts",
-    });
-    expect(malTsRes.outcome).toBe("formatted");
-    expect(malTsRes.boundaries.length).toBeGreaterThanOrEqual(3);
-  });
-
-  it("FMT-AC-04, FMT-AC-18: formats CSS rules and declarations while preserving url(...), rgb(...), strings, and comments", () => {
-    const cssText =
-      '.card{background:url("http://example.com/a;b{c}.png");color:rgb(1,2,3);padding:4px/* {comment;} */}.btn{display:flex;gap:8px}';
-    const res = computePrettyNativeLayout(cssText, { path: "styles.css" });
-    expect(res.outcome).toBe("formatted");
-    expect(res.family).toBe("css");
-
-    const urlStart = cssText.indexOf("url(");
-    const urlEnd = cssText.indexOf(")", urlStart);
-    expect(
-      res.boundaries.filter((b) => b.pos > urlStart && b.pos <= urlEnd),
-    ).toEqual([]);
-    expect(res.boundaries.length).toBeGreaterThanOrEqual(6);
-
-    const malformedCss = ".card{color:red padding:4px;margin:0";
-    const malCssRes = computePrettyNativeLayout(malformedCss, {
-      path: "styles.css",
-    });
-    expect(malCssRes.outcome).toBe("formatted");
-    expect(malCssRes.boundaries.length).toBeGreaterThanOrEqual(2);
-  });
-
-  it("FMT-AC-02, FMT-AC-04, FMT-AC-20: formats fenced blocks for supported common blobs in Markdown while keeping whitespace-sensitive Python/YAML and unsupported languages as truthful passthrough", () => {
-    for (const [path, sample] of [
-      ["script.py", "def f():\n    return {'a': 1, 'b': 2}\n"],
-      ["config.yaml", "service:\n  name: gateway\n  ports: [80, 443]\n"],
-      ["Cargo.toml", '[package]\nname = "lycaon"\n'],
-      ["query.sql", "SELECT id, name FROM users WHERE active = 1;"],
-      ["main.go", 'package main\nfunc main() { println("{a:1}") }\n'],
-      ["data.csv", "id,name,role\n1,Alice,admin\n"],
-      ["opaque.txt", "dGhpcyBpcyBiYXNlNjQgZW5jb2RlZCBkYXRhCg=="],
-    ] as const) {
-      const passthroughRes = computePrettyNativeLayout(sample, { path });
-      expect(passthroughRes.outcome).toBe("passthrough");
-      expect(passthroughRes.family).toBe("passthrough");
-      expect(passthroughRes.boundaries).toEqual([]);
-    }
-
-    const md = [
-      "# Heading {not:formatted}",
-      "```json",
-      '{"a":1,"b":2}',
-      "```",
-      "```css",
-      ".box{color:red;margin:0}",
-      "```",
-      "```python",
-      "x = {'a': 1, 'b': 2}",
-      "```",
-    ].join("\n");
-    const mdRes = computePrettyNativeLayout(md, { path: "notes.md" });
-    expect(mdRes.outcome).toBe("formatted");
-    expect(mdRes.lineStates[0]?.relBoundaries).toEqual([]);
-    expect(mdRes.lineStates[2]?.relBoundaries.length).toBe(3);
-    expect(mdRes.lineStates[5]?.relBoundaries.length).toBe(3);
-    expect(mdRes.lineStates[8]?.relBoundaries).toEqual([]);
-
-    const logLine = '2026-11-09T20:00:00Z INFO [gw] {"ok":true,"n":1}';
-    const logRes = computePrettyNativeLayout(logLine);
-    expect(logRes.outcome).toBe("formatted");
-    expect(logRes.boundaries[0]?.pos).toBe(logLine.indexOf("{") + 1);
-  });
-
-  it("FMT-AC-04, FMT-AC-11: preserves multiline template literals, multiline parenthesized calls, multiline XML CDATA/comments, and regexes across lines and incremental edits", () => {
-    // 1. Multiline JS template literal with `{`, `,`, `}` and nested `${`inner`}` +
-    // multiline parenthesized call + return regex:
-    const jsDoc = [
-      "const tpl = `header ${`inner`} start",
-      '{"literal":1,"ignored":2}',
-      "footer`;",
-      "callFn(",
-      "  firstArg, secondArg,",
-      "  {nestedA:1,nestedB:2},",
-      "  thirdArg, fourthArg",
-      ");",
-      "function check(){return /a,b{1,2}/;}",
-      "const tail = {x:10,y:20};",
-    ].join("\n");
-
-    let jsState = EditorState.create({
-      doc: jsDoc,
-      extensions: [
-        javascript({ typescript: true }),
-        createPrettyNativeDecorationsExtension({
-          enabled: true,
-          path: "multiline.ts",
-        }),
-      ],
-    });
-
-    const f0 = jsState.field(prettyNativeStateField);
-    expect(f0.outcome).toBe("formatted");
-    // Line 2 (`{"literal":1,"ignored":2}`) is inside multiline backtick template -> 0 boundaries!
-    expect(f0.lineStates[0]?.endQuoteCode).toBe(0x60);
-    expect(f0.lineStates[1]?.startQuoteCode).toBe(0x60);
-    expect(f0.lineStates[1]?.relBoundaries).toEqual([]);
-    expect(f0.lineStates[2]?.endQuoteCode).toBe(0);
-
-    // Line 5 (`  firstArg, secondArg,`) and Line 7 (`  thirdArg, fourthArg`) are directly inside `callFn(` -> 0 boundaries!
-    expect(f0.lineStates[3]?.endDelimSignature).toBe("(");
-    expect(f0.lineStates[4]?.startDelimSignature).toBe("(");
-    expect(f0.lineStates[4]?.relBoundaries).toEqual([]);
-    // Line 6 (`  {nestedA:1,nestedB:2},`) has an inner object `{...}` inside `callFn(` -> formats `{nestedA:1,nestedB:2}`!
-    expect(f0.lineStates[5]?.relBoundaries.length).toBe(3);
-    expect(f0.lineStates[6]?.relBoundaries).toEqual([]);
-    expect(f0.lineStates[7]?.endDelimSignature).toBe("");
-
-    // Line 9 (`function check(){return /a,b{1,2}/;}`) formats `{` and `;}` without splitting inside `/a,b{1,2}/`:
-    expect(f0.lineStates[8]?.relBoundaries.length).toBe(2);
-    // Line 10 (`const tail = {x:10,y:20};`) formats `{x:10,y:20}`:
-    expect(f0.lineStates[9]?.relBoundaries.length).toBe(3);
-    const tailLineStateBefore = f0.lineStates[9];
-
-    // Incremental edit inside Line 2 of the template literal converges and reuses suffix line 10 by reference:
-    const line2 = jsState.doc.line(2);
-    jsState = jsState.update({
-      changes: {
-        from: line2.from + 2,
-        to: line2.from + 9,
-        insert: "updated",
-      },
-    }).state;
-    const f1 = jsState.field(prettyNativeStateField);
-    expect(f1.lineStates[1]?.relBoundaries).toEqual([]);
-    expect(f1.lastIncrementalLinesScanned).toBeLessThanOrEqual(3);
-    expect(f1.lineStates[9]).toBe(tailLineStateBefore);
-    const jsScratch = computePrettyNativeLayout(
-      jsState.doc,
-      { path: "multiline.ts" },
-      jsState,
-    );
-    expect(f1.lineStates).toEqual(jsScratch.lineStates);
-    expect(f1.counters).toEqual(jsScratch.counters);
-
-    // 2. Multiline XML CDATA and multiline XML comments:
-    const xmlDoc = [
-      "<root><item><![CDATA[",
-      "<a><b>literal-not-markup</b></a>",
-      "]]></item><!--",
-      "<c><d>commented-out</d></c>",
-      "--><after><x>1</x><y>2</y></after></root>",
-    ].join("\n");
-
-    let xmlState = EditorState.create({
-      doc: xmlDoc,
-      extensions: [
-        html(),
-        createPrettyNativeDecorationsExtension({
-          enabled: true,
-          path: "cdata.xml",
-        }),
-      ],
-    });
-    const xf0 = xmlState.field(prettyNativeStateField);
-    expect(xf0.outcome).toBe("formatted");
-    // Line 1 enters CDATA (`endInXmlCdata === true`):
-    expect(xf0.lineStates[0]?.endInXmlCdata).toBe(true);
-    // Line 2 (`<a><b>literal-not-markup</b></a>`) is inside CDATA -> 0 boundaries!
-    expect(xf0.lineStates[1]?.startInXmlCdata).toBe(true);
-    expect(xf0.lineStates[1]?.endInXmlCdata).toBe(true);
-    expect(xf0.lineStates[1]?.relBoundaries).toEqual([]);
-    // Line 3 closes `]]></item>` and opens `<!--` (`endInBlockComment === true`):
-    expect(xf0.lineStates[2]?.endInXmlCdata).toBe(false);
-    expect(xf0.lineStates[2]?.endInBlockComment).toBe(true);
-    // Line 4 (`<c><d>commented-out</d></c>`) is inside XML comment -> 0 boundaries!
-    expect(xf0.lineStates[3]?.startInBlockComment).toBe(true);
-    expect(xf0.lineStates[3]?.relBoundaries).toEqual([]);
-    // Line 5 (`--><after><x>1</x><y>2</y></after></root>`) formats normal XML tags after `-->`:
-    expect(xf0.lineStates[4]?.relBoundaries.length).toBeGreaterThanOrEqual(4);
-
-    // Incremental edit on Line 2 inside CDATA keeps Line 2 unformatted and matches fresh construction:
-    const xmlLine2 = xmlState.doc.line(2);
-    xmlState = xmlState.update({
-      changes: {
-        from: xmlLine2.from + 6,
-        to: xmlLine2.from + 13,
-        insert: "changed",
-      },
-    }).state;
-    const xf1 = xmlState.field(prettyNativeStateField);
-    expect(xf1.lineStates[1]?.relBoundaries).toEqual([]);
-    const xmlScratch = computePrettyNativeLayout(
-      xmlState.doc,
-      { path: "cdata.xml" },
-      xmlState,
-    );
-    expect(xf1.lineStates).toEqual(xmlScratch.lineStates);
-    expect(xf1.counters).toEqual(xmlScratch.counters);
-  });
-
-  it("FMT-AC-07, FMT-AC-11: enforces aggregate document-wide resource limits across incremental edits (non-ASCII UTF-8 growth & cumulative synthetic rows) identically to fresh construction", () => {
-    // 1. Repeated non-ASCII UTF-8 growth against `maxInputUtf8Bytes`:
-    const initialJson = ['{"row":1,"msg":"aa"}', '{"row":2,"msg":"bb"}'].join(
-      "\n",
-    );
-    const utf8Limits = { maxInputUtf8Bytes: 52 };
-    let utf8State = EditorState.create({
-      doc: initialJson,
-      extensions: [
-        json(),
-        createPrettyNativeDecorationsExtension({
-          enabled: true,
-          path: "utf8.json",
-          limits: utf8Limits,
-        }),
-      ],
-    });
-    expect(utf8State.field(prettyNativeStateField).outcome).toBe("formatted");
-
-    // Insert "🎉🎉" (8 UTF-8 bytes, 4 UTF-16 units) on line 1 -> stays within 52 UTF-8 bytes (41 + 8 = 49 <= 52):
-    const pos1 = utf8State.doc.line(1).from + 17;
-    utf8State = utf8State.update({
-      changes: { from: pos1, to: pos1, insert: "🎉🎉" },
-    }).state;
-    const step1Field = utf8State.field(prettyNativeStateField);
-    const step1Fresh = computePrettyNativeLayout(
-      utf8State.doc,
-      { path: "utf8.json", limits: utf8Limits },
-      utf8State,
-    );
-    expect(step1Field.outcome).toBe("formatted");
-    expect(step1Field.counters).toEqual(step1Fresh.counters);
-
-    // Insert another "🎉" (4 UTF-8 bytes -> 49 + 4 = 53 > 52) on line 2 ->
-    // must transition to limit-exceeded (maxInputUtf8Bytes):
-    const pos2 = utf8State.doc.line(2).from + 17;
-    utf8State = utf8State.update({
-      changes: { from: pos2, to: pos2, insert: "🎉" },
-    }).state;
-    const step2Field = utf8State.field(prettyNativeStateField);
-    const step2Fresh = computePrettyNativeLayout(
-      utf8State.doc,
-      { path: "utf8.json", limits: utf8Limits },
-      utf8State,
-    );
-    expect(step2Field.outcome).toBe("limit-exceeded");
-    expect(step2Field.limitReason).toBe("maxInputUtf8Bytes");
-    expect(step2Fresh.outcome).toBe("limit-exceeded");
-    expect(step2Fresh.limitReason).toBe("maxInputUtf8Bytes");
-
-    // 2. Cumulative synthetic-row growth across multiple edits against `maxOutputLines`:
-    // Initial doc has 2 physical lines + 6 synthetic breaks (3 per line) = 8 outputLines.
-    const rowLimits = { maxOutputLines: 9 };
-    let rowState = EditorState.create({
-      doc: ['{"a":1,"b":2}', '{"c":3,"d":4}'].join("\n"),
-      extensions: [
-        json(),
-        createPrettyNativeDecorationsExtension({
-          enabled: true,
-          path: "rows.jsonl",
-          limits: rowLimits,
-        }),
-      ],
-    });
-    expect(rowState.field(prettyNativeStateField).outcome).toBe("formatted");
-    expect(rowState.field(prettyNativeStateField).counters.outputLines).toBe(8);
-
-    // Edit 1: Add `"e":5` on line 1 -> adds 1 synthetic break -> total outputLines = 9 (<= 9):
-    const line1EndBrace = rowState.doc.line(1).to - 1;
-    rowState = rowState.update({
-      changes: { from: line1EndBrace, to: line1EndBrace, insert: ',"e":5' },
-    }).state;
-    const rowStep1 = rowState.field(prettyNativeStateField);
-    const rowFresh1 = computePrettyNativeLayout(
-      rowState.doc,
-      { path: "rows.jsonl", limits: rowLimits },
-      rowState,
-    );
-    expect(rowStep1.outcome).toBe("formatted");
-    expect(rowStep1.counters.outputLines).toBe(9);
-    expect(rowStep1.counters).toEqual(rowFresh1.counters);
-
-    // Edit 2: Add `"f":6` on line 2 -> adds 1 more synthetic break -> total outputLines = 10 (> 9):
-    const line2EndBrace = rowState.doc.line(2).to - 1;
-    rowState = rowState.update({
-      changes: { from: line2EndBrace, to: line2EndBrace, insert: ',"f":6' },
-    }).state;
-    const rowStep2 = rowState.field(prettyNativeStateField);
-    const rowFresh2 = computePrettyNativeLayout(
-      rowState.doc,
-      { path: "rows.jsonl", limits: rowLimits },
-      rowState,
-    );
-    expect(rowStep2.outcome).toBe("limit-exceeded");
-    expect(rowStep2.limitReason).toBe("maxOutputLines");
-    expect(rowFresh2.outcome).toBe("limit-exceeded");
-    expect(rowFresh2.limitReason).toBe("maxOutputLines");
-  });
-
-  it("FMT-AC-11: updates decorations incrementally on changed lines, reuses suffix line states by reference, and accounts for Lezer syntaxTree nodes", () => {
-    const lines = Array.from(
-      { length: 200 },
-      (_, idx) => `{"row":${idx},"nested":{"a":1,"b":2}}`,
-    );
-    const docText = lines.join("\n");
-
-    let state = EditorState.create({
-      doc: docText,
-      extensions: [
-        json(),
-        createPrettyNativeDecorationsExtension({
-          enabled: true,
-          path: "rows.jsonl",
-        }),
-      ],
-    });
-
-    const initialField = state.field(prettyNativeStateField);
-    expect(initialField.outcome).toBe("formatted");
-    expect(initialField.lastIncrementalLinesScanned).toBe(200);
-    expect(initialField.counters.syntaxNodesVisited).toBeGreaterThan(0);
-
-    const line100 = state.doc.line(100);
-    const editPos = line100.from + line100.text.indexOf('"a":1') + 4;
-    const tr = state.update({
-      changes: { from: editPos, to: editPos + 1, insert: "99" },
-    });
-    state = tr.state;
-
-    const updatedField = state.field(prettyNativeStateField);
-    expect(updatedField.outcome).toBe("formatted");
-    expect(updatedField.lastIncrementalLinesScanned).toBeLessThanOrEqual(3);
-    expect(
-      updatedField.lastIncrementalSuffixLinesReused,
-    ).toBeGreaterThanOrEqual(99);
-    // Unchanged prefix and suffix lineStates are reused by reference without reallocation:
-    expect(updatedField.lineStates[0]).toBe(initialField.lineStates[0]);
-    expect(updatedField.lineStates[150]).toBe(initialField.lineStates[150]);
-
-    const scratch = computePrettyNativeLayout(
-      state.doc,
-      { path: "rows.jsonl" },
-      state,
-    );
-    expect(updatedField.lineStates).toEqual(scratch.lineStates);
-    expect(updatedField.counters).toEqual(scratch.counters);
-
-    for (const [ext, path, sample] of [
-      [html(), "page.html", "<div><span>Hi</span><p>There</p></div>"],
-      [javascript({ typescript: true }), "app.ts", "const x={a:1,b:[2,3]};"],
-      [css(), "app.css", ".a{color:red;top:0}"],
-    ] as const) {
-      const s = EditorState.create({
-        doc: sample,
-        extensions: [
-          ext,
-          createPrettyNativeDecorationsExtension({ enabled: true, path }),
-        ],
-      });
-      const f = s.field(prettyNativeStateField);
-      expect(f.outcome).toBe("formatted");
-      expect(f.counters.syntaxNodesVisited).toBeGreaterThan(0);
+  it("indents synthetic lines from the real line's indentation by the detected unit", () => {
+    const item = (i: number) => `{"id":${i},"tags":["a","b"]}`;
+    for (const [lead, unit] of [["\t", "\t"], ["    ", "    "], ["  ", "  "]] as const) {
+      const source = `{\n${lead}"items":[${item(1)},${item(2)}]\n}`;
+      const state = open(source, { path: "data.json" }, unit);
+      const leadColumns = lead === "\t" ? 4 : lead.length;
+      const unitColumns = unit === "\t" ? 4 : unit.length;
+      const { lines } = layoutOf(state);
+      const columns = new Set(lines.map(([, , c]) => c));
+      expect(columns).toEqual(new Set([0, 1, 2, 3].map((depth) => leadColumns + depth * unitColumns)));
     }
   });
 
-  it("FMT-AC-10, FMT-AC-16: supports native CodeMirror commands (Backspace/Delete on comma, Enter, Tab/Shift+Tab) directly on raw source", () => {
-    const parent = document.createElement("div");
-    document.body.appendChild(parent);
-    try {
-      const raw = '{"service":"gateway","enabled":true}';
-      const view = new EditorView({
-        parent,
-        state: EditorState.create({
-          doc: raw,
-          extensions: [
-            createPrettyNativeDecorationsExtension({
-              enabled: true,
-              path: "config.json",
-            }),
-          ],
-        }),
-      });
-
-      expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBe(3);
-      expect(view.dom.querySelectorAll(".pw-pretty-line").length).toBe(2);
-
-      const commaOffset = raw.indexOf(",");
-      view.dispatch({
-        selection: { anchor: commaOffset + 1, head: commaOffset + 1 },
-      });
-      expect(deleteCharBackward(view)).toBe(true);
-      expect(view.state.doc.toString()).toBe(
-        '{"service":"gateway""enabled":true}',
-      );
-      expect(view.state.field(prettyNativeStateField).enabled).toBe(true);
-      expect(view.state.field(prettyNativeStateField).outcome).toBe(
-        "formatted",
-      );
-      expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBe(2);
-
-      view.dispatch({
-        changes: { from: commaOffset, to: commaOffset, insert: "," },
-        selection: { anchor: commaOffset, head: commaOffset },
-      });
-      expect(deleteCharForward(view)).toBe(true);
-      expect(view.state.doc.toString()).toBe(
-        '{"service":"gateway""enabled":true}',
-      );
-
-      view.dispatch({
-        changes: { from: commaOffset, to: commaOffset, insert: "," },
-        selection: { anchor: commaOffset + 1, head: commaOffset + 1 },
-      });
-      expect(insertNewlineAndIndent(view)).toBe(true);
-      expect(view.state.doc.lines).toBe(2);
-
-      expect(indentMore(view)).toBe(true);
-      expect(view.state.doc.line(2).text.startsWith("  ")).toBe(true);
-      expect(indentLess(view)).toBe(true);
-
-      const docBeforeOff = view.state.doc.toString();
-      applyPrettyNativeConfig(view, { enabled: false, path: "config.json" });
-      expect(view.state.doc.toString()).toBe(docBeforeOff);
-      expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBe(0);
-
-      view.destroy();
-    } finally {
-      parent.remove();
+  it("aligns items whether or not separators are followed by spaces", () => {
+    for (const source of ['{"a": 1, "b": 2, "c": [1, 2]}', '{"a":1,"b":2,"c":[1,2]}']) {
+      const written = pretty(source, "data.json").split("\n");
+      expect(written.slice(1, 4).map((line) => line.length - line.trimStart().length)).toEqual([2, 2, 2]);
+      expect(written.every((line) => !line.startsWith("   ") || line.startsWith("    "))).toBe(true);
     }
   });
 
-  it("FMT-AC-05, FMT-AC-10: protected Lezer RegExp/String/Comment spans with interior quotes or comment markers never mutate fallback lexical state across fresh and incremental updates", () => {
-    const cases = [
-      'const r=/"/;const x={a:1,b:2};',
-      "const r=/'/;const x={a:1,b:2};",
-      "const r=/`/;const x={a:1,b:2};",
-      "const r=/\\/*/;const x={a:1,b:2};",
-      "const r=/\\/\\//;const x={a:1,b:2};",
+  it("adds no break where the source already breaks more finely", () => {
+    const source = "{\n  \"a\":\n    1,\n  \"b\": 2\n}";
+    expect(layoutOf(open(source, { path: "data.json" })).breaks).toEqual([]);
+  });
+
+  it("only adds: every decoration is a break widget or an indentation mark", () => {
+    const state = open('{"a":[1,2,{"b":"c"}]}', { path: "data.json" });
+    state.facet(prettyLayoutDecorations).between(0, state.doc.length, (from, to, value) => {
+      if (from === to) expect(value.spec.widget).toBeInstanceOf(PrettyBreakWidget);
+      else expect(value.spec.widget).toBeUndefined();
+    });
+  });
+
+  it("adds nothing on a second pass over its written-out result", () => {
+    const sources: Array<[string, string]> = [
+      ['{"a":[1,2,{"b":"c","d":[{"e":1},{"f":[]}]}],"g":"h"}', "data.json"],
+      ['function a(t,e){if(!t)throw new Error("x");const n=new Map,r=e.filter(i=>i);for(const i of r){n.set(i,i)}return n}' + "export const z=1;".repeat(20), "bundle.js"],
+      [".a{b:c;d:e}.f:hover{g:h}@media (x){.i{j:k}.l{m:n}}" + ".o{p:q}".repeat(30), "s.css"],
+      [`<a>${"<b><c>x</c></b>".repeat(20)}</a>`, "doc.xml"],
     ];
-
-    for (const raw of cases) {
-      let state = EditorState.create({
-        doc: raw,
-        extensions: [
-          javascript(),
-          createPrettyNativeDecorationsExtension({
-            enabled: true,
-            path: "regex-protected.js",
-          }),
-        ],
-      });
-
-      const field = state.field(prettyNativeStateField);
-      expect(field.outcome).toBe("formatted");
-      expect(field.counters.syntaxNodesVisited).toBeGreaterThan(0);
-
-      const semiIdx = raw.indexOf(";") + 1;
-      const openBraceIdx = raw.indexOf("{", semiIdx) + 1;
-      const commaIdx = raw.indexOf(",", openBraceIdx) + 1;
-      const closeBraceIdx = raw.indexOf("}", commaIdx);
-      expect(field.lineStates[0]?.relBoundaries).toEqual([
-        { relPos: semiIdx, depth: 0 },
-        { relPos: openBraceIdx, depth: 1 },
-        { relPos: commaIdx, depth: 1 },
-        { relPos: closeBraceIdx, depth: 0 },
-      ]);
-
-      // Verify incremental update matches fresh computePrettyNativeLayout:
-      const multiRaw = `${raw}\nconst tail={c:3,d:4};`;
-      state = EditorState.create({
-        doc: multiRaw,
-        extensions: [
-          javascript(),
-          createPrettyNativeDecorationsExtension({
-            enabled: true,
-            path: "regex-protected.js",
-          }),
-        ],
-      });
-      const valIdx = multiRaw.indexOf("a:1") + 2;
-      state = state.update({
-        changes: { from: valIdx, to: valIdx + 1, insert: "99" },
-      }).state;
-
-      const updatedField = state.field(prettyNativeStateField);
-      const fresh = computePrettyNativeLayout(
-        state.doc,
-        { path: "regex-protected.js" },
-        state,
-      );
-      expect(updatedField.lineStates).toEqual(fresh.lineStates);
-      expect(updatedField.counters).toEqual(fresh.counters);
-      expect(updatedField.lineStates[1]?.relBoundaries.length).toBe(3);
-    }
-  });
-
-  it("FMT-AC-09, FMT-AC-10: invalidates and updates layout across intervening blank/unchanged lines when an earlier edit changes later syntax context and on language-compartment reconfiguration", () => {
-    const langCompartment = new Compartment();
-    const raw = [
-      'const a=1 / 2;const b="/* not a comment */";const c={x:1,y:2};',
-      'const d=/"/;const e={m:3,n:4};',
-    ].join("\n");
-
-    let state = EditorState.create({
-      doc: raw,
-      extensions: [
-        langCompartment.of([]),
-        createPrettyNativeDecorationsExtension({
-          enabled: true,
-          path: "reconfig.js",
-        }),
-      ],
-    });
-
-    const beforeParse = state.field(prettyNativeStateField);
-    expect(beforeParse.counters.syntaxNodesVisited).toBe(0);
-    expect(beforeParse.lineStates[0]?.syntaxSpanSignature).toBe("");
-
-    // Reconfigure language compartment without docChanged (exercises treeChanged invalidation path):
-    state = state.update({
-      effects: langCompartment.reconfigure(javascript()),
-    }).state;
-
-    const afterParse = state.field(prettyNativeStateField);
-    expect(afterParse.counters.syntaxNodesVisited).toBeGreaterThan(0);
-    expect(afterParse.lineStates[0]?.syntaxSpanSignature).not.toBe("");
-    expect(afterParse.lineStates[1]?.syntaxSpanSignature).not.toBe("");
-
-    const freshAfterParse = computePrettyNativeLayout(
-      state.doc,
-      { path: "reconfig.js" },
-      state,
-    );
-    expect(afterParse.lineStates).toEqual(freshAfterParse.lineStates);
-    expect(afterParse.counters).toEqual(freshAfterParse.counters);
-
-    // Multi-line syntax invalidation across intervening blank and unchanged lines:
-    // Line 1: "const v = 1 < 2"
-    // Line 2: 'id = "x" > c;'
-    // Line 3: "" (blank intervening line)
-    // Line 4: "const unchanged = 42;" (unchanged intervening line)
-    // Line 5: "" (blank intervening line)
-    // Line 6: 'if (cond) /; const x = {a: 1, b: 2};/i;' (affected JSX body line)
-    // Line 7: "</tag>; // /"
-    // Line 8: "const mid = 1;" (normalizes lastSigCode to `;` after Line 7)
-    // Line 9: "const suffix = {m: 1, n: 2};" (unaffected suffix line reused by reference)
-    const jsxDoc = [
-      "const v = 1 < 2",
-      'id = "x" > c;',
-      "",
-      "const unchanged = 42;",
-      "",
-      "if (cond) /; const x = {a: 1, b: 2};/i;",
-      "</tag>; // /",
-      "const mid = 1;",
-      "const suffix = {m: 1, n: 2};",
-    ].join("\n");
-    let jsxState = EditorState.create({
-      doc: jsxDoc,
-      extensions: [
-        javascript({ jsx: true }),
-        createPrettyNativeDecorationsExtension({
-          enabled: true,
-          path: "comp.jsx",
-        }),
-      ],
-    });
-    const beforeField = jsxState.field(prettyNativeStateField);
-    const sigLine6Before = beforeField.lineStates[5]?.syntaxSpanSignature;
-    const suffixRefBefore = beforeField.lineStates[8];
-    expect(beforeField.lineStates[5]?.relBoundaries.length).toBe(0);
-
-    // Direction 1: Edit Line 1 ("const v = 1 < 2" -> "const v = <tag") across blank/unchanged Lines 3-5:
-    jsxState = jsxState.update({
-      changes: {
-        from: 0,
-        to: "const v = 1 < 2".length,
-        insert: "const v = <tag",
-      },
-    }).state;
-    const jsxAfterToTag = jsxState.field(prettyNativeStateField);
-    const jsxFreshToTag = computePrettyNativeLayout(
-      jsxState.doc,
-      { path: "comp.jsx" },
-      jsxState,
-    );
-    expect(jsxAfterToTag.lineStates[5]?.syntaxSpanSignature).not.toBe(
-      sigLine6Before,
-    );
-    expect(jsxAfterToTag.lineStates[5]?.relBoundaries.length).toBe(5);
-    expect(jsxAfterToTag.lineStates).toEqual(jsxFreshToTag.lineStates);
-    expect(jsxAfterToTag.counters).toEqual(jsxFreshToTag.counters);
-    expect(jsxAfterToTag.lastIncrementalSuffixLinesReused).toBe(1);
-    expect(jsxAfterToTag.lineStates[8]).toBe(suffixRefBefore);
-
-    // Direction 2: Edit Line 1 back ("const v = <tag" -> "const v = 1 < 2") across blank/unchanged Lines 3-5:
-    jsxState = jsxState.update({
-      changes: {
-        from: 0,
-        to: "const v = <tag".length,
-        insert: "const v = 1 < 2",
-      },
-    }).state;
-    const jsxAfterToExpr = jsxState.field(prettyNativeStateField);
-    const jsxFreshToExpr = computePrettyNativeLayout(
-      jsxState.doc,
-      { path: "comp.jsx" },
-      jsxState,
-    );
-    expect(jsxAfterToExpr.lineStates[5]?.syntaxSpanSignature).toBe(
-      sigLine6Before,
-    );
-    expect(jsxAfterToExpr.lineStates[5]?.relBoundaries.length).toBe(0);
-    expect(jsxAfterToExpr.lineStates).toEqual(jsxFreshToExpr.lineStates);
-    expect(jsxAfterToExpr.counters).toEqual(jsxFreshToExpr.counters);
-    expect(jsxAfterToExpr.lastIncrementalSuffixLinesReused).toBe(1);
-    expect(jsxAfterToExpr.lineStates[8]).toBe(suffixRefBefore);
-  });
-
-  it("FMT-AC-09, FMT-AC-10: updates layout when CodeMirror partial initial parse (doc.length > 3000) advances to full syntaxTree completion without docChanged", () => {
-    // CodeMirror's LanguageState.init stops initial synchronous parsing at Work.InitViewport (3000 chars).
-    // Build a >3,500-char JS document so the tail line after offset 3,000 is initially unparsed by Lezer:
-    const prefixLines = Array.from(
-      { length: 70 },
-      (_, i) => `const padLine_${i} = {alpha: ${i}, beta: ${i + 1}, gamma: "padding_value_${i}"};`,
-    );
-    const tailLine = 'if (cond) /"/; const tailObj = {a: 1, b: 2};';
-    const largeDoc = [...prefixLines, tailLine].join("\n");
-    expect(largeDoc.length).toBeGreaterThan(3200);
-
-    const parent = document.createElement("div");
-    const view = new EditorView({
-      parent,
-      state: EditorState.create({
-        doc: largeDoc,
-        extensions: [
-          javascript(),
-          createPrettyNativeDecorationsExtension({
-            enabled: true,
-            path: "partial-parse.js",
-          }),
-        ],
-      }),
-    });
-
-    try {
-      const tailIndex = view.state.doc.lines - 1;
-      const initialFullParseAvailable = syntaxTreeAvailable(
-        view.state,
-        view.state.doc.length,
-      );
-      expect(initialFullParseAvailable).toBe(false);
-
-      const fieldBeforeFullParse = view.state.field(prettyNativeStateField);
-      // Before Lezer parses past offset 3,000, the tail line has no syntax-tree protected spans
-      // (`/"/` after `if (cond)` is seen by fallback lexical scan as division followed by an unclosed quote):
-      expect(
-        fieldBeforeFullParse.lineStates[tailIndex]?.syntaxSpanSignature,
-      ).toBe("");
-      expect(
-        fieldBeforeFullParse.lineStates[tailIndex]?.relBoundaries.length,
-      ).toBe(0);
-
-      // Advance CodeMirror's Lezer parser to the end of the document without changing the document:
-      const parsed = forceParsing(view, view.state.doc.length, 500);
-      expect(parsed).toBe(true);
-      expect(syntaxTreeAvailable(view.state, view.state.doc.length)).toBe(true);
-
-      // Dispatch a non-docChanged transaction (just as ParseWorker's setState effect does)
-      // if forceParsing did not already dispatch:
-      view.dispatch({});
-
-      const fieldAfterFullParse = view.state.field(prettyNativeStateField);
-      const freshAfterFullParse = computePrettyNativeLayout(
-        view.state.doc,
-        { path: "partial-parse.js" },
-        view.state,
-      );
-      expect(
-        fieldAfterFullParse.lineStates[tailIndex]?.syntaxSpanSignature,
-      ).not.toBe("");
-      expect(
-        fieldAfterFullParse.lineStates[tailIndex]?.relBoundaries.length,
-      ).toBe(4);
-      expect(fieldAfterFullParse.lineStates).toEqual(
-        freshAfterFullParse.lineStates,
-      );
-      expect(fieldAfterFullParse.counters).toEqual(
-        freshAfterFullParse.counters,
-      );
-    } finally {
-      view.destroy();
+    for (const [source, path] of sources) {
+      const once = pretty(source, path);
+      expect(layoutOf(open(once, { path })).breaks, path).toEqual([]);
     }
   });
 });
 
-describe("pretty-classify document modes, envelope prefixes, and line eligibility (FMT01, FMT05)", () => {
-  it("classifies paths, language hints, and bare content into document modes (FMT-AC-04, FMT-AC-20)", () => {
-    // Path extensions and passthrough basenames
-    expect(classifyDocumentFormat("", "main.go")).toBe("code-passthrough");
-    expect(classifyDocumentFormat("", "Makefile")).toBe("code-passthrough");
-    expect(classifyDocumentFormat("", "config/.gitignore")).toBe("code-passthrough");
-    expect(classifyDocumentFormat("", "data.json")).toBe("json");
-    expect(classifyDocumentFormat("", "stream.ndjson")).toBe("jsonl");
-    expect(classifyDocumentFormat("", "config.json5")).toBe("jsonc");
-    expect(classifyDocumentFormat("", "page.svg")).toBe("xml-html");
-    expect(classifyDocumentFormat("", "app.tsx")).toBe("javascript");
-    expect(classifyDocumentFormat("", "theme.scss")).toBe("css");
-    expect(classifyDocumentFormat("", "README.md")).toBe("markdown");
-    expect(classifyDocumentFormat("", "notes.txt")).toBe("auto");
+describe("recognition", () => {
+  const laidOut = (text: string, config: Omit<PrettyConfig, "enabled"> = {}) => layoutOf(open(text, config)).breaks.length > 0;
 
-    // Language hints are trimmed, lowercased, and win over content
-    expect(classifyDocumentFormat("{}", undefined, " Python ")).toBe("code-passthrough");
-    expect(classifyDocumentFormat("", undefined, "json")).toBe("json");
-    expect(classifyDocumentFormat("", undefined, "jsonl")).toBe("jsonl");
-    expect(classifyDocumentFormat("", undefined, "jsonc")).toBe("jsonc");
-    expect(classifyDocumentFormat("", undefined, "text/html")).toBe("xml-html");
-    expect(classifyDocumentFormat("", undefined, "TypeScript")).toBe("javascript");
-    expect(classifyDocumentFormat("", undefined, "text/css")).toBe("css");
-    expect(classifyDocumentFormat("", undefined, "gfm")).toBe("markdown");
-
-    // Bare content heuristics without path or hint
-    expect(classifyDocumentFormat("package main\n\nfunc main() {}\n")).toBe("code-passthrough");
-    expect(classifyDocumentFormat('import { readFile } from "node:fs";\n')).toBe("code-passthrough");
-    expect(classifyDocumentFormat("def greet(name):\n    return name\n")).toBe("code-passthrough");
-    // Fenced or empty content never claims bare passthrough code
-    expect(classifyDocumentFormat("```go\npackage main\n```\n")).toBe("auto");
-    expect(classifyDocumentFormat("")).toBe("auto");
-
-    // isKnownCodeOrMarkupPath mirrors the passthrough classification
-    expect(isKnownCodeOrMarkupPath("main.go")).toBe(true);
-    expect(isKnownCodeOrMarkupPath(undefined, "rust")).toBe(true);
-    expect(isKnownCodeOrMarkupPath("data.json")).toBe(false);
-    expect(isKnownCodeOrMarkupPath()).toBe(false);
+  it("leaves unknown text without positive evidence alone", () => {
+    for (const text of [
+      "src/a.ts(12,5): error TS2345: Argument of type '{ id: number; }' is not assignable to parameter of type 'User'.",
+      "FAIL src/x.test.ts > suite > case [1, 2, 3]\n  expected [ 1, 2 ] to equal [ 1, 3 ]",
+      "Ship it (soon), then tell [the team], {maybe} tomorrow.",
+      "key:\n  - [a, b]\n  - {c: d}",
+      "def f(x):\n    return {'a': [1, 2]}",
+      '{"unbalanced": [1, 2}',
+      "{ not json at all }",
+    ]) {
+      expect(laidOut(text), text).toBe(false);
+    }
   });
 
-  it("matches host-marker, compaction, and log prefixes ahead of JSON bodies", () => {
-    // Evidence tags, overlay events, compaction banners, and receipt markers
-    expect(matchEnvelopeOrLogPrefix('[repo#12] {"a":1}')).toBe(10);
-    expect(matchEnvelopeOrLogPrefix('[repo#12 "src/app.ts":1-40] {"a":1}')).toBe(28);
-    expect(matchEnvelopeOrLogPrefix('[host:overlay-promote-event] {"a":1}')).toBe(29);
-    expect(matchEnvelopeOrLogPrefix('[host:overlay-reject-event] {"a":1}')).toBe(28);
-    expect(matchEnvelopeOrLogPrefix('[compacted 1200 chars] {"a":1}')).toBe(23);
-    expect(matchEnvelopeOrLogPrefix('verbatim head/tail: {"a":1}')).toBe(20);
-    expect(matchEnvelopeOrLogPrefix('>>> {"a":1}')).toBe(4);
-    expect(matchEnvelopeOrLogPrefix('Rejected: {"a":1}')).toBe(10);
-    expect(matchEnvelopeOrLogPrefix('Code: {"a":1}')).toBe(6);
-
-    // Leading whitespace is skipped and markers may chain
-    expect(matchEnvelopeOrLogPrefix('  \t[repo#12] {"a":1}')).toBe(13);
-    expect(matchEnvelopeOrLogPrefix('[repo#12] [host:overlay-promote-event] {"a":1}')).toBe(39);
-
-    // A marker not followed by a container is not an envelope prefix
-    expect(matchEnvelopeOrLogPrefix("[repo#12] plain text")).toBeNull();
-    expect(matchEnvelopeOrLogPrefix("[repo#12] [1,2]")).toBe(10);
-
-    // Log timestamps, levels, labels, and bracket tag chains
-    expect(matchEnvelopeOrLogPrefix('2026-11-10T16:12:43Z request {"a":1}')).toBe(29);
-    expect(matchEnvelopeOrLogPrefix('INFO request {"a":1}')).toBe(13);
-    expect(matchEnvelopeOrLogPrefix('worker: {"a":1}')).toBe(8);
-    expect(matchEnvelopeOrLogPrefix('[tag one] [tag two] {"a":1}')).toBe(20);
-    expect(matchEnvelopeOrLogPrefix('{"a":1}')).toBeNull();
-    expect(matchEnvelopeOrLogPrefix("no prefix here")).toBeNull();
+  it("lays out a JSON container at a line start or after a log prefix", () => {
+    expect(laidOut('{"a":1,"b":[1,2]}')).toBe(true);
+    expect(laidOut('2026-11-10T10:00:00Z INFO request {"id":7,"tags":["a"]}')).toBe(true);
+    expect(laidOut('note: plain words\n[{"a":1},{"b":2}]\nmore words')).toBe(true);
   });
 
-  it("identifies envelope header lines and excerpt barriers", () => {
-    expect(isEnvelopeHeaderLine("[repo#12]")).toBe(true);
-    expect(isEnvelopeHeaderLine("[compacted 1200 chars]")).toBe(true);
-    expect(isEnvelopeHeaderLine("⟦D7:receipt⟧")).toBe(true);
-    expect(isEnvelopeHeaderLine("Receipt: demo")).toBe(true);
-    expect(isEnvelopeHeaderLine('{"a":1}')).toBe(false);
-    expect(isEnvelopeHeaderLine("   ")).toBe(false);
-
-    expect(isExcerptBarrierLine("...")).toBe(true);
-    expect(isExcerptBarrierLine("…")).toBe(true);
-    expect(isExcerptBarrierLine("[repo#12]")).toBe(true);
-    expect(isExcerptBarrierLine("⟦D1⟧")).toBe(true);
-    expect(isExcerptBarrierLine('{"a":1}')).toBe(false);
-    expect(isExcerptBarrierLine("")).toBe(false);
+  it("uses a known path or language and refuses a path without a layout", () => {
+    expect(prettyOutcomeOf(open('{"a":[1,2]}', { path: "notes.txt" })).kind).toBe("unavailable");
+    expect(prettyOutcomeOf(open("package main\nfunc main() {}\n", { path: "main.go" })).kind).toBe("unavailable");
+    expect(laidOut('{"a":[1,2]}', { languageHint: "json" })).toBe(true);
+    expect(laidOut('x {"a":[1,2]}', { languageHint: "go" })).toBe(false);
   });
 
-  it("parses fences and resolves fence languages to layout families", () => {
-    expect(parseOpeningFence("```json")).toEqual({ char: "`", len: 3, lang: "json" });
-    expect(parseOpeningFence("~~~~md extra")).toEqual({ char: "~", len: 4, lang: "md" });
-    // A backtick inside the info string disqualifies a backtick fence
-    expect(parseOpeningFence("```json `x`")).toBeNull();
-    expect(parseOpeningFence("plain text")).toBeNull();
+  it("lays out fenced regions by their language", () => {
+    const md = "# Notes\n\n```json\n{\"a\":[1,2]}\n```\n\n```sh\necho {a,b}\n```\n";
+    const state = open(md, { path: "notes.md" });
+    const { breaks } = layoutOf(state);
+    const fence = md.indexOf('{"a"');
+    expect(breaks.length).toBeGreaterThan(0);
+    expect(breaks.every((pos) => pos > fence && pos < md.indexOf("```", fence))).toBe(true);
+  });
+});
 
-    expect(resolveFenceLayoutFamily("json")).toBe("json");
-    expect(resolveFenceLayoutFamily(".jsonl")).toBe("jsonl");
-    expect(resolveFenceLayoutFamily("jsonc")).toBe("jsonc");
-    expect(resolveFenceLayoutFamily("xml")).toBe("xml-html");
-    expect(resolveFenceLayoutFamily("js")).toBe("javascript");
-    expect(resolveFenceLayoutFamily("css")).toBe("css");
-    expect(resolveFenceLayoutFamily("")).toBeNull();
-    expect(resolveFenceLayoutFamily("go")).toBeNull();
+function oneLineJson(target: number): string {
+  const items: string[] = [];
+  let length = 2;
+  for (let i = 0; length < target; i++) {
+    const item = `{"id":${i},"name":"item ${i}","tags":["a","b"],"ok":${i % 2 === 0}}`;
+    items.push(item);
+    length += item.length + 1;
+  }
+  return `[${items.join(",")}]`;
+}
+
+function oneLineScript(target: number): string {
+  const parts: string[] = [];
+  let length = 0;
+  for (let i = 0; length < target; i++) {
+    const part = `function f${i}(a,b){const c=a.map(x=>x*${i}),d={k:${i},v:[a,b]};if(c.length){return d}return null}`;
+    parts.push(part);
+    length += part.length;
+  }
+  return parts.join("");
+}
+
+describe("bounded work", () => {
+  it("rescans a bounded window after a one-character edit in a 1 MB line", () => {
+    for (const [doc, path] of [[oneLineJson(1_000_000), "big.json"], [oneLineScript(1_000_000), "bundle.js"]] as const) {
+      let state = open(doc, { path });
+      configs.set(state, { enabled: true, path });
+      expect(prettyOutcomeOf(state).kind).toBe("active");
+      const middle = doc.indexOf("7", doc.length >> 1);
+      state = edit(state, middle, middle + 1, "8");
+      const work = prettyWorkOf(state);
+      expect(work.visits, path).toBeLessThan(4 * PRETTY_CHECKPOINT_INTERVAL);
+      expect(work.to - work.from, path).toBeLessThan(3 * PRETTY_CHECKPOINT_INTERVAL);
+      expect(layoutOf(state), path).toEqual(rebuilt(state));
+    }
   });
 
-  it("short-circuits passthrough mode and marks fixed-family modes fully eligible", () => {
-    const raw = '{"a":1}\n{"b":2}';
-    const doc = docOf(raw);
-    expect(
-      determineDocumentLineEligibility(doc, "code-passthrough", raw, new PrettyBudgetTracker(raw)),
-    ).toBe("passthrough");
-
-    const jsonlElig = determineDocumentLineEligibility(
-      doc,
-      "jsonl",
-      raw,
-      new PrettyBudgetTracker(raw),
-    ) as readonly LineEligibility[];
-    expect(jsonlElig).toEqual([
-      { eligible: true, family: "jsonl", scanStartCol: 0, resetDepth: true },
-      { eligible: true, family: "jsonl", scanStartCol: 0, resetDepth: true },
-    ]);
+  it("formats a 2 MB document at the input cap and reports a larger one", () => {
+    const atCap = oneLineJson(PRETTY_MAX_INPUT - 200);
+    expect(atCap.length).toBeLessThanOrEqual(PRETTY_MAX_INPUT);
+    expect(prettyOutcomeOf(open(atCap, { path: "big.json" })).kind).toBe("active");
+    const over = oneLineJson(PRETTY_MAX_INPUT + 100);
+    const outcome = prettyOutcomeOf(open(over, { path: "big.json" }));
+    expect(outcome).toMatchObject({ kind: "limit", reason: "size" });
   });
 
-  it("keeps markdown prose raw and prettifies only supported fenced blocks", () => {
-    const raw = 'intro\n```json\n{"a":1}\n```\n```go\npackage main\n```\ntail';
-    const elig = determineDocumentLineEligibility(
-      docOf(raw),
-      "markdown",
-      raw,
-      new PrettyBudgetTracker(raw),
-    ) as readonly LineEligibility[];
-    expect(elig).toHaveLength(8);
-    expect(elig[0]).toMatchObject({ eligible: false, family: "passthrough" });
-    expect(elig[1]).toMatchObject({ eligible: false, family: "passthrough" });
-    expect(elig[2]).toMatchObject({ eligible: true, family: "json", resetDepth: true });
-    expect(elig[3]).toMatchObject({ eligible: false, family: "passthrough" });
-    expect(elig[4]).toMatchObject({ eligible: false, family: "passthrough" });
-    expect(elig[5]).toMatchObject({ eligible: false, family: "passthrough" });
-    expect(elig[6]).toMatchObject({ eligible: false, family: "passthrough" });
-    expect(elig[7]).toMatchObject({ eligible: false, family: "passthrough" });
-
-    // An unclosed fence keeps the remainder raw
-    const unclosed = 'intro\n```json\n{"a":1}\nnever closed';
-    const unclosedElig = determineDocumentLineEligibility(
-      docOf(unclosed),
-      "markdown",
-      unclosed,
-      new PrettyBudgetTracker(unclosed),
-    ) as readonly LineEligibility[];
-    expect(unclosedElig[2]).toMatchObject({ eligible: false, family: "passthrough" });
-    expect(unclosedElig[3]).toMatchObject({ eligible: false, family: "passthrough" });
+  it("repeats no scan after a limit until the document is shorter", () => {
+    const over = oneLineJson(PRETTY_MAX_INPUT + 100);
+    let state = open(over, { path: "big.json" });
+    configs.set(state, { enabled: true, path: "big.json" });
+    state = edit(state, 1, 1, " ");
+    expect(prettyOutcomeOf(state).kind).toBe("limit");
+    expect(prettyWorkOf(state).visits).toBe(0);
+    state = edit(state, 1, state.doc.length - PRETTY_MAX_INPUT + 1000, "");
+    expect(prettyOutcomeOf(state).kind).toBe("active");
   });
 
-  it("reports budget exhaustion from the markdown and envelope scans", () => {
-    const fenced = '```json\n{"a":1}\n```';
-    expect(
-      determineDocumentLineEligibility(
-        docOf(fenced),
-        "markdown",
-        fenced,
-        new PrettyBudgetTracker(fenced, { maxVisits: 0 }),
-      ),
-    ).toBe("budget");
-    expect(
-      determineDocumentLineEligibility(
-        docOf(fenced),
-        "markdown",
-        fenced,
-        new PrettyBudgetTracker(fenced, { maxVisits: 1 }),
-      ),
-    ).toBe("budget");
-
-    const envelope = 'Receipt: demo\n{"a":1}';
-    expect(
-      determineDocumentLineEligibility(
-        docOf(envelope),
-        "auto",
-        envelope,
-        new PrettyBudgetTracker(envelope, { maxVisits: 0 }),
-      ),
-    ).toBe("budget");
+  it("reports nesting beyond the depth limit", () => {
+    const deep = "[".repeat(600) + "]".repeat(600);
+    expect(prettyOutcomeOf(open(deep, { path: "deep.json" }))).toMatchObject({ kind: "limit", reason: "depth" });
   });
+});
 
-  it("treats standalone XML documents as fully eligible xml-html", () => {
-    const raw = "<root>\n<a><b>deep</b></a>\n</root>";
-    const elig = determineDocumentLineEligibility(
-      docOf(raw),
-      "auto",
-      raw,
-      new PrettyBudgetTracker(raw),
-    ) as readonly LineEligibility[];
-    expect(elig).toEqual([
-      { eligible: true, family: "xml-html", scanStartCol: 0, resetDepth: true },
-      { eligible: true, family: "xml-html", scanStartCol: 0, resetDepth: false },
-      { eligible: true, family: "xml-html", scanStartCol: 0, resetDepth: false },
-    ]);
-  });
+function random(seed: number): () => number {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0x100000000;
+  };
+}
 
-  it("prefers jsonl only when every non-blank line opens a container", () => {
-    const jsonlRaw = '{"a":1}\n{"b":2}';
-    const jsonlElig = determineDocumentLineEligibility(
-      docOf(jsonlRaw),
-      "auto",
-      jsonlRaw,
-      new PrettyBudgetTracker(jsonlRaw),
-    ) as readonly LineEligibility[];
-    expect(jsonlElig).toEqual([
-      { eligible: true, family: "jsonl", scanStartCol: 0, resetDepth: true },
-      { eligible: true, family: "jsonl", scanStartCol: 0, resetDepth: true },
-    ]);
-
-    const jsonRaw = '{"a":1}\ntrailing text';
-    const jsonElig = determineDocumentLineEligibility(
-      docOf(jsonRaw),
-      "auto",
-      jsonRaw,
-      new PrettyBudgetTracker(jsonRaw),
-    ) as readonly LineEligibility[];
-    expect(jsonElig).toEqual([
-      { eligible: true, family: "json", scanStartCol: 0, resetDepth: true },
-      { eligible: true, family: "json", scanStartCol: 0, resetDepth: false },
-    ]);
-  });
-
-  it("prettifies JSON bodies under envelope prefixes while honoring barriers and quotes", () => {
-    const raw = [
-      "Receipt: demo",
-      '{"a": [',
-      "  1,",
-      "  2",
-      "]}",
-      "...",
-      '{"s": "a\\"}", "t": "{"}',
-      "plain text",
-    ].join("\n");
-    const elig = determineDocumentLineEligibility(
-      docOf(raw),
-      "auto",
-      raw,
-      new PrettyBudgetTracker(raw),
-    ) as readonly LineEligibility[];
-    expect(elig).toEqual([
-      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
-      { eligible: true, family: "json", scanStartCol: 0, resetDepth: true },
-      { eligible: true, family: "json", scanStartCol: 0, resetDepth: false },
-      { eligible: true, family: "json", scanStartCol: 0, resetDepth: false },
-      { eligible: true, family: "json", scanStartCol: 0, resetDepth: false },
-      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
-      { eligible: true, family: "json", scanStartCol: 0, resetDepth: true },
-      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
-    ]);
-  });
-
-  it("keeps JSON bodies raw when an excerpt barrier interrupts the container", () => {
-    const raw = 'Receipt: demo\n{"a": [\n...\n1]}';
-    const elig = determineDocumentLineEligibility(
-      docOf(raw),
-      "auto",
-      raw,
-      new PrettyBudgetTracker(raw),
-    ) as readonly LineEligibility[];
-    expect(elig).toEqual([
-      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
-      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
-      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
-      { eligible: false, family: "passthrough", scanStartCol: 0, resetDepth: true },
-    ]);
-  });
+describe("incremental layout", () => {
+  const families: Array<[string, string, string[]]> = [
+    ["data.json", oneLineJson(30_000), ["1", ",", "{", "}", "[", "]", '"', " ", "a", "\n"]],
+    ["bundle.js", oneLineScript(30_000), ["x", ";", "{", "}", "(", ")", ",", '"', "`", "/", " ", "\n", "else"]],
+    ["site.css", ".a{b:c;d:e}.f:hover{g:h}@media (x){.i{j:k}}".repeat(400), ["a", ";", "{", "}", ",", "/*", "*/", " ", "\n"]],
+    ["page.html", `<ul>${'<li class="x">one</li><!-- c -->'.repeat(600)}</ul>`, ["<", ">", "/", "a", '"', " ", "\n", "<!--", "-->"]],
+    ["notes.md", `# t\n\n\`\`\`json\n${oneLineJson(8_000)}\n\`\`\`\n\ntext {a}\n`, ["`", "{", "}", ",", "\n", "a"]],
+  ];
+  for (const [path, doc, tokens] of families) {
+    it(`matches a full layout after random edits (${path})`, () => {
+      const next = random(path.length * 7919);
+      let state = open(doc, { path });
+      configs.set(state, { enabled: true, path });
+      for (let round = 0; round < 400; round++) {
+        const length = state.doc.length;
+        const from = Math.floor(next() * length);
+        const to = Math.min(length, from + (next() < 0.3 ? Math.floor(next() * 6) : 0));
+        const insert = next() < 0.8 ? tokens[Math.floor(next() * tokens.length)]! : "";
+        state = edit(state, from, to, insert);
+        if (round % 20 === 19 || round > 380) {
+          expect(layoutOf(state), `${path} round ${round}`).toEqual(rebuilt(state));
+        }
+      }
+    });
+  }
 });

@@ -9,9 +9,11 @@ import type { TextWindow } from "./pretty-text-window.ts";
 export interface PrettyLexer {
   /**
    * Consumes protected text at `pos`, stopping at `end`, and returns where it
-   * stopped. Returns `pos` when the character there is code.
+   * stopped. Returns `pos` when the character there is code. Tokens are
+   * recognised by looking as far as `lineEnd`, so where scanning pauses never
+   * changes how text reads.
    */
-  skip(text: TextWindow, pos: number, end: number): number;
+  skip(text: TextWindow, pos: number, end: number, lineEnd: number): number;
   /** Records a code character the scanner consumed. */
   noteCode(text: TextWindow, pos: number): void;
   /** Whether a protected token is open. */
@@ -66,7 +68,7 @@ abstract class LexerBase implements PrettyLexer {
   protected mode = Mode.Code;
   protected escape = false;
 
-  abstract skip(text: TextWindow, pos: number, end: number): number;
+  abstract skip(text: TextWindow, pos: number, end: number, lineEnd: number): number;
   abstract copy(): PrettyLexer;
 
   noteCode(_text: TextWindow, _pos: number): void {}
@@ -77,6 +79,8 @@ abstract class LexerBase implements PrettyLexer {
 
   endLine(): void {
     if (this.mode === Mode.LineComment) this.mode = Mode.Code;
+    // A star ending a line does not pair with a slash starting the next.
+    if (this.mode === Mode.BlockComment) this.escape = false;
   }
 
   protected continueQuoted(text: TextWindow, pos: number, end: number, quote: number): number {
@@ -146,7 +150,7 @@ export class DataLexer extends LexerBase {
     super();
   }
 
-  skip(text: TextWindow, pos: number, end: number): number {
+  skip(text: TextWindow, pos: number, end: number, lineEnd: number): number {
     switch (this.mode) {
       case Mode.Double: return this.continueQuoted(text, pos, end, QUOTE);
       case Mode.Single: return this.continueQuoted(text, pos, end, APOS);
@@ -163,7 +167,7 @@ export class DataLexer extends LexerBase {
       this.mode = Mode.Single;
       return this.continueQuoted(text, pos + 1, end, APOS);
     }
-    if (this.options.comments && c === SLASH && pos + 1 < end) {
+    if (this.options.comments && c === SLASH && pos + 1 < lineEnd) {
       const next = text.at(pos + 1);
       if (next === SLASH) {
         this.mode = Mode.LineComment;
@@ -179,7 +183,8 @@ export class DataLexer extends LexerBase {
 
   override endLine(): void {
     // Data strings never span lines.
-    if (this.mode !== Mode.BlockComment) this.closed();
+    if (this.mode === Mode.BlockComment) this.escape = false;
+    else this.closed();
   }
 
   copy(): DataLexer {
@@ -217,14 +222,14 @@ export class ScriptLexer extends LexerBase {
   private lastCode = 0;
   private lastWord = "";
 
-  skip(text: TextWindow, pos: number, end: number): number {
+  skip(text: TextWindow, pos: number, end: number, lineEnd: number): number {
     switch (this.mode) {
       case Mode.Double: return this.continueQuoted(text, pos, end, QUOTE);
       case Mode.Single: return this.continueQuoted(text, pos, end, APOS);
       case Mode.BlockComment: return this.continueBlockComment(text, pos, end);
       case Mode.LineComment: return end;
-      case Mode.Template: return this.continueTemplate(text, pos, end);
-      case Mode.Regex: return this.continueRegex(text, pos, end);
+      case Mode.Template: return this.continueTemplate(text, pos, end, lineEnd);
+      case Mode.Regex: return this.continueRegex(text, pos, end, lineEnd);
     }
     if (pos >= end) return pos;
     const c = text.at(pos);
@@ -235,9 +240,9 @@ export class ScriptLexer extends LexerBase {
     if (c === BACKTICK) {
       this.mode = Mode.Template;
       this.templates = [-1];
-      return this.continueTemplate(text, pos + 1, end);
+      return this.continueTemplate(text, pos + 1, end, lineEnd);
     }
-    if (c === SLASH && pos + 1 < end) {
+    if (c === SLASH && pos + 1 < lineEnd) {
       const next = text.at(pos + 1);
       if (next === SLASH) {
         this.mode = Mode.LineComment;
@@ -251,7 +256,7 @@ export class ScriptLexer extends LexerBase {
     if (c === SLASH && this.regexAllowed()) {
       this.mode = Mode.Regex;
       this.regexClass = false;
-      return this.continueRegex(text, pos + 1, end);
+      return this.continueRegex(text, pos + 1, end, lineEnd);
     }
     return pos;
   }
@@ -261,7 +266,7 @@ export class ScriptLexer extends LexerBase {
     return isIdentifierCode(this.lastCode) && REGEX_AFTER_WORDS.has(this.lastWord);
   }
 
-  private continueRegex(text: TextWindow, pos: number, end: number): number {
+  private continueRegex(text: TextWindow, pos: number, end: number, lineEnd: number): number {
     let i = pos;
     while (i < end) {
       const c = text.at(i);
@@ -275,7 +280,7 @@ export class ScriptLexer extends LexerBase {
       } else if (c === CLOSE_BRACKET) {
         this.regexClass = false;
       } else if (c === SLASH && !this.regexClass) {
-        while (i < end && isIdentifierCode(text.at(i))) i += 1;
+        while (i < lineEnd && isIdentifierCode(text.at(i))) i += 1;
         this.closedWith(SLASH);
         return i;
       }
@@ -283,7 +288,7 @@ export class ScriptLexer extends LexerBase {
     return i;
   }
 
-  private continueTemplate(text: TextWindow, pos: number, end: number): number {
+  private continueTemplate(text: TextWindow, pos: number, end: number, lineEnd: number): number {
     let i = pos;
     while (i < end) {
       const c = text.at(i);
@@ -304,7 +309,7 @@ export class ScriptLexer extends LexerBase {
             this.closedWith(BACKTICK);
             return i;
           }
-        } else if (c === DOLLAR && i < end && text.at(i) === OPEN_BRACE) {
+        } else if (c === DOLLAR && i < lineEnd && text.at(i) === OPEN_BRACE) {
           this.templates.push(0);
           i += 1;
         }
@@ -355,7 +360,7 @@ export class ScriptLexer extends LexerBase {
     // Quoted strings end at the line unless a backslash continues them.
     if ((this.mode === Mode.Single || this.mode === Mode.Double) && !this.escape) this.closed();
     else if (this.mode === Mode.Regex || this.mode === Mode.LineComment) this.closed();
-    else if (this.mode === Mode.Single || this.mode === Mode.Double) this.escape = false;
+    else if (this.mode !== Mode.Template) this.escape = false;
   }
 
   copy(): ScriptLexer {
@@ -386,7 +391,7 @@ export class StyleLexer extends LexerBase {
     super();
   }
 
-  skip(text: TextWindow, pos: number, end: number): number {
+  skip(text: TextWindow, pos: number, end: number, lineEnd: number): number {
     switch (this.mode) {
       case Mode.Double: return this.continueQuoted(text, pos, end, QUOTE);
       case Mode.Single: return this.continueQuoted(text, pos, end, APOS);
@@ -400,7 +405,7 @@ export class StyleLexer extends LexerBase {
       this.mode = c === QUOTE ? Mode.Double : Mode.Single;
       return this.continueQuoted(text, pos + 1, end, c);
     }
-    if (c === SLASH && pos + 1 < end) {
+    if (c === SLASH && pos + 1 < lineEnd) {
       const next = text.at(pos + 1);
       if (next === STAR) {
         this.mode = Mode.BlockComment;
@@ -411,10 +416,10 @@ export class StyleLexer extends LexerBase {
         return end;
       }
     }
-    if ((c === 0x75 || c === 0x55) && pos + 4 <= end && text.slice(pos, pos + 4).toLowerCase() === "url(") {
+    if ((c === 0x75 || c === 0x55) && pos + 4 <= lineEnd && text.slice(pos, pos + 4).toLowerCase() === "url(") {
       let i = pos + 4;
-      while (i < end && isSpace(text.at(i))) i += 1;
-      const first = i < end ? text.at(i) : 0;
+      while (i < lineEnd && isSpace(text.at(i))) i += 1;
+      const first = i < lineEnd ? text.at(i) : 0;
       if (first !== QUOTE && first !== APOS) {
         this.mode = Mode.Url;
         return this.continueUrl(text, i, end);
@@ -434,7 +439,8 @@ export class StyleLexer extends LexerBase {
   }
 
   override endLine(): void {
-    if (this.mode !== Mode.BlockComment) this.closed();
+    if (this.mode === Mode.BlockComment) this.escape = false;
+    else this.closed();
   }
 
   copy(): StyleLexer {

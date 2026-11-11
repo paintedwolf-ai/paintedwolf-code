@@ -182,7 +182,7 @@ describe("chat content Files pane", () => {
     // keeps read-only authority and raw-offset redaction mark,
     // and keeps original source line gutter label ("1").
     fireEvent.click(prettyBtn);
-    expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
+    await waitFor(() => expect(prettyBtn.getAttribute("aria-pressed")).toBe("true"));
     await waitFor(() =>
       expect(view.container.querySelectorAll(".pw-pretty-break").length).toBe(3),
     );

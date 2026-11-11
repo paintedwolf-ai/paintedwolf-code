@@ -49,7 +49,10 @@ export function keepPositionInView(
           if (repeats >= SETTLED_SCROLL_REPEATS) return;
           repeats += 1;
           if (offset === null) {
-            v.dispatch({ effects: EditorView.scrollIntoView(target(v.state), { y }) });
+            // A measure's write phase may not dispatch.
+            queueMicrotask(() => {
+              if (v.dom.isConnected) v.dispatch({ effects: EditorView.scrollIntoView(target(v.state), { y }) });
+            });
           } else {
             const sign = Math.sign(offset);
             if (lastSign !== 0 && sign !== lastSign) scale /= 2;

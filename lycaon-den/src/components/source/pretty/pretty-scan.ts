@@ -145,19 +145,34 @@ interface Fence {
   readonly rule: PrettyRule | null;
 }
 
+type TagKind = "open" | "close" | "self";
+
+/** A tag being read: its kind and name are known at `<`, its end at `>`. */
+interface OpenTag {
+  readonly kind: TagKind;
+  readonly name: string;
+  readonly quote: number;
+  readonly slash: boolean;
+}
+
 interface MarkupState {
   readonly comment: boolean;
   readonly cdata: boolean;
   readonly rawTag: string | null;
-  readonly previous: "open" | "close" | "self" | null;
+  readonly tag: OpenTag | null;
+  readonly previous: TagKind | null;
   readonly previousName: string;
   readonly adjacent: boolean;
   readonly depth: number;
 }
 
 const INITIAL_MARKUP: MarkupState = {
-  comment: false, cdata: false, rawTag: null, previous: null, previousName: "", adjacent: false, depth: 0,
+  comment: false, cdata: false, rawTag: null, tag: null, previous: null, previousName: "", adjacent: false, depth: 0,
 };
+
+function tagsEqual(a: OpenTag | null, b: OpenTag | null): boolean {
+  return a === b || (!!a && !!b && a.kind === b.kind && a.name === b.name && a.quote === b.quote && a.slash === b.slash);
+}
 
 /** Scan state at a position, with positions stored as distances back from it. */
 export interface PrettySnapshot {
@@ -188,6 +203,7 @@ export function snapshotsEqual(a: PrettySnapshot, b: PrettySnapshot): boolean {
   const ma = a.markup;
   const mb = b.markup;
   if (ma.comment !== mb.comment || ma.cdata !== mb.cdata || ma.rawTag !== mb.rawTag || ma.previous !== mb.previous) return false;
+  if (!tagsEqual(ma.tag, mb.tag)) return false;
   if (ma.previousName !== mb.previousName || ma.adjacent !== mb.adjacent || ma.depth !== mb.depth) return false;
   const fa = a.fence;
   const fb = b.fence;
@@ -465,7 +481,7 @@ export class PrettyScanner {
   private stepBracket(rule: BracketRule, pos: number, end: number): number {
     const text = this.text;
     const lexer = this.lexer!;
-    const skipped = lexer.skip(text, pos, end);
+    const skipped = lexer.skip(text, pos, end, this.lineEnd);
     if (skipped > pos) {
       this.visits += skipped - pos;
       this.col += skipped - pos;
@@ -577,7 +593,7 @@ export class PrettyScanner {
   /**
    * Whether the group opening at `open` stays flat: its visual line, up to the
    * next place the enclosing layout breaks, fits the target width, and nothing
-   * inside it must break.
+   * inside it breaks on its own (a data container, or a break after a block).
    */
   private fits(rule: BracketRule, open: number, lineEnd: number): boolean {
     const text = this.text;
@@ -589,7 +605,7 @@ export class PrettyScanner {
     let pos = open;
     for (;;) {
       if (pos >= lineEnd) return false;
-      const skipped = lexer.skip(text, pos, Math.min(lineEnd, pos + remaining - width + 1));
+      const skipped = lexer.skip(text, pos, Math.min(lineEnd, pos + remaining - width + 1), lineEnd);
       if (skipped > pos) {
         this.visits += skipped - pos;
         width += skipped - pos;
@@ -612,9 +628,6 @@ export class PrettyScanner {
           break;
         }
         if (c === CLOSE_BRACE && this.breaksAfterBlock(rule, pos, lineEnd)) return false;
-      } else if (c === SEMICOLON && rule.statements && stack[stack.length - 1] === OPEN_BRACE) {
-        const next = this.skipSpaces(pos + 1, lineEnd);
-        if (next < lineEnd && !isCloser(text.at(next))) return false;
       }
       pos += 1;
     }
@@ -622,7 +635,7 @@ export class PrettyScanner {
     const parent = this.frames;
     for (;;) {
       if (pos >= lineEnd) return true;
-      const skipped = lexer.skip(text, pos, Math.min(lineEnd, pos + remaining - width + 1));
+      const skipped = lexer.skip(text, pos, Math.min(lineEnd, pos + remaining - width + 1), lineEnd);
       if (skipped > pos) {
         this.visits += skipped - pos;
         width += skipped - pos;
@@ -659,7 +672,7 @@ export class PrettyScanner {
     const stack: Array<{ kind: number; open: number; semicolon: boolean }> = [{ kind: OPEN_BRACE, open, semicolon: false }];
     let pos = open + 1;
     while (pos < lineEnd && stack.length > 0) {
-      const skipped = lexer.skip(text, pos, lineEnd);
+      const skipped = lexer.skip(text, pos, lineEnd, lineEnd);
       if (skipped > pos) {
         this.visits += skipped - pos;
         pos = skipped;
@@ -683,136 +696,108 @@ export class PrettyScanner {
     return this.options.facts.get(open) ?? false;
   }
 
+  /**
+   * Reads markup one character at a time. A break before a tag depends only
+   * on the tag's kind and name, read at `<`; whether it closes itself is known
+   * at its `>`, so no decision waits on text further on.
+   */
   private stepMarkup(pos: number): number {
     const text = this.text;
     const m = this.markup;
+    const lineEnd = this.lineEnd;
     this.visits += 1;
     const c = text.at(pos);
+    this.col += c === TAB ? this.options.tabSize : 1;
     if (m.comment) {
-      if (c === DASH && pos + 2 < this.lineEnd && text.at(pos + 1) === DASH && text.at(pos + 2) === GREATER) {
+      if (c === DASH && pos + 2 < lineEnd && text.at(pos + 1) === DASH && text.at(pos + 2) === GREATER) {
         this.markup = { ...m, comment: false, previous: "self", previousName: "!comment", adjacent: true };
-        this.col += 3;
+        this.col += 2;
         return pos + 3;
       }
-      this.col += 1;
       return pos + 1;
     }
     if (m.cdata) {
-      if (c === CLOSE_BRACKET && pos + 2 < this.lineEnd && text.at(pos + 1) === CLOSE_BRACKET && text.at(pos + 2) === GREATER) {
+      if (c === CLOSE_BRACKET && pos + 2 < lineEnd && text.at(pos + 1) === CLOSE_BRACKET && text.at(pos + 2) === GREATER) {
         this.markup = { ...m, cdata: false, previous: null, adjacent: false };
-        this.col += 3;
+        this.col += 2;
         return pos + 3;
       }
-      this.col += 1;
+      return pos + 1;
+    }
+    if (m.tag) {
+      const tag = m.tag;
+      if (tag.quote !== 0) {
+        if (c === tag.quote) this.markup = { ...m, tag: { ...tag, quote: 0 } };
+      } else if (c === QUOTE || c === APOS) {
+        this.markup = { ...m, tag: { ...tag, quote: c } };
+      } else if (c === GREATER) {
+        const kind: TagKind = tag.kind === "open" && (tag.slash || VOID_TAGS.has(tag.name)) ? "self" : tag.kind;
+        this.markup = {
+          ...m,
+          tag: null,
+          rawTag: kind === "open" && RAW_TAGS.has(tag.name) ? tag.name : null,
+          previous: kind,
+          previousName: tag.name,
+          adjacent: true,
+        };
+      } else if (c !== SPACE && c !== TAB) {
+        const slash = c === SLASH;
+        if (slash !== tag.slash) this.markup = { ...m, tag: { ...tag, slash } };
+      }
       return pos + 1;
     }
     if (m.rawTag !== null) {
-      if (c === LESS && pos + 1 < this.lineEnd && text.at(pos + 1) === SLASH) {
-        const name = this.tagName(pos + 2, this.lineEnd);
-        if (name === m.rawTag) {
-          let close = pos + 2 + name.length;
-          while (close < this.lineEnd && text.at(close) !== GREATER) close += 1;
-          if (close < this.lineEnd) {
-            this.markup = { ...m, rawTag: null, previous: "close", previousName: name, adjacent: true };
-            this.col += close + 1 - pos;
-            this.visits += close - pos;
-            return close + 1;
-          }
-        }
+      if (c === LESS && pos + 1 < lineEnd && text.at(pos + 1) === SLASH && this.tagName(pos + 2, lineEnd) === m.rawTag) {
+        this.markup = { ...m, rawTag: null, tag: { kind: "close", name: m.rawTag, quote: 0, slash: false } };
       }
-      this.col += 1;
       return pos + 1;
     }
-    if (c === SPACE || c === TAB) {
-      this.col += c === TAB ? this.options.tabSize : 1;
-      return pos + 1;
-    }
+    if (c === SPACE || c === TAB) return pos + 1;
+    this.hasContent = true;
     if (c !== LESS) {
-      this.markup = m.adjacent ? { ...m, adjacent: false } : m;
-      this.col += 1;
-      this.hasContent = true;
+      if (m.adjacent) this.markup = { ...m, adjacent: false };
       return pos + 1;
     }
-    if (pos + 3 < this.lineEnd && text.at(pos + 1) === BANG && text.at(pos + 2) === DASH && text.at(pos + 3) === DASH) {
+    if (pos + 3 < lineEnd && text.at(pos + 1) === BANG && text.at(pos + 2) === DASH && text.at(pos + 3) === DASH) {
       let depth = m.depth;
-      if (this.laidOut && m.adjacent && m.previous !== null) {
+      if (m.adjacent && m.previous !== null) {
         if (m.previous === "open") depth += 1;
-        this.emitBreak(pos, this.columns(Math.max(0, depth)));
+        if (this.laidOut) this.emitBreak(pos, this.columns(Math.max(0, depth)));
       }
       this.markup = { ...m, comment: true, previous: null, adjacent: false, depth };
-      this.col += 4;
-      this.hasContent = true;
+      this.col += 3;
       return pos + 4;
     }
-    if (pos + 8 < this.lineEnd && text.slice(pos, pos + 9) === "<![CDATA[") {
+    if (pos + 8 < lineEnd && text.slice(pos, pos + 9) === "<![CDATA[") {
       this.markup = { ...m, cdata: true, previous: null, adjacent: false };
-      this.col += 9;
-      this.hasContent = true;
+      this.col += 8;
       return pos + 9;
     }
-    let quote = 0;
-    let tagEnd = pos + 1;
-    while (tagEnd < this.lineEnd) {
-      const t = text.at(tagEnd);
-      if (quote !== 0) {
-        if (t === quote) quote = 0;
-      } else if (t === QUOTE || t === APOS) {
-        quote = t;
-      } else if (t === GREATER) {
-        break;
-      }
-      tagEnd += 1;
-    }
-    this.visits += tagEnd - pos;
-    if (tagEnd >= this.lineEnd) {
-      this.col += 1;
-      this.markup = { ...m, adjacent: false };
-      this.hasContent = true;
-      return pos + 1;
-    }
-    const first = text.at(pos + 1);
-    let kind: "open" | "close" | "self" = "open";
+    const first = pos + 1 < lineEnd ? text.at(pos + 1) : 0;
+    let kind: TagKind = "open";
     let name: string;
     if (first === SLASH) {
       kind = "close";
-      name = this.tagName(pos + 2, tagEnd);
+      name = this.tagName(pos + 2, lineEnd);
     } else if (first === BANG || first === QUESTION) {
       kind = "self";
       name = "!decl";
     } else {
-      name = this.tagName(pos + 1, tagEnd);
-      let before = tagEnd - 1;
-      while (before > pos && (text.at(before) === SPACE || text.at(before) === TAB)) before -= 1;
-      if (text.at(before) === SLASH || VOID_TAGS.has(name)) kind = "self";
+      name = this.tagName(pos + 1, lineEnd);
     }
     let depth = m.depth;
-    if (m.adjacent && m.previous !== null && this.laidOut) {
+    if (m.adjacent && m.previous !== null) {
+      let breaks = true;
       if (m.previous === "open") {
-        if (!(kind === "close" && name === m.previousName)) {
-          if (kind !== "close") depth += 1;
-          this.emitBreak(pos, this.columns(Math.max(0, depth)));
-        }
+        if (kind === "close" && name === m.previousName) breaks = false;
+        else if (kind !== "close") depth += 1;
       } else if (kind === "close") {
         depth -= 1;
-        this.emitBreak(pos, this.columns(Math.max(0, depth)));
-      } else {
-        this.emitBreak(pos, this.columns(Math.max(0, depth)));
       }
-    } else if (m.adjacent && m.previous !== null) {
-      if (m.previous === "open" && kind !== "close") depth += 1;
-      else if (m.previous !== "open" && kind === "close") depth -= 1;
+      if (breaks && this.laidOut) this.emitBreak(pos, this.columns(Math.max(0, depth)));
     }
-    this.markup = {
-      ...m,
-      rawTag: kind === "open" && RAW_TAGS.has(name) ? name : null,
-      previous: kind,
-      previousName: name,
-      adjacent: true,
-      depth,
-    };
-    this.col += tagEnd + 1 - pos;
-    this.hasContent = true;
-    return tagEnd + 1;
+    this.markup = { ...m, tag: { kind, name, quote: 0, slash: false }, depth };
+    return pos + 1;
   }
 
   private tagName(from: number, limit: number): string {
