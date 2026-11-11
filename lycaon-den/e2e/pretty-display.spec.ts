@@ -31,9 +31,9 @@ async function openPretty(page: Page, request: Parameters<typeof openProjectFile
   const content = host.locator(".cm-content");
   await expect(content).toBeEditable();
   await page.evaluate(async (projectId) => {
-    const host = await import(/* @vite-ignore */ "/src/files/editor/files-editor-host.ts") as typeof import("../src/files/editor/files-editor-host.ts");
-    const buffers = await import(/* @vite-ignore */ "/src/files/documents/files-buffer-state.ts") as typeof import("../src/files/documents/files-buffer-state.ts");
-    const pretty = await import(/* @vite-ignore */ "/src/components/source/pretty/pretty-view.ts") as typeof import("../src/components/source/pretty/pretty-view.ts");
+    const host = await import(/* @vite-ignore */ String("/src/files/editor/files-editor-host.ts")) as typeof import("../src/files/editor/files-editor-host.ts");
+    const buffers = await import(/* @vite-ignore */ String("/src/files/documents/files-buffer-state.ts")) as typeof import("../src/files/documents/files-buffer-state.ts");
+    const pretty = await import(/* @vite-ignore */ String("/src/components/source/pretty/pretty-view.ts")) as typeof import("../src/components/source/pretty/pretty-view.ts");
     const view = () => host.getFilesEditorView(projectId, buffers.projectFilesState(projectId).activeKey!)!;
     const breaksIn = (from: number, to: number): number[] => {
       const out: number[] = [];
@@ -110,8 +110,8 @@ modelIndependentWebE2e("lays a long one-line document out under soft wrapping", 
     return {
       active: view.state.facet(window.__pretty.active),
       wrap: getComputedStyle(view.contentDOM).whiteSpace,
-      lineNumberOnes: [...view.dom.querySelectorAll(".cm-lineNumbers .cm-gutterElement")]
-        .filter((element) => element.textContent === "1").length,
+      lineNumberOnes: [...view.dom.querySelectorAll(".cm-gutters .cm-gutterElement")]
+        .filter((element) => element.textContent?.trim() === "1").length,
     };
   });
   expect(facts.active).toBe(true);
@@ -223,11 +223,15 @@ modelIndependentWebE2e("moves by visual rows and stops line keys at the visual l
   await page.keyboard.press("Shift+End");
   expect(await selection(page)).toMatchObject({ anchor: startPos, head: short.line.to });
   if (process.platform === "darwin") {
-    await page.mouse.click(start!.left + 1, (start!.top + start!.bottom) / 2);
-    await page.keyboard.press("Meta+ArrowRight");
-    expect((await selection(page)).head).toBe(short.line.to);
-    await page.keyboard.press("Meta+ArrowLeft");
-    expect((await selection(page)).head).toBe(short.line.from);
+    for (const [end, start_] of [["Meta+ArrowRight", "Meta+ArrowLeft"], ["Control+e", "Control+a"]] as const) {
+      await page.mouse.click(start!.left + 1, (start!.top + start!.bottom) / 2);
+      await page.keyboard.press(end);
+      await page.keyboard.press(end);
+      expect((await selection(page)).head, end).toBe(short.line.to);
+      await page.keyboard.press(start_);
+      await page.keyboard.press(start_);
+      expect((await selection(page)).head, start_).toBe(short.line.from);
+    }
   }
 
   const wrapped = await page.evaluate(() => {
@@ -252,12 +256,17 @@ modelIndependentWebE2e("moves by visual rows and stops line keys at the visual l
   await page.keyboard.press("End");
   expect((await selection(page)).head).toBe(wrapped!.to);
 
-  const rows = await page.evaluate((from) => {
+  const rows = await page.evaluate(({ from, to }) => {
     const view = window.__pretty.view();
-    const { node } = view.domAtPos(from + 1);
-    const element = (node instanceof Element ? node : node.parentElement)!.closest(".pw-pretty-line")!;
-    return [...element.getClientRects()].map((rect) => rect.left);
-  }, wrapped!.from);
+    const lefts = new Map<number, number>();
+    for (let pos = from; pos < to; pos++) {
+      const rect = view.coordsAtPos(pos, 1);
+      if (!rect) continue;
+      const top = Math.round(rect.top);
+      lefts.set(top, Math.min(lefts.get(top) ?? Infinity, rect.left));
+    }
+    return [...lefts.values()];
+  }, wrapped!);
   expect(rows.length).toBeGreaterThan(1);
   for (const left of rows) expect(Math.abs(left - rows[0]!)).toBeLessThan(1.5);
   await expect(content).toBeFocused();
@@ -319,9 +328,26 @@ modelIndependentWebE2e("keeps the selection and brings it into view across toggl
       const before = await selection(page);
       const docBefore = await page.evaluate(() => window.__pretty.view().state.doc.length);
       for (let i = 0; i < 2; i++) {
+        await page.evaluate(() => {
+          const view = window.__pretty.view();
+          const trace: number[][] = [];
+          Object.assign(window, { __toggleTrace: trace });
+          const tick = () => {
+            const rect = view.coordsAtPos(view.state.selection.main.head);
+            const port = view.scrollDOM.getBoundingClientRect();
+            trace.push([Math.round(view.scrollDOM.scrollTop), rect ? Math.round(rect.top - port.top) : -1, Math.round(view.scrollDOM.scrollHeight)]);
+            if (trace.length < 60) requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        });
         await toggle();
         expect(await selection(page)).toMatchObject({ anchor: before.anchor, head: before.head });
-        await expect.poll(visible, { timeout: 5_000 }).toBe(true);
+        try {
+          await expect.poll(visible, { timeout: 5_000 }).toBe(true);
+        } catch (error) {
+          const trace = await page.evaluate(() => (window as unknown as { __toggleTrace: number[][] }).__toggleTrace);
+          throw new Error(`toggle ${i} at ${fraction}: ${JSON.stringify(trace)}`, { cause: error });
+        }
       }
       expect(await page.evaluate(() => window.__pretty.view().state.doc.length)).toBe(docBefore);
     }
@@ -334,7 +360,7 @@ for (const wrapPref of [false, true]) {
     for (const items of [ITEMS_200_KB, ITEMS_1_MB]) {
       const { scroller } = await openPretty(page, request, items);
       await page.evaluate(async (wrap) => {
-        const prefs = await import(/* @vite-ignore */ "/src/settings/editor/editor-prefs.ts") as typeof import("../src/settings/editor/editor-prefs.ts");
+        const prefs = await import(/* @vite-ignore */ String("/src/settings/editor/editor-prefs.ts")) as typeof import("../src/settings/editor/editor-prefs.ts");
         await prefs.saveEditorWordWrap(wrap);
       }, wrapPref);
       for (const fraction of [0, 0.5, 1]) {
@@ -348,10 +374,15 @@ for (const wrapPref of [false, true]) {
           const doc = view.state.doc;
           const bad: string[] = [];
           for (const line of view.contentDOM.querySelectorAll(".cm-line")) {
-            const text = line.textContent ?? "";
-            if (!text) continue;
-            const from = view.posAtDOM(line, 0);
-            if (doc.sliceString(from, from + text.length) !== text) bad.push(`${from}`);
+            // A long line is drawn as a window; compare from its first text.
+            const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+            let first: Node | null = walker.nextNode();
+            while (first && !first.nodeValue) first = walker.nextNode();
+            if (!first) continue;
+            let text = "";
+            for (let node: Node | null = first; node; node = walker.nextNode()) text += node.nodeValue ?? "";
+            const from = view.posAtDOM(first, 0);
+            if (text.length < 200 || doc.sliceString(from, from + text.length) !== text) bad.push(`${from}:${text.length}`);
           }
           return bad;
         });
