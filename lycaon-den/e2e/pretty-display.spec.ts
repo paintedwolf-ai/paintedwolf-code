@@ -19,12 +19,14 @@ const ITEMS_1_MB = 14_000;
 
 type Probe = { content: Locator; scroller: Locator };
 
-async function openPretty(page: Page, request: Parameters<typeof openProjectFilesFixture>[1], items: number): Promise<Probe> {
-  const name = `one-line-${items}.json`;
+type Source = number | { name: string; text: string };
+
+async function openPretty(page: Page, request: Parameters<typeof openProjectFilesFixture>[1], source: Source): Promise<Probe> {
+  const { name, text } = typeof source === "number" ? { name: `one-line-${source}.json`, text: oneLineJson(source) } : source;
   const { project } = await openProjectFilesFixture(page, request, {
     prefix: "pretty-display",
     name: "Pretty display",
-    seed: (root) => writeFileSync(path.join(root, name), oneLineJson(items)),
+    seed: (root) => writeFileSync(path.join(root, name), text),
   });
   await page.getByTestId("files-tree-file").filter({ hasText: name }).click();
   const host = page.getByTestId("files-editor-host");
@@ -362,6 +364,37 @@ modelIndependentWebE2e("keeps the selection and brings it into view across toggl
       expect(await page.evaluate(() => window.__pretty.view().state.doc.length)).toBe(docBefore);
     }
   }
+});
+
+modelIndependentWebE2e("marks tabs in indentation while laid out", async ({ page, request }) => {
+  const text = '{\n\t"rows": [\n\t\t{"a":\t1},\n  \t"mixed",\n\t\t"end"\n\t]\n}\n';
+  await openPretty(page, request, { name: "tabs.json", text });
+  const marks = (selector: string) => page.evaluate((selector) => [...window.__pretty.view().contentDOM.querySelectorAll(selector)]
+    .map((element) => {
+      const after = getComputedStyle(element, "::after");
+      return { text: element.textContent, width: element.getBoundingClientRect().width, arrow: after.maskImage || after.webkitMaskImage };
+    }), selector);
+  const marked = await marks(".cm-den-tab");
+  expect(marked).toHaveLength(7);
+  for (const mark of marked) {
+    expect(mark.text).toBe("\t");
+    expect(mark.width).toBeGreaterThan(0);
+    expect(mark.arrow).toContain("svg");
+  }
+  await page.getByTestId("files-editor-pretty-toggle").click();
+  await expect(page.getByTestId("files-editor-pretty-toggle")).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(async () => (await marks(".cm-den-tab")).length).toBe(0);
+
+  await page.evaluate(async () => {
+    const prefs = await import(/* @vite-ignore */ String("/src/settings/editor/editor-prefs.ts")) as typeof import("../src/settings/editor/editor-prefs.ts");
+    await prefs.saveEditorWhitespace(true);
+  });
+  await expect.poll(async () => (await marks(".cm-highlightTab")).length).toBe(8);
+  for (const mark of await marks(".cm-highlightTab")) expect(mark.arrow).toContain("svg");
+  const dots = await page.evaluate(() => [...window.__pretty.view().contentDOM.querySelectorAll(".cm-highlightSpace")]
+    .map((element) => getComputedStyle(element).backgroundImage));
+  expect(dots.length).toBeGreaterThan(0);
+  for (const dot of dots) expect(dot).toContain("radial-gradient");
 });
 
 for (const wrapPref of [false, true]) {

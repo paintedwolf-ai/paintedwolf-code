@@ -15,6 +15,7 @@ import {
   type PrettyWork,
   updateLayout,
 } from "./pretty-rescan.ts";
+import { prettyTabMarks } from "./pretty-tab-marks.ts";
 import { prettyLayoutActive, prettyLayoutDecorations, prettyPresentation } from "./pretty-view.ts";
 
 const setPrettyConfig = StateEffect.define<PrettyConfig>();
@@ -66,7 +67,7 @@ export function prettyOutcomeListener(onChange: (outcome: PrettyOutcome) => void
 }
 
 export function createPrettyExtension(initial: PrettyConfig = { enabled: false }): Extension {
-  return [prettyPresentation, prettyLayoutField.init((state) => buildLayout(state, initial))];
+  return [prettyPresentation, prettyTabMarks, prettyLayoutField.init((state) => buildLayout(state, initial))];
 }
 
 /** Applies a configuration; turning layout on or off keeps the selection head in view. */
