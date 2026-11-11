@@ -113,8 +113,19 @@ func TestMacOSUnsignedReleaseCustodyRefusalPreservesLegacyFilesAndRefusesTokenPr
 	}
 	entries, err := os.ReadDir(configDir)
 	testutil.FailErr(t, "readdir configDir", err)
-	if len(entries) != len(legacyFiles) {
-		t.Fatalf("configDir entry count = %d, want %d", len(entries), len(legacyFiles))
+	for _, entry := range entries {
+		name := entry.Name()
+		if name == "credential-vault.age.lock" {
+			info, statErr := entry.Info()
+			testutil.FailErr(t, "stat lock file", statErr)
+			if info.Size() != 0 {
+				t.Fatalf("lock file size = %d, want 0", info.Size())
+			}
+			continue
+		}
+		if _, ok := beforeDigests[name]; !ok {
+			t.Fatalf("unexpected file %q created in configDir after release refusal", name)
+		}
 	}
 	for _, name := range legacyFiles {
 		raw, err := os.ReadFile(filepath.Join(configDir, name))
