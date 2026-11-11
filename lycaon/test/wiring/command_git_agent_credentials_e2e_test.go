@@ -4,6 +4,8 @@ package wiring
 
 import (
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -13,12 +15,15 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
@@ -96,5 +101,71 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	}
 	if !authenticated() {
 		t.Fatal("the remote never saw the stored credentials")
+	}
+}
+
+// fakeSSHAgent answers identity requests with no keys and counts them.
+func fakeSSHAgent(t *testing.T) (string, func() int) {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "pwa-") //nolint:usetesting // A socket path must stay short.
+	testutil.FailErr(t, "agent dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	path := filepath.Join(dir, "agent.sock")
+	listener, err := net.Listen("unix", path)
+	testutil.FailErr(t, "listen agent", err)
+	t.Cleanup(func() { _ = listener.Close() })
+	var requests atomic.Int32
+	go func() {
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				return
+			}
+			header := make([]byte, 5)
+			if _, err := io.ReadFull(conn, header); err == nil && header[4] == 11 {
+				requests.Add(1)
+				_, _ = conn.Write([]byte{0, 0, 0, 5, 12, 0, 0, 0, 0})
+			}
+			_ = conn.Close()
+		}
+	}()
+	return path, func() int { return int(requests.Load()) }
+}
+
+// An agent's Git reaches the user's SSH agent from inside its confinement
+// once the session holds a socket capability for it, and not before.
+func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T) {
+	gitengine.TestingEnableBundledBinary()
+	confine.TestingSetAutoConfine(t)
+	t.Setenv("LYCAON_SANDBOX", "on")
+	agent, requests := fakeSSHAgent(t)
+	t.Setenv("SSH_AUTH_SOCK", agent)
+	self, err := os.Executable()
+	testutil.FailErr(t, "resolve test binary", err)
+	shims := t.TempDir()
+	testutil.FailErr(t, "write ssh shim", os.WriteFile(filepath.Join(shims, "ssh"), []byte("#!/bin/sh\nexec '"+self+"' "+sshAgentProbeVerb+" \"$@\"\n"), 0o755))
+	t.Setenv("PATH", shims+string(os.PathListSeparator)+os.Getenv("PATH"))
+	remote := "ssh://git@ssh.example.test/org/repo.git"
+
+	ungranted := newCommandProgramSession(t, "git ls-remote "+remote, "")
+	gittest.InitCommit(t, ungranted.dir, "work")
+	runCommandWithApprovals(t, ungranted, "recommended")
+	if got := ungranted.outcome(t, "program-1"); strings.Contains(got.Stderr, sshAgentAnswered) || requests() != 0 {
+		t.Fatalf("SSH agent reached Git without a capability: %d requests, %+v", requests(), got)
+	}
+
+	granted := newCommandProgramSession(t, "git ls-remote "+remote, "")
+	gittest.InitCommit(t, granted.dir, "work")
+	lease, err := socketref.Capture(agent)
+	testutil.FailErr(t, "capture agent", err)
+	t.Cleanup(lease.Close)
+	grant := confine.SocketGrant{ApprovedPath: agent, ResolvedPath: fspath.CanonicalPath(agent), Binding: lease.Binding()}
+	if !granted.h.Server.Admin.Capabilities.Installation.Sockets.GrantChat(granted.session, grant, "ssh-agent", "test-agent", "", nil) {
+		t.Fatal("socket grant failed")
+	}
+	runCommandWithApprovals(t, granted, "recommended")
+	got := granted.outcome(t, "program-1")
+	if !strings.Contains(got.Stderr, sshAgentAnswered) || requests() == 0 {
+		t.Fatalf("granted SSH agent unreachable from the confined Git: %d requests, %+v", requests(), got)
 	}
 }

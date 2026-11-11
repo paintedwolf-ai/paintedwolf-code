@@ -290,12 +290,12 @@ func (h *harness) execWithEnv(env []string, words ...string) run {
 	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err}
 }
 
-func configureSSHTransport(t *testing.T, h *harness, bareParent, bareDir string) (sockPath, argvLog, envLog string) {
+func configureSSHTransport(t *testing.T, h *harness, bareParent, bareDir string) (argvLog, envLog string) {
 	t.Helper()
 	sockDir, err := os.MkdirTemp(os.TempDir(), "pws-") //nolint:usetesting // SSH_AUTH_SOCK needs a short path; registered cleanup removes this owned directory.
 	testutil.FailErr(t, "mkdir socket dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sockPath = filepath.Join(sockDir, "agent.sock")
+	sockPath := filepath.Join(sockDir, "agent.sock")
 	ln, err := net.Listen("unix", sockPath)
 	testutil.FailErr(t, "listen unix socket", err)
 	t.Cleanup(func() { _ = ln.Close() })
@@ -331,16 +331,13 @@ esac
 	// must not apply.
 	gitexec.SetHostConfig(sshTestHostConfig{sshCmd: "/bin/false"})
 	t.Cleanup(func() { gitexec.SetHostConfig(nil) })
-	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, sockets []confine.SocketGrant) (lycexec.LaunchPlan, func(context.Context), error) {
-		plan, release, err := UnconfinedLaunch(ctx, tc, subject, line, sockets)
+	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, services []confine.HostService) (lycexec.LaunchPlan, func(context.Context), error) {
+		plan, release, err := UnconfinedLaunch(ctx, tc, subject, line, services)
 		return plan.WithReducedEnvironment().WithExtraEnv("PATH=" + bareParent + string(os.PathListSeparator) + os.Getenv("PATH")), release, err
 	}
-	// The user's SSH agent reaches agent Git only through a socket capability.
-	grant, err := confine.ResolveSocketRequest(sockPath)
-	testutil.FailErr(t, "resolve agent socket grant", err)
-	h.tc.Socket.DurableSocketGrants = []confine.SocketGrant{grant}
-
-	return sockPath, argvLog, envLog
+	// Without a socket capability the user's SSH agent never reaches agent
+	// Git; the wiring suite covers the granted agent under real confinement.
+	return argvLog, envLog
 }
 
 // Serial: mutates process-wide SSH environment, host config, and egress gate.
@@ -356,7 +353,7 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 		t.Fatalf("init bare: %d %s %s", code, out, errOut)
 	}
 
-	sockPath, argvLog, envLog := configureSSHTransport(t, h, bareParent, bareDir)
+	argvLog, envLog := configureSSHTransport(t, h, bareParent, bareDir)
 
 	scpRemote := "git@ssh.example.test:org/remote.git"
 	urlRemote := "ssh://git@ssh-alt.example.test:2222/org/remote.git"
@@ -467,7 +464,7 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 	testutil.FailErr(t, "read ssh env log", err)
 	envText := string(envBytes)
 	for _, want := range []string{
-		"SSH_AUTH_SOCK=" + sockPath,
+		"SSH_AUTH_SOCK=",
 		"SSH_ASKPASS=",
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_SSH_COMMAND=",
@@ -475,15 +472,6 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 		if !strings.Contains(envText, want+"\n") {
 			t.Fatalf("ssh transport env missing %q:\n%s", want, envText)
 		}
-	}
-	h.tc.Socket.DurableSocketGrants = nil
-	if ls := h.exec("git", "ls-remote", "--heads", "origin"); ls.err != nil || ls.result.Status != 0 {
-		t.Fatalf("ssh ls-remote without the agent capability: %+v %v %s", ls.result, ls.err, ls.stderr)
-	}
-	envBytes, err = os.ReadFile(envLog)
-	testutil.FailErr(t, "read ssh env log", err)
-	if strings.Contains(string(envBytes), "SSH_AUTH_SOCK="+sockPath) {
-		t.Fatalf("SSH agent reached Git without a socket capability:\n%s", envBytes)
 	}
 	argvBytes, err := os.ReadFile(argvLog)
 	testutil.FailErr(t, "read ssh argv log", err)

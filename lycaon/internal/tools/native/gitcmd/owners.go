@@ -72,14 +72,15 @@ var networkForms = map[string]bool{"git fetch": true, "git push": true, "git pul
 
 // AgentLaunch admits one agent Git command's confined launch; release closes
 // its action lease.
-type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string, hostSockets []confine.SocketGrant) (plan exec.LaunchPlan, release func(context.Context), err error)
+type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string, services []confine.HostService) (plan exec.LaunchPlan, release func(context.Context), err error)
 
 func (p Prepared) commandLine() string {
 	return strings.Join(append([]string{"git"}, p.command.args...), " ")
 }
 
-// grantedSSHAgent is the user's SSH agent when this call holds a socket
-// capability for it; SSH remotes otherwise authenticate without the agent.
+// grantedSSHAgent references the user's SSH agent when this call holds a
+// socket capability for it, so the launch dials that capability's endpoint;
+// SSH remotes otherwise authenticate without the agent.
 func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) string {
 	agent := gitexec.HostSSHAgentSocket(ctx)
 	if agent == "" {
@@ -88,7 +89,8 @@ func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) string {
 	resolved := fspath.CanonicalPath(agent)
 	for _, grant := range append(slices.Clone(tc.Socket.SocketGrants), tc.Socket.DurableSocketGrants...) {
 		if grant.ResolvedPath == resolved {
-			return agent
+			reference, _ := confine.SocketEndpointReferences(grant.ApprovedPath)
+			return reference
 		}
 	}
 	return ""
