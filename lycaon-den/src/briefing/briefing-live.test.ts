@@ -159,4 +159,33 @@ describe("briefing live store", () => {
     expect(briefingEntryCountForTests()).toBe(BRIEFING_INACTIVE_LIMIT + 1);
     watched.dispose();
   });
+
+  it("asks once for a target however many views watch it", async () => {
+    const clock = new FakeClock();
+    setBriefingClockForTests(clock);
+    const client = stubClient([snapshot({ status: "idle" })]);
+    setBriefingClient(() => client);
+    for (let i = 0; i < 5; i++) {
+      const view = watch("p", target);
+      clock.advance(BRIEFING_DEBOUNCE_MS);
+      await settle();
+      view.dispose();
+    }
+    expect(client.calls).toHaveLength(1);
+  });
+
+  it("asks nothing for a view that closes before the debounce", async () => {
+    const clock = new FakeClock();
+    setBriefingClockForTests(clock);
+    const client = stubClient([]);
+    setBriefingClient(() => client);
+    for (let i = 0; i < 5; i++) {
+      const view = watch("p", { profileId: "source_step", ref: { target_key: `e${i}` } });
+      clock.advance(BRIEFING_DEBOUNCE_MS - 1);
+      view.dispose();
+    }
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await settle();
+    expect(client.calls).toHaveLength(0);
+  });
 });
