@@ -4,10 +4,10 @@ import { isPendingSessionId } from "../../chat/session/session-scope.ts";
 import { contributionFrameReady } from "../../contributions/contribution-store.ts";
 import { retainedHomeSummaries } from "../../home/home-model.ts";
 import { type ProjectSummary } from "../../project/project-summary.ts";
-import { isHomePresentation, deriveProjectPresentation, retainMountedProjectPresentation, type ProjectPresentation } from "../../shell/project-presentation.ts";
+import { isHomePresentation, deriveProjectPresentation, projectScopeSettled, retainMountedProjectPresentation, type ProjectPresentation } from "../../shell/project-presentation.ts";
 import { deriveStageScope, holdChatPresence, holdPresentedChat, stabilizeActiveChat, type ActiveChat, type ChatPresence } from "../../shell/stage-scope.ts";
 import { workspacePreparation } from "../../shell/workspace-preparation.ts";
-import { recordWorkspaceOpen } from "../../shell/workspace-open-diagnostic.ts";
+import { recordWorkspaceOpen, traceWorkspaceOpening } from "../../shell/workspace-open-diagnostic.ts";
 import { isResolved } from "../../store/load-state.ts";
 import { useSurfaceReveal } from "../../ui/surface-reveal.ts";
 
@@ -27,16 +27,6 @@ export function createShellWorkspacePresentation({ shell, appStore, projects, re
     return workspacePreparation(projectId).ready() && workspacePreparation("app").ready();
   };
 
-  const workspacePending = () => {
-    const projectId = shell.state.activeProjectId;
-    if (!projectId) return "project";
-    return [
-      ...(!sessionListLoaded(projectId) ? ["session-list"] : []),
-      ...(appStore.state.chatHydrationLock != null ? ["chat-hydration"] : []),
-      ...workspacePreparation(projectId).pending(),
-      ...workspacePreparation("app").pending().map((name) => `app:${name}`),
-    ].join(",");
-  };
 
   const projectPresentation = createMemo<ProjectPresentation>((previous) => {
     const scope = stageScope();
@@ -53,6 +43,22 @@ export function createShellWorkspacePresentation({ shell, appStore, projects, re
       scope,
     );
   });
+  /** Everything the opening veil still waits on, the reveal's paint included. */
+  const workspacePending = (): string[] => {
+    const projectId = shell.state.activeProjectId;
+    if (!projectId) return ["project"];
+    const scope = stageScope();
+    const blockers = [
+      ...(contributionFrameReady() ? [] : ["contributions"]),
+      ...(recents.state.loaded ? [] : ["recents"]),
+      ...(projectScopeSettled(projectId, scope) ? [] : [`stage-scope:${scope.phase}`]),
+      ...(!sessionListLoaded(projectId) ? ["session-list"] : []),
+      ...(appStore.state.chatHydrationLock != null ? ["chat-hydration"] : []),
+      ...workspacePreparation(projectId).pending(),
+      ...workspacePreparation("app").pending().map((name) => `app:${name}`),
+    ];
+    return blockers.length > 0 || workspaceRevealed() ? blockers : ["paint"];
+  };
   const identityReady = () => projectPresentation().ready.identity;
   const workspaceMounted = () => projectPresentation().ready.mounted;
   const workspaceOpen = () => projectPresentation().ready.open;
@@ -108,6 +114,7 @@ export function createShellWorkspacePresentation({ shell, appStore, projects, re
     const key = workspaceVeilKey();
     if (!key) return;
     onCleanup(recordWorkspaceOpen(key, workspaceRevealed));
+    traceWorkspaceOpening(key, workspacePending, workspaceRevealed);
   });
   /** The rail's chat list paints on the workspace's frame. */
   const sidebarChatsPublished = () =>
