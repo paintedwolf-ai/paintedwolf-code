@@ -9,6 +9,12 @@ import type { PrettyTokenSource } from "./pretty-tokens.ts";
 export const PRETTY_TARGET_COLUMNS = 80;
 /** Outside data, only source lines wider than this are laid out. */
 export const PRETTY_TRIGGER_COLUMNS = 240;
+
+/** Groups fit the declared line width, else the default target. */
+export function targetColumns(lineWidth: number | undefined): number {
+  return lineWidth ?? PRETTY_TARGET_COLUMNS;
+}
+
 /** Characters between saved scan states. */
 export const PRETTY_CHECKPOINT_INTERVAL = 2048;
 /** Open groups and containers allowed at once. */
@@ -84,6 +90,8 @@ export interface PrettyScanOptions {
   readonly facts: PrettyBlockFacts;
   /** Tokens from the editor's syntax tree, for rules that read them. */
   readonly tokens?: PrettyTokenSource | null;
+  /** The line width the project declares for the file. */
+  readonly lineWidth?: number;
 }
 
 export interface Fence {

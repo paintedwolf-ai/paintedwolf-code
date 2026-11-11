@@ -1,5 +1,5 @@
 import { stepBracket } from "./pretty-bracket.ts";
-import { type BracketRule, PRETTY_TARGET_COLUMNS, type ScanCursor } from "./pretty-scan-state.ts";
+import { type BracketRule, type ScanCursor, targetColumns } from "./pretty-scan-state.ts";
 import { TreeLexer } from "./pretty-tokens.ts";
 
 const SPACE = 0x20;
@@ -154,7 +154,7 @@ export function stepClause(cursor: ScanCursor, pos: number, end: number): number
     if (state.listDepth === depth) state.listDepth = -1;
     if (previousToken(cursor, pos).code !== OPEN_PAREN) {
       if (state.hasContent) cursor.emitBreak(pos, cursor.columns(depth));
-      const remaining = PRETTY_TARGET_COLUMNS - state.col;
+      const remaining = targetColumns(cursor.options.lineWidth) - state.col;
       if (LISTS.has(clause.word) && clauseWidth(cursor, pos, remaining) > remaining) {
         const next = cursor.skipSpaces(phraseEnd(cursor, clause.end), state.lineEnd);
         if (next < state.lineEnd) {

@@ -4,7 +4,6 @@ import type { PrettyLexer } from "./pretty-lexers.ts";
 import { INITIAL_MARKUP, type MarkupState, markupEqual, startMarkupLine, stepMarkup } from "./pretty-markup.ts";
 import {
   type Fence,
-  PRETTY_TRIGGER_COLUMNS,
   type PrettyRule,
   type PrettyScanOptions,
   type PrettySink,
@@ -12,6 +11,7 @@ import {
   ScanState,
 } from "./pretty-scan-state.ts";
 import { TextWindow } from "./pretty-text-window.ts";
+import { exceedsLineWidth } from "./pretty-width.ts";
 
 const SPACE = 0x20;
 const TAB = 0x09;
@@ -253,7 +253,8 @@ export class PrettyScanner implements ScanCursor {
       else break;
     }
     s.leadColumns = leadColumns;
-    s.laidOut = (rule.kind === "bracket" && rule.data) || this.wider(from, to);
+    s.laidOut = (rule.kind === "bracket" && rule.data) ||
+      exceedsLineWidth(this.text, from, to, this.options.tabSize, rule, this.options.lineWidth);
     s.hasContent = false;
     s.col = 0;
     s.pending = -1;
@@ -262,19 +263,6 @@ export class PrettyScanner implements ScanCursor {
     if (rule.kind === "markup") s.markup = startMarkupLine(s.markup);
     if (rule.kind === "clause") s.listDepth = -1;
     return start;
-  }
-
-  private wider(from: number, to: number): boolean {
-    const length = to - from;
-    const tabSize = this.options.tabSize;
-    if (length > PRETTY_TRIGGER_COLUMNS) return true;
-    if (length * tabSize <= PRETTY_TRIGGER_COLUMNS) return false;
-    let width = 0;
-    for (let pos = from; pos < to; pos++) {
-      width += this.text.at(pos) === TAB ? tabSize : 1;
-      if (width > PRETTY_TRIGGER_COLUMNS) return true;
-    }
-    return false;
   }
 
   private endLine(): void {

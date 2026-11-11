@@ -14,15 +14,16 @@ import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
 import { PrettyScanner, type PrettySnapshot, snapshotsEqual } from "./pretty-scan.ts";
 import {
   PRETTY_CHECKPOINT_INTERVAL,
-  PRETTY_TARGET_COLUMNS,
-  PRETTY_TRIGGER_COLUMNS,
   type PrettyBlockFacts,
   type PrettyPlan,
   type PrettySink,
   readsSyntaxTree,
+  targetColumns,
 } from "./pretty-scan-state.ts";
+import { TextWindow } from "./pretty-text-window.ts";
 import { TreeTokens } from "./pretty-tokens.ts";
 import { prettyBreakDecoration, prettyIndentDecoration } from "./pretty-view.ts";
+import { exceedsLineWidth, exceedsTrigger } from "./pretty-width.ts";
 
 /** Largest document laid out, in characters. */
 export const PRETTY_MAX_INPUT = 2 * 1024 * 1024;
@@ -31,8 +32,6 @@ export const PRETTY_MAX_DECORATIONS = 1_500_000;
 /** Scanner visits allowed per character in one update, beyond a fixed allowance. */
 const VISITS_PER_CHARACTER = 8;
 const VISITS_ALLOWANCE = 200_000;
-/** Text before an edit whose layout can depend on it: one fit check. */
-const LOOKBEHIND = PRETTY_TARGET_COLUMNS + 1;
 /** Edits this close to a line start may change its indentation. */
 const LEAD_REACH = 512;
 
@@ -48,6 +47,13 @@ export interface PrettyConfig {
   readonly enabled: boolean;
   readonly path?: string;
   readonly languageHint?: string;
+  /** The line width the project declares for the file. */
+  readonly lineWidth?: number;
+}
+
+/** Text before an edit whose layout can depend on it: one fit check. */
+function lookbehind(config: PrettyConfig): number {
+  return targetColumns(config.lineWidth) + 1;
 }
 
 /** Work done by the last update, for bounds. */
@@ -204,7 +210,7 @@ export function buildLayout(state: EditorState, config: PrettyConfig): PrettyLay
   const facts = new FactStore(NO_FACTS);
   const indentUnit = getIndentUnit(state);
   const end = layoutEnd(state, plan);
-  const scanner = new PrettyScanner({ doc, plan, tabSize: state.tabSize, indentUnit, facts, tokens: tokensFor(state, plan) }, sink);
+  const scanner = new PrettyScanner({ doc, plan, tabSize: state.tabSize, indentUnit, facts, tokens: tokensFor(state, plan), lineWidth: config.lineWidth }, sink);
   const checkpoints = new RangeSetBuilder<Checkpoint>();
   const limit = visitLimit(doc);
   let reason: PrettyLimitReason | null = null;
@@ -263,16 +269,17 @@ function summarize(tr: Transaction): ChangeSummary {
   return { from, to, quiet, semicolonsOnly };
 }
 
-function wider(doc: Text, from: number, to: number, tabSize: number): boolean {
-  if (to - from > PRETTY_TRIGGER_COLUMNS) return true;
-  if ((to - from) * tabSize <= PRETTY_TRIGGER_COLUMNS) return false;
-  let width = 0;
-  const text = doc.sliceString(from, to);
-  for (let i = 0; i < text.length; i++) {
-    width += text.charCodeAt(i) === 9 ? tabSize : 1;
-    if (width > PRETTY_TRIGGER_COLUMNS) return true;
+/**
+ * Whether a source line is laid out, read as the scanner reads it at the line
+ * start; null when the line's rule is not known here.
+ */
+function lineLaidOut(doc: Text, state: EditorState, plan: PrettyPlan, config: PrettyConfig, from: number, to: number): boolean | null {
+  const text = new TextWindow(doc, tokensFor(state, plan));
+  if (plan.kind !== "document") {
+    return config.lineWidth === undefined ? exceedsTrigger(text, from, to, state.tabSize) : null;
   }
-  return false;
+  if (plan.rule.kind === "bracket" && plan.rule.data) return true;
+  return exceedsLineWidth(text, from, to, state.tabSize, plan.rule, config.lineWidth);
 }
 
 function checkpointAtOrBefore(set: RangeSet<Checkpoint>, pos: number): { pos: number; snapshot: PrettySnapshot } | null {
@@ -332,7 +339,7 @@ function rescan(prev: PrettyLayoutState, job: Rescan): PrettyLayoutState {
   const added: Range<Decoration>[] = [];
   const store = new FactStore(job.facts);
   const scanner = new PrettyScanner(
-    { doc, plan, tabSize: prev.tabSize, indentUnit: prev.indentUnit, facts: store, tokens: tokensFor(state, plan) },
+    { doc, plan, tabSize: prev.tabSize, indentUnit: prev.indentUnit, facts: store, tokens: tokensFor(state, plan), lineWidth: prev.config.lineWidth },
     collect(added),
   );
   const from = start?.pos ?? 0;
@@ -413,7 +420,7 @@ export function updateLayout(prev: PrettyLayoutState, tr: Transaction): PrettyLa
   if (doc.length > PRETTY_MAX_INPUT) return limited(prev, "size", state);
   const change = summarize(tr);
   let facts = prev.facts.map(tr.changes);
-  let restart = Math.max(0, change.from - LOOKBEHIND);
+  let restart = Math.max(0, change.from - lookbehind(prev.config));
   if (!change.quiet) {
     // A group whose statement facts the change may alter decides again from its opening.
     facts = facts.update({
@@ -430,7 +437,9 @@ export function updateLayout(prev: PrettyLayoutState, tr: Transaction): PrettyLa
   }
   const line = doc.lineAt(change.from);
   const oldLine = tr.startState.doc.lineAt(tr.changes.invertedDesc.mapPos(change.from, -1));
-  const flips = wider(doc, line.from, line.to, state.tabSize) !== wider(tr.startState.doc, oldLine.from, oldLine.to, state.tabSize);
+  const now = lineLaidOut(doc, state, plan, prev.config, line.from, line.to);
+  const before = lineLaidOut(tr.startState.doc, tr.startState, plan, prev.config, oldLine.from, oldLine.to);
+  const flips = now === null || now !== before;
   if (flips || change.from - line.from <= LEAD_REACH) restart = Math.min(restart, line.from);
   return rescan({ ...prev, scannedTo: Math.min(tr.changes.mapPos(prev.scannedTo), doc.length) }, {
     state,
@@ -438,7 +447,7 @@ export function updateLayout(prev: PrettyLayoutState, tr: Transaction): PrettyLa
     checkpoints: prev.checkpoints.map(tr.changes),
     facts,
     restart,
-    compareFrom: change.to + LOOKBEHIND,
+    compareFrom: change.to + lookbehind(prev.config),
   });
 }
 

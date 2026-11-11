@@ -4867,19 +4867,22 @@ paths:
                 $ref: '#/components/schemas/Error'
         default:
           $ref: '#/components/responses/Error'
-  /v1/projects/{id}/source/editorconfig:
+  /v1/projects/{id}/source/format-settings:
     get:
       tags:
         - projects
-      operationId: getProjectSourceEditorConfig
-      summary: Resolve the EditorConfig pairs in effect for a project path
+      operationId: getProjectSourceFormatSettings
+      summary: Resolve the formatting settings each tool declares for a project path
       description: |
-        Resolves `.editorconfig` files from the path's directory toward its
-        attached root, stopping at `root = true` or at the root itself, with
-        nearer files and later sections winning. The host applies the same
-        resolution when it checks agent writes. The file itself need not exist.
-        Unrecognized keys and values are ignored; `unset` clears a pair from a
-        farther file. An absent property is not declared for this path.
+        Resolves each catalog tool's configuration for the path the way that
+        tool finds it. EditorConfig merges `.editorconfig` files from the
+        path's directory toward its attached root, stopping at `root = true`,
+        with nearer files and later sections winning; the host applies the same
+        resolution when it checks agent writes. Every other tool uses its
+        nearest configuration file between the path's directory and the root.
+        A nearer configuration the host cannot read, such as a JavaScript
+        file, means that tool declares nothing for the path. The file itself
+        need not exist; unrecognized keys and values are ignored.
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
@@ -4899,11 +4902,11 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Pairs in effect for the path
+          description: Settings in effect for the path
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SourceEditorConfig'
+                $ref: '#/components/schemas/SourceFormatSettings'
         '400':
           description: Missing or invalid path or root_id
           content:
@@ -33586,24 +33589,42 @@ components:
         height:
           type: integer
           minimum: 1
-    SourceEditorConfig:
+    FormatTool:
+      type: string
+      enum:
+        - editorconfig
+        - prettier
+        - biome
+        - dprint
+        - ruff
+        - black
+        - rustfmt
+        - clang_format
+        - scalafmt
+        - swift_format
+        - dart
+        - rubocop
+        - stylua
+        - ocamlformat
+        - fourmolu
+        - julia_formatter
+        - sqlfluff
+        - foundry
+        - taplo
+    FormatSettings:
       x-go-generate: true
       type: object
-      required:
-        - path
-        - root_id
       additionalProperties: false
       description: |
-        EditorConfig pairs in effect for one root-addressed path. Every property
-        is omitted when no `.editorconfig` declares it.
+        Settings a tool's configuration declares, in one vocabulary across
+        tools. Every property is omitted when the configuration does not
+        declare it or declares the tool's automatic choice.
       properties:
-        path:
-          type: string
-          description: Normalized repo-relative path (slash-separated)
-        root_id:
-          type: string
-          format: uuid
-          description: Attached root that holds the path
+        line_width:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          description: Column the tool keeps lines within.
         indent_style:
           type: string
           enum:
@@ -33616,7 +33637,7 @@ components:
           description: Columns per indentation level; omitted when indent_size_tab is true.
         indent_size_tab:
           type: boolean
-          description: True when `indent_size = tab`, so a level follows tab_width.
+          description: True when a level is one tab and follows tab_width.
         tab_width:
           type: integer
           minimum: 1
@@ -33626,6 +33647,7 @@ components:
           enum:
             - lf
             - crlf
+            - cr
         trim_trailing_whitespace:
           x-go-pointer: true
           type: boolean
@@ -33640,6 +33662,57 @@ components:
             - utf-8-bom
             - utf-16be
             - utf-16le
+    FormatSettingsSource:
+      x-go-generate: true
+      type: object
+      required:
+        - tool
+        - configs
+        - settings
+      additionalProperties: false
+      properties:
+        tool:
+          $ref: '#/components/schemas/FormatTool'
+        configs:
+          type: array
+          description: Repo-relative configuration files that contributed, nearest first.
+          items:
+            type: string
+        settings:
+          $ref: '#/components/schemas/FormatSettings'
+    SourceFormatSettings:
+      x-go-generate: true
+      type: object
+      required:
+        - path
+        - root_id
+        - sources
+        - config_names
+      additionalProperties: false
+      description: |
+        Formatting settings that each tool's configuration declares for one
+        root-addressed path. A tool appears only when a configuration it reads
+        is in effect for the path.
+      properties:
+        path:
+          type: string
+          description: Normalized repo-relative path (slash-separated)
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root that holds the path
+        sources:
+          type: array
+          description: One entry per tool with configuration in effect, in catalog order.
+          items:
+            $ref: '#/components/schemas/FormatSettingsSource'
+        config_names:
+          type: array
+          description: |
+            File names the resolution reads. A change to a file with one of
+            these names can change the settings of paths beneath it.
+          items:
+            type: string
     MakeProjectSourceEditableRequest:
       x-go-generate: true
       type: object

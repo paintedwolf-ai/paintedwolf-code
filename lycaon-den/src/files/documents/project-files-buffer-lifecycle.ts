@@ -171,7 +171,7 @@ export function openFilesBuffer(
       ...(jobId ? { jobId } : {}), loading: true, sourcePresent: false, loadError: null,
       content: { state: "unloaded" }, payloadGeneration: nextBufferPayloadGeneration(),
       eol: defaultEol(), baseEol: defaultEol(), mixedEol: false, baseMixedEol: false,
-      detectedIndent: undefined, indentOverride: undefined, editorConfig: undefined,
+      detectedIndent: undefined, indentOverride: undefined, editorConfig: undefined, formatSources: undefined,
       baseSha256: null, sizeBytes: 0, kind: args.kind ?? "text", mime: null, mtime: null,
       overLimit: false, encoding: args.decodeAs ?? null, writable: null,
       unsupportedEncodingDetected: null, dirty: false, editRevision: 0,

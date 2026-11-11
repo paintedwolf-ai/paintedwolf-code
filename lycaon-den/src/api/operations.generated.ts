@@ -136,7 +136,7 @@ export const API_OPERATIONS = {
   getProjectSource: { method: "GET", path: "/v1/projects/{id}/source" },
   getProjectSourceAttribution: { method: "GET", path: "/v1/projects/{id}/source/attribution" },
   getProjectSourceComparison: { method: "GET", path: "/v1/projects/{id}/source/comparison" },
-  getProjectSourceEditorConfig: { method: "GET", path: "/v1/projects/{id}/source/editorconfig" },
+  getProjectSourceFormatSettings: { method: "GET", path: "/v1/projects/{id}/source/format-settings" },
   getProjectSourceGitReview: { method: "GET", path: "/v1/projects/{id}/source/git-changes/{git_change_id}/review" },
   getProjectSourceHistory: { method: "GET", path: "/v1/projects/{id}/source/history" },
   getProjectSourceIndex: { method: "GET", path: "/v1/projects/{id}/source/index" },
@@ -482,7 +482,7 @@ export type OperationPathParameters = {
   getProjectSource: { id: string | number; };
   getProjectSourceAttribution: { id: string | number; };
   getProjectSourceComparison: { id: string | number; };
-  getProjectSourceEditorConfig: { id: string | number; };
+  getProjectSourceFormatSettings: { id: string | number; };
   getProjectSourceGitReview: { id: string | number; git_change_id: string | number; };
   getProjectSourceHistory: { id: string | number; };
   getProjectSourceIndex: { id: string | number; };

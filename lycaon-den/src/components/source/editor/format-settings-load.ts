@@ -1,11 +1,8 @@
-/** Load the host's EditorConfig resolution for open files. */
+/** Load the host's formatting settings for open files. */
 
 import type { LycaonClient } from "../../../api/client.ts";
-import {
-  editorConfigPropsFromHost,
-  type EditorConfigProps,
-} from "./editorconfig.ts";
-import { setFilesBufferEditorConfig } from "../../../files/documents/project-files-buffers.ts";
+import { rememberFormatConfigNames, type FormatSources } from "./format-settings.ts";
+import { setFilesBufferFormatSettings } from "../../../files/documents/project-files-buffers.ts";
 import { projectFilesState, type FileBuffer } from "../../../files/documents/files-buffer-state.ts";
 import type { FileBufferKey } from "../../../files/components/project-files-model.ts";
 
@@ -19,25 +16,26 @@ type ResolveArgs = {
   sessionId?: string;
 };
 
-type Resolution = { ok: true; props: EditorConfigProps | undefined } | { ok: false };
+type Resolution = { ok: true; sources: FormatSources } | { ok: false };
 
 /** A failed resolution is reported, not read as "nothing declared". */
-async function resolveEditorConfig(args: ResolveArgs): Promise<Resolution> {
+async function resolveFormatSettings(args: ResolveArgs): Promise<Resolution> {
   try {
-    const resolved = await args.client.getProjectSourceEditorConfig(
+    const resolved = await args.client.getProjectSourceFormatSettings(
       args.projectId,
       args.path,
       args.rootId,
       args.sessionId,
     );
-    return { ok: true, props: editorConfigPropsFromHost(resolved) };
+    rememberFormatConfigNames(args.projectId, resolved.config_names);
+    return { ok: true, sources: resolved.sources };
   } catch {
     return { ok: false };
   }
 }
 
-/** Resolve EditorConfig for a loaded buffer and store it on the buffer. */
-export async function loadEditorConfigForBuffer(args: {
+/** Resolve formatting settings for a loaded buffer and store them on the buffer. */
+export async function loadFormatSettingsForBuffer(args: {
   client: LycaonClient;
   projectId: string;
   key: FileBufferKey;
@@ -45,22 +43,22 @@ export async function loadEditorConfigForBuffer(args: {
   sessionId?: string;
 }): Promise<void> {
   if (args.buffer.kind !== "text" || args.buffer.jobId) {
-    setFilesBufferEditorConfig(args.projectId, args.key, undefined);
+    setFilesBufferFormatSettings(args.projectId, args.key, undefined);
     return;
   }
-  const resolution = await resolveEditorConfig({
+  const resolution = await resolveFormatSettings({
     client: args.client,
     projectId: args.projectId,
     rootId: args.buffer.rootId,
     path: args.buffer.path,
     sessionId: args.sessionId,
   });
-  // A failed resolution keeps the buffer's current pairs.
-  if (resolution.ok) setFilesBufferEditorConfig(args.projectId, args.key, resolution.props);
+  // A failed resolution keeps the buffer's current settings.
+  if (resolution.ok) setFilesBufferFormatSettings(args.projectId, args.key, resolution.sources);
 }
 
-/** Re-resolve open root buffers after a config change. */
-export async function refreshOpenEditorConfigs(args: {
+/** Re-resolve open root buffers after a configuration change. */
+export async function refreshOpenFormatSettings(args: {
   client: LycaonClient;
   projectId: string;
   rootId: string;
@@ -80,7 +78,7 @@ export async function refreshOpenEditorConfigs(args: {
           !row.buffer.jobId,
       );
     for (const { key, buffer } of buffers) {
-      const resolution = await resolveEditorConfig({
+      const resolution = await resolveFormatSettings({
         client: args.client,
         projectId: args.projectId,
         rootId: buffer.rootId,
@@ -97,7 +95,7 @@ export async function refreshOpenEditorConfigs(args: {
       ) {
         continue;
       }
-      setFilesBufferEditorConfig(args.projectId, key, resolution.props);
+      setFilesBufferFormatSettings(args.projectId, key, resolution.sources);
     }
   } finally {
     if (refreshGeneration.get(refreshKey) === generation) {

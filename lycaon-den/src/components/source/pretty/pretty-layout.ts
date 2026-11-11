@@ -20,7 +20,7 @@ import { prettyLayoutActive, prettyLayoutDecorations, prettyPresentation } from 
 const setPrettyConfig = StateEffect.define<PrettyConfig>();
 
 function sameConfig(a: PrettyConfig, b: PrettyConfig): boolean {
-  return a.enabled === b.enabled && a.path === b.path && a.languageHint === b.languageHint;
+  return a.enabled === b.enabled && a.path === b.path && a.languageHint === b.languageHint && a.lineWidth === b.lineWidth;
 }
 
 export const prettyLayoutField = StateField.define<PrettyLayoutState>({

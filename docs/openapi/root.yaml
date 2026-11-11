@@ -283,8 +283,8 @@ paths:
     $ref: paths/projects/attachments.yaml#/paths/~1v1~1projects~1{id}~1attachments
   /v1/projects/{id}/source/raw:
     $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1raw
-  /v1/projects/{id}/source/editorconfig:
-    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1editorconfig
+  /v1/projects/{id}/source/format-settings:
+    $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1format-settings
   /v1/projects/{id}/source/editable:
     $ref: paths/projects/source-content.yaml#/paths/~1v1~1projects~1{id}~1source~1editable
   /v1/projects/{id}/source/browse:
