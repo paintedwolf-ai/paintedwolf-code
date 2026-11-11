@@ -14,19 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
-// FilterPromotableChanges removes .git metadata paths from a view's change list
-// so .git metadata is never promoted as ordinary files.
-func FilterPromotableChanges(changes []layeredfs.ChangeEntry) []layeredfs.ChangeEntry {
-	out := make([]layeredfs.ChangeEntry, 0, len(changes))
-	for _, ce := range changes {
-		if _, _, isGit := splitGitRelPath(ce.Path.Rel); isGit {
-			continue
-		}
-		out = append(out, ce)
-	}
-	return out
-}
-
 // CaptureCheckpointGitState captures a coherent CheckpointGitState (HEAD, detached HEAD,
 // refs, deleted refs, tags, stashes, index, config) and imports any new private objects
 // into the engine-retained object store under a checkpoint lease.

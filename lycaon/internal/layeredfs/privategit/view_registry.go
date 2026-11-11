@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -231,48 +230,4 @@ func prepareManagedViewOperation(
 		return errors.Join(overlayErr, syncErr, retainErr)
 	}
 	return view.worktreeDir, finish, true, nil
-}
-
-// ViewPathExists reports whether relPath exists inside an active private-git worker view
-// associated with projectOrWorktreeDir.
-func ViewPathExists(projectOrWorktreeDir, relPath string) bool {
-	rel := strings.TrimSpace(relPath)
-	if rel == "" || filepath.IsAbs(rel) || strings.HasPrefix(rel, "-") {
-		return false
-	}
-	cleanRel := filepath.ToSlash(filepath.Clean(rel))
-	if cleanRel == "." || cleanRel == ".." || strings.HasPrefix(cleanRel, "../") {
-		return false
-	}
-	cleanDir := canonicalCleanPath(strings.TrimSpace(projectOrWorktreeDir))
-	if cleanDir == "" {
-		return false
-	}
-
-	activeViewsMu.RLock()
-	var views []*managedView
-	for _, entry := range activeViewsByID {
-		if viewMatchesBoundary(entry.view, cleanDir) {
-			views = append(views, entry.view)
-		}
-	}
-	activeViewsMu.RUnlock()
-
-	for _, v := range views {
-		if v.core != nil {
-			if st, err := v.core.Stat(layeredfs.QualifiedPath{RootID: v.rootID, Rel: cleanRel}); err == nil && st.Kind != layeredfs.EntryAbsent {
-				return true
-			}
-			if !v.materialized {
-				continue
-			}
-		}
-		if _, err := os.Lstat(filepath.Join(v.worktreeDir, filepath.FromSlash(cleanRel))); err == nil {
-			return true
-		}
-		if _, err := os.Lstat(filepath.Join(v.trunkDir, filepath.FromSlash(cleanRel))); err == nil {
-			return true
-		}
-	}
-	return false
 }

@@ -324,18 +324,6 @@ type CapabilityLimits struct {
 	MaxSymlinkHops     int
 }
 
-func DefaultCapabilities() CapabilityLimits {
-	return CapabilityLimits{
-		SupportsSymlinks:   true,
-		SupportsHardLinks:  true,
-		SupportsXattrs:     true,
-		SupportsChmod:      true,
-		SupportsTimestamps: true,
-		SupportsChown:      false,
-		MaxSymlinkHops:     16,
-	}
-}
-
 func MapErrno(err error) syscall.Errno {
 	if err == nil {
 		return 0

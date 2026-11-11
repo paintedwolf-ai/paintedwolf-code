@@ -155,11 +155,6 @@ func UnknownVisibilityFacts(adapterName string) VisibilityFacts {
 	})
 }
 
-// EagerCopyViewCapabilities returns a ViewCapabilityDescriptor from EagerCopyAdapter's typed facts.
-func EagerCopyViewCapabilities(viewID string) ViewCapabilityDescriptor {
-	return ViewCapabilitiesFromAdapterFacts(viewID, adapter.NewEagerCopyAdapter().Facts())
-}
-
 // MountedAdapterViewCapabilities returns a ViewCapabilityDescriptor for a mounted adapter.
 func MountedAdapterViewCapabilities(
 	viewID string,
