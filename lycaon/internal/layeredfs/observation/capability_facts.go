@@ -157,7 +157,7 @@ func UnknownVisibilityFacts(adapterName string) VisibilityFacts {
 
 // EagerCopyViewCapabilities returns a ViewCapabilityDescriptor from EagerCopyAdapter's typed facts.
 func EagerCopyViewCapabilities(viewID string) ViewCapabilityDescriptor {
-	return ViewCapabilitiesFromAdapterFacts(viewID, adapter.NewEagerCopyAdapter(adapter.ReasonNone).Facts())
+	return ViewCapabilitiesFromAdapterFacts(viewID, adapter.NewEagerCopyAdapter().Facts())
 }
 
 // MountedAdapterViewCapabilities returns a ViewCapabilityDescriptor for a mounted adapter.
@@ -189,7 +189,7 @@ func MountedAdapterViewCapabilities(
 	}
 }
 
-// ViewCapabilitiesFromAdapterFacts converts shared adapter.AdapterFacts (#1658) into a ViewCapabilityDescriptor.
+// ViewCapabilitiesFromAdapterFacts converts shared adapter.AdapterFacts into a ViewCapabilityDescriptor.
 func ViewCapabilitiesFromAdapterFacts(viewID string, facts adapter.AdapterFacts) ViewCapabilityDescriptor {
 	var mode UntouchedVisibilityMode
 	switch facts.UntouchedSourceVisibility {
@@ -223,7 +223,7 @@ func ViewCapabilitiesFromAdapterFacts(viewID string, facts adapter.AdapterFacts)
 	}
 }
 
-// ViewCapabilitiesFromPreparedView extracts the ViewCapabilityDescriptor from a prepared adapter.PreparedView (#1658).
+// ViewCapabilitiesFromPreparedView extracts the ViewCapabilityDescriptor from a prepared adapter.PreparedView.
 func ViewCapabilitiesFromPreparedView(view *adapter.PreparedView) ViewCapabilityDescriptor {
 	if view == nil {
 		return ViewCapabilityDescriptor{}

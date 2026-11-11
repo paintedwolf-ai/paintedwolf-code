@@ -131,7 +131,7 @@ func mountedSelector() *adapter.Selector {
 		},
 		MountViewFn: func(context.Context, string, []adapter.PreparedRoot) error { return nil },
 	})
-	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = adapter.ZeroBudget
 	selector.Confinement = fixtureConfinement{}
 	return selector

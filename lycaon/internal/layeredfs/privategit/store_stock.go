@@ -264,7 +264,7 @@ func initStockFromDiskLocked(ctx context.Context, s *RetainedObjectStore) error 
 }
 
 // InspectStock performs an explicit, cancellable on-disk qualification audit of the
-// retained object store outside the routine O(1) Metrics() hot path (#1671).
+// retained object store outside the routine O(1) Metrics() hot path.
 func (s *RetainedObjectStore) InspectStock(ctx context.Context) (StockInventory, error) {
 	if err := ctx.Err(); err != nil {
 		return StockInventory{Complete: false}, err
@@ -450,13 +450,6 @@ func finalizeInterruptedPackRetirements(ctx context.Context, packDir string) err
 	retiringBases := collectRetiringPackBases(entries)
 	if len(retiringBases) == 0 {
 		return nil
-	}
-	if info, statErr := os.Stat(packDir); statErr == nil {
-		origPerm := info.Mode().Perm()
-		if origPerm&0o200 == 0 {
-			_ = os.Chmod(packDir, 0o755)
-			defer func() { _ = os.Chmod(packDir, origPerm) }()
-		}
 	}
 	sortedBases := make([]string, 0, len(retiringBases))
 	for base := range retiringBases {

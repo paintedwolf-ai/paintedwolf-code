@@ -328,7 +328,7 @@ func (m *Manager) MaterializedReposOf(viewID string) []MaterializedRepoAt {
 
 // InitializeMaterializedSeed discovers repositories during materialized fallback seed
 // traversal, skips raw source .git metadata, registers pre-existing working-tree bases,
-// and installs complete private .git repositories before workspace readiness (#1671).
+// and installs complete private .git repositories before workspace readiness.
 func (m *Manager) InitializeMaterializedSeed(
 	ctx context.Context,
 	cfg MaterializedSeedConfig,

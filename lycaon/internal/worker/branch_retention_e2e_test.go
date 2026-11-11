@@ -298,7 +298,6 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	initialBranches := filepath.Join(dataDir, "worker-branches")
 	initialGit, err := workspace.OpenPrivateGit(initialBranches)
 	testutil.FailErr(t, "open initial private Git", err)
-	t.Cleanup(func() { _ = initialGit.Store().Close() })
 	initialManager := workspace.NewManager(initialBranches).WithPrivateGit(initialGit)
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
@@ -333,7 +332,6 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 			t.Fatal("evicted branch tree still present before backup")
 		}
 	}
-	testutil.FailErr(t, "close initial private Git", initialGit.Store().Close())
 	if repackBeforeBackup {
 		storeRoot := initialGit.Store().RootDir()
 		gittest.Run(t, storeRoot, "update-ref", "refs/heads/repack-pin", workerCommit)
@@ -387,7 +385,6 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"))
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
 	testutil.FailErr(t, "open restored private Git", err)
-	t.Cleanup(func() { _ = restoredGit.Store().Close() })
 	restored.SetWorkerWorkspaceManager(manager.WithPrivateGit(restoredGit))
 	coordinator := openFixtureRecovery(t, manager.BranchBase())
 	manager.WithRecovery(coordinator)
@@ -468,7 +465,6 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	initialBranches := filepath.Join(dataDir, "worker-branches")
 	initialGit, err := workspace.OpenPrivateGit(initialBranches)
 	testutil.FailErr(t, "open initial private Git", err)
-	t.Cleanup(func() { _ = initialGit.Store().Close() })
 	queue := NewSQLQueue(database, 1)
 	queue.SetBaselineStore(sourceledger.New(database, filepath.Join(dataDir, "source-content")).Baselines)
 	queue.SetWorkerWorkspaceManager(workspace.NewManager(initialBranches).WithPrivateGit(initialGit))
@@ -485,7 +481,6 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	gittest.Run(t, task.WorkspaceRoot, "add", "main.go")
 	gittest.Run(t, task.WorkspaceRoot, "commit", "-m", "worker unsealed commit")
 	workerCommit := strings.TrimSpace(gittest.Run(t, task.WorkspaceRoot, "rev-parse", "HEAD"))
-	testutil.FailErr(t, "close initial private Git", initialGit.Store().Close())
 
 	// Archive while the worker is still unfinished (no published checkpoint yet), then delete both oldRoot and project!
 	archive := filepath.Join(t.TempDir(), "unfinished.zip")
@@ -508,7 +503,6 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	manager := workspace.NewManager(filepath.Join(newRoot, "worker-branches"))
 	restoredGit, err := workspace.OpenPrivateGit(manager.BranchBase())
 	testutil.FailErr(t, "open restored private Git", err)
-	t.Cleanup(func() { _ = restoredGit.Store().Close() })
 	restored.SetWorkerWorkspaceManager(manager.WithPrivateGit(restoredGit))
 	coordinator := openFixtureRecovery(t, manager.BranchBase())
 	manager.WithRecovery(coordinator)

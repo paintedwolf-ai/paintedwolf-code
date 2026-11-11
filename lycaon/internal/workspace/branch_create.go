@@ -46,7 +46,7 @@ func releaseBranchClaimState(branchRoot string) {
 	branchClaimsMu.Unlock()
 }
 
-// LookupBranchClaimedView returns the active ClaimedView recorded for a mounted worker branch (#1662).
+// LookupBranchClaimedView returns the active ClaimedView recorded for a mounted worker branch.
 func LookupBranchClaimedView(branchRoot string) (*claim.ClaimedView, bool) {
 	branchClaimsMu.RLock()
 	defer branchClaimsMu.RUnlock()
@@ -58,8 +58,7 @@ func LookupBranchClaimedView(branchRoot string) (*claim.ClaimedView, bool) {
 }
 
 // BranchViewBoundary reads what a process of this branch must not reach, as of each launch: its own
-// view's boundary, its pristine tree whether or not it has one yet, and every live view's listener,
-// since another view's may start after this worker did.
+// view's boundary and every live view's listener, since another view's may start after this worker did.
 func BranchViewBoundary(branchRoot string) func() confine.ViewBoundary {
 	clean := filepath.Clean(branchRoot)
 	return func() confine.ViewBoundary {
@@ -82,12 +81,11 @@ func BranchViewBoundary(branchRoot string) func() confine.ViewBoundary {
 			}
 		}
 		boundary.DeniedLoopbackPorts = ports
-		boundary.WriteDeniedPaths = []string{enginepaths.PristineTreeForBranchRoot(clean)}
 		return boundary
 	}
 }
 
-// BranchWorkspaceState returns the typed WorkspaceStateSnapshot and DispatchWorkspaceReceipt for a branch (#1662).
+// BranchWorkspaceState returns the typed WorkspaceStateSnapshot and DispatchWorkspaceReceipt for a branch.
 func BranchWorkspaceState(branchRoot string) (claim.WorkspaceStateSnapshot, claim.DispatchWorkspaceReceipt, bool) {
 	clean := filepath.Clean(branchRoot)
 	branchClaimsMu.RLock()

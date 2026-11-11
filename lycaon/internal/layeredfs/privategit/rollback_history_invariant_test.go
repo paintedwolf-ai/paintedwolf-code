@@ -29,7 +29,6 @@ func TestInterruptedImportRollbackPreservesReadableLeasedHistory(t *testing.T) {
 	testutil.FailErr(t, "open retained store", err)
 	t.Cleanup(func() {
 		if store != nil {
-			_ = store.Close()
 		}
 	})
 	_, reachable, err := store.ImportRepositoryObjects(t.Context(), []string{filepath.Join(source, ".git", "objects")}, []string{second})
@@ -69,7 +68,6 @@ func TestInterruptedImportRollbackPreservesReadableLeasedHistory(t *testing.T) {
 	_, err = store.CollectGarbage(t.Context())
 	testutil.FailErr(t, "continued-use GC", err)
 	assertReadable()
-	testutil.FailErr(t, "close before recovery", store.Close())
 	store, err = NewRetainedObjectStoreContext(t.Context(), root)
 	testutil.FailErr(t, "reopen store", err)
 	assertReadable()
@@ -119,7 +117,6 @@ func TestCompactPackOverlappingAndMixedInventoryAccountingAndGC(t *testing.T) {
 	testutil.FailErr(t, "NewRetainedObjectStoreContext", err)
 	t.Cleanup(func() {
 		if store != nil {
-			_ = store.Close()
 		}
 	})
 
@@ -145,7 +142,6 @@ func TestCompactPackOverlappingAndMixedInventoryAccountingAndGC(t *testing.T) {
 	}
 
 	// Reopen store from disk and verify reconstructed stock preserves deduplicated unique count.
-	testutil.FailErr(t, "close store", store.Close())
 	store, err = NewRetainedObjectStoreContext(t.Context(), storeDir)
 	testutil.FailErr(t, "reopen store", err)
 	if got := store.Metrics().RetainedObjects; got != wantCount {
@@ -216,7 +212,6 @@ func TestSourceModificationAfterImportDoesNotMutateRetainedStore(t *testing.T) {
 
 	store, err := NewRetainedObjectStoreContext(t.Context(), t.TempDir())
 	testutil.FailErr(t, "NewRetainedObjectStoreContext", err)
-	t.Cleanup(func() { _ = store.Close() })
 
 	_, reachable, err := store.ImportRepositoryObjects(t.Context(), []string{srcObjDir}, []string{c2})
 	testutil.FailErr(t, "ImportRepositoryObjects", err)
@@ -279,7 +274,6 @@ func TestCompactPackRejectsMissingDescendantObject(t *testing.T) {
 
 	store, err := NewRetainedObjectStoreContext(t.Context(), t.TempDir())
 	testutil.FailErr(t, "NewRetainedObjectStoreContext", err)
-	t.Cleanup(func() { _ = store.Close() })
 
 	_, _, err = store.ImportRepositoryObjects(t.Context(), []string{incompleteObjDir}, []string{commitOID})
 	if !errors.Is(err, ErrCorruptObjectStore) {

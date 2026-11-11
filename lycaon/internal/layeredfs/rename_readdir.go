@@ -11,7 +11,7 @@ import (
 )
 
 // Rename atomically moves oldPath to newPath within the same workspace root.
-// If newPath already exists, its base is captured before replacement even when oldPath is a privately created temp file (#1657).
+// If newPath already exists, its base is captured before replacement even when oldPath is a privately created temp file.
 func (c *Core) Rename(oldPath, newPath QualifiedPath) error {
 	return renamePath(c, oldPath, newPath)
 }

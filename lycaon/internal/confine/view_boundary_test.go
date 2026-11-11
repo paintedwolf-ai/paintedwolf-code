@@ -117,17 +117,18 @@ func TestViewBoundaryRequestReachesTheConfinement(t *testing.T) {
 	}
 }
 
-// A branch's own tree stays open below a base closed to it, and a pristine tree stays read-only
-// even where the worker may write.
-func TestReopenedRootAndWriteDeniedPristineVerdicts(t *testing.T) {
+// A branch's own tree stays open below a base closed to it, and its pristine tree beside it stays
+// readable and refuses writes.
+func TestReopenedRootAndReadOnlyPristineVerdicts(t *testing.T) {
 	base, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve", err)
 	own := filepath.Join(base, "own")
-	pristine := filepath.Join(own, "pristine")
+	pristine := filepath.Join(base, "own.meta", "pristine")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(pristine, 0o700))
+	testutil.FailErr(t, "mkdir", os.MkdirAll(own, 0o700))
 	boundary := confine.BoundaryOf(&confine.Confinement{
 		Roots: []string{own},
-		View:  confine.ViewBoundary{DeniedPaths: []string{base}, ReopenedPaths: []string{own}, WriteDeniedPaths: []string{pristine}},
+		View:  confine.ViewBoundary{DeniedPaths: []string{base}, ReopenedPaths: []string{own}, ReopenedReadPaths: []string{pristine}},
 	})
 	rules := boundary.Filesystem
 	if !rules.Verdict(confine.AccessRead, filepath.Join(own, "f")).Allowed || !rules.Verdict(confine.AccessWrite, filepath.Join(own, "f")).Allowed {

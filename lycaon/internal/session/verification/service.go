@@ -36,7 +36,6 @@ type WorkspaceTrackerProvider interface {
 
 // ObservationBindings manages session- and workspace-scoped observation trackers and check bindings.
 type ObservationBindings struct {
-	ServiceConfigOps
 	svc               *Service
 	workspaceTrackers WorkspaceTrackerProvider
 	obsMu             sync.RWMutex
@@ -44,9 +43,6 @@ type ObservationBindings struct {
 	obsBindings       map[string]observation.VerificationBinding
 	obsCheckpoints    map[string]string
 }
-
-// ServiceConfigOps provides dependency configuration setters on Service.
-type ServiceConfigOps struct{ svc *Service }
 
 // Service binds terminal verification evidence to the current source revision.
 type Service struct {
@@ -67,51 +63,28 @@ type Service struct {
 func New(store Store, workspace *sessionscope.Service, transcript *transcript.Service) *Service {
 	s := &Service{store: store, workspace: workspace, transcript: transcript}
 	s.ObservationBindings.svc = s
-	s.ObservationBindings.ServiceConfigOps.svc = s
 	return s
 }
-
-func (c *ServiceConfigOps) SetDataDir(dir string)      { c.svc.dataDir = strings.TrimSpace(dir) }
-func (c *ServiceConfigOps) SetWorkers(workers Workers) { c.svc.workerQueue = workers }
-func (c *ServiceConfigOps) SetWorkflow(workflow Workflow) {
-	c.svc.workflows = workflow
+func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace(dir) }
+func (m *Service) SetWorkers(workers Workers)    { m.workerQueue = workers }
+func (m *Service) SetWorkflow(workflow Workflow) { m.workflows = workflow }
+func (m *Service) SetSourceObservations(source *sourceledger.Inventory) {
+	m.sourceObservations = source
 }
-func (c *ServiceConfigOps) SetSourceObservations(source *sourceledger.Inventory) {
-	c.svc.sourceObservations = source
+func (m *Service) SetRevisionSource(source func(context.Context, string) (string, string)) {
+	m.verificationSource = source
 }
-func (c *ServiceConfigOps) SetRevisionSource(source func(context.Context, string) (string, string)) {
-	c.svc.verificationSource = source
-}
-func (c *ServiceConfigOps) SetWorkspaceTrackers(p WorkspaceTrackerProvider) {
-	c.svc.workspaceTrackers = p
-}
-func (c *ServiceConfigOps) SetEvidenceStore(s inspector.EvidenceStore) {
-	if c != nil && c.svc != nil {
-		c.svc.evidenceStore = s
-	}
-}
-func (c *ServiceConfigOps) SetVerifyConfig(r VerifyConfigResolver) {
-	if c != nil && c.svc != nil {
-		c.svc.verifyConfig = r
-	}
-}
-
-func (c *ServiceConfigOps) ReadSourceRecords(ctx context.Context, sess *api.Session) ([]evidence.Record, error) {
-	if c == nil || c.svc == nil || c.svc.evidenceStore == nil || sess == nil {
+func (m *Service) SetWorkspaceTrackers(p WorkspaceTrackerProvider) { m.workspaceTrackers = p }
+func (m *Service) ReadSourceRecords(ctx context.Context, sess *api.Session) ([]evidence.Record, error) {
+	if m == nil || m.evidenceStore == nil || sess == nil {
 		return nil, nil
 	}
-	runID := sessiontree.RootID(ctx, c.svc.store, sess.ID)
-	return c.svc.evidenceStore.ReadAll(ctx, c.svc.EvidenceRootFor(sess), runID, VerifySlot, evidence.GateTypeVerify)
+	runID := sessiontree.RootID(ctx, m.store, sess.ID)
+	return m.evidenceStore.ReadAll(ctx, m.EvidenceRootFor(sess), runID, VerifySlot, evidence.GateTypeVerify)
 }
-func (c *ServiceConfigOps) RequiresPhaseVerify(ctx context.Context, sessionID string) bool {
-	if c == nil || c.svc == nil || c.svc.workflows == nil {
+func (m *Service) RequiresPhaseVerify(ctx context.Context, sessionID string) bool {
+	if m == nil || m.workflows == nil {
 		return false
 	}
-	return c.svc.workflows.ActivePhaseRequiresEvidence(ctx, sessionID, "verify")
-}
-func (c *ServiceConfigOps) SourceVerifyCommand(ctx context.Context, projectDir string) string {
-	if c == nil || c.svc == nil || c.svc.verifyConfig == nil {
-		return ""
-	}
-	return strings.TrimSpace(c.svc.verifyConfig.VerifyTestCommand(projectDir))
+	return m.workflows.ActivePhaseRequiresEvidence(ctx, sessionID, "verify")
 }

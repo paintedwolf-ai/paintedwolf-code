@@ -254,7 +254,7 @@ func TestSameBootSurvivingWriterSettlementAndScopedReconciliation(t *testing.T) 
 func TestRebuildWithAdapterAndReleaseSeparation(t *testing.T) {
 	fx := newRecoveryFixture(t)
 	ctx := t.Context()
-	eagerAdp := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	eagerAdp := adapter.NewEagerCopyAdapter()
 
 	viewEager, err := eagerAdp.Prepare(ctx, fx.prepareRequest("view-eager-1"))
 	if err != nil {

@@ -121,7 +121,7 @@ func TestCheckpointScale2MLowerAndParentLayer(t *testing.T) {
 		t.Fatalf("expected exactly 1 changed entry, got %+v", res.Manifest)
 	}
 
-	// Mount published checkpoint as read-only ParentLayer in a stacked child view (#1666).
+	// Mount published checkpoint as read-only ParentLayer in a stacked child view.
 	parentLayer, err := store.OpenParentLayer("chk-scale-1")
 	testutil.FailErr(t, "OpenParentLayer", err)
 

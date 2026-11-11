@@ -5,7 +5,7 @@ package platform
 import "github.com/lycaon/lycaon/internal/layeredfs/adapter"
 
 func newHostSelector(Config) *adapter.Selector {
-	return adapter.NewSelector("", nil, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	return adapter.NewSelector("", nil, nil, adapter.NewEagerCopyAdapter())
 }
 
 // ConnectionRecoveries names the adapters able to settle connections left by an earlier engine

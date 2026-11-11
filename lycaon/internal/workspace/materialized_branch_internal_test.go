@@ -44,7 +44,6 @@ func openMaterializedRecovery(t *testing.T, branches string) *recovery.Coordinat
 	t.Helper()
 	gitManager, err := OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	t.Cleanup(func() { _ = gitManager.Store().Close() })
 	recoveryDir := filepath.Join(branches, adapterRuntimeDirName, "recovery")
 	store, err := checkpoint.NewStore(filepath.Join(recoveryDir, "checkpoints"))
 	testutil.FailErr(t, "open store", err)
@@ -61,7 +60,6 @@ func newMaterializedManager(t *testing.T, branches string) *Manager {
 	coordinator := openMaterializedRecovery(t, branches)
 	gitManager, err := OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	t.Cleanup(func() { _ = gitManager.Store().Close() })
 	return NewManager(branches).WithRecovery(coordinator).WithPrivateGit(gitManager)
 }
 
@@ -146,7 +144,7 @@ func TestACopyThatPassesItsBudgetMovesOnToTheMount(t *testing.T) {
 		},
 		MountViewFn: func(context.Context, string, []adapter.PreparedRoot) error { mounted.Add(1); return nil },
 	})
-	selector := adapter.NewSelector("linux", mount, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector("linux", mount, nil, adapter.NewEagerCopyAdapter())
 	selector.RequireConfinement, selector.Confinement = true, passingConfinement{}
 	// Clones cost nothing here, so the survey says under budget; then no clone succeeds.
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
@@ -180,7 +178,7 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 			return adapter.ReasonMountDenied, "fixture", errors.New("EPERM")
 		},
 	})
-	selector := adapter.NewSelector("linux", denied, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector("linux", denied, nil, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
 		return adapter.BudgetFact{Class: class, Limit: 100_000, EntryCost: 1000}
 	}
@@ -213,7 +211,7 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 	}
 	meta, err := LoadJobMeta(enginepaths.MetaDirForBranchRoot(binding.Root))
 	testutil.FailErr(t, "load meta", err)
-	if meta.SelectionReason != facts.Reason || meta.DeclaredCost != facts.DeclaredCost || meta.FallbackReason != adapter.ReasonNone || meta.CopiedBytes != wantBytes {
+	if meta.SelectionReason != facts.Reason || meta.DeclaredCost != facts.DeclaredCost || meta.CopiedBytes != wantBytes {
 		t.Fatalf("recorded facts = %+v", meta.JobMetaPreparation)
 	}
 }

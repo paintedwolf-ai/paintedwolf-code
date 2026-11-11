@@ -113,7 +113,7 @@ func TestFormatV1UpgradeRetainsMaterializedSemanticsAndUnknownVersionsFailWithou
 	}
 }
 
-func TestHostAndDenWorkspaceStateAndReceiptsDistinguishFallbackGitCommandAndCheckpoint(t *testing.T) {
+func TestHostAndDenWorkspaceStateAndReceiptsDistinguishGitCommandAndCheckpoint(t *testing.T) {
 	t.Parallel()
 	tmp := t.TempDir()
 	trunk := filepath.Join(tmp, "trunk")
@@ -122,50 +122,47 @@ func TestHostAndDenWorkspaceStateAndReceiptsDistinguishFallbackGitCommandAndChec
 	testutil.FailErr(t, "write file", os.WriteFile(filepath.Join(trunk, "hello.txt"), []byte("hello\n"), 0o644))
 	gittest.CommitAll(t, trunk, "initial commit")
 
-	// Configure selector where primary mounted adapter fails with ReasonFUSEDeviceUnavailable so eagercopy fallback is chosen.
-	unsupportedPrimary := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
+	// A workspace under the preparation limit materializes without consulting a mount.
+	unavailableMount := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
 		AdapterID: adapter.AdapterFUSELinux,
 		TargetOS:  "linux",
 		MountProbeFn: func(_ context.Context, _, _ string) (adapter.ReasonCode, string, error) {
 			return adapter.ReasonFUSEDeviceUnavailable, "/dev/fuse missing", errors.New("no fuse")
 		},
 	})
-	sel := adapter.NewSelector("linux", unsupportedPrimary, unsupportedPrimary, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
-	sel.BudgetFor = adapter.ZeroBudget
-	coord := NewCoordinator(sel)
+	coord := NewCoordinator(adapter.NewSelector("linux", unavailableMount, unavailableMount, adapter.NewEagerCopyAdapter()))
 
 	cv, snap, err := coord.ClaimWorkerView(t.Context(), ClaimRequest{
-		Identity:       ClaimIdentity{WorkerID: "w-fb", ProjectID: "proj-fb", ViewID: "v-fb", SourceGeneration: 3},
+		Identity:       ClaimIdentity{WorkerID: "w-mat", ProjectID: "proj-mat", ViewID: "v-mat", SourceGeneration: 3},
 		Storage:        ClaimStorage{RuntimeDir: filepath.Join(tmp, "rt")},
 		Grants:         []adapter.RootGrant{{RootID: "primary", Label: "primary", SourcePath: trunk, IsPrimary: true}},
 		FocusPathHints: []string{"hello.txt"},
 	})
-	testutil.FailErr(t, "ClaimWorkerView eagercopy fallback", err)
-	defer func() { _ = coord.ReleaseWorkerView(t.Context(), "v-fb", nil) }()
+	testutil.FailErr(t, "ClaimWorkerView materialized", err)
+	defer func() { _ = coord.ReleaseWorkerView(t.Context(), "v-mat", nil) }()
 
-	// 1. Usable fallback is reported as SeverityInfo with eager git init and copied entry/byte counts.
+	// 1. A materialized workspace is ready with its private Git initialized and its copy counted.
 	receipt := BuildReceipt(snap)
 	if receipt.AdapterID != adapter.AdapterEagerCopy ||
 		receipt.Readiness != StateReady ||
 		receipt.GitInit != GitInitInitialized ||
-		receipt.FallbackReason != adapter.ReasonFUSEDeviceUnavailable ||
-		receipt.Notice.Severity != SeverityInfo ||
+		snap.Adapter.SelectionReason != adapter.SelectionUnderBudget ||
 		receipt.CopiedEntries == 0 || receipt.CopiedBytes == 0 {
-		t.Fatalf("expected usable fallback receipt with SeverityInfo and initialized git, got %+v", receipt)
+		t.Fatalf("expected a ready materialized receipt with initialized git, got %+v", receipt)
 	}
 	if len(cv.Metadata.Adapter.SeededGitRepos) == 0 {
 		t.Fatalf("expected materialized claim to discover and initialize git repo during seed, got %+v", cv.Metadata.Adapter)
 	}
 
 	// 2. Live background command (CommandRunning) never makes a ready workspace appear unready.
-	snapCmd, err := coord.SetCommandState("v-fb", CommandRunning)
+	snapCmd, err := coord.SetCommandState("v-mat", CommandRunning)
 	testutil.FailErr(t, "SetCommandState running", err)
 	if snapCmd.Command != CommandRunning || snapCmd.Readiness != StateReady || snapCmd.Checkpoint.State != CheckpointNone {
 		t.Fatalf("command running must keep readiness=ready and checkpoint distinct, got %+v", snapCmd)
 	}
 
 	// 3. Failed checkpoint persistence surfaces CheckpointFailedPersistence + ActionRetryCheckpoint while Readiness stays StateReady.
-	snapCPFail, err := coord.RecordCheckpointFailure("v-fb", "cp-attempt-1", adapter.ReasonBarrierFailed, "disk full writing checkpoint")
+	snapCPFail, err := coord.RecordCheckpointFailure("v-mat", "cp-attempt-1", adapter.ReasonBarrierFailed, "disk full writing checkpoint")
 	testutil.FailErr(t, "RecordCheckpointFailure", err)
 	recCPFail := BuildReceipt(snapCPFail)
 	if recCPFail.Readiness != StateReady ||
@@ -177,7 +174,7 @@ func TestHostAndDenWorkspaceStateAndReceiptsDistinguishFallbackGitCommandAndChec
 	}
 
 	// 4. Subsequent checkpoint publication succeeds and updates LatestCheckpointID.
-	snapCPPub, err := coord.RecordCheckpointPublished("v-fb", "cp-attempt-1")
+	snapCPPub, err := coord.RecordCheckpointPublished("v-mat", "cp-attempt-1")
 	testutil.FailErr(t, "RecordCheckpointPublished", err)
 	if snapCPPub.Checkpoint.State != CheckpointPublished || snapCPPub.Checkpoint.LatestCheckpointID != "cp-attempt-1" {
 		t.Fatalf("expected published checkpoint state, got %+v", snapCPPub.Checkpoint)
@@ -203,7 +200,7 @@ func TestSmallerWorkspaceSelectionRetryAfterLimitAndFocusHintsDoNotChangeWorkspa
 	disk := func() (adapter.DiskSpace, error) {
 		return adapter.DiskSpace{Path: tmp, Available: 64 * 1024, Known: true}, nil
 	}
-	sel := adapter.NewSelector("unknown-os", nil, nil, adapter.NewEagerCopyAdapter(adapter.ReasonUnsupportedPlatform))
+	sel := adapter.NewSelector("unknown-os", nil, nil, adapter.NewEagerCopyAdapter())
 	coord := NewCoordinator(sel)
 	grants := []adapter.RootGrant{
 		{RootID: "primary", Label: "primary", SourcePath: rootSmall, IsPrimary: true},

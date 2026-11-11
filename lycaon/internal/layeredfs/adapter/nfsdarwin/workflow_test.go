@@ -59,7 +59,6 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	if err != nil {
 		t.Fatalf("privategit.NewManager: %v", err)
 	}
-	t.Cleanup(func() { _ = gitMgr.Store().Close() })
 
 	adp := nfsdarwin.New(nfsdarwin.Config{})
 	const viewID = "view-mounted-e2e"
@@ -166,7 +165,7 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 	trunkDuring := snapshotTreeDigests(t, trunkDir)
 	assertTreesIdentical(t, "trunk untouched during mounted worker edits and private git commit", trunkBefore, trunkDuring)
 
-	// 5. Execute CheckpointBarrier, capture private Git state, and publish an immutable checkpoint (#1663).
+	// 5. Execute CheckpointBarrier, capture private Git state, and publish an immutable checkpoint.
 	barrierReceipt, releaseBarrier, err := adp.CheckpointBarrier(t.Context(), viewID)
 	if err != nil || !barrierReceipt.DirtyDataFlushed || !barrierReceipt.WritersQuiesced {
 		t.Fatalf("CheckpointBarrier failed: receipt=%+v err=%v", barrierReceipt, err)

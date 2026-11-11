@@ -42,7 +42,7 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 		sel.BudgetFor = ZeroBudget
 		return ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}}}
 	}
-	selLinux := NewSelector("linux", fuseSupported, darwinSupported, NewEagerCopyAdapter(ReasonNone))
+	selLinux := NewSelector("linux", fuseSupported, darwinSupported, NewEagerCopyAdapter())
 	linuxChoice, err := selLinux.Choose(ctx, overBudget(selLinux))
 	adp, res := linuxChoice.Adapter, linuxChoice.Probe
 	if err != nil || !res.Supported || adp.ID() != AdapterFUSELinux {
@@ -56,7 +56,7 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 		t.Fatalf("unexpected mounted facts: %+v", facts)
 	}
 
-	selDarwin := NewSelector("darwin", fuseSupported, darwinSupported, NewEagerCopyAdapter(ReasonNone))
+	selDarwin := NewSelector("darwin", fuseSupported, darwinSupported, NewEagerCopyAdapter())
 	darwinChoice, err := selDarwin.Choose(ctx, overBudget(selDarwin))
 	adpD, resD := darwinChoice.Adapter, darwinChoice.Probe
 	if err != nil || !resD.Supported || adpD.ID() != AdapterNFSDarwin {
@@ -72,7 +72,7 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 			return ReasonMountDenied, "sandbox blocked mount", errors.New("EPERM")
 		},
 	})
-	selDenied := NewSelector("linux", mountDeniedAdp, darwinSupported, NewEagerCopyAdapter(ReasonNone))
+	selDenied := NewSelector("linux", mountDeniedAdp, darwinSupported, NewEagerCopyAdapter())
 	deniedChoice, err := selDenied.Choose(ctx, overBudget(selDenied))
 	var denied *AdapterError
 	if !errors.As(err, &denied) || denied.ReasonCode != ReasonMountDenied || deniedChoice.Adapter != nil {
@@ -109,7 +109,7 @@ func TestSelectorTransientRetryOnce(t *testing.T) {
 		sel.BudgetFor = ZeroBudget
 		return ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true}}}
 	}
-	selRecover := NewSelector("darwin", nil, recoveringAdp, NewEagerCopyAdapter(ReasonNone))
+	selRecover := NewSelector("darwin", nil, recoveringAdp, NewEagerCopyAdapter())
 	recovered, err := selRecover.Choose(ctx, overBudget(selRecover))
 	adp, res := recovered.Adapter, recovered.Probe
 	if err != nil || !res.Supported || adp.ID() != AdapterNFSDarwin || res.Attempts != 2 {
@@ -125,7 +125,7 @@ func TestSelectorTransientRetryOnce(t *testing.T) {
 			return ReasonTransientStartupFailure, "persistent port bind contention", errors.New("timeout")
 		},
 	})
-	selFail := NewSelector("darwin", nil, failingTransientAdp, NewEagerCopyAdapter(ReasonNone))
+	selFail := NewSelector("darwin", nil, failingTransientAdp, NewEagerCopyAdapter())
 	failed, err := selFail.Choose(ctx, overBudget(selFail))
 	if persistentTransientCalls.Load() != 2 || failed.Probe.Attempts != 2 {
 		t.Fatalf("expected exactly 2 attempts (1 retry), got calls=%d attempts=%d", persistentTransientCalls.Load(), failed.Probe.Attempts)
@@ -272,7 +272,7 @@ func TestActiveWorkerDataSurvivesAdapterFailure(t *testing.T) {
 			return ReasonNone, "", nil
 		},
 	})
-	sel := NewSelector("darwin", nil, primaryAdp, NewEagerCopyAdapter(ReasonNone))
+	sel := NewSelector("darwin", nil, primaryAdp, NewEagerCopyAdapter())
 	sel.BudgetFor = ZeroBudget
 	grants := []RootGrant{{RootID: "root", SourcePath: srcRoot, IsPrimary: true}}
 	choice, err := sel.Choose(ctx, ChooseRequest{Probe: ProbeConfig{RuntimeDir: tmp}, Grants: grants})
@@ -291,7 +291,7 @@ func TestActiveWorkerDataSurvivesAdapterFailure(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	// Silent transition without checkpoint reconstruction (#1666) must be refused and preserve data.
+	// Silent transition without checkpoint reconstruction must be refused and preserve data.
 	recovery, recErr := sel.Registry.RecoverOrTransition(ctx, view.ViewID, ReasonCleanupFailed, nil, false)
 	if recErr == nil {
 		t.Fatalf("expected RecoverOrTransition without checkpoint reconstruction to return error")

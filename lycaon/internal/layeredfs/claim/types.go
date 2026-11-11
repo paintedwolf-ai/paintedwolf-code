@@ -1,6 +1,6 @@
 // Package claim implements worker view claiming without lower-tree walks,
 // Format-v2 persisted workspace metadata (with Format-v1 upgrade support),
-// and the typed Host/Den workspace state surface (#1662).
+// and the typed Host/Den workspace state surface.
 package claim
 
 import (
@@ -13,9 +13,9 @@ import (
 )
 
 const (
-	// FormatVersionV1 identifies legacy materialized branch metadata (#1662).
+	// FormatVersionV1 identifies legacy materialized branch metadata.
 	FormatVersionV1 = 1
-	// FormatVersionV2 identifies layered/materialized workspace view metadata (#1662).
+	// FormatVersionV2 identifies layered/materialized workspace view metadata.
 	FormatVersionV2 = 2
 )
 
@@ -107,7 +107,7 @@ const (
 	StagePersistMetadata   ClaimStage = "persist_metadata"
 )
 
-// RetentionRegistrar registers and releases worker workspace retention claims (#1662, #1666).
+// RetentionRegistrar registers and releases worker workspace retention claims.
 type RetentionRegistrar interface {
 	RegisterClaim(ctx context.Context, workerID, viewID string, rootPaths []string) (claimID string, err error)
 	ReleaseClaim(claimID string) error
@@ -162,7 +162,7 @@ type ClaimHooks struct {
 	Fault             FaultHook
 }
 
-// ClaimRequest specifies a worker view claim across selected roots (#1662).
+// ClaimRequest specifies a worker view claim across selected roots.
 type ClaimRequest struct {
 	Identity ClaimIdentity
 	Storage  ClaimStorage

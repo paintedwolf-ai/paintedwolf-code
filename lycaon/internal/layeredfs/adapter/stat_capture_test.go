@@ -69,7 +69,7 @@ func agedTree(t *testing.T, count int) string {
 
 func prepareClonedView(t *testing.T, viewID, source string) (*EagerCopyAdapter, *PreparedView) {
 	t.Helper()
-	adp := NewEagerCopyAdapter(ReasonNone)
+	adp := NewEagerCopyAdapter()
 	view, err := adp.Prepare(t.Context(), PrepareRequest{
 		ViewID: viewID, RuntimeDir: t.TempDir(), CloneFile: copyingClone,
 		Grants: []RootGrant{{RootID: "repo", Label: "repo", SourcePath: source, IsPrimary: true}},
@@ -112,7 +112,7 @@ func TestRealClonePreparationReadsNoFileContent(t *testing.T) {
 		t.Skip("this volume cannot clone")
 	}
 	watched := watchContentOpens(t)
-	adp := NewEagerCopyAdapter(ReasonNone)
+	adp := NewEagerCopyAdapter()
 	view, err := adp.Prepare(t.Context(), PrepareRequest{
 		ViewID: "real-clone", RuntimeDir: t.TempDir(), TargetRootDirs: map[string]string{"repo": filepath.Join(work, "tree")},
 		PristineDir: filepath.Join(work, "pristine"), BackingDir: filepath.Join(work, "backing"),
@@ -127,7 +127,7 @@ func TestRealClonePreparationReadsNoFileContent(t *testing.T) {
 
 func TestAByteCopyHoldsItsBytesTwiceAndCountsThem(t *testing.T) {
 	source := agedTree(t, 2)
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	adp := NewEagerCopyAdapter()
 	view, err := adp.Prepare(t.Context(), PrepareRequest{
 		ViewID: "byte-copy", RuntimeDir: t.TempDir(), CloneFile: func(string, string) (bool, error) { return false, nil },
 		Grants: []RootGrant{{RootID: "repo", SourcePath: source, IsPrimary: true}},
@@ -281,7 +281,7 @@ func TestStatRecordRules(t *testing.T) {
 
 func TestReopenReDerivesChangesFromTheManifest(t *testing.T) {
 	source := agedTree(t, 4)
-	first := NewEagerCopyAdapter(ReasonNone)
+	first := NewEagerCopyAdapter()
 	base := t.TempDir()
 	manifest := filepath.Join(base, "stat-manifest")
 	view, err := first.Prepare(t.Context(), PrepareRequest{
@@ -298,7 +298,7 @@ func TestReopenReDerivesChangesFromTheManifest(t *testing.T) {
 	sharedEagerViews.Delete("before-restart")
 
 	watched := watchContentOpens(t)
-	next := NewEagerCopyAdapter(ReasonNone)
+	next := NewEagerCopyAdapter()
 	testutil.FailErr(t, "clear backing", os.RemoveAll(filepath.Join(base, "backing")))
 	reopened, err := next.Reopen(t.Context(), ReopenRequest{
 		ViewID: "before-restart", RuntimeDir: filepath.Join(base, "rt"), BackingDir: filepath.Join(base, "backing"), StatManifestPath: manifest,
@@ -361,7 +361,7 @@ func TestAnUnknownManifestFormatIsRefusedUnchanged(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "stat-manifest")
 	raw := []byte(`{"format":99,"view_id":"v"}` + "\n")
 	testutil.FailErr(t, "write", os.WriteFile(path, raw, 0o600))
-	_, err := NewEagerCopyAdapter(ReasonNone).Reopen(t.Context(), ReopenRequest{ViewID: "v", RuntimeDir: t.TempDir(), StatManifestPath: path})
+	_, err := NewEagerCopyAdapter().Reopen(t.Context(), ReopenRequest{ViewID: "v", RuntimeDir: t.TempDir(), StatManifestPath: path})
 	if !errors.Is(err, ErrUnsupportedStatManifest) {
 		t.Fatalf("err = %v", err)
 	}
@@ -376,7 +376,7 @@ func TestNoCopyRunsPastItsBudget(t *testing.T) {
 	source := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(source, "big.bin"), make([]byte, 1<<20), 0o644))
 	watched := watchContentOpens(t)
-	_, err := NewEagerCopyAdapter(ReasonNone).Prepare(t.Context(), PrepareRequest{
+	_, err := NewEagerCopyAdapter().Prepare(t.Context(), PrepareRequest{
 		ViewID: "bounded", RuntimeDir: t.TempDir(), CloneFile: func(string, string) (bool, error) { return false, nil },
 		CopyBudget: &CopyBudget{Limit: 1 << 10, EntryCost: 1},
 		Grants:     []RootGrant{{RootID: "repo", SourcePath: source, IsPrimary: true}},
@@ -396,7 +396,7 @@ func TestCancellationStopsACopyInsideAFile(t *testing.T) {
 	target := filepath.Join(t.TempDir(), "tree")
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
-	_, err := NewEagerCopyAdapter(ReasonNone).Prepare(ctx, PrepareRequest{
+	_, err := NewEagerCopyAdapter().Prepare(ctx, PrepareRequest{
 		ViewID: "canceled-copy", RuntimeDir: t.TempDir(), TargetRootDirs: map[string]string{"repo": target},
 		CloneFile:  func(string, string) (bool, error) { return false, nil },
 		ProgressFn: func(MaterializeProgress) { cancel() },

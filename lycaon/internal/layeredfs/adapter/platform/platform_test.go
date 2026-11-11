@@ -157,7 +157,6 @@ func TestEngineStartersEnterAMountUnderForcedGC(t *testing.T) {
 	gittest.InitCommit(t, trunk, "initial")
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "privategit.NewManager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 	view, chosen := mountedHostView(t, trunk, mgr)
 	mount := view.PrimaryWorkPath
 	sub := filepath.Join(mount, "sub", "deep")
@@ -250,7 +249,6 @@ func TestAdapterFIFOFactMatchesTheKernel(t *testing.T) {
 	testutil.FailErr(t, "resolve trunk", err)
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "privategit.NewManager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 	view, chosen := mountedHostView(t, trunk, mgr)
 	fifo := filepath.Join(view.PrimaryWorkPath, "pipe")
 	testutil.FailErr(t, "mkfifo", syscall.Mkfifo(fifo, 0o644))
@@ -276,7 +274,6 @@ func TestGitInitOfANewNestedRepositoryStaysPrivate(t *testing.T) {
 	before := gittest.Run(t, trunk, "status", "--porcelain")
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "privategit.NewManager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 	view, _ := mountedHostView(t, trunk, mgr)
 	nested := filepath.Join(view.PrimaryWorkPath, "vendor", "new")
 	testutil.FailErr(t, "mkdir nested", os.MkdirAll(nested, 0o755))
@@ -311,7 +308,6 @@ func TestEverySelectedRootHasItsOwnPrivateRepository(t *testing.T) {
 	sourceHead := gittest.Run(t, grants[1].SourcePath, "rev-parse", "HEAD")
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "privategit.NewManager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 	selector := platform.NewSelector(platform.Config{Confinement: availableConfinement{}})
 	chosen, _ := overBudgetChoice(t, selector, filepath.Join(base, "probe"), grants[0].SourcePath)
 	view, err := chosen.Prepare(t.Context(), adapter.PrepareRequest{
@@ -356,7 +352,6 @@ func TestDestroyRefusesARootStillMountedWhateverItsRecordsSay(t *testing.T) {
 	testutil.FailErr(t, "resolve trunk", err)
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "privategit.NewManager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 	view, _ := mountedHostView(t, trunk, mgr)
 	result := filepath.Join(view.PrimaryWorkPath, "result.txt")
 	testutil.FailErr(t, "write result", os.WriteFile(result, []byte("result\n"), 0o644))
@@ -381,7 +376,6 @@ func TestSidecarSurvivalFollowsTheAdapterFact(t *testing.T) {
 	testutil.FailErr(t, "resolve trunk", err)
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "privategit.NewManager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 	view, chosen := mountedHostView(t, trunk, mgr)
 	root := view.PrimaryWorkPath
 

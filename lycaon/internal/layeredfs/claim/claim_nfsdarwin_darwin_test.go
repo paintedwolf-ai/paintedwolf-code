@@ -29,7 +29,7 @@ func TestRealNFSDarwinMountedClaimZeroLowerDirReads(t *testing.T) {
 	nfsAdp := nfsdarwin.New(nfsdarwin.Config{
 		ConfinementCheckFn: func(context.Context, adapter.ProbeConfig) error { return nil },
 	})
-	sel := adapter.NewSelector("darwin", nil, nfsAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	sel := adapter.NewSelector("darwin", nil, nfsAdp, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = adapter.ZeroBudget
 	coord := NewCoordinator(sel)
 	ret := newTestRetentionRegistrar()

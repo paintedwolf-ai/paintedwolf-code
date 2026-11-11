@@ -486,7 +486,6 @@ func TestWriteLegWorkerGitFormsRequireTheirManagedView(t *testing.T) {
 	h := newHarness(t)
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "new private Git manager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 	h.owners.PrivateGit = mgr
 	h.tc.Identity.WorkerJobID = "worker-1"
 	h.tc.Source.WorkerBranchRoot = h.root

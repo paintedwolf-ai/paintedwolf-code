@@ -209,16 +209,10 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 
 		// And if the retained object store is subsequently corrupted across another restart with the record removed again, it must fail closed.
 		testutil.FailErr(t, "remove durable record again", os.Remove(recPath))
-		mgr2.Store().mu.Lock()
-		unlockStoreWriteBoundary(mgr2.Store())
-		mgr2.Store().mu.Unlock()
 		testutil.FailErr(t, "remove store objectsDir", os.RemoveAll(mgr2.Store().ObjectsDir()))
 
 		mgr3 := newTestManager(t, backingRoot)
 		// Remove the newly created empty objectsDir on mgr3 to simulate store loss after restart.
-		mgr3.Store().mu.Lock()
-		unlockStoreWriteBoundary(mgr3.Store())
-		mgr3.Store().mu.Unlock()
 		testutil.FailErr(t, "remove mgr3 store objectsDir", os.RemoveAll(mgr3.Store().ObjectsDir()))
 		core3 := newMountedViewWithManager(t, mgr3, "view-prior-ev", srcDir)
 		if _, err := core3.WriteFile(qp(".git/config"), []byte("[core]\n"), 0o644); !errors.Is(err, layeredfs.ErrGitPending) {
@@ -441,9 +435,6 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			}
 
 			// Delete only the target loose object from the retained store; keep HEAD commit and objects/ directory intact.
-			mgr1.Store().mu.Lock()
-			unlockStoreWriteBoundary(mgr1.Store())
-			mgr1.Store().mu.Unlock()
 			objPath := filepath.Join(mgr1.Store().ObjectsDir(), oid[:2], oid[2:])
 			testutil.FailErr(t, "remove dependency object "+depSpec.name, os.Remove(objPath))
 			testutil.FailErr(t, "remove source .git", os.RemoveAll(filepath.Join(srcDir, ".git")))

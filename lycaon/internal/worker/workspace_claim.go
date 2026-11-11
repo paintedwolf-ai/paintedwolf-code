@@ -33,7 +33,7 @@ func recordWorkerClaimState(jobID string, snap claim.WorkspaceStateSnapshot) {
 	workerClaimStateMu.Unlock()
 }
 
-// WorkerClaimWorkspaceState returns the typed WorkspaceStateSnapshot and DispatchWorkspaceReceipt for jobID (#1662).
+// WorkerClaimWorkspaceState returns the typed WorkspaceStateSnapshot and DispatchWorkspaceReceipt for jobID.
 func WorkerClaimWorkspaceState(jobID string) (claim.WorkspaceStateSnapshot, claim.DispatchWorkspaceReceipt, bool) {
 	workerClaimStateMu.RLock()
 	snap, ok := workerClaimStates[strings.TrimSpace(jobID)]
@@ -137,7 +137,7 @@ func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api
 		recordWorkerClaimState(task.ID, claim.WorkspaceStateSnapshot{
 			Identity:  claim.ClaimIdentity{WorkerID: task.ID, ProjectID: task.ProjectID, ViewID: task.ID},
 			Readiness: readiness,
-			Notice:    claim.FallbackNotice{Severity: claim.SeverityError, ReasonCode: claim.ClassifyFailureReason(err), Diagnostic: err.Error()},
+			Notice:    claim.WorkspaceNotice{Severity: claim.SeverityError, ReasonCode: claim.ClassifyFailureReason(err), Diagnostic: err.Error()},
 		})
 		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}

@@ -33,21 +33,44 @@ func branchVolumeAvailable(branchRoot string) error {
 }
 
 // With no regular file to try, the volume itself answers.
-func probeSourcesClone(ctx context.Context, sample, dir string) (bool, error) {
+// existingBranchAncestor is the nearest existing directory above a branch, up to its branch base. A
+// missing base means the volume holding it is gone, and nothing is created in its place.
+func existingBranchAncestor(branchRoot string) (string, error) {
+	base := enginepaths.WorkerBranchesRootOf(branchRoot)
+	for dir := filepath.Dir(branchRoot); ; dir = filepath.Dir(dir) {
+		_, err := os.Stat(dir)
+		if err == nil {
+			return dir, nil
+		}
+		if !errors.Is(err, fs.ErrNotExist) {
+			return "", err
+		}
+		if dir == base || dir == filepath.Dir(dir) {
+			return "", fmt.Errorf("%w: %s", ErrBranchVolumeUnavailable, branchRoot)
+		}
+	}
+}
+
+func (m *Manager) probeSourcesClone(ctx context.Context, sample, dir string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
 	if sample == "" {
 		return fileclone.SupportedAt(dir)
 	}
-	return fileclone.SupportedFrom(ctx, sample, dir)
+	return fileclone.SupportedFromUsing(ctx, sample, dir, m.fileCloner())
 }
 
 // placedBranchClonability re-derives a placed branch's clone answer when its view is rebuilt: the
-// branch stays where it is, so only the sources' clone path to it is asked again.
+// branch stays where it is, so only the sources' clone path to it is asked again. An evicted branch
+// has no tree, so the probe asks the nearest directory above it, which is on the same volume.
 func (m *Manager) placedBranchClonability(ctx context.Context, branchRoot string, sources []projectroot.RootRef) (workerplacement.Decision, error) {
+	parent, err := existingBranchAncestor(branchRoot)
+	if err != nil {
+		return workerplacement.Decision{}, err
+	}
 	if m.cloneProbe != nil {
-		clonable, err := m.cloneProbe(ctx, branchRoot)
+		clonable, err := m.cloneProbe(ctx, parent)
 		return workerplacement.Decision{Clonable: clonable}, err
 	}
 	for _, source := range sources {
@@ -55,7 +78,7 @@ func (m *Manager) placedBranchClonability(ctx context.Context, branchRoot string
 		if err != nil {
 			return workerplacement.Decision{}, err
 		}
-		clonable, err := probeSourcesClone(ctx, sample, branchRoot)
+		clonable, err := m.probeSourcesClone(ctx, sample, parent)
 		if err != nil {
 			return workerplacement.Decision{}, err
 		}
@@ -94,7 +117,7 @@ func (m *Manager) decidePlacement(ctx context.Context, roots, sources []projectr
 					break
 				}
 			}
-			return probeSourcesClone(ctx, sample, dir)
+			return m.probeSourcesClone(ctx, sample, dir)
 		},
 	})
 }

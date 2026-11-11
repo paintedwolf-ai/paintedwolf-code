@@ -220,8 +220,7 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 		t.Fatalf("expected CreateWorkerWorkspace to attach PreparedView and Adapter, got %+v", binding)
 	}
 	if binding.Selection.Strategy != workspace.ProvisionMaterializedEagerCopy ||
-		binding.Selection.Selection.Reason != adapter.SelectionUnderBudget ||
-		binding.Selection.Facts.FallbackReason != adapter.ReasonNone {
+		binding.Selection.Selection.Reason != adapter.SelectionUnderBudget {
 		t.Fatalf("expected an under-budget materialized selection, got %+v", binding.Selection)
 	}
 	if _, ok := binding.View.SeededGitRepos["primary:."]; !ok {
@@ -265,7 +264,7 @@ func TestProductionCreateWorkerWorkspaceRoutesThroughAdapterAndMountedSelector(t
 			return nil
 		},
 	})
-	mountedSel := adapter.NewSelector("", mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	mountedSel := adapter.NewSelector("", mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
 	mountedSel.BudgetFor = adapter.ZeroBudget
 	mountedSel.Confinement = fixtureConfinement{}
 	mBinding, err := mgr.WithSelector(mountedSel).CreateWorkerWorkspace(ctx, primary, "prod-mounted")

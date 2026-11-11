@@ -43,7 +43,9 @@ func TestDecisionBranchStaysAttachedButCannotBePromoted(t *testing.T) {
 	if task.Status != api.WorkerStatusHeld {
 		t.Fatalf("decision worker status = %q want held", task.Status)
 	}
-	if task.WorkspaceRoot == "" || task.WorkspaceBaselinePath == "" {
+	// A branch keeps its base either as a checkpoint or as a captured baseline.
+	attached := workspace.BranchUsesCheckpoints(task.WorkspaceRoot) || task.WorkspaceBaselinePath != ""
+	if task.WorkspaceRoot == "" || !workspace.BranchTreePresent(task.WorkspaceRoot) || !attached {
 		t.Fatalf("decision branch detached: %+v", task)
 	}
 	if task.MergeStatus != "" {

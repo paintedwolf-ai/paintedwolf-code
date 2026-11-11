@@ -29,13 +29,12 @@ func fixtureMountedManager(t *testing.T, unmount func(context.Context, string, s
 		},
 		UnmountViewFn: unmount,
 	})
-	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = adapter.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	branches := t.TempDir()
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	return workspace.NewManager(branches).WithSelector(selector).WithPrivateGit(privateGit)
 }
 
@@ -119,7 +118,6 @@ func TestMaterializedRootsAreManagedGitViewsForThePrimaryWorker(t *testing.T) {
 	branches := t.TempDir()
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	manager := workspace.NewManager(branches).WithPrivateGit(privateGit)
 	binding, _, err := manager.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "p", "job-roots")
 	testutil.FailErr(t, "create workspace", err)

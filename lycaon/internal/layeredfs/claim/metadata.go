@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
-// RootMappingRecord persists one selected root mapping inside a worker view (#1662).
+// RootMappingRecord persists one selected root mapping inside a worker view.
 type RootMappingRecord struct {
 	RootID        string `json:"root_id"`
 	Label         string `json:"label"`
@@ -24,12 +24,11 @@ type RootMappingRecord struct {
 	IsPrimary     bool   `json:"is_primary"`
 }
 
-// AdapterMetadataFacts persists the adapter identity, preparation kind, fallback reason, and seed cost.
+// AdapterMetadataFacts persists the adapter identity, preparation kind, selection and seed cost.
 type AdapterMetadataFacts struct {
 	AdapterID            adapter.AdapterID        `json:"adapter_id"`
 	PreparationKind      adapter.PreparationKind  `json:"preparation_kind"`
 	SourceVisibility     adapter.SourceVisibility `json:"source_visibility"`
-	FallbackReason       adapter.ReasonCode       `json:"fallback_reason,omitempty"`
 	SelectionReason      adapter.SelectionReason  `json:"selection_reason,omitempty"`
 	DeclaredCost         adapter.MaterializeCost  `json:"declared_cost,omitzero"`
 	CopiedEntries        int64                    `json:"copied_entries"`
@@ -47,7 +46,7 @@ type CheckpointMetadataRefs struct {
 	FailedCheckpointReason    adapter.ReasonCode `json:"failed_checkpoint_reason,omitempty"`
 }
 
-// ViewMetadataV2 is the Format-v2 persisted branch/view metadata record (#1662).
+// ViewMetadataV2 is the Format-v2 persisted branch/view metadata record.
 // It records durable identity and reconstructible state, never claiming a live mount survived restart.
 type ViewMetadataV2 struct {
 	FormatVersion       int                     `json:"format_version"`
@@ -61,7 +60,7 @@ type ViewMetadataV2 struct {
 	CommittedAt         time.Time               `json:"committed_at"`
 }
 
-// LegacyBranchMetadataV1 represents Format-v1 retained materialized branch metadata (#1662).
+// LegacyBranchMetadataV1 represents Format-v1 retained materialized branch metadata.
 type LegacyBranchMetadataV1 struct {
 	FormatVersion    int                     `json:"format_version"`
 	JobID            string                  `json:"job_id"`

@@ -21,12 +21,11 @@ const (
 	JobMetaFormatV2 = 2
 )
 
-// JobMetaPreparation describes layered adapter and fallback facts for a worker view (#1662).
+// JobMetaPreparation describes the provider facts of a worker view.
 type JobMetaPreparation struct {
 	AdapterID       adapter.AdapterID        `json:"adapter_id,omitempty"`
 	PreparationKind adapter.PreparationKind  `json:"preparation_kind,omitempty"`
 	VisibilityMode  adapter.SourceVisibility `json:"visibility_mode,omitempty"`
-	FallbackReason  adapter.ReasonCode       `json:"fallback_reason,omitempty"`
 	CopiedEntries   int64                    `json:"copied_entries,omitempty"`
 	CopiedBytes     int64                    `json:"copied_bytes,omitempty"`
 	SelectionReason adapter.SelectionReason  `json:"selection_reason,omitempty"`
@@ -35,7 +34,7 @@ type JobMetaPreparation struct {
 	AdapterFacts    *adapter.AdapterFacts    `json:"adapter_facts,omitempty"`
 }
 
-// JobMetaLineage describes layered view identity, journal, selection, and checkpoint refs (#1662).
+// JobMetaLineage describes layered view identity, journal, selection, and checkpoint refs.
 type JobMetaLineage struct {
 	ViewID                    string   `json:"view_id,omitempty"`
 	PreparedViewID            string   `json:"prepared_view_id,omitempty"`
@@ -59,7 +58,7 @@ type JobMeta struct {
 
 func hasLayeredV2Fields(m JobMeta) bool {
 	return m.AdapterID != "" || m.PreparationKind != "" || m.VisibilityMode != "" ||
-		m.FallbackReason != "" || m.CopiedEntries != 0 || m.CopiedBytes != 0 ||
+		m.CopiedEntries != 0 || m.CopiedBytes != 0 ||
 		m.PendingGitInit || m.ViewID != "" || m.PreparedViewID != "" ||
 		m.SourceGeneration != 0 || m.JournalPath != "" || len(m.ParentCheckpointIDs) > 0 ||
 		m.LastPublishedCheckpointID != "" || m.CheckpointStoreDir != "" || len(m.SelectedRootIDs) > 0 || len(m.FocusPathHints) > 0
@@ -180,7 +179,7 @@ func normalizeLoadedJobMeta(meta *JobMeta) error {
 }
 
 // UpgradeJobMetaToV2 upgrades a Format-v1 branch metadata file to Format-v2 while preserving
-// retained materialized eagercopy semantics (VisibilityFixed) without relabeling it as live (#1662).
+// retained materialized eagercopy semantics (VisibilityFixed) without relabeling it as live.
 func UpgradeJobMetaToV2(metaDir string) (JobMeta, bool, error) {
 	meta, err := LoadJobMeta(metaDir)
 	if err != nil || meta.FormatVersion == JobMetaFormatV2 {

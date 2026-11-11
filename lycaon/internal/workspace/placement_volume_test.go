@@ -336,10 +336,14 @@ func TestSourceThatCannotCloneDeclaresCostBeforeCopying(t *testing.T) {
 	if filesAtDeclaration.Load() != 0 || branchAtDeclaration.Load() != 0 {
 		t.Fatalf("copying began before the declaration: %d files, %d entries", filesAtDeclaration.Load(), branchAtDeclaration.Load())
 	}
+	// Every source byte is copied; the pristine tree clones from the working tree where the branch's
+	// own volume allows it.
 	declaredCost := binding.Selection.Selection.DeclaredCost
+	materialized := binding.Preparation.Materialized
 	if strategy := preparationStrategy(binding.Selection.Selection); strategy != ProvisionDirectCopy ||
-		binding.Preparation.Materialized.CopiedBytes != 2*want || declaredCost.UncloneableBytes != want || declaredCost.Entries != wantEntries {
-		t.Fatalf("selection = %+v, materialized = %+v", binding.Selection.Selection, binding.Preparation.Materialized)
+		materialized.CopiedBytes < want || materialized.CopiedBytes+materialized.ClonedBytes != 2*want ||
+		declaredCost.UncloneableBytes != want || declaredCost.Entries != wantEntries {
+		t.Fatalf("selection = %+v, materialized = %+v", binding.Selection.Selection, materialized)
 	}
 	if _, err := os.Lstat(filepath.Join(volume.Root, enginepaths.WorkerPlacementDirName(os.Getuid(), fixture.state))); !os.IsNotExist(err) {
 		t.Fatalf("placement folder left on a volume that cannot clone: %v", err)

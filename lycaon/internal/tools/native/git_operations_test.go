@@ -112,7 +112,6 @@ func setupAdapterWorkerView(t *testing.T, trunkDir, adapter string) (*privategit
 	workerID := "worker-" + adapter
 	t.Cleanup(func() {
 		_ = mgr.ReleaseView(viewID)
-		_ = mgr.Store().Close()
 	})
 	if adapter == "eagercopy" {
 		targetDir := filepath.Join(t.TempDir(), "materialized-wt")
@@ -250,7 +249,6 @@ func TestWorkerGitRejectsUnbranchedWriteLegAndBlocksNativeGitInternalsWrite(t *t
 
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
 	testutil.FailErr(t, "new privategit manager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 	refused := func(name string, tc tools.ToolContext) {
 		t.Helper()
 		opTool := GitOperationTool{Git: git.NewManager(), Boundary: nativefixture.Boundary(t), PrivateGit: mgr, Kind: "checkout"}

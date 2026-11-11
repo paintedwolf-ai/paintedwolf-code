@@ -310,3 +310,15 @@ func validateRequiredBranchTrees(ctx context.Context, capturedDir string, databa
 	}
 	return nil
 }
+
+// captureEveryTree is the rule for a full backup, which carries every retained tree.
+func captureEveryTree(string) bool { return false }
+
+// placedOnDevice reports a tree this device's registry keeps outside the state folder. A store
+// upgrade and its recovery point leave such a tree where it is.
+func placedOnDevice(dataDir string) func(root string) bool {
+	return func(root string) bool {
+		physical, err := workerplacement.PhysicalFromLogical(dataDir, root)
+		return err == nil && physical != filepath.Join(dataDir, filepath.FromSlash(root))
+	}
+}

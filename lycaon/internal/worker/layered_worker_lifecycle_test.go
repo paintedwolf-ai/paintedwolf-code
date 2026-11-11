@@ -83,7 +83,6 @@ func newLayeredWorkerFixture(t *testing.T, selector *adapter.Selector) *layeredW
 	branches := filepath.Join(testbaseline.DataDir(t, sqlDB), "worker-branches")
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	manager := workspace.NewManager(branches).WithPrivateGit(privateGit)
 	if selector != nil {
 		manager = manager.WithSelector(selector)
@@ -131,7 +130,7 @@ func TestOrdinaryWorkerClaimRegistersAndSettlesItsConsumerEngine(t *testing.T) {
 			return adapter.ReasonNone, "", nil
 		},
 	})
-	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = adapter.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	fixture := newLayeredWorkerFixture(t, selector)
@@ -170,8 +169,8 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 	if !ok || snap.Readiness != claim.StateReady {
 		t.Fatalf("claim state ok=%v snap=%+v", ok, snap)
 	}
-	if snap.Adapter.AdapterID != adapter.AdapterEagerCopy || snap.Adapter.FallbackReason != adapter.ReasonNone || receipt.AdapterID != adapter.AdapterEagerCopy {
-		t.Fatalf("small worker was not materialized without fallback: %+v", snap.Adapter)
+	if snap.Adapter.AdapterID != adapter.AdapterEagerCopy || snap.Adapter.SelectionReason != adapter.SelectionUnderBudget || receipt.AdapterID != adapter.AdapterEagerCopy {
+		t.Fatalf("a small worker was not materialized under its budget: %+v", snap.Adapter)
 	}
 	if _, ok := consumer.LookupBranchEngine(task.WorkspaceRoot); ok {
 		t.Fatal("a materialized branch has no layered engine")
@@ -238,8 +237,8 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 }
 
 // The materialized path is the default selector's: a worker reads its pristine base and never writes
-// it, while its own tree stays writable.
-func TestMaterializedWorkerIsDeniedWritesToItsPristineTree(t *testing.T) {
+// it, its own tree stays writable, and the branches and object store beside it stay out of reach.
+func TestMaterializedWorkerReachesOnlyItsOwnBranch(t *testing.T) {
 	confine.TestingSetAutoConfine(t)
 	if !confine.Available() {
 		t.Skip("this host applies no confinement")
@@ -255,10 +254,16 @@ func TestMaterializedWorkerIsDeniedWritesToItsPristineTree(t *testing.T) {
 	if !ok || snap.Adapter.PreparationKind != adapter.PreparationMaterialized {
 		t.Fatalf("the default selector chose: ok=%v %+v", ok, snap.Adapter)
 	}
-	pristine := enginepaths.PristineTreeForBranchRoot(root)
-	testutil.FailErr(t, "mkdir pristine", os.MkdirAll(pristine, 0o700))
+	pristineRoots, err := os.ReadDir(enginepaths.PristineTreeForBranchRoot(root))
+	if err != nil || len(pristineRoots) != 1 {
+		t.Fatalf("pristine roots = %v, %v", pristineRoots, err)
+	}
+	pristine := filepath.Join(enginepaths.PristineTreeForBranchRoot(root), pristineRoots[0].Name())
 	base := filepath.Join(pristine, "main.go")
 	testutil.FailErr(t, "write base", os.WriteFile(base, []byte("package main\n"), 0o600))
+	neighbour := filepath.Join(fixture.branches, "neighbour")
+	testutil.FailErr(t, "mkdir neighbour", os.MkdirAll(neighbour, 0o700))
+	store := filepath.Join(fixture.branches, ".adapter")
 
 	tctx := tools.ToolContext{}
 	tctx.Source.WorkerBranchRoot = root
@@ -273,6 +278,8 @@ func TestMaterializedWorkerIsDeniedWritesToItsPristineTree(t *testing.T) {
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(root, "worker-probe")},
 		{Kind: denialprobe.OverwriteFile, Path: base},
 		{Kind: denialprobe.CreateFile, Path: filepath.Join(pristine, "worker-probe")},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(neighbour, "worker-probe")},
+		{Kind: denialprobe.CreateFile, Path: filepath.Join(store, "worker-probe")},
 	})
 	testutil.FailErr(t, "launch worker probe", err)
 	for i, result := range results {
@@ -294,6 +301,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	}
 	selector := workspace.EnforcedWorkspaceSelector()
 	selector.BudgetFor = adapter.ZeroBudget
+	skipWithoutMount(t, selector)
 	fixture := newLayeredWorkerFixture(t, selector)
 	// Worker storage sits under the engine's state root, as it does in production.
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(fixture.branches))
@@ -303,11 +311,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 		t.Fatal("claim recorded no workspace state")
 	}
 	if snap.Adapter.PreparationKind != adapter.PreparationMounted {
-		switch snap.Adapter.FallbackReason {
-		case adapter.ReasonFUSEDeviceUnavailable, adapter.ReasonFUSEHelperUnavailable, adapter.ReasonUnsupportedPlatform:
-			t.Skipf("this host cannot mount a view: %s", snap.Adapter.FallbackReason)
-		}
-		t.Fatalf("an enforcing host fell back: %s", snap.Adapter.FallbackReason)
+		t.Fatalf("a host that mounts did not mount this worker: %+v", snap.Adapter)
 	}
 	destroyed := false
 	binding := &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}
@@ -494,7 +498,6 @@ func openFixtureRecovery(t *testing.T, branches string) *recovery.Coordinator {
 	t.Helper()
 	privateGit, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	root := filepath.Join(branches, ".adapter", "recovery")
 	store, err := checkpoint.NewStore(filepath.Join(root, "checkpoints"))
 	testutil.FailErr(t, "open checkpoint store", err)
@@ -512,7 +515,7 @@ func fixtureMountedSelector() *adapter.Selector {
 			return adapter.ReasonNone, "", nil
 		},
 	})
-	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector("linux", mounted, nil, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = adapter.ZeroBudget
 	selector.RequireConfinement, selector.Confinement = true, fixtureConfinement{}
 	return selector

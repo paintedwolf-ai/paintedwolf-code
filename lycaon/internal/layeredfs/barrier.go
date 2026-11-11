@@ -91,7 +91,7 @@ func (c *Core) ReleaseView() error {
 	return nil
 }
 
-// BarrierToken identifies an acquired checkpoint barrier (#1658, #1663).
+// BarrierToken identifies an acquired checkpoint barrier.
 type BarrierToken struct {
 	ViewID string
 	Seq    uint64
@@ -212,7 +212,7 @@ func waitReleaseAttempt(c *Core, att *releaseAttempt) error {
 }
 
 // BeginCheckpointBarrier blocks new mutation admission, waits for active mutations to drain,
-// and flushes all open writable handles and backing directories (#1658, #1663).
+// and flushes all open writable handles and backing directories.
 func (c *Core) BeginCheckpointBarrier(ctx context.Context) (BarrierToken, error) {
 	b := c.barrier
 	b.mu.Lock()

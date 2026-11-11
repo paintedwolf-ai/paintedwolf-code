@@ -469,6 +469,8 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 	rules.add(denySpecRule(specs, FloorBaseline, FloorProtected))
 	rules.add(fsRule{op: opWrite, allow: true, matches: subpathMatches(resolveEach(c.GrantedWriteRoots), "")})
 	rules.add(fsRule{op: opWrite, allow: true, matches: subpathMatches(workspaceAllowBacks(c), "")})
+	// The view floor precedes the protected floors, so reopening a worker's own roots never lifts them.
+	addViewStorageFloor(&rules, c.View)
 	rules.add(denySpecRule(specs, FloorProtected))
 	rules.add(protectedGrantRule(c.ProtectedWriteGrants))
 	rules.add(denySpecRule(specs, FloorAgentPolicy))
@@ -479,7 +481,7 @@ func filesystemRules(c Confinement) (FilesystemRules, error) {
 		{regex: "^/dev/disk", layer: FloorControlPlane},
 		{regex: "^/dev/rdisk", layer: FloorControlPlane},
 	}})
-	addViewStorageFloor(&rules, c.View)
+	closeViewStorage(&rules, c.View)
 	if err := rules.checkStringLengths(); err != nil {
 		return rules, err
 	}

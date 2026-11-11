@@ -26,7 +26,7 @@ func (c *Core) Chtimes(qpath QualifiedPath, atime, mtime time.Time, noFollow boo
 }
 
 // SetAttr updates supported attributes on qpath.
-// Ownership changes return EPERM/ENOTSUP per the capability contract (#1657, #1660).
+// Ownership changes return EPERM/ENOTSUP per the capability contract.
 func (c *Core) SetAttr(qpath QualifiedPath, req SetAttrRequest) (EntryAttr, error) {
 	return setAttrPath(c, qpath, req)
 }

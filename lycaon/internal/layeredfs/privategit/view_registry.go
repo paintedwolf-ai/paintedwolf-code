@@ -158,7 +158,7 @@ func viewWorktreeDir(m *Manager, viewID string) string {
 
 // PrepareViewGitOperation ensures private Git metadata is initialized on first use for an
 // active worker view, synchronizes layeredfs.Core overlay changes into the private worktree
-// stage before a Git operation, and returns a finish callback to sync worktree mutations back (#1671).
+// stage before a Git operation, and returns a finish callback to sync worktree mutations back.
 func PrepareViewGitOperation(
 	ctx context.Context,
 	rootOrBranchDir, workerID string,
@@ -234,7 +234,7 @@ func prepareManagedViewOperation(
 }
 
 // ViewPathExists reports whether relPath exists inside an active private-git worker view
-// associated with projectOrWorktreeDir (#1671).
+// associated with projectOrWorktreeDir.
 func ViewPathExists(projectOrWorktreeDir, relPath string) bool {
 	rel := strings.TrimSpace(relPath)
 	if rel == "" || filepath.IsAbs(rel) || strings.HasPrefix(rel, "-") {

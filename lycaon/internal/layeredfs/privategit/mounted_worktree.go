@@ -72,7 +72,7 @@ func isBindingLive(b MountedViewBinding) bool {
 }
 
 // RegisterMountedViewBinding registers an adapter/supervisor-owned MountedViewBinding
-// for (binding.ViewID, binding.RootID) after verifying its identity and lifecycle facts (#1671).
+// for (binding.ViewID, binding.RootID) after verifying its identity and lifecycle facts.
 func (m *Manager) RegisterMountedViewBinding(binding MountedViewBinding) error {
 	if m == nil {
 		return fmt.Errorf("%w: nil manager", ErrMountedWorktreeUnavailable)
@@ -102,7 +102,7 @@ func (m *Manager) RegisterMountedViewBinding(binding MountedViewBinding) error {
 }
 
 // RevokeMountedViewBinding revokes and deactivates any registered MountedViewBinding
-// for (viewID, rootID) when the mount supervisor releases or unmounts the view (#1671).
+// for (viewID, rootID) when the mount supervisor releases or unmounts the view.
 func (m *Manager) RevokeMountedViewBinding(viewID, rootID string) {
 	if m == nil {
 		return
@@ -117,7 +117,7 @@ func (m *Manager) RevokeMountedViewBinding(viewID, rootID string) {
 }
 
 // MountedClaimWithBinding claims a mounted layeredfs.Core view and binds it to an
-// adapter/supervisor-owned MountedViewBinding without scanning or copying trunk (#1671).
+// adapter/supervisor-owned MountedViewBinding without scanning or copying trunk.
 func (m *Manager) MountedClaimWithBinding(binding MountedViewBinding, authorizedGitDirs ...string) error {
 	if m == nil {
 		return fmt.Errorf("%w: nil manager", ErrMountedWorktreeUnavailable)
@@ -148,7 +148,7 @@ func (m *Manager) MountedClaimWithBinding(binding MountedViewBinding, authorized
 }
 
 // BindMountedView binds or updates the active adapter/supervisor-owned MountedViewBinding
-// for an existing mounted view after verifying its ViewID, RootID, Core, TrunkDir, and liveness (#1671).
+// for an existing mounted view after verifying its ViewID, RootID, Core, TrunkDir, and liveness.
 func (m *Manager) BindMountedView(binding MountedViewBinding) error {
 	if m == nil {
 		return fmt.Errorf("%w: nil manager", ErrMountedWorktreeUnavailable)
@@ -185,7 +185,7 @@ func (m *Manager) BindMountedView(binding MountedViewBinding) error {
 }
 
 // MountedClaimWithWorktree claims a mounted view against a pre-registered active
-// MountedViewBinding matching (viewID, rootID, trunkDir, mountWorktreeDir, core) (#1671).
+// MountedViewBinding matching (viewID, rootID, trunkDir, mountWorktreeDir, core).
 func (m *Manager) MountedClaimWithWorktree(
 	viewID, workerID, rootID, trunkDir, mountWorktreeDir string,
 	core *layeredfs.Core,
@@ -213,7 +213,7 @@ func (m *Manager) MountedClaimWithWorktree(
 }
 
 // BindMountedWorktree binds mountWorktreeDir to viewID after verifying that an active
-// MountedViewBinding is registered for (viewID, view.rootID) and matches mountWorktreeDir (#1671).
+// MountedViewBinding is registered for (viewID, view.rootID) and matches mountWorktreeDir.
 func (m *Manager) BindMountedWorktree(viewID, mountWorktreeDir string) error {
 	view, err := getManagedView(m, viewID)
 	if err != nil {

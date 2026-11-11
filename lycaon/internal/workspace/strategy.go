@@ -13,14 +13,14 @@ import (
 	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
-// Adapter-backed ProvisionStrategy constants (#1658).
+// Adapter-backed ProvisionStrategy constants.
 const (
 	ProvisionMountedFUSELinux      ProvisionStrategy = ProvisionStrategy(adapter.AdapterFUSELinux)
 	ProvisionMountedNFSDarwin      ProvisionStrategy = ProvisionStrategy(adapter.AdapterNFSDarwin)
 	ProvisionMaterializedEagerCopy ProvisionStrategy = ProvisionStrategy(adapter.AdapterEagerCopy)
 )
 
-// WorkspaceStrategySelection is one worker's selected provider with its facts and probe result (#1658).
+// WorkspaceStrategySelection is one worker's selected provider with its facts and probe result.
 type WorkspaceStrategySelection struct {
 	AdapterID  adapter.AdapterID      `json:"adapter_id"`
 	Strategy   ProvisionStrategy      `json:"strategy"`

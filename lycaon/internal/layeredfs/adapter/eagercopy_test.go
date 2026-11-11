@@ -26,7 +26,7 @@ func TestUnderLimitMaterializedWorkerPrivateGitAndCheckpointSuite(t *testing.T) 
 			return ReasonMountDenied, "forced sandbox mount denial", errors.New("EPERM")
 		},
 	})
-	sel := NewSelector("darwin", nil, forcedFailPrimary, NewEagerCopyAdapter(ReasonNone))
+	sel := NewSelector("darwin", nil, forcedFailPrimary, NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 
 	grants := []RootGrant{{RootID: "repo", Label: "repo", SourcePath: srcRoot, IsPrimary: true}}
@@ -49,7 +49,7 @@ func TestUnderLimitMaterializedWorkerPrivateGitAndCheckpointSuite(t *testing.T) 
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
-	if view.Facts.PreparationKind != PreparationMaterialized || view.Facts.UntouchedSourceVisibility != VisibilityFixed || view.Facts.FallbackReason != ReasonNone {
+	if view.Facts.PreparationKind != PreparationMaterialized || view.Facts.UntouchedSourceVisibility != VisibilityFixed {
 		t.Fatalf("unexpected materialized facts: %+v", view.Facts)
 	}
 	if len(progressUpdates) == 0 {
@@ -169,7 +169,7 @@ func TestMaterializedCancellationCleansOnlyCanceledPreparation(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(srcRoot, "b.txt"), []byte("second"), 0o644)
 
 	runtimeDir := filepath.Join(tmp, "runtime")
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	adp := NewEagerCopyAdapter()
 
 	siblingView, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "sibling-active",
@@ -240,7 +240,7 @@ func TestEagerCopySeedMetadataFailureFailsClosedAndUnchangedCaptureIsClean(t *te
 		_ = unix.Lsetxattr(subDir, "user.dirmeta", []byte("d1"), 0)
 	}
 
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	adp := NewEagerCopyAdapter()
 	verifySeedMetadataFailuresCleanUp(t, ctx, adp, tmp, srcRoot, xattrSupported)
 	verifyPreservedModesAndIntentionalRoDirChmod(t, ctx, adp, tmp, srcRoot, xattrSupported)
 }

@@ -152,7 +152,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 
 	// Also verify materialized view reconstruction when AdoptMaterializedView registered the view
 	// without pre-initialized Repos (so restoreRootGitRefs initializes via InitRepo on demand).
-	eagerAdp := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	eagerAdp := adapter.NewEagerCopyAdapter()
 	viewMat, err := eagerAdp.Prepare(ctx, multiPrepareReq("view-multi-mat"))
 	if err != nil {
 		t.Fatalf("eagerAdp.Prepare: %v", err)

@@ -1,7 +1,7 @@
 // Package consumer implements indexed source inventory overlay, O(changed)
 // workspace divergence, orientation inventory, branch survey, mount-backed
 // evidence reads, checkpoint inspection, and bounded search across the worker
-// lifecycle (#1664).
+// lifecycle.
 package consumer
 
 import (

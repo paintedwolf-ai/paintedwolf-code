@@ -1,7 +1,7 @@
 // Package observation implements live trunk visibility coordination, cache
 // invalidation dispatch, structured source observation provenance tracking,
 // watcher overflow uncertainty handling, trunk.changed notices, and
-// verification receipt staleness evaluation (#1665).
+// verification receipt staleness evaluation.
 package observation
 
 import (
@@ -216,7 +216,7 @@ type ReceiptFreshnessResult struct {
 	EvaluatedGeneration uint64                    `json:"evaluated_generation"`
 }
 
-// StaleObservationHint provides structured stale-read review hints for promotion preview (#1663).
+// StaleObservationHint provides structured stale-read review hints for promotion preview.
 // It never substitutes for exact-base conflict checks or target revalidation.
 type StaleObservationHint struct {
 	Path                      layeredfs.QualifiedPath `json:"path"`

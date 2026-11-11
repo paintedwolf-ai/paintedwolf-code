@@ -1,6 +1,6 @@
 //go:build linux
 
-// Package fuselinux implements the Linux unprivileged FUSE3 worker workspace adapter (#1659).
+// Package fuselinux implements the Linux unprivileged FUSE3 worker workspace adapter.
 //
 // It mounts an engine-served FUSE v7.31 filesystem onto a user-owned directory
 // under the worker runtime root using fusermount3 without allow_other, root
@@ -108,7 +108,7 @@ type viewState struct {
 
 var _ adapter.Adapter = (*Adapter)(nil)
 
-// Adapter implements adapter.Adapter for Linux engine-served FUSE3 worker mounts (#1659).
+// Adapter implements adapter.Adapter for Linux engine-served FUSE3 worker mounts.
 type Adapter struct {
 	cfg   Config
 	facts adapter.AdapterFacts

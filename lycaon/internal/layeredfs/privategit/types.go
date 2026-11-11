@@ -1,6 +1,6 @@
 // Package privategit implements lazy private worker Git initialization,
 // the engine-retained content-addressed object store, write-leg repository
-// operations, and checkpointed idempotent namespaced ref import (#1671).
+// operations, and checkpointed idempotent namespaced ref import.
 package privategit
 
 import (
@@ -81,7 +81,7 @@ type StoreMetrics struct {
 }
 
 // StockInventory reports an explicit, cancellable qualification inventory of the retained
-// object store on disk outside the routine O(1) Metrics() hot path (#1671).
+// object store on disk outside the routine O(1) Metrics() hot path.
 type StockInventory struct {
 	LogicalObjects int64 `json:"logical_objects"`
 	LooseObjects   int64 `json:"loose_objects"`
@@ -130,7 +130,7 @@ type RemotePolicy struct {
 }
 
 // MountedViewBinding records the adapter/supervisor-owned mount identity and lifecycle
-// facts that bind a worker view, root, and layeredfs.Core to a mounted workspace path (#1671).
+// facts that bind a worker view, root, and layeredfs.Core to a mounted workspace path.
 type MountedViewBinding struct {
 	ViewID string
 	// CoreViewID names the view whose Core serves a non-primary root; empty means ViewID.

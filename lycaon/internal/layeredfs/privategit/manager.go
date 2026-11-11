@@ -51,7 +51,7 @@ type managedView struct {
 }
 
 // Manager coordinates lazy mounted repository initialization, materialized seed
-// repository preparation, checkpoints, and trunk ref imports (#1671).
+// repository preparation, checkpoints, and trunk ref imports.
 type Manager struct {
 	cfg             ManagerConfig
 	canonBackingDir string
@@ -112,7 +112,7 @@ func (m *Manager) Store() *RetainedObjectStore {
 }
 
 // MountedClaim binds a mounted layeredfs.Core view without scanning for or initializing
-// any repositories during workspace claim (#1671). A mounted worktree directory must be
+// any repositories during workspace claim. A mounted worktree directory must be
 // bound via MountedClaimWithWorktree or BindMountedWorktree before running Git operations.
 func (m *Manager) MountedClaim(
 	viewID, workerID, rootID, trunkDir string,
@@ -163,7 +163,7 @@ func (m *Manager) BindViewBranch(viewID, branchDir string) error {
 }
 
 // InterceptGitAccess implements layeredfs.GitInterceptor to initialize private Git
-// metadata on first .git lookup or repository tool invocation (#1671).
+// metadata on first .git lookup or repository tool invocation.
 func (m *Manager) InterceptGitAccess(
 	viewID string,
 	qpath layeredfs.QualifiedPath,
@@ -256,7 +256,7 @@ func (m *Manager) RepoMetrics(viewID, repoRel string) (InitMetrics, bool) {
 }
 
 // ReleaseView releases active view leases from the retained store without invalidating
-// any retained checkpoint leases (#1671).
+// any retained checkpoint leases.
 func (m *Manager) ReleaseView(viewID string) error {
 	m.mu.Lock()
 	view, ok := m.views[viewID]

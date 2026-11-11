@@ -211,6 +211,10 @@ func runFuseBarrierFlushSubprocess(ctx context.Context, a *Adapter, st *viewStat
 		},
 	})
 	if runErr != nil || exitCode != 0 {
+		// The launcher ends a canceled helper, so its exit says only that it was stopped.
+		if err := ctx.Err(); err != nil {
+			return 0, 0, err
+		}
 		if runErr != nil {
 			return 0, 0, runErr
 		}

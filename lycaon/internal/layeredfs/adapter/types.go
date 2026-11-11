@@ -1,6 +1,6 @@
 // Package adapter implements the platform-neutral workspace adapter contract,
 // capability-based selector, explicit workspace selection, and bounded
-// materialized fallback feeding *layeredfs.Core (#1658).
+// materialized fallback feeding *layeredfs.Core.
 package adapter
 
 import (
@@ -103,7 +103,6 @@ type AdapterFacts struct {
 	MetadataCapabilities      MetadataCapabilities `json:"metadata_capabilities"`
 	SupportsPrivateGit        bool                 `json:"supports_private_git"`
 	SupportsCheckpointBarrier bool                 `json:"supports_checkpoint_barrier"`
-	FallbackReason            ReasonCode           `json:"fallback_reason,omitempty"`
 }
 
 // ProbeConfig configures a real confinement probe of an adapter.
@@ -334,7 +333,7 @@ type MountSupervisor interface {
 	BindPrivateGit(viewID, workerID string, mgr *privategit.Manager, authorizedGitDirs ...string) error
 }
 
-// Adapter defines the platform-neutral workspace adapter contract (#1658).
+// Adapter defines the platform-neutral workspace adapter contract.
 type Adapter interface {
 	ID() AdapterID
 	Facts() AdapterFacts

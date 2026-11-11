@@ -15,7 +15,7 @@ import (
 )
 
 // FilterPromotableChanges removes .git metadata paths from a view's change list
-// so .git metadata is never promoted as ordinary files (#1671).
+// so .git metadata is never promoted as ordinary files.
 func FilterPromotableChanges(changes []layeredfs.ChangeEntry) []layeredfs.ChangeEntry {
 	out := make([]layeredfs.ChangeEntry, 0, len(changes))
 	for _, ce := range changes {
@@ -29,7 +29,7 @@ func FilterPromotableChanges(changes []layeredfs.ChangeEntry) []layeredfs.Change
 
 // CaptureCheckpointGitState captures a coherent CheckpointGitState (HEAD, detached HEAD,
 // refs, deleted refs, tags, stashes, index, config) and imports any new private objects
-// into the engine-retained object store under a checkpoint lease (#1671).
+// into the engine-retained object store under a checkpoint lease.
 func (m *Manager) CaptureCheckpointGitState(
 	ctx context.Context,
 	viewID, checkpointID string,
@@ -189,7 +189,7 @@ func captureCheckpointGitState(
 
 // VerifyCheckpointHistory verifies that all objects referenced by a retained checkpoint
 // remain intact and reachable in the engine-retained object store even if the source
-// view was released or the trunk ran `git gc --prune=now` (#1671).
+// view was released or the trunk ran `git gc --prune=now`.
 func (m *Manager) VerifyCheckpointHistory(ctx context.Context, cp *CheckpointGitState) error {
 	if cp == nil {
 		return fmt.Errorf("privategit: checkpoint is nil")

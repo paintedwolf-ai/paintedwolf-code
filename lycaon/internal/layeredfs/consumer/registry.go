@@ -146,7 +146,7 @@ func (e *Engine) MountedRootSpecs() []layeredfs.RootSpec {
 }
 
 // DivergenceRelativePaths returns sorted relative (or root-prefixed when multi-root) divergence
-// paths for promotion preview and completion checks in O(changed) time (#1664).
+// paths for promotion preview and completion checks in O(changed) time.
 func (e *Engine) DivergenceRelativePaths(ctx context.Context, checkpointID string) ([]string, error) {
 	sum, err := e.ComputeDivergence(ctx, checkpointID)
 	if err != nil {

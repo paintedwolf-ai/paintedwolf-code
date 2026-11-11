@@ -106,7 +106,7 @@ func newMockMountedSelector(targetOS string) *adapter.Selector {
 			return nil
 		},
 	})
-	selector := adapter.NewSelector(targetOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector(targetOS, mounted, mounted, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = adapter.ZeroBudget
 	return selector
 }
@@ -131,7 +131,6 @@ func TestThreeRootMountedClaimOperationCountIdentical1kVs2MAndZeroLowerReadDir(t
 
 		pgit, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(tmp, "pgit")})
 		testutil.FailErr(t, "privategit.NewManager", err)
-		defer func() { _ = pgit.Store().Close() }()
 
 		var mountCalls atomic.Int64
 		coord := NewCoordinator(newMockMountedSelector(runtime.GOOS))
@@ -286,7 +285,7 @@ func TestFailedSettlementKeepsCustodyUntilARetrySettles(t *testing.T) {
 			return nil
 		},
 	})
-	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector(runtime.GOOS, mounted, mounted, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = adapter.ZeroBudget
 	coord := NewCoordinator(selector)
 	retention := newTestRetentionRegistrar()
