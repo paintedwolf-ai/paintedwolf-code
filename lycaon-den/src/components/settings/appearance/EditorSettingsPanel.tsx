@@ -570,7 +570,7 @@ export function EditorSettingsPanel() {
             <span class="den-settings-pref-label">{settingLabel("show-whitespace")}</span>
             <p class="den-settings-hint">
               Highlight spaces and tabs. Trailing whitespace is always marked
-              while editing.
+              while editing, and tabs in indentation while Pretty is on.
             </p>
           </div>
           <DenCheckbox
