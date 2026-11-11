@@ -179,3 +179,21 @@ func TestVaultRefusesGrowthBeyondReadableLimit(t *testing.T) {
 		t.Fatal("size refusal changed memory")
 	}
 }
+
+func TestSharedVaultIsolatesIncompatibleCustodyAndCoordinatesLocks(t *testing.T) {
+	path := filepath.Join(t.TempDir(), VaultBasename)
+	devProvider := newDevelopmentIdentityProvider(path)
+	unavailProvider := unavailableIdentityProvider{refusal: ErrCustodianUnavailable}
+
+	devVault := sharedVault(path, devProvider)
+	unavailVault := sharedVault(path, unavailProvider)
+	if devVault == unavailVault {
+		t.Fatal("sharedVault aliased development custody with unavailable custody")
+	}
+	if devVault.provider != devProvider {
+		t.Fatal("unavailable provider replaced cached development provider")
+	}
+	if vaultPathMutex(devVault.path) != vaultPathMutex(unavailVault.path) {
+		t.Fatal("vault instances on the same path do not share lock coordination")
+	}
+}

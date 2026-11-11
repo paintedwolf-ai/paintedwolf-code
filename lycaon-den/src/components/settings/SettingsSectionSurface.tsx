@@ -17,15 +17,17 @@ export function SettingsSectionSurface(props: {
   children: JSX.Element;
 }) {
   const live = useResidentLive();
-  usePresentationParticipant("settings-data", () => !props.panel || !props.client || props.store.panelReady(props.client, props.panel),
-    () => {
+  usePresentationParticipant("settings-data", () => !props.panel || !props.client || props.store.panelReady(props.client, props.panel), {
+    notice: () => {
       const message = props.client && props.panel ? props.store.panelError(props.client, props.panel) : undefined;
       return message ? { tone: "error", message } : null;
-    }, () => {
+    },
+    retry: () => {
       if (!props.client || !props.panel) return;
       props.store.invalidate();
       void loadSettingsPanel(props.store, props.client, props.projects, props.panel, props.projectDir, { alwaysProjectScope: props.projectScope });
-    });
+    },
+  });
   let activated = false;
   createEffect(() => {
     const client = props.client;

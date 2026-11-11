@@ -79,11 +79,13 @@ export function createSurfaceQuery<S extends QuerySource, T>(options: {
     current.invalidate();
     return current.read((signal) => options.load(target, signal));
   };
-  if (options.required !== false) usePresentationParticipant(options.name, ready,
-    () => {
+  if (options.required !== false) usePresentationParticipant(options.name, ready, {
+    notice: () => {
       const message = errorOf(state());
       return message ? { tone: "error", message } : null;
-    }, () => void refresh());
+    },
+    retry: () => void refresh(),
+  });
   const loading = () => state().state === "loading" || (source() != null && state().state === "unloaded");
   const coldPending = () => loading() && value() === undefined;
   const showLoading = createPresentationWaiting(coldPending);

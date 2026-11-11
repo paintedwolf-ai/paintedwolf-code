@@ -1,4 +1,6 @@
+import { createEffect } from "solid-js";
 import { denScrollDebugLog, isStreamScrollDebugEnabled } from "../chat/stream/den-scroll-debug.ts";
+import { isPerfCaptureEnabled, recordPerfDiagnostic } from "../chat/stream/den-main-thread-perf.ts";
 
 const RECORD_MS = 30_000;
 const FINE_TICK_MS = 250;
@@ -122,4 +124,36 @@ export function recordWorkspaceOpen(key: string, revealed: () => boolean): () =>
     });
   };
   return stop;
+}
+
+function pageState(): { visibility: string; focused: boolean } {
+  return { visibility: document.visibilityState, focused: document.hasFocus() };
+}
+
+/**
+ * Records what the opening veil waits on whenever that set changes, then when
+ * the veil lifts. Runs under the caller's reactive owner.
+ */
+export function traceWorkspaceOpening(
+  key: string,
+  pending: () => readonly string[],
+  revealed: () => boolean,
+): void {
+  if (!isPerfCaptureEnabled()) return;
+  const started = performance.now();
+  const elapsed = () => Math.round(performance.now() - started);
+  let lifted = false;
+  let recorded: string | undefined;
+  createEffect(() => {
+    if (lifted) return;
+    if (revealed()) {
+      lifted = true;
+      recordPerfDiagnostic("workspace-opening-revealed", { key, elapsed_ms: elapsed(), ...pageState() });
+      return;
+    }
+    const waiting = pending().join(",");
+    if (waiting === recorded) return;
+    recorded = waiting;
+    recordPerfDiagnostic("workspace-opening-waiting", { key, elapsed_ms: elapsed(), pending: waiting, ...pageState() });
+  });
 }

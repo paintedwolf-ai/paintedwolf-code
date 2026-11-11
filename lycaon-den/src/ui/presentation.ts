@@ -22,18 +22,24 @@ export type PreparationNotice = {
   tone: "waiting" | "error";
 };
 
-type Participant = {
-  name: string;
-  ready: Accessor<boolean>;
+/** What a participant reports beyond its readiness. */
+export type ParticipantReport = {
   notice?: Accessor<PreparationNotice | null>;
   retry?: () => void;
+  /** Names of the unsettled conditions inside this participant. */
+  pending?: Accessor<readonly string[]>;
+};
+
+type Participant = ParticipantReport & {
+  name: string;
+  ready: Accessor<boolean>;
 };
 
 /** Tracks render dependencies outside the DOM. */
 export function createPreparation() {
   const [participants, setParticipants] = createSignal<ReadonlyMap<symbol, Participant>>(new Map());
-  const pending = () => [...participants().values()].filter((item) => !item.ready());
-  const ready = () => pending().length === 0;
+  const unsettled = () => [...participants().values()].filter((item) => !item.ready());
+  const ready = () => unsettled().length === 0;
   return {
     ready,
     empty: () => participants().size === 0,
@@ -43,11 +49,15 @@ export function createPreparation() {
         if (item.notice?.()?.tone === "error") item.retry?.();
       }
     },
-    pending: () => pending().map((item) => item.name),
-    notice: () => pending().map((item) => item.notice?.()).find((notice) => notice != null) ?? null,
-    register(name: string, settled: Accessor<boolean>, notice?: Accessor<PreparationNotice | null>, retry?: () => void) {
+    /** Unsettled participants, as paths through the conditions they report. */
+    pending: (): string[] => unsettled().flatMap((item) => {
+      const inner = item.pending?.() ?? [];
+      return inner.length > 0 ? inner.map((path) => `${item.name}/${path}`) : [item.name];
+    }),
+    notice: () => unsettled().map((item) => item.notice?.()).find((notice) => notice != null) ?? null,
+    register(name: string, settled: Accessor<boolean>, report: ParticipantReport = {}) {
       const token = Symbol(name);
-      setParticipants((current) => new Map(current).set(token, { name, ready: settled, notice, retry }));
+      setParticipants((current) => new Map(current).set(token, { ...report, name, ready: settled }));
       return () => setParticipants((current) => {
         if (!current.has(token)) return current;
         const next = new Map(current);
