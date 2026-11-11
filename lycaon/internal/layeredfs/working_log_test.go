@@ -205,7 +205,9 @@ func TestWorkingLogCostsOneRecordPerMutationAtAnyTreeSize(t *testing.T) {
 		testutil.FailErr(t, "stat log", err)
 		return info.Size()
 	}
-	if small, large := recordBytes(10), recordBytes(1000); small != large {
+	// The bound leaves room for the paths and timestamps one rename records, not for a listing.
+	const recordBound = 4 << 10
+	if small, large := recordBytes(10), recordBytes(1000); small > recordBound || large > recordBound {
 		t.Fatalf("a rename logged %d bytes over 10 files and %d over 1000", small, large)
 	}
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -15,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
@@ -60,17 +62,8 @@ func newRecoveryFixture(t *testing.T) *recoveryFixture {
 		t.Fatal(err)
 	}
 
-	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
-		RootDir:         filepath.Join(baseDir, "recovery"),
-		CheckpointStore: cpStore,
-		GitStore:        gitMgr.Store(),
-		GitManager:      gitMgr,
-		CurrentBootID:   "boot-1",
-		MountReconciler: recovery.ConnectionReconciler{},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	fx := &recoveryFixture{t: t, baseDir: baseDir, trunkDir: trunkDir, cpStore: cpStore, gitMgr: gitMgr}
+	fx.coord = fx.coordinatorOnBoot("boot-1")
 
 	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{
 		AdapterID:     adapter.AdapterFUSELinux,
@@ -79,15 +72,25 @@ func newRecoveryFixture(t *testing.T) *recoveryFixture {
 		UnmountViewFn: func(_ context.Context, _ string, _ string) error { return nil },
 	})
 
-	return &recoveryFixture{
-		t:          t,
-		baseDir:    baseDir,
-		trunkDir:   trunkDir,
-		cpStore:    cpStore,
-		gitMgr:     gitMgr,
-		coord:      coord,
-		mountedAdp: mountedAdp,
+	fx.mountedAdp = mountedAdp
+	return fx
+}
+
+// coordinatorOnBoot opens the fixture's recovery state as an engine started in boot does.
+func (fx *recoveryFixture) coordinatorOnBoot(boot string) *recovery.Coordinator {
+	fx.t.Helper()
+	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+		RootDir:         filepath.Join(fx.baseDir, "recovery"),
+		CheckpointStore: fx.cpStore,
+		GitStore:        fx.gitMgr.Store(),
+		GitManager:      fx.gitMgr,
+		CurrentBootID:   boot,
+		MountReconciler: recovery.ConnectionReconciler{},
+	})
+	if err != nil {
+		fx.t.Fatal(err)
 	}
+	return coord
 }
 
 func writeFile(t *testing.T, p, body string) {
@@ -297,11 +300,13 @@ func TestOverwriteAndDeleteAfterCheckpointACrashReconstructsA(t *testing.T) {
 	}
 	_ = fx.coord.RecordTransition(workerID, viewA.ViewID, recovery.PhasePublication, recovery.StateCommitted, "cp-A", "publish", nil, false)
 
-	// Later unsealed work: overwrite app.go, delete keep.txt and added_in_a.txt, then simulate crash.
+	// Later unsealed work: overwrite app.go, delete keep.txt and added_in_a.txt, then lose power, so
+	// the next engine starts in another boot and working storage is not trusted.
 	_, _ = viewA.Core.WriteFile(qpApp, []byte("CORRUPTED AFTER A\n"), 0o644)
 	_ = viewA.Core.Unlink(qpKeep, false)
 	_ = viewA.Core.Unlink(qpAdded, false)
 	_ = fx.coord.RecordTransition(workerID, viewA.ViewID, recovery.PhaseActiveMutation, recovery.StateBegin, "cp-A", "post_a_edits", nil, true)
+	fx.coord = fx.coordinatorOnBoot("boot-2")
 
 	rec1, err := fx.coord.RecoverWorkerView(ctx, recovery.RecoverRequest{
 		WorkerID:           workerID,
@@ -346,5 +351,59 @@ func TestOverwriteAndDeleteAfterCheckpointACrashReconstructsA(t *testing.T) {
 	}
 	if _, err := rec2.PreparedView.Core.Lstat(qpSub); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("expected sub/dir.txt deleted in cp-A, got err=%v", err)
+	}
+}
+
+// An engine that exits in the same boot leaves working storage its next start resumes: the
+// worker's unsealed renames, deletions and edits come back and nothing is quarantined.
+func TestSameBootEngineExitResumesUnsealedWork(t *testing.T) {
+	fx := newRecoveryFixture(t)
+	ctx := t.Context()
+	const workerID = "worker-resume"
+	testutil.FailErr(t, "journal", fx.coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
+		FormatVersion: recovery.FormatVersion, WorkerID: workerID, ViewID: "view-a",
+		TaskID: "task-a", ProjectID: "proj-a", AdapterID: fx.mountedAdp.ID(),
+	}))
+	viewA, err := fx.mountedAdp.Prepare(ctx, fx.prepareRequest("view-a"))
+	testutil.FailErr(t, "prepare", err)
+	defer func() { _, _ = fx.mountedAdp.Release(ctx, viewA.ViewID) }()
+	qp := func(rel string) layeredfs.QualifiedPath { return layeredfs.QualifiedPath{RootID: "primary", Rel: rel} }
+	_, err = viewA.Core.WriteFile(qp("app.go"), []byte("package main // checkpoint-A\n"), 0o644)
+	testutil.FailErr(t, "edit", err)
+	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
+		Core: viewA.Core, Store: fx.cpStore, WorkerID: workerID, TaskID: "task-a", ProjectID: "proj-a", SourceGeneration: "gen-a",
+		SelectedRoots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: fx.trunkDir, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "publisher", err)
+	_, err = pub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-A"})
+	testutil.FailErr(t, "publish", err)
+	testutil.FailErr(t, "record", fx.coord.RecordTransition(workerID, viewA.ViewID, recovery.PhasePublication, recovery.StateCommitted, "cp-A", "publish", nil, false))
+
+	_, err = viewA.Core.WriteFile(qp("app.go"), []byte("unsealed after A\n"), 0o644)
+	testutil.FailErr(t, "unsealed edit", err)
+	testutil.FailErr(t, "unsealed rename", viewA.Core.Rename(qp("keep.txt"), qp("kept.txt")))
+	testutil.FailErr(t, "unsealed delete", viewA.Core.Unlink(qp("sub/dir.txt"), false))
+
+	rec, err := fx.coord.RecoverWorkerView(ctx, recovery.RecoverRequest{
+		WorkerID: workerID, ExpectedTaskID: "task-a", ExpectedProjectID: "proj-a", NewViewID: "view-resumed",
+		Adapter: fx.mountedAdp, PrepareReq: fx.prepareRequest("view-resumed"),
+		PreviousViewID: viewA.ViewID, PreviousBackingDir: viewA.BackingDir,
+	})
+	testutil.FailErr(t, "recover", err)
+	defer func() { _, _ = fx.mountedAdp.Release(ctx, rec.ViewID) }()
+	if rec.ResumedWorkingState == nil || rec.QuarantinedWork != nil || rec.PreparedView.BackingDir != viewA.BackingDir {
+		t.Fatalf("recovery did not resume: %+v", rec)
+	}
+	core := rec.PreparedView.Core
+	if got, err := core.ReadFile(qp("app.go")); err != nil || string(got) != "unsealed after A\n" {
+		t.Fatalf("app.go = %q %v", got, err)
+	}
+	if got, err := core.ReadFile(qp("kept.txt")); err != nil || string(got) != "keep-v0\n" {
+		t.Fatalf("kept.txt = %q %v", got, err)
+	}
+	for _, gone := range []string{"keep.txt", "sub/dir.txt"} {
+		if _, err := core.Stat(qp(gone)); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("%s came back: %v", gone, err)
+		}
 	}
 }

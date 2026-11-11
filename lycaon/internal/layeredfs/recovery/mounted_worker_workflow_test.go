@@ -48,17 +48,19 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 	}
 
 	views := watchMountedViews(t, adp)
-	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
-		RootDir:         filepath.Join(baseDir, "recovery"),
-		CheckpointStore: cpStore,
-		GitStore:        gitMgr.Store(),
-		GitManager:      gitMgr,
-		CurrentBootID:   "boot-macos-1",
-		MountReconciler: recovery.ConnectionReconciler{},
-	})
-	if err != nil {
-		t.Fatal(err)
+	onBoot := func(boot string) *recovery.Coordinator {
+		coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
+			RootDir:         filepath.Join(baseDir, "recovery"),
+			CheckpointStore: cpStore,
+			GitStore:        gitMgr.Store(),
+			GitManager:      gitMgr,
+			CurrentBootID:   boot,
+			MountReconciler: recovery.ConnectionReconciler{},
+		})
+		testutil.FailErr(t, "coordinator", err)
+		return coord
 	}
+	coord := onBoot("boot-1")
 
 	const parentWorkerID = "worker-nfs-parent"
 	const parentViewID = "view-nfs-parent-1"
@@ -138,7 +140,8 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 		LastPublishedCheckpointID: "cp-nfs-A",
 	}))
 
-	// 2. Overwrite and delete cp-nfs-A files over the mount, then crash before Checkpoint B seals.
+	// 2. Overwrite and delete cp-nfs-A files over the mount, then lose power before Checkpoint B
+	// seals, so the next engine starts in another boot and does not trust working storage.
 	writeFile(t, filepath.Join(mountPath, "README.md"), "corrupted unsealed edit after A\n")
 	testutil.FailErr(t, "remove parent feature", os.Remove(filepath.Join(mountPath, "parent_feature.txt")))
 	testutil.FailErr(t, "flush parent", adp.FlushClientData(t.Context(), parentViewID))
@@ -146,6 +149,7 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 		t.Fatalf("release parent: %+v err=%v", receipt, err)
 	}
 	views.requireAbsent(t, parentConnections)
+	coord = onBoot("boot-2")
 
 	// 3. RecoverWorkerView onto a fresh mount and verify cp-nfs-A is reconstructed.
 	recRes, err := coord.RecoverWorkerView(t.Context(), recovery.RecoverRequest{
