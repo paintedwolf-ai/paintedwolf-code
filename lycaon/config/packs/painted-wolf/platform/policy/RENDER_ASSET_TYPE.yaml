@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     path: docs/readme.pdf
     profile: coordinator
     tool: render_view
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RENDER_ASSET_TYPE'

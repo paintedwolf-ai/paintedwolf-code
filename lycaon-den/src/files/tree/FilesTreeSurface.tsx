@@ -129,7 +129,7 @@ export function FilesTreeSurface(props: FilesTreeSurfaceProps) {
             <strong class="den-files-tree__drag-ghost-title">{g.label}</strong>
             <Show when={props.dropAssessment()} keyed>
               {(assessment) => (
-                <span>
+                <span data-testid="files-tree-drop-hint">
                   {assessment.valid ? `Move to ${assessment.destination}` : assessment.reason}
                 </span>
               )}
@@ -139,7 +139,7 @@ export function FilesTreeSurface(props: FilesTreeSurfaceProps) {
       </Show>
       <Show when={props.movePending()} keyed>
         {(move) => (
-          <div class="den-files-tree__move-status" role="status">
+          <div class="den-files-tree__move-status" role="status" data-testid="files-tree-move-status">
             Moving {move.source.name} to {move.target.dir === "." ? `@${props.rootLabel(move.target.rootId)}` : move.target.dir}…
           </div>
         )}

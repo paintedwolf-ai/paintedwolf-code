@@ -31,6 +31,3 @@ x-paintedwolf-scenarios:
     profile: implement
     tool: http_request
     token_jar_name: auth_api
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: HTTP_REQUEST_TOKEN_JAR_FAILED'

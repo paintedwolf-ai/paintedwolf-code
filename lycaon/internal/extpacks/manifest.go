@@ -21,7 +21,7 @@ const (
 
 var extensionCapabilities = map[string]struct{}{
 	"agents": {}, "approvals": {}, "guidance": {}, "host.bindings": {},
-	"host.user_notices": {}, "mcp.bindings": {}, "playbooks": {}, "policy": {},
+	"host.next_steps": {}, "host.user_notices": {}, "mcp.bindings": {}, "playbooks": {}, "policy": {},
 	"shared": {}, "skills": {}, "tools.profiles": {}, "tools.schemas": {},
 	"workflows": {}, "workflows.topologies": {},
 	"host.credential_slots": {},

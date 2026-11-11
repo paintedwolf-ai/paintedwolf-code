@@ -177,7 +177,7 @@ func pingThroughRelay(t *testing.T, i int, relay string, upstream map[string]boo
 		if _, err := c.Write([]byte("ping")); err != nil {
 			testutil.FailErr(t, "c.Write failed", err)
 		}
-		_ = c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		_ = c.SetReadDeadline(time.Now().Add(testutil.Timeout(time.Minute)))
 		buf := make([]byte, 64)
 		n, err := c.Read(buf)
 		if err != nil {

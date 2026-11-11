@@ -7,15 +7,14 @@ import (
 )
 
 var (
-	visualShowPageTools     = []string{"capture_page", "page_open"}
-	visualShowTerminalTools = []string{"command", "terminal_snapshot"}
+	visualShowPageTools         = []string{"capture_page", "page_open"}
+	visualShowTerminalTools     = []string{"command", "terminal_snapshot"}
+	visualShowHeldTerminalTools = []string{"terminal_open", "terminal_snapshot"}
 )
 
-// MergeVisualShowVars derives visual availability from the offered schemas
-// and the tools request_tools can still load. Page capture that is only
-// loadable sets visual_show_needs_request, not visual_show_page, so the
-// prompt asks for the tools without teaching schemas it does not carry. Only
-// an agent that can change files builds an interface to capture.
+// MergeVisualShowVars sets visual capture availability and requestable flags
+// from offered and requestable tool sets. Requestable flags require request_tools
+// and a mutation-capable agent.
 func MergeVisualShowVars(offered, requestable []string, into map[string]any) {
 	if into == nil {
 		return
@@ -24,12 +23,23 @@ func MergeVisualShowVars(offered, requestable []string, into map[string]any) {
 	loadable := toolNameSet(requestable)
 	page := anyPresent(visualShowPageTools, set)
 	terminal := anyPresent(visualShowTerminalTools, set)
-	needsRequest := !page && set["request_tools"] && anyPresent(visualShowPageTools, loadable) &&
-		(hasMutationRole(set) || hasMutationRole(loadable))
+	canRequest := set["request_tools"] && (hasMutationRole(set) || hasMutationRole(loadable))
+	needsRequest := !page && canRequest && anyPresent(visualShowPageTools, loadable)
+	terminalNeedsRequest := canRequest && !set["terminal_open"] && allPresent(visualShowHeldTerminalTools, loadable)
 	into["visual_show_page"] = page
 	into["visual_show_terminal"] = terminal
 	into["visual_show_needs_request"] = needsRequest
-	into["visual_show_available"] = page || terminal || needsRequest
+	into["visual_show_terminal_needs_request"] = terminalNeedsRequest
+	into["visual_show_available"] = page || terminal || needsRequest || terminalNeedsRequest
+}
+
+func allPresent(names []string, set map[string]bool) bool {
+	for _, name := range names {
+		if !set[name] {
+			return false
+		}
+	}
+	return true
 }
 
 func hasMutationRole(set map[string]bool) bool {

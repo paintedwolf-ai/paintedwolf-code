@@ -1,3 +1,4 @@
+import { observeCommandActivity, clearCommandActivities } from "../chat/tool/command-activity-live.ts";
 import { produce } from "solid-js/store";
 import type { SetStoreFunction } from "solid-js/store";
 import type { AppState, AppStoreActions, PromptSubmissionHold, SessionActivity } from "./app-state-model.ts";
@@ -144,6 +145,7 @@ export function createSessionActivityActions(state: AppState, setState: SetStore
       );
     },
     clearSessionActivity(sessionId) {
+      clearCommandActivities(sessionId);
       const id = sessionId.trim();
       if (!id) return;
       setState(
@@ -210,6 +212,7 @@ export function createSessionActivityActions(state: AppState, setState: SetStore
       );
     },
     setActivity(event) {
+      observeCommandActivity(event);
       const sessionId = event.session_id?.trim();
       const activityId = event.activity_id?.trim();
       if (!sessionId || !activityId) return;

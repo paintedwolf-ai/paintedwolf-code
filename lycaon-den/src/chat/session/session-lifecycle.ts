@@ -27,7 +27,10 @@ import {
   refreshWorkflowState,
 } from "../workflow/workflow-actions.ts";
 import { applySessionTranscriptSnapshot } from "./session-transcript-hydrate.ts";
-import { applySessionBootstrapChrome } from "./session-chrome.ts";
+import {
+  applySessionBootstrapAuxiliaryChrome,
+  installSessionBootstrapChrome,
+} from "./session-chrome.ts";
 import { cancelPromptSubmissions, reservePromptSubmission } from "../send/prompt-submission-order.ts";
 import { pendingPromptKind } from "../send/pending-sends.ts";
 
@@ -144,7 +147,7 @@ export async function enrichCreatedSession(
   if (live?.id?.trim() === session.id.trim()) {
     installedSession = mergeCreatedSessionBootstrap(live, session);
   }
-  applySessionBootstrapChrome(appStore, bootstrap, installedSession);
+  installSessionBootstrapChrome(appStore, bootstrap, installedSession);
   if (recents) registerRecentTitle(recents, session);
 
   const { transcript } = bootstrap;
@@ -160,6 +163,7 @@ export async function enrichCreatedSession(
     projects,
   );
   if (!shouldApply()) return;
+  applySessionBootstrapAuxiliaryChrome(appStore, bootstrap, installedSession);
   if (scope) rememberSessionChatFromStore(appStore, scope);
 }
 
@@ -295,13 +299,13 @@ export async function resumeChatSession(
     // Cached data retains the requested session identity.
     if (appStore.state.currentSession?.id?.trim() === sid) {
       if (recents) registerRecentTitle(recents, cached.session);
-      await reconcileActiveScope(appStore, client, projects, {
+      const reconciled = await reconcileActiveScope(appStore, client, projects, {
         resumeVisible: true,
         fromSessionSwitch: true,
         shouldApply,
         signal: opts?.signal,
       });
-      if (!shouldApply()) return;
+      if (reconciled === undefined || !shouldApply()) return;
       if (scope) rememberSessionChatFromStore(appStore, scope);
       return;
     }
@@ -312,7 +316,7 @@ export async function resumeChatSession(
   const { session, transcript } = bootstrap;
   if (!shouldApply()) return;
   const projectDir = session.workspace_path?.trim() ?? "";
-  applySessionBootstrapChrome(appStore, bootstrap);
+  installSessionBootstrapChrome(appStore, bootstrap);
   resumeProjectEventsAfter(bootstrap.event_cursor);
   // Registration preserves recent ordering.
   if (recents) registerRecentTitle(recents, session);
@@ -327,6 +331,7 @@ export async function resumeChatSession(
     projects,
   );
   if (!shouldApply()) return;
+  applySessionBootstrapAuxiliaryChrome(appStore, bootstrap);
   if (scope) rememberSessionChatFromStore(appStore, scope);
 }
 

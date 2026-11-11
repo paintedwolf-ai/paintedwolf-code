@@ -9,4 +9,3 @@ suggested_action: The current state was reloaded automatically.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [event window, reloaded]

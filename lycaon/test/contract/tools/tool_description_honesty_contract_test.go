@@ -13,7 +13,7 @@ import (
 // token in a tool description names a registered tool. A model attempts any
 // tool a description cites, so a misspelled name becomes a failed call.
 func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
-	reg := toolfixture.RegisterCatalogToolsForContract(t)
+	reg := toolfixture.ContractServeBootRegistry(t)
 
 	registered := map[string]bool{}
 	for _, meta := range reg.List() {
@@ -43,9 +43,15 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 		"reason":             "input field on multiple tools",
 		"value":              "scaffold-var update field",
 		"path":               "scaffold-var update field",
+		"paths":              "summarize input field",
+		"content":            "summarize input field",
 		"response":           "feedback resolve field",
 		"comment":            "decision resolve field",
 		"choice":             "decision resolve field",
+		"network":            "command_output response field",
+		"boundary_refusal":   "command_output response field",
+		"secret_use":         "capability contract field",
+		"true":               "boolean literal",
 	}
 
 	type violation struct {
@@ -54,10 +60,9 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 		description string
 	}
 	var found []violation
-	for _, meta := range reg.List() {
-		desc := meta.Description
+	checkProse := func(toolName, desc string) {
 		if strings.TrimSpace(desc) == "" {
-			continue
+			return
 		}
 		for _, m := range tokenRE.FindAllStringSubmatch(desc, -1) {
 			token := m[1]
@@ -67,8 +72,28 @@ func TestToolDescriptionsCiteOnlyRegisteredTools(t *testing.T) {
 			if _, ok := notATool[token]; ok {
 				continue
 			}
-			found = append(found, violation{tool: meta.Name, token: token, description: desc})
+			found = append(found, violation{tool: toolName, token: token, description: desc})
 		}
+	}
+	var walkSchema func(toolName string, node any)
+	walkSchema = func(toolName string, node any) {
+		switch v := node.(type) {
+		case map[string]any:
+			if desc, ok := v["description"].(string); ok {
+				checkProse(toolName, desc)
+			}
+			for _, child := range v {
+				walkSchema(toolName, child)
+			}
+		case []any:
+			for _, child := range v {
+				walkSchema(toolName, child)
+			}
+		}
+	}
+	for _, meta := range reg.List() {
+		checkProse(meta.Name, meta.Description)
+		walkSchema(meta.Name, meta.ArgsSchema)
 	}
 	if len(found) > 0 {
 		sort.Slice(found, func(i, j int) bool {

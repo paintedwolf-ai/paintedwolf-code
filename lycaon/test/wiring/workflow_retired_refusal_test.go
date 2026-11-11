@@ -33,14 +33,14 @@ func TestWorkflowRetiredRefusal_StartHumanRefusesRetiredVersion(t *testing.T) {
 		t.Fatalf("expected ErrUnknownWorkflow for retired 1.0.0, got %v", err)
 	}
 
-	// Starting active 2.0.0 must succeed
-	run200, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
+	// Starting active 2.0.1 must succeed
+	run201, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{
 		WorkflowID:      "security-survey",
-		WorkflowVersion: "2.0.0",
+		WorkflowVersion: "2.0.1",
 	})
-	testutil.FailErr(t, "start security-survey 2.0.0", err)
-	if run200 == nil || run200.WorkflowVersion != "2.0.0" {
-		t.Fatalf("expected run with version 2.0.0, got %+v", run200)
+	testutil.FailErr(t, "start security-survey 2.0.1", err)
+	if run201 == nil || run201.WorkflowVersion != "2.0.1" {
+		t.Fatalf("expected run with version 2.0.1, got %+v", run201)
 	}
 }
 

@@ -1,0 +1,14 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/api/modeladmin/modeladmin.Handler",
+  "kind": "runtime_service",
+  "workstream": "local-model-recovery",
+  "disposition": "retain",
+  "reason": "Provider configuration, discovery, credentials and model policy share the model administration HTTP boundary. Local recovery delegates lifecycle and admission to the registry runtime, then publishes the same provider event and host status. Retain the measured 432 lines and 18 methods without introducing another lifecycle authority; the authenticated repair route contract covers missing, remote and unavailable providers.",
+  "reviewed_commit": "2d6f9ba453cf4c27cd3080821933acc9227140c5",
+  "ceiling": 18,
+  "boundaries": {
+    "lycaon/internal/api/hostcontracts/local_generation_test.go": "c4df7763b4bbc1de2ccc285424ea9ae4478d47191913f3fe5a5f7867a12a95c7"
+  },
+  "reviewed_shape": "94b0b87d59de9e47c6313d6b049f73314e8bcac3aecda2c1694777d3f30d3bd7"
+}

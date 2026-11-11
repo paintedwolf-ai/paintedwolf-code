@@ -14,7 +14,7 @@ import (
 // process of its own; external stages it launches keep their own supervision.
 const processKindProgram = "program"
 
-// ProgramJobSpec is one statement-trailing & job. Run receives the job's
+// ProgramJobSpec is a background statement or continued root program. Run receives its
 // context, which Stop cancels, and the registry's stdout/stderr capture.
 type ProgramJobSpec struct {
 	SessionID     string
@@ -48,11 +48,12 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 	handle := uuid.NewString()
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
 	proc := &Process{
-		cwd: spec.Cwd, Handle: handle, SessionID: sessionID, ProjectID: trim(spec.ProjectID), RootSessionID: trim(spec.RootSessionID),
-		buffer: NewRingBuffer(r.ringBufferBytes), running: true, done: make(chan struct{}), cancel: cancel,
-		mode: JobModeBackground, originTool: trim(spec.OriginTool), toolCallID: trim(spec.ToolCallID),
-		startedAt: time.Now().UTC(), kind: processKindProgram,
-		Stages: []hostcmd.StageResult{{Command: spec.CommandLine}},
+		Handle: handle, SessionID: sessionID, ProjectID: trim(spec.ProjectID), RootSessionID: trim(spec.RootSessionID),
+		running: true, mode: JobModeBackground, kind: processKindProgram,
+		processRuntimeState:     processRuntimeState{done: make(chan struct{}), cancel: cancel, startedAt: time.Now().UTC()},
+		processIOState:          processIOState{buffer: NewRingBuffer(r.ringBufferBytes), originTool: trim(spec.OriginTool), toolCallID: trim(spec.ToolCallID)},
+		processConfinementState: processConfinementState{cwd: spec.Cwd},
+		Stages:                  []hostcmd.StageResult{{Command: spec.CommandLine}},
 	}
 	if proc.RootSessionID == "" {
 		proc.RootSessionID = sessionID
@@ -62,6 +63,11 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		r.jobs.mu.Unlock()
 		cancel()
 		return "", ErrRegistryClosed
+	}
+	if _, ok := r.jobs.checkAdmissionLocked(proc.ProjectID, sessionID, proc.RootSessionID, spec.Cwd); !ok {
+		r.jobs.mu.Unlock()
+		cancel()
+		return "", ErrTeardownInProgress
 	}
 	r.jobs.pruneCompletedLocked(sessionID)
 	if r.jobs.countRunningBackgroundLocked(sessionID) >= r.jobs.maxBackground {
@@ -74,7 +80,13 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		r.jobs.sessions[sessionID] = make(map[string]*Process)
 	}
 	r.jobs.sessions[sessionID][handle] = proc
+	r.jobs.workDirs[handle] = spec.Cwd
+	event, publish := r.jobs.indexProjectProcessLocked(proc)
 	r.jobs.mu.Unlock()
+	if publish && r.Output.publishProject != nil {
+		r.Output.publishProject(context.WithoutCancel(ctx), event)
+	}
+	r.sweeper.onJobStarted() //nolint:contextcheck // The sweeper loop outlives this call and holds its own context.
 	stdout := streamWriter{proc: proc, stream: "stdout", publish: r.Output.publishStream}
 	stderr := streamWriter{proc: proc, stream: "stderr", publish: r.Output.publishStream}
 	go func() {
@@ -88,14 +100,14 @@ func (r *Registry) StartProgram(ctx context.Context, spec ProgramJobSpec) (strin
 		proc.Stages[0].ExitCode, proc.Stages[0].Failed = &exitCode, exitCode != 0
 		proc.failure = hostcmd.ExecFailureOf(err)
 		proc.finishedAt = time.Now().UTC()
-		proc.reason = TerminationExited
-		if proc.stopped {
-			proc.reason = TerminationStopped
+		if !proc.stopped {
+			proc.reason = TerminationExited
 		}
 		r.jobs.pruneCompletedLocked(proc.SessionID)
 		r.jobs.mu.Unlock()
-		close(proc.done)
 		r.Output.publishTerminal(context.WithoutCancel(ctx), proc)
+		r.sweeper.onJobEnded()
+		close(proc.done)
 	}()
 	return handle, nil
 }

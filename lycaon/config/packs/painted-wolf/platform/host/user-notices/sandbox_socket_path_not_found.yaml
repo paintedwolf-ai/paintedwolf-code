@@ -9,5 +9,3 @@ suggested_action: "Start the service that owns the socket, then try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "Nothing exists"

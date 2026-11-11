@@ -63,6 +63,13 @@ func surveyRootCost(ctx context.Context, root rootCostFacts, fact BudgetFact, st
 	src := filepath.Clean(root.grant.SourcePath)
 	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			// What this user cannot read is left out of every tree, so it costs nothing.
+			if path != src && errors.Is(walkErr, fs.ErrPermission) {
+				if d != nil && d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			return walkErr
 		}
 		if err := ctx.Err(); err != nil {

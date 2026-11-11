@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createSignal, onCleanup } from "solid-js";
 import type { ProjectRemovalAssessment, ProjectRemovalCheck, ProjectRemovalReason } from "../../api/types.ts";
 import { createModalFocusTrap } from "../../platform/interaction/modal-focus-trap.ts";
+import { formatBackgroundCommandWithChat } from "../../session/confirm-chat-delete.ts";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { DenCheckbox } from "../primitives/DenCheckbox.tsx";
 import { DenButton } from "../primitives/DenButton.tsx";
@@ -11,6 +12,7 @@ import { ChromeDragSurface } from "./ChromeDragSurface.tsx";
 type Review = {
   assessment: ProjectRemovalAssessment | null;
   projectName: string;
+  onOpenRunning?: () => void;
   resolve: (ids: string[] | null) => void;
 };
 
@@ -30,10 +32,14 @@ export function createProjectRemovalReview() {
   return {
     pending,
     settle,
-    show: (assessment: ProjectRemovalAssessment | null, projectName = "this project"): Promise<string[] | null> => {
+    show: (
+      assessment: ProjectRemovalAssessment | null,
+      projectName = "this project",
+      onOpenRunning?: () => void,
+    ): Promise<string[] | null> => {
       if (disposed) return Promise.resolve(null);
       return new Promise((resolve) => {
-        const request = { assessment, projectName, resolve };
+        const request = { assessment, projectName, onOpenRunning, resolve };
         if (pending()) queue.push(request);
         else setPending(request);
       });
@@ -87,7 +93,7 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
             data-testid="project-removal-dialog"
           >
             <header class="den-dialog__header" {...chromeProps()}>
-              <h2 id="project-removal-title">Delete project</h2>
+              <h2 data-testid="delete-project" id="project-removal-title">Delete project</h2>
             </header>
             <Scrollport class="den-dialog__body">
               <p class="den-dialog__hint">History and any unsaved draft workspace for <strong>{request.projectName}</strong> will be deleted. Attached folders stay on disk.</p>
@@ -96,6 +102,20 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
                 fallback={<p class="den-dialog__hint" role="status">Extension references could not be assessed. All extensions will be kept.</p>}
                 keyed
               >{(assessment) => <>
+                <Show when={assessment.background_processes?.length}>{count => (
+                  <div data-testid="project-removal-background-processes">
+                    <p class="den-dialog__hint">
+                      {count() === 1
+                        ? "1 background command is running in this project and will stop when the project is deleted:"
+                        : `${count()} background commands are running in this project and will stop when the project is deleted:`}
+                    </p>
+                    <ul class="den-dialog__hint">
+                      <For each={assessment.background_processes}>{(proc) => (
+                        <li>{formatBackgroundCommandWithChat(proc)}</li>
+                      )}</For>
+                    </ul>
+                  </div>
+                )}</Show>
                 <Show when={assessment.extensions.length > 0}>
                   <p class="den-dialog__hint">These extensions were installed from this project. They are shared across this device. Choose which to remove after the project is deleted.</p>
                   <For each={assessment.extensions}>{(pack, index) => (
@@ -132,8 +152,21 @@ export function ProjectRemovalDialog(props: { review: ReturnType<typeof createPr
             </Scrollport>
             <footer class="den-dialog__footer">
               <div class="den-dialog__footer-end">
-                <DenButton variant="ghost" autofocus onClick={() => props.review.settle(null)}>Cancel</DenButton>
-                <DenButton variant="danger" onClick={() => props.review.settle(selected())}>
+                <Show when={request.onOpenRunning && (request.assessment?.background_processes?.length ?? 0) > 0}>
+                  <DenButton
+                    variant="ghost"
+                    data-testid="project-removal-open-running"
+                    onClick={() => {
+                      const openRunning = request.onOpenRunning;
+                      props.review.settle(null);
+                      openRunning?.();
+                    }}
+                  >
+                    Open Running
+                  </DenButton>
+                </Show>
+                <DenButton data-testid="cancel" variant="ghost" autofocus onClick={() => props.review.settle(null)}>Cancel</DenButton>
+                <DenButton data-testid="project-removal-confirm" variant="danger" onClick={() => props.review.settle(selected())}>
                   {selected().length > 0
                     ? `Delete project and remove ${selected().length} extension${selected().length === 1 ? "" : "s"}`
                     : request.assessment && request.assessment.extensions.length === 0

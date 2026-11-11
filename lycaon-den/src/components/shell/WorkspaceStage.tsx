@@ -350,6 +350,7 @@ export function WorkspaceStage(props: Props) {
             title: row.title,
           })
         }
+        onOpenRunning={() => openStageWithPlacement("running", "routed")}
       />
     );
   }

@@ -98,7 +98,6 @@ describe("SecurityCoverage", () => {
     expect(panel.textContent).toContain("No lockfile in this project");
     // No next-run prediction; a quiet scanner is watching.
     expect(panel.textContent).toContain("Watching for changes · full pass 2h ago");
-    expect(panel.textContent).toContain("not scanned yet");
     expect(panel.textContent).not.toContain("next");
   });
 
@@ -123,7 +122,6 @@ describe("SecurityCoverage", () => {
     expect(bars[1]?.getAttribute("aria-valuenow")).toBe("100");
     // Start is hidden while a pass runs.
     expect(screen.queryByTestId("scans-full-scan-start")).toBeNull();
-    expect(screen.queryByText("Cancel")).toBeNull();
   });
 
   it("names the control by the pass on screen at one reserved width", () => {

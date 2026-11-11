@@ -88,6 +88,7 @@ func (s *Retention) SweepBlobs(ctx context.Context) error {
 func (s *Retention) RunBlobGC(ctx context.Context, interval, retry time.Duration) error {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
+	var blobsDue time.Time
 	for {
 		select {
 		case <-ctx.Done():
@@ -97,11 +98,20 @@ func (s *Retention) RunBlobGC(ctx context.Context, interval, retry time.Duration
 		// Generations age out on the same cadence, so an idle engine still
 		// releases the snapshots nothing references.
 		var snapshotErr error
+		snapshotReport := sourcesnapshot.SweepReport{CycleComplete: true}
 		if s.snapshots != nil {
-			snapshotErr = s.snapshots.Sweep(ctx, time.Now().UTC().Add(-sourcesnapshot.Retention))
+			snapshotReport, snapshotErr = s.snapshots.Sweep(ctx, time.Now().UTC().Add(-sourcesnapshot.Retention))
 		}
-		blobErr := s.SweepBlobs(ctx)
-		deferred := errors.Is(snapshotErr, sourcesnapshot.ErrSweepInProgress) || errors.Is(blobErr, ErrBlobMaintenanceDeferred)
+		// Resuming a bounded snapshot cycle does not repeat the object store scan.
+		var blobErr error
+		if now := time.Now(); !now.Before(blobsDue) {
+			blobErr = s.SweepBlobs(ctx)
+			if blobErr == nil {
+				blobsDue = now.Add(interval)
+			}
+		}
+		deferred := errors.Is(snapshotErr, sourcesnapshot.ErrSweepInProgress) || errors.Is(blobErr, ErrBlobMaintenanceDeferred) ||
+			(snapshotErr == nil && !snapshotReport.CycleComplete)
 		if errors.Is(snapshotErr, sourcesnapshot.ErrSweepInProgress) {
 			snapshotErr = nil
 		}

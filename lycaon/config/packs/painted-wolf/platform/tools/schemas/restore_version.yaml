@@ -1,5 +1,5 @@
 tags: [edit, filesystem]
-description: "Restore a file to a previously retained source version as a forward mutation in the source ledger. Use source_history to inspect available versions or diffs."
+description: "Restore a file to a previously retained source version as a forward mutation in the source ledger. Where offered, source_history inspects available versions and diffs."
 schema:
   type: object
   properties:

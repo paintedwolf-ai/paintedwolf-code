@@ -214,7 +214,7 @@ function ArtifactGalleryTile(props: TileProps) {
         </Show>
       </button>
       <Show when={blob.error || decodeFailed()}>
-        <p role="status">This artifact could not be loaded.</p>
+        <p role="status" data-testid="project-artifact-load-error">This artifact could not be loaded.</p>
       </Show>
       <figcaption class="project-artifacts-tile__meta">
         <Show when={caption()}>
@@ -508,7 +508,7 @@ export function ProjectArtifactsView(props: Props) {
               testId="project-artifacts-source-filter"
             />
             <label class="den-artifacts-chat-filter">
-              <span class="den-artifacts-chat-filter__label">Chats</span>
+              <span data-testid="chats" class="den-artifacts-chat-filter__label">Chats</span>
               <DenSelect
                 aria-label="Filter artifacts by chat"
                 data-testid="project-artifacts-chat-filter"

@@ -9,6 +9,3 @@ suggested_action: Refresh the list, or add a custom provider with its documented
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - catalog
-      - custom

@@ -312,6 +312,9 @@ func pinnedAbs(tctx tools.ToolContext, pin toolcontract.ExecutionRevision) (stri
 	if pin.RootID == "" {
 		return pin.Path, filepath.IsAbs(pin.Path)
 	}
+	if pin.RootID == "worker-branch" && tctx.Source.WorkerBranchRoot != "" {
+		return filepath.Join(tctx.Source.WorkerBranchRoot, filepath.FromSlash(pin.Path)), true
+	}
 	for _, root := range tctx.Source.Roots {
 		if root.ID == pin.RootID {
 			return filepath.Join(root.Path, filepath.FromSlash(pin.Path)), true

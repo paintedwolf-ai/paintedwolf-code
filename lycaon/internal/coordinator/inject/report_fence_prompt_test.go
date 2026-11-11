@@ -1,6 +1,7 @@
 package inject
 
 import (
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"strings"
 	"testing"
 
@@ -37,19 +38,25 @@ func TestReportDocumentPromptShowsTheShapeTheHostReads(t *testing.T) {
 	}
 	fence := section[open : open+len("```json\n")+end+len("\n```")]
 
-	read, ok := guidance.ReadCloseoutReport("The answer.\n\n"+fence, "")
-	if !ok {
+	read := guidance.ReadCloseoutReport("The answer.\n\n"+fence, guidance.RetainedCloseout{}, true, citationmd.Options{})
+	if read.Draft.Document == nil {
 		t.Fatalf("the prompt's fence is not a report:\n%s", fence)
 	}
 	if len(read.Unread) > 0 {
 		t.Fatalf("the prompt's fence has members the host does not read: %+v", read.Unread)
 	}
-	report := read.Report
+	report := read.Draft.Report()
 	if len(report.Findings) != 1 || report.Findings[0].Answers["reachable"] == "" || report.Findings[0].Answers["outcome"] == "" {
 		t.Fatalf("findings = %+v, want the declared answers inside the finding", report.Findings)
 	}
-	if report.Ask == nil || len(report.SetAsides) != 1 || len(report.CitedEvidence) != 1 {
-		t.Fatalf("report = %+v, want ask, set_asides, and cited_evidence at the top level", report)
+	if report.Ask == nil || len(report.SetAsides) != 1 {
+		t.Fatalf("report = %+v, want ask and set_asides at the top level", report)
+	}
+	if strings.Contains(fence, "cited_evidence") || strings.Contains(fence, "verification") {
+		t.Fatalf("the fence teaches a retired member:\n%s", fence)
+	}
+	if !strings.Contains(section, "citations inline") {
+		t.Fatalf("the report section does not place citations in the answer:\n%s", section)
 	}
 	if !strings.Contains(section, "\n  - `reachable` — ") {
 		t.Fatalf("rating questions are not nested under answers:\n%s", section)

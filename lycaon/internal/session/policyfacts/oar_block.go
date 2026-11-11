@@ -37,7 +37,7 @@ func RejectFromGuardErr(ctx context.Context, err error) *guidance.Refusal {
 	}
 	var nudge *guidance.ErrGroundingNudge
 	if errors.As(err, &nudge) && nudge != nil {
-		body, renderErr := guidance.RenderPolicyCopy(ctx, nudge.Code, string(oar.EffectBlock), nudge.Copy)
+		body, renderErr := guidance.RenderPolicyCopy(ctx, nudge.Code, string(oar.EffectBlock), nudge.Copy, nudge.Data)
 		if renderErr != nil {
 			body = nudge.Code
 		}
@@ -70,6 +70,17 @@ func (m *Service) CloseoutBlock(ctx context.Context, sess *api.Session, gc *oar.
 		return nil, nil
 	}
 	return d, nil
+}
+
+// MidTurnNoteFeedback runs coordinator.mid_turn_note. Its rules only warn: the
+// pipeline's advisory sink queues the notice for the next model request.
+func (m *Service) MidTurnNoteFeedback(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error {
+	if m == nil || m.Pipeline == nil || !m.Pipeline.AnchorEnforced(oar.AnchorCoordinatorMidTurnNote) {
+		return fmt.Errorf("mid-turn note OAR requires enforced coordinator.mid_turn_note")
+	}
+	m.FillSessionFacts(ctx, gc, sess, "", nil)
+	_, err := m.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorMidTurnNote, gc)
+	return err
 }
 
 // FinishBlock evaluates the native provisional report checkpoint.
@@ -203,7 +214,9 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 	ObserveConfine(gc, raised.Confine)
 	RegisterWorktreeFacts(ctx, gc, raised.IndexWatch)
 	ObserveEditorConfigMismatch(gc, raised)
+	ObserveGitNoRepositoryOnWriteLeg(gc, raised)
 	ObserveHTTPRequestWebPage(gc, raised)
+	ObserveHTTPRequestLoopbackOtherSession(gc, raised)
 	ObserveSourceParsingFeedback(gc, raised)
 	m.ObserveDeferredUnactivated(gc, sess.ID)
 	loopguard.ObserveDoomLoopWarn(gc, doomCompletionCountAfter, loopguard.DoomLoopMaxAttempts, tool, args)

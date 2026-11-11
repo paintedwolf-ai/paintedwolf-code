@@ -2,10 +2,71 @@ import { describe, expect, it } from "vitest";
 import {
   buildCitationGroundingView,
   citationGroundingHadTraceableWork,
+  citationGroundingPresent,
 } from "./citation-grounding-model.ts";
-import { GROUNDING_HEADLINE_GROUNDED } from "./grounding-copy.ts";
+import {
+  GROUNDING_HEADLINE_EVIDENCE_OPTIONAL,
+  GROUNDING_HEADLINE_GROUNDED,
+} from "./grounding-copy.ts";
 
 describe("citation-grounding-model", () => {
+  // Each shape is one the host writes for speech with no observed source behind it.
+  describe.each([
+    ["host progress note", { traced: true, evidence_optional: true }],
+    [
+      "exempt reply with its vacuous check",
+      {
+        traced: true,
+        evidence_optional: true,
+        checks: [
+          {
+            id: "evidence_optional",
+            label: "Citations",
+            status: "passed" as const,
+            kind: "citation" as const,
+            vacuous: true,
+            summary: "No citations required: no tool observations in this turn",
+          },
+        ],
+      },
+    ],
+    [
+      "exempt reply with a verification assessment",
+      {
+        traced: true,
+        evidence_optional: true,
+        verification: { method: "inspection" as const, reason: "Nothing to run." },
+      },
+    ],
+  ])("AC-COMPAT-05 exempt speech: %s", (_name, grounding) => {
+    it("is never presented as a checked source", () => {
+      const view = buildCitationGroundingView(grounding);
+      expect(citationGroundingHadTraceableWork(grounding)).toBe(false);
+      expect(view.outcome).toBe("evidence_optional");
+      expect(view.headline).toBe(GROUNDING_HEADLINE_EVIDENCE_OPTIONAL);
+      expect(view.headline).not.toBe(GROUNDING_HEADLINE_GROUNDED);
+      expect(view.checks).toEqual([]);
+    });
+
+    it("still counts as the host's accept signal for its row", () => {
+      expect(citationGroundingPresent(grounding)).toBe(true);
+    });
+  });
+
+  it("carries a cited range to the citation row", () => {
+    const view = buildCitationGroundingView({
+      traced: true,
+      cited_evidence: [
+        { handle: "read#3", path: "a.go", line: 42, end_line: 58, verdict: "traced" },
+        { handle: "read#3", path: "b.go", line: 7, verdict: "traced" },
+      ],
+    });
+    expect(view.citedEvidence.map((row) => [row.line, row.endLine])).toEqual([
+      [42, 58],
+      [7, undefined],
+    ]);
+  });
+
   it("hides chicklets when every check was vacuous", () => {
     const grounding = {
       traced: true,

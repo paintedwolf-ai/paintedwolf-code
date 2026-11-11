@@ -609,4 +609,124 @@ describe("reconcileActiveScope", () => {
     await reconcileActiveScope(store, client, emptyProjects, { resumeVisible: true });
     expect(store.state.pendingCheckpoints).toHaveLength(1);
   });
+
+  it("applies transcript, resumes events, and reports when auxiliary chrome throws after installSessionBootstrap", async () => {
+    const store = createAppStore();
+    const services = connectionServicesFixture({ app: store });
+    const { dispose } = bindAppConnection(services);
+    try {
+      const session: Session = {
+        id: "sess-chrome-err",
+        owner_person_id: "00000000-0000-4000-8000-000000000002",
+        project_id: "proj-1",
+        workspace_path: "/tmp/p",
+        posture: "build",
+        status: "idle",
+        created_at: "t",
+        activity_at: "t",
+        updated_at: "t",
+      };
+      store.actions.setCurrentSession(session);
+      store.actions.beginSessionResumeSwitch(session.id);
+
+      const snap: SessionBootstrap = {
+        ...bootstrap(
+          session,
+          [
+            {
+              id: "m-fresh",
+              role: "user",
+              origin: "user",
+              authority: "user",
+              trust_tier: "trusted",
+              content: "latest question",
+              created_at: "t",
+              seq: 2,
+            },
+          ],
+          2,
+        ),
+        event_cursor: "cursor-42",
+      };
+      Object.defineProperty(snap, "background_outputs", {
+        get() {
+          throw new Error("auxiliary background failure");
+        },
+      });
+
+      const client = stubClient({
+        getSessionBootstrap: vi.fn(async () => snap),
+        listWorkers: vi.fn(async () => []),
+        getBoard: vi.fn(async () => ({ tasks: [], updated_at: "t" })),
+        getActiveWorkflowRun: vi.fn(async () => undefined),
+        listSessionWorkflowRuns: vi.fn(async () => ({ runs: [] })),
+        listWorkflows: vi.fn(async () => []),
+        listBlueprints: vi.fn(async () => []),
+      });
+
+      const cursor = await reconcileActiveScope(store, client, emptyProjects, {
+        resumeVisible: true,
+        fromSessionSwitch: true,
+      });
+
+      expect(cursor).toBe("cursor-42");
+      expect(store.state.messages.map((m) => m.id)).toEqual(["m-fresh"]);
+      expect(store.state.chatHydrationLock).toBeUndefined();
+      expect([...services.notices.index().values()].flat()).toHaveLength(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("surfaces transcript hydration errors after installSessionBootstrap instead of treating the epoch bump as supersession", async () => {
+    const store = createAppStore();
+    const session: Session = {
+      id: "sess-post-epoch-err",
+      owner_person_id: "00000000-0000-4000-8000-000000000002",
+      project_id: "proj-1",
+      workspace_path: "/tmp/p",
+      posture: "build",
+      status: "idle",
+      created_at: "t",
+      activity_at: "t",
+      updated_at: "t",
+    };
+    store.actions.setCurrentSession(session);
+    store.actions.beginSessionResumeSwitch(session.id);
+
+    const snap = bootstrap(
+      session,
+      [
+        {
+          id: "m-missing-run",
+          role: "user",
+          origin: "user",
+          authority: "user",
+          trust_tier: "trusted",
+          content: "needs run",
+          workflow_run_id: "run-boom",
+          created_at: "t",
+          seq: 1,
+        },
+      ],
+      1,
+    );
+    const client = stubClient({
+      getSessionBootstrap: vi.fn(async () => snap),
+      getActiveWorkflowRun: vi.fn(async () => {
+        throw new Error("workflow lookup failed");
+      }),
+      listSessionWorkflowRuns: vi.fn(async () => ({ runs: [] })),
+      listWorkflows: vi.fn(async () => []),
+      listBlueprints: vi.fn(async () => []),
+    });
+
+    await expect(
+      reconcileActiveScope(store, client, emptyProjects, {
+        resumeVisible: true,
+        fromSessionSwitch: true,
+      }),
+    ).rejects.toThrow("workflow lookup failed");
+    expect(store.state.chatHydrationLock).toBeUndefined();
+  });
 });

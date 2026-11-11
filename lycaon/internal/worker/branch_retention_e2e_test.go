@@ -451,7 +451,7 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 		}
 	}
 	gittest.Run(t, project, "rev-list", "--objects", "-n", "1", workerCommit)
-	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
+	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
 }
 
 func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunkAbsent(t *testing.T) {
@@ -540,5 +540,5 @@ func TestUnfinishedMaterializedWorkerGitAndEditsSurviveRelocatedArchiveWithTrunk
 	if !slices.Contains(manifest.PrivateGit.RetainedObjects, initialHead) || !slices.Contains(manifest.PrivateGit.RetainedObjects, workerCommit) {
 		t.Fatalf("checkpoint lost commit history: %v", manifest.PrivateGit.RetainedObjects)
 	}
-	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
+	testutil.FailErr(t, "destroy", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: id, Root: task.WorkspaceRoot}))
 }

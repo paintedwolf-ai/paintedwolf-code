@@ -7,6 +7,10 @@ import type {
   SidebarChatRow,
   SidebarChatSections,
 } from "../../store/projects-sidebar-model.ts";
+import {
+  applyProjectBackgroundEvent,
+  resetProjectBackgroundForTests,
+} from "../../project/project-background-store.ts";
 import { indexAttention } from "../../attention/attention-model.ts";
 import type { AttentionRow } from "../../api/types.ts";
 
@@ -69,13 +73,13 @@ describe("FocusedSessionList", () => {
   beforeEach(() => {
     exportSessionTranscript.mockClear();
     getLycaonClient.mockClear();
+    resetProjectBackgroundForTests();
   });
   it("shows empty state when project has no sessions", () => {
     render(() => (
       <FocusedSessionList {...baseProps()} sections={chats()} totalChats={0} loaded />
     ));
     expect(screen.getByTestId("focused-session-list-empty")).toBeTruthy();
-    expect(screen.getByText("No chats yet")).toBeTruthy();
   });
 
   it("does not claim the project is empty before host inventory settles", () => {
@@ -88,7 +92,6 @@ describe("FocusedSessionList", () => {
       />
     ));
     expect(screen.getByTestId("focused-session-list-empty").textContent).toBe("");
-    expect(screen.queryByText("No chats yet")).toBeNull();
   });
 
   it("highlights active session and selects on click", () => {
@@ -167,9 +170,7 @@ describe("FocusedSessionList", () => {
         .closest("button")
         ?.classList.contains("den-shell-nav-sub-link-active"),
     ).toBe(true);
-    expect(screen.getByText("Fix tests").closest("button")?.textContent).toContain(
-      "Selected chat, visible.",
-    );
+    expect(screen.getByText("Fix tests").closest("button")?.querySelector(".sr-only")).toBeTruthy();
   });
 
   it("archives and deletes from the right-click menu", () => {
@@ -307,7 +308,6 @@ describe("FocusedSessionList", () => {
       />
     ));
     const status = document.querySelector(".focused-session-list__status");
-    expect(status?.textContent).toBe("Needs you");
     expect(status?.getAttribute("data-attention-class")).toBe("needs_you");
     // Attention text occupies the time slot.
     expect(document.querySelector(".focused-session-list__time")).toBeNull();
@@ -433,7 +433,6 @@ describe("FocusedSessionList", () => {
         }}
       />
     ));
-    expect(screen.getByText("Pinned")).toBeTruthy();
     expect(titles("focused-session-list-pinned")).toEqual(["First pin", "Second pin"]);
     expect(titles("focused-session-list-chats")).toEqual(["Loose"]);
   });
@@ -451,7 +450,6 @@ describe("FocusedSessionList", () => {
     ));
     const [unpin, pin] = screen.getAllByTestId("session-pin-action");
     expect(unpin?.getAttribute("aria-pressed")).toBe("true");
-    expect(unpin?.getAttribute("aria-label")).toBe("Unpin chat");
     expect(pin?.getAttribute("aria-pressed")).toBe("false");
     fireEvent.click(pin!);
     expect(props.onTogglePin).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "c1" }), true);
@@ -492,7 +490,6 @@ describe("FocusedSessionList", () => {
     const props = baseProps();
     render(() => <FocusedSessionList {...props} sections={chats(row())} />);
     const trigger = screen.getByTestId("focused-session-list-sort");
-    expect(trigger.textContent).toContain("Created");
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
     expect(
@@ -632,5 +629,50 @@ describe("FocusedSessionList", () => {
     fireEvent.keyDown(second, { key: "Enter" });
     expect(props.onSelectSession).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "s2" }));
     fireEvent.keyDown(second, { key: "Escape" });
+  });
+
+  it("shows the running background command indicator with tooltip and updates live as commands start and end", () => {
+    render(() => (
+      <FocusedSessionList
+        {...baseProps()}
+        sections={chats(row({ sessionId: "s1", title: "Dev server", backgroundRunning: 0 }))}
+      />
+    ));
+    expect(screen.queryByTestId("session-background-running")).toBeNull();
+
+    applyProjectBackgroundEvent({
+      revision: 1,
+      action: "started",
+      project_id: "p1",
+      session_id: "s1",
+      process_id: "bg_1",
+      running: true,
+      process: {
+        process_id: "bg_1",
+        project_id: "p1",
+        session_id: "s1",
+        session_title: "Dev server",
+        session_archived: false,
+        command: "python3 -m http.server 8000",
+        working_dir: ".",
+        started_at: "2026-10-30T12:00:00Z",
+        running: true,
+        ports: ["127.0.0.1:8000"],
+      },
+    });
+    const indicator = screen.getByTestId("session-background-running");
+    expect(indicator.getAttribute("data-tip")).toBe("1 background command running");
+    expect(indicator.getAttribute("aria-label")).toBe("1 background command running");
+
+    applyProjectBackgroundEvent({
+      revision: 2,
+      action: "ended",
+      project_id: "p1",
+      session_id: "s1",
+      process_id: "bg_1",
+      running: false,
+      termination_reason: "stopped_by_user",
+    });
+    expect(screen.queryByTestId("session-background-running")).toBeNull();
   });
 });

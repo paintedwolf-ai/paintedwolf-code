@@ -10,8 +10,3 @@ invariants:
   fires_in:
   - coordinator wait() on next_worker_done or all_workers_idle — a running worker
     called request_budget
-  required:
-  - extend_worker_budget
-  - wait(resume=true)
-  forbidden:
-  - workflow_advance

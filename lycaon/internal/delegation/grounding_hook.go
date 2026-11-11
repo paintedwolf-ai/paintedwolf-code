@@ -140,7 +140,7 @@ func (g *GroundingCoordinator) rejectCloseoutGrounding(ctx context.Context, sess
 		return ErrGroundingPending
 	}
 	d := res.Decision
-	body, err := guidance.RenderPolicyCopy(ctx, d.Code, string(d.Effect), d.Copy)
+	body, err := guidance.RenderPolicyCopy(ctx, d.Code, string(d.Effect), d.Copy, d.Data)
 	if err != nil {
 		return ErrGroundingPending
 	}

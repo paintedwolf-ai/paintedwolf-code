@@ -4,6 +4,7 @@ package workercloseout
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 	"unicode/utf8"
 
@@ -38,9 +39,9 @@ type WorkerSummaryFinalizeOpts struct {
 	// Pipeline is required for blocking worker.report_check Decisions.
 	Pipeline        *oar.GuardPipeline
 	DecisionPending func(ctx context.Context, childSessionID string) bool
-	// OfferedTools are the tools the worker's latest turn could call; none
+	// Reach is what the worker's latest turn could call; none
 	// after a restart, when no live turn result exists.
-	OfferedTools []string
+	Reach toolreach.Request
 }
 
 func (o WorkerSummaryFinalizeOpts) decisionPending(ctx context.Context, childSessionID string) bool {
@@ -110,7 +111,7 @@ func FinalizeWorkerSummaryForChild(
 		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), nil)
 		if closeout != "" {
 			if result, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
-				opts.OfferedTools = result.OfferedToolNames()
+				opts.Reach = result.RequestReach()
 				if opts.decisionPending(ctx, childSessionID) {
 					return WorkerSummaryOutcome{Status: string(api.WorkerSummaryStatusNeedsDecision), Provenance: "decision_pending"}, nil
 				}
@@ -158,7 +159,7 @@ func FinalizeWorkerSummaryForCanceled(
 		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
 		if closeout != "" {
 			if result, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
-				opts.OfferedTools = result.OfferedToolNames()
+				opts.Reach = result.RequestReach()
 				if report, ok, err := extractCompleteLegReport(ctx, resolver, childSessionID); err != nil {
 					return WorkerSummaryOutcome{}, err
 				} else if ok {
@@ -372,11 +373,11 @@ func trimRetryReport(
 }
 
 func workerReportEvalInput(childSessionID, agentType string, report workercompletion.WorkerCompletionReport, messages []api.Message, opts WorkerSummaryFinalizeOpts) workercompletion.WorkerSummaryEvalInput {
-	return workercompletion.WorkerSummaryEvalInput{AgentType: agentType, MaxChars: workerSummaryMaxChars(opts), Report: report, ChildSessionID: childSessionID, ChildMessages: messages, ProjectDir: opts.ProjectDir, ProjectRoots: opts.ProjectRoots, ActiveRootID: opts.ActiveRootID, WorkspaceCheck: opts.WorkspaceCheck, Hints: opts.WorkflowHints, Ledger: opts.Ledger, Pipeline: opts.Pipeline, OfferedTools: opts.OfferedTools}
+	return workercompletion.WorkerSummaryEvalInput{AgentType: agentType, MaxChars: workerSummaryMaxChars(opts), Report: report, ChildSessionID: childSessionID, ChildMessages: messages, ProjectDir: opts.ProjectDir, ProjectRoots: opts.ProjectRoots, ActiveRootID: opts.ActiveRootID, WorkspaceCheck: opts.WorkspaceCheck, Hints: opts.WorkflowHints, Ledger: opts.Ledger, Pipeline: opts.Pipeline, Reach: opts.Reach}
 }
 
 func missingWorkerReportOutcome(ctx context.Context, childSessionID, agentType, provenance string, messages []api.Message, opts WorkerSummaryFinalizeOpts) (WorkerSummaryOutcome, error) {
-	evaluated, err := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{AgentType: agentType, MissingReport: true, ChildSessionID: childSessionID, ChildMessages: messages, ProjectDir: opts.ProjectDir, ProjectRoots: opts.ProjectRoots, ActiveRootID: opts.ActiveRootID, WorkspaceCheck: opts.WorkspaceCheck, Hints: opts.WorkflowHints, Ledger: opts.Ledger, Pipeline: opts.Pipeline, OfferedTools: opts.OfferedTools})
+	evaluated, err := workercompletion.EvaluateWorkerSummary(ctx, workercompletion.WorkerSummaryEvalInput{AgentType: agentType, MissingReport: true, ChildSessionID: childSessionID, ChildMessages: messages, ProjectDir: opts.ProjectDir, ProjectRoots: opts.ProjectRoots, ActiveRootID: opts.ActiveRootID, WorkspaceCheck: opts.WorkspaceCheck, Hints: opts.WorkflowHints, Ledger: opts.Ledger, Pipeline: opts.Pipeline, Reach: opts.Reach})
 	if err != nil {
 		return WorkerSummaryOutcome{}, err
 	}

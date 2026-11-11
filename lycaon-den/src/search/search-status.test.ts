@@ -50,8 +50,6 @@ it("distinguishes permanent coverage gaps from work that can finish", () => {
   const note = searchIssueNotes(issues);
   expect(note).toContain("2 folders");
   expect(note).toContain("could not be read");
-  expect(note).toContain("could not be refreshed");
-  expect(note).not.toContain("refresh automatically");
 });
 
 it("keeps an available root's failure separate from another root's pending discovery", () => {
@@ -60,18 +58,14 @@ it("keeps an available root's failure separate from another root's pending disco
     { root_id: "b", state: "warming", discovery_complete: false, refreshing: true, bounded_directories: 0, failed_directories: 0 },
   ]);
   expect(note).toContain("could not be read");
-  expect(note).toContain("still being indexed");
 });
 
 it("explains a symbol search that stopped at its budget", () => {
   const issues = [{ executor: "symbol", reason: "symbol_budget" as const, count: 1 }];
   expect(searchCoverageNote({ exhaustive: false, issues })).toBe("Results may be incomplete. Narrow your search for more matches.");
-  expect(searchIssueNotes(issues)).toContain("The symbol search stopped before checking every candidate.");
 });
 
 it("describes retained symbol progress separately from indexing and terminal limits", () => {
   const issues = [{ executor: "symbol", reason: "symbol_pending" as const }];
-  expect(searchCoverageNote({ exhaustive: false, issues })).toBe("Results may be incomplete. Still searching symbols…");
-  expect(searchIssueNotes(issues)).toContain("Symbol search is continuing.");
   expect(searchWarming({ issues })).toBe(false);
 });

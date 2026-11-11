@@ -55,7 +55,10 @@ if __name__ == "__main__":
     from transformers import AutoTokenizer
     source = inventory(args.model)
     tokenizer = AutoTokenizer.from_pretrained(args.model, local_files_only=True, trust_remote_code=False)
+    from rendering import configure_training_renderer
+    rendering_profile = configure_training_renderer(tokenizer, args.model)
     identity = {"files": source, "template_sha256": digest(tokenizer.chat_template),
+                "rendering_profile": rendering_profile,
                 "transformers": importlib.metadata.version("transformers")}
     report = prepare({name: getattr(args, name) for name in ("train", "validation", "holdout")},
                      args.out, tokenizer, args.max_length, identity, lambda: inventory(args.model) == source)

@@ -165,21 +165,37 @@ func (d *BoundDir) Close() error {
 
 // StatChild binds and stats one immediate entry of the held directory without following links.
 func (d *BoundDir) StatChild(name string) (BoundPath, fseffect.EntryStat, error) {
+	child, err := d.BindChild(name)
+	if err != nil {
+		return child, fseffect.EntryStat{}, err
+	}
+	st, err := d.StatBoundChild(child, name)
+	return child, st, err
+}
+
+// BindChild binds an immediate name without touching the filesystem, so a caller
+// can consult the child's scope before paying for its metadata.
+func (d *BoundDir) BindChild(name string) (BoundPath, error) {
 	if d.closed {
-		return BoundPath{}, fseffect.EntryStat{}, os.ErrClosed
+		return BoundPath{}, os.ErrClosed
 	}
 	if name == "" || name == "." || name == ".." || filepath.Base(name) != name || strings.ContainsRune(name, 0) {
-		return BoundPath{}, fseffect.EntryStat{}, invalidOperand(name, "expected an immediate directory entry")
+		return BoundPath{}, invalidOperand(name, "expected an immediate directory entry")
 	}
 	child := d.dir.Child(name)
 	if !d.VisibleChild(name) {
-		return child, fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
+		return child, PathOperationError(child.Resolved.DisplayPath, fs.ErrNotExist)
 	}
+	return child, nil
+}
+
+// StatBoundChild stats a child from BindChild without following links.
+func (d *BoundDir) StatBoundChild(child BoundPath, name string) (fseffect.EntryStat, error) {
 	st, err := d.root.StatChildAt(d.file, child.exactRelative, name, child.admitEntry)
 	if err != nil {
-		return child, fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, err)
+		return fseffect.EntryStat{}, PathOperationError(child.Resolved.DisplayPath, err)
 	}
-	return child, st, nil
+	return st, nil
 }
 
 // StatChildFollowed resolves a symlink child's target through the held root.
@@ -228,11 +244,8 @@ func (p BoundPath) ReadDir() ([]string, error) {
 // Child binds one entry beneath a bound directory with the same authority.
 func (p BoundPath) Child(name string) BoundPath {
 	child := p
-	if p.Resolved.ScopeRel == "" || p.Resolved.ScopeRel == "." {
-		child.Resolved.ScopeRel = name
-	} else {
-		child.Resolved.ScopeRel = p.Resolved.ScopeRel + "/" + name
-	}
+	child.Resolved.Abs = p.Resolved.Abs + string(filepath.Separator) + name
+	child.Resolved.ScopeRel = childScopeRel(p.Resolved.ScopeRel, child.Resolved.Abs, name)
 	if filepath.Separator == '/' && p.exactRelative == p.Resolved.ScopeRel {
 		child.exactRelative = child.Resolved.ScopeRel
 	} else if p.exactRelative == "." || p.exactRelative == "" {
@@ -240,13 +253,24 @@ func (p BoundPath) Child(name string) BoundPath {
 	} else {
 		child.exactRelative = p.exactRelative + string(filepath.Separator) + name
 	}
-	child.Resolved.Abs = p.Resolved.Abs + string(filepath.Separator) + name
 	if p.Resolved.DisplayPath == p.Resolved.ScopeRel && name != "" && name != "." && name != ".." && filepath.Base(name) == name {
 		child.Resolved.DisplayPath = child.Resolved.ScopeRel
 	} else {
 		child.Resolved.DisplayPath = filepath.ToSlash(filepath.Join(p.Resolved.DisplayPath, name))
 	}
 	return child
+}
+
+// childScopeRel shares the tail of the child's absolute path when it already spells
+// the scope path, sparing a walk one allocation per entry.
+func childScopeRel(parent, abs, name string) string {
+	if parent == "" || parent == "." {
+		return name
+	}
+	if start := len(abs) - len(parent) - 1 - len(name); filepath.Separator == '/' && start > 0 && abs[start:start+len(parent)] == parent {
+		return abs[start:]
+	}
+	return parent + "/" + name
 }
 
 // Readlink reads a link entry's target text, admitted at the entry itself, without

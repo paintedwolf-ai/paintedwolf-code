@@ -91,6 +91,9 @@ func walkSnapshotDir(projectDir string, out map[string]WorkspaceFileFingerprint)
 			}
 			return nil
 		}
+		if sandbox.IsGitlinkDirEntry(d.Name(), walked, d) {
+			return nil
+		}
 		info, err := d.Info()
 		if err != nil {
 			return oswalk.Skip(err)

@@ -133,7 +133,7 @@ func declarationSearchIn(scope []search.Node, include, exclude []string, include
 			}
 			out = append(out, projectsource.DeclarationSearchHit{RootID: h.RootID, Path: h.Path, Snippet: strings.Clone(h.Snippet)})
 		}
-		coverage := projectsource.DeclarationCoverage{Limited: report.Limited || len(out) > hitCap}
+		coverage := projectsource.DeclarationCoverage{Limited: len(out) > 0 && (report.Limited || len(out) > hitCap)}
 		for _, issue := range report.CoverageIssues(search.ExecutorCode) {
 			coverage.Gaps = append(coverage.Gaps, projectsource.DeclarationGap{Reason: projectsource.DeclarationGapReason(issue.Reason), Count: issue.Count, Limit: issue.Limit, Message: issue.Message})
 		}

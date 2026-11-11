@@ -49,8 +49,7 @@ func (p *Projector) JSON(ctx context.Context, scope Scope, label string, raw []b
 	return out, meta, nil
 }
 
-// valueWalk is shared by legacy JSON capture and admitted native value capture.
-// The latter supplies accounting before containers, keys, labels or values grow.
+// valueWalk admits containers and scalar projections before allocation.
 type valueWalk struct {
 	screen    func(string, string) (string, error)
 	admit     func(context.Context, int64) error
@@ -85,7 +84,7 @@ func (w *valueWalk) walk(ctx context.Context, label string, value any, depth int
 				return nil, err
 			}
 		}
-		if err := w.reserve(ctx, int64(len(typed))*32+4096); err != nil {
+		if err := w.reserve(ctx, int64(len(typed))*32+128); err != nil {
 			return nil, err
 		}
 		out := make([]any, len(typed))
@@ -103,7 +102,7 @@ func (w *valueWalk) walk(ctx context.Context, label string, value any, depth int
 				return nil, err
 			}
 		}
-		if err := w.reserve(ctx, int64(len(typed))*32+4096); err != nil {
+		if err := w.reserve(ctx, int64(len(typed))*32+128); err != nil {
 			return nil, err
 		}
 		out := make([]string, len(typed))
@@ -126,7 +125,7 @@ func (w *valueWalk) walk(ctx context.Context, label string, value any, depth int
 				return nil, err
 			}
 		}
-		if err := w.reserve(ctx, int64(len(typed))*256+4096); err != nil {
+		if err := w.reserve(ctx, int64(len(typed))*256+128); err != nil {
 			return nil, err
 		}
 		out := make(map[string]any, len(typed))
@@ -135,7 +134,7 @@ func (w *valueWalk) walk(ctx context.Context, label string, value any, depth int
 			keys = append(keys, key)
 		}
 		sort.Strings(keys)
-		if err := w.reserve(ctx, int64(len(label))+4100); err != nil {
+		if err := w.reserve(ctx, int64(len(label))+132); err != nil {
 			return nil, err
 		}
 		keyLabel := label + ".key"
@@ -153,7 +152,7 @@ func (w *valueWalk) walk(ctx context.Context, label string, value any, depth int
 			if err != nil {
 				return nil, err
 			}
-			if err := w.reserve(ctx, int64(len(label))+int64(len(safeKey))+4097); err != nil {
+			if err := w.reserve(ctx, int64(len(label))+int64(len(safeKey))+129); err != nil {
 				return nil, err
 			}
 			child, err := w.walk(ctx, label+"."+safeKey, typed[key], depth+1)
@@ -183,7 +182,7 @@ func (w *valueWalk) uniqueKey(ctx context.Context, values map[string]any, key st
 		if err := ctx.Err(); err != nil {
 			return "", err
 		}
-		if err := w.reserve(ctx, int64(len(key))+4096+32); err != nil {
+		if err := w.reserve(ctx, int64(len(key))+128+32); err != nil {
 			return "", err
 		}
 		candidate := fmt.Sprintf("%s#%d", key, i)

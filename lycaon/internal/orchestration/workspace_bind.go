@@ -11,7 +11,7 @@ import (
 // WorkspaceBinder creates and destroys per-leg sandbox copies (out-of-repo, git-free).
 type WorkspaceBinder interface {
 	CreateWorkerWorkspace(ctx context.Context, primaryDir, legID string) (*workspace.Binding, error)
-	DestroyWorkerWorkspace(binding *workspace.Binding) error
+	DestroyWorkerWorkspace(ctx context.Context, binding *workspace.Binding) error
 }
 
 func (o *OrchestratorImpl) ensureWorkspaceManager(mode WorkspaceMode) error {
@@ -40,7 +40,7 @@ func (o *OrchestratorImpl) bindLegWorkspacesIfIsolated(
 	for _, legID := range legIDs {
 		leg, err := o.store.GetLeg(ctx, delegationID, legID)
 		if err != nil {
-			o.destroyBindings(bindings)
+			o.destroyBindings(ctx, bindings)
 			return nil, err
 		}
 		if leg.Status != api.LegStatusPending || leg.WorkspaceID != "" {
@@ -48,13 +48,13 @@ func (o *OrchestratorImpl) bindLegWorkspacesIfIsolated(
 		}
 		binding, err := o.workspaces.CreateWorkerWorkspace(ctx, projectDir, legID)
 		if err != nil {
-			o.destroyBindings(bindings)
+			o.destroyBindings(ctx, bindings)
 			return nil, err
 		}
 		leg.WorkspaceRoot = binding.Root
 		leg.WorkspaceID = binding.ID
 		if err := o.store.UpdateLeg(ctx, *leg); err != nil {
-			o.destroyBindings(append(bindings, binding))
+			o.destroyBindings(ctx, append(bindings, binding))
 			return nil, err
 		}
 		bindings = append(bindings, binding)
@@ -72,11 +72,11 @@ func (o *OrchestratorImpl) BindLegWorkspacesIfIsolatedForTest(
 	return o.bindLegWorkspacesIfIsolated(ctx, spec, projectDir, delegationID, legIDs)
 }
 
-func (o *OrchestratorImpl) destroyBindings(bindings []*workspace.Binding) {
+func (o *OrchestratorImpl) destroyBindings(ctx context.Context, bindings []*workspace.Binding) {
 	if o == nil || o.workspaces == nil {
 		return
 	}
 	for _, b := range bindings {
-		_ = o.workspaces.DestroyWorkerWorkspace(b)
+		_ = o.workspaces.DestroyWorkerWorkspace(context.WithoutCancel(ctx), b)
 	}
 }

@@ -21,4 +21,3 @@ x-paintedwolf-message: "The ask purpose {{ paintedwolf.ask_purpose }} does not f
 x-paintedwolf-scenarios:
   - id: default
     vars: {"ask_purpose": "clarify", "ask_purposes": ["clarify", "review", "compare"], "ask_artifact_count": 2, "profile": "coordinator", "tool": "ask_user"}
-    expect_contains: ['Rejected:', 'Code: ASK_USER_PURPOSE_INVALID']

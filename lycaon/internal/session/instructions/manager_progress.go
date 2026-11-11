@@ -20,8 +20,10 @@ func (m *Service) BootstrapProgress(ctx context.Context, sessionID string, msg a
 	if runID == "" {
 		return
 	}
+	before, _ := m.progress.Snapshot(ctx, sessionID)
 	if refreshed := progress.EnsureBootstrap(ctx, m.progress, sessionID, runID, msg.Content); refreshed {
-		progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: sessionID})
+		after, _ := m.progress.Snapshot(ctx, sessionID)
+		progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: sessionID, Before: before, After: after})
 	}
 }
 

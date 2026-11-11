@@ -7,6 +7,6 @@ missing_signals:
   - id: no_board_or_recon
     when: "true"
     detail: "No pack board inject and no completed recon/orientation worker on this session."
-    fix: "Call pack_board for a compact snapshot, or task(agent_type=\"repo-researcher\"|\"path-explorer\", …) and wait for the worker envelope."
+    fix: "Read the board for a compact snapshot, or dispatch an orientation worker and wait for its envelope."
 satisfy:
   - "Ensure the host injects pack board on the next coordinator turn, or complete an orientation worker job."

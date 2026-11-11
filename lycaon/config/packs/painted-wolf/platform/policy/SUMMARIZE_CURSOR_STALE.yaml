@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: summarize
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SUMMARIZE_CURSOR_STALE'

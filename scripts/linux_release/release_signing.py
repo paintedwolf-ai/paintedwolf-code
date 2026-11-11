@@ -1,4 +1,4 @@
-"""Sign one staged Linux release set and rebind its digests to the final signed bytes."""
+"""Sign one staged Linux release set, rebind its digests, and check exact-source qualification."""
 
 from __future__ import annotations
 
@@ -17,6 +17,11 @@ from .signing import CATALOG, digest, sign
 
 # RPM carries its signature in the package header; the other forms use detached signatures.
 DETACHED = ("deb", "pkg.tar.zst")
+
+
+def require(source_commit: str):
+    from ci_policy.verification_verdict import require_qualification
+    return require_qualification(os.environ["GITHUB_REPOSITORY"], source_commit)
 
 
 @contextmanager

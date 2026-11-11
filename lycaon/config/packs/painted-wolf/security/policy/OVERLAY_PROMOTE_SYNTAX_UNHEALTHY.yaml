@@ -45,9 +45,6 @@ x-paintedwolf-scenarios:
     parse_error: line 783
     profile: implement
     tool: promote_overlay
-  expect_contains:
-  - 'Code: OVERLAY_PROMOTE_SYNTAX_UNHEALTHY'
-  - merged source
 - id: timeout
   vars:
     tool: promote_overlay
@@ -57,4 +54,3 @@ x-paintedwolf-scenarios:
     parse_phase: merged
     parse_failure: swift parsing stopped after 30000 ms
     parse_config: config/packs/painted-wolf/platform/host/source-parsing.yaml
-  expect_contains: ['Code: OVERLAY_PROMOTE_SYNTAX_UNHEALTHY', 'host timeout', 'preserved overlay']

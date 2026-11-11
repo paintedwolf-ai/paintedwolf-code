@@ -3,7 +3,6 @@ package promptsource
 import (
 	"context"
 
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -16,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/policyfacts"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/turnnudges"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -35,8 +35,9 @@ type Closeout struct {
 
 func (m *Closeout) Build() promptloop.CloseoutDeps {
 	deps := promptloop.CloseoutDeps{
-		RejectFmt:  m.Rejects,
-		HintConfig: m.Hints,
+		RejectFmt:     m.Rejects,
+		HintConfig:    m.Hints,
+		HintNextSteps: tools.HintNextStepsResolver(m.Policy.Pipeline.Rules()),
 		EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
 			reject, blocked, content, transformed, err := m.Policy.ContentBlock(ctx, sess, anchor, observation, tool, args)
 			if err != nil {
@@ -47,6 +48,9 @@ func (m *Closeout) Build() promptloop.CloseoutDeps {
 		EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 			return m.Policy.CloseoutBlock(ctx, sess, gc)
 		},
+		EvaluateMidTurnNote: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error {
+			return m.Policy.MidTurnNoteFeedback(ctx, sess, gc)
+		},
 	}
 	deps.TurnCloseoutNudge = m.Nudges.Closeout
 	deps.IterationRunwayNudge = m.Nudges.IterationRunway
@@ -54,20 +58,6 @@ func (m *Closeout) Build() promptloop.CloseoutDeps {
 	deps.AssertCompletion = m.Guards.AssertCompletion
 	deps.OnGroundedSynthesisAccepted = func(ctx context.Context, _ *api.Session, sessionID string) {
 		m.Batch.AcceptSynthesis(ctx, sessionID)
-	}
-	deps.ProseCitationGrounding = func(ctx context.Context, sess *api.Session, history []api.Message, _ string, prose, surfaceID string) *api.CitationGrounding {
-		if m == nil || sess == nil || sess.IsWorkerChild() {
-			return nil
-		}
-		roots, err := m.Closeout.CitationRoots(ctx, sess)
-		if err != nil {
-			return nil
-		}
-		grounding, err := guard.BuildCoordinatorProseCitationGrounding(ctx, m.Evidence, sess, history, prose, surfaceID, roots)
-		if err != nil {
-			return nil
-		}
-		return grounding
 	}
 	deps.EvidenceLedger = m.Evidence
 	deps.MaxCloseoutCitationGroundingRetries = limits.DefaultCitationGroundingRetries
@@ -82,8 +72,8 @@ func (m *Closeout) Build() promptloop.CloseoutDeps {
 		deps.CheckRunReportDocument = m.Reports.CheckRunReportDocument
 	}
 	deps.ClearCloseoutStall = m.Closeouts.ClearCloseoutStall
-	deps.AssembleLedgerCloseout = func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draftedContent string, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-		return m.Closeout.Assemble(ctx, sessionID, surfaceID, forcedBy, draftedContent, retryCount)
+	deps.AssembleLedgerCloseout = func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draft guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+		return m.Closeout.Assemble(ctx, sessionID, surfaceID, forcedBy, draft, retryCount)
 	}
 	deps.CitationRoots = func(ctx context.Context, sess *api.Session) evidence.CitationRoots {
 		if m == nil || sess == nil {

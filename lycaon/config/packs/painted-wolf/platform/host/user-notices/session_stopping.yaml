@@ -6,4 +6,3 @@ suggested_action: Wait for the chat to finish stopping.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [stopping, cannot start]

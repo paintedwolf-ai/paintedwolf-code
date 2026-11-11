@@ -182,40 +182,6 @@ func TestAltitudeInvariantSurveyTieringAndGloss(t *testing.T) {
 	})
 }
 
-func TestAltitudeRepoMapToolGone(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	for _, rel := range []string{
-		"lycaon/config/packs/painted-wolf/platform/tools/native-tools.yaml",
-		"lycaon-den/src/api/types.ts",
-	} {
-		body, err := os.ReadFile(filepath.Join(root, rel))
-		contractcheck.FailErr(t, "read "+rel, err)
-		if strings.Contains(string(body), "repo_map") {
-			t.Fatalf("%s must not reference repo_map tool", rel)
-		}
-	}
-	schemaDir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas")
-	entries, err := os.ReadDir(schemaDir)
-	contractcheck.FailErr(t, "read tools/schemas", err)
-	for _, ent := range entries {
-		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".yaml") {
-			continue
-		}
-		if strings.TrimSuffix(ent.Name(), ".yaml") == "repo_map" {
-			t.Fatal("tools/schemas must not include repo_map.yaml")
-		}
-		body, err := os.ReadFile(filepath.Join(schemaDir, ent.Name()))
-		contractcheck.FailErr(t, "read schema "+ent.Name(), err)
-		if strings.Contains(string(body), "repo_map") {
-			t.Fatalf("tools/schemas/%s must not reference repo_map", ent.Name())
-		}
-	}
-	if tools := loadNativeToolsManifestFlat(t); altitudeContainsString(tools, "repo_map") {
-		t.Fatal("native-tools manifest must not list repo_map")
-	}
-}
-
 func TestAltitudeCompactorBoundary(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -251,7 +217,7 @@ func TestAltitudeCompactorBoundary(t *testing.T) {
 func TestAltitudeToolArgSchemas(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 
 	locked := map[string][]string{
@@ -312,15 +278,6 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-func altitudeContainsString(ss []string, want string) bool {
-	for _, s := range ss {
-		if s == want {
-			return true
-		}
-	}
-	return false
 }
 
 // Evidence rows carry observed handles or typed gate outcomes. A manifest

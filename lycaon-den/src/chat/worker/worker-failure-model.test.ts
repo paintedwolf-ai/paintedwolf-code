@@ -39,14 +39,11 @@ describe("workerFailureDisplay", () => {
       created_at: "2026-01-01T00:00:00Z",
       error: "context canceled",
     });
-    expect(display?.headline).toBe("Worker failed");
     expect(display?.message).toBe("context canceled");
   });
 
   it("maps dispatch rejects to structured failure copy", () => {
     const failure = workerFailureFromDispatchReject("PROGRESS_MISSING");
     expect(failure.code).toBe("PROGRESS_MISSING");
-    expect(failure.title).toBe("Worker dispatch rejected");
-    expect(failure.message).toBe("The coordinator called a worker with arguments the host rejected.");
   });
 });

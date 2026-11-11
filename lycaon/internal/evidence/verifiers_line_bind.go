@@ -17,6 +17,15 @@ func effectiveClaimPath(rec Record, claimPath string) string {
 func lineContentIndex(rec Record, claimPath string) map[int]string {
 	claimPath = effectiveClaimPath(rec, claimPath)
 	idx := map[int]string{}
+	if fact := rec.SourceDelivery; fact != nil {
+		if NormalizeLedgerPath(rec.Path) != claimPath {
+			return nil
+		}
+		for i, line := range rec.Body {
+			idx[fact.StartLine+i] = line
+		}
+		return idx
+	}
 	for _, body := range rec.Body {
 		for _, line := range strings.Split(body, "\n") {
 			n, text, ok := hostmarker.ParseNumberedLine(line)
@@ -73,7 +82,9 @@ func excerptAtCitedLine(rec Record, claimPath string, line int, excerpt string, 
 	if window < 0 {
 		window = 0
 	}
-	for anchor := line - window; anchor <= line+window; anchor++ {
+	// Counting by offset keeps a line near the integer limit from wrapping.
+	for offset := -window; offset <= window; offset++ {
+		anchor := line + offset
 		if anchor <= 0 {
 			continue
 		}
@@ -124,7 +135,11 @@ func reanchorExcerpt(ev Ledger, path string, excerpt string) (int, string, bool)
 			continue
 		}
 		for line := range idx {
-			if line > 0 && excerptLinesMatchAtAnchor(idx, line, exLines) {
+			matches := excerptLinesMatchAtAnchor(idx, line, exLines)
+			if rec.SourceDelivery != nil {
+				matches, _ = verifyDeliveredSource(rec, Claim{Path: path, Line: line, Excerpt: excerpt})
+			}
+			if line > 0 && matches {
 				if existing, exists := matched[line]; !exists || h < existing {
 					matched[line] = h
 				}

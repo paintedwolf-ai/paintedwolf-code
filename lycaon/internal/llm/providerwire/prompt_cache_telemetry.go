@@ -31,6 +31,7 @@ type promptCacheSessionStats struct {
 	window                             [promptCacheWindowSize]promptCacheSample
 	next, count                        int
 	alert                              string
+	prefix                             prefixBaseline
 }
 
 type promptCacheHitTracker struct {
@@ -62,6 +63,8 @@ func (t *promptCacheHitTracker) note(scope observability.PromptCacheScope, req m
 		out.IdleMS = max(int64(0), started.Sub(st.started).Milliseconds())
 	}
 	out.Comparison = cacheComparison(st, found, identity, policy, usage, started, failed, out)
+	prefix := measurePrefixReuse(st.prefix, found, req, identity, out)
+	prefix.apply(&out)
 	if out.Comparison == "comparable" {
 		st.window[st.next] = promptCacheSample{usage.PromptTokens, usage.CacheReadInputTokens, usage.CacheCreationInputTokens}
 		st.next = (st.next + 1) % promptCacheWindowSize
@@ -80,6 +83,7 @@ func (t *promptCacheHitTracker) note(scope observability.PromptCacheScope, req m
 			st.history = identity.history[st.historyCount-1]
 		}
 		st.started, st.finished = started, finished
+		st.prefix = prefix.baseline
 		st.valid = identity.valid && !identity.retried && !failed && usage.Reported() && !usage.Incomplete
 	}
 	st.alert = out.Alert

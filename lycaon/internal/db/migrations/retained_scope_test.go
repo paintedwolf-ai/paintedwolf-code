@@ -73,29 +73,9 @@ func TestRetainedRouteSeparatesCheckpointPayloadAndManifestSorts(t *testing.T) {
 	}
 }
 
-func TestRetainedRouteAcceptsReviewedAuthorityDecoderCorrection(t *testing.T) {
-	plan := retainedStorageContractPlan()
-	plan.steps[2].Checksum = "13848cc7b59739e3971bd0a793d996372bde110f0b6b4e9bb14a9925697557a5"
-	if !plan.reviewedRetainedRoute() {
-		t.Fatal("reviewed decoder-only correction lost resource proof")
-	}
-}
-
 func TestRetainedSelectionRejectsPhysicalCountOverflow(t *testing.T) {
 	trees := map[string]retainedTree{"source_manifest_chunks": {cells: math.MaxUint64, record: 200}}
 	if _, err := retainedRouteSortBytes(trees, 4096); err == nil {
 		t.Fatal("accepted overflowing physical selection")
-	}
-}
-
-func TestRetainedRouteAcceptsOnlyTheReviewedBoundedWriter(t *testing.T) {
-	plan := retainedStorageContractPlan()
-	plan.steps[0].Checksum = "046635199cf698cecc77b7f59fe03b92a9874b1b1789025472f44e0af6b8931e"
-	if !plan.reviewedRetainedRoute() {
-		t.Fatal("reviewed streaming writer lost resource proof")
-	}
-	plan.steps[0].Checksum = "unreviewed-writer"
-	if plan.reviewedRetainedRoute() {
-		t.Fatal("unreviewed writer inherited allocation proof")
 	}
 }

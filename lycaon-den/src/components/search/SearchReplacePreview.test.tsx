@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, expect, it, vi } from "vitest";
@@ -23,22 +24,22 @@ it("keeps revert state with its batch, including late completions", async () => 
     onApply={() => {}} onApplyFile={() => {}} onCancel={() => {}}
     onSearchAgain={() => {}} applyAllDisabled={false} onRevertBatch={revert}
   />);
-  fireEvent.click(screen.getByRole("button", { name: "Revert" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("search-replace-revert"), "button"));
   await waitFor(() => expect(revert).toHaveBeenCalledTimes(1));
   setCurrent(null);
   setCurrent(summary("b"));
-  expect(screen.getByRole("button", { name: "Revert" }).hasAttribute("disabled")).toBe(false);
+  expect(assertNamedControl(screen.getByTestId("search-replace-revert"), "button").hasAttribute("disabled")).toBe(false);
   finish({ ok: 1, skipped: [], undos: [] });
   await Promise.resolve();
   expect(screen.queryByTestId("search-replace-revert-report")).toBeNull();
-  fireEvent.click(screen.getByRole("button", { name: "Revert" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("search-replace-revert"), "button"));
   await waitFor(() => expect(revert).toHaveBeenCalledTimes(2));
   finish({ ok: 1, skipped: [], undos: [] });
   await waitFor(() => expect(screen.getByTestId("search-replace-revert-report").textContent).toContain("Reverted 1 file"));
   setCurrent(null);
   setCurrent(summary("c"));
   expect(screen.queryByTestId("search-replace-revert-report")).toBeNull();
-  expect(screen.getByRole("button", { name: "Revert" }).hasAttribute("disabled")).toBe(false);
+  expect(assertNamedControl(screen.getByTestId("search-replace-revert"), "button").hasAttribute("disabled")).toBe(false);
 });
 
 it.each([

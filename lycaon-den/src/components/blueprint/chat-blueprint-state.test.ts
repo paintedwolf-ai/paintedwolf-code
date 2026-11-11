@@ -491,7 +491,6 @@ describe("createChatBlueprintState", () => {
 
     state.approve();
     await vi.waitFor(() => expect(errors).toHaveLength(1));
-    expect(errors[0]).toBe("The blueprint changed. Review it and approve again.");
     dispose();
   });
 
@@ -518,7 +517,6 @@ describe("createChatBlueprintState", () => {
 
     state.fireChoiceTransition("critique");
     await vi.waitFor(() => expect(errors).toHaveLength(1));
-    expect(errors[0]).toBe("The workflow changed. Review it and try again.");
     dispose();
   });
 

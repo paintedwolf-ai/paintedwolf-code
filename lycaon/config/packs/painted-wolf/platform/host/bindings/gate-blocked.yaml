@@ -9,9 +9,6 @@ invariants:
   trigger_class: tool_rejection
   fires_in:
   - tool rejection with WORKFLOW_GATE_BLOCKED banner
-  required:
-  - failed_leaves
-  - delegate
   optional_vars:
   - gate_obligations
   - failed_leaves

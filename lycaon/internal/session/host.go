@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -17,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/closeoutassembly"
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
+	"github.com/lycaon/lycaon/internal/session/contextpreparation"
 	"github.com/lycaon/lycaon/internal/session/coordinatorcontrol"
 	"github.com/lycaon/lycaon/internal/session/curation"
 	"github.com/lycaon/lycaon/internal/session/decisions"
@@ -71,37 +73,59 @@ import (
 )
 
 type Host struct {
-	Resources      *resources.Service
-	RewindRuntime  *rewindruntime.Service
-	Coordinator    *coordinatorcontrol.Service
-	ProjectControl *projectcontrol.Service
-	Admission      *turnadmission.Service
-	Processes      *processcontrol.Service
-	Promotion      *promotionstate.Service
-	Runner         *turnexecution.Service
-	Stops          *stopping.Service
-	ToolPolicy     *policyfacts.Service
-	ToolContext    *toolcontext.Service
-	Verification   *sessionverification.Service
-	Profiles       *profiles.Service
-	Workers        *workerexecution.Service
-	Chats          *chats.Service
-	Limits         *sessionlimits.Service
-	SourceBriefs   *sourcebrief.Service
-	Workspace      *sessionscope.Service
-	Catalog        sessioncatalog.Service
-	Observations   *sessionobservation.Service
-	Submissions    *submissions.Service
-	Decisions      decisions.Store
+	ContextPreparation *contextpreparation.Service
+	Resources          *resources.Service
+	RewindRuntime      *rewindruntime.Service
+	Coordinator        *coordinatorcontrol.Service
+	ProjectControl     *projectcontrol.Service
+	Admission          *turnadmission.Service
+	Processes          *processcontrol.Service
+	Promotion          *promotionstate.Service
+	Runner             *turnexecution.Service
+	Stops              *stopping.Service
+	ToolPolicy         *policyfacts.Service
+	ToolContext        *toolcontext.Service
+	Verification       *sessionverification.Service
+	Profiles           *profiles.Service
+	Workers            *workerexecution.Service
+	Chats              *chats.Service
+	Limits             *sessionlimits.Service
+	SourceBriefs       *sourcebrief.Service
+	Workspace          *sessionscope.Service
+	Catalog            sessioncatalog.Service
+	Observations       *sessionobservation.Service
+	Submissions        *submissions.Service
+	Decisions          decisions.Store
+	loopbackProv       LoopbackProvenanceResolver
 }
 
-// SetLoopbackProvenance installs the provenance resolver for task container recording.
+// SetLoopbackProvenance installs host listener observation and provenance.
 func (m *Host) SetLoopbackProvenance(p LoopbackProvenanceResolver) {
 	if m != nil {
-
-		m.ToolContext.SetContainers(p)
-		m.Chats.SetLoopback(p)
+		m.loopbackProv = p
+		observer, _ := p.(tools.LoopbackEndpointObserver)
+		m.ToolContext.SetLoopbackObserver(observer)
+		if dp, ok := p.(*DefaultLoopbackProvenance); ok {
+			dp.SetHostSources(
+				m.Chats,
+				m.ToolContext.Project,
+				func() *bgprocess.Registry {
+					if m.Processes == nil {
+						return nil
+					}
+					return m.Processes.Background
+				},
+			)
+		}
 	}
+}
+
+// LoopbackProvenance returns the installed loopback provenance resolver.
+func (m *Host) LoopbackProvenance() LoopbackProvenanceResolver {
+	if m == nil {
+		return nil
+	}
+	return m.loopbackProv
 }
 
 // NewHost acquires the session domains and binds their shared resources.
@@ -238,6 +262,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.RewindRuntime.Touches = m.Workers.Workspaces.Touches
 	acquireCoordinatorSources(m, store, client, svc, registry, tracker)
 	bindCoordinatorRuntime(m, store)
+	m.ContextPreparation = newContextPreparation(m)
 
 	return m
 }
@@ -255,6 +280,7 @@ func (m *Host) BeginEngineShutdown() {
 	if m == nil {
 		return
 	}
+	m.ContextPreparation.Stop()
 	m.Runner.Settlement.BeginShutdown()
 	m.Coordinator.Runtime.StopSleepTimers()
 	m.Catalog.Stop()
@@ -275,6 +301,7 @@ func (m *Host) WaitForEngineShutdown(ctx context.Context) error {
 		return nil
 	}
 	var errs []error
+	errs = append(errs, m.ContextPreparation.Wait(ctx))
 	errs = append(errs, m.Coordinator.Runtime.WaitSleepTimers(ctx))
 	if m.Runner.Curation != nil {
 		m.Runner.Curation.Wait(ctx)

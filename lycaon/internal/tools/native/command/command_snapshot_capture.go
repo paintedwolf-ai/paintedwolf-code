@@ -71,12 +71,16 @@ func runCommandSnapshotCapture(
 	}
 
 	scratchDir := strings.TrimSpace(tctx.Host.SessionScratchDir)
-	if scratchDir == "" {
+	tempScratch := scratchDir == ""
+	if tempScratch {
 		scratchDir = os.TempDir()
 	}
 	outFileName := fmt.Sprintf("snapshot-%s.png", uuid.NewString())
 	outPath := filepath.Join(scratchDir, outFileName)
-	extraWriteRoots = append(extraWriteRoots, filepath.Dir(outPath))
+	if tempScratch {
+		// Session scratch already rides its dedicated confinement lane.
+		extraWriteRoots = append(extraWriteRoots, filepath.Dir(outPath))
+	}
 
 	childEnv := make(map[string]any)
 	if existingEnv, ok := args["env"].(map[string]any); ok {

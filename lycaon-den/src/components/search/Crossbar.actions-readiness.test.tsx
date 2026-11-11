@@ -44,13 +44,12 @@ it("presents first-frame hydration then the actual stock Actions row from the sa
   initContributionStore(() => client);
   present();
   expect(contributionFrameHydrating()).toBe(true);
-  expect(screen.getByText("Actions are loading…").getAttribute("role")).toBe("status");
-  expect(screen.queryByText("No matching actions or results.")).toBeNull();
+  expect(screen.getByTestId("crossbar-action-status").getAttribute("role")).toBe("status");
+  expect(screen.queryByTestId("crossbar-empty")).toBeNull();
   resolve(STOCK_FRAME);
   await ensureContributionFrame();
   expect(await screen.findByTestId(`crossbar-action-${commandId}`)).toBeTruthy();
-  expect(screen.queryByText("Actions are loading…")).toBeNull();
-  expect(screen.queryByText("Actions unavailable")).toBeNull();
+  expect(screen.queryByTestId("crossbar-action-status")).toBeNull();
 });
 
 it("distinguishes unavailable hydration from no match and retains a ready frame during a failed refresh", async () => {
@@ -65,18 +64,18 @@ it("distinguishes unavailable hydration from no match and retains a ready frame 
   initContributionStore(() => client);
   present();
   await ensureContributionFrame();
-  expect(screen.getByText("Actions unavailable").getAttribute("role")).toBe("status");
-  expect(screen.queryByText("No matching actions or results.")).toBeNull();
+  expect(screen.getByTestId("crossbar-action-status").getAttribute("role")).toBe("status");
+  expect(screen.queryByTestId("crossbar-empty")).toBeNull();
   fail = false;
   await invalidateContributionFrame();
   await screen.findByTestId(`crossbar-action-${commandId}`);
   fail = true;
   const refreshing = invalidateContributionFrame();
-  expect(screen.queryByText("Actions are loading…")).toBeNull();
+  expect(screen.queryByTestId("crossbar-action-status")).toBeNull();
   expect(screen.getByTestId(`crossbar-action-${commandId}`)).toBeTruthy();
   await refreshing;
   expect(screen.getByTestId(`crossbar-action-${commandId}`)).toBeTruthy();
-  expect(screen.queryByText("Actions unavailable")).toBeNull();
+  expect(screen.queryByTestId("crossbar-action-status")).toBeNull();
 });
 
 it("keeps ready filtered emptiness distinct from unavailable shell facts", async () => {
@@ -86,13 +85,12 @@ it("keeps ready filtered emptiness distinct from unavailable shell facts", async
   facts.setShellFactState({ ...ALL_SHELL_FACTS, editor: null });
   const view = present();
   expect(crossbarCommands()).toEqual({ phase: "ready", commands: [] });
-  expect(screen.queryByText("Actions are loading…")).toBeNull();
-  expect(screen.queryByText("Actions unavailable")).toBeNull();
+  expect(screen.queryByTestId("crossbar-action-status")).toBeNull();
   view.unmount();
   vi.spyOn(facts, "liveShellFactLookup").mockReturnValue(null);
   present();
   expect(crossbarCommands()).toEqual({ phase: "unavailable", commands: [] });
-  expect(screen.getByText("Actions unavailable")).toBeTruthy();
+  expect(screen.getByTestId("crossbar-action-status")).toBeTruthy();
   expect(screen.queryByTestId(`crossbar-action-${commandId}`)).toBeNull();
 });
 
@@ -100,6 +98,5 @@ it("does not present Actions availability in a Files query", async () => {
   resetContributionStoreForTest();
   render(() => <Crossbar open originProjectId="fixed-project" seed="file-name" initialMode="files"
     contributionActions={crossbarCommands()} onClose={vi.fn()} onEscalate={vi.fn()} onNavigateHit={vi.fn()} />);
-  await waitFor(() => expect(screen.queryByText("Actions unavailable")).toBeNull());
-  expect(screen.queryByText("Actions are loading…")).toBeNull();
+  await waitFor(() => expect(screen.queryByTestId("crossbar-action-status")).toBeNull());
 });

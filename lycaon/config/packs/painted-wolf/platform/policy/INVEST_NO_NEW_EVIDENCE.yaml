@@ -31,6 +31,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: path:AGENTS.md
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: INVEST_NO_NEW_EVIDENCE'

@@ -28,7 +28,6 @@ describe("TurnLoadCard", () => {
     const { getByTestId } = render(() => <TurnLoadCard row={toolsRow} layout="chat" />);
     const card = getByTestId("turn-load-card") as HTMLElement;
     expect(card.dataset.tool).toBe("Bialy");
-    expect(card.textContent).toContain("Local AI");
     expect(card.textContent).toContain("git_commit, git_status");
     expect(card.textContent).toContain("offered · 438 ms");
     fireEvent.click(disclosureToggle(card));

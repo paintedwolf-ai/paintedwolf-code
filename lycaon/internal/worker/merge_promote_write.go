@@ -4,22 +4,26 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/idset"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/scan/obligation"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
+	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *MergeService) registerReconcilePaths(sessionID string, assessment PromoteAssessment) {
-	if s == nil || s.Reconcile == nil {
+func (s mergeEngine) registerReconcilePaths(sessionID string, assessment PromoteAssessment) {
+	if s.MergeService == nil || s.Reconcile == nil {
 		return
 	}
 	var paths []string
@@ -31,8 +35,8 @@ func (s *MergeService) registerReconcilePaths(sessionID string, assessment Promo
 	}
 }
 
-func (s *MergeService) recordPromoteOutput(sessionID, jobID string, out *api.WorkerMergeResult) {
-	if s == nil || s.Reconcile == nil || out == nil {
+func (s mergeEngine) recordPromoteOutput(sessionID, jobID string, out *api.WorkerMergeResult) {
+	if s.MergeService == nil || s.Reconcile == nil || out == nil {
 		return
 	}
 	if rows := promotionstate.NormalizePromotePathStatusRows(out.PathStatus); len(rows) > 0 {
@@ -44,8 +48,8 @@ func (s *MergeService) recordPromoteOutput(sessionID, jobID string, out *api.Wor
 	}
 }
 
-func (s *MergeService) clearReconcilePaths(sessionID string) {
-	if s == nil || s.Reconcile == nil {
+func (s mergeEngine) clearReconcilePaths(sessionID string) {
+	if s.MergeService == nil || s.Reconcile == nil {
 		return
 	}
 	s.Reconcile.ClearMergeReconcilePaths(sessionID)
@@ -130,7 +134,7 @@ func notifyMergeWorktreeChanged(ctx context.Context, task *api.WorkerTask, roots
 	}
 }
 
-func (s *MergeService) rejectConflict(jobID string, assessment PromoteAssessment) error {
+func (s mergeEngine) rejectConflict(jobID string, assessment PromoteAssessment) error {
 	conflictPaths := make([]string, 0, len(assessment.Conflicts))
 	for _, c := range assessment.Conflicts {
 		conflictPaths = append(conflictPaths, c.Path)
@@ -156,6 +160,107 @@ func promoteRecoveryChoices(assessment PromoteAssessment) []map[string]any {
 		choices = append(choices, map[string]any{"path": item.Path, "action": item.Action, "needs_review": item.NeedsReview, "conflict_tier": item.ConflictTier})
 	}
 	return choices
+}
+
+type promoteFinishInput struct {
+	sessionID     string
+	task          *api.WorkerTask
+	jobID         string
+	out           *api.WorkerMergeResult
+	resolved      []string
+	landed        []string
+	detail        string
+	claim         *mergeApplyClaim
+	facts         promotionSourceFacts
+	childStatuses []MergeStatusUpdate
+}
+
+func (s mergeEngine) finishPromoteState(ctx context.Context, in promoteFinishInput) error {
+	fullPaths := s.jobPromotePaths(ctx, in.task)
+	fullAssessment, err := s.assessMerge(ctx, in.sessionID, in.task, fullPaths)
+	if err != nil {
+		return err
+	}
+	remaining := remainingPromoteWork(fullAssessment, in.resolved)
+	in.out.Applied = append([]string(nil), in.resolved...)
+	fillMergeResult(in.out, remaining, promoteOutputOpts{Detail: in.detail})
+	if mergeComplete(remaining) {
+		return s.commitCompletedPromotion(ctx, in)
+	}
+	s.registerReconcilePaths(in.sessionID, remaining)
+	if err := s.releaseMergeClaim(ctx, in.claim); err != nil {
+		return fmt.Errorf("persist pending overlay: %w", err)
+	}
+	in.out.Status = api.WorkerMergeStatusPending
+	return nil
+}
+
+func (s mergeEngine) commitCompletedPromotion(ctx context.Context, in promoteFinishInput) error {
+	plan := obligation.Plan{}
+	if s.Scans != nil && in.task != nil {
+		var planErr error
+		plan, planErr = s.Scans.PrepareOverlayPromotion(ctx, *in.task, in.landed, deletedPromotionPaths(in.facts.changes))
+		if planErr != nil {
+			return fmt.Errorf("prepare landed change: %w", planErr)
+		}
+	}
+	if cause := context.Cause(ctx); cause != nil {
+		return cause
+	}
+	in.facts.stageDocuments(ctx)
+	in.claim.stop()
+	commitCtx, cancel := promoteCleanupContext(ctx)
+	err := s.Store.CommitPromotion(commitCtx, in.jobID, in.claim.token, PromotionCommit{
+		Plan: plan, Recorder: s.SourceLedger, Documents: in.facts.documentWriter(),
+		Records: in.facts.records, Changes: in.facts.changes, ChildStatuses: in.childStatuses,
+	})
+	cancel()
+	if err != nil {
+		return fmt.Errorf("commit merged overlay: %w", err)
+	}
+	in.facts.documents.release(ctx, true)
+	s.clearReconcilePaths(in.sessionID)
+	s.finalizeMergedOverlay(ctx, in.task, in.jobID, plan)
+	in.out.Status = api.WorkerMergeStatusMerged
+	return nil
+}
+
+func (s mergeEngine) finalizeMergedOverlay(ctx context.Context, task *api.WorkerTask, jobID string, plan obligation.Plan) {
+	if s.Scans != nil && !plan.Empty() {
+		if err := s.Scans.PublishObligation(ctx, plan); err != nil {
+			slog.WarnContext(ctx, "scan obligation publication deferred", "landed_change_id", plan.ID, "scan_id", plan.ScanID, "err", err)
+		}
+	}
+	if s.Coord != nil && task != nil {
+		_ = s.Coord.ReleaseReservations(ctx, task.ParentSessionID, jobID)
+	}
+	if s.Closeout != nil && task != nil && task.DelegationID != "" {
+		_ = s.Closeout.RetryCloseout(ctx, task.DelegationID)
+	}
+	if err := s.teardownBranch(ctx, task); err != nil {
+		slog.WarnContext(ctx, "merged overlay cleanup deferred", "job_id", jobID, "err", err)
+		return
+	}
+	cleanupCtx, cancel := promoteCleanupContext(ctx)
+	err := s.Store.ClearWorkerWorkspace(cleanupCtx, jobID)
+	cancel()
+	if err != nil {
+		slog.WarnContext(ctx, "merged overlay metadata cleanup deferred", "job_id", jobID, "err", err)
+	}
+}
+
+func deletedPromotionPaths(changes []sourcefeed.Change) []string {
+	deleted := make([]string, 0)
+	for _, change := range changes {
+		if change.Op == api.SourceChangeOpDelete {
+			deleted = append(deleted, change.Path)
+		}
+	}
+	return deleted
+}
+
+func promoteCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 }
 
 func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, bool, error) {

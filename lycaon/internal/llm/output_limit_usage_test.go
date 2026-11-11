@@ -1,14 +1,18 @@
 package llm
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	anthropicprovider "github.com/lycaon/lycaon/internal/llm/providers/anthropic"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -59,9 +63,12 @@ func TestCloudflareOutputLimitRecoversOnceAndPreservesUsage(t *testing.T) {
 			} else {
 				completion, err = provider.Complete(t.Context(), req)
 			}
-			empty, ok := failure.AsProviderEmptyCompletion(err)
-			if !ok || empty.Retryable || empty.Reason != "length" || empty.Attempts != 2 || calls != 2 || !empty.RecoveryAttempted {
+			truncated, ok := failure.AsProviderOutputTruncated(err)
+			if !ok || truncated.FinishReason != "length" || truncated.Attempts != 2 || calls != 2 || !truncated.RecoveryAttempted {
 				t.Fatalf("output limit error = %v, requests = %d", err, calls)
+			}
+			if _, isEmpty := failure.AsProviderEmptyCompletion(err); isEmpty {
+				t.Fatalf("length output limit misclassified as empty completion: %v", err)
 			}
 			if completion.ContextInputTokens() != 42 {
 				t.Fatalf("failed attempts inflated context input: %d", completion.ContextInputTokens())
@@ -176,5 +183,104 @@ func TestResponseRetryPreservesAttemptMetadata(t *testing.T) {
 		if err != nil || completion == nil || completion.ContextInputTokens() != 7 || completion.Usage.PromptTokens != 20 || completion.Usage.CacheReadInputTokens != 8 {
 			t.Fatalf("stream=%v lost separated attempt and billing usage: %+v, %v", stream, completion, err)
 		}
+	}
+}
+
+func TestOpenAICompatClassifiesLengthTruncatedToolCallAsOutputTruncatedError(t *testing.T) {
+	truncatedArgs := `{"path":"internal/foo.go","content":"package foo\nfunc bar() {`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":    "chatcmpl-trunc",
+			"model": "gpt-4o",
+			"choices": []map[string]any{{
+				"index":         0,
+				"finish_reason": "length",
+				"message": map[string]any{
+					"role":    "assistant",
+					"content": "",
+					"tool_calls": []map[string]any{{
+						"id":   "call_write_1",
+						"type": "function",
+						"function": map[string]any{
+							"name":      "write",
+							"arguments": truncatedArgs,
+						},
+					}},
+				},
+			}},
+			"usage": map[string]any{
+				"prompt_tokens":     120,
+				"completion_tokens": 4096,
+				"total_tokens":      4216,
+			},
+		})
+	}))
+	defer srv.Close()
+
+	provider := openaicompat.New("openai", srv.URL, "test-key", []modelinfo.Entry{{
+		ID:                "gpt-4o",
+		MaxTokens:         4096,
+		ProviderMaxTokens: 16384,
+	}})
+
+	_, err := provider.Complete(context.Background(), modelcall.CompletionRequest{
+		Model:     "gpt-4o",
+		MaxTokens: 4096,
+		Messages:  []api.Message{{Role: api.MessageRoleUser, Content: "write file"}},
+	})
+	if err == nil {
+		t.Fatal("expected error for length-truncated tool call")
+	}
+	var emptyErr *failure.ProviderEmptyCompletionError
+	if errors.As(err, &emptyErr) {
+		t.Fatalf("expected ProviderOutputTruncatedError distinct from ProviderEmptyCompletionError, got %T: %v", err, err)
+	}
+	var truncErr *failure.ProviderOutputTruncatedError
+	if !errors.As(err, &truncErr) {
+		t.Fatalf("expected *failure.ProviderOutputTruncatedError, got %T: %v", err, err)
+	}
+	if !truncErr.ToolCallTruncated {
+		t.Fatal("expected ToolCallTruncated = true")
+	}
+	if truncErr.ToolName != "write" {
+		t.Fatalf("ToolName = %q, want %q", truncErr.ToolName, "write")
+	}
+	if truncErr.ToolArgsBytes != len(truncatedArgs) {
+		t.Fatalf("ToolArgsBytes = %d, want %d", truncErr.ToolArgsBytes, len(truncatedArgs))
+	}
+	if truncErr.MaxTokens != 4096 {
+		t.Fatalf("MaxTokens = %d, want 4096", truncErr.MaxTokens)
+	}
+	if truncErr.ConfiguredMaxTokens != 4096 || truncErr.ProviderMaxTokens != 16384 {
+		t.Fatalf("ceilings = (%d, %d), want (4096, 16384)", truncErr.ConfiguredMaxTokens, truncErr.ProviderMaxTokens)
+	}
+	if !truncErr.LowOutputCeiling() {
+		t.Fatal("expected LowOutputCeiling() = true when configured_max_tokens < provider_max_tokens")
+	}
+}
+
+func TestLookupModelOutputCeilingDiagnosticSurfacesLowCeiling(t *testing.T) {
+	reg := &Registry{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	reg.Register(openaicompat.New("anthropic", srv.URL, "key", []modelinfo.Entry{{
+		ID:                "claude-sonnet-4-5",
+		MaxTokens:         8192,
+		ProviderMaxTokens: 64000,
+	}}))
+
+	ceiling := LookupModelOutputCeilingDiagnostic(context.Background(), reg, "anthropic", "claude-sonnet-4-5")
+	if ceiling == nil {
+		t.Fatal("expected output ceiling diagnostic to be found")
+	}
+	if ceiling.ConfiguredMaxTokens != 8192 || ceiling.ProviderMaxTokens != 64000 {
+		t.Fatalf("ceiling = %+v, want 8192 / 64000", ceiling)
+	}
+	if !strings.Contains(ceiling.Diagnostic, "8192") || !strings.Contains(ceiling.Diagnostic, "64000") {
+		t.Fatalf("diagnostic = %q, want configured and provider ceilings mentioned", ceiling.Diagnostic)
 	}
 }

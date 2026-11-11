@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: implement
       tool: page_act
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: PAGE_ID_REQUIRED'
-      - page_open

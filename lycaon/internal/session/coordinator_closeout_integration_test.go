@@ -4,12 +4,11 @@ package session_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/orchestration"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -17,11 +16,13 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func requireWorkflowCloseoutRejection(t *testing.T, err error) {
+func requireWorkflowCloseoutRejection(t *testing.T, resp *promptresult.Result, err error) {
 	t.Helper()
-	refusal, ok := guidance.RefusalFromError(err)
-	if !ok || refusal.Code() != "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT" || !errors.Is(err, guidance.ErrCloseoutStopped) {
-		t.Fatalf("gated prose closeout = %v; want structured workflow gate stop", err)
+	if err != nil {
+		t.Fatalf("gated prose closeout returned error %v; want settled closeout_blocked outcome", err)
+	}
+	if resp == nil || !resp.IsCloseoutBlocked() || resp.CloseoutBlocked == nil || resp.CloseoutBlocked.Code != "WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT" || len(resp.CloseoutBlocked.OpenGateLeaves) == 0 {
+		t.Fatalf("gated prose closeout = %+v; want closeout_blocked with WORKFLOW_GATES_OPEN_BEFORE_CLOSEOUT and open gate leaves", resp)
 	}
 }
 

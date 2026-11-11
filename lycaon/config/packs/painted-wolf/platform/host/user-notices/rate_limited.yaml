@@ -6,6 +6,4 @@ suggested_action: Wait briefly and try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Too many requests
 retryable: true

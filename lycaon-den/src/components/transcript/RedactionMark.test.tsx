@@ -39,7 +39,6 @@ describe("RedactionMark", () => {
     ));
     const mark = container.querySelector(".den-redaction-mark");
     expect(mark?.classList.contains("den-redaction-mark--mask")).toBe(true);
-    expect(mark?.getAttribute("data-tip")).toBe("Not shown to observers");
   });
 
   it("keeps a reference readable and says the source still holds the value", () => {

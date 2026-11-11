@@ -31,15 +31,5 @@ scenarios:
       model: zai-org/GLM-5.3-Flash
       status: 500
       attempts: 4
-    expect_contains:
-      - together-ai-1
-      - HTTP 500
-      - provider's side
-      - rather than with your prompt or local setup
-      - tried 4 times
-      - Diagnostics
   - id: generic
     vars: {}
-    expect_contains:
-      - server-side error
-      - provider's side

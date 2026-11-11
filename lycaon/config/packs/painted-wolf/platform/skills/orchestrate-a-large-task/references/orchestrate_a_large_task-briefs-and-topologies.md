@@ -1,5 +1,7 @@
 # Briefs and topologies
 
+The dispatch guidance below is coordinator-only: a worker leg applies the matching guidance within its own assignment and reports dispatch needs to the parent.
+
 ## Topology selection
 
 | Situation | Dispatch shape | Stop condition |
@@ -12,15 +14,24 @@
 | Competing approaches | Independent alternatives against one frozen rubric | Reject losers and integrate one selected result |
 | Independent fix set | Partition by root cause and non-overlapping paths | Every finding maps to exactly one leg |
 | Integrated change needs confidence | Parallel read-only review and verification legs | Findings are resolved or reported as remaining risk |
-| Complementary facts from different roles | Role set in one wave (e.g. web + repo research, research + implement); brief `record_finding` sharing | Each role's questions have grounded notes or explicit unknowns |
+| Complementary facts from different roles | Role set in one wave (e.g. web + repo research, research + implement){% if profile_has_record_finding %}; brief `record_finding` sharing{% endif %} | Each role's questions have grounded notes or explicit unknowns |
 
 Do not mix read scouts and write workers in one slice when the scouts are expected to discover write assignments. Do not parallelize stages whose outputs determine the next stage's interface or scope.
 
 ## Sizing by shape
 
-Host sizing integers are in [the orchestration procedure](references/orchestrate_a_large_task.md) (**Sizing by shape**, rendered at `skills_read`). This file is topology-only.
+Host sizing integers are in [the orchestration procedure](references/orchestrate_a_large_task.md) (**Sizing by shape**{% if profile_has_skills_read and root_count %}, rendered at `skills_read`{% endif %}). This file is topology-only.
 
-Every row above names what to count — components, root causes, configuration groups, areas, roles, approaches. That count is the wave. Prefer another focused `task()` over a kitchen-sink brief, and prefer a role set with `record_finding` sibling notes when complementary agents should share facts mid-flight.
+Every row above names what to count — components, root causes, configuration groups, areas, roles, approaches. That count is the wave. Prefer{% if profile_has_task %} another focused `task()` over a kitchen-sink brief, and{% endif %} a role set{% if profile_has_record_finding %} with `record_finding` sibling notes{% endif %} when complementary agents should share facts mid-flight.
+
+## Dependencies and shared agreements
+
+Name dependencies in the dispatch fields rather than hoping waves line up:
+
+- `after_workers` — the consumer leg starts only after the listed producer jobs finish and their write overlays are promoted; unusable producer output cancels the wait. Use it for stages that build on promoted output, and do not combine it with `child_session_id` or `scope.base_overlay_id`.
+- `scope.base_overlay_id` — stacks a write leg on a pending, unpromoted overlay so both legs edit the same line of work; the base overlay must still promote for the stack to land.
+- `child_session_id` — resumes the same worker on its existing snapshot for follow-up with new facts or budget; it keeps the old snapshot, so it is not a way to pick up a sibling's new edits.
+- `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating leg; give every collaborator the same text so their interfaces cannot diverge.
 
 ## Self-contained worker brief
 

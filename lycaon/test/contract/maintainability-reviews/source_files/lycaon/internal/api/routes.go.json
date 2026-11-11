@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/api/routes.go",
+  "kind": "construction",
+  "workstream": "http-composition",
+  "disposition": "retain",
+  "reason": "This file declares the route map and applies the shared HTTP operation boundary. Local generation repair is one registration into the model administration domain; its implementation and process lifetime remain outside routing. Retain the map at 407 measured lines.",
+  "reviewed_commit": "069ef27f388c4421c30dec66753aeaa513baadd0",
+  "ceiling": 407,
+  "boundaries": {
+    "lycaon/internal/api/operations_contract_test.go": "b12b3bbbfa9eceaee01e4c1d500f92c85076d87f55a07956bc24c83462d620ca",
+    "lycaon/internal/api/hostcontracts/local_generation_test.go": "c4df7763b4bbc1de2ccc285424ea9ae4478d47191913f3fe5a5f7867a12a95c7"
+  }
+}

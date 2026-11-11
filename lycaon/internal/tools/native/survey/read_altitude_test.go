@@ -200,3 +200,25 @@ func TestReadHasExpressedScopeClassifier(t *testing.T) {
 		t.Fatal("large bare file should be unbounded")
 	}
 }
+
+func TestReadSmallFileExplicitOutlineOmitsLargeFileSpecificsNote(t *testing.T) {
+	tmpDir := t.TempDir()
+	css := "body {\n  margin: 0;\n}\n#board {\n  display: grid;\n}\n.cell {\n  width: 48px;\n}\n"
+	testutil.FailErr(t, "write style.css", os.WriteFile(filepath.Join(tmpDir, "style.css"), []byte(css), 0o644))
+	tool := &ReadTool{Boundary: nativefixture.Boundary(t), Escalation: NewReadEscalationStore()}
+	out, err := tool.Run(context.Background(), map[string]any{"path": "style.css", "mode": "outline"}, testCtxSession(tmpDir, "sess-small-outline"))
+	testutil.FailErr(t, "read outline", err)
+	resp := decodeReadOut(t, out)
+	if resp.Mode != "outline" {
+		t.Fatalf("mode = %q, want outline", resp.Mode)
+	}
+	if resp.SurveyRecommended {
+		t.Fatalf("SurveyRecommended = true for %d-line file, want false", resp.TotalLines)
+	}
+	if strings.Contains(resp.Note, "Specifics:") || strings.Contains(resp.Note, "summarize(") {
+		t.Fatalf("small file outline note = %q, must not nudge summarize for large file", resp.Note)
+	}
+	if len(resp.Symbols) != 3 {
+		t.Fatalf("symbols = %+v, want 3 CSS rule-set symbols", resp.Symbols)
+	}
+}

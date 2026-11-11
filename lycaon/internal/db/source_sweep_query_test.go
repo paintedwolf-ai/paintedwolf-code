@@ -42,3 +42,23 @@ func TestSourceSweepCandidatesUseIndexedPages(t *testing.T) {
 		})
 	}
 }
+
+// Reference checks use the partial indexes, so a deletion transaction's cost does
+// not include a full read of the scan and inventory tables per candidate.
+func TestSourceSnapshotDeleteChecksUsePartialIndexes(t *testing.T) {
+	database, err := Open(filepath.Join(t.TempDir(), "store.db"))
+	testutil.FailErr(t, "open store", err)
+	t.Cleanup(func() { _ = database.Close() })
+	rows, err := database.QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+deleteUnreferencedSourceSnapshot, "id", "2099-01-01")
+	testutil.FailErr(t, "explain delete", err)
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id, parent, unused int
+		var detail string
+		testutil.FailErr(t, "read plan", rows.Scan(&id, &parent, &unused, &detail))
+		if strings.HasPrefix(detail, "SCAN code_scans") || strings.HasPrefix(detail, "SCAN source_inventory_state") {
+			t.Fatalf("reference check reads a whole table: %s", detail)
+		}
+	}
+	testutil.FailErr(t, "finish plan", rows.Err())
+}

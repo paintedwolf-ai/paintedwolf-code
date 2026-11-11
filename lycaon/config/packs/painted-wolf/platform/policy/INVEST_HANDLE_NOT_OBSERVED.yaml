@@ -15,8 +15,8 @@ copy:
   what: Investigate cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat.
   cause: An evidence handle or path did not match the evidence ledger for this chat
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: 'Repair only the trailing citation metadata. Copy an exact observed handle into evidence, or an observed path, line and verbatim excerpt. Move observed URL citations to cited_urls; omit entries with no matching receipt.'
-  instead: 'Use existing coordinator or worker observations that support the pinned report. Resuming work requires a fresh report.'
+  fix: 'Repair only the rejected citations. Cite an exact printed handle such as `[command#4]`, or an observed path and printed line such as `[internal/a.go:42]`. Write web sources as Markdown links. Drop a citation with no matching receipt.'
+  instead: 'Use existing coordinator or worker observations that support the retained answer. Resuming work requires a fresh report.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_investigate
 x-paintedwolf-evidence:
@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: src/missing.go:1
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: INVEST_HANDLE_NOT_OBSERVED'

@@ -102,6 +102,7 @@ type ProviderCatalog struct {
 	mu         sync.RWMutex
 	mutationMu sync.Mutex
 	localPath  string
+	included   bool
 	templates  *catalogruntime.Catalog[ProviderEntry]
 	entries    *catalogruntime.Catalog[CatalogEntry]
 	capacity   CapacityPolicy
@@ -124,7 +125,11 @@ func NewProviderCatalog() (*ProviderCatalog, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewProviderCatalogAt(localPath)
+	c := &ProviderCatalog{localPath: localPath, included: PlatformsSupportedHere(IncludedProviderEntry().Platforms)}
+	if err := c.Reload(); err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 // Reload reads templates and local instances.
@@ -198,9 +203,22 @@ func (c *ProviderCatalog) Reload() error {
 
 	shipByKind := preferredProviderTemplates(templates)
 
-	items := make([]catalogruntime.Item[CatalogEntry], 0, len(local.Providers))
+	items := make([]catalogruntime.Item[CatalogEntry], 0, len(local.Providers)+1)
+	hasIncluded := false
 	for _, p := range local.Providers {
+		if IsIncludedProvider(p.ID) {
+			hasIncluded = true
+		}
 		entry, err := resolveLocalEntry(p, shipByKind)
+		if err != nil {
+			return err
+		}
+		items = append(items, catalogruntime.Item[CatalogEntry]{
+			ID: entry.ID, Spec: entry,
+		})
+	}
+	if !hasIncluded && c.included {
+		entry, err := resolveLocalEntry(IncludedProviderEntry(), shipByKind)
 		if err != nil {
 			return err
 		}
@@ -247,6 +265,28 @@ func (c *ProviderCatalog) Reload() error {
 
 // resolveLocalEntry projects one stored instance onto its kind template.
 func resolveLocalEntry(p ProviderEntry, shipByKind map[string]ProviderEntry) (CatalogEntry, error) {
+	if IsIncludedProvider(p.ID) || IsIncludedProvider(p.Kind) {
+		included := IncludedProviderEntry()
+		if p.Kind == "" {
+			p.Kind = included.Kind
+		}
+		if p.Label == "" {
+			p.Label = included.Label
+		}
+		if p.EndpointStyle == "" {
+			p.EndpointStyle = included.EndpointStyle
+		}
+		if p.RequiresAPIKey == nil {
+			p.RequiresAPIKey = included.RequiresAPIKey
+		}
+		if len(p.Platforms) == 0 {
+			p.Platforms = append([]string(nil), included.Platforms...)
+		}
+		if len(p.Models) == 0 {
+			p.Models = modelinfo.CloneEntries(included.Models)
+		}
+		p.LocalFree = true
+	}
 	if !p.EndpointStyle.Validate() {
 		return CatalogEntry{}, fmt.Errorf("local providers: %q: unsupported endpoint_style %q", p.ID, p.EndpointStyle)
 	}
@@ -508,6 +548,9 @@ func cloneProviderEntry(entry ProviderEntry) ProviderEntry {
 
 // Remove deletes a live instance from the local file.
 func (c *ProviderCatalog) Remove(id string) (bool, error) {
+	if IsIncludedProvider(id) {
+		return false, ErrCannotRemoveIncludedProvider
+	}
 	c.mutationMu.Lock()
 	defer c.mutationMu.Unlock()
 	data, err := os.ReadFile(c.localPath)

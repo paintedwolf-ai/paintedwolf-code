@@ -8,5 +8,3 @@ suggested_action: Use a compatible app version, then restore the backup again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - compatible

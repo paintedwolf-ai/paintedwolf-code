@@ -28,6 +28,20 @@ func registerStubProjectRoutes(mux *http.ServeMux, now time.Time, writeJSON stub
 	mux.HandleFunc("GET /v1/projects/{id}", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, fixtureProject)
 	})
+	mux.HandleFunc("GET /v1/projects/{id}/background", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.ProjectBackgroundProcessListResponse{
+			Processes: []api.ProjectBackgroundProcess{},
+			Revision:  0,
+		})
+	})
+	mux.HandleFunc("POST /v1/projects/{id}/background/{process_id}/stop", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.BackgroundProcessStopResult{
+			ProcessID:         r.PathValue("process_id"),
+			StopRequested:     true,
+			Running:           false,
+			TerminationReason: api.BackgroundProcessTerminationReasonStoppedByUser,
+		})
+	})
 	mux.HandleFunc("GET /v1/projects/{id}/artifacts", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.ArtifactListResponse{Artifacts: []api.ArtifactListItem{}})
 	})

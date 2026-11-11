@@ -47,6 +47,19 @@ func TestParseThinkStyleCoversAllConstants(t *testing.T) {
 	if _, ok := modelinfo.ParseThinkStyle("bogus"); ok {
 		t.Fatal("parseThinkStyle accepted an unknown style")
 	}
+	for _, policy := range []modelinfo.ContinuationPolicy{
+		modelinfo.ContinuationPolicyDefault, modelinfo.ContinuationPolicyRetainBlocks,
+		modelinfo.ContinuationPolicyRequireFields, modelinfo.ContinuationPolicyStripReasoning,
+		modelinfo.ContinuationPolicyToolLoopOnly,
+	} {
+		got, ok := modelinfo.ParseContinuationPolicy(string(policy))
+		if !ok || got != policy {
+			t.Fatalf("ParseContinuationPolicy(%q) = (%q, %v)", policy, got, ok)
+		}
+	}
+	if _, ok := modelinfo.ParseContinuationPolicy("bogus"); ok {
+		t.Fatal("ParseContinuationPolicy accepted an unknown policy")
+	}
 }
 
 func TestValidateThinkingRulesRejectsBadRules(t *testing.T) {
@@ -61,6 +74,9 @@ func TestValidateThinkingRulesRejectsBadRules(t *testing.T) {
 	}
 	if err := modelinfo.ValidateThinkingRules([]modelinfo.ThinkingRule{{Match: []string{"x"}, Style: "budget_tokens", DefaultOn: true}}); err == nil {
 		t.Fatal("default_on accepted for a non-adaptive protocol")
+	}
+	if err := modelinfo.ValidateThinkingRules([]modelinfo.ThinkingRule{{Match: []string{"x"}, Style: "adaptive", ContinuationPolicy: "bogus"}}); err == nil {
+		t.Fatal("unknown continuation_policy accepted")
 	}
 }
 
@@ -104,8 +120,8 @@ func TestResolveModelThinkingTransportConstraint(t *testing.T) {
 
 	// Provider-managed adaptive thinking is preserved.
 	mt = modelcall.ResolveModelThinking(providerprofile.Anthropic(), modelinfo.Entry{}, "claude-sonnet-4-6")
-	if mt.Style != modelinfo.ThinkStyleAdaptive {
-		t.Fatalf("claude on anthropic = %+v want adaptive", mt)
+	if mt.Style != modelinfo.ThinkStyleAdaptive || mt.ContinuationPolicy != modelinfo.ContinuationPolicyRequireFields {
+		t.Fatalf("claude on anthropic = %+v want adaptive with require_fields", mt)
 	}
 
 	// Native boolean thinking remains transport-specific.

@@ -1,6 +1,9 @@
 package confine
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 const (
 	SignalSocksProxy                     = "socks_proxy"
@@ -27,6 +30,43 @@ type Observation struct {
 	TerminationReason string
 	// Refusals is what the kernel reported refusing the invocation.
 	Refusals SandboxRefusals
+}
+
+// Merge combines boundary observations across stages of one invocation.
+func (o Observation) Merge(other Observation) Observation {
+	if !other.Applied {
+		return o
+	}
+	if !o.Applied {
+		return other
+	}
+	merged := o
+	merged.Signals = append([]string(nil), o.Signals...)
+	merged.FailedStages = append([]string(nil), o.FailedStages...)
+	if merged.Network == "" {
+		merged.Network = other.Network
+	}
+	if merged.DenialSubject == "" {
+		merged.DenialSubject = other.DenialSubject
+	}
+	if merged.Destination == "" && other.Destination != "" {
+		merged.Destination = other.Destination
+		merged.Port = other.Port
+	}
+	for _, signal := range other.Signals {
+		merged.add(signal)
+	}
+	for _, stage := range other.FailedStages {
+		if stage != "" && !slices.Contains(merged.FailedStages, stage) {
+			merged.FailedStages = append(merged.FailedStages, stage)
+		}
+	}
+	merged.Running = o.Running || other.Running
+	if merged.TerminationReason == "" || (other.TerminationReason != "" && other.TerminationReason != "exited") {
+		merged.TerminationReason = other.TerminationReason
+	}
+	merged.Refusals = o.Refusals.Merge(other.Refusals)
+	return merged
 }
 
 // HasSignal reports whether signal was observed on this invocation.

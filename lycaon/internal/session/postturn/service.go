@@ -19,6 +19,7 @@ type Grounding interface {
 type Guidance interface {
 	Emit(context.Context, string, anchor.ID, anchor.Envelope)
 	QueueAdvisories(context.Context, string, []guidance.GuidanceNudge)
+	TakePolicy(context.Context, string) ([]api.Message, error)
 }
 type Progress interface {
 	Get(context.Context, string) string

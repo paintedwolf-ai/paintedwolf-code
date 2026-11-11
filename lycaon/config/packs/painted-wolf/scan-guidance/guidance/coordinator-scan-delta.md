@@ -12,4 +12,4 @@ Fixed by recent edits:
 {% endfor %}{% if fixed_omitted_count > 0 %}
   … {{ fixed_omitted_count }} more.
 {% endif %}{% endif %}
-This scan did not block your work and nothing waits on it. Fix an introduced finding when it belongs to the task at hand; otherwise note it and continue. `scan_query` reads the details; a full pass runs only when asked for with `scan_pack`.
+This scan did not block your work and nothing waits on it. Fix an introduced finding when it belongs to the task at hand; otherwise note it and continue. {% if profile_has_scan_query %}`scan_query` reads the details; {% endif %}a full pass runs only when asked for.

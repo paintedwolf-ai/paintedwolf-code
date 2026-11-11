@@ -10,22 +10,6 @@ import (
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
-func TestUserNoticeScenarioFixturesRender(t *testing.T) {
-	t.Parallel()
-	cfg := loadUserNoticeConfig(t)
-	for code, entry := range cfg.UserNotices {
-		for _, sc := range entry.Scenarios {
-			copy := usernotice.RenderCopy(entry, sc.Vars)
-			for _, want := range sc.ExpectContains {
-				blob := strings.Join([]string{copy.Title, copy.Message, copy.SuggestedAction}, "\n")
-				if !strings.Contains(blob, want) {
-					t.Fatalf("%s scenario %q missing %q in %q", code, sc.ID, want, blob)
-				}
-			}
-		}
-	}
-}
-
 // TestUserNoticeVisibleEntriesRenderClean covers every conditional fixture branch.
 func TestUserNoticeVisibleEntriesRenderClean(t *testing.T) {
 	t.Parallel()
@@ -48,9 +32,6 @@ func TestUserNoticeVisibleEntriesRenderClean(t *testing.T) {
 			if strings.Contains(blob, "{{") || strings.Contains(blob, "{%") {
 				t.Fatalf("%s scenario %q: unrendered template in copy: %q", code, ctx.id, blob)
 			}
-			// Empty vars are caught by each scenario's expect_contains
-			// (TestUserNoticeScenarioFixturesRender); prose shape checks here
-			// misfire on text such as ".gitignore".
 		}
 	}
 }

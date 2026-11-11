@@ -4,6 +4,7 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -105,7 +107,7 @@ func TestChildPromptIncludesWorkerContextBlock(t *testing.T) {
 	if legBlock == "" {
 		t.Fatalf("messages = %+v", rec.LastRequest().Messages)
 	}
-	if !strings.Contains(legBlock, "leg-implement-1") || !strings.Contains(legBlock, "## Leg tools") {
+	if !strings.Contains(legBlock, "leg-implement-1") {
 		t.Fatalf("leg block = %q", legBlock)
 	}
 	if !strings.Contains(legBlock, "lycaon-worker-leg:v1") {
@@ -188,10 +190,7 @@ func TestChildPromptDistinctAgentTypes(t *testing.T) {
 	if implL1 == reviewL1 {
 		t.Fatal("implementer and plan-reviewer L1 personas must differ")
 	}
-	if !strings.Contains(implL1, "implement product code") && !strings.Contains(implL1, "Implementer") {
-		t.Fatalf("implementer L1 = %q", implL1)
-	}
-	if !strings.Contains(reviewL1, "advisory") || !strings.Contains(reviewL1, "Plan Reviewer") {
+	if !strings.Contains(reviewL1, "advisory") {
 		t.Fatalf("plan-reviewer L1 = %q", reviewL1)
 	}
 }
@@ -209,14 +208,14 @@ func TestCoordinatorPromptUnchanged(t *testing.T) {
 		testutil.FailErr(t, "mgr.Submissions.Prompt failed", err)
 	}
 	for _, msg := range rec.LastRequest().Messages {
-		if strings.Contains(msg.Content, inject.WorkerLegInjectSentinel) {
-			t.Fatalf("coordinator got worker block: %q", msg.Content)
-		}
+		exposure.Absent(t, msg.Content, inject.WorkerLegInjectSentinel)
 	}
 }
 
-func TestWorkerPromptKeepsCuratedSkillsOutOfStandingPrompt(t *testing.T) {
-	mgr, _, rec := setupWorkerPromptFixture(t)
+func TestWorkerPromptExposesApplicableSkillsWithoutBialy(t *testing.T) {
+	mgr, _, _ := setupWorkerPromptFixture(t)
+	ledger := turnload.NewLedger()
+	mgr.Coordinator.Loading.SetLedger(ledger)
 	wireSkillsCatalogForPromptTest(t, mgr)
 	mgr.SetWorkerContextBuilder(&stubWorkerContext{ctx: inject.WorkerLegContext{Checklist: []string{"survey"}}})
 
@@ -246,16 +245,8 @@ func TestWorkerPromptKeepsCuratedSkillsOutOfStandingPrompt(t *testing.T) {
 		testutil.FailErr(t, "mgr.Submissions.Prompt", err)
 	}
 
-	var system string
-	for _, msg := range rec.LastRequest().Messages {
-		if msg.Role == api.MessageRoleSystem {
-			system += "\n" + msg.Content
-		}
-	}
-	for name := range curated {
-		if strings.Contains(system, "- "+name) {
-			t.Fatalf("standing prompt listed skill %q", name)
-		}
+	if !ledger.FullCatalog(child.ID) {
+		t.Fatal("absent selector did not activate full permitted catalog")
 	}
 }
 

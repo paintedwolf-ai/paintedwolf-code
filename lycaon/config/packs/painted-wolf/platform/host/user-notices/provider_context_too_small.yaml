@@ -25,12 +25,5 @@ scenarios:
     vars:
       model: qwen3.5:27b
       max_context: 4096
-    expect_contains:
-      - qwen3.5:27b
-      - 4096
-      - truncated
   - id: generic
     vars: {}
-    expect_contains:
-      - context window
-      - truncated

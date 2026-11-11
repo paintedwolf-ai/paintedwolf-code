@@ -4,13 +4,13 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/summarize"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
+	"github.com/lycaon/lycaon/internal/tools/native/toolkit"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -76,7 +76,7 @@ func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, 
 		if err != nil || !open {
 			continue
 		}
-		lines := strings.Split(doc.Text, "\n")
+		lines := toolkit.SplitLines(doc.Text)
 		if window.EndLine != len(lines) || window.Body != hostmarker.FormatNumberedLines(lines, 1) {
 			continue
 		}

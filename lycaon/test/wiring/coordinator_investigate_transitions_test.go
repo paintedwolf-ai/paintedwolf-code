@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/batch"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/llm"
-	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -42,9 +41,9 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 			FollowUpText: "Dispatched implementer for module A.",
 		},
 	}})
+	// No worker runner: a worker that finishes before the first look would leave
+	// nothing in flight to observe, and the wake below is about workers in flight.
 	h := BuildForTest(t, WithLLMClient(mock))
-	cancel := h.StartBackgroundWorkers(t, context.Background())
-	t.Cleanup(cancel)
 
 	ctx := context.Background()
 	dir := t.TempDir()
@@ -60,20 +59,7 @@ func TestInvestigateTaskFanOutBlocksInvestigateUntilWorkersIdle(t *testing.T) {
 		testutil.FailErr(t, "Prompt", err)
 	}
 
-	var state surface.ImplementSessionState
-	testutil.WaitFor(t, func() bool {
-		state = h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
-		if state.WorkersInFlight > 0 {
-			return true
-		}
-		jobs, listErr := h.Delegations.Queue.List(ctx, testdbseed.DefaultProjectID, api.WorkerStatusPending, api.WorkerStatusRunning)
-		testutil.FailErr(t, "WorkerQueue.List", listErr)
-		if len(jobs) > 0 {
-			state.WorkersInFlight = len(jobs)
-			return true
-		}
-		return false
-	})
+	state := h.Sessions.Manager.Workers.State.ForSession(ctx, sess)
 	if state.WorkersInFlight == 0 {
 		t.Fatal("expected workers in flight after task() from investigate turn")
 	}

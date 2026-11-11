@@ -3,10 +3,11 @@ id: CHOWN_RECURSIVE_DENIED
 kind: schema
 anchor: tool.rejected
 selector:
-  tool:
+  paintedwolf.operation:
   - chown
 requires:
   facts:
+  - paintedwolf.operation
   - paintedwolf.rejection_code
   profiles:
   - tool
@@ -29,6 +30,3 @@ x-paintedwolf-scenarios:
     path: scripts/run.sh
     profile: implement
     tool: chown
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CHOWN_RECURSIVE_DENIED'

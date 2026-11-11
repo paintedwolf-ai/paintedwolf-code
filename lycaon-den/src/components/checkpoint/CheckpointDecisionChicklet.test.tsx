@@ -214,7 +214,6 @@ describe("CheckpointDecisionChicklet", () => {
     ));
     fireEvent.click(disclosureToggle(getByTestId("checkpoint-decision-chicklet")));
     fireEvent.click(getByTestId("checkpoint-decision-body").querySelector("button")!);
-    expect(decisionText()).toContain("Direction sent");
     expect(decisionText()).toContain("Keep the file");
   });
 
@@ -281,7 +280,6 @@ describe("CheckpointDecisionChicklet", () => {
     ));
     const el = getByTestId("checkpoint-decision-chicklet") as HTMLElement;
     expect(el.getAttribute("data-status")).toBe("pending");
-    expect(el.textContent).toContain("Needs approval");
     expect(container.querySelector(".den-decision")?.getAttribute("data-tone")).toBe("pending");
 
     // Open marker testid is present for transcript anchor discovery
@@ -295,7 +293,6 @@ describe("CheckpointDecisionChicklet", () => {
 
     const reviewBtn = getByTestId("checkpoint-decision-review-dock");
     expect(reviewBtn).toBeTruthy();
-    expect(reviewBtn.textContent).toBe("Review in composer");
 
     fireEvent.click(reviewBtn);
     expect(approvalReviewTarget()).toEqual({

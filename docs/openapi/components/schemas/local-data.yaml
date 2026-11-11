@@ -20,6 +20,11 @@ components:
           format: int64
           minimum: 0
           description: Best-effort on-disk size; may be omitted when unknown
+        unavailable_entries:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Recorded entries on a volume that is absent right now; not in bytes, and left alone by clearing
     LocalDataStatus:
       x-go-generate: true
       type: object

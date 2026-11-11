@@ -83,6 +83,9 @@ type WorkerFinding struct {
 	Adversary    string `json:"adversary,omitempty"`
 	Precondition string `json:"precondition,omitempty"`
 	Severity     string `json:"severity,omitempty"`
+	// Cite is the citation a coordinator can copy, written by the host. A worker's
+	// handle means nothing outside its leg.
+	Cite string `json:"cite,omitempty"`
 }
 
 // LastCompleteLegReport decodes the latest accepted report arguments.
@@ -523,6 +526,9 @@ func (r WorkerCompletionReport) ParentReport() WorkerCompletionReport {
 	r.Findings = normalizeFindings(r.Findings, maxReportListItems)
 	for i := range r.Findings {
 		r.Findings[i].Note = runeclamp.Fit(r.Findings[i].Note, maxFindingNoteChars)
+		if r.Findings[i].Cite != "" {
+			r.Findings[i].Evidence = ""
+		}
 		// A truncated quotation is no longer the observed excerpt. The path and line remain addressable.
 		if len([]rune(r.Findings[i].Excerpt)) > maxFindingExcerptChars {
 			r.Findings[i].Excerpt = ""

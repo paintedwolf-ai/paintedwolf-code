@@ -12,7 +12,7 @@ func TestCoalescerAnchorsChangedAtToWriteInstant(t *testing.T) {
 	c := NewCoalescer(time.Hour, func(p FlushPayload) { got = p })
 	c.now = func() time.Time { return writeAt }
 
-	c.Record("s1", "- [ ] a\n", "- [x] a\n")
+	c.Record("s1", NewSnapshot("", "- [ ] a\n", "id-a").WithDocumentVersion(1), NewSnapshot("", "- [x] a\n", "id-a").WithDocumentVersion(2))
 
 	// Flush happens later than the write — the payload must still carry the write instant.
 	c.now = func() time.Time { return writeAt.Add(2 * time.Second) }
@@ -31,10 +31,10 @@ func TestCoalescerAnchorsChangedAtToLastWrite(t *testing.T) {
 	c := NewCoalescer(time.Hour, func(p FlushPayload) { got = p })
 
 	c.now = func() time.Time { return base }
-	c.Record("s1", "- [ ] a\n", "- [ ] a\n- [ ] b\n")
+	c.Record("s1", NewSnapshot("", "- [ ] a\n", "id-a").WithDocumentVersion(1), NewSnapshot("", "- [ ] a\n- [ ] b\n", "id-a", "id-b").WithDocumentVersion(2))
 	last := base.Add(500 * time.Millisecond)
 	c.now = func() time.Time { return last }
-	c.Record("s1", "- [ ] a\n- [ ] b\n", "- [x] a\n- [ ] b\n")
+	c.Record("s1", NewSnapshot("", "- [ ] a\n- [ ] b\n", "id-a", "id-b").WithDocumentVersion(2), NewSnapshot("", "- [x] a\n- [ ] b\n", "id-a", "id-b").WithDocumentVersion(3))
 	c.FlushNow("s1")
 
 	if !got.ChangedAt.Equal(last) {

@@ -16,7 +16,7 @@ kind: policy
 anchor: tool.pre_invoke
 selector:
   tool:
-    - write
+    - command
 requires:
   profiles:
     - tool

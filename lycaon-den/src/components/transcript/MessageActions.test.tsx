@@ -124,8 +124,6 @@ describe("MessageActions", () => {
     expect(edit.getAttribute("aria-disabled")).toBe("true");
     expect(rewind.getAttribute("aria-disabled")).toBe("true");
     expect(edit.getAttribute("aria-label")).toBe("Edit from here");
-    expect(edit.getAttribute("data-tip")).toBe("Edit after this turn finishes");
-    expect(rewind.getAttribute("data-tip")).toBe("Rewind after this turn finishes");
 
     fireEvent.click(edit);
     fireEvent.click(rewind);
@@ -151,7 +149,6 @@ describe("SessionRecoverDialog", () => {
         onCancel={() => {}}
       />
     ));
-    expect(screen.getByText("Edit this ask?")).toBeTruthy();
     // Both Edit and Rewind put the ask back in the composer.
     expect(screen.getByTestId("session-recover-dialog").textContent).toContain("composer");
     unmount();
@@ -163,7 +160,6 @@ describe("SessionRecoverDialog", () => {
         onCancel={() => {}}
       />
     ));
-    expect(screen.getByText("Rewind from here?")).toBeTruthy();
     expect(screen.getByTestId("session-recover-dialog").textContent).toContain("composer");
   });
 

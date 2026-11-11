@@ -164,7 +164,7 @@ export function IgnoreSecretDialog(props: Props) {
           <footer class="den-dialog__footer">
             <DenButton variant="ghost" disabled={busy()} onClick={close}>{review.error ? "Close" : "Cancel"}</DenButton>
             <Show when={!review.error}>
-              <DenButton variant="primary" type="submit" disabled={!canSave()}>{busy() ? "Saving…" : "Save project ignore"}</DenButton>
+              <DenButton variant="primary" type="submit" data-testid="ignore-secret-save" disabled={!canSave()}>{busy() ? "Saving…" : "Save project ignore"}</DenButton>
             </Show>
           </footer>
         </form>

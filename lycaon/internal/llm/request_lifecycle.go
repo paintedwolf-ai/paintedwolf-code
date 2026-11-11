@@ -37,7 +37,12 @@ func lifecycleFromContext(ctx context.Context) *requestLifecycle {
 }
 
 // lifecycleProvider measures preparation as well as transport, without logging payloads.
-type lifecycleProvider struct{ modelcall.Provider }
+type lifecycleProvider struct {
+	modelcall.Provider
+	capacity *modelcall.CapacityGroup
+}
+
+func (p *lifecycleProvider) CapacityGroup() *modelcall.CapacityGroup { return p.capacity }
 
 func (p *lifecycleProvider) start(ctx context.Context, req *modelcall.CompletionRequest) (context.Context, *requestLifecycle) {
 	callID := req.Debug.CallID

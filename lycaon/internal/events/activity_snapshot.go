@@ -11,6 +11,7 @@ func cloneActivity(event api.ActivityEvent) api.ActivityEvent {
 	event.WaitTriggers = slices.Clone(event.WaitTriggers)
 	if event.Progress != nil {
 		progress := *event.Progress
+		progress.CommandProgram = cloneCommandActivityProgram(event.Progress.CommandProgram)
 		event.Progress = &progress
 	}
 	return event

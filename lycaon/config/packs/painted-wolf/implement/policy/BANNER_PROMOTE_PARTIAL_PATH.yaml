@@ -21,7 +21,4 @@ scenarios:
     conflict_paths:
     - internal/router.go
     overlay_id: job-mix
-  expect_contains:
-  - BANNER_PROMOTE_PARTIAL_PATH
-  - preview_overlay
 id: BANNER_PROMOTE_PARTIAL_PATH

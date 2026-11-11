@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -174,18 +175,22 @@ func (s *SQLStore) rollbackApprovalOperation(ctx context.Context, checkpointID s
 	})
 }
 
-func (s *SQLStore) preparedApprovalOperations(ctx context.Context) ([]preparedApprovalOperation, error) {
-	rows, err := s.queries.ListPreparedApprovalOperations(ctx)
-	if err != nil {
-		return nil, err
-	}
-	out := make([]preparedApprovalOperation, 0, len(rows))
-	for _, row := range rows {
-		op := preparedApprovalOperation{CheckpointID: row.CheckpointID, SessionID: row.SessionID, authorityFormat: row.AuthorityFormat}
-		if err := json.Unmarshal([]byte(row.OptionJson), &op.Option); err != nil {
-			return nil, fmt.Errorf("decode approval operation %s: %w", op.CheckpointID, err)
-		}
-		out = append(out, op)
-	}
-	return out, nil
+func (s *SQLStore) eachPreparedApprovalOperation(ctx context.Context, state toolcontract.ReviewStateAdmission, visit func(preparedApprovalOperation) error) error {
+	return s.withAuthoritySnapshot(ctx, func(snapshot authoritySnapshot) error {
+		return snapshot.queries.ScanPreparedApprovalOperations(ctx, func(row db.ListPreparedApprovalOperationsRow) error {
+			op := preparedApprovalOperation{CheckpointID: row.CheckpointID, SessionID: row.SessionID, authorityFormat: row.AuthorityFormat}
+			if err := json.Unmarshal([]byte(row.OptionJson), &op.Option); err != nil {
+				return fmt.Errorf("decode approval operation %s: %w", op.CheckpointID, err)
+			}
+			if op.authorityFormat != "" {
+				option, release, err := snapshot.approvedOption(ctx, state, operationAuthoritySource(op.CheckpointID), op.Option)
+				if err != nil {
+					return err
+				}
+				defer release()
+				op.Option = option
+			}
+			return visit(op)
+		})
+	})
 }

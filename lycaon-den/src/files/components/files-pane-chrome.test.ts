@@ -8,8 +8,8 @@ const PANES_DIR = import.meta.dirname;
 
 /** ReadonlyFilesDocument supplies both toolbar and status chrome. */
 const CHROME_HOOKS = {
-  toolbar: ["den-files-toolbar", "FilesEditorToolbar", "ReadonlyFilesDocument"],
-  address: ["FilesPathCrumbs"],
+  toolbar: ["den-files-toolbar", "FilesEditorToolbar", "FilesEditorHeaderChrome", "ReadonlyFilesDocument"],
+  address: ["FilesPathCrumbs", "FilesEditorHeaderChrome"],
   status: ["den-files-editor__status", "FilesEditorStatus", "ReadonlyFilesDocument"],
 } as const;
 

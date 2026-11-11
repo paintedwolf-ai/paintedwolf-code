@@ -11,7 +11,7 @@ type grepBuffers struct{ available chan []byte }
 func newGrepBuffers(slots int) *grepBuffers {
 	buffers := &grepBuffers{available: make(chan []byte, slots)}
 	for range slots {
-		buffers.available <- make([]byte, 0, grepOutputChunk)
+		buffers.available <- nil
 	}
 	return buffers
 }
@@ -27,6 +27,9 @@ func (b *grepBuffers) get(ctx context.Context) ([]byte, error) {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case buffer := <-b.available:
+		if buffer == nil {
+			buffer = make([]byte, 0, grepOutputChunk)
+		}
 		return buffer, nil
 	}
 }

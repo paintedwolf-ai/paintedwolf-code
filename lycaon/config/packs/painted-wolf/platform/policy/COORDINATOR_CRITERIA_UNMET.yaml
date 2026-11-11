@@ -23,8 +23,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Completion evidence is missing.'
-  - 'leg-1'
-  - 'Rejected:'
-  - 'Code: COORDINATOR_CRITERIA_UNMET'

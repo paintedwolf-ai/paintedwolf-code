@@ -1,0 +1,3 @@
+steps:
+  - tool: "update_progress"
+    say: "Your **next** tool call must be {{ call }} that records the completed work: `- [x]` for the steps it finished, or revise a step's text when it finished only part of one."

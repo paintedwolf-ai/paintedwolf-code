@@ -109,7 +109,7 @@ export function ThinkingOverrideRow(props: Props) {
                 disabled={props.saving}
                 onInput={(event) => setBudget(event.currentTarget.value === "" ? undefined : event.currentTarget.valueAsNumber)}
               />
-              <DenButton variant="secondary" disabled={props.saving || !budgetValid()} onClick={() => props.onChange({ ...props.model, mode: "fixed", budget_tokens: budget() })}>Apply budget</DenButton>
+              <DenButton data-testid="apply-budget" variant="secondary" disabled={props.saving || !budgetValid()} onClick={() => props.onChange({ ...props.model, mode: "fixed", budget_tokens: budget() })}>Apply budget</DenButton>
             </div>
             <p class="den-settings-hint">Minimum {props.capabilities.budget?.min.toLocaleString()} tokens{props.capabilities.budget?.max ? `; maximum ${props.capabilities.budget.max.toLocaleString()}` : ""}. The output limit must also leave room for an answer.</p>
           </Show>

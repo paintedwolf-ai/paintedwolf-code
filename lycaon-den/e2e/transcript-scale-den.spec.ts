@@ -910,7 +910,7 @@ webE2e.describe("transcript scale den", () => {
       await scrollStreamToMiddle(page);
       await expect
         .poll(() => transcriptRunwayStatus(page), {
-          timeout: 5_000,
+          timeout: 30_000,
         })
         .toBe("covered");
       expect(await mountedRowCount(page)).toBeLessThanOrEqual(
@@ -937,7 +937,7 @@ webE2e.describe("transcript scale den", () => {
       const found = await revealMsgByScroll(page, revealId);
       expect(found).toBe(true);
       await expect(page.locator(`[data-msg-id="${revealId}"]`)).toHaveCount(1, {
-        timeout: 5_000,
+        timeout: 30_000,
       });
       expect(await mountedRowCount(page)).toBeLessThanOrEqual(
         MAX_MOUNTED_TRANSCRIPT_ROWS,

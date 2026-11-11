@@ -12,13 +12,9 @@ import (
 )
 
 func TestGitManagerCommitAndStatus(t *testing.T) {
+	t.Parallel()
 	tmpDir := t.TempDir()
-	// Remove inherited repository variables before creating the scratch repository.
-	initCmd := exec.CommandContext(t.Context(), "git", "init", tmpDir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
+	initGitRepo(t, tmpDir)
 	if err := os.WriteFile(filepath.Join(tmpDir, "test.txt"), []byte("hello"), 0o644); err != nil {
 		testutil.FailErr(t, "write file", err)
 	}
@@ -44,13 +40,10 @@ func TestGitManagerCommitAndStatus(t *testing.T) {
 
 // TestGitManagerChangedPathsPorcelain covers leading-space status codes.
 func TestGitManagerChangedPathsPorcelain(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
+	initGitRepo(t, dir)
 	mgr := NewManager()
 	writeFile := func(rel, content string) {
 		testutil.FailErr(t, "write "+rel, os.WriteFile(filepath.Join(dir, rel), []byte(content), 0o644))
@@ -62,8 +55,6 @@ func TestGitManagerChangedPathsPorcelain(t *testing.T) {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "Test")
 
 	// README.md is committed then modified-not-staged → ` M README.md`.
 	writeFile("README.md", "base\n")
@@ -105,16 +96,13 @@ func TestGitManagerChangedPathsPorcelain(t *testing.T) {
 	}
 }
 
-// Untracked directories are listed one entry per file, never collapsed to
+// Untracked directories are listed one entry per file, not collapsed to
 // `dir/`: staging, paging, and invalidation all address explicit file paths.
 func TestGitManagerStatusExpandsUntrackedDirectories(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
+	initGitRepo(t, dir)
 	testutil.FailErr(t, "mkdir fixtures", os.MkdirAll(filepath.Join(dir, "fixtures", "nested"), 0o755))
 	for _, rel := range []string{"fixtures/a.txt", "fixtures/b.txt", "fixtures/nested/c.txt"} {
 		testutil.FailErr(t, "write "+rel, os.WriteFile(filepath.Join(dir, rel), []byte("x\n"), 0o644))

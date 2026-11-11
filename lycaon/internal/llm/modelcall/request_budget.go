@@ -10,6 +10,8 @@ import (
 
 // RequestBudget describes the complete input and transport reservation.
 type RequestBudget struct {
+	Err           error
+	Exact         bool
 	Window        int
 	Input         int
 	Output        int

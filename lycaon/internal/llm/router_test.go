@@ -72,7 +72,7 @@ func TestLiteUsesCompactModelPolicy(t *testing.T) {
 	if sel.Role != ModelRoleLite {
 		t.Fatalf("role = %q want lite", sel.Role)
 	}
-	p, err := r.effectivePolicy()
+	p, err := r.effectivePolicy(t.Context())
 	testutil.FailErr(t, "r.effectivePolicy failed", err)
 	want := SummarizerRef(p)
 	if sel.ProviderID != want.ProviderID || sel.Model != want.Model {
@@ -92,7 +92,7 @@ func TestLiteFallsBackToCoordinatorWhenUnset(t *testing.T) {
 	r := NewStaticModelRouter(policy)
 	sel, err := r.Lite(context.Background())
 	testutil.FailErr(t, "r.Lite failed", err)
-	p, err := r.effectivePolicy()
+	p, err := r.effectivePolicy(t.Context())
 	testutil.FailErr(t, "r.effectivePolicy failed", err)
 	if sel.ProviderID != p.Coordinator.ProviderID || sel.Model != p.Coordinator.Model {
 		t.Fatalf("lite = %+v coordinator = %+v", sel, p.Coordinator)

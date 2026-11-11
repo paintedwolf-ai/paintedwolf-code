@@ -22,7 +22,7 @@ import (
 )
 
 // BindPublishedSourceSnapshot replaces a warming source identity.
-func (s *SQLStore) BindPublishedSourceSnapshot(ctx context.Context, id string, snapshot sourcesnapshot.Snapshot) (*api.CodeScan, error) {
+func (s *sqlCore) BindPublishedSourceSnapshot(ctx context.Context, id string, snapshot sourcesnapshot.Snapshot) (*api.CodeScan, error) {
 	id = strings.TrimSpace(id)
 	if id == "" || strings.TrimSpace(snapshot.ID) == "" || snapshot.ID == api.SourceSnapshotWarming {
 		return nil, fmt.Errorf("bind source snapshot requires id and published snapshot")
@@ -81,7 +81,7 @@ type AssessmentDraft struct {
 	CreatedAt        time.Time
 }
 
-func (s *SQLStore) EnsureAssessment(ctx context.Context, draft AssessmentDraft) (string, error) {
+func (s *sqlCore) EnsureAssessment(ctx context.Context, draft AssessmentDraft) (string, error) {
 	if s == nil || s.db == nil {
 		return "", fmt.Errorf("scan store not configured")
 	}
@@ -219,7 +219,7 @@ func scanReuseKey(scan api.CodeScan, baseSnapshotID string) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func (s *SQLStore) ensureAssessmentForScan(ctx context.Context, scan api.CodeScan) error {
+func (s *sqlCore) ensureAssessmentForScan(ctx context.Context, scan api.CodeScan) error {
 	identity, err := s.queries.GetSecurityAssessmentIdentity(ctx, scan.AssessmentID)
 	if err == nil {
 		if identity.CanonicalPath != scan.CanonicalPath ||
@@ -299,7 +299,7 @@ func hydrateScanFacts(ctx context.Context, handle db.DBTX, scan *api.CodeScan) e
 	return nil
 }
 
-func (s *SQLStore) hydrateScan(ctx context.Context, scan *api.CodeScan) (*api.CodeScan, error) {
+func (s *sqlCore) hydrateScan(ctx context.Context, scan *api.CodeScan) (*api.CodeScan, error) {
 	if scan != nil {
 		pruned, err := db.New(s.db).GetHistoryBodyPrunedAt(ctx, db.GetHistoryBodyPrunedAtParams{Class: "scan_detail", OwnerID: scan.ID})
 		if err != nil && !db.IsNoRows(err) {
@@ -329,7 +329,7 @@ func (s *SQLStore) hydrateScan(ctx context.Context, scan *api.CodeScan) (*api.Co
 	return scan, nil
 }
 
-func (s *SQLStore) hydrateScans(ctx context.Context, scans []api.CodeScan) ([]api.CodeScan, error) {
+func (s *sqlCore) hydrateScans(ctx context.Context, scans []api.CodeScan) ([]api.CodeScan, error) {
 	for index := range scans {
 		if _, err := s.hydrateScan(ctx, &scans[index]); err != nil {
 			return nil, err
@@ -349,7 +349,7 @@ func EstablishesAuthority(scan api.CodeScan) bool {
 }
 
 // FinalizeCompleteJSON atomically commits completion and its finding set.
-func (s *SQLStore) FinalizeCompleteJSON(ctx context.Context, claimed *api.CodeScan, resultJSON []byte, findings []api.SecurityFinding, warnings []api.ScanWarning, coverage api.ScanCoverageStatus) (bool, error) {
+func (s *sqlCore) FinalizeCompleteJSON(ctx context.Context, claimed *api.CodeScan, resultJSON []byte, findings []api.SecurityFinding, warnings []api.ScanWarning, coverage api.ScanCoverageStatus) (bool, error) {
 	if claimed == nil || claimed.ID == "" || claimed.ClaimToken == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
@@ -384,7 +384,7 @@ func (s *SQLStore) FinalizeCompleteJSON(ctx context.Context, claimed *api.CodeSc
 }
 
 // FinalizeFailure atomically commits failure and unavailable coverage.
-func (s *SQLStore) FinalizeFailure(ctx context.Context, claimed *api.CodeScan, status api.CodeScanStatus, code, message string) (bool, error) {
+func (s *sqlCore) FinalizeFailure(ctx context.Context, claimed *api.CodeScan, status api.CodeScanStatus, code, message string) (bool, error) {
 	if claimed == nil || claimed.ID == "" || claimed.ClaimToken == "" {
 		return false, fmt.Errorf("scan claim token required")
 	}
@@ -419,7 +419,7 @@ func (s *SQLStore) FinalizeFailure(ctx context.Context, claimed *api.CodeScan, s
 }
 
 // FinalizePendingFailure records a typed failure before a job is claimed.
-func (s *SQLStore) FinalizePendingFailure(ctx context.Context, id, code, message string) (bool, error) {
+func (s *sqlCore) FinalizePendingFailure(ctx context.Context, id, code, message string) (bool, error) {
 	id = strings.TrimSpace(id)
 	code = strings.TrimSpace(code)
 	if id == "" || code == "" {
@@ -544,7 +544,7 @@ func FindingTouchesPaths(finding api.SecurityFinding, paths []string) bool {
 	return false
 }
 
-func (s *SQLStore) findingSetForScan(ctx context.Context, scanID string) ([]api.SecurityFinding, api.ScanCoverageStatus, error) {
+func (s *sqlCore) findingSetForScan(ctx context.Context, scanID string) ([]api.SecurityFinding, api.ScanCoverageStatus, error) {
 	row, err := s.queries.GetScanFindingSetForScan(ctx, scanID)
 	if err != nil {
 		return nil, "", fmt.Errorf("scan %s finding set: %w", scanID, err)

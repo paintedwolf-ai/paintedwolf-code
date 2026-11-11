@@ -61,6 +61,8 @@ paths:
             schema:
               $ref: ../../components/schemas/checkpoint.yaml#/components/schemas/ResolveCheckpointRequest
       responses:
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/Error
         '200':
           description: Resolved checkpoint
           content:
@@ -118,6 +120,8 @@ paths:
             schema:
               $ref: ../../components/schemas/presence.yaml#/components/schemas/BeginUnlockChallengeRequest
       responses:
+        '422':
+          $ref: ../../components/responses.yaml#/components/responses/Error
         '201':
           description: Challenge to verify and sign
           content:

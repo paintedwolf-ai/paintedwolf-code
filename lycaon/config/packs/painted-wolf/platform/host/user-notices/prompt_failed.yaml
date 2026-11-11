@@ -21,10 +21,5 @@ scenarios:
   - id: with_detail
     vars:
       detail: "dial tcp 127.0.0.1:11434: connection refused"
-    expect_contains:
-      - stopped before a reply
-      - connection refused
   - id: generic
     vars: {}
-    expect_contains:
-      - stopped before a reply

@@ -21,7 +21,7 @@ function loadGolden(name: string): CitationGroundingParityGolden {
 }
 
 describe("citation-grounding-parity", () => {
-  for (const name of ["none.json", "grounded.json", "prose-advisory-only.json"]) {
+  for (const name of ["none.json", "grounded.json", "evidence_optional.json"]) {
     it(`matches Go vacuous flag for ${name}`, () => {
       const golden = loadGolden(name);
       expect(citationGroundingHadTraceableWork(golden.grounding)).toBe(

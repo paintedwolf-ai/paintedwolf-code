@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/llm/providers/nativegen/nativegen.outputDecoder",
+  "kind": "algorithm",
+  "workstream": "native-output-contract",
+  "disposition": "retain",
+  "reason": "Retain 15 fields for one request-scoped envelope parser: offered tools, pending call and quoted-string buffers, channel state, byte accounting and bounded diagnostic identity/history share the same token stream and terminal decision. Splitting these coupled transitions would scatter validation without creating an independent lifetime. Decoder and stream fixtures cover literal preservation, strict boundaries, truncation, withheld call batches and diagnostic privacy. Recovery policy remains separate.",
+  "reviewed_commit": "433e692d0a9d750f4bcd4a4f6fe93dc1ff2f1622",
+  "reviewed_shape": "78bfe8a070b29df5a095c627a27782028ee962983cbe40ccfc72105cd9e5ca27",
+  "ceiling": 15,
+  "boundaries": {
+    "lycaon/internal/llm/providers/nativegen/output_test.go": "bc81bac76d909cb633a77a22b6bdddbf7f798e98dbe1e7e47191e5ff1cca8caf",
+    "lycaon/internal/llm/providers/nativegen/output_channel_test.go": "9a694ef4e54589109723cef1497e44e73e5e5225b3dc9b6c965cad270acb6a67",
+    "lycaon/internal/llm/providers/nativegen/output_contract_test.go": "d6b6f23fb42606ccd592acf399957143c9105072719040e5f84a739bcfa871e5",
+    "lycaon/internal/llm/providers/nativegen/stream_contract_test.go": "0ca3b269293135114f1137470b03236ca1b258aa477176e5e863e20b4718e350"
+  }
+}

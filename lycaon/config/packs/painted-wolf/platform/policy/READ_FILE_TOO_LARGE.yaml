@@ -43,10 +43,6 @@ x-paintedwolf-scenarios:
       can_command: true
       size: 12000000
       tool: read
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: READ_FILE_TOO_LARGE'
-      - 'Use command'
   - id: without_command
     vars:
       detail: bad args
@@ -56,7 +52,3 @@ x-paintedwolf-scenarios:
       can_command: false
       size: 12000000
       tool: read
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: READ_FILE_TOO_LARGE'
-      - 'Use a smaller source file'

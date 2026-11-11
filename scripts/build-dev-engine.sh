@@ -24,3 +24,11 @@ rm -f "${ROOT}/lycaon-den/src-tauri/engine-root/decide/mlx.metallib"
 if [[ -f "${PW_BUILD_DIR}/mlx.metallib" ]]; then
   cp "${PW_BUILD_DIR}/mlx.metallib" "${ROOT}/lycaon-den/src-tauri/engine-root/decide/mlx.metallib"
 fi
+
+case "$(uname -s)" in
+  Darwin|Linux)
+    bash "${ROOT}/scripts/generation/run.sh" stage --output "${PW_BUILD_DIR}/nativegen" \
+      --resources "${ROOT}/lycaon-den/src-tauri/engine-root/generation"
+    bash "${ROOT}/scripts/sign-dev-binary.sh" "${PW_BUILD_DIR}/nativegen"
+    ;;
+esac

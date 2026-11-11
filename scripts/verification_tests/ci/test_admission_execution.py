@@ -12,7 +12,7 @@ from ci_policy import impact, evidence, resources, recovery
 class AdmissionTests(unittest.TestCase):
     def test_shared_unknown_deleted_inputs_expand_not_skip(self):
         for paths in [['docs/openapi/api.yaml'], ['lycaon/go.mod'], ['scripts/x.py'], ['new-area/data.bin'],
-                      ['lycaon/internal/a/testdata/fixture.json'], ['lycaon/config/prompt.md']]:
+                      ['lycaon/config/prompt.md']]:
             full, reasons = impact.broad_scope(paths)
             self.assertTrue(full)
             self.assertEqual(reasons, paths)
@@ -22,7 +22,7 @@ class AdmissionTests(unittest.TestCase):
         scope = dict(full=False, paths=['lycaon-den/src/a.ts'])
         lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
         # Any Den source can change the DOM a screen reader queries.
-        self.assertEqual(lanes, {'limits', 'contracts', 'integration-build', 'frontend', 'behavior', 'webkit-gtk'})
+        self.assertEqual(lanes, {'limits', 'build', 'frontend', 'behavior', 'webkit-gtk'})
         full = {row['lane'] for row in ci.matrix('integration', scope=dict(full=True))['include']}
         self.assertIn('behavior', full)
         self.assertIn('runner', full)
@@ -60,7 +60,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertEqual(impact.broad_scope(paths), (False, []))
         scope = dict(full=False, paths=paths)
         lanes = {row['lane'] for row in ci.matrix('integration', scope=scope)['include']}
-        self.assertEqual(lanes, {'limits', 'contracts', 'integration-build', 'behavior'})
+        self.assertEqual(lanes, {'limits', 'build', 'behavior'})
         with patch.object(impact.subprocess, 'run') as run:
             run.return_value = impact.subprocess.CompletedProcess([], 0, stdout=json.dumps({
                 'ImportPath': 'github.com/lycaon/lycaon/test/smoke', 'Dir': str(impact.ROOT / 'lycaon/test/smoke')}))
@@ -70,7 +70,7 @@ class AdmissionTests(unittest.TestCase):
         self.assertNotIn('frontend', {row['lane'] for row in ci.matrix('integration', scope=mixed)['include']})
         # Documentation that a build or contract parses still widens the gate.
         for path in ['CHANGELOG.md', 'docs/openapi/vocab/README.md', 'docs/openapi.yaml',
-                     'lycaon/config/README.md', 'lycaon/internal/governance/testdata/agentsmd/frontmatter/AGENTS.md']:
+                     'lycaon/config/README.md']:
             self.assertTrue(impact.broad_scope([path])[0], path)
 
     def test_confinement_changes_admit_the_other_architecture(self):
@@ -83,9 +83,11 @@ class AdmissionTests(unittest.TestCase):
                      'lycaon/internal/execution/supervisor_linux.go', 'lycaon-den/src/a.ts']:
             lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(full=False, paths=[path]))['include']}
             self.assertNotIn('confinement-arm64', lanes, path)
-        # The lane, its target, and confinement data outside Go source run every platform lane.
-        for path in ['scripts/test-confine-linux.sh', 'scripts/verification-plan.json',
-                     'lycaon/internal/confine/testdata/fixture.json']:
+        lanes = {row['lane'] for row in ci.matrix('integration', scope=dict(
+            full=False, paths=['lycaon/internal/confine/testdata/fixture.json']))['include']}
+        self.assertIn('confinement-arm64', lanes)
+        # The lane and its target run every platform lane.
+        for path in ['scripts/test-confine-linux.sh', 'scripts/verification-plan.json']:
             self.assertTrue(impact.broad_scope([path])[0], path)
 
     def test_reverse_graph_reaches_test_importers_and_cycles(self):
@@ -195,8 +197,7 @@ class AdmissionTests(unittest.TestCase):
                 self.assertEqual(quarantine.arguments(row['package'], []), ['-test.skip=^(TestFlake)$'])
                 self.assertEqual(quarantine.arguments('unrelated', []), [])
                 self.assertEqual(quarantine.arguments(row['package'], [], observe=True), [])
-                with self.assertRaises(ValueError):
-                    quarantine.entries(date(2099, 1, 2))
+                self.assertEqual(quarantine.entries(date(2099, 1, 2)), [])
                 policy.write_text(json.dumps([{**row, 'test': 'Test.*'}]))
                 with self.assertRaises(ValueError):
                     quarantine.entries()

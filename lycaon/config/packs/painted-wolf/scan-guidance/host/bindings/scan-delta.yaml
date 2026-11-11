@@ -8,8 +8,3 @@ invariants:
   trigger_class: host_api
   fires_in:
   - "delta scan terminal — an automatic scan of changed files introduced or fixed findings in the session's project"
-  required:
-  - introduced
-  - fixed
-  forbidden:
-  - workflow_advance

@@ -42,7 +42,7 @@ func TestRipgrepAlternationMatchesByDefault(t *testing.T) {
 func TestGrepSchemaHasRegexFields(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
 	entry, ok := schemas.Tools["grep"]
 	if !ok {

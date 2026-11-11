@@ -23,9 +23,22 @@ func agentCommandLaunch(tctx tools.ToolContext, subject string, confinement *con
 	launch.CurrentAuthority = tools.AgentLaunchAuthority(tctx, confinement, lease, commandEgressIdentity(tctx, subject, commandLine))
 	launch.RecordStart = tctx.Source.RecordViewProcess
 	if tctx.Files.PackageExecution != nil {
-		launch = launch.WithExtraEnv(packageExecutionCacheEnv()...)
+		launch = launch.WithReducedEnvironment().WithExtraEnv(packageExecutionCacheEnv()...)
+	}
+	if confinement != nil && confinement.CredentialStore {
+		launch = launch.WithExtraEnv(credentialStoreSessionEnv()...)
 	}
 	return launch
+}
+
+func credentialStoreSessionEnv() []string {
+	var out []string
+	for _, key := range []string{"DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"} {
+		if val, ok := os.LookupEnv(key); ok && val != "" {
+			out = append(out, key+"="+val)
+		}
+	}
+	return out
 }
 
 func packageExecutionCacheEnv() []string {

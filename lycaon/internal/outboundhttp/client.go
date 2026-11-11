@@ -105,9 +105,10 @@ type Request struct {
 	// retains the received block in Response.Wire; TLS headers are normalized.
 	WireHeaders bool
 	// TLS adds this request's trust and client identity to every TLS hop.
-	TLS          *ClientTLS
-	AllowAddress func(netip.Addr, uint16) bool
-	BeforeHop    func(context.Context, *url.URL) error
+	TLS            *ClientTLS
+	AllowAddress   func(netip.Addr, uint16) bool
+	BeforeHop      func(context.Context, *url.URL) error
+	OnFirstHopConn func(local, remote netip.AddrPort)
 }
 
 // Hop records a followed redirect and its destination.
@@ -140,7 +141,9 @@ type Response struct {
 	Timing      *HopTiming `json:"timing_ms,omitempty"`
 	TLS         *TLSInfo   `json:"tls,omitempty"`
 	// BodyObserved excludes HEAD responses and discarded bodies.
-	BodyObserved bool `json:"-"`
+	BodyObserved  bool           `json:"-"`
+	FirstHopLocal netip.AddrPort `json:"-"`
+	FirstHopPeer  netip.AddrPort `json:"-"`
 	// StatusLine is the final response's protocol and status as received,
 	// such as "HTTP/1.1 200 OK".
 	StatusLine string `json:"-"`
@@ -210,6 +213,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 	var hops []Hop
 	var ioElapsed time.Duration
 	begun := time.Now()
+	var firstHopLocal, firstHopPeer netip.AddrPort
 	for hop := 0; ; hop++ {
 		if in.BeforeHop != nil {
 			if err := in.BeforeHop(ctx, current); err != nil {
@@ -236,7 +240,17 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			wire = captureWire(transport)
 		}
 		client := in.clientForHop(remaining, transport)
-		tracer, trace := newHopTracer()
+		var onConn func(local, remote netip.AddrPort)
+		if hop == 0 {
+			onConn = func(local, remote netip.AddrPort) {
+				firstHopLocal = local
+				firstHopPeer = remote
+				if in.OnFirstHopConn != nil {
+					in.OnFirstHopConn(local, remote)
+				}
+			}
+		}
+		tracer, trace := newHopTracer(onConn)
 		req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ioCtx, trace), method, current.String(), bytes.NewReader(body))
 		if err != nil {
 			transport.CloseIdleConnections()
@@ -286,6 +300,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			if wire != nil && readErr == nil {
 				result.Wire = wire.headers(resp.StatusCode)
 			}
+			result.FirstHopLocal, result.FirstHopPeer = firstHopLocal, firstHopPeer
 			return result, readErr
 		}
 		_ = resp.Body.Close()

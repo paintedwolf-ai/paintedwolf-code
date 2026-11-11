@@ -33,22 +33,10 @@ func TestRenderPromptDumpInvestigateFixture(t *testing.T) {
 	if strings.TrimSpace(summaryGuidance) == "" {
 		t.Fatal("summarize guidance is empty")
 	}
-	for _, want := range []string{
-		"# Coordinator prompt dump",
-		"surface_id: `implement_investigate`",
-		"## core",
-		"Project folder: " + root,
-		"load through `request_tools`",
-		"Sandbox and worker checks",
-		strings.TrimSpace(summaryGuidance),
-		"excludes device/project skills",
-	} {
+	for _, want := range []string{"# Coordinator prompt dump", "surface_id: `implement_investigate`", "## core", "Project folder: " + root, "load through `request_tools`", strings.TrimSpace(summaryGuidance), "excludes device/project skills"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in dump:\n%s", want, out)
 		}
-	}
-	if strings.Contains(out, "No folder is attached") {
-		t.Fatal("fixture workspace was rendered as folderless")
 	}
 }
 

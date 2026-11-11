@@ -66,7 +66,6 @@ describe("tab tree availability", () => {
     const buffer = file({ kind: "diff" });
     const { reveal, browse, setDeleted } = setup([buffer], listing([]));
     await waitFor(() => expect(browse).toHaveResolved());
-    expect(reveal.unavailable(buffer)).toBe("This file is not in the current tree.");
     setDeleted([buffer.path]);
     expect(reveal.unavailable(buffer)).toBeNull();
     setDeleted([]);

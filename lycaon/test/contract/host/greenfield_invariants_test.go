@@ -16,32 +16,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestServeWiresConditionRegistry(t *testing.T) {
-	t.Parallel()
-	text := contractcheck.ServeWireSource(t) + contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "lycaon/internal/app/workflows/conditions.go")
-	for _, required := range []string{
-		"SetConditionRegistry",
-		"DelegationCloseout:",
-		"ValidateBundled",
-		"ValidateServeWiring",
-		"NewPostureRuleEngine",
-	} {
-		if !strings.Contains(text, required) {
-			t.Fatalf("serve wire missing production wiring %q", required)
-		}
-	}
-}
-
-func TestSessionCreationWarmsPostureOverlay(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "lycaon", "internal", "api", "sessionadmin", "session_create.go"))
-	contractcheck.FailErr(t, "read file", err)
-	if !strings.Contains(string(data), "WarmPostureOverlay") {
-		t.Fatal("session_create.go must warm posture overlay during session materialization")
-	}
-}
-
 func TestBundledWorkflowsUseShippedCompleteWhenOnly(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -71,46 +45,6 @@ func TestBundledWorkflowsUseShippedCompleteWhenOnly(t *testing.T) {
 			if conditions.IsCatalogStub(cw) {
 				t.Fatalf("%s phase %q uses catalog stub complete_when %q", e.Name(), p.ID, cw)
 			}
-		}
-	}
-}
-
-func TestNoDiskPlanReadInConditions(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	condDir := filepath.Join(root, "lycaon", "internal", "conditions")
-	var hits []string
-	err := filepath.Walk(condDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || info.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
-			return err
-		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		text := string(data)
-		for _, forbidden := range []string{"ReadMarkdownFromProject", "blueprintfile.Read"} {
-			if strings.Contains(text, forbidden) {
-				hits = append(hits, path+": "+forbidden)
-			}
-		}
-		return nil
-	})
-	contractcheck.FailErr(t, "operation failed", err)
-	if len(hits) > 0 {
-		t.Fatalf("conditions must not read plan markdown from disk:\n%s", strings.Join(hits, "\n"))
-	}
-}
-
-func TestRegistryGateEvaluatorNoDiskPlanRead(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	data, err := os.ReadFile(filepath.Join(root, "lycaon", "internal", "workflow", "registry_gate.go"))
-	contractcheck.FailErr(t, "read file", err)
-	text := string(data)
-	for _, forbidden := range []string{"ReadMarkdownFromProject", "blueprintfile.Read"} {
-		if strings.Contains(text, forbidden) {
-			t.Fatalf("registry_gate.go must not use disk plan reads (%s)", forbidden)
 		}
 	}
 }

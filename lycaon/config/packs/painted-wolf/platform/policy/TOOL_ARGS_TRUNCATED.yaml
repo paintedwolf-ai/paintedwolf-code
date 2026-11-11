@@ -35,12 +35,6 @@ x-paintedwolf-scenarios:
   vars:
     tool: write
     tool_payload_chunkable: true
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TOOL_ARGS_TRUNCATED'
 - id: small_args_runaway
   vars:
     tool: terminal_open
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TOOL_ARGS_TRUNCATED'

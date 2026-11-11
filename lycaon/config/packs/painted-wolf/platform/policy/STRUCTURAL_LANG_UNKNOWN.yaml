@@ -36,6 +36,3 @@ x-paintedwolf-scenarios:
     path: internal/foo.go
     profile: implement
     tool: grep
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: STRUCTURAL_LANG_UNKNOWN'

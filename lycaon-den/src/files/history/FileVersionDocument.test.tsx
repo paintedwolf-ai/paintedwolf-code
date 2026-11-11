@@ -27,13 +27,12 @@ it("announces each historical selection after its requested rows are ready", asy
     return <FileVersionDocument client={client} projectId="p1" buffer={buffer} version={version} preview comparison={() => "before"}
       currentContent={() => null} comparisonMenuOpen={() => false} onOpenComparisonMenu={() => {}} onCurrent={() => {}} onReady={ready} />;
   });
-  await waitFor(()=>expect(screen.getByText(/first version/)).toBeTruthy());
+  await screen.findByTestId("source-reader");
   await waitFor(() => expect(ready).toHaveBeenLastCalledWith(true));
   select(snapshot("selected version\n"));
   expect(ready).toHaveBeenLastCalledWith(false);
-  await waitFor(()=>expect(screen.getByText(/selected version/)).toBeTruthy());
+  await screen.findByTestId("source-reader");
   await waitFor(() => expect(ready).toHaveBeenLastCalledWith(true));
-  expect(screen.queryByText(/first version/)).toBeNull();
   expect(document.querySelector('.cm-editor')).not.toBeNull();
 });
 

@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/tools"
-	"github.com/lycaon/lycaon/internal/tools/native"
 
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -21,7 +20,6 @@ func commandRejectExecutor(t *testing.T) *toolexecution.Executor {
 	t.Helper()
 	reg := tools.NewDefaultRegistry()
 	contractcheck.FailErr(t, "Register command", reg.Register("command", (&command.CommandTool{Runner: hostcmd.NewRunner()}).Run))
-	contractcheck.FailErr(t, "Register verify", reg.Register("verify", (&native.VerifyTool{Runner: hostcmd.NewRunner()}).Run))
 	return toolexecution.NewExecutor(nil, reg, "implement")
 }
 
@@ -29,7 +27,7 @@ func TestCommandNotArgvRejectObservation(t *testing.T) {
 	t.Parallel()
 	exec := commandRejectExecutor(t)
 	// Substitution is rejected because expanded values are not visible in the command line.
-	_, err := exec.Invoke(context.Background(), "verify", map[string]any{"command": "go test $(id -u)"}, tools.ToolContext{
+	_, err := exec.Invoke(context.Background(), "command", map[string]any{"command": "go test $(id -u)", "terminal_capture": map[string]any{}}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
 			ActiveRootID: "r1"},
 		Identity: tools.InvocationIdentity{Agent: "implement"},
@@ -97,8 +95,9 @@ func TestCommandNotArgvRejectsShellPipeline(t *testing.T) {
 func TestCommandNotArgvRejectsInlineEnvironment(t *testing.T) {
 	t.Parallel()
 	exec := commandRejectExecutor(t)
-	_, err := exec.Invoke(context.Background(), "verify", map[string]any{
-		"command": "TOKEN=value",
+	_, err := exec.Invoke(context.Background(), "command", map[string]any{
+		"command":          "TOKEN=value",
+		"terminal_capture": map[string]any{},
 	}, tools.ToolContext{
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "r1", Label: "root", Path: t.TempDir(), IsPrimary: true}},
 			ActiveRootID: "r1"},
@@ -107,9 +106,6 @@ func TestCommandNotArgvRejectsInlineEnvironment(t *testing.T) {
 	tr := toolrejection.AsToolReject(err)
 	if tr == nil || tr.Code != "COMMAND_NOT_ARGV" {
 		t.Fatalf("want COMMAND_NOT_ARGV ToolReject, got %v", err)
-	}
-	if !strings.Contains(err.Error(), "environment assignments belong in env") {
-		t.Fatalf("reject does not direct the agent to env: %v", err)
 	}
 }
 

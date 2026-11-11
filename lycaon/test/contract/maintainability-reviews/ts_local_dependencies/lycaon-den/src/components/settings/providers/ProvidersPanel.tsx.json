@@ -1,0 +1,15 @@
+{
+  "category": "ts_local_dependencies",
+  "artifact": "lycaon-den/src/components/settings/providers/ProvidersPanel.tsx",
+  "kind": "module",
+  "workstream": "included-model-settings",
+  "disposition": "retain",
+  "reason": "The 31 direct modules are the panel presentation, form actions, settings projections and shared primitives. Local recovery and its card are explicit dependencies with their own lifecycle; the panel remains the composition point.",
+  "reviewed_commit": "1668bbc7358a092317986a52060b4bee1fa5585b",
+  "ceiling": 31,
+  "boundaries": {
+    "lycaon-den/src/components/settings/providers/ProvidersPanel.test.tsx": "135495d11d315e62660078bb846153c057f12e7d1eddb59d0afc899f925be7bd",
+    "lycaon-den/src/components/settings/providers/ProvidersPanel.local.test.tsx": "14604fa5c51fb7da41d6aeb8d75d83d785d1a29ba4708ccdfc37256c9edaf42e"
+  },
+  "reviewed_shape": "56bd3197b770e3a730b818eed23459bf98f6411e5a13a6b513ad2a659150d9d9"
+}

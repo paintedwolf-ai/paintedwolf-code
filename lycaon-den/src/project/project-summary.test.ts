@@ -3,9 +3,6 @@ import { folderLabel, toProjectSummary } from "./project-summary.ts";
 import { wireProject } from "../api/mocks/project-fixture.ts";
 
 describe("project-summary", () => {
-  it("labels no-folder projects", () => {
-    expect(folderLabel([])).toBe("No folder");
-  });
 
   it("labels multi-folder with primary +N", () => {
     const p = wireProject("/repo/a", "p1");

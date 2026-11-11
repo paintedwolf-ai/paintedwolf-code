@@ -21,9 +21,8 @@ type promptSurfaceDeps struct {
 	EffectivePromptSurface  func(ctx context.Context, sess *api.Session) prompts.AgentPromptSurface
 	ImplementSessionState   func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
-	LoadExecutionModeState  func(ctx context.Context, sessionID string) surface.ExecutionModeState
-	LoadedTools             func(sessionID string) map[string]bool
-	OmittedUnits            func(sessionID string) map[string]bool
+	ExecutionModes          *surface.ExecutionModeStateStore
+	Selection               SelectionSource
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
 	PromptToolLister        PromptToolLister
 	Prompts                 prompts.PromptTemplateEngine
@@ -36,7 +35,7 @@ type promptSurfaceDeps struct {
 }
 
 type turnContextDeps struct {
-	AgentsMDChain       AgentsMDChainInjector
+	AgentsMDPolicies    AgentsMDPoliciesInjector
 	AgentsMDIndex       AgentsMDIndexInjector
 	Board               BoardPrependHook
 	BoardOrientReady    BoardOrientReadyRecorder
@@ -46,6 +45,7 @@ type turnContextDeps struct {
 	HeldCalls           func(sessionID string) []heldcall.Running
 	Injects             *prompts.InjectRenderer
 	PeerReservations    PeerReservationSource
+	ReadMessageWindow   inject.MessageWindowReader
 	SiblingNoteDelivery SiblingNoteDeliveryRecorder
 	SkillPointer        func(sessionID string) *turnload.SkillRank
 	SkillPreload        func(sessionID string) *turnload.SkillPreload
@@ -58,11 +58,12 @@ type turnContextDeps struct {
 }
 
 type promptProjection interface {
-	loadExecutionModeState(context.Context, string) surface.ExecutionModeState
+	loadExecutionModeState(string) surface.ExecutionModeState
 	loadedTools(*api.Session) map[string]bool
 	resolveCoordinatorProfile(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (surface.TurnProfile, surface.ImplementSessionState)
 	resolveTurnRoster(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) *inject.AgentRoster
 	sessionCatalogView(context.Context, *api.Session) *catalogview.View
+	sourceHistoryOffered(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) bool
 	taskOffered(*api.Session, string, int) bool
 	workspaceRootsForTurn(context.Context, *api.Session, *TurnAssemblyScratch) ([]map[string]any, int, string, bool)
 }
@@ -73,9 +74,8 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		EffectivePromptSurface:  snapshot.EffectivePromptSurface,
 		ImplementSessionState:   snapshot.ImplementSessionState,
 		Limits:                  snapshot.Limits,
-		LoadExecutionModeState:  snapshot.LoadExecutionModeState,
-		LoadedTools:             snapshot.LoadedTools,
-		OmittedUnits:            snapshot.OmittedUnits,
+		ExecutionModes:          snapshot.ExecutionModes,
+		Selection:               snapshot.Selection,
 		ProjectOverlayRootPaths: snapshot.ProjectOverlayRootPaths,
 		PromptToolLister:        snapshot.PromptToolLister,
 		Prompts:                 snapshot.Prompts,
@@ -103,7 +103,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 	}
 	prompt := &promptSurface{deps: surfaceDeps, cache: cache}
 	turn := &turnContextAssembler{surface: prompt, deps: turnContextDeps{
-		AgentsMDChain:       snapshot.AgentsMDChain,
+		AgentsMDPolicies:    snapshot.AgentsMDPolicies,
 		AgentsMDIndex:       snapshot.AgentsMDIndex,
 		Board:               snapshot.Board,
 		BoardOrientReady:    snapshot.BoardOrientReady,
@@ -113,6 +113,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		HeldCalls:           snapshot.HeldCalls,
 		Injects:             snapshot.Injects,
 		PeerReservations:    snapshot.PeerReservations,
+		ReadMessageWindow:   snapshot.ReadMessageWindow,
 		SiblingNoteDelivery: snapshot.SiblingNoteDelivery,
 		SkillPointer:        snapshot.SkillPointer,
 		SkillPreload:        snapshot.SkillPreload,

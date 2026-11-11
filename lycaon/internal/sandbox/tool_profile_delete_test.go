@@ -14,10 +14,10 @@ func TestImplementWithShellProfileAllowsDelete(t *testing.T) {
 	profiles, err := sandbox.LoadToolProfiles()
 	testutil.FailErr(t, "load tool profiles", err)
 	b := sandbox.NewBoundary(cfg, profiles)
-	if err := b.AssertToolAllowed(context.Background(), "implement", "chown", sandbox.ToolAccessProfile); err != nil {
-		t.Fatalf("AssertToolAllowed chown: %v", err)
+	if err := b.AssertToolAllowed(context.Background(), "implement", "command", sandbox.ToolAccessProfile); err != nil {
+		t.Fatalf("AssertToolAllowed command: %v", err)
 	}
-	if err := b.AssertToolAllowed(context.Background(), "implement", "chmod", sandbox.ToolAccessProfile); err != nil {
-		t.Fatalf("AssertToolAllowed chmod: %v", err)
+	if err := b.AssertToolAllowed(context.Background(), "implement", "restore_version", sandbox.ToolAccessProfile); err != nil {
+		t.Fatalf("AssertToolAllowed restore_version: %v", err)
 	}
 }

@@ -2,7 +2,6 @@ package contract
 
 import (
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -120,12 +119,12 @@ func TestCoordinatorContextDietSurfaceToolsSSOT(t *testing.T) {
 		}
 	}
 	investigate := surfaces["implement_investigate"]
-	for _, tool := range []string{"command", "summarize", "skills_read", "request_tools", "ask_user"} {
+	for _, tool := range []string{"command", "skills_read", "request_tools", "ask_user"} {
 		if !contractcheck.ContainsString(investigate, tool) {
 			t.Fatalf("implement_investigate floor must carry %q", tool)
 		}
 	}
-	// Everything that mutates, delegates, or uses retired routine schemas loads per turn.
+	// Worker dispatch and page capture remain deferred.
 	for _, loadable := range []string{"write", "read", "grep", "list_dir", "git_status", "task", "capture_page"} {
 		if contractcheck.ContainsString(investigate, loadable) {
 			t.Fatalf("implement_investigate floor must not carry loadable tool %q", loadable)
@@ -133,26 +132,10 @@ func TestCoordinatorContextDietSurfaceToolsSSOT(t *testing.T) {
 	}
 }
 
-func TestRenderViewSchemaEncouragesMockupsAndExplanatoryVisuals(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
-	contractcheck.FailErr(t, "LoadSchemaDir", err)
-	meta, ok := cfg.ToolMeta("render_view")
-	if !ok {
-		t.Fatal("missing render_view schema")
-	}
-	for _, want := range []string{"UI/product mockups", "especially before", "diagrams", "runtime evidence"} {
-		if !strings.Contains(meta.Description, want) {
-			t.Fatalf("render_view description missing %q: %s", want, meta.Description)
-		}
-	}
-}
-
 func TestProjectProviderToolMetaPreservesRequiredFields(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 	meta, ok := cfg.ToolMeta("read")
 	if !ok {

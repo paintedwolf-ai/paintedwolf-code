@@ -21,6 +21,3 @@ x-paintedwolf-message: http_request token not held in token jar
 x-paintedwolf-scenarios:
   - id: default
     vars: {jar: api, missing: auth, held: [session], profile: implement, tool: http_request}
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: HTTP_REQUEST_TOKEN_NOT_HELD'

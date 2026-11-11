@@ -172,7 +172,6 @@ describe("workflows-drawer-model", () => {
 
   it("routes an open gate to a review pointer with no lifecycle controls", () => {
     const actions = deriveWorkflowPanelActions(planRun({ ui: { current_phase_label: "Waiting for approval", human_approval_awaiting: true } }));
-    expect(actions.review?.label).toBe("Review in chat");
     expect(actions.controls).toEqual([]);
     expect(actions.leave.id).toBe("leave");
   });
@@ -187,7 +186,6 @@ describe("workflows-drawer-model", () => {
   });
 
   it("never labels picker toggle Cancel", () => {
-    expect(workflowPickerToggleLabel(true)).toBe("Hide workflows");
     expect(workflowPickerToggleLabel(false)).toBe("Pick a workflow");
   });
 

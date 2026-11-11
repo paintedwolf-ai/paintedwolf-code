@@ -50,6 +50,40 @@ const TimedOutStatus = 124
 
 var errTimedOut = errors.New("timeout expired")
 
+type timeoutBoundKey struct{}
+
+// timeoutBound is when the innermost timeout's command is due to be signalled.
+type timeoutBound struct {
+	clock Clock
+	at    time.Time
+}
+
+// RemainingBound reports how long ctx's command has before a deadline or an
+// enclosing timeout ends it. A timeout expires through its clock and the relay,
+// so its context carries no deadline of its own.
+func RemainingBound(ctx context.Context) (time.Duration, bool) {
+	remaining, bounded := time.Duration(0), false
+	if deadline, ok := ctx.Deadline(); ok {
+		remaining, bounded = time.Until(deadline), true
+	}
+	if bound, ok := ctx.Value(timeoutBoundKey{}).(timeoutBound); ok {
+		left := bound.at.Sub(bound.clock.Now())
+		if !bounded || left < remaining {
+			remaining, bounded = left, true
+		}
+	}
+	return max(remaining, 0), bounded
+}
+
+// withTimeoutBound keeps the earlier of d from now and any enclosing timeout.
+func withTimeoutBound(ctx context.Context, clock Clock, d time.Duration) context.Context {
+	at := clock.Now().Add(d)
+	if outer, ok := ctx.Value(timeoutBoundKey{}).(timeoutBound); ok && outer.at.Before(at) {
+		return ctx
+	}
+	return context.WithValue(ctx, timeoutBoundKey{}, timeoutBound{clock: clock, at: at})
+}
+
 // RunTimeout supervises one inner command. On expiry the plan's signal goes
 // to the process the inner command attached to the relay; an inner command
 // with no process (a native operation) is ended through its context. With
@@ -59,6 +93,9 @@ var errTimedOut = errors.New("timeout expired")
 func RunTimeout(ctx context.Context, clock Clock, plan TimeoutPlan, sent func(Signal), run func(context.Context, *SignalRelay) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	inner, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
+	if plan.Duration > 0 {
+		inner = withTimeoutBound(inner, clock, plan.Duration)
+	}
 	relay := &SignalRelay{}
 	var (
 		mu       sync.Mutex

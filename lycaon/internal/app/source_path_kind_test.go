@@ -26,7 +26,7 @@ func TestSourcePathKindsRejectedConsistently(t *testing.T) {
 	outside := t.TempDir()
 	testutil.FailErr(t, "outside", os.WriteFile(filepath.Join(outside, "secret.txt"), []byte("x"), 0o644))
 	testutil.FailErr(t, "link", os.Symlink(filepath.Join(outside, "secret.txt"), filepath.Join(root, "escape.txt")))
-	names := map[string]bool{"read": true, "write": true, "edit": true, "replace_lines": true, "code_rewrite": true}
+	names := map[string]bool{"read": true, "write": true}
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, []sandbox.ToolProfile{{ID: "coordinator", Tools: names}})
 	for _, withDocs := range []bool{false, true} {
 		tctx := tools.ToolContext{
@@ -44,18 +44,6 @@ func TestSourcePathKindsRejectedConsistently(t *testing.T) {
 			},
 			"write": func(p string) error {
 				_, err := (&native.WriteTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": p, "content": "x\n"}, tctx)
-				return err
-			},
-			"edit": func(p string) error {
-				_, err := (&native.EditTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": p, "old_string": "a", "new_string": "b"}, tctx)
-				return err
-			},
-			"replace_lines": func(p string) error {
-				_, err := (&native.ReplaceLinesTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": p, "start_line": 1, "end_line": 1, "new_content": "x"}, tctx)
-				return err
-			},
-			"code_rewrite": func(p string) error {
-				_, err := (&native.CodeRewriteTool{Boundary: boundary}).Run(context.Background(), map[string]any{"path": p, "pattern": "a", "rewrite": "b", "lang": "go"}, tctx)
 				return err
 			},
 		}

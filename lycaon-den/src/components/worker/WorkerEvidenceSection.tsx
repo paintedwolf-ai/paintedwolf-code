@@ -34,6 +34,8 @@ function evidenceSectionStatus(
       return "partial";
     case "failed":
       return "failed";
+    // Nothing was checked, so it does not read as a finished audit.
+    case "evidence_optional":
     case "pending":
       return workerRowStatus(worker) === "running" ? "working" : "pending";
   }

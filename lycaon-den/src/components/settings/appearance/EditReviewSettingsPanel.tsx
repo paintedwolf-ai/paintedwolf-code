@@ -120,6 +120,7 @@ export function EditReviewSettingsPanel(props: Props) {
                   <DenInput
                     kind="rules"
                     aria-label="Path glob"
+                    data-testid={`edit-review-path-${index}`}
                     placeholder="infra/**"
                     value={rule().path}
                     onInput={(e) =>

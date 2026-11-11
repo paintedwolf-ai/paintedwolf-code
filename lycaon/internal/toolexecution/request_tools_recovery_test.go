@@ -159,38 +159,6 @@ func requireUnmatchedToolRequest(t *testing.T, err error) *toolrejection.ToolRej
 	return reject
 }
 
-func TestRequestToolsActivatesDeclaredCompanionsOnly(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	store := tools.NewMemoryActivation()
-	boundary := fakeRequestBoundary{deferred: map[string]bool{"write": true, "edit": true, "diff": true}}
-	testutil.FailErr(t, "register request tools", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: store, Boundary: boundary,
-		Resolve: func(_ context.Context, _ tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
-			return turnload.RequestOutcome{Need: need, Exact: turnload.ExactNames(need, cards)}
-		},
-	}))
-	handler := func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil }
-	testutil.FailErr(t, "register write", reg.Register("write", handler))
-	testutil.FailErr(t, "register edit", reg.Register("edit", handler))
-	testutil.FailErr(t, "register diff", reg.Register("diff", handler))
-
-	tctx := tools.ToolContext{
-		Identity: tools.InvocationIdentity{SessionID: "companions",
-			Agent: "coordinator"},
-		Turn: tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{"write", "edit", "diff"})},
-	}
-	_, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "write the new file"}, tctx)
-	testutil.FailErr(t, "request write", err)
-
-	// write declares edit as a companion; diff is neither selected nor declared.
-	// replace_lines is a companion too, but this plan does not offer it.
-	active := store.Active(tctx.Identity.SessionID)
-	for _, tool := range []string{"write", "edit", "diff", "replace_lines"} {
-		if active[tool] != (tool == "write" || tool == "edit") {
-			t.Errorf("active %s = %v, want the selected tool and its offered companions", tool, active[tool])
-		}
-	}
-}
-
 func TestRequestCommandLoadsOnlyTheSelectedTool(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	activation := tools.NewMemoryActivation()

@@ -109,17 +109,21 @@ class LifecycleTests(unittest.TestCase):
             if method == 'PATCH':
                 return {}
             return {'state': 'open', 'draft': False, 'head': {'sha': SHA if path.endswith('/3') else OTHER}}
-        with patch.object(c, 'api', side_effect=api) as calls:
+        with patch.object(c, 'api', side_effect=api) as calls, patch.object(c, 'update_dependents') as dependents:
             c.reconcile('o/r', {**self.pull, 'merged_at': 'now'}, self.record)
+        # Only the unchanged source landed, so only its children move.
+        self.assertEqual(dependents.call_count, 1)
+        self.assertTrue(dependents.call_args.args[1]['pull_request']['merged'])
         closed = [call.args[0] for call in calls.call_args_list if len(call.args) > 1 and call.args[2] == {'state': 'closed'}]
         self.assertEqual(closed, ['repos/o/r/pulls/3'])
 
     def test_changed_or_labeled_original_is_never_reenrolled(self):
         for pull in ({'state': 'open', 'draft': True, 'head': {'sha': SHA}},
                      {'state': 'open', 'draft': False, 'head': {'sha': OTHER}}):
-            with patch.object(gh, 'api', return_value=pull), patch.object(gh, 'mutation') as mutation:
+            with patch.object(gh, 'api', return_value=pull) as api, patch.object(gh, 'mutation') as mutation:
                 gh.restore('o/r', row(3))
                 mutation.assert_not_called()
+                self.assertEqual(api.call_args.args[:2], ('repos/o/r/issues/3/comments', 'POST'))
 
     def test_checks_require_both_combined_success_and_original_commit_certification(self):
         runs = [{'id': 1, 'name': 'check', 'status': 'completed', 'conclusion': 'failure'},

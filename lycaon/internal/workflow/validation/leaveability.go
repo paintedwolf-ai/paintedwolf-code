@@ -6,7 +6,9 @@ import (
 
 	"github.com/lycaon/lycaon/internal/agentdef"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/internal/workflowdiag"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -19,8 +21,6 @@ const (
 	ToolWait            = "wait"
 	ToolSubmitVerdict   = "submit_verdict"
 )
-
-var blueprintMutationTools = []string{"write", "edit", "replace_lines"}
 
 // ValidateBlueprintWritePhases checks that authoring phases can write.
 func ValidateBlueprintWritePhases(m workflowdef.Manifest) []api.ComposeValidationError {
@@ -52,6 +52,11 @@ func ValidateBlueprintWritePhases(m workflowdef.Manifest) []api.ComposeValidatio
 	if err != nil {
 		return nil
 	}
+	catalog, err := surfacecatalog.Load()
+	if err != nil {
+		return nil
+	}
+	mutation, _ := toolcontract.NewCommandEffects(toolcontract.CommandMutation)
 	var out []api.ComposeValidationError
 	for _, phase := range writers {
 		binding, bindErr := workflowdef.ResolveSurfaceBinding(m, phase.ID, m.ID, "")
@@ -71,14 +76,12 @@ func ValidateBlueprintWritePhases(m workflowdef.Manifest) []api.ComposeValidatio
 		if !ok {
 			continue
 		}
-		tools := toolPlan.AddressableNames()
-		writable := false
-		for _, tool := range blueprintMutationTools {
-			if containsToolID(tools, tool) {
-				writable = true
-				break
-			}
+		row, err := catalog.Surface(surfaceID)
+		if err != nil {
+			continue
 		}
+		effects, err := toolcontract.NewCommandEffects(row.CommandEffects...)
+		writable := err == nil && effects.Allows(mutation) && containsToolID(toolPlan.AddressableNames(), "command")
 		if writable {
 			continue
 		}

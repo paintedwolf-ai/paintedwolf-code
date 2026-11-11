@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: update_progress
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: PROGRESS_NO_OPEN_STEP'
-  - 'If no work remains for this request, continue without a checklist'

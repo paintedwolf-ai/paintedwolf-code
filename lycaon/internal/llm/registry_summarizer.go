@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -9,13 +10,18 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/cost"
+	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
+	"github.com/lycaon/lycaon/internal/tokenest"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+const summaryRequestHeadroom = 1024
 
 // RegistrySummarizer uses a Provider from Registry for lite summarization.
 type RegistrySummarizer struct {
@@ -59,7 +65,7 @@ func (r *RegistrySummarizer) utilityClass() UtilityClass {
 
 func (r *RegistrySummarizer) summarize(ctx context.Context, systemPrompt, userPrompt string, maxTokens int, allowFallback bool) (string, error) {
 	class := r.utilityClass()
-	p, model, err := r.liteProvider()
+	p, model, err := r.liteProvider(ctx)
 	if err != nil || p == nil {
 		return r.degradeSummarize(ctx, systemPrompt, userPrompt, maxTokens, allowFallback, class, err)
 	}
@@ -80,7 +86,7 @@ func (r *RegistrySummarizer) summarize(ctx context.Context, systemPrompt, userPr
 		return "", liteErr
 	}
 	if class.AllowsCoordinatorFallback() {
-		if cp, cmodel, cerr := r.coordinatorProvider(); cerr == nil && cp != nil && (cp.ID() != p.ID() || cmodel != model) {
+		if cp, cmodel, cerr := r.coordinatorProvider(ctx); cerr == nil && cp != nil && (cp.ID() != p.ID() || cmodel != model) {
 			content, coordErr := r.summarizeWith(ctx, cp, cmodel, systemPrompt, userPrompt, maxTokens)
 			if coordErr == nil {
 				return content, nil
@@ -120,19 +126,30 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	if err != nil {
 		return "", err
 	}
+	rawMessages := []api.Message{
+		{Role: api.MessageRoleSystem, Content: today + "\n\n" + systemPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
+		{Role: api.MessageRoleUser, Content: userPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
+	}
 	req := modelcall.CompletionRequest{
-		Model: model,
-		Messages: transcript.Project([]api.Message{
-			{Role: api.MessageRoleSystem, Content: today + "\n\n" + systemPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
-			{Role: api.MessageRoleUser, Content: userPrompt, Origin: api.MessageOriginHost, Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted},
-		}),
-		Debug: modelcall.RequestDebug{Purpose: r.Purpose},
+		Model:    model,
+		Messages: transcript.Project(rawMessages),
+		Debug:    modelcall.RequestDebug{Purpose: r.Purpose},
 		// Short utility outputs use the configured no-reasoning mode.
 		Think:     modelcall.ThinkOff,
 		MaxTokens: maxTokens,
 	}
 	if compaction.SummaryFormatRequested(ctx) {
 		req.ResponseFormat = compaction.CompactionSummaryResponseFormat()
+	}
+	if window := r.Registry.ContextLength(p.ID(), model); window > 0 && compaction.SummaryFormatRequested(ctx) {
+		encoded, err := json.Marshal(req.ResponseFormat)
+		if err != nil {
+			return "", fmt.Errorf("encode summary response format: %w", err)
+		}
+		estimated := modelcall.EstimateRequestInput(req) + tokenest.EstimateDefault(string(encoded))
+		if estimated+maxTokens+summaryRequestHeadroom > window {
+			return "", &failure.ProviderContextTooSmallError{ProviderID: p.ID(), Model: model, PromptTokens: estimated + summaryRequestHeadroom, CompletionReserve: maxTokens, MaxContext: window, Source: "summary-request-estimate"}
+		}
 	}
 	resp, err := r.completeUtility(ctx, p, model, req)
 	if err != nil && req.ResponseFormat != nil && providerretry.IsRequestRejected(err) {
@@ -149,24 +166,28 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 	return resp.Content, nil
 }
 
-func (r *RegistrySummarizer) coordinatorProvider() (modelcall.Provider, string, error) {
-	return r.slotProvider(CoordinatorRef, "coordinator model not configured")
+func (r *RegistrySummarizer) localDefaultAvailable(ctx context.Context) bool {
+	return r != nil && r.Registry != nil && r.Registry.IncludedModelAvailable(ctx)
 }
 
-func (r *RegistrySummarizer) liteProvider() (modelcall.Provider, string, error) {
-	return r.slotProvider(SummarizerRef, "lite model not configured")
+func (r *RegistrySummarizer) coordinatorProvider(ctx context.Context) (modelcall.Provider, string, error) {
+	return r.slotProvider(ctx, func(p ModelPolicy) ModelRef {
+		return CoordinatorRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
+	}, "coordinator model not configured")
+}
+
+func (r *RegistrySummarizer) liteProvider(ctx context.Context) (modelcall.Provider, string, error) {
+	return r.slotProvider(ctx, func(p ModelPolicy) ModelRef {
+		return SummarizerRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
+	}, "lite model not configured")
 }
 
 // slotProvider advances past standing model refusals.
-func (r *RegistrySummarizer) slotProvider(pick func(ModelPolicy) ModelRef, missing string) (modelcall.Provider, string, error) {
+func (r *RegistrySummarizer) slotProvider(ctx context.Context, pick func(ModelPolicy) ModelRef, missing string) (modelcall.Provider, string, error) {
 	if r.Policy == nil || r.Registry == nil {
 		return nil, "", fmt.Errorf("registry not configured")
 	}
-	scope := r.Scope
-	if scope == "" {
-		scope = SettingsScopeGlobal
-	}
-	policy, err := r.Policy.Get(scope, r.ProjectDir)
+	policy, err := r.modelPolicy(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -204,15 +225,11 @@ func (r *RegistrySummarizer) Summarize(ctx context.Context, systemPrompt, userPr
 }
 
 // SummaryRevision identifies the routed utility policy that plans summaries.
-func (r *RegistrySummarizer) SummaryRevision() (string, error) {
+func (r *RegistrySummarizer) SummaryRevision(ctx context.Context) (string, error) {
 	if r.Policy == nil {
 		return "local", nil
 	}
-	scope := r.Scope
-	if scope == "" {
-		scope = SettingsScopeGlobal
-	}
-	policy, err := r.Policy.Get(scope, r.ProjectDir)
+	policy, err := r.modelPolicy(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -224,8 +241,8 @@ func (r *RegistrySummarizer) SummaryRevision() (string, error) {
 }
 
 // SummaryBudget reserves utility output and framing inside the selected window.
-func (r *RegistrySummarizer) SummaryBudget() compaction.SummaryBudget {
-	provider, model, err := r.liteProvider()
+func (r *RegistrySummarizer) SummaryBudget(ctx context.Context) compaction.SummaryBudget {
+	provider, model, err := r.liteProvider(ctx)
 	if err != nil || provider == nil {
 		return compaction.SummaryBudget{}
 	}
@@ -234,5 +251,17 @@ func (r *RegistrySummarizer) SummaryBudget() compaction.SummaryBudget {
 		return compaction.SummaryBudget{}
 	}
 	output := min(1536, max(1, window/8))
-	return compaction.SummaryBudget{Input: max(1, window*3/4-output-1024), Output: output}
+	return compaction.SummaryBudget{Input: max(1, window*3/4-output-summaryRequestHeadroom), Output: output}
+}
+
+// Explicit bindings take precedence over the invoking session's settings roots.
+func (r *RegistrySummarizer) modelPolicy(ctx context.Context) (ModelPolicy, error) {
+	if r.Scope != "" || r.ProjectDir != "" {
+		scope := r.Scope
+		if scope == "" {
+			scope = SettingsScopeProject
+		}
+		return r.Policy.Get(scope, r.ProjectDir)
+	}
+	return r.Policy.GetForProjectRoots(curationctx.SessionFrom(ctx).SettingsRoots)
 }

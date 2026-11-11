@@ -6,8 +6,12 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/session/history"
+	"github.com/lycaon/lycaon/internal/session/lifecycle"
+	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/transcript"
+	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -92,5 +96,56 @@ func TestProjectionAppendSettlesTranscriptBeforeReviewAccounting(t *testing.T) {
 				t.Fatalf("durable rows = %d, want %d", len(durable), expectedRows)
 			}
 		})
+	}
+}
+
+func TestModelBuildWiresContextOverflowAndTokenObservationCallbacks(t *testing.T) {
+	memory := store.NewMemory()
+	sess, err := memory.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
+	testutil.FailErr(t, "create session", err)
+	testutil.FailErr(t, "append message", memory.AppendMessages(t.Context(), sess.ID, api.Message{
+		ID: "m1", Role: api.MessageRoleUser, Content: "hello",
+	}))
+	lim := sessionlimits.New(settings.DefaultSessionLimits(), nil)
+	hist := history.New(memory, &lifecycle.State{}, nil, lim, nil, nil)
+	m := &Model{History: hist, Limits: lim}
+	deps := m.Build()
+
+	deps.RecordCompactionTokenObservation(sess.ID, "openai-compatible", "qwen", 4096, 3500)
+	if rows, err := deps.CompactAfterContextOverflow(t.Context(), nil, []api.Message{{ID: "m0"}}, 16384); err != nil || len(rows) != 1 {
+		t.Fatalf("nil session CompactAfterContextOverflow = (%v, %v)", rows, err)
+	}
+	rows, _ := deps.CompactAfterContextOverflow(t.Context(), sess, []api.Message{{ID: "m1", Role: api.MessageRoleUser, Content: "hello"}}, 16384)
+	if len(rows) == 0 {
+		t.Fatal("expected non-empty rows after CompactAfterContextOverflow")
+	}
+}
+
+func TestProjectionBuildForwardsSettledModelOutputIteration(t *testing.T) {
+	ctx := t.Context()
+	memory := store.NewMemory()
+	sess, err := memory.Create(ctx, api.CreateSessionRequest{}, "project-1")
+	testutil.FailErr(t, "create session", err)
+	turn, err := memory.BeginTurn(ctx, store.TurnStart{
+		SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: store.TurnOriginUser, InputJSON: "{}",
+	})
+	testutil.FailErr(t, "begin turn", err)
+
+	projection := &Projection{Sessions: memory, Transcript: transcript.New(memory, nil)}
+	deps := projection.Build()
+	iter, err := deps.SettledModelOutputIteration(ctx, turn.Attempt.ID)
+	testutil.FailErr(t, "initial settled iteration", err)
+	if iter != 0 {
+		t.Fatalf("initial settled iteration = %d, want 0", iter)
+	}
+	_, err = deps.SettleModelOutput(ctx, store.ModelOutput{
+		ID: "out-1", TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
+		Iteration: 2, MessageID: "msg-1", Content: "Done.",
+	})
+	testutil.FailErr(t, "settle model output", err)
+	iter, err = deps.SettledModelOutputIteration(ctx, turn.Attempt.ID)
+	testutil.FailErr(t, "settled iteration after output", err)
+	if iter != 2 {
+		t.Fatalf("settled iteration = %d, want 2", iter)
 	}
 }

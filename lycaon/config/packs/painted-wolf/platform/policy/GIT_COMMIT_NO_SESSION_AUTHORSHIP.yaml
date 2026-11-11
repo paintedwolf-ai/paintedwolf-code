@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: git_commit
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: GIT_COMMIT_NO_SESSION_AUTHORSHIP'

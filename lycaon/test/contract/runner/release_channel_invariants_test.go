@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -271,9 +272,7 @@ func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
 		t.Fatal("signed platform build must use the release-signing environment")
 	}
 	for _, credential := range []string{"CLOUDFLARE_API_TOKEN", "HOMEBREW_TAP_TOKEN", "WWW_DISPATCH_TOKEN"} {
-		if strings.Contains(build, credential) {
-			t.Fatalf("signed build receives publication credential %s", credential)
-		}
+		exposure.Absent(t, build, credential)
 	}
 	if !strings.Contains(publish, "environment: release-publication") {
 		t.Fatal("immutable publication must use the release-publication environment")
@@ -283,9 +282,7 @@ func TestReleaseSigningAndPublicationCustodyAreSeparated(t *testing.T) {
 		t.Fatal("publication job must receive the catalog-filtered public artifact set, not platform candidates")
 	}
 	for _, credential := range []string{"APPLE_CERTIFICATE", "AZURE_CLIENT_SECRET", "TAURI_SIGNING_PRIVATE_KEY"} {
-		if strings.Contains(publish, credential) {
-			t.Fatalf("publication job receives signing credential %s", credential)
-		}
+		exposure.Absent(t, publish, credential)
 	}
 	// The feed key signs pointers at publication and never signs code; the artifact key never
 	// leaves the signing environment.

@@ -124,7 +124,7 @@ func TestBrokerOrdersStartedBeforeExitedForImmediateExitChild(t *testing.T) {
 	testutil.FailErr(t, "close client", client.Close())
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("broker agent did not exit after client closed")
 	}
 }
@@ -203,7 +203,7 @@ func TestBrokerDetachedCallDoesNotBlockShutdown(t *testing.T) {
 
 	select {
 	case <-done:
-	case <-time.After(3 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("broker agent stayed alive waiting on detached process")
 	}
 	if _, err := os.Stat("/proc/" + strconv.Itoa(bgPID)); err != nil {

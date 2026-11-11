@@ -48,7 +48,7 @@ func TestCloudflareWorkersAIRegistryUnconfiguredWithoutKey(t *testing.T) {
 	// Bundled providers come from the binary; the local overlay stays a real path.
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
@@ -61,7 +61,7 @@ func TestCloudflareWorkersAIRegistryUnconfiguredWithoutKey(t *testing.T) {
 func TestCloudflareWorkersAIReportsToolCallCapability(t *testing.T) {
 	t.Parallel()
 	catalog := liveCatalogForShipIDs(t, "cloudflare-workers-ai")
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}

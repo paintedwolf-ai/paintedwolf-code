@@ -39,6 +39,8 @@ const (
 	RetryReasonSilent RetryReason = "silent"
 	// RetryReasonEmptyCompletion is a terminal response without usable output.
 	RetryReasonEmptyCompletion RetryReason = "empty_completion"
+	// RetryReasonInterrupted is a response that failed after headers arrived.
+	RetryReasonInterrupted RetryReason = "interrupted"
 )
 
 type retryObserverKey struct{}

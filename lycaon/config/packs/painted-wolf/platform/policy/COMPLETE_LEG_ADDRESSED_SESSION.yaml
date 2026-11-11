@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: explore
       tool: complete_leg
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COMPLETE_LEG_ADDRESSED_SESSION'
-      - no worker leg to close

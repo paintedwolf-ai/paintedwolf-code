@@ -64,8 +64,8 @@ func TestSessionScratchIsReadableAndWritableByItsOwnSession(t *testing.T) {
 
 // The kernel agrees: a confined command writes its own scratch and reads the
 // file back, while another session's scratch stays unreadable.
-func TestSeatbeltLetsSessionReadBackItsOwnScratch(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryLetsSessionReadBackItsOwnScratch(t *testing.T) {
+	self := requireLiveBoundary(t)
 	c, _, own, other := sessionScratchFixture(t)
 	ownFile := filepath.Join(own, "flow.sh")
 	if code := confinedExit(t, self, c, "/bin/sh", "-c", `echo ok > "$1"`, "sh", ownFile); code != 0 {

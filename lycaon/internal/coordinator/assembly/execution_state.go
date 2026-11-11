@@ -2,6 +2,7 @@ package assembly
 
 import (
 	"context"
+	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -12,7 +13,16 @@ func (e *turnContextAssembler) appendExecutionState(ctx context.Context, sess *a
 		return out
 	}
 	_, state := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	message := inject.RenderExecutionStateMessage(ctx, e.deps.Injects, sess.ID, history, state.VerifyCommand)
+	window := history
+	if e.deps.ReadMessageWindow != nil {
+		var err error
+		window, err = inject.ReadExecutionStateWindow(ctx, e.deps.ReadMessageWindow, sess.ID)
+		if err != nil {
+			slog.WarnContext(ctx, "read execution state window", "session_id", sess.ID, "error", err)
+			return out
+		}
+	}
+	message := inject.RenderExecutionStateMessage(ctx, e.deps.Injects, sess.ID, window, state.VerifyCommand)
 	if len(message.ContentParts) > 0 {
 		out = append(out, message)
 	}

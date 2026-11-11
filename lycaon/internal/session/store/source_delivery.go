@@ -51,7 +51,7 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	if err != nil {
 		return "", err
 	}
-	if err := s.supersedePathsForRecord(ctx, q, sessionID, rec.Handle, rec, live); err != nil {
+	if err := supersedePathsForRecord(ctx, q, sessionID, rec.Handle, rec, live); err != nil {
 		return "", err
 	}
 	if _, err = writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, rec); err != nil {
@@ -60,8 +60,8 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
-	s.bumpUntrusted(sessionID, rec)
-	s.bumpSecretExposure(sessionID, rec)
+	bumpUntrusted(s.sqlCore, sessionID, rec)
+	bumpSecretExposure(s.sqlCore, sessionID, rec)
 	if err := s.projectUntrustedLedger(ctx, nil, sessionID, rec); err != nil {
 		return "", err
 	}

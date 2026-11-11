@@ -16,7 +16,7 @@ import urllib.request
 import uuid
 import unittest
 import smoke_capabilities
-import smoke_closeout
+import smoke_grading
 import smoke_boundaries
 import smoke_workers
 from runtime_checks import project_scans, project_baseline, requested_full_pass
@@ -26,10 +26,10 @@ sys.path.append(str(ROOT / 'scripts'))
 from artifact_paths import artifact_root
 from built_runtime import engine_path
 from focused_evidence import preparation_checks
-from application_ledger import checkpoint_closed_store
-from application_http import open_request
+from capture_storage import checkpoint_closed_store
+from bootstrap_policy import open_request
 from application_environment import application_environment
-from dispatch_graph import dependency_check_id
+from orchestration_evidence import dependency_check_id
 
 
 class Application:
@@ -269,10 +269,9 @@ class Application:
 
 def verify_case(application, spec, operation):
     if spec.get('workflow_id'):
-        import smoke_workflows
-        return smoke_workflows.verify(application, spec, operation)
-    if spec['id'] in smoke_closeout.CASES:
-        return smoke_closeout.verify(application, spec, operation)
+        return smoke_grading.verify_workflow(application, spec, operation)
+    if spec['id'] in smoke_grading.CASES:
+        return smoke_grading.verify_closeout(application, spec, operation)
     if spec['id'] in smoke_capabilities.CASES:
         return smoke_capabilities.verify(application, spec)
     if spec.get('sandbox'):

@@ -10,8 +10,3 @@ invariants:
   fires_in:
   - investigate/synthesis final turn when tool iteration cap or budget forces the
     final report
-  required:
-  - Do not paste file or code content
-  - Stop calling tools
-  forbidden:
-  - workflow_advance

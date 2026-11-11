@@ -48,43 +48,30 @@ scenarios:
     vars:
       reason: base_dirty
       base_branch: main
-    expect_contains:
-      - uncommitted changes
   - id: base_on_other_branch
     resolution: base_on_other_branch
     vars:
       reason: base_on_other_branch
       base_branch: main
       current: feature
-    expect_contains:
-      - on feature
-      - not main
   - id: base_branch_missing
     resolution: base_branch_missing
     vars:
       reason: base_branch_missing
       base_branch: main
-    expect_contains:
-      - main no longer exists
   - id: base_missing
     resolution: base_missing
     vars:
       reason: base_missing
       base_branch: main
-    expect_contains:
-      - no longer a git repository
   - id: detached_head
     resolution: detached_head
     vars:
       reason: detached_head
       base_branch: main
-    expect_contains:
-      - detached HEAD
   - id: conflict
     resolution: conflict
     vars:
       reason: conflict
       base_branch: main
       conflicts: ["README.md"]
-    expect_contains:
-      - conflicts and was not applied

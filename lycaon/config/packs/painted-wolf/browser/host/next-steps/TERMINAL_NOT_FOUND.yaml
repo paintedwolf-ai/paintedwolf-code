@@ -1,0 +1,8 @@
+steps:
+  - when: "paintedwolf.terminal_not_pty"
+    tool: "command_output"
+    say: "Use {{ call }} with this command handle to inspect its result."
+    otherwise: "Inspect the command result using the available process controls."
+  - when: "!paintedwolf.terminal_not_pty"
+    tool: "terminal_open"
+    say: "If a new process is needed, use {{ call }} and keep its returned id."

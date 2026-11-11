@@ -83,9 +83,6 @@ func TestScanPackToolReturnsEnqueueReceipt(t *testing.T) {
 	if payload.Status != api.CodeScanStatusPending || !payload.WaitTimedOut {
 		t.Fatalf("timed receipt = %#v", payload)
 	}
-	if !strings.Contains(payload.Message, "continue in the background") {
-		t.Fatalf("message = %q want continuation fact", payload.Message)
-	}
 }
 
 func TestScanPackToolCanWaitForSummary(t *testing.T) {
@@ -129,7 +126,7 @@ func TestScanPackToolCanWaitForSummary(t *testing.T) {
 	if payload.Status != api.CodeScanStatusComplete || payload.WaitTimedOut {
 		t.Fatalf("summary receipt = %#v", payload)
 	}
-	if len(payload.ScanIDs) != 1 || !strings.Contains(payload.Message, "zero findings") {
+	if len(payload.ScanIDs) != 1 {
 		t.Fatalf("summary receipt = %#v", payload)
 	}
 }

@@ -42,9 +42,11 @@ type Resolution struct {
 	Handle            string
 	Path              string
 	Line              int
+	EndLine           int // closes a validated inclusive range; zero otherwise
 	LineCorrectedFrom int
 	Excerpt           string
 	Verdict           Verdict
+	Reason            string
 }
 
 // Resolve binds a citation triple against the path-indexed ledger.
@@ -79,6 +81,10 @@ func Resolve(
 	if matchedHandle := matchedHandleForPath(ev, path, line, excerpt, handleHint); matchedHandle != "" {
 		out.Handle = matchedHandle
 		out.Verdict = VerdictMatched
+		// Only a verified excerpt is exact: without one the line was seen, not checked.
+		if excerpt == "" {
+			out.Verdict = VerdictTraced
+		}
 		return out
 	}
 

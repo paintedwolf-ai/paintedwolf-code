@@ -1,11 +1,10 @@
 import { createComposerElevatedAccess, ElevatedAccessButton } from "./ComposerElevatedAccess.tsx";
 import { createComposerVaultUnlock, VaultUnlockButton } from "./ComposerVaultUnlock.tsx";
 import { createComposerEditMenu } from "./composer-edit-menu.ts";
-import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from "solid-js";
+import { Show, batch, createEffect, createSignal, onCleanup, untrack } from "solid-js";
 import {
   attachDispatcher,
   declinable,
-  isEditableTarget,
   registerCommandHandler,
   setAskSendArmed,
   setComposerFocused,
@@ -24,35 +23,18 @@ import {
   type ComposerBlockReason,
 } from "../../chat/composer/composer-rules.ts";
 import { composerDraftForSession, flushComposerDraftsToDisk } from "../../chat/composer/composer-drafts.ts";
-import { filterWorkflowSlashSuggestions } from "../../chat/composer/composer-workflow-triggers.ts";
 import type { CoordinatorVisionSupport } from "../../chat/composer/composer-vision.ts";
 import { clearRevealHighlight } from "../../chat/transcript/presentation/reveal-highlight.ts";
 import {
-  ATTACHMENT_PROVIDER_SEND_HINT,
-  composerAttachmentCapabilities,
-  attachmentChipDetail,
-  attachmentChipLabel,
-  attachmentKindGlyph,
-  attachmentPreviewSnippet,
   attachmentTurnBytes,
-  countsAsImage,
-  fileToComposerAttachment,
   attachPastedFiles,
-  formatAttachmentBytes,
-  isAllowedImageMime,
-  isAllowedVideoMime,
-  isByteAttachmentKind,
-  isPayloadAttachment,
-  isSendablePendingAttachment,
+  composerAttachmentCapabilities,
   rejectMessageForCode,
-  type ComposerPendingAttachment,
 } from "../../chat/composer/composer-attachments.ts";
 import { pendingAttachmentsForSession } from "../../chat/composer/composer-attachment-store.ts";
 import {
   acquireComposerDocumentLease,
-  clearComposerDocumentAttachments,
   consumeComposerDocument,
-  ensureComposerDocument,
   removeComposerDocumentAttachment,
   stageComposerMutation,
   updateComposerDocumentDraft,
@@ -64,49 +46,34 @@ import type {
   PromptReferencePart,
   PromptSecretReferencePart,
   SessionStatus,
+  TurnClock,
   WorkflowRun,
   WorkflowSummary,
 } from "../../api/types.ts";
-import type { TurnClock } from "../../api/types.ts";
 import type { SidecarStatus } from "../../store/app-state-model.ts";
 import { bindingForHandler } from "../../shortcuts/display-binding-for.ts";
 import { shortcutOverrides } from "../../settings/system/shortcut-prefs.ts";
 import { ComposerActivityIndicator } from "./ComposerActivityIndicator.tsx";
+import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import { chromeProps } from "../../styling/ui-chrome.ts";
 import { ExternalContentBadge } from "../nav/ExternalContentBadge.tsx";
 import { createSettledVisibility } from "../../chat/composer/composer-status-settle.ts";
 import { openInSearch } from "../../search/search-nav.ts";
-import {
-  caretAtRecallEdge,
-  exitRecall,
-  inRecall,
-  recordSentPrompt,
-  walkRecall,
-} from "../../chat/composer/prompt-recall.ts";
+import { exitRecall, recordSentPrompt } from "../../chat/composer/prompt-recall.ts";
 import { externalContentSearchQuery } from "../../chat/untrusted/untrusted-content-copy.ts";
-import { syncThemedScrollbar } from "../../platform/scrolling/themed-scrollbars.ts";
-import { revealTextareaCaret } from "../../platform/scrolling/textarea-caret-reveal.ts";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { appBootPreparation } from "../../platform/connection/app-boot-readiness.ts";
-import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import {
   INLINE_TEXT_TOO_LARGE_MESSAGE,
   inlineTextWithinLimit,
-  shouldAttachTextPaste,
 } from "../../chat/composer/large-text-paste.ts";
-import { createPastedTextAttachmentController } from "../../chat/composer/pasted-text-attachment-controller.ts";
-import { AnchoredSurface } from "../primitives/AnchoredSurface.tsx";
 import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
 import { ContextMenu } from "../ContextMenu.tsx";
 import { MarkSecretDialog } from "../source/secrets/MarkSecretDialog.tsx";
-import {
-  HEIGHT_TOGGLE_TIMING,
-  followBodyHeight,
-  type HeightFollow,
-  type HeightMotionTiming,
-} from "../../ui/height-toggle-motion.ts";
-import { handleSlashSuggestionKey } from "../../chat/composer/slash-suggestion-keys.ts";
+import { useComposerAttachments } from "./useComposerAttachments.ts";
+import { ComposerAttachmentStrip } from "./ComposerAttachmentStrip.tsx";
+import { useComposerDraftSizing } from "./useComposerDraftSizing.ts";
 
 let nextSlashListboxId = 0;
 
@@ -163,40 +130,6 @@ type Props = {
   claimFocus?: boolean;
 };
 
-// Early deceleration keeps resizing responsive during typing.
-const DRAFT_RESIZE_TIMING: HeightMotionTiming = {
-  duration: 20,
-  easing: "cubic-bezier(0.2, 0, 0, 1)",
-};
-
-/** Returns whether the draft height changed. */
-function fitDraftHeight(
-  el: HTMLTextAreaElement,
-  scrollHost: HTMLElement | undefined,
-): boolean {
-  const previous = el.style.height;
-  el.style.height = "auto";
-  const next = `${el.scrollHeight}px`;
-  el.style.height = next;
-  el.style.overflowY = "hidden";
-  // Only a shorter draft can leave the scroll host past its content.
-  if (scrollHost && !(Number.parseFloat(next) >= Number.parseFloat(previous))) {
-    syncThemedScrollbar(scrollHost);
-  }
-  return next !== previous;
-}
-
-function clearDraftHeight(
-  el: HTMLTextAreaElement,
-  scrollHost: HTMLElement | undefined,
-): boolean {
-  const previous = el.style.height;
-  el.style.height = "auto";
-  el.style.overflowY = "hidden";
-  if (scrollHost) syncThemedScrollbar(scrollHost);
-  return previous !== "auto";
-}
-
 function focusComposerInput(el: HTMLTextAreaElement | undefined): void {
   if (!el || el.disabled || document.activeElement === el) return;
   // Foreground surfaces keep their focus claim.
@@ -207,29 +140,6 @@ function focusComposerInput(el: HTMLTextAreaElement | undefined): void {
 
 function scheduleComposerFocus(el: HTMLTextAreaElement | undefined): void {
   queueMicrotask(() => focusComposerInput(el));
-}
-
-/** Unreachable hosts leave a rejected file chip. */
-function rejectChipFor(name: string): ComposerPendingAttachment {
-  return {
-    id: crypto.randomUUID(),
-    kind: "reject",
-    name,
-    mime: "application/octet-stream",
-    byteLength: 0,
-    rejectMessage: rejectMessageForCode("unsupported_attachment"),
-  };
-}
-
-function chipTitle(att: ComposerPendingAttachment): string {
-  if (att.kind === "reject") return att.rejectMessage || att.name;
-  if (att.kind === "path-file" || att.kind === "path-folder" || att.kind === "external-file" || att.kind === "external-folder") {
-    return `${attachmentChipLabel(att)} · ${att.path}`;
-  }
-  if (att.kind === "artifact") return att.name;
-  if (att.kind === "search-hit") return `${att.name} · ${att.sourceRef}`;
-  if (att.kind === "secret") return `${att.name} · ${attachmentChipDetail(att)}`;
-  return `${att.name} · ${formatAttachmentBytes(att.byteLength)} · ${attachmentPreviewSnippet(att)}`;
 }
 
 export function Composer(props: Props) {
@@ -262,7 +172,8 @@ export function Composer(props: Props) {
     );
 
   const sendBlocked = () =>
-    !appBootPreparation.ready() || isComposerSendBlocked(
+    !appBootPreparation.ready() ||
+    isComposerSendBlocked(
       props.sidecarStatus,
       props.sessionId,
       props.activeWorkflow,
@@ -285,12 +196,89 @@ export function Composer(props: Props) {
     }
     return "Message…";
   };
+
   const [text, setText] = createSignal(composerDraftForSession(props.sessionId));
-  const [dismissedSlashText, setDismissedSlashText] = createSignal<string | null>(null);
-  const [activeSlashSuggestion, setActiveSlashSuggestion] = createSignal(0);
   const slashListboxId = `den-composer-slash-${++nextSlashListboxId}`;
-  const attachments = () => pendingAttachmentsForSession(props.sessionId);
   const [composerErrors, setComposerErrors] = createSignal<Record<string, string>>({});
+  const composerError = () => composerErrors()[destinationKey()] ?? null;
+  const setComposerError = (target: ChatDestination, message: string | null) => {
+    const targetKey = destinationKey(target);
+    setComposerErrors((previous) => {
+      if (message === null && previous[targetKey] === undefined) return previous;
+      const next = { ...previous };
+      if (message === null) delete next[targetKey];
+      else next[targetKey] = message;
+      return next;
+    });
+  };
+
+  let inputRef: HTMLTextAreaElement | undefined;
+  let footerRef: HTMLElement | undefined;
+  let bodyRef: HTMLDivElement | undefined;
+  let scrollRef: HTMLDivElement | undefined;
+  let viewportRef: HTMLDivElement | undefined;
+  let fileInputRef: HTMLInputElement | undefined;
+
+  const {
+    replaceText,
+    growDraft,
+    clearDraft,
+    revealCaret,
+    resizeChrome,
+    removeMarkedDraftRange,
+    walkPromptRecall,
+    insertNewline,
+    slashSuggestions,
+    showSlashSuggestions,
+    activeSlashSuggestion,
+    setActiveSlashSuggestion,
+    dismissSlashSuggestions,
+    applySlashSuggestion,
+    onSlashSuggestionKeyDown,
+  } = useComposerDraftSizing({
+    sessionId: () => props.sessionId,
+    destination,
+    composeBlocked,
+    workflowCatalog: () => props.workflowCatalog,
+    focusWhen: () => props.focusWhen,
+    refocusPulse: () => props.refocusPulse,
+    rehydrateDraftPulse: () => props.rehydrateDraftPulse,
+    text,
+    setText,
+    setComposerError,
+    inputRef: () => inputRef,
+    footerRef: () => footerRef,
+    bodyRef: () => bodyRef,
+    scrollRef: () => scrollRef,
+    viewportRef: () => viewportRef,
+    focusInput: () => focusComposerInput(inputRef),
+    scheduleFocus: () => scheduleComposerFocus(inputRef),
+  });
+
+  const {
+    attachments,
+    pastedTextAttachments,
+    visiblePastedTextUploads,
+    pasteAnnouncement,
+    sendableAttachments,
+    hasRejectChips,
+    hasPastedTextUploads,
+    hasByteAttachments,
+    visionHint,
+    clearAttachments,
+    interceptTextPaste,
+    addFiles,
+    removeAttachment,
+    isAttachLimitReached,
+  } = useComposerAttachments({
+    sessionId: () => props.sessionId,
+    destination,
+    visionSupport: () => props.visionSupport,
+    currentText: () => inputRef?.value ?? text(),
+    setComposerError,
+    scheduleFocus: () => scheduleComposerFocus(inputRef),
+  });
+
   const {
     editMenuAnchor,
     setEditMenuAnchor,
@@ -306,46 +294,30 @@ export function Composer(props: Props) {
     sessionId: () => props.sessionId,
     projectId: () => props.projectId,
     destination,
-    removeMarkedDraftRange: (start, end, nextDraft) => removeMarkedDraftRange(start, end, nextDraft),
-    growDraft: () => growDraft(),
+    removeMarkedDraftRange,
+    growDraft,
   });
-  const composerError = () => composerErrors()[destinationKey()] ?? null;
-  const setComposerError = (target: ChatDestination, message: string | null) => {
-    const targetKey = destinationKey(target);
-    setComposerErrors((previous) => {
-      if (message === null && previous[targetKey] === undefined) return previous;
-      const next = { ...previous };
-      if (message === null) delete next[targetKey];
-      else next[targetKey] = message;
-      return next;
-    });
-  };
-  const pastedTextAttachments = createPastedTextAttachmentController({
-    destination,
-    clearError: (target) => setComposerError(target, null),
-  });
-  const visiblePastedTextUploads = pastedTextAttachments.visibleUploads;
-  const pasteAnnouncement = pastedTextAttachments.announcement;
-  let inputRef: HTMLTextAreaElement | undefined;
+
   const elevated = createComposerElevatedAccess({
-    client: () => { props.sidecarStatus; return getLycaonClient(); },
+    client: () => {
+      props.sidecarStatus;
+      return getLycaonClient();
+    },
     connected: () => props.sidecarStatus === "connected",
     sessionId: () => props.sessionId,
     revision: () => `${props.projectId}:${props.approvalsRevision ?? 0}:${props.sidecarStatus}`,
     focus: () => inputRef?.focus({ preventScroll: true }),
   });
   const vaultUnlock = createComposerVaultUnlock({
-    client: () => { props.sidecarStatus; return getLycaonClient(); },
+    client: () => {
+      props.sidecarStatus;
+      return getLycaonClient();
+    },
     connected: () => props.sidecarStatus === "connected",
     sessionId: () => props.sessionId,
     revision: () => `${props.projectId}:${props.sidecarStatus}`,
   });
-  let footerRef: HTMLElement | undefined;
-  let bodyRef: HTMLDivElement | undefined;
-  let scrollRef: HTMLDivElement | undefined;
-  let viewportRef: HTMLDivElement | undefined;
-  let composerHeight: HeightFollow | undefined;
-  let fileInputRef: HTMLInputElement | undefined;
+
   // Plain prompts overlap; decision sends serialize.
   const pendingSubmissions = new Map<string, number>();
   // Each draft maps to one active submission.
@@ -362,7 +334,7 @@ export function Composer(props: Props) {
     else pendingSubmissions.set(targetKey, next);
     setPendingSubmissionVersion((version) => version + 1);
   };
-  let resolvedDocumentKey = "";
+
   // Distinguishes this composer from other focus claimants.
   const focusClaim = {};
   const [composerEl, setComposerEl] = createSignal<HTMLTextAreaElement | undefined>();
@@ -380,11 +352,6 @@ export function Composer(props: Props) {
   const externalDesired = () => Boolean(props.externalContent);
   const liveSettled = createSettledVisibility(liveDesired);
   const externalSettled = createSettledVisibility(externalDesired);
-  const sendableAttachments = () => attachments().filter(isSendablePendingAttachment);
-  const hasRejectChips = () =>
-    attachments().some((a) => a.kind === "reject") ||
-    visiblePastedTextUploads().some((upload) => upload.status === "failed");
-  const hasPastedTextUploads = () => visiblePastedTextUploads().length > 0;
   const hasDraftContent = () =>
     text().trim().length > 0 ||
     sendableAttachments().length > 0 ||
@@ -427,285 +394,6 @@ export function Composer(props: Props) {
     openInSearch(projectId, query);
   };
 
-  const replaceText = (value: string) => {
-    setText(value);
-    // Unchanged values preserve the live selection.
-    if (inputRef && inputRef.value !== value) inputRef.value = value;
-  };
-
-  const sizeDraft = (
-    size: typeof fitDraftHeight,
-    motion: "ease" | "snap",
-  ) => {
-    const el = inputRef;
-    if (!el) return;
-    const apply = () => size(el, scrollRef);
-    if (!composerHeight) apply();
-    else if (motion === "snap") composerHeight.snap(apply);
-    else composerHeight.change(DRAFT_RESIZE_TIMING, apply);
-  };
-  /** Drafts scroll once the composer reaches its height cap. */
-  const growDraft = () => sizeDraft(fitDraftHeight, "ease");
-  const clearDraft = () => sizeDraft(clearDraftHeight, "snap");
-  /** Conversation switches resize the draft without animation. */
-  const snapDraft = () => sizeDraft(fitDraftHeight, "snap");
-  const revealCaret = () => {
-    if (inputRef && viewportRef) revealTextareaCaret(inputRef, viewportRef);
-  };
-
-  const resizeChrome = (mutate: () => void) => {
-    if (composerHeight) composerHeight.change(HEIGHT_TOGGLE_TIMING, mutate);
-    else mutate();
-  };
-
-  onMount(() => {
-    if (!footerRef || !bodyRef) return;
-    const follow = followBodyHeight(footerRef, bodyRef);
-    composerHeight = follow;
-    snapDraft();
-    onCleanup(() => {
-      if (composerHeight === follow) composerHeight = undefined;
-      follow.dispose();
-    });
-  });
-
-  /** Native deletion preserves undo for marked text. */
-  const removeMarkedDraftRange = (
-    start: number,
-    end: number,
-    nextDraft: string,
-  ) => {
-    const el = inputRef;
-    if (el && typeof document.execCommand === "function") {
-      el.focus();
-      el.setSelectionRange(start, end);
-      if (document.execCommand("delete") && el.value === nextDraft) {
-        setText(nextDraft);
-        return;
-      }
-    }
-    replaceText(nextDraft);
-  };
-
-  const writeDraft = (value: string): boolean => {
-    const target = destination();
-    if (!inlineTextWithinLimit(value, composerAttachmentCapabilities())) {
-      setComposerError(target, INLINE_TEXT_TOO_LARGE_MESSAGE);
-      return false;
-    }
-    batch(() => {
-      replaceText(value);
-      updateComposerDocumentDraft(target, value);
-    });
-    return true;
-  };
-
-  // Multiline recall yields arrow keys to the caret.
-  const walkPromptRecall = (direction: "older" | "newer"): boolean => {
-    if (composeBlocked()) return false;
-    if (text().length > 0 && !inRecall(props.sessionId)) return false;
-    if (
-      inputRef &&
-      !caretAtRecallEdge(
-        inputRef.value,
-        inputRef.selectionStart,
-        inputRef.selectionEnd,
-        direction,
-      )
-    ) {
-      return false;
-    }
-    const recalled = walkRecall(props.sessionId, direction);
-    if (recalled === null) return false;
-    writeDraft(recalled);
-    queueMicrotask(() => {
-      if (!inputRef) return;
-      growDraft();
-      inputRef.setSelectionRange(inputRef.value.length, inputRef.value.length);
-      revealCaret();
-    });
-    return true;
-  };
-
-  const slashSuggestions = createMemo(() =>
-    filterWorkflowSlashSuggestions(text(), props.workflowCatalog ?? []),
-  );
-  const showSlashSuggestions = () =>
-    !composeBlocked() &&
-    text().trimStart().startsWith("/") &&
-    slashSuggestions().length > 0 &&
-    dismissedSlashText() !== text();
-
-  createEffect(() => {
-    const count = slashSuggestions().length;
-    if (!showSlashSuggestions() || count === 0) {
-      setActiveSlashSuggestion(0);
-      return;
-    }
-    setActiveSlashSuggestion((index) => Math.min(index, count - 1));
-  });
-
-  const imageCount = () => attachments().filter((a) => countsAsImage(a)).length;
-  const byteAttachmentCount = () =>
-    attachments().filter((a) => isByteAttachmentKind(a.kind)).length;
-  const hasByteAttachments = () => attachments().some(isPayloadAttachment);
-
-  // Unknown vision support remains distinct from unsupported.
-  const visionHint = () => {
-    if (imageCount() === 0 || props.visionSupport !== "unsupported") return null;
-    const media = attachments().some((a) => a.kind === "video") ? "images or video frames" : "images";
-    return `The active model cannot see ${media}. They will still appear in the transcript.`;
-  };
-
-  const applySlashSuggestion = (trigger: string) => {
-    writeDraft(`${trigger} `);
-    setDismissedSlashText(text());
-    queueMicrotask(() => {
-      growDraft();
-      focusComposerInput(inputRef);
-      revealCaret();
-    });
-  };
-
-  const onSlashSuggestionKeyDown = (event: KeyboardEvent) => {
-    if (!showSlashSuggestions()) return;
-    const suggestions = slashSuggestions();
-    handleSlashSuggestionKey(event, {
-      count: suggestions.length,
-      active: activeSlashSuggestion,
-      setActive: setActiveSlashSuggestion,
-      choose: (index) => {
-        const suggestion = suggestions[index];
-        if (suggestion) applySlashSuggestion(suggestion.trigger);
-      },
-      dismiss: () => setDismissedSlashText(text()),
-    });
-  };
-
-  const clearAttachments = () => {
-    const target = destination();
-    pastedTextAttachments.cancelVisible();
-    setComposerError(target, null);
-    void clearComposerDocumentAttachments(target);
-  };
-
-  const interceptTextPaste = (pasted: string, start: number, end: number): boolean => {
-    if (!pasted) return false;
-    const shouldAttach = shouldAttachTextPaste({
-      current: inputRef?.value ?? text(),
-      selectionStart: start,
-      selectionEnd: end,
-      pasted,
-      capabilities: composerAttachmentCapabilities(),
-    });
-    if (!shouldAttach) return false;
-    exitRecall(props.sessionId);
-    pastedTextAttachments.stage(pasted);
-    return true;
-  };
-
-  const addFiles = async (files: File[]) => {
-    if (files.length === 0) return;
-    const target = destination();
-    setComposerError(target, null);
-    const caps = composerAttachmentCapabilities();
-    if (!caps) {
-      setComposerError(target, "Attachments are unavailable until host readiness loads.");
-      return;
-    }
-    const activePastedUploads = visiblePastedTextUploads().filter(
-      (upload) => upload.status === "uploading",
-    );
-    let availableCount = Math.max(
-      0,
-      caps.max_attachments - byteAttachmentCount() - activePastedUploads.length,
-    );
-    let availableBytes = Math.max(
-      0,
-        caps.max_turn_bytes -
-        attachmentTurnBytes(attachments()) -
-        activePastedUploads.reduce((sum, upload) => sum + upload.file.size, 0),
-    );
-    let availableImages = Math.max(0, caps.max_images - imageCount());
-    const acceptedFiles: File[] = [];
-    for (const file of files) {
-      const looksLikeVideo = isAllowedVideoMime(file.type);
-      // A video reaches the model as one frame sheet, so it spends an image slot too.
-      const spendsImage = looksLikeVideo || isAllowedImageMime(file.type);
-      if (
-        availableCount <= 0 ||
-        file.size > availableBytes ||
-        (looksLikeVideo && file.size > caps.max_video_bytes) ||
-        (spendsImage && availableImages <= 0)
-      ) {
-        continue;
-      }
-      acceptedFiles.push(file);
-      availableCount -= 1;
-      availableBytes -= file.size;
-      if (spendsImage) availableImages -= 1;
-    }
-    if (acceptedFiles.length === 0) {
-      setComposerError(target, rejectMessageForCode("attachment_too_large"));
-      return;
-    }
-    if (acceptedFiles.length < files.length) {
-      setComposerError(target, rejectMessageForCode("attachment_too_large"));
-    }
-    const pending: ComposerPendingAttachment[] = [];
-    for (const file of acceptedFiles) {
-      const client = getLycaonClient();
-      const attachment = client
-        ? await fileToComposerAttachment(file, target.projectId, client)
-        : rejectChipFor(file.name);
-      pending.push(attachment);
-      if (attachment.kind === "reject" && attachment.rejectMessage) {
-        setComposerError(target, attachment.rejectMessage);
-      }
-    }
-    const result = await stageComposerMutation(target, pending);
-    if (!result.ok) setComposerError(target, result.reason);
-    // File-picker blur drops the composer focus claim.
-    scheduleComposerFocus(inputRef);
-  };
-
-  const removeAttachment = (id: string) => {
-    const target = destination();
-    setComposerError(target, null);
-    void removeComposerDocumentAttachment(target, id);
-  };
-
-  // Peer views share one host-managed chat document.
-  createEffect(() => {
-    const target = destination();
-    const targetKey = `${target.projectId}\0${target.sessionId}`;
-    if (targetKey === resolvedDocumentKey) return;
-    resolvedDocumentKey = targetKey;
-    void ensureComposerDocument(target);
-  });
-
-  // Mirror explicit shared-document updates into the mounted field.
-  createEffect(() => {
-    const stored = composerDraftForSession(props.sessionId);
-    if (stored === text()) return;
-    replaceText(stored);
-    queueMicrotask(growDraft);
-  });
-
-  const insertNewline = () => {
-    if (!inputRef || composeBlocked()) return;
-    const el = inputRef;
-    const start = el.selectionStart;
-    const end = el.selectionEnd;
-    const next = `${el.value.slice(0, start)}\n${el.value.slice(end)}`;
-    if (!writeDraft(next)) return;
-    queueMicrotask(() => {
-      el.selectionStart = el.selectionEnd = start + 1;
-      growDraft();
-      revealCaret();
-    });
-  };
-
   const submit = async () => {
     const submittedDestination = destination();
     const submittedKey = destinationKey(submittedDestination);
@@ -721,23 +409,25 @@ export function Composer(props: Props) {
     if (
       (!value && pending.length === 0 && !props.askAnswerReady && !props.emptySubmitEnabled) ||
       sendBlocked()
-    ) return;
+    ) {
+      return;
+    }
     if (hasRejectChips()) {
       setComposerError(submittedDestination, "Remove unsupported attachments before sending");
       return;
     }
     if (!inlineTextWithinLimit(value, composerAttachmentCapabilities())) {
-      setComposerError(
-        submittedDestination,
-        INLINE_TEXT_TOO_LARGE_MESSAGE,
-      );
+      setComposerError(submittedDestination, INLINE_TEXT_TOO_LARGE_MESSAGE);
       return;
     }
     const pendingBytes = attachmentTurnBytes(pending);
     // Restored chips defer unknown limits to host validation at send time.
     const capabilities = composerAttachmentCapabilities();
-    if (pendingBytes > 0 && capabilities &&
-      (capabilities.max_turn_bytes <= 0 || pendingBytes > capabilities.max_turn_bytes)) {
+    if (
+      pendingBytes > 0 &&
+      capabilities &&
+      (capabilities.max_turn_bytes <= 0 || pendingBytes > capabilities.max_turn_bytes)
+    ) {
       setComposerError(submittedDestination, rejectMessageForCode("attachment_too_large"));
       return;
     }
@@ -837,23 +527,31 @@ export function Composer(props: Props) {
   // Composer-scoped commands belong to the composer whose input holds focus.
   createEffect(() => {
     if (!inputFocused() && !holdsAskSend()) return;
-    onCleanup(registerCommandHandler("composer.send", () => {
-      void submit();
-    }));
+    onCleanup(
+      registerCommandHandler("composer.send", () => {
+        void submit();
+      }),
+    );
   });
   createEffect(() => {
     if (!inputFocused()) return;
-    onCleanup(registerCommandHandler("composer.newline", () => {
-      insertNewline();
-    }));
-    onCleanup(registerCommandHandler(
-      "composer.recallPrev",
-      declinable(() => walkPromptRecall("older")),
-    ));
-    onCleanup(registerCommandHandler(
-      "composer.recallNext",
-      declinable(() => walkPromptRecall("newer")),
-    ));
+    onCleanup(
+      registerCommandHandler("composer.newline", () => {
+        insertNewline();
+      }),
+    );
+    onCleanup(
+      registerCommandHandler(
+        "composer.recallPrev",
+        declinable(() => walkPromptRecall("older")),
+      ),
+    );
+    onCleanup(
+      registerCommandHandler(
+        "composer.recallNext",
+        declinable(() => walkPromptRecall("newer")),
+      ),
+    );
   });
   const detachListener = attachDispatcher();
   onCleanup(() => {
@@ -863,485 +561,282 @@ export function Composer(props: Props) {
     releaseFocusRegion("composer", focusClaim);
   });
 
-  createEffect(
-    on(
-      () => props.sessionId,
-      (sessionId, prevSessionId) => {
-        if (prevSessionId) void flushComposerDraftsToDisk();
-        replaceText(composerDraftForSession(sessionId));
-        queueMicrotask(snapDraft);
-      },
-      { defer: true },
-    ),
-  );
-
-  createEffect(
-    on(
-      () => props.focusWhen,
-      (focusWhen) => {
-        if (!focusWhen || composeBlocked()) return;
-        scheduleComposerFocus(inputRef);
-      },
-    ),
-  );
-
-  // Unblocking returns the caret unless another text field holds it.
-  createEffect(
-    on(composeBlocked, (isDisabled, wasDisabled) => {
-      if (isDisabled || wasDisabled !== true || !props.focusWhen) return;
-      if (isEditableTarget(document.activeElement)) return;
-      scheduleComposerFocus(inputRef);
-    }),
-  );
-
-  createEffect(
-    on(
-      () => props.refocusPulse,
-      () => {
-        if (composeBlocked()) return;
-        scheduleComposerFocus(inputRef);
-      },
-      { defer: true },
-    ),
-  );
-
-  createEffect(
-    on(
-      () => props.rehydrateDraftPulse,
-      () => {
-        replaceText(composerDraftForSession(props.sessionId));
-        queueMicrotask(() => {
-          if (!inputRef) return;
-          growDraft();
-          // Explicit edit preloads place the caret after the draft.
-          inputRef.setSelectionRange(inputRef.value.length, inputRef.value.length);
-        });
-      },
-      { defer: true },
-    ),
-  );
-
   return (
     <>
-    <footer class="den-composer" ref={footerRef}>
-      <div class="den-composer-body" ref={bodyRef}>
-        <ComposerActivityIndicator
-          present={liveSettled()}
-          activityLabel={sending() ? "Sending" : props.activityLabel}
-          turnClock={sending() ? undefined : props.turnClock}
-          resize={resizeChrome}
-        />
-        {/* Drafted approval guidance arms the redirect controls together. */}
-        <Show when={props.approvalRedirect && text().trim().length > 0}>
-          <p class="den-composer-pause-hint" role="status" data-testid="composer-approval-redirect">
-            <strong>{APPROVALS_COPY.card.composerRedirect.title}</strong>{" — "}
-            {APPROVALS_COPY.card.composerRedirect.detail}
-          </p>
-        </Show>
-        <Show when={props.pauseHint}>
-          <p class="den-composer-pause-hint" role="status" data-testid="composer-pause-hint">
-            {props.pauseHint}
-          </p>
-        </Show>
-        <Show when={visionHint()}>
-          <p class="den-composer-pause-hint" role="status" data-testid="composer-vision-hint">
-            {visionHint()}
-          </p>
-        </Show>
-        <Show when={composerError()}>
-          <p class="den-composer-pause-hint" role="status" data-testid="composer-attach-error">
-            {composerError()}
-          </p>
-        </Show>
-        <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
-          {pasteAnnouncement()}
-        </span>
-        <Show when={attachments().length > 0 || visiblePastedTextUploads().length > 0}>
-          <div class="den-composer-attach-note">
-            <span data-testid="composer-attach-count">
-              {visiblePastedTextUploads().some((upload) => upload.status === "uploading")
-                ? `${visiblePastedTextUploads().filter((upload) => upload.status === "uploading").length} attaching`
-                : visiblePastedTextUploads().some((upload) => upload.status === "failed")
-                  ? `${visiblePastedTextUploads().filter((upload) => upload.status === "failed").length} needs attention`
-                  : attachments().length === 1
-                  ? "1 attached"
-                  : `${attachments().length} attached`}
-            </span>
-            <Show when={hasByteAttachments() || visiblePastedTextUploads().length > 0}>
-              <span class="den-composer-attach-note-hint" data-testid="composer-provider-send-hint">
-                {ATTACHMENT_PROVIDER_SEND_HINT}
-              </span>
-            </Show>
-            <button
-              type="button"
-              class="den-composer-attach-clear"
-              data-testid="composer-attach-clear"
-              onClick={clearAttachments}
-            >
-              Clear all
-            </button>
-          </div>
-          <Scrollport
-            class="den-composer-chip-rail"
-            contentAs="ul"
-            contentClass="den-composer-chip-list"
-            content={{ "data-testid": "composer-attachment-chips" }}
-          >
-            <For each={visiblePastedTextUploads()}>
-              {(upload) => (
-                <li
-                  class="den-composer-chip"
-                  classList={{ "den-composer-chip--reject": upload.status === "failed" }}
-                  data-testid="composer-pasted-text-upload"
-                  data-kind="text"
-                  aria-busy={upload.status === "uploading" ? "true" : undefined}
-                  data-tip={`${upload.file.name} · ${formatAttachmentBytes(upload.file.size)}`}
-                  data-tip-when-clipped=".den-composer-chip-label, .den-composer-chip-detail"
-                >
-                  <span class="den-composer-chip-glyph" aria-hidden="true">≡</span>
-                  <span class="den-composer-chip-label">{upload.file.name}</span>
-                  <span class="den-composer-chip-detail">
-                    {upload.status === "uploading"
-                      ? `${formatAttachmentBytes(upload.file.size)} · Attaching…`
-                      : upload.error}
-                  </span>
-                  <Show when={upload.status === "failed"}>
-                    <button
-                      type="button"
-                      class="den-composer-chip-remove"
-                      data-testid="composer-pasted-text-retry"
-                      aria-label="Retry pasted text attachment"
-                      onClick={() => void pastedTextAttachments.retry(upload)}
-                    >
-                      ↻
-                    </button>
-                  </Show>
-                  <button
-                    type="button"
-                    class="den-composer-chip-remove"
-                    data-testid="composer-pasted-text-remove"
-                    aria-label="Remove pasted text attachment"
-                    onClick={() => pastedTextAttachments.remove(upload.id)}
-                  >
-                    ×
-                  </button>
-                </li>
-              )}
-            </For>
-            <For each={attachments()}>
-              {(att) => (
-                <li
-                  class="den-composer-chip"
-                  classList={{ "den-composer-chip--reject": att.kind === "reject" }}
-                  data-testid="composer-attachment-chip"
-                  data-kind={att.kind}
-                  data-reject-code={att.kind === "reject" ? (att.rejectCode ?? "") : ""}
-                  data-tip={chipTitle(att)}
-                  data-tip-when-clipped=".den-composer-chip-label, .den-composer-chip-detail"
-                >
-                  <Show
-                    when={
-                      "previewUrl" in att && att.previewUrl
-                        ? att.previewUrl
-                        : undefined
-                    }
-                    keyed
-                    fallback={
-                      <span class="den-composer-chip-glyph" aria-hidden="true">
-                        {attachmentKindGlyph(att.kind)}
-                      </span>
-                    }
-                  >
-                    {(url) => (
-                      <img
-                        class="den-composer-chip-thumb"
-                        src={url}
-                        alt={
-                          att.kind === "image"
-                            ? `${att.name} (${formatAttachmentBytes(att.byteLength)})`
-                            : att.name
-                        }
-                      />
-                    )}
-                  </Show>
-                  <span class="den-composer-chip-label">{attachmentChipLabel(att)}</span>
-                  <Show when={attachmentChipDetail(att)}>
-                    <span class="den-composer-chip-detail" data-testid="composer-attach-preview">
-                      {attachmentChipDetail(att)}
-                    </span>
-                  </Show>
-                  <button
-                    type="button"
-                    class="den-composer-chip-remove"
-                    data-testid="composer-image-remove"
-                    aria-label={`Remove ${attachmentChipLabel(att)}`}
-                    onClick={() => removeAttachment(att.id)}
-                  >
-                    ×
-                  </button>
-                </li>
-              )}
-            </For>
-          </Scrollport>
-        </Show>
-        <Show when={showSlashSuggestions()}>
-          <AnchoredSurface
-            id={slashListboxId}
-            class="den-composer-slash-suggestions"
-            testId="composer-slash-suggestions"
-            role="listbox"
-            ariaLabel="Workflow slash commands"
+      <footer class="den-composer" ref={footerRef}>
+        <div class="den-composer-body" ref={bodyRef}>
+          <ComposerActivityIndicator
+            present={liveSettled()}
+            activityLabel={sending() ? "Sending" : props.activityLabel}
+            turnClock={sending() ? undefined : props.turnClock}
+            resize={resizeChrome}
+          />
+          {/* Drafted approval guidance arms the redirect controls together. */}
+          <Show when={props.approvalRedirect && text().trim().length > 0}>
+            <p class="den-composer-pause-hint" role="status" data-testid="composer-approval-redirect">
+              <strong>{APPROVALS_COPY.card.composerRedirect.title}</strong>
+              {" — "}
+              {APPROVALS_COPY.card.composerRedirect.detail}
+            </p>
+          </Show>
+          <Show when={props.pauseHint}>
+            <p class="den-composer-pause-hint" role="status" data-testid="composer-pause-hint">
+              {props.pauseHint}
+            </p>
+          </Show>
+          <Show when={visionHint()}>
+            <p class="den-composer-pause-hint" role="status" data-testid="composer-vision-hint">
+              {visionHint()}
+            </p>
+          </Show>
+          <Show when={composerError()}>
+            <p class="den-composer-pause-hint" role="status" data-testid="composer-attach-error">
+              {composerError()}
+            </p>
+          </Show>
+          <span class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+            {pasteAnnouncement()}
+          </span>
+          <ComposerAttachmentStrip
+            attachments={attachments()}
+            visiblePastedTextUploads={visiblePastedTextUploads()}
+            hasByteAttachments={hasByteAttachments()}
+            onClearAttachments={clearAttachments}
+            onRetryPastedUpload={(upload) => void pastedTextAttachments.retry(upload)}
+            onRemovePastedUpload={(id) => pastedTextAttachments.remove(id)}
+            onRemoveAttachment={removeAttachment}
+            showSlashSuggestions={showSlashSuggestions()}
+            slashListboxId={slashListboxId}
+            slashSuggestions={slashSuggestions()}
+            activeSlashSuggestion={activeSlashSuggestion()}
             anchor={() => footerRef}
-            preferredSide="top"
-            width="anchor"
-            gap={6}
-            onDismiss={() => setDismissedSlashText(text())}
-          >
-            <For each={slashSuggestions()}>
-              {(row, index) => (
-                <button
-                  id={`${slashListboxId}-option-${index()}`}
-                  type="button"
-                  role="option"
-                  tabindex={-1}
-                  aria-selected={index() === activeSlashSuggestion()}
-                  class="den-composer-slash-suggestion"
-                  classList={{
-                    "den-composer-slash-suggestion--active":
-                      index() === activeSlashSuggestion(),
-                  }}
-                  data-testid={`composer-slash-${row.trigger.slice(1)}`}
-                  onMouseEnter={() => setActiveSlashSuggestion(index())}
-                  onClick={() => applySlashSuggestion(row.trigger)}
-                >
-                  <span class="den-composer-slash-suggestion-trigger">{row.trigger}</span>
-                  <span class="den-composer-slash-suggestion-label">{row.label}</span>
-                </button>
-              )}
-            </For>
-          </AnchoredSurface>
-        </Show>
-        <div class="den-composer-row">
-          <Scrollport class="den-composer-scroll"
-            ref={(el) => {
-              scrollRef = el;
-            }}
-            viewportRef={(el) => {
-              viewportRef = el;
-            }}
-          >
-            <textarea
+            onDismissSlash={dismissSlashSuggestions}
+            onSelectSlashIndex={setActiveSlashSuggestion}
+            onApplySlashSuggestion={applySlashSuggestion}
+          />
+          <div class="den-composer-row">
+            <Scrollport class="den-composer-scroll"
               ref={(el) => {
-                inputRef = el;
-                setComposerEl(el);
-                if (el) el.value = untrack(text);
+                scrollRef = el;
               }}
-              class="den-composer-input"
-              placeholder={placeholder()}
-              rows={2}
-              disabled={composeBlocked()}
-              onInput={(e) => {
-                // Editing recalled text exits recall mode.
-                exitRecall(props.sessionId);
-                const value = e.currentTarget.value;
-                if (!inlineTextWithinLimit(value, composerAttachmentCapabilities())) {
-                  replaceText(text());
-                  setComposerError(destination(), INLINE_TEXT_TOO_LARGE_MESSAGE);
+              viewportRef={(el) => {
+                viewportRef = el;
+              }}
+            >
+              <textarea
+                ref={(el) => {
+                  inputRef = el;
+                  setComposerEl(el);
+                  if (el) el.value = untrack(text);
+                }}
+                class="den-composer-input"
+                placeholder={placeholder()}
+                rows={2}
+                disabled={composeBlocked()}
+                onInput={(e) => {
+                  // Editing recalled text exits recall mode.
+                  exitRecall(props.sessionId);
+                  const value = e.currentTarget.value;
+                  if (!inlineTextWithinLimit(value, composerAttachmentCapabilities())) {
+                    replaceText(text());
+                    setComposerError(destination(), INLINE_TEXT_TOO_LARGE_MESSAGE);
+                    growDraft();
+                    return;
+                  }
+                  batch(() => {
+                    setText(value);
+                    updateComposerDocumentDraft(destination(), value);
+                  });
                   growDraft();
-                  return;
-                }
-                batch(() => {
-                  setText(value);
-                  updateComposerDocumentDraft(destination(), value);
-                });
-                growDraft();
-                revealCaret();
-              }}
-              onClick={() => revealCaret()}
-              onKeyUp={(event) => {
-                if (
-                  event.key === "ArrowUp" ||
-                  event.key === "ArrowDown" ||
-                  event.key === "ArrowLeft" ||
-                  event.key === "ArrowRight" ||
-                  event.key === "Home" ||
-                  event.key === "End" ||
-                  event.key === "PageUp" ||
-                  event.key === "PageDown"
-                ) {
                   revealCaret();
-                }
-              }}
-              onFocus={() => {
-                setInputFocused(true);
-                setComposerFocused(true, focusClaim);
-                void acquireComposerDocumentLease(destination());
-              }}
-              onBlur={() => {
-                setInputFocused(false);
-                setComposerFocused(false, focusClaim);
-              }}
-              onBeforeInput={(e) => {
-                const input = e as InputEvent;
-                if (
-                  input.inputType === "insertFromPaste" &&
-                  input.data &&
-                  interceptTextPaste(
-                    input.data,
-                    e.currentTarget.selectionStart,
-                    e.currentTarget.selectionEnd,
-                  )
-                ) {
-                  e.preventDefault();
-                }
-              }}
-              onPaste={(e) => {
-                if (attachPastedFiles(e, addFiles, (error) => setComposerError(destination(), error instanceof Error ? error.message : String(error)))) return;
-                const pasted = e.clipboardData?.getData("text/plain") ?? "";
-                if (
-                  interceptTextPaste(
-                    pasted,
-                    e.currentTarget.selectionStart,
-                    e.currentTarget.selectionEnd,
-                  )
-                ) {
-                  e.preventDefault();
-                }
-              }}
-              onContextMenu={(event) => openEditContextMenu(event)}
-              onKeyDown={(event) => {
-                if (event.key === "F10" && event.shiftKey && openEditContextMenu()) {
-                  event.preventDefault();
-                  return;
-                }
-                onSlashSuggestionKeyDown(event);
-              }}
-              aria-autocomplete={showSlashSuggestions() ? "list" : undefined}
-              aria-expanded={showSlashSuggestions()}
-              aria-controls={showSlashSuggestions() ? slashListboxId : undefined}
-              aria-activedescendant={
-                showSlashSuggestions()
-                  ? `${slashListboxId}-option-${activeSlashSuggestion()}`
-                  : undefined
-              }
-              data-testid="chat-composer"
-            />
-          </Scrollport>
-          <div class="den-composer-action-pad">
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="*/*"
-              multiple
-              hidden
-              data-testid="composer-file-input"
-              onChange={(e) => {
-                const files = Array.from(e.currentTarget.files ?? []);
-                e.currentTarget.value = "";
-                void addFiles(files);
-              }}
-            />
-            <div
-              class="den-composer-status-cluster"
-              data-testid="composer-status-cluster"
-              {...chromeProps()}
-            >
-              <Show when={externalSettled()}>
-                <div
-                  class="den-composer-status-item"
-                  data-status-id="external"
-                  data-testid="composer-external-content-cell"
-                >
-                  <ExternalContentBadge visible onActivate={openExternalContentSearch} />
-                </div>
-              </Show>
-              <ElevatedAccessButton state={elevated} />
-              <VaultUnlockButton state={vaultUnlock} />
-            </div>
-            <button
-              type="button"
-              class="den-quiet-icon-btn"
-              data-testid="composer-attach"
-              disabled={
-                composeBlocked() ||
-                !composerAttachmentCapabilities() ||
-                byteAttachmentCount() +
-                  visiblePastedTextUploads().filter((upload) => upload.status === "uploading")
-                    .length >=
-                  (composerAttachmentCapabilities()?.max_attachments ?? 0)
-              }
-              onClick={() => fileInputRef?.click()}
-              aria-label="Attach file"
-              data-tip="Attach file"
-            >
-              <ThemeIcon slot="plus" size={16} />
-            </button>
-            <Show
-              when={showStopAsPrimary()}
-              fallback={
-                <button
-                  type="button"
-                  class="den-composer-send den-quiet-icon-btn"
-                  classList={{ "den-composer-send--armed": sendArmedByAsk() }}
-                  data-armed={sendArmedByAsk() ? "" : undefined}
-                  data-testid="composer-send"
-                  disabled={(decisionSend() && submitPending()) || !canSubmit()}
-                  onClick={() => void submit()}
-                  aria-label={
-                    props.askPending
-                      ? "Send answer"
-                      : props.streaming
-                        ? "Queue message"
-                        : "Send message"
+                }}
+                onClick={() => revealCaret()}
+                onKeyUp={(event) => {
+                  if (
+                    event.key === "ArrowUp" ||
+                    event.key === "ArrowDown" ||
+                    event.key === "ArrowLeft" ||
+                    event.key === "ArrowRight" ||
+                    event.key === "Home" ||
+                    event.key === "End" ||
+                    event.key === "PageUp" ||
+                    event.key === "PageDown"
+                  ) {
+                    revealCaret();
                   }
-                  data-tip={
-                    !sendArmedByAsk() && !props.askPending && props.streaming
-                      ? "Queue for the next turn"
-                      : undefined
+                }}
+                onFocus={() => {
+                  setInputFocused(true);
+                  setComposerFocused(true, focusClaim);
+                  void acquireComposerDocumentLease(destination());
+                }}
+                onBlur={() => {
+                  setInputFocused(false);
+                  setComposerFocused(false, focusClaim);
+                }}
+                onBeforeInput={(e) => {
+                  const input = e as InputEvent;
+                  if (
+                    input.inputType === "insertFromPaste" &&
+                    input.data &&
+                    interceptTextPaste(
+                      input.data,
+                      e.currentTarget.selectionStart,
+                      e.currentTarget.selectionEnd,
+                    )
+                  ) {
+                    e.preventDefault();
                   }
-                >
-                  <ThemeIcon slot="arrow-up" size={16} class="den-composer-send-icon" />
-                </button>
-              }
-            >
+                }}
+                onPaste={(e) => {
+                  if (
+                    attachPastedFiles(e, addFiles, (error) =>
+                      setComposerError(
+                        destination(),
+                        error instanceof Error ? error.message : String(error),
+                      ),
+                    )
+                  ) {
+                    return;
+                  }
+                  const pasted = e.clipboardData?.getData("text/plain") ?? "";
+                  if (
+                    interceptTextPaste(
+                      pasted,
+                      e.currentTarget.selectionStart,
+                      e.currentTarget.selectionEnd,
+                    )
+                  ) {
+                    e.preventDefault();
+                  }
+                }}
+                onContextMenu={(event) => openEditContextMenu(event)}
+                onKeyDown={(event) => {
+                  if (event.key === "F10" && event.shiftKey && openEditContextMenu()) {
+                    event.preventDefault();
+                    return;
+                  }
+                  onSlashSuggestionKeyDown(event);
+                }}
+                aria-autocomplete={showSlashSuggestions() ? "list" : undefined}
+                aria-expanded={showSlashSuggestions()}
+                aria-controls={showSlashSuggestions() ? slashListboxId : undefined}
+                aria-activedescendant={
+                  showSlashSuggestions()
+                    ? `${slashListboxId}-option-${activeSlashSuggestion()}`
+                    : undefined
+                }
+                data-testid="chat-composer"
+              />
+            </Scrollport>
+            <div class="den-composer-action-pad">
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="*/*"
+                multiple
+                hidden
+                data-testid="composer-file-input"
+                onChange={(e) => {
+                  const files = Array.from(e.currentTarget.files ?? []);
+                  e.currentTarget.value = "";
+                  void addFiles(files);
+                }}
+              />
+              <div
+                class="den-composer-status-cluster"
+                data-testid="composer-status-cluster"
+                {...chromeProps()}
+              >
+                <Show when={externalSettled()}>
+                  <div
+                    class="den-composer-status-item"
+                    data-status-id="external"
+                    data-testid="composer-external-content-cell"
+                  >
+                    <ExternalContentBadge visible onActivate={openExternalContentSearch} />
+                  </div>
+                </Show>
+                <ElevatedAccessButton state={elevated} />
+                <VaultUnlockButton state={vaultUnlock} />
+              </div>
               <button
                 type="button"
-                class="den-composer-stop den-quiet-icon-btn"
-                data-testid="stop-coordinator"
-                disabled={props.stopping}
-                aria-busy={props.stopping ? "true" : undefined}
-                onClick={() => {
-                  if (!props.stopping) void props.onStop?.();
-                }}
-                aria-label={props.stopping ? "Stopping response" : "Stop response"}
-                data-tip={stopTitle()}
+                class="den-quiet-icon-btn"
+                data-testid="composer-attach"
+                disabled={composeBlocked() || isAttachLimitReached()}
+                onClick={() => fileInputRef?.click()}
+                aria-label="Attach file"
+                data-tip="Attach file"
               >
-                <ThemeIcon slot="stop" size={16} />
+                <ThemeIcon slot="plus" size={16} />
               </button>
-            </Show>
+              <Show
+                when={showStopAsPrimary()}
+                fallback={
+                  <button
+                    type="button"
+                    class="den-composer-send den-quiet-icon-btn"
+                    classList={{ "den-composer-send--armed": sendArmedByAsk() }}
+                    data-armed={sendArmedByAsk() ? "" : undefined}
+                    data-testid="composer-send"
+                    disabled={(decisionSend() && submitPending()) || !canSubmit()}
+                    onClick={() => void submit()}
+                    aria-label={
+                      props.askPending
+                        ? "Send answer"
+                        : props.streaming
+                          ? "Queue message"
+                          : "Send message"
+                    }
+                    data-tip={
+                      !sendArmedByAsk() && !props.askPending && props.streaming
+                        ? "Queue for the next turn"
+                        : undefined
+                    }
+                  >
+                    <ThemeIcon slot="arrow-up" size={16} class="den-composer-send-icon" />
+                  </button>
+                }
+              >
+                <button
+                  type="button"
+                  class="den-composer-stop den-quiet-icon-btn"
+                  data-testid="stop-coordinator"
+                  disabled={props.stopping}
+                  aria-busy={props.stopping ? "true" : undefined}
+                  onClick={() => {
+                    if (!props.stopping) void props.onStop?.();
+                  }}
+                  aria-label={props.stopping ? "Stopping response" : "Stop response"}
+                  data-tip={stopTitle()}
+                >
+                  <ThemeIcon slot="stop" size={16} />
+                </button>
+              </Show>
+            </div>
           </div>
         </div>
-      </div>
-    </footer>
-    <Show when={editMenuAnchor()} keyed>
-      {(anchor) => (
-        <ContextMenu
-          anchor={anchor}
-          items={editContextMenuItems()}
-          retainFocus={editMenuRetainsFocus()}
-          onDismiss={() => setEditMenuAnchor(null)}
-        />
-      )}
-    </Show>
-    <MarkSecretDialog
-      target={markSecretTarget()}
-      onClose={() => setMarkSecretTarget(null)}
-      onMarked={() => {
-        clearSecretSelection();
-        setComposerError(destination(), null);
-      }}
-      onError={(message) => setComposerError(destination(), message)}
-    />
+      </footer>
+      <Show when={editMenuAnchor()} keyed>
+        {(anchor) => (
+          <ContextMenu
+            anchor={anchor}
+            items={editContextMenuItems()}
+            retainFocus={editMenuRetainsFocus()}
+            onDismiss={() => setEditMenuAnchor(null)}
+          />
+        )}
+      </Show>
+      <MarkSecretDialog
+        target={markSecretTarget()}
+        onClose={() => setMarkSecretTarget(null)}
+        onMarked={() => {
+          clearSecretSelection();
+          setComposerError(destination(), null);
+        }}
+        onError={(message) => setComposerError(destination(), message)}
+      />
     </>
   );
 }

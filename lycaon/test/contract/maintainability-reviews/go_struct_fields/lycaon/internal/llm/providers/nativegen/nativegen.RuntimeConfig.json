@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/llm/providers/nativegen/nativegen.RuntimeConfig",
+  "kind": "construction",
+  "workstream": "local-inference",
+  "disposition": "retain",
+  "reason": "Retain the 13 independently validated construction inputs for platform identity, device and host budgets, packaged resources and model storage. Preparation introduces no new configuration fields or separate model lifetime. The 89-result adapter suite includes backend validation, context admission and loading contracts.",
+  "reviewed_commit": "6e4953482a290440ca0c12f820a9d714bba1b61a",
+  "reviewed_shape": "3cbae97b486fca3f209b397bb6eaa61c29e6b87da5f630005058486f630eb821",
+  "ceiling": 13,
+  "boundaries": {
+    "lycaon/internal/llm/providers/nativegen/context_test.go": "591864c0aa8faf0602fccb6b064b2481c25644747b9cb96896ebcfb525d441db",
+    "lycaon/internal/llm/providers/nativegen/loading_test.go": "2e48f6eb099eb86e210c529912cdfb61c8a90c43bb048f3dd34967e35e0551f2"
+  }
+}

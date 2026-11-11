@@ -19,7 +19,7 @@ func (m *Service) Assemble(
 	ctx context.Context,
 	root, surfaceID string,
 	forcedBy []string,
-	draftedContent string,
+	draft guidance.CloseoutDraft,
 	retryCount int,
 ) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 	root = strings.TrimSpace(root)
@@ -39,7 +39,7 @@ func (m *Service) Assemble(
 		ev = guidance.CloseoutEvidence{Ledger: evidence.InitLedger()}
 	}
 	legs := m.terminalLegCloseouts(ctx, root, history)
-	return assembleGroundedLedgerCloseout(roots, surfaceID, ev, legs, draftedContent, forcedBy, retryCount)
+	return assembleGroundedLedgerCloseout(roots, surfaceID, ev, legs, draft, guidance.SessionPresentableArtifactIDs(history), forcedBy, retryCount)
 }
 
 type legCloseout struct {
@@ -150,22 +150,23 @@ func assembleGroundedLedgerCloseout(
 	surfaceID string,
 	ev guidance.CloseoutEvidence,
 	legs []legCloseout,
-	draftedContent string,
+	draft guidance.CloseoutDraft,
+	presentable []string,
 	forcedBy []string,
 	retryCount int,
 ) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 	// Every field the host could read from the draft survives; the emitter
 	// records what it could not.
-	synthesis := guidance.UsableCloseoutSynthesis(draftedContent)
 	var report guidance.CoordinatorCompletionReport
-	if synthesis != "" {
-		read, _ := guidance.ReadCloseoutReport(draftedContent, "")
-		draft := read.Report
-		draft.Synthesis = synthesis
-		if !guidance.TypedCitationChannelsEmpty(len(draft.CitedEvidence), len(draft.CitedURLs)) {
-			return guidance.AssembleRetainedCloseout(roots, surfaceID, ev, draft, firstForcedByCode(forcedBy), retryCount)
+	synthesis := ""
+	if draft.HasAnswer() {
+		if draft.CitationCount() > 0 {
+			return guidance.AssembleRetainedCloseout(roots, surfaceID, ev, draft, presentable, firstForcedByCode(forcedBy), retryCount)
 		}
-		report = draft
+		resolved := guidance.ResolveDraftCitations(roots, surfaceID, draft, ev, presentable)
+		report = draft.Report()
+		_, _, report.ArtifactIDs = guidance.AcceptedDraftReferences(draft, resolved)
+		synthesis = strings.TrimSpace(guidance.PresentCloseoutMarkdown(draft, resolved))
 	}
 	if synthesis == "" {
 		synthesis = legCloseoutSynthesis(legs)

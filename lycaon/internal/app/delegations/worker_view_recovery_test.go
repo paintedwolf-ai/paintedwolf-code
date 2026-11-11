@@ -631,7 +631,7 @@ func TestRebuiltMountedViewPublishesAndSettlesLikeAClaimedOne(t *testing.T) {
 		t.Fatalf("handled=%v recorded=%q journal=%q", handled, recorded, journal.LastPublishedCheckpointID)
 	}
 
-	testutil.FailErr(t, "destroy", engine.Workspace.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: root}))
+	testutil.FailErr(t, "destroy", engine.Workspace.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: root}))
 	if _, ok := consumer.LookupBranchEngine(root); ok {
 		t.Fatal("settlement left the rebuilt view's engine registered")
 	}

@@ -75,9 +75,14 @@ func BuildMatcher(layers ...Layer) (*Matcher, error) {
 	if err != nil {
 		return nil, err
 	}
+	ocrConfusions, err := bundledOCRConfusions()
+	if err != nil {
+		return nil, err
+	}
 	m := matcherFromUnits(units)
 	m.addKingfisher(vendor)
 	m.placeholders = placeholders
+	m.ocr = newOCRState(cfg, ocrConfusions)
 	built := detect.NewDetector(cfg)
 	built.MaxDecodeDepth = 2
 	m.detector = built

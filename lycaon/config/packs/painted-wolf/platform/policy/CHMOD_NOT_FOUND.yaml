@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: chmod
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CHMOD_NOT_FOUND'

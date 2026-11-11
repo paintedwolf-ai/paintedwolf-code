@@ -10,7 +10,7 @@ import (
 )
 
 // queryFindingEntries selects ordinals before loading the page's finding bodies.
-func (s *SQLStore) queryFindingEntries(ctx context.Context, scan *api.CodeScan, req QueryRequest) (*api.ScanQueryResponse, error) {
+func (s *sqlFindingStore) queryFindingEntries(ctx context.Context, scan *api.CodeScan, req QueryRequest) (*api.ScanQueryResponse, error) {
 	if req.ScanID == "" && scan != nil {
 		req.ScanID = scan.ID
 	}

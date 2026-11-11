@@ -107,7 +107,7 @@ func assertRetainedApprovalPlan(t *testing.T, plan *hitl.ApprovalPlan) {
 	testutil.FailErr(t, "persist actual owner plan", err)
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin format conversion", err)
-	step := migrations.EffectPermitIdentity(migrations.Baseline{Revision: 5})
+	step := migrations.EffectPermitIdentity()
 	testutil.FailErr(t, "apply actual format migration", step.Apply(t.Context(), tx))
 	testutil.FailErr(t, "commit fixture conversion", tx.Commit())
 	var raw, format, digest, body string

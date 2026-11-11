@@ -14,12 +14,9 @@ import (
 
 // Project overlay paths participate in source status.
 func TestGitManagerStatusReportsProjectOverlayPolicy(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
+	initGitRepo(t, dir)
 	write := func(rel, content string) {
 		abs := filepath.Join(dir, rel)
 		testutil.FailErr(t, "mkdir", os.MkdirAll(filepath.Dir(abs), 0o755))
@@ -34,8 +31,6 @@ func TestGitManagerStatusReportsProjectOverlayPolicy(t *testing.T) {
 			t.Fatalf("git %v: %v %s", args, err, out)
 		}
 	}
-	git("config", "user.email", "test@example.com")
-	git("config", "user.name", "Test")
 	git("add", "README.md")
 	git("commit", "-m", "init")
 	git("add", settingsoverlay.DirName()+"/blueprints/feature.md")

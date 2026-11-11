@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: capture_page
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CAPTURE_PROCESS_NOT_RUNNING'

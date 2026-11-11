@@ -33,8 +33,8 @@ components:
           description: >
             True when the provider can make API calls. Keyed AI providers require a
             non-empty credential saved via PUT /v1/providers/{provider_id}/credential
-            (environment variables do not configure). Local keyless providers are
-            ready without credentials; ambient providers must resolve their declared
+            (environment variables do not configure). Keyless providers need no credentials; bundled local generation also
+            requires host admission. Ambient providers must resolve their declared
             credential chain. List membership is providers.local.yaml —
             Den does not keep a parallel hide allowlist.
         credential_present:
@@ -120,6 +120,9 @@ components:
           - stale
           - unavailable
           description: models.dev document freshness for catalog merge.
+        local_runtime:
+          x-go-pointer: true
+          $ref: local-runtime.yaml#/components/schemas/LocalGenerationStatus
         discovery_status:
           type: string
           enum:

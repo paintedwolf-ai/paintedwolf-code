@@ -353,16 +353,16 @@ func btoi(b bool) int {
 	return 0
 }
 
-// runChown accepts the numeric UID[:GID] form the catalog declares and applies
-// the existing ownership policy; an omitted GID keeps each file's group.
+// runChown applies the existing ownership policy to OWNER[:GROUP], each a name,
+// a number or "current"; an omitted group keeps each file's group.
 func runChown(inv *invocation) error {
 	operands := inv.operands()
 	if len(operands) < 2 {
-		return inv.usage(inv.name(), "UID[:GID] PATH ...")
+		return inv.usage(inv.name(), "OWNER[:GROUP] PATH ...")
 	}
 	owner, group, hasGroup := strings.Cut(operands[0], ":")
-	if !numericID(owner) || (hasGroup && !numericID(group)) {
-		return inv.usage(operands[0], "numeric UID[:GID]")
+	if owner == "" || (hasGroup && group == "") {
+		return inv.usage(operands[0], "OWNER[:GROUP]")
 	}
 	if !hasGroup {
 		group = "current"
@@ -382,10 +382,6 @@ func runChown(inv *invocation) error {
 		results, err := inv.owners.Operations.Chown.Chown(inv.ctx, native.ChownInput{Paths: []string{bound.Resolved.Abs}, UID: uid, GID: gid}, inv.tc)
 		return len(results), err
 	})
-}
-
-func numericID(s string) bool {
-	return s != "" && strings.Trim(s, "0123456789") == ""
 }
 
 func (inv *invocation) capture(abs string) (pinnedTarget, error) {

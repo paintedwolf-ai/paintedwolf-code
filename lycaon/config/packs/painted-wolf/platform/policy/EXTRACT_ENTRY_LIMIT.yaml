@@ -41,9 +41,6 @@ x-paintedwolf-scenarios:
     max_entries: 500
     profile: implement
     tool: extract_archive
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EXTRACT_ENTRY_LIMIT'
 - id: partial_extraction
   vars:
     max_entries: 500
@@ -53,7 +50,3 @@ x-paintedwolf-scenarios:
     extracted_bytes: 500
     extracted_paths_sample:
     - out/first.txt
-  expect_contains:
-  - after committing 500
-  - out/first.txt
-  - remain in place

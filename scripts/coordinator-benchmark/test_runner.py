@@ -422,7 +422,7 @@ class RetainedReportTests(unittest.TestCase):
                 self.assertEqual(completion.result(root)['outcomes'], {'retained': 2})
 
     def test_partial_grading_retains_valid_measurements_and_excludes_corrupt_evidence(self):
-        from measurement_cache import measure
+        from grading_identity import measure
         import completion
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
@@ -464,7 +464,7 @@ class RetainedReportTests(unittest.TestCase):
 
     def test_private_grading_receipt_does_not_replace_selected_standalone_result(self):
         import completion
-        from grading_state import report_lease, select_report
+        from grading_identity import report_lease, select_report
         with tempfile.TemporaryDirectory() as tmp:
             root = pathlib.Path(tmp)
             self.prepare(root)
@@ -572,7 +572,7 @@ if __name__ == '__main__':
 class TierSelectionTests(unittest.TestCase):
     def test_tier_selection_filters_scored_operations_and_release_runs_every_tier(self):
         operations = report.MANIFEST['operations']
-        from operation_selection import selected_operations
+        from target_selection import selected_operations
         all_scored = set()
         for tier in report.TIERS:
             selected = selected_operations(report.MANIFEST, tier=tier)

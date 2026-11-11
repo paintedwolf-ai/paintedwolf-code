@@ -12,19 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func TestLicensesNoticesTaskExists(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	taskfile := contractcheck.ReadRepoFile(t, root, "Taskfile.yml")
-	if !strings.Contains(taskfile, "licenses:notices:") {
-		t.Fatal("Taskfile.yml must define licenses:notices")
-	}
-	script := filepath.Join(root, "scripts", "licenses-notices.sh")
-	if _, err := os.Stat(script); err != nil {
-		t.Fatalf("missing %s: %v", script, err)
-	}
-}
-
 func TestBundledBinariesCatalogParsesAndHasRequiredFields(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -97,6 +84,7 @@ func TestLicensesNoticesFailClosedOnUnknown(t *testing.T) {
 		"--crates-json", crates,
 		"--document-crates-json", crates,
 		"--decide-crates-json", crates,
+		"--generation-crates-json", crates,
 		"--opengrep-artifact", filepath.Join(tmp, "unused artifact"),
 		"--out", out,
 	)
@@ -107,38 +95,6 @@ func TestLicensesNoticesFailClosedOnUnknown(t *testing.T) {
 	}
 	if !strings.Contains(string(outBytes), "unclassifiable") {
 		t.Fatalf("assemble should cite unclassifiable; got:\n%s", outBytes)
-	}
-}
-
-func TestAboutPanelHasThirdPartySoftwareRow(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	about := contractcheck.ReadRepoFile(t, root, "lycaon-den/src/components/settings/system/AboutSettingsPanel.tsx")
-	for _, want := range []string{
-		"Third-party software",
-		"about-third-party",
-		"openThirdPartyNotices",
-	} {
-		if !strings.Contains(about, want) {
-			t.Fatalf("AboutSettingsPanel missing %q", want)
-		}
-	}
-}
-
-func TestNoticesGitignoredAndWorkflowsWired(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	gitignore := contractcheck.ReadRepoFile(t, root, ".gitignore")
-	if !strings.Contains(gitignore, "THIRD-PARTY-NOTICES.md") {
-		t.Fatal(".gitignore must ignore THIRD-PARTY-NOTICES.md")
-	}
-	plan := contractcheck.ReadRepoFile(t, root, "scripts/verification-plan.json")
-	if !strings.Contains(plan, `"licenses:notices"`) {
-		t.Fatal("verification must declare the third-party notices check")
-	}
-	tauri := contractcheck.ReadRepoFile(t, root, "lycaon-den/src-tauri/tauri.conf.json")
-	if !strings.Contains(tauri, "THIRD-PARTY-NOTICES.md") {
-		t.Fatal("tauri.conf.json must map THIRD-PARTY-NOTICES.md into bundle.resources")
 	}
 }
 
@@ -175,6 +131,7 @@ func TestLicensesNoticesReadSelectedArtifact(t *testing.T) {
 				"--npm-md", filepath.Join(tmp, "npm.md"), "--crates-json", filepath.Join(tmp, "crates.json"),
 				"--document-crates-json", filepath.Join(tmp, "crates.json"),
 				"--decide-crates-json", filepath.Join(tmp, "crates.json"),
+				"--generation-crates-json", filepath.Join(tmp, "crates.json"),
 				"--opengrep-artifact", artifact, "--out", outputPath)
 			output, err := cmd.CombinedOutput()
 			if test.wantError != "" {

@@ -192,7 +192,7 @@ func TestResolveDispatchWorkspaceSelectionNarrowsRootsAndIgnoresTaskPathHints(t 
 		"primary", "selected-job",
 	)
 	testutil.FailErr(t, "CreateWorkerWorkspaceSelected", err)
-	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
 
 	if len(layout.Roots) != 1 || layout.Roots[0].ID != "primary" {
 		t.Fatalf("expected narrowed layout to contain only primary, got %+v", layout.Roots)

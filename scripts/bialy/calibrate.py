@@ -72,7 +72,7 @@ def main():
         ap.error("--engine (or LYCAON_DECIDE_ENGINE) must name a bialy launcher")
 
     corpus = Corpus.load(args.corpus)
-    examples = rowfile.load(args.examples)
+    examples = rowfile.load(args.examples, corpus=corpus)
     tool_pairs = []
     guide_pairs = []
     skill_tops = []

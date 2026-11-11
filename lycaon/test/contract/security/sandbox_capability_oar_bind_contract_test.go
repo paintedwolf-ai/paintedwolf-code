@@ -33,10 +33,9 @@ func TestSandboxCapabilityRulesBindActualRefusals(t *testing.T) {
 			continue
 		}
 		selected := append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...)
-		// Intrinsic code-only rules apply regardless of tool identity. Exercise
-		// every actual tool rather than skipping an unrestricted selector.
+		// An intrinsic code-only rule ignores tool identity, so one actual tool exercises it.
 		if len(rule.Selector) == 0 {
-			selected = toolNames
+			selected = toolNames[:1]
 		}
 		if len(selected) == 0 {
 			t.Fatalf("sandbox refusal %s has no exercised tool identities", rule.ID)

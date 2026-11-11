@@ -8,12 +8,34 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// TypedCitationChannelsEmpty reports whether a report had no typed citation fields to audit.
+// TypedCitationChannelsEmpty reports whether a report had no citations to audit.
 func TypedCitationChannelsEmpty(typedCount, urlCount int) bool {
 	return typedCount == 0 && urlCount == 0
 }
 
-// BuildCloseoutCitationGrounding records host-authored outcomes for typed closeout checks.
+// EvidenceOptionalGrounding is an accepted reply that cited nothing in an intent
+// window with no citable observations. Nothing failed to trace, and nothing
+// observed stands behind it: readers wanting observed-source success check
+// Traced && !EvidenceOptional.
+func EvidenceOptionalGrounding(report CoordinatorCompletionReport) *api.CitationGrounding {
+	out := &api.CitationGrounding{
+		Traced:           true,
+		EvidenceOptional: true,
+		Checks: stampCitationKind([]api.CitationGroundingCheck{{
+			ID:      "evidence_optional",
+			Label:   "Citations",
+			Status:  api.CitationGroundingCheckStatusPassed,
+			Vacuous: true,
+			Summary: "No citations required: no tool observations in this turn",
+		}}),
+	}
+	if report.Verification != nil && report.Verification.Valid() {
+		out.Verification = &api.CitationVerification{Method: report.Verification.Method, Reason: report.Verification.Reason}
+	}
+	return out
+}
+
+// BuildCloseoutCitationGrounding records host-authored outcomes for closeout checks.
 func BuildCloseoutCitationGrounding(
 	roots evidence.CitationRoots,
 	surfaceID string,
@@ -40,7 +62,6 @@ func BuildCloseoutCitationGrounding(
 	if len(report.CitedURLs) > 0 {
 		out.CitedURLs = append([]string(nil), report.CitedURLs...)
 	}
-	FillProseSamples(out, eval.ProseDuplicateTokens, eval.ProseAdvisoryTokens)
 	StampEvidenceRecords(out, ev.Ledger)
 	if report.Verification != nil && report.Verification.Valid() {
 		out.Verification = &api.CitationVerification{Method: report.Verification.Method, Reason: report.Verification.Reason}
@@ -99,31 +120,13 @@ func closeoutChecks(roots evidence.CitationRoots, surfaceID string, report Coord
 			Failed:  append([]string(nil), eval.SurveyAdvisoryTokens...),
 		})
 	}
-	if eval.ProseDuplicateCount > 0 {
-		checks = append(checks, api.CitationGroundingCheck{
-			ID:      "prose_duplication",
-			Label:   "Closeout prose",
-			Status:  api.CitationGroundingCheckStatusPassed,
-			Summary: fmt.Sprintf("%d citation(s) duplicated in synthesis — already in typed fields", eval.ProseDuplicateCount),
-			Matched: append([]string(nil), eval.ProseDuplicateTokens...),
-		})
-	}
 	if TypedCitationChannelsEmpty(len(report.CitedEvidence), len(report.CitedURLs)) {
 		checks = append(checks, api.CitationGroundingCheck{
 			ID:      "typed_citations",
-			Label:   "Typed citations",
+			Label:   "Citations",
 			Status:  api.CitationGroundingCheckStatusPassed,
 			Vacuous: true,
 			Summary: closeoutVacuousCitationSummary(surfaceID),
-		})
-	}
-	if eval.ProseAdvisoryCount > 0 {
-		checks = append(checks, api.CitationGroundingCheck{
-			ID:      "prose_advisories",
-			Label:   "Closeout prose",
-			Status:  api.CitationGroundingCheckStatusAdvisory,
-			Summary: fmt.Sprintf("%d citation(s) appeared only in synthesis prose — surfaced for review; prefer typed fields", eval.ProseAdvisoryCount),
-			Failed:  append([]string(nil), eval.ProseAdvisoryTokens...),
 		})
 	}
 	return stampCitationKind(checks)
@@ -131,12 +134,12 @@ func closeoutChecks(roots evidence.CitationRoots, surfaceID string, report Coord
 
 func closeoutVacuousCitationSummary(surfaceID string) string {
 	if strings.TrimSpace(surfaceID) == "implement_investigate" {
-		return "No typed citations in investigate report"
+		return "No citations in investigate report"
 	}
-	return "No typed citations in synthesis report"
+	return "No citations in synthesis report"
 }
 
-// ungroundedCitationChecks records typed citations missing from the ledger.
+// ungroundedCitationChecks records citations missing from the ledger.
 func ungroundedCitationChecks(code string, offenders []string) []api.CitationGroundingCheck {
 	label, id := coordinatorCitationCheckMeta(code)
 	return stampCitationKind([]api.CitationGroundingCheck{{
@@ -155,9 +158,9 @@ func coordinatorCitationCheckMeta(code string) (label, id string) {
 	case InvestURLNotObservedCode, SynthURLNotObservedCode:
 		return "URL citations", "url_citations"
 	case InvestCitationsRequiredCode, SynthCitationsRequiredCode:
-		return "Typed citations", "typed_citations"
+		return "Citations", "typed_citations"
 	default:
-		return "Typed citations", "typed_citations"
+		return "Citations", "typed_citations"
 	}
 }
 

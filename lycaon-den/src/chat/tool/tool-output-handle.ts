@@ -1,6 +1,6 @@
-import { EVIDENCE_HANDLE_PATTERN } from "../host-markers.generated.ts";
+import { EVIDENCE_COVERAGE_PATTERN, EVIDENCE_HANDLE_PATTERN } from "../host-markers.generated.ts";
 
-const EVIDENCE_HANDLE_TAG_RE = new RegExp(`^\\[${EVIDENCE_HANDLE_PATTERN}\\]\\n?`);
+const EVIDENCE_HANDLE_TAG_RE = new RegExp(`^\\[(${EVIDENCE_HANDLE_PATTERN})(?: ${EVIDENCE_COVERAGE_PATTERN})?\\]\\n?`);
 
 export type PeeledToolOutput = {
   handle: string | null;
@@ -13,9 +13,8 @@ export function peelEvidenceHandleTag(content: string): PeeledToolOutput {
   if (!match) {
     return { handle: null, body: content };
   }
-  const handleMatch = /^\[(.+)\]/.exec(match[0].trimEnd());
   return {
-    handle: handleMatch?.[1]?.trim() ?? null,
+    handle: match[1] ?? null,
     body: content.slice(match[0].length),
   };
 }

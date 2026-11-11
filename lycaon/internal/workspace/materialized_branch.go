@@ -98,7 +98,8 @@ func (m *Manager) prepareMaterializedWorkspaceView(ctx context.Context, binding 
 	}
 	reportPreparation(ctx, base)
 	cv, snap, err := services.coordinator.ClaimSelectedView(ctx, claim.ClaimRequest{
-		Identity: claim.ClaimIdentity{WorkerID: binding.ID, ProjectID: projectID, ViewID: binding.ID, SourceGeneration: 1},
+		HiddenPaths: m.hiddenEnginePaths(),
+		Identity:    claim.ClaimIdentity{WorkerID: binding.ID, ProjectID: projectID, ViewID: binding.ID, SourceGeneration: 1},
 		Storage: claim.ClaimStorage{
 			RuntimeDir:     filepath.Join(m.branchRoot, adapterRuntimeDirName, projKey),
 			BackingDir:     filepath.Join(metaDir, "backing"),
@@ -113,7 +114,7 @@ func (m *Manager) prepareMaterializedWorkspaceView(ctx context.Context, binding 
 			StatManifestPath: enginepaths.StatManifestForBranchRoot(binding.Root),
 			CopyBudget:       choice.CopyBudget,
 			GitObjectStore:   services.privateGit.Store(),
-			CloneFile:        m.cloneFile,
+			CloneFile:        m.fileCloner(),
 			Progress: func(p adapter.MaterializeProgress) {
 				progress := base
 				progress.Files, progress.Bytes = p.Entries, p.LogicalBytes

@@ -33,8 +33,9 @@ type BoundaryPermit struct {
 
 // Contained is the applied per-action confinement fact.
 type Contained struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// FSJailed reports whether the write jail is active.
 	FSJailed bool
 	// Egress is empty when FSJailed is false.
@@ -43,6 +44,8 @@ type Contained struct {
 	Roots []string
 	// WriteRoots includes roots, system scratch, and approved grants.
 	WriteRoots []string
+	// ReadRoots are read-only capabilities from the applied boundary.
+	ReadRoots []string
 	// SocketPathsDigest identifies applied AF_UNIX grants.
 	SocketPathsDigest string
 	// SocketCount is the number of applied socket grants.
@@ -81,9 +84,10 @@ func (c Contained) Active() bool {
 
 // ActionConfineInputs describes one process boundary.
 type ActionConfineInputs struct {
-	ProcessControl bool
-	HostExecution  bool
-	ProjectID      string
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
+	ProjectID       string
 	// Roots are host-derived write-jail roots.
 	Roots []string
 	// SessionScratchRoot is the session-owned scratch root.
@@ -119,7 +123,7 @@ func ActionConfineRequest(in ActionConfineInputs) confine.Request {
 		reads = append(reads, confine.NewProtectedPathGrant(p))
 	}
 	req := confine.Request{
-		ProcessControl: in.ProcessControl, HostExecution: in.HostExecution,
+		ProcessControl: in.ProcessControl, CredentialStore: in.CredentialStore, HostExecution: in.HostExecution,
 		ProjectID:            in.ProjectID,
 		Roots:                append([]string(nil), in.Roots...),
 		SessionScratchRoot:   in.SessionScratchRoot,
@@ -175,10 +179,12 @@ func ContainedFromConfinement(c *confine.Confinement, ok bool) Contained {
 	}
 	contained := Contained{
 		ProcessControl:    c.ProcessControl,
+		CredentialStore:   c.CredentialStore,
 		FSJailed:          true,
 		Egress:            ContainedEgressLabel(c.Network),
 		Roots:             append([]string(nil), c.Roots...),
 		WriteRoots:        writeRoots,
+		ReadRoots:         append([]string(nil), c.ReadRoots...),
 		SocketPathsDigest: confine.SocketPathsDigest(c.SocketGrants),
 		SocketCount:       len(c.SocketGrants),
 		DirectIP:          c.Network == confine.NetworkDirectIP,
@@ -192,6 +198,9 @@ func ContainedFromConfinement(c *confine.Confinement, ok bool) Contained {
 	}
 	if c.ProcessControl {
 		contained.BoundaryPermits = append(contained.BoundaryPermits, BoundaryPermit{Kind: "process.signal", Digest: "enabled", Count: 1})
+	}
+	if c.CredentialStore {
+		contained.BoundaryPermits = append(contained.BoundaryPermits, BoundaryPermit{Kind: "credential_store.read", Digest: "enabled", Count: 1})
 	}
 	if contained.SocketCount > 0 {
 		contained.BoundaryPermits = append(contained.BoundaryPermits, BoundaryPermit{
@@ -219,6 +228,9 @@ func (c Contained) EffectiveBoundaryPermits() []BoundaryPermit {
 	var permits []BoundaryPermit
 	if c.ProcessControl {
 		permits = append(permits, BoundaryPermit{Kind: "process.signal", Digest: "enabled", Count: 1})
+	}
+	if c.CredentialStore {
+		permits = append(permits, BoundaryPermit{Kind: "credential_store.read", Digest: "enabled", Count: 1})
 	}
 	if c.HostExecution {
 		permits = append(permits, BoundaryPermit{Kind: "execution.host", Digest: "enabled", Count: 1})

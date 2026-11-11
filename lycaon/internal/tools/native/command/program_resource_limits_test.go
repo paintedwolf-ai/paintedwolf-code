@@ -21,8 +21,8 @@ func TestConfineLimitsServeTheDeclaredCapabilities(t *testing.T) {
 				t.Fatalf("%s: confine %b, evaluator %b", resource, declared, got)
 			}
 		}
-		limit, err := confineLimits{}.Read(resource)
-		host, hostErr := confine.ReadResourceLimit(resource)
+		limit, err := confineLimits{}.Read(t.Context(), resource)
+		host, hostErr := confine.ChildResourceLimit(t.Context(), resource)
 		if (err == nil) != (hostErr == nil) || limit != (commandprogram.ResourceLimit{Resource: host.Resource, Soft: host.Soft, Hard: host.Hard}) {
 			t.Fatalf("%s read %+v (%v), confine %+v (%v)", resource, limit, err, host, hostErr)
 		}

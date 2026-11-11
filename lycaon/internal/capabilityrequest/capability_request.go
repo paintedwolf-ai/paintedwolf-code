@@ -26,63 +26,6 @@ type DirectIPRequest struct {
 	DeclaredDestinations []string
 }
 
-// ValidateCapabilityContract checks capabilities against the tool contract.
-func ValidateCapabilityContract(contract toolcontract.Contract, args map[string]any) (result *toolrejection.ToolReject) {
-	defer func() {
-		if result == nil {
-			return
-		}
-		if result.Data == nil {
-			result.Data = map[string]any{}
-		}
-		result.Data["capability_request_fields"] = contract.CapabilityRequestFields()
-		result.Data["supports_local_listen"] = contract.Supports(toolcontract.CapabilityLocalListen)
-		result.Data["supports_loopback_connect"] = contract.Supports(toolcontract.CapabilityLoopbackConnect)
-	}()
-	request, reject := ParseCapabilityRequest(args)
-	if reject != nil {
-		return reject
-	}
-	unsupported := func(name string) *toolrejection.ToolReject {
-		return toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
-			"reason": "capability is not declared by the tool contract", "capability": name,
-		})
-	}
-	if request != nil {
-		if request.ProcessControl && !contract.Supports(toolcontract.CapabilityProcessControl) {
-			return unsupported("process_control")
-		}
-		if request.HostExecution && !contract.Supports(toolcontract.CapabilityHostExecution) {
-			return unsupported("host_execution")
-		}
-		if len(request.HostResources) > 0 && !contract.Supports(toolcontract.CapabilityHostResource) {
-			return unsupported("host_resource")
-		}
-		if len(request.SocketPaths) > 0 && !contract.Supports(toolcontract.CapabilitySocket) {
-			return unsupported("socket")
-		}
-		if request.DirectIP != nil && !contract.Supports(toolcontract.CapabilityDirectIP) {
-			return unsupported("direct_ip")
-		}
-		if request.LocalListen != nil && !contract.Supports(toolcontract.CapabilityLocalListen) {
-			return unsupported("local_listen")
-		}
-		if request.LoopbackConnect != nil && !contract.Supports(toolcontract.CapabilityLoopbackConnect) {
-			return unsupported("loopback_connect")
-		}
-		if request.WriteRoot != "" && !contract.Supports(toolcontract.CapabilityWriteRoot) {
-			return unsupported("write_root")
-		}
-		if request.ReadPath != "" && !contract.Supports(toolcontract.CapabilityReadPath) {
-			return unsupported("read_path")
-		}
-	}
-	if _, present := args["terminal_capture"]; present && !contract.Supports(toolcontract.CapabilityTerminalCapture) {
-		return unsupported("terminal_capture")
-	}
-	return nil
-}
-
 // LocalListenRequest is the optional chat-scoped local listener request.
 // Declared ports narrow the grant; empty asks for any local port.
 type LocalListenRequest struct {
@@ -102,10 +45,11 @@ const MaxLoopbackConnectPorts = 8
 
 // CapabilityRequest declares structured execution authority.
 type CapabilityRequest struct {
-	ProcessControl bool
-	HostExecution  bool
-	HostResources  []string
-	SocketPaths    []string
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
+	HostResources   []string
+	SocketPaths     []string
 	// DirectIP preserves an explicit request, including an empty object.
 	DirectIP *DirectIPRequest
 	// LocalListen is non-nil when the model asked for listener authority (including {}).
@@ -159,6 +103,13 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 				return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{"capability": name, "reason": name + " must be true or an empty object"})
 			}
 		}
+	}
+	if raw, present := obj["credential_store"]; present {
+		value, ok := raw.(bool)
+		if !ok || !value {
+			return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{"capability": "credential_store", "reason": "credential_store must be true"})
+		}
+		out.CredentialStore = true
 	}
 	if out.HostExecution && len(obj) != 1 {
 		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{"reason": "host_execution replaces sandbox capabilities; request it alone"})
@@ -216,7 +167,7 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 		}
 		out.ReadPath = path
 	}
-	if !out.ProcessControl && !out.HostExecution && len(out.HostResources) == 0 && len(out.SocketPaths) == 0 && out.DirectIP == nil && out.LocalListen == nil && out.LoopbackConnect == nil && out.WriteRoot == "" && out.ReadPath == "" {
+	if !out.ProcessControl && !out.CredentialStore && !out.HostExecution && len(out.HostResources) == 0 && len(out.SocketPaths) == 0 && out.DirectIP == nil && out.LocalListen == nil && out.LoopbackConnect == nil && out.WriteRoot == "" && out.ReadPath == "" {
 		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{
 			"reason": "capability_request requires at least one declared capability",
 		})

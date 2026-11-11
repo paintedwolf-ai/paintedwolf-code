@@ -1,0 +1,4 @@
+steps:
+  - tool: "page_close"
+    say: "Use {{ call }} only on a page whose state is no longer needed, then retry the intended open."
+    otherwise: "The current surface offers no tool to close a page; retain the pending open until capacity is available."

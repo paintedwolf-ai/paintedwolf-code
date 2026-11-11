@@ -33,7 +33,7 @@ func TestNativeRemovalOrdersAfterAnInFlightUndo(t *testing.T) {
 	}()
 	select {
 	case <-reached:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("Undo did not reach publication boundary")
 	}
 	removed := make(chan error, 1)
@@ -87,7 +87,7 @@ func TestMemoryRecoveryQuotaKeepsOtherProjectsActiveCapture(t *testing.T) {
 	for _, run := range runs {
 		select {
 		case <-run.reached:
-		case <-time.After(5 * time.Second):
+		case <-time.After(testutil.Timeout(time.Minute)):
 			t.Fatal("project did not reach removal effect boundary")
 		}
 	}

@@ -1,8 +1,10 @@
 package providerwire
 
 import (
+	"encoding/json"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -96,6 +98,16 @@ const (
 
 // ProjectReasoning selects replay state without changing durable messages.
 func ProjectReasoning(messages []api.Message, providerID, model string, scope ReasoningReplayScope) []api.Message {
+	policy := modelinfo.ResolveContinuationPolicy(model)
+	switch policy {
+	case modelinfo.ContinuationPolicyStripReasoning:
+		scope = ReasoningReplayNone
+	case modelinfo.ContinuationPolicyToolLoopOnly:
+		if scope == ReasoningReplayHistory {
+			scope = ReasoningReplayCurrentToolLoop
+		}
+	case modelinfo.ContinuationPolicyDefault, modelinfo.ContinuationPolicyRetainBlocks, modelinfo.ContinuationPolicyRequireFields:
+	}
 	out := append([]api.Message(nil), messages...)
 	start := 0
 	if scope == ReasoningReplayCurrentToolLoop {
@@ -110,6 +122,57 @@ func ProjectReasoning(messages []api.Message, providerID, model string, scope Re
 		}
 		if !eligible || r == nil || r.Text == "" && len(r.Details) == 0 || providerID == "" || model == "" || r.ProviderID != providerID || r.Model != model {
 			m.ModelReasoning = nil
+			continue
+		}
+		if policy == modelinfo.ContinuationPolicyRequireFields && len(r.Details) > 0 {
+			details := projectRequiredReasoningFields(r.Details)
+			if len(details) == 0 && r.Text == "" {
+				m.ModelReasoning = nil
+				continue
+			}
+			copied := *r
+			copied.Details = details
+			m.ModelReasoning = &copied
+		}
+	}
+	return out
+}
+
+func projectRequiredReasoningFields(details []json.RawMessage) []json.RawMessage {
+	out := make([]json.RawMessage, 0, len(details))
+	for _, raw := range details {
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil {
+			continue
+		}
+		var blockType string
+		if json.Unmarshal(fields["type"], &blockType) != nil {
+			continue
+		}
+		switch blockType {
+		case "thinking":
+			var sig string
+			if json.Unmarshal(fields["signature"], &sig) != nil || sig == "" {
+				continue
+			}
+			var text *string
+			if rawThinking, ok := fields["thinking"]; !ok || json.Unmarshal(rawThinking, &text) != nil || text == nil {
+				fields["thinking"] = json.RawMessage(`""`)
+				normalized, err := json.Marshal(fields)
+				if err != nil {
+					continue
+				}
+				raw = normalized
+			}
+			out = append(out, raw)
+		case "redacted_thinking":
+			var data string
+			if json.Unmarshal(fields["data"], &data) != nil || data == "" {
+				continue
+			}
+			out = append(out, raw)
+		default:
+			out = append(out, raw)
 		}
 	}
 	return out

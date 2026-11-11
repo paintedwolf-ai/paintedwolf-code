@@ -11,6 +11,9 @@
      "events": [
       {
        "introduced": "0.69.4"
+      },
+      {
+       "fixed": "0.70.0"
       }
      ],
      "type": "SEMVER"
@@ -28,7 +31,7 @@
  },
  "details": "On March 19, 2026, a threat actor used compromised credentials to publish a malicious Trivy v0.69.4 release.",
  "id": "GO-2026-4919",
- "modified": "2026-04-01T16:33:18Z",
+ "modified": "2026-11-05T22:54:17Z",
  "published": "2026-04-01T16:33:18Z",
  "references": [
   {

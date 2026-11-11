@@ -42,7 +42,7 @@ func TestCanceledServiceAllocationDoesNotCreateDeviceState(t *testing.T) {
 	t.Setenv(configdir.EnvConfigDir, filepath.Join(home, "device"))
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	service, err := NewService(ctx, nil)
+	service, err := NewService(ctx, nil, nil)
 	if service != nil || !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled allocation = %v, %v", service, err)
 	}
@@ -88,11 +88,11 @@ func TestCanceledAllocationDrainsInitialProviderDiscovery(t *testing.T) {
 			done := make(chan result, 1)
 			go func() {
 				if kind == "service" {
-					service, err := NewService(ctx, nil)
+					service, err := NewService(ctx, nil, nil)
 					done <- result{service != nil, err}
 					return
 				}
-				registry, err := NewRegistry(ctx, catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+				registry, err := NewRegistry(ctx, catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 				if err == nil {
 					registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 				}

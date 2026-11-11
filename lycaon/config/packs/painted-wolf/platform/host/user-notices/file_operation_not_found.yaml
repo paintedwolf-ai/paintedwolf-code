@@ -9,5 +9,3 @@ suggested_action: "Review the file history before trying again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "no longer available"

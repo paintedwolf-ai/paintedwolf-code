@@ -101,7 +101,7 @@ func managedScreeningValue(name, id, value string, standing valueStanding) secre
 }
 
 // protectDurableVersion publishes a new current version.
-func (s *Service) protectDurableVersion(versionID string, owner secretIdentity, value string) {
+func (s *serviceCore) protectDurableVersion(versionID string, owner secretIdentity, value string) {
 	version := durableVersion{owner: owner, values: versionEvidence(owner, value, standingLive)}
 	s.durable.mu.Lock()
 	defer s.durable.mu.Unlock()
@@ -111,14 +111,14 @@ func (s *Service) protectDurableVersion(versionID string, owner secretIdentity, 
 	s.durable.versions[versionID] = version
 }
 
-func (s *Service) forgetDurableVersion(versionID string) {
+func (s *serviceCore) forgetDurableVersion(versionID string) {
 	s.durable.mu.Lock()
 	defer s.durable.mu.Unlock()
 	delete(s.durable.versions, versionID)
 }
 
 // retireDurable mirrors a committed retirement onto the versions it covers.
-func (s *Service) retireDurable(covers func(versionID string, owner secretIdentity) bool) {
+func (s *serviceCore) retireDurable(covers func(versionID string, owner secretIdentity) bool) {
 	s.durable.mu.Lock()
 	defer s.durable.mu.Unlock()
 	for versionID, version := range s.durable.versions {
@@ -138,7 +138,7 @@ func (s *Service) retireDurable(covers func(versionID string, owner secretIdenti
 // Protects reports whether value holds bytes a managed secret of the project
 // protects, retired versions included. File marks ask; the editor already
 // draws those bytes as tracked.
-func (s *Service) Protects(projectID, value string) bool {
+func (s *serviceCore) Protects(projectID, value string) bool {
 	if s == nil || strings.TrimSpace(projectID) == "" || value == "" {
 		return false
 	}
@@ -152,7 +152,7 @@ func (s *Service) Protects(projectID, value string) bool {
 
 // DurableScreeningValues returns retained values without acquiring a database lock.
 // An empty project selects all device values for unattributed diagnostics.
-func (s *Service) DurableScreeningValues(projectID string) []secretmatch.Remembered {
+func (s *serviceCore) DurableScreeningValues(projectID string) []secretmatch.Remembered {
 	projectID = strings.TrimSpace(projectID)
 	s.durable.mu.RLock()
 	defer s.durable.mu.RUnlock()
@@ -167,7 +167,7 @@ func (s *Service) DurableScreeningValues(projectID string) []secretmatch.Remembe
 
 // restoreDurableEvidence rebuilds the memory projection before the host accepts
 // traffic. Retired values remain evidence even after their chat is gone.
-func (s *Service) restoreDurableEvidence(ctx context.Context) error {
+func (s *serviceCore) restoreDurableEvidence(ctx context.Context) error {
 	projects, err := s.queries.ListProjects(ctx)
 	if err != nil {
 		return err

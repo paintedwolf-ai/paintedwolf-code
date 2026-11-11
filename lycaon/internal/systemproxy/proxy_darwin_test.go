@@ -9,6 +9,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// Only the macOS reader evaluates PAC scripts; other hosts report them as
+// unsupported.
 func TestPACScriptResolution(t *testing.T) {
 	target, err := url.Parse("https://api.example.com/v1/models")
 	testutil.FailErr(t, "parse target", err)

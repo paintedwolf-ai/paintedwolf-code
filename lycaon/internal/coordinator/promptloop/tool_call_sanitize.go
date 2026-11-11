@@ -3,6 +3,7 @@ package promptloop
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"sort"
 	"strings"
 
@@ -105,6 +106,11 @@ func offeredToolNames(metas []tools.ToolMeta) []string {
 		}
 	}
 	return out
+}
+
+// requestReach is this turn's frozen request.
+func (st *promptLoopTurnState) requestReach() toolreach.Request {
+	return toolreach.Freeze(st.offeredToolNames, st.turnToolPlan).WithPrograms(st.turnPrograms)
 }
 
 func (st *promptLoopTurnState) stampOfferedToolNames(metas []tools.ToolMeta) {

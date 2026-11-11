@@ -39,6 +39,12 @@ func recentCompactionStart(messages []ContextMessage, keepRecent int) int {
 	for start > 0 && start < len(messages) && messages[start].Role == "tool" {
 		start--
 	}
+	if start > 0 && start < len(messages) && messages[start].Role == "assistant" && messages[start].ID != "" {
+		target := messages[start].ID
+		for start > 0 && messages[start-1].DraftRecoveryTarget == target {
+			start--
+		}
+	}
 	return start
 }
 

@@ -75,10 +75,10 @@ func TestReasoningRecoveryKeepsRunAlive(t *testing.T) {
 			if got.Usage.PromptTokens != 200 || got.Usage.CompletionTokens != 24596 {
 				t.Fatalf("lost billed attempts: %+v", got.Usage)
 			}
-			if len(requests) != 2 || requests[0]["max_tokens"] != float64(32768) || requests[1]["max_tokens"] != float64(4096) || requests[0]["reasoning_effort"] != "high" || requests[1]["reasoning_effort"] != "low" {
+			if len(requests) != 2 || requests[0]["max_tokens"] != float64(32768) || requests[1]["max_tokens"] != float64(16384) || requests[0]["reasoning_effort"] != "high" || requests[1]["reasoning_effort"] != "low" {
 				t.Fatalf("unexpected recovery controls: %+v", requests)
 			}
-			if modelcall.SessionStrictBudget(transport) {
+			if modelcall.SessionReasoningRecovery(transport) {
 				t.Fatal("successful recovery left the run permanently downgraded")
 			}
 		})
@@ -109,6 +109,31 @@ func TestRecoveryRequiresChangedReasoningAndRespectsFixedOverrides(t *testing.T)
 				t.Fatalf("retry=%v err=%v budget=%+v", retry, err, req.AttemptBudget)
 			}
 		})
+	}
+}
+
+func TestReasoningRecoveryPreservesAdmittedOutputLimit(t *testing.T) {
+	withThinkingRules(t, bundledThinkingRules(t))
+	t.Cleanup(modelcall.ResetTurnBudgetForTest)
+	for _, limit := range []int{2048, 11375, 32768} {
+		p := openaicompat.New("fixture", "http://unused", "fixture", []modelinfo.Entry{{ID: "glm-5.3-flash", MaxTokens: 65536}})
+		req := modelcall.CompletionRequest{Model: "glm-5.3-flash", MaxTokens: limit, Think: modelcall.ThinkHigh, AttemptBudget: &modelcall.CompletionBudget{}}
+		_, err := p.Prepare(req, false)
+		testutil.FailErr(t, "prepare original request", err)
+		wrapper := &responseRetryProvider{inner: p}
+		retry, err := wrapper.prepareResponseRetry(t.Context(), &req, 0, &failure.ProviderEmptyCompletionError{Terminal: true, Reason: "length"}, false)
+		if err != nil || !retry || req.MaxTokens != limit {
+			t.Fatalf("limit=%d retry=%v request=%+v err=%v", limit, retry, req, err)
+		}
+		_, err = p.Prepare(req, false)
+		testutil.FailErr(t, "prepare recovery request", err)
+		if req.AttemptBudget.MaxTokens != limit || !req.AttemptBudget.ReducedReasoning {
+			t.Fatalf("limit=%d recovery controls=%+v", limit, req.AttemptBudget)
+		}
+		retry, err = wrapper.prepareResponseRetry(t.Context(), &req, 1, &failure.ProviderEmptyCompletionError{Terminal: true, Reason: "length"}, false)
+		if err != nil || retry {
+			t.Fatalf("recovery repeated: retry=%v err=%v", retry, err)
+		}
 	}
 }
 
@@ -165,16 +190,16 @@ func TestNativeReasoningRecoveryControls(t *testing.T) {
 			if req.AttemptBudget.MaxTokens != 24576 || !req.AttemptBudget.CanReduceReasoning {
 				t.Fatalf("initial native budget: %+v", req.AttemptBudget)
 			}
-			req.StrictBudget = true
+			req.ReasoningRecovery = true
 			if p, ok := provider.(*anthropicprovider.Provider); ok {
 				out := p.Prepare(req, false)
-				if out.MaxTokens != 4096 || out.Thinking != nil {
+				if out.MaxTokens != 16384 || out.Thinking != nil {
 					t.Fatalf("strict Anthropic controls: %+v", out)
 				}
 			}
 			if p, ok := provider.(*vertexexpressprovider.Provider); ok {
 				cfg := p.Prepare(req).GenerationConfig
-				if cfg.MaxOutputTokens != 4096 || cfg.ThinkingConfig == nil || cfg.ThinkingConfig.ThinkingBudget == nil || *cfg.ThinkingConfig.ThinkingBudget != 1024 {
+				if cfg.MaxOutputTokens != 16384 || cfg.ThinkingConfig == nil || cfg.ThinkingConfig.ThinkingBudget == nil || *cfg.ThinkingConfig.ThinkingBudget != 1024 {
 					t.Fatalf("strict Vertex controls: %+v", cfg)
 				}
 			}

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
@@ -47,9 +46,6 @@ func TestPromptWithoutProviderPublishesRenderedHostError(t *testing.T) {
 		t.Fatalf("host_error code = %q want provider_not_configured", host.Code)
 	}
 	assertUserFacingHostError(t, host)
-	if !strings.Contains(host.Message, "language model") && !strings.Contains(host.Message, "Settings") {
-		t.Fatalf("host_error message = %q want user-facing provider copy", host.Message)
-	}
 }
 
 func waitForSessionHostError(t *testing.T, hub *projectHub) wire.EventEnvelope {

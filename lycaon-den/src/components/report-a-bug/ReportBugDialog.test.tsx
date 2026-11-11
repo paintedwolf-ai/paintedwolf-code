@@ -80,7 +80,6 @@ describe("ReportBugDialog", () => {
     fireEvent.click(screen.getByTestId("report-bug-save"));
     await waitFor(() => expect(screen.getByTestId("report-bug-path").textContent).toBe("report.zip"));
     expect(screen.queryByTestId("open-in-button")).toBeNull();
-    expect(screen.getByText("Find the report in your browser downloads.")).toBeTruthy();
   });
 
   it("cancel of the save dialog stays on explain", async () => {

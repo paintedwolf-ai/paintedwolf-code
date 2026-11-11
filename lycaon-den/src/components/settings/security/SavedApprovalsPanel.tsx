@@ -1,7 +1,6 @@
-import { APPROVALS_COPY } from "../../../settings/security/approvals-copy.ts";
 import { bindContextAction } from "../../context-actions.ts";
 import { usePresentationParticipant } from "../../../ui/presentation-context.tsx";
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
 import type {
   ApprovalGrant,
@@ -25,9 +24,6 @@ import {
   expiredGrants,
   filterApprovalGrants,
   filterAskQuiets,
-  formatGrantExpiry,
-  formatGrantedAt,
-  formatQuietExpiry,
   grantCategoryFilterOptions,
   groupApprovalGrants,
   groupAskQuiets,
@@ -43,37 +39,24 @@ import {
   SAVED_APPROVALS_COPY,
 } from "../../../settings/security/saved-approvals-copy.ts";
 import { BrowseChrome } from "../../browse/BrowseChrome.tsx";
-import { chromeProps } from "../../../styling/ui-chrome.ts";
 import { BrowseOverflowMenu } from "../../browse/BrowseOverflowMenu.tsx";
 import type { ContextMenuItem } from "../../ContextMenu.tsx";
 import { BrowseSegmented } from "../../browse/BrowseSegmented.tsx";
 import { DenButton } from "../../primitives/DenButton.tsx";
 import { DenInput } from "../../primitives/DenInput.tsx";
-import { DenSelect } from "../../primitives/DenSelect.tsx";
 import { RecentAsksStrip } from "./RecentAsksStrip.tsx";
+import {
+  SavedApprovalElevatedSection,
+  SavedApprovalGroupsSection,
+  SavedApprovalSocketCreateSection,
+  isSocketGrant,
+} from "./SavedApprovalRows.tsx";
 
 type Props = {
   client: LycaonClient;
   projectId?: string;
   sessionId?: string;
 };
-
-function isSocketGrant(grant: ApprovalGrant): boolean {
-  return grant.category === "socket_path";
-}
-
-function unavailableBadgeLabel(grant: ApprovalGrant): string {
-  return isSocketGrant(grant)
-    ? SAVED_APPROVALS_COPY.unavailableSocketBadge
-    : SAVED_APPROVALS_COPY.unavailableFolderBadge;
-}
-
-function projectName(project: Project): string {
-  const name = project.name?.trim();
-  if (name) return name;
-  const root = project.roots[0]?.path?.trim();
-  return root || project.id;
-}
 
 export function SavedApprovalsPanel(props: Props) {
   // A coarse clock keeps expiry labels current.
@@ -397,203 +380,19 @@ export function SavedApprovalsPanel(props: Props) {
     return items;
   };
 
-  const grantRow = (grant: ApprovalGrant, showScope = false) => (
-    <li
-      data-testid="saved-approvals-row"
-      data-grant-id={grant.id}
-      data-grant-category={grant.category}
-    >
-      <div class="den-saved-approvals-row" classList={{ "den-saved-approvals-row--expired": grant.expired === true }}>
-        <span class="den-saved-approvals-kind">
-          {GRANT_KIND_LABELS[grant.category]}
-        </span>
-        <span class="den-saved-approvals-main">
-          <Show
-            when={grant.category === "action_set"}
-            fallback={
-              <Show
-                when={grant.category === "host_resource"}
-                fallback={
-                  <span class="den-saved-approvals-what">
-                    <code data-tip={grant.secret_names?.join(", ") || grant.pattern} data-tip-when-clipped>
-                      {grant.secret_names?.join(", ") || grant.pattern}
-                    </code>
-                    {rowBadges(grant)}
-                  </span>
-                }
-              >
-                <span class="den-saved-approvals-what">
-                  <For each={grant.resource_ids ?? []}>
-                    {(id) => <span class="den-saved-approvals-rchip">{id}</span>}
-                  </For>
-                  {rowBadges(grant)}
-                </span>
-              </Show>
-            }
-          >
-            <span
-              class="den-saved-approvals-what"
-              data-testid="saved-approvals-actionset-summary"
-            >
-              {SAVED_APPROVALS_COPY.actionSetSummary(grant.action_count ?? 1)}
-              {rowBadges(grant)}
-            </span>
-          </Show>
-          <Show when={showScope}><small class="den-saved-approvals-detail">{SAVED_APPROVALS_COPY.scopeLabel(grant.scope, !!grant.project_id && grant.scope === "device")}</small></Show>
-          <small class="den-saved-approvals-detail">{rowDetail(grant)}</small>
-          <Show when={(grant.secret_recipients?.length ?? 0) > 0}>
-            <small class="den-saved-approvals-detail" data-testid="saved-secret-recipients">
-              {grant.secret_recipients?.map((recipient) => recipient.label).join("; ")}
-            </small>
-          </Show>
-        </span>
-        <span class="den-saved-approvals-dates" data-testid="saved-approvals-granted-cell">
-          {formatGrantedAt(grant.granted_at)}
-          <Show when={grant.expires_at}>
-            {(expires) => (
-              <small data-testid="saved-approvals-expiry">
-                {grant.expired
-                  ? SAVED_APPROVALS_COPY.expiredBadge.toLowerCase()
-                  : "expires"}{" "}
-                {formatGrantExpiry(expires(), nowMs())}
-              </small>
-            )}
-          </Show>
-        </span>
-        <DenButton
-          variant="danger"
-          compact
-          data-testid="saved-approvals-revoke"
-          disabled={actionsDisabled()}
-          onClick={() => void revokeOne(grant)}
-        >
-          {grant.expired
-            ? SAVED_APPROVALS_COPY.clearButton
-            : SAVED_APPROVALS_COPY.revokeButton}
-        </DenButton>
-      </div>
-    </li>
-  );
-
-  const reviewGrantRow = (grant: ApprovalGrant) => (
-    <li class="den-settings-pref-row den-saved-approvals-priority-row" classList={{ "den-saved-approvals-row--expired": grant.expired === true }} data-testid="saved-approvals-row" data-grant-id={grant.id} data-grant-category={grant.category}>
-      <div class="den-saved-approvals-priority-content">
-        <span class="den-saved-approvals-priority-title">{grant.title} {rowBadges(grant)}</span>
-        <span class="den-saved-approvals-priority-meta">
-          {SAVED_APPROVALS_COPY.scopeLabel(grant.scope, !!grant.project_id && grant.scope === "device")}
-          <span aria-hidden="true">·</span>
-          {rowDetail(grant) || GRANT_KIND_LABELS[grant.category]}
-        </span>
-        <Show when={grant.pattern && grant.category !== "action_set" && grant.category !== "host_resource"}>
-          <code class="den-saved-approvals-priority-pattern">{grant.secret_names?.join(", ") || grant.pattern}</code>
-        </Show>
-        <Show when={(grant.secret_recipients?.length ?? 0) > 0}>
-          <span class="den-saved-approvals-priority-detail" data-testid="saved-secret-recipients">{grant.secret_recipients?.map((recipient) => recipient.label).join("; ")}</span>
-        </Show>
-        <Show when={grant.expires_at}>
-          {(expires) => <span class="den-saved-approvals-priority-detail" data-testid="saved-approvals-expiry">{grant.expired ? SAVED_APPROVALS_COPY.expiredBadge.toLowerCase() : "expires"} {formatGrantExpiry(expires(), nowMs())}</span>}
-        </Show>
-      </div>
-      <DenButton variant="secondary" data-testid="saved-approvals-revoke" disabled={actionsDisabled()} onClick={() => void revokeOne(grant)}>
-        {grant.expired ? SAVED_APPROVALS_COPY.clearButton : SAVED_APPROVALS_COPY.revokeButton}
-      </DenButton>
-    </li>
-  );
-
-  const rowBadges = (grant: ApprovalGrant) => (
-    <>
-      <Show when={grant.unavailable}>
-        <span
-          class="den-saved-approvals-badge den-saved-approvals-badge--warn"
-          data-testid="saved-approvals-unavailable"
-        >
-          {unavailableBadgeLabel(grant)}
-        </span>
-      </Show>
-      <Show when={grant.repointed}>
-        <span
-          class="den-saved-approvals-badge den-saved-approvals-badge--warn"
-          data-testid="saved-approvals-repointed"
-        >
-          {SAVED_APPROVALS_COPY.repointedBadge}
-        </span>
-      </Show>
-      <Show when={grant.expired}>
-        <span
-          class="den-saved-approvals-badge"
-          data-testid="saved-approvals-expired"
-        >
-          {SAVED_APPROVALS_COPY.expiredBadge}
-        </span>
-      </Show>
-    </>
-  );
-
-  const rowDetail = (grant: ApprovalGrant): string => {
-    const withScope = (detail: string): string => {
-      if (grant.scope !== "device") return detail;
-      const scope = grant.project_dir
-        ? SAVED_APPROVALS_COPY.deviceProjectOnly
-        : SAVED_APPROVALS_COPY.deviceAllProjects;
-      return detail ? `${detail} · ${scope}` : scope;
-    };
-    if (isSocketGrant(grant)) {
-      if (grant.unavailable) return withScope(SAVED_APPROVALS_COPY.socketMissingHint);
-      const resolvedPath = grant.resolved_path?.trim();
-      const approvedPath = grant.approved_path?.trim();
-      if (resolvedPath && resolvedPath !== approvedPath) {
-        return withScope(`${SAVED_APPROVALS_COPY.socketDetailPrefix} · ${SAVED_APPROVALS_COPY.socketResolvesTo} ${resolvedPath}`);
-      }
-      return withScope(SAVED_APPROVALS_COPY.socketDetailPrefix);
-    }
-    if (grant.category === "host_resource") {
-      return withScope(SAVED_APPROVALS_COPY.resourceIdsHint);
-    }
-    if (grant.category === "direct_ip") {
-      return withScope(SAVED_APPROVALS_COPY.directIPDetail);
-    }
-    return withScope(grant.coverage);
-  };
-
-  const groupRows = (group: GrantScopeGroup) => (
-    <ul class="den-saved-approvals-list" data-testid="saved-approvals-table">
-      <For each={group.grants}>{(grant) => props.projectId ? reviewGrantRow(grant) : grantRow(grant)}</For>
-    </ul>
-  );
-
-  const elevatedSection = () => (
-    <Show when={elevatedGrants().length > 0 || elevatedQuiets().length > 0}>
-      <section class="den-saved-approvals-band" data-testid="saved-approvals-band-elevated">
-        <div class="den-saved-approvals-band-head den-saved-approvals-band-head--elevated">
-          <h3>{APPROVALS_COPY.elevated.label} <span class="den-saved-approvals-priority-count">{elevatedGrants().length + elevatedQuiets().length}</span></h3>
-          <Show when={props.sessionId && applicableIds().size > 0 && !summaryError()}>
-            <DenButton variant="secondary" compact disabled={actionsDisabled()} data-testid="saved-approvals-revoke-elevated" onClick={() => void revokeElevated()}>
-              {SAVED_APPROVALS_COPY.revokeElevatedAll}
-            </DenButton>
-          </Show>
-        </div>
-        <p class="den-saved-approvals-priority-hint">{SAVED_APPROVALS_COPY.elevatedHint}</p>
-        <ul class="den-settings-pref-group den-saved-approvals-priority-list" data-testid="saved-approvals-elevated-list">
-          <For each={elevatedGrants()}>{(grant) => reviewGrantRow(grant)}</For>
-          <For each={elevatedQuiets()}>{(quiet) =>
-            <li class="den-settings-pref-row den-saved-approvals-priority-row" data-testid="saved-approvals-quiet-row" data-quiet-id={quiet.id}>
-              <span class="den-saved-approvals-priority-content">
-                <span class="den-saved-approvals-priority-title">{quiet.label}</span>
-                <span class="den-saved-approvals-priority-meta">
-                  {SAVED_APPROVALS_COPY.scopeLabel("chat", false)} <span aria-hidden="true">·</span> {SAVED_APPROVALS_COPY.quietedGroupHeading}
-                </span>
-                <span class="den-saved-approvals-priority-detail">{quiet.expires_at
-                  ? SAVED_APPROVALS_COPY.quietedUntil(formatQuietExpiry(quiet, nowMs()))
-                  : SAVED_APPROVALS_COPY.quietedChat} · {SAVED_APPROVALS_COPY.quietedSuppressed(quiet.suppressed)}</span>
-              </span>
-              <DenButton variant="secondary" data-testid="saved-approvals-revoke-quiet" disabled={actionsDisabled()} onClick={() => void revokeQuiet(quiet)}>
-                {SAVED_APPROVALS_COPY.revokeButton}
-              </DenButton>
-            </li>
-          }</For>
-        </ul>
-      </section>
-    </Show>
+  const renderElevatedSection = () => (
+    <SavedApprovalElevatedSection
+      elevatedGrants={elevatedGrants()}
+      elevatedQuiets={elevatedQuiets()}
+      sessionId={props.sessionId}
+      applicableCount={applicableIds().size}
+      summaryError={summaryError()}
+      actionsDisabled={actionsDisabled()}
+      nowMs={nowMs()}
+      onRevokeElevated={() => void revokeElevated()}
+      onRevokeGrant={(grant) => void revokeOne(grant)}
+      onRevokeQuiet={(quiet) => void revokeQuiet(quiet)}
+    />
   );
 
   const searchControl = () => <DenInput
@@ -635,7 +434,7 @@ export function SavedApprovalsPanel(props: Props) {
       </Show>
 
       <Show when={!props.projectId}><RecentAsksStrip client={props.client} /></Show>
-      <Show when={props.projectId && !loading() && !loadError()}>{elevatedSection()}</Show>
+      <Show when={props.projectId && !loading() && !loadError()}>{renderElevatedSection()}</Show>
 
       <Show when={props.projectId} fallback={
         <BrowseChrome
@@ -668,132 +467,25 @@ export function SavedApprovalsPanel(props: Props) {
       </Show>
 
       <Show when={createOpen()}>
-        <section
-          class="den-saved-approvals-create"
-          data-testid="saved-approvals-socket-create"
-          aria-labelledby="saved-approvals-socket-create-title"
-        >
-          <h3
-            id="saved-approvals-socket-create-title"
-            class="den-settings-subhead"
-            {...chromeProps()}
-          >
-            {SAVED_APPROVALS_COPY.socketCreateTitle}
-          </h3>
-          <p class="den-settings-hint">
-            {SAVED_APPROVALS_COPY.socketSectionExplain}
-          </p>
-          <label class="den-settings-field">
-            <span>{SAVED_APPROVALS_COPY.socketPathLabel}</span>
-            <DenInput
-              data-testid="saved-approvals-socket-path"
-              type="text"
-              aria-label={SAVED_APPROVALS_COPY.socketPathAriaLabel}
-              placeholder={SAVED_APPROVALS_COPY.socketPathPlaceholder}
-              value={socketPath()}
-              onInput={(e) => {
-                setSocketPath(e.currentTarget.value);
-                setResolved(undefined);
-              }}
-            />
-          </label>
-          <div class="den-saved-approvals-create-actions">
-            <DenButton
-              variant="secondary"
-              data-testid="saved-approvals-socket-resolve"
-              disabled={actionsDisabled() || resolveBusy() || !socketPath().trim()}
-              onClick={() => void resolveSocket()}
-            >
-              {SAVED_APPROVALS_COPY.socketResolve}
-            </DenButton>
-            <DenButton
-              variant="secondary"
-              data-testid="saved-approvals-socket-cancel"
-              disabled={createBusy()}
-              onClick={closeCreate}
-            >
-              {SAVED_APPROVALS_COPY.socketCancel}
-            </DenButton>
-          </div>
-          <Show when={resolved()} keyed>
-            {(preview) => (
-              <div
-                class="den-saved-approvals-create-confirm"
-                data-testid="saved-approvals-socket-confirm"
-                role="group"
-                aria-label="Confirm local service grant"
-              >
-                <p data-testid="saved-approvals-socket-approved">
-                  {SAVED_APPROVALS_COPY.socketApprovedLabel}:{" "}
-                  <code>{preview.approved_path}</code>
-                </p>
-                <p data-testid="saved-approvals-socket-resolved">
-                  {SAVED_APPROVALS_COPY.socketResolvedLabel}:{" "}
-                  <code>{preview.resolved_path}</code>
-                </p>
-                <p
-                  class="den-settings-warn"
-                  data-testid="saved-approvals-socket-authority"
-                  role="note"
-                >
-                  {preview.authority_warning}
-                </p>
-                <BrowseSegmented
-                  ariaLabel={SAVED_APPROVALS_COPY.socketScopeLabel}
-                  testId="saved-approvals-socket-scope"
-                  value={socketScope()}
-                  onChange={(id) => setSocketScope(id as ApprovalGrantScope)}
-                  options={[
-                    {
-                      id: "project",
-                      label: SAVED_APPROVALS_COPY.socketScopeProject,
-                      testId: "saved-approvals-socket-scope-project",
-                    },
-                    {
-                      id: "device",
-                      label: SAVED_APPROVALS_COPY.socketScopeDevice,
-                      testId: "saved-approvals-socket-scope-device",
-                    },
-                  ]}
-                />
-                <Show when={socketScope() === "project"}>
-                  <label class="den-settings-field">
-                    <span>{SAVED_APPROVALS_COPY.socketProjectLabel}</span>
-                    <Show
-                      when={projects().length > 0}
-                      fallback={
-                        <p class="den-settings-hint">
-                          {SAVED_APPROVALS_COPY.socketProjectMissing}
-                        </p>
-                      }
-                    >
-                      <DenSelect
-                        aria-label="Project"
-                        data-testid="saved-approvals-socket-project"
-                        value={projectId()}
-                        options={projects().map((project) => ({
-                          value: project.id,
-                          label: projectName(project),
-                        }))}
-                        onValueChange={setProjectId}
-                      />
-                    </Show>
-                  </label>
-                </Show>
-                <div class="den-saved-approvals-create-actions">
-                  <DenButton
-                    variant="primary"
-                    data-testid="saved-approvals-socket-confirm-create"
-                    disabled={actionsDisabled()}
-                    onClick={() => void createSocketGrant()}
-                  >
-                    {SAVED_APPROVALS_COPY.socketConfirm}
-                  </DenButton>
-                </div>
-              </div>
-            )}
-          </Show>
-        </section>
+        <SavedApprovalSocketCreateSection
+          socketPath={socketPath()}
+          onSocketPathInput={(value) => {
+            setSocketPath(value);
+            setResolved(undefined);
+          }}
+          actionsDisabled={actionsDisabled()}
+          resolveBusy={resolveBusy()}
+          createBusy={createBusy()}
+          onResolveSocket={() => void resolveSocket()}
+          onCloseCreate={closeCreate}
+          resolved={resolved()}
+          socketScope={socketScope()}
+          onSocketScopeChange={setSocketScope}
+          projects={projects()}
+          projectId={projectId()}
+          onProjectIdChange={setProjectId}
+          onCreateSocketGrant={() => void createSocketGrant()}
+        />
       </Show>
 
       <Show when={loadError()}>
@@ -860,192 +552,31 @@ export function SavedApprovalsPanel(props: Props) {
           }
         >
           <Show when={!props.projectId || hasOrdinary()}>
-          <Show
-            when={filtered().length > 0 || filteredQuiets().length > 0}
-            fallback={
-              <p
-                class="den-saved-approvals-empty"
-                data-testid="saved-approvals-no-matches"
-              >
-                {SAVED_APPROVALS_COPY.noMatches}
-              </p>
-            }
-          >
-            <Show when={!props.projectId}>{elevatedSection()}</Show>
-            <Show when={chatGroups().length > 0}>
-              <section
-                class="den-saved-approvals-band"
-                data-testid="saved-approvals-band-chat"
-              >
-                <div class="den-saved-approvals-band-head">
-                  <h3>
-                    <span
-                      class="den-saved-approvals-livedot"
-                      aria-hidden="true"
-                    />
-                    {SAVED_APPROVALS_COPY.chatGroupHeading}
-                  </h3>
-                  <span class="den-saved-approvals-lifetime">
-                    {SAVED_APPROVALS_COPY.chatGroupLifetime}
-                  </span>
-                </div>
-                <For each={chatGroups()}>
-                  {(group) => (
-                    <div
-                      class="den-saved-approvals-session"
-                      data-testid="saved-approvals-session"
-                      data-session-id={group.sessionId}
-                    >
-                      <div class="den-saved-approvals-session-head">
-                        <span class="den-saved-approvals-session-name">
-                          {group.sessionTitle ||
-                            SAVED_APPROVALS_COPY.chatGroupUntitled}
-                        </span>
-                        <span class="den-saved-approvals-session-kind">
-                          · {SAVED_APPROVALS_COPY.chatGroupKind}
-                        </span>
-                        <button
-                          type="button"
-                          class="den-saved-approvals-group-revoke"
-                          data-testid="saved-approvals-revoke-group"
-                          disabled={actionsDisabled()}
-                          onClick={() => void revokeGroup(group)}
-                        >
-                          {SAVED_APPROVALS_COPY.revokeGroupChat}
-                        </button>
-                      </div>
-                      {groupRows(group)}
-                    </div>
-                  )}
-                </For>
-              </section>
-            </Show>
-
-            <For each={projectGroups()}>
-              {(group) => (
-                <section
-                  class="den-saved-approvals-band"
-                  data-testid="saved-approvals-band-project"
+            <Show
+              when={filtered().length > 0 || filteredQuiets().length > 0}
+              fallback={
+                <p
+                  class="den-saved-approvals-empty"
+                  data-testid="saved-approvals-no-matches"
                 >
-                  <div class="den-saved-approvals-band-head">
-                    <h3>{SAVED_APPROVALS_COPY.projectGroupHeading}</h3>
-                    <span class="den-saved-approvals-lifetime">
-                      {SAVED_APPROVALS_COPY.projectGroupLifetime}
-                      <Show when={group.projectDir}>
-                        {" · "}
-                        <code>{group.projectDir}</code>
-                      </Show>
-                    </span>
-                    <button
-                      type="button"
-                      class="den-saved-approvals-group-revoke"
-                      data-testid="saved-approvals-revoke-group"
-                      disabled={actionsDisabled()}
-                      onClick={() => void revokeGroup(group)}
-                    >
-                      {SAVED_APPROVALS_COPY.revokeGroupProject}
-                    </button>
-                  </div>
-                  <div class="den-saved-approvals-card">{groupRows(group)}</div>
-                </section>
-              )}
-            </For>
-
-            <Show when={deviceGroup()} keyed>
-              {(group) => (
-                <section
-                  class="den-saved-approvals-band"
-                  data-testid="saved-approvals-band-device"
-                >
-                  <div class="den-saved-approvals-band-head">
-                    <h3>{SAVED_APPROVALS_COPY.deviceGroupHeading}</h3>
-                    <span class="den-saved-approvals-lifetime">
-                      {SAVED_APPROVALS_COPY.deviceGroupLifetime}
-                    </span>
-                    <button
-                      type="button"
-                      class="den-saved-approvals-group-revoke"
-                      data-testid="saved-approvals-revoke-group"
-                      disabled={actionsDisabled()}
-                      onClick={() => void revokeGroup(group)}
-                    >
-                      {SAVED_APPROVALS_COPY.revokeGroupDevice}
-                    </button>
-                  </div>
-                  <div class="den-saved-approvals-card">{groupRows(group)}</div>
-                </section>
-              )}
+                  {SAVED_APPROVALS_COPY.noMatches}
+                </p>
+              }
+            >
+              <Show when={!props.projectId}>{renderElevatedSection()}</Show>
+              <SavedApprovalGroupsSection
+                projectId={props.projectId}
+                chatGroups={chatGroups()}
+                projectGroups={projectGroups()}
+                deviceGroup={deviceGroup()}
+                quietGroups={quietGroups()}
+                nowMs={nowMs()}
+                actionsDisabled={actionsDisabled()}
+                onRevokeGrant={(grant) => void revokeOne(grant)}
+                onRevokeGroup={(group) => void revokeGroup(group)}
+                onRevokeQuiet={(quiet) => void revokeQuiet(quiet)}
+              />
             </Show>
-
-            <Show when={quietGroups().length > 0}>
-              <section
-                class="den-saved-approvals-band"
-                data-testid="saved-approvals-band-quieted"
-              >
-                <div class="den-saved-approvals-band-head">
-                  <h3>{SAVED_APPROVALS_COPY.quietedGroupHeading}</h3>
-                  <span class="den-saved-approvals-lifetime">
-                    {SAVED_APPROVALS_COPY.quietedGroupLifetime}
-                  </span>
-                </div>
-                <For each={quietGroups()}>
-                  {(group) => (
-                    <div
-                      class="den-saved-approvals-session"
-                      data-testid="saved-approvals-quiet-session"
-                      data-session-id={group.sessionId}
-                    >
-                      <div class="den-saved-approvals-session-head">
-                        <span class="den-saved-approvals-session-name">
-                          {group.sessionTitle ||
-                            SAVED_APPROVALS_COPY.quietedUntitled}
-                        </span>
-                      </div>
-                      <ul
-                        class="den-saved-approvals-list"
-                        data-testid="saved-approvals-quiet-list"
-                      >
-                        <For each={group.quiets}>
-                          {(quiet) => (
-                            <li
-                              class="den-settings-pref-row den-saved-approvals-priority-row"
-                              data-testid="saved-approvals-quiet-row"
-                              data-quiet-id={quiet.id}
-                            >
-                              <div class="den-saved-approvals-priority-content">
-                                <span class="den-saved-approvals-priority-title">
-                                  {quiet.label}
-                                </span>
-                                <p class="den-settings-hint">
-                                  {quiet.expires_at
-                                    ? SAVED_APPROVALS_COPY.quietedUntil(
-                                        formatQuietExpiry(quiet, nowMs()),
-                                      )
-                                    : SAVED_APPROVALS_COPY.quietedChat}
-                                  {" · "}
-                                  {SAVED_APPROVALS_COPY.quietedSuppressed(
-                                    quiet.suppressed,
-                                  )}
-                                </p>
-                              </div>
-                              <DenButton
-                                variant="secondary"
-                                data-testid="saved-approvals-revoke-quiet"
-                                disabled={actionsDisabled()}
-                                onClick={() => void revokeQuiet(quiet)}
-                              >
-                                {SAVED_APPROVALS_COPY.revokeButton}
-                              </DenButton>
-                            </li>
-                          )}
-                        </For>
-                      </ul>
-                    </div>
-                  )}
-                </For>
-              </section>
-            </Show>
-          </Show>
           </Show>
         </Show>
       </Show>

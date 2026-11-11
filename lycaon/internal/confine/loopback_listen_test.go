@@ -9,8 +9,8 @@ import (
 )
 
 // The direct-IP boundary permits local listeners.
-func TestSeatbeltDirectIPAllowsLocalListener(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryDirectIPAllowsLocalListener(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDirectIP}
 
@@ -31,8 +31,8 @@ except OSError as e:
 }
 
 // The local bind rule covers wildcard addresses.
-func TestSeatbeltBindAddressIsNotBounded(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryBindAddressIsNotBounded(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDirectIP}
 
@@ -53,15 +53,19 @@ except OSError as e:
 }
 
 // Terminal allocation requires a writable slave device.
-func TestSeatbeltAllowsPTYAllocation(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryAllowsPTYAllocation(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{Roots: []string{t.TempDir()}}
 
 	const openPTY = `
-import pty, sys
+import os, pty, sys
 try:
     m, s = pty.openpty()
+    os.write(s, b'ping\\n')
+    if b'ping' not in os.read(m, 16):
+        print('NO ROUND TRIP'); sys.exit(1)
+    os.close(os.open(os.ttyname(s), os.O_RDWR | os.O_NOCTTY))
     print('PTY OK')
 except OSError as e:
     print('DENIED', e); sys.exit(1)

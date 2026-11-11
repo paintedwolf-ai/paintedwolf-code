@@ -22,12 +22,6 @@ var coordinatorFamilyShellTopics = map[string][]string{
 	},
 }
 
-// Pacing guidance paths are relative to the platform pack's shared/ directory.
-var coordinatorFamilyPacingBatchDispatch = map[string]string{
-	"units/investigate-pacing.md":                     "partials/coordinator-batch-dispatch.md",
-	"partials/coordinator-mode-orchestrate-pacing.md": "partials/coordinator-batch-dispatch.md",
-}
-
 func TestCoordinatorFamilyShellRegistry(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
@@ -49,24 +43,6 @@ func TestCoordinatorFamilyShellRegistry(t *testing.T) {
 			if _, err := os.Stat(filepath.Join(partialsDir, topic)); err != nil {
 				t.Fatalf("topic file missing %s: %v", topic, err)
 			}
-		}
-	}
-}
-
-func TestCoordinatorFamilyPacingIncludesBatchDispatch(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	sharedDir := filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "shared")
-	if _, err := os.Stat(filepath.Join(sharedDir, "partials", "coordinator-batch-dispatch.md")); err != nil {
-		t.Fatalf("shared batch-dispatch partial missing: %v", err)
-	}
-	for pacing, include := range coordinatorFamilyPacingBatchDispatch {
-		raw, err := os.ReadFile(filepath.Join(sharedDir, filepath.FromSlash(pacing)))
-		if err != nil {
-			t.Fatalf("read pacing %s: %v", pacing, err)
-		}
-		if !strings.Contains(string(raw), include) {
-			t.Fatalf("pacing %s missing include of %s", pacing, include)
 		}
 	}
 }

@@ -286,6 +286,12 @@ components:
         message_count:
           type: integer
           minimum: 0
+        background_running:
+          type: integer
+          minimum: 0
+          description: >-
+            Count of live background commands (JobModeBackground) attributed to
+            this session; omitted when 0.
         created_at:
           type: string
           format: date-time

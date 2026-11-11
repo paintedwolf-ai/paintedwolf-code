@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter/viewconfine"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 // Adapter-backed ProvisionStrategy constants (#1658).
@@ -66,6 +67,7 @@ func (m *Manager) chooseWorkspaceAdapter(
 	branchRoot string,
 	grants []adapter.RootGrant,
 	projectID string,
+	decision workerplacement.Decision,
 	overrun *adapter.BudgetOverrunError,
 ) (WorkspaceStrategySelection, error) {
 	selector := m.selector
@@ -73,10 +75,8 @@ func (m *Manager) chooseWorkspaceAdapter(
 		selector = DefaultWorkspaceSelector()
 	}
 	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
-	clone := adapter.ProbeCloneAt(metaDir)
-	if m.cloneAvailable != nil {
-		clone = m.cloneAvailable(branchRoot)
-	}
+	// Placement already probed a clone from the sources to this branch's volume.
+	clone := func(context.Context, adapter.RootGrant) (bool, error) { return decision.Clonable, nil }
 	choice, err := selector.Choose(ctx, adapter.ChooseRequest{
 		Probe:          adapter.ProbeConfig{RuntimeDir: filepath.Join(m.branchRoot, adapterRuntimeDirName)},
 		Grants:         withIndexFacts(ctx, projectID, grants),

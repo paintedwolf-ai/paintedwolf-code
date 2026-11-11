@@ -10,10 +10,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/pkg/api"
-	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 
@@ -74,63 +71,6 @@ func TestCoordinatorSurfaceInvariants_orchestrationLifecycleOnPinnedSurfaces(t *
 				t.Fatalf("%s must include orchestration lifecycle tool %q — host can pin this surface while coordinator-core references it", id, tool)
 			}
 		}
-	}
-}
-
-func TestCoordinatorSurfaceInvariants_pinnedSurfacePromptMentionsLifecycleTools(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	profile := loadCoordinatorProfileTools(t)
-	surfaces := loadImplementSurfaces(t)
-
-	cases := []struct {
-		name      string
-		surfaceID string
-		corpus    string
-	}{
-		{
-			name:      "overlay_promote",
-			surfaceID: surfaceImplementOverlayPromote,
-			corpus: strings.Join([]string{
-				fileText(t, catalogfixture.FindStockAgentPrompt(t, "coordinator-mode-implement-overlay-promote.md")),
-				renderCoordinatorTripartiteForRunContext(t, root,
-					api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild},
-					surface.HostLoopWakeSentinel,
-					WorkerCompletionHistory(orchestration.ProfileImplementer),
-					surfaceImplementOverlayPromote,
-					surface.ImplementSessionState{PendingOverlayIDs: []string{"job-overlay-1"}, WorkersInFlight: 1},
-				),
-			}, "\n"),
-		},
-		{
-			name:      "park",
-			surfaceID: surfaceImplementPark,
-			corpus: renderCoordinatorTripartiteForRunContext(t, root,
-				api.CoordinatorRunContext{}, &api.Session{Posture: api.SessionPostureBuild},
-				surface.HostLoopWakeSentinel,
-				WorkerCompletionHistory(orchestration.ProfileImplementer),
-				surfaceImplementPark,
-				surface.ImplementSessionState{WorkersInFlight: 2},
-			),
-		},
-	}
-
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			wire := surfaces[tc.surfaceID]
-			for _, tool := range orchestrationLifecyclePromptTools {
-				if !coordinatorProfileGrantsTool(profile, tool) {
-					t.Fatalf("coordinator profile must grant lifecycle tool %q", tool)
-				}
-				if !mentionsToolName(tc.corpus, tool) {
-					t.Fatalf("%s prompt corpus must mention lifecycle tool %q (coordinator-core orchestrate copy)", tc.name, tool)
-				}
-				if !toolOnImplementSurface(wire, tool) {
-					t.Fatalf("%s wire must expose lifecycle tool %q — no allowlist escape hatch", tc.surfaceID, tool)
-				}
-			}
-		})
 	}
 }
 

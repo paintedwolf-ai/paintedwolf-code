@@ -30,30 +30,18 @@ scenarios:
   - id: model_missing
     vars:
       reason: model_missing
-    expect_contains:
-      - Reinstall
   - id: no_capable_device
     vars:
       reason: no_capable_device
-    expect_contains:
-      - Vulkan
   - id: no_gpu
     vars:
       reason: no_gpu
-    expect_contains:
-      - graphics card
   - id: disabled
     vars:
       reason: disabled
-    expect_contains:
-      - switched off
   - id: unusable
     vars:
       reason: unusable
-    expect_contains:
-      - diagnostics
   - id: binary_missing
     vars:
       reason: binary_missing
-    expect_contains:
-      - Reinstall

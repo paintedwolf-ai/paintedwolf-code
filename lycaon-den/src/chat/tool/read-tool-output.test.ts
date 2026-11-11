@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  formatLogFormatLabel,
   formatTimeSpan,
   readLogDigestFromOutput,
 } from "./read-tool-output.ts";
@@ -70,8 +69,3 @@ describe("formatTimeSpan", () => {
   });
 });
 
-describe("formatLogFormatLabel", () => {
-  it("uses sentence case", () => {
-    expect(formatLogFormatLabel("json_lines")).toBe("JSON lines");
-  });
-});

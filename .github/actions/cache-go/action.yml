@@ -1,5 +1,5 @@
 name: Cache Go builds
-description: Restore bounded compiler outputs that main warms for verification
+description: Restore the newest compiler outputs that main warmed for verification
 inputs:
   lookup-only:
     description: Check the exact native cache identity without restoring payloads
@@ -7,12 +7,9 @@ inputs:
   save:
     description: Publish prepared caches (main only); the default restores without saving
     default: 'false'
-  exact:
-    description: Restore only the current module graph when preparing its main cache
-    default: 'false'
 outputs:
   cache-hit:
-    description: Whether the exact key for the current module graph was restored
+    description: Whether the exact key for the current sources was restored
     value: ${{ steps.restore.outputs.cache-hit }}
 runs:
   using: composite
@@ -24,28 +21,34 @@ runs:
         set -euo pipefail
         PYTHONPATH=scripts python3 -m ci_policy.cache_paths
         {
-          printf 'key_prefix=go-v4-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(PYTHONPATH=scripts python3 -c 'from analysis_tools import toolchain; print(toolchain())')"
+          printf 'key_prefix=go-v5-%s-%s-%s-%s-\n' "${RUNNER_OS}" "${RUNNER_ARCH}" "${ImageOS:-}" "$(PYTHONPATH=scripts python3 -c 'from analysis_tools import toolchain; print(toolchain())')"
         } >> "${GITHUB_OUTPUT}"
 
-    # Main publishes one trimmed payload per module graph.
+    # Linux verification follows main's source. macOS holds dependency builds, so its scarce runners warm rarely.
+    - name: Identify the Go cache generation
+      id: identity
+      shell: bash
+      env:
+        SOURCES: ${{ runner.os == 'Linux' && hashFiles('lycaon/**/*.go', 'lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') || hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum') }}
+      run: printf 'sources=%s\n' "$SOURCES" >> "${GITHUB_OUTPUT}"
+
+    # Go validates each entry by content, so any older generation is a safe starting point.
     - id: restore
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
-        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum', 'scripts/ci_policy/cache_payload.py') }}
+        key: ${{ steps.paths.outputs.key_prefix }}${{ steps.identity.outputs.sources }}
         lookup-only: ${{ inputs.lookup-only == 'true' || inputs.save == 'true' }}
-        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && inputs.exact != 'true' && steps.paths.outputs.key_prefix || '' }}
-    - name: Trim the prepared Go payload
-      if: inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true'
-      shell: bash
-      env:
-        PYTHONPATH: scripts
-      run: python3 -m ci_policy.cache_payload go "${{ steps.paths.outputs.gocache }}"
+        restore-keys: ${{ inputs.save != 'true' && inputs.lookup-only != 'true' && steps.paths.outputs.key_prefix || '' }}
     - if: ${{ inputs.save == 'true' && github.ref == 'refs/heads/main' && steps.restore.outputs.cache-hit != 'true' }}
       id: save
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: |
           ${{ steps.paths.outputs.gocache }}
-        key: ${{ steps.paths.outputs.key_prefix }}${{ hashFiles('lycaon/go.mod', 'lycaon/go.sum', 'scripts/commentlint/go.mod', 'scripts/commentlint/go.sum', 'scripts/ci_policy/cache_payload.py') }}
+        key: ${{ steps.paths.outputs.key_prefix }}${{ steps.identity.outputs.sources }}
+    - if: ${{ steps.save.outcome == 'success' }}
+      uses: ./.github/actions/cache-prune
+      with:
+        family: ${{ steps.paths.outputs.key_prefix }}

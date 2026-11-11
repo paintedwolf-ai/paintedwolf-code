@@ -55,7 +55,7 @@ type CreateSettingsSecretRequest struct {
 }
 
 // Generate mints random key material as a new capability.
-func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Metadata, error) {
+func (s *secretVersionService) Generate(ctx context.Context, req GenerateRequest) (Metadata, error) {
 	req = normalizeGenerate(req)
 	if err := validateGenerate(req); err != nil {
 		return Metadata{}, err
@@ -76,7 +76,7 @@ func (s *Service) Generate(ctx context.Context, req GenerateRequest) (Metadata, 
 }
 
 // CreateSettingsSecret stores a project-scoped value entered in settings.
-func (s *Service) CreateSettingsSecret(ctx context.Context, req CreateSettingsSecretRequest) (Metadata, error) {
+func (s *secretVersionService) CreateSettingsSecret(ctx context.Context, req CreateSettingsSecretRequest) (Metadata, error) {
 	deadlineStamp, err := parseAgentUseDeadline(req.AgentUseEndsAt, s.now())
 	if err != nil {
 		return Metadata{}, fmt.Errorf("%w: %w", ErrInvalidPut, err)
@@ -90,7 +90,7 @@ func (s *Service) CreateSettingsSecret(ctx context.Context, req CreateSettingsSe
 }
 
 // Put stores a value as a new capability, idempotent per operation id.
-func (s *Service) Put(ctx context.Context, req PutRequest) (PutResult, error) {
+func (s *secretVersionService) Put(ctx context.Context, req PutRequest) (PutResult, error) {
 	defer s.invalidateScreening(ctx, req.ProjectID)
 	s.mutationMu.Lock()
 	defer s.mutationMu.Unlock()
@@ -132,7 +132,7 @@ func (s *Service) Put(ctx context.Context, req PutRequest) (PutResult, error) {
 }
 
 // createWithFirstVersion records metadata only after storing its value.
-func (s *Service) createWithFirstVersion(ctx context.Context, id string, req PutRequest, now time.Time, record func(*db.Queries) error) error {
+func (s *serviceCore) createWithFirstVersion(ctx context.Context, id string, req PutRequest, now time.Time, record func(*db.Queries) error) error {
 	valueID := uuid.NewString()
 	// Publish protection before the metadata writer can make the value visible.
 	// A failed mint may still have supplied bytes to a diagnostic or tool result.
@@ -180,7 +180,7 @@ func (s *Service) createWithFirstVersion(ctx context.Context, id string, req Put
 }
 
 // existingByOperation resolves session and project idempotency keys.
-func (s *Service) existingByOperation(ctx context.Context, req PutRequest) (db.ManagedSecrets, bool, error) {
+func (s *secretVersionService) existingByOperation(ctx context.Context, req PutRequest) (db.ManagedSecrets, bool, error) {
 	var row db.ManagedSecrets
 	var err error
 	if req.SessionID == "" {
@@ -203,7 +203,7 @@ func (s *Service) existingByOperation(ctx context.Context, req PutRequest) (db.M
 }
 
 // inTx commits one metadata mutation. Vault writes are reconciled separately.
-func (s *Service) inTx(ctx context.Context, fn func(*db.Queries) error) error {
+func (s *serviceCore) inTx(ctx context.Context, fn func(*db.Queries) error) error {
 	tx, err := s.handle.BeginTx(ctx, nil)
 	if err != nil {
 		return err

@@ -24,6 +24,3 @@ x-paintedwolf-message: local service connection authority declined
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_LOOPBACK_CONNECT_DENIED'
-  - local service

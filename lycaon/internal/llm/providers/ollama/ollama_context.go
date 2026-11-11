@@ -74,7 +74,13 @@ func (p *Provider) ContextLimit(ctx context.Context, model string) int {
 	}
 	p.capMu.Unlock()
 
+	if ctx.Err() != nil {
+		return 0
+	}
 	v := p.fetchModelContextLength(ctx, model)
+	if ctx.Err() != nil {
+		return 0
+	}
 
 	p.capMu.Lock()
 	if p.capCache == nil {

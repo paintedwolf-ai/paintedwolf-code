@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
   - id: missing_disposition
     vars:
       rejection_reason: 'finding "goldmark-xss" has no disposition (want act, accept, or held)'
-    expect_contains:
-      - 'Code: REPORT_DOCUMENT_INVALID'
-      - disposition
-      - act

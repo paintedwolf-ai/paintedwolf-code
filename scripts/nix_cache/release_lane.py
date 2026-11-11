@@ -131,7 +131,7 @@ def main():
                     raise
                 print(f"::warning title=Nix cache credential::{exc}")
         elif args.command == "publish":
-            from scripts.linux_release import release_qualification
+            from scripts.linux_release import release_signing as release_qualification
             from release_distribution_contract.ledger import require_publishable
             def admit(source):
                 require_publishable(args.version)

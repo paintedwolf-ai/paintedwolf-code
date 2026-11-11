@@ -8,10 +8,31 @@ import (
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
 
-const toolSchemaUnitPrefix = "tools/schemas/"
+const (
+	toolSchemaUnitPrefix      = "tools/schemas/"
+	operationSchemaUnitPrefix = "tools/operation-schemas/"
+)
 
-// LoadEffectiveToolSchemas parses loaded tool schema units.
+// LoadEffectiveToolSchemas parses the schemas of tools an agent can call.
 func LoadEffectiveToolSchemas(eff *EffectiveCatalog) (*toolschema.Config, []Diagnostic, error) {
+	return loadSchemaUnits(eff, toolSchemaUnitPrefix)
+}
+
+// LoadEffectiveRegistrySchemas parses every schema the registry declares: callable
+// tools and the native operations command reaches.
+func LoadEffectiveRegistrySchemas(eff *EffectiveCatalog) (*toolschema.Config, error) {
+	callable, _, err := loadSchemaUnits(eff, toolSchemaUnitPrefix)
+	if err != nil {
+		return nil, err
+	}
+	operations, _, err := loadSchemaUnits(eff, operationSchemaUnitPrefix)
+	if err != nil {
+		return nil, err
+	}
+	return toolschema.Merge(callable, operations)
+}
+
+func loadSchemaUnits(eff *EffectiveCatalog, prefix string) (*toolschema.Config, []Diagnostic, error) {
 	if eff == nil {
 		return nil, nil, fmt.Errorf("tool schemas: effective catalog required")
 	}
@@ -20,14 +41,14 @@ func LoadEffectiveToolSchemas(eff *EffectiveCatalog) (*toolschema.Config, []Diag
 	diags := unloadedToolSchemaDiags(eff)
 	failed := false
 	for _, id := range eff.LoadedUnitIDs() {
-		if !strings.HasPrefix(id, toolSchemaUnitPrefix) {
+		if !strings.HasPrefix(id, prefix) {
 			continue
 		}
 		u, ok := eff.Loaded[id]
 		if !ok {
 			continue
 		}
-		stem := strings.TrimPrefix(id, toolSchemaUnitPrefix)
+		stem := strings.TrimPrefix(id, prefix)
 		if !toolschema.ValidToolName(stem) {
 			failed = true
 			diags = append(diags, Diagnostic{
@@ -52,7 +73,7 @@ func LoadEffectiveToolSchemas(eff *EffectiveCatalog) (*toolschema.Config, []Diag
 		entries[stem] = entry
 	}
 	if failed {
-		return nil, diags, fmt.Errorf("tools/schemas: %s", describeDiagnostics(diags))
+		return nil, diags, fmt.Errorf("%s: %s", strings.TrimSuffix(prefix, "/"), describeDiagnostics(diags))
 	}
 	return toolschema.ConfigFromEntries(entries), diags, nil
 }

@@ -420,7 +420,7 @@ export function ProjectCostView(props: Props) {
                       <span>Turn it on to record new project usage. Existing estimates remain visible.</span>
                     </div>
                     <Show when={props.onOpenCostSettings}>
-                      <DenButton variant="primary" compact onClick={() => props.onOpenCostSettings?.()}>
+                      <DenButton data-testid="open-settings-cost" variant="primary" compact onClick={() => props.onOpenCostSettings?.()}>
                         Open Settings → Cost
                       </DenButton>
                     </Show>
@@ -508,7 +508,7 @@ export function ProjectCostView(props: Props) {
                           <header>
                             <div>
                               <span class="project-cost-eyebrow">Session guardrails</span>
-                              <h2>{allowsLanding() ? "Warn, then land" : "Warn, then close out"}</h2>
+                              <h2 data-testid="project-cost-guardrail-mode">{allowsLanding() ? "Warn, then land" : "Warn, then close out"}</h2>
                             </div>
                             <span class="den-status-mark" data-tone={enabled() ? "positive" : undefined}>{enabled() ? "On" : "Off"}</span>
                           </header>
@@ -594,7 +594,7 @@ export function ProjectCostView(props: Props) {
                           </Show>
                           </SettingsGovernedGroup>
                           <Show when={enabled() && !guardrailError()}>
-                            <div class="project-cost-guardrails__sequence" aria-label={`Warn at ${formatUSD(ceilingNumber() * warningNumber() / 100)} then ${allowsLanding() ? "land" : "close out"} at ${formatUSD(ceilingNumber())}`}>
+                            <div class="project-cost-guardrails__sequence" data-testid="project-cost-guardrail-sequence" aria-label={`Warn at ${formatUSD(ceilingNumber() * warningNumber() / 100)} then ${allowsLanding() ? "land" : "close out"} at ${formatUSD(ceilingNumber())}`}>
                               <span>Start</span>
                               <i><b style={{ width: `${warningNumber()}%` }} /></i>
                               <span>Warn {formatUSD(ceilingNumber() * warningNumber() / 100)}</span>

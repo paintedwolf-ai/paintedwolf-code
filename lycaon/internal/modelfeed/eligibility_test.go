@@ -42,6 +42,17 @@ func TestConversationEligibleFixtureRows(t *testing.T) {
 			t.Fatalf("%s must not be ConversationEligible", id)
 		}
 	}
+
+	cerebras := loadFixtureDoc(t).Providers["cerebras"].Models
+	for _, id := range []string{"gpt-oss-120b", "llama3.1-8b", "qwen-3-235b-a22b-instruct-2507", "zai-glm-4.7"} {
+		m, ok := cerebras[id]
+		if !ok {
+			t.Fatalf("cerebras fixture missing %s", id)
+		}
+		if !ConversationEligible(m) {
+			t.Fatalf("cerebras %s should be ConversationEligible", id)
+		}
+	}
 }
 
 func TestEligibleModelsDropsNonChat(t *testing.T) {
@@ -54,6 +65,28 @@ func TestEligibleModelsDropsNonChat(t *testing.T) {
 	}
 	if ids["text-embedding-3-small"] || ids["gpt-image-1"] || ids["synthetic-embed-temp"] {
 		t.Fatalf("expected embeds/image dropped, got %v", ids)
+	}
+
+	deepinfraIDs := map[string]bool{}
+	for _, m := range loadFixtureDoc(t).EligibleModels("deepinfra") {
+		deepinfraIDs[m.ID] = true
+	}
+	if !deepinfraIDs["deepseek-ai/DeepSeek-V3.2"] {
+		t.Fatalf("expected deepinfra chat model kept, got %v", deepinfraIDs)
+	}
+	if deepinfraIDs["Qwen/Qwen3-Embedding-8B"] {
+		t.Fatalf("expected deepinfra embedding dropped, got %v", deepinfraIDs)
+	}
+
+	scalewayIDs := map[string]bool{}
+	for _, m := range loadFixtureDoc(t).EligibleModels("scaleway") {
+		scalewayIDs[m.ID] = true
+	}
+	if !scalewayIDs["qwen3-235b-a22b-instruct-2507"] {
+		t.Fatalf("expected scaleway chat model kept, got %v", scalewayIDs)
+	}
+	if scalewayIDs["qwen3-embedding-8b"] {
+		t.Fatalf("expected scaleway embedding dropped, got %v", scalewayIDs)
 	}
 }
 

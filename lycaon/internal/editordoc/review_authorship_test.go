@@ -80,7 +80,7 @@ func TestSavedLineKeepsAllContributingChats(t *testing.T) {
 	if len(versions.Versions) == 0 || len(versions.Versions[0].Contributors) != 2 {
 		t.Fatalf("publication history lost the human and second chat: %+v", versions.Versions)
 	}
-	effects, err := ledger.History.QueryFileEffects(t.Context(), f.project.ID, document.FileID, 0, 0, 10)
+	effects, err := ledger.History.QueryFileEffects(t.Context(), f.project.ID, sourcebranch.Trunk, document.FileID, 0, 0, 10)
 	testutil.FailErr(t, "query tool provenance", err)
 	if len(effects.Effects) == 0 || effects.Effects[0].ActorClassFor("chat-2") != sourceledger.ActorMixed || effects.Effects[0].AuthoredTurn() != 0 {
 		t.Fatalf("agent tools classified the publisher instead of contributors: %+v", effects)

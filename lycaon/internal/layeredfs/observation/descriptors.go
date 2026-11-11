@@ -4,9 +4,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
@@ -42,10 +42,8 @@ func (d *DescriptorTracker) OpenHeldDescriptor(qpath layeredfs.QualifiedPath) (l
 	t.mu.RLock()
 	if rootSpec, ok := t.rootsByID[qpath.RootID]; ok && rootSpec.TrunkPath != "" && attr.Layer == layeredfs.LayerTrunk {
 		if info, sErr := os.Lstat(filepath.Join(rootSpec.TrunkPath, filepath.FromSlash(qpath.Rel))); sErr == nil {
-			if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
-				ino = uint64(sys.Ino)
-				dev = uint64(sys.Dev)
-			}
+			observed := fspath.ObserveFile(info)
+			ino, dev = observed.Identity.Inode, observed.Identity.Device
 		}
 	}
 	t.mu.RUnlock()
@@ -180,8 +178,8 @@ func enrichTrunkObservationLocked(t *Tracker, obs *SourceObservation, ev layered
 	if err != nil {
 		return
 	}
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil && obs.Ino == 0 {
-		obs.Ino = uint64(sys.Ino)
+	if observed := fspath.ObserveFile(info); observed.Known && obs.Ino == 0 {
+		obs.Ino = observed.Identity.Inode
 	}
 	if obs.ModTimeNS == 0 {
 		obs.ModTimeNS = info.ModTime().UnixNano()

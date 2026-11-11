@@ -6,11 +6,13 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/noticeerr"
 	"github.com/lycaon/lycaon/internal/testutil"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -77,4 +79,110 @@ func TestOpenAIEmptyStreamRetainsWireTerminalFact(t *testing.T) {
 			}
 		})
 	}
+}
+
+func abortResponseMidBody(t *testing.T, w http.ResponseWriter, contentType, partial string) {
+	t.Helper()
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", "4096")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(partial))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	if hijacker, ok := w.(http.Hijacker); ok {
+		if conn, _, err := hijacker.Hijack(); err == nil {
+			if tcp, ok := conn.(*net.TCPConn); ok {
+				_ = tcp.SetLinger(0)
+			}
+			_ = conn.Close()
+		}
+	}
+}
+
+func TestOpenAIHTTPServerInterruptedAndEmptyResponses(t *testing.T) {
+	req := modelcall.CompletionRequest{
+		Model:    "gpt-test",
+		Messages: []wire.Message{{Role: wire.MessageRoleUser, Content: "hello"}},
+	}
+
+	t.Run("mid-stream connection reset", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortResponseMidBody(t, w, "text/event-stream", "data: {\"choices\":[{\"delta\":{\"content\":\"half\"}}]}\n\n")
+		}))
+		defer srv.Close()
+
+		p := New("fireworks", srv.URL, "key", []modelinfo.Entry{{ID: "gpt-test"}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "fireworks" || interrupted.Model != "gpt-test" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
+
+	t.Run("stream closes after output without terminal event", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			_, _ = w.Write([]byte("data: {\"choices\":[{\"delta\":{\"content\":\"half\"}}]}\n\n"))
+		}))
+		defer srv.Close()
+
+		p := New("fireworks", srv.URL, "key", []modelinfo.Entry{{ID: "gpt-test"}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || !errors.Is(err, io.ErrUnexpectedEOF) || interrupted.ProviderID != "fireworks" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError wrapping unexpected EOF", err)
+		}
+	})
+
+	t.Run("stream closes before any output", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		p := New("fireworks", srv.URL, "key", []modelinfo.Entry{{ID: "gpt-test"}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		empty, ok := failure.AsProviderEmptyCompletion(err)
+		if !ok || !empty.Retryable || empty.ProviderID != "fireworks" {
+			t.Fatalf("err = %v, want retryable ProviderEmptyCompletionError", err)
+		}
+	})
+
+	t.Run("non-streaming complete body breaks after headers", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortResponseMidBody(t, w, "application/json", `{"choices":[{"message":{"content":"half`)
+		}))
+		defer srv.Close()
+
+		p := New("fireworks", srv.URL, "key", []modelinfo.Entry{{ID: "gpt-test"}})
+		_, err := p.Complete(t.Context(), req)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "fireworks" || interrupted.Model != "gpt-test" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
+
+	t.Run("non-sse json stream response body breaks after headers", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortResponseMidBody(t, w, "application/json", `{"choices":[{"message":{"content":"half`)
+		}))
+		defer srv.Close()
+
+		p := New("fireworks", srv.URL, "key", []modelinfo.Entry{{ID: "gpt-test"}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open json fallback stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "fireworks" || interrupted.Model != "gpt-test" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
 }

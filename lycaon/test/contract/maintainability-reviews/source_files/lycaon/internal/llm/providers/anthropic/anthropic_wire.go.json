@@ -8,6 +8,6 @@
   "reviewed_commit": "3eea863db8acb72e10e6766da8b55fce3ee992cd",
   "ceiling": 335,
   "boundaries": {
-    "lycaon/internal/llm/providers/anthropic/thinking_wire_test.go": "e79790a0b6341817ca5045199ff0aa5a67699e9f33ad941a2dda824fba735311"
+    "lycaon/internal/llm/providers/anthropic/thinking_wire_test.go": "f1c59120d383f684b2f3b49c96459d9d0d02f790ddb941aef0e0f0725af65531"
   }
 }

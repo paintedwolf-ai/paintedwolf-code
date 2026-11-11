@@ -1,0 +1,3 @@
+steps:
+  - tool: "pack_board"
+    say: "Request a fresh board with {{ call }} only on a later request."

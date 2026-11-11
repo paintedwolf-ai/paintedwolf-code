@@ -13,34 +13,71 @@ import (
 )
 
 func (e *ProcessAuthority) preflightExecutionCapability(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext) error {
-	request, reject := capabilityrequest.ParseCapabilityRequest(args)
-	if reject != nil {
-		return reject
-	}
-	if request == nil || (!request.ProcessControl && !request.HostExecution) {
-		return nil
-	}
-	tc.Execution.ProcessControl, tc.Execution.HostExecution = request.ProcessControl, request.HostExecution
-	action := e.executionCapabilityAction(ctx, tool, args, *tc)
-	if request.ProcessControl && !action.Execution.Contained.FSJailed {
-		return &toolrejection.ToolReject{Code: isolation.CodeExecutionBoundaryUnavailable}
-	}
-	result, err := e.Approvals.evaluatePreSpawn(ctx, action)
-	if err != nil {
-		return err
-	}
-	if result == nil {
-		return &toolrejection.ToolReject{Code: isolation.CodeApprovalUnavailable}
-	}
-	if result.Denied {
-		return e.Approvals.rejectBoundaryPolicyDeny(ctx, tool, args, *tc, result)
-	}
-	if result.Required() {
-		if err := e.awaitExecutionCapability(ctx, action, *tc, result); err != nil {
+	for _, err := range e.reviewExecutionCapabilities(ctx, tool, args, tc) {
+		if err != nil {
 			return err
 		}
 	}
-	tc.StampExecutionApproval(args, action)
+	return nil
+}
+
+func (e *ProcessAuthority) reviewExecutionCapabilities(ctx context.Context, tool string, args map[string]any, tc *tools.ToolContext) []error {
+	request, reject := capabilityrequest.ParseCapabilityRequest(args)
+	if reject != nil {
+		return []error{reject}
+	}
+	if request == nil || (!request.ProcessControl && !request.CredentialStore && !request.HostExecution) {
+		return nil
+	}
+	tc.Execution.ProcessControl, tc.Execution.CredentialStore, tc.Execution.HostExecution = request.ProcessControl, request.CredentialStore, request.HostExecution
+	fullAction := e.executionCapabilityAction(ctx, tool, args, *tc)
+	if (request.ProcessControl || request.CredentialStore) && !fullAction.Execution.Contained.FSJailed {
+		return []error{&toolrejection.ToolReject{Code: isolation.CodeExecutionBoundaryUnavailable}}
+	}
+	var errs []error
+	for _, mode := range []string{"host_execution", "process_control", "credential_store"} {
+		switch mode {
+		case "host_execution":
+			if !request.HostExecution {
+				continue
+			}
+		case "process_control":
+			if !request.ProcessControl {
+				continue
+			}
+		case "credential_store":
+			if !request.CredentialStore {
+				continue
+			}
+		}
+		subTC := *tc
+		subTC.Execution.HostExecution = mode == "host_execution"
+		subTC.Execution.ProcessControl = mode == "process_control"
+		subTC.Execution.CredentialStore = mode == "credential_store"
+		action := e.executionCapabilityAction(ctx, tool, args, subTC)
+		result, err := e.Approvals.evaluatePreSpawn(ctx, action)
+		if err != nil {
+			return []error{err}
+		}
+		if result == nil {
+			return []error{&toolrejection.ToolReject{Code: isolation.CodeApprovalUnavailable}}
+		}
+		if result.Denied {
+			return []error{e.Approvals.rejectBoundaryPolicyDeny(ctx, tool, args, subTC, result)}
+		}
+		if result.Required() {
+			if err := e.awaitExecutionCapability(ctx, action, subTC, result); err != nil {
+				errs = append(errs, err)
+				if !hitl.IsPreparedApproval(err) {
+					return errs
+				}
+			}
+		}
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+	tc.StampExecutionApproval(args, fullAction)
 	return nil
 }
 
@@ -53,7 +90,7 @@ func (e *ProcessAuthority) executionCapabilityAction(ctx context.Context, tool s
 }
 
 func (e *ProcessAuthority) awaitExecutionCapability(ctx context.Context, action hitl.ProposedAction, tc tools.ToolContext, result *hitl.ApprovalResult) error {
-	subject, title, impact, consequence := executionCapabilityCopy(tc.Execution.HostExecution)
+	subject, title, impact, consequence := executionCapabilityCopy(tc.Execution.HostExecution, tc.Execution.CredentialStore && !tc.Execution.ProcessControl)
 	targets := []hitl.ApprovalTarget{{Kind: string(subject), Label: action.Presentation.Command}}
 	who := hitl.WhoAgentCommand
 	if action.Execution.ProcessAccess != "" {
@@ -110,9 +147,12 @@ func (e *ProcessAuthority) awaitExecutionCapability(ctx context.Context, action 
 	return nil
 }
 
-func executionCapabilityCopy(host bool) (hitl.ApprovalSubjectKind, string, string, string) {
+func executionCapabilityCopy(host, credentialStore bool) (hitl.ApprovalSubjectKind, string, string, string) {
 	if host {
 		return hitl.ApprovalSubjectHostExecution, hitl.HostExecutionTitle, hitl.HostExecutionWhat, hitl.HostExecutionIfWrong
+	}
+	if credentialStore {
+		return hitl.ApprovalSubjectCredentialStore, hitl.CredentialStoreTitle, hitl.CredentialStoreWhat, hitl.CredentialStoreIfWrong
 	}
 	return hitl.ApprovalSubjectProcessControl, hitl.ProcessControlTitle, hitl.ProcessControlWhat, hitl.ProcessControlIfWrong
 }

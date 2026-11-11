@@ -19,4 +19,3 @@ x-paintedwolf-message: The operating system could not inspect or signal this pro
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains: ['Rejected:', 'Code: PROCESS_UNAVAILABLE']

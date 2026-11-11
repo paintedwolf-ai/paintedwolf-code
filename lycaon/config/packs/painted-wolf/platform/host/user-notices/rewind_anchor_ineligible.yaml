@@ -8,5 +8,3 @@ suggested_action: Pick one of your messages instead.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Only your own messages

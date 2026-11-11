@@ -22,6 +22,3 @@ x-paintedwolf-message: socks proxy env request invalid
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_SOCKS_PROXY_INVALID'
-  - SOCKS

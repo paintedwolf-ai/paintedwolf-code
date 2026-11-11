@@ -37,9 +37,9 @@ func openGuardedDirectory(loc Location, expected string) (*os.File, error) {
 	return dir, nil
 }
 
-// MkdirAll creates every missing component without traversing symlinks.
+// MkdirAll ensures a directory exists without traversing child symlinks.
 func MkdirAll(loc Location, mode os.FileMode) (createdCount int, err error) {
-	clean, err := cleanLocation(loc)
+	clean, err := cleanReadLocation(loc)
 	if err != nil {
 		return createdCount, err
 	}
@@ -48,6 +48,9 @@ func MkdirAll(loc Location, mode os.FileMode) (createdCount int, err error) {
 		return createdCount, err
 	}
 	defer root.close()
+	if clean.Rel == "." {
+		return 0, nil
+	}
 	currentFD := root.fd
 	ownsCurrent := false
 	defer func() {

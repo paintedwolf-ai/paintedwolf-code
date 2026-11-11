@@ -9,4 +9,5 @@ components:
         - direct_network
         - host_execution
         - process_control
+        - credential_store
         - local_service

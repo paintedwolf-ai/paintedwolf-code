@@ -17,6 +17,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/lycaon/lycaon/internal/osprocess"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -137,7 +138,7 @@ func (f *fakeDesktop) start(ctx context.Context, timeout time.Duration) (net.Con
 
 func groupGone(t *testing.T, pid int) {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testutil.Timeout(time.Minute))
 	for time.Now().Before(deadline) {
 		if err := syscall.Kill(-pid, 0); errors.Is(err, syscall.ESRCH) {
 			return
@@ -282,7 +283,7 @@ func TestStoppingAReapedDesktopNeverSignalsItsReleasedGroup(t *testing.T) {
 	bystander := exec.Command("sleep", "60")
 	testutil.FailErr(t, "bystander start", bystander.Start())
 	defer func() { _ = bystander.Process.Kill(); _ = bystander.Wait() }()
-	started.signalGroup = func(int, syscall.Signal) error {
+	started.signalGroup = func(osprocess.Incarnation, syscall.Signal) error {
 		t.Error("Stop tried to signal a group after releasing its leader")
 		return nil
 	}
@@ -298,7 +299,7 @@ func TestStoppingKeepsTheExitedLeaderUntilItsStubbornChildIsKilled(t *testing.T)
 	testutil.FailErr(t, "start failed", err)
 	started := owned.(*desktopStart)
 	t.Cleanup(started.Stop)
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(testutil.Timeout(time.Minute))
 	for {
 		if _, err := os.Stat(filepath.Join(fake.base, "child.ready")); err == nil {
 			break
@@ -309,12 +310,12 @@ func TestStoppingKeepsTheExitedLeaderUntilItsStubbornChildIsKilled(t *testing.T)
 		time.Sleep(10 * time.Millisecond)
 	}
 	var signals []syscall.Signal
-	started.signalGroup = func(group int, sig syscall.Signal) error {
+	started.signalGroup = func(leader osprocess.Incarnation, sig syscall.Signal) error {
 		if _, err := os.Stat("/proc/" + strconv.Itoa(started.cmd.Process.Pid)); err != nil {
 			t.Errorf("leader identity was released before group signal %v: %v", sig, err)
 		}
 		signals = append(signals, sig)
-		return syscall.Kill(group, sig)
+		return osprocess.SignalGroup(leader, sig)
 	}
 	started.Stop()
 	if len(signals) != 2 || signals[0] != syscall.SIGTERM || signals[1] != syscall.SIGKILL {

@@ -161,13 +161,15 @@ func TestSweepSparesPinnedChunksAndManifests(t *testing.T) {
 	testutil.FailErr(t, "cut chunk", builder.cut(t.Context()))
 	manifest, err := builder.finish(t.Context())
 	testutil.FailErr(t, "finish manifest", err)
-	testutil.FailErr(t, "sweep while pinned", store.Sweep(t.Context(), time.Now()))
+	_, err = store.Sweep(t.Context(), time.Now())
+	testutil.FailErr(t, "sweep while pinned", err)
 	if countRows(t, store, `SELECT COUNT(*) FROM source_manifest_chunks`) == 0 ||
 		countRows(t, store, fmt.Sprintf(`SELECT COUNT(*) FROM source_manifests WHERE id = '%s'`, manifest.id)) != 1 {
 		t.Fatal("sweep removed pinned rows")
 	}
 	held.release()
-	testutil.FailErr(t, "sweep after release", store.Sweep(t.Context(), time.Now()))
+	_, err = store.Sweep(t.Context(), time.Now())
+	testutil.FailErr(t, "sweep after release", err)
 	for _, table := range []string{"source_manifests", "source_manifest_layout", "source_manifest_chunks", "source_manifest_entries"} {
 		if got := countRows(t, store, "SELECT COUNT(*) FROM "+table); got != 0 {
 			t.Fatalf("%s after unpinned sweep = %d, want 0", table, got)
@@ -181,7 +183,7 @@ func TestSweepRunsUntilNothingIsUnreferenced(t *testing.T) {
 	store := openSnapshotStore(t)
 	held := store.pins.holdManifests()
 	builder := store.newManifestBuilder(held)
-	total := 3 * chunkSweepEntries
+	total := 3 * sweepTxChildRows
 	for i := range total {
 		testutil.FailErr(t, "add entry", builder.add(t.Context(), syntheticEntry(fmt.Sprintf("p-%06d", i), 0)))
 	}
@@ -190,7 +192,8 @@ func TestSweepRunsUntilNothingIsUnreferenced(t *testing.T) {
 	if got := countRows(t, store, `SELECT COUNT(*) FROM source_manifest_entries`); got != total {
 		t.Fatalf("entries before sweep = %d, want %d", got, total)
 	}
-	testutil.FailErr(t, "sweep", store.Sweep(t.Context(), time.Now()))
+	_, err := store.Sweep(t.Context(), time.Now())
+	testutil.FailErr(t, "sweep", err)
 	if got := countRows(t, store, `SELECT COUNT(*) FROM source_manifest_entries`); got != 0 {
 		t.Fatalf("entries after one sweep = %d, want 0", got)
 	}

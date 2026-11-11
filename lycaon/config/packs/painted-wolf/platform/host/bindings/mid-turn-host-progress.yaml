@@ -1,0 +1,11 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': coordinator.mid_turn_note
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-mid-turn-host-progress
+tier: builtin
+invariants:
+  trigger_class: host_api
+  fires_in:
+  - visibility repair is exhausted before wait and dispatch or result facts exist

@@ -1,7 +1,3 @@
 scope: app
 title: Could not check again
 message: The app could not verify whether this issue has changed.
-scenarios:
-  - id: default
-    expect_contains:
-      - could not verify

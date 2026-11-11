@@ -47,10 +47,8 @@ describe("Cloudflare provider setup", () => {
     };
     const client = setup([provider]);
     fireEvent.click(screen.getByTestId(`providers-row-${provider.id}`));
-    expect(screen.getByTestId(`provider-test-scope-${provider.id}`).textContent).toContain("without running a model");
     fireEvent.click(screen.getByTestId(`provider-test-${provider.id}`));
     await waitFor(() => expect(client.testProvider).toHaveBeenCalledWith(provider.id));
-    expect(screen.getByTestId(`provider-test-result-${provider.id}`).textContent).toContain("model access not verified");
   });
 
   it("requires an account ID before adding and saves the assembled endpoint", async () => {
@@ -88,13 +86,11 @@ describe("Cloudflare provider setup", () => {
     };
     const client = setup([provider]);
     const row = screen.getByTestId(`providers-row-${provider.id}`);
-    expect(row.textContent).toContain("Needs setup");
     fireEvent.click(row);
     const account = screen.getByTestId(`provider-account-id-${provider.id}`) as HTMLInputElement;
     const endpoint = screen.getByTestId(`provider-endpoint-${provider.id}`) as HTMLInputElement;
     const save = screen.getByTestId(`provider-save-endpoint-${provider.id}`) as HTMLButtonElement;
     expect(save.disabled).toBe(true);
-    expect(screen.getByTestId(`provider-key-status-${provider.id}`).textContent).toContain("Key saved");
     expect(screen.queryByTestId(`provider-discovery-failure-${provider.id}`)).toBeNull();
     fireEvent.input(account, { target: { value: accountId } });
     expect(endpoint.value).toBe(completeUrl);

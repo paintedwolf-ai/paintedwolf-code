@@ -71,7 +71,7 @@ func TestRecordedFailurePreservesProjectedEvidenceAndOriginalReject(t *testing.T
 	if _, exists := original.Data["recorded"]; exists {
 		t.Fatal("recording mutated original rejection")
 	}
-	if effect.Visual == nil || !effect.Visual.Projected || effect.Visual.Perceive || string(effect.Visual.Bytes) != "recording" {
+	if effect.Visual == nil || !effect.Visual.Projected || !effect.Visual.Perceive || string(effect.Visual.Bytes) != "recording" {
 		t.Fatalf("lost projected recording: %+v", effect.Visual)
 	}
 	err = recordedFailure(tools.ToolContext{}, capture, original)

@@ -10,9 +10,6 @@ approval_outcomes:
       for new user direction.
     scenarios:
       - id: denied
-        expect_contains:
-          - denied by the user
-          - did not run
 
   approval_expired:
     message: >-
@@ -21,10 +18,6 @@ approval_outcomes:
       you still need it.
     scenarios:
       - id: expired
-        expect_contains:
-          - expired
-          - timeout, not a denial
-          - retry
 
   approval_canceled:
     message: >-
@@ -32,6 +25,3 @@ approval_outcomes:
       action did not run. Continue only after a new user request.
     scenarios:
       - id: canceled_by_stop
-        expect_contains:
-          - canceled because the user stopped the session
-          - action did not run

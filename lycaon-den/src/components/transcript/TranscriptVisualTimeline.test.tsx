@@ -5,6 +5,7 @@ import { timelineCache } from "../../chat/visual/frame-archive-cache.ts";
 import { buildTestTimelineZip } from "../../chat/visual/timeline-archive.fixture.ts";
 import { TIMELINE_MIME } from "../../chat/visual/timeline-archive.ts";
 import { stubClient } from "../../test/client-fixture.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { TranscriptVisualArtifact } from "./TranscriptVisualArtifact.tsx";
 
 function renderTimeline() {
@@ -51,7 +52,10 @@ describe("TranscriptVisualArtifact timeline", () => {
     fireEvent.click(shift);
     const scrubber = screen.getByTestId("transcript-visual-timeline-scrubber") as HTMLInputElement;
     expect(scrubber.value).toBe("900");
-    expect(screen.getByRole("group", { name: "Actions" }).querySelectorAll("button")).toHaveLength(1);
+    expect(
+      assertNamedControl(screen.getByTestId("transcript-visual-timeline-lane-action"), "group")
+        .querySelectorAll("button"),
+    ).toHaveLength(1);
     const facts = screen.getByTestId("transcript-visual-timeline-facts").textContent ?? "";
     expect(facts).toContain("Unexpected layout shift 0.180 (1)");
     expect(facts).toContain("1 failed request");

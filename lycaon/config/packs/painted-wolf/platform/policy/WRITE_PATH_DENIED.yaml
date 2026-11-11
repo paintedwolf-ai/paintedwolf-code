@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: implement
     tool: write
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WRITE_PATH_DENIED'

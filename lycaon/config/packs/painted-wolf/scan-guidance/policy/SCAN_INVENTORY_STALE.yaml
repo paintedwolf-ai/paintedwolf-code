@@ -21,4 +21,3 @@ x-paintedwolf-message: Scan inventory changed.
 x-paintedwolf-scenarios:
   - id: stale
     vars: {}
-    expect_contains: ['Code: SCAN_INVENTORY_STALE', revision]

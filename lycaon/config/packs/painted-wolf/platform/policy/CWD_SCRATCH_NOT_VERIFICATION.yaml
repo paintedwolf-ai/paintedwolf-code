@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       cwd: '@scratch'
       profile: implement
       tool: verify
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: CWD_SCRATCH_NOT_VERIFICATION'

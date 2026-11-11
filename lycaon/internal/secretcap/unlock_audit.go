@@ -26,7 +26,7 @@ func RecordUnlock(ctx context.Context, tx *sql.Tx, projectID string, unlock pres
 
 // RecordUnlockEnd audits why an unlock ended. A failed write leaves the row
 // open, and the next boot closes it as restart.
-func (s *Service) RecordUnlockEnd(ctx context.Context, unlock presence.Unlock, reason presence.EndReason, at time.Time) {
+func (s *secretAdminService) RecordUnlockEnd(ctx context.Context, unlock presence.Unlock, reason presence.EndReason, at time.Time) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	defer cancel()
 	if err := s.queries.EndVaultUnlock(ctx, db.EndVaultUnlockParams{
@@ -38,7 +38,7 @@ func (s *Service) RecordUnlockEnd(ctx context.Context, unlock presence.Unlock, r
 
 // CloseUnlocksLeftOpen ends the unlocks a stopped engine left open. Unlocks
 // live only in memory, so at boot none is open; run it before any can be.
-func (s *Service) CloseUnlocksLeftOpen(ctx context.Context) error {
+func (s *secretAdminService) CloseUnlocksLeftOpen(ctx context.Context) error {
 	if _, err := s.queries.EndOpenVaultUnlocks(ctx, nullable(db.FormatTime(s.now()))); err != nil {
 		return fmt.Errorf("close vault unlocks left open: %w", err)
 	}

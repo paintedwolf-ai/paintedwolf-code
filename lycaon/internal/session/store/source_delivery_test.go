@@ -161,7 +161,7 @@ func newRetainedDeliveryFixture(t *testing.T) retainedDeliveryFixture {
 	sourceRef := "output:submitted-source"
 	start := toolcontract.ProgramStart{Version: toolcontract.ProgramVersion{ProgramID: program, ParentReceiptID: parent.ID, RootExecutionID: rootExecution, LanguageVersion: snapshot.Plan.Version, CatalogDigest: snapshot.Plan.CatalogDigest, SourceUnitID: "submitted", SourceDigest: snapshot.Plan.SourceDigest, SourceReference: sourceRef}, PlanReference: sourceRef, SourceExact: true, SyntaxValidated: true, Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted", Revision: snapshot.Plan.SourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: snapshot.Plan.SourceDigest, EndByte: int64(len(command))}, DetailReference: sourceRef}}, Nodes: []toolcontract.ProgramNode{{ID: string(statement.ID), SourceUnitID: "submitted", Span: statement.Span}}}
 	testutil.FailErr(t, "attach actual source/program without synthetic child", outputs.BeginProgram(ctx, start, retain(program, []byte(command), 0), false))
-	schemas, err := toolschema.LoadSchemaDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	schemas, err := toolschema.LoadSchemaDirWithOperations(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	testutil.FailErr(t, "load actual native read schema", err)
 	meta, ok := schemas.ToolMeta("read")
 	if !ok {

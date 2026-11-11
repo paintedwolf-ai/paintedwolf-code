@@ -39,9 +39,8 @@ func reportWebPage(tctx tools.ToolContext, spec requestSpec, resp outboundhttp.R
 		host = final.Hostname()
 	}
 	tctx.Effects.Out.Facts = tctx.Effects.Out.Facts.WithFeedback(toolrejection.HTTPRequestWebPageCode, map[string]any{
-		"host":               host,
-		"bytes":              strconv.FormatInt(resp.Bytes, 10),
-		"content_type":       resp.ContentType,
-		"fetch_url_deferred": tctx.Turn.TurnToolPlan.Deferred(fetchURLTool),
+		"host":         host,
+		"bytes":        strconv.FormatInt(resp.Bytes, 10),
+		"content_type": resp.ContentType,
 	}, &api.FeedbackSubject{Kind: "host", ID: host})
 }

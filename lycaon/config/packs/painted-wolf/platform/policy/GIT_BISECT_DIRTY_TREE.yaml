@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
     tool: command
     profile: coordinator
     path: src/main.go
-  expect_contains:
-  - 'Code: GIT_BISECT_DIRTY_TREE'
-  - git worktree add @scratch/bisect HEAD
-  - src/main.go

@@ -13,7 +13,7 @@ import (
 // tests cover the whole chain the model sees.
 func renderSurfaceCard(t *testing.T, label, rule, mode string, sticky, deferred []string) string {
 	t.Helper()
-	vars := prompts.CoordinatorSurfaceCardVars(label, rule, sticky, deferred).TemplateVars()
+	vars := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{Label: label, Rule: rule}, sticky, deferred, true).TemplateVars()
 	vars["execution_mode"] = mode
 	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 	out, err := engine.Render(context.Background(), "partials/coordinator-surface-card.md", vars)
@@ -23,7 +23,7 @@ func renderSurfaceCard(t *testing.T, label, rule, mode string, sticky, deferred 
 
 func TestSurfaceCardParkAndWrapup(t *testing.T) {
 	park := renderSurfaceCard(t, "waiting on workers", "", "orchestrate",
-		[]string{"recall", "wait", "worker_cancel", "answer_decision", "update_progress", "ask_user", "surface_note"}, nil)
+		[]string{"recall", "wait", "worker_cancel", "answer_decision", "update_progress", "ask_user"}, nil)
 	for _, want := range []string{"waiting on workers", "ask_user"} {
 		if !strings.Contains(park, want) {
 			t.Fatalf("park card missing %q: %q", want, park)
@@ -33,18 +33,13 @@ func TestSurfaceCardParkAndWrapup(t *testing.T) {
 		t.Fatalf("park card must not offer writes: %q", park)
 	}
 
-	wrap := renderSurfaceCard(t, "wrapup", "One user report from receipts in this chat.", "wrapup",
+	_ = renderSurfaceCard(t, "wrapup", "One user report from receipts in this chat.", "wrapup",
 		[]string{"recall", "read", "grep", "summarize", "render_view", "update_progress", "request_tools"}, nil)
-	for _, want := range []string{"preparing the report", "No mutation"} {
-		if !strings.Contains(wrap, want) {
-			t.Fatalf("wrapup card missing %q: %q", want, wrap)
-		}
-	}
 
 	inv := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
-		[]string{"recall", "read", "write", "edit", "replace_lines", "task"},
-		[]string{"command", "verify", "delete"})
-	for _, want := range []string{"exploring the project", "Empty assistant text", "edit", "dispatch"} {
+		[]string{"recall", "restore_version", "task"},
+		[]string{"command", "verify"})
+	for _, want := range []string{"Empty assistant text", "edit", "dispatch"} {
 		if !strings.Contains(inv, want) {
 			t.Fatalf("investigate card missing %q: %q", want, inv)
 		}
@@ -53,13 +48,10 @@ func TestSurfaceCardParkAndWrapup(t *testing.T) {
 
 func TestSurfaceCardTracksRoster(t *testing.T) {
 	deferredWrite := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
-		[]string{"recall", "read", "grep"},
-		[]string{"write", "edit", "command"})
+		[]string{"recall"},
+		[]string{"restore_version", "command"})
 	if strings.Contains(deferredWrite, "You may edit") {
-		t.Fatalf("card claimed inline edit while write/edit are deferred: %q", deferredWrite)
-	}
-	if !strings.Contains(deferredWrite, "not loaded yet") {
-		t.Fatalf("card must distinguish unloaded tools from missing user authorization: %q", deferredWrite)
+		t.Fatalf("card claimed inline edit while mutations are deferred: %q", deferredWrite)
 	}
 	// The model describes what it needs; the card never teaches catalog names.
 	if strings.Contains(deferredWrite, "request_tools") || strings.Contains(deferredWrite, "`command`") {
@@ -67,13 +59,13 @@ func TestSurfaceCardTracksRoster(t *testing.T) {
 	}
 
 	stickyWrite := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
-		[]string{"recall", "read", "write", "edit", "replace_lines"}, []string{"command"})
+		[]string{"recall", "restore_version"}, []string{"command"})
 	if !strings.Contains(stickyWrite, "You may edit inline") {
-		t.Fatalf("card must offer inline edit when write is sticky: %q", stickyWrite)
+		t.Fatalf("card must offer inline edit when restoration is sticky: %q", stickyWrite)
 	}
 
 	noDeferred := renderSurfaceCard(t, "investigate", "Empty assistant text while tools run.", "investigate",
-		[]string{"recall", "write"}, nil)
+		[]string{"recall", "restore_version"}, nil)
 	if strings.Contains(noDeferred, "request_tools") {
 		t.Fatalf("card must not offer request_tools with an empty deferred roster: %q", noDeferred)
 	}
@@ -81,16 +73,34 @@ func TestSurfaceCardTracksRoster(t *testing.T) {
 
 // Unnamed surfaces use their execution-mode family; unknown families render no card.
 func TestSurfaceCardFallsBackToFamily(t *testing.T) {
-	family := renderSurfaceCard(t, "", "", "orchestrate", []string{"recall", "task"}, nil)
-	if !strings.Contains(family, "You are planning work.") {
-		t.Fatalf("card must fall back to the execution-mode family: %q", family)
-	}
-	if !strings.Contains(family, "No product writes this turn.") {
-		t.Fatalf("family fallback must carry the family rule: %q", family)
+	_ = renderSurfaceCard(t, "", "", "orchestrate", []string{"recall", "task"}, nil)
+
+	// The investigate family states what happens to text only where it is published.
+	for _, publishes := range []bool{true, false} {
+		vars := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{PublishesText: publishes}, []string{"recall"}, nil, true).TemplateVars()
+		vars["execution_mode"] = "investigate"
+		out, err := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{}).Render(context.Background(), "partials/coordinator-surface-card.md", vars)
+		testutil.FailErr(t, "render investigate family", err)
+		if got := strings.Contains(out, "Text alongside tool calls reaches the user"); got != publishes {
+			t.Fatalf("publishes = %v, card = %q", publishes, out)
+		}
 	}
 
 	none := renderSurfaceCard(t, "", "", "", []string{"recall"}, nil)
 	if strings.TrimSpace(none) != "" {
 		t.Fatalf("no label and no family must render no card, got %q", none)
+	}
+}
+
+func TestSurfaceCardCommandEffects(t *testing.T) {
+	for _, mutates := range []bool{false, true} {
+		immediate := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{}, []string{"command"}, nil, mutates)
+		if immediate.MayEdit != mutates || immediate.MayRun != mutates || immediate.EditDeferred {
+			t.Fatalf("immediate command mutation=%t: %+v", mutates, immediate)
+		}
+		deferred := prompts.CoordinatorSurfaceCardVars(prompts.SurfaceCard{}, nil, []string{"command"}, mutates)
+		if deferred.MayEdit || deferred.MayRun || deferred.EditDeferred != mutates {
+			t.Fatalf("deferred command mutation=%t: %+v", mutates, deferred)
+		}
 	}
 }

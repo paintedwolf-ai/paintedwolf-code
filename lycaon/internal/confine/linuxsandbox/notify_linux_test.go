@@ -42,8 +42,12 @@ func TestRelativeSocketPathsResolveAgainstTheTargetDirectory(t *testing.T) {
 	if resolved, ok := resolveSocketPath(path, &targetProcess{pid: -1}); !ok || resolved != want {
 		t.Fatalf("absolute path: got %q %v", resolved, ok)
 	}
-	if resolved, ok := resolveSocketPath(path+".missing", &targetProcess{pid: -1}); ok || resolved != "" {
-		t.Fatalf("missing path resolved: %q %v", resolved, ok)
+	// A name that does not exist yet keeps its resolved directory.
+	for _, missing := range []string{"socket.missing", filepath.Join("absent", "deeper", "socket")} {
+		got, ok := resolveSocketPath(filepath.Join(root, missing), &targetProcess{pid: -1})
+		if wantMissing := filepath.Join(filepath.Dir(want), missing); !ok || got != wantMissing {
+			t.Fatalf("missing path %s: got %q %v, want %q", missing, got, ok, wantMissing)
+		}
 	}
 
 }

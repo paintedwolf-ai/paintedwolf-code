@@ -50,7 +50,10 @@ type PhaseExitChoiceArm struct {
 // WorkflowRuntimeSnapshot is workflow-generic runtime metadata for inject.
 type WorkflowRuntimeSnapshot struct {
 	ReportDocumentEnabled bool
-	CloseoutRetries       int
+	// PhaseOwesReport marks a phase gated on topology_report_delivered, with or
+	// without a report document.
+	PhaseOwesReport bool
+	CloseoutRetries int
 	// ReportRating is the rating a report document answers, when the workflow
 	// declares one.
 	CoverageReview    string
@@ -462,7 +465,7 @@ func workflowHintViews(ctx context.Context, hints *guidance.HintConfig, codes []
 		if !ok {
 			continue
 		}
-		msg, _, fix := guidance.RenderHintFields(code, entry, nil)
+		msg, _, fix := guidance.RenderHintFields(ctx, code, entry, nil, nil)
 		if msg == "" {
 			msg = strings.TrimSpace(entry.Message)
 		}

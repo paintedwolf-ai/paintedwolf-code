@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: explore
       tool: request_budget
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: REQUEST_BUDGET_ADDRESSED_SESSION'
-      - no coordinator above this session

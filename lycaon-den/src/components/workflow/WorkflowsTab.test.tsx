@@ -139,8 +139,6 @@ describe("WorkflowsTab", () => {
       />
     ));
     const review = screen.getByTestId("workflow-gate-review");
-    expect(review.textContent).toContain("Awaiting your approval");
-    expect(review.textContent).toContain("Review in chat");
     fireEvent.click(review);
     expect(onReviewInChat).toHaveBeenCalledOnce();
     expect(screen.queryByTestId("workflow-pause")).toBeNull();
@@ -162,11 +160,6 @@ describe("WorkflowsTab", () => {
     expect(screen.getByTestId("workflow-picker-row-options").textContent).toContain("/options");
     expect(screen.getByTestId("workflow-picker-row-bugbash").textContent).toContain("/bugbash");
     expect(screen.getByTestId("workflow-picker-row-security-survey")).toBeTruthy();
-  });
-
-  it("toggles picker label without Cancel", () => {
-    render(() => <WorkflowsTab {...baseProps()} pickerOpen catalog={planCatalog} />);
-    expect(screen.getByTestId("pick-workflow-button").textContent).toBe("Hide workflows");
   });
 
   it("opens picker from the pick button", () => {

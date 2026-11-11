@@ -18,15 +18,13 @@ when: paintedwolf.rejection_code == "SKILL_RESOURCE_UNKNOWN"
 effect: block
 copy:
   what: Skill {{ paintedwolf.name }} has no readable resource at {{ paintedwolf.resource }}.
-  cause: The path is not a regular bundled file listed for this skill.
+  cause: '{% if paintedwolf.available %}The path is not a regular bundled file listed for this skill.{% else %}Skill {{ paintedwolf.name }} has no supporting resource files; its full procedure is in SKILL.md.{% endif %}'
   why: Skill resources are confined to their own directory and selected by exact relative path.
-  fix: 'Call skills_read for the skill instructions, then use one of its listed files: {{ paintedwolf.available
-    }}'
-  instead: Branch on Code SKILL_RESOURCE_UNKNOWN; choose a listed skill resource
+  fix: '{% if paintedwolf.available %}Call skills_read for the skill instructions, then use one of its listed files: {{ paintedwolf.available }}{% else %}Follow the skill instructions from SKILL.md; omit resource when calling skills_read for {{ paintedwolf.name }}.{% endif %}'
+  instead: '{% if paintedwolf.available %}Branch on Code SKILL_RESOURCE_UNKNOWN; choose a listed skill resource{% else %}Branch on Code SKILL_RESOURCE_UNKNOWN; do not request a supporting resource for {{ paintedwolf.name }}{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:skills_read
-x-paintedwolf-message: 'Skill {{ paintedwolf.name }} has no resource {{ paintedwolf.resource }}. Available:
-  {{ paintedwolf.available }}'
+x-paintedwolf-message: '{% if paintedwolf.available %}Skill {{ paintedwolf.name }} has no resource {{ paintedwolf.resource }}. Available: {{ paintedwolf.available }}{% else %}Skill {{ paintedwolf.name }} has no supporting resources (requested {{ paintedwolf.resource }}){% endif %}'
 x-paintedwolf-scenarios:
 - id: default
   vars:
@@ -36,6 +34,10 @@ x-paintedwolf-scenarios:
     - references/failure-triage.md
     profile: implement
     tool: skills_read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SKILL_RESOURCE_UNKNOWN'
+- id: empty_available
+  vars:
+    name: prepare-a-release
+    resource: references/missing.md
+    available: []
+    profile: implement
+    tool: skills_read

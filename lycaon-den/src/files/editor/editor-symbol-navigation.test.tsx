@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -19,7 +20,7 @@ it("leaves IME commit and candidate navigation in the symbol filter before ordin
     observeSource: vi.fn(), setFilterElement: vi.fn(), setMenuElement: vi.fn(),
   } satisfies ReturnType<typeof createEditorSymbolNavigation>;
   render(() => <FilesSymbolMenu symbols={symbols} />);
-  const input = screen.getByRole("combobox", { name: "Filter symbols" });
+  const input = assertNamedControl(screen.getByTestId("files-crumb-symbol-filter"), "combobox");
   fireEvent.input(input, { target: { value: "target" } });
   for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
     for (const key of ["Enter", "Escape", "ArrowDown"]) fireEvent.keyDown(input, { key, ...composition });

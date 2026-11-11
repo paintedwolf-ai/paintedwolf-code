@@ -1,0 +1,13 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/toolexecution/args_schema_test.go",
+  "kind": "test_suite",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain the 565-line schema validation and introspection suite beside its stock-schema fixtures. Nested recovery corrections share the same validation contract. The direct-IP assertion checks the canonical request object without changing runtime authority. Keep these related correction cases together at this measured ceiling.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
+  "ceiling": 565,
+  "boundaries": {
+    "lycaon/internal/toolexecution/args_schema_test.go": "89853ba0c68b501844268ed303b723cc91ad5fe8140ddf2e40646600aeb58519"
+  }
+}

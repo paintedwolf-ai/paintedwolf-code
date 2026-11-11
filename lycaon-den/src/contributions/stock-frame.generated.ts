@@ -915,6 +915,22 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "result_treatment": "effect"
     },
     {
+      "id": "painted-wolf/platform:editor-toggle-pretty",
+      "provider": "painted-wolf/platform",
+      "title": "Toggle pretty display",
+      "category": "navigation",
+      "scope": "files",
+      "icon": "play",
+      "executor": "den",
+      "invocation": "den",
+      "action_kind": "native_ui",
+      "handler_id": "editor.togglePretty",
+      "when": {
+        "fact": "files_stage_active"
+      },
+      "result_treatment": "effect"
+    },
+    {
       "id": "painted-wolf/platform:editor-toggle-tab-focus",
       "provider": "painted-wolf/platform",
       "title": "Toggle Tab moves focus",
@@ -2439,6 +2455,51 @@ export const STOCK_FRAME: ContributionFrameResponse = {
               {
                 "fact": "context_feature",
                 "is": "files"
+              },
+              {
+                "any": [
+                  {
+                    "fact": "context_navigable"
+                  },
+                  {
+                    "fact": "view_mounted",
+                    "is": "context"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "result_treatment": "effect"
+    },
+    {
+      "id": "painted-wolf/platform:go-context-running",
+      "provider": "painted-wolf/platform",
+      "title": "Show running commands",
+      "scope": "global",
+      "keywords": [
+        "running",
+        "background",
+        "background commands",
+        "processes",
+        "servers"
+      ],
+      "icon": "play",
+      "executor": "den",
+      "invocation": "den",
+      "action_kind": "native_ui",
+      "handler_id": "go.context.running",
+      "when": {
+        "all": [
+          {
+            "fact": "project_open"
+          },
+          {
+            "all": [
+              {
+                "fact": "context_feature",
+                "is": "running"
               },
               {
                 "any": [
@@ -4173,6 +4234,14 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "label": "Files"
     },
     {
+      "id": "painted-wolf/platform:app-menu-go-go-context-running",
+      "slot": "app_menu.go",
+      "command": "painted-wolf/platform:go-context-running",
+      "group": "2",
+      "order": 12,
+      "label": "Running"
+    },
+    {
       "id": "painted-wolf/platform:app-menu-go-go-context-search",
       "slot": "app_menu.go",
       "command": "painted-wolf/platform:go-context-search",
@@ -4409,6 +4478,14 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "group": "2",
       "order": 8,
       "label": "Toggle line numbers"
+    },
+    {
+      "id": "painted-wolf/platform:app-menu-view-editor-toggle-pretty",
+      "slot": "app_menu.view",
+      "command": "painted-wolf/platform:editor-toggle-pretty",
+      "group": "2",
+      "order": 7,
+      "label": "Toggle pretty display"
     },
     {
       "id": "painted-wolf/platform:app-menu-view-editor-toggle-wrap",
@@ -5368,6 +5445,23 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       }
     },
     {
+      "id": "painted-wolf/platform:key-editor-toggle-pretty",
+      "command": "painted-wolf/platform:editor-toggle-pretty",
+      "scope": "files",
+      "allow_in_input": true,
+      "bindings": {
+        "linux": [
+          "Alt+P"
+        ],
+        "macos": [
+          "Alt+P"
+        ],
+        "windows": [
+          "Alt+P"
+        ]
+      }
+    },
+    {
       "id": "painted-wolf/platform:key-editor-toggle-tab-focus",
       "command": "painted-wolf/platform:editor-toggle-tab-focus",
       "scope": "files",
@@ -6207,6 +6301,23 @@ export const STOCK_FRAME: ContributionFrameResponse = {
         ],
         "windows": [
           "Leader F"
+        ]
+      }
+    },
+    {
+      "id": "painted-wolf/platform:key-go-context-running",
+      "command": "painted-wolf/platform:go-context-running",
+      "scope": "global",
+      "allow_in_input": true,
+      "bindings": {
+        "linux": [
+          "Leader P"
+        ],
+        "macos": [
+          "Leader P"
+        ],
+        "windows": [
+          "Leader P"
         ]
       }
     },
@@ -7477,6 +7588,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "files",
+      "chord": "Alt+P",
+      "active": "painted-wolf/platform:key-editor-toggle-pretty",
+      "candidates": [
+        "painted-wolf/platform:key-editor-toggle-pretty"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "files",
       "chord": "Alt+Shift+A",
       "active": "painted-wolf/platform:key-editor-toggle-block-comment",
       "candidates": [
@@ -8260,6 +8380,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "linux",
       "scope": "global",
+      "chord": "Leader P",
+      "active": "painted-wolf/platform:key-go-context-running",
+      "candidates": [
+        "painted-wolf/platform:key-go-context-running"
+      ]
+    },
+    {
+      "platform": "linux",
+      "scope": "global",
       "chord": "Leader S",
       "active": "painted-wolf/platform:key-go-context-security",
       "candidates": [
@@ -8993,6 +9122,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-editor-unfold-all",
       "candidates": [
         "painted-wolf/platform:key-editor-unfold-all"
+      ]
+    },
+    {
+      "platform": "macos",
+      "scope": "files",
+      "chord": "Alt+P",
+      "active": "painted-wolf/platform:key-editor-toggle-pretty",
+      "candidates": [
+        "painted-wolf/platform:key-editor-toggle-pretty"
       ]
     },
     {
@@ -9754,6 +9892,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "platform": "macos",
       "scope": "global",
+      "chord": "Leader P",
+      "active": "painted-wolf/platform:key-go-context-running",
+      "candidates": [
+        "painted-wolf/platform:key-go-context-running"
+      ]
+    },
+    {
+      "platform": "macos",
+      "scope": "global",
       "chord": "Leader S",
       "active": "painted-wolf/platform:key-go-context-security",
       "candidates": [
@@ -10388,6 +10535,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-editor-unfold-all",
       "candidates": [
         "painted-wolf/platform:key-editor-unfold-all"
+      ]
+    },
+    {
+      "platform": "windows",
+      "scope": "files",
+      "chord": "Alt+P",
+      "active": "painted-wolf/platform:key-editor-toggle-pretty",
+      "candidates": [
+        "painted-wolf/platform:key-editor-toggle-pretty"
       ]
     },
     {
@@ -11144,6 +11300,15 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "active": "painted-wolf/platform:key-go-context-cost",
       "candidates": [
         "painted-wolf/platform:key-go-context-cost"
+      ]
+    },
+    {
+      "platform": "windows",
+      "scope": "global",
+      "chord": "Leader P",
+      "active": "painted-wolf/platform:key-go-context-running",
+      "candidates": [
+        "painted-wolf/platform:key-go-context-running"
       ]
     },
     {

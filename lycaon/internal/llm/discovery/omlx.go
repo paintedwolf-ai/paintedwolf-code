@@ -24,9 +24,13 @@ type omlxModelsStatusResponse struct {
 }
 
 type omlxModelStatusRecord struct {
-	ID         string `json:"id"`
-	ModelAlias string `json:"model_alias"`
-	ModelType  string `json:"model_type"`
+	ID                  string `json:"id"`
+	ModelAlias          string `json:"model_alias"`
+	ModelType           string `json:"model_type"`
+	LoadedContextLength int    `json:"loaded_context_length"`
+	MaxModelLen         int    `json:"max_model_len"`
+	ContextLength       int    `json:"context_length"`
+	MaxContextLength    int    `json:"max_context_length"`
 }
 
 // OMLXModels lists conversation models from typed status rows.
@@ -75,7 +79,12 @@ func OMLXModels(ctx context.Context, baseURL, apiKey string, client *http.Client
 			continue
 		}
 		seen[id] = struct{}{}
-		out = append(out, modelinfo.Entry{ID: id})
+		entry := modelinfo.Entry{ID: id}
+		if ctxLen, _ := firstPositiveContextLength(item.LoadedContextLength, item.MaxModelLen, item.ContextLength, item.MaxContextLength); ctxLen > 0 {
+			entry.ContextLength = ctxLen
+			entry.ContextLengthSource = "omlx"
+		}
+		out = append(out, entry)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil

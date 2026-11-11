@@ -1802,7 +1802,11 @@ SELECT e.file_id, e.root_id, e.path, e.from_path,
        MIN(e.ordinal) AS first_ordinal, MIN(e.created_ts) AS first_ts
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = ? AND o.session_id = ? AND e.root_id = ?
-  AND (o.origin = 'agent' OR o.command_window_id IS NOT NULL)
+  AND (o.origin = 'agent' OR (o.command_window_id IS NOT NULL AND o.session_id = (
+        SELECT newest_op.session_id
+        FROM source_effects newest JOIN source_operations newest_op ON newest_op.id = newest.operation_id
+        WHERE newest.file_id = e.file_id AND newest_op.branch_id = o.branch_id
+        ORDER BY newest.ordinal DESC LIMIT 1)))
   AND (o.branch_id = '' OR substr(o.branch_id,1,9)='worktree:')
 GROUP BY e.file_id ORDER BY first_ordinal ASC, e.path ASC LIMIT ?
 `
@@ -1825,7 +1829,8 @@ type ListSessionAuthoredFilesRow struct {
 
 // Paths a session's work produced on the primary tree: its own tool writes
 // plus what its commands were observed changing, so a lockfile a build
-// regenerated stages with the edit that caused it.
+// regenerated stages with the edit that caused it. A command's claim on a file
+// lasts until the file's next change by anyone else on that branch.
 func (q *Queries) ListSessionAuthoredFiles(ctx context.Context, arg ListSessionAuthoredFilesParams) ([]ListSessionAuthoredFilesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSessionAuthoredFiles,
 		arg.ProjectID,
@@ -2297,6 +2302,242 @@ func (q *Queries) ListSourceEffectsAfterOrdinal(ctx context.Context, arg ListSou
 	return items, nil
 }
 
+const listSourceEffectsAfterOrdinalOnBranch = `-- name: ListSourceEffectsAfterOrdinalOnBranch :many
+WITH scope_input AS (SELECT CAST(?5 AS TEXT) AS roots), scoped_roots AS (
+ SELECT CAST(r.key AS TEXT) AS root_id, CAST(r.value AS TEXT) AS branch_id FROM scope_input, json_each(roots) r
+)
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND e.ordinal > ?2
+  AND e.walk_visible = 1
+  AND (CAST(?3 AS INTEGER) = 0 OR e.ordinal < CAST(?3 AS INTEGER))
+  AND EXISTS (SELECT 1 FROM scoped_roots r WHERE r.root_id = e.root_id AND r.branch_id = o.branch_id)
+ORDER BY e.ordinal DESC LIMIT ?4
+`
+
+type ListSourceEffectsAfterOrdinalOnBranchParams struct {
+	ProjectID     string `json:"project_id"`
+	Ordinal       int64  `json:"ordinal"`
+	BeforeOrdinal int64  `json:"before_ordinal"`
+	PageLimit     int64  `json:"page_limit"`
+	RootBranches  string `json:"root_branches"`
+}
+
+type ListSourceEffectsAfterOrdinalOnBranchRow struct {
+	EffectID        string `json:"effect_id"`
+	ProjectID       string `json:"project_id"`
+	OperationID     string `json:"operation_id"`
+	FileID          string `json:"file_id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	RootID          string `json:"root_id"`
+	Path            string `json:"path"`
+	FromRootID      string `json:"from_root_id"`
+	FromPath        string `json:"from_path"`
+	Op              string `json:"op"`
+	EntryKind       string `json:"entry_kind"`
+	Ordinal         int64  `json:"ordinal"`
+	CreatedTs       string `json:"created_ts"`
+	BranchID        string `json:"branch_id"`
+	Origin          string `json:"origin"`
+	Cause           string `json:"cause"`
+	ActorLabel      string `json:"actor_label"`
+	SessionID       string `json:"session_id"`
+	JobID           string `json:"job_id"`
+	Turn            int64  `json:"turn"`
+	ToolCallID      string `json:"tool_call_id"`
+	ToolName        string `json:"tool_name"`
+	BatchID         string `json:"batch_id"`
+	CaptureQuality  string `json:"capture_quality"`
+	GitTransitionID string `json:"git_transition_id"`
+	CommandWindowID string `json:"command_window_id"`
+}
+
+// Each attached root admits only the branch given for it, trunk included, so
+// other branches neither fill nor truncate the page.
+func (q *Queries) ListSourceEffectsAfterOrdinalOnBranch(ctx context.Context, arg ListSourceEffectsAfterOrdinalOnBranchParams) ([]ListSourceEffectsAfterOrdinalOnBranchRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceEffectsAfterOrdinalOnBranch,
+		arg.ProjectID,
+		arg.Ordinal,
+		arg.BeforeOrdinal,
+		arg.PageLimit,
+		arg.RootBranches,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceEffectsAfterOrdinalOnBranchRow
+	for rows.Next() {
+		var i ListSourceEffectsAfterOrdinalOnBranchRow
+		if err := rows.Scan(
+			&i.EffectID,
+			&i.ProjectID,
+			&i.OperationID,
+			&i.FileID,
+			&i.BeforeVersionID,
+			&i.AfterVersionID,
+			&i.RootID,
+			&i.Path,
+			&i.FromRootID,
+			&i.FromPath,
+			&i.Op,
+			&i.EntryKind,
+			&i.Ordinal,
+			&i.CreatedTs,
+			&i.BranchID,
+			&i.Origin,
+			&i.Cause,
+			&i.ActorLabel,
+			&i.SessionID,
+			&i.JobID,
+			&i.Turn,
+			&i.ToolCallID,
+			&i.ToolName,
+			&i.BatchID,
+			&i.CaptureQuality,
+			&i.GitTransitionID,
+			&i.CommandWindowID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listSourceEffectsForBriefClass = `-- name: ListSourceEffectsForBriefClass :many
+SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
+       COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.root_id, e.path, e.from_root_id, e.from_path,
+       e.op, e.entry_kind, e.ordinal, e.created_ts,
+       o.branch_id, o.origin, o.cause, o.actor_label,
+       o.session_id, o.job_id, o.turn, o.tool_call_id, o.tool_name, o.batch_id, o.capture_quality,
+       COALESCE(o.git_transition_id, '') AS git_transition_id,
+       COALESCE(o.command_window_id, '') AS command_window_id
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND e.ordinal > ?2
+  AND e.walk_visible = 1
+  AND e.ordinal <= ?3
+  AND (o.branch_id = '' OR substr(o.branch_id, 1, 9) = 'worktree:')
+  AND (o.origin != 'agent' OR o.session_id != ?4)
+  AND (COALESCE(o.command_window_id, '') != '' AND o.session_id = ?4) = CAST(?5 AS INTEGER)
+ORDER BY e.ordinal DESC LIMIT ?6
+`
+
+type ListSourceEffectsForBriefClassParams struct {
+	ProjectID       string `json:"project_id"`
+	Ordinal         int64  `json:"ordinal"`
+	ThroughOrdinal  int64  `json:"through_ordinal"`
+	ViewerSessionID string `json:"viewer_session_id"`
+	DuringCommand   int64  `json:"during_command"`
+	PageLimit       int64  `json:"page_limit"`
+}
+
+type ListSourceEffectsForBriefClassRow struct {
+	EffectID        string `json:"effect_id"`
+	ProjectID       string `json:"project_id"`
+	OperationID     string `json:"operation_id"`
+	FileID          string `json:"file_id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	RootID          string `json:"root_id"`
+	Path            string `json:"path"`
+	FromRootID      string `json:"from_root_id"`
+	FromPath        string `json:"from_path"`
+	Op              string `json:"op"`
+	EntryKind       string `json:"entry_kind"`
+	Ordinal         int64  `json:"ordinal"`
+	CreatedTs       string `json:"created_ts"`
+	BranchID        string `json:"branch_id"`
+	Origin          string `json:"origin"`
+	Cause           string `json:"cause"`
+	ActorLabel      string `json:"actor_label"`
+	SessionID       string `json:"session_id"`
+	JobID           string `json:"job_id"`
+	Turn            int64  `json:"turn"`
+	ToolCallID      string `json:"tool_call_id"`
+	ToolName        string `json:"tool_name"`
+	BatchID         string `json:"batch_id"`
+	CaptureQuality  string `json:"capture_quality"`
+	GitTransitionID string `json:"git_transition_id"`
+	CommandWindowID string `json:"command_window_id"`
+}
+
+// One class of what a session's turn brief reads, so one class cannot fill the
+// other's page: the viewer's own command windows, or every other actor. Worker
+// branches and the viewer's own writes are in neither.
+func (q *Queries) ListSourceEffectsForBriefClass(ctx context.Context, arg ListSourceEffectsForBriefClassParams) ([]ListSourceEffectsForBriefClassRow, error) {
+	rows, err := q.db.QueryContext(ctx, listSourceEffectsForBriefClass,
+		arg.ProjectID,
+		arg.Ordinal,
+		arg.ThroughOrdinal,
+		arg.ViewerSessionID,
+		arg.DuringCommand,
+		arg.PageLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListSourceEffectsForBriefClassRow
+	for rows.Next() {
+		var i ListSourceEffectsForBriefClassRow
+		if err := rows.Scan(
+			&i.EffectID,
+			&i.ProjectID,
+			&i.OperationID,
+			&i.FileID,
+			&i.BeforeVersionID,
+			&i.AfterVersionID,
+			&i.RootID,
+			&i.Path,
+			&i.FromRootID,
+			&i.FromPath,
+			&i.Op,
+			&i.EntryKind,
+			&i.Ordinal,
+			&i.CreatedTs,
+			&i.BranchID,
+			&i.Origin,
+			&i.Cause,
+			&i.ActorLabel,
+			&i.SessionID,
+			&i.JobID,
+			&i.Turn,
+			&i.ToolCallID,
+			&i.ToolName,
+			&i.BatchID,
+			&i.CaptureQuality,
+			&i.GitTransitionID,
+			&i.CommandWindowID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSourceEffectsForFilePage = `-- name: ListSourceEffectsForFilePage :many
 SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(e.before_version_id, '') AS before_version_id,
@@ -2308,14 +2549,16 @@ SELECT e.id AS effect_id, e.project_id, e.operation_id, e.file_id,
        COALESCE(o.command_window_id, '') AS command_window_id
 FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
 WHERE e.project_id = ?1 AND e.file_id = ?2
-  AND e.ordinal > CAST(?3 AS INTEGER) AND e.walk_visible = 1
-  AND (CAST(?4 AS INTEGER) = 0 OR e.ordinal < CAST(?4 AS INTEGER))
-ORDER BY e.ordinal DESC LIMIT ?5
+  AND o.branch_id = ?3
+  AND e.ordinal > CAST(?4 AS INTEGER) AND e.walk_visible = 1
+  AND (CAST(?5 AS INTEGER) = 0 OR e.ordinal < CAST(?5 AS INTEGER))
+ORDER BY e.ordinal DESC LIMIT ?6
 `
 
 type ListSourceEffectsForFilePageParams struct {
 	ProjectID     string `json:"project_id"`
 	FileID        string `json:"file_id"`
+	BranchID      string `json:"branch_id"`
 	AfterOrdinal  int64  `json:"after_ordinal"`
 	BeforeOrdinal int64  `json:"before_ordinal"`
 	PageLimit     int64  `json:"page_limit"`
@@ -2355,6 +2598,7 @@ func (q *Queries) ListSourceEffectsForFilePage(ctx context.Context, arg ListSour
 	rows, err := q.db.QueryContext(ctx, listSourceEffectsForFilePage,
 		arg.ProjectID,
 		arg.FileID,
+		arg.BranchID,
 		arg.AfterOrdinal,
 		arg.BeforeOrdinal,
 		arg.PageLimit,
@@ -4024,6 +4268,56 @@ func (q *Queries) MarkSourceInventoryScanning(ctx context.Context, arg MarkSourc
 	return result.RowsAffected()
 }
 
+const oldestSourceEffectAtPathAfterOrdinalOnBranch = `-- name: OldestSourceEffectAtPathAfterOrdinalOnBranch :one
+SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.ordinal, e.from_root_id, e.from_path
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND o.branch_id = ?2
+  AND e.ordinal > ?3 AND e.walk_visible = 1
+  AND ((e.root_id = ?4 AND e.path = ?5)
+    OR (e.from_root_id = ?4 AND e.from_path = ?5))
+ORDER BY e.ordinal ASC LIMIT 1
+`
+
+type OldestSourceEffectAtPathAfterOrdinalOnBranchParams struct {
+	ProjectID string `json:"project_id"`
+	BranchID  string `json:"branch_id"`
+	Ordinal   int64  `json:"ordinal"`
+	RootID    string `json:"root_id"`
+	Path      string `json:"path"`
+}
+
+type OldestSourceEffectAtPathAfterOrdinalOnBranchRow struct {
+	ID              string `json:"id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	Ordinal         int64  `json:"ordinal"`
+	FromRootID      string `json:"from_root_id"`
+	FromPath        string `json:"from_path"`
+}
+
+// The first thing this branch recorded at a location past the ordinal, whichever
+// file held it, including a move away from it.
+func (q *Queries) OldestSourceEffectAtPathAfterOrdinalOnBranch(ctx context.Context, arg OldestSourceEffectAtPathAfterOrdinalOnBranchParams) (OldestSourceEffectAtPathAfterOrdinalOnBranchRow, error) {
+	row := q.db.QueryRowContext(ctx, oldestSourceEffectAtPathAfterOrdinalOnBranch,
+		arg.ProjectID,
+		arg.BranchID,
+		arg.Ordinal,
+		arg.RootID,
+		arg.Path,
+	)
+	var i OldestSourceEffectAtPathAfterOrdinalOnBranchRow
+	err := row.Scan(
+		&i.ID,
+		&i.BeforeVersionID,
+		&i.AfterVersionID,
+		&i.Ordinal,
+		&i.FromRootID,
+		&i.FromPath,
+	)
+	return i, err
+}
+
 const oldestSourceEffectForFileAfterOrdinal = `-- name: OldestSourceEffectForFileAfterOrdinal :one
 SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
        e.after_version_id, e.ordinal
@@ -4048,6 +4342,46 @@ type OldestSourceEffectForFileAfterOrdinalRow struct {
 func (q *Queries) OldestSourceEffectForFileAfterOrdinal(ctx context.Context, arg OldestSourceEffectForFileAfterOrdinalParams) (OldestSourceEffectForFileAfterOrdinalRow, error) {
 	row := q.db.QueryRowContext(ctx, oldestSourceEffectForFileAfterOrdinal, arg.ProjectID, arg.FileID, arg.Ordinal)
 	var i OldestSourceEffectForFileAfterOrdinalRow
+	err := row.Scan(
+		&i.ID,
+		&i.BeforeVersionID,
+		&i.AfterVersionID,
+		&i.Ordinal,
+	)
+	return i, err
+}
+
+const oldestSourceEffectForFileAfterOrdinalOnBranch = `-- name: OldestSourceEffectForFileAfterOrdinalOnBranch :one
+SELECT e.id, COALESCE(e.before_version_id, '') AS before_version_id,
+       e.after_version_id, e.ordinal
+FROM source_effects e JOIN source_operations o ON o.id = e.operation_id
+WHERE e.project_id = ?1 AND e.file_id = ?2
+  AND o.branch_id = ?3 AND e.ordinal > ?4 AND e.walk_visible = 1
+ORDER BY e.ordinal ASC LIMIT 1
+`
+
+type OldestSourceEffectForFileAfterOrdinalOnBranchParams struct {
+	ProjectID string `json:"project_id"`
+	FileID    string `json:"file_id"`
+	BranchID  string `json:"branch_id"`
+	Ordinal   int64  `json:"ordinal"`
+}
+
+type OldestSourceEffectForFileAfterOrdinalOnBranchRow struct {
+	ID              string `json:"id"`
+	BeforeVersionID string `json:"before_version_id"`
+	AfterVersionID  string `json:"after_version_id"`
+	Ordinal         int64  `json:"ordinal"`
+}
+
+func (q *Queries) OldestSourceEffectForFileAfterOrdinalOnBranch(ctx context.Context, arg OldestSourceEffectForFileAfterOrdinalOnBranchParams) (OldestSourceEffectForFileAfterOrdinalOnBranchRow, error) {
+	row := q.db.QueryRowContext(ctx, oldestSourceEffectForFileAfterOrdinalOnBranch,
+		arg.ProjectID,
+		arg.FileID,
+		arg.BranchID,
+		arg.Ordinal,
+	)
+	var i OldestSourceEffectForFileAfterOrdinalOnBranchRow
 	err := row.Scan(
 		&i.ID,
 		&i.BeforeVersionID,

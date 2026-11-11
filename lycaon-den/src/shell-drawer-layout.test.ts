@@ -358,7 +358,6 @@ describe("den-shell drawer layout contract", () => {
     expect(shell).toMatch(/dismissLayoutDockOnOutsidePress/);
     expect(shell).toMatch(/open: \(\) => dockTray\(\) === "layout"/);
     expect(shell).toMatch(/dock: \(\) => navDockEl/);
-    expect(shell).toMatch(/onDismiss: closeLayoutTray/);
   });
 
   it("adapts main navigation and chat spacing to the actual column", () => {

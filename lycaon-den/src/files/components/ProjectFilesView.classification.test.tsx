@@ -48,7 +48,7 @@ async function mount(
     }),
     ...overrides, getProjectSource };
   render(() => <ProjectFilesView projectId={PROJECT} appStore={appStore} roots={ROOTS} client={client} />);
-  await waitFor(() => expect(screen.getByTestId("project-files-stage-boundary").dataset.ready).toBe("true"), { timeout: 5000 });
+  await waitFor(() => expect(screen.getByTestId("project-files-stage-boundary").dataset.ready).toBe("true"));
   return client;
 }
 

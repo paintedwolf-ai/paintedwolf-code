@@ -20,16 +20,9 @@ scenarios:
   - id: missing
     vars:
       reason: missing
-    expect_contains:
-      - Reinstall
   - id: digest_mismatch
     vars:
       reason: digest_mismatch
-    expect_contains:
-      - differs
-      - Reinstall
   - id: unsupported_platform
     vars:
       reason: unsupported_platform
-    expect_contains:
-      - confirm

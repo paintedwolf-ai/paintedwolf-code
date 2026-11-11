@@ -28,7 +28,7 @@ func (f PolicyFeedback) Clone() PolicyFeedback {
 
 // RenderPolicyCopy formats the copy already evaluated at the occurrence.
 // [OAR-COPY-1] Its templates are not re-evaluated against later host state.
-func RenderPolicyCopy(ctx context.Context, code, effect string, copy map[string]string) (string, error) {
+func RenderPolicyCopy(ctx context.Context, code, effect string, copy map[string]string, details map[string]any) (string, error) {
 	what := copy["what"]
 	if what == "" {
 		what = copy["title"]
@@ -41,6 +41,7 @@ func RenderPolicyCopy(ctx context.Context, code, effect string, copy map[string]
 	}
 	return RenderGuidance(ctx, "reject/_reject", map[string]any{
 		"code": code, "effect": effect, "category": "", "what": what,
-		"cause": copy["cause"], "why": copy["why"], "fix": copy["fix"], "instead": copy["instead"],
+		"execution": commandRecoveryView(details),
+		"cause":     copy["cause"], "why": copy["why"], "fix": copy["fix"], "instead": copy["instead"],
 	})
 }

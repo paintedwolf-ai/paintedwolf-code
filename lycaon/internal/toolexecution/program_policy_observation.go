@@ -2,10 +2,7 @@ package toolexecution
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"math"
-	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
@@ -37,30 +34,34 @@ func programModelArguments(ctx context.Context, frame ProgramFrame, admission *t
 	if admission == nil {
 		return nil, nil, fmt.Errorf("program observation requires state admission")
 	}
+	end, err := frame.beginUse()
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() {
+		if end != nil {
+			end()
+		}
+	}()
 	model, err := frame.ModelInvocation(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
-	if model.ToolName != "command" || model.ToolCallID != tc.Identity.ToolCallID {
+	if !programModelTool(model.ToolName) || model.ToolCallID != tc.Identity.ToolCallID {
 		return nil, nil, fmt.Errorf("program observation model call changed")
 	}
-	if int64(len(model.CanonicalArguments)) > (math.MaxInt64-4096)/32 {
-		return nil, nil, fmt.Errorf("program observation state bound overflow")
-	}
-	release, err := admission.ReserveProgramState(ctx, int64(len(model.CanonicalArguments))*32+4096)
+	frame.lifetime.mu.Lock()
+	values := frame.lifetime.arguments.values
+	frame.lifetime.mu.Unlock()
+	snapshot, err := prepareNativeArguments(ctx, admission, values)
 	if err != nil {
 		return nil, nil, err
 	}
-	var submitted map[string]any
-	decoder := json.NewDecoder(strings.NewReader(model.CanonicalArguments))
-	decoder.UseNumber()
-	if err := decoder.Decode(&submitted); err != nil || submitted == nil {
-		release()
-		return nil, nil, fmt.Errorf("captured model invocation is not an argument object")
-	}
-	return submitted, release, nil
+	finish := end
+	end = nil
+	return snapshot.values, func() { snapshot.close(); finish() }, nil
 }
 
 func (p *programPolicyObservation) evaluate(ctx context.Context, bp *toolfeedback.BlockPlane, anchor, profile string) error {
-	return bp.EvaluateProgram(ctx, anchor, profile, p.submitted, p.operation, p.frame.retainProgramFacts)
+	return bp.EvaluateProgram(ctx, anchor, p.frame.lifetime.model.ToolName, profile, p.submitted, p.operation, p.frame.retainProgramFacts)
 }

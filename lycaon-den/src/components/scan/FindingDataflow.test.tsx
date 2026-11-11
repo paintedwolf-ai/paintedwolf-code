@@ -7,8 +7,6 @@ describe("FindingDataflow", () => {
     render(() => <FindingDataflow flow={{
       sink: { location: { uri: "app.py", start_line: 7 }, callee: { location: { uri: "helper.py", start_line: 2 } } },
     }} />);
-    expect(screen.queryByText("Source")).toBeNull();
-    expect(screen.getByText("Sink")).toBeTruthy();
     expect(screen.getByText("app.py:7")).toBeTruthy();
     expect(screen.getByText("helper.py:2")).toBeTruthy();
   });

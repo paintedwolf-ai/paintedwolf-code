@@ -1,0 +1,4 @@
+steps:
+  - tool: "pack_board"
+    complete: true
+    say: "Use {{ call }} to inspect the worker."

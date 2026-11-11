@@ -61,7 +61,7 @@ func (p ProviderHTTPRetry) TransportPolicy() ProviderTransportRetry {
 
 func (t ProviderTransportRetry) Covers(kind FaultKind) bool {
 	if len(t.Faults) == 0 {
-		return kind == FaultUnreachable || kind == FaultSilent || kind == FaultEmptyCompletion
+		return kind == FaultUnreachable || kind == FaultSilent || kind == FaultEmptyCompletion || kind == FaultInterrupted
 	}
 	for _, f := range t.Faults {
 		if f == kind {
@@ -227,9 +227,9 @@ func validateHTTPRetryTransport(t *ProviderTransportRetry) error {
 		return fmt.Errorf("http_retry.transport.max_retries must be >= 0")
 	}
 	for _, f := range t.Faults {
-		if f != FaultUnreachable && f != FaultSilent && f != FaultEmptyCompletion {
-			return fmt.Errorf("http_retry.transport.faults: %q is not a response retry fault (want %q, %q, or %q)",
-				f, FaultUnreachable, FaultSilent, FaultEmptyCompletion)
+		if f != FaultUnreachable && f != FaultSilent && f != FaultEmptyCompletion && f != FaultInterrupted {
+			return fmt.Errorf("http_retry.transport.faults: %q is not a response retry fault (want %q, %q, %q, or %q)",
+				f, FaultUnreachable, FaultSilent, FaultEmptyCompletion, FaultInterrupted)
 		}
 	}
 	if t.MaxRetries == 0 {
@@ -271,7 +271,7 @@ func ShouldRetryFault(policy ProviderHTTPRetry, attempt int, fault Fault) bool {
 		return false
 	case FaultModelRefused:
 		return false
-	case FaultUnreachable, FaultSilent, FaultEmptyCompletion:
+	case FaultUnreachable, FaultSilent, FaultEmptyCompletion, FaultInterrupted:
 		t := policy.TransportPolicy()
 		if !t.Covers(fault.Kind) {
 			return false

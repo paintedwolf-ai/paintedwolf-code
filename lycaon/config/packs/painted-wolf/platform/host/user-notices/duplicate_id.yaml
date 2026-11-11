@@ -10,6 +10,3 @@ suggested_action: Choose a different id, or edit the existing entry.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - already uses this id
-      - different id

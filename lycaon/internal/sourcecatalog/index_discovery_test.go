@@ -28,7 +28,7 @@ func TestForegroundDirectoryCompletesWhileBulkDirectoryWorkerIsHeld(t *testing.T
 	})
 	testutil.FailErr(t, "hold bulk directory worker", err)
 	defer hold()
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {

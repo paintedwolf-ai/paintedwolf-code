@@ -49,7 +49,7 @@ func captureLLMComplete(providerID string, profile providerprofile.Profile, req 
 		TTFTMs:     elapsed,
 	}, usage, observability.LLMRequestDebug{
 		CallID:            req.Debug.CallID,
-		ReasoningRecovery: req.StrictBudget,
+		ReasoningRecovery: req.ReasoningRecovery,
 		RequestControls:   req.ControlCapture.Snapshot(),
 		EmptyCompletion:   captureEmptyCompletion(err),
 		SessionID:         req.Debug.SessionID,
@@ -91,8 +91,14 @@ func captureLLMStream(ctx context.Context, providerID string, profile providerpr
 		var content strings.Builder
 		var toolCalls []api.ToolCall
 		var streamErr error
+		var abandoned bool
 		var reasoning reasoningCapture
 		for chunk := range ch {
+			if chunk.ResetAttempt() {
+				content.Reset()
+				toolCalls = nil
+				reasoning.reset()
+			}
 			reasoning.append(chunk.Reasoning)
 			if chunk.Err != nil {
 				streamErr = chunk.Err
@@ -121,6 +127,7 @@ func captureLLMStream(ctx context.Context, providerID string, profile providerpr
 			}
 			if !modelcall.SendChunk(ctx, out, chunk) {
 				// Drain abandoned streams before recording the partial response.
+				abandoned = true
 				modelcall.DrainStream(ch)
 				break
 			}
@@ -134,7 +141,7 @@ func captureLLMStream(ctx context.Context, providerID string, profile providerpr
 			Present:                    usage.Present,
 			Incomplete:                 usage.Incomplete,
 			CacheCreation1HInputTokens: usage.CacheCreation1HInputTokens,
-		}, start, streamErr != nil || ctx.Err() != nil)
+		}, start, streamErr != nil || abandoned)
 		logStreamCapture(providerID, req, start, ttftMs, usage, summary, streamErr)
 	}()
 	return out, nil
@@ -151,7 +158,7 @@ func logStreamCapture(providerID string, req modelcall.CompletionRequest, start 
 		TTFTMs:     ttftMs,
 	}, usage, observability.LLMRequestDebug{
 		CallID:            req.Debug.CallID,
-		ReasoningRecovery: req.StrictBudget,
+		ReasoningRecovery: req.ReasoningRecovery,
 		RequestControls:   req.ControlCapture.Snapshot(),
 		EmptyCompletion:   captureEmptyCompletion(responseErr),
 		SessionID:         req.Debug.SessionID,

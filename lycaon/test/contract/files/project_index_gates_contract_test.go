@@ -16,7 +16,7 @@ func TestNativeToolsBeforeMultiRootSandbox(t *testing.T) {
 	// Multi-root sandbox depends on native path tools — boot registry must expose them.
 	reg := toolfixture.ContractServeBootRegistry(t)
 	registered := toolfixture.BootRegisteredToolSet(t, reg)
-	for _, tool := range []string{"read", "grep", "find", "list_dir", "command"} {
+	for _, tool := range []string{"command", "code_rewrite", "summarize", "survey_repo"} {
 		if !registered[tool] {
 			t.Fatalf("native tool %q must be registered before multi-root sandbox", tool)
 		}

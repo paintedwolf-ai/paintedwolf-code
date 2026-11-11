@@ -8,7 +8,6 @@ tools:
   command: sticky
   summarize: sticky
   survey_repo: sticky
-  edit: sticky
   update_progress: true
 deny_tools:
   - verify

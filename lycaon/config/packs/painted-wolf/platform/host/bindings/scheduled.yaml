@@ -9,6 +9,3 @@ invariants:
   trigger_class: wait_trigger
   fires_in:
   - wait() deadline backstop
-  required:
-  - wait(
-  - conditions

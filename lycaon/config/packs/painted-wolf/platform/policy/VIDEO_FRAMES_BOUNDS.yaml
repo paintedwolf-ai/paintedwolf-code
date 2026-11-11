@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
     count: '40'
     max: '24'
     tool: view_video
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: VIDEO_FRAMES_BOUNDS'

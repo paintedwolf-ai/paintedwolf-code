@@ -18,7 +18,7 @@ export function optionNeedsPresence(checkpoint: PendingCheckpoint, optionId: str
 }
 
 export async function resolveToolApproval(
-  client: LycaonClient,
+  client: Pick<LycaonClient, "resolveCheckpoint">,
   checkpoint: PendingCheckpoint,
   action: "approve" | "reject",
   options?: {
@@ -55,7 +55,7 @@ export async function resolveToolApproval(
 }
 
 export async function resolveContentApply(
-  client: LycaonClient,
+  client: Pick<LycaonClient, "resolveCheckpoint">,
   checkpoint: PendingCheckpoint,
   decision: ContentApplyDecision,
   opts?: {

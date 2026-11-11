@@ -1,0 +1,4 @@
+steps:
+  - program: ["ps"]
+    complete: true
+    say: "Run {{ call }} again and review the new exact target."

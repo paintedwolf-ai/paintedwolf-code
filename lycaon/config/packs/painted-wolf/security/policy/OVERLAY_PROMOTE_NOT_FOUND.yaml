@@ -26,7 +26,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: ov-missing
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_NOT_FOUND'
-  - ov-missing

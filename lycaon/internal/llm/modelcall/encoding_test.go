@@ -16,13 +16,13 @@ import (
 func TestInternalAttemptControlsStayOutOfEncodedRequests(t *testing.T) {
 	request := CompletionRequest{
 		Model: "fixture", MaxTokens: 73,
-		Messages:     []api.Message{{Role: api.MessageRoleUser, Content: "hello"}},
-		StrictBudget: true, AttemptBudget: &CompletionBudget{Strict: true, MaxTokens: 91, CanReduceReasoning: true},
+		Messages:          []api.Message{{Role: api.MessageRoleUser, Content: "hello"}},
+		ReasoningRecovery: true, AttemptBudget: &CompletionBudget{ReducedReasoning: true, MaxTokens: 91, CanReduceReasoning: true},
 		ThinkingOverride:      &ThinkingOverride{Mode: "fixed", Effort: "high"},
 		ThinkingOverrideStyle: modelinfo.ThinkStyleEffortLevels,
 		ControlCapture:        &RequestControlCapture{},
 	}
-	chunk := StreamChunk{ResetReasoning: true, Content: "delta", Reasoning: "reason", Done: true}
+	chunk := StreamChunk{Reset: true, ResetReasoning: true, ReasoningPresent: true, Content: "delta", Reasoning: "reason", Done: true}
 	for _, codec := range []struct {
 		name   string
 		encode func(any) ([]byte, error)

@@ -12,7 +12,7 @@ import (
 // FindingsNeedingConfirmation returns absent findings a covering scan re-checks.
 // Absence recorded without coverage or under another execution identity stays
 // eligible for confirmation without counting as an open finding.
-func (s *SQLStore) FindingsNeedingConfirmation(ctx context.Context, job *api.CodeScan) (map[string]api.SecurityFinding, error) {
+func (s *sqlFindingStore) FindingsNeedingConfirmation(ctx context.Context, job *api.CodeScan) (map[string]api.SecurityFinding, error) {
 	if job.ExecutionFingerprint == "" || !(job.CoverageStatus == api.ScanCoverageComplete ||
 		(job.TargetKind == api.ScanTargetPaths && job.CoverageStatus == api.ScanCoverageBounded)) {
 		return nil, nil

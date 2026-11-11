@@ -27,6 +27,7 @@ export function NoProviderCard(props: Props) {
     <SystemNudge
       testId="no-provider-banner"
       role="status"
+      titleTestId={props.gap === "no_default_model" ? "no-provider-title-model" : "no-provider-title-provider"}
       title={copy().title}
       description={copy().body}
       primaryAction={{

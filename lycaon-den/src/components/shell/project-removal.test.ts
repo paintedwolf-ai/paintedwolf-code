@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ProjectRemovalAssessment, ProjectRemovalRequest, ProjectRemovalResult } from "../../api/types.ts";
+import type { ProjectBackgroundProcess, ProjectRemovalAssessment, ProjectRemovalRequest, ProjectRemovalResult } from "../../api/types.ts";
 import { LycaonApiError } from "../../api/http.ts";
 import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
 import { createProjectRemoval } from "./project-removal.ts";
@@ -10,7 +10,7 @@ const assessment: ProjectRemovalAssessment = {project_id:"p", assessment_token:"
 const result: ProjectRemovalResult = {operation_id:"op",project_id:"p",project_state:"deleted",cleanup_state:"removed",extensions:["acme/one"],reason:"",failure_code:"",documents:0,sessions:0,workers:0,overlays:0};
 function setup() {
   let id = 0;
-  const client = {assessProjectRemoval:vi.fn(async(_id: string)=>assessment),createProjectRemoval:vi.fn(async(_id: string, _request: ProjectRemovalRequest)=>result),getProjectRemoval:vi.fn(async(_id: string, _operationId: string)=>result)};
+  const client = {assessProjectRemoval:vi.fn(async(_id: string)=>assessment),createProjectRemoval:vi.fn(async(_id: string, _request: ProjectRemovalRequest)=>result),getProjectRemoval:vi.fn(async(_id: string, _operationId: string)=>result),listProjectBackgroundProcesses:vi.fn(async(_id: string)=>({processes:[] as ProjectBackgroundProcess[],revision:1}))};
   const confirm = vi.fn(async(_request: import("../../platform/interaction/confirm-dialog.ts").ConfirmDestructiveRequest)=>true);
   const review = vi.fn(async (_assessment: ProjectRemovalAssessment | null): Promise<string[] | null> => ["acme/one"]);
   const prepare = vi.fn(async()=>{});
@@ -100,6 +100,53 @@ describe("project removal controller",()=>{
   it("requires a fresh review after the host rejects stale evidence",async()=>{
     const f=setup();f.client.createProjectRemoval.mockRejectedValueOnce(new LycaonApiError("stale",409,"project_removal_assessment_changed"));await f.remove("p");await f.remove("p");
     expect(f.client.assessProjectRemoval).toHaveBeenCalledTimes(2);expect(f.client.getProjectRemoval).not.toHaveBeenCalled();
+  });
+  it("lists running commands on busy project removal and refreshes review if the running set changes before admission", async () => {
+    const f = setup();
+    const bg1 = {
+      process_id: "bg_1",
+      project_id: "p",
+      session_id: "s-1",
+      session_title: "Chat 1",
+      session_archived: false,
+      command: "python3 -m http.server 8000",
+      working_dir: ".",
+      started_at: "2026-10-30T12:00:00Z",
+      running: true,
+      ports: ["127.0.0.1:8000"],
+    };
+    const bg2 = {
+      ...bg1,
+      process_id: "bg_2",
+      command: "npm run dev",
+      ports: ["127.0.0.1:5173"],
+    };
+    f.client.assessProjectRemoval.mockResolvedValueOnce({ ...assessment, background_processes: [bg1] });
+    f.client.listProjectBackgroundProcesses
+      .mockResolvedValueOnce({ processes: [bg1, bg2], revision: 1 })
+      .mockResolvedValueOnce({ processes: [bg1, bg2], revision: 2 })
+      .mockResolvedValueOnce({ processes: [bg1, bg2], revision: 2 });
+    f.review.mockResolvedValue(["acme/one"]);
+    f.client.createProjectRemoval
+      .mockResolvedValueOnce({
+        ...result,
+        project_state: "retained",
+        cleanup_state: "retained",
+        failure_code: "root_busy",
+        background_processes: [bg1, bg2],
+      })
+      .mockResolvedValueOnce(result);
+    await f.remove("p");
+    expect(f.review).toHaveBeenCalledTimes(2);
+    expect(f.confirm).toHaveBeenCalledWith(
+      expect.objectContaining({
+        message: expect.stringContaining("python3 -m http.server 8000 (127.0.0.1:8000) — Chat 1"),
+      }),
+    );
+    expect(f.client.createProjectRemoval).toHaveBeenLastCalledWith(
+      "p",
+      expect.objectContaining({ force: true }),
+    );
   });
 });
 

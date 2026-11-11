@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/inference"
 	"github.com/lycaon/lycaon/internal/observability"
 )
 
@@ -52,15 +53,51 @@ type Client struct {
 	started bool
 	engine  decide.Engine
 	// starting is closed when the start in flight finishes; nil when none is.
-	starting chan struct{}
-	startErr error
+	starting    chan struct{}
+	startCancel context.CancelFunc
+	startErr    error
 	// generation advances on Close, so a start that finishes after it stops its
 	// own process instead of installing it.
 	generation int
 	incapable  bool
 	noGPU      bool
-	// warmErr is the last handshake failure; cleared once an engine answers.
-	warmErr error
+	// fault is the last handshake failure the hardware does not explain, and
+	// faultHold is when the engine may launch again; faults in a row lengthen
+	// the hold. Both clear once an engine answers.
+	fault     error
+	faultHold time.Time
+	faults    int
+	now       func() time.Time
+}
+
+const (
+	// faultHoldFirst is the hold after one handshake fault.
+	faultHoldFirst = 30 * time.Second
+	// faultHoldMax caps the hold however many faults follow.
+	faultHoldMax = 10 * time.Minute
+)
+
+// faultHoldFor doubles the hold with each fault in a row, up to the cap.
+func faultHoldFor(faults int) time.Duration {
+	hold := faultHoldFirst
+	for i := 1; i < faults && hold < faultHoldMax; i++ {
+		hold *= 2
+	}
+	return min(hold, faultHoldMax)
+}
+
+func (c *Client) clock() time.Time {
+	if c.now != nil {
+		return c.now()
+	}
+	return time.Now()
+}
+
+// SetClockForTest replaces the clock the relaunch hold is measured on.
+func (c *Client) SetClockForTest(now func() time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = now
 }
 
 // Reason says why the engine cannot answer; empty when it can.
@@ -94,7 +131,7 @@ func (c *Client) Status() Reason {
 	if c.incapable {
 		return ReasonNoCapableDevice
 	}
-	if c.warmErr != nil && !c.started {
+	if c.fault != nil && !c.started {
 		return ReasonUnusable
 	}
 	return ""
@@ -145,43 +182,7 @@ func (c *Client) Loaded(head decide.Head) bool {
 // does not pay for weight loading.
 func (c *Client) Warm(ctx context.Context) error {
 	_, err := c.ensure(ctx)
-	c.mu.Lock()
-	c.warmErr = err
-	c.mu.Unlock()
 	return err
-}
-
-// Decide answers every question over state in one engine call of head.
-func (c *Client) Decide(ctx context.Context, head decide.Head, state any, questions map[string]decide.Question) (decide.Result, error) {
-	if len(questions) == 0 {
-		return decide.Result{Engine: c.Engine()}, nil
-	}
-	started := time.Now()
-	resp, err := c.call(ctx, request{Method: methodDecide, Head: head, State: state, Questions: questions})
-	if err != nil {
-		return decide.Result{}, err
-	}
-	for id := range questions {
-		if _, ok := resp.Answers[id]; !ok {
-			return decide.Result{}, fmt.Errorf("%w: no answer for %q", decide.ErrEngine, id)
-		}
-	}
-	return decide.Result{Answers: resp.Answers, Engine: c.Engine(), Elapsed: time.Since(started)}, nil
-}
-
-// Rank scores candidates against task with the named head.
-func (c *Client) Rank(ctx context.Context, head decide.Head, task string, candidates []string) ([]float64, decide.Engine, error) {
-	if len(candidates) == 0 {
-		return nil, c.Engine(), nil
-	}
-	resp, err := c.call(ctx, request{Method: methodRank, Head: head, Task: task, Candidates: candidates})
-	if err != nil {
-		return nil, decide.Engine{}, err
-	}
-	if len(resp.Scores) != len(candidates) {
-		return nil, decide.Engine{}, fmt.Errorf("%w: %d scores for %d candidates", decide.ErrEngine, len(resp.Scores), len(candidates))
-	}
-	return resp.Scores, c.Engine(), nil
 }
 
 // Close stops the engine process.
@@ -190,24 +191,24 @@ func (c *Client) Close() error {
 		return nil
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if c.proc != nil {
-		c.proc.stop()
-		c.proc = nil
-	}
+	proc, starting, cancel := c.proc, c.starting, c.startCancel
+	c.proc = nil
 	c.started = false
 	c.generation++
+	c.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	if proc != nil {
+		proc.stop()
+	}
+	if starting != nil {
+		<-starting
+	}
 	return nil
 }
 
-func (c *Client) call(ctx context.Context, req request) (response, error) {
-	if err := ctx.Err(); err != nil {
-		return response{}, err
-	}
-	proc, err := c.ensure(ctx)
-	if err != nil {
-		return response{}, err
-	}
+func (c *Client) exchange(ctx context.Context, proc *process, req request) (response, error) {
 	req.ID = c.seq.Add(1)
 	resp, err := proc.roundTrip(ctx, req)
 	if err != nil {
@@ -255,6 +256,11 @@ func (c *Client) ensure(ctx context.Context) (*process, error) {
 		c.mu.Unlock()
 		return nil, ErrNoCapableDevice
 	}
+	if c.starting == nil && c.fault != nil && c.clock().Before(c.faultHold) {
+		err := c.fault
+		c.mu.Unlock()
+		return nil, err
+	}
 	if c.starting == nil {
 		bin := c.cfg.Resolve()
 		if bin == "" {
@@ -266,7 +272,12 @@ func (c *Client) ensure(ctx context.Context) (*process, error) {
 			return nil, fmt.Errorf("%w: checkpoint not installed at %q", decide.ErrUnavailable, c.cfg.ModelDir)
 		}
 		c.starting = make(chan struct{})
-		go c.start(context.WithoutCancel(ctx), bin, c.starting, c.generation)
+		startCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), startTimeout)
+		c.startCancel = cancel
+		go func(done chan struct{}, generation int) {
+			defer cancel()
+			c.start(startCtx, bin, done, generation)
+		}(c.starting, c.generation)
 	}
 	starting := c.starting
 	c.mu.Unlock()
@@ -295,6 +306,7 @@ func (c *Client) start(ctx context.Context, bin string, done chan struct{}, gene
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.starting = nil
+	c.startCancel = nil
 	if generation != c.generation {
 		if proc != nil {
 			proc.stop()
@@ -314,8 +326,19 @@ func (c *Client) start(ctx context.Context, bin string, done chan struct{}, gene
 		return
 	}
 	if err != nil {
+		c.faults++
+		c.fault = err
+		hold := faultHoldFor(c.faults)
+		c.faultHold = c.clock().Add(hold)
+		var exit *EngineExitError
+		if errors.As(err, &exit) {
+			log.Warn("decision engine exited during handshake; decisions fall back", "status", exit.Status, "stderr", exit.Stderr, "faults", c.faults, "hold", hold)
+		} else {
+			log.Warn("decision engine handshake failed; decisions fall back", "error", err, "faults", c.faults, "hold", hold)
+		}
 		return
 	}
+	c.fault, c.faults = nil, 0
 	c.engine = engine
 	c.proc = proc
 	c.started = true
@@ -323,8 +346,13 @@ func (c *Client) start(ctx context.Context, bin string, done chan struct{}, gene
 }
 
 func (c *Client) handshake(ctx context.Context, bin string) (*process, decide.Engine, error) {
-	proc, err := startProcess(ctx, bin, c.cfg.Args())
+	grant, err := c.cfg.Resources.acquire(ctx)
 	if err != nil {
+		return nil, decide.Engine{}, err
+	}
+	proc, err := startProcess(ctx, bin, c.cfg.Args(), grant)
+	if err != nil {
+		grant.release()
 		return nil, decide.Engine{}, err
 	}
 	helloCtx, cancel := context.WithTimeout(ctx, startTimeout)
@@ -343,6 +371,15 @@ func (c *Client) handshake(ctx context.Context, bin string) (*process, decide.En
 	if hello.Engine == nil {
 		proc.stop()
 		return nil, decide.Engine{}, fmt.Errorf("%w: handshake carried no engine identity", decide.ErrEngine)
+	}
+	if grant != nil {
+		device, err := c.cfg.Resources.Devices.Bind(hello.PhysicalDevice)
+		if err != nil || device != grant.device {
+			proc.stop()
+			return nil, decide.Engine{}, fmt.Errorf("decide: runtime physical device mismatch: %w", inference.ErrIdentity)
+		}
+		proc.device = device
+		grant.permit.Complete()
 	}
 	return proc, *hello.Engine, nil
 }

@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -15,12 +16,17 @@ type scriptStep struct {
 	text  string
 	calls []api.ToolCall
 	err   error
+	once  bool
 }
 
 func textStep(text string) scriptStep { return scriptStep{text: text} }
 
 // errStep injects a failure at its scripted round.
 func errStep(err error) scriptStep { return scriptStep{err: err} }
+
+// errOnce injects a failure a single time; later rounds of the same step
+// succeed, modeling a provider that accepts the prompt once the host re-fits it.
+func errOnce(err error) scriptStep { return scriptStep{err: err, once: true} }
 
 func toolStep(text string, calls ...api.ToolCall) scriptStep {
 	return scriptStep{text: text, calls: calls}
@@ -43,10 +49,11 @@ func call(id, name string, args map[string]any) api.ToolCall {
 type scriptedLLM struct {
 	mu    sync.Mutex
 	steps map[string][]scriptStep
+	fired map[string]bool
 }
 
 func newScriptedLLM() *scriptedLLM {
-	return &scriptedLLM{steps: map[string][]scriptStep{}}
+	return &scriptedLLM{steps: map[string][]scriptStep{}, fired: map[string]bool{}}
 }
 
 func (s *scriptedLLM) on(marker string, steps ...scriptStep) *scriptedLLM {
@@ -127,7 +134,15 @@ func (s *scriptedLLM) pick(marker string, round int) *scriptStep {
 	if round < 0 || round >= len(steps) {
 		return nil
 	}
-	return &steps[round]
+	step := &steps[round]
+	if step.once {
+		key := marker + "\x00" + strconv.Itoa(round)
+		if s.fired[key] {
+			return nil
+		}
+		s.fired[key] = true
+	}
+	return step
 }
 
 // scriptUsage reports a fixed non-zero token count so cost tracking has

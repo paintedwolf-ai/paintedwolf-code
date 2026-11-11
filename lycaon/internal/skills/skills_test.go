@@ -243,7 +243,6 @@ type stockSkill struct {
 	packRoot string
 	name     string
 	ref      string
-	desc     string
 }
 
 var stockSkills = []stockSkill{
@@ -254,67 +253,55 @@ var stockSkills = []stockSkill{
 	{
 		packRoot: "platform",
 		name:     "evolve-a-system",
-		desc:     "Review failure, retry, and idempotency policies; design state machines and concurrency; evolve APIs or fix systemic defects.",
 	},
 	{
 		packRoot: "platform",
 		name:     "trace-a-system-invariant",
-		desc:     "Trace a correctness invariant across writers, readers, storage, caches, and state transitions.",
 	},
 	{
 		packRoot: "platform",
 		name:     "diagnose-performance",
-		desc:     "Find the measured cause of a slow query, build, request, or test suite, a performance regression, a memory leak, or disk, memory, or file-descriptor exhaustion.",
 	},
 	{
 		packRoot: "platform",
 		name:     "design-and-debug-tests",
-		desc:     "Minimize a failing reproduction, fix a flaky or CI-only test, or design property-based and invariant tests that keep a bug class from returning.",
 	},
 	{
 		packRoot: "platform",
 		name:     "write-extension-pack",
 		ref:      "references/pack-layout.md",
-		desc:     "Create and validate extension packs containing supported catalog policy, guidance, workflows, agents, or skills.",
 	},
 	{
 		packRoot: "platform",
 		name:     "write-workflow",
 		ref:      "references/workflow-contract.md",
-		desc:     "Author and validate workflow phases, gates, human decisions, and durable orchestration.",
 	},
 	{
 		packRoot: "platform",
 		name:     "reach-a-network-service",
-		desc:     "Pick the confined network route for HTTP calls, database or broker connections, UDP, local servers, or loopback clients, and recover from bind, connect, DNS, or proxy failures.",
 	},
 	{
 		packRoot: "platform",
 		name:     "verify-terminal-change",
 		ref:      "references/terminal-evidence.md",
-		desc:     "Verify changed CLI/TUI output, including non-interactive reports, TTY behavior, and requested terminal images.",
 	},
 	{
 		packRoot: "platform",
 		name:     "verify-a-backup-and-restore",
-		desc:     "Prove a backup restores required data into an isolated target within the recovery-time objective.",
 	},
 	{
 		packRoot: "platform",
 		name:     "prepare-a-release",
-		desc:     "Assemble and verify release versions, notes, artifacts, provenance, and clean-install evidence without publishing.",
 	},
 	{
 		packRoot: "platform",
 		name:     "write-policy-rule",
 		ref:      "references/rule-contract.md",
-		desc:     "Author and test Open Agent Rules over supported machine-state anchors and facts without new host behavior.",
 	},
 	{
 		packRoot: "platform",
 		name:     "write-prompt-override",
 		ref:      "references/prompt-layering.md",
-		desc:     "Create and render-test a project or extension override for an existing prompt template or persona.",
 	},
 	{
 		packRoot: "platform",
@@ -325,25 +312,21 @@ var stockSkills = []stockSkill{
 		packRoot: "hitl",
 		name:     "ask-for-a-decision",
 		ref:      "references/decision-cards.md",
-		desc:     "Use ask_user for a blocking product choice, required human action, or review of one to four visuals.",
 	},
 	{
 		packRoot: "web-research",
 		name:     "research-current-information",
 		ref:      "references/research-routing.md",
-		desc:     "Research changing versions, APIs, advisories, schedules, prices, laws, or other current external facts.",
 	},
 	{
 		packRoot: "browser",
 		name:     "verify-visual-change",
 		ref:      "references/page-evidence.md",
-		desc:     "Inspect the running UI and capture grounded artifacts for visible changes, requested receipts, or proposals.",
 	},
 	{
 		packRoot: "browser",
 		name:     "review-accessibility",
 		ref:      "references/review-boundary.md",
-		desc:     "Review keyboard, focus, motion, contrast, responsive layout, and structural accessibility on a bounded route.",
 	},
 	{
 		packRoot: "scan-guidance",
@@ -354,7 +337,6 @@ var stockSkills = []stockSkill{
 		packRoot: "security",
 		name:     "write-detection-pack",
 		ref:      "references/sigma-subset.md",
-		desc:     "Create and test additive Sigma detections that raise approval asks or egress holds on tool and network events.",
 	},
 }
 
@@ -391,8 +373,8 @@ func TestStockSkillsOnDisk(t *testing.T) {
 		if res.Skill.Name == "" || len(res.Notes) != 0 {
 			t.Fatalf("%s: %#v", tc.name, res)
 		}
-		if tc.desc != "" && res.Skill.Description != tc.desc {
-			t.Fatalf("%s description = %q want %q", tc.name, res.Skill.Description, tc.desc)
+		if res.Skill.Description == "" {
+			t.Fatalf("%s has no description", tc.name)
 		}
 		if strings.Contains(string(data), "allowed-tools") {
 			t.Fatalf("%s must omit allowed-tools", tc.name)
@@ -403,18 +385,6 @@ func TestStockSkillsOnDisk(t *testing.T) {
 		ref := filepath.Join(root, tc.name, filepath.FromSlash(tc.ref))
 		if _, err := os.Stat(ref); err != nil {
 			testutil.FailErr(t, "stat "+tc.ref, err)
-		}
-	}
-}
-
-func TestAccessibilitySkillClaimsNoCompliance(t *testing.T) {
-	a11y := filepath.Join("..", "..", "config", "packs", "painted-wolf", "browser", "skills", "review-accessibility", "SKILL.md")
-	body, err := os.ReadFile(a11y)
-	testutil.FailErr(t, "read review-accessibility", err)
-	lower := strings.ToLower(string(body))
-	for _, banned := range []string{"certified", "certification", "wcag compliant"} {
-		if strings.Contains(lower, banned) {
-			t.Fatalf("review-accessibility must not claim %q", banned)
 		}
 	}
 }

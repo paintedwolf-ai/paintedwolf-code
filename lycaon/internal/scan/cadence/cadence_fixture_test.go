@@ -150,10 +150,18 @@ func (f *failingCoordinator) Enqueue(ctx context.Context, req scanbase.EnqueueRe
 
 func seedSizedProject(t *testing.T, dir string, n int) {
 	t.Helper()
+	paths := make([]string, 0, n)
 	for i := 0; i < n; i++ {
-		name := filepath.Join(dir, fmt.Sprintf("f%02d.go", i))
+		rel := fmt.Sprintf("f%02d.go", i)
+		name := filepath.Join(dir, rel)
 		if err := os.WriteFile(name, []byte("package p\n"), 0o644); err != nil {
 			testutil.FailErr(t, "write file", err)
 		}
+		paths = append(paths, rel)
+	}
+	if canonical, err := scanbase.CanonicalPath(dir); err == nil {
+		repochange.Notify(context.Background(), repochange.Event{
+			ProjectDir: canonical, Kind: repochange.WorktreeChanged, Paths: paths, Source: repochange.SourceMutation,
+		})
 	}
 }

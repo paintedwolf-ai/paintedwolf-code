@@ -48,14 +48,14 @@ func newProgressChangeEmitter(
 }
 
 // buildProgressUpdate omits terminal windows and summarizes large diffs.
-func buildProgressUpdate(baseline, latest string, seq int) (*wire.ProgressUpdateMeta, bool) {
-	baselineSteps := progress.DeriveProgress(baseline, progress.DefaultProgressCap).Items
-	latestSteps := progress.DeriveProgress(latest, progress.DefaultProgressCap).Items
+func buildProgressUpdate(baseline, latest progress.Snapshot, seq int) (*wire.ProgressUpdateMeta, bool) {
+	baselineSteps := progress.DeriveProgress(baseline.Content, progress.DefaultProgressCap).Items
+	latestSteps := progress.DeriveProgress(latest.Content, progress.DefaultProgressCap).Items
 
-	if progress.AllTerminal(latest) && !progress.AllTerminal(baseline) {
+	if progress.AllTerminal(latest.Content) && !progress.AllTerminal(baseline.Content) {
 		return nil, false
 	}
-	changes := progress.DiffSteps(baselineSteps, latestSteps)
+	changes := progress.DiffSteps(baseline, latest)
 	if len(changes) == 0 {
 		return nil, false
 	}

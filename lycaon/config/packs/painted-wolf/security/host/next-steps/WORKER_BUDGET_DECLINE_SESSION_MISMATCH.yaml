@@ -1,0 +1,4 @@
+steps:
+  - tool: "pack_board"
+    complete: true
+    say: "Find it with {{ call }}."

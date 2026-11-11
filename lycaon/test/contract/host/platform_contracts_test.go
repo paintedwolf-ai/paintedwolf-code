@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -72,13 +73,15 @@ func TestNativeToolsManifest(t *testing.T) {
 			t.Fatal("native-tools.yaml must not list command")
 		}
 	}
+	operations, err := nativemanifest.Load()
+	contractcheck.FailErr(t, "load native manifests", err)
 	hasGit := false
-	for _, tool := range manifest.Native.Git {
+	for _, tool := range operations.OperationGroup("git") {
 		if strings.HasPrefix(tool, "git_") {
 			hasGit = true
 		}
 	}
 	if !hasGit {
-		t.Fatal("expected git_* tools in native manifest")
+		t.Fatal("expected git_* operations in the native manifests")
 	}
 }

@@ -6,6 +6,7 @@ import { resolveChickletTitle } from "./tool-chicklet-titles.ts";
 import {
   TOOL_CHICKLET_RUNNING_LABELS,
   TOOL_CHICKLET_TITLE_KEYS,
+  TOOL_TITLE_FALLBACKS,
 } from "./tool-presentation.generated.ts";
 
 const SAMPLE_ARGS: Record<string, Record<string, unknown>> = {
@@ -177,6 +178,12 @@ describe("tool-chicklet-titles", () => {
       "asst",
     );
     expect(toolPartSummaryTitle(part)).toBe("git_status");
+  });
+
+  it("titles the argument-free source_history call with its declared fallback", () => {
+    expect(resolveChickletTitle("source_history", {})).toBe(TOOL_TITLE_FALLBACKS.source_history);
+    expect(TOOL_TITLE_FALLBACKS.source_history).toBeTruthy();
+    expect(resolveChickletTitle("source_history", { path: "main.go" })).toBe("main.go");
   });
 
   it("shows only the tool name for a handle-only call", () => {

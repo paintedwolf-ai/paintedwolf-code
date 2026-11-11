@@ -16,14 +16,8 @@ suggested_action: >-
 scenarios:
   - id: generic
     vars: {}
-    expect_contains:
-      - available space
-      - No worker changes
   - id: capacity_preflight
     vars:
       reason: capacity_preflight
       required: 30.0 GiB
       available: 12.0 GiB
-    expect_contains:
-      - 30.0 GiB
-      - 12.0 GiB

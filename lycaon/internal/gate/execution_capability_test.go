@@ -8,12 +8,14 @@ import (
 
 func TestExecutionCapabilitiesRequireExplicitAuthority(t *testing.T) {
 	for _, posture := range []Posture{PostureLight, PostureBalanced, PostureStrict} {
-		for _, mode := range []string{"process_control", "host_execution", "list", "signal"} {
+		for _, mode := range []string{"process_control", "credential_store", "host_execution", "list", "signal"} {
 			facts := baseFacts(StagePreSpawn)
 			facts.Recoverable = true
 			switch mode {
 			case "process_control":
 				facts.Containment.ProcessControl = true
+			case "credential_store":
+				facts.Containment.CredentialStore = true
 			case "host_execution":
 				facts.Containment.HostExecution = true
 				facts.Containment.FSJailed = false

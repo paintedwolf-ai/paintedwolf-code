@@ -29,6 +29,9 @@ func TouchBranchUse(branchRoot string) {
 	if branchRoot == "" {
 		return
 	}
+	if branchVolumeAvailable(branchRoot) != nil {
+		return
+	}
 	metaDir := enginepaths.MetaDirForBranchRoot(branchRoot)
 	if err := os.MkdirAll(metaDir, 0o700); err != nil {
 		return
@@ -83,6 +86,9 @@ func AcquireBranchUse(ctx context.Context, branchRoot string) (release func(), e
 	if err != nil {
 		return nil, err
 	}
+	if err := branchVolumeAvailable(branchRoot); err != nil {
+		return nil, err
+	}
 	inProcess := branchUseLock(branchRoot)
 	inProcess.RLock()
 	file, err := filelock.Open(branchRoot + branchUseLockSuffix)
@@ -119,6 +125,9 @@ func AcquireBranchUse(ctx context.Context, branchRoot string) (release func(), e
 // tryExclusiveBranchUse takes the lease exclusively without waiting; a held
 // lease means the tree is in use and eviction steps aside.
 func tryExclusiveBranchUse(branchRoot string) (release func(), err error) {
+	if err := branchVolumeAvailable(branchRoot); err != nil {
+		return nil, err
+	}
 	inProcess := branchUseLock(branchRoot)
 	if !inProcess.TryLock() {
 		return nil, ErrBranchInUse

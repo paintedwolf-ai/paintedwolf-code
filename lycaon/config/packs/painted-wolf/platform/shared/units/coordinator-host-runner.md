@@ -10,4 +10,4 @@ hosts: [coordinator]
 ---
 {% if profile_command_mutation or profile_has_verify or profile_has_terminal_open %}### Sandbox and worker checks
 
-Finish shared setup before dispatching dependent workers; workers run source checks in isolated branches. Use `task` for independent work; review results, resolve decisions or `wait` for a result. Workers cannot expand the access available to this chat.{% endif %}
+Finish shared setup before dispatching dependent workers; workers run source checks in isolated branches. {% if profile_has_task %}Use `task` for independent work;{% else %}Independent work belongs to workers;{% endif %} review results, resolve decisions or `wait` for a result. Workers cannot expand the access available to this chat.{% endif %}

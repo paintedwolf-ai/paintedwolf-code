@@ -124,9 +124,11 @@ func collectToolDiagnostic(ctx context.Context, chunks <-chan modelcall.StreamCh
 			if !ok {
 				return result, fmt.Errorf("the compatibility stream ended without a terminal receipt")
 			}
-			if chunk.ResetReasoning {
+			if chunk.ResetAttempt() {
+				result.Content = ""
 				result.Reasoning = ""
 				result.ReasoningDetails = nil
+				result.ToolCalls = nil
 			}
 			result.Content += chunk.Content
 			result.Reasoning += chunk.Reasoning

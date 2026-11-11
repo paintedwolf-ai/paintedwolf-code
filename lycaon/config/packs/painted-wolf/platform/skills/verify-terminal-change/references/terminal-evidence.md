@@ -17,7 +17,7 @@ Maintained sources of truth: `docs/tools.md` (Interactive exec) and `docs/ground
 
 1. Put the exact program argv, working directory, capability request, `terminal_capture`, size, and caption on one `command` call.
 2. Use it when no input is needed and one settled screen establishes the claim. It is the required route when the action needs direct network authority, which cannot be held across turns.
-3. Inspect the returned terminal state and screen. Cite the `tui#` handle and present the visual artifact when useful.
+3. Inspect the returned terminal state and screen. Cite its terminal evidence handle and present the visual artifact when useful.
 4. Do not run a weaker second invocation for the screenshot, replay saved output, or print a prior result into another PTY.
 
 ## Drive a held screen
@@ -35,4 +35,4 @@ Output quiescence is the settle boundary. A fixed delay neither proves idle nor 
 
 The virtual screen can establish rendered cells, cursor location, dimensions, and tool-reported busy state. It cannot establish native menus or dialogs outside the PTY, assistive-technology behavior, real terminal-emulator quirks, clipboard state, or pixels beyond the rendered-grid artifact. Report those as manual follow-up.
 
-Never send known plaintext passwords, tokens, signing material, or other secrets with `terminal_send`. If an interactive prompt is the only supported input, use an opaque `{{paintedwolf-secret:…}}` reference; otherwise stop and ask for a safer non-agent entry path.
+Never send known plaintext passwords, tokens, signing material, or other secrets with `terminal_send`. If an interactive prompt is the only supported input, use an opaque {% verbatim %}`{{paintedwolf-secret:…}}`{% endverbatim %} reference; otherwise stop and ask for a safer non-agent entry path.

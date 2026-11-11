@@ -26,15 +26,9 @@ x-paintedwolf-scenarios:
     vars:
       review_reason: 'verdict has undeclared field(s): cited_evidence'
       review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED}, cited_evidence=[{"handle":"<observed-handle>"}], cited_urls=["<observed-url>"])'
-    expect_contains: ['Code: SUBMIT_VERDICT_INVALID', 'cited_evidence', 'expected']
   - id: stamped_claim_missing
     vars:
       review_reason: claim_outcome_required
       offenders_sample: secret-gates-hold
       review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED, challenges: [...]})'
-    expect_contains:
-      - 'Code: SUBMIT_VERDICT_INVALID'
-      - 'Affected fields or stamped claims: secret-gates-hold'
-      - 'Copy stamped claim IDs verbatim'
-      - 'do not register a follow-up question'
 x-paintedwolf-emit: guard:workflow

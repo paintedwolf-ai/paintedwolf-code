@@ -231,7 +231,7 @@ func TestLostReturnsWhenTheStoreClaimIsReplaced(t *testing.T) {
 	testutil.FailErr(t, "remove store", os.Remove(dbPath))
 	testutil.FailErr(t, "write another store", os.WriteFile(dbPath, []byte("other"), 0o600))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	err := claim.Lost(ctx, time.Millisecond)
 	if !errors.Is(err, ErrStoreClaimLost) {

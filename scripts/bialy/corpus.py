@@ -34,11 +34,15 @@ def decide_dir():
 
 DEFAULT_PATH = decide_dir() / "corpus.json"
 
+SCHEMA = "pw-decide-corpus/2"
+
 KINDS = ("answer_only", "inspect", "change", "run", "delegate")
 
 
 class Corpus:
     def __init__(self, data):
+        if data.get("schema") != SCHEMA:
+            raise ValueError("corpus schema %r, want %r; export a current corpus" % (data.get("schema"), SCHEMA))
         self.data = data
         self.revision = data["catalog_revision"]
         self.spec = data["questions"]
@@ -46,6 +50,8 @@ class Corpus:
         self.surfaces = {row["id"]: row for row in data["surfaces"]}
         self.tools = {row["name"]: row["description"] for row in data["tools"]}
         self.tool_options = dict(self.spec["tools"].get("options") or {row["name"]: row.get("option", "") for row in data["tools"]})
+        if set(self.tool_options) != set(self.tools):
+            raise ValueError("corpus tool options must match the callable tool roster")
         self.state_spec = data.get("state", {})
         self.units = {row["id"]: row for row in data["units"]}
         self.skills = {row["name"]: row for row in data.get("skills") or []}
@@ -73,14 +79,43 @@ class Corpus:
         """The host's multi question over candidate ids: every known candidate is an option.
         Option order is the sorted id order the engine reads, as the host's map encodes it."""
         spec = self.spec["tools"] if kind == "tool" else self.spec["guides"]
+        known = self.tool_options if kind == "tool" else self.units
+        self.require_candidates(kind, ids, known)
         if kind == "tool":
-            options = {name: self.tool_options[name] for name in ids if name in self.tool_options}
+            options = {name: self.tool_options[name] for name in ids}
         else:
-            options = {uid: self.units[uid].get("option", "") for uid in ids if uid in self.units}
+            options = {uid: self.units[uid].get("option", "") for uid in ids}
         question = {"type": "multi", "instructions": spec["question"], "options": dict(sorted(options.items()))}
         if self.independent():
             question["independent"] = True
         return question
+
+    @staticmethod
+    def require_candidates(field, ids, known):
+        unknown = set(ids or ()) - set(known)
+        if unknown:
+            raise ValueError("%s contains candidates absent from this corpus: %s; use matching data, do not relabel history" % (field, ", ".join(sorted(unknown))))
+
+    def validate_row(self, row):
+        """Admit recorded candidates and labels without changing their identities."""
+        offered, labels = row["offered"], row["labels"]
+        for field in ("floor", "loadable"):
+            self.require_candidates("offered." + field, offered[field], self.tools)
+        self.require_candidates("offered.guides", offered["guides"], self.units)
+        loadable = offered["loadable"]
+        for field in ("tools", "tool_scores"):
+            self.require_candidates("labels." + field, labels.get(field), loadable)
+        self.require_candidates("labels.guides", labels.get("guides"), offered["guides"])
+        for field in ("skills", "skill_scores"):
+            self.require_candidates("labels." + field, labels.get(field), self.skills)
+        second = labels.get("second_scores") or {}
+        self.require_candidates("second_scores.tools", second.get("tools"), loadable)
+        self.require_candidates("second_scores.skills", second.get("skills"), self.skills)
+        for i, request in enumerate(labels.get("requests") or []):
+            for field in ("after", "scores"):
+                self.require_candidates("requests[%d].%s" % (i, field), request.get(field), loadable)
+        for scores in second.get("requests") or []:
+            self.require_candidates("second_scores.requests", scores, loadable)
 
     def independent(self):
         """Whether the turn's multi questions encode one option per row. The tools
@@ -101,6 +136,7 @@ class Corpus:
 
     def row_questions(self, row):
         """The turn set a training row's turn was asked: the candidates it offered."""
+        self.validate_row(row)
         return self.questions(row["offered"]["loadable"], row["offered"]["guides"])
 
     def surface_questions(self, surface_id):

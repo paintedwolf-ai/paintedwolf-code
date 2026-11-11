@@ -9,9 +9,6 @@ func (gc *GuardContext) ObserveToolCall(name string, arguments map[string]any) {
 		gc.Published = map[string]any{}
 	}
 	gc.Published["paintedwolf.native_operation"] = ""
-	if arguments == nil {
-		arguments = map[string]any{}
-	}
 	gc.Invocation.ToolArgs = arguments
 	gc.RegisterProvider("tool_args_fingerprint", func(gc *GuardContext) error {
 		if _, explicit := gc.Published["tool_args_fingerprint"]; explicit {
@@ -22,7 +19,7 @@ func (gc *GuardContext) ObserveToolCall(name string, arguments map[string]any) {
 			gc.Invocation.ToolArgsFingerprint = ""
 			return nil
 		}
-		fingerprint, err := oarcore.ToolFingerprint(gc.Invocation.Tool, gc.Invocation.ToolArgs)
+		fingerprint, err := oarcore.ToolFingerprint(gc.Invocation.Tool, mapOrEmpty(gc.Invocation.ToolArgs))
 		if err != nil {
 			return err
 		}

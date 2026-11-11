@@ -1,14 +1,64 @@
-"""Capture local model identity without publishing private server addresses."""
+"""Capture local model identity and clean up owned launcher process groups."""
 import hashlib
 import json
 import math
+import os
 import re
+import signal
+import subprocess
+import time
 import urllib.request
 import yaml
 from snapshot import identity
 
 SAMPLERS = {'temperature', 'top_k', 'top_p', 'min_p', 'repeat_penalty', 'presence_penalty',
             'frequency_penalty', 'num_ctx', 'num_predict', 'seed', 'repeat_last_n', 'draft_num_predict'}
+
+
+def live_members(pgid):
+    if pgid <= 1:
+        raise ValueError('cleanup requires an explicit process group')
+    rows = subprocess.check_output(['ps', '-axo', 'pgid=,stat='], text=True)
+    live = False
+    for row in rows.splitlines():
+        group, state = row.split()
+        if int(group) == pgid and state[0] != 'Z':
+            live = True
+    return live
+
+
+def signal_group(pgid, sig):
+    if pgid <= 1:
+        raise ValueError('cleanup requires an explicit process group')
+    try:
+        os.killpg(pgid, sig)
+        return True
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        # Darwin may reject signals to a group containing only zombies.
+        if live_members(pgid):
+            raise
+        return False
+
+
+def stop_process(process, grace_seconds=30, kill_wait_seconds=30):
+    if not signal_group(process.pid, signal.SIGTERM):
+        return process.wait()
+    deadline = time.monotonic() + grace_seconds
+    while live_members(process.pid):
+        process.poll()
+        if time.monotonic() >= deadline:
+            signal_group(process.pid, signal.SIGKILL)
+            deadline = time.monotonic() + kill_wait_seconds
+            while live_members(process.pid):
+                process.poll()
+                if time.monotonic() >= deadline:
+                    raise TimeoutError('owned process group remains live after forced cleanup')
+                time.sleep(0.05)
+            break
+        time.sleep(0.05)
+    return process.wait()
 
 
 def ollama_model(endpoint, model):

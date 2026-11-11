@@ -37,7 +37,7 @@ type hopTracer struct {
 	sent              []Header
 }
 
-func newHopTracer() (*hopTracer, *httptrace.ClientTrace) {
+func newHopTracer(onConn func(local, remote netip.AddrPort)) (*hopTracer, *httptrace.ClientTrace) {
 	t := &hopTracer{}
 	first := func(at *time.Time) {
 		t.mu.Lock()
@@ -56,6 +56,11 @@ func newHopTracer() (*hopTracer, *httptrace.ClientTrace) {
 			first(&t.ttfbTime)
 		},
 		GotConn: func(info httptrace.GotConnInfo) {
+			if local, ok := info.Conn.LocalAddr().(*net.TCPAddr); ok && onConn != nil {
+				if remote, ok := info.Conn.RemoteAddr().(*net.TCPAddr); ok {
+					onConn(local.AddrPort(), remote.AddrPort())
+				}
+			}
 			if addr, ok := info.Conn.RemoteAddr().(*net.TCPAddr); ok {
 				t.mu.Lock()
 				t.remote = addr.AddrPort()

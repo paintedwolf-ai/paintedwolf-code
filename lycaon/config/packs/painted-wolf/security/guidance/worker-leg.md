@@ -10,7 +10,7 @@
 {% if not requires_isolation %}- read scope: full project (touch paths are hints, not limits)
 {% endif %}{% if layout_top_level %}
 ## Repo layout (host)
-Top-level paths materialized for this workspace — `grep`/`find`/`read` roots must exist here.
+Top-level paths materialized for this workspace — search and file-read paths must exist here.
 {% for entry in layout_top_level %}- `{{ entry }}`
 {% endfor %}{% endif %}
 

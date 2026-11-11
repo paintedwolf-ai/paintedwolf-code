@@ -38,7 +38,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, profileID string
 		}
 	}
 	if m != nil && m.loopbackProv != nil {
-		tctx.Local.ContainerRecorder = m.loopbackProv
+		tctx.Local.LoopbackObserver = m.loopbackProv
 	}
 	if m != nil && m.projects != nil && tctx.Identity.ProjectID != "" {
 		// The view precedes the roots it qualifies, so a change between them

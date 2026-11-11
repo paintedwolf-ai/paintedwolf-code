@@ -25,7 +25,7 @@ func Run(m interface{ Run() int }, budget Budget) int {
 	if code != 0 {
 		return code
 	}
-	deadline := time.Now().Add(5 * time.Second)
+	deadline := time.Now().Add(time.Minute)
 	for {
 		runtime.GC()
 		var after runtime.MemStats

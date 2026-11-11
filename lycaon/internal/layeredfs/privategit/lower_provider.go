@@ -165,13 +165,7 @@ func fileInfoToLowerEntry(info fs.FileInfo) layeredfs.LowerEntry {
 		CtimeNsec: int64(info.ModTime().Nanosecond()),
 		Nlink:     1,
 	}
-	if st, ok := info.Sys().(*syscall.Stat_t); ok && st != nil {
-		le.Dev = uint64(st.Dev)
-		le.Ino = uint64(st.Ino)
-		le.UID = st.Uid
-		le.GID = st.Gid
-		le.Nlink = uint32(st.Nlink)
-	}
+	fillLowerIdentity(&le, info)
 	return le
 }
 

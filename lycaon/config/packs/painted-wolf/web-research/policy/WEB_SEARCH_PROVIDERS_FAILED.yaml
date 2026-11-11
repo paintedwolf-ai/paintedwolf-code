@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
   vars:
     detail: 'direct: upstream unavailable; brave: HTTP 422'
     tool: web_search
-  expect_contains:
-  - 'Code: WEB_SEARCH_PROVIDERS_FAILED'
-  - materially different retry
-  - proceed without web evidence

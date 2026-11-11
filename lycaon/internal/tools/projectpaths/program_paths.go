@@ -215,6 +215,9 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 	if IsNullOperand(operand) {
 		return BoundPath{Null: true}, nil
 	}
+	if spill, ok := p.spillReference(operand); ok && !write && spillExists(spill) {
+		operand = spill
+	}
 	addressed := operand
 	if p.cwd.Resolved.Abs != "" {
 		held, err := p.OpenCwd(ctx)
@@ -384,7 +387,11 @@ func (p *ProgramPaths) NativePaths(ctx context.Context, operands []string, nul b
 
 func (p *ProgramPaths) nativePath(ctx context.Context, operand string, nul bool) (string, error) {
 	// Explicit conversion accepts addressed text, including computed values.
-	if _, addressed := rootLabel(operand); addressed {
+	spill, isSpill := p.spillReference(operand)
+	if _, addressed := rootLabel(operand); addressed || isSpill {
+		if isSpill {
+			operand = spill
+		}
 		resolved, err := ResolveRead(ctx, p.boundary, p.context, operand)
 		if err != nil {
 			return "", err
@@ -397,6 +404,11 @@ func (p *ProgramPaths) nativePath(ctx context.Context, operand string, nul bool)
 	}
 	if bound.Null {
 		return "", invalidOperand(operand, "null device has no ordinary path identity")
+	}
+	if bound.Resolved.Root.ID == hostDataRootID {
+		if err := holdConvertedSpill(p.context.Host.HostDataDir, bound); err != nil {
+			return "", err
+		}
 	}
 	native := bound.Resolved.Abs
 	if !nul && strings.HasSuffix(native, "\n") {

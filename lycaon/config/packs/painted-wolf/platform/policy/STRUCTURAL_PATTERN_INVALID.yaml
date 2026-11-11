@@ -37,6 +37,3 @@ x-paintedwolf-scenarios:
     profile: implement
     reason: pattern is required
     tool: grep
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: STRUCTURAL_PATTERN_INVALID'

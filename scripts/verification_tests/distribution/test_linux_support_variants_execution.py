@@ -3,8 +3,7 @@ import copy
 import json
 import unittest
 
-from linux_release.support_matrix import CATALOG, expand
-from linux_release.support_variants import qualification, variants
+from linux_release.support_matrix import CATALOG, expand, qualification, variants
 
 
 class LinuxSupportVariantTests(unittest.TestCase):

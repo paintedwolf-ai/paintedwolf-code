@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { Show, createSignal } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -209,7 +210,7 @@ describe("FirstTimeTipsLayer", () => {
     anchor.focus();
     requestFirstTimeTip("files-review-scope");
 
-    const tip = await screen.findByRole("dialog", { name: "Choose what to compare" });
+    const tip = assertNamedControl(await screen.findByTestId("first-time-tip-files-review-scope"), "dialog");
     const dismiss = screen.getByTestId("first-time-tip-dismiss");
     await waitFor(() => expect(document.activeElement).toBe(dismiss));
     expect(tip.getAttribute("aria-describedby")).toBeTruthy();
@@ -231,9 +232,7 @@ describe("FirstTimeTipsLayer", () => {
     ));
     screen.getByRole("button", { name: "Outside" }).focus();
     requestFirstTimeTip("project-search");
-    await screen.findByRole("dialog", {
-      name: "Search connects code and project work",
-    });
+    assertNamedControl(await screen.findByTestId("first-time-tip-project-search"), "dialog");
 
     fireEvent.keyDown(document, { key: "Escape" });
 

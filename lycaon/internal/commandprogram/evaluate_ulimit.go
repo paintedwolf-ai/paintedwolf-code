@@ -27,7 +27,7 @@ type ResourceLimit struct {
 type LimitCapability uint8
 
 const (
-	// LimitQuery reports the host's current soft and hard limits.
+	// LimitQuery reports the limits a child started without ulimit receives.
 	LimitQuery LimitCapability = 1 << iota
 	// LimitSetSoft starts later children with a soft limit up to the hard one.
 	LimitSetSoft
@@ -40,21 +40,21 @@ const (
 // resource whose capability includes LimitQuery.
 type ResourceLimits interface {
 	Capability(resource string) LimitCapability
-	Read(resource string) (ResourceLimit, error)
+	Read(ctx context.Context, resource string) (ResourceLimit, error)
 }
 
 type noResourceLimits struct{}
 
 func (noResourceLimits) Capability(string) LimitCapability { return 0 }
-func (noResourceLimits) Read(resource string) (ResourceLimit, error) {
+func (noResourceLimits) Read(_ context.Context, resource string) (ResourceLimit, error) {
 	return ResourceLimit{}, fmt.Errorf("resource limit %s unavailable", resource)
 }
 
-// childLimits are the resource limits a frame's external children start
-// with. They begin as the host's own and stay unpinned until the program
-// uses ulimit; from then on every later external child receives exactly the
-// limits ulimit reported or set, so a report is what the child sees. A
-// limit never outlives the program invocation.
+// childLimits are the resource limits ulimit set for a frame's external
+// children. A resource stays unpinned until the program sets it, so a child
+// receives what the host gives it and a report changes nothing; from then on
+// every later external child receives exactly the set limits. A limit never
+// outlives the program invocation.
 type childLimits struct {
 	mu     sync.Mutex
 	values map[string]ResourceLimit
@@ -91,26 +91,23 @@ func (l *childLimits) pinned() []ResourceLimit {
 	return out
 }
 
-func (l *childLimits) get(read func(string) (ResourceLimit, error), resource string) (ResourceLimit, error) {
+// current is what a later external child of this frame starts with.
+func (l *childLimits) current(ctx context.Context, owner ResourceLimits, resource string) (ResourceLimit, error) {
 	l.mu.Lock()
-	defer l.mu.Unlock()
-	if limit, ok := l.values[resource]; ok {
+	limit, ok := l.values[resource]
+	l.mu.Unlock()
+	if ok {
 		return limit, nil
 	}
-	limit, err := read(resource)
-	if err != nil {
-		return ResourceLimit{}, err
-	}
-	if l.values == nil {
-		l.values = map[string]ResourceLimit{}
-	}
-	l.values[resource] = limit
-	return limit, nil
+	return owner.Read(ctx, resource)
 }
 
 func (l *childLimits) set(limit ResourceLimit) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	if l.values == nil {
+		l.values = map[string]ResourceLimit{}
+	}
 	l.values[limit.Resource] = limit
 }
 
@@ -180,11 +177,11 @@ func runUlimit(ctx context.Context, f *frame, s commandsurface.Statement, fields
 		}
 	}
 	readHard := hardFlag && !softFlag
-	return f.inProcess(ctx, s, spec.Name, func(context.Context, toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
+	return f.inProcess(ctx, s, spec.Name, func(ctx context.Context, _ toolcontract.OperationInvocation) (toolcontract.ProducerResult, error) {
 		var out strings.Builder
 		status := 0
 		for i, resource := range selected {
-			limit, err := f.state.limits.get(owner.Read, resource.resource)
+			limit, err := f.state.limits.current(ctx, owner, resource.resource)
 			if err != nil {
 				return ownerResult(err), err
 			}

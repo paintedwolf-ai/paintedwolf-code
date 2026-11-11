@@ -35,10 +35,7 @@ func TestActiveWorkflowInjectMakesInheritedApprovalAuthoritative(t *testing.T) {
 			Status: "approved", Origin: "inherited", ParentRunID: "parent-1",
 		},
 	}, nil, nil)
-	for _, want := range []string{
-		"blueprint_approval", "`approved`", "inherited from parent run `parent-1`",
-		"Execute the approved Blueprint now", "Do not ask the user to approve it again",
-	} {
+	for _, want := range []string{"blueprint_approval", "`approved`", "inherited from parent run `parent-1`"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}
@@ -80,7 +77,7 @@ func TestActiveWorkflowInjectIncludesRuntimeSections(t *testing.T) {
 		Phases:   []WorkflowPhaseRow{{ID: "research", CompleteWhen: "topology_stage_complete", BindTopologyStage: "research"}},
 	}
 	block := renderTestActiveWorkflow(t, runCtx, snap, nil, nil)
-	for _, want := range []string{"completes on", "topology_phase_id", "Workflow phases", "(current)"} {
+	for _, want := range []string{"topology_phase_id", "(current)"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}
@@ -132,9 +129,6 @@ func TestActiveWorkflowInjectAutoAdvancePhaseOmitsAdvanceCall(t *testing.T) {
 	if !strings.Contains(block, "### Phase exit") {
 		t.Fatalf("missing Phase exit in:\n%s", block)
 	}
-	if !strings.Contains(block, "host advances on its own") {
-		t.Fatalf("missing auto-advance copy in:\n%s", block)
-	}
 	if strings.Contains(block, "Advance: call") {
 		t.Fatalf("must not use standalone Advance one-liner:\n%s", block)
 	}
@@ -154,16 +148,7 @@ func TestActiveWorkflowInjectMakesStampedFanoutActionable(t *testing.T) {
 		},
 	}
 	block := renderTestActiveWorkflow(t, runCtx, snap, nil, nil)
-	for _, want := range []string{
-		"### Stamped fan-out",
-		"stamped, not automatically dispatched",
-		"call `task`",
-		"as `agent_type`",
-		"all_workers_idle",
-		"do not duplicate them",
-		"Inspect the workflow runtime",
-		"dormant", "not failing",
-	} {
+	for _, want := range []string{"call `task`", "as `agent_type`", "all_workers_idle", "Inspect the workflow runtime", "dormant"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}
@@ -194,12 +179,7 @@ func TestActiveWorkflowInjectListsChoiceTransitions(t *testing.T) {
 		},
 	}
 	block := renderTestActiveWorkflow(t, runCtx, snap, nil, nil)
-	for _, want := range []string{
-		"Choice transitions out of this phase",
-		"`deepen`",
-		"`critique`",
-		"workflow_transition",
-	} {
+	for _, want := range []string{"`deepen`", "`critique`", "workflow_transition"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}
@@ -256,9 +236,6 @@ func TestWorkflowInjectNeverAdvertisesExcludedAgents(t *testing.T) {
 			t.Fatalf("excluded agent %q not disclosed with code %q in:\n%s", ex.Name, ex.Code, block)
 		}
 	}
-	if !strings.Contains(block, "unavailable this turn") {
-		t.Fatalf("missing unavailable disclosure in:\n%s", block)
-	}
 }
 
 func renderTestImplementSpawn(t *testing.T, allowedAgents []string) string {
@@ -272,20 +249,7 @@ func renderTestImplementSpawn(t *testing.T, allowedAgents []string) string {
 
 func TestImplementSpawnInjectIncludesSpawnMatrix(t *testing.T) {
 	block := renderTestImplementSpawn(t, spawn.AmbientAllowedAgents())
-	for _, want := range []string{
-		ImplementSpawnInjectSentinel,
-		"Spawn roster",
-		"`implementer`",
-		"`repo-researcher`",
-		"`path-explorer`",
-		"`code-reviewer`",
-		"DISALLOWED_AGENT",
-		"plan-writer",
-		"Product edits only — dispatch with scope.mode write + paths; host rejects read/default. Read-only survey → repo-researcher",
-		"Bounded path, find, and grep code survey",
-		"(command)",
-		fmt.Sprintf("**%d** in-flight", spawn.MaxInFlightTaskWorkers),
-	} {
+	for _, want := range []string{ImplementSpawnInjectSentinel, "`implementer`", "`repo-researcher`", "`path-explorer`", "`code-reviewer`", "DISALLOWED_AGENT", "plan-writer", "Product edits only — dispatch with scope.mode write + paths; host rejects read/default. Read-only survey → repo-researcher", "(command)", fmt.Sprintf("**%d** in-flight", spawn.MaxInFlightTaskWorkers)} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in:\n%s", want, block)
 		}

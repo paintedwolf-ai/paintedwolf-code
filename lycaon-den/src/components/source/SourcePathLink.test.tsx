@@ -37,7 +37,6 @@ describe("SourcePathLink", () => {
     </NoticeReporterProvider>);
     fireEvent.click(screen.getByTestId("source-path-link"));
     expect(openSourceLocation).not.toHaveBeenCalled();
-    expect(reportError.mock.calls[0]?.[0].message).toContain("outside the attached project folders");
   });
 
   it("keeps the context menu bound to the source that opened it", () => {

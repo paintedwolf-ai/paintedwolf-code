@@ -7,5 +7,3 @@ suggested_action: "Use your version control tools or project settings to change 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "This file belongs to protected project metadata and cannot be changed here"

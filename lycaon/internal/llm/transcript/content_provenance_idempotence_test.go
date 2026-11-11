@@ -63,14 +63,11 @@ func TestProjectModelMessagesMarksEachDataLineOnce(t *testing.T) {
 	if tool == "" {
 		t.Fatal("no tool message in projection")
 	}
-	if strings.Contains(tool, "⟦D⟧⟦D⟧") {
-		t.Fatalf("stacked data markers: %q", tool)
+	if n := strings.Count(tool, "Data from tool"); n != 1 {
+		t.Fatalf("data header count = %d, want 1: %q", n, tool)
 	}
-	if n := strings.Count(tool, "⟦D:tool⟧"); n != 1 {
-		t.Fatalf("⟦D:tool⟧ header count = %d, want 1: %q", n, tool)
-	}
-	if n := strings.Count(tool, "⟦D⟧"); n != 3 {
-		t.Fatalf("⟦D⟧ count = %d, want 3 (one per data line): %q", n, tool)
+	if strings.Contains(tool, "⟦D") {
+		t.Fatalf("legacy data marker in projection: %q", tool)
 	}
 }
 
@@ -80,7 +77,7 @@ func TestProjectModelMessagesLeavesInstructionsUnmarked(t *testing.T) {
 		if m.Role != api.MessageRoleUser {
 			continue
 		}
-		if strings.Contains(m.Content, "⟦D") {
+		if strings.Contains(m.Content, "Data from") {
 			t.Fatalf("user instruction was data-marked: %q", m.Content)
 		}
 	}
@@ -92,7 +89,7 @@ func TestProjectModelMessagesAddsNoticeOnce(t *testing.T) {
 	for _, m := range out {
 		joined += m.Content + "\n"
 	}
-	if n := strings.Count(joined, ContentAuthorityNotice()); n != 1 {
+	if n := strings.Count(joined, ContentAuthorityNotice(AudienceUtility)); n != 1 {
 		t.Fatalf("authority notice appears %d times, want 1", n)
 	}
 }

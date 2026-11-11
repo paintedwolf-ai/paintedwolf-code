@@ -145,6 +145,18 @@ func TestProcListenersJoinsTablesWithHolders(t *testing.T) {
 	if len(all) != 5 {
 		t.Fatalf("every listener on both protocols = %+v", all)
 	}
+
+	testutil.FailErr(t, "mkdir sys/net/ipv6", os.MkdirAll(filepath.Join(root, "sys", "net", "ipv6"), 0o755))
+	testutil.FailErr(t, "write bindv6only", os.WriteFile(filepath.Join(root, "sys", "net", "ipv6", "bindv6only"), []byte("1\n"), 0o644))
+	v6OnlyGot, err := fixtureFS(root).listeners(ListenerQuery{Port: 8080})
+	testutil.FailErr(t, "listeners with bindv6only=1", err)
+	wantV6Only := []Listener{
+		{Protocol: ProtocolTCP, Addr: ap("0.0.0.0:8080"), UID: 1000, Holders: holders(400, 401)},
+		{Protocol: ProtocolTCP, Addr: ap("[::]:8080"), UID: 1000, IPv6Only: true, Holders: holders(400)},
+	}
+	if !reflect.DeepEqual(v6OnlyGot, wantV6Only) {
+		t.Fatalf("listeners with bindv6only=1 = %+v, want %+v", v6OnlyGot, wantV6Only)
+	}
 }
 
 func TestProcListenersWithoutIPv6TablesAndWithoutProc(t *testing.T) {

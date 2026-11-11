@@ -2,6 +2,8 @@ package oar
 
 import (
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/oarcopy"
 )
 
 func TestFactCatalogueMatchesConditionEnvironment(t *testing.T) {
@@ -73,9 +75,7 @@ func TestFactCatalogue_TypesRendered(t *testing.T) {
 	want := map[string]string{
 		"tool":           "string",
 		"workers_idle":   "bool",
-		"summary_length": "int",
 		"secret_matches": "list<map>",
-		"write_roots":    "list<string>",
 		"tool_args":      "map",
 	}
 	for _, f := range FactCatalogue() {
@@ -98,4 +98,13 @@ func TestFactCatalogue_LazyAssemblyRecognizesEnvFacts(t *testing.T) {
 	if len(missing) > 0 {
 		t.Fatalf("env facts missing from facts.go catalogueFacts: %v", missing)
 	}
+}
+
+func TestFactCatalogue_PortableFactsMatchOARCopy(t *testing.T) {
+	eachDeclaredFact(func(d factDecl) {
+		wantPortable := d.tier != FactTierHost
+		if got := oarcopy.IsPortableFact(d.name); got != wantPortable {
+			t.Errorf("fact %q (tier %q): oarcopy.IsPortableFact = %v, want %v", d.name, d.tier, got, wantPortable)
+		}
+	})
 }

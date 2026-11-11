@@ -143,9 +143,9 @@ func TestChunkProjectionUpdatesToolResultBody(t *testing.T) {
 func TestProtectedChunksRemainIneligibleUnderForcedDiet(t *testing.T) {
 	for _, msg := range []ContextMessage{
 		{Role: "user", ContextPinned: true},
-		{Role: "assistant", DietStampSource: DietStampSourceWorkerEnvelope},
-		{Role: "assistant", ModelReasoning: &api.ModelReasoning{Text: "trace"}},
-		{Role: "user", CompactionCheckpoint: true},
+		{Role: "assistant", ContextMessageCompaction: ContextMessageCompaction{DietStampSource: DietStampSourceWorkerEnvelope}},
+		{Role: "assistant", ContextMessageProvenance: ContextMessageProvenance{ModelReasoning: &api.ModelReasoning{Text: "trace"}}},
+		{Role: "user", ContextMessageCompaction: ContextMessageCompaction{CompactionCheckpoint: true}},
 	} {
 		class := ClassifyMessageDiet(ClassifyMessageDietInput{Index: 0, Messages: []ContextMessage{msg}, ForceEligible: true})
 		if class.Eligibility != DietEligibilityPinned || !class.SkipOversizedChunk("large body") {

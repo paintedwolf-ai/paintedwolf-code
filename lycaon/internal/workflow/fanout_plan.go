@@ -122,19 +122,20 @@ func seedFanoutProgress(ctx context.Context, store progress.RunScopedStore, sess
 	default:
 		return
 	}
-	prev := store.Get(ctx, sessionID)
-	if !progress.ProgressMissing(prev) {
+	before, err := store.Snapshot(ctx, sessionID)
+	if err != nil || !progress.ProgressMissing(before.Content) {
 		return
 	}
 	labels := make([]string, 0, len(plan.Legs))
 	for _, leg := range plan.Legs {
 		labels = append(labels, leg.ID+" "+leg.Subject)
 	}
-	if err := store.Set(sessionID, progress.SeedChecklist(prev, labels)); err != nil {
+	if err := store.Set(sessionID, progress.SeedChecklist(before.Content, labels)); err != nil {
 		slog.WarnContext(ctx, "seed fan-out progress", "session", sessionID, "error", err)
 		return
 	}
-	progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: sessionID, Prev: prev})
+	after, _ := store.Snapshot(ctx, sessionID)
+	progress.NotifyWriteObservers(ctx, progress.WriteEvent{SessionID: sessionID, Before: before, After: after})
 }
 
 func parseFanoutPlanArgs(args map[string]any) (runstate.FanoutPlan, error) {

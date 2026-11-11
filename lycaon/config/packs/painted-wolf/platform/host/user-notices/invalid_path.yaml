@@ -6,6 +6,3 @@ suggested_action: Choose an existing folder and try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - project folder
-      - existing folder

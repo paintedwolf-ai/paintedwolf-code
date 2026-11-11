@@ -22,14 +22,7 @@ func renderRecallPartial(t *testing.T, vars map[string]any) string {
 // worker leg may not. The partial teaches it only where the call would succeed.
 func TestRecallPartialTeachesWideningOnlyToRoot(t *testing.T) {
 	root := renderRecallPartial(t, map[string]any{"profile_has_recall": true, "recall_may_widen": true})
-	for _, want := range []string{
-		"its worker legs, finished ones included",
-		"a finished leg's envelope omits a detail the leg saw",
-		"[compacted …]",
-		"an earlier session on this project may already have looked",
-		`widen: "project"`,
-		"`scope_empty` means dispatch",
-	} {
+	for _, want := range []string{"[compacted …]", `widen: "project"`, "`scope_empty` means dispatch"} {
 		if !strings.Contains(root, want) {
 			t.Fatalf("root render missing %q:\n%s", want, root)
 		}
@@ -41,7 +34,7 @@ func TestRecallPartialTeachesWideningOnlyToRoot(t *testing.T) {
 			t.Fatalf("worker render must not teach %q:\n%s", banned, worker)
 		}
 	}
-	for _, want := range []string{"in this leg", "[compacted …]", "`scope_empty` means go observe it"} {
+	for _, want := range []string{"[compacted …]", "`scope_empty` means go observe it"} {
 		if !strings.Contains(worker, want) {
 			t.Fatalf("worker render missing %q:\n%s", want, worker)
 		}

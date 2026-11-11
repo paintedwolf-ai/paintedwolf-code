@@ -1,9 +1,9 @@
 """Conservative change scope shared by pull requests and merge groups.
 
-Only ordinary source files and documentation prose are narrowed. Embedded data,
-generated contracts, configuration, deleted packages, and unknown paths widen the
-gate. Test imports participate in reverse reachability; contracts and smoke tests
-run unconditionally.
+Files in a Go package's tree, CI tooling, and documentation prose are narrowed.
+Generated contracts, configuration, dependencies, build inputs, and unknown paths
+widen the gate. Test imports participate in reverse reachability; contracts and
+smoke tests run unconditionally.
 """
 
 import json
@@ -16,6 +16,11 @@ from ci_policy.native_impact import dependencies as native_dependencies
 ROOT = Path(__file__).resolve().parents[2]
 SHARED = (".github/", "scripts/", "dependencies/", "schemas/", "docs/openapi",
           "lycaon/config/", "lycaon/pkg/", "lycaon/vulndb")
+# CI's own logic and tests: no product test reads them, and the repository contracts and runner lane check them.
+TOOLING = (".github/workflows/", "scripts/ci_policy/", "scripts/verification_tests/")
+# These decide how the lanes themselves run, so a change must exercise every lane.
+TOOLING_EXCEPTIONS = {".github/workflows/ci.yml", ".github/workflows/verification.yml",
+                      "scripts/ci_policy/hosted_execution.py", "scripts/ci_policy/hosted_plan.py"}
 # Prose that no build, fixture, or prompt reads; the repository contracts every scope runs check it.
 # CHANGELOG.md is not among them: Den embeds it.
 PROSE = {"AGENTS.md", "CODE_OF_CONDUCT.md", "CONTRIBUTING.md", "README.md", "REPORTING.md", "SECURITY.md",
@@ -54,16 +59,21 @@ def prose(path):
     return path in PROSE or path.startswith("docs/") and path.endswith(".md") and not path.startswith(SHARED)
 
 
-def main_module_go(path):
-    """Go source the module's import graph can resolve: not in a directory Go ignores or a nested module.
+def tooling(path):
+    return path.startswith(TOOLING) and path not in TOOLING_EXCEPTIONS
 
-    Fixture programs, such as the harness projects, are read by other lanes rather than compiled here.
+
+def module_tree(path):
+    """A file inside the Go module's package trees: source, embedded data, or test fixtures.
+
+    Nested modules, such as the harness projects, are read by other lanes rather than compiled here;
+    native trees declare their own dependencies.
     """
-    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")) or not path.endswith(".go"):
+    if not path.startswith(("lycaon/internal/", "lycaon/cmd/", "lycaon/test/")) or "/native/" in path:
+        return False
+    if Path(path).name in {"go.mod", "go.sum"}:
         return False
     directories = Path(path).parent.relative_to("lycaon").parts
-    if any(part == "testdata" or part.startswith(("_", ".")) for part in directories):
-        return False
     return not any((ROOT / "lycaon" / Path(*directories[:depth]) / "go.mod").exists()
                    for depth in range(1, len(directories) + 1))
 
@@ -71,7 +81,9 @@ def main_module_go(path):
 def broad_scope(paths):
     reasons = []
     for path in paths:
-        ordinary = (main_module_go(path)
+        if tooling(path):
+            continue
+        ordinary = (module_tree(path)
                     or path.startswith("lycaon-den/src/") and path.endswith((".ts", ".tsx", ".css"))
                     or prose(path) or native_dependencies(path) is not None)
         if path.startswith(SHARED) or not ordinary:
@@ -82,14 +94,16 @@ def broad_scope(paths):
 def selected_lanes(scope, lanes):
     if scope["full"]:
         return set(lanes)
-    paths = [path for path in scope["paths"] if not prose(path)]
+    paths = [path for path in scope["paths"] if not prose(path) and not tooling(path)]
     native = [native_dependencies(path) for path in paths if native_dependencies(path) is not None]
     ordinary = [path for path in paths if native_dependencies(path) is None]
     areas = {"go" if p.startswith("lycaon/") else "den" for p in ordinary}
     # Repository contracts read source outside the package/import graph.
-    chosen = {"limits", "contracts", "integration-build", "behavior"}
+    chosen = {"limits", "build", "behavior"}
     for dependency in native:
         chosen |= dependency["lanes"]
+    if any(tooling(path) for path in scope["paths"]):
+        chosen.add("runner")
     if "go" in areas:
         chosen |= {"behavior", "lint", "vulnerabilities", "command-scale"}
     if "den" in areas:
@@ -136,6 +150,14 @@ def reverse_closure(graph, seeds):
         reached = next_set
 
 
+def owning_package(path, directories):
+    """The nearest Go package at or above a file, which embeds it or reads it as a fixture."""
+    for directory in Path(path).parents:
+        if directory.as_posix() in directories:
+            return directories[directory.as_posix()]
+    return None
+
+
 def go_scope(scope):
     """Go's resolved graph, including integration and test edges; uncertainty means the full recipe."""
     if scope["full"]:
@@ -165,7 +187,7 @@ def go_scope(scope):
                     return None
                 seeds |= matches
             continue
-        package = directories.get(str(Path(path).parent))
+        package = owning_package(path, directories)
         if package is None:
             return None
         seeds.add(package)

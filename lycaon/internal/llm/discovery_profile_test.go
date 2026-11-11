@@ -179,7 +179,7 @@ func TestRegistryTestConnectivityDiscoversModels(t *testing.T) {
 	if err := creds.Set("together", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(t.Context(), catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -210,7 +210,7 @@ func TestRegistryTestConnectivityFailsOnUnauthorized(t *testing.T) {
 	if err := creds.Set("together", "bad-key"); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(t.Context(), catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -252,7 +252,7 @@ func TestRegistryListDiscoversConfiguredTogetherProvider(t *testing.T) {
 	if err := creds.Set("together", wantAuth); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := NewRegistry(t.Context(), catalog, creds)
+	registry, err := NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

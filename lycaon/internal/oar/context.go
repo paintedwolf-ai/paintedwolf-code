@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 // ContentObservation combines attributed content with response protocol facts.
@@ -11,6 +12,7 @@ type ContentObservation struct {
 	Segments        []ContentSegment
 	TextActionTools []string
 	EmptyResponse   *EmptyResponseObservation
+	InvalidResponse bool
 	// ToolCallUnparsed records a native call the provider dropped as invalid JSON.
 	ToolCallUnparsed   bool
 	ToolCallDiagnostic string
@@ -28,6 +30,9 @@ func (gc *GuardContext) SetContentObservation(observation ContentObservation) {
 	if observation.EmptyResponse != nil {
 		gc.Rejection.RejectObservation = "terminal_empty_response"
 		gc.Response = *observation.EmptyResponse
+	}
+	if observation.InvalidResponse {
+		gc.Rejection.RejectObservation = "provider_response_invalid"
 	}
 	if observation.ToolCallUnparsed {
 		gc.Rejection.RejectObservation = "provider_tool_call_unparsed"
@@ -72,7 +77,9 @@ type GuardContext struct {
 	RejectData         map[string]map[string]any
 	ObservationData    map[string]any
 	ObservedRejectCode string
-	Published          map[string]any
+	// Reach is the frozen model request this occurrence's reader acts on.
+	Reach     toolreach.Request
+	Published map[string]any
 }
 
 // ClearMCPObservation zeros all MCP structural facts and clears MCPFields.
@@ -91,7 +98,6 @@ func NewGuardContext() *GuardContext {
 	return &GuardContext{
 		Invocation: InvocationFacts{ToolArgs: map[string]any{}},
 		Access:     AccessFacts{PathOutsideScopeByTool: map[string]bool{}},
-		Source:     SourceFacts{SourceIncludes: map[string]bool{}},
 		RejectData: map[string]map[string]any{},
 		Published:  map[string]any{"paintedwolf.native_operation": ""},
 		lazy: providerState{
@@ -249,20 +255,19 @@ func (gc *GuardContext) DeriveToolClassFacts() {
 		return
 	}
 	t := gc.Invocation.Tool
-	gc.Invocation.ToolIsState = hasPrefix(t, "state_")
-	gc.Invocation.ToolIsDelegation = hasPrefix(t, "delegate_")
-	gc.Invocation.ToolIsHandoff = hasPrefix(t, "handoff_")
 	gc.Invocation.ToolIsTask = t == "task"
-	gc.Invocation.PackRunnerTask = t == "task" // observation: task tool used; agent-type filter is separate
 	if contract, ok := toolcontract.Lookup(t); ok {
+		gc.Invocation.ToolIsState = contract.Owner == "workflow_state"
+		gc.Invocation.ToolIsDelegation = contract.Owner == "delegation"
+		gc.Invocation.ToolIsHandoff = contract.Owner == "handoff"
 		gc.Invocation.ToolPayloadChunkable = contract.ChunkablePayload
+	} else {
+		gc.Invocation.ToolIsState = strings.HasPrefix(t, "state_")
+		gc.Invocation.ToolIsDelegation = strings.HasPrefix(t, "delegate_")
+		gc.Invocation.ToolIsHandoff = strings.HasPrefix(t, "handoff_")
+		gc.Invocation.ToolPayloadChunkable = false
 	}
-	gc.Session.PostureUnresolved = gc.Session.SessionPosture == "" || gc.Session.SessionPosture == "unresolved"
 	if gc.Session.PermissionProfile == "" {
 		gc.Session.PermissionProfile = gc.Session.Profile
 	}
-}
-
-func hasPrefix(s, p string) bool {
-	return len(s) >= len(p) && s[:len(p)] == p
 }

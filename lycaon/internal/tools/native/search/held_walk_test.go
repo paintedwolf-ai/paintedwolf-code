@@ -114,9 +114,13 @@ func TestOneLineConsumerHandlesArbitraryWriteBoundaries(t *testing.T) {
 
 func TestFindConsumerCloseStopsSiblingMetadataAndReleasesParents(t *testing.T) {
 	logs := discoveryCapture(t)
+	const name = "dir/file-%05d-held-until-the-buffer-fills"
+	record := len(fmt.Sprintf("./"+name+"\n", 0))
+	// Output is held up to the buffer, so the walk learns of the close at its first delivery.
+	held := outputBufferBytes / record
 	files := map[string]string{}
-	for i := range 200 {
-		files[fmt.Sprintf("dir/file-%03d", i)] = "data"
+	for i := range 2 * held {
+		files[fmt.Sprintf(name, i)] = "data"
 	}
 	h := newHarness(t, files)
 	h.owners.Catalog = discoveryCatalog(t)
@@ -125,12 +129,12 @@ func TestFindConsumerCloseStopsSiblingMetadataAndReleasesParents(t *testing.T) {
 	streams := streamsFor()
 	streams.Output = output
 	_, err := h.owners.Invoke(t.Context(), h.tc, mustPaths(t, h), h.dispatch, request, streams)
-	if !errors.Is(err, io.ErrClosedPipe) || output.output != "./dir/file-000\n" {
+	if want := fmt.Sprintf("./"+name+"\n", 0); !errors.Is(err, io.ErrClosedPipe) || output.output != want {
 		t.Fatalf("output=%q err=%v", output.output, err)
 	}
 	work := logs.records[request.Invocation.Identity.ExecutionID]
-	if work["entry_metadata_reads"] != 3 || work["directory_handles"] != 2 || work["held_directory_remaining"] != 0 {
-		t.Fatalf("closed consumer work=%v", work)
+	if work["entry_metadata_reads"] > int64(held+3) || work["directory_handles"] != 2 || work["held_directory_remaining"] != 0 {
+		t.Fatalf("closed consumer work=%v, held records=%d", work, held)
 	}
 }
 

@@ -9,6 +9,9 @@
   flex-direction: column;
   gap: var(--spacing-den-5);
   padding: var(--spacing-den-6) var(--spacing-den-7);
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 
   & + & {
     border-top: 1px solid var(--den-line-quiet);
@@ -21,6 +24,7 @@
   gap: var(--spacing-den-4);
   align-items: center;
   margin-bottom: 0;
+  min-width: 0;
 }
 
 @utility den-settings-provider-title {
@@ -28,6 +32,16 @@
   flex-direction: column;
   gap: 0.15rem;
   min-width: 0;
+  flex: 1 1 auto;
+}
+
+@utility den-settings-provider-name {
+  margin: 0;
+  font-weight: 650;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @utility den-settings-provider-rename-trigger {
@@ -70,6 +84,10 @@
   font-size: var(--text-den-overline);
   color: var(--den-text-muted);
   user-select: all;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 @utility den-settings-provider-label-hint {
@@ -144,11 +162,20 @@
   padding: 0;
   margin: 0 0 var(--spacing-den-4);
   font-size: var(--text-den-hint);
+  min-width: 0;
 
   & li {
     display: flex;
+    flex-wrap: wrap;
     gap: var(--spacing-den-4);
     padding: var(--spacing-den-2) 0;
+    min-width: 0;
+  }
+
+  & code,
+  & p {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 }
 
@@ -173,9 +200,14 @@
   align-items: flex-start;
   gap: var(--spacing-den-2);
   margin-top: var(--spacing-den-2);
+  min-width: 0;
+  max-width: 100%;
 
   & p {
     margin: 0;
+    min-width: 0;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 }
 

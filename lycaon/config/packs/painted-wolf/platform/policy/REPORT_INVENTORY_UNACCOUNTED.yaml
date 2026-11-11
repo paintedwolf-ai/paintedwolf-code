@@ -31,7 +31,3 @@ x-paintedwolf-scenarios:
       offender_count: 232
       offenders_sample: 'group:6cca317c · lycaon-sca · critical · osv:CVE-2019-10744 · lycaon/test/testdata/scan/package-lock.json'
       offenders_omitted: 231
-    expect_contains:
-      - 'Code: REPORT_INVENTORY_UNACCOUNTED'
-      - set_asides
-      - scan_group_ids

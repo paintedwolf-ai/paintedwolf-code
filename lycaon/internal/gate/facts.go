@@ -57,8 +57,9 @@ func (p Producer) Has(want Producer) bool { return p&want == want }
 
 // Containment projects the same confinement result applied by the executor.
 type Containment struct {
-	ProcessControl bool
-	HostExecution  bool
+	ProcessControl  bool
+	CredentialStore bool
+	HostExecution   bool
 	// SpawnsProcess distinguishes confined child processes from native host tools.
 	SpawnsProcess bool
 	// FSJailed is true when the write jail is active.

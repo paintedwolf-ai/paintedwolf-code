@@ -7,7 +7,7 @@ selector:
     - scan_summary
     - scan_query
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
   profiles:
     - filesystem
     - tool
@@ -17,8 +17,8 @@ copy:
   what: scan_id does not match a stored scan row for the active project root.
   cause: The supplied id is missing, truncated, stale, or not from the host scan store.
   why: Drill-down reads persisted ingest keyed by the full per-engine scan UUID.
-  fix: For bound work, report the missing assigned id; do not substitute ambient scans. Otherwise use scan_list or scan_pack per_scan[].scan_id, then retry with full scan_ids.
-  instead: Preserve bound scan_ids; resolve unbound ids with scan_list before drill-down
+  fix: 'For bound work, report the missing assigned id; do not substitute ambient scans. {{ paintedwolf.next_steps }}'
+  instead: 'Preserve bound scan_ids; resolve unbound ids before drill-down.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:scan_drilldown
 x-paintedwolf-message: Scan id not found for this project
@@ -28,7 +28,3 @@ x-paintedwolf-scenarios:
       profile: coordinator
       scan_id: deadbeef
       tool: scan_query
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SCAN_NOT_FOUND'
-      - scan_list

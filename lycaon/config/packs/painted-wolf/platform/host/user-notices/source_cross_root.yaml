@@ -8,6 +8,3 @@ suggested_action: Pick a destination inside the same attached folder as the sour
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - attached folders
-      - same

@@ -198,6 +198,8 @@ function formatArrayItem(item: unknown): string {
   }
   if (typeof item.path === "string") {
     const extras: string[] = [];
+    if (typeof item.op === "string" && item.op.trim()) extras.push(item.op);
+    if (item.unrecorded === true) extras.push("unrecorded");
     if (typeof item.mode === "string") extras.push(item.mode);
     if (typeof item.size === "number") extras.push(`${item.size} B`);
     if (typeof item.is_dir === "boolean") extras.push(item.is_dir ? "dir" : "file");

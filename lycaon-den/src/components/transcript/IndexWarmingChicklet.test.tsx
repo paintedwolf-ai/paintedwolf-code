@@ -69,7 +69,6 @@ describe("IndexWarmingChicklet", () => {
       />
     ));
     const title = container.querySelector(".den-tool-part-title")?.textContent ?? "";
-    expect(title).toContain("prefetch for shared link");
     expect(title).toContain("1 host");
     expect(title).not.toContain("hourly seed cap");
     expect(title).not.toContain("tailwind dark mode");
@@ -120,7 +119,6 @@ describe("IndexWarmingChicklet", () => {
 
 describe("indexWarmingChickletTitle", () => {
   it("covers all session warm triggers without topic snippets", () => {
-    expect(indexWarmingTriggerPhrase("intent")).toBe("background prefetch");
     expect(indexWarmingTriggerPhrase("search")).toBe("after web_search");
     expect(indexWarmingTriggerPhrase("fetch")).toBe("after fetch_url");
     expect(

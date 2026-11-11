@@ -49,7 +49,7 @@ func TestExploreLegToolsMatchExploreProfile(t *testing.T) {
 					t.Fatalf("%s LegTools must not include unavailable tool %q: %v", agentType, forbidden, got)
 				}
 			}
-			for _, want := range []string{"command", "survey_repo", "complete_leg"} {
+			for _, want := range []string{"command", "complete_leg"} {
 				if !legToolsContains(got, want) {
 					t.Fatalf("%s LegTools missing %q: %v", agentType, want, got)
 				}

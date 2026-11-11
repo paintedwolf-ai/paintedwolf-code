@@ -1,0 +1,14 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/evidence",
+  "kind": "module",
+  "workstream": "program-observation-evidence",
+  "disposition": "retain",
+  "reason": "Evidence shapes, grounding and bounded capture remain one ledger domain. Program observation capture is separate from source mapping and cannot index stdout paths. Retain the measured immediate membership; further membership changes require review.",
+  "reviewed_commit": "62c955c3704aaefe1d48fc485b09e6201a4244cd",
+  "ceiling": 46,
+  "boundaries": {
+    "lycaon/internal/evidence/program_observation_test.go": "164e526779865beb60365020c0b2e461256c665a2899764a43dee72586058a6b"
+  },
+  "reviewed_shape": "ebd86b4f3a95fc4dae0ba24805ba1ad91732c51666098ef285f2189237ba142f"
+}

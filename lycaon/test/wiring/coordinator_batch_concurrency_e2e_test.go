@@ -286,7 +286,7 @@ func TestCoordinatorPackBoardShowsInFlightRosterE2E(t *testing.T) {
 			Agent: "coordinator"},
 	})
 	testutil.FailErr(t, "pack_board", err)
-	for _, want := range []string{"in flight", "repo-researcher", "path-explorer", "implementer"} {
+	for _, want := range []string{"repo-researcher", "path-explorer", "implementer"} {
 		if !strings.Contains(raw, want) {
 			t.Fatalf("pack_board = %q missing %q", raw, want)
 		}

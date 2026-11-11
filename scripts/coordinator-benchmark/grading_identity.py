@@ -1,13 +1,19 @@
-"""Bind every grading revision to its unchanged paid execution."""
+"""Bind every grading revision, measurement cache, and report lease to its unchanged paid execution."""
+from contextlib import contextmanager
+import fcntl
+import json
 import pathlib
-import uuid
 import shutil
 import tempfile
+import uuid
+from progress import save
 from snapshot import identity, file_hash
 
-GRADING_FILES = {'benchmark.json', 'built_runtime.py', 'snapshot.py', 'grading_state.py', 'candidate_process.py', 'execution_evidence.py', 'allowance_evidence.py', 'coordinator_evidence.py', 'fixture_contracts.py', 'fixture-contracts.json', 'sampling.py', 'oracle_process.py', 'focused_outcomes.py', 'focused_evidence.py', 'report.py', 'grade.py', 'outcomes.py', 'candidate_tests.py', 'candidate_cli.py', 'unittest_structure.py', 'worker_evidence.py',
-                 'cost_evidence.py', 'verification_evidence.py', 'episode_evidence.py', 'workflow_evidence.py', 'grading_identity.py', 'artifacts.py', 'measurement_cache.py',
-                 'ledger.py', 'timestamps.py', 'dispatch_graph.py', 'orchestration_evidence.py', 'decision_evidence.py', 'capability_evidence.py', 'closeout_evidence.py', 'structure.py', 'requirements.txt'}
+GRADING_FILES = {'benchmark.json', 'built_runtime.py', 'snapshot.py', 'candidate_process.py', 'fixture_contracts.py',
+                 'fixture-contracts.json', 'sampling.py', 'focused_outcomes.py', 'focused_evidence.py', 'report.py',
+                 'grade.py', 'outcomes.py', 'candidate_tests.py', 'candidate_cli.py', 'cost_evidence.py',
+                 'verification_evidence.py', 'episode_evidence.py', 'grading_identity.py', 'artifacts.py',
+                 'ledger.py', 'orchestration_evidence.py', 'requirements.txt'}
 GRADING_FILES |= {'portable_command/' + name + '.py' for name in ('__init__', 'contracts', 'artifacts', 'grading', 'live')}
 
 
@@ -55,6 +61,46 @@ def retain_grader(run, current, digest):
                 if not destination.exists():
                     raise
     if (grading_hash(destination) != digest or implementation_files(destination) != implementation_files(current)
-        or (destination / 'benchmark.json').read_bytes() != (current / 'benchmark.json').read_bytes()):
+            or (destination / 'benchmark.json').read_bytes() != (current / 'benchmark.json').read_bytes()):
         raise ValueError('retained grader differs from its identity')
     return destination
+
+
+@contextmanager
+def report_lease(run):
+    with (run / 'grading-report.lock').open('a') as lease:
+        fcntl.flock(lease, fcntl.LOCK_EX)
+        yield
+
+
+def select_report(run, status, publish=False):
+    """Select a completed receipt while its report lease is held."""
+    if status.get('report_sha256'):
+        source = pathlib.Path(status['report_path'])
+        if not source.is_absolute() or source.is_symlink() or file_hash(source) != status['report_sha256']:
+            raise ValueError('selected grading report differs from its receipt')
+        result = json.loads(source.read_text())
+        if result['run_id'] != status['report_id']:
+            raise ValueError('selected grading report has a different revision')
+        if publish:
+            destination = run / ('public.json' if result['mode'] == 'release' else 'preview.json')
+            save(destination, result)
+    elif publish:
+        for name in ('public.json', 'preview.json'):
+            (run / name).unlink(missing_ok=True)
+    save(run / 'grading-status.json', status)
+
+
+def measure(capture, grading, inputs, evaluate):
+    evidence = {str(path.relative_to(capture)): file_hash(path) for path in sorted(inputs)}
+    key = identity({'grading': grading, 'evidence': evidence})
+    path = capture / ('measurement-' + key + '.json')
+    if path.exists():
+        receipt = json.loads(path.read_text())
+        if receipt['identity'] != key or receipt['result_sha256'] != identity(receipt['result']):
+            raise ValueError('measurement receipt is corrupt')
+        return receipt['result']
+    result = evaluate()
+    if result['outcome'] in {'passed', 'failed'}:
+        save(path, {'identity': key, 'result': result, 'result_sha256': identity(result)})
+    return result

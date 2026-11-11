@@ -173,6 +173,7 @@ func prepareMountedWorkspaceView(ctx context.Context, m *Manager, binding *Bindi
 	projectID := workspaceProjectFromContext(ctx, projKey)
 	metaDir := enginepaths.MetaDirForBranchRoot(binding.Root)
 	cv, snap, err := services.coordinator.ClaimSelectedView(ctx, claim.ClaimRequest{
+		HiddenPaths: m.hiddenEnginePaths(),
 		Identity: claim.ClaimIdentity{
 			WorkerID:         binding.ID,
 			ProjectID:        projectID,

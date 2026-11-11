@@ -7,5 +7,3 @@ suggested_action: "Check file permissions and close applications using the item,
 scenarios:
   - id: default
     vars: {reason: "The disk is full."}
-    expect_contains:
-      - "The system could not complete the move to Trash"

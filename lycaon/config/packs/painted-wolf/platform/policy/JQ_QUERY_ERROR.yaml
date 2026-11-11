@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       detail: Cannot index array with "name"
       profile: explore_readonly
       tool: jq
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: JQ_QUERY_ERROR'

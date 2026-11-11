@@ -3,6 +3,7 @@ package workercompletion
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"strings"
 	"unicode/utf8"
@@ -46,9 +47,9 @@ type WorkerSummaryEvalInput struct {
 	Hints *guidance.HintConfig
 	// Pipeline is required for blocking Decisions (worker.report_check EvaluateBlock).
 	Pipeline *oar.GuardPipeline
-	// OfferedTools are the tools the worker's latest turn could call. Absent
+	// Reach is what the worker's latest turn could call. Absent
 	// evidence leaves every paintedwolf.can_* fact false.
-	OfferedTools []string
+	Reach toolreach.Request
 }
 
 // WorkerSummaryEvalResult is the outcome of summary validation.
@@ -184,6 +185,11 @@ func decideWorkerSummary(
 ) (WorkerSummaryEvalResult, error) {
 	data := guidance.OffenderHintData(obs.Offenders)
 	if audit != nil {
+		roots := evidence.CitationRoots{ProjectDir: in.ProjectDir, Roots: in.ProjectRoots, ActiveRootID: in.ActiveRootID}
+		report.Findings = append([]WorkerFinding(nil), report.Findings...)
+		for i, finding := range report.Findings {
+			report.Findings[i].Cite = guidance.FindingCitation(roots, audit.ev, finding.Path, finding.Line, finding.Excerpt)
+		}
 		data = guidance.GroundingHintData(obs.Offenders, audit.ev)
 	}
 	observedValid := !obs.MissingReport && !obs.NoProse && !obs.NoSurveyEvidence && !obs.SurfaceClaimUngrounded && !obs.PageMeasureUngrounded && !obs.NoArtifact && len(obs.Offenders) == 0 && obs.MaxChars == 0
@@ -199,7 +205,7 @@ func decideWorkerSummary(
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = in.ChildSessionID
 	gc.Session.Profile = "worker"
-	tools.RegisterRecoveryFacts(tools.WithRecoveryTools(ctx, in.OfferedTools), gc)
+	tools.RegisterRecoveryFacts(tools.WithCallReach(ctx, in.Reach), gc)
 	publishWorkerSummaryFacts(gc, in.AgentType, obs)
 	putWorkerRejectData(gc, obs, data)
 	var code string
@@ -334,7 +340,7 @@ func toolMessageFailed(msg api.Message) bool {
 // FormatFeedback preserves the occurrence's frozen copy through retry and delivery.
 func (r WorkerSummaryEvalResult) FormatFeedback(ctx context.Context, hints *guidance.HintConfig) (string, error) {
 	if r.HintCopy != nil {
-		return guidance.RenderPolicyCopy(ctx, r.HintCode, string(r.HintEffect), r.HintCopy)
+		return guidance.RenderPolicyCopy(ctx, r.HintCode, string(r.HintEffect), r.HintCopy, nil)
 	}
 	return guidance.FormatWorkerSummaryFeedback(hints, r.HintCode, r.HintData)
 }

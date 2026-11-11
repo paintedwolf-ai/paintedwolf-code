@@ -143,7 +143,7 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 		t.Fatalf("normalize metadata url: %v", err)
 	}
 	//nolint:bodyclose // the assertion is that guardedGet errors before any response exists
-	if _, _, err := guardedGet(context.Background(), u, acceptHeaderForMode("text")); err == nil || !strings.Contains(err.Error(), "blocked") {
+	if _, _, err := guardedGet(context.Background(), u, researchAcceptHeader); err == nil || !strings.Contains(err.Error(), "blocked") {
 		t.Fatalf("redirect to metadata address must be blocked, got err=%v", err)
 	}
 
@@ -151,7 +151,7 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize hop url: %v", err)
 	}
-	resp, finalURL, err := guardedGet(context.Background(), u, acceptHeaderForMode("text"))
+	resp, finalURL, err := guardedGet(context.Background(), u, researchAcceptHeader)
 	if err != nil {
 		t.Fatalf("same-host redirect should be followed: %v", err)
 	}

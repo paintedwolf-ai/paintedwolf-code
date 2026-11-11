@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { describe, expect, it, vi } from "vitest";
 import { ProjectFolderZone } from "./ProjectFolderZone.tsx";
@@ -188,8 +189,8 @@ describe("ProjectFolderZone", () => {
     ));
 
     expect(screen.getByText("Destination changed")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
-    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("retry"), "button"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("cancel"), "button"));
     expect(onRetryPromotion).toHaveBeenCalledOnce();
     expect(onCancelPromotion).toHaveBeenCalledOnce();
   });
@@ -210,8 +211,8 @@ describe("ProjectFolderZone", () => {
     ));
 
     expect(screen.getByText("Draft cleanup needs attention")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(screen.queryByTestId("cancel")).toBeNull();
+    fireEvent.click(assertNamedControl(screen.getByTestId("retry"), "button"));
     expect(onRetryPromotion).toHaveBeenCalledOnce();
   });
 });

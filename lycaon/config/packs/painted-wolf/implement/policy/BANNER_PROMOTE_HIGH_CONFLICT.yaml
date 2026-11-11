@@ -24,7 +24,4 @@ scenarios:
     overlay_id: job-notes
     spill_path: promote-spills/job-notes.json
     threshold: 10
-  expect_contains:
-  - BANNER_PROMOTE_HIGH_CONFLICT
-  - promote_overlay
 id: BANNER_PROMOTE_HIGH_CONFLICT

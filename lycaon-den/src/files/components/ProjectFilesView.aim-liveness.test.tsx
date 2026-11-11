@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 // @vitest-environment jsdom
 import "../../test/document-outbox-fixture.ts";
 import { sourceEffectFixture } from "../source/source-effect-fixture.ts";
@@ -56,6 +57,13 @@ function readKey(path: string): FileBufferKey {
 }
 
 type ReadGate = Map<string, ReturnType<typeof deferred<ReturnType<typeof sourceRead>>>>;
+
+// Tabs share the files-tab test id; data-path discriminates the instance.
+function filesTab(path: string) {
+  const tab = screen.getAllByTestId("files-tab").find((tab) => tab.dataset.path === path);
+  expect(tab, `tab for ${path}`).toBeDefined();
+  return assertNamedControl(tab!, "tab");
+}
 
 function listingClient(options: {
   gate?: ReadGate;
@@ -197,12 +205,12 @@ describe("ProjectFilesView aim liveness matrix", () => {
     setFilesActiveBuffer(PROJECT, readKey("a.ts"));
     setFilesActiveBuffer(PROJECT, provisional);
     expect(projectFilesState(PROJECT).pendingKey).toBe(provisional);
-    await waitFor(() => expect(screen.getByRole("tab", { name: "b.ts" }).getAttribute("aria-busy")).toBe("true"));
+    await waitFor(() => expect(filesTab("b.ts").getAttribute("aria-busy")).toBe("true"));
     expect(screen.getByTestId("files-pane-presentation").querySelector('[role="status"]')).toBeNull();
 
     gate.get("b.ts")!.resolve(sourceRead("b.ts"));
     await expectPresented(readKey("b.ts"));
-    expect(screen.getByRole("tab", { name: "b.ts" }).getAttribute("aria-busy")).toBe("false");
+    expect(filesTab("b.ts").getAttribute("aria-busy")).toBe("false");
   });
 
   it("a hot-exit restore presents the restored active tab", async () => {

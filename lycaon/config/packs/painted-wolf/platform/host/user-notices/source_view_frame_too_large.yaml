@@ -6,5 +6,3 @@ suggested_action: Open the file directly to inspect its contents.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Source row is too large

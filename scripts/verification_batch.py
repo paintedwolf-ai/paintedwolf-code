@@ -11,6 +11,7 @@ import time
 import uuid
 
 import verification_advisories as advisories
+from verification_lifecycle.digest import PreviewFilter, deliver, invocation_digest, request_digest
 from verification_history import estimate, read_history
 from verification_plan import compatibility, outcome_exit
 from verification_resources import blocked_reason, foreground_git_environment, order_of
@@ -221,6 +222,7 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
     supervisor = None
     assignment = None
     log = None
+    preview = PreviewFilter()
     last_notice = 0.0
     last_state = None
     with lease_class(queue, name, int(environment["PW_TEST_WORKERS"]), descriptor) as lease:
@@ -253,7 +255,7 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                         log = (directory / "batch.log").open("rb")
                     output = log.read()
                     if output:
-                        sys.stdout.buffer.write(output)
+                        sys.stdout.buffer.write(preview.feed(output))
                         sys.stdout.buffer.flush()
                     receipt = directory / (lease.entry["ticket"] + ".json")
                     if receipt.exists():
@@ -272,23 +274,30 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                         if all((directory / (member + ".json")).exists() for member in live) and not (directory / "finished.json").exists():
                             time.sleep(0.05)
                             continue
-                        output = log.read()
-                        if output:
-                            sys.stdout.buffer.write(output)
-                            sys.stdout.buffer.flush()
+                        sys.stdout.buffer.write(preview.feed(log.read()) + preview.finish())
+                        sys.stdout.buffer.flush()
                         result = value
-                        print(f"test execution: {name}: {result['status']} (source {result.get('source_commit') or 'uncaptured'}; receipt {receipt})",
-                              file=sys.stderr, flush=True)
+                        notice = f"test execution: {name}: {result['status']} (source {result.get('source_commit') or 'uncaptured'}; receipt {receipt})"
+                        print(notice, file=sys.stderr, flush=True)
                         final = read_optional(directory / "finished.json") or {}
-                        if final.get("status") == "unverified":
-                            return 2
                         # The receipt keeps the tool's own code; the caller gets
                         # the runner's verdict.
-                        return outcome_exit(result["exit_code"], result["status"] != "unverified")
+                        verdict = 2 if final.get("status") == "unverified" else outcome_exit(
+                            result["exit_code"], result["status"] != "unverified")
+                        if verdict:
+                            overridden = final.get("status") == "unverified" and result["status"] != "unverified"
+                            deliver(request_digest(result, receipt, directory, verdict, late=notice,
+                                                   status="unverified" if overridden else None,
+                                                   reason=final.get("reason") if overridden else None))
+                        return verdict
                     if not any(e["ticket"] == assignment["ticket"] for e in entries):
                         result = unfinished_receipt(directory, lease.entry, "Batch exited without completing this request")
                         write_json(receipt, result)
-                        print(f"test execution: {result['reason']}; receipt {receipt}", file=sys.stderr)
+                        notice = f"test execution: {result['reason']}; receipt {receipt}"
+                        print(notice, file=sys.stderr, flush=True)
+                        sys.stdout.buffer.write(preview.finish())
+                        sys.stdout.buffer.flush()
+                        deliver(request_digest(result, receipt, directory, 2, late=notice))
                         return 2
                 state = "sharing active verification" if assignment else ("paused" if paused else "waiting for admission")
                 if state != last_state:
@@ -298,6 +307,17 @@ def subscribe(queue, lease_class, lock_file, root, binary, arguments, plan, envi
                     report(queue, lease.entry["ticket"])
                     last_notice = time.monotonic()
                 time.sleep(0.25)
+        except KeyboardInterrupt:
+            reason = "Interrupted before this request had a result; shared work may continue"
+            if assignment:
+                directory = Path(assignment["directory"])
+                cancelled = read_optional(directory / (lease.entry["ticket"] + ".cancelled.json"))
+                partial = unfinished_receipt(directory, lease.entry, (cancelled or {}).get("reason") or reason)
+                partial.update(status="cancelled" if cancelled else "unverified", exit_code=130)
+                deliver(request_digest(partial, directory / (lease.entry["ticket"] + ".json"), directory, 130))
+            else:
+                deliver(invocation_digest(name, 130, status="unverified", reason=reason))
+            raise
         finally:
             if log:
                 log.close()

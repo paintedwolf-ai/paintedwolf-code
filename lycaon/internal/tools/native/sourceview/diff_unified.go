@@ -47,10 +47,10 @@ func DiffHunks(ops []DiffOp, context int, changed func(index int) bool) []DiffHu
 		merged = append(merged, span{i, i + 1})
 	}
 	hunks := make([]DiffHunk, 0, len(merged))
+	oldLine, newLine, counted := 1, 1, 0
 	for _, c := range merged {
 		h := DiffHunk{StartOp: max(c.start-context, 0), EndOp: min(c.end+context, len(ops))}
-		oldLine, newLine := 1, 1
-		for _, op := range ops[:h.StartOp] {
+		for _, op := range ops[counted:h.StartOp] {
 			if op.Tag != '+' {
 				oldLine++
 			}
@@ -58,6 +58,7 @@ func DiffHunks(ops []DiffOp, context int, changed func(index int) bool) []DiffHu
 				newLine++
 			}
 		}
+		counted = h.StartOp
 		h.OldStart, h.NewStart = oldLine, newLine
 		for _, op := range ops[h.StartOp:h.EndOp] {
 			if op.Tag != '+' {
@@ -78,6 +79,64 @@ func UnifiedDiff(fromName, toName string, oldLines, newLines []string, context i
 		return ""
 	}
 	ops, _ := DiffScript(oldLines, newLines, nil, 0)
+	return renderUnified(fromName, toName, ops, oldLines, newLines, context)
+}
+
+// lineTableCells is one line's string header in DiffScript's four-byte cells, and
+// lineScriptCells its entry in the output script.
+const (
+	lineTableCells  = 4
+	lineScriptCells = 6
+)
+
+// UnifiedDiffWithin is UnifiedDiff under a ceiling in DiffScript's cells, line
+// tables included, and returns ErrDiffTooLarge above it. A side that only grew or
+// shrank needs no edit search, so its cost stays linear in the file.
+func UnifiedDiffWithin(fromName, toName, oldText, newText string, context int, maxCells int64) (string, error) {
+	lines := int64(strings.Count(oldText, "\n") + strings.Count(newText, "\n") + 2)
+	tables := lines * lineTableCells
+	if needed := tables + lines*lineScriptCells; needed > maxCells {
+		return "", &DiffLimitError{maxCells, needed}
+	}
+	oldLines, newLines := SplitLines(oldText), SplitLines(newText)
+	if len(oldLines) == 0 && len(newLines) == 0 {
+		return "", nil
+	}
+	ops, ok := edgeOnlyScript(oldLines, newLines)
+	if !ok {
+		var err error
+		if ops, err = DiffScript(oldLines, newLines, nil, maxCells-tables); err != nil {
+			return "", err
+		}
+	}
+	return renderUnified(fromName, toName, ops, oldLines, newLines, context), nil
+}
+
+// edgeOnlyScript answers without a search when, past the common edges, one side
+// has nothing left. It builds the script DiffScript would.
+func edgeOnlyScript(oldLines, newLines []string) ([]DiffOp, bool) {
+	prefix, suffix := commonEdges(oldLines, newLines, func(a, b string) bool { return a == b })
+	removed, added := len(oldLines)-prefix-suffix, len(newLines)-prefix-suffix
+	if removed > 0 && added > 0 {
+		return nil, false
+	}
+	ops := make([]DiffOp, 0, prefix+removed+added+suffix)
+	for i := range prefix {
+		ops = append(ops, DiffOp{' ', i, i})
+	}
+	for i := range removed {
+		ops = append(ops, DiffOp{'-', prefix + i, -1})
+	}
+	for i := range added {
+		ops = append(ops, DiffOp{'+', -1, prefix + i})
+	}
+	for i := range suffix {
+		ops = append(ops, DiffOp{' ', prefix + removed + i, prefix + added + i})
+	}
+	return ops, true
+}
+
+func renderUnified(fromName, toName string, ops []DiffOp, oldLines, newLines []string, context int) string {
 	hunks := DiffHunks(ops, context, nil)
 	if len(hunks) == 0 {
 		return ""

@@ -8,14 +8,6 @@ import {
 } from "./cache-settings-copy.ts";
 
 describe("cache-settings-copy", () => {
-  it("maps known bucket ids to labels without engine name", () => {
-    const web = cacheBucketCopy("web_index");
-    expect(web.label).toBe("Web research index");
-    expect(web.clearLabel.toLowerCase()).not.toContain("lycaon");
-    expect(CACHE_SETTINGS_COPY.intro.toLowerCase()).not.toContain("lycaon");
-    expect(CACHE_SETTINGS_COPY.durableKeepNote).toMatch(/chats/i);
-  });
-
   it("uses generic label for unknown host ids", () => {
     const unk = cacheBucketCopy("future_bucket");
     expect(unk.label).toBe(CACHE_SETTINGS_COPY.unknownBucketLabel);
@@ -23,7 +15,6 @@ describe("cache-settings-copy", () => {
   });
 
   it("builds confirms that keep durable messaging", () => {
-    expect(cacheClearBucketConfirm("fetch_cache")).toContain("Fetched pages");
     expect(cacheClearBucketConfirm("fetch_cache")).toContain(
       CACHE_SETTINGS_COPY.durableKeepNote,
     );

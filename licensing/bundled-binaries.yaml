@@ -104,9 +104,7 @@ binaries:
     source_url: https://github.com/JetBrains/JetBrainsMono
     license_text_file: texts/OFL-1.1-jetbrainsmono.txt
 
-  # Compiled into bialy on Apple silicon from third_party/mlx's pinned offline
-  # C++ sources (outside cargo-about's view); its kernels ship as engine-root/decide/mlx.metallib. The
-  # notice file covers the code MLX links in.
+  # Native MLX sources and kernels are shared by both local model runtimes.
   - name: MLX
     version: "0.32.2"
     license: MIT
@@ -121,3 +119,10 @@ binaries:
     source_url: https://huggingface.co/convaiinnovations/laya-multilingual
     license_text_file: texts/Apache-2.0.txt
     notice_text_file: texts/laya-multilingual-notices.md
+
+  - name: llama.cpp generation adapter
+    version: "bc428e407a52bd3e21b5985cabeef57cdff9bc4a"
+    license: MIT
+    source_url: https://github.com/ggml-org/llama.cpp/tree/bc428e407a52bd3e21b5985cabeef57cdff9bc4a
+    license_text_file: texts/MIT-llama.txt
+    notice_text_file: texts/llama-compiled-notices.md

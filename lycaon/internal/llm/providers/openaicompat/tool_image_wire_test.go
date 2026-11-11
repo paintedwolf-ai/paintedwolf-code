@@ -111,7 +111,7 @@ func TestToolImagesFollowTheirRunInOneUserMessage(t *testing.T) {
 	}
 	for i, callID := range []string{"call-a", "call-b"} {
 		caption, image := parts[2*i], parts[2*i+1]
-		if caption.Type != "text" || !strings.Contains(caption.Text, "⟦D:tool:image⟧") || !strings.Contains(caption.Text, callID) {
+		if caption.Type != "text" || !strings.Contains(caption.Text, "Data from tool (image):") || !strings.Contains(caption.Text, callID) {
 			t.Fatalf("caption %d = %+v", i, caption)
 		}
 		if image.Type != "image_url" || image.ImageURL == nil || !strings.HasPrefix(image.ImageURL.URL, "data:image/png;base64,") {

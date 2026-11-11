@@ -29,6 +29,10 @@ func symbolWindowLines(d DefinitionItem, windowLines int, lines []string) (PackW
 	if lines == nil {
 		lines = strings.Split(d.Head, "\n")
 	}
+	// A final newline ends the last line; it does not start another.
+	if n := len(lines); n > 0 && lines[n-1] == "" && strings.HasSuffix(d.Head, "\n") {
+		lines = lines[:n-1]
+	}
 	endHead := start + len(lines) - 1
 	if d.Line < start || d.Line > endHead {
 		return PackWindow{}, false

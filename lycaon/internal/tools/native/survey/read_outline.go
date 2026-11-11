@@ -120,20 +120,24 @@ func OutlineResponse(path string, outline fileoutline.Result) ReadResponse {
 		switch {
 		case large && len(outline.Symbols) > 0:
 			summary = fmt.Sprintf(
-				"%d lines — large file (outline only); symbols[] lists defs with line numbers. For how/what: summarize(path=%q). For edits: read(symbol=…) or ranges at known lines — not full-file paging",
+				"%d lines — large file (outline only); symbols[] lists defs with line numbers. For how/what: summarize(path=%q). For edits: sed -n START,ENDp %s at known lines — not full-file paging",
 				outline.TotalLines,
+				path,
 				path,
 			)
 		case large:
 			summary = fmt.Sprintf(
-				"%d lines — large file (outline only, no defs in symbols[]). For how/what: summarize(path=%q); else grep to anchor then ranges (short files: mode=content once OK)",
+				"%d lines — large file (outline only, no defs in symbols[]). For how/what: summarize(path=%q); else grep -n to anchor then sed -n START,ENDp %s (short files: cat %s once OK)",
 				outline.TotalLines,
+				path,
+				path,
 				path,
 			)
 		default:
 			summary = fmt.Sprintf(
-				"%d lines — requested outline; symbols[] lists available definitions. Use mode=content for the full short file",
+				"%d lines — requested outline; symbols[] lists available definitions. Use cat %s for the full short file",
 				outline.TotalLines,
+				path,
 			)
 		}
 		if outline.Parses != nil && !*outline.Parses && len(outline.Errors) > 0 {

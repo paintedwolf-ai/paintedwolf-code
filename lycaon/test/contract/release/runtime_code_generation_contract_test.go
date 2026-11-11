@@ -26,18 +26,14 @@ func TestShippedGoBinariesLinkNoRuntimeCodeGenerator(t *testing.T) {
 	if len(staged) == 0 {
 		t.Fatal("scripts/stage-engine.sh: no `go build ./cmd/...` invocations found — the extraction pattern is stale")
 	}
-	// Some staged commands exist on one platform only, so -e lets the other platform list past them.
+	// Some staged commands exist for one platform only, and go list refuses a
+	// package with no files for the platform it is asked about.
 	for _, goos := range []string{"darwin", "linux"} {
-		cmd := exec.CommandContext(t.Context(), "go", append([]string{"list", "-e", "-deps", "-tags=paintedwolf_release"}, staged...)...)
-		cmd.Dir = filepath.Join(root, "lycaon")
-		cmd.Env = append(os.Environ(), "GOOS="+goos)
-		var stderr bytes.Buffer
-		cmd.Stderr = &stderr
-		out, err := cmd.Output()
-		if err != nil {
-			t.Fatalf("go list %s release dependencies: %v\n%s", goos, err, stderr.String())
+		present := strings.Fields(goList(t, root, goos, append([]string{"-e", "-f", "{{if .GoFiles}}{{.ImportPath}}{{end}}"}, staged...)...))
+		if len(present) == 0 {
+			t.Fatalf("%s: none of the staged commands %v build here", goos, staged)
 		}
-		for pkg := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
+		for pkg := range strings.SplitSeq(strings.TrimSpace(goList(t, root, goos, append([]string{"-deps"}, present...)...)), "\n") {
 			for _, generator := range runtimeCodeGenerators {
 				if strings.HasPrefix(pkg, generator) {
 					t.Errorf("%s release build links %s, which generates machine code at run time and is killed under the "+
@@ -46,4 +42,18 @@ func TestShippedGoBinariesLinkNoRuntimeCodeGenerator(t *testing.T) {
 			}
 		}
 	}
+}
+
+func goList(t *testing.T, root, goos string, args ...string) string {
+	t.Helper()
+	cmd := exec.CommandContext(t.Context(), "go", append([]string{"list", "-tags=paintedwolf_release"}, args...)...)
+	cmd.Dir = filepath.Join(root, "lycaon")
+	cmd.Env = append(os.Environ(), "GOOS="+goos)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("go list release dependencies for %s: %v\n%s", goos, err, stderr.String())
+	}
+	return string(out)
 }

@@ -127,7 +127,9 @@ func TestOnTurnCompleteParksForHostObligation(t *testing.T) {
 			return true, nil
 		},
 		// Host holds outrank workflow retry timers.
-		WorkflowObligationsOpen: func(context.Context, string) bool { return true },
+		LoopWakeSignalDeps: LoopWakeSignalDeps{
+			WorkflowObligationsOpen: func(context.Context, string) bool { return true },
+		},
 		WorkflowSource: workflowFixturePorts(hostObligationParkWF{
 			run: &api.WorkflowRun{ID: "run-1", Status: api.WorkflowRunStatusRunning, CurrentPhase: "ingest"},
 		}),
@@ -234,7 +236,9 @@ func TestOnTurnCompleteObligationsOpenArmsWorkflowRetry(t *testing.T) {
 		WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) {
 			return true, nil
 		},
-		WorkflowObligationsOpen: func(context.Context, string) bool { return true },
+		LoopWakeSignalDeps: LoopWakeSignalDeps{
+			WorkflowObligationsOpen: func(context.Context, string) bool { return true },
+		},
 	})
 	continuation := loop.Waits.OnTurnComplete(context.Background(), "sess-oblig", true)
 	if continuation != UserTurnContinues {
@@ -264,7 +268,9 @@ func TestOnTurnCompleteObligationsOpenAppliesToUserTurns(t *testing.T) {
 		WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) {
 			return true, nil
 		},
-		WorkflowObligationsOpen: func(context.Context, string) bool { return true },
+		LoopWakeSignalDeps: LoopWakeSignalDeps{
+			WorkflowObligationsOpen: func(context.Context, string) bool { return true },
+		},
 	})
 	loop.Waits.OnTurnComplete(context.Background(), "sess-oblig-user", false)
 	if !loop.Waits.IsSleeping("sess-oblig-user") {
@@ -284,7 +290,9 @@ func TestOnTurnCompleteObligationsSettledParksForUser(t *testing.T) {
 		WorkerCycleIdle: func(context.Context, *api.Session, string) (bool, error) {
 			return true, nil
 		},
-		WorkflowObligationsOpen: func(context.Context, string) bool { return false },
+		LoopWakeSignalDeps: LoopWakeSignalDeps{
+			WorkflowObligationsOpen: func(context.Context, string) bool { return false },
+		},
 	})
 	loop.Waits.OnTurnComplete(context.Background(), "sess-settled", true)
 	if got := sleepReasonForTest(loop.Waits, "sess-settled"); got != "awaiting user after idle host turn" {

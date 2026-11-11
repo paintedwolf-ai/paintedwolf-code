@@ -80,6 +80,11 @@ ON CONFLICT(id) DO NOTHING;
 SELECT * FROM model_outputs
 WHERE id = ?;
 
+-- name: MaxSettledModelOutputIteration :one
+SELECT CAST(COALESCE(MAX(iteration), 0) AS INTEGER) AS max_iteration
+FROM model_outputs
+WHERE turn_attempt_id = ?;
+
 -- name: DeleteLiveModelOutput :exec
 DELETE FROM live_model_outputs WHERE id = ?;
 

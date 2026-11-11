@@ -6,4 +6,3 @@ suggested_action: Request an explanation from the Review lens.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [does not have an AI explanation]

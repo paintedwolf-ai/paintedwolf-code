@@ -35,8 +35,9 @@ type Decision struct {
 	Engine     decide.Engine `json:"engine"`
 	Elapsed    time.Duration `json:"-"`
 	// Abstained is true when no engine answered; Reason says why.
-	Abstained bool   `json:"abstained"`
-	Reason    string `json:"reason,omitempty"`
+	Abstained bool           `json:"abstained"`
+	Reason    string         `json:"reason,omitempty"`
+	Failure   RankingFailure `json:"failure,omitempty"`
 }
 
 // ToolIDs returns the loaded tools in sorted order.
@@ -111,12 +112,12 @@ func verdictOf(a decide.Answer, id string) (Verdict, bool) {
 	return Verdict{P: p, Confidence: math.Max(p, 1-p)}, true
 }
 
-// Decide applies the catalog thresholds; engine faults load no tools and omit no guides.
+// Decide applies catalog thresholds and records typed selection failures.
 func Decide(ctx context.Context, d decide.Decider, spec TurnSpec, state State, candidates []Candidate) Decision {
 	candidates = spec.Tools.Candidates(candidates)
 	out := Decision{Candidates: candidates}
 	if d == nil || !d.Available() {
-		out.Abstained, out.Reason = true, "engine unavailable"
+		out.Abstained, out.Reason, out.Failure = true, "engine unavailable", RankingUnavailable
 		return out
 	}
 	if len(candidates) == 0 {
@@ -127,7 +128,7 @@ func Decide(ctx context.Context, d decide.Decider, spec TurnSpec, state State, c
 	defer cancel()
 	res, err := ask(callCtx, d, state, spec.Questions(candidates))
 	if err != nil {
-		out.Abstained, out.Reason = true, abstainReason(err)
+		out.Abstained, out.Reason, out.Failure = true, abstainReason(err), rankingFailure(err)
 		return out
 	}
 	out.Engine, out.Elapsed = res.Engine, res.Elapsed
@@ -150,16 +151,24 @@ func Decide(ctx context.Context, d decide.Decider, spec TurnSpec, state State, c
 			continue
 		}
 		out.Verdicts[c.QuestionID()] = v
-		switch c.Kind {
-		case KindTool:
+		if c.Kind == KindTool {
 			vetoed := spec.Kind.VetoTools && out.Kind == KindAnswerOnly
 			if !vetoed && v.P >= spec.Tools.LoadAt {
 				out.Tools[c.ID] = v.P
 			}
-		case KindGuide:
-			if slices.Contains(spec.Guides.Omittable, c.ID) && !c.Needed(state.Loaded) && v.P < spec.Guides.OmitBelow && v.Confidence >= spec.Guides.ConfidenceFloor {
-				out.Omitted[c.ID] = v
-			}
+		}
+	}
+	loadedTools := out.ToolIDs()
+	for _, c := range candidates {
+		if c.Kind != KindGuide {
+			continue
+		}
+		v, ok := out.Verdicts[c.QuestionID()]
+		if !ok {
+			continue
+		}
+		if slices.Contains(spec.Guides.Omittable, c.ID) && !c.Needed(state.Loaded) && !c.Needed(loadedTools) && v.P < spec.Guides.OmitBelow && v.Confidence >= spec.Guides.ConfidenceFloor {
+			out.Omitted[c.ID] = v
 		}
 	}
 	return out

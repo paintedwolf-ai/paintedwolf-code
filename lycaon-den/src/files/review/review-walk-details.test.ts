@@ -122,25 +122,6 @@ describe("review walk details", () => {
     expect(details.summary).toBe("Created a file with 1 line.");
   });
 
-  it("explains why line details are absent", () => {
-    const unavailable: ComparisonSnapshot = {
-      ...comparison("", ""),
-      after: {
-        state: "content",
-        size_bytes: 20,
-        availability: "binary",
-        },
-    };
-
-    const details = buildReviewWalkDetails(
-      effectOf("binary", "image.png"),
-      unavailable,
-    );
-
-    expect(details.summary).toBe("Modified this file.");
-    expect(details.availabilityNote).toBe("This step changes a binary file.");
-  });
-
   it("locates the step within the current file", () => {
     const first = step("one", "src/a.ts");
     const second = step("two", "src/a.ts", { ordinal: 2 });

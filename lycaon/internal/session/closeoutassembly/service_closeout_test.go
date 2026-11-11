@@ -2,6 +2,7 @@ package closeoutassembly
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 	"strings"
@@ -34,7 +35,7 @@ func TestAssemblyRecoversCompletedLegsWithoutInventingCitations(t *testing.T) {
 		{ID: "pending", Status: api.LegStatusPending, Result: &api.WorkerResult{Summary: "Unfinished assertion."}},
 		{ID: "empty", Status: api.LegStatusComplete, Result: &api.WorkerResult{}},
 	}})
-	report, grounding := s.Assemble(t.Context(), "parent", "implement_synthesis", nil, "", 0)
+	report, grounding := s.Assemble(t.Context(), "parent", "implement_synthesis", nil, guidance.CloseoutDraft{}, 0)
 	if !strings.Contains(report.Synthesis, "Review: Checked access controls.") || strings.Contains(report.Synthesis, "Duplicate") || strings.Contains(report.Synthesis, "Unfinished") {
 		t.Fatalf("assembled report=%+v", report)
 	}
@@ -44,7 +45,7 @@ func TestAssemblyRecoversCompletedLegsWithoutInventingCitations(t *testing.T) {
 	if grounding != nil && grounding.Traced {
 		t.Fatalf("unobserved leg was traced: %+v", grounding)
 	}
-	report, _ = s.Assemble(t.Context(), "parent", "implement_synthesis", nil, "Human-facing draft.", 0)
+	report, _ = s.Assemble(t.Context(), "parent", "implement_synthesis", nil, draftOf("Human-facing draft."), 0)
 	if report.Synthesis != "Human-facing draft." {
 		t.Fatalf("draft replaced by retained legs: %+v", report)
 	}

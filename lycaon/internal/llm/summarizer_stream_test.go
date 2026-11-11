@@ -59,8 +59,8 @@ func TestSummarizeStreamDeliversDeltasAndFullContent(t *testing.T) {
 	if len(deltas) != 2 || strings.Join(deltas, "") != out {
 		t.Fatalf("deltas = %q want full content in order", deltas)
 	}
-	content := provider.last.Messages[0].Content
-	if !strings.Contains(content, "Today is ") || provider.last.Think != modelcall.ThinkOff {
+	_ = provider.last.Messages[0].Content
+	if provider.last.Think != modelcall.ThinkOff {
 		t.Fatalf("request = %+v want TodayLine + ThinkOff parity with Summarize", provider.last)
 	}
 	if !transcript.HasAuthorityNotice(provider.last.Messages[0]) || provider.last.Messages[1].Content != "user" {

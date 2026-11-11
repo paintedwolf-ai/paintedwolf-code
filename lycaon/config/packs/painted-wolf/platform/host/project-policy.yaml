@@ -32,6 +32,9 @@ deny_path_prefixes:
   - ~/.password-store
   - ~/.local/share/keyrings
   - ~/.local/share/kwalletd
+  - ~/AppData/Roaming/Microsoft/Credentials
+  - ~/AppData/Local/Microsoft/Credentials
+  - ~/AppData/Local/Microsoft/Vault
   # Catalogued credential stores the pack names.
   - ~/.config/containers/auth.json
   - ~/.oci

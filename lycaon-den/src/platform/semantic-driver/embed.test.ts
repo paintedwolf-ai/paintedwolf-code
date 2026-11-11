@@ -18,4 +18,6 @@ it("the embedded driver preserves observed control identity and checked state", 
     { id: "done", type: "checkbox", checked: false },
   ] });
   expect(JSON.stringify(state)).not.toContain("private");
+  const snap = window.__lycaonDriver?.snapshot();
+  expect(snap).toHaveProperty("viewport");
 });

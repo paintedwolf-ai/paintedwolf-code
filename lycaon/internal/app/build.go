@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/app/eventing"
 	"github.com/lycaon/lycaon/internal/app/execution"
 	"github.com/lycaon/lycaon/internal/app/interactions"
+	"github.com/lycaon/lycaon/internal/app/localmodels"
 	"github.com/lycaon/lycaon/internal/app/persistence"
 	"github.com/lycaon/lycaon/internal/app/processes"
 	"github.com/lycaon/lycaon/internal/app/providers"
@@ -24,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/startupprotocol"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -52,6 +54,7 @@ type serveBuilder struct {
 	startup      startupBootstrap
 	storage      persistence.Runtime
 	decisions    decisions.Runtime
+	localModels  localmodels.Startup
 	agents       configuration.Agents
 	workflows    *workflows.Runtime
 	scanning     *scanning.Runtime
@@ -102,7 +105,10 @@ func Build(ctx context.Context, cfg configuration.Config) (*ServeApp, error) {
 		{"credential-floors", startupprotocol.PhaseCredentials, func() error { return b.security.Detections.LoadFloors() }},
 		{"host_resources", startupprotocol.PhaseHostResources, func() error { return b.settings.BuildHostResources(b.storage.Directory) }},
 		{"llm", startupprotocol.PhaseProviders, func() error {
-			return b.providers.Build(ctx, providers.Options{Client: cfg.TestLLMClient, Pricer: cfg.TestCostPricer, Startup: cfg.Startup}, b.storage.Database, b.storage.Directory, b.settings.Service, resources, b.startup.recovery)
+			b.localModels = localmodels.Start(ctx, llm.MockEnabled(cfg.TestLLMClient) || cfg.TestDecider != nil)
+			resources.Track("generation-engine", 46, b.localModels.CloseGeneration)
+			resources.Track("local-inference-resources", 48, b.localModels.CloseResources)
+			return b.providers.Build(ctx, providers.Options{LocalRuntime: b.localModels.Generation(), Client: cfg.TestLLMClient, Pricer: cfg.TestCostPricer, Startup: cfg.Startup}, b.storage.Database, b.storage.Directory, b.settings.Service, resources, b.startup.recovery)
 		}},
 		{"tool-runtime", startupprotocol.PhaseTools, b.wireToolRuntime},
 		{"presence", startupprotocol.PhaseTools, func() error { return b.security.BuildPresence(b.execution.Host.Executor.Secrets) }},

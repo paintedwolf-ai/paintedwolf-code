@@ -78,7 +78,7 @@ func TestPlanStubGateFeedbackListsMissingHeadings(t *testing.T) {
 	}, extras)
 	out, err := catalog.RenderGateFeedback(t.Context(), "plan_stub_valid", ctx)
 	testutil.FailErr(t, "RenderGateFeedback", err)
-	if !strings.Contains(out, "## Goal") || !strings.Contains(out, "Headings present") {
+	if !strings.Contains(out, "## Goal") {
 		t.Fatalf("expected missing/present diagnostics:\n%s", out)
 	}
 	if !strings.Contains(out, "## Scope") {

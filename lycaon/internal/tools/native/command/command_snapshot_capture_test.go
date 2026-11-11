@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -49,21 +51,28 @@ func TestCommandSnapshotCaptureIncompatibleArgs(t *testing.T) {
 }
 
 func TestCommandSnapshotCaptureMissingFileRejection(t *testing.T) {
-	cmd, _ := newCommandTool(t)
-	root := t.TempDir()
-	tctx := commandToolContext(root, "sess-1", "worker-1")
-
-	// Process exits 0 without writing to APP_SNAPSHOT.
-	args := map[string]any{
-		"command": "echo normal-output",
-		"snapshot_capture": map[string]any{
-			"caption": "test capture",
-		},
-	}
-	_, err := cmd.Run(context.Background(), args, tctx)
-	tr := toolrejection.AsToolReject(err)
-	if tr == nil || tr.Code != "SNAPSHOT_FILE_NOT_PRODUCED" {
-		t.Fatalf("expected SNAPSHOT_FILE_NOT_PRODUCED, got %v", err)
+	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
+	hints, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load snapshot feedback", err)
+	formatter := guidance.NewStaticRejectFormatter(hints)
+	for _, envVar := range []string{"APP_SNAPSHOT", "PW_CAPTURE_FILE"} {
+		t.Run(envVar, func(t *testing.T) {
+			cmd, _ := newCommandTool(t)
+			tctx := commandToolContext(t.TempDir(), "sess-1", "worker-1")
+			_, err := cmd.Run(t.Context(), map[string]any{
+				"command":          "echo normal-output",
+				"snapshot_capture": map[string]any{"env_var": envVar},
+			}, tctx)
+			rejected := toolrejection.AsToolReject(err)
+			if rejected == nil || rejected.Code != "SNAPSHOT_FILE_NOT_PRODUCED" || rejected.Data["env_var"] != envVar {
+				t.Fatalf("snapshot refusal lost its configured input: %v", err)
+			}
+			text, err := formatter.Format(rejected.Code, rejected.Data)
+			testutil.FailErr(t, "render snapshot observation", err)
+			if !strings.Contains(text, envVar) || strings.Contains(text, "Fix:") || strings.Contains(text, "Next:") || (envVar != "APP_SNAPSHOT" && strings.Contains(text, "APP_SNAPSHOT")) {
+				t.Fatalf("snapshot feedback guessed a contract or repair: %s", text)
+			}
+		})
 	}
 }
 
@@ -139,5 +148,33 @@ func TestCommandSnapshotCaptureSuccess(t *testing.T) {
 	}
 	if parsed.SnapshotCapture.Width != 1 || parsed.SnapshotCapture.Height != 1 {
 		t.Fatalf("dimensions in json = %dx%d, want 1x1", parsed.SnapshotCapture.Width, parsed.SnapshotCapture.Height)
+	}
+}
+
+func TestCommandSnapshotCaptureUnderControlPlaneSessionScratch(t *testing.T) {
+	cmd, _ := newCommandTool(t)
+	root := t.TempDir()
+	stateDir := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", stateDir)
+	scratchDir := filepath.Join(stateDir, "scratch", "sess-1")
+	testutil.FailErr(t, "create session scratch", os.MkdirAll(scratchDir, 0755))
+
+	tctx := commandToolContext(root, "sess-1", "worker-1")
+	tctx.Host.SessionScratchDir = scratchDir
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
+
+	helperScript := filepath.Join(root, "snapshot_app.sh")
+	pngFile := filepath.Join(root, "sample.png")
+	testutil.FailErr(t, "write png", os.WriteFile(pngFile, testPNGBytes, 0644))
+	scriptContent := "#!/bin/sh\ncp \"" + pngFile + "\" \"$APP_SNAPSHOT\"\nexit 0\n"
+	testutil.FailErr(t, "write script", os.WriteFile(helperScript, []byte(scriptContent), 0755))
+
+	_, err := cmd.Run(t.Context(), map[string]any{
+		"command":          "/bin/sh " + helperScript,
+		"snapshot_capture": map[string]any{"caption": "Control-plane scratch capture"},
+	}, tctx)
+	testutil.FailErr(t, "run snapshot capture in session scratch", err)
+	if tctx.Effects.Out.Visual == nil {
+		t.Fatal("expected captured visual artifact")
 	}
 }

@@ -461,7 +461,7 @@ export function ProjectRootSummary(props: Props) {
         <p class="den-search-status" role="status" data-testid="files-root-summary-coverage">
           {inventory()?.note}
           <Show when={!inventory()?.warming}>
-            <DenButton variant="ghost" compact disabled={query.loading()} onClick={() => void refreshFacts(["inventory"])}>Retry file index</DenButton>
+            <DenButton data-testid="retry-file-index" variant="ghost" compact disabled={query.loading()} onClick={() => void refreshFacts(["inventory"])}>Retry file index</DenButton>
           </Show>
         </p>
       </Show>
@@ -480,6 +480,7 @@ export function ProjectRootSummary(props: Props) {
                 <button
                   type="button"
                   class="den-files-root-summary__resource"
+                  data-testid={`files-root-summary-resource-${resource.label.toLowerCase()}`}
                   onClick={() => openResource(resource)}
                 >
                   <span class="den-files-root-summary__resource-mark">MD</span>

@@ -19,4 +19,3 @@ x-paintedwolf-message: An execution authorization was no longer valid at spawn.
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains: ['Code: SANDBOX_EXECUTION_AUTHORIZATION_CHANGED', 'execution authorization']

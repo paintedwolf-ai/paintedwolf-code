@@ -24,14 +24,18 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 	return binding, err
 }
 
-// DestroyWorkerWorkspace releases a branch's views, proves no mount remains in it, drops its retention
-// and deletes it. Any failure keeps the branch and its metadata: the view is still in custody, and
-// recursive removal through a live mount would delete the worker's result.
-func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
+// DestroyWorkerWorkspace releases a branch's views, proves no mount remains in it, drops its retention,
+// deletes it and forgets its placement. Any failure keeps the branch and its metadata: the view is still
+// in custody, and recursive removal through a live mount would delete the worker's result. A branch on
+// an absent volume keeps its record until the volume returns.
+func (m *Manager) DestroyWorkerWorkspace(ctx context.Context, binding *Binding) error {
 	if binding == nil || strings.TrimSpace(binding.Root) == "" {
 		return nil
 	}
 	root := strings.TrimSpace(binding.Root)
+	if err := branchVolumeAvailable(root); err != nil {
+		return err
+	}
 	jobID := jobIDForBranch(root)
 	if err := m.releaseBranchRuntime(binding, root, jobID); err != nil {
 		return err
@@ -45,7 +49,10 @@ func (m *Manager) DestroyWorkerWorkspace(binding *Binding) error {
 	releaseBranchClaimState(root)
 	err := errors.Join(os.RemoveAll(enginepaths.MetaDirForBranchRoot(root)), os.RemoveAll(root))
 	removeBranchLocks(root)
-	return err
+	if err != nil {
+		return err
+	}
+	return forgetPlacedBranch(ctx, m.stateRoot, root)
 }
 
 func (m *Manager) releaseBranchRuntime(binding *Binding, root, jobID string) error {
@@ -167,6 +174,6 @@ func snapshotFromJobMeta(branchRoot string, meta JobMeta) claim.WorkspaceStateSn
 	}
 }
 
-func jobRoot(m *Manager, primaryDir, jobID string) string {
+func (m *Manager) jobRoot(primaryDir, jobID string) string {
 	return enginepaths.JobBranchDir(m.branchRoot, primaryDir, jobID)
 }

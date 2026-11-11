@@ -134,7 +134,7 @@ func TestIndependentScriptedLegsVerifyConcurrently(t *testing.T) {
 			return nil, ctx.Err()
 		}
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	results := make(chan error, 2)
 	for _, path := range []string{"app.py", "lib.py"} {

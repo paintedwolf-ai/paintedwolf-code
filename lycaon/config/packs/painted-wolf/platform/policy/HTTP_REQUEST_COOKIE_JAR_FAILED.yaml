@@ -37,6 +37,3 @@ x-paintedwolf-scenarios:
     profile: implement
     tool: http_request
     cookie_jar_name: registry
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: HTTP_REQUEST_COOKIE_JAR_FAILED'

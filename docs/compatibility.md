@@ -37,7 +37,7 @@ The directory-identity migration replaces the flat current-path projection with 
 
 The manifest-layout migration (revision 5) moves every retained source snapshot onto per-root manifests and keeps its id, counts, quality, and boundaries, so scans, inventories, and command windows that name it still resolve. Chunks no snapshot referenced, and in-flight survey staging, are dropped rather than converted; content they alone named is queued for the blob reclaimer to re-check. The reviewed revision-4 route prepares a released-shape working file. When every chunk is referenced, staging is empty, and declared counts match measured primary rows, it clones or copies the sealed whole source, preserving unrelated tables, FTS shadow rows, row identities, counters and indexes directly. Recovery capture verifies the sealed bytes and exact source shape, without an exhaustive audit of historical secondary indexes. Incomplete retention or a structured integrity failure encountered during preparation uses primary-row reconstruction with rebuilt indexes instead; operational failures refuse without an expensive repair retry. The reconstructed path selects retained rows rather than copying discarded rows. The migrated replacement passes a structural `quick_check`, foreign-key checks and each migration’s data invariants before publication.
 
-A schema change records the shipped source identity in `internal/db/released-baselines.json`, advances `SchemaVersion`, and adds an explicit adjacent step under `internal/db/migrations`. A step's `ID`, `Checksum`, source and destination revisions, and exact shapes identify the transformation. Every step embeds its implementation source or executed SQL as `Source`; registration verifies its SHA-256 against `Checksum` before planning. Each step declares its temporary disk requirement in `ScratchBytes`; the reviewed retained route also derives checked phase-specific reservations from source facts. Startup recognizes both revision and shape, validates the entire route and its applied ledger, and refuses unknown or newer stores without opening a writer. Users may skip releases: all registered intermediate steps execute in one immediate transaction, including their ledger records and revision stamp; destination shape, structural validity, migration data invariants, and foreign keys must pass before commit. In-place failures roll back the chain; a failed or canceled discardable replacement is removed while the original remains intact. Fresh installs do not manufacture an applied-migration history. One final structural check runs after transformation, inside the transaction. Retained recovery requires byte-consistent, hash-verified released-shape material; reconstructed source images receive structural and foreign-key checks before capture. Healthy whole-file candidates preserve the sealed source directly. Exhaustive secondary-index correspondence and uniqueness auditing runs after the application starts serving, with a durable pending obligation committed alongside the upgraded schema. Pending work survives cancellation and clean shutdown; confirmed damage still stops writes. Irreversible recovery/pre-image and database-dependent orphan cleanup waits for successful completion. Recorded damage still refuses the upgrade and recovery capture still precedes schema transformation.
+The first schema change after a published build, preview or stable, records that build's source identity in `internal/db/released-baselines.json`, advances `SchemaVersion` once, and adds an explicit adjacent step under `internal/db/migrations`. While the current revision has no published build, later schema changes join its step and keep its number: no store outside development can hold the intermediate shapes. Publishing a release candidate freezes its revision, so a change after that candidate advances again. A step's `ID`, `Checksum`, source and destination revisions, and exact shapes identify the transformation. Every step embeds its implementation source or executed SQL as `Source`; registration verifies its SHA-256 against `Checksum` before planning. Each step declares its temporary disk requirement in `ScratchBytes`; the reviewed retained route also derives checked phase-specific reservations from source facts. Startup recognizes both revision and shape, validates the entire route and its applied ledger, and refuses unknown or newer stores without opening a writer. Users may skip releases: all registered intermediate steps execute in one immediate transaction, including their ledger records and revision stamp; destination shape, structural validity, migration data invariants, and foreign keys must pass before commit. In-place failures roll back the chain; a failed or canceled discardable replacement is removed while the original remains intact. Fresh installs do not manufacture an applied-migration history. One final structural check runs after transformation, inside the transaction. Retained recovery requires byte-consistent, hash-verified released-shape material; reconstructed source images receive structural and foreign-key checks before capture. Healthy whole-file candidates preserve the sealed source directly. Exhaustive secondary-index correspondence and uniqueness auditing runs after the application starts serving, with a durable pending obligation committed alongside the upgraded schema. Pending work survives cancellation and clean shutdown; confirmed damage still stops writes. Irreversible recovery/pre-image and database-dependent orphan cleanup waits for successful completion. Recorded damage still refuses the upgrade and recovery capture still precedes schema transformation.
 
 The application holds the installation lease before inspecting or upgrading. `db.OpenWithOptions` requires its `Before` hook to durably capture a complete recovery snapshot before any live schema transformation: copies of the database, retained bodies, and backed-up device configuration, which later live-store garbage collection cannot erase. Credentials and code-loading controls keep their separate custody rules. For a retained upgrade, recovery capture uses the verified released-shape working file and the complete installation payload, after SQLite checkpoints committed WAL data into the original and seals it without sidecars. This preserves the logical source while changing its physical representation; the sealed original remains available throughout copying and recovery capture. Both publication candidates are self-contained before their names are exchanged. The `After` hook records the database commit; readiness is marked only after required retained references initialize. Failure retains the recovery point, and restoring one is explicit and explains that history returns to the capture point. A database-only `.bak` is not an installation rollback point, and opening the database does not create one merely because the product version changed.
 
@@ -80,6 +80,22 @@ Deleting bytes must produce an explainable unavailable state, not make a durable
 
 ## Portable command records
 
+Command diagnostic categories and recovery actions are additive `agent-public`
+facts. Existing rejection codes retain their meanings. Explanations and bounded
+source context are co-shipped `bundle` presentation; they do not authorize an
+operation, repair source, or establish replay eligibility. Execution and effect
+claims remain projections of the invocation recorder. This work changes no
+persisted schema or command language version.
+
+Recovery availability and diagnostic-knowledge facts are additive host facts in
+the `paintedwolf` namespace. They distinguish missing observations from the
+standard typed zero values without changing OAR defaults. Structural argument
+repairs carry the validating tool identity; unrelated operation schemas do not
+authorize a replacement outer call. Unproven name guesses and remedies are not
+part of the recovery contract. Canonical rejection identities remain readable.
+
+The command language v1 summary output projects follow-up actions onto `command` arguments. Native `summarize --cursor` continues the same path and focus. This command interface is unpublished; released structured summary results and internal routing identities retain their existing shape and meaning.
+
 The compiled catalog freezes the language, operation definitions and limits for each invocation. The model call owns the aggregate receipt; child identities are host operations. Persistence and wire consumers follow the classifications below.
 
 Command limit identifiers are `agent-public` vocabulary. The shared text-search
@@ -115,6 +131,7 @@ as errors rather than publishing a result under a changed frame.
 | Session job/listener/resource handles and lifecycle events | Live registry entries ephemeral, PID optional. Retained receipt/resource identity is `durable-db`; UI/event shapes are `bundle`. Session ownership survives wrappers/functions; host loss interrupts rather than resumes instructions. | Process supervision, resource registry and generated wire consumers |
 | Variables, functions, expansion state, pipe buffers/spill staging, live capabilities, one-use permits | Ephemeral only. Bound allocations obey the versioned ceilings. No serialized instruction pointer, interpreter checkpoint, whole-program retry or crash replay. Spill retained as history follows the output rules above. | Evaluator, stream and admission owners |
 | Agent-visible command names, syntax version, status/rejection meaning, output-handle vocabulary | `agent-public`. Retire with a named successor; never reuse a meaning. DTO additions are `bundle`, authored through OpenAPI and generated together. | Catalog, operation owners and generated wire consumers |
+| Command result presentation and receipt-bound compaction provenance | Readable refusal/stream framing is `agent-public` presentation. The detached compaction descriptor is ephemeral and excluded from serialization. Canonical history, receipt identities, source bytes and output references are unchanged. | Transcript projection and compaction |
 
 Host-loss recovery reconciles existing mutation journals and releases process/network resources, settles the aggregate interrupted, and preserves completed child outcomes. A later cancellation, refusal or stream error cannot rewrite a prior publication or HTTP effect. The invocation recorder records owner facts and cannot reclassify them. The evaluator delegates remaining obligations to existing workflow/grounding authority rather than inferring completion from stdout.
 
@@ -130,10 +147,8 @@ The durable checkpoint authority descriptor includes `execution_id` for
 socket/direct-IP once permits. Its canonical reader keeps session and real
 model-call identity distinct from the native child. Absence or an empty value
 preserves structured-only authority and grants no native child. Schema revision
-5 registers the explicit revision 4 to 5 checkpoint-data transformation; revision
-4 is an existing known intermediate with unchanged SQL shape, not a newly
-claimed released baseline. Shipped revisions 1 through 3 and their migration
-checksums remain unchanged. The step makes old structured-only scope explicit,
+5 includes the explicit checkpoint-data transformation. Shipped revisions 1
+through 4 and their migration checksums remain unchanged. The transformation makes old structured-only scope explicit,
 preserves semantic grant and plan identities, and refuses unknown authority
 shapes without committing any part of the transaction. Checkpoint/session
 retention remains unchanged; live permit caches remain ephemeral. The wire
@@ -203,8 +218,8 @@ The released build's `promote-transactions/<digest>.json` journal, version 1, st
 
 A run pins its definition by id and version (`durable-db` state). Released
 workflow definitions are contracts for existing runs. An unreleased candidate
-can be corrected under its current version; the security workflow remains
-`2.0.0` until that candidate ships.
+can be corrected under its current version. Security workflow `2.0.0` shipped
+in product `v1.0.2`; command-oriented guidance belongs to workflow `2.0.1`.
 
 Released workflow content changes receive a new workflow version. The prior
 version is stored byte-for-byte under its pack's `archive/<workflow>/<version>/`,
@@ -260,6 +275,8 @@ A deliberate breaking change updates Den in the same release. `./task openapi:di
 Responses remain additive-friendly: Den ignores unknown properties. Request object schemas are closed so unknown fields cannot silently change intent. Do not create multi-version adapters between co-shipped components.
 
 The Linux launch broker's descriptor-slot layout is co-shipped native `bundle` wire, not persisted state or agent vocabulary. Its optional layout preserves explicitly closed inherited slots across descriptor transport; an omitted layout keeps all supplied slots open. The engine relay and broker move together, with validation and actual-child descriptor invariants covering both sides. No store migration or OpenAPI consumer changes are involved.
+
+The packaged `generation/vulkan-drivers.json` resource is co-shipped internal `bundle` data. Format 1 declares the closure's Mesa ICD paths. The inference host validates the exact shape and prepares process-local NVIDIA driver selection when needed. Its temporary ICD files are ephemeral and remain alive until their reader process exits; they contain no device settings or model state.
 
 Health reports product, store, and schema revisions as distinct facts. Product SemVer does not stand in for the database schema version, and the Den cache revision does not stand in for either.
 
@@ -319,10 +336,19 @@ absent from the baseline release must advance at least a minor version and raise
 `extension_api` and `painted-wolf/platform` floors above the baseline. These checks validate structured contracts; they do
 not infer behavioral equivalence from display copy.
 
+A retirement's successor is either a list of names that exist in the same vocabulary, or
+an object such as `{"content_contract": "paintedwolf.markdown_note", "version": 1}` when
+the meaning moves out of the vocabulary into a non-callable content contract. The object
+must match an entry in the catalog's `content_contracts` map at its declared version.
+Contract identifiers are dotted namespaces that never name a tool, and a released
+contract stays declared at its version or later. Both forms belong to catalog format 1:
+released catalogs parse unchanged, and the gate that reads a candidate's catalog runs
+from `main`.
+
 ### Release coverage
 
 Product versions identify publications. Other identities advance only when their
-own contract changes. An additive configuration field does not require a new
+own contract changes, and at most once between publications. An additive configuration field does not require a new
 store schema, and a regenerated cache does not justify changing an archive format.
 
 | Surface | Independent contract | Automated assurance |
@@ -387,6 +413,12 @@ Free-form display copy is not agent-public vocabulary. The structured id behind 
 
 Provider credentials, device model policy, extension desired state, exact grants, and application state are not contained in `store.db`. Deleting the database must not silently erase or reinterpret them.
 
+Local model activation history and device selection are device configuration; the authenticated payload bytes are reacquirable content. Model-store journal format 1 authenticates each revision with host-trusted Ed25519 keys. A revision identity cannot be rebound to different contents, and collection or repair cannot remove a revision while a runtime holds its lease. Database deletion does not reset model activation or trust.
+
+A local model bundle contains `manifest.json` and explicitly named payload files. The manifest is bounded to 128 KiB and rejects unknown fields and trailing content. Its signature covers the `paintedwolf-model-manifest/1` domain and the canonical `SigningBytes` representation. The bundle supplies a key identifier, never a new trust authority. Import verifies that signature before opening payloads, then checks each declared size and SHA-256 before activation. Payload names are single safe path components; `manifest.json` is reserved. Activated revisions hard-link verified content inside the store, avoiding a second model copy. Importing a valid bundle establishes artifact integrity, not runtime compatibility or model quality. Published payloads are read-only. Routine lease and readiness checks inspect the revision seal, size, and modification time without scanning model contents. A lease audit hashes the actual pinned revision, detects same-size corruption even with unchanged timestamps, and supports cancellation. Repair replaces damaged inodes only after readers release their leases.
+
+The model release-key registry is a co-versioned application resource, separate from downloaded model bundles and mutable device state. Format 1 contains `format: 1` and a `keys` array of `{id, public_key}` entries, where each public key is a base64-encoded Ed25519 key. The decoder bounds the registry to 16 KiB and 16 distinct keys and refuses unknown fields, formats and trailing content. Key rotation ships through the trusted application distribution.
+
 The host identity key (`host-identity.pem`) is device configuration too. A store reset keeps it, and backups neither carry nor restore it: a backup restored on another machine becomes a new host with the same people. An unreadable key stops startup rather than silently minting a new identity. The people who author durable facts live in `store.db` and travel with it.
 
 Native update preferences are device configuration too. The unversioned `{checks_enabled, channel, rollout_bucket}` record that 1.0.x clients wrote has one explicit migration to `updates/preferences.json` format 2: `checks_enabled` becomes `automatic_updates_enabled`, which governs discovery, background download, and lifecycle installation, so an existing opt-out remains off; channel and bucket are unchanged. Unknown versions and malformed records are refused without overwriting them. Per-installation operational records live under `updates/installations/<path-sha256>/`, keyed by the canonical application path, and the device-wide `updates/feed-state.json` records the newest signed pointer timestamp accepted per feed. Unknown ephemeral records (`ready.json`, `rejected.json`, `feed-state.json`) are quarantined unchanged and rebuilt; an unreadable preference file disables automatic updating for that run without being rewritten. Update archives are ephemeral, but an unresolved activation journal is recovery-critical operational state and cannot be cleared as a cache. An `update-state.json` journal written by a 1.0.x client is reconciled against the running product version: it completes only when its target or a newer version runs, and it never manufactures staged bytes or missing artifacts.
@@ -407,13 +439,26 @@ as unavailable and requires a fresh approval. An unknown enforcement mode refuse
 loading without mutating the saved data. Reading saved intent never recaptures a
 pathname.
 
-Existing macOS command grants retain their kernel pathname-at-connect contract;
-an absent mode means that contract on macOS. They cannot establish authority for
-host-native socket dials. Linux grants and host-native dials on both platforms
-require the retained-object mode and a live instance ID. Mode and instance enter
-permission keys, action digests and grant IDs, so a new approval after a service
-or engine restart cannot accidentally reuse an unexpired stale grant. Changing
-the realization never silently broadens the earlier approval.
+Saved macOS kernel-pathname grants keep that interpretation, including an absent
+mode, and remain visible as unavailable intent. They cannot authorize a new
+confined launch or native dial. Fresh socket approval requires retained-object
+mode and a live instance ID on both Linux and macOS. There is no automatic
+recapture or migration of saved path intent into live authority. Mode and
+instance enter permission keys, action digests and grant IDs, so service or
+engine restart cannot reuse an unexpired stale approval.
+
+`{{paintedwolf-socket:/absolute/path}}` is additive agent-visible launch
+vocabulary. Its URI path is percent-encoded when necessary. The reference must
+occupy a complete argument or environment value and requires the invocation's
+reviewed live socket binding. Expansion occurs after command-language evaluation
+and before the final exec vectors are captured. Ordinary path operands, embedded
+source, executable selection and environment keys are never rewritten. Native
+socket arguments retain their ordinary path shape and their host-mediated dial.
+The `unix-url:` selector formats the bound stream endpoint with a `unix://`
+prefix. On macOS, `unixgram:` preserves Unix datagram message boundaries;
+Linux retains its existing Unix datagram refusal. Each form uses the same
+reviewed socket object; the default selector is a stream.
+No database or wire fields change, and ephemeral endpoints are not backup data.
 
 Native exact Unix-socket requests on a platform reporting no retained-object realization are refused with the existing structured socket-path refusal and an approved service-endpoint recovery route. This is the Windows socket contract and changes the previous native pathname-dial behavior. Existing saved socket intent and credential/token data remain; there is no pathname fallback, implicit rebinding or new durable wire shape. The unavailable realization and recovery are structured refusal facts rather than inferred error prose.
 
@@ -438,6 +483,8 @@ or kernel handles. Public grant inventory keeps its existing unavailable state
 and fresh-approval route. Public schema descriptions of matching must reflect
 the host binding contract; any wire shape change still follows OpenAPI bundling
 and generation for all consumers.
+
+The worker placement registry (`worker-placements.json`, format 1) is `device-config`. It names worker branch folders on other volumes for this device, whose paths mean nothing elsewhere, so backups exclude it and a database wipe does not reinterpret it. An unknown format is refused without mutation. `worker_jobs.workspace_relpath` keeps its logical `worker-branches/<key>/<job>` address, so no store row holds a volume path and the column's shape is unchanged: a branch with no record lives in the state folder, which is also where restore on another device puts it. A tree in the state folder wins over a record. A store reset removes the branches it can reach and leaves records for absent volumes, which keep their folders until they return. Each placement folder carries a `placement.json` marker on its own volume, which is what makes it available; a bare mount point left by an unmount is not. Placement folders hold `ephemeral` sealed trees and retained unsealed work under the same rules as `worker-branches` in the state folder. A placed branch also keeps its layout record under the logical address, so backups retain it while the volume is absent.
 
 Native update `ready.json` format 2 records the exact prepared bundle path and a nullable offer confirmation. Its strict format-1 decoder retains the legacy prepared path and confirmation. `transaction.json` format 2 also names the prepared path; its strict format-1 conversion first saves the original record under `receipts/<id>-format-1.json`, then atomically publishes the converted journal. Unknown journals remain untouched. New preparation names include the account UID, so accounts sharing an application cannot remove each other's preparation. The installed bundle and its parent directory provide cross-account inode locks; private journals never cross account boundaries. The permanent profile-wide `feed-state.lock` serializes replay-state reads, quarantine, and writes. `records.lock` serializes ready, rejection, and journal mutations. Lock files are never replaced or removed during normal operation.
 
@@ -492,3 +539,11 @@ Internal packages that do not leak into a sticky surface can be reshaped directl
 - Rebuildable cache identity may outlive its evictable bytes; durable history keeps the bytes it names.
 - Version fields keep distinct meanings.
 - Breaking evolution is explicit, attributable, and recoverable.
+
+### Progress result summary
+
+The agent-public `deliverable_closed` result field is retired. New results use
+`closed_item_ids` for the changed rows and a computed snapshot `summary` for
+current state. Completed and explicitly not-pursued work remain distinct.
+Retained transcript results keep their original bytes; this does not change
+persisted checklist documents or their revisions.

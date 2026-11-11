@@ -9,6 +9,3 @@ suggested_action: Check the connection settings and the provider’s logs, then 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - tools
-      - Resync

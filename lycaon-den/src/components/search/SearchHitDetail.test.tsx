@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
@@ -132,7 +133,7 @@ describe("SearchHitDetail", () => {
     const signal = loadSearchToolContent.mock.calls[0]?.[2] as AbortSignal;
     setHit({ ...hit(), score: 2 });
     expect(signal.aborted).toBe(false);
-    expect(screen.getByRole("button", { name: "Opening…" }).hasAttribute("disabled")).toBe(true);
+    expect(assertNamedControl(screen.getByTestId("search-tool-content-open"), "button").hasAttribute("disabled")).toBe(true);
     setHit({ ...hit(), hit_id: "second", source_ref: "call_2", source: "message" });
     expect(signal.aborted).toBe(true);
     finish({ messageId: "old-result" });

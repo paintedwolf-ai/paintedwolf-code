@@ -112,7 +112,18 @@ func contextFromPromptErrorFixtures() map[string]map[string]any {
 			&failure.ProviderNotConfiguredError{ProviderID: "fireworks"},
 		),
 		"provider_empty_completion": usernotice.ContextFromPromptError(
-			&failure.ProviderEmptyCompletionError{ProviderID: "fireworks", Model: "llama-3.1-8b", Terminal: true, Reason: "length"},
+			&failure.ProviderOutputTruncatedError{
+				ProviderID:          "fireworks",
+				Model:               "llama-3.1-8b",
+				FinishReason:        "length",
+				MaxTokens:           4096,
+				ConfiguredMaxTokens: 4096,
+				ProviderMaxTokens:   16384,
+				ToolCallTruncated:   true,
+				ToolName:            "write",
+				ToolArgsBytes:       384,
+				RecoveryAttempted:   true,
+			},
 		),
 		"provider_context_too_small": usernotice.ContextFromPromptError(
 			&failure.ProviderContextTooSmallError{ProviderID: "desktop", Model: "qwen3.5:27b", PromptTokens: 9000, MaxContext: 4096},

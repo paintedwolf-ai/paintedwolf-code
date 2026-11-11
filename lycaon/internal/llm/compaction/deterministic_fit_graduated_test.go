@@ -144,7 +144,7 @@ func TestDeterministicFitMonotonicInBudget(t *testing.T) {
 // continuation record the rest of the history was summarized into.
 func TestDeterministicFitPreservesCheckpointHead(t *testing.T) {
 	msgs := append([]ContextMessage{
-		{Role: string(api.MessageRoleUser), Content: "checkpoint", CompactionCheckpoint: true},
+		{Role: string(api.MessageRoleUser), Content: "checkpoint", ContextMessageCompaction: ContextMessageCompaction{CompactionCheckpoint: true}},
 		{Role: string(api.MessageRoleAssistant), Content: "summary of prior work"},
 	}, fitRows(100)...)
 
@@ -193,4 +193,92 @@ func TestDeterministicFitFloorsAtKeepRecent(t *testing.T) {
 	if retained := len(out) - countTrimNotices(out); retained != fitCfg().KeepRecentMessages {
 		t.Fatalf("impossible budget kept %d rows, want %d", retained, fitCfg().KeepRecentMessages)
 	}
+}
+
+// Ordinal rows drop to the anchor grid and leave the asked-for token reserve.
+func TestDeterministicFitAnchorsToStableOrdinals(t *testing.T) {
+	rows := make([]ContextMessage, 0, 200)
+	for i := range 200 {
+		rows = append(rows, ContextMessage{Ord: int64(i + 7), ID: strconv.Itoa(i), Role: string(api.MessageRoleAssistant), Content: fitDistinctBody(i)})
+	}
+	perRow := EstimateMessagesTokens(rows[:1])
+	budget := EstimateMessagesTokens(rows) - 10*perRow
+	first := func(out []ContextMessage) int64 {
+		for _, row := range out {
+			if row.ID != contextTrimNoticeID {
+				return row.Ord
+			}
+		}
+		return 0
+	}
+	cases := []struct {
+		name    string
+		reserve int
+		want    int64
+	}{
+		// Ten rows over lands past ordinal 17: the next anchor, 32.
+		{"no reserve", 0, 32},
+		// The reserve target is ordinal 57, whose nearest anchor is 64.
+		{"token reserve", 40 * perRow, 64},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := DeterministicFitWithReserve(fitCfg(), rows, budget, tc.reserve)
+			if got := first(out); got != tc.want {
+				t.Fatalf("first retained ordinal = %d, want %d", got, tc.want)
+			}
+		})
+	}
+	// The same ordinal anchor survives a shorter reconstructed slice.
+	if got := first(DeterministicFitWithReserve(fitCfg(), rows[5:], EstimateMessagesTokens(rows[5:])-5*perRow, 0)); got != 32 {
+		t.Fatalf("anchor moved with the slice: %d", got)
+	}
+}
+
+func TestDeterministicFitLeavesNoInterleavedOrphan(t *testing.T) {
+	var rows []ContextMessage
+	for i := range 40 {
+		rows = append(rows, ContextMessage{Ord: int64(i + 1), ID: strconv.Itoa(i), Role: string(api.MessageRoleAssistant), Content: fitDistinctBody(i)})
+	}
+	rows[29].ToolCalls = []api.ToolCall{{ID: "p1"}, {ID: "p2"}}
+	rows[30].Role, rows[30].ToolCallID = string(api.MessageRoleTool), "p1"
+	rows[31].Role = string(api.MessageRoleSystem)
+	rows[32].Role, rows[32].ToolCallID = string(api.MessageRoleTool), "p2"
+	perRow := EstimateMessagesTokens(rows[:1])
+	cfg := CompactionConfig{KeepRecentMessages: 2}
+	out := DeterministicFit(cfg, rows, EstimateMessagesTokens(rows)-30*perRow)
+	calls := map[string]bool{}
+	for _, row := range out {
+		for _, call := range row.ToolCalls {
+			calls[call.ID] = true
+		}
+		if row.Role == string(api.MessageRoleTool) && !calls[row.ToolCallID] {
+			t.Fatalf("orphan result %s after fit", row.ID)
+		}
+	}
+}
+
+func TestDeterministicFitBlockRoundingStopsAtActiveTurnBoundary(t *testing.T) {
+	rows := []ContextMessage{
+		{Ord: 2, ID: "turn-1-user", Role: string(api.MessageRoleUser), ContextPinned: true, Content: fitDistinctBody(2), ContextMessageProvenance: ContextMessageProvenance{Origin: api.MessageOriginUser}},
+	}
+	for ord := int64(14); ord <= 20; ord++ {
+		rows = append(rows, ContextMessage{Ord: ord, ID: strconv.FormatInt(ord, 10), Role: string(api.MessageRoleAssistant), Content: fitDistinctBody(int(ord))})
+	}
+	rows = append(rows, ContextMessage{
+		Ord: 21, ID: "turn-2-user", Role: string(api.MessageRoleUser), ContextPinned: true, Content: fitDistinctBody(21),
+		ContextMessageProvenance: ContextMessageProvenance{Origin: api.MessageOriginUser},
+	})
+	for ord := int64(22); ord <= 50; ord++ {
+		rows = append(rows, ContextMessage{Ord: ord, ID: strconv.FormatInt(ord, 10), Role: string(api.MessageRoleAssistant), Content: fitDistinctBody(int(ord))})
+	}
+	perRow := EstimateMessagesTokens(rows[1:2])
+	budget := EstimateMessagesTokens(rows) - perRow
+	out := DeterministicFitWithReserve(fitCfg(), rows, budget, 4*perRow)
+	for _, row := range out {
+		if row.Ord == 22 {
+			return
+		}
+	}
+	t.Fatalf("block rounding crossed active turn boundary and dropped ord=22: %+v", out)
 }

@@ -1,0 +1,14 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/session/profiles/profiles.Service",
+  "kind": "projection",
+  "workstream": "local-inference",
+  "disposition": "retain",
+  "reason": "Retain one profile-to-machine projection with explicit authority dependencies. The read-only entry shares compilation while suppressing posture and external-access observations. The projection fixture checks both paths; separating them would risk divergent tool and permission surfaces.",
+  "reviewed_commit": "e033acac702d36f5e358de3cab884f372d152c6c",
+  "ceiling": 37,
+  "boundaries": {
+    "lycaon/internal/session/profiles/machine_projection_test.go": "7e72aca6a7737da413712b04acf3f8ca32baef82c91c04f075f30b24e5dcb8a8"
+  },
+  "reviewed_shape": "102ebf2f1c3cc4bb97aa014524d3cfeea947f516d9b2e176a2a9648a23064852"
+}

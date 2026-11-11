@@ -20,7 +20,7 @@ import (
 func TestToolSchemaArgPropertiesHaveDescriptions(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 	if cfg == nil || len(cfg.Tools) == 0 {
 		t.Fatal("tools/schemas loaded empty tools map")
@@ -60,7 +60,7 @@ type toolSchemaArgDesc struct {
 func TestToolSchemaDescriptionsAvoidToolArgDupes(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 
 	toolFeats := map[string]map[string]struct{}{}

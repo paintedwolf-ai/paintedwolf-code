@@ -120,7 +120,7 @@ func TestProxyRefusalMalformedReplyAndCancellationNeverDialDirect(t *testing.T) 
 	}
 	select {
 	case <-closed:
-	case <-time.After(time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("cancelled proxy connection stayed open")
 	}
 }

@@ -3,6 +3,7 @@ package toolexecution
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
@@ -64,15 +65,7 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 		return ProgramSurface{}, fmt.Errorf("coordinator program requires captured surface")
 	}
 	if filter.SurfaceID != "" {
-		catalog, err := surfacecatalog.Load()
-		if err != nil {
-			return ProgramSurface{}, err
-		}
-		row, err := catalog.Surface(filter.SurfaceID)
-		if err != nil {
-			return ProgramSurface{}, err
-		}
-		restriction, err := toolcontract.NewCommandEffects(row.CommandEffects...)
+		restriction, err := surfaceCommandEffects(filter.SurfaceID)
 		if err != nil {
 			return ProgramSurface{}, err
 		}
@@ -83,6 +76,113 @@ func (e *Metadata) FreezeProgramSurface(ctx context.Context, filter platform.Too
 		return ProgramSurface{}, err
 	}
 	return ProgramSurface{selection: selection, allowed: allowed, profile: filter.ProfileID}, nil
+}
+
+// ProgramReach freezes which native programs a profile and surface can run: the
+// catalog entry's effects fit the restriction and no profile deny names it.
+func (e *Metadata) ProgramReach(ctx context.Context, filter platform.ToolFilter) (toolreach.Programs, error) {
+	if e == nil {
+		return nil, fmt.Errorf("command metadata required")
+	}
+	policy, ok := e.policy.(interface {
+		FreezeCommandProfile(context.Context, string) (context.Context, toolcontract.CommandEffects, error)
+		CommandOperationAllowed(context.Context, string, string, string) (bool, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("command profile effect boundary required")
+	}
+	frozen, allowed, err := policy.FreezeCommandProfile(ctx, filter.ProfileID)
+	if err != nil {
+		return nil, err
+	}
+	if filter.SurfaceID != "" {
+		restriction, err := surfaceCommandEffects(filter.SurfaceID)
+		if err != nil {
+			return nil, err
+		}
+		allowed &= restriction
+	}
+	surfaceTools, err := surfaceCommandFormTools(filter.SurfaceID)
+	if err != nil {
+		return nil, err
+	}
+	catalog, err := toolcontract.ReadOnlyLanguageV1()
+	if err != nil {
+		return nil, err
+	}
+	reachable := map[string]bool{}
+	for _, spec := range catalog.Commands {
+		permitted, err := policy.CommandOperationAllowed(frozen, filter.ProfileID, spec.Name, spec.Name)
+		if err != nil {
+			return nil, err
+		}
+		if !surfaceAllowsCommandForm(surfaceTools, spec.Name) {
+			permitted = false
+		}
+		reachable[spec.Name] = permitted && anyModeAllowed(spec, allowed)
+	}
+	return func(name string) bool { return reachable[name] }, nil
+}
+
+func surfaceCommandFormTools(surfaceID string) (map[string]bool, error) {
+	if strings.TrimSpace(surfaceID) == "" {
+		return nil, nil
+	}
+	catalog, err := surfacecatalog.Load()
+	if err != nil {
+		return nil, err
+	}
+	row, err := catalog.Surface(surfaceID)
+	if err != nil {
+		return nil, err
+	}
+	tools := make(map[string]bool, len(row.Floor)+len(row.Loadable))
+	for _, name := range row.FloorTools() {
+		tools[name] = true
+	}
+	for _, name := range row.LoadableTools() {
+		tools[name] = true
+	}
+	return tools, nil
+}
+
+func surfaceAllowsCommandForm(surfaceTools map[string]bool, command string) bool {
+	if surfaceTools == nil {
+		return true
+	}
+	identities, err := toolcontract.CommandPolicyIdentities(command)
+	if err != nil {
+		return false
+	}
+	for _, candidate := range identities {
+		if toolcontract.CommandFormTool(candidate) && !surfaceTools[candidate] {
+			return false
+		}
+	}
+	return true
+}
+
+func anyModeAllowed(spec toolcontract.CommandSpecification, allowed toolcontract.CommandEffects) bool {
+	for _, requirement := range spec.Effects {
+		// A wrapper's effects depend on its child, which is checked when it runs.
+		effects, err := requirement.CommandEffects(&allowed)
+		if err == nil && allowed.Allows(effects) {
+			return true
+		}
+	}
+	return false
+}
+
+func surfaceCommandEffects(surfaceID string) (toolcontract.CommandEffects, error) {
+	catalog, err := surfacecatalog.Load()
+	if err != nil {
+		return 0, err
+	}
+	row, err := catalog.Surface(surfaceID)
+	if err != nil {
+		return 0, err
+	}
+	return toolcontract.NewCommandEffects(row.CommandEffects...)
 }
 
 // ValidateBound checks a binder-selected exact catalog mode. The adapter must

@@ -1,0 +1,4 @@
+steps:
+  - program: ["ls", "{{ paintedwolf.path }}"]
+    complete: true
+    say: "List the directory with {{ call }} and pass one image file inside it."

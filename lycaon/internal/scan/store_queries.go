@@ -10,7 +10,7 @@ import (
 )
 
 // Get returns a scan by id, or (nil, nil) when no row exists.
-func (s *SQLStore) Get(ctx context.Context, id string) (*api.CodeScan, error) {
+func (s *sqlCore) Get(ctx context.Context, id string) (*api.CodeScan, error) {
 	row, err := s.queries.GetCodeScan(ctx, id)
 	if db.IsNoRows(err) {
 		return nil, nil
@@ -22,7 +22,7 @@ func (s *SQLStore) Get(ctx context.Context, id string) (*api.CodeScan, error) {
 }
 
 // FindReusableByPathScanner returns matching active or complete evidence.
-func (s *SQLStore) FindReusableByPathScanner(ctx context.Context, canonicalPath, snapshotID, scannerID, reuseKey string) (*api.CodeScan, error) {
+func (s *sqlCore) FindReusableByPathScanner(ctx context.Context, canonicalPath, snapshotID, scannerID, reuseKey string) (*api.CodeScan, error) {
 	canonicalPath = strings.TrimSpace(canonicalPath)
 	scannerID = strings.TrimSpace(scannerID)
 	snapshotID = strings.TrimSpace(snapshotID)
@@ -45,7 +45,7 @@ func (s *SQLStore) FindReusableByPathScanner(ctx context.Context, canonicalPath,
 }
 
 // OpenScansForPath returns pending or running scans for a path across all triggers.
-func (s *SQLStore) OpenScansForPath(ctx context.Context, canonicalPath string) ([]api.CodeScan, error) {
+func (s *sqlCore) OpenScansForPath(ctx context.Context, canonicalPath string) ([]api.CodeScan, error) {
 	rows, err := s.queries.OpenScansForPath(ctx, canonicalPath)
 	if err != nil {
 		return nil, err
@@ -54,7 +54,7 @@ func (s *SQLStore) OpenScansForPath(ctx context.Context, canonicalPath string) (
 }
 
 // ListOpen returns every pending or running scan.
-func (s *SQLStore) ListOpen(ctx context.Context) ([]api.CodeScan, error) {
+func (s *sqlCore) ListOpen(ctx context.Context) ([]api.CodeScan, error) {
 	rows, err := s.queries.ListOpenScans(ctx)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (s *SQLStore) ListOpen(ctx context.Context) ([]api.CodeScan, error) {
 }
 
 // ListByCanonicalPath returns scans for one canonical path.
-func (s *SQLStore) ListByCanonicalPath(ctx context.Context, canonicalPath string) ([]api.CodeScan, error) {
+func (s *sqlCore) ListByCanonicalPath(ctx context.Context, canonicalPath string) ([]api.CodeScan, error) {
 	rows, err := s.queries.ListScansByCanonicalPath(ctx, canonicalPath)
 	if err != nil {
 		return nil, err
@@ -72,7 +72,7 @@ func (s *SQLStore) ListByCanonicalPath(ctx context.Context, canonicalPath string
 }
 
 // ListByWorkflowRunID returns scans bound to a workflow run, newest first.
-func (s *SQLStore) ListByWorkflowRunID(ctx context.Context, workflowRunID string) ([]api.CodeScan, error) {
+func (s *sqlCore) ListByWorkflowRunID(ctx context.Context, workflowRunID string) ([]api.CodeScan, error) {
 	workflowRunID = strings.TrimSpace(workflowRunID)
 	if workflowRunID == "" {
 		return nil, nil
@@ -89,7 +89,7 @@ func (s *SQLStore) ListByWorkflowRunID(ctx context.Context, workflowRunID string
 }
 
 // ListBySessionID returns scans the session asked for, newest first.
-func (s *SQLStore) ListBySessionID(ctx context.Context, sessionID string) ([]api.CodeScan, error) {
+func (s *sqlCore) ListBySessionID(ctx context.Context, sessionID string) ([]api.CodeScan, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil, nil
@@ -106,7 +106,7 @@ func (s *SQLStore) ListBySessionID(ctx context.Context, sessionID string) ([]api
 }
 
 // LatestForDelegation returns the newest scan for a delegation and category set.
-func (s *SQLStore) LatestForDelegation(ctx context.Context, delegationID string, categories []api.ScanCategory) (*api.CodeScan, error) {
+func (s *sqlCore) LatestForDelegation(ctx context.Context, delegationID string, categories []api.ScanCategory) (*api.CodeScan, error) {
 	if delegationID == "" {
 		return nil, fmt.Errorf("delegation_id required")
 	}
@@ -128,7 +128,7 @@ func (s *SQLStore) LatestForDelegation(ctx context.Context, delegationID string,
 }
 
 // LatestCompleteForDelegationSnapshot returns the newest complete scan for a delegation snapshot.
-func (s *SQLStore) LatestCompleteForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
+func (s *sqlCore) LatestCompleteForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory) (*api.CodeScan, error) {
 	if delegationID == "" {
 		return nil, fmt.Errorf("delegation_id required")
 	}
@@ -151,7 +151,7 @@ func (s *SQLStore) LatestCompleteForDelegationSnapshot(ctx context.Context, dele
 }
 
 // FindInFlightForDelegationSnapshot returns a matching pending or running scan.
-func (s *SQLStore) FindInFlightForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error) {
+func (s *sqlCore) FindInFlightForDelegationSnapshot(ctx context.Context, delegationID, snapshotID string, categories []api.ScanCategory, paths []string) (*api.CodeScan, error) {
 	if delegationID == "" {
 		return nil, nil
 	}

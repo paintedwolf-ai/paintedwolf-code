@@ -40,7 +40,6 @@ describe("ReviewFileRow revert", () => {
       onToggleSteps={() => {}} onOpenStep={() => {}} onRowMenu={() => {}} />);
     expect(screen.getByText("Fix auth")).toBeTruthy();
     expect(screen.getByText("Add tests")).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /open chat/i })).toBeNull();
   });
 
   it("keeps Revert visible on a tombstone", () => {

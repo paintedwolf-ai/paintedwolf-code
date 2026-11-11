@@ -9,10 +9,12 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/claim"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 // SandboxLayout describes how a worker branch maps project roots into the sandbox.
@@ -164,42 +166,64 @@ func createWorkerWorkspaceFromSources(
 	if err := validateLayout(sources); err != nil {
 		return nil, SandboxLayout{}, err
 	}
-	var branchRoot string
-	if len(layout.Roots) == 1 {
-		primary, err := projectroot.PrimaryRoot(layout.Roots)
-		if err != nil {
-			return nil, SandboxLayout{}, err
-		}
-		branchRoot = jobRoot(m, primary.Path, jobID)
-	} else {
-		active, err := projectroot.ActiveRoot(layout.Roots, activeRootID)
-		if err != nil {
-			return nil, SandboxLayout{}, err
-		}
-		branchRoot = jobRoot(m, active.Path, jobID)
+	keyPath, err := branchKeyPath(layout, activeRootID)
+	if err != nil {
+		return nil, SandboxLayout{}, err
 	}
-	release, err := acquireWorkspaceProvisionLock(ctx, branchRoot)
+	logicalRoot := m.jobRoot(keyPath, jobID)
+	release, err := acquireWorkspaceProvisionLock(ctx, logicalRoot)
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
 	defer release()
-	if completeBranchMatchesLayout(branchRoot, layout) {
-		b := &Binding{ID: jobID, Root: branchRoot}
-		if sel, view, ok := m.lookupBranchViews(branchRoot); ok {
-			b.Selection = sel
-			b.View = view
-			b.Adapter = sel.Adapter
+	if existing, err := m.completeBranch(logicalRoot, layout); err != nil {
+		return nil, SandboxLayout{}, err
+	} else if existing != "" {
+		b := &Binding{ID: jobID, Root: existing}
+		if sel, view, ok := m.lookupBranchViews(existing); ok {
+			b.Selection, b.View, b.Adapter = sel, view, sel.Adapter
 		}
 		return b, layout, nil
 	}
-	binding, err := m.createBranchSkeleton(ctx, branchRoot, layout, jobID)
+	decision, err := m.decidePlacement(ctx, layout.Roots, sources.Roots)
+	if err != nil {
+		return nil, SandboxLayout{}, classifyProvisionError(err)
+	}
+	branchRoot := enginepaths.JobBranchDir(decision.Base, keyPath, jobID)
+	if err := workerplacement.AssertOutsideRoots(branchRoot, placementRoots(layout.Roots, sources.Roots)); err != nil {
+		return nil, SandboxLayout{}, err
+	}
+	if branchRoot != logicalRoot {
+		releasePlaced, err := acquireWorkspaceProvisionLock(ctx, branchRoot)
+		if err != nil {
+			return nil, SandboxLayout{}, err
+		}
+		defer releasePlaced()
+	}
+	binding, err := m.createPlacedSkeleton(ctx, logicalRoot, branchRoot, layout, jobID, decision)
 	if err != nil {
 		return nil, SandboxLayout{}, err
 	}
-	if err := snapshotSourceRoots(ctx, m, binding, sources.Roots, parentCheckpointID); err != nil {
-		return nil, SandboxLayout{}, errors.Join(err, m.DestroyWorkerWorkspace(binding))
+	binding.Preparation = placementPreparation(decision)
+	if err := snapshotSourceRoots(ctx, m, binding, sources.Roots, parentCheckpointID, decision); err != nil {
+		return nil, SandboxLayout{}, errors.Join(err, m.DestroyWorkerWorkspace(ctx, binding))
 	}
 	return binding, layout, nil
+}
+
+func branchKeyPath(layout SandboxLayout, activeRootID string) (string, error) {
+	if len(layout.Roots) == 1 {
+		primary, err := projectroot.PrimaryRoot(layout.Roots)
+		if err != nil {
+			return "", err
+		}
+		return primary.Path, nil
+	}
+	active, err := projectroot.ActiveRoot(layout.Roots, activeRootID)
+	if err != nil {
+		return "", err
+	}
+	return active.Path, nil
 }
 
 func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
@@ -219,7 +243,7 @@ func completeBranchMatchesLayout(branchRoot string, want SandboxLayout) bool {
 
 // snapshotSourceRoots gives a worker its one provider. A copy that passes its budget has cleaned up
 // after itself, so the rule runs again knowing that and moves on to the mount.
-func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, parentCheckpointID string) error {
+func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sources []projectroot.RootRef, parentCheckpointID string, decision workerplacement.Decision) error {
 	services, err := m.layered()
 	if err != nil {
 		return err
@@ -230,11 +254,18 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 	var overrun *adapter.BudgetOverrunError
 	for {
 		reportPreparation(ctx, PreparationProgress{Stage: "probing"})
-		choice, err := m.chooseWorkspaceAdapter(ctx, binding.Root, grants, projectID, overrun)
+		choice, err := m.chooseWorkspaceAdapter(ctx, binding.Root, grants, projectID, decision, overrun)
 		if err != nil {
 			return classifyProvisionError(err)
 		}
 		binding.Selection, binding.Adapter = choice, choice.Adapter
+		if choice.Facts.PreparationKind == adapter.PreparationMaterialized {
+			reportPreparation(ctx, PreparationProgress{
+				Strategy: preparationStrategy(choice.Selection), Stage: StageCostDeclared,
+				TotalEntries: choice.Selection.DeclaredCost.Entries, TotalBytes: choice.Selection.DeclaredCost.UncloneableBytes,
+				NotClonableReason: decision.Reason,
+			})
+		}
 
 		var view *adapter.PreparedView
 		var cv *claim.ClaimedView
@@ -268,6 +299,11 @@ func snapshotSourceRoots(ctx context.Context, m *Manager, binding *Binding, sour
 			return classifyProvisionError(err)
 		}
 		binding.View = view
+		binding.Preparation.Materialized = view.Materialize
+		reportPreparation(ctx, PreparationProgress{
+			Strategy: preparationStrategy(choice.Selection), Stage: StageBranchPrepared,
+			UnreadableEntries: view.Materialize.UnreadableEntries, NotClonableReason: decision.Reason,
+		})
 		m.recordBranchViews(binding.Root, choice, view)
 		return markSnapshotCompleteWithClaim(binding.Root, choice, view, cv, hints)
 	}
@@ -291,6 +327,15 @@ func restoreBranchDirectories(binding *Binding, sources []projectroot.RootRef) e
 		}
 	}
 	return nil
+}
+
+// placementPreparation is what the placement decision contributes to a binding's preparation facts.
+func placementPreparation(decision workerplacement.Decision) Preparation {
+	out := Preparation{Clonable: decision.Clonable, NotClonableReason: decision.Reason}
+	if decision.Folder != nil {
+		out.PlacementFolder = decision.Folder.Path
+	}
+	return out
 }
 
 // jobIDForBranch is the branch directory name: the worker job id.

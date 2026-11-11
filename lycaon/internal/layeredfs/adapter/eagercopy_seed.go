@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -110,7 +111,17 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir stri
 	a.seededDirs = a.seededDirs[:0]
 	walkErr := filepath.WalkDir(srcRoot, func(srcPath string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
+			if srcPath != srcRoot && errors.Is(walkErr, fs.ErrPermission) {
+				a.out.stats.UnreadableEntries++
+				if d != nil && d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
 			return walkErr
+		}
+		if d.IsDir() && srcPath != srcRoot && a.hidden(srcPath) {
+			return filepath.SkipDir
 		}
 		if err := a.ctx.Err(); err != nil {
 			return &AdapterError{AdapterID: AdapterEagerCopy, Op: "prepare", ReasonCode: ReasonContextCanceled, Diagnostic: err.Error(), Cause: err}
@@ -301,12 +312,22 @@ func (a *seedAccumulator) seedSymlink(rootID, rel, srcPath, dstPath, pristinePat
 // does not. The working file comes from the source and the pristine one from the working file, so the
 // two cannot differ whatever the source does meanwhile. Nothing here hashes.
 func (a *seedAccumulator) seedRegularFile(rootID, rel, srcPath, dstPath, pristinePath string, info fs.FileInfo, xattrs map[string][]byte) error {
+	// A clone can succeed without read permission and leave a file nothing can capture.
+	if info.Mode().Perm()&0o400 == 0 {
+		a.out.stats.UnreadableEntries++
+		return nil
+	}
 	if err := a.chargeEntries(rootID, 1); err != nil {
 		return err
 	}
 	size := max(info.Size(), 0)
 	a.out.logicalBytes += size
 	if err := a.cloneOrCopy(rootID, srcPath, dstPath, info.Mode().Perm()|0o600, size); err != nil {
+		if errors.Is(err, fs.ErrPermission) {
+			_ = os.Remove(dstPath)
+			a.out.stats.UnreadableEntries++
+			return nil
+		}
 		return err
 	}
 	if err := writePathXattrs(dstPath, xattrs); err != nil {
@@ -416,4 +437,15 @@ func (a *seedAccumulator) overrun(rootID string) error {
 		ViewID: a.req.ViewID, RootID: rootID, Entries: a.out.stats.Entries,
 		CopiedBytes: a.out.stats.CopiedBytes, Limit: limit,
 	}
+}
+
+// hidden reports engine storage under a source root that no view shows.
+func (a *seedAccumulator) hidden(dir string) bool {
+	canonical := fspath.CanonicalPath(dir)
+	for _, path := range a.req.HiddenPaths {
+		if canonical == fspath.CanonicalPath(path) {
+			return true
+		}
+	}
+	return false
 }

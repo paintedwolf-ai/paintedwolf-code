@@ -13,8 +13,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ObserveToolCall records a tool the chat called and, on the turn's first
-// loadable tool, asks the engine which skill that tool's work needs.
+// ObserveToolCall records a tool call and ranks tool-event skills on the
+// turn's first non-skipped loadable tool.
 func (m *Service) ObserveToolCall(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string) {
 	if m == nil || sess == nil {
 		return
@@ -24,7 +24,7 @@ func (m *Service) ObserveToolCall(ctx context.Context, sess *api.Session, tctx t
 }
 
 func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string) {
-	if m.skillBody == nil {
+	if m.skillBody == nil || m.skills == nil || m.Ledger.FullCatalog(sess.ID) {
 		return
 	}
 	catalog, err := turnload.LoadCatalog()
@@ -41,10 +41,12 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		return
 	}
 	roster, _ := m.skills(ctx, sess, tctx.Identity.Agent, roots)
+	roster = eligibleSkillsForOfferedTools(roster, m.toolEventOfferedTools(ctx, sess, tctx, tool, len(roots)))
 	card := turnload.ToolCard{Name: tool, Description: m.toolDescription(ctx, sess, tctx.Identity.Agent, tool)}
 	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.Identity.ToolCallID)
 	outcome := turnload.RankToolEvent(ctx, m.Decider(), catalog.ToolEvent, request, card, roster)
 	finishDeciding()
+	m.Ledger.ExposeCatalog(sess.ID, outcome.Ranking.Failure)
 	var preload *turnload.SkillPreload
 	switch {
 	case outcome.Read != nil:
@@ -77,8 +79,41 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 		"elapsed_ms", time.Since(started).Milliseconds())
 }
 
-// renderToolEventSkill reads the selected skill's body into the turn; a body
-// that fails to render leaves the turn without a skill.
+func (m *Service) toolEventOfferedTools(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string, rootCount int) map[string]bool {
+	floor, loadable, _ := m.turnToolSets(ctx, sess, tctx.Identity.Agent, tctx.Turn.TurnSurfaceID, rootCount)
+	offered := nameSet(floor)
+	for _, name := range loadable {
+		if name = strings.TrimSpace(name); name != "" {
+			offered[name] = true
+		}
+	}
+	for _, name := range tctx.Turn.TurnOfferedToolNames {
+		if name = strings.TrimSpace(name); name != "" {
+			offered[name] = true
+		}
+	}
+	for _, name := range tctx.Turn.TurnToolPlan.ImmediateNames() {
+		if name = strings.TrimSpace(name); name != "" {
+			offered[name] = true
+		}
+	}
+	for _, name := range tctx.Turn.TurnToolPlan.DeferredNames() {
+		if name = strings.TrimSpace(name); name != "" {
+			offered[name] = true
+		}
+	}
+	if m != nil && m.Ledger != nil && sess != nil {
+		for name := range m.Ledger.Active(sess.ID) {
+			offered[name] = true
+		}
+	}
+	if tool = strings.TrimSpace(tool); tool != "" {
+		offered[tool] = true
+	}
+	return offered
+}
+
+// renderToolEventSkill renders the selected skill's body into the turn ledger.
 func (m *Service) renderToolEventSkill(ctx context.Context, sessionID string, tctx tools.ToolContext, tool string, read turnload.SkillRank, roster []skills.Skill) *turnload.SkillPreload {
 	for i := range roster {
 		if roster[i].Name != read.Name {
@@ -92,16 +127,24 @@ func (m *Service) renderToolEventSkill(ctx context.Context, sessionID string, tc
 		if strings.TrimSpace(body) == "" {
 			return nil
 		}
-		preload := &turnload.SkillPreload{Name: read.Name, Score: read.Score, Body: body, Tool: tool}
+		preload := &turnload.SkillPreload{
+			Name:      read.Name,
+			Score:     read.Score,
+			Body:      body,
+			Tool:      tool,
+			Resources: append([]string(nil), roster[i].Resources...),
+		}
 		m.Ledger.SetPreload(sessionID, preload)
 		return preload
 	}
 	return nil
 }
 
-// toolDescription is the bounded description the engine reads for a tool,
-// from the same policy that offers the tool to the prompt.
+// toolDescription returns the policy description for tool on profileID.
 func (m *Service) toolDescription(ctx context.Context, sess *api.Session, profileID, tool string) string {
+	if m == nil || m.policy == nil {
+		return ""
+	}
 	policy := m.policy()
 	if policy == nil {
 		return ""

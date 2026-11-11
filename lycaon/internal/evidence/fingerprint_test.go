@@ -385,3 +385,12 @@ func TestCommandOutputURLsRemainOutcomeEvidenceNotPathsOrWebObservations(t *test
 		t.Fatal("command outcome handle missing")
 	}
 }
+
+func TestMutationRecordsCaptureResultBody(t *testing.T) {
+	for _, tool := range []string{"write", "edit", "replace_lines", "restore_version", "jq_edit", "code_rewrite", "delete"} {
+		rec := evidence.BuildEvidenceRecord("", tool, map[string]any{"path": "pkg/a.go"}, `{"path":"pkg/a.go","ok":true}`)
+		if len(rec.Body) == 0 || !strings.Contains(rec.Body[0], `"ok":true`) {
+			t.Fatalf("%s record body = %v, want captured result body", tool, rec.Body)
+		}
+	}
+}

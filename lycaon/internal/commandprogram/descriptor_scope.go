@@ -205,6 +205,9 @@ func (s *descriptorScope) prepare(ctx context.Context, f *frame, statement comma
 			prevented, err := f.expanding(r.SyntaxLocation, func(scope *frame) error {
 				var err error
 				plan.body, err = f.e.expander.ExpandDocument(ctx, scope, r)
+				if err == nil && f.e.ports.DocumentUnresolvable != nil && f.e.ports.DocumentUnresolvable(plan.body) {
+					err = &ExpansionError{Code: codeSecretOutsideSink, Span: r.Span, Expected: "a document without a managed secret reference"}
+				}
 				return err
 			})
 			if prevented || err != nil {

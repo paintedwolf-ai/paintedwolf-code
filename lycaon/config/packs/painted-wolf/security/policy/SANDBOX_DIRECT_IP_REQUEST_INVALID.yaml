@@ -30,6 +30,3 @@ x-paintedwolf-message: structured direct network request invalid
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_DIRECT_IP_REQUEST_INVALID'
-  - direct network

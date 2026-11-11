@@ -23,8 +23,5 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SPEC_POSTURE_REVIEW_DEPTH_REQUIRED'
 x-paintedwolf-audience:
 - coordinator

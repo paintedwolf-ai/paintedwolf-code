@@ -12,6 +12,12 @@ import (
 	"github.com/lycaon/lycaon/config"
 )
 
+// NextStepsKindRoot holds the host catalog of reachable steps, one file per rule.
+const NextStepsKindRoot = "host/next-steps"
+
+// NextStepsUnitID returns the catalog unit for a rule code.
+func NextStepsUnitID(code string) string { return NextStepsKindRoot + "/" + code }
+
 // inventoryKindRoots contains content resolved through pack composition.
 var inventoryKindRoots = []string{
 	"policy",
@@ -27,6 +33,7 @@ var inventoryKindRoots = []string{
 	"host/detection-packs",
 	CredentialSlotsKindRoot,
 	"host/user-notices",
+	NextStepsKindRoot,
 	"shared",
 	"mcp_bindings",
 	"contributions/commands",
@@ -115,6 +122,7 @@ var projectScopeByKind = map[string]ProjectScopeClass{
 	"tools":                          ScopeDeviceOnly,
 	"host/bindings":                  ScopeDeviceOnly,
 	"host/user-notices":              ScopeDeviceOnly,
+	NextStepsKindRoot:                ScopeAdditive,
 	"mcp_bindings":                   ScopeDeviceOnly,
 	"skills":                         ScopeDeviceOnly,
 	// Recognition rules require device installation.
@@ -380,7 +388,7 @@ func UnitIDFor(packID, rel string) string {
 			return strings.TrimSuffix(rel, ".yaml")
 		}
 		return ""
-	case "host/bindings", "host/user-notices":
+	case "host/bindings", "host/user-notices", NextStepsKindRoot:
 		if strings.HasSuffix(rel, ".yaml") || strings.HasSuffix(rel, ".yml") {
 			return strings.TrimSuffix(strings.TrimSuffix(rel, ".yaml"), ".yml")
 		}

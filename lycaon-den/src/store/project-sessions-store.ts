@@ -2,7 +2,12 @@ import { batch } from "solid-js";
 import { createProjectionStore } from "./projection-store.ts";
 import { createStore, reconcile, unwrap } from "solid-js/store";
 import type { LycaonClient } from "../api/client.ts";
-import type { Session, SessionEvent, SessionSummary } from "../api/types.ts";
+import type {
+  ProjectBackgroundEvent,
+  Session,
+  SessionEvent,
+  SessionSummary,
+} from "../api/types.ts";
 import {
   DEFAULT_CHAT_LIST_SORT,
   type ChatListSort,
@@ -36,6 +41,7 @@ type SidebarInventory = { rows: SessionSummary[]; total: number };
 
 export type ProjectSessionsSseBus = {
   onSessionEvent: (cb: (ev: SessionEvent) => void) => () => void;
+  onProjectBackgroundEvent?: (cb: (ev: ProjectBackgroundEvent) => void) => () => void;
 };
 
 export type ProjectSessionsStore = ReturnType<typeof createProjectSessionsStore>;
@@ -182,6 +188,24 @@ export function createProjectSessionsStore(
   }
 
   sse.onSessionEvent(() => scheduleRefresh());
+  sse.onProjectBackgroundEvent?.((ev) => {
+    if (!state.projectId || ev.project_id !== state.projectId) return;
+    const sessionId = ev.session_id?.trim();
+    if (sessionId && (ev.action === "started" || ev.action === "ended")) {
+      const delta = ev.action === "started" ? 1 : -1;
+      const idx = state.rows.findIndex((r) => r.id === sessionId);
+      if (idx >= 0) {
+        const nextCount = Math.max(0, (state.rows[idx]?.background_running ?? 0) + delta);
+        setState("rows", idx, "background_running", nextCount);
+      }
+      const hostRow = hostRows.find((r) => r.id === sessionId);
+      if (hostRow) {
+        hostRow.background_running = Math.max(0, (hostRow.background_running ?? 0) + delta);
+      }
+      retainLocalRows();
+    }
+    scheduleRefresh();
+  });
 
   function retainLocalRows(): void {
     const projectId = state.projectId;

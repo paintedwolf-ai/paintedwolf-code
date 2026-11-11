@@ -1,8 +1,11 @@
 package sandbox
 
 import (
+	"io/fs"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -18,6 +21,14 @@ func IsVCSDirBaseName(baseName string) bool {
 	return baseName == vcsDirName
 }
 
+// IsGitlinkDirEntry reports whether entry is a regular .git file whose first line starts with "gitdir:".
+func IsGitlinkDirEntry(baseName, absPath string, entry fs.DirEntry) bool {
+	if !IsVCSDirBaseName(baseName) || entry == nil || entry.IsDir() || entry.Type()&fs.ModeSymlink != 0 {
+		return false
+	}
+	return gitrepo.IsGitlinkFile(absPath)
+}
+
 // IsEngineOverlayBaseName reports whether baseName is the project settings overlay.
 func IsEngineOverlayBaseName(baseName string) bool {
 	return baseName == settingsoverlay.DirName()
@@ -25,7 +36,7 @@ func IsEngineOverlayBaseName(baseName string) bool {
 
 // ShouldSkipDirBaseName reports whether baseName is engine overlay or VCS metadata.
 func ShouldSkipDirBaseName(baseName string) bool {
-	return IsVCSDirBaseName(baseName) || IsEngineOverlayBaseName(baseName)
+	return IsVCSDirBaseName(baseName) || IsEngineOverlayBaseName(baseName) || enginepaths.IsWorkerPlacementDirName(baseName)
 }
 
 // ShouldSkipDir reports whether a directory lies under engine overlay or VCS metadata.

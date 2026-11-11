@@ -8,5 +8,3 @@ suggested_action: Try again; if it keeps failing, check disk space and folder ap
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - could not read

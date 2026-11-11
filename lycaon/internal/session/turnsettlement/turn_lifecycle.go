@@ -6,39 +6,77 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+type deferredTurnSettlement struct {
+	disposition     api.SessionIdleDisposition
+	closeoutBlocked *promptresult.CloseoutBlocked
+}
+
 type deferredTurnSettlementStore struct {
-	mu        sync.Mutex
-	bySession map[string]api.SessionIdleDisposition
+	mu              sync.Mutex
+	bySession       map[string]deferredTurnSettlement
+	closeoutBlocked map[string]*promptresult.CloseoutBlocked
+}
+
+func (s *deferredTurnSettlementStore) noteCloseoutBlocked(sessionID string, blocked *promptresult.CloseoutBlocked) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closeoutBlocked == nil {
+		s.closeoutBlocked = make(map[string]*promptresult.CloseoutBlocked)
+	}
+	s.closeoutBlocked[sessionID] = blocked
+}
+
+func (s *deferredTurnSettlementStore) takeCloseoutBlocked(sessionID string) *promptresult.CloseoutBlocked {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	blocked := s.closeoutBlocked[sessionID]
+	delete(s.closeoutBlocked, sessionID)
+	return blocked
 }
 
 func (s *deferredTurnSettlementStore) put(sessionID string, disposition api.SessionIdleDisposition) {
+	s.putEntry(sessionID, deferredTurnSettlement{disposition: disposition})
+}
+
+func (s *deferredTurnSettlementStore) putEntry(sessionID string, entry deferredTurnSettlement) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.bySession == nil {
-		s.bySession = make(map[string]api.SessionIdleDisposition)
+		s.bySession = make(map[string]deferredTurnSettlement)
 	}
-	s.bySession[sessionID] = disposition
+	s.bySession[sessionID] = entry
 }
 
-func (s *deferredTurnSettlementStore) take(sessionID string) (api.SessionIdleDisposition, bool) {
+func (s *deferredTurnSettlementStore) takeEntry(sessionID string) (deferredTurnSettlement, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	disposition, ok := s.bySession[sessionID]
+	entry, ok := s.bySession[sessionID]
 	delete(s.bySession, sessionID)
-	return disposition, ok
+	return entry, ok
 }
 
 func (s *deferredTurnSettlementStore) remove(sessionID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.bySession, sessionID)
+	delete(s.closeoutBlocked, sessionID)
+}
+
+// NoteCloseoutBlocked records that the active turn settled as closeout_blocked
+// so Finish and SettlePending keep the workflow resumable instead of failing the turn.
+func (m *Service) NoteCloseoutBlocked(sessionID string, blocked *promptresult.CloseoutBlocked) {
+	if m != nil && blocked != nil {
+		m.deferredTurnSettlement.noteCloseoutBlocked(sessionID, blocked)
+	}
 }
 
 func (m *Service) Begin(sessionID string, pendingKickIDs ...string) {
 	if m != nil {
+		m.deferredTurnSettlement.takeCloseoutBlocked(sessionID)
 		m.batch.BeginTurn(sessionID)
 		m.runtime.BeginPromptTurn(sessionID, pendingKickIDs...)
 	}
@@ -59,6 +97,7 @@ func (m *Service) Finish(ctx context.Context, sessionID string, promptFailed, ho
 	hostCtx := context.WithoutCancel(ctx)
 	rt := m.runtime
 	m.End(sessionID)
+	closeoutBlocked := m.deferredTurnSettlement.takeCloseoutBlocked(sessionID)
 	if m.gate.InProgress(hostCtx, sessionID) {
 		m.deferredTurnSettlement.remove(sessionID)
 		rt.CoordinatorLoop().Nudges.ClearPending(sessionID)
@@ -73,6 +112,21 @@ func (m *Service) Finish(ctx context.Context, sessionID string, promptFailed, ho
 		if err := m.workflows.Phases.ReconcileTurnCompletion(hostCtx, sessionID); err != nil {
 			return m.Failure(sessionID, fmt.Errorf("reconcile workflow turn completion: %w", err))
 		}
+	}
+	if closeoutBlocked != nil {
+		m.batch.Reconcile(hostCtx, sessionID)
+		m.batch.DisarmTerminal(hostCtx, sessionID)
+		if m.workflows != nil {
+			if err := m.workflows.Reports.MaybeDeliverTopologyReport(hostCtx, sessionID, closeoutID); err != nil {
+				return m.Failure(sessionID, fmt.Errorf("deliver topology report: %w", err))
+			}
+			m.DisarmInactiveWorkflow(hostCtx, sessionID)
+		}
+		m.deferredTurnSettlement.putEntry(sessionID, deferredTurnSettlement{
+			disposition:     api.SessionIdleDispositionCompleted,
+			closeoutBlocked: closeoutBlocked,
+		})
+		return nil
 	}
 	continuation := rt.CoordinatorLoop().Waits.OnTurnComplete(
 		hostCtx, sessionID, hostTurn,
@@ -104,10 +158,15 @@ func (m *Service) Failure(sessionID string, turnErr error) error {
 }
 
 func (m *Service) Settle(ctx context.Context, sessionID string, disposition api.SessionIdleDisposition) error {
+	return m.settleEntry(ctx, sessionID, deferredTurnSettlement{disposition: disposition})
+}
+
+func (m *Service) settleEntry(ctx context.Context, sessionID string, entry deferredTurnSettlement) error {
 	if m == nil || m.store == nil {
 		return nil
 	}
-	if disposition == api.SessionIdleDispositionCompleted && m.workflows != nil {
+	disposition := entry.disposition
+	if entry.closeoutBlocked == nil && disposition == api.SessionIdleDispositionCompleted && m.workflows != nil {
 		if err := m.workflows.Policy.AssertSessionCompletion(ctx, sessionID); err != nil {
 			disposition = m.Disposition(true)
 		}
@@ -116,7 +175,11 @@ func (m *Service) Settle(ctx context.Context, sessionID string, disposition api.
 		return fmt.Errorf("mark user turn idle: %w", err)
 	}
 	m.deferredTurnSettlement.remove(sessionID)
-	m.status.PublishIdle(ctx, sessionID, disposition)
+	messageOverride := ""
+	if entry.closeoutBlocked != nil {
+		messageOverride = entry.closeoutBlocked.Notice
+	}
+	m.status.PublishIdleWithMessage(ctx, sessionID, disposition, messageOverride)
 	m.ReconcileSandbox(ctx, sessionID)
 	return nil
 }
@@ -139,10 +202,10 @@ func (m *Service) SettlePending(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return err
 	}
-	disposition, ok := m.deferredTurnSettlement.take(sessionID)
+	entry, ok := m.deferredTurnSettlement.takeEntry(sessionID)
 	hadDeferred := ok
 	if completed && !ok {
-		disposition, ok = api.SessionIdleDispositionCompleted, true
+		entry, ok = deferredTurnSettlement{disposition: api.SessionIdleDispositionCompleted}, true
 	}
 	if !ok {
 		return nil
@@ -151,7 +214,7 @@ func (m *Service) SettlePending(ctx context.Context, sessionID string) error {
 	release, claimed := loop.Turns.BeginUserTurnSettlement(ctx, sessionID)
 	if !claimed {
 		if hadDeferred {
-			m.deferredTurnSettlement.put(sessionID, disposition)
+			m.deferredTurnSettlement.putEntry(sessionID, entry)
 		}
 		return nil
 	}
@@ -160,7 +223,7 @@ func (m *Service) SettlePending(ctx context.Context, sessionID string) error {
 		if err != nil || !ready {
 			release()
 			if hadDeferred {
-				m.deferredTurnSettlement.put(sessionID, disposition)
+				m.deferredTurnSettlement.putEntry(sessionID, entry)
 			}
 			return err
 		}
@@ -169,7 +232,7 @@ func (m *Service) SettlePending(ctx context.Context, sessionID string) error {
 	if err != nil {
 		release()
 		if hadDeferred {
-			m.deferredTurnSettlement.put(sessionID, disposition)
+			m.deferredTurnSettlement.putEntry(sessionID, entry)
 		}
 		return fmt.Errorf("read deferred user turn: %w", err)
 	}
@@ -180,14 +243,14 @@ func (m *Service) SettlePending(ctx context.Context, sessionID string) error {
 		release()
 		return nil
 	}
-	err = m.Settle(ctx, sessionID, disposition)
+	err = m.settleEntry(ctx, sessionID, entry)
 	if err == nil && completed {
 		m.deferredWorkflowCompletions.CompareAndDelete(sessionID, completedRun)
 	}
 	release()
 	if err != nil {
 		if hadDeferred {
-			m.deferredTurnSettlement.put(sessionID, disposition)
+			m.deferredTurnSettlement.putEntry(sessionID, entry)
 		}
 	}
 	return err

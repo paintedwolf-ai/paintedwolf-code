@@ -25,7 +25,7 @@ type WorktreeBinding struct {
 }
 
 // GetWorktreeBinding returns the session's worktree binding; ok=false when unbound.
-func (s *SQL) GetWorktreeBinding(ctx context.Context, sessionID string) (*WorktreeBinding, bool, error) {
+func (s *sqlSessionViews) GetWorktreeBinding(ctx context.Context, sessionID string) (*WorktreeBinding, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
@@ -33,7 +33,7 @@ func (s *SQL) GetWorktreeBinding(ctx context.Context, sessionID string) (*Worktr
 	if sessionID == "" {
 		return nil, false, nil
 	}
-	row, err := s.queries.GetSessionWorktree(ctx, sessionID)
+	row, err := s.core.queries.GetSessionWorktree(ctx, sessionID)
 	if err != nil {
 		if db.IsNoRows(err) {
 			return nil, false, nil
@@ -58,7 +58,7 @@ func (s *SQL) GetWorktreeBinding(ctx context.Context, sessionID string) (*Worktr
 }
 
 // PutWorktreeBinding inserts or replaces the session's binding.
-func (s *SQL) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error {
+func (s *sqlSessionViews) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -72,12 +72,12 @@ func (s *SQL) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error {
 		createdAt = time.Now().UTC()
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	tx, err := s.core.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	q := s.queries.WithTx(tx)
+	q := s.core.queries.WithTx(tx)
 	id, err := q.UpsertSourceWorktree(ctx, db.UpsertSourceWorktreeParams{
 		ID: uuid.NewString(), ProjectID: b.ProjectID, RepoID: strings.TrimSpace(b.RepoID),
 		Toplevel: strings.TrimSpace(b.Toplevel), WorktreePath: strings.TrimSpace(b.WorktreePath),
@@ -95,7 +95,7 @@ func (s *SQL) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error {
 }
 
 // DeleteWorktreeBinding removes a session binding.
-func (s *SQL) DeleteWorktreeBinding(ctx context.Context, sessionID string) error {
+func (s *sqlSessionViews) DeleteWorktreeBinding(ctx context.Context, sessionID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -103,11 +103,11 @@ func (s *SQL) DeleteWorktreeBinding(ctx context.Context, sessionID string) error
 	if sessionID == "" {
 		return nil
 	}
-	return s.queries.DeleteSessionWorktree(ctx, sessionID)
+	return s.core.queries.DeleteSessionWorktree(ctx, sessionID)
 }
 
 // GetWorktreeBinding returns the session's worktree binding; ok=false when unbound.
-func (s *Memory) GetWorktreeBinding(ctx context.Context, sessionID string) (*WorktreeBinding, bool, error) {
+func (s *memorySessionViews) GetWorktreeBinding(ctx context.Context, sessionID string) (*WorktreeBinding, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
@@ -115,9 +115,9 @@ func (s *Memory) GetWorktreeBinding(ctx context.Context, sessionID string) (*Wor
 	if sessionID == "" {
 		return nil, false, nil
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	b, ok := s.worktreeBindings[sessionID]
+	s.core.mu.RLock()
+	defer s.core.mu.RUnlock()
+	b, ok := s.core.worktreeBindings[sessionID]
 	if !ok {
 		return nil, false, nil
 	}
@@ -126,7 +126,7 @@ func (s *Memory) GetWorktreeBinding(ctx context.Context, sessionID string) (*Wor
 }
 
 // PutWorktreeBinding inserts or replaces the session's binding.
-func (s *Memory) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error {
+func (s *memorySessionViews) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -135,12 +135,13 @@ func (s *Memory) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) erro
 	if b.SessionID == "" || b.ProjectID == "" {
 		return fmt.Errorf("session_id and project_id required")
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.sessions[b.SessionID]; !ok {
+	core := s.core
+	core.mu.Lock()
+	defer core.mu.Unlock()
+	if _, ok := core.sessions[b.SessionID]; !ok {
 		return ErrSessionNotFound
 	}
-	if existing, ok := s.worktreeBindings[b.SessionID]; ok && b.CreatedAt.IsZero() {
+	if existing, ok := core.worktreeBindings[b.SessionID]; ok && b.CreatedAt.IsZero() {
 		b.CreatedAt = existing.CreatedAt
 	}
 	if b.CreatedAt.IsZero() {
@@ -152,18 +153,18 @@ func (s *Memory) PutWorktreeBinding(ctx context.Context, b WorktreeBinding) erro
 	b.Branch = strings.TrimSpace(b.Branch)
 	b.BaseBranch = strings.TrimSpace(b.BaseBranch)
 	key := b.ProjectID + "\x00" + b.WorktreePath
-	id := s.worktreeIdentities[key]
+	id := core.worktreeIdentities[key]
 	if id == "" {
 		id = uuid.NewString()
-		s.worktreeIdentities[key] = id
+		core.worktreeIdentities[key] = id
 	}
 	b.WorktreeID = id
-	s.worktreeBindings[b.SessionID] = b
+	core.worktreeBindings[b.SessionID] = b
 	return nil
 }
 
 // DeleteWorktreeBinding removes a session binding.
-func (s *Memory) DeleteWorktreeBinding(ctx context.Context, sessionID string) error {
+func (s *memorySessionViews) DeleteWorktreeBinding(ctx context.Context, sessionID string) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -171,8 +172,8 @@ func (s *Memory) DeleteWorktreeBinding(ctx context.Context, sessionID string) er
 	if sessionID == "" {
 		return nil
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	delete(s.worktreeBindings, sessionID)
+	s.core.mu.Lock()
+	defer s.core.mu.Unlock()
+	delete(s.core.worktreeBindings, sessionID)
 	return nil
 }

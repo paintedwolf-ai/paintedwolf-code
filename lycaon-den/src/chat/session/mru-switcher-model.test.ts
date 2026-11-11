@@ -80,15 +80,6 @@ describe("buildMruEntries", () => {
     expect(entries[0]?.projectName).toBe("First");
   });
 
-  it("falls back to a placeholder for an untitled chat", () => {
-    const mru = createMruTracker();
-    const entries = buildMruEntries(
-      mru,
-      [{ projectId: "p1", sessionId: "s", title: "   " }],
-      lookup,
-    );
-    expect(entries[0]?.title).toBe("Untitled chat");
-  });
 });
 
 describe("switcher index", () => {

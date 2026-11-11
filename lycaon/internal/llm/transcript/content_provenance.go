@@ -8,13 +8,47 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// ContentAuthorityNotice loads the instruction/data notice, panicking if unavailable.
-func ContentAuthorityNotice() string {
+// ContentAudience selects what a notice says about text accompanying tool calls,
+// which differs by who wrote it and whether the surface publishes it.
+type ContentAudience string
+
+const (
+	// AudienceUtility is a host utility prompt with no tool steps, such as a summary.
+	AudienceUtility ContentAudience = "utility"
+	// AudiencePublisher writes on a surface that publishes valid tool-step text.
+	AudiencePublisher ContentAudience = "publisher"
+	// AudiencePrivate writes tool-step text only it reads: a worker, or a root
+	// session on a surface that does not publish.
+	AudiencePrivate ContentAudience = "private"
+)
+
+// ContentAuthorityNotice loads the instruction/data notice for an audience,
+// panicking if unavailable.
+func ContentAuthorityNotice(audience ContentAudience) string {
 	loadContentAuthority()
-	return contentAuthorityNotice
+	switch audience {
+	case AudiencePublisher:
+		return contentAuthorityNotice + " " + publisherToolTextNotice
+	case AudiencePrivate:
+		return contentAuthorityNotice + " " + privateToolTextNotice
+	case AudienceUtility:
+		return contentAuthorityNotice
+	default:
+		panic(fmt.Errorf("unknown content audience %q", audience))
+	}
+}
+
+func isContentAuthorityNotice(content string) bool {
+	for _, audience := range []ContentAudience{AudienceUtility, AudiencePublisher, AudiencePrivate} {
+		if content == ContentAuthorityNotice(audience) {
+			return true
+		}
+	}
+	return false
 }
 
 // CheckpointRejectionNotice frames a human denial even without free-text guidance.
@@ -44,7 +78,8 @@ func loadContentAuthority() {
 		}
 		var doc struct {
 			Notice              string `yaml:"notice"`
-			InternalStepNote    string `yaml:"internal_step_note"`
+			PublisherToolText   string `yaml:"publisher_tool_text"`
+			PrivateToolText     string `yaml:"private_tool_text"`
 			CheckpointGuidance  string `yaml:"checkpoint_guidance"`
 			CheckpointApproval  string `yaml:"checkpoint_approval"`
 			CheckpointRejection string `yaml:"checkpoint_rejection"`
@@ -57,8 +92,12 @@ func loadContentAuthority() {
 			contentAuthorityErr = fmt.Errorf("content-authority.yaml declares no notice")
 			return
 		}
-		if internalStepNoteNotice = strings.TrimSpace(doc.InternalStepNote); internalStepNoteNotice == "" {
-			contentAuthorityErr = fmt.Errorf("content-authority.yaml declares no internal_step_note")
+		if publisherToolTextNotice = strings.TrimSpace(doc.PublisherToolText); publisherToolTextNotice == "" {
+			contentAuthorityErr = fmt.Errorf("content-authority.yaml declares no publisher_tool_text")
+			return
+		}
+		if privateToolTextNotice = strings.TrimSpace(doc.PrivateToolText); privateToolTextNotice == "" {
+			contentAuthorityErr = fmt.Errorf("content-authority.yaml declares no private_tool_text")
 			return
 		}
 		if checkpointRejectionNotice = strings.TrimSpace(doc.CheckpointRejection); checkpointRejectionNotice == "" {
@@ -81,7 +120,8 @@ func loadContentAuthority() {
 var (
 	contentAuthorityOnce      sync.Once
 	contentAuthorityNotice    string
-	internalStepNoteNotice    string
+	publisherToolTextNotice   string
+	privateToolTextNotice     string
 	checkpointGuidanceNotice  string
 	checkpointApprovalNotice  string
 	checkpointRejectionNotice string
@@ -90,16 +130,21 @@ var (
 
 const (
 	contentAuthorityNoticeSource = "content_authority_notice"
-	internalStepNoteSource       = "internal_step_note"
 	checkpointDenialSource       = "checkpoint_denial"
 	checkpointGuidanceSource     = "checkpoint_guidance"
 	checkpointDecisionSource     = "checkpoint_decision"
 	checkpointApprovalSource     = "checkpoint_approval"
 )
 
-// Project returns detached, model-ready messages with one authority notice.
-// ModelProjected prevents repeated projection from duplicating data markers.
+// Project returns detached, model-ready messages with one utility authority
+// notice. A request that already carries a notice keeps it.
 func Project(messages []api.Message) []api.Message {
+	return ProjectFor(AudienceUtility, messages)
+}
+
+// ProjectFor projects for an audience. ModelProjected prevents repeated
+// projection from duplicating data headers.
+func ProjectFor(audience ContentAudience, messages []api.Message) []api.Message {
 	out := make([]api.Message, 0, len(messages)+1)
 	hasNotice := false
 	for _, raw := range messages {
@@ -115,11 +160,13 @@ func Project(messages []api.Message) []api.Message {
 			msg.Role == api.MessageRoleUser && msg.Visibility == api.MessageVisibilityInternal {
 			msg.Role = api.MessageRoleSystem
 		}
+		msg = stripAssistantTransportMarkers(msg)
 		parts := msg.ContentParts
 		if len(parts) == 0 && msg.Authority == api.ContentAuthorityNone {
 			parts = api.MessageTextParts(msg)
 		}
 		parts = projectSourceText(msg, parts)
+		parts = projectCommandResult(msg, parts)
 		if decision := checkpointDecisionParts(msg); len(decision) > 0 {
 			parts = append(append([]api.MessageContentPart(nil), parts...), decision...)
 		}
@@ -129,7 +176,6 @@ func Project(messages []api.Message) []api.Message {
 		if len(parts) > 0 {
 			msg.Content = ProjectContentParts(msg.Role, parts)
 		}
-		msg = frameInternalStepNote(msg)
 		msg.ModelProjected = true
 		out = append(out, msg)
 	}
@@ -137,19 +183,19 @@ func Project(messages []api.Message) []api.Message {
 		for i := range out {
 			if out[i].Role == api.MessageRoleSystem && out[i].Origin == api.MessageOriginHost &&
 				out[i].Authority == api.ContentAuthoritySystem {
-				out[i] = mergeContentAuthorityNotice(out[i])
+				out[i] = mergeContentAuthorityNotice(audience, out[i])
 				return out
 			}
 		}
-		out = append([]api.Message{contentAuthorityNoticeMessage()}, out...)
+		out = append([]api.Message{contentAuthorityNoticeMessage(audience)}, out...)
 	}
 	return out
 }
 
-func contentAuthorityNoticeMessage() api.Message {
+func contentAuthorityNoticeMessage(audience ContentAudience) api.Message {
 	return api.Message{
 		Role:      api.MessageRoleSystem,
-		Content:   ContentAuthorityNotice(),
+		Content:   ContentAuthorityNotice(audience),
 		Origin:    api.MessageOriginHost,
 		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted,
 		ModelProjected: true,
@@ -158,21 +204,21 @@ func contentAuthorityNoticeMessage() api.Message {
 
 func HasAuthorityNotice(msg api.Message) bool {
 	if msg.Role == api.MessageRoleSystem && msg.Origin == api.MessageOriginHost &&
-		msg.Authority == api.ContentAuthoritySystem && msg.Content == ContentAuthorityNotice() {
+		msg.Authority == api.ContentAuthoritySystem && isContentAuthorityNotice(msg.Content) {
 		return true
 	}
 	for _, part := range msg.ContentParts {
 		if part.Origin == api.MessageOriginHost && part.Authority == api.ContentAuthoritySystem &&
-			part.Source == contentAuthorityNoticeSource && part.Content == ContentAuthorityNotice() {
+			part.Source == contentAuthorityNoticeSource && isContentAuthorityNotice(part.Content) {
 			return true
 		}
 	}
 	return false
 }
 
-func mergeContentAuthorityNotice(msg api.Message) api.Message {
+func mergeContentAuthorityNotice(audience ContentAudience, msg api.Message) api.Message {
 	parts := []api.MessageContentPart{{
-		Content: ContentAuthorityNotice(), Origin: api.MessageOriginHost,
+		Content: ContentAuthorityNotice(audience), Origin: api.MessageOriginHost,
 		Authority: api.ContentAuthoritySystem, TrustTier: api.ContentTrustTierTrusted, Source: contentAuthorityNoticeSource,
 	}}
 	parts = append(parts, api.MessageTextParts(msg)...)
@@ -254,11 +300,7 @@ func ProjectContentParts(role api.MessageRole, parts []api.MessageContentPart) s
 			out = append(out, content)
 			continue
 		}
-		label := string(part.Origin)
-		if source := strings.TrimSpace(part.Source); source != "" {
-			label += ":" + source
-		}
-		out = append(out, fmt.Sprintf("⟦D:%s⟧\n%s", label, dataMarkLines(content)))
+		out = append(out, dataHeader(part.Origin, part.Source)+"\n"+content)
 	}
 	return strings.Join(out, "\n\n")
 }
@@ -266,8 +308,7 @@ func ProjectContentParts(role api.MessageRole, parts []api.MessageContentPart) s
 // Assistant roles structurally identify model output without a transport label.
 func contentPartUsesNativeRole(role api.MessageRole, part api.MessageContentPart) bool {
 	return role == api.MessageRoleAssistant &&
-		part.Origin == api.MessageOriginModel && part.Authority == api.ContentAuthorityNone &&
-		strings.TrimSpace(part.Source) != internalStepNoteSource
+		part.Origin == api.MessageOriginModel && part.Authority == api.ContentAuthorityNone
 }
 
 func contentPartIsInstruction(authority api.ContentAuthority) bool {
@@ -279,19 +320,43 @@ func contentPartIsInstruction(authority api.ContentAuthority) bool {
 	}
 }
 
-func dataMarkLines(content string) string {
-	lines := strings.Split(strings.ReplaceAll(content, "\r\n", "\n"), "\n")
-	for i := range lines {
-		lines[i] = "⟦D⟧" + lines[i]
+// dataHeader is the one host-authored line above an authority-none part. It names
+// where the part came from; authority itself comes from structured provenance.
+func dataHeader(origin api.MessageOrigin, source string) string {
+	// A source can be a file name, which must not break the single line.
+	source = strings.Join(strings.Fields(source), " ")
+	if source == "" {
+		return fmt.Sprintf("Data from %s:", origin)
 	}
-	return strings.Join(lines, "\n")
+	return fmt.Sprintf("Data from %s (%s):", origin, source)
 }
 
-// MarkData marks non-authoritative utility-prompt content.
-func MarkData(content string) string {
+// LabelToolMetadata heads externally authored tool metadata with its data header.
+func LabelToolMetadata(content string) string {
 	content = strings.TrimSpace(content)
 	if content == "" {
 		return ""
 	}
-	return dataMarkLines(content)
+	return dataHeader(api.MessageOriginTool, "tool_metadata") + "\n" + content
+}
+
+// stripAssistantTransportMarkers removes markers the model parroted from older
+// transcripts. Notes were stripped when published.
+func stripAssistantTransportMarkers(msg api.Message) api.Message {
+	if msg.Role != api.MessageRoleAssistant || api.IsAgentNoteMessage(msg) {
+		return msg
+	}
+	msg.Content = hostmarker.StripParrotedTransportMarkers(msg.Content)
+	if len(msg.ContentParts) == 0 {
+		return msg
+	}
+	parts := make([]api.MessageContentPart, 0, len(msg.ContentParts))
+	for _, part := range msg.ContentParts {
+		if part.Origin == api.MessageOriginModel {
+			part.Content = hostmarker.StripParrotedTransportMarkers(part.Content)
+		}
+		parts = append(parts, part)
+	}
+	msg.ContentParts = parts
+	return msg
 }

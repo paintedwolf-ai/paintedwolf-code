@@ -12,6 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// FSEvents exists only on macOS; platform_watcher_fsnotify_test.go tests the
+// Linux watcher.
 func TestFSEventsWatcherIsRecursiveWithoutPerFileDescriptors(t *testing.T) {
 	root := t.TempDir()
 	nested := filepath.Join(root, "src", "generated")

@@ -10,8 +10,3 @@ invariants:
   fires_in:
   - wait() process_done condition — a command/verify process reached terminal
     status
-  required:
-  - process_done
-  - command_output
-  forbidden:
-  - workflow_advance

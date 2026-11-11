@@ -22,6 +22,9 @@ func (r *Registry) ActiveExecutionJobs(sessionID string) []ActiveExecutionJob {
 			continue
 		}
 		capability := ""
+		if process.boundary.CredentialStore {
+			capability = "credential_store"
+		}
 		if process.boundary.ProcessControl {
 			capability = "process_control"
 		}

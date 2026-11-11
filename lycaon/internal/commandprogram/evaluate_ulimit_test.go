@@ -19,7 +19,7 @@ type fixtureLimits struct {
 }
 
 func (l *fixtureLimits) Capability(resource string) LimitCapability { return l.capabilities[resource] }
-func (l *fixtureLimits) Read(resource string) (ResourceLimit, error) {
+func (l *fixtureLimits) Read(_ context.Context, resource string) (ResourceLimit, error) {
 	l.reads = append(l.reads, resource)
 	if l.capabilities[resource]&LimitQuery == 0 {
 		return ResourceLimit{}, fmt.Errorf("read of undeclared %s", resource)
@@ -126,14 +126,15 @@ func TestUlimitSettingReachesLaterExternalChildrenOnly(t *testing.T) {
 	}
 }
 
-// Reading pins the reported value too, so a later child sees what was shown.
-func TestUlimitReadPinsTheReportedLimit(t *testing.T) {
+// A report pins nothing, so later children receive what they would have.
+func TestUlimitReadLeavesLaterChildrenUnpinned(t *testing.T) {
 	f, _ := ulimitFixture(t)
-	if _, err := f.run(t, context.Background(), "ulimit -n >/dev/null; burn"); err != nil {
+	if _, err := f.run(t, context.Background(), "ulimit -n >/dev/null; ulimit -Hn >/dev/null; ulimit -a >/dev/null; ulimit -n -f 4 >/dev/null; burn; ulimit -n soft; burn"); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if got := burnLimits(t, f.log); len(got) != 1 || fmt.Sprint(got[0]) != "[{nofile 256 1024}]" {
-		t.Fatalf("burn limits = %v, want the reported open files limit", got)
+	got := burnLimits(t, f.log)
+	if len(got) != 2 || fmt.Sprint(got[0]) != "[{fsize 4096 18446744073709551615}]" || fmt.Sprint(got[1]) != "[{fsize 4096 18446744073709551615} {nofile 256 1024}]" {
+		t.Fatalf("burn limits = %v, want only what the program set", got)
 	}
 }
 
@@ -256,7 +257,7 @@ func TestUlimitAllListsDeclaredResources(t *testing.T) {
 	if _, err := f.run(t, context.Background(), "ulimit -n"); !errors.As(err, &refusal) || refusal.Code != "COMMAND_PLATFORM_UNAVAILABLE" {
 		t.Fatalf("no owner: %v", err)
 	}
-	if _, err := (noResourceLimits{}).Read("nofile"); err == nil {
+	if _, err := (noResourceLimits{}).Read(context.Background(), "nofile"); err == nil {
 		t.Fatal("no owner read a limit")
 	}
 }

@@ -63,7 +63,7 @@ var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
 		ID:       "source_changes",
 		Hosts:    coordinatorTurns,
 		Template: "guidance/source-changes.md",
-		Fixture:  "RenderSourceChangesBlock at the working-set row cap with elsewhere counts",
+		Fixture:  "RenderSourceChangesBlock at the row cap with elsewhere counts",
 		Advice:   "Change-brief growth — keep rows single-line and the itemized set capped.",
 	},
 	{

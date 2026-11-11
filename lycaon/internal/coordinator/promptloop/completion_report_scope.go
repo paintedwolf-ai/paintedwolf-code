@@ -17,6 +17,9 @@ type CompletionReportBinding struct {
 	// PhaseDeliversRunReport marks the phase the manifest gates on
 	// topology_report_delivered — the one declared to produce the run's report.
 	PhaseDeliversRunReport bool
+	// PhaseOwesReport marks a phase whose gate only a report can satisfy, so a reply
+	// with nothing to cite cannot end its turn there.
+	PhaseOwesReport bool
 	// CloseoutRetries is the workflow-configured retry limit for this phase,
 	// or 0 to use system defaults.
 	CloseoutRetries int
@@ -24,8 +27,7 @@ type CompletionReportBinding struct {
 
 // completionReportMeta states what a report covers: the session outside a run,
 // the run in its declared report phase, and otherwise just that phase. What the
-// report concluded travels on the same record, since the message body may be
-// prose or an envelope but the record's shape never varies.
+// report concluded travels on the same record.
 func completionReportMeta(
 	surfaceID string, binding CompletionReportBinding, report guidance.CoordinatorCompletionReport,
 ) *api.CompletionReportMeta {
@@ -81,9 +83,10 @@ func reportFindingsMeta(findings []guidance.CoordinatorFinding) []api.Completion
 		}
 		for _, w := range f.Where {
 			row.Where = append(row.Where, api.CompletionReportFindingLocation{
-				Handle: w.Evidence,
-				Path:   w.Path,
-				Line:   w.Line,
+				Handle:  w.Evidence,
+				Path:    w.Path,
+				Line:    w.Line,
+				EndLine: w.EndLine,
 			})
 		}
 		out = append(out, row)
@@ -138,6 +141,7 @@ func completionReportBinding(st *promptLoopTurnState) CompletionReportBinding {
 		RunID:                  frame.RunContext.RunID,
 		Phase:                  frame.RunContext.CurrentPhase,
 		PhaseDeliversRunReport: frame.Runtime.ReportDocumentEnabled,
+		PhaseOwesReport:        frame.Runtime.PhaseOwesReport,
 		CloseoutRetries:        frame.Runtime.CloseoutRetries,
 	}
 }

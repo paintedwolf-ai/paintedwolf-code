@@ -31,12 +31,12 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 	switch spec.Name {
 	case "git stash":
 		if len(p.command.beforeDash) > 0 && p.command.beforeDash[0] == "show" {
-			status, err := p.run(ctx, streams)
+			status, err := p.run(ctx, tc, streams)
 			return settle(status, err, spec.Name)
 		}
 	case "git clean":
 		if has(p.Argv, "-n") {
-			status, err := p.run(ctx, streams)
+			status, err := p.run(ctx, tc, streams)
 			return settle(status, err, spec.Name)
 		}
 	case "git init":
@@ -47,7 +47,7 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 		return runApply(ctx, p, tc, streams, out, stderr)
 	}
 	write := spec.Name != "git ls-remote" && !bisectReads[spec.Name]
-	dir, repo, status, err := resolveCommandRepo(ctx, p, stderr, write)
+	dir, repo, status, err := resolveCommandRepo(ctx, p, tc, stderr, write)
 	if err != nil || status != 0 {
 		return settle(status, err, spec.Name)
 	}

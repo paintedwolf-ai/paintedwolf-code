@@ -88,3 +88,46 @@ func TestBindResolverTakesNoNarrative(t *testing.T) {
 		}
 	}
 }
+
+// MC-INV-06: publication decides from the parse and the ledger. The note's text reaches
+// the audit only through the parser and the bare-JSON check, so no prose can steer it.
+func TestMidTurnAuditReadsTextOnlyThroughTheParser(t *testing.T) {
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, "mid_turn_note.go", nil, 0)
+	testutil.FailErr(t, "parse mid_turn_note.go", err)
+	var audit *ast.FuncDecl
+	for _, decl := range f.Decls {
+		if fn, ok := decl.(*ast.FuncDecl); ok && fn.Name.Name == "AuditMidTurnNote" {
+			audit = fn
+		}
+	}
+	if audit == nil {
+		t.Fatal("AuditMidTurnNote not found")
+	}
+	allowed := map[string]bool{"ParseCloseoutDraft": true, "IsBareJSONResponse": true}
+	reads := 0
+	ast.Inspect(audit.Body, func(n ast.Node) bool {
+		switch node := n.(type) {
+		case *ast.CallExpr:
+			name, _ := node.Fun.(*ast.Ident)
+			for _, arg := range node.Args {
+				if selector, ok := arg.(*ast.SelectorExpr); ok && selector.Sel.Name == "Text" {
+					reads++
+					if name == nil || !allowed[name.Name] {
+						t.Fatalf("note text reaches %s", types.ExprString(node.Fun))
+					}
+				}
+			}
+		case *ast.AssignStmt:
+			for _, rhs := range node.Rhs {
+				if selector, ok := rhs.(*ast.SelectorExpr); ok && selector.Sel.Name == "Text" {
+					t.Fatalf("note text escapes into a local")
+				}
+			}
+		}
+		return true
+	})
+	if reads != 2 {
+		t.Fatalf("note text is read %d times, want the parser and the bare-JSON check", reads)
+	}
+}

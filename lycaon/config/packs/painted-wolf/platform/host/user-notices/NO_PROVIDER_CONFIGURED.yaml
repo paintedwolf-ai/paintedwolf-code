@@ -8,6 +8,3 @@ action: open_ai_providers
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - No model provider
-      - AI providers

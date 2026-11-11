@@ -30,7 +30,10 @@ export function createFilesWorkspaceWalk(options: {
       return !currentWalkStep(options.projectId()) || walkEditorPreparation.ready();
     },
   });
-  usePresentationParticipant("files-editors", walkEditorPreparation.ready, walkEditorPreparation.notice);
+  usePresentationParticipant("files-editors", walkEditorPreparation.ready, {
+    notice: walkEditorPreparation.notice,
+    pending: walkEditorPreparation.pending,
+  });
   // Effect steps show a file version; group steps show a summary page.
   const walkPresentation = createMemo(() => {
     void walkTick();

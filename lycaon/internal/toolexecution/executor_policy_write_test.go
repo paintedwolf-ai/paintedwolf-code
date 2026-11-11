@@ -55,7 +55,7 @@ func TestInstructionWriteUsesOrdinaryApprovalWithExactDiff(t *testing.T) {
 	for _, after := range []string{"First approved instructions\n", "Second approved instructions\n"} {
 		manager := &asyncHITL{requested: make(chan struct{}, 1)}
 		executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 		t.Cleanup(cancel)
 		done := make(chan error, 1)
 		go func() {
@@ -178,7 +178,7 @@ func TestFileChangeApprovalDeduplicatesPathsAndRetainsIndexPreviews(t *testing.T
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), registry, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 1)}
 	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
@@ -225,7 +225,7 @@ func TestCommandInstructionGrantUsesOneOrdinaryApproval(t *testing.T) {
 	executor := toolexecution.NewExecutor(toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), approvalGate), reg, "implement")
 	manager := &asyncHITL{requested: make(chan struct{}, 2)}
 	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	done := make(chan error, 1)
 	go func() {
@@ -296,7 +296,7 @@ func TestCoordinatorInvestigateOverlayWriteReachesAgentPolicyApproval(t *testing
 
 	manager := &asyncHITL{requested: make(chan struct{}, 1)}
 	executor.Approvals.SetCheckpointManager(t.Context(), manager, approvalGate)
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() {

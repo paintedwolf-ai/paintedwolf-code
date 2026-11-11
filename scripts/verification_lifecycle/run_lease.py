@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import errno
 import fcntl
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import subprocess
@@ -14,6 +16,7 @@ from typing import NamedTuple
 
 UNMOUNT_TIMEOUT_SECONDS = 15
 OWNER_RELEASE_SECONDS = 15
+HOLDERS_EXIT_SECONDS = 5
 # Short paths keep Unix sockets within platform limits; test-run-isolation.sh names the same root.
 RUN_ROOT = Path(f"/tmp/paintedwolf-test-runs-{os.getuid()}") if hasattr(os, "getuid") else None
 SIGKILL_PENDING = 1 << 8
@@ -26,42 +29,63 @@ class Connection(NamedTuple):
 
 
 def mount_points() -> list[str]:
-    """Current mount points, read without touching any of them: a dead one would hang a stat."""
+    """Read the kernel's table, because a stat on a mount whose server died blocks for minutes."""
     if sys.platform == "linux":
-        with open("/proc/self/mountinfo", encoding="utf-8", errors="surrogateescape") as mounts:
-            return [line.split()[4].encode().decode("unicode_escape") for line in mounts]
-    table = subprocess.run(["/sbin/mount"], capture_output=True, text=True, timeout=UNMOUNT_TIMEOUT_SECONDS).stdout
-    return [line.split(" on ", 1)[1].rsplit(" (", 1)[0] for line in table.splitlines() if " on " in line]
+        with open("/proc/self/mountinfo", "rb") as mounts:
+            return [
+                os.fsdecode(re.sub(rb"\\([0-7]{3})", lambda code: bytes([int(code[1], 8)]), line.split()[4]))
+                for line in mounts
+            ]
+    listing = subprocess.run(
+        ["/sbin/mount"], capture_output=True, check=True, timeout=UNMOUNT_TIMEOUT_SECONDS
+    ).stdout
+    return [
+        os.fsdecode(line.split(b" on ", 1)[1].rsplit(b" (", 1)[0])
+        for line in listing.splitlines()
+        if b" on " in line
+    ]
 
 
 def force_unmount(mount_point: str) -> None:
-    command = (
-        ["fusermount3", "-u", "-z", "--", mount_point]
+    commands = (
+        [["fusermount3", "-u", "-z", "--", mount_point], ["umount", "-l", mount_point]]
         if sys.platform == "linux"
-        else ["/sbin/umount", "-f", mount_point]
+        else [["/sbin/umount", "-f", mount_point], ["/usr/sbin/diskutil", "unmount", "force", mount_point]]
     )
-    try:
-        subprocess.run(command, capture_output=True, timeout=UNMOUNT_TIMEOUT_SECONDS)
-    except (OSError, subprocess.TimeoutExpired) as failure:
-        print(f"test-run-lease: unmount {mount_point}: {failure}", file=sys.stderr)
+    for command in commands:
+        try:
+            helper = subprocess.Popen(
+                command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL
+            )
+        except OSError:
+            continue
+        try:
+            helper.wait(timeout=UNMOUNT_TIMEOUT_SECONDS)
+        except subprocess.TimeoutExpired:
+            # A helper stuck in the kernel may never exit, so it is killed but not awaited:
+            # this runs under the collection lock that every starting run needs.
+            helper.kill()
+        if mount_point not in mount_points():
+            return
 
 
 def within(candidate: Path) -> str:
     return os.path.realpath(candidate) + os.sep
 
 
-def detach_mounts_within(candidate: Path) -> bool:
-    """Detach mounts a killed test left in its run directory, and report whether none remain.
+def detach_mounts_within(candidate: Path) -> None:
+    """Detach what a killed test left behind; the caller's exclusive lease proves no run owns it.
 
-    The exclusive lease proves no run owns this directory. A test killed mid-run cannot unmount, and
-    walking into such a mount would fail on a server that no longer answers, or delete through one
-    that does.
+    Only this runner outlives a killed test, and walking into its mount would stall on a dead
+    server or delete through a live one.
     """
     prefix = within(candidate)
     present = [point for point in mount_points() if point.startswith(prefix)]
     for point in sorted(present, key=len, reverse=True):
         force_unmount(point)
-    return not present or not any(point.startswith(prefix) for point in mount_points())
+    for point in mount_points():
+        if point.startswith(prefix):
+            raise OSError(errno.EBUSY, "mount could not be removed", point)
 
 
 def fuse_connections(prefix: str) -> list[Connection]:
@@ -170,17 +194,32 @@ def acquire_lease(candidate: Path, lease, killed: frozenset) -> bool:
             time.sleep(0.05)
 
 
-def holds_a_mount(candidate: Path) -> bool:
-    """A mount a test left behind answers from another device, or fails to answer at all."""
-    device = candidate.lstat().st_dev
+def remove_tree(candidate: Path) -> None:
+    detach_mounts_within(candidate)
+    device = os.lstat(candidate).st_dev
+    # Test fixtures can leave read-only directories behind.
+    os.chmod(candidate, os.stat(candidate).st_mode | stat.S_IRWXU)
     for directory, children, _ in os.walk(candidate):
         for name in children:
-            try:
-                if (Path(directory) / name).lstat().st_dev != device:
-                    return True
-            except OSError:
-                return True
-    return False
+            path = Path(directory) / name
+            status = os.lstat(path)
+            if not stat.S_ISDIR(status.st_mode):
+                continue
+            # A mount that would not detach may have a dead server, or a live one whose
+            # exported tree removal would delete through.
+            if status.st_dev != device:
+                raise OSError(errno.EBUSY, "mounted filesystem in test run", str(path))
+            os.chmod(path, status.st_mode | stat.S_IRWXU)
+    # The lease goes last: a partial removal is retried under its lease.
+    for child in candidate.iterdir():
+        if child.name == ".lease":
+            continue
+        if child.is_dir() and not child.is_symlink():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
+    (candidate / ".lease").unlink(missing_ok=True)
+    candidate.rmdir()
 
 
 def remove_unleased(candidate: Path, killed: frozenset = frozenset()) -> None:
@@ -188,27 +227,16 @@ def remove_unleased(candidate: Path, killed: frozenset = frozenset()) -> None:
         return
     try:
         descriptor = os.open(candidate / ".lease", os.O_RDWR | os.O_NOFOLLOW)
+    except FileNotFoundError:
+        # Creation leases under the collection lock held here, so no run owns this
+        # directory: its creation stopped partway.
+        remove_tree(candidate)
+        return
     except OSError:
         return
     with os.fdopen(descriptor, "r+") as lease:
-        if not acquire_lease(candidate, lease, killed):
-            return
-        if not detach_mounts_within(candidate):
-            print(f"test-run-lease: leaving {candidate}: a mount inside it could not be removed", file=sys.stderr)
-            return
-        # Removing through a stranded mount would reach its backing store or hang this runner.
-        if holds_a_mount(candidate):
-            print(f"test run keeps {candidate}: a mount remains inside it", file=sys.stderr)
-            return
-        # Test fixtures can leave read-only directories behind.
-        os.chmod(candidate, os.stat(candidate).st_mode | stat.S_IRWXU)
-        for directory, children, _ in os.walk(candidate):
-            for name in children:
-                path = Path(directory) / name
-                mode = path.lstat().st_mode
-                if stat.S_ISDIR(mode):
-                    os.chmod(path, mode | stat.S_IRWXU)
-        shutil.rmtree(candidate)
+        if acquire_lease(candidate, lease, killed):
+            remove_tree(candidate)
 
 
 def prune(root: Path, candidate: Path | None = None, killed: frozenset = frozenset()) -> None:
@@ -219,7 +247,34 @@ def prune(root: Path, candidate: Path | None = None, killed: frozenset = frozens
     with (root / ".collection.lock").open("a") as collection:
         fcntl.flock(collection, fcntl.LOCK_EX)
         for path in [candidate] if candidate is not None else root.iterdir():
-            remove_unleased(path, killed)
+            # What cannot be removed stays for a later prune: leftovers must not fail a new run.
+            try:
+                remove_unleased(path, killed)
+            except (OSError, subprocess.SubprocessError) as failure:
+                print(f"test-run-lease: keeping {path}: {failure}", file=sys.stderr)
+
+
+def await_holders_exit(candidate: Path) -> None:
+    """Give a signaled test group time to exit: its dying processes hold the lease until they are gone."""
+    try:
+        descriptor = os.open(candidate / ".lease", os.O_RDWR | os.O_NOFOLLOW)
+    except OSError:
+        return
+    with os.fdopen(descriptor, "r+") as lease:
+        deadline = time.monotonic() + HOLDERS_EXIT_SECONDS
+        while True:
+            try:
+                fcntl.flock(lease, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return
+            except BlockingIOError:
+                if time.monotonic() >= deadline:
+                    return
+                time.sleep(0.05)
+
+
+def remove(root: Path, candidate: Path) -> None:
+    await_holders_exit(candidate)
+    prune(root, candidate)
 
 
 def collect_runs(killed: frozenset = frozenset()) -> None:

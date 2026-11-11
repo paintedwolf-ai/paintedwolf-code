@@ -10,8 +10,8 @@ import unittest
 from contextlib import ExitStack
 from unittest.mock import Mock, patch
 
-from scripts.linux_release import (repository_installation, repository_origin, repository_rehearsal,
-                                   repository_r2, repository_setup_rehearsal, repository_setup_upgrade)
+from scripts.linux_release import (repository_installation, repository_installation as repository_origin,
+                                   repository_rehearsal, repository_r2, repository_setup_rehearsal)
 
 
 class RepositoryInstallationContracts(unittest.TestCase):
@@ -314,10 +314,10 @@ class RepositorySetupRehearsalContracts(unittest.TestCase):
             work = Path(temporary)
             old = self.receipt("deb")
             successor = {**old, "version": "0.0.2"}
-            with patch.object(repository_setup_upgrade.subprocess, "run") as run:
+            with patch.object(repository_setup_rehearsal.subprocess, "run") as run:
                 with self.assertRaisesRegex(ValueError, "preserve the application version"):
-                    repository_setup_upgrade.rehearse(work, (old, work), (successor, work), work / "old",
-                                                      work / "new", "https://repository.example.invalid")
+                    repository_setup_rehearsal.rehearse_upgrade(work, (old, work), (successor, work), work / "old",
+                                                                work / "new", "https://repository.example.invalid")
             run.assert_not_called()
 
     def test_same_version_setup_rotation_installs_then_removes_only_owned_files(self):
@@ -355,12 +355,12 @@ class RepositorySetupRehearsalContracts(unittest.TestCase):
                             "digest": lambda _path: "d" * 64,
                             "restore_owner": Mock(),
                     }.items():
-                        patches.enter_context(patch.object(repository_setup_upgrade, name, replacement))
-                    patches.enter_context(patch.object(repository_setup_upgrade.subprocess, "run", side_effect=run))
-                    patches.enter_context(patch.object(repository_setup_upgrade.subprocess, "check_output",
+                        patches.enter_context(patch.object(repository_setup_rehearsal, name, replacement))
+                    patches.enter_context(patch.object(repository_setup_rehearsal.subprocess, "run", side_effect=run))
+                    patches.enter_context(patch.object(repository_setup_rehearsal.subprocess, "check_output",
                                                        return_value="0.0.1" if family == "deb" else "0.0.1-1"))
-                    repository_setup_upgrade.rehearse(work, (old, work), (successor, work), work / "old", work / "new",
-                                                      "https://repository.example.invalid")
+                    repository_setup_rehearsal.rehearse_upgrade(work, (old, work), (successor, work), work / "old", work / "new",
+                                                                "https://repository.example.invalid")
                 self.assertEqual(sum("--install" in action for action in actions), 2 if family == "deb" else 1)
                 self.assertTrue(any("--purge" in action or "--erase" in action for action in actions))
                 self.assertFalse(installed.exists())

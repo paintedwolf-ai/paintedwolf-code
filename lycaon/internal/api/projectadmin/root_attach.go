@@ -104,7 +104,7 @@ func (s *Roots) ensureProjectRootsMutable(w http.ResponseWriter, r *http.Request
 		s.responses.ProjectRegistryError(w, r, err)
 		return false
 	}
-	if dependents.HasAny() {
+	if len(dependents.Workers) > 0 || len(dependents.Overlays) > 0 || len(dependents.Sessions) > 0 || len(dependents.Documents) > 0 {
 		s.Projects.writeRootBusy(w, dependents)
 		return false
 	}

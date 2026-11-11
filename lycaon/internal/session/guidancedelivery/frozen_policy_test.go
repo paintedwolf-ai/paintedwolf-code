@@ -9,7 +9,11 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/store"
+	"github.com/lycaon/lycaon/internal/session/transcript"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func frozenFeedbackService(t *testing.T) *Service {
@@ -62,5 +66,17 @@ func TestEval20QueuesAllNamespacedAdvisoriesInOneDelivery(t *testing.T) {
 			t.Fatalf("[OAR-EVAL-20] advisory %d missing or out of order: %q", i, text)
 		}
 		previous = index
+	}
+}
+
+func TestAppendHostKickMessageStampsCanonicalOrdinal(t *testing.T) {
+	mem := store.NewMemory()
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{ProviderID: "fixture", Model: "large"}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create session", err)
+	svc := &Service{store: mem, transcript: transcript.New(mem, nil), kicks: &kick.KickEngine{}}
+	msg, err := svc.appendHostKickMessage(t.Context(), sess.ID, "coordinator.phase.entered", "Phase entered: act")
+	testutil.FailErr(t, "append host kick message", err)
+	if msg.Ord != 1 || msg.Seq != 1 {
+		t.Fatalf("kick message = (ord=%d, seq=%d), want (1, 1)", msg.Ord, msg.Seq)
 	}
 }

@@ -35,7 +35,7 @@ func (m *Service) QueueAdvisories(ctx context.Context, sessionID string, items [
 			m.Queue(ctx, sessionID, item.Code, item.Data, item.Subject)
 			continue
 		}
-		text, err := guidance.RenderPolicyCopy(ctx, item.Code, string(oar.EffectNudge), item.Copy)
+		text, err := guidance.RenderPolicyCopy(ctx, item.Code, string(oar.EffectNudge), item.Copy, item.Data)
 		if err != nil || strings.TrimSpace(text) == "" || m == nil || strings.TrimSpace(sessionID) == "" {
 			continue
 		}

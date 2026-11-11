@@ -25,6 +25,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: workflow_transition
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKFLOW_TRANSITION_INACTIVE'

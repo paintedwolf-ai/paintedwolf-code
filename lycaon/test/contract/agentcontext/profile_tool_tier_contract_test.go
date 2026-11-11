@@ -9,26 +9,14 @@ import (
 )
 
 var implementNativeToolkit = []string{
-	"edit",
-	"replace_lines",
 	"restore_version",
-	"code_rewrite",
-	"chmod",
-	"chown",
-	"jq_edit",
 	"source_history",
 	"command",
 }
 
 var coordinatorNativeCeiling = []string{
-	"edit",
-	"replace_lines",
 	"restore_version",
-	"code_rewrite",
-	"chmod",
-	"git_commit",
 	"source_history",
-	"git_restore",
 	"command",
 }
 
@@ -142,12 +130,12 @@ var repoFacingProfiles = []string{
 	"plan_review_readonly", "plan_write_only",
 }
 
-func TestProfileToolTier_repoFacingProfilesHaveSummarize(t *testing.T) {
+func TestProfileToolTier_repoFacingProfilesHaveCommand(t *testing.T) {
 	t.Parallel()
 	for _, id := range repoFacingProfiles {
 		prof := loadToolProfileByID(t, id)
-		if !prof.Tools["summarize"] {
-			t.Fatalf("%s must include summarize", id)
+		if !prof.Tools["command"] {
+			t.Fatalf("%s must include command", id)
 		}
 	}
 }

@@ -239,11 +239,11 @@ func TestBlockedLoopEarlyCloseoutAssemblesWhenFinishBlocked(t *testing.T) {
 	deps.Closeout.TurnCloseoutNudge = func(_ context.Context, _ *api.Session, _ string, cause promptloop.TurnCloseoutCause) promptloop.HostNudge {
 		return promptloop.HostNudge{Content: "final turn: " + cause.Text()}
 	}
-	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+	deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, _ *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
 		return guidance.NewRefusal("PROGRESS_OPEN_BEFORE_CLOSEOUT", "Rejected: held\n\nCode: PROGRESS_OPEN_BEFORE_CLOSEOUT\n"), true
 	}
-	deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted string, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
-		return guidance.CoordinatorCompletionReport{Synthesis: drafted},
+	deps.Closeout.AssembleLedgerCloseout = func(_ context.Context, _, _ string, _ []string, drafted guidance.CloseoutDraft, _ int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+		return guidance.CoordinatorCompletionReport{Synthesis: drafted.Synthesis},
 			&api.CitationGrounding{HostAssembled: true, Traced: false}
 	}
 	deps.Context.PromptTurnSurface = func(string) string { return "implement_investigate" }
@@ -460,11 +460,11 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 	deps.Nudges.DoomLoop = guard
 	deps.Closeout.RejectFmt = guidance.NewStaticRejectFormatter(&guidance.HintConfig{
 		HintCodes: map[string]guidance.HintEntry{
-			"PROGRESS_ITEM_NOT_CLOSED": {Message: "reconcile the checklist"},
+			"PROGRESS_RECONCILIATION_REQUIRED": {Message: "reconcile the checklist"},
 		},
 	})
 	deps.Tools.BeforeToolRun = func(context.Context, *api.Session, []api.Message, string, string, map[string]any) (string, bool, error) {
-		return "", false, guidance.NewRefusal("PROGRESS_ITEM_NOT_CLOSED", "Rejected: reconcile the checklist first")
+		return "", false, guidance.NewRefusal("PROGRESS_RECONCILIATION_REQUIRED", "Rejected: reconcile the checklist first")
 	}
 	deps.Nudges.EscalateRepeatedCode = func(_ context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal {
 		code := original.Code()
@@ -492,7 +492,7 @@ func TestPreInvokeRejectAccruesCodeTotalAndEscalates(t *testing.T) {
 		t.Fatalf("closeout content = %q", result.LastAssistantContent)
 	}
 
-	if total := guard.CodeRejectResponses(sess.ID, "command", "PROGRESS_ITEM_NOT_CLOSED"); total < loopguard.DoomLoopMaxCodeRepeats {
+	if total := guard.CodeRejectResponses(sess.ID, "command", "PROGRESS_RECONCILIATION_REQUIRED"); total < loopguard.DoomLoopMaxCodeRepeats {
 		t.Fatalf("code reject total = %d want >= %d — pre-invoke refusals must accrue", total, loopguard.DoomLoopMaxCodeRepeats)
 	}
 	if escalateCalls == 0 {

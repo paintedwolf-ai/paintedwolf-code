@@ -24,7 +24,7 @@ func TestParseEntryAcceptsTags(t *testing.T) {
 }
 
 func TestLoadBundledToolSchemasReadRequiresPath(t *testing.T) {
-	dir := filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "schemas")
+	dir := filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "tools", "operation-schemas")
 	cfg, err := toolschema.LoadSchemaDir(dir)
 	if err != nil {
 		t.Fatalf("LoadSchemaDir: %v", err)

@@ -4,7 +4,6 @@ description: Present system designs, proposals, decision briefs, developer resea
 license: Apache-2.0
 metadata:
   author: painted-wolf
-  paintedwolf.template_resources: references/build_a_system_design_review.md|references/build_an_engineering_decision_brief.md|references/write_an_implementation_proposal.md|references/synthesize_developer_research.md|references/prototype_a_coding_workflow.md|references/mock_an_agent_control_plane.md
 ---
 
 # Present an engineering design
@@ -21,4 +20,4 @@ metadata:
 4. **Compose the layout.** Apply the HTML/CSS structure from the companion `-layout.md` file using `--kit-*` tokens, catalog fonts, and `.kit-surface` cards. Maintain an answer-first hierarchy: title, recommendation or design claim, supporting evidence/scorecard, risk register, and the decision ask.
 5. **Render the artifact.** For a brief, review board, or proposal, call `render_view` with `viewport.preset: "desktop-wide"` and `viewport.fit: "content"` for a complete capture. Prototypes and control planes follow their procedure: a local route when interaction is the subject, `render_view` only for static state boards.
 6. **Inspect the visual.** Confirm recommendation visibility, verify that numbers and labels are not truncated, ensure body text remains legible, and verify that color is not the sole indicator of risk or status.
-7. **Return the design handoff.** Emit the structured handoff fields defined in the selected procedure (`recommendation`, `decision_needed`, `material_risks`, `open_questions`, and limits), and present renders by their ids in `artifact_ids` or name the local route. Explicitly state that visual artifacts represent authored intent and analysis, not runtime verification.
+7. **Return the design handoff.** Emit the structured handoff fields defined in the selected procedure (`recommendation`, `decision_needed`, `material_risks`, `open_questions`, and limits), and present renders with `[artifact:<uuid>]` or name the local route. Explicitly state that visual artifacts represent authored intent and analysis, not runtime verification.

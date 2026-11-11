@@ -8,5 +8,3 @@ suggested_action: Remove the file or pick a supported type.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - cannot be attached

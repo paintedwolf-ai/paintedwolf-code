@@ -281,7 +281,6 @@ func TestClassifyToolResponseDetectsAndRecoversXMLAndDeferredToolCalls(t *testin
 			{Name: "request_tools"},
 			{Name: "skills_read"},
 			{Name: "summarize"},
-			{Name: "surface_note"},
 			{Name: "update_progress"},
 		},
 	}

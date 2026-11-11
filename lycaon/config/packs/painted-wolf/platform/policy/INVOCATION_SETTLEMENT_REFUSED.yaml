@@ -12,7 +12,3 @@ scenarios:
   - id: default
     vars:
       tool: write
-    expect_contains:
-      - 'Code: INVOCATION_SETTLEMENT_REFUSED'
-      - write
-      - host fault

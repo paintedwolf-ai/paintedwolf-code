@@ -19,6 +19,7 @@ export function PreparedSurface(props: {
     ready: () => (props.ready?.() ?? true) && preparation.ready(),
     deferInitialReveal: true,
     notice: preparation.notice,
+    pending: preparation.pending,
   });
   const attrs = () => surfaceRevealDom(reveal);
   const waiting = createPresentationWaiting(() => !reveal.ready());
@@ -28,7 +29,7 @@ export function PreparedSurface(props: {
         <PresentationProvider preparation={preparation}>{props.children}</PresentationProvider>
       </div>
       <Show when={waiting()}>
-        <div class="den-presentation-wait" role="status">
+        <div class="den-presentation-wait" role="status" data-testid={`${props.name}-wait`}>
           {props.waiting ?? preparation.notice()?.message ?? "Loading…"}
         </div>
       </Show>

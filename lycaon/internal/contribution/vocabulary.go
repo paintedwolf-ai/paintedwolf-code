@@ -360,7 +360,7 @@ var workspaceKinds = map[string]bool{
 // contextFeatures validates context navigation operands.
 var contextFeatures = map[string]bool{
 	"files": true, "search": true, "security": true, "cost": true,
-	"artifacts": true, "blueprints": true, "extensions": true,
+	"artifacts": true, "blueprints": true, "extensions": true, "running": true,
 }
 
 // settingsSections validates settings navigation operands.

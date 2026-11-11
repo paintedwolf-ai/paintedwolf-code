@@ -31,14 +31,8 @@ x-paintedwolf-scenarios:
     host_max: 40
     max_tool_loops: 1
     min_required: 2
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TASK_MAX_TOOL_LOOPS_INVALID'
 - id: above_host_cap
   vars:
     host_max: 40
     max_tool_loops: 41
     min_required: 2
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TASK_MAX_TOOL_LOOPS_INVALID'

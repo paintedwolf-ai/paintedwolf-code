@@ -170,3 +170,30 @@ func TestSummarizeAnchorHighlightRecordsRequiresDeclaredEnvelope(t *testing.T) {
 		}
 	}
 }
+
+func TestExtractEmbeddedHandlesRequiresAuthenticatedParentEnvelope(t *testing.T) {
+	if got := evidence.ExtractEmbeddedHandles(`{"anchors":[{"handle":"summarize#1"}]}`); len(got) != 0 {
+		t.Fatalf("bare JSON extracted handles: %v", got)
+	}
+	if got := evidence.ExtractEmbeddedHandles("[summarize#2]\n{\"anchors\":[{\"handle\":\"read#1\"}]}"); len(got) != 0 {
+		t.Fatalf("cross-kind handle extracted: %v", got)
+	}
+	if got := evidence.ExtractEmbeddedHandles("[summarize#2]\n{\"anchors\":[{\"handle\":\"summarize#3\"}]}"); len(got) != 0 {
+		t.Fatalf("out-of-range child ordinal extracted: %v", got)
+	}
+	if got := evidence.ExtractEmbeddedHandles("[summarize#2]\n{\"anchors\":[{\"handle\":\"summarize#1\"}]}", "summarize#9"); len(got) != 0 {
+		t.Fatalf("unlisted parent handle extracted children: %v", got)
+	}
+	gotSummarize := evidence.ExtractEmbeddedHandles("[summarize#3]\n{\"anchors\":[{\"handle\":\"summarize#1\"},{\"handle\":\"summarize#2\"}]}", "summarize#3")
+	if len(gotSummarize) != 2 || gotSummarize[0] != "summarize#1" || gotSummarize[1] != "summarize#2" {
+		t.Fatalf("summarize children = %v", gotSummarize)
+	}
+	gotRead := evidence.ExtractEmbeddedHandles("[read#1]\n{\"highlights\":[{\"handle\":\"read#2\"}]}", "read#1")
+	if len(gotRead) != 1 || gotRead[0] != "read#2" {
+		t.Fatalf("read highlight children = %v", gotRead)
+	}
+	gotPage := evidence.ExtractEmbeddedHandles("[page#2]\n{\"frames\":[{\"evidence_handle\":\"page#1\"}]}", "page#2")
+	if len(gotPage) != 1 || gotPage[0] != "page#1" {
+		t.Fatalf("page frame children = %v", gotPage)
+	}
+}

@@ -2,6 +2,8 @@
 package fspath
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +51,17 @@ func CanonicalPath(path string) string {
 		missing = append(missing, base)
 		cur = dir
 	}
+}
+
+// CanonicalPathOrMissing is CanonicalPath for a decision that must not outlive a
+// failed resolution: only a missing name is preserved. Anything else that stops
+// resolution, such as a denied or non-directory component, refuses.
+func CanonicalPathOrMissing(path string) (string, bool) {
+	if _, err := filepath.EvalSymlinks(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return "", false
+	}
+	resolved := CanonicalPath(path)
+	return resolved, resolved != ""
 }
 
 // compareForm normalizes separators without trimming the root.

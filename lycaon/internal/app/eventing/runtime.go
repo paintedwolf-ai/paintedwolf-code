@@ -41,10 +41,13 @@ func (b *Runtime) latestWorker(ctx context.Context, child string) (*api.WorkerTa
 	}
 	return b.workers.GetLatestByChildSessionID(ctx, child)
 }
-func Build(ctx context.Context, database *db.Store, sessions *store.SQL, projects *project.SQLRegistry, power *hostpower.Controller, states events.SessionStateSource, pending store.PromptPendingSource, listing ProjectSessions, resources ResourceLifetime) (*Runtime, error) {
+func Build(ctx context.Context, database *db.Store, sessions *store.SQL, projects *project.SQLRegistry, power *hostpower.Controller, states events.SessionStateSource, pending store.PromptPendingSource, listing ProjectSessions, resources ResourceLifetime, preparation PreparationObserver) (*Runtime, error) {
 	b := &Runtime{}
 
 	b.Hub = events.WrapDebugHub(events.NewMemoryHub())
+	if preparation != nil {
+		b.Hub = &preparationHub{ReplayHub: b.Hub, observer: preparation}
+	}
 	b.Outbox = eventoutbox.New(database, b.Hub)
 	if b.Outbox != nil {
 		resources.Track("event-outbox", 120, func(context.Context) error { return b.Outbox.Close() })

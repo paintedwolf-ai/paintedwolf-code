@@ -1,13 +1,12 @@
 package tools
 
 import (
-	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/sandbox"
-
 	"context"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hitl"
+	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
 func UniqueRoots(in []string) []string {
@@ -29,7 +28,11 @@ func UniqueRoots(in []string) []string {
 
 func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string) hitl.ActionConfineInputs {
 	var readDenyPaths []string
-	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {
+	writeLeg := strings.TrimSpace(tctx.Source.WorkerBranchRoot) != ""
+	if writeLeg || strings.TrimSpace(tctx.Identity.WorkerJobID) != "" {
+		readDenyPaths = append(readDenyPaths, confine.WorkerReadDenyRoots(writeLeg)...)
+	}
+	if writeLeg {
 		readDenyPaths = append(readDenyPaths, tctx.Source.WorkerSourceRoots...)
 	}
 	overlayReadPaths := tctx.Files.SessionReadPaths
@@ -43,7 +46,7 @@ func ActionConfineInputsForContext(tctx ToolContext, overlayWriteRoots []string)
 		view = tctx.Source.WorkerViewBoundary()
 	}
 	return hitl.ActionConfineInputs{
-		ProcessControl: tctx.Execution.ProcessControl, HostExecution: tctx.Execution.HostExecution,
+		ProcessControl: tctx.Execution.ProcessControl, CredentialStore: tctx.Execution.CredentialStore, HostExecution: tctx.Execution.HostExecution,
 		View:                 view,
 		ProjectID:            tctx.Identity.ProjectID,
 		Roots:                ConfineRootsForAction(tctx),

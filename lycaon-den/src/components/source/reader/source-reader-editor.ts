@@ -91,6 +91,7 @@ class RangeWidget extends WidgetType {
     button.type = "button";
     button.className = "cm-foldPlaceholder cm-den-reader-gap";
     button.dataset.readerGap = String(this.slot.index);
+    button.dataset.testid = "source-reader-gap";
     button.textContent = "Show lines";
     button.setAttribute("aria-label", button.textContent);
     button.addEventListener("click", () => this.load(this.slot));

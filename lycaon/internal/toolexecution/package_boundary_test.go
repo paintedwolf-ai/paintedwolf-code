@@ -19,6 +19,7 @@ func TestPackageBoundaryRejectsAuthorityThatWouldEscapeFirstRun(t *testing.T) {
 	request := &capabilityrequest.CapabilityRequest{
 		HostResources:   []string{"docker"},
 		SocketPaths:     []string{"/var/run/docker.sock"},
+		CredentialStore: true,
 		DirectIP:        &capabilityrequest.DirectIPRequest{},
 		LocalListen:     &capabilityrequest.LocalListenRequest{},
 		LoopbackConnect: &capabilityrequest.LoopbackConnectRequest{},
@@ -27,7 +28,7 @@ func TestPackageBoundaryRejectsAuthorityThatWouldEscapeFirstRun(t *testing.T) {
 	}
 	got := packageBoundaryWidening(request, true)
 	for _, capability := range []string{
-		"direct_ip", "host_resources", "local_listen", "loopback_connect",
+		"credential_store", "direct_ip", "host_resources", "local_listen", "loopback_connect",
 		"socket_paths", "socks_proxy",
 	} {
 		if !slices.Contains(got, capability) {

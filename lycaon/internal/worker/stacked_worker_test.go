@@ -134,7 +134,7 @@ func TestMaterializedStackedWorkerStartsFromItsParentsSealedResult(t *testing.T)
 	if !foundBase {
 		t.Fatal("child checkpoint lost changed main.go")
 	}
-	testutil.FailErr(t, "destroy child", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: child.ID, Root: child.WorkspaceRoot}))
+	testutil.FailErr(t, "destroy child", fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: child.ID, Root: child.WorkspaceRoot}))
 	claims, err = coordinator.ListClaims()
 	testutil.FailErr(t, "claims after destroy", err)
 	for _, claim := range claims {
@@ -192,7 +192,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 		t.Skipf("this host cannot mount a view: %+v", snap.Adapter)
 	}
 	t.Cleanup(func() {
-		_ = fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: parent.ID, Root: parent.WorkspaceRoot})
+		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: parent.ID, Root: parent.WorkspaceRoot})
 	})
 	completed := fixture.completeWithChange(t, parent, func() { write(t, parent, "main.go", "package parent\n") })
 	_, parentManifest, published, err := session.OpenTaskCheckpointStore(completed)
@@ -205,7 +205,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 
 	child := fixture.claimChild(t, parent.ID)
 	t.Cleanup(func() {
-		_ = fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: child.ID, Root: child.WorkspaceRoot})
+		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: child.ID, Root: child.WorkspaceRoot})
 	})
 	view, ok := workspace.LookupBranchClaimedView(child.WorkspaceRoot)
 	if !ok {
@@ -318,10 +318,10 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	testutil.FailErr(t, "open private Git", err)
 	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	selector := workspace.EnforcedWorkspaceSelector()
-	manager := workspace.NewManager(filepath.Join(base, "branches"), filepath.Join(base, "seeds")).WithPrivateGit(privateGit).WithSelector(selector)
+	manager := workspace.NewManager(filepath.Join(base, "branches")).WithPrivateGit(privateGit).WithSelector(selector)
 	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")
 	testutil.FailErr(t, "create branch", err)
-	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(binding) })
+	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })
 	if binding.Selection.Facts.PreparationKind != adapter.PreparationMounted {
 		t.Skipf("this host cannot mount a view: %s", binding.Selection.Facts.FallbackReason)
 	}

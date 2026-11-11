@@ -13,23 +13,27 @@ import (
 )
 
 func initGitRepo(t *testing.T, dir string) {
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
-	config := func(key, val string) {
-		cmd := exec.CommandContext(t.Context(), "git", "-C", dir, "config", key, val)
-		cmd.Env = lyexec.LocalGitEnv()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git config %s: %v %s", key, err, out)
+	t.Helper()
+	CloneFixtureInto(t, "empty-configured", dir, func(seed string) {
+		initCmd := exec.CommandContext(context.Background(), "git", "init", seed)
+		initCmd.Env = lyexec.LocalGitEnv()
+		if out, err := initCmd.CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v %s", err, out)
 		}
-	}
-	config("user.email", "test@example.com")
-	config("user.name", "Test")
+		config := func(key, val string) {
+			cmd := exec.CommandContext(context.Background(), "git", "-C", seed, "config", key, val)
+			cmd.Env = lyexec.LocalGitEnv()
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git config %s: %v %s", key, err, out)
+			}
+		}
+		config("user.email", "test@example.com")
+		config("user.name", "Test")
+	})
 }
 
 func TestGitManagerShowAndRef(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
@@ -60,6 +64,7 @@ func TestGitManagerShowAndRef(t *testing.T) {
 }
 
 func TestGitManagerBlameAndLogPath(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
@@ -90,6 +95,7 @@ func TestGitManagerBlameAndLogPath(t *testing.T) {
 }
 
 func TestGitManagerDiffStagedAndRestore(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
@@ -126,6 +132,7 @@ func TestGitManagerDiffStagedAndRestore(t *testing.T) {
 }
 
 func TestGitManagerRestoreDefaultsToWorktreeFromIndex(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
@@ -159,6 +166,7 @@ func TestGitManagerRestoreDefaultsToWorktreeFromIndex(t *testing.T) {
 }
 
 func TestGitManagerBranches(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
@@ -182,6 +190,7 @@ func TestGitManagerBranches(t *testing.T) {
 }
 
 func TestGitManagerShowStat(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initGitRepo(t, dir)
@@ -206,6 +215,7 @@ func TestGitManagerShowStat(t *testing.T) {
 }
 
 func TestGitManagerStatusIgnored(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initGitRepo(t, dir)

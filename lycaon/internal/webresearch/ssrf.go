@@ -34,7 +34,7 @@ func guardedGetWithHopPolicy(
 	recordHop recordGuardedGetHop,
 ) (*http.Response, string, error) {
 	if accept == "" {
-		accept = acceptHeaderForMode("text")
+		accept = researchAcceptHeader
 	}
 	current := u
 	// Redirects add no new agent-authored content.

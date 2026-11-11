@@ -13,7 +13,7 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 		}
 		reducedReq := req
 		reducedReq.AttemptBudget = nil
-		reducedReq.StrictBudget = true
+		reducedReq.ReasoningRecovery = true
 		reduced := p.resolveRequestControls(reducedReq, model)
 		req.RecordBudget(out.MaxTokens, []any{out.Thinking, out.OutputConfig}, []any{reduced.Thinking, reduced.OutputConfig})
 	}()
@@ -25,7 +25,7 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 	override = entry.ReasoningEffort
 
 	mt := modelcall.ResolveModelThinking(p.profile, entry, model)
-	strict := req.StrictOutputBudget()
+	strict := req.ReduceReasoning()
 	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, strict)
 	maxTokens := modelcall.CompletionTokenLimit(req, entry.MaxTokens, providerprofile.DefaultAnthropicMaxTokens, level, mt.Style != modelinfo.ThinkStyleNone)
 

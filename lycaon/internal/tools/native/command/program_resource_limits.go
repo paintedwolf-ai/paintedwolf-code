@@ -1,12 +1,14 @@
 package command
 
 import (
+	"context"
+
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
 )
 
 // confineLimits serves the evaluator's resource-limit port from the confine
-// owner's declared capabilities and the host process's own limits.
+// owner's declared capabilities and the limits it measures for children.
 type confineLimits struct{}
 
 func (confineLimits) Capability(resource string) commandprogram.LimitCapability {
@@ -23,8 +25,8 @@ func (confineLimits) Capability(resource string) commandprogram.LimitCapability 
 	return capability
 }
 
-func (confineLimits) Read(resource string) (commandprogram.ResourceLimit, error) {
-	limit, err := confine.ReadResourceLimit(resource)
+func (confineLimits) Read(ctx context.Context, resource string) (commandprogram.ResourceLimit, error) {
+	limit, err := confine.ChildResourceLimit(ctx, resource)
 	return commandprogram.ResourceLimit{Resource: limit.Resource, Soft: limit.Soft, Hard: limit.Hard}, err
 }
 

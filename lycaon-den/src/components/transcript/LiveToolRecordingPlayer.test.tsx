@@ -89,7 +89,7 @@ describe("LiveToolRecordingPlayer", () => {
       </ErrorBoundary>
     ));
 
-    await screen.findByText("Recording could not be played.");
+    await screen.findByTestId("live-tool-recording-player-error");
     expect(stageFailed).not.toHaveBeenCalled();
     expect(screen.queryByTestId("stage-boundary")).toBeNull();
     expect(

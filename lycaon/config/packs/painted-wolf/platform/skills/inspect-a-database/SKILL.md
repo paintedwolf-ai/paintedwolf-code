@@ -2,7 +2,6 @@
 name: inspect-a-database
 description: Inspect a SQLite file or query PostgreSQL, MySQL/MariaDB, MongoDB, or Redis for schema, data, query-plan, and cache evidence without changing it.
 metadata:
-  paintedwolf.template_resources: references/inspect_a_sqlite_database.md|references/query_a_postgres_database.md|references/query_a_mysql_database.md|references/query_a_mongodb_database.md|references/inspect_a_redis_instance.md
   host_resources: mongodb-shell|mysql-cli|postgresql-cli|redis-cli|sqlite
 ---
 

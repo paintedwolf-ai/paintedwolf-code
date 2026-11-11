@@ -57,11 +57,12 @@ function setupBlockerCopy(blocker: OnboardingSetupBlocker): string {
 }
 
 export function OnboardingGate(props: Props) {
+  const effectivePolicy = () => props.settingsStore.state.effectiveModelPolicy ?? props.settingsStore.state.modelPolicy;
   const initialNeedsConfig = () =>
     needsOnboardingConfig({
       readyProviderCount: readyProviders(props.settingsStore.state.providers)
         .length,
-      hasDefaultModel: hasDefaultModel(props.settingsStore.state.modelPolicy),
+      hasDefaultModel: hasDefaultModel(effectivePolicy()),
     });
 
   let waitingForInitialSettings = props.settingsChecked === false;
@@ -91,7 +92,7 @@ export function OnboardingGate(props: Props) {
   const readyCount = () =>
     readyProviders(props.settingsStore.state.providers).length;
   const defaultReady = () =>
-    hasDefaultModel(props.settingsStore.state.modelPolicy);
+    hasDefaultModel(effectivePolicy());
   const setupBlocker = () =>
     onboardingSetupBlocker({
       readyProviderCount: readyCount(),
@@ -184,7 +185,7 @@ export function OnboardingGate(props: Props) {
       setValidationError(setupBlockerCopy(blocker));
       return;
     }
-    const current = policy();
+    const current = effectivePolicy();
     if (!current || !hasDefaultModel(current)) {
       setValidationError(setupBlockerCopy("default_model"));
       return;

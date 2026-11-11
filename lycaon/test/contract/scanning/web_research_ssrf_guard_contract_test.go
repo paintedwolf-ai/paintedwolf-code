@@ -15,7 +15,7 @@ func TestPageFetchPathsUseGuardedTransport(t *testing.T) {
 	files := map[string]string{
 		filepath.Join(root, "lycaon", "internal", "webresearch", "fetch.go"):             "outboundhttp.Do(",
 		filepath.Join(root, "lycaon", "internal", "webresearch", "direct_page_probe.go"): "politeGuardedGet(",
-		filepath.Join(root, "lycaon", "internal", "webresearch", "direct_site_fetch.go"): "politeGuardedGet(",
+		filepath.Join(root, "lycaon", "internal", "webresearch", "direct_helpers.go"):    "politeGuardedGet(",
 		filepath.Join(root, "lycaon", "internal", "webresearch", "direct_polite.go"):     "guardedGetWithHopPolicy(",
 	}
 	for path, guardedCall := range files {

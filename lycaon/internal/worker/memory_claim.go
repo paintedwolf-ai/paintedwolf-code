@@ -10,7 +10,7 @@ import (
 )
 
 // ClaimNext claims the next matching pending job.
-func (q *InMemoryQueue) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
+func (q *memoryQueueClaims) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
 	if _, err := q.recoverPrerequisites(ctx); err != nil {
 		return nil, err
 	}
@@ -32,7 +32,7 @@ func (q *InMemoryQueue) ClaimNext(ctx context.Context, req ClaimRequest) (*api.W
 	}
 }
 
-func (q *InMemoryQueue) nextPending(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
+func (q *memoryQueueClaims) nextPending(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -62,7 +62,7 @@ func (q *InMemoryQueue) nextPending(ctx context.Context, req ClaimRequest) (*api
 	return nil, ErrNoPendingJobs
 }
 
-func (q *InMemoryQueue) claimPending(ctx context.Context, req ClaimRequest, expectedID string) (*api.WorkerTask, error) {
+func (q *memoryQueueClaims) claimPending(ctx context.Context, req ClaimRequest, expectedID string) (*api.WorkerTask, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -121,7 +121,7 @@ func (q *InMemoryQueue) claimPending(ctx context.Context, req ClaimRequest, expe
 	return nil, ErrNoPendingJobs
 }
 
-func (q *InMemoryQueue) RenewClaim(ctx context.Context, jobID, claimToken string) (bool, error) {
+func (q *memoryQueueClaims) RenewClaim(ctx context.Context, jobID, claimToken string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -139,12 +139,12 @@ func (q *InMemoryQueue) RenewClaim(ctx context.Context, jobID, claimToken string
 }
 
 // RecoverExpiredClaims retries expired attempts while runway remains.
-func (q *InMemoryQueue) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerTask, error) {
+func (q *memoryQueueClaims) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerTask, error) {
 	prerequisites, prerequisiteErr := q.recoverPrerequisites(ctx)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	canceled, cancelErr := recoverCancellations(ctx, q)
+	canceled, cancelErr := recoverCancellations(ctx, q.self)
 	canceled = append(prerequisites, canceled...)
 	cancelErr = errors.Join(prerequisiteErr, cancelErr)
 	q.mu.Lock()
@@ -156,7 +156,7 @@ func (q *InMemoryQueue) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerT
 		}
 	}
 	q.mu.Unlock()
-	recovered, err := recoverExpiredWorkerJobs(ctx, q, ids)
+	recovered, err := recoverExpiredWorkerJobs(ctx, q.self, ids)
 	return append(canceled, recovered...), errors.Join(cancelErr, err)
 }
 

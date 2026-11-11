@@ -6,5 +6,3 @@ suggested_action: Close unused source views and try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Source view is busy

@@ -1,8 +1,8 @@
 package usernotice
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -27,9 +27,7 @@ func TestExtensionSourceFailuresHaveActionableBoundedNotices(t *testing.T) {
 			if copy.Title == "" || copy.Message == "" || copy.SuggestedAction == "" || copy.Message == cfg.Defaults.Message {
 				t.Fatalf("extension failure lost actionable context: %+v", copy)
 			}
-			if strings.Contains(copy.Message+copy.SuggestedAction, providerPayload) {
-				t.Fatal("provider output leaked into an unbounded diagnostic")
-			}
+			exposure.Absent(t, copy.Message+copy.SuggestedAction, providerPayload)
 			if catalog.Retryable(code) {
 				t.Fatal("extension failure should require an explicit reviewed retry")
 			}

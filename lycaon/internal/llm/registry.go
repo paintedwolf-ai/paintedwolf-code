@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/llm/providerretry"
+	"github.com/lycaon/lycaon/internal/llm/providers/nativegen"
 	"github.com/lycaon/lycaon/internal/llm/providers/openaicompat"
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/modelfeed"
@@ -26,13 +27,25 @@ import (
 
 // Registry implements ProviderRegistry with catalog + credentials.
 type Registry struct {
-	thinkingPolicy  atomic.Pointer[PolicyStore]
-	rateGate        *providerretry.ProviderRateGate
-	mutationMu      sync.Mutex
-	screenMu        sync.RWMutex
-	catalog         *ProviderCatalog
-	credentials     *providercredentials.Store
-	snapshot        atomic.Pointer[providerRegistrySnapshot]
+	registryCatalog
+}
+
+type registryCatalog struct {
+	registryDiscovery
+}
+
+type registryDiscovery struct {
+	registryRouting
+}
+
+type registryRouting struct {
+	registryCore
+}
+
+type registryCore struct {
+	registryState
+	localRuntime    *nativegen.Runtime
+	localStartup    nativegen.Readiness
 	discovery       *discovery.Cache
 	cloudflareUsage *openaicompat.CloudflareUsageCache
 	discoveryClient *http.Client
@@ -42,6 +55,16 @@ type Registry struct {
 	listCache *catalogruntime.SnapshotCache[[]api.ProviderMeta]
 	// outboundSecretScreen is the final provider boundary.
 	outboundSecretScreen OutboundSecretScreen
+}
+
+type registryState struct {
+	thinkingPolicy atomic.Pointer[PolicyStore]
+	rateGate       *providerretry.ProviderRateGate
+	mutationMu     sync.Mutex
+	screenMu       sync.RWMutex
+	catalog        *ProviderCatalog
+	credentials    *providercredentials.Store
+	snapshot       atomic.Pointer[providerRegistrySnapshot]
 }
 
 const providerListCacheTTL = 30 * time.Second
@@ -68,7 +91,7 @@ func (r *Registry) SetOutboundSecretScreen(screen OutboundSecretScreen) {
 }
 
 // ProviderKind returns the kind for a catalog instance.
-func (r *Registry) ProviderKind(instanceID string) (string, bool) {
+func (r *registryCore) ProviderKind(instanceID string) (string, bool) {
 	if r == nil {
 		return "", false
 	}
@@ -105,7 +128,7 @@ func (r *Registry) ModelFeed() *modelfeed.Feed {
 
 // resolveAPIKey returns the Settings-stored API key for the provider.
 // Catalog environment hints do not configure providers.
-func (r *Registry) resolveAPIKey(entry CatalogEntry) string {
+func (r *registryCore) resolveAPIKey(entry CatalogEntry) string {
 	if r.credentials == nil {
 		return ""
 	}
@@ -164,7 +187,7 @@ func (r *Registry) ConfiguredCount() int {
 }
 
 // IsConfigured reports whether a provider can make API calls.
-func (r *Registry) IsConfigured(id string) bool {
+func (r *registryCore) IsConfigured(id string) bool {
 	if r == nil {
 		return false
 	}
@@ -208,11 +231,14 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 	if p == nil {
 		return nil
 	}
+	capacity := modelcall.ProviderCapacity(p)
 	var entry CatalogEntry
 	var hasEntry bool
 	if snapshot != nil {
 		entry, hasEntry = snapshot.entries[p.ID()]
 	}
+	// Reasoning leaves the content channel before anything judges the payload.
+	p = &reasoningMarkerProvider{Provider: p}
 	if hasEntry {
 		if len(entry.RejectionReasons) > 0 {
 			p = &rejectionReasonProvider{inner: p, rules: entry.RejectionReasons}
@@ -236,7 +262,7 @@ func (r *Registry) decorateProvider(snapshot *providerRegistrySnapshot, p modelc
 		}
 	}
 	p = &secretScreenedProvider{inner: p, destination: destination, screen: screen}
-	return &lifecycleProvider{Provider: &reasoningMarkerProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}}}
+	return &lifecycleProvider{Provider: &thinkingPolicyProvider{Provider: p, registry: r}, capacity: capacity}
 }
 
 // Catalog exposes the underlying catalog.
@@ -253,7 +279,7 @@ func (r *Registry) RenderRequest(ctx context.Context, providerID, model string, 
 	if !ok {
 		return "", nil, fmt.Errorf("render request: provider %q is not configured", providerID)
 	}
-	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{entry: entry, resolved: ResolveProvider(entry, "")})
+	driver, err := driverFactories.Build(ctx, entry.Kind, providerBuild{localRuntime: r.localRuntime, entry: entry, resolved: ResolveProvider(entry, "")})
 	if err != nil {
 		return entry.Kind, nil, fmt.Errorf("render request for %s: %w", entry.ID, err)
 	}

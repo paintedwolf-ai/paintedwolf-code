@@ -152,7 +152,7 @@ func TestQuotaChangesWaitForAcceptedRemoval(t *testing.T) {
 	}()
 	select {
 	case <-reached:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("removal did not reach effect boundary")
 	}
 	changing, changed := make(chan struct{}), make(chan struct{})

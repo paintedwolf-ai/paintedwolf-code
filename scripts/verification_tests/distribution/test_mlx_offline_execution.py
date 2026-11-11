@@ -61,6 +61,47 @@ class MLXOfflineSource(unittest.TestCase):
         result = self.run_cmake()
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def add_patch(self):
+        patch = self.vendor / "attention.patch"
+        patch.write_text("--- a/CMakeLists.txt\n+++ b/CMakeLists.txt\n@@ -1 +1 @@\n"
+                         "-# Pinned source fixture\n+# Patched source fixture\n")
+        self.pin["sources"][0]["patch"] = {
+            "file": patch.name, "sha256": hashlib.sha256(patch.read_bytes()).hexdigest()}
+        return patch
+
+    def test_verified_patch_is_applied_once_to_a_distinct_source(self):
+        self.assertEqual(self.run_cmake().returncode, 0)
+        self.add_patch()
+        for _ in range(2):
+            result = self.run_cmake()
+            self.assertEqual(result.returncode, 0, result.stderr)
+        sources = list((self.root / "build/paintedwolf-sources").glob("*/mlx-source/CMakeLists.txt"))
+        self.assertEqual(sorted(p.read_text() for p in sources),
+                         ["# Patched source fixture\n", "# Pinned source fixture\n"])
+
+    def test_changed_patch_is_refused(self):
+        self.add_patch().write_text("different patch")
+        result = self.run_cmake()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("MLX_PATCH_DIGEST_MISMATCH", result.stderr)
+
+    def test_missing_patch_is_refused(self):
+        self.add_patch().unlink()
+        result = self.run_cmake()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("MLX_PATCH_MISSING", result.stderr)
+
+    def test_invalid_patch_is_not_published(self):
+        patch = self.add_patch()
+        patch.write_text(patch.read_text().replace("-# Pinned source fixture", "-# Wrong source"))
+        pin = self.pin["sources"][0]
+        pin["patch"]["sha256"] = hashlib.sha256(patch.read_bytes()).hexdigest()
+        result = self.run_cmake()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("MLX_PATCH_INVALID", result.stderr)
+        published = self.root / "build/paintedwolf-sources" / (pin["sha256"] + "-" + pin["patch"]["sha256"])
+        self.assertFalse(published.exists())
+
     def test_changed_archive_is_refused_before_any_fetch(self):
         (self.vendor / "source.tar.gz").write_bytes(b"wrong source")
         result = self.run_cmake()

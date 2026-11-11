@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"testing"
 
@@ -44,7 +46,7 @@ func TestGatedCloseoutBlocksOnOpenGates(t *testing.T) {
 	mgr, sess := newSynthesisDelayManager(t)
 	mgr.SetWorkflowDomains(workflowDomainFixture(gatedCloseoutView{state: gatedExecuteState()}))
 
-	reject, block := mgr.Coordinator.Guards.OpenGates(context.Background(), sess, true, true)
+	reject, block := mgr.Coordinator.Guards.OpenGates(tools.WithCallReach(context.Background(), toolreach.Offered([]string{"ask_user"})), sess, true, true)
 	if !block {
 		t.Fatal("expected the closeout to be held while the gated phase's gates are open")
 	}
@@ -136,7 +138,7 @@ func TestPendingOverlayCloseoutUsesLedgerOnEveryTurnOrigin(t *testing.T) {
 				history[0].Kind = api.MessageKindHostLoopWake
 			}
 			for _, invokeAllowed := range []bool{true, false} {
-				reject, blocked := mgr.Coordinator.Guards.BeforeFinish(t.Context(), sess, history, "", "Finished", "implement_overlay_promote", true, []string{"read"}, invokeAllowed)
+				reject, blocked := mgr.Coordinator.Guards.BeforeFinish(tools.WithCallReach(t.Context(), toolreach.Offered([]string{"promote_overlay"})), sess, history, "", "Finished", guidance.CloseoutDraft{}, "implement_overlay_promote", true, []string{"read"}, invokeAllowed)
 				if !blocked || reject == nil || reject.Code() != "OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT" {
 					t.Fatalf("invoke=%t closeout=%v blocked=%t", invokeAllowed, reject, blocked)
 				}

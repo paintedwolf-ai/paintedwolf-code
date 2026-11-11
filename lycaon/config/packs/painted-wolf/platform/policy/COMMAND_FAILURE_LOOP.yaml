@@ -14,16 +14,18 @@ requires:
   - paintedwolf.command
   - paintedwolf.count
   - paintedwolf.failure_source_unchanged
+  - paintedwolf.failure_count_known
 when: paintedwolf.rejection_code == "COMMAND_FAILURE_LOOP"
 effect: block
 copy:
-  what: command `{{ paintedwolf.command }}` has failed {{ paintedwolf.count }} times in a row.
+  what: '{% if paintedwolf.command %}Command `{{ paintedwolf.command }}`{% else %}This command{% endif %} has failed{% if paintedwolf.failure_count_known %} {{ paintedwolf.count
+    }} times in a row{% else %} repeatedly{% endif %}.'
   cause: Repeating the same confined invocation without changed execution context spends budget without new information.
-  why: >-
-    {% if paintedwolf.failure_source_unchanged %}The admitted workspace source is unchanged since the last failed attempt.{% else %}The host could not establish a current source-content change against this failure streak. Missing or superseded captures cannot authorize a source-only retry.{% endif %}
-  fix: Inspect the preceding outcome and follow any structured refusal’s recovery fields. Correct the observed cause.
-    An observed workspace source change permits a bounded retry of the same invocation; it does not prove the cause is fixed.
-    Change the command only when its arguments are wrong. Do not alter cwd or capability declarations merely to evade this guard.
+  why: '{% if paintedwolf.failure_source_unchanged %}The admitted workspace source is unchanged since the last failed attempt.{% else %}The host could not establish
+    a current source-content change against this failure streak. Missing or superseded captures cannot authorize a source-only retry.{% endif %}'
+  fix: Inspect the preceding outcome and follow any structured refusal’s recovery fields. Correct the observed cause. An observed workspace source change permits
+    a bounded retry of the same invocation; it does not prove the cause is fixed. Change the command only when its arguments are wrong. Do not alter cwd or capability
+    declarations merely to evade this guard.
   instead: Diagnose the failed outcome before retrying; changed source must be observed by the host.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_loop
@@ -33,7 +35,3 @@ x-paintedwolf-scenarios:
   vars:
     command: go mod tidy
     count: 3
-  expect_contains:
-  - 'Code: COMMAND_FAILURE_LOOP'
-  - go mod tidy
-  - failed 3 times

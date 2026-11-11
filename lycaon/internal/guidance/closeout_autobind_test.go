@@ -75,8 +75,8 @@ func TestBuildObservedAutobindGroundingSurfacesTypedCitedEvidence(t *testing.T) 
 		if c.Handle == "" {
 			t.Fatalf("bound cited_evidence missing resolved handle: %+v", c)
 		}
-		if c.Verdict != api.CitationVerdictMatched {
-			t.Fatalf("observed cited_evidence verdict=%q want matched", c.Verdict)
+		if c.Verdict != api.CitationVerdictTraced {
+			t.Fatalf("observed cited_evidence verdict=%q want traced", c.Verdict)
 		}
 	}
 }
@@ -229,5 +229,21 @@ func TestBindObservedSamplePrefersURLsMentionedInSynthesis(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("synthesis-mentioned URL missing from cited_urls %v", report.CitedURLs)
+	}
+}
+
+func TestBindObservedSampleFallsBackToHandleOnlyEvidence(t *testing.T) {
+	msgs := []api.Message{
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: "command", Args: map[string]any{"command": "python3 -m py_compile tic_tac_toe.py"}}}},
+		{Role: api.MessageRoleTool, Content: `{"ok":true,"stages":[{"command":"python3 -m py_compile tic_tac_toe.py","exit_code":0}]}`},
+	}
+	ev := ledgertest.BuildFromMessages("", msgs)
+	report := guidance.BindObservedSample(guidance.CoordinatorCompletionReport{Synthesis: "verified"}, ev, evidence.CitationRoots{})
+	if len(report.CitedEvidence) != 1 || report.CitedEvidence[0].Evidence != "command#1" {
+		t.Fatalf("expected handle fallback command#1, got %+v", report.CitedEvidence)
+	}
+	g := guidance.BuildObservedAutobindGrounding(evidence.CitationRoots{}, ev, report)
+	if g == nil || len(g.CitedEvidence) != 1 || g.CitedEvidence[0].Handle != "command#1" || g.CitedEvidence[0].Verdict != api.CitationVerdictTraced {
+		t.Fatalf("expected wire cited_evidence for command#1, got %+v", g)
 	}
 }

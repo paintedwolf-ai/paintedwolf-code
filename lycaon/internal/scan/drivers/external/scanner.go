@@ -148,7 +148,7 @@ func (s *Scanner) runTarget(ctx context.Context, projectDir, target string) (*sc
 	if s.mapParser != nil {
 		parsed, perr = s.mapParser.Parse(out)
 	} else {
-		parsed, perr = scanoutput.ParseOutput(parserID, out) //nolint:contextcheck // ParseOutput is pure JSON decode
+		parsed, perr = scanoutput.ParseOutput(parserID, out)
 	}
 	if perr != nil {
 		if exitCode != 0 {

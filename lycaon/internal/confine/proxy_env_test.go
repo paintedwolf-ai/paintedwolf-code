@@ -1,6 +1,7 @@
 package confine_test
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 
@@ -86,8 +87,6 @@ func TestProxyEnvIsIdenticalAcrossInvocations(t *testing.T) {
 		t.Fatalf("proxy env differs between invocations:\n%s\n---\n%s", first, second)
 	}
 	for _, secret := range []string{"@", "password", ":x@"} {
-		if strings.Contains(first, secret) {
-			t.Fatalf("proxy env carries a credential (%q):\n%s", secret, first)
-		}
+		exposure.Absent(t, first, secret)
 	}
 }

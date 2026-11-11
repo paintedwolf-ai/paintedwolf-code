@@ -40,6 +40,22 @@ li:last-child > .project-list-row {
   flex-direction: column;
   gap: 1px;
 }
+.project-list-row__heading {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.project-list-row__draft-badge {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: var(--den-radius-sm);
+  background: color-mix(in srgb, var(--den-accent-signal) 14%, var(--den-surface));
+  color: var(--den-accent-text);
+  font-size: var(--text-den-micro);
+  font-weight: 600;
+  line-height: 1.35;
+}
 .project-list-row__name,
 .project-list-row__path {
   display: block;
@@ -151,5 +167,3 @@ li:last-child > .project-list-row {
 .project-list-row__menu-danger {
   color: var(--den-danger-text);
 }
-
-/* Blueprints list — den-list-panel with Kind + Run columns. */

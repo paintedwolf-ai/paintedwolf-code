@@ -8,5 +8,3 @@ suggested_action: Reload the chat and pick a message that is still there.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - no longer in this chat

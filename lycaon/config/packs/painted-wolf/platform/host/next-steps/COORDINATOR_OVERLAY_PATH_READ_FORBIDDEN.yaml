@@ -1,0 +1,4 @@
+steps:
+  - tool: "preview_overlay"
+    say: "Use {{ call }} with a repository-relative product path from the worker result, and inspect branch_delta and path_status before choosing a merge action."
+    otherwise: "Use retained worker evidence and state any limitation on the current report turn."

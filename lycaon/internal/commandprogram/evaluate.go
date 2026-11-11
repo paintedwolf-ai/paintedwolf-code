@@ -23,6 +23,9 @@ type EvaluationPorts struct {
 	Input       InputRedirection
 	Sources     SourceCapture
 	Supervision ProgramSupervision
+	// DocumentUnresolvable reports a document body holding text the host would
+	// have to resolve; those bytes are stdin, which no consumer resolves.
+	DocumentUnresolvable func(body string) bool
 	// Waits receives the program's wait states; nil reports none.
 	Waits ProgramWaits
 	// Predicates supplies the filesystem and pattern ports for test, [ and [[.
@@ -101,10 +104,11 @@ func (o ProgramOutcome) Settlement(detailReference string) toolcontract.ProgramS
 // EvaluationRefusal is a typed host refusal at a reached or statically present
 // node. Effects settled before it remain recorded; nothing after it is admitted.
 type EvaluationRefusal struct {
-	Code     string
-	Node     commandsurface.SyntaxLocation
-	Expected string
-	Cause    error
+	SourceUnitID string
+	Code         string
+	Node         commandsurface.SyntaxLocation
+	Expected     string
+	Cause        error
 	// Command, Option and Form name a refused native form: the command, the
 	// refused word and the command's supported form.
 	Command, Option, Form string
@@ -127,14 +131,14 @@ func (e *EvaluationRefusal) MachineErrorCode() string { return e.Code }
 // ports.Supervision after it returns; no interpreter state survives otherwise.
 func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports EvaluationPorts) (ProgramOutcome, error) {
 	if err := ports.validate(plan); err != nil {
-		return ProgramOutcome{}, err
+		return failedEntry(ports.Invocation, err), err
 	}
 	limits, err := catalogEvaluationLimits()
 	if err != nil {
-		return ProgramOutcome{}, err
+		return failedEntry(ports.Invocation, err), err
 	}
 	if err := preflight(plan.Statements, ports); err != nil {
-		return ProgramOutcome{}, err
+		return failedEntry(ports.Invocation, err), err
 	}
 	e := &evaluation{ports: ports, limits: limits, programName: plan.SourceName}
 	ctx, cancelWait := context.WithCancelCause(ctx)
@@ -142,11 +146,11 @@ func Evaluate(ctx context.Context, plan commandsurface.ProgramSnapshot, ports Ev
 	e.waits = newExecutionWaits(ctx, e.clock(), ports.Waits, cancelWait)
 	e.expander, err = NewWordExpander(ExpanderPorts{Substitutions: e, Files: ports.Files, Memory: ports.Memory})
 	if err != nil {
-		return ProgramOutcome{}, err
+		return failedEntry(ports.Invocation, err), err
 	}
 	root, release, err := e.rootFrame(ctx)
 	if err != nil {
-		return ProgramOutcome{}, err
+		return failedEntry(ports.Invocation, err), err
 	}
 	defer release()
 	e.waits.cancel = func(cause error) {

@@ -13,6 +13,7 @@ import (
 
 // Fixed commit dates distinguish per-path touch order.
 func TestGitManagerLastTouchByPath(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dir := t.TempDir()
 	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
@@ -38,9 +39,9 @@ func TestGitManagerLastTouchByPath(t *testing.T) {
 		}
 	}
 
-	commitAt("a.txt", "1", "a", "2020-01-01T00:00:00")
-	commitAt("b.txt", "1", "b", "2021-01-01T00:00:00")
-	commitAt("a.txt", "2", "a2", "2022-01-01T00:00:00") // a.txt touched again, most recent
+	commitAt("a.txt", "1", "a", "2020-01-01T00:00:00Z")
+	commitAt("b.txt", "1", "b", "2021-01-01T00:00:00Z")
+	commitAt("a.txt", "2", "a2", "2022-01-01T00:00:00Z") // a.txt touched again, most recent
 
 	m, err := NewManager().LastTouchByPath(ctx, dir)
 	testutil.FailErr(t, "LastTouchByPath", err)

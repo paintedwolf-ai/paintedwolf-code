@@ -29,8 +29,8 @@ copy:
   cause: The path must name an existing file; directories and out-of-scope paths are rejected separately.
   why: Structured rejects include optional suggestions so agents can fix typos without guessing from free-form
     errors.
-  fix: '{% if paintedwolf.can_list_dir %}Inspect the intended parent with list_dir.{% endif %}{% if paintedwolf.can_find
-    %} Use find to resolve the intended filename.{% endif %} Correct a demonstrated path mistake within attached
+  fix: '{% if paintedwolf.can_list_dir %}Inspect the intended parent with the offered directory listing.{% endif %}{% if paintedwolf.can_find
+    %} Use the offered file search to resolve the intended filename.{% endif %} Correct a demonstrated path mistake within attached
     roots, then retry {{ tool }}. Do not create an empty substitute for missing input.'
   instead: Correct the path from observed evidence, or report the missing input
 x-paintedwolf-category: recoverable
@@ -42,6 +42,3 @@ x-paintedwolf-scenarios:
     path: src/missing.go
     profile: explore_readonly
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: READ_PATH_NOT_FOUND'

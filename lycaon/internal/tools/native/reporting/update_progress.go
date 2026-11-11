@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/progress"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
@@ -16,7 +16,7 @@ import (
 type ProgressScopeKey func(ctx context.Context, sessionID string) string
 
 // ProgressHandler returns the update_progress handler.
-func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.ToolHandler {
+func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey, reconciliation progress.Reconciler) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		root := strings.TrimSpace(scopeKey(ctx, tctx.Identity.SessionID))
 		if root == "" {
@@ -31,20 +31,29 @@ func ProgressHandler(store progress.Store, scopeKey ProgressScopeKey) tools.Tool
 			}
 			return "", err
 		}
-		result, err := prepared.Apply(ctx, store, root)
+		expected, _ := args["expected_revision"].(string)
+		token, _ := args["reconciliation_token"].(string)
+		result, err := prepared.ExpectRevision(expected).ExpectItemIDsFromArgs(args).ExpectReconciliation(token).Apply(ctx, store, root, reconciliation)
 		if err != nil {
 			var rejected *progress.AuthorUpdateRejection
 			if errors.As(err, &rejected) {
+				if snapshot, ok := rejected.Data["snapshot"].(progress.Snapshot); ok {
+					rejected.Data["snapshot"] = progress.ForRequest(root, snapshot)
+				}
 				return "", &toolrejection.ToolReject{Code: rejected.Code, Data: rejected.Data}
 			}
 			return "", err
+		}
+		if tctx.Effects.Out != nil {
+			advanced := result.AdvancesWorkflow()
+			tctx.Effects.Out.Facts.WorkflowAdvanced = &advanced
 		}
 		status := "unchanged"
 		if result.Updated {
 			status = "updated"
 		}
 
-		raw, _ := surveyjson.Marshal(map[string]any{"status": status})
+		raw, _ := surveyjson.Marshal(map[string]any{"status": status, "document_changed": result.Updated, "state_changed": result.StateChanged, "closed_item_ids": result.ClosedItemIDs, "reconciliation_status": result.ReconciliationStatus, "snapshot": progress.ForRequest(root, result.Snapshot)})
 		return string(raw), nil
 	}
 }

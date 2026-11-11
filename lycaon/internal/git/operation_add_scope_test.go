@@ -14,12 +14,14 @@ import (
 )
 
 func TestNamedAddPreparationVisitsDoNotGrowWithUnrelatedTree(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		unrelated int
 		tracked   bool
 	}{{"empty", 0, false}, {"untracked", 128, false}, {"tracked-empty", 0, true}, {"tracked-full", 128, true}} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			visits := namedAddPreparationVisits(t, tc.tracked, tc.unrelated)
 			if tc.unrelated > 0 {
 				baseline := namedAddPreparationVisits(t, tc.tracked, 0)

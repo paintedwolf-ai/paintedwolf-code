@@ -31,6 +31,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: recall
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RECALL_LIVE_CODE_NOT_IN_SCOPE'

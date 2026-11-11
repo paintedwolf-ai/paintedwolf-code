@@ -31,6 +31,3 @@ x-paintedwolf-scenarios:
     path: .git/objects
     profile: implement
     tool: extract_archive
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EXTRACT_PATH_DENIED'

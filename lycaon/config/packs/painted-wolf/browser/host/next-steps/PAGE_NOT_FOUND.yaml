@@ -1,0 +1,4 @@
+mentions: ["page_close"]
+steps:
+  - tool: "page_open"
+    say: "If a new page is needed, {{ call }} starts new state; it does not restore the missing DOM or cookies."

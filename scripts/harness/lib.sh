@@ -66,29 +66,8 @@ _harness_resolve_mode() {
 }
 
 _harness_set_model() {
-  [[ -n "${HARNESS_PROJECT_ID:-}" ]] || { echo "warn: no Harness project to scope model to" >&2; return 0; }
-  local cur provider="${HARNESS_PROVIDER}" payload
-  cur="$(curl -sf -H "Authorization: Bearer ${LYCAON_E2E_TOKEN}" \
-    "${LYCAON_E2E_API_URL}/v1/settings/model-policy")" || cur="{}"
-  if [[ -z "${provider}" ]] && command -v jq >/dev/null 2>&1; then
-    provider="$(printf '%s' "${cur}" | jq -r '.coordinator.provider_id // empty')"
-  fi
-  HARNESS_PROVIDER="${provider}"
-  if command -v jq >/dev/null 2>&1; then
-    payload="$(printf '%s' "${cur}" | jq \
-      --arg p "${provider}" --arg m "${HARNESS_MODEL}" '
-        (if type=="object" then . else {} end)
-        | .coordinator={provider_id:$p,model:$m}
-        | .lite={provider_id:$p,model:$m}
-        | .agent_pool=((.agent_pool // {selection:"fixed"}) + {models:[{provider_id:$p,model:$m}]})')"
-  else
-    payload="{\"coordinator\":{\"provider_id\":\"${provider}\",\"model\":\"${HARNESS_MODEL}\"},\"lite\":{\"provider_id\":\"${provider}\",\"model\":\"${HARNESS_MODEL}\"},\"agent_pool\":{\"selection\":\"fixed\",\"models\":[{\"provider_id\":\"${provider}\",\"model\":\"${HARNESS_MODEL}\"}]}}"
-  fi
-  curl -sf -X PATCH -H "Authorization: Bearer ${LYCAON_E2E_TOKEN}" \
-    -H "Content-Type: application/json" -d "${payload}" \
-    "${LYCAON_E2E_API_URL}/v1/settings/model-policy?project_id=${HARNESS_PROJECT_ID}" >/dev/null || {
-    echo "warn: model policy update failed (model ${HARNESS_MODEL} may be invalid for provider ${provider:-<none>})" >&2
-  }
+  [[ -n "${HARNESS_PROJECT_ID:-}" ]] || { echo "error: no Harness project to scope model to" >&2; return 1; }
+  HARNESS_PROVIDER="$(python3 "${HARNESS_DIR}/model_policy.py" "${HARNESS_PROJECT_ID}" "${HARNESS_PROVIDER}" "${HARNESS_MODEL}")" || return 1
 }
 
 _harness_json_field() {

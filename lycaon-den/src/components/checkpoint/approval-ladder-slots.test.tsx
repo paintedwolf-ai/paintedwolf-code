@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import type { PendingCheckpoint } from "../../chat/checkpoint/checkpoint-model.ts";
@@ -81,12 +82,11 @@ describe("approval ladder slots", () => {
 
   it("names the grant menu button by its visible label and the menu by its purpose", () => {
     const { view } = mount(tunnelCard());
-    const trigger = view.getByRole("button", { name: "Other choices" });
+    const trigger = assertNamedControl(view.getByTestId("approval-grant-face"), "button");
     expect(trigger.getAttribute("aria-haspopup")).toBe("menu");
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(trigger);
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByRole("menu", { name: "Allow with a grant" })).toBeTruthy();
   });
 
   it("keeps an unreachable rung in its slot, disabled, with the host note", () => {

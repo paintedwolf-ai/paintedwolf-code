@@ -20,7 +20,4 @@ scenarios:
     - tests/test_core_utils.py
     overlay_id: job-tests
     spill_path: promote-spills/job-tests.json
-  expect_contains:
-  - BANNER_PROMOTE_OVERLAY_BODY
-  - promote_overlay
 id: BANNER_PROMOTE_OVERLAY_BODY

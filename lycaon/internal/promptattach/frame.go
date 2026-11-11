@@ -21,9 +21,9 @@ func TruncationMarker(kept, total int64) string {
 // BodyHint names the materialized body outside its untrusted fence.
 func BodyHint(mime, path string) string {
 	if format.IsStructuredQueryMIME(mime) {
-		return fmt.Sprintf("[full attachment content: jq(path=%q) to query, or read(path=%q) with offset/limit]", path, path)
+		return fmt.Sprintf("[full attachment content: command(command=%q) to query, or command(command=%q) for a line slice]", fmt.Sprintf("jq . %s", path), fmt.Sprintf("sed -n 1,80p %s", path))
 	}
-	return fmt.Sprintf("[full attachment content: read(path=%q) with offset/limit, or grep(path=%q) to search]", path, path)
+	return fmt.Sprintf("[full attachment content: command(command=%q) for a line slice, or command(command=%q) to search]", fmt.Sprintf("sed -n 1,80p %s", path), fmt.Sprintf("grep -n PATTERN %s", path))
 }
 
 // CountLines treats a trailing newline as a terminator.

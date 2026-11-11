@@ -12,6 +12,8 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// Only macOS asks the kernel for a path by descriptor; Linux resolves symlinks,
+// which needs no content access to begin with.
 func TestKernelPathDoesNotRequireContentAccess(t *testing.T) {
 	if root := os.Getenv("PW_PATH_IDENTITY_FIXTURE"); root != "" {
 		for _, path := range []string{root, filepath.Join(root, "file")} {

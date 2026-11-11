@@ -79,6 +79,36 @@ describe("buildProseCitationIndex", () => {
     expect(idx.paths.get("src/a.ts")).toBe(42);
   });
 
+  it("keeps a cited range for the path's first cited line", () => {
+    const idx = index({
+      cited_evidence: [
+        { path: "src/a.ts", line: 42, end_line: 58 },
+        { path: "src/a.ts", line: 90, end_line: 95 },
+      ],
+      evidence_records: [{ shape: "file_region", path: "src/read.ts", line: 7, line_end: 9 }],
+    });
+    expect(idx.paths.get("src/a.ts")).toBe(42);
+    expect(idx.endLines.get("src/a.ts")).toBe(58);
+    // A read that was never cited opens at its line, not as a selection.
+    expect(idx.endLines.has("src/read.ts")).toBe(false);
+  });
+
+  it("gives different ranges different cache keys", () => {
+    const narrow = index({ cited_evidence: [{ path: "src/a.ts", line: 42, end_line: 44 }] });
+    const wide = index({ cited_evidence: [{ path: "src/a.ts", line: 42, end_line: 58 }] });
+    expect(narrow.key).not.toBe(wide.key);
+  });
+
+  it("opens the cited range from every prose form of the path", () => {
+    const idx = index({ cited_evidence: [{ path: "src/a.ts", line: 42, end_line: 58 }] });
+    const range = { path: "src/a.ts", line: 42, endLine: 58 };
+    expect(matchProseCitation(idx, "src/a.ts#L42-L58")).toEqual(range);
+    expect(matchProseCitation(idx, "src/a.ts:42-58")).toEqual(range);
+    expect(matchProseCitation(idx, "src/a.ts")).toEqual(range);
+    // A mention naming its own line means that line.
+    expect(matchProseCitation(idx, "src/a.ts:50")).toEqual({ path: "src/a.ts", line: 50 });
+  });
+
   it("normalizes ./ prefixes and backslashes", () => {
     const idx = index({ cited_evidence: [{ path: "./src\\a.ts", line: 3 }] });
     expect(idx.paths.get("src/a.ts")).toBe(3);

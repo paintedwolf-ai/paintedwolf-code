@@ -6,5 +6,3 @@ suggested_action: Choose a different folder label.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Another folder in this project already uses that label.

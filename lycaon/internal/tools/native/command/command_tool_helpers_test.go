@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
 )
@@ -21,13 +23,15 @@ func commandToolContext(root, sessionID, workerJobID string) tools.ToolContext {
 }
 
 // newCommandTool builds the retained confined runner used by one-shot
-// captures and verify's background launches.
+// captures and external process launches.
 func newCommandTool(t *testing.T) (*command.CommandTool, *bgprocess.Registry) {
 	t.Helper()
 	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true}, []sandbox.ToolProfile{
 		{ID: "implement", Tools: map[string]bool{"command": true}},
 	})
 	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	// Command output reads are screened, so a registry without a projector withholds them.
+	reg.Output.SetCaptureProjector(captureprojection.New(secretmatch.NewInertMatcher(), nil))
 	return &command.CommandTool{
 		Runner:     hostcmd.NewRunner(),
 		Boundary:   boundary,

@@ -1,4 +1,5 @@
 import { stubClient } from "../../test/client-fixture.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { createSignal } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -128,7 +129,7 @@ describe("FileSummaryDrawer", () => {
     ));
     fireEvent.click(screen.getByTestId("file-summary-toggle"));
 
-    expect(await screen.findByText("Summarizing this file…")).toBeTruthy();
+    expect(await screen.findByTestId("file-summary-summarizing")).toBeTruthy();
     expect(screen.getByRole("button", { name: "src/main.ts" })).toBeTruthy();
     expect(screen.getByTestId("file-summary-scroll").getAttribute("aria-busy")).toBe(
       "true",
@@ -319,11 +320,11 @@ describe("FileSummaryDrawer", () => {
     expect(screen.getByText("Starts the application.")).toBeTruthy();
     rejectNext?.(new Error("Could not reach the summarizer."));
 
-    expect(await screen.findByRole("button", { name: "Summarize current file" })).toBeTruthy();
+    expect(assertNamedControl(await screen.findByTestId("file-summary-retry"), "button")).toBeTruthy();
     expect(screen.queryByText("Could not reach the summarizer.")).toBeNull();
     expect(screen.queryByText("Starts the application.")).toBeNull();
     expect(screen.getByRole("button", { name: "src/worker.ts" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Summarize current file" })).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("file-summary-retry"), "button")).toBeTruthy();
     expect(screen.getByTestId("file-summary-scroll").getAttribute("aria-busy")).toBeNull();
   });
 
@@ -367,13 +368,13 @@ describe("FileSummaryDrawer", () => {
     ));
     fireEvent.click(screen.getByTestId("file-summary-toggle"));
     expect(
-      await screen.findByText("Summary shortened to fit the interactive budget."),
+      await screen.findByTestId("file-summary-truncated"),
     ).toBeTruthy();
 
     setSelection(readySelection("src/worker.ts"));
     await waitFor(() => expect(getFileBriefing).toHaveBeenCalledTimes(2));
     expect(
-      screen.getByText("Summary shortened to fit the interactive budget."),
+      screen.getByTestId("file-summary-truncated"),
     ).toBeTruthy();
     expect(
       screen.getByTestId("file-summary-content").parentElement?.getAttribute(
@@ -512,7 +513,7 @@ describe("FileSummaryDrawer", () => {
     setProjectId("p2");
     await waitFor(() => expect(getFileBriefing).toHaveBeenCalledTimes(2));
     expect(screen.queryByText("Starts the application.")).toBeNull();
-    expect(screen.getByText("Summarizing this file…")).toBeTruthy();
+    expect(screen.getByTestId("file-summary-summarizing")).toBeTruthy();
     expect(screen.queryByTestId("file-summary-status")).toBeNull();
 
     resolveSecond?.(secondResponse);
@@ -541,7 +542,10 @@ describe("FileSummaryDrawer", () => {
     const toggle = screen.getByTestId("file-summary-toggle");
     fireEvent.click(toggle);
     fireEvent.click(
-      await screen.findByRole("button", { name: "Summarize current file" }),
+      assertNamedControl(
+        await screen.findByTestId("file-summary-retry"),
+        "button",
+      ),
     );
     await waitFor(() => expect(requestFileBriefing).toHaveBeenCalledTimes(1));
 
@@ -570,7 +574,7 @@ describe("FileSummaryDrawer", () => {
       />
     ));
     fireEvent.click(screen.getByTestId("file-summary-toggle"));
-    expect(await screen.findByRole("button", { name: "Summarize current file" })).toBeTruthy();
+    expect(assertNamedControl(await screen.findByTestId("file-summary-retry"), "button")).toBeTruthy();
     await waitFor(() => {
       const rows = selectProjectNoticeGroups(store.index()).find((group) => group.projectId === "p1")?.notices ?? [];
       expect(rows).toMatchObject([{ code: "file_summary_failed" }]);

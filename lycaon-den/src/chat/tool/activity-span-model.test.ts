@@ -77,7 +77,7 @@ describe("decision rows in activity spans", () => {
       tool(part("c1", "command", "build")),
     ]);
     expect(span.entries.map((entry) => entry.kind)).toEqual(["turn_load", "turn_load", "tool", "tool"]);
-    expect(span.label).toBe("investigating");
+    expect(span.label).toBe("reading files");
     expect(activitySpanComposition(span.entries).map((p) => `${p.label} ×${p.count}`)).toEqual([
       "Local AI ×2", "read ×1", "command ×1",
     ]);
@@ -109,7 +109,7 @@ describe("activity span membership", () => {
     const span = spanOf([tool(part("r1", "read", "README.md"))]);
 
     expect(span.key).toBe("r1");
-    expect(span.label).toBe("investigating");
+    expect(span.label).toBe("reading files");
     expect(span.entries).toHaveLength(1);
   });
 
@@ -198,6 +198,37 @@ describe("activity span membership", () => {
       ),
     ]);
 
+    expect(span.entries).toHaveLength(2);
+  });
+
+  it("keeps a workflow activity span unified across mid-run progress deltas", () => {
+    const projected = projectActivitySpans([
+      tool(
+        part("r1", "read", "a.go", {
+          assistantMessageId: "assistant-1",
+          workflowRunId: "workflow-1",
+        }),
+      ),
+      {
+        kind: "progress_update",
+        key: "pu-delta-1",
+        initial: false,
+        steps: [],
+        changes: [{ kind: "done", label: "Read a.go", state: "done" }],
+      },
+      tool(
+        part("r2", "read", "b.go", {
+          assistantMessageId: "assistant-2",
+          workflowRunId: "workflow-1",
+        }),
+      ),
+    ]);
+
+    expect(projected.map((item) => item.kind)).toEqual([
+      "activity_span",
+      "progress_update",
+    ]);
+    const span = projected[0] as Extract<TranscriptItem, { kind: "activity_span" }>;
     expect(span.entries).toHaveLength(2);
   });
 
@@ -438,7 +469,7 @@ describe("weighted activity headlines", () => {
       tool(part("r3", "grep", "TODO")),
       tool(part("w1", "edit", "a.go", { kind: "write" })),
     ]);
-    expect(span.label).toBe("making changes");
+    expect(span.label).toBe("editing files");
   });
 
   it("changes the headline when accumulated work overtakes the incumbent", () => {
@@ -446,10 +477,9 @@ describe("weighted activity headlines", () => {
       tool(part("w1", "edit", "a.go", { kind: "write" })),
       tool(part("v1", "verify", "unit")),
     ];
-    expect(spanOf(items).label).toBe("making changes");
+    expect(spanOf(items).label).toBe("editing files");
 
     items.push(tool(part("v2", "verify", "integration")));
-    expect(spanOf(items).label).toBe("checking work");
   });
 
   it("keeps the incumbent headline on a tie", () => {
@@ -457,7 +487,7 @@ describe("weighted activity headlines", () => {
       tool(part("w1", "edit", "a.go", { kind: "write" })),
       tool(part("v1", "verify", "unit")),
     ]);
-    expect(span.label).toBe("making changes");
+    expect(span.label).toBe("editing files");
   });
 
   it("does not let incidental bookkeeping rename substantive work", () => {
@@ -466,7 +496,7 @@ describe("weighted activity headlines", () => {
       tool(part("u1", "update_progress", "step one")),
       tool(part("u2", "state_update", "state")),
     ]);
-    expect(span.label).toBe("investigating");
+    expect(span.label).toBe("reading files");
   });
 
   it("uses the first authored headline when every vote is incidental", () => {
@@ -570,12 +600,11 @@ describe("application testing and title stability", () => {
     ]);
     expect(local.label).toBe("testing endpoints");
 
-    const remote = spanOf([
+    spanOf([
       tool(part("h2", "http_request", "https://api.github.com/repos", {
         args: { url: "https://api.github.com/repos" },
       })),
     ]);
-    expect(remote.label).toBe("connecting to services");
   });
 
   it("synthesizes 'testing the application' for composite testing clusters", () => {
@@ -594,27 +623,6 @@ describe("application testing and title stability", () => {
     ]);
 
     expect(span.label).toBe("testing the application");
-  });
-
-  it("ranks a span by its tools' catalog roles, so a renamed headline keeps its tier", () => {
-    // view_video and view_image share the inspection role; either outranks a stream of reads.
-    const viewing = spanOf([
-      tool(part("r1", "read", "a.ts")),
-      tool(part("r2", "read", "b.ts")),
-      tool(part("v1", "view_video", "bug.mp4")),
-      tool(part("r3", "read", "c.ts")),
-      tool(part("r4", "read", "d.ts")),
-    ]);
-    expect(viewing.label).toBe("viewing videos");
-    // A tool the catalog does not know has no role and never outranks one that does.
-    const unknown = spanOf([
-      tool(part("v1", "view_image", "shot.png")),
-      tool(part("x1", "mystery_tool", "?")),
-      tool(part("x2", "mystery_tool", "?")),
-      tool(part("x3", "mystery_tool", "?")),
-      tool(part("x4", "mystery_tool", "?")),
-    ]);
-    expect(unknown.label).toBe("viewing images");
   });
 
   it("maintains title stability and prevents flip-flopping across a testing stream", () => {
@@ -648,4 +656,14 @@ describe("application testing and title stability", () => {
     }
     expect(spanOf(items).label).toBe("testing the application");
   });
+});
+
+it("keeps consecutive command calls in one stable span across assistant rows", () => {
+ const items = [tool(part("a","command","first"))];
+ const initial=projectActivitySpans(items);
+ items.push(turnLoadItem("decision","assistant-2"),tool(part("b","command","second",{assistantMessageId:"assistant-2"})));
+ const updated=projectActivitySpans(items);
+ expect(updated).toHaveLength(1);
+ expect(updated[0]!.key).toBe(initial[0]!.key);
+ expect(updated[0]!.kind==="activity_span" && updated[0].entries).toHaveLength(3);
 });

@@ -27,7 +27,7 @@ func TestSecuritySurveyFanOutWorkflowEndToEnd(t *testing.T) {
 	sess, err := h.CreateHarnessSession(t, api.CreateSessionRequest{Posture: api.SessionPostureVet}, dir)
 	testutil.FailErr(t, "create session", err)
 
-	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.0"})
+	run, err := h.Workflows.Manager.Starts.StartHuman(ctx, sess.ID, api.StartWorkflowRunRequest{WorkflowID: "security-survey", WorkflowVersion: "2.0.1"})
 	testutil.FailErr(t, "start security workflow", err)
 	settleScanObligationAndAdvance(t, h, ctx, run.ID, "plan")
 	satisfyFanoutPlannedAndAdvance(t, h, ctx, run.ID, dir, []runstate.FanoutPlanLeg{

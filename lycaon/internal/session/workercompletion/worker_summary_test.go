@@ -766,3 +766,16 @@ func TestEvaluateWorkerSummaryNoBriefStillChecksCitations(t *testing.T) {
 		t.Fatal("expected citation check to be recorded even without brief")
 	}
 }
+
+// What reaches the coordinator carries the host's citation in place of a handle that
+// means nothing outside the leg, such as the live output:program:... value.
+func TestParentReportCarriesTheHostCitation(t *testing.T) {
+	report := workercompletion.WorkerCompletionReport{Brief: "Read it", Findings: []workercompletion.WorkerFinding{
+		{Path: "a.go", Evidence: "output:program:p1:stdout", Line: 3, Cite: "[a.go:3]"},
+		{Note: "no source", Evidence: "read#1"},
+	}}
+	got := report.ParentReport().Findings
+	if len(got) != 2 || got[0].Evidence != "" || got[0].Cite != "[a.go:3]" || got[1].Evidence != "read#1" {
+		t.Fatalf("findings = %+v", got)
+	}
+}

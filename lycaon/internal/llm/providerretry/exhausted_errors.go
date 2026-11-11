@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -44,6 +45,14 @@ func ExhaustedHTTPError(providerID, model string, status, attempts int, formatte
 	if formatted == nil {
 		formatted = fmt.Errorf("provider %s: HTTP %d", providerID, status)
 	}
+	if tooSmall, ok := failure.AsProviderContextTooSmall(formatted); ok && tooSmall != nil {
+		if tooSmall.ProviderID == "" {
+			tooSmall.ProviderID = providerID
+		}
+		if tooSmall.Model == "" {
+			tooSmall.Model = model
+		}
+	}
 	switch status {
 	case 429:
 		return &failure.ProviderRateLimitedError{
@@ -78,6 +87,18 @@ func ExhaustedHTTPError(providerID, model string, status, attempts int, formatte
 	}
 }
 
+func declareRetryAfter(err error, wait time.Duration) {
+	if e, ok := failure.AsProviderRateLimited(err); ok {
+		e.RetryAfter = wait
+	}
+	if e, ok := failure.AsProviderOverloaded(err); ok {
+		e.RetryAfter = wait
+	}
+	if e, ok := failure.AsProviderServer(err); ok {
+		e.RetryAfter = wait
+	}
+}
+
 // ProviderRejectionReason names a cause established by a provider's protocol.
 type ProviderRejectionReason string
 
@@ -107,6 +128,9 @@ func (e *ProviderRequestRejectedError) Error() string {
 func (e *ProviderRequestRejectedError) Unwrap() error { return e.Cause }
 
 func (e *ProviderRequestRejectedError) NoticeCode() wire.NoticeCode {
+	if _, ok := failure.AsProviderContextTooSmall(e); ok {
+		return wire.NoticeCodeProviderContextTooSmall
+	}
 	return wire.NoticeCodeProviderRequestRejected
 }
 

@@ -174,7 +174,7 @@ class NixCacheReleaseLaneTests(unittest.TestCase):
 
     def test_cli_rerun_refuses_common_withdrawal_after_cache_keep_without_tombstone(self):
         import release_distribution
-        from scripts.linux_release import release_qualification
+        from scripts.linux_release import release_signing as release_qualification
         class EmptyBackend:
             def __init__(self, request): pass
             def read(self, name): return None

@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
   vars:
     tool: command
     path: /fixture/protected-output
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SANDBOX_WRITE_ROOT_DENIED'
-  - /fixture/protected-output

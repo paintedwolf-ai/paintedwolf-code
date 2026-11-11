@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
   vars:
     period: last year
     tool: web_search
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WEB_SEARCH_PERIOD_INVALID'

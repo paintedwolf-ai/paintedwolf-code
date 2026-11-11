@@ -42,21 +42,6 @@ func TestFeedbackHintRequiresPendingFeedbackInContextBlock(t *testing.T) {
 	}
 }
 
-func TestLastUserAskResponseAbsentFromInjectBlock(t *testing.T) {
-	t.Parallel()
-	ctx := api.CoordinatorRunContext{
-		PendingFeedback: &api.PendingFeedback{PhaseID: "ask-test-1", Prompt: "use REST?"},
-	}
-	block, err := renderCoordinatorInjectForTest(t, ctx, nil, nil)
-	contractcheck.FailErr(t, "renderCoordinatorInjectForTest failed", err)
-	if strings.Contains(block, "last_user_ask_response") {
-		t.Fatal("deleted last_user_ask_response from inject")
-	}
-	if !strings.Contains(block, "pending_feedback") {
-		t.Fatal("context block missing pending_feedback")
-	}
-}
-
 func TestGateUnmetHintRequiresFailedLeavesInContextBlock(t *testing.T) {
 	t.Parallel()
 	ctx := api.CoordinatorRunContext{FailedLeaves: []string{"human_approval"}}

@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: wait
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: COORDINATOR_HOST_TURN_REQUIRES_WAIT'

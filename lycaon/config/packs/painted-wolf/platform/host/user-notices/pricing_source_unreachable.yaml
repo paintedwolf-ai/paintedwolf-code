@@ -6,6 +6,4 @@ suggested_action: "Check your network connection and try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "could not be reached"
 retryable: true

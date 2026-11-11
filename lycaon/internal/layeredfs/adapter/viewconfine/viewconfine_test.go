@@ -99,13 +99,15 @@ func TestPlacedBranchIsUsableAndItsFolderIsClosed(t *testing.T) {
 	state := filepath.Join(base, "state")
 	testutil.FailErr(t, "mkdir state", os.Mkdir(state, 0o700))
 	t.Setenv("LYCAON_CONFIG_DIR", state)
-	placement := filepath.Join(base, "volume", ".paintedwolf")
-	branch := filepath.Join(enginepaths.WorkerBranchesRootUnder(placement), "project", "job")
+	volume := filepath.Join(base, "volume")
+	placement := filepath.Join(volume, enginepaths.WorkerPlacementDirName(os.Getuid(), state))
+	branch := filepath.Join(enginepaths.WorkerBranchesRootUnder(placement), "0123456789abcdef", "job")
 	testutil.FailErr(t, "mkdir branch", os.MkdirAll(branch, 0o700))
-	registry := filepath.Join(placement, "registry")
-	testutil.FailErr(t, "write registry", os.WriteFile(registry, []byte("x"), 0o600))
-	confine.SetPlacementFolders(func() []string { return []string{placement} })
-	t.Cleanup(func() { confine.SetPlacementFolders(nil) })
+	registry := filepath.Join(placement, "placement.json")
+	testutil.FailErr(t, "write marker", os.WriteFile(registry,
+		[]byte(`{"format_version":1,"id":"placement","state_key":"`+enginepaths.ProjectKey(state)+`"}`), 0o600))
+	testutil.FailErr(t, "write registry", os.WriteFile(filepath.Join(state, enginepaths.WorkerPlacementsFileName),
+		[]byte(`{"format_version":1,"folders":[{"id":"placement","path":"`+placement+`","volume_root":"`+volume+`","kind":"volume_root"}],"branches":{}}`), 0o600))
 
 	box, ok := confine.DefaultConfinement(confine.Request{Roots: []string{branch}, ReadRoots: []string{branch}, Egress: confine.EgressDeny})
 	if !ok {

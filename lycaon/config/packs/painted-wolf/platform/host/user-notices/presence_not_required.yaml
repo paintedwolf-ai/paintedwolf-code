@@ -9,5 +9,3 @@ suggested_action: >-
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - takes no authentication

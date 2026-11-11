@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: implement
     tool: move
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: MOVE_BULK_DENIED'

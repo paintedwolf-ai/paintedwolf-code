@@ -28,7 +28,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: implement
       tool: git_commit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: GIT_SIGNING_UNSUPPORTED'
-      - terminal

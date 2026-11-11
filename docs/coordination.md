@@ -215,7 +215,7 @@ Details: [Worker result contract](worker-result-contract.md).
 
 The coordinator may close the batch only after it has reconciled every terminal worker envelope, resolved pending overlays and decisions, updated progress, and satisfied current verification and grounding obligations.
 
-Synthesis uses the union of parent and child evidence but keeps provenance: a child observation does not become a parent first-hand read. The final answer is committed once, with citations the host can resolve. Missing citation metadata does not require another coordinator turn; the host preserves the answer and attaches recorded references with visible host attribution. Supplied references that fail to resolve use the bounded [citation repair path](grounding.md#evidence-grounded-prose).
+Synthesis uses the union of parent and child evidence but keeps provenance: a child observation does not become a parent first-hand read. The final answer is committed once, with citations the host can resolve. Missing citations do not require another coordinator turn; the host preserves the answer and attaches recorded references with visible host attribution. Supplied references that fail to resolve use the bounded [citation repair path](grounding.md#evidence-grounded-prose).
 
 If the model cannot produce a valid closeout after bounded repair, the host may assemble a conservative result from the ledger. Failure to format a report must not erase completed work or leave the batch permanently open.
 
@@ -232,3 +232,18 @@ If the model cannot produce a valid closeout after bounded repair, the host may 
 - A parent card or wake can lag a committed worker result; it cannot define that result.
 - A worker's ceiling rises only when its coordinator grants it; the host neither extends nor shrinks it.
 - A resume continues the child it names: same agent, scope mode, and planned leg.
+
+### Tool family loading
+
+The native family catalog defines capabilities offered together, including
+web research, browser pages, and terminals. Prediction and `request_tools`
+load each selected family member permitted by the current surface. Search and
+read-only page reading share the web-research family.
+Loading does not change tool authorization or make an unavailable member
+requestable. Explicitly requested schemas retain their normal
+standing-surface lifetime.
+
+Research proceeds from source discovery to reading relevant passages and citing
+them inline. Search snippets locate candidates; they do not establish that a
+page was read. A failed fetch remains an evidence limitation, and a citation
+records attribution without proving that its source supports the claim.

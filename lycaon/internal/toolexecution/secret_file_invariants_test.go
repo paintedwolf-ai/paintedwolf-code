@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
@@ -66,12 +67,12 @@ func runInvariant1Case1A(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				}), nil
 			}
 
-			reg := catalogRegistry(t)
+			reg := tools.NewDefaultRegistry()
 			var handledArgs map[string]any
-			testutil.FailErr(t, "reg write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+			testutil.FailErr(t, "reg write", reg.RegisterDefinition(tools.Definition{Meta: tools.ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}, Contract: catalogContract(t, "write"), Handler: func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 				handledArgs = args
 				return "ok", nil
-			}))
+			}}))
 			exec.Metadata.registry = reg
 
 			tc := tools.ToolContext{
@@ -149,12 +150,12 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 					}), nil
 				}
 
-				reg := catalogRegistry(t)
+				reg := tools.NewDefaultRegistry()
 				var handledArgs map[string]any
-				testutil.FailErr(t, "reg write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+				testutil.FailErr(t, "reg write", reg.RegisterDefinition(tools.Definition{Meta: tools.ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}, Contract: catalogContract(t, "write"), Handler: func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 					handledArgs = args
 					return "ok", nil
-				}))
+				}}))
 				exec.Metadata.registry = reg
 
 				tc := tools.ToolContext{
@@ -211,11 +212,11 @@ func runInvariant1Case1B(t *testing.T, m *secretmatch.Matcher, chatSecretRef, ch
 				}
 
 				var writeCalled bool
-				reg := catalogRegistry(t)
-				testutil.FailErr(t, "reg write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+				reg := tools.NewDefaultRegistry()
+				testutil.FailErr(t, "reg write", reg.RegisterDefinition(tools.Definition{Meta: tools.ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}, Contract: catalogContract(t, "write"), Handler: func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 					writeCalled = true
 					return "ok", nil
-				}))
+				}}))
 				exec.Metadata.registry = reg
 
 				tc := tools.ToolContext{
@@ -265,12 +266,12 @@ func runInvariant1Case1C(t *testing.T, m *secretmatch.Matcher, projSecretRef, pr
 			return res, nil
 		}
 
-		reg := catalogRegistry(t)
+		reg := tools.NewDefaultRegistry()
 		var handledArgs map[string]any
-		testutil.FailErr(t, "reg write", reg.Register("write", func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
+		testutil.FailErr(t, "reg write", reg.RegisterDefinition(tools.Definition{Meta: tools.ToolMeta{Name: "write", ArgsSchema: map[string]any{"type": "object"}}, Contract: catalogContract(t, "write"), Handler: func(_ context.Context, args map[string]any, _ tools.ToolContext) (string, error) {
 			handledArgs = args
 			return "ok", nil
-		}))
+		}}))
 		exec.Metadata.registry = reg
 
 		tc := tools.ToolContext{
@@ -349,15 +350,11 @@ func TestInvariant2_SymmetricValueFreeWireDiffAndSpanTableRestoration(t *testing
 	maskedBefore := res.ReferenceEchoes(beforeRaw)
 	maskedAfter := res.ReferenceEchoes(afterRaw)
 
-	if strings.Contains(maskedBefore, oldSecretVal) {
-		t.Fatal("maskedBefore still contains raw old secret")
-	}
+	exposure.Absent(t, maskedBefore, oldSecretVal)
 	if !strings.Contains(maskedBefore, oldSecretRef) {
 		t.Fatal("maskedBefore does not contain old secret reference token")
 	}
-	if strings.Contains(maskedAfter, newSecretVal) {
-		t.Fatal("maskedAfter still contains raw new secret")
-	}
+	exposure.Absent(t, maskedAfter, newSecretVal)
 	if !strings.Contains(maskedAfter, newSecretRef) {
 		t.Fatal("maskedAfter does not contain new secret reference token")
 	}

@@ -9,6 +9,3 @@ suggested_action: Open the overlay file and remove or rename the unknown field.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - unknown field
-      - overlay

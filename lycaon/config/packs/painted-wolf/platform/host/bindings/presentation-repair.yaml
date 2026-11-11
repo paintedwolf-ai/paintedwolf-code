@@ -1,0 +1,12 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': coordinator.presentation.repair
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-presentation-repair
+tier: builtin
+invariants:
+  trigger_class: tool_rejection
+  fires_in:
+  - closeout body rejected for image syntax the host cannot present (bare artifact
+    id or unobserved source; in-session retry replaces the body)

@@ -65,7 +65,7 @@ func readRebuildJournal(path string) (rebuildJournal, error) {
 	if err := decoder.Decode(new(any)); err != io.EOF {
 		return record, fmt.Errorf("store upgrade journal has trailing content")
 	}
-	if record.Version != 2 || record.Database != filepath.Base(path) || record.Directory != filepath.Base(record.Directory) || !strings.HasPrefix(record.Directory, StoreUpgradeDirectoryPrefix) || record.DirectoryIdentity == "" {
+	if record.Version != 1 || record.Database != filepath.Base(path) || record.Directory != filepath.Base(record.Directory) || !strings.HasPrefix(record.Directory, StoreUpgradeDirectoryPrefix) || record.DirectoryIdentity == "" {
 		return record, fmt.Errorf("store upgrade journal has invalid identity")
 	}
 	if record.State != "building" && record.State != "prepared" && record.State != "installed" {

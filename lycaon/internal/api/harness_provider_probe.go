@@ -66,6 +66,12 @@ func (s *HarnessProviders) probeProviderConversation(ctx context.Context, req ha
 		}
 	}
 	result["catalog_context_length"] = contextLength
+	if ceiling := llm.LookupModelOutputCeilingDiagnostic(ctx, s.llmSvc.Registry, req.Provider, req.Model); ceiling != nil {
+		result["output_ceiling"] = ceiling
+		result["configured_max_tokens"] = ceiling.ConfiguredMaxTokens
+		result["provider_max_tokens"] = ceiling.ProviderMaxTokens
+		result["output_ceiling_diagnostic"] = ceiling.Diagnostic
+	}
 	if err != nil {
 		recordProviderProbeFailure(result, err)
 	}

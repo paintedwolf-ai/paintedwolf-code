@@ -226,6 +226,7 @@ export function TranscriptVisualTimeline(props: Props) {
                         role="group"
                         aria-label={lane === "action" ? "Actions" : "Page events"}
                         data-lane={lane}
+                        data-testid={`transcript-visual-timeline-lane-${lane}`}
                       >
                         <For each={markers().filter((marker) => marker.lane === lane)}>
                           {(marker) => (

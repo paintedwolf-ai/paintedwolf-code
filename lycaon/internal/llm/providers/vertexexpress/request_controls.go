@@ -12,14 +12,14 @@ func (p *Provider) resolveRequestControls(req modelcall.CompletionRequest, model
 		}
 		reducedReq := req
 		reducedReq.AttemptBudget = nil
-		reducedReq.StrictBudget = true
+		reducedReq.ReasoningRecovery = true
 		reduced := p.resolveRequestControls(reducedReq, model)
 		req.RecordBudget(cfg.MaxOutputTokens, cfg.ThinkingConfig, reduced.ThinkingConfig)
 	}()
 
 	entry, _ := p.ModelEntry(model)
 	mt := modelcall.ResolveModelThinking(p.profile, entry, model)
-	strict := req.StrictOutputBudget()
+	strict := req.ReduceReasoning()
 	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, strict)
 	maxTokens := modelcall.CompletionTokenLimit(req, entry.MaxTokens, vertexExpressDefaultMaxTokens, level, mt.Style != modelinfo.ThinkStyleNone)
 

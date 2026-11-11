@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -19,25 +18,6 @@ func newProvisionalAssistantMessage(msg api.Message) api.Message {
 	return msg
 }
 
-func (l *turnCloseout) attachProseCitationGrounding(
-	ctx context.Context,
-	sess *api.Session,
-	history []api.Message,
-	userPrompt, surfaceID string,
-	assistantMsg *api.Message,
-) {
-	if l == nil || l.Deps.ProseCitationGrounding == nil || assistantMsg == nil {
-		return
-	}
-	// Host-assembled grounding retains the assembler's provenance.
-	if assistantMsg.Grounding != nil && assistantMsg.Grounding.HostAssembled {
-		return
-	}
-	if g := l.Deps.ProseCitationGrounding(ctx, sess, history, userPrompt, assistantMsg.Content, surfaceID); g != nil {
-		assistantMsg.Grounding = g
-	}
-}
-
 // promptTurnSurface returns the pinned surface, or empty when unresolved.
 func (l *promptContext) promptTurnSurface(sessionID string) string {
 	if l == nil || l.Deps.PromptTurnSurface == nil {
@@ -46,30 +26,11 @@ func (l *promptContext) promptTurnSurface(sessionID string) string {
 	return l.Deps.PromptTurnSurface(sessionID)
 }
 
-// closeoutWireContent projects streaming envelopes to prose for transcript rendering.
-func closeoutWireContent(surfaceID string) func(string) string {
-	if !surface.SurfaceDeliversReport(surfaceID) {
-		return func(content string) string { return content }
-	}
-	return func(content string) string {
-		if prose, ok := guidance.StreamingCloseoutNarrative(content); ok {
-			return prose
-		}
-		return content
-	}
-}
-
-// wireCopy projects transcript content while preserving the raw envelope in loop history.
-func wireCopy(msg api.Message, project func(string) string) api.Message {
-	msg.Content = project(msg.Content)
-	return msg
-}
-
-// keepCloseoutEnvelopeInternal also projects the body because grounded rows can render internally.
-func (l *turnProjection) keepCloseoutEnvelopeInternal(ctx context.Context, sessionID, surfaceID string, msg api.Message) (api.Message, error) {
+// keepUnansweredInternal leaves a reply with nothing to show out of the transcript.
+func (l *turnProjection) keepUnansweredInternal(ctx context.Context, sessionID string, msg api.Message) (api.Message, error) {
 	msg.Visibility = api.MessageVisibilityInternal
 	if l.Deps.UpdateMessage != nil {
-		if err := l.Deps.UpdateMessage(ctx, sessionID, msg.ID, wireCopy(msg, closeoutWireContent(surfaceID))); err != nil {
+		if err := l.Deps.UpdateMessage(ctx, sessionID, msg.ID, msg); err != nil {
 			return api.Message{}, err
 		}
 	}
@@ -89,7 +50,7 @@ func (l *turnProjection) commitProvisionalAssistantTurn(ctx context.Context, ses
 	return patch, nil
 }
 
-// commitGuardedAssistantTurn grounds the raw envelope before publishing its narrative.
+// commitGuardedAssistantTurn publishes a guarded row.
 func (l *turnProjection) commitGuardedAssistantTurn(
 	ctx context.Context,
 	sess *api.Session,
@@ -105,13 +66,13 @@ func (l *turnProjection) commitGuardedAssistantTurn(
 	// Only prose responses become user drafts; tool-step text stays in model history.
 	if len(msg.ToolCalls) == 0 {
 		if surface.SurfaceDeliversReport(surfaceID) {
-			l.Closeout.attachProseCitationGrounding(ctx, sess, history, userPrompt, surfaceID, &msg)
-			if prose, ok := guard.ProjectCoordinatorCloseoutProse(surfaceID, msg.Content); ok {
-				msg.Content = prose
-			} else if guidance.CloseoutBodyIsEnvelopeShaped(msg.Content) {
-				// Unprojectable envelopes remain internal for retry.
-				return l.keepCloseoutEnvelopeInternal(ctx, sessionID, surfaceID, msg)
-			} else if coordinatorSession && msg.Grounding == nil && strings.TrimSpace(msg.Content) != "" {
+			// The closeout path grounds and presents every reply with an answer, so
+			// what reaches here unaccepted is at most a draft, without protocol nodes.
+			if coordinatorSession && msg.Grounding == nil && strings.TrimSpace(msg.Content) != "" {
+				msg.Content = strings.TrimSpace(citationmd.Project(citationmd.Parse(msg.Content, citationmd.Options{})))
+				if msg.Content == "" {
+					return l.keepUnansweredInternal(ctx, sessionID, msg)
+				}
 				msg.Kind = api.MessageKindDraft
 				msg.CompletionReport = nil
 			}

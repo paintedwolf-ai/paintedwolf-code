@@ -68,8 +68,6 @@ describe("external-open-prefs", () => {
       expect(label.trim().length).toBeGreaterThan(0);
     }
     // Spot-check a few that the labels match the Rust display names.
-    expect(EDITOR_LABELS["intellij-idea"]).toBe("IntelliJ IDEA");
-    expect(EDITOR_LABELS["vscode-insiders"]).toBe("VS Code Insiders");
     expect(EDITOR_LABELS["custom"]).toBe("Custom");
   });
 

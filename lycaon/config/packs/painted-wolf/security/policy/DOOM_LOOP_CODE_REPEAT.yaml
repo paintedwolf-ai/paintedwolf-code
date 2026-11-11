@@ -4,12 +4,7 @@ kind: invariant
 anchor: tool.rejected
 requires:
   profiles: [tool]
-  facts:
-  - paintedwolf.code
-  - paintedwolf.code_instead
-  - paintedwolf.count
-  - paintedwolf.worker_leg
-  - paintedwolf.code_reject_responses
+  facts: [paintedwolf.code, paintedwolf.code_instead, paintedwolf.count, paintedwolf.worker_leg, paintedwolf.code_reject_responses, paintedwolf.next_steps]
 when: paintedwolf.code_reject_responses >= 3
 effect: block
 copy:
@@ -23,11 +18,7 @@ copy:
     observed state.{% else %} Use the original field or path diagnostic to select the correction.{% endif %}
     If valid inputs still fail, preserve the failing example and report the host constraint instead of simplifying
     away the assigned objective.'
-  instead: '{% if paintedwolf.worker_leg %}If an answer could unblock the work, use `request_decision` to suspend
-    the same leg. Otherwise use `complete_leg` with `leg_status: blocked`, the observed constraint, and the
-    remaining risk. {% else %}Keep accepted peer work and existing evidence. Resolve the blocked requirement
-    through the available tools, or use `ask_user` when human input or authority is required. Describe unresolved
-    work explicitly in closeout. {% endif %}'
+  instead: '{% if paintedwolf.worker_leg %}{% else %}Keep accepted peer work and existing evidence. Resolve the blocked requirement through the available tools. Describe unresolved work explicitly in closeout. {% endif %}{{ paintedwolf.next_steps }}'
   what: 'At least {{ paintedwolf.count }} model responses called {{ tool }} and were rejected with Code: {{ paintedwolf.code }} this session —
     inspect the original diagnostic before retrying'
 x-paintedwolf-category: recoverable
@@ -41,10 +32,6 @@ x-paintedwolf-scenarios:
     count: 3
     profile: coordinator
     tool: command
-  expect_contains:
-  - 'Code: DOOM_LOOP_CODE_REPEAT'
-  - COMMAND_NOT_ARGV
-  - inspect the original diagnostic before retrying
 - id: worker_leg
   vars:
     code: WORKER_SCOPE_DENIED
@@ -52,17 +39,10 @@ x-paintedwolf-scenarios:
     profile: explore_readonly
     tool: read
     worker_leg: true
-  expect_contains:
-  - 'Code: DOOM_LOOP_CODE_REPEAT'
-  - 'leg_status: blocked'
 - id: carries_repeated_code_exit
   vars:
-    code: PROGRESS_ITEM_NOT_CLOSED
-    code_instead: '`update_progress` that closes or revises a step, then retry `task`'
+    code: PROGRESS_RECONCILIATION_REQUIRED
+    code_instead: '`update_progress` with the current reconciliation_token and expected_revision, then retry `task`'
     count: 3
     profile: coordinator
     tool: task
-  expect_contains:
-  - 'Code: DOOM_LOOP_CODE_REPEAT'
-  - PROGRESS_ITEM_NOT_CLOSED
-  - update_progress

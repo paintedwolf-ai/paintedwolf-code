@@ -46,7 +46,7 @@ func TestLogsSiblingBesideMissing(t *testing.T) {
 
 func TestLogsSiblingInsideMacOSHostBundle(t *testing.T) {
 	if runtime.GOOS != "darwin" {
-		return
+		t.Skip("only macOS nests the engine in an application bundle")
 	}
 	contents := filepath.Join(t.TempDir(), "Painted Wolf Code.app", "Contents")
 	engine := filepath.Join(contents, "Helpers", "Painted Wolf Code engine.app", "Contents", "MacOS", "pw")

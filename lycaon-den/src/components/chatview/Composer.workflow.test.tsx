@@ -2,6 +2,7 @@ import { Composer, pressComposerKey, typeDraft } from "../../test/composer-view-
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { render, fireEvent, screen, waitFor } from "@solidjs/testing-library";
+import { assertNamedControl } from "../../test/controls.ts";
 import type { WorkflowSummary } from "../../api/types.ts";
 
 describe("Composer", () => {
@@ -24,9 +25,10 @@ describe("Composer", () => {
 
     typeDraft(input, "/");
 
-    const suggestions = screen.getByRole("listbox", {
-      name: "Workflow slash commands",
-    });
+    const suggestions = assertNamedControl(
+      screen.getByTestId("composer-slash-suggestions"),
+      "listbox",
+    );
     expect(view.container.contains(suggestions)).toBe(false);
     expect(suggestions.dataset.denAnchoredSurface).toBeTruthy();
     expect(suggestions.style.zIndex).toBe("var(--den-z-anchored-surface)");
@@ -127,7 +129,6 @@ describe("Composer", () => {
     setReady(true);
     expect(queryByTestId("stop-coordinator")).toBeNull();
     const send = getByTestId("composer-send");
-    expect(send.getAttribute("aria-label")).toBe("Send answer");
     // A staged pick gives Send its armed state.
     expect(send.classList.contains("den-composer-send--armed")).toBe(true);
     expect(send.getAttribute("data-armed")).toBe("");

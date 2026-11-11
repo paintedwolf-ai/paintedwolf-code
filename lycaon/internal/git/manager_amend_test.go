@@ -11,6 +11,7 @@ import (
 )
 
 func TestCommitAmendPreservesHistoryAndUnrelatedIndex(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gittest.Init(t, dir)
 	write := func(path, content string) {
@@ -59,6 +60,7 @@ func TestCommitAmendPreservesHistoryAndUnrelatedIndex(t *testing.T) {
 }
 
 func TestCommitAmendRequiresScopeBeforeStaging(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	gittest.Init(t, dir)
 	testutil.FailErr(t, "write fixture", os.WriteFile(filepath.Join(dir, "new.txt"), []byte("new\n"), 0o644))

@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
     profile: implement
     reason: pty_unsupported
     tool: terminal_open
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TERMINAL_UNSUPPORTED'

@@ -397,16 +397,16 @@ export function SourceReader(props: {
     <div class={props.current ? "den-source-reader__actions" : "den-document-actions"}>
       {props.leadingActions}
       <Show when={!props.current && change() === "changed"}>
-        <Show when={mode() === "changes"} fallback={<button type="button" class="den-document-action" onClick={() => setMode("changes")}>Changes</button>}>
-          <button type="button" class="den-document-action" onClick={() => setMode("full")}>Full file</button>
+        <Show when={mode() === "changes"} fallback={<button data-testid="changes" type="button" class="den-document-action" onClick={() => setMode("changes")}>Changes</button>}>
+          <button data-testid="full-file" type="button" class="den-document-action" onClick={() => setMode("full")}>Full file</button>
         </Show>
       </Show>
       {props.trailingActions}
     </div>
     <Show when={searchState.pending()}><span role="status">Finding in file…</span></Show>
     {facts.card}
-    <Show when={change() === "absent"}><div class="den-source-reader__state" role="status">The file doesn’t exist on either side of this comparison.</div></Show>
-    <div class="den-source-reader__editors" aria-label={`Contents of ${props.path}`} hidden={change() === "absent"}
+    <Show when={change() === "absent"}><div class="den-source-reader__state" role="status" data-testid="source-reader-absent">The file doesn’t exist on either side of this comparison.</div></Show>
+    <div class="den-source-reader__editors" data-testid="source-reader-editors" aria-label={`Contents of ${props.path}`} hidden={change() === "absent"}
       style={{ "min-height": props.scrollPastEnd === false && retainedHeight() ? `${retainedHeight()}px` : undefined }}>
       <Show when={split()}><div class="den-source-reader__editor" ref={setBeforeHost} /></Show>
       <div class="den-source-reader__editor" ref={setAfterHost} />

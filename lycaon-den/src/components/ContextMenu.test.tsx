@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../test/controls.ts";
 import { createSignal } from "solid-js";
 import { ResidentPresenceProvider } from "../ui/resident-presence-context.tsx";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
@@ -51,11 +52,11 @@ describe("ContextMenu", () => {
       <ContextMenu
         anchor={{ x: 10, y: 10 }}
         onDismiss={vi.fn()}
-        items={[{ label: "Add to chat", shortcut: "⌘L", onSelect }]}
+        items={[{ label: "Add to chat", shortcut: "⌘L", testId: "item-add-to-chat", onSelect }]}
       />
     ));
     await Promise.resolve();
-    const item = screen.getByRole("menuitem", { name: "Add to chat" });
+    const item = assertNamedControl(screen.getByTestId("item-add-to-chat"), "menuitem");
     expect(item.querySelector(".den-context-menu__label")?.textContent).toBe("Add to chat");
     expect(item.querySelector(".den-context-menu__shortcut")?.textContent).toBe("⌘L");
     fireEvent.keyDown(item, { key: "Enter" });
@@ -152,8 +153,8 @@ describe("ContextMenu", () => {
 
   it("exposes a disabled action reason without changing its accessible name", () => {
     render(() => <ContextMenu anchor={{ x: 10, y: 10 }} onDismiss={vi.fn()}
-      items={[{ label: "External editor", disabled: true, description: "This file is not present on disk." }]} />);
-    const item = screen.getByRole("menuitem", { name: "External editor" });
+      items={[{ label: "External editor", testId: "item-external-editor", disabled: true, description: "This file is not present on disk." }]} />);
+    const item = assertNamedControl(screen.getByTestId("item-external-editor"), "menuitem");
     expect(item.getAttribute("aria-disabled")).toBe("true");
     const description = document.getElementById(item.getAttribute("aria-describedby")!);
     expect(description?.textContent).toBe("This file is not present on disk.");
@@ -231,7 +232,7 @@ describe("ContextMenu", () => {
     ));
 
     fireEvent.mouseEnter(screen.getByTestId("copy-menu"));
-    expect(screen.getByRole("menu", { name: "Copy submenu" })).toBeTruthy();
+    expect(assertNamedControl(screen.getByTestId("context-menu-submenu"), "menu")).toBeTruthy();
     fireEvent.click(screen.getByTestId("copy-path"));
     expect(onSelect).toHaveBeenCalledOnce();
     expect(onDismiss).toHaveBeenCalledOnce();
@@ -394,7 +395,7 @@ describe("ContextMenu", () => {
     selection?.addRange(range);
     const { unmount } = render(() => <ContextMenu anchor={trigger}
       onDismiss={() => unmount()} items={[{
-        label: "Select all", onSelect: () => {
+        label: "Select all", testId: "item-select-all", onSelect: () => {
           const all = document.createRange();
           all.selectNodeContents(prose);
           selection?.removeAllRanges();
@@ -402,7 +403,7 @@ describe("ContextMenu", () => {
         },
       }]} />);
     await Promise.resolve();
-    fireEvent.click(screen.getByRole("menuitem", { name: "Select all" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("item-select-all"), "menuitem"));
     await Promise.resolve();
     expect(document.activeElement).toBe(trigger);
     expect(selection?.toString()).toBe("select all of this");

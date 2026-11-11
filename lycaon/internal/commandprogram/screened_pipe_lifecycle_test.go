@@ -38,7 +38,7 @@ func lifecyclePipe(t *testing.T, ctx context.Context, source io.ReadCloser) *Scr
 func TestScreenedPipeCloseInducedEOFCannotComplete(t *testing.T) {
 	for _, external := range []bool{false, true} {
 		t.Run(map[bool]string{false: "consumer", true: "parent"}[external], func(t *testing.T) {
-			ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+			ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 			defer cancel()
 			parent, stop := context.WithCancelCause(ctx)
 			defer stop(nil)

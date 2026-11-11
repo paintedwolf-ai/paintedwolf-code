@@ -74,11 +74,13 @@ func Analyze(ctx context.Context, langName, filename string, src []byte, purpose
 		return Report{Language: failure.Language, Status: StatusIncomplete, Failure: failure}
 	}
 	entry := resolveEntry(ctx, langName, filename, src)
-	if entry != nil && entry.Name == "css" {
-		return cssMarkupHealth(src)
-	}
 	if entry == nil || entry.Language == nil || !supported(entry.Name) {
 		return Report{Status: StatusUnsupported}
+	}
+	if entry.Name == "css" {
+		if report, ok := cssLeadingMarkupReport(src); ok {
+			return report
+		}
 	}
 	report.Language = entry.Name
 	defer func() {
@@ -91,7 +93,15 @@ func Analyze(ctx context.Context, langName, filename string, src []byte, purpose
 			}
 		}
 	}()
-	tree, err := tsparse.Parse(ctx, entry.Language(), src, purpose)
+	parseSrc := src
+	if entry.Name == "css" {
+		parseSrc = normalizeModernCSS(src)
+	}
+	if entry.Name == "dockerfile" && len(src) > 0 && src[len(src)-1] != '\n' {
+		// The grammar requires a line terminator; source bytes remain unchanged.
+		parseSrc = append(append([]byte(nil), src...), '\n')
+	}
+	tree, err := tsparse.Parse(ctx, entry.Language(), parseSrc, purpose)
 	if err != nil {
 		report.Status = StatusFailed
 		if errors.As(err, &report.Failure) && report.Failure.Incomplete() {
@@ -103,6 +113,9 @@ func Analyze(ctx context.Context, langName, filename string, src []byte, purpose
 	faults := collectLeafFaults(tree.RootNode())
 	if report.Language == "python" {
 		faults = append(faults, pythonStructuralFaults(tree.RootNode(), entry.Language(), src)...)
+	}
+	if report.Language == "css" {
+		faults = append(faults, cssStructuralFaults(tree.RootNode(), entry.Language(), src)...)
 	}
 	if len(faults) == 0 {
 		report.Status = StatusClean
@@ -126,6 +139,9 @@ func resolveEntry(ctx context.Context, langName, filename string, src []byte) *g
 }
 
 func supported(name string) bool {
+	if name == "css" {
+		return true
+	}
 	for _, candidate := range filekind.SupportedLanguages() {
 		if candidate == name {
 			return true

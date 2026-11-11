@@ -1,4 +1,4 @@
-Stamp candidate claims from the worker closeouts and run scan ledger below. This digest is not `record_finding` peer notes. Use the stamped threat model, not a generic checklist.
+Stamp candidate claims from the worker closeouts and run scan ledger below. This digest is not sibling notes. Use the stamped threat model, not a generic checklist.
 
 1. Merge overlapping material claims; skip informational `claim: model` facts. Each claim's `statement` names adversary, surface, and precondition; use only the fields the verdict shape lists.
 2. Account for the complete inventory through `scan_query` view `groups`, following every continuation at the same inventory revision. Samples do not assess omitted groups. Link assessed groups using `scan_group_ids`; keep inconclusive groups as unresolved candidate claims.

@@ -1,0 +1,3 @@
+steps:
+  - program: ["sed", "-n", "A,Bp", "FILE"]
+    say: "For files, inspect text with {{ call }} or a plain text search."

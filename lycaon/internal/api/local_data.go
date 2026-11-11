@@ -29,7 +29,9 @@ func (s *LocalData) localDataRegistry() (*localdata.Registry, error) {
 	if s.workerBranchRoot != "" {
 		deps := s.branchRetentionDeps()
 		reg.SetWorkerBranches(
-			func(ctx context.Context) (bool, int64, error) { return branchretention.Inventory(ctx, deps.BranchRoot) },
+			func(ctx context.Context) (localdata.WorkerBranches, error) {
+				return branchretention.Inventory(ctx, deps.BranchRoot)
+			},
 			func(ctx context.Context) error {
 				_, err := branchretention.ReclaimSealed(ctx, deps)
 				return err
@@ -86,6 +88,7 @@ func (s *LocalData) handleGetLocalData(w http.ResponseWriter, r *http.Request) {
 		if row.Bytes > 0 {
 			st.Bytes = row.Bytes
 		}
+		st.UnavailableEntries = row.Unavailable
 		out.Buckets = append(out.Buckets, st)
 	}
 	httpio.WriteJSON(w, http.StatusOK, out)

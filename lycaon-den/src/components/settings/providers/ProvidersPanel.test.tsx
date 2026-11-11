@@ -105,7 +105,6 @@ describe("ProvidersPanel configured actions", () => {
     expect(toolCalls.textContent).toBe(
       MODELS_SETTINGS_COPY.toolCallsUnknownNoModels,
     );
-    expect(toolCalls.textContent).not.toContain("can't make tool calls");
     expect(toolCalls.classList.contains("den-settings-warn")).toBe(false);
   });
 
@@ -127,7 +126,6 @@ describe("ProvidersPanel configured actions", () => {
     expect(support.textContent).toBe(discovery === "ok"
       ? MODELS_SETTINGS_COPY.toolCallsUnknownFilteredModels
       : MODELS_SETTINGS_COPY.toolCallsUnknownEmptyModels);
-    expect(support.textContent).not.toContain("No models have been listed");
   });
 
   it.each(["completed", "pending"] as const)("endpoint changes invalidate %s connection checks", async (timing) => {
@@ -228,6 +226,57 @@ describe("ProvidersPanel configured actions", () => {
       MODELS_SETTINGS_COPY.noToolCallsWarning,
     );
     expect(toolCalls.classList.contains("den-settings-warn")).toBe(true);
+  });
+
+  it("shows the provider as having an unknown window when no context_length is reported", async () => {
+    const localCompat: ProviderMeta = {
+      id: "openai-compatible",
+      kind: "openai-compatible",
+      label: "OpenAI-compatible",
+      base_url: "http://localhost:8080/v1",
+      configured: true,
+      ready_to_assign: true,
+      credential_present: false,
+      requires_api_key: false,
+      features: {
+        tool_calls: true,
+        thinking: true,
+        prompt_cache: "local_kv",
+      },
+      models: [providerModel("local-gguf")],
+    };
+    const settingsStore = createSettingsStore({ providers: [localCompat] });
+    const { getByTestId } = render(() => (
+      <ProvidersPanel
+        client={
+          {
+            listProviders: vi.fn().mockResolvedValue([localCompat]),
+            listProviderKinds: vi.fn().mockResolvedValue(kinds),
+            replaceProviderCredential: vi.fn(),
+            deleteProviderCredential: vi.fn(),
+            deleteProvider: vi.fn(),
+            testProvider: vi.fn(),
+            refreshProviderModels: vi.fn(),
+          } as never
+        }
+        settingsStore={settingsStore}
+        providers={[localCompat]}
+        onRemoveProvider={() => undefined}
+      />
+    ));
+
+    await waitFor(() => {
+      expect(getByTestId("providers-row-openai-compatible")).toBeTruthy();
+    });
+    fireEvent.click(getByTestId("providers-row-openai-compatible"));
+    await waitFor(() => {
+      expect(getByTestId("provider-context-window-openai-compatible")).toBeTruthy();
+    });
+    const windowHint = getByTestId("provider-context-window-openai-compatible");
+    expect(windowHint.getAttribute("data-context-window")).toBe("unknown");
+    expect(windowHint.textContent).toBe(
+      MODELS_SETTINGS_COPY.contextWindowUnknown,
+    );
   });
 
   it("points a rejected key at a new key rather than at the endpoint", async () => {

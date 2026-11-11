@@ -111,7 +111,7 @@ func TestOrdinaryWorkspacePreparationSuppliesEagerCopyFactsWithoutTestInjection(
 		"job-prod-eager",
 	)
 	testutil.FailErr(t, "CreateWorkerBranch", err)
-	t.Cleanup(func() { _ = wsMgr.DestroyWorkerWorkspace(binding) })
+	t.Cleanup(func() { _ = wsMgr.DestroyWorkerWorkspace(t.Context(), binding) })
 
 	// Construct production workerworkspace.Service and call EnsureTracker / ObserveReadWithFacts
 	// with ZERO test-only calls to BindViewCapabilities, BindVisibilityFacts, or SetViewCapabilitiesResolver.
@@ -213,7 +213,7 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 		"job-prod-nfs",
 	)
 	testutil.FailErr(t, "CreateWorkerBranch mounted", err)
-	t.Cleanup(func() { _ = wsMgr.DestroyWorkerWorkspace(binding) })
+	t.Cleanup(func() { _ = wsMgr.DestroyWorkerWorkspace(t.Context(), binding) })
 
 	// Construct production workerworkspace.Service and record observations WITHOUT any test-only capability injection.
 	svc := workerworkspace.New(nil, nil, nil)

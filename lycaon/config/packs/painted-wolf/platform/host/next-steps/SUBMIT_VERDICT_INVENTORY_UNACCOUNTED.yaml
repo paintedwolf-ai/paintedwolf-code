@@ -1,0 +1,5 @@
+steps:
+  - tool: "scan_query"
+    args:
+      view: "groups"
+    say: "Use {{ call }} only to read a group's findings."

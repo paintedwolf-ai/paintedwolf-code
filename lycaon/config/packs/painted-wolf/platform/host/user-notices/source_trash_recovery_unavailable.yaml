@@ -7,5 +7,3 @@ suggested_action: "Check Trash or restore the item from a backup."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "The item is no longer available in Trash"

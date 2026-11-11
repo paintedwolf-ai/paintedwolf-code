@@ -9,10 +9,10 @@
     "checks": [
       {
         "id": "cited_evidence",
-        "label": "Leg evidence citations",
+        "label": "Evidence citations",
         "status": "passed",
         "kind": "citation",
-        "summary": "1 citation(s) matched leg union ledger",
+        "summary": "1 citation(s) matched closeout evidence ledger",
         "matched": [
           "src/a.go:1 (\"package a\")"
         ]

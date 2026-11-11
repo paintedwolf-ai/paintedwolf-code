@@ -23,7 +23,21 @@ func emitProgressCompletion(
 	if store == nil || eventPub == nil || progressStore == nil || activeRun == nil {
 		return
 	}
-	content := progressStore.Get(ctx, sessionID)
+	emitProgressCompletionFromContent(ctx, store, eventPub, progressStore, activeRun, sessionID, progressStore.Get(ctx, sessionID))
+}
+
+func emitProgressCompletionFromContent(
+	ctx context.Context,
+	store *store.SQL,
+	eventPub *events.Publisher,
+	progressStore progress.RunScopedStore,
+	activeRun ActiveRunID,
+	sessionID string,
+	content string,
+) {
+	if store == nil || eventPub == nil || progressStore == nil || activeRun == nil {
+		return
+	}
 	reservation, ok := progress.ReserveCompletion(sessionID, progress.AllTerminal(content))
 	if !ok {
 		return

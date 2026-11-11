@@ -1,0 +1,23 @@
+{
+  "llama.cpp": {
+    "revision": "bc428e407a52bd3e21b5985cabeef57cdff9bc4a",
+    "url": "https://codeload.github.com/ggml-org/llama.cpp/tar.gz/bc428e407a52bd3e21b5985cabeef57cdff9bc4a",
+    "sha256": "83400f716b12981606c7068667fa593cff0718fd0938ed59f44d69f662f8d958",
+    "patches": [
+      {
+        "path": "llama-reference/cache-cursor.patch",
+        "sha256": "1993ec60d04f749934a746a508e15d107c99bf79825f61804d47d0322fe34389"
+      },
+      {
+        "path": "llama-reference/shared-kv-prefill.patch",
+        "sha256": "23157204a5be5960b91e2fc5a256c7c40b1841855a825b1cce70452ccf26556d"
+      }
+    ]
+  },
+  "mlx-lm": {
+    "revision": "736ab0d8c1d0edc79c3d798044fe6904e2fa23be"
+  },
+  "mlx-swift-lm": {
+    "revision": "128f49f1db38ea7b949f2ebb60967def8b76f58e"
+  }
+}

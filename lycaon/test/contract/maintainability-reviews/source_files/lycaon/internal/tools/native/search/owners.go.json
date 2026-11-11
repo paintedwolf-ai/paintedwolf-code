@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/search/owners.go",
+  "kind": "construction",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain the 325-line search owner assembly and invocation entry. Pin cleanup joins the existing per-call release boundary. Revision capture and persistence remain on their existing ports. Pending-pin and worker-cleanup contracts support this measured assembly.",
+  "reviewed_commit": "abd7258eca3ad0cdf084a28196481237096744cd",
+  "ceiling": 325,
+  "boundaries": {
+    "lycaon/internal/tools/native/search/pin_batch_test.go": "4248940afa736b42439d8cf3c1020c212a09e206f49aac2b91e664abdbd8e53b",
+    "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188"
+  }
+}

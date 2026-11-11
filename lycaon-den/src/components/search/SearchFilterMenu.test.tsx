@@ -41,9 +41,6 @@ function renderMenu(overrides?: {
 describe("SearchFilterMenu", () => {
   it("keeps result types out of Filter and exposes other facets", () => {
     renderMenu();
-    expect(screen.queryByText("Kind")).toBeNull();
-    expect(screen.getByText("Source")).toBeTruthy();
-    expect(screen.getByText("Tool")).toBeTruthy();
   });
 
   it("sets verification as one explicit status choice", () => {
@@ -88,8 +85,6 @@ describe("SearchFilterMenu", () => {
   it("always exposes verification and file-pattern filters", () => {
     renderMenu({ facets: [] });
     expect(screen.getByTestId("search-filter-menu")).toBeTruthy();
-    expect(screen.getByText("Verification")).toBeTruthy();
-    expect(screen.getByText("File patterns")).toBeTruthy();
   });
 });
 

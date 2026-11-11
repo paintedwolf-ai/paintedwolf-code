@@ -131,10 +131,10 @@ func (s *sequentialLLMClient) Stream(ctx context.Context, req modelcall.Completi
 			if strings.TrimSpace(completion.Content) != "" {
 				ch <- modelcall.StreamChunk{Content: completion.Content}
 			}
-			ch <- modelcall.StreamChunk{ToolCalls: completion.ToolCalls, Done: true}
+			ch <- modelcall.StreamChunk{ToolCalls: completion.ToolCalls, FinishReason: completion.FinishReason, Done: true}
 			return
 		}
-		ch <- modelcall.StreamChunk{Content: completion.Content, Done: true}
+		ch <- modelcall.StreamChunk{Content: completion.Content, FinishReason: completion.FinishReason, Done: true}
 	}()
 	return ch, nil
 }

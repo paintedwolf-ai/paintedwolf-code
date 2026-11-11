@@ -2,10 +2,12 @@ package anthropic
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
+	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -90,5 +92,55 @@ func TestAnthropicReplayRequiresMatchingProviderAndModel(t *testing.T) {
 	_, switched := ProjectMessages([]api.Message{message}, nil, false, "", "anthropic", "claude-sonnet-5")
 	if len(switched) != 1 || len(switched[0].Content) != 1 || switched[0].Content[0].Type != "text" {
 		t.Fatalf("model-switched replay = %+v", switched)
+	}
+}
+
+func TestAnthropicOmittedThinkingContinuationPreservesWireField(t *testing.T) {
+	withThinkingRules(t, []modelinfo.ThinkingRule{{
+		Match:              []string{"claude-opus-4-8"},
+		Style:              string(modelinfo.ThinkStyleAdaptive),
+		ContinuationPolicy: string(modelinfo.ContinuationPolicyRequireFields),
+	}})
+	streamBlocks := anthropicReasoningDetails(map[int]*ContentBlock{
+		0: {Type: "thinking", Thinking: "", Signature: "sig-stream"},
+		1: {Type: "redacted_thinking", Data: "redacted-payload"},
+	})
+	if len(streamBlocks) != 2 || !strings.Contains(string(streamBlocks[0]), `"thinking":""`) {
+		t.Fatalf("stream reasoning details = %s", streamBlocks)
+	}
+
+	p := New("anthropic", "https://api.anthropic.com/v1", "k", []modelinfo.Entry{{
+		ID: "claude-opus-4-8", ThinkStyle: string(modelinfo.ThinkStyleAdaptive),
+	}})
+	req := p.Prepare(modelcall.CompletionRequest{
+		Model: "claude-opus-4-8",
+		Think: modelcall.ThinkHigh,
+		Messages: []api.Message{
+			{Role: api.MessageRoleUser, Content: "inspect"},
+			{
+				Role:    api.MessageRoleAssistant,
+				Content: "checking",
+				ModelReasoning: &api.ModelReasoning{
+					ProviderID: "anthropic",
+					Model:      "claude-opus-4-8",
+					Details: []json.RawMessage{
+						json.RawMessage(`{"type":"thinking","signature":"sig-omitted"}`),
+						json.RawMessage(`{"type":"thinking","thinking":""}`),
+						streamBlocks[1],
+					},
+				},
+			},
+			{Role: api.MessageRoleUser, Content: "continue"},
+		},
+	}, false)
+	wire, err := surveyjson.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal request: %v", err)
+	}
+	if !strings.Contains(string(wire), `{"type":"thinking","signature":"sig-omitted","thinking":""}`) {
+		t.Fatalf("request wire missing required thinking field: %s", wire)
+	}
+	if strings.Count(string(wire), `"type":"thinking"`) != 1 {
+		t.Fatalf("unsigned thinking block was not dropped: %s", wire)
 	}
 }

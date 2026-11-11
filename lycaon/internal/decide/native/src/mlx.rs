@@ -1,9 +1,5 @@
-//! The decision model on MLX, the runtime for Apple silicon (`--device mlx`, what `auto`
-//! picks there). It mirrors the candle port in `modernbert.rs` and `model.rs` op for op, so a
-//! checkpoint answers the same on either runtime up to rounding; the parity test checks that.
-//!
-//! MLX's kernels live in `mlx.metallib`, found beside the executable or at the path
-//! [`set_metallib`] names.
+//! ModernBERT inference and decision heads on Apple silicon.
+//! The bundled Metal library supplies the MLX kernels.
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -15,10 +11,8 @@ use crate::model::{HEAD_LN_EPS, HeadShape, MASKED_OPTION_LOGIT, MASKED_SCORE, la
 use crate::modernbert::{Config, MASK_FILL};
 use crate::sequence::Batch;
 
-/// Freed GPU memory MLX may keep for reuse. Requests differ in batch size and sequence
-/// length, so freed buffers rarely fit the next allocation and an uncapped cache grows toward
-/// the device's working set.
-pub const CACHE_LIMIT_BYTES: usize = 512 << 20;
+/// Bound idle allocator storage alongside the generation model.
+pub const CACHE_LIMIT_BYTES: usize = 64 << 20;
 
 /// Tell MLX where its Metal library lives before the first kernel runs.
 pub fn set_metallib(path: &Path) -> Result<()> {
@@ -112,7 +106,7 @@ impl Attention {
         let q = parts[0].squeeze_axes(&[0])?;
         let k = parts[1].squeeze_axes(&[0])?;
         let v = parts[2].squeeze_axes(&[0])?;
-        // Non-interleaved rotation, as the candle port applies it.
+        // ModernBERT uses non-interleaved rotary pairs.
         let q = fast::rope(&q, self.head_dim, false, Some(self.rope_theta), 1.0, 0, None)?;
         let k = fast::rope(&k, self.head_dim, false, Some(self.rope_theta), 1.0, 0, None)?;
         let scale = (self.head_dim as f32).powf(-0.5);
@@ -215,8 +209,9 @@ impl Backbone {
 /// The exact (erf) GELU as plain ops: the crate's compiled GELU recompiles for every new
 /// input shape, and every turn has its own sequence length.
 fn gelu(x: &Array) -> Result<Array> {
-    let scaled = x.multiply(Array::from_f32(std::f32::consts::FRAC_1_SQRT_2))?;
-    let cdf = ops::erf(&scaled)?.add(Array::from_f32(1.0))?.multiply(Array::from_f32(0.5))?;
+    let scalar = |value| Array::from_f32(value).as_dtype(x.dtype());
+    let scaled = x.multiply(scalar(std::f32::consts::FRAC_1_SQRT_2)?)?;
+    let cdf = ops::erf(&scaled)?.add(scalar(1.0)?)?.multiply(scalar(0.5)?)?;
     Ok(x.multiply(&cdf)?)
 }
 
@@ -283,7 +278,7 @@ impl HeadLayer {
         let x = x.add(&out)?;
         let ff = self.linear2.forward(&ops::maximum(
             &self.linear1.forward(&self.norm2.forward(&x)?)?,
-            Array::from_f32(0.0),
+            Array::from_f32(0.0).as_dtype(x.dtype())?,
         )?)?;
         Ok(x.add(&ff)?)
     }
@@ -421,6 +416,42 @@ mod tests {
     use crate::device::DeviceChoice;
     use crate::engine::{Engine, EngineOptions, HEAD_CODE_RANK};
     use crate::testutil::{assert_agrees_with_cpu, scratch_dir, write_tiny_checkpoint, write_tiny_head};
+
+    #[test]
+    fn half_precision_graph_keeps_its_activation_dtype() {
+        use super::*;
+        let dir = scratch_dir("mlx-half");
+        write_tiny_checkpoint(&dir);
+        let config = crate::config::load_encoder_config(&dir.join("encoder/config.json")).unwrap();
+        let weights = Array::load_safetensors(dir.join("model.safetensors")).unwrap();
+        let model = Model::load(weights, &config, 1, Dtype::Float16, "tiny").unwrap();
+        let ids = Array::from_slice(&[1i32, 3, 10, 2, 0, 0], &[1, 6]);
+        let mask = Array::from_slice(&[1i32, 1, 1, 1, 0, 0], &[1, 6]);
+        let mut hidden = model.backbone.forward(&ids, &mask).unwrap();
+        assert_eq!(hidden.dtype(), Dtype::Float16);
+        let bias = padding_bias(&mask, MASKED_SCORE as f32, Dtype::Float16).unwrap();
+        for layer in &model.base.layers {
+            hidden = layer.forward(&hidden, &bias).unwrap();
+            assert_eq!(hidden.dtype(), Dtype::Float16);
+        }
+        hidden.eval().unwrap();
+        let values = hidden.as_dtype(Dtype::Float32).unwrap();
+        assert!(values.as_slice::<f32>().iter().all(|x| x.is_finite()));
+        let activation = gelu(&hidden).unwrap();
+        assert_eq!(activation.dtype(), Dtype::Float16);
+    }
+
+    #[test]
+    fn mlx_half_matches_cpu_reference() {
+        let dir = scratch_dir("mlx-half-parity");
+        write_tiny_checkpoint(&dir);
+        let head = write_tiny_head(&dir, "rank", "tiny");
+        let mlx = Engine::load(&EngineOptions {
+            model_dir: dir.to_path_buf(), device: DeviceChoice::Mlx, dtype: "f16".into(),
+            heads: vec![(HEAD_CODE_RANK.to_string(), head.clone())], ..Default::default()
+        }).unwrap();
+        assert_agrees_with_cpu(&dir, &head, &mlx, 4e-3);
+    }
 
     #[test]
     fn mlx_matches_the_cpu_on_the_same_checkpoint() {

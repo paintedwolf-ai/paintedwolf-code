@@ -188,6 +188,9 @@ func (c LanguageCatalog) CommandHelp(name string) (string, bool) {
 // DispositionReplaceRoutineSchema marks a tool whose routine use is a command form.
 const DispositionReplaceRoutineSchema = "replace-routine-schema"
 
+// DispositionToolAndCommandForm marks a callable tool that also has a command form.
+const DispositionToolAndCommandForm = "tool-and-command-form"
+
 // ReplacedRoutineSchemas maps each tool whose routine schema the language
 // replaces to the command form that replaces it.
 func (c LanguageCatalog) ReplacedRoutineSchemas() map[string]string {

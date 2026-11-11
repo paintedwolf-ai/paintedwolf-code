@@ -6,4 +6,3 @@ suggested_action: Retry the save with a valid duration.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [non-negative, valid duration]

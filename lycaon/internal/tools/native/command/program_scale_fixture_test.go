@@ -2,6 +2,7 @@ package command_test
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/programtest"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"os"
 	"path/filepath"
@@ -23,6 +24,7 @@ func checkProgramEntrySpillQuota(t *testing.T, programs int) {
 func checkProgramEntryLoopRetention(t *testing.T, items int) {
 	t.Helper()
 	f := newLoopFixture(t)
+	f.Runtime.Clock = programtest.NewManualClock()
 	data := strings.Repeat("item\n", items)
 	testutil.FailErr(t, "write loop input", os.WriteFile(filepath.Join(f.Dir, "items.txt"), []byte(data), 0o600))
 	for _, form := range []struct {

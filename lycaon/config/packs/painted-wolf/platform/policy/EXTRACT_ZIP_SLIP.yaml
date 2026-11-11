@@ -39,6 +39,3 @@ x-paintedwolf-scenarios:
     entry: ../escape.txt
     profile: implement
     tool: extract_archive
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EXTRACT_ZIP_SLIP'

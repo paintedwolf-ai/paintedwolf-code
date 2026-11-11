@@ -100,6 +100,16 @@ class WorkstreamTests(unittest.TestCase):
         current = {**old, **operations[0]['body']}
         duplicate = {**other, **operations[1]['body']}
         self.assertEqual(self.groups.plan([current, duplicate], self.artifacts(first, second), observation('f' * 40)), ([], 0))
+        preamble = ('Measured 1041; limit 600. [Evidence](https://github.com/owner/repo/actions/runs/1). '
+                    'Reduce this artifact along cohesive domain boundaries.\n\n')
+        footer = ('\n\nInitial consolidation preserves historical observations from the individual issues. '
+                  'Source links identify their recorded revisions; this migration does not claim a fresh measurement '
+                  'or completed refactor. Subsequent qualification snapshots reconcile current debt.\n')
+        stale = {**current, 'body': preamble + current['body'][len('Human notes\n'):-len('\nAfterword')] + footer}
+        cleaned, _ = self.groups.plan([stale, duplicate], self.artifacts(first, second), observation('f' * 40))
+        self.assertEqual([o['action'] for o in cleaned], ['update'])
+        self.assertTrue(cleaned[0]['body']['body'].startswith(self.groups.START))
+        self.assertTrue(cleaned[0]['body']['body'].endswith(issues.END))
 
     def test_partial_migration_replay_does_not_recreate_artifact_issues(self):
         first, second = row('pkg/a.go'), row('pkg/b.go')

@@ -17,6 +17,9 @@ import (
 
 // WriteInput is shared by retained structured write and native command adapters.
 type WriteInput struct {
+	// Operation names the form the write serves, as review rules and rejections
+	// know it; empty is a plain write.
+	Operation string
 	Path      string
 	Content   string
 	Append    bool
@@ -142,14 +145,14 @@ func (t *WriteTool) writeText(ctx context.Context, tctx tools.ToolContext, resol
 		}
 		proposed = *before + input.Content
 	}
-	if err := guardMutationContent("write", path, proposed); err != nil {
+	if err := guardMutationContent(input.operation(), path, proposed); err != nil {
 		return WriteResult{}, err
 	}
 	finalContent := proposed
 	reportTextIntent(tctx, resolved, st, before != nil, proposed)
 	if t.ContentApply != nil {
 		var err error
-		finalContent, err = t.ContentApply.GateApply(ctx, "write", path, before, proposed, tctx)
+		finalContent, err = t.ContentApply.GateApply(ctx, input.operation(), path, before, proposed, tctx)
 		if err != nil {
 			return WriteResult{}, err
 		}
@@ -157,7 +160,7 @@ func (t *WriteTool) writeText(ctx context.Context, tctx tools.ToolContext, resol
 			reportTextIntent(tctx, resolved, st, before != nil, finalContent)
 		}
 	}
-	if err := rejectIfSyntaxUnhealthy(ctx, "write", path, before, finalContent, mutationSeam{}); err != nil {
+	if err := rejectIfSyntaxUnhealthy(ctx, input.operation(), path, before, finalContent); err != nil {
 		return WriteResult{}, err
 	}
 	landed, err := land(finalContent)
@@ -170,6 +173,13 @@ func (t *WriteTool) writeText(ctx context.Context, tctx tools.ToolContext, resol
 		Accepted: true, Saved: !landed.editor || landed.saved, HeldVersionID: landed.heldVersionID,
 		PublicationError: landed.publicationError, Note: landed.note(),
 		DocumentID: landed.documentID, AcceptedRevision: landed.acceptedRevision, PublishedSHA256: landed.publishedSHA256}, nil
+}
+
+func (input WriteInput) operation() string {
+	if input.Operation != "" {
+		return input.Operation
+	}
+	return "write"
 }
 
 func unsupportedWriteAdmission() error {

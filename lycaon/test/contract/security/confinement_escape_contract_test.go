@@ -26,9 +26,16 @@ import (
 
 // Escape tests exercise applied profiles and live mediation.
 
-func requireSeatbeltEscape(t *testing.T) string {
+// requireLiveBoundary fails on Linux when confinement is missing, since the
+// capability report is the finding; Seatbelt tests stay out of short runs.
+func requireLiveBoundary(t *testing.T) string {
 	t.Helper()
-	if runtime.GOOS != "darwin" || testing.Short() || !confine.Available() {
+	if runtime.GOOS == "linux" {
+		if !confine.Available() {
+			caps, _ := confine.LinuxCapabilities()
+			t.Fatalf("linux confinement unavailable on this host: %+v", caps)
+		}
+	} else if runtime.GOOS != "darwin" || testing.Short() || !confine.Available() {
 		t.Skip("darwin + seatbelt sandbox required")
 	}
 	self, err := os.Executable()
@@ -59,7 +66,7 @@ func isProfileStagingCandidate(name string) bool {
 }
 
 func TestConfinementIntegrityConfigTokenUnreadable(t *testing.T) {
-	self := requireSeatbeltEscape(t)
+	self := requireLiveBoundary(t)
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
 	tokenPath := filepath.Join(cfg, "api.token")
@@ -88,7 +95,7 @@ func TestConfinementIntegrityConfigTokenUnreadable(t *testing.T) {
 }
 
 func TestConfinementIntegrityNoProfileStagingFile(t *testing.T) {
-	self := requireSeatbeltEscape(t)
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	c := confine.Confinement{Roots: []string{proj}}
 
@@ -128,7 +135,7 @@ func TestConfinementIntegrityNoProfileStagingFile(t *testing.T) {
 }
 
 func TestConfinementIntegrityLauncherUntamperable(t *testing.T) {
-	self := requireSeatbeltEscape(t)
+	self := requireLiveBoundary(t)
 	exe := self
 	if rp, err := filepath.EvalSymlinks(self); err == nil {
 		exe = rp
@@ -217,21 +224,33 @@ func TestConfinementIntegrityUnattributedProxy(t *testing.T) {
 	}
 }
 
-func TestConfinementIntegrityForeignVarFoldersWriteDenied(t *testing.T) {
-	self := requireSeatbeltEscape(t)
+// foreignTemporaryTree is a directory beside the write roots: another user's
+// /private/var/folders subtree on macOS, and on Linux, whose temporary roots are
+// shared by name, a directory in the runtime or home tree outside them.
+func foreignTemporaryTree(t *testing.T) string {
+	t.Helper()
+	parent, err := os.UserHomeDir()
+	testutil.FailErr(t, "resolve home", err)
+	if runtime.GOOS == "darwin" {
+		systemTmp, err := exec.Command("/usr/bin/getconf", "DARWIN_USER_TEMP_DIR").Output()
+		testutil.FailErr(t, "resolve system temporary directory", err)
+		parent = filepath.Dir(filepath.Dir(strings.TrimSpace(string(systemTmp))))
+	}
+	foreign, err := os.MkdirTemp(parent, "paintedwolf-escape-foreign-") //nolint:usetesting // Probe must be outside this process's temporary subtree.
+	testutil.FailErr(t, "create foreign temporary subtree", err)
+	t.Cleanup(func() { _ = os.RemoveAll(foreign) })
+	return foreign
+}
+
+func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	c := confine.Confinement{Roots: []string{proj}}
 
 	tmp := os.TempDir()
-	// Sibling temporary subtrees remain read-only.
-	systemTmp, err := exec.Command("/usr/bin/getconf", "DARWIN_USER_TEMP_DIR").Output()
-	testutil.FailErr(t, "resolve system temporary directory", err)
-	foreign, err := os.MkdirTemp(filepath.Dir(filepath.Dir(strings.TrimSpace(string(systemTmp)))), "paintedwolf-escape-foreign-") //nolint:usetesting // Probe must be outside this process's temporary subtree.
-	testutil.FailErr(t, "create foreign temporary subtree", err)
-	t.Cleanup(func() { _ = os.RemoveAll(foreign) })
-	probe := filepath.Join(foreign, "escape.txt")
+	probe := filepath.Join(foreignTemporaryTree(t), "escape.txt")
 	if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", probe); code == 0 {
-		t.Fatal("write under a foreign /private/var/folders subtree must be denied")
+		t.Fatal("write under a foreign temporary subtree must be denied")
 	}
 	assertInProjectWriteOK(t, self, c, proj)
 	ownTmp := filepath.Join(tmp, "lycaon-escape-f6-own.txt")
@@ -273,7 +292,7 @@ func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 
 func TestConfinementIntegrityCompositeChain(t *testing.T) {
 	t.Run("a_confined_cannot_read_api_token", func(t *testing.T) {
-		self := requireSeatbeltEscape(t)
+		self := requireLiveBoundary(t)
 		cfg := t.TempDir()
 		t.Setenv("LYCAON_CONFIG_DIR", cfg)
 		tokenPath := filepath.Join(cfg, "api.token")

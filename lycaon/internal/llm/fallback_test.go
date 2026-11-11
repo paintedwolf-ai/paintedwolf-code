@@ -73,7 +73,7 @@ func TestRoutingClientRegistryUnconfiguredProvider(t *testing.T) {
 	writeProvidersLocal(t, localPath, []byte(shipYAML))
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}
@@ -176,7 +176,7 @@ func TestConfiguredProviderEmptyResponseFails(t *testing.T) {
 	writeProvidersLocal(t, localPath, []byte(shipYAML))
 	catalog, err := NewProviderCatalogAt(localPath)
 	testutil.FailErr(t, "NewProviderCatalogAt failed", err)
-	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	registry, err := NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(NewModelSecretScreen(nil, nil))
 	}

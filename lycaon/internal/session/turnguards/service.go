@@ -2,6 +2,8 @@ package turnguards
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/toolreach"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
@@ -113,7 +115,24 @@ func (m *Service) SetWorkspaceCheck(check workercompletion.WorkspaceChangeChecke
 }
 func (m *Service) SetRepoProvider(provider repoinfo.Provider)     { m.repoProvider = provider }
 func (m *Service) SetToolMetadata(lister tools.ToolProfileLister) { m.toolLister = lister }
-func (m *Service) SetRules(rules toolpolicy.RuleEvaluator)        { m.rules = rules }
+
+// ProgramReach freezes a model turn's native programs. A failure reaches none,
+// because no answer is no evidence that a program can run.
+func (m *Service) ProgramReach(ctx context.Context, profileID, surfaceID string) toolreach.Programs {
+	source, ok := m.toolLister.(interface {
+		ProgramReach(context.Context, platform.ToolFilter) (toolreach.Programs, error)
+	})
+	if !ok {
+		return nil
+	}
+	programs, err := source.ProgramReach(ctx, platform.ToolFilter{ProfileID: profileID, SurfaceID: surfaceID})
+	if err != nil {
+		return nil
+	}
+	return programs
+}
+
+func (m *Service) SetRules(rules toolpolicy.RuleEvaluator) { m.rules = rules }
 func (m *Service) SetRejects(formatter *guidance.StaticRejectFormatter, toolFormatter *guidance.ToolRejectFormatter) {
 	m.Rejects = formatter
 	m.toolRejectFormatter = toolFormatter

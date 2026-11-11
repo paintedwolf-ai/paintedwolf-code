@@ -44,7 +44,7 @@ func TestHarnessToolsUsesRealCallsWithoutChangingEligibility(t *testing.T) {
 			for _, message := range req.Messages {
 				if message.Role == "tool" {
 					var result map[string]string
-					if err := json.Unmarshal([]byte(strings.TrimPrefix(strings.SplitN(message.Content, "\n", 2)[1], "⟦D⟧")), &result); err != nil {
+					if err := json.Unmarshal([]byte(strings.SplitN(message.Content, "\n", 2)[1]), &result); err != nil {
 						t.Errorf("decode tool receipt: %v", err)
 						return
 					}

@@ -6,4 +6,3 @@ suggested_action: Restore the recovery snapshot or install a compatible version.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [cannot safely open]

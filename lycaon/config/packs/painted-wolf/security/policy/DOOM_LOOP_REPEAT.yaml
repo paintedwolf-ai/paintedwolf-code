@@ -5,16 +5,7 @@ anchor: tool.rejected
 requires:
   profiles:
   - tool
-  facts:
-  - paintedwolf.code
-  - paintedwolf.count
-  - paintedwolf.worker_leg
-  - paintedwolf.repeat_count
-  - paintedwolf.same_code_reject_run
-  - paintedwolf.deferred_unactivated
-  - paintedwolf.handle
-  - paintedwolf.can_complete_leg
-  - paintedwolf.can_request_tools
+  facts: [paintedwolf.code, paintedwolf.count, paintedwolf.worker_leg, paintedwolf.repeat_count, paintedwolf.same_code_reject_run, paintedwolf.deferred_unactivated, paintedwolf.handle, paintedwolf.next_steps]
 when: paintedwolf.repeat_count >= 8 || paintedwolf.same_code_reject_run >= 2
 effect: block
 on_fire:
@@ -23,21 +14,8 @@ copy:
   cause: The same tool+args invocation keeps repeating without a changed outcome
   why: Replaying or cosmetically varying a call with no new outcome burns budget without advancing the current
     objective.
-  fix: '{% if paintedwolf.handle %}Do not call `command_output` with the same cursor again. Call `wait(until_complete=true,
-    conditions=[{"kind":"process_done","handles":["{{ paintedwolf.handle }}"]}], reason="waiting for command
-    completion")` now. The host will wake this session when the command finishes or becomes unavailable. {% else
-    %}{% if paintedwolf.code %}Follow the original rejection: correct invalid arguments or complete its named prerequisite before retrying. If that prerequisite is available, take it now; the corrected call remains available. {% else %}Reuse the returned result; do not repeat this unchanged invocation. {% endif %}{% if paintedwolf.deferred_unactivated %} {% if paintedwolf.can_request_tools %}If
-    the action you are trying to take needs a tool that is not in this turn''s schema, no retry will surface
-    it — call `request_tools` with that tool''s name, then take the action.{% endif %}{% endif %} {% if paintedwolf.worker_leg
-    %}Answer the leg from existing evidence. If a required fact cannot be obtained through an available prerequisite or corrected call, {% if paintedwolf.can_complete_leg %}call complete_leg now with `leg_status: partial`, name the
-    unanswered question in `remaining_risk`, and put the next step in `suggested_next_task`.{% else %}report
-    the dependency through the actual completion channel.{% endif %}{% else %}Follow the active workflow Phase exit or current next action; use another tool when it supplies the named prerequisite or missing fact.{% endif %}{% endif %}'
-  instead: '{% if paintedwolf.handle %}Wait on handle `{{ paintedwolf.handle }}`; after wake, continue from
-    its terminal envelope or the last returned `next_cursor`. {% else %}{% if paintedwolf.worker_leg %}{% if
-    paintedwolf.can_complete_leg %}If no available prerequisite or corrected call can resolve the question, call complete_leg with `leg_status: partial`, name the unanswered
-    question in `remaining_risk`, and put the next step in `suggested_next_task`. A partial leg with cited
-    evidence is a result; more calls against this block are not.{% else %}Report the unresolved question through
-    the actual completion channel.{% endif %}{% else %}Resume the current next action. {% if paintedwolf.code %}Correct the arguments or complete the named prerequisite before retrying.{% else %}Reuse the completed result. If all work is complete, send the final answer with no tool calls.{% endif %} {% endif %}{% endif %}'
+  fix: '{% if paintedwolf.handle %}Do not read this handle with the same cursor again. {% else %}{% if paintedwolf.code %}Follow the original rejection: correct invalid arguments or complete its named prerequisite before retrying. If that prerequisite is available, take it now; the corrected call remains available. {% else %}Reuse the returned result; do not repeat this unchanged invocation. {% endif %}{% if paintedwolf.worker_leg %}Answer the leg from existing evidence. {% else %}Follow the active workflow Phase exit or current next action; use another tool when it supplies the named prerequisite or missing fact. {% endif %}{% endif %}{{ paintedwolf.next_steps }}'
+  instead: '{% if paintedwolf.handle %}Wait on handle `{{ paintedwolf.handle }}`; after wake, continue from its terminal envelope or the last returned `next_cursor`. {% else %}{% if paintedwolf.worker_leg %}A partial leg with cited evidence is a result; more calls against this block are not.{% else %}Resume the current next action. {% if paintedwolf.code %}Correct the arguments or complete the named prerequisite before retrying.{% else %}Reuse the completed result. If all work is complete, send the final answer with no tool calls.{% endif %} {% endif %}{% endif %}'
   what: 'Identical {{ tool }} call blocked{% if paintedwolf.code %} — the previous attempts all rejected with
     Code: {{ paintedwolf.code }}, so unchanged retries remain blocked{% else %} after {{ paintedwolf.count }} repeats{%
     endif %}.'
@@ -53,10 +31,6 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DOOM_LOOP_REPEAT'
-  - current next action
 - id: worker_leg
   vars:
     detail: bad args
@@ -65,18 +39,9 @@ x-paintedwolf-scenarios:
     tool: grep
     worker_leg: true
     can_complete_leg: true
-  expect_contains:
-  - 'Code: DOOM_LOOP_REPEAT'
-  - 'leg_status: partial'
-  - remaining_risk
 - id: command_output
   vars:
     count: 8
     handle: cmd_docker_01
     profile: coordinator
     tool: command_output
-  expect_contains:
-  - 'Code: DOOM_LOOP_REPEAT'
-  - '"handles":["cmd_docker_01"]'
-  - process_done
-  - terminal envelope

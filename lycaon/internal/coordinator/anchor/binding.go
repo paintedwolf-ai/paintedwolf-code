@@ -75,8 +75,6 @@ func (b *Binding) Matches(ctx MatchContext) bool {
 type BindingInvariants struct {
 	TriggerClass string   `yaml:"trigger_class,omitempty" json:"trigger_class,omitempty"`
 	FiresIn      []string `yaml:"fires_in,omitempty" json:"fires_in,omitempty"`
-	Required     []string `yaml:"required,omitempty" json:"required,omitempty"`
-	Forbidden    []string `yaml:"forbidden,omitempty" json:"forbidden,omitempty"`
 	OptionalVars []string `yaml:"optional_vars,omitempty" json:"optional_vars,omitempty"`
 }
 

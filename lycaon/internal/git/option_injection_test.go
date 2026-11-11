@@ -1,6 +1,7 @@
 package git
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,28 +15,29 @@ import (
 // optionInjectionRepo builds a one-commit repository for the injection cases.
 func optionInjectionRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	initCmd := exec.CommandContext(t.Context(), "git", "init", dir)
-	initCmd.Env = lyexec.LocalGitEnv()
-	if out, err := initCmd.CombinedOutput(); err != nil {
-		t.Skipf("git init: %v %s", err, out)
-	}
-	run := func(args ...string) {
-		t.Helper()
-		cmd := exec.CommandContext(t.Context(), "git", append([]string{"-C", dir}, args...)...)
-		cmd.Env = lyexec.LocalGitEnv()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("git %v: %v %s", args, err, out)
+	return CloneFixtureRepo(t, "option-injection", func(dir string) {
+		initCmd := exec.CommandContext(context.Background(), "git", "init", dir)
+		initCmd.Env = lyexec.LocalGitEnv()
+		if out, err := initCmd.CombinedOutput(); err != nil {
+			t.Fatalf("git init: %v %s", err, out)
 		}
-	}
-	testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("one\n"), 0o600))
-	run("add", "-A")
-	run("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-m", "seed")
-	return dir
+		run := func(args ...string) {
+			t.Helper()
+			cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
+			cmd.Env = lyexec.LocalGitEnv()
+			if out, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("git %v: %v %s", args, err, out)
+			}
+		}
+		testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(dir, "tracked.txt"), []byte("one\n"), 0o600))
+		run("add", "-A")
+		run("-c", "user.email=t@example.com", "-c", "user.name=t", "commit", "-m", "seed")
+	})
 }
 
 // Option-shaped refs are rejected and isolated from command options.
 func TestRefArgsCannotBecomeOptions(t *testing.T) {
+	t.Parallel()
 	dir := optionInjectionRepo(t)
 	mgr := NewManager()
 	sentinel := filepath.Join(t.TempDir(), "written-by-git")
@@ -49,6 +51,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	}
 
 	t.Run("show ref", func(t *testing.T) {
+		t.Parallel()
 		_, err := mgr.Show(t.Context(), dir, GitShowOpts{Ref: payload})
 		if err == nil {
 			t.Fatal("Show accepted an option-shaped ref")
@@ -57,6 +60,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	})
 
 	t.Run("show blob ref", func(t *testing.T) {
+		t.Parallel()
 		_, err := mgr.Show(t.Context(), dir, GitShowOpts{Ref: payload, Path: "tracked.txt"})
 		if err == nil {
 			t.Fatal("Show accepted an option-shaped ref for a blob")
@@ -65,6 +69,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	})
 
 	t.Run("rev-parse ref", func(t *testing.T) {
+		t.Parallel()
 		_, err := mgr.RevParse(t.Context(), dir, []string{payload})
 		if err == nil {
 			t.Fatal("RevParse accepted an option-shaped ref")
@@ -73,6 +78,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	})
 
 	t.Run("checkout branch", func(t *testing.T) {
+		t.Parallel()
 		err := mgr.Checkout(t.Context(), dir, payload)
 		if err == nil {
 			t.Fatal("Checkout accepted an option-shaped branch")
@@ -81,6 +87,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 	})
 
 	t.Run("diff base ref", func(t *testing.T) {
+		t.Parallel()
 		_, err := mgr.DiffFromRef(t.Context(), dir, payload, "tracked.txt")
 		if err == nil {
 			t.Fatal("DiffFromRef accepted an option-shaped base ref")
@@ -91,6 +98,7 @@ func TestRefArgsCannotBecomeOptions(t *testing.T) {
 
 // Branch selection treats filenames as refs, preserving working changes.
 func TestCheckoutDoesNotRestorePaths(t *testing.T) {
+	t.Parallel()
 	dir := optionInjectionRepo(t)
 	mgr := NewManager()
 

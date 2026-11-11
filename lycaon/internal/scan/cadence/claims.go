@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
+	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -52,6 +53,12 @@ func (b claimBook) claimDueSeries(ctx context.Context, canonical string) ([]scan
 			if err := planner.retireLocked(ctx, row, now); err != nil {
 				return nil, err
 			}
+			continue
+		}
+		if _, err := refreshAvailabilityLocked(ctx, b.c, row); err != nil {
+			return nil, err
+		}
+		if row.Unavailable() {
 			continue
 		}
 		if row.DispatchToken != "" && now.Sub(row.ClaimHeartbeatAt) >= scanbase.DispatchClaimTTL {
@@ -184,6 +191,8 @@ func (b claimBook) finishDispatch(ctx context.Context, claimed scanbase.SeriesRo
 	}
 	now := nowUTC(b.c)
 	releaseClaim(row)
+	row.ConsecutiveFailures = 0
+	row.ClearUnavailable()
 	row.LastStartedAt = now
 	row.ActiveScanID = record.ID
 	planner.rearmHeldDesireLocked(row)
@@ -207,6 +216,11 @@ func (b claimBook) finishDispatch(ctx context.Context, claimed scanbase.SeriesRo
 // Retry changed-file work; release members from a pass that started without them.
 func (b claimBook) releaseUndispatched(ctx context.Context, canonical string, row scanbase.SeriesRow, cause error) {
 	dispatcher := rootDispatcher(b)
+	if fault, ok := scancatalog.AsConfigFault(cause); ok {
+		dispatcher.logDispatch(ctx, "unavailable", canonical, []scanbase.SeriesRow{row}, cause, "reason", string(fault.Reason))
+		markUnavailableDispatch(ctx, b.c, row, fault)
+		return
+	}
 	if row.DispatchPassID == "" {
 		dispatcher.logDispatch(ctx, "requeued", canonical, []scanbase.SeriesRow{row}, cause)
 		b.requeueDispatch(ctx, row)
@@ -247,11 +261,13 @@ func (b claimBook) requeueDispatch(ctx context.Context, claimed scanbase.SeriesR
 	cfg := cadenceCfg(b.c)
 	holdDispatchedDesire(row)
 	releaseClaim(row)
+	row.ConsecutiveFailures++
+	delay := dispatchBackoff(cfg, row.ConsecutiveFailures)
 	if row.DirtySinceAt.IsZero() {
 		row.DirtySinceAt = now
 	}
-	row.DueAt = now.Add(cfg.WriteBurstSettle())
-	row.MaxDueAt = row.DirtySinceAt.Add(cfg.MaxDefer())
+	row.DueAt = now.Add(delay)
+	row.MaxDueAt = maxTime(row.DirtySinceAt.Add(cfg.MaxDefer()), row.DueAt)
 	row.UpdatedAt = now
 	if err := b.c.Store.UpsertSeries(ctx, *row); err != nil {
 		slog.WarnContext(ctx, "requeue scan series dispatch", "scanner_id", row.ScannerID, "error", err)

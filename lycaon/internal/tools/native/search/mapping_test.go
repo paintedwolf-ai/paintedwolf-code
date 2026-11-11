@@ -61,3 +61,28 @@ func TestPrintedRecordsMapToTheirCaptures(t *testing.T) {
 		}
 	}
 }
+
+// A mapping carries the line number printed beside it, the fact that lets its record
+// state a coordinate. Without -n nothing was printed.
+func TestMappingsCarryThePrintedLineNumber(t *testing.T) {
+	h := newHarness(t, grepTree)
+	for _, c := range []struct {
+		argv []string
+		want []int64
+	}{
+		{[]string{"grep", "-n", "alpha", "a.txt"}, []int64{2, 6}},
+		{[]string{"grep", "-no", "alpha", "a.txt"}, []int64{2, 6}},
+		{[]string{"rg", "-n", "alpha", "a.txt"}, []int64{2, 6}},
+		{[]string{"grep", "alpha", "a.txt"}, []int64{0, 0}},
+	} {
+		_, mappings := h.execMapped(c.argv...)
+		if len(mappings) != len(c.want) {
+			t.Fatalf("%v: mappings %+v", c.argv, mappings)
+		}
+		for i, m := range mappings {
+			if m.PrintedLine != c.want[i] {
+				t.Fatalf("%v mapping %d printed %d, want %d", c.argv, i, m.PrintedLine, c.want[i])
+			}
+		}
+	}
+}

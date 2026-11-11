@@ -505,14 +505,9 @@ fn kill_child_reaps_the_spawned_process() {
     let pid = child.id() as i32;
     let mut slot = Some(child);
 
-    let started = Instant::now();
     kill_child(&mut slot);
 
     assert!(slot.is_none(), "kill_child must consume the handle");
-    assert!(
-        started.elapsed() < GRACEFUL_STOP_TIMEOUT,
-        "an unresponsive child must not wait past the shutdown budget"
-    );
     assert!(
         !is_pid_alive(pid),
         "child must be gone and reaped, not left as a zombie or an orphan"

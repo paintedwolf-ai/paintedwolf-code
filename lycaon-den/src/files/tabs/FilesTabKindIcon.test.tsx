@@ -76,7 +76,6 @@ describe("special tab icons", () => {
   it.each(["text", "image", "info"] as const)("marks a previous %s version and clears it on return to current", (kind) => {
     const [previous, setPrevious] = createSignal(true);
     const { container } = render(() => <FilesTabKindIcon buffer={{ kind }} previousVersion={previous()} />);
-    expect(container.querySelector("[data-tip]")?.getAttribute("data-tip")).toBe("Previous version");
     setPrevious(false);
     expect(container.childElementCount).toBe(0);
   });

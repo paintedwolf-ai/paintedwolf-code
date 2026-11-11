@@ -98,7 +98,7 @@ func (r *Renderer) renderOne(ctx context.Context, stage Stage, d Decision) (Rend
 		default:
 			return rd, fmt.Errorf("unknown effect %q", d.Effect)
 		}
-		text, err := guidance.RenderPolicyCopy(ctx, d.Code, string(d.Effect), d.Copy)
+		text, err := guidance.RenderPolicyCopy(ctx, d.Code, string(d.Effect), d.Copy, d.Data)
 		rd.Text = text
 		return rd, err
 	}

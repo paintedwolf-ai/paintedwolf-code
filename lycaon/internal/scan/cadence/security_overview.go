@@ -25,6 +25,7 @@ func buildSecurityOverview(ctx context.Context, c *Service, projectDir string, l
 	if err != nil {
 		return out, err
 	}
+	reconcileUnavailable(ctx, c)
 	series, err := c.Store.ListSeriesForPath(ctx, canonical)
 	if err != nil {
 		return out, err
@@ -75,6 +76,9 @@ func buildSecurityOverview(ctx context.Context, c *Service, projectDir string, l
 				baselineID = row.LastCoveredSnapshotID
 			}
 			applySeriesReadiness(&state, row, execution)
+			if !state.Available {
+				execution = ""
+			}
 		}
 		state.LastFullAt = lastFullAt(passes, meta.ID)
 		out.Scanners = append(out.Scanners, state)
@@ -107,6 +111,12 @@ func buildSecurityOverview(ctx context.Context, c *Service, projectDir string, l
 // applySeriesReadiness compares covered and current execution identities.
 func applySeriesReadiness(state *api.SecurityScannerState, row scanbase.SeriesRow, currentExecution string) {
 	state.Watching = true
+	if row.Unavailable() {
+		state.Available = false
+		if state.Unavailable == "" {
+			state.Unavailable = row.UnavailableDetail
+		}
+	}
 	if !row.LastCompletedAt.IsZero() {
 		at := row.LastCompletedAt
 		state.LastCompletedAt = &at

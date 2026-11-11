@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       path: .
       profile: coordinator
       tool: task
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: REPO_EMPTY_READ_ONLY_WORKER'

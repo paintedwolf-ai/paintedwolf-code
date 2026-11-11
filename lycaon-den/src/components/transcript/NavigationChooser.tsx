@@ -37,7 +37,7 @@ export function NavigationChooser(props: {
     const root = props.roots?.find((item) => item.id === target.root_id);
     return `${root?.label ? `@${root.label}/` : `${target.root_id}/`}${target.path}${target.worker_id ? ` (worker ${target.worker_id})` : ""}`;
   };
-  return <AnchoredSurface ref={(element) => { surface = element; }} tabIndex={-1} chrome anchor={() => props.anchor} role="dialog" ariaLabel={props.action === "reveal" ? "Reveal in tree" : "File navigation"} class="den-menu-surface flex w-[min(32rem,calc(100vw-2rem))] flex-col text-den-body text-den-text" onDismiss={props.onDismiss} dismissOnEscape>
+  return <AnchoredSurface ref={(element) => { surface = element; }} tabIndex={-1} chrome anchor={() => props.anchor} role="dialog" testId="navigation-chooser" ariaLabel={props.action === "reveal" ? "Reveal in tree" : "File navigation"} class="den-menu-surface flex w-[min(32rem,calc(100vw-2rem))] flex-col text-den-body text-den-text" onDismiss={props.onDismiss} dismissOnEscape>
     <p class="m-0 px-den-4 py-den-3 text-den-text-muted" role="status">{props.error ?? (props.busy ? "Looking for this file…" : props.reference ? statusCopy[props.reference.status] : "File lookup is unavailable.")}</p>
     <Show when={(props.reference?.candidates?.length ?? 0) > 5}>
       <div class="px-den-3 pb-den-2">

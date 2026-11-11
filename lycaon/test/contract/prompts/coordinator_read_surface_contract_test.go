@@ -75,7 +75,7 @@ func TestCoordinatorProfileToolsIncludeCommandDiscovery(t *testing.T) {
 	exec := toolfixture.ContractToolExecutor(t)
 	names := toolfixture.SortedToolNames(context.Background(), exec.Metadata, "coordinator")
 	// Profile grant; the turn surface gates invoke.
-	for _, want := range []string{"command", "survey_repo"} {
+	for _, want := range []string{"command"} {
 		if !slices.Contains(names, want) {
 			t.Fatalf("coordinator profile schema must include %q; got %v", want, names)
 		}

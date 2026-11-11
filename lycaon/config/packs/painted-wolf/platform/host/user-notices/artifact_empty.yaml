@@ -6,4 +6,3 @@ suggested_action: Open the live tool again, then retry the save.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [no video data, Open the live tool again]

@@ -1,49 +1,57 @@
 package oar
 
-import "sync"
+import (
+	"github.com/lycaon/lycaon/internal/toolcontract"
+	"sync"
+)
 
 type InvocationFacts struct {
-	Tool                  string
-	ToolArgs              map[string]any
-	ToolArgsFingerprint   string
-	ToolAllowedForProfile bool
-	PatternParseOK        bool
-	ArgValidationErrors   []string
-	ArgValidationReason   string
-	ArgValidationField    string
-	ToolIsState           bool
-	ToolIsDelegation      bool
-	ToolIsTask            bool
-	ToolPayloadChunkable  bool
-	ToolIsHandoff         bool
-	PackRunnerTask        bool
-	CommandNotArgv        bool
-	HTTPRequestWebPage    bool
+	CapabilityContract              *toolcontract.ToolCapabilitySnapshot
+	Tool                            string
+	ToolArgs                        map[string]any
+	ToolArgsFingerprint             string
+	PatternParseOK                  bool
+	ArgValidationErrors             []string
+	ArgValidationReason             string
+	ArgValidationField              string
+	ToolIsState                     bool
+	ToolIsDelegation                bool
+	ToolIsTask                      bool
+	ToolPayloadChunkable            bool
+	ToolIsHandoff                   bool
+	CommandNotArgv                  bool
+	HTTPRequestWebPage              bool
+	HTTPRequestLoopbackOtherSession bool
 }
 
 type SessionFacts struct {
-	ToolTurnHasText      bool
-	ToolTurnHasAgentNote bool
-	SurfaceNoteOffered   bool
-	LastAssistant        string
-	TurnTools            []string
-	ProjectID            string
-	SessionID            string
-	SessionPosture       string
-	Surface              string
-	Profile              string
-	Phase                string
-	WorkerLeg            bool
-	SurfaceMayFinish     bool
-	IsHostCycleTurn      bool
-	CloseoutSurface      bool
-	PendingUserInput     bool
-	StubValid            bool
-	PermissionProfile    string
-	Principal            string
-	PrincipalRoles       []string
-	PostureUnresolved    bool
-	RecentToolNames      []string
+	// UnpublishedToolTextPending holds a carrier's text with no later note this intent.
+	UnpublishedToolTextPending bool
+	// MidTurnEvidenceUnreadable means the host failed to read evidence, so pending
+	// text was never judged and no citation of its is at fault.
+	MidTurnEvidenceUnreadable bool
+	// MidTurnCitationsRequired holds once this intent has citable observations.
+	MidTurnCitationsRequired bool
+	// MidTurnCitationAttempted holds when the latest unpublished text tried to cite.
+	MidTurnCitationAttempted bool
+	LastAssistant            string
+	TurnTools                []string
+	ProjectID                string
+	SessionID                string
+	SessionPosture           string
+	Surface                  string
+	Profile                  string
+	Phase                    string
+	WorkerLeg                bool
+	SurfaceMayFinish         bool
+	IsHostCycleTurn          bool
+	CloseoutSurface          bool
+	PendingUserInput         bool
+	StubValid                bool
+	PermissionProfile        string
+	Principal                string
+	PrincipalRoles           []string
+	RecentToolNames          []string
 }
 
 type ProgressFacts struct {
@@ -55,7 +63,8 @@ type ProgressFacts struct {
 	ProgressMissing              bool
 	ProgressClosedBeyondBaseline bool
 	ProgressReconciledSinceArm   bool
-	HasCompletionReport          bool
+	CloseoutHasAnswer            bool
+	CloseoutOnlyRepairDirectives bool
 	TaskEnvelopeEcho             bool
 	VerifyRequired               bool
 	VerifierPass                 bool
@@ -68,14 +77,12 @@ type WorkflowFacts struct {
 	BatchClosed                  bool
 	SynthesisWrapupToolForbidden bool
 	ReviewLoopActive             bool
-	PlanAwaitingApproval         bool
 	BatchReadyIgnoringProgress   bool
 	SynthesisDelayCount          int64
 	ReviewVerdictGateOpen        bool
 	VerdictDelayCount            int64
 	CloseoutGatesOpen            bool
 	CloseoutGateOpenLeaves       string
-	CloseoutGateDelayCount       int64
 	WorkflowReportPhasePending   bool
 	PhaseObligationPending       bool
 	PhaseObligationKinds         string
@@ -86,7 +93,6 @@ type WorkersFacts struct {
 	WorkerSpawnBlocked      bool
 	ActiveWorkerCount       int64
 	PendingOverlayPromote   bool
-	OverlayState            string
 	PathIsWorkerBranch      bool
 	WorkerAttemptedMutation bool
 	ScopeMode               string
@@ -102,23 +108,17 @@ type WorkersFacts struct {
 	MaxWriteWorkers         int64
 	AgentIsScout            bool
 	AgentIsImplementer      bool
-	AgentIsPlanWriter       bool
-	DisallowedAgent         bool
 }
 
 type GroundingFacts struct {
 	UnobservedCitedPaths       []string
 	UnobservedCitedURLs        []string
 	UnobservedCitedHandles     []string
-	CitationFieldsPresent      bool
 	ClaimsCompletion           bool
 	HasMatchingLedgerJob       bool
-	LedgerCriteriaMet          bool
 	WorkerSummaryPresent       bool
 	WorkerArtifactPresent      bool
 	WorkerArtifactMeasured     bool
-	FilesTouched               []string
-	SummaryLength              int64
 	CitationUnverifiable       bool
 	ScoutSurveyEvidencePresent bool
 	SurfaceClaimUngrounded     bool
@@ -131,32 +131,27 @@ type GroundingFacts struct {
 }
 
 type ExecutionFacts struct {
-	ConfineApplied  bool
-	NetworkMode     string
-	DenialSubject   string
-	ConfineSignals  []string
-	FailedStages    []string
-	ProcessRunning  bool
-	ProcessTimedOut bool
-	ProcessStopped  bool
-	ProcessExited   bool
-	SandboxRefusals []string
-	ModeBits        string
+	ConfineApplied bool
+	NetworkMode    string
+	DenialSubject  string
+	ConfineSignals []string
+	FailedStages   []string
+	ProcessRunning bool
 }
 
 type RefusalsFacts struct {
-	RefusedWritePaths         []string
-	RefusedWriteGrants        []string
-	RefusedReadPaths          []string
-	RefusedReadGrants         []string
-	RefusedTerminalReadPaths  []string
-	RefusedTerminalWritePaths []string
-	SandboxRefusalWitness     string
-	RefusedSocketPaths        []string
-	RefusedConnectPorts       []string
-	RefusedListenPorts        []string
-	RefusedSignals            []string
-	UnsandboxedRefusals       []string
+	RefusedWritePaths           []string
+	RefusedWriteGrants          []string
+	RefusedReadPaths            []string
+	RefusedReadGrants           []string
+	RefusedCredentialStorePaths []string
+	RefusedTerminalReadPaths    []string
+	RefusedTerminalWritePaths   []string
+	RefusedSocketPaths          []string
+	RefusedConnectPorts         []string
+	RefusedListenPorts          []string
+	RefusedSignals              []string
+	UnsandboxedRefusals         []string
 }
 
 type SourceFacts struct {
@@ -164,19 +159,16 @@ type SourceFacts struct {
 	WorktreeLeftoverPaths     []string
 	WorktreeConflictPaths     []string
 	EditorConfigMismatch      bool
+	GitNoRepositoryOnWriteLeg bool
 	SourceAnalysisUnavailable bool
 	SyntaxCheckOverridden     bool
-	SourceIncludes            map[string]bool
 }
 
 type AccessFacts struct {
 	WriteRoots                []string
 	PathOutsideScope          bool
 	PathOutsideScopeByTool    map[string]bool
-	ActionHostResources       []string
 	ActionHostResourceDenials []string
-	HostResourceStatus        map[string]string
-	HostResourcePolicy        map[string]string
 }
 
 type ContentFacts struct {

@@ -39,7 +39,7 @@ func (r *RegistrySummarizer) Curate(ctx context.Context, snapshot evidence.Ledge
 	}
 
 	total := countSnapshotCandidates(snapshot)
-	p, model, err := r.liteProvider()
+	p, model, err := r.liteProvider(ctx)
 	if err != nil || p == nil {
 		out := emptyCurationResult(total, true)
 		r.storeCuratorCache(key, out)
@@ -239,7 +239,8 @@ func resolveSelections(projectDir string, snapshot evidence.Ledger, triples []ev
 			continue
 		}
 		res := evidence.Resolve(evidence.CitationRoots{ProjectDir: projectDir}, triple, snapshot, "")
-		if res.Verdict != evidence.VerdictMatched {
+		// A triple with no excerpt is traced at best; Materialize holds it to observed lines.
+		if res.Verdict != evidence.VerdictMatched && (res.Verdict != evidence.VerdictTraced || strings.TrimSpace(triple.Excerpt) != "") {
 			dropped++
 			continue
 		}

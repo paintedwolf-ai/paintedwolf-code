@@ -306,7 +306,7 @@ func dedupeQueryGuidance(in []api.ScanGuidanceSummary) []api.ScanGuidanceSummary
 
 // queryIntroducedSince loads the set, stamps history, and keeps the findings
 // the series first observed at or after the requested time.
-func (s *SQLStore) queryIntroducedSince(ctx context.Context, scan *api.CodeScan, req QueryRequest) (*api.ScanQueryResponse, error) {
+func (s *sqlFindingStore) queryIntroducedSince(ctx context.Context, scan *api.CodeScan, req QueryRequest) (*api.ScanQueryResponse, error) {
 	findings, err := loadFindingEntries(ctx, s.queries, scan.FindingSetID)
 	if err != nil {
 		return nil, err
@@ -326,7 +326,7 @@ func (s *SQLStore) queryIntroducedSince(ctx context.Context, scan *api.CodeScan,
 
 // attachFixedSince adds the findings the series fixed at or after the
 // requested time, under the same filters as the page.
-func (s *SQLStore) attachFixedSince(ctx context.Context, scan *api.CodeScan, req QueryRequest, out *api.ScanQueryResponse) (*api.ScanQueryResponse, error) {
+func (s *sqlFindingStore) attachFixedSince(ctx context.Context, scan *api.CodeScan, req QueryRequest, out *api.ScanQueryResponse) (*api.ScanQueryResponse, error) {
 	if req.FixedSince == nil || out == nil {
 		return out, nil
 	}

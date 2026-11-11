@@ -44,6 +44,8 @@ type Store struct {
 	writeCount  atomic.Uint64
 	maintenance chan struct{}
 	checkpoint  chan struct{}
+	// maintenanceState is in-memory progress; a restart begins its counters anew.
+	maintenanceState maintenanceState
 	// integrityAuditDue covers unclean shutdowns and unfinished audits.
 	integrityAuditDue bool
 }
@@ -128,7 +130,10 @@ func (s *Store) BeginReadTx(ctx context.Context) (*sql.Tx, error) {
 	return s.reader.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
 }
 
-const maintenanceWriteStride = 512
+const (
+	maintenanceWriteStride  = 512
+	maintenanceTurnMaxTicks = 10
+)
 
 func (s *Store) noteWrite() {
 	if s.writeCount.Add(1)%maintenanceWriteStride == 0 {

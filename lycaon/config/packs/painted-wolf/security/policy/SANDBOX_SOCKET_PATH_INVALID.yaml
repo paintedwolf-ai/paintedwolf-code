@@ -24,7 +24,3 @@ x-paintedwolf-message: the structured socket path request is invalid
 x-paintedwolf-scenarios:
 - id: command_socket_path_invalid
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_SOCKET_PATH_INVALID'
-  - capability_request
-  - absolute

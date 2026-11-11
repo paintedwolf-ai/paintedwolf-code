@@ -13,7 +13,9 @@ func DraftRecoverySignal(draftID, signalID string) string {
 	return draftRecoverySignalPrefix + draftID + ":" + signalID
 }
 
-func draftRecoveryTarget(message Message) string {
+// DraftRecoveryTarget returns the draft message ID targeted by a draft-recovery
+// host guidance row, or empty when message is not a draft-recovery signal.
+func DraftRecoveryTarget(message Message) string {
 	if message.Role != MessageRoleUser || message.Origin != MessageOriginHost ||
 		message.Authority != ContentAuthoritySystem || message.Visibility != MessageVisibilityInternal ||
 		message.Kind != MessageKindCoordinatorGuidance {
@@ -28,6 +30,10 @@ func draftRecoveryTarget(message Message) string {
 		return ""
 	}
 	return id
+}
+
+func draftRecoveryTarget(message Message) string {
+	return DraftRecoveryTarget(message)
 }
 
 // orderDraftRecovery restores causal order without moving immutable transcript rows.

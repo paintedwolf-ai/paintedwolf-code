@@ -12,6 +12,9 @@ import {
   rememberSessionChatFromStore,
   restoreCachedSessionChat,
 } from "./session-chat-cache.ts";
+import { toSessionChatSnapshot, trimSnapshotForPersist } from "./session-chat-persist.ts";
+import { applyMessageEvent } from "../transcript/projection/message-events.ts";
+import { advanceTranscriptAnnouncement } from "../transcript/presentation/transcript-live-announcement.ts";
 import type { SessionChatSnapshot } from "./session-chat-snapshot.ts";
 
 const demoSession: Session = {
@@ -210,5 +213,78 @@ describe("session-chat-cache", () => {
     expect(getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" })).toBeUndefined();
     expect(getSessionChatCache({ projectId: "proj-2", sessionId: "sess-a" })).toBeUndefined();
     expect(getSessionChatCache({ projectId: "proj-1", sessionId: "sess-b" })).toBeDefined();
+  });
+
+  it("applyMessageEvent refreshes the cached session snapshot when an assistant reply commits", () => {
+    const store = createAppStore();
+    store.actions.setCurrentSession(demoSession);
+    store.actions.installTranscriptBaseline(
+      "sess-a",
+      [
+        {
+          id: "u1",
+          role: "user",
+          origin: "user",
+          authority: "user",
+          trust_tier: "trusted",
+          content: "hello",
+          created_at: "t",
+          seq: 1,
+        },
+      ],
+      1,
+    );
+    rememberSessionChatFromStore(store);
+
+    applyMessageEvent(store, {
+      session_id: "sess-a",
+      op: "append",
+      seq: 2,
+      message: {
+        id: "a1",
+        role: "assistant",
+        origin: "model",
+        authority: "none",
+        trust_tier: "trusted",
+        content: "Part",
+        status: "streaming",
+        created_at: "t2",
+        seq: 2,
+      },
+    });
+    expect(
+      getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" })?.messages.map(
+        (m) => m.id,
+      ),
+    ).toEqual(["u1"]);
+
+    applyMessageEvent(store, {
+      session_id: "sess-a",
+      op: "patch",
+      seq: 3,
+      message: {
+        id: "a1",
+        role: "assistant",
+        origin: "model",
+        authority: "none",
+        trust_tier: "trusted",
+        content: "Completed answer",
+        status: "complete",
+        created_at: "t2",
+        seq: 3,
+      },
+    });
+    const cached = getSessionChatCache({ projectId: "proj-1", sessionId: "sess-a" });
+    expect(cached?.messages.map((m) => m.id)).toEqual(["u1", "a1"]);
+    expect(cached?.messages[1]?.content).toBe("Completed answer");
+
+    const restored = toSessionChatSnapshot(trimSnapshotForPersist(cached!));
+    expect(restored).not.toBeNull();
+    const initial = advanceTranscriptAnnouncement(
+      undefined,
+      "sess-a",
+      restored!.messages,
+    );
+    expect(initial.announcement).toBeUndefined();
   });
 });

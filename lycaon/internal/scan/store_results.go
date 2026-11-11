@@ -13,7 +13,7 @@ import (
 )
 
 // SaveIngest persists bounded guidance and the normalized ingest record.
-func (s *SQLStore) SaveIngest(ctx context.Context, id string, rec evidence.Record) error {
+func (s *sqlFindingStore) SaveIngest(ctx context.Context, id string, rec evidence.Record) error {
 	guidanceJSON, ingestJSON, err := marshalIngest(rec)
 	if err != nil {
 		return err
@@ -31,7 +31,7 @@ func (s *SQLStore) SaveIngest(ctx context.Context, id string, rec evidence.Recor
 }
 
 // LoadPaths reads paths_json for a scan id.
-func (s *SQLStore) LoadPaths(ctx context.Context, id string) ([]string, error) {
+func (s *sqlFindingStore) LoadPaths(ctx context.Context, id string) ([]string, error) {
 	pathsJSON, err := s.queries.GetScanPathsJSON(ctx, id)
 	if db.IsNoRows(err) {
 		return nil, nil

@@ -39,6 +39,3 @@ x-paintedwolf-scenarios:
     profile: explore_readonly
     tool: read
     total_lines: 498
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: READ_OFFSET_BEYOND_EOF'

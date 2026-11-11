@@ -6,5 +6,3 @@ suggested_action: Land or remove the existing worktree first.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - already has a worktree

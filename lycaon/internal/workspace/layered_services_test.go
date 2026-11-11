@@ -59,7 +59,7 @@ func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 	binding, _, err := manager.CreateWorkerBranch(t.Context(), roots, "primary", "job-custody")
 	testutil.FailErr(t, "create workspace", err)
 
-	err = manager.DestroyWorkerWorkspace(binding)
+	err = manager.DestroyWorkerWorkspace(t.Context(), binding)
 	if !errors.Is(err, claim.ErrSettlementUnresolved) {
 		t.Fatalf("destroy = %v, want unresolved settlement", err)
 	}
@@ -77,7 +77,7 @@ func TestFailedSettlementKeepsTheBranchAndItsMetadataInCustody(t *testing.T) {
 	}
 
 	failing = false
-	testutil.FailErr(t, "retry destroy", manager.DestroyWorkerWorkspace(binding))
+	testutil.FailErr(t, "retry destroy", manager.DestroyWorkerWorkspace(t.Context(), binding))
 	if _, statErr := os.Stat(binding.Root); !errors.Is(statErr, fs.ErrNotExist) {
 		t.Fatalf("settled destroy kept the branch root: %v", statErr)
 	}
@@ -91,7 +91,7 @@ func TestRebuildRefusesABranchHoldingALiveView(t *testing.T) {
 	roots := singleRoot(t)
 	binding, _, err := manager.CreateWorkerBranch(t.Context(), roots, "primary", "job-live")
 	testutil.FailErr(t, "create workspace", err)
-	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(binding) })
+	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })
 
 	// The same source and job name the same branch; a label change alone defeats the layout match.
 	relabeled := append([]projectroot.RootRef(nil), roots...)
@@ -123,7 +123,7 @@ func TestMaterializedRootsAreManagedGitViewsForThePrimaryWorker(t *testing.T) {
 	manager := workspace.NewManager(branches).WithPrivateGit(privateGit)
 	binding, _, err := manager.CreateWorkerWorkspaceFromSources(t.Context(), roots, roots, "p", "job-roots")
 	testutil.FailErr(t, "create workspace", err)
-	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(binding) })
+	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })
 
 	worktree, finish, managed, err := privategit.PrepareManagerViewOperation(t.Context(), privateGit, binding.Root, "job-roots")
 	testutil.FailErr(t, "prepare from the branch", err)
@@ -163,7 +163,7 @@ func TestDestroyKeepsTheBranchWhenAViewDoesNotRelease(t *testing.T) {
 			manager := workspace.NewManager(branches)
 			binding := &workspace.Binding{ID: "job-kept", Root: root, Adapter: adp, View: &adapter.PreparedView{ViewID: "view-kept"}}
 
-			if err := manager.DestroyWorkerWorkspace(binding); err == nil {
+			if err := manager.DestroyWorkerWorkspace(t.Context(), binding); err == nil {
 				t.Fatal("destroy ignored the failed release")
 			}
 			if _, err := os.Stat(keep); err != nil {
@@ -180,7 +180,7 @@ func TestDestroyTreatsAViewTheAdapterNoLongerHoldsAsReleased(t *testing.T) {
 	binding := &workspace.Binding{ID: "job-gone", Root: root, Adapter: refusingAdapter{
 		err: &adapter.AdapterError{AdapterID: adapter.AdapterEagerCopy, Op: "release", ReasonCode: adapter.ReasonViewNotFound},
 	}, View: &adapter.PreparedView{ViewID: "view-gone"}}
-	testutil.FailErr(t, "destroy", workspace.NewManager(branches).DestroyWorkerWorkspace(binding))
+	testutil.FailErr(t, "destroy", workspace.NewManager(branches).DestroyWorkerWorkspace(t.Context(), binding))
 	if _, err := os.Stat(root); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("branch remains: %v", err)
 	}

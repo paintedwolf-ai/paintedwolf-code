@@ -146,41 +146,18 @@ func TestReopenedRootAndWriteDeniedPristineVerdicts(t *testing.T) {
 	}
 }
 
-// A placement folder holds as the state folder does: closed, with its worker base left to a worker
-// that owns a branch there, and never a write root by itself.
-func TestPlacementFolderIsCoveredLikeTheStateFolder(t *testing.T) {
-	base, err := filepath.EvalSymlinks(t.TempDir())
-	testutil.FailErr(t, "resolve", err)
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(base, "state"))
-	placement := filepath.Join(base, "volume", ".paintedwolf")
-	branch := filepath.Join(placement, "worker-branches", "project", "job")
-	testutil.FailErr(t, "mkdir", os.MkdirAll(branch, 0o700))
-	testutil.FailErr(t, "mkdir state", os.MkdirAll(filepath.Join(base, "state"), 0o700))
-	confine.SetPlacementFolders(func() []string { return []string{placement} })
-	t.Cleanup(func() { confine.SetPlacementFolders(nil) })
-
-	if !confine.ControlPlaneTree(filepath.Join(placement, "registry")) {
-		t.Fatal("the placement folder is not control plane")
-	}
-	if confine.ControlPlaneTree(branch) {
-		t.Fatal("a placed branch is not a workspace")
-	}
-	if refused, code := confine.AttachedWriteRootRefused(branch); refused {
-		t.Fatalf("a placed branch was refused: %s", code)
-	}
-	if refused, _ := confine.AttachedWriteRootRefused(filepath.Join(placement, "registry")); !refused {
-		t.Fatal("a write root in the placement folder was admitted")
-	}
-	if refused, code := confine.AttachedWriteRootRefused(filepath.Dir(placement)); !refused || code != confine.WriteRootCodeContainsState {
-		t.Fatalf("a root holding the placement folder: refused=%v code=%s", refused, code)
-	}
-	rules := confine.BoundaryOf(&confine.Confinement{Roots: []string{branch}, ReadRoots: []string{branch}}).Filesystem
-	inside := filepath.Join(branch, "f")
+// A worker can use its own placed branch, and the placement folder around it stays out of reach.
+func TestPlacedBranchVerdictsMatchTheStateFolder(t *testing.T) {
+	f := newPlacementGrantFixture(t)
+	rules := confine.BoundaryOf(&confine.Confinement{Roots: []string{f.branch}, ReadRoots: []string{f.branch}}).Filesystem
+	inside := filepath.Join(f.branch, "f")
 	if !rules.Verdict(confine.AccessRead, inside).Allowed || !rules.Verdict(confine.AccessWrite, inside).Allowed {
 		t.Fatal("a worker could not use its own placed branch")
 	}
-	registry := filepath.Join(placement, "registry")
-	if rules.Verdict(confine.AccessRead, registry).Allowed || rules.Verdict(confine.AccessWrite, registry).Allowed {
+	if rules.Verdict(confine.AccessRead, f.marker).Allowed || rules.Verdict(confine.AccessWrite, f.marker).Allowed {
 		t.Fatal("the placement folder is reachable")
+	}
+	if refused, _ := confine.AttachedWriteRootRefused(f.folder); !refused {
+		t.Fatal("a write root at the placement folder was admitted")
 	}
 }

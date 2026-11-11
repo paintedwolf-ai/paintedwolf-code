@@ -2,6 +2,7 @@ package bgprocess
 
 import (
 	"context"
+	"errors"
 )
 
 // sessionDrain retains the physical jobs after their public handles disappear.
@@ -21,7 +22,9 @@ func (r *processTable) beginDrainLocked(sessionID string) *sessionDrain {
 		return nil
 	}
 	delete(r.sessions, sessionID)
-	for _, proc := range procs {
+	for handle, proc := range procs {
+		r.unindexProjectProcessLocked(proc)
+		delete(r.workDirs, handle)
 		proc.discarded = true
 	}
 	drain := &sessionDrain{procs: procs, done: make(chan struct{})}
@@ -77,7 +80,7 @@ func (proc *Process) pendingDrainLocked() bool {
 
 // DisposeSession hides handles, closes admission and joins their physical drain.
 // A canceled wait leaves the same drain owned for retry until every job settles.
-func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string) error {
+func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string, reason TerminationReason) error {
 	if r == nil {
 		return nil
 	}
@@ -87,7 +90,12 @@ func (r *ProcessLifecycle) DisposeSession(ctx context.Context, sessionID string)
 	if drain == nil {
 		return nil
 	}
-	return r.settleDrains(ctx, []*sessionDrain{drain})
+	if reason == "" {
+		reason = TerminationReasonFromContext(ctx, TerminationChatDeleted)
+	}
+	err := r.settleDrains(ctx, []*sessionDrain{drain}, reason)
+	r.sweeper.onJobEnded()
+	return err
 }
 
 // Close permanently closes admission; every retry joins any remaining drains.
@@ -107,13 +115,14 @@ func (r *ProcessLifecycle) Close(ctx context.Context) error {
 		drains = append(drains, drain)
 	}
 	r.jobs.mu.Unlock()
-	return r.settleDrains(ctx, drains)
+	r.sweeper.close()
+	return r.settleDrains(ctx, drains, TerminationAppQuit)
 }
 
-func (r *ProcessLifecycle) settleDrains(ctx context.Context, drains []*sessionDrain) error {
+func (r *ProcessLifecycle) settleDrains(ctx context.Context, drains []*sessionDrain, reason TerminationReason) error {
 	for _, drain := range drains {
 		for _, proc := range drain.procs {
-			r.killProcess(proc)
+			r.killProcess(proc, reason)
 		}
 	}
 	for _, drain := range drains {
@@ -124,4 +133,27 @@ func (r *ProcessLifecycle) settleDrains(ctx context.Context, drains []*sessionDr
 		}
 	}
 	return nil
+}
+
+// failStart settles an admitted job that never acquired a child. A concurrent
+// teardown may already have hidden it, so it still owes physical completion.
+func (r *processTable) failStart(proc *Process, cause error) error {
+	r.mu.Lock()
+	reason := proc.reason
+	proc.running, proc.hasExit, proc.exitCode = false, true, -1
+	close(proc.done)
+	r.mu.Unlock()
+	if proc.screen != nil {
+		proc.screen.Close()
+	}
+	r.remove(proc.SessionID, proc.Handle)
+	switch reason {
+	case TerminationAppQuit:
+		return errors.Join(ErrRegistryClosed, cause)
+	case TerminationChatDeleted, TerminationProjectDeleted, TerminationRootDetached,
+		TerminationWorkerCompleted, TerminationWorkerCancelled:
+		return errors.Join(ErrTeardownInProgress, cause)
+	default:
+		return cause
+	}
 }

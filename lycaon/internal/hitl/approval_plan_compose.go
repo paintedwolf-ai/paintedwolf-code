@@ -102,6 +102,7 @@ func combinedCapabilityQuiet(plans []*ApprovalPlan, combined []ApprovalOption) [
 }
 
 func mergeCapabilityPresentation(out *ApprovalPresentation, in ApprovalPresentation) {
+	out.Lead = joinCapabilityCopy(out.Lead, in.Lead)
 	out.Impact = joinCapabilityCopy(out.Impact, in.Impact)
 	out.Who = joinCapabilityCopy(out.Who, in.Who)
 	out.IfWrong = joinCapabilityCopy(out.IfWrong, in.IfWrong)
@@ -180,7 +181,7 @@ func (p ApprovalPlan) OptionContinues(option ApprovalOption) bool {
 	}
 	for _, delta := range option.Authority {
 		switch p.Subject.Kind {
-		case ApprovalSubjectAction, ApprovalSubjectDestinationSet, ApprovalSubjectSecret, ApprovalSubjectPackageSet, ApprovalSubjectProcessControl, ApprovalSubjectHostExecution:
+		case ApprovalSubjectAction, ApprovalSubjectDestinationSet, ApprovalSubjectSecret, ApprovalSubjectPackageSet, ApprovalSubjectProcessControl, ApprovalSubjectCredentialStore, ApprovalSubjectHostExecution:
 			if delta.Kind == AuthorityCurrentAction || delta.Kind == AuthorityGenericGrant {
 				return true
 			}

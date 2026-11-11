@@ -78,7 +78,7 @@ func TestCompleteRequestFitsColdOllamaWindowWithoutChangingFrame(t *testing.T) {
 	cfg := compaction.DefaultCompactionConfig()
 	cfg.ModelContextWindow = 12288
 	history := &Service{store: mem, Compactor: compaction.NewSimpleCompactor(cfg, nil), recallAvailable: func(context.Context, *api.Session) bool { return true }}
-	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider})
+	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider}, nil)
 	testutil.FailErr(t, "fit complete request", err)
 	payload, _, err := provider.Prepare(t.Context(), fitted, true)
 	testutil.FailErr(t, "prepare fitted native request", err)
@@ -116,7 +116,7 @@ func (b catalogRequestBudgets) RequestBudget(ctx context.Context, _ string, req 
 
 func TestRequestFittingKeepsUnchangedHistoryCacheBoundary(t *testing.T) {
 	rows := []api.Message{
-		{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "go"},
+		{ID: "u1", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "go"},
 		{ID: "a1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "read"}}},
 		{ID: "t1", Role: api.MessageRoleTool, Content: "result", PromptCacheBreakpoint: api.PromptCacheTierHistory,
 			ToolResult: &api.ToolResult{ToolCallID: "c1", Tool: "read", Content: "result"}},
@@ -125,7 +125,7 @@ func TestRequestFittingKeepsUnchangedHistoryCacheBoundary(t *testing.T) {
 	req := modelcall.CompletionRequest{Model: "large", Messages: append([]api.Message{frame}, rows...)}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "large", ContextLength: 1_000_000}})}
 	history := &Service{}
-	fitted, err := history.FitRequest(t.Context(), &api.Session{ID: "s", Model: "large"}, rows, req, budgets)
+	fitted, err := history.FitRequest(t.Context(), &api.Session{ID: "s", Model: "large"}, rows, req, budgets, nil)
 	testutil.FailErr(t, "fit large-window request", err)
 	if !reflect.DeepEqual(req, fitted) {
 		t.Fatal("an admitted frame changed its cache boundary or history")
@@ -134,7 +134,7 @@ func TestRequestFittingKeepsUnchangedHistoryCacheBoundary(t *testing.T) {
 
 func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
 	provider := ollama.New("local", "http://unused.invalid", "", []modelinfo.Entry{{ID: "small", ContextLength: 16384, MaxTokens: 24576}})
-	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue"}
+	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Continue"}
 	req := modelcall.CompletionRequest{Model: "small", Messages: []api.Message{{ID: "standing", Role: api.MessageRoleSystem}, current}}
 	low, high := 1, 70000
 	for low < high {
@@ -155,18 +155,18 @@ func TestRequestFittingUsesRemainingOutputAfterHistoryIsMinimal(t *testing.T) {
 		t.Fatalf("fixture skipped usable output allocation: %d", available)
 	}
 	history := &Service{}
-	fitted, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider})
+	fitted, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider}, nil)
 	testutil.FailErr(t, "fit minimal history", err)
 	if fitted.MaxTokens != available || len(fitted.Messages) != 2 || !reflect.DeepEqual(req.Messages[0], fitted.Messages[0]) || fitted.Messages[1].Content != current.Content {
 		t.Fatalf("minimal history fit changed input or output allocation: %d, want %d", fitted.MaxTokens, available)
 	}
 	req.MaxTokens = 512
-	if _, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider}); !errors.Is(err, failure.ErrProviderContextTooSmall) {
+	if _, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider}, nil); !errors.Is(err, failure.ErrProviderContextTooSmall) {
 		t.Fatalf("explicit output allocation must remain required: %v", err)
 	}
 	req.MaxTokens = 0
 	req.ThinkingOverride = &modelcall.ThinkingOverride{BudgetTokens: new(1024)}
-	if _, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider}); !errors.Is(err, failure.ErrProviderContextTooSmall) {
+	if _, err := history.FitRequest(t.Context(), &api.Session{ID: "session", ProviderID: "local", Model: "small"}, []api.Message{current}, req, nativeRequestBudgets{provider}, nil); !errors.Is(err, failure.ErrProviderContextTooSmall) {
 		t.Fatalf("human thinking allocation must remain required: %v", err)
 	}
 }
@@ -177,7 +177,7 @@ func TestEveryRequestAdoptsPublishedHistoryProjection(t *testing.T) {
 	testutil.FailErr(t, "create session", err)
 	testutil.FailErr(t, "append original history", mem.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "old", Role: api.MessageRoleAssistant, Content: "Original detail"},
-		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue"}))
+		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Continue"}))
 	canonical, err := mem.GetMessages(t.Context(), sess.ID)
 	testutil.FailErr(t, "read original history", err)
 	summary := api.Message{ID: "summary", Role: api.MessageRoleAssistant, Content: "Recorded continuation",
@@ -189,7 +189,7 @@ func TestEveryRequestAdoptsPublishedHistoryProjection(t *testing.T) {
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "large", ContextLength: 1_000_000}})}
 	for range 2 {
 		req := modelcall.CompletionRequest{Model: "large", Messages: canonical}
-		fitted, err := history.FitRequest(t.Context(), sess, canonical, req, budgets)
+		fitted, err := history.FitRequest(t.Context(), sess, canonical, req, budgets, nil)
 		testutil.FailErr(t, "fit refreshed request", err)
 		if len(fitted.Messages) != 2 || fitted.Messages[0].ID != summary.ID || fitted.Messages[1].ID != "current" || sess.CompactionGeneration != 1 {
 			t.Fatal("request lost its published continuation after canonical history refresh")
@@ -212,7 +212,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	recallBody := strings.Repeat("Recovered page. ", 200)
 	testutil.FailErr(t, "append active exchange", mem.AppendMessages(t.Context(), sess.ID,
 		api.Message{ID: "earlier", Role: api.MessageRoleAssistant, Content: strings.Repeat("Earlier work. ", 120)},
-		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Read the observations"},
+		api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Read the observations"},
 		api.Message{ID: "call", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read", Args: args}}},
 		api.Message{ID: "result", Role: api.MessageRoleTool, Content: body, TrustTier: api.ContentTrustTierTrusted,
 			ContentParts: []api.MessageContentPart{{Content: body, TrustTier: api.ContentTrustTierUntrusted}},
@@ -225,7 +225,7 @@ func TestActiveToolBodyCanBecomeARecoverableProjection(t *testing.T) {
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 1400)}
 	req := modelcall.CompletionRequest{Model: sess.Model, Messages: append([]api.Message{standing}, rows...)}
 	history := &Service{store: mem, recallAvailable: func(context.Context, *api.Session) bool { return true }}
-	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider})
+	fitted, err := history.FitRequest(t.Context(), sess, rows, req, nativeRequestBudgets{provider}, nil)
 	testutil.FailErr(t, "fit active observation", err)
 	_, _, err = provider.Prepare(t.Context(), fitted, true)
 	testutil.FailErr(t, "prepare projected active observation", err)
@@ -323,7 +323,7 @@ func TestReviewFittingHonorsProviderHeadroom(t *testing.T) {
 	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: []api.Message{{ID: "standing", Role: api.MessageRoleSystem, Content: strings.Repeat("frame ", 1800)}}}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 4096}})}
 	svc := &Service{}
-	fitted, err := svc.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, nil, req, budgets)
+	fitted, err := svc.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, nil, req, budgets, nil)
 	if err != nil {
 		t.Logf("correctly refused required frame: %v", err)
 		return
@@ -335,7 +335,7 @@ func TestReviewFittingHonorsProviderHeadroom(t *testing.T) {
 }
 
 func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
-	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: strings.Repeat("Measured input. ", 600)}
+	current := api.Message{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: strings.Repeat("Measured input. ", 600)}
 	rows := []api.Message{current}
 	req := modelcall.CompletionRequest{Model: "small", Messages: rows}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
@@ -343,7 +343,7 @@ func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 	sess := &api.Session{ID: "observed", Model: "small"}
 	estimate := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows))
 	service.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, estimate*2, estimate)
-	fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets)
+	fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets, nil)
 	testutil.FailErr(t, "fit observed input usage", err)
 	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
 	observed := service.Calibration(t.Context(), sess).ProjectBilled(compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(fitted.Messages)), 0)
@@ -355,7 +355,7 @@ func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 		t.Fatal("output allocation changed the active instruction or was not bounded")
 	}
 	req.MaxTokens = 4096
-	if _, err := service.FitRequest(t.Context(), sess, rows, req, budgets); !errors.Is(err, failure.ErrProviderContextTooSmall) {
+	if _, err := service.FitRequest(t.Context(), sess, rows, req, budgets, nil); !errors.Is(err, failure.ErrProviderContextTooSmall) {
 		t.Fatalf("explicit output must not overcommit observed input: %v", err)
 	}
 }
@@ -363,7 +363,7 @@ func TestRequestFittingReservesObservedInputUsage(t *testing.T) {
 func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
 	body := strings.Repeat("Recorded observation. ", 1000)
 	rows := []api.Message{
-		{ID: "intent", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Inspect the observations"},
+		{ID: "intent", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Inspect the observations"},
 		{ID: "call", Ord: 2, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "read-call", Name: "read"}}},
 		{ID: "result", Ord: 3, Role: api.MessageRoleTool, Content: body, PromptCacheBreakpoint: api.PromptCacheTierHistory,
 			ToolResult: &api.ToolResult{ToolCallID: "read-call", Tool: "read", Content: body}},
@@ -376,7 +376,7 @@ func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
 	initialTranscript := compaction.EstimateMessagesTokens(compaction.ContextMessagesFromAPI(rows[:1]))
 	toolTokens := modelcall.EstimateRequestInput(modelcall.CompletionRequest{Tools: toolDefs})
 	service.ObserveTokens(sess.ID, sess.ProviderID, sess.Model, initialTranscript+toolTokens, initialTranscript)
-	fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets)
+	fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets, nil)
 	testutil.FailErr(t, "allocate output around complete observations", err)
 	if !reflect.DeepEqual(rows, fitted.Messages) || fitted.MaxTokens <= 0 {
 		t.Fatal("automatic output reservation or tool-schema calibration displaced a tool body that fits")
@@ -388,7 +388,7 @@ func TestRequestFittingKeepsToolBodyWhenOutputCanYield(t *testing.T) {
 }
 
 func TestRequestFittingDiscardsOtherReceiverCalibration(t *testing.T) {
-	rows := []api.Message{{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Continue the task"}}
+	rows := []api.Message{{ID: "current", Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Continue the task"}}
 	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: rows}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 4096}})}
 	for _, receiver := range []struct{ name, providerID, model string }{
@@ -406,7 +406,7 @@ func TestRequestFittingDiscardsOtherReceiverCalibration(t *testing.T) {
 			if service.Calibration(t.Context(), sess).Calibrated() {
 				t.Fatal("receiver switch reused incompatible input usage")
 			}
-			fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets)
+			fitted, err := service.FitRequest(t.Context(), sess, rows, req, budgets, nil)
 			testutil.FailErr(t, "fit new receiver without old token ratio", err)
 			if !reflect.DeepEqual(fitted.Messages, rows) || fitted.MaxTokens != 512 {
 				t.Fatal("receiver switch unnecessarily changed the request")
@@ -423,7 +423,7 @@ func TestRequestFittingCanProjectRecallBelowSixteenKilobytes(t *testing.T) {
 		t.Fatal("fixture must exercise the medium recall size")
 	}
 	rows := []api.Message{
-		{ID: "current", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, Content: "Recover the original observation"},
+		{ID: "current", Ord: 1, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Recover the original observation"},
 		{ID: "call", Ord: 2, Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "recall-call", Name: "recall"}}},
 		{ID: "result", Ord: 3, Role: api.MessageRoleTool, Content: string(raw), ToolResult: &api.ToolResult{ToolCallID: "recall-call", Tool: "recall", Content: string(raw)}},
 	}
@@ -431,7 +431,7 @@ func TestRequestFittingCanProjectRecallBelowSixteenKilobytes(t *testing.T) {
 	req := modelcall.CompletionRequest{Model: "small", MaxTokens: 512, Messages: append([]api.Message{frame}, rows...)}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
 	service := &Service{store: store.NewMemory(), recallAvailable: func(context.Context, *api.Session) bool { return true }}
-	fitted, err := service.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, rows, req, budgets)
+	fitted, err := service.FitRequest(t.Context(), &api.Session{ID: "s", Model: "small"}, rows, req, budgets, nil)
 	testutil.FailErr(t, "fit medium recall around required frame", err)
 	budget := budgets.RequestBudget(t.Context(), "fixture", fitted)
 	if budget.Input+budget.Output+budget.Headroom > budget.Window {
@@ -448,5 +448,34 @@ func TestRequestFittingCanProjectRecallBelowSixteenKilobytes(t *testing.T) {
 	}
 	if rows[2].Content != string(raw) || rows[2].ToolResult.Content != string(raw) {
 		t.Fatal("request fitting changed the recorded observation")
+	}
+}
+
+func TestRequestProjectionReplaceKeepsTrailingFrameAfterOpenerFirstAndMovedCoverage(t *testing.T) {
+	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, Content: "Standing instructions"}
+	chk := api.Message{ID: "chk", Role: api.MessageRoleUser, CompactionCheckpoint: true, Origin: api.MessageOriginHost}
+	sum := api.Message{ID: "sum", Role: api.MessageRoleAssistant, Content: "Summary",
+		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "Summary"}}}
+	brief := api.Message{ID: "host-source-changes-u2", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Source brief"}
+	u2 := api.Message{ID: "u2", Ord: 10, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Current turn"}
+	a2 := api.Message{ID: "a2", Ord: 40, Role: api.MessageRoleAssistant, Content: "Working reply"}
+	execState := api.Message{ID: "exec-state", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "<execution_state>"}
+	toolProc := api.Message{ID: "tool-proc", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Tool procedure"}
+
+	messages := []api.Message{standing, chk, sum, brief, u2, a2, execState, toolProc}
+	initialHistory := []api.Message{chk, sum, u2, a2}
+	proj := projectRequest(messages, initialHistory)
+
+	notice := api.Message{ID: historyCoverageNoticeID, Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Coverage notice"}
+	reorderedHistory := []api.Message{u2, chk, sum, notice, a2}
+	replaced := proj.replace(reorderedHistory)
+
+	wantIDs := []string{"standing", "host-source-changes-u2", "u2", "chk", "sum", historyCoverageNoticeID, "a2", "exec-state", "tool-proc"}
+	gotIDs := make([]string, 0, len(replaced))
+	for _, m := range replaced {
+		gotIDs = append(gotIDs, m.ID)
+	}
+	if !reflect.DeepEqual(gotIDs, wantIDs) {
+		t.Fatalf("replaced message order = %v, want %v", gotIDs, wantIDs)
 	}
 }

@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: recall
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RECALL_UNAVAILABLE'

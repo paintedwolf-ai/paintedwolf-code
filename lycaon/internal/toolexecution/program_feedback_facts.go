@@ -31,6 +31,7 @@ func programOutcomeFacts(p invocation.ProgramProjection) (map[string]any, error)
 	detail, detailOmitted := programFeedbackReference(p.DetailReference)
 	progress, progressOmitted := programFeedbackReference(p.Program.ProgressRef)
 	facts := map[string]any{
+		"command_execution":                          "observed",
 		"program_id":                                 p.Program.ID,
 		"program_completed_effects":                  p.CompletedEffects,
 		"program_uncertain_effects":                  p.UncertainEffects,
@@ -48,6 +49,12 @@ func programOutcomeFacts(p invocation.ProgramProjection) (map[string]any, error)
 		"program_progress_ref":                       progress,
 		"program_progress_ref_omitted":               progressOmitted,
 		"program_replay_available":                   false,
+	}
+	if p.Program.State != "running" && p.ExecutedChildren == 0 && p.CompletedEffects == 0 && p.UncertainEffects == 0 {
+		facts["command_execution"] = "not_started"
+	}
+	if p.Program.State == "running" {
+		facts["command_execution"] = "active"
 	}
 	if p.Stopped != nil {
 		stopped, omitted, err := programEffectDetails(p.Program.ID, []invocation.ExecutionProjection{*p.Stopped})

@@ -1,1 +1,1 @@
-User answered — read the answered `ask_user` tool result and continue. Prose is not the answer.
+User answered — read the answered question's tool result and continue. Prose is not the answer.

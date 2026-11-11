@@ -60,7 +60,7 @@ export function WorkersTab(props: Props) {
       <Show
         when={rows().length > 0}
         fallback={
-          <p class="den-workers-tab-empty" role="status">
+          <p class="den-workers-tab-empty" role="status" data-testid="workers-tab-empty">
             No workers in this session yet.
           </p>
         }
@@ -109,6 +109,7 @@ export function WorkersTab(props: Props) {
                     }}
                     disabled={busyWorkerId() === worker.id}
                     aria-label={`Cancel ${workerAgentLabel(worker)} worker`}
+                    data-testid={`workers-tab-cancel-${worker.id}`}
                     onClick={() => props.onCancel(worker.id)}
                   >
                     {busyWorkerId() === worker.id ? "Cancelling…" : "Cancel"}

@@ -19,55 +19,53 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestCitationOnlyRetryStitchesPersistedCloseoutDraftBeforeGuard(t *testing.T) {
-	const pinned = "## Recon report\n\nThe backend manages session lifecycle."
+// A repair reads against the persisted cycle, and an inactive cycle never stitches.
+func TestCitationRepairReadsRetainedDraftBeforeGuard(t *testing.T) {
+	const pinned = "## Recon report\n\nThe backend manages session lifecycle [missing#1]."
+	retained := activeRetained(pinned, 1, false, guidance.SynthHandleNotInLegsCode)
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
 			CloseoutStallState: func(_ context.Context, sessionID string) guidance.RetainedCloseout {
 				if sessionID != "session-1" {
 					return guidance.RetainedCloseout{}
 				}
-				return guidance.RetainedCloseout{Active: true, Attempt: 1, PrevKey: guidance.SynthHandleNotInLegsCode, Drafted: pinned, ForcedBy: []string{guidance.SynthHandleNotInLegsCode}}
+				return retained
 			},
 		},
 	})
-	const trailer = "```json\n{\"cited_evidence\":[{\"evidence\":\"leg-1:list#1\"}],\"cited_urls\":[],\"artifact_ids\":[]}\n```"
-	history := []api.Message{{ID: "draft-1", Role: api.MessageRoleAssistant, Content: trailer}}
-	prepared, _ := loop.Tools.maybeCoerceCloseoutContent(
-		context.Background(), history, "session-1", "implement_synthesis", trailer, "draft-1",
-	)
-	report, ok := guidance.ParseCoordinatorCompletionReport(prepared)
-	if !ok {
-		t.Fatalf("stitched retry did not become a closeout envelope: %q", prepared)
+	assistant := api.Message{ID: "draft-1", Role: api.MessageRoleAssistant, Content: "[cite: c1 => leg-1:list#1]"}
+	read, err := loop.Closeout.readCloseoutDraft(t.Context(), &api.Session{ID: "session-1"}, "implement_synthesis", nil, []api.Message{assistant}, assistant)
+	testutil.FailErr(t, "read the repair", err)
+	if !read.Draft.HasAnswer() || len(read.RepairDefects) > 0 {
+		t.Fatalf("read = %+v", read)
 	}
-	if report.Synthesis != pinned || len(report.CitedEvidence) != 1 || report.CitedEvidence[0].Evidence != "leg-1:list#1" {
-		t.Fatalf("stitched report = %+v", report)
+	if !strings.HasPrefix(read.Draft.Synthesis, "## Recon report") || !strings.Contains(read.Draft.Synthesis, "[leg-1:list#1]") {
+		t.Fatalf("repaired draft = %q", read.Draft.Synthesis)
 	}
-	if history[0].Content != prepared {
-		t.Fatalf("history kept unstiched citation fence: %q", history[0].Content)
+	if read.Draft.CitedEvidence[0].Evidence != "leg-1:list#1" {
+		t.Fatalf("metadata = %+v", read.Draft.CitedEvidence)
 	}
-	inactive := NewPromptLoopForTest(PromptLoopDeps{
-		Closeout: CloseoutDeps{
-			CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
-				return guidance.RetainedCloseout{Drafted: pinned}
-			},
-		},
-	})
-	if got, _ := inactive.Tools.maybeCoerceCloseoutContent(context.Background(), nil, "session-1", "implement_synthesis", trailer, ""); got != trailer {
-		t.Fatalf("inactive stall stitched stale draft: %q", got)
+	inactive, err := loop.Closeout.readCloseoutDraft(t.Context(), &api.Session{ID: "other"}, "implement_synthesis", nil, []api.Message{assistant}, assistant)
+	testutil.FailErr(t, "read an inactive repair", err)
+	if inactive.Draft.HasAnswer() || len(inactive.RepairDefects) != 1 {
+		t.Fatalf("an inactive cycle recovered a retired report: %+v", inactive)
 	}
-
-	staleHistory := []api.Message{{Role: api.MessageRoleAssistant, Content: pinned}, {Role: api.MessageRoleUser, Content: "Pinned body: " + pinned}}
-	got, _ := inactive.Tools.maybeCoerceCloseoutContent(t.Context(), staleHistory, "session-1", "implement_synthesis", trailer, "")
-	if _, ok := guidance.ParseCoordinatorCompletionReport(got); ok {
-		t.Fatalf("citation-only repair recovered retired report from history: %s", got)
+	worker, err := loop.Closeout.readCloseoutDraft(t.Context(), &api.Session{ID: "session-1", ParentSessionID: "p"}, "implement_synthesis", nil, nil, assistant)
+	testutil.FailErr(t, "read a worker turn", err)
+	if worker.Draft.HasAnswer() {
+		t.Fatalf("a worker turn is no closeout: %+v", worker)
+	}
+	routing, err := loop.Closeout.readCloseoutDraft(t.Context(), &api.Session{ID: "session-1"}, "implement_routing", nil, nil, assistant)
+	testutil.FailErr(t, "read a routing turn", err)
+	if routing.Draft.HasAnswer() {
+		t.Fatalf("a routing turn is no closeout: %+v", routing)
 	}
 }
 
 func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 	for _, outcome := range []string{"completed", "failed", "rejected", "blocked", "checkpoint failure"} {
 		t.Run(outcome, func(t *testing.T) {
-			retained := guidance.RetainedCloseout{Active: true, Attempt: 2, DocumentAttempt: 1, Drafted: "stale success", ForcedBy: []string{"citation"}}
+			retained := guidance.RetainedCloseout{Active: true, Attempt: 2, DocumentAttempt: 1, Draft: markdownRead("stale success", false).Draft, ForcedBy: []string{"citation"}}
 			reg := tools.NewStubRegistry()
 			executed := 0
 			defer func() {
@@ -79,22 +77,24 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 					t.Fatalf("handler executions=%d, want %d", executed, want)
 				}
 			}()
-			_ = reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+			_ = reg.Register("write", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 				executed++
 				if retained.Active {
 					t.Fatal("tool ran before pinned report retired")
 				}
 				if outcome == "failed" {
-					return "", errors.New("read failed")
+					return "", errors.New("write failed")
 				}
 				return "current observation", nil
 			})
 			loop := NewPromptLoopForTest(PromptLoopDeps{Context: ContextDeps{Tools: reg}, Closeout: CloseoutDeps{
 				CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout { return retained },
-				ResumeCloseoutWork: func(context.Context, string) {
-					retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+				CloseoutTrackingDeps: CloseoutTrackingDeps{
+					ResumeCloseoutWork: func(context.Context, string) {
+						retained = guidance.RetainedCloseout{Attempt: retained.Attempt, DocumentAttempt: retained.DocumentAttempt}
+					},
 				},
-				AssembleLedgerCloseout: func(context.Context, string, string, []string, string, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
+				AssembleLedgerCloseout: func(context.Context, string, string, []string, guidance.CloseoutDraft, int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding) {
 					t.Fatal("tool recovery assembled an old conclusion")
 					return guidance.CoordinatorCompletionReport{}, nil
 				},
@@ -115,10 +115,16 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 				}
 				return nil
 			}}})
-			st := &promptLoopTurnState{turnToolPlan: toolsurface.Compile([]string{"read"}, nil), offeredToolNames: []string{"read"}, turnID: "turn", attemptID: "attempt", closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}}
+			st := &promptLoopTurnState{
+				turnBatchState:    turnBatchState{turnToolPlan: toolsurface.Compile([]string{"write"}, nil)},
+				turnStreamState:   turnStreamState{offeredToolNames: []string{"write"}},
+				turnID:            "turn",
+				attemptID:         "attempt",
+				turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old", codes: []string{"citation"}}},
+			}
 			sess := &api.Session{ID: "session"}
 			for i := 0; i < 7; i++ {
-				call := api.ToolCall{ID: fmt.Sprint(i), Name: "read", Args: map[string]any{"path": "missing"}}
+				call := api.ToolCall{ID: fmt.Sprint(i), Name: "write", Args: map[string]any{"path": "missing"}}
 				msg := api.Message{ID: fmt.Sprint("assistant", i), Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{call}}
 				st.history = append(st.history, msg)
 				result, err := loop.processPromptLoopAssistantTurn(t.Context(), sess, sess.ID, PromptRunInput{}, i, 20, "implement_investigate", "inspect", st, msg, &modelcall.Completion{ToolCalls: msg.ToolCalls})
@@ -129,7 +135,7 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 				} else {
 					testutil.FailErr(t, "process recovery attempt", err)
 				}
-				if retained.Active || retained.Drafted != "" || st.closeoutRetry.attempt != 2 || st.closeoutRetry.documentAttempt != 1 || st.closeoutRetry.prevKey != "" || len(st.closeoutRetry.codes) != 0 {
+				if retained.Active || retained.Draft.Synthesis != "" || st.closeoutRetry.attempt != 2 || st.closeoutRetry.documentAttempt != 1 || st.closeoutRetry.prevKey != "" || len(st.closeoutRetry.codes) != 0 {
 					t.Fatalf("retirement lost invariant: %+v / %+v", retained, st.closeoutRetry)
 				}
 				if result.exit == loopExitCompleted {
@@ -149,10 +155,10 @@ func TestCloseoutToolRecoveryRetiresBeforeEveryOutcome(t *testing.T) {
 				t.Fatal("repeated rejected recovery did not stop")
 			}
 			fresh := "Fresh conclusion: the file is still missing."
-			got, _ := loop.Tools.maybeCoerceCloseoutContent(t.Context(), nil, sess.ID, "implement_investigate", fresh, "")
-			report, ok := guidance.ParseCoordinatorCompletionReport(got)
-			if !ok || report.Synthesis != fresh || loop.Closeout.pinnedCloseoutSynthesis(t.Context(), sess.ID) != "" {
-				t.Fatalf("fresh report overwritten: %q", got)
+			read, err := loop.Closeout.readCloseoutDraft(t.Context(), sess, "implement_investigate", nil, nil, api.Message{Content: fresh})
+			testutil.FailErr(t, "read the fresh report", err)
+			if read.Draft.Synthesis != fresh || len(read.RepairDefects) > 0 {
+				t.Fatalf("fresh report overwritten: %+v", read)
 			}
 		})
 	}
@@ -168,10 +174,10 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 	defer release()
 
 	for _, repair := range []struct {
-		code, contract string
+		code, contract, offer string
 	}{
-		{code: guidance.InvestHandleNotObservedCode, contract: "emit only the citations fence"},
-		{code: guidance.ReportFenceUnreadableCode, contract: "emit only the report fence"},
+		{code: guidance.InvestHandleNotObservedCode, contract: "Your answer is retained", offer: "use a tool with effects"},
+		{code: guidance.ReportFenceUnreadableCode, contract: "emit only the report fence", offer: "use an offered tool"},
 	} {
 		for _, tc := range []struct {
 			name          string
@@ -195,16 +201,18 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 						}
 						return guidance.RetainedCloseout{}
 					},
-					RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
-						var err error
-						rendered, err = engine.RenderKick(ctx, id, data)
-						return rendered, err
+					CloseoutTrackingDeps: CloseoutTrackingDeps{
+						RenderHostKick: func(ctx context.Context, id string, data map[string]any) (string, error) {
+							var err error
+							rendered, err = engine.RenderKick(ctx, id, data)
+							return rendered, err
+						},
 					},
 				}})
-				st := &promptLoopTurnState{proseFinish: tc.prose, offeredToolNames: tc.offered}
-				_, err := loop.Closeout.rejectCloseoutGrounding(t.Context(), "session", st, nil, "", &oar.Decision{Code: repair.code, Copy: map[string]string{"what": "Closeout refused"}}, "Pinned report", nil)
+				st := &promptLoopTurnState{proseFinish: tc.prose, turnStreamState: turnStreamState{offeredToolNames: tc.offered}}
+				_, err := loop.Closeout.rejectCloseoutGrounding(t.Context(), "session", st, nil, "", &oar.Decision{Code: repair.code, Copy: map[string]string{"what": "Closeout refused"}}, markdownRead("Pinned report", false).Draft, nil)
 				testutil.FailErr(t, "render closeout rejection", err)
-				if got := strings.Contains(rendered, "use an offered tool"); got != tc.want {
+				if got := strings.Contains(rendered, repair.offer); got != tc.want {
 					t.Fatalf("offered guidance = %v, want %v: %s", got, tc.want, rendered)
 				}
 				if !strings.Contains(rendered, repair.contract) {
@@ -218,7 +226,7 @@ func TestCloseoutRecoveryCopyUsesCallableTools(t *testing.T) {
 func TestCloseoutAsyncRetirementClearsLocalOffenderBeforeFreshReport(t *testing.T) {
 	const fresh = "Fresh report after worker failed."
 	stopped := errors.New("inspection boundary")
-	st := &promptLoopTurnState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old offender", codes: []string{"old refusal"}}}
+	st := &promptLoopTurnState{turnCloseoutState: turnCloseoutState{closeoutRetry: closeoutRetryState{attempt: 2, documentAttempt: 1, prevKey: "old offender", codes: []string{"old refusal"}}}}
 	loop := NewPromptLoopForTest(PromptLoopDeps{Closeout: CloseoutDeps{
 		CloseoutStallState: func(context.Context, string) guidance.RetainedCloseout {
 			return guidance.RetainedCloseout{Attempt: 2, DocumentAttempt: 1}
@@ -230,8 +238,60 @@ func TestCloseoutAsyncRetirementClearsLocalOffenderBeforeFreshReport(t *testing.
 			return nil, stopped
 		},
 	}})
-	_, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", st, nil, api.Message{}, guidance.CloseoutRead{Report: guidance.CoordinatorCompletionReport{Synthesis: fresh}})
+	_, err := loop.Closeout.handleAcceptedCloseoutReport(t.Context(), &api.Session{ID: "session"}, "session", "", "implement_investigate", st, nil, api.Message{}, markdownRead(fresh, false))
 	if !errors.Is(err, stopped) {
 		t.Fatalf("fresh report didn't reach observation boundary: %v", err)
+	}
+}
+
+func TestRetainedAnswerSurvivesObservingToolsOnly(t *testing.T) {
+	const assistant = "assistant-1"
+	read := `{"state":"completed","status":0,"stdout":"package x","completed_effects":0,"uncertain_effects":0}`
+	wrote := `{"state":"completed","status":0,"completed_effects":1,"uncertain_effects":0}`
+	maybe := `{"state":"completed","status":0,"completed_effects":0,"uncertain_effects":1}`
+	running := `{"state":"running","completed_effects":0,"uncertain_effects":0}`
+	for _, tc := range []struct {
+		name    string
+		calls   []string
+		results map[string]string
+		keeps   bool
+	}{
+		{"read-only tool", []string{"read"}, nil, true},
+		{"recall", []string{"recall"}, nil, true},
+		{"bookkeeping", []string{"update_progress"}, nil, true},
+		{"read-only command", []string{"command"}, map[string]string{"command": read}, true},
+		{"command with effects", []string{"command"}, map[string]string{"command": wrote}, false},
+		{"command with uncertain effects", []string{"command"}, map[string]string{"command": maybe}, false},
+		{"command still running", []string{"command"}, map[string]string{"command": running}, false},
+		{"command with unreadable outcome", []string{"command"}, map[string]string{"command": "refused"}, false},
+		{"command with no outcome", []string{"command"}, nil, false},
+		{"write", []string{"write"}, nil, false},
+		{"observer beside a write", []string{"recall", "write"}, nil, false},
+		{"unknown tool", []string{"no_such_tool"}, nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := tools.NewStubRegistry()
+			for _, name := range []string{"recall", "update_progress", "command"} {
+				_ = reg.Register(name, func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil })
+			}
+			retained := guidance.RetainedCloseout{Active: true}
+			loop := NewPromptLoopForTest(PromptLoopDeps{
+				Context:  ContextDeps{Tools: reg},
+				Closeout: CloseoutDeps{CloseoutTrackingDeps: CloseoutTrackingDeps{ResumeCloseoutWork: func(context.Context, string) { retained.Active = false }}},
+			})
+			var calls []api.ToolCall
+			var history []api.Message
+			for _, name := range tc.calls {
+				calls = append(calls, api.ToolCall{ID: name + "-1", Name: name})
+				if output, ok := tc.results[name]; ok {
+					history = append(history, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: name, ToolCallID: name + "-1", AssistantMessageID: assistant, Content: output}})
+				}
+			}
+			settle := loop.Closeout.keepRetainedForObservers(t.Context(), "s", &promptLoopTurnState{}, calls)
+			settle(history, assistant)
+			if retained.Active != tc.keeps {
+				t.Fatalf("retained after batch = %t, want %t", retained.Active, tc.keeps)
+			}
+		})
 	}
 }

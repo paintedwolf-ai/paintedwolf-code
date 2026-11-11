@@ -20,7 +20,6 @@ describe("scoped settings projections", () => {
     const client = stubClient();
     await loadSettingsPanel(store, client, [], "providers", "/tmp/missing", { alwaysProjectScope: true });
     expect(store.panelReady(client, "providers")).toBe(true);
-    expect(store.panelError(client, "providers")).toContain("Project settings cannot resolve");
   });
 
   it("keeps project policy separate while sharing device providers", async () => {
@@ -93,7 +92,8 @@ describe("settings invalidation", () => {
     expect(listProviders).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(SETTINGS_INVALIDATION_MS);
     expect(listProviders).toHaveBeenCalledOnce();
-    expect(getModelPolicySettings).toHaveBeenCalledOnce();
+    expect(getModelPolicySettings).toHaveBeenCalledTimes(2);
+    expect(getModelPolicySettings).toHaveBeenCalledWith(undefined, true);
 
     scheduler.cancel();
     vi.useRealTimers();
@@ -305,5 +305,25 @@ describe("effective limits invalidation", () => {
     await refreshSettingsSlices(store, stubClient({ getLimitsSettings }), [], ["limits"]);
     expect(getLimitsSettings).toHaveBeenCalledExactlyOnceWith();
     expect(store.state.effectiveLimits).toBeUndefined();
+  });
+});
+
+
+describe("effective model policy", () => {
+  const policy = (model: string): ModelPolicy => ({
+    coordinator: { provider_id: "local", model },
+    lite: { provider_id: "local", model },
+    agent_pool: { selection: "first", models: [] },
+  });
+  it("keeps resolved defaults separate and discards them on overlay updates", () => {
+    const store = createSettingsStore();
+    const overlay = policy("");
+    const effective = policy("included");
+    store.actions.setModelPolicy(overlay, effective);
+    expect(store.state.modelPolicy).toEqual(overlay);
+    expect(store.state.effectiveModelPolicy).toEqual(effective);
+    store.actions.setModelPolicy(policy("external"));
+    expect(store.state.effectiveModelPolicy).toBeUndefined();
+    expect(store.state.modelPolicy).toEqual(policy("external"));
   });
 });

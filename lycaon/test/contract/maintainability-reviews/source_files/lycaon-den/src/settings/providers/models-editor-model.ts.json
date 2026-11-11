@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/settings/providers/models-editor-model.ts",
+  "kind": "projection",
+  "workstream": "included-model-settings",
+  "disposition": "retain",
+  "reason": "The existing pure provider/model settings projections retain their public call sites. Included-provider labels delegate to the bounded host-readiness projection; obsolete fixed-context constants were removed. Retain the unchanged 690-line size while keeping runtime decisions out of the client.",
+  "reviewed_commit": "1668bbc7358a092317986a52060b4bee1fa5585b",
+  "ceiling": 690,
+  "boundaries": {
+    "lycaon-den/src/settings/providers/models-editor-model.test.ts": "29ed4994fe53ba4809e9d32a870f246c83629cbb6909123699c468a80e52a496",
+    "lycaon-den/src/settings/providers/local-generation-model.test.ts": "309d88c730579c550012d5dc446015a82c234913ac327f8063934c5f39d12d21"
+  }
+}

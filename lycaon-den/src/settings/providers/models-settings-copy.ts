@@ -69,10 +69,17 @@ export const MODELS_SETTINGS_COPY = {
   secretScreenTrustLabel: "Trust this provider with secrets",
   secretScreenTrustHint:
     "Nothing will ask before a detected secret is sent to this endpoint. Meant for a model running on this machine. Transcripts are still redacted, and changing the endpoint turns this off.",
+  secretScreenTrustIncludedHint:
+    "Detected secrets can be sent to this local model without asking. Transcripts remain redacted.",
   secretScreenTrustLoopbackNote:
     "This endpoint is on this machine, though a local proxy can still forward requests elsewhere.",
   secretScreenTrustRemoteNote: "This endpoint is not on this machine.",
   removeProvider: "Remove AI provider",
+  includedProviderBadge: "Included",
+  includedProviderModelSummary:
+    "Gemma 4 E4B",
+  includedProviderHint:
+    "Runs on this device. No per-token charges.",
   instanceCount: (n: number) => `${n} instance${n === 1 ? "" : "s"}`,
   usageQuota: (used: number, limit: number, unit: string) =>
     `Daily ${unit}: ${formatQuotaNumber(used)} / ${formatQuotaNumber(limit)} free`,
@@ -125,7 +132,7 @@ export const MODELS_SETTINGS_COPY = {
   onboardingSummarizerLede:
     "Optional second model for smaller tasks.",
   onboardingSummarizerLocalSaveHint:
-    "A local model for summarizing can save money while your default model handles the hard work.",
+    "You can choose a different model for summaries and other small tasks.",
   onboardingSummarizerAddProvider: "Add another provider",
   onboardingSummarizerAddProviderHint:
     "If you want the summarizer to use a different provider.",
@@ -174,13 +181,15 @@ export const MODELS_SETTINGS_COPY = {
   /** Credentials are in place and nothing has been reached yet. */
   statusNotChecked: "Not checked",
   statusUnavailable: "Unavailable",
+  contextWindowUnknown:
+    "Context window is unknown — using a conservative local fallback until the server reports one.",
   coordinatorSlotLabel: "Coordinator",
   coordinatorSlotHint:
     "Must be tool-calling capable or Painted Wolf Code cannot run. We recommend GLM 5.3 Flash, Gemini 3.5 Flash, Claude Sonnet, or a similar class model — this is the hard part, so use your strongest model.",
   liteSlotLabel: "Summarizer",
   /** Wraps the unset label: the hint names it as the picker shows it. */
   summarizerModelHintLead: "Optional override for compaction, context diet, and web search seeding.",
-  summarizerModelHintTail: "inherits the default model and tracks when it changes.",
+  summarizerModelHintTail: "uses the included model when available, otherwise your default model.",
   modelPolicyEmpty:
     "Configure at least one provider in Settings → AI providers, then choose models here.",
   workerSectionTitle: "Workers",

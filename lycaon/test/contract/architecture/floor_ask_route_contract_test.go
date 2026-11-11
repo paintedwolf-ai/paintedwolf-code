@@ -19,8 +19,9 @@ import (
 // refusedGrantFact is the host fact that names each capability's grant for a
 // path the applied profile refused.
 var refusedGrantFact = map[string]string{
-	"write_root": "paintedwolf.refused_write_grants",
-	"read_path":  "paintedwolf.refused_read_grants",
+	"write_root":       "paintedwolf.refused_write_grants",
+	"read_path":        "paintedwolf.refused_read_grants",
+	"credential_store": "paintedwolf.refused_credential_store_paths",
 }
 
 // Nothing blocks without an ask outside the control plane: every filesystem

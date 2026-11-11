@@ -51,8 +51,19 @@ func (e *appleVisionOCR) RecognizeText(ctx context.Context, mime string, raw []b
 	spansSlice := unsafe.Slice(res.spans, int(res.count))
 	out := make([]TextSpan, 0, len(spansSlice))
 	for _, s := range spansSlice {
+		var candidates []string
+		if s.candidate_count > 0 && s.candidates != nil {
+			cSlice := unsafe.Slice(s.candidates, int(s.candidate_count))
+			candidates = make([]string, 0, len(cSlice))
+			for _, cStr := range cSlice {
+				if cStr != nil {
+					candidates = append(candidates, C.GoString(cStr))
+				}
+			}
+		}
 		out = append(out, TextSpan{
 			Text:       C.GoString(s.text),
+			Candidates: candidates,
 			Confidence: float64(s.confidence),
 			BoundingBox: [4]float64{
 				float64(s.x),

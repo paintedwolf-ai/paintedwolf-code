@@ -1,3 +1,4 @@
+import { localGenerationView } from "./local-generation-model.ts";
 import type {
   ModelPolicy,
   ModelPolicyPatch,
@@ -134,6 +135,7 @@ export function providerEndpointIsLoopback(url: string | undefined): boolean {
 
 /** Describe setup and assignment from the host's status axes. */
 export function providerStatusLabel(provider: ProviderMeta): string {
+  if (isIncludedProvider(provider)) return localGenerationView(provider).label;
   if (providerIsReady(provider)) return MODELS_SETTINGS_COPY.statusReady;
   if (providerNeedsApiKey(provider)) {
     return MODELS_SETTINGS_COPY.statusNeedsApiKey;
@@ -193,8 +195,30 @@ export type ProviderPickerGroup = (typeof PROVIDER_PICKER_GROUP_ORDER)[number];
 
 const CUSTOM_PROVIDER_KINDS = new Set(["openai-compatible"]);
 
+export const INCLUDED_PROVIDER_ID = "nativegen";
+
+export function isIncludedProvider(
+  provider: Pick<ProviderMeta, "id" | "kind">,
+): boolean {
+  const id = provider.id?.trim() ?? "";
+  const kind = provider.kind?.trim() || id;
+  return id === INCLUDED_PROVIDER_ID || kind === INCLUDED_PROVIDER_ID;
+}
+
+const LOCAL_PROVIDER_KINDS = new Set([
+  INCLUDED_PROVIDER_ID,
+  "ollama",
+  "lmstudio",
+  "omlx",
+  "litellm-proxy",
+]);
+
 export function providerKindIsCustom(kind: string): boolean {
   return CUSTOM_PROVIDER_KINDS.has(kind);
+}
+
+export function providerKindIsLocal(kind: string): boolean {
+  return LOCAL_PROVIDER_KINDS.has(kind);
 }
 
 /** Empty platforms and unknown hosts allow the provider. */
@@ -212,8 +236,14 @@ export function providerPickerGroupForKind(
   requiresApiKey: boolean,
   baseUrl: string,
 ): ProviderPickerGroup {
+  if (kind.trim() === INCLUDED_PROVIDER_ID) {
+    return "local";
+  }
   if (providerKindIsCustom(kind)) {
     return "custom";
+  }
+  if (providerKindIsLocal(kind)) {
+    return "local";
   }
   return deploymentGroupFromEndpoint(requiresApiKey, baseUrl);
 }
@@ -232,13 +262,11 @@ function deploymentGroupFromEndpoint(
   requiresApiKey: boolean,
   baseUrl: string,
 ): ProviderPickerGroup {
-  const trimmed = baseUrl.trim();
-  const lower = trimmed.toLowerCase();
-  if (lower.includes("localhost") || lower.includes("127.0.0.1")) {
+  if (providerEndpointIsLoopback(baseUrl)) {
     return "local";
   }
   // Keyless HTTP endpoints are local; derived endpoints stay hosted.
-  if (!requiresApiKey && /^https?:\/\//i.test(trimmed)) {
+  if (!requiresApiKey && /^https?:\/\//i.test(baseUrl.trim())) {
     return "local";
   }
   return "cloud";
@@ -369,7 +397,9 @@ export function modelAssignmentOptionGroupsForPicker(
   }
   const orphan = orphanModelAssignmentOption(value);
   const provider = providers.find((p) => p.id === value.provider_id);
-  const group = provider ? providerPickerGroup(provider) : "cloud";
+  const group = provider
+    ? providerPickerGroup(provider)
+    : providerPickerGroupForKind(value.provider_id, true, "");
   const label = providerPickerGroupLabel(group);
   const existing = base.find((entry) => entry.group === group);
   if (existing) {
@@ -556,6 +586,21 @@ export function providerToolCallSupport(
   return allUnsupported ? "unsupported" : "unknown";
 }
 
+export type ProviderContextWindowState = "known" | "unknown";
+
+/** Reports whether the provider's listed models declare a positive context window. */
+export function providerContextWindowState(
+  provider: ProviderMeta,
+): ProviderContextWindowState {
+  if (provider.models.length === 0) return "unknown";
+  for (const model of provider.models) {
+    if (!model.context_length || model.context_length <= 0) {
+      return "unknown";
+    }
+  }
+  return "known";
+}
+
 export type ProviderKindTemplateGroup = {
   group: ProviderPickerGroup;
   label: string;
@@ -630,7 +675,12 @@ export function groupProvidersByKind(
       return providerDisplayName(a).localeCompare(providerDisplayName(b));
     });
   }
-  return [...groups.values()].sort((a, b) => a.label.localeCompare(b.label));
+  return [...groups.values()].sort((a, b) => {
+    const aIncluded = a.kind === INCLUDED_PROVIDER_ID ? 0 : 1;
+    const bIncluded = b.kind === INCLUDED_PROVIDER_ID ? 0 : 1;
+    if (aIncluded !== bIncluded) return aIncluded - bIncluded;
+    return a.label.localeCompare(b.label);
+  });
 }
 
 export function slugifyProviderId(raw: string): string {

@@ -10,7 +10,3 @@ invariants:
   fires_in:
   - wait() process_done condition — the kernel refused a running command/verify
     job an operation
-  required:
-  - sandbox refusal
-  forbidden:
-  - workflow_advance

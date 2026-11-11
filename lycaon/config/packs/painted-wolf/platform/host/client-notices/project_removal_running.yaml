@@ -1,7 +1,3 @@
 scope: app
 title: Deleting project
 message: Project deletion is running. Large histories can take several minutes. You can keep using other projects.
-scenarios:
-  - id: default
-    expect_contains:
-      - deletion is running

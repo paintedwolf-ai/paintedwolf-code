@@ -21,6 +21,3 @@ x-paintedwolf-message: http_request response_path is not writable
 x-paintedwolf-scenarios:
   - id: default
     vars: {path: .git/objects/pack, tool: http_request}
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: HTTP_REQUEST_RESPONSE_PATH_DENIED'

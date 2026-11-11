@@ -2,14 +2,15 @@
   "category": "go_receiver_lines",
   "artifact": "lycaon/internal/session/session.Host",
   "kind": "construction",
-  "workstream": "approval-intent-lifecycle",
+  "workstream": "local-inference",
   "disposition": "retain",
-  "reason": "Session wiring binds existing approval, capability, and repetition owners. Denial suppression belongs to HITL and the repetition guard reads its persisted intent. Retain explicit wiring here without creating another authority owner.",
-  "reviewed_commit": "10d0822c7c4275eb12a9ae9e2d26324df60cfe43",
-  "ceiling": 434,
+  "reason": "Retain explicit host construction and shutdown wiring. Preparation owns its disposable worker; the host cancels and joins it before releasing shared resources. Approval and capability authority remain with their existing services. Splitting these fields would obscure lifecycle dependencies. The assembly and shutdown fixtures exercise the added boundary.",
+  "reviewed_commit": "e033acac702d36f5e358de3cab884f372d152c6c",
+  "ceiling": 464,
   "boundaries": {
     "lycaon/internal/hitl/checkpoint_expiry_test.go": "04f494ae92c3f3d7e1e95dccff14d9713888a29abeb7d465b4d73aca72f2d07b",
-    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de"
+    "lycaon/internal/session/sandbox_broker_denial_invariant_test.go": "5a78b3c87377e0209a42f85f50b6332847a460719df2946e071d57a33130c8de",
+    "lycaon/internal/session/context_preparation_integration_test.go": "6231c64baf486080ae3bd004f7154101f99862c7e7fbc6021b46406eeae855f3"
   },
-  "reviewed_shape": "277a3b3de9f9d1ff6f49173f1a8b1ac95fc26d265505aa93d93f3c8296adad9e"
+  "reviewed_shape": "6a75c696320aa35a12c002aeb338a505d5d4fb4c28b64e54b8ceab6b867f135c"
 }

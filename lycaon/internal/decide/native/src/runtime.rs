@@ -40,6 +40,7 @@ pub(crate) struct LoadSpec<'a> {
     pub encoder: &'a modernbert::Config,
     /// `f16`, `f32`, or empty for the device's own precision.
     pub dtype: &'a str,
+    pub memory: crate::memory::Limits,
     #[cfg(feature = "mlx")]
     pub metallib: Option<&'a Path>,
 }
@@ -47,6 +48,14 @@ pub(crate) struct LoadSpec<'a> {
 impl Runtime {
     /// Load the checkpoint onto `selected`, returning the runtime and the checkpoint's own head.
     pub(crate) fn load(selected: &Selected, spec: &LoadSpec) -> Result<(Runtime, RuntimeHead)> {
+        #[cfg(feature = "mlx")]
+        if matches!(selected, Selected::Mlx) {
+            if let Some(path) = spec.metallib {
+                crate::mlx::set_metallib(path)?;
+            }
+        }
+        // Allocator configuration can initialize the device and load its kernels.
+        spec.memory.configure(selected)?;
         let cp = spec.checkpoint;
         match selected {
             Selected::Cpu => {
@@ -73,9 +82,6 @@ impl Runtime {
                     "f32" => mlx_rs::Dtype::Float32,
                     other => return Err(unknown_dtype(other)),
                 };
-                if let Some(path) = spec.metallib {
-                    crate::mlx::set_metallib(path)?;
-                }
                 let weights = mlx_rs::Array::load_safetensors(&cp.weights)
                     .map_err(|e| Error::Checkpoint(format!("{}: {e}", cp.weights.display())))?;
                 verify_tensors(

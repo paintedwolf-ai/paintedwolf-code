@@ -189,4 +189,7 @@ func registerStubSettingsWorkflowRoutes(mux *http.ServeMux, now time.Time, write
 			Models:            []api.ProviderModelMeta{stubProviderModel("custom")},
 		})
 	})
+	mux.HandleFunc("POST /v1/providers/{provider_id}/repair", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, api.LocalGenerationRepairResult{OK: true, Status: api.LocalGenerationStatus{State: "ready", RecoveryAction: "none"}})
+	})
 }

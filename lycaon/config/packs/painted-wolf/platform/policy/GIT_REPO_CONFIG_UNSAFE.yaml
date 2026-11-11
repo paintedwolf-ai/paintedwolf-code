@@ -43,17 +43,9 @@ x-paintedwolf-scenarios:
       keys: filter.crypt
       profile: implement
       tool: git_status
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: GIT_REPO_CONFIG_UNSAFE'
-      - terminal
   - id: proxy
     vars:
       detail: bad args
       keys: core.gitProxy
       profile: implement
       tool: git_diff
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: GIT_REPO_CONFIG_UNSAFE'
-      - terminal

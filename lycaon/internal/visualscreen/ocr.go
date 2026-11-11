@@ -8,9 +8,13 @@ import (
 // ErrOCRUnavailable reports a platform without text recognition.
 var ErrOCRUnavailable = errors.New("text recognition is unavailable on this platform")
 
+// maxOCRCandidates bounds alternative recognition hypotheses retained per span.
+const maxOCRCandidates = 5
+
 // TextSpan is an extracted or recognized text fragment with its normalized coordinates.
 type TextSpan struct {
 	Text        string
+	Candidates  []string
 	Confidence  float64
 	BoundingBox [4]float64 // [x, y, width, height] normalized to [0.0, 1.0]
 }

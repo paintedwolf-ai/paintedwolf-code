@@ -42,7 +42,7 @@ func TestRunnerConcurrencyCap(t *testing.T) {
 		}
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	runCtx, cancel := context.WithTimeout(ctx, testutil.Timeout(time.Minute))
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

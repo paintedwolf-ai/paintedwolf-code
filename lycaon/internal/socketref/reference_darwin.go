@@ -3,19 +3,35 @@
 package socketref
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"regexp"
+	"strconv"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"golang.org/x/sys/unix"
 )
 
-func Platform() Adapter { return Adapter{Command: KernelPathname, Native: RetainedObject} }
+func Platform() Adapter { return Adapter{Command: RetainedObject, Native: RetainedObject} }
+
+func implicitBindingMode() Enforcement { return KernelPathname }
+
+func setUnixAddressLength(address *unix.RawSockaddrUnix, length uint32) { address.Len = uint8(length) }
+
+func shortReferencePrefix() string { return ".paintedwolf-socket-" + strconv.Itoa(os.Getuid()) + "-" }
+
+// ControlPlanePathPattern protects the short address namespace before any
+// reference exists, including launches that have no socket grant.
+func ControlPlanePathPattern() string {
+	return "(^|/)" + regexp.QuoteMeta(shortReferencePrefix()) + "[^/]+(/|$)"
+}
 
 // Open retains a hard link behind the engine's terminal control-plane floor.
-// Cross-filesystem services cannot be represented and never fall back to path.
+// A service on another volume gets an OS-selected temporary reference there.
 func Open(path string) (*Reference, error) {
 	resolved, err := filepath.EvalSymlinks(path)
 	if err != nil {
@@ -43,40 +59,34 @@ func Open(path string) (*Reference, error) {
 	}
 	aliases = realAliases
 
-	dir, err := os.MkdirTemp(aliases, "service-")
+	directory, guard, releaseParent, err := captureReferenceDirectory(aliases, resolved)
 	if err != nil {
 		return nil, err
 	}
-	guard, err := os.Open(dir)
-	if err != nil {
-		_ = os.Remove(dir)
-		return nil, err
-	}
+	dir := directory
 	alias := filepath.Join(dir, "socket")
-	if len(alias) >= 104 {
-		_ = guard.Close()
-		_ = os.Remove(dir)
-		return nil, fmt.Errorf("retained local-service address exceeds the kernel limit")
-	}
-	if err := os.Link(resolved, alias); err != nil {
-		_ = guard.Close()
-		_ = os.Remove(dir)
-		return nil, err
-	}
+	captured := false
+	defer func() {
+		if !captured {
+			_ = os.Remove(alias)
+			_ = guard.Close()
+			_ = os.Remove(dir)
+			_ = releaseParent()
+		}
+	}()
 	var socketStat, dirStat unix.Stat_t
 	if err := unix.Lstat(alias, &socketStat); err != nil || socketStat.Mode&unix.S_IFMT != unix.S_IFSOCK {
-		_ = os.Remove(alias)
-		_ = guard.Close()
-		_ = os.Remove(dir)
 		return nil, fmt.Errorf("retained local service is not a socket: %v", err)
 	}
 	if err := unix.Fstat(int(guard.Fd()), &dirStat); err != nil {
-		_ = os.Remove(alias)
-		_ = guard.Close()
-		_ = os.Remove(dir)
 		return nil, err
 	}
-	release := func() error {
+	short, releaseShort, err := shortReferenceAddress(dir)
+	if err != nil {
+		return nil, err
+	}
+	release := func() (result error) {
+		defer func() { result = errors.Join(result, releaseShort(), releaseParent()) }()
 		var currentDir, currentSocket unix.Stat_t
 		if unix.Lstat(dir, &currentDir) != nil || currentDir.Dev != dirStat.Dev || currentDir.Ino != dirStat.Ino {
 			return ErrUnbound
@@ -89,7 +99,57 @@ func Open(path string) (*Reference, error) {
 		}
 		return errors.Join(os.Remove(alias), os.Remove(dir))
 	}
-	return &Reference{file: guard, path: resolved, release: release}, nil
+	captured = true
+	return &Reference{file: guard, path: resolved, address: filepath.Join(short, "socket"), release: release, verify: newPeerBinding()}, nil
+}
+
+func newReferenceEndpoint(r *Reference, network string) (serviceEndpoint, error) {
+	if network == "unixgram" {
+		endpoint, err := startDatagramEndpoint(filepath.Join(filepath.Dir(r.address), "datagrams"), func(ctx context.Context, local string) (net.Conn, error) {
+			return r.dialContext(ctx, network, local)
+		})
+		if err != nil {
+			return nil, err
+		}
+		endpoint.remove = func() error { return unix.Unlinkat(int(r.file.Fd()), "datagrams", 0) }
+		return endpoint, nil
+	}
+	endpoint, err := startEndpoint(filepath.Join(filepath.Dir(r.address), "relay"), r.DialContext)
+	if err != nil {
+		return nil, err
+	}
+	endpoint.listener.SetUnlinkOnClose(false)
+	endpoint.remove = func() error { return unix.Unlinkat(int(r.file.Fd()), "relay", 0) }
+	return endpoint, nil
+}
+
+func shortReferenceAddress(directory string) (string, func() error, error) {
+	root, err := os.MkdirTemp("/private/tmp", shortReferencePrefix())
+	if err != nil {
+		return "", nil, err
+	}
+	var expected unix.Stat_t
+	if err := unix.Lstat(root, &expected); err != nil || expected.Mode&unix.S_IFMT != unix.S_IFDIR || expected.Mode&0777 != 0700 || expected.Uid != uint32(os.Getuid()) {
+		_ = os.Remove(root)
+		return "", nil, ErrUnbound
+	}
+	link := filepath.Join(root, "d")
+	if err := os.Symlink(directory, link); err != nil {
+		_ = os.Remove(root)
+		return "", nil, err
+	}
+	release := func() error {
+		var current unix.Stat_t
+		if unix.Lstat(root, &current) != nil || current.Dev != expected.Dev || current.Ino != expected.Ino {
+			return ErrUnbound
+		}
+		target, err := os.Readlink(link)
+		if err != nil || target != directory {
+			return ErrUnbound
+		}
+		return errors.Join(os.Remove(link), os.Remove(root))
+	}
+	return link, release, nil
 }
 
 func descriptorPath(file *os.File) string { return filepath.Join(file.Name(), "socket") }

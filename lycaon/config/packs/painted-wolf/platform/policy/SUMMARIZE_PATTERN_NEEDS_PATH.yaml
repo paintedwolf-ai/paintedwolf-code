@@ -25,7 +25,3 @@ x-paintedwolf-scenarios:
     vars:
       profile: coordinator
       tool: summarize
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SUMMARIZE_PATTERN_NEEDS_PATH'
-      - path

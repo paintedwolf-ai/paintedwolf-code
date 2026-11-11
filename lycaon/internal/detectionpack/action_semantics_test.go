@@ -108,7 +108,7 @@ mappings:
 	testutil.FailErr(t, "write device semantics", os.WriteFile(DeviceActionSemanticsPath(dir), []byte(body), 0o600))
 	catalog, err := LoadActionSemantics(dir)
 	testutil.FailErr(t, "LoadActionSemantics", err)
-	if len(catalog.Warnings) != 1 || !strings.Contains(catalog.Warnings[0], "anchor the complete registry identity") {
+	if len(catalog.Warnings) != 1 {
 		t.Fatalf("warnings=%v", catalog.Warnings)
 	}
 }

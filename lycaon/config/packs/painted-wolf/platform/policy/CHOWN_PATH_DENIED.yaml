@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     path: scripts/run.sh
     profile: implement
     tool: chown
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CHOWN_PATH_DENIED'

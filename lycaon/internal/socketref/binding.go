@@ -33,15 +33,13 @@ type Adapter struct {
 	Native  Enforcement
 }
 
-// Mode preserves existing pathname grants only on adapters that realize them.
-func (b Binding) Mode() Enforcement { return Platform().BindingMode(b) }
-
-// BindingMode preserves an explicit contract and otherwise uses this adapter.
-func (a Adapter) BindingMode(b Binding) Enforcement {
+// Mode preserves the interpretation of saved intent, including older macOS
+// pathname grants. Fresh requests select the platform's current realization.
+func (b Binding) Mode() Enforcement {
 	if b.Enforcement != "" {
 		return b.Enforcement
 	}
-	return a.Command
+	return implicitBindingMode()
 }
 
 // Key includes the enforcement contract as well as its object identity.
@@ -111,7 +109,7 @@ func (b Binding) Acquire() (*Lease, error) {
 	bindings.Lock()
 	defer bindings.Unlock()
 	entry := bindings.refs[b.ID]
-	if entry == nil {
+	if entry == nil || entry.reference.invalid.Load() {
 		return nil, ErrUnbound
 	}
 	entry.owners++
@@ -146,6 +144,9 @@ func (b Binding) MatchesPath(path string) bool {
 		return false
 	}
 	defer release()
+	if ref.invalid.Load() {
+		return false
+	}
 	return matchesPath(ref, path)
 }
 
@@ -172,7 +173,20 @@ func (b Binding) SameObject(other Binding) bool {
 		return false
 	}
 	defer doneC()
+	if a.invalid.Load() || c.invalid.Load() {
+		return false
+	}
 	return sameObject(a, c)
+}
+
+// Endpoint supplies a connection address without granting the original pathname.
+func (l *Lease) Endpoint(network string) (string, error) {
+	ref, release, err := l.operation()
+	if err != nil {
+		return "", err
+	}
+	defer release()
+	return ref.Endpoint(network)
 }
 
 // DialContext holds an operation share until the kernel connect has finished.

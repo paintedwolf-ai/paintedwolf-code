@@ -168,6 +168,17 @@ func (m *Matcher) harvestMatches(ctx context.Context, s string) []Match {
 	if m == nil || s == "" {
 		return nil
 	}
+	values := collectHarvestValues(ctx, m)
+	var hits []Match
+	for _, v := range values {
+		for _, n := range harvestNeedles(v.Secret, MinNeedleRunes(v.NonDisclosable)) {
+			hits = append(hits, m.needleMatches(s, n, v)...)
+		}
+	}
+	return hits
+}
+
+func collectHarvestValues(ctx context.Context, m *Matcher) []HarvestedValue {
 	local, _ := ctx.Value(screeningValuesKey{}).([]Remembered)
 	current := make(map[string]bool, len(local))
 	for _, value := range local {
@@ -193,13 +204,7 @@ func (m *Matcher) harvestMatches(ctx context.Context, s string) []Match {
 			Fingerprint: m.fingerprinter.Fingerprint(value.Secret),
 		})
 	}
-	var hits []Match
-	for _, v := range values {
-		for _, n := range harvestNeedles(v.Secret, MinNeedleRunes(v.NonDisclosable)) {
-			hits = append(hits, m.needleMatches(s, n, v)...)
-		}
-	}
-	return hits
+	return values
 }
 
 func (m *Matcher) needleMatches(s string, n needle, v HarvestedValue) []Match {

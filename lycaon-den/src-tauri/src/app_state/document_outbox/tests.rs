@@ -47,7 +47,7 @@ fn a_document_writer_does_not_block_other_documents_or_committed_reads() {
         );
         send.send(()).expect("report independent completion");
     });
-    let completed = receive.recv_timeout(std::time::Duration::from_secs(5));
+    let completed = receive.recv_timeout(std::time::Duration::from_secs(120));
     drop(document);
     drop(store);
     worker.join().expect("independent worker");

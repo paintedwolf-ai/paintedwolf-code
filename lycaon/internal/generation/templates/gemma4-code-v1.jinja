@@ -1,0 +1,227 @@
+{# Tool-value formatting derives from the Google Gemma 4 canonical template. #}
+{%- macro format_parameters(properties, required, filter_keys=false) -%}
+    {%- set standard_keys = ['description', 'type', 'properties', 'required', 'nullable'] -%}
+    {%- set ns = namespace(found_first=false) -%}
+    {%- for key, value in properties | dictsort -%}
+        {%- set add_comma = false -%}
+        {%- if not filter_keys or key not in standard_keys -%}
+            {%- if ns.found_first %},{% endif -%}
+            {%- set ns.found_first = true -%}
+            {{ key }}:{
+            {%- if value['description'] -%}
+                description:<|"|>{{ value['description'] }}<|"|>
+                {%- set add_comma = true -%}
+            {%- endif -%}
+            {%- if value['type'] | upper == 'STRING' -%}
+                {%- if value['enum'] -%}
+                    {%- if add_comma %},{%- else -%} {%- set add_comma = true -%} {% endif -%}
+                    enum:{{ format_argument(value['enum']) }}
+                {%- endif -%}
+            {%- elif value['type'] | upper == 'ARRAY' -%}
+                {%- if value['items'] is mapping and value['items'] -%}
+                    {%- if add_comma %},{%- else -%} {%- set add_comma = true -%} {% endif -%}
+                    items:{
+                    {%- set ns_items = namespace(found_first=false) -%}
+                    {%- for item_key, item_value in value['items'] | dictsort -%}
+                        {%- if item_value is not none -%}
+                            {%- if ns_items.found_first %},{% endif -%}
+                            {%- set ns_items.found_first = true -%}
+                            {%- if item_key == 'properties' -%}
+                                properties:{
+                                {%- if item_value is mapping -%}
+                                    {{- format_parameters(item_value, value['items']['required'] | default([])) -}}
+                                {%- endif -%}
+                                }
+                            {%- elif item_key == 'required' -%}
+                                required:[
+                                {%- for req_item in item_value -%}
+                                    <|"|>{{- req_item -}}<|"|>
+                                    {%- if not loop.last %},{% endif -%}
+                                {%- endfor -%}
+                                ]
+                            {%- elif item_key == 'type' -%}
+                                {%- if item_value is string -%}
+                                    type:{{ format_argument(item_value | upper) }}
+                                {%- else -%}
+                                    type:{{ format_argument(item_value | map('upper') | list) }}
+                                {%- endif -%}
+                            {%- else -%}
+                                {{ item_key }}:{{ format_argument(item_value) }}
+                            {%- endif -%}
+                        {%- endif -%}
+                    {%- endfor -%}
+                    }
+                {%- endif -%}
+            {%- endif -%}
+            {%- if value['nullable'] %}
+                {%- if add_comma %},{%- else -%} {%- set add_comma = true -%} {% endif -%}
+                nullable:true
+            {%- endif -%}
+            {%- if value['type'] | upper == 'OBJECT' -%}
+                {%- if value['properties'] is defined and value['properties'] is mapping -%}
+                    {%- if add_comma %},{%- else -%} {%- set add_comma = true -%} {% endif -%}
+                    properties:{
+                    {{- format_parameters(value['properties'], value['required'] | default([])) -}}
+                    }
+                {%- elif value is mapping -%}
+                    {%- if add_comma %},{%- else -%} {%- set add_comma = true -%} {% endif -%}
+                    properties:{
+                    {{- format_parameters(value, value['required'] | default([]), filter_keys=true) -}}
+                    }
+                {%- endif -%}
+                {%- if value['required'] -%}
+                    {%- if add_comma %},{%- else -%} {%- set add_comma = true -%} {% endif -%}
+                    required:[
+                    {%- for item in value['required'] | default([]) -%}
+                        <|"|>{{- item -}}<|"|>
+                        {%- if not loop.last %},{% endif -%}
+                    {%- endfor -%}
+                    ]
+                {%- endif -%}
+            {%- endif -%}
+            {%- if add_comma %},{%- else -%} {%- set add_comma = true -%} {% endif -%}
+            type:<|"|>{{ value['type'] | upper }}<|"|>}
+        {%- endif -%}
+    {%- endfor -%}
+{%- endmacro -%}
+{%- macro format_function_declaration(tool_data) -%}
+    declaration:{{- tool_data['function']['name'] -}}{description:<|"|>{{- tool_data['function']['description'] -}}<|"|>
+    {%- set params = tool_data['function']['parameters'] -%}
+    {%- if params -%}
+        ,parameters:{
+        {%- if params['properties'] -%}
+            properties:{ {{- format_parameters(params['properties'], params['required']) -}} },
+        {%- endif -%}
+        {%- if params['required'] -%}
+            required:[
+            {%- for item in params['required'] -%}
+                <|"|>{{- item -}}<|"|>
+                {{- ',' if not loop.last -}}
+            {%- endfor -%}
+            ],
+        {%- endif -%}
+        {%- if params['type'] -%}
+            type:<|"|>{{- params['type'] | upper -}}<|"|>}
+        {%- endif -%}
+    {%- endif -%}
+    {%- if 'response' in tool_data['function'] -%}
+        {%- set response_declaration = tool_data['function']['response'] -%}
+        ,response:{
+        {%- if response_declaration['description'] -%}
+            description:<|"|>{{- response_declaration['description'] -}}<|"|>,
+        {%- endif -%}
+        {%- if response_declaration['type'] | upper == 'OBJECT' -%}
+            type:<|"|>{{- response_declaration['type'] | upper -}}<|"|>}
+        {%- endif -%}
+    {%- endif -%}
+    }
+{%- endmacro -%}
+{%- macro format_argument(argument, escape_keys=True) -%}
+    {%- if argument is none -%}
+        {{- 'null' -}}
+    {%- elif argument is string -%}
+        {{- '<|"|>' + argument + '<|"|>' -}}
+    {%- elif argument is boolean -%}
+        {{- 'true' if argument else 'false' -}}
+    {%- elif argument is mapping -%}
+        {{- '{' -}}
+        {%- set ns = namespace(found_first=false) -%}
+        {%- for key, value in argument | dictsort -%}
+            {%- if ns.found_first %},{% endif -%}
+            {%- set ns.found_first = true -%}
+            {%- if escape_keys -%}
+                {{- '<|"|>' + key + '<|"|>' -}}
+            {%- else -%}
+                {{- key -}}
+            {%- endif -%}
+            :{{- format_argument(value, escape_keys=escape_keys) -}}
+        {%- endfor -%}
+        {{- '}' -}}
+    {%- elif argument is sequence -%}
+        {{- '[' -}}
+        {%- for item in argument -%}
+            {{- format_argument(item, escape_keys=escape_keys) -}}
+            {%- if not loop.last %},{% endif -%}
+        {%- endfor -%}
+        {{- ']' -}}
+    {%- else -%}
+        {{- argument -}}
+    {%- endif -%}
+{%- endmacro -%}
+{%- macro format_tool_response_block(tool_name, response) -%}
+    {{- '<|tool_response>' -}}
+    {%- if response is mapping -%}
+        {{- 'response:' + tool_name + '{' -}}
+        {%- for key, value in response | dictsort -%}
+            {{- key -}}:{{- format_argument(value, escape_keys=False) -}}
+            {%- if not loop.last %},{% endif -%}
+        {%- endfor -%}
+        {{- '}' -}}
+    {%- else -%}
+        {{- 'response:' + tool_name + '{value:' + format_argument(response, escape_keys=False) + '}' -}}
+    {%- endif -%}
+    {{- '<tool_response|>' -}}
+{%- endmacro -%}
+
+{%- if enable_thinking | default(false) -%}
+    {{- raise_exception('gemma4-code-v1 does not enable thinking') -}}
+{%- endif -%}
+{{- bos_token -}}
+{%- set history = messages -%}
+{%- if tools or (messages and messages[0]['role'] in ['system', 'developer']) -%}
+    {{- '<|turn>system\n' -}}
+    {%- if messages and messages[0]['role'] in ['system', 'developer'] -%}
+        {%- if messages[0]['content'] is not string -%}
+            {{- raise_exception('system content must be text') -}}
+        {%- endif -%}
+        {{- messages[0]['content'] -}}
+        {%- set history = messages[1:] -%}
+    {%- endif -%}
+    {%- for tool in tools | default([], true) -%}
+        {{- '<|tool>' + format_function_declaration(tool) | trim + '<tool|>' -}}
+    {%- endfor -%}
+    {{- '<turn|>\n' -}}
+{%- endif -%}
+{%- set state = namespace(open_model=false) -%}
+{%- for message in history -%}
+    {%- set role = message['role'] -%}
+    {%- set following = history[loop.index]['role'] if not loop.last else none -%}
+    {%- if role not in ['user', 'assistant', 'tool'] or message['content'] is not string -%}
+        {{- raise_exception('gemma4-code-v1 requires ordered text messages') -}}
+    {%- endif -%}
+    {%- if message.get('tool_responses') or (role != 'assistant' and message.get('tool_calls')) -%}
+        {{- raise_exception('tool history requires assistant calls and ordered tool messages') -}}
+    {%- endif -%}
+    {%- if role == 'user' -%}
+        {{- '<|turn>user\n' + message['content'] + '<turn|>\n' -}}
+    {%- else -%}
+        {%- if not state.open_model -%}{{- '<|turn>model\n' -}}{%- endif -%}
+        {%- set state.open_model = true -%}
+        {%- if role == 'tool' -%}
+            {%- if not message.get('name') -%}
+                {{- raise_exception('tool result requires its tool name') -}}
+            {%- endif -%}
+            {{- format_tool_response_block(message['name'], message['content']) -}}
+        {%- else -%}
+            {{- message['content'] -}}
+            {%- for call in (message.get('tool_calls') or []) -%}
+                {%- set function = call['function'] -%}
+                {%- if function['arguments'] is not mapping -%}
+                    {{- raise_exception('tool arguments must be an object') -}}
+                {%- endif -%}
+                {{- '<|tool_call>call:' + function['name'] + format_argument(function['arguments'], escape_keys=false) + '<tool_call|>' -}}
+            {%- endfor -%}
+        {%- endif -%}
+        {%- set continue_model = (role == 'tool' and following in ['tool', 'assistant']) or (role == 'assistant' and message.get('tool_calls') and following == 'tool') -%}
+        {%- if loop.last and role == 'tool' and add_generation_prompt -%}
+        {%- elif loop.last and role == 'assistant' and message.get('tool_calls') and not add_generation_prompt -%}
+            {{- '<|tool_response>' -}}
+        {%- elif not continue_model -%}
+            {{- '<turn|>\n' -}}
+            {%- set state.open_model = false -%}
+        {%- endif -%}
+    {%- endif -%}
+{%- endfor -%}
+{%- if add_generation_prompt and not state.open_model -%}
+    {{- '<|turn>model\n' -}}
+{%- endif -%}

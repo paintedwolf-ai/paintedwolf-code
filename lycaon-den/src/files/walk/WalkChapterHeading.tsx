@@ -28,7 +28,7 @@ export function WalkChapterHeading(props: {
             </span>
           </div>
           <Show when={current().messageId && props.onRevealInTranscript}>
-            <button type="button" class="den-walk-chapter__reveal" onClick={() => props.onRevealInTranscript?.({
+            <button data-testid="show-in-chat" type="button" class="den-walk-chapter__reveal" onClick={() => props.onRevealInTranscript?.({
               sessionId: current().sessionId,
               anchor: { chicklet: "message", anchorId: current().messageId },
             })}>Show in chat</button>

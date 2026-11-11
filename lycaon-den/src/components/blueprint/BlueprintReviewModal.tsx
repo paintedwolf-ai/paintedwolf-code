@@ -256,7 +256,7 @@ export function BlueprintReviewModal(props: Props) {
             <div class="den-blueprint-review-footer__row">
               <span
                 class="den-blueprint-review-footer__lead"
-                data-testid="blueprint-review-lead"
+                data-testid={props.changed ? "blueprint-review-lead-changed" : "blueprint-review-lead"}
               >
                 {footerLead()}
               </span>

@@ -68,10 +68,10 @@ export function FeedbackArtifactThumb(props: {
   const fallback = () => {
     if (artifactWasDeleted(props.artifactId) ||
       (blobResource.error instanceof LycaonApiError && blobResource.error.code === "artifact_deleted")) {
-      return <p class="den-workflow-feedback-card-artifact-loading" role="status">This artifact was deleted.</p>;
+      return <p class="den-workflow-feedback-card-artifact-loading" role="status" data-testid="artifact-tombstone">This artifact was deleted.</p>;
     }
     if (blobFailed()) {
-      return <p class="den-workflow-feedback-card-artifact-loading" role="status">Preview unavailable.</p>;
+      return <p class="den-workflow-feedback-card-artifact-loading" role="status" data-testid="artifact-preview-unavailable">Preview unavailable.</p>;
     }
     return <p class="den-workflow-feedback-card-artifact-loading" aria-busy="true">Loading preview…</p>;
   };

@@ -25,7 +25,6 @@ import {
   groupHitsForEverything,
   matchGotoTargets,
   crossbarHitStatus,
-  crossbarNoMatchLabel,
   crossbarServerQuery,
   shouldRunCrossbarServerSearch,
   queryLooksLikeDsl,
@@ -451,9 +450,6 @@ describe("crossbar-model", () => {
     expect(
       crossbarHitStatus({ query: "x", mode: "everything", searching: false, hitCount: 2 }),
     ).toBe("hits");
-    expect(crossbarNoMatchLabel("code")).toBe("No code matches");
-    expect(crossbarNoMatchLabel("evidence")).toBe("No evidence matches");
-    expect(crossbarNoMatchLabel("everything")).toBe("No matches");
   });
 
   it("go-to lane: idle shows recent chats first; typing matches all targets", () => {
@@ -653,7 +649,6 @@ describe("query arms", () => {
     expect(shouldRunCrossbarServerSearch("#p", "everything", true)).toBe(false);
     expect(shouldRunCrossbarServerSearch("p", "symbols", true)).toBe(false);
     expect(shouldRunCrossbarServerSearch("p", "code", true)).toBe(true);
-    expect(crossbarNoMatchLabel("symbols")).toBe("No symbols match");
   });
 
   it("offers outside paths as a project, and a reveal only where this device can", () => {

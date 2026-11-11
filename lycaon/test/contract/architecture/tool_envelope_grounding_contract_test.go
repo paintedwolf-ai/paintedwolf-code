@@ -115,7 +115,7 @@ func TestListScansEmptyHintMatchesRegistry(t *testing.T) {
 	if resp.HintCode != "SCAN_LIST_EMPTY" {
 		t.Fatalf("HintCode = %q", resp.HintCode)
 	}
-	want := guidance.EnvelopeHintMessage(t.Context(), cfg, resp.HintCode, nil)
+	want := guidance.EnvelopeHintMessage(t.Context(), cfg, nil, resp.HintCode, nil)
 	if resp.Hint != want {
 		t.Fatalf("Hint = %q want registry message %q", resp.Hint, want)
 	}
@@ -250,7 +250,7 @@ func TestSurveyByteClampUsesRegisteredHintCode(t *testing.T) {
 	cfg := loadToolEnvelopeHintConfig(t)
 	clamped := `{"results":[],"offset":0,"truncated":true,"next_offset":0,"truncation_banner":"trimmed"}`
 	vars := map[string]any{"kept": 0, "page_key": "results", "offset": 0, "next_offset": 0}
-	msg := guidance.EnvelopeHintMessage(t.Context(), cfg, "TOOL_SURVEY_BYTE_CLAMPED", vars)
+	msg := guidance.EnvelopeHintMessage(t.Context(), cfg, nil, "TOOL_SURVEY_BYTE_CLAMPED", vars)
 	out := guidance.AppendOutputBanner(clamped, "TOOL_SURVEY_BYTE_CLAMPED", msg)
 	if !strings.Contains(out, "Code: TOOL_SURVEY_BYTE_CLAMPED") {
 		t.Fatalf("missing registered banner code: %q", out)
@@ -260,22 +260,5 @@ func TestSurveyByteClampUsesRegisteredHintCode(t *testing.T) {
 	}
 	if !strings.Contains(out, clamped) {
 		t.Fatal("banner must preserve clamped JSON prefix")
-	}
-}
-
-func TestSurveyreceiptNoForbiddenInlineSessionCapProse(t *testing.T) {
-	root := contractcheck.RepoRoot(t)
-	path := filepath.Join(root, "lycaon", "internal", "tools", "surveyreceipt")
-	entries, err := os.ReadDir(path)
-	contractcheck.FailErr(t, "read surveyreceipt dir", err)
-	for _, ent := range entries {
-		if !strings.HasSuffix(ent.Name(), ".go") || strings.HasSuffix(ent.Name(), "_test.go") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(path, ent.Name()))
-		contractcheck.FailErr(t, "read file", err)
-		if strings.Contains(string(data), "session byte cap") {
-			t.Fatalf("%s must not contain inline session byte cap prose (use TOOL_SURVEY_BYTE_CLAMPED registry)", ent.Name())
-		}
 	}
 }

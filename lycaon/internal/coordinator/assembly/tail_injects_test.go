@@ -2,6 +2,7 @@ package assembly
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 
@@ -92,9 +93,7 @@ func TestDynamicInjectsFollowHistory(t *testing.T) {
 		if isVolatilePromptBlock(m.Content) {
 			t.Fatalf("dynamic inject at index %d precedes history tail at %d:\n%s", i, lastHistoryIdx, m.Content[:120])
 		}
-		if strings.Contains(m.Content, inject.ActiveWorkflowInjectSentinel) {
-			t.Fatalf("workflow runtime block at index %d must follow history", i)
-		}
+		exposure.Absent(t, m.Content, inject.ActiveWorkflowInjectSentinel)
 	}
 
 	foundVolatileAfter := false

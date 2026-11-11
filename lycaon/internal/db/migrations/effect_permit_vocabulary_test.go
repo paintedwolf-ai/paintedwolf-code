@@ -139,7 +139,7 @@ INSERT INTO chat_grants VALUES
 	before := approvalDatabaseSnapshot(t, database)
 	tx, err := database.BeginTx(t.Context(), nil)
 	testutil.FailErr(t, "begin refused migration", err)
-	if err := migrations.EffectPermitIdentity(migrations.Baseline{Revision: 5}).Apply(t.Context(), tx); err == nil {
+	if err := migrations.EffectPermitIdentity().Apply(t.Context(), tx); err == nil {
 		t.Fatal("migration accepted unrecognized retained authority")
 	}
 	testutil.FailErr(t, "roll back refused migration", tx.Rollback())

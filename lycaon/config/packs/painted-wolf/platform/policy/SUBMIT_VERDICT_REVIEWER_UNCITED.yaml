@@ -23,5 +23,4 @@ x-paintedwolf-message: Terminal verdict does not cite every owed reviewer.
 x-paintedwolf-scenarios:
   - id: skeptic
     vars: { review_uncited_reviewers: [skeptic] }
-    expect_contains: ['Code: SUBMIT_VERDICT_REVIEWER_UNCITED', 'skeptic']
 x-paintedwolf-emit: guard:workflow

@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/onboarding/OnboardingGate.tsx",
+  "kind": "projection",
+  "workstream": "included-model-onboarding",
+  "disposition": "retain",
+  "reason": "This component presents the first-run sequence and its continuation checks. The policy change adds one host-resolved accessor without new imports or workflow ownership. Keep this cohesive projection bounded while the existing page contracts cover navigation and default-model readiness.",
+  "reviewed_commit": "9c40fec1d78c2d68f97fcbab8b8b5a8c645e4684",
+  "ceiling": 600,
+  "boundaries": {
+    "lycaon-den/src/components/onboarding/OnboardingGate.test.tsx": "bb046a6328ebd36b08b9c53181b9e819b1eb750ac075767b60200d6c5f74fd0c"
+  }
+}

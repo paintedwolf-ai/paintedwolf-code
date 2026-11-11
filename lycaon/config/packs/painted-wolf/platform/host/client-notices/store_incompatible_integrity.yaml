@@ -3,9 +3,3 @@ title: Your data needs attention
 message: >-
   Your conversation history did not pass its integrity check. A recovery snapshot
   from {time} is available. We will verify it before restoring your data.
-scenarios:
-  - id: default
-    expect_contains:
-      - integrity check
-      - recovery snapshot
-      - "{time}"

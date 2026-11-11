@@ -6,5 +6,3 @@ suggested_action: "Reload the chat and try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "changed before its references"

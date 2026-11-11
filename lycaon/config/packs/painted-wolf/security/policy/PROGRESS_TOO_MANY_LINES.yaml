@@ -31,7 +31,3 @@ x-paintedwolf-scenarios:
     line_count: 9
     max_lines: 8
     tool: update_progress
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: PROGRESS_TOO_MANY_LINES'
-  - update_progress

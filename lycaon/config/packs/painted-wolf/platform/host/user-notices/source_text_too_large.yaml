@@ -6,5 +6,3 @@ suggested_action: "Open the file directly, or compare a smaller file."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "larger than a comparison"

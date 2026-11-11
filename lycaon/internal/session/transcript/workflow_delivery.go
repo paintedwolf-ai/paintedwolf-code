@@ -21,7 +21,7 @@ func (m *Service) DeliveredWorkflowPhase(ctx context.Context, sessionID, runID, 
 		if msg.Role == api.MessageRoleAssistant && msg.Kind == api.MessageKindCompletionReport && len(msg.ToolCalls) == 0 &&
 			msg.Visibility == api.MessageVisibilityTranscript && msg.WorkflowRunID == runID &&
 			msg.CompletionReport != nil && msg.CompletionReport.Scope == api.CompletionReportScopePhase &&
-			msg.CompletionReport.Phase == phase {
+			msg.CompletionReport.Phase == phase && (msg.Grounding == nil || !msg.Grounding.EvidenceOptional) {
 			return true, nil
 		}
 	}

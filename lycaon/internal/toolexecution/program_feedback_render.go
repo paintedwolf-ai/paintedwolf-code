@@ -63,9 +63,9 @@ func (r *Rejections) RenderProgramFailure(ctx context.Context, frame ProgramFram
 	if r.blockPlane != nil {
 		var rejectErr error
 		if prepared.progress {
-			rejectErr = r.blockPlane.RejectObservation(ctx, "command", tc.Identity.Agent, submitted, prepared.Rejection)
+			rejectErr = r.blockPlane.RejectObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, prepared.Rejection)
 		} else {
-			rejectErr = r.blockPlane.RejectNativeObservation(ctx, tc.Identity.Agent, submitted, prepared.operation, prepared.Rejection)
+			rejectErr = r.blockPlane.RejectNativeObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, prepared.operation, prepared.Rejection)
 		}
 		if rejectErr != nil {
 			return rejectErr
@@ -153,7 +153,7 @@ func (d *ProgramRefusalDelivery) Close() {
 
 // RenderProgramRefusal renders a reached evaluator refusal beneath its actual
 // command call. It observes no native operation and grants no execution authority.
-func (r *Rejections) RenderProgramRefusal(ctx context.Context, frame ProgramFrame, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, tc tools.ToolContext, cause error, preparationFailure error) (delivery *ProgramRefusalDelivery, err error) {
+func (r *Rejections) RenderProgramRefusal(ctx context.Context, frame ProgramFrame, memory *toolcontract.ProgramMemory, screen ProgramDiagnosticScreen, tc tools.ToolContext, cause error, preparationFailure error, ledger ProgramOutcomeLedger) (delivery *ProgramRefusalDelivery, err error) {
 	rejected := toolrejection.AsToolReject(cause)
 	if r == nil || ctx == nil || memory == nil || screen == nil || rejected == nil || len(rejected.Code) > 1024 {
 		return nil, fmt.Errorf("program refusal requires actual frame, typed cause, screening and admission")
@@ -259,13 +259,30 @@ func (r *Rejections) RenderProgramRefusal(ctx context.Context, frame ProgramFram
 	releases = append(releases, release)
 	clone := *rejected
 	clone.Data = screened
-	clone.Data["tool"] = "command"
+	if ledger != nil {
+		retained, readErr := ledger.ReadProgramOutcomeFeedback(ctx, tc.Identity.SessionID, frame.lifetime.facts.parent.Identity.ProgramID, 2, memory)
+		if readErr != nil {
+			return delivery, readErr
+		}
+		if retained == nil {
+			return delivery, fmt.Errorf("evaluator feedback ledger returned no snapshot")
+		}
+		releases = append(releases, retained.Close)
+		facts, factsErr := evaluatorOutcomeFacts(frame.lifetime.facts.parent, tc, retained.Projection)
+		if factsErr != nil {
+			return delivery, factsErr
+		}
+		for key, value := range facts {
+			clone.Data[key] = value
+		}
+	}
+	clone.Data["tool"] = frame.lifetime.model.ToolName
 	delete(clone.Data, "native_operation")
 	delete(clone.Data, "native_command")
 	var rendered error
 	ctx = invocationContext(ctx, tc)
 	if r.blockPlane != nil {
-		rendered = r.blockPlane.RejectObservation(ctx, "command", tc.Identity.Agent, submitted, &clone)
+		rendered = r.blockPlane.RejectObservation(ctx, frame.lifetime.model.ToolName, tc.Identity.Agent, submitted, &clone)
 	}
 	if rendered == nil {
 		rendered = r.renderReject(&clone)

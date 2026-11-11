@@ -1,8 +1,8 @@
-"""Own application controls while preserving host tools and provider credentials."""
+"""Own application controls and resource release while preserving host tools and provider credentials."""
 import os
-import sys
 import shutil
 import subprocess
+import sys
 
 
 def application_environment(overrides=None):
@@ -13,6 +13,12 @@ def application_environment(overrides=None):
                         'LYCAON_LLM_MOCK': '0', 'LYCAON_LLM_MANUAL': '0'})
     environment.update(overrides or {})
     return environment
+
+
+def release_external_resource(capture, source):
+    subprocess.run([str(source / '.bin/lycaon-debug'), 'eval', 'tool-usage',
+                    '--release-resources', str(capture)], check=True,
+                   env=application_environment())
 
 
 def require_launcher_runtime():

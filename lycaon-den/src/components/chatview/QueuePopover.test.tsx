@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { at } from "../../test/at.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { QueuePopover } from "./QueuePopover.tsx";
 import type { QueueItem } from "../../api/types.ts";
@@ -58,8 +59,8 @@ describe("QueuePopover", () => {
     render(() => (
       <QueuePopover items={[item("a", "first"), item("b", "second")]} running paused={paused} {...handlers()} />
     ));
-    fireEvent.click(at(screen.getAllByRole("button", { name: "Edit message" }), 1));
-    expect((screen.getByRole("textbox", { name: "Queued message 2" }) as HTMLTextAreaElement).value).toBe("second");
+    fireEvent.click(assertNamedControl(at(screen.getAllByTestId("queue-edit"), 1), "button"));
+    expect((assertNamedControl(screen.getByTestId("queue-edit-input"), "textbox") as HTMLTextAreaElement).value).toBe("second");
   });
 
   it("renders nothing when the queue is empty", () => {
@@ -117,7 +118,7 @@ describe("QueuePopover", () => {
     const { unmount } = render(() => (
       <QueuePopover items={[item("a", "x")]} running paused={false} {...h} />
     ));
-    expect(screen.getByTestId("queue-send").textContent).toBe("Send");
+    expect(assertNamedControl(screen.getByTestId("queue-send"), "button")).toBeTruthy();
     fireEvent.click(screen.getByTestId("queue-send"));
     expect(h.onSend).toHaveBeenCalledOnce();
     unmount();
@@ -129,7 +130,7 @@ describe("QueuePopover", () => {
         {...handlers()}
       />
     ));
-    expect(screen.getByTestId("queue-send").textContent).toBe("Send");
+    expect(assertNamedControl(screen.getByTestId("queue-send"), "button")).toBeTruthy();
   });
 
   it("locks queue editing while the head group is being sent", () => {
@@ -142,17 +143,16 @@ describe("QueuePopover", () => {
         sending
       />
     ));
-    expect(screen.getByTestId("queue-status").textContent).toBe("Sending");
+    expect(screen.getByTestId("queue-status").getAttribute("data-state")).toBe("sending");
     // An unclaimed reservation can still be canceled.
     expect(screen.queryByTestId("queue-send")).toBeNull();
-    expect(screen.getByTestId("queue-cancel-send").textContent).toBe("Cancel send");
     for (const button of screen.getAllByTestId("queue-edit")) {
       expect((button as HTMLButtonElement).disabled).toBe(true);
     }
     for (const button of screen.getAllByTestId("queue-grip")) {
       expect((button as HTMLButtonElement).disabled).toBe(true);
     }
-    expect(screen.getByTestId("queue-pill").textContent).toContain("sending");
+    expect(screen.getByTestId("queue-pill").getAttribute("data-state")).toBe("sending");
   });
 
   it("waits for an active edit or drag to finish before sending", () => {
@@ -172,7 +172,7 @@ describe("QueuePopover", () => {
     const { unmount } = render(() => (
       <QueuePopover items={[item("a", "x")]} running paused {...handlers()} />
     ));
-    expect(screen.getByTestId("queue-status").textContent).toBe("Paused");
+    expect(screen.getByTestId("queue-status").getAttribute("data-state")).toBe("paused");
     unmount();
     const { unmount: unmount2 } = render(() => (
       <QueuePopover
@@ -183,8 +183,8 @@ describe("QueuePopover", () => {
         arranging
       />
     ));
-    expect(screen.getByTestId("queue-status").textContent).toBe(
-      "Sends at turn end",
+    expect(screen.getByTestId("queue-status").getAttribute("data-state")).toBe(
+      "running",
     );
     unmount2();
     render(() => (
@@ -195,7 +195,6 @@ describe("QueuePopover", () => {
         {...handlers()}
       />
     ));
-    expect(screen.getByTestId("queue-status").textContent).toBe("Sends next");
   });
 
   it("toggles pause from the header control", () => {
@@ -252,7 +251,7 @@ describe("QueuePopover", () => {
     ));
     fireEvent.click(screen.getByTestId("queue-edit"));
     expect(h.onBeginArrange).toHaveBeenCalledOnce();
-    const input = screen.getByRole("textbox", { name: "Queued message 1" }) as HTMLTextAreaElement;
+    const input = assertNamedControl(screen.getByTestId("queue-edit-input"), "textbox") as HTMLTextAreaElement;
     input.value = "after";
     for (const composition of [{ isComposing: true }, { keyCode: 229 }]) {
       fireEvent.keyDown(input, { key: "Enter", ...composition });
@@ -330,7 +329,6 @@ describe("QueuePopover", () => {
       />
     ));
     // Pending approval holds the queued send.
-    expect(screen.getByTestId("queue-status").textContent).toBe("Waiting on your approval");
     fireEvent.click(screen.getByTestId("queue-cancel-send"));
     expect(h.onCancelSend).toHaveBeenCalled();
   });
@@ -345,8 +343,6 @@ describe("QueuePopover", () => {
       />
     ));
     // This action prioritizes the message without sending it.
-    expect(screen.getByTestId("queue-fire-now").getAttribute("aria-label")).toBe(
-      "Move to the front",
-    );
+    assertNamedControl(screen.getByTestId("queue-fire-now"), "button");
   });
 });

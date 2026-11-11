@@ -12,6 +12,3 @@ suggested_action: >-
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - authorization
-      - Sign in

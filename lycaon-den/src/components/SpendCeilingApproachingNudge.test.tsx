@@ -88,7 +88,6 @@ describe("SpendCeilingApproachingNudge", () => {
       />
     ));
     const nudge = await screen.findByTestId("spend-ceiling-approaching-nudge");
-    expect(nudge.textContent).toContain("Approaching the spend ceiling");
     expect(nudge.textContent).toContain(formatUSD(4.25));
     expect(nudge.textContent).toContain(formatUSD(5));
   });

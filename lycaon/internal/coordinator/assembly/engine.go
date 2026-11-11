@@ -2,7 +2,6 @@ package assembly
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"sync/atomic"
 
@@ -76,8 +75,15 @@ type SessionView func(ctx context.Context, sess *api.Session) *catalogview.View
 // AgentsMDIndexInjector renders the cached session AGENTS.md index for each request.
 type AgentsMDIndexInjector func(ctx context.Context, sess *api.Session) (block api.Message, ok bool)
 
-// AgentsMDChainInjector renders path-scoped AGENTS.md chain content for a turn.
-type AgentsMDChainInjector func(ctx context.Context, sess *api.Session, relPath string) (block api.Message, err error)
+// AgentsMDPoliciesInjector renders current guidance for resolved working scopes.
+type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error)
+
+// SelectionSource exposes the session ledger's current prompt selection.
+type SelectionSource interface {
+	LoadedTools(string) map[string]bool
+	OmittedUnits(string) map[string]bool
+	FullCatalog(string) bool
+}
 
 // AssemblyDeps wires prompt message assembly for coordinator and worker turns.
 type AssemblyDeps struct {
@@ -87,7 +93,7 @@ type AssemblyDeps struct {
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
 	SessionView             SessionView
 	AgentsMDIndex           AgentsMDIndexInjector
-	AgentsMDChain           AgentsMDChainInjector
+	AgentsMDPolicies        AgentsMDPoliciesInjector
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	Agents                  AgentProfileResolver
 	Workflows               WorkflowManifestSource
@@ -105,19 +111,18 @@ type AssemblyDeps struct {
 	BoardOrientReady BoardOrientReadyRecorder
 	EnrichHistory    func(sessionID string, history []api.Message) []api.Message
 	PromptToolLister PromptToolLister
-	// LoadedTools returns the tools the turn ledger loaded beyond the surface floor.
-	LoadedTools func(sessionID string) map[string]bool
-	// OmittedUnits returns the instruction units the turn ledger left out.
-	OmittedUnits           func(sessionID string) map[string]bool
-	SkillPreload           func(sessionID string) *turnload.SkillPreload
-	SkillPointer           func(sessionID string) *turnload.SkillRank
-	ModelVision            func(context.Context, *api.Session) bool
-	ImplementSessionState  func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
-	LoadExecutionModeState func(ctx context.Context, sessionID string) surface.ExecutionModeState
-	SaveExecutionModeState func(ctx context.Context, sessionID, family string)
-	WebSearchEnabled       func() bool
-	SynthesisEvidence      SynthesisEvidenceSource
-	CommandJobs            func(sessionID string) []bgprocess.JobSnapshot
+	// ReadMessageWindow reads canonical rows for projections that must not vary
+	// with compaction. Unwired, they read the supplied history.
+	ReadMessageWindow     inject.MessageWindowReader
+	Selection             SelectionSource
+	SkillPreload          func(sessionID string) *turnload.SkillPreload
+	SkillPointer          func(sessionID string) *turnload.SkillRank
+	ModelVision           func(context.Context, *api.Session) bool
+	ImplementSessionState func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
+	ExecutionModes        *surface.ExecutionModeStateStore
+	WebSearchEnabled      func() bool
+	SynthesisEvidence     SynthesisEvidenceSource
+	CommandJobs           func(sessionID string) []bgprocess.JobSnapshot
 	// HeldCalls lists the session's tool calls held past their foreground wait.
 	HeldCalls func(sessionID string) []heldcall.Running
 	// TurnSourceBriefs returns each turn's source-change brief, keyed by the
@@ -200,33 +205,13 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		if deps.ScanGuidance != nil {
 			messages = deps.ScanGuidance.PrependGuidance(ctx, sess.ID, history)
 		}
-		return transcript.Project(llm.AppendHostSecretRedactionNotice(messages)), nil
+		return transcript.ProjectFor(contentAudience(sess, e.cache.LoadTurn(sess.ID).SurfaceID), llm.AppendHostSecretRedactionNotice(messages)), nil
 	}
 
 	turn := e.cache.LoadTurn(sess.ID)
 
-	templateRef, err := prompt.resolveSystemPromptRef(ctx, sess)
-	if err != nil {
-		return nil, err
-	}
-	vars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, ok := prompt.workspaceRootsForTurn(ctx, sess, turn); ok {
-		vars["root_count"] = count
-		vars["workspace_roots"] = roots
-		if activePath != "" {
-			vars["project_dir"] = activePath
-		}
-	}
-
 	coordinator := surface.IsCoordinatorSession(sess)
-	if coordinator {
-		// Coordinator rosters use a top-level heading.
-		vars["skills_heading"] = "##"
-	}
-	prompt.applyToolBudgetVars(ctx, sess, coordinator, vars)
-	if deps.ModelVision != nil {
-		prompts.MergeModelCapabilityVars(deps.ModelVision(ctx, sess), vars)
-	}
+	var err error
 	frame := inject.CoordinatorTurnFrame{}
 	if turnFrame != nil {
 		frame = *turnFrame
@@ -249,32 +234,13 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	if turnFrame != nil {
 		*turnFrame = frame
 	}
-	if !coordinatorSurface {
-		prompt.mergeVisibleTools(ctx, sess, frame, vars)
-		prompt.mergeVisibleToolCapabilityVars(vars)
-	}
-	prompt.mergeEffectivePromptSurface(ctx, sess, frame, vars)
-
 	var pendingKickIDs []string
 	if turn != nil {
 		pendingKickIDs = turn.PendingKickIDs
 	}
-
-	pe, promptRevision, err := prompt.projectPromptsSnapshot(ctx, sess)
+	rendered, err := prompt.renderSystemPrefix(ctx, sess, frame, history, turn, deps.ModelVision)
 	if err != nil {
 		return nil, err
-	}
-	var rendered string
-	if coordinatorSurface {
-		rendered, err = prompt.renderCoordinatorStablePrompt(ctx, pe, promptRevision, sess, frame, history, turn, vars)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		rendered, err = prompt.renderSystemPromptWithEngine(ctx, pe, sess, templateRef, vars)
-		if err != nil {
-			return nil, fmt.Errorf("system prompt %q: %w", templateRef, err)
-		}
 	}
 
 	out := []api.Message{{Role: api.MessageRoleSystem, Content: rendered, ContextPinned: true}}
@@ -295,8 +261,9 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 		messages = deps.EnrichHistory(sess.ID, messages)
 	}
 	if coordinator && !sess.IsWorkerChild() {
-		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, turn, messages)
+		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
 	}
+	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, messages)
 	if deps.ScanGuidance != nil {
 		out = append(out, deps.ScanGuidance.PrependGuidance(ctx, sess.ID, messages)...)
 	} else {
@@ -329,7 +296,16 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	markPromptCacheBreakpoints(out, prefixIdx, lastStableIdx)
 
 	turn.Iteration++
-	return transcript.Project(deduplicateProjectGuidance(out)), nil
+	return transcript.ProjectFor(contentAudience(sess, turn.SurfaceID), deduplicateProjectGuidance(out)), nil
+}
+
+// contentAudience selects the notice's account of tool-step text, the same split
+// publication makes: workers and non-publishing surfaces keep that text private.
+func contentAudience(sess *api.Session, surfaceID string) transcript.ContentAudience {
+	if sess != nil && !sess.IsWorkerChild() && surface.PublishesMidTurnText(surfaceID) {
+		return transcript.AudiencePublisher
+	}
+	return transcript.AudiencePrivate
 }
 
 // markPromptCacheBreakpoints marks each stable boundary a provider may cache
@@ -359,9 +335,7 @@ func (e *AssemblyEngine) EndPromptTurn(sessionID string) {
 	}
 	turn := e.cache.LoadTurn(sessionID)
 	if family := strings.TrimSpace(turn.CurrentExecutionModeFamily); family != "" {
-		if save := e.deps().SaveExecutionModeState; save != nil {
-			save(context.Background(), sessionID, family)
-		}
+		e.deps().ExecutionModes.Save(sessionID, family)
 	}
 	e.cache.EndTurn(sessionID)
 }

@@ -425,7 +425,6 @@ describe("ScannersSettingsPanel", () => {
 
     expect(client.createScanner).not.toHaveBeenCalled();
     await waitFor(() => {
-      expect(screen.getByTestId("scanners-custom-error").textContent).toContain("whole positive numbers");
     });
   });
 

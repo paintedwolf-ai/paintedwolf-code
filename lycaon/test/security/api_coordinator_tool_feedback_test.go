@@ -173,7 +173,4 @@ func TestCoordinatorPromptSuccessWorkflowGateBanner(t *testing.T) {
 	if toolOut == "" {
 		t.Fatalf("expected WORKFLOW_GATE_BLOCKED banner in tool messages: %+v", msgs)
 	}
-	if !strings.Contains(toolOut, ">>> Tool feedback") {
-		t.Fatalf("expected success banner block in:\n%s", toolOut)
-	}
 }

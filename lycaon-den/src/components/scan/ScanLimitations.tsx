@@ -62,7 +62,7 @@ export function ScanLimitations(props: {
             viewport={{ tabIndex: -1 }} viewportRef={(viewport) => queueMicrotask(() => viewport.focus())}>
           <div class="den-scans-issues-heading">
             <h3>Analysis issues</h3>
-            <DenButton variant="ghost" compact aria-label="Close analysis issues" onClick={() => close(true)}>Close</DenButton>
+            <DenButton variant="ghost" compact aria-label="Close analysis issues" data-testid="scans-issues-close" onClick={() => close(true)}>Close</DenButton>
           </div>
           <p>{props.scan.coverage_status === "unavailable"
             ? "Analysis coverage is unavailable for this run. Any available findings remain in the results."
@@ -81,7 +81,7 @@ export function ScanLimitations(props: {
           <div class="den-scans-diagnostics">
             <Show when={query.showLoading()}><p role="status">Loading diagnostics…</p></Show>
             <Show when={query.error()}>
-              <p role="alert">Could not load diagnostics. Available findings are unaffected.</p>
+              <p role="alert" data-testid="scans-issues-alert">Could not load diagnostics. Available findings are unaffected.</p>
               <DenButton variant="link" onClick={() => void query.refresh()}>Retry loading diagnostics</DenButton>
             </Show>
             <ul class="den-scans-diagnostics-list">

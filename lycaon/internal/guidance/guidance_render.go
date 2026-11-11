@@ -36,8 +36,9 @@ func RenderGuidance(ctx context.Context, ref string, data map[string]any) (strin
 }
 
 // RenderHintFields renders what/why/fix for a hint from its registered fields.
-func RenderHintFields(code string, entry HintEntry, data map[string]any) (what, why, fix string) {
+func RenderHintFields(ctx context.Context, code string, entry HintEntry, data map[string]any, resolve NextStepsResolver) (what, why, fix string) {
 	view := NormalizeRejectCodeView(code, entry)
+	data = withHintNextSteps(ctx, code, view, data, resolve)
 	return renderFieldTemplate(view.What, data),
 		renderFieldTemplate(view.Cause, data),
 		renderFieldTemplate(view.Fix, data)

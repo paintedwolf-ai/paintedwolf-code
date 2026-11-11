@@ -1,0 +1,9 @@
+steps:
+  - when: "paintedwolf.process_running"
+    tool: "command_stop"
+    say: "If this job cannot continue, request {{ call }} once."
+    otherwise: "If this job cannot continue, report the need to stop it; no stop tool is offered."
+  - when: "paintedwolf.process_running"
+    tool: "command_output"
+    say: "Use {{ call }} on its handle to observe exit."
+    otherwise: "Wait for its observed exit."

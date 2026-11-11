@@ -33,9 +33,6 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 		want string
 	}{
 		{tool: "task", args: map[string]any{}, want: "TOOL_ARGS_INVALID"},
-		{tool: "read", args: map[string]any{"filepath": "x.go"}, want: "received keys: filepath"},
-		{tool: "edit", args: map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, want: "TOOL_ARGS_INVALID"},
-		{tool: "code_rewrite", args: map[string]any{"pattern": "a", "rewrite": "b"}, want: "TOOL_ARGS_INVALID"},
 		{tool: "delegate_init", args: map[string]any{"blueprint_path": "p1"}, want: "TOOL_ARGS_INVALID"},
 	}
 	for _, tc := range cases {
@@ -57,7 +54,7 @@ func TestSchemaRejectsMissingRequiredFields(t *testing.T) {
 	}
 }
 
-func TestEditSchemaRejectPreservesSourcePrerequisite(t *testing.T) {
+func TestRetiredEditSchemaRejectCarriesCommandOperationCode(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	schemas, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir failed", err)
@@ -67,16 +64,14 @@ func TestEditSchemaRejectPreservesSourcePrerequisite(t *testing.T) {
 	_, err = exec.Invoke(context.Background(), "edit", map[string]any{"path": "ntp_check.py", "symbol": "query_server"}, tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "implementer"},
 		Turn: tools.InvocationTurn{
-			TurnOfferedToolNames: []string{"write", "edit"},
-			TurnToolPlan:         toolsurface.Compile([]string{"write", "edit"}, nil),
+			TurnOfferedToolNames: []string{"command"},
+			TurnToolPlan:         toolsurface.Compile([]string{"command"}, nil),
 		},
 	})
 	if err == nil {
 		t.Fatal("expected edit schema reject")
 	}
-	if !strings.Contains(err.Error(), "read the current source") || strings.Contains(err.Error(), "switch to `write`") {
-		t.Fatalf("reject should preserve edit source prerequisite without switching to write, got %v", err)
-	}
+	assertStructuredRejectCode(t, err, "TOOL_COMMAND_OPERATION")
 }
 
 func TestNativeOwnersDoNotFmtMissingArg(t *testing.T) {

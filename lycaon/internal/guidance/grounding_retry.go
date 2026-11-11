@@ -15,6 +15,10 @@ func GroundingOffenderKey(code string, data map[string]any) string {
 	if data == nil {
 		return code
 	}
+	// A repair's own target IDs change between attempts; its values do not.
+	if key, ok := data[citationRepairKeyField].(string); ok {
+		return code + ":" + key
+	}
 	sample, _ := data["offenders_sample"].(string)
 	count := data["offender_count"]
 	return fmt.Sprintf("%s:%v:%s", code, count, sample)

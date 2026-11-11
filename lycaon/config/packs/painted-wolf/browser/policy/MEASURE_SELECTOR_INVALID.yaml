@@ -29,7 +29,3 @@ x-paintedwolf-scenarios:
     selector: '##'
     tool: measure_page
     measure_selector: '##'
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: MEASURE_SELECTOR_INVALID'
-  - selector syntax

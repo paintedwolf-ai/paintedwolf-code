@@ -27,6 +27,8 @@ const (
 	// FaultEmptyCompletion is a successful terminal response with no usable
 	// assistant content or tool call.
 	FaultEmptyCompletion FaultKind = "empty_completion"
+	// FaultInterrupted is a response that failed after headers arrived.
+	FaultInterrupted FaultKind = "interrupted"
 	// FaultCanceled is caller cancellation.
 	FaultCanceled FaultKind = "canceled"
 	// FaultModelRefused is a structured refusal of one model.
@@ -47,7 +49,7 @@ type Fault struct {
 
 // Transport reports a retryable response-path fault without an HTTP status.
 func (f Fault) Transport() bool {
-	return f.Kind == FaultUnreachable || f.Kind == FaultSilent || f.Kind == FaultEmptyCompletion
+	return f.Kind == FaultUnreachable || f.Kind == FaultSilent || f.Kind == FaultEmptyCompletion || f.Kind == FaultInterrupted
 }
 
 // ClassifyAttempt uses delivery state to classify transport faults.
@@ -112,6 +114,8 @@ func retryReasonForFault(f Fault) RetryReason {
 		return RetryReasonSilent
 	case FaultEmptyCompletion:
 		return RetryReasonEmptyCompletion
+	case FaultInterrupted:
+		return RetryReasonInterrupted
 	default:
 		return RetryReasonStatus
 	}

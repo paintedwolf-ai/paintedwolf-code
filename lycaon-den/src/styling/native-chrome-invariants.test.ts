@@ -95,7 +95,7 @@ describe("visible native chrome", () => {
       "components/transcript/TranscriptVisualFilmstrip.tsx",
     ];
     const bypasses = matchingFiles(
-      /role=["'](?:menu|listbox)["']/,
+      /<[A-Za-z][^>]*\brole=["'](?:menu|listbox)["']/,
       structuralListboxes,
     ).filter((path) => !source(join(denSrc, path)).includes("AnchoredSurface"));
     expect(bypasses).toEqual([]);

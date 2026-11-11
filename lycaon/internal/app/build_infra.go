@@ -19,9 +19,10 @@ import (
 )
 
 func (b *serveBuilder) wireToolRuntime() error {
-	if err := b.decisions.Load(b.startup.cfg.TestDecider); err != nil {
+	if err := b.decisions.Load(b.startup.cfg.TestDecider, b.localModels.Decision); err != nil {
 		return err
 	}
+	b.startup.resources.Track("decision-engine", 47, b.decisions.Close)
 	privateGit, err := workspace.OpenPrivateGit(enginepaths.WorkerBranchesRootUnder(b.storage.Directory))
 	if err != nil {
 		return err
@@ -40,7 +41,7 @@ func (b *serveBuilder) wireToolRuntime() error {
 
 func (b *serveBuilder) wireEvents() error {
 	b.settings.BuildHostPower(b.startup.resources)
-	eventRuntime, err := eventing.Build(b.startup.ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, b.settings.Power, b.sessions.Manager.Runner.SubmissionState, b.sessions.Manager.Runner.SubmissionState, b.sessions.Manager.Chats, b.startup.resources)
+	eventRuntime, err := eventing.Build(b.startup.ctx, b.storage.Database, b.storage.Sessions, b.storage.Projects, b.settings.Power, b.sessions.Manager.Runner.SubmissionState, b.sessions.Manager.Runner.SubmissionState, b.sessions.Manager.Chats, b.startup.resources, b.sessions.Manager.ContextPreparation)
 	if err != nil {
 		return err
 	}

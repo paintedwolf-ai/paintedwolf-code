@@ -2,7 +2,41 @@ import json
 import math
 import pathlib
 import unittest
-from sampling import weights, estimate
+from ledger import checkpoints
+import sampling
+from sampling import estimate, pass_k, reliability, weights
+from test_orchestration_evidence import LedgerCase
+
+
+class StructureTests(LedgerCase):
+    def test_counts_come_from_the_ledger_and_the_operator_record(self):
+        self.message(1, [{'name': 'task', 'args': {}}, {'name': 'task', 'args': {}}])
+        self.message(2, [{'name': 'wait', 'args': {}}])
+        self.message(3, [{'name': 'promote_overlay', 'args': {}}])
+        self.result(4,'command','cmd',outcome='rejected',codes=['COMMAND_NOT_ARGV'])
+        self.session['checkpoints'].append({'id':'c','kind':'tool_approval','status':'approved',
+            'issued_at':'2026-09-09T10:00:00Z','tool_approval':{'tool_call_id':'cmd','plan':{'subject':{'kind':'local_listen'}}}})
+        self.job('a', 'c1', 'write', ['a.py'])
+        case = {'session_id': 'root',
+                'automatic_responses': [{'kind': 'approval_rejected'}, {'kind': 'fixture_rule_denied'}, {'kind': 'fixture_rule_denied'}]}
+        observed = sampling.observe(self.root, case)
+        self.assertEqual(observed['tool_calls'], 4)
+        self.assertEqual(observed['tool_calls_by_name'], {'promote_overlay': 1, 'task': 2, 'wait': 1})
+        self.assertEqual(observed['rejected_by_family'], {'COMMAND_NOT_ARGV': 1})
+        self.assertEqual(observed['approval_cards_by_subject'], {'local_listen': 1})
+        self.assertEqual(observed['interventions'], 2)
+        self.assertTrue({'prompt_tokens', 'completion_tokens', 'model_calls'}.isdisjoint(observed))
+        summary = sampling.summarize([observed, {**observed, 'tool_calls': 2}])
+        self.assertEqual(summary['tool_calls'], 3)
+        self.assertEqual(summary['trials'], 2)
+        self.assertIsNone(sampling.summarize([]))
+
+    def test_checkpoint_projection_uses_the_exported_wire_identity(self):
+        self.session['checkpoints'].append({'id':'approved-card','session_id':'root','kind':'tool_approval','status':'approved',
+            'issued_at':'2026-10-13T19:49:50Z','tool_approval':{'tool_call_id':'input-read','plan':{'subject':{'kind':'action'}}}})
+        cards=checkpoints(self.facts,['root'])
+        self.assertEqual(cards,[{'id':'approved-card','session_id':'root','status':'approved',
+            'created_at':'2026-10-13T19:49:50Z','tool_call_id':'input-read','subject':'action'}])
 
 
 class SamplingTests(unittest.TestCase):
@@ -31,7 +65,6 @@ class SamplingTests(unittest.TestCase):
         with self.assertRaises(ValueError): estimate(cases[1:],operations)
 
     def test_pass_k_is_the_unbiased_all_pass_probability(self):
-        from sampling import pass_k, reliability
         self.assertEqual(pass_k(5,5,5),1.0)
         self.assertEqual(pass_k(0,5,5),0.0)
         self.assertAlmostEqual(pass_k(4,5,5),0.0)

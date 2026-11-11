@@ -1,8 +1,11 @@
 package guidance
 
-import "github.com/lycaon/lycaon/internal/evidence"
+import (
+	"context"
 
-import "context"
+	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/pkg/api"
+)
 
 // EvidenceLedgerReader loads the durable evidence ledger for a session.
 type EvidenceLedgerReader interface {
@@ -11,6 +14,7 @@ type EvidenceLedgerReader interface {
 
 // EvidenceLedgerWriter persists evidence at tool-commit time.
 type EvidenceLedgerWriter interface {
+	CommitProgramObservation(ctx context.Context, sessionID, tool string, receipt *api.CommandProgramReceipt, content string) (string, error)
 	CommitEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) (handle string, patchedContent string, err error)
 	// CommitVisualEvidenceToolResult also stamps the minted handle onto the
 	// result's stored visual artifact in the same commit.

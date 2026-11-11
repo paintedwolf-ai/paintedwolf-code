@@ -8,9 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
-	"github.com/lycaon/lycaon/internal/filelock"
 	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/project"
@@ -162,48 +160,10 @@ func settleShippedJournalIfCommitted(jobs MergeQueue, dir, path string) error {
 	return removeShippedPromoteJournal(path)
 }
 
-type promoteFileLock struct {
-	file *os.File
-}
-
-func acquirePromoteFileLock(ctx context.Context, dataDir string) (*promoteFileLock, error) {
-	path := filepath.Join(dataDir, "promote.lock")
-	file, err := filelock.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		held, lockErr := filelock.TryExclusive(file)
-		if lockErr != nil {
-			_ = file.Close()
-			return nil, lockErr
-		}
-		if held {
-			return &promoteFileLock{file: file}, nil
-		}
-		select {
-		case <-ctx.Done():
-			_ = file.Close()
-			return nil, ctx.Err()
-		case <-ticker.C:
-		}
-	}
-}
-
 // syncPromoteTransactionDir makes a journal removal durable.
 func syncPromoteTransactionDir(dir *os.File) error {
 	if err := fssync.File(dir); err != nil {
 		return fmt.Errorf("sync promote transaction directory: %w", err)
 	}
 	return nil
-}
-
-func (l *promoteFileLock) release() {
-	if l == nil || l.file == nil {
-		return
-	}
-	_ = filelock.Unlock(l.file)
-	_ = l.file.Close()
 }

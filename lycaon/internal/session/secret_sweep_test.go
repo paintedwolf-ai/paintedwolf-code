@@ -3,9 +3,16 @@ package session
 import (
 	"context"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/bgprocess"
+	lyexec "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/session/chats"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
@@ -62,9 +69,7 @@ func TestSweepRewritesRowsScreenedBeforeTheEvidenceGrew(t *testing.T) {
 
 	swept, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
-	if strings.Contains(swept[0].Content, sweepSecret) {
-		t.Fatalf("the minting row still holds the value after the host learned it:\n%s", swept[0].Content)
-	}
+	exposure.Absent(t, swept[0].Content, sweepSecret)
 	if swept[0].HostSecretRedaction == nil || swept[0].HostSecretRedaction.Occurrences() != 1 {
 		t.Fatalf("swept row carries no provenance: %+v", swept[0].HostSecretRedaction)
 	}
@@ -126,9 +131,7 @@ func TestSweepRevisitsRowsStampedByAnEarlierRun(t *testing.T) {
 
 	swept, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read swept messages", err)
-	if strings.Contains(swept[0].Content, sweepSecret) {
-		t.Fatalf("a row stamped before the restart was never revisited:\n%s", swept[0].Content)
-	}
+	exposure.Absent(t, swept[0].Content, sweepSecret)
 }
 
 // failingUpdateStore refuses to rewrite one row.
@@ -165,17 +168,13 @@ func TestSweepContinuesPastARowTheStoreRefuses(t *testing.T) {
 	if !strings.Contains(swept[0].Content, sweepSecret) {
 		t.Fatalf("precondition failed: the refused row was rewritten anyway:\n%s", swept[0].Content)
 	}
-	if strings.Contains(swept[1].Content, sweepSecret) {
-		t.Fatalf("a refused row abandoned the rest of the pass:\n%s", swept[1].Content)
-	}
+	exposure.Absent(t, swept[1].Content, sweepSecret)
 	// The refused row keeps its earlier stamp, so the next pass finds it again.
 	blocked.messageID = ""
 	mgr.Runner.Transcript.SweepSessionTree(ctx, sess.ID, 2)
 	retried, err := mem.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "read retried messages", err)
-	if strings.Contains(retried[0].Content, sweepSecret) {
-		t.Fatalf("the refused row was stamped as screened and never retried:\n%s", retried[0].Content)
-	}
+	exposure.Absent(t, retried[0].Content, sweepSecret)
 }
 
 // Stale rows are found below the generation, and a stamp lifts them out of the
@@ -200,5 +199,128 @@ func TestScreenGenerationStampNarrowsTheCandidateSet(t *testing.T) {
 	testutil.FailErr(t, "list stale after stamp", err)
 	if len(stale) != 0 {
 		t.Fatalf("stamped row still listed as stale: %v", stale)
+	}
+}
+
+func TestDeleteSessionSharesTurnLifecycleGate(t *testing.T) {
+	mem := store.NewMemory()
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
+	testutil.FailErr(t, "create session", err)
+	turnLock := mgr.Runner.Execution.Prompt.Acquire(sess.ID)
+	turnLock.Lock()
+	err = mgr.Chats.Delete(t.Context(), sess.ID)
+	turnLock.Unlock()
+	if !errors.Is(err, chats.ErrSessionBusy) {
+		t.Fatalf("DeleteSession = %v, want chats.ErrSessionBusy", err)
+	}
+	_, err = mem.Get(t.Context(), sess.ID)
+	testutil.FailErr(t, "session retained after busy delete", err)
+}
+
+func TestDeleteSessionDisposesBackgroundRuntimeBeforeRow(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sleep fixture is unix-oriented")
+	}
+	mem := store.NewMemory()
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	reg := bgprocess.NewRegistry(bgprocess.DefaultConfig(), bgprocess.Hooks{})
+	mgr.SetBackgroundRegistry(reg)
+	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild, ProjectID: "p1"}, "p1")
+	testutil.FailErr(t, "create session", err)
+	_, err = reg.StartPipeline(t.Context(), bgprocess.PipelineSpec{
+		SessionID: sess.ID,
+		ProjectID: "p1",
+		Runner:    hostcmd.NewRunner(),
+		Mode:      bgprocess.JobModeBackground,
+		Request: hostcmd.Request{
+			Launch:     lyexec.HostLaunch("session lifecycle test"),
+			ProjectDir: t.TempDir(),
+			Stages:     []lyexec.Stage{{Name: "sleep", Args: []string{"30"}}},
+		},
+	})
+	testutil.FailErr(t, "start session background process", err)
+	testutil.FailErr(t, "delete session", mgr.Chats.Delete(t.Context(), sess.ID))
+	if got := reg.Output.List(context.Background(), sess.ID); len(got) != 0 {
+		t.Fatalf("background handles retained after delete: %#v", got)
+	}
+}
+
+func TestDeleteSession_refusesWhileBound(t *testing.T) {
+	mem := store.NewMemory()
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	ctx := context.Background()
+	sess, err := mem.Create(ctx, api.CreateSessionRequest{
+		Posture:   api.SessionPostureBuild,
+		ProjectID: "p1",
+	}, "p1")
+	testutil.FailErr(t, "create", err)
+	testutil.FailErr(t, "bind", mem.PutWorktreeBinding(ctx, store.WorktreeBinding{
+		SessionID:    sess.ID,
+		ProjectID:    "p1",
+		RepoID:       "r1",
+		Toplevel:     "/repo",
+		WorktreePath: "/wt",
+		Branch:       "session/x",
+		BaseBranch:   "main",
+	}))
+
+	err = mgr.Chats.Delete(ctx, sess.ID)
+	if !errors.Is(err, chats.ErrSessionWorktreeBound) {
+		t.Fatalf("DeleteSession = %v want chats.ErrSessionWorktreeBound", err)
+	}
+	if _, getErr := mem.Get(ctx, sess.ID); getErr != nil {
+		t.Fatalf("session must still exist: %v", getErr)
+	}
+
+	testutil.FailErr(t, "unbind", mem.DeleteWorktreeBinding(ctx, sess.ID))
+	testutil.FailErr(t, "delete after unbind", mgr.Chats.Delete(ctx, sess.ID))
+	if _, getErr := mem.Get(ctx, sess.ID); !errors.Is(getErr, store.ErrSessionNotFound) {
+		t.Fatalf("session should be gone: %v", getErr)
+	}
+}
+
+func TestBoundSession_archivePinRenameUnaffected(t *testing.T) {
+	mem := store.NewMemory()
+	mgr := NewHost(mem, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
+	ctx := context.Background()
+	sess, err := mem.Create(ctx, api.CreateSessionRequest{
+		Posture:   api.SessionPostureBuild,
+		ProjectID: "p1",
+	}, "p1")
+	testutil.FailErr(t, "create", err)
+	testutil.FailErr(t, "bind", mem.PutWorktreeBinding(ctx, store.WorktreeBinding{
+		SessionID:    sess.ID,
+		ProjectID:    "p1",
+		RepoID:       "r1",
+		Toplevel:     "/repo",
+		WorktreePath: "/wt",
+		Branch:       "session/x",
+		BaseBranch:   "main",
+	}))
+
+	archived, err := mgr.Chats.SetArchived(ctx, sess.ID, true)
+	testutil.FailErr(t, "archive", err)
+	if archived.ArchivedAt == nil {
+		t.Fatal("expected archived_at")
+	}
+	unarchived, err := mgr.Chats.SetArchived(ctx, sess.ID, false)
+	testutil.FailErr(t, "unarchive", err)
+	if unarchived.ArchivedAt != nil {
+		t.Fatal("expected cleared archived_at")
+	}
+	pinned, err := mgr.Chats.SetPinned(ctx, sess.ID, true)
+	testutil.FailErr(t, "pin", err)
+	if pinned.PinRank == nil {
+		t.Fatal("expected pin_rank")
+	}
+	testutil.FailErr(t, "rename", mem.UpdateSession(ctx, sess.ID, func(s *api.Session) {
+		s.Title = "renamed"
+		s.UpdatedAt = time.Now().UTC()
+	}))
+	got, err := mem.Get(ctx, sess.ID)
+	testutil.FailErr(t, "get", err)
+	if got.Title != "renamed" {
+		t.Fatalf("title = %q", got.Title)
 	}
 }

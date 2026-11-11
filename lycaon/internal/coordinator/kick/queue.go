@@ -111,11 +111,24 @@ func (q *sessionKickQueue) has(kickID string) bool {
 	return false
 }
 
+const processFinishedKickID = "coordinator-process-finished"
+
 func (q *sessionKickQueue) clear() {
 	q.mu.Lock()
 	defer q.mu.Unlock()
+	var kept []kickQueueItem
+	if q.staged != nil && q.staged.kickID == processFinishedKickID {
+		item := *q.staged
+		item.lease = 0
+		kept = append(kept, item)
+	}
 	q.staged = nil
-	q.items = nil
+	for _, item := range q.items {
+		if item.kickID == processFinishedKickID {
+			kept = append(kept, item)
+		}
+	}
+	q.items = kept
 }
 
 func (q *sessionKickQueue) dropKickID(kickID string) {

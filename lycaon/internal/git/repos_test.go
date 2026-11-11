@@ -18,17 +18,11 @@ import (
 
 func initDiscoverRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	mgr := git.NewManager()
-	testutil.FailErr(t, "init", mgr.Init(context.Background(), dir))
-	path := filepath.Join(dir, "a.txt")
-	testutil.FailErr(t, "write", os.WriteFile(path, []byte("one\n"), 0o644))
-	_, commitErr := mgr.Commit(context.Background(), dir, git.GitCommitOpts{Message: "init", Paths: []string{"a.txt"}})
-	testutil.FailErr(t, "commit", commitErr)
-	return dir
+	return initTestRepo(t)
 }
 
 func TestDiscoverRepos_twoSeparateCheckouts(t *testing.T) {
+	t.Parallel()
 	a := initDiscoverRepo(t)
 	b := initDiscoverRepo(t)
 	roots := []projectroot.RootRef{
@@ -62,6 +56,7 @@ func TestDiscoverRepos_twoSeparateCheckouts(t *testing.T) {
 }
 
 func TestDiscoverRepos_twoRootsOneCheckout(t *testing.T) {
+	t.Parallel()
 	repo := initDiscoverRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	apiDir := filepath.Join(repo, "packages", "api")
@@ -95,6 +90,7 @@ func TestDiscoverRepos_twoRootsOneCheckout(t *testing.T) {
 }
 
 func TestDiscoverRepos_rootBelowToplevel(t *testing.T) {
+	t.Parallel()
 	repo := initDiscoverRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(web, 0o755))
@@ -111,6 +107,7 @@ func TestDiscoverRepos_rootBelowToplevel(t *testing.T) {
 }
 
 func TestDiscoverRepos_nonRepoRoot(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	roots := []projectroot.RootRef{{ID: "plain", Label: "docs", Path: dir, IsPrimary: true}}
 	repos := git.DiscoverRepos(context.Background(), roots)
@@ -127,6 +124,7 @@ func TestDiscoverRepos_nonRepoRoot(t *testing.T) {
 }
 
 func TestDiscoverRepos_probeFailure(t *testing.T) {
+	t.Parallel()
 	good := initDiscoverRepo(t)
 	missing := filepath.Join(t.TempDir(), "gone")
 	roots := []projectroot.RootRef{
@@ -157,6 +155,7 @@ func TestDiscoverRepos_probeFailure(t *testing.T) {
 }
 
 func TestDiscoverRepos_symlinkSameID(t *testing.T) {
+	t.Parallel()
 	repo := initDiscoverRepo(t)
 	link := filepath.Join(t.TempDir(), "link")
 	testutil.FailErr(t, "symlink", os.Symlink(repo, link))
@@ -176,6 +175,7 @@ func TestDiscoverRepos_symlinkSameID(t *testing.T) {
 }
 
 func TestDeriveRepoID_stableAndCanonical(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	id1 := git.DeriveRepoID(dir)
 	id2 := git.DeriveRepoID(dir)
@@ -185,7 +185,7 @@ func TestDeriveRepoID_stableAndCanonical(t *testing.T) {
 	if len(id1) != 17 || id1[0] != 'r' {
 		t.Fatalf("id shape = %q want r + 16 hex", id1)
 	}
-	// Trailing separator must not mint a second id once canonicalized.
+	// Trailing separator does not mint a second id once canonicalized.
 	withSep := dir + string(filepath.Separator)
 	if git.DeriveRepoID(withSep) != id1 {
 		t.Fatalf("trailing sep changed id: %q vs %q", git.DeriveRepoID(withSep), id1)
@@ -197,6 +197,7 @@ func TestDeriveRepoID_stableAndCanonical(t *testing.T) {
 }
 
 func TestOrderRepos_activePrimaryLabelNonRepo(t *testing.T) {
+	t.Parallel()
 	repos := []git.RepoRef{
 		{ID: "r-z", Toplevel: "/z", Label: "zebra", RootIDs: []string{"z"}, Available: true},
 		{ID: "r-a", Toplevel: "/a", Label: "alpha", RootIDs: []string{"a", "a2"}, Available: true},
@@ -216,6 +217,7 @@ func TestOrderRepos_activePrimaryLabelNonRepo(t *testing.T) {
 }
 
 func TestOrderRepos_activeAndPrimarySameRepo(t *testing.T) {
+	t.Parallel()
 	repos := []git.RepoRef{
 		{ID: "r-other", Toplevel: "/o", Label: "other", RootIDs: []string{"o"}, Available: true},
 		{ID: "r-main", Toplevel: "/m", Label: "main", RootIDs: []string{"prim", "active"}, Available: true},
@@ -227,6 +229,7 @@ func TestOrderRepos_activeAndPrimarySameRepo(t *testing.T) {
 }
 
 func TestDiscoverReposAgreesWithPathDiscovery(t *testing.T) {
+	t.Parallel()
 	repo := initDiscoverRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(web, 0o755))
@@ -247,6 +250,7 @@ func TestDiscoverReposAgreesWithPathDiscovery(t *testing.T) {
 }
 
 func TestReposGo_noShellOutEscape(t *testing.T) {
+	t.Parallel()
 	srcPath := filepath.Join("repos.go")
 	// Resolve relative to this test file's package directory via runtime.
 	pkgDir, err := os.Getwd()
@@ -280,6 +284,7 @@ func TestReposGo_noShellOutEscape(t *testing.T) {
 }
 
 func TestLabelFor_primaryMostWins(t *testing.T) {
+	t.Parallel()
 	members := []projectroot.RootRef{
 		{ID: "a", Label: "api", Path: "/repo/api"},
 		{ID: "w", Label: "web", Path: "/repo/web", IsPrimary: true},

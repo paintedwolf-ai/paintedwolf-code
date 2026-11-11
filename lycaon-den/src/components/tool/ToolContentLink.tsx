@@ -12,7 +12,9 @@ export function ToolContentLink(props: {
   content: ChatContentDocument["content"];
   projectId?: string;
   messageId?: string;
+  toolCallId?: string;
   revealOffset?: number;
+  testId?: string;
 }) {
   const tool = useToolContent();
   const source = useSourceContext();
@@ -24,7 +26,7 @@ export function ToolContentLink(props: {
     return {
       kind: "tool",
       sessionId: identity.sessionId,
-      toolCallId: identity.toolCallId,
+      toolCallId: props.toolCallId ?? identity.toolCallId,
       messageId: props.messageId ?? identity.messageId,
       pane: props.pane,
       title: `${props.label} · ${identity.title ?? "Tool"}`,
@@ -39,5 +41,5 @@ export function ToolContentLink(props: {
   createEffect(() => {
     if (props.revealOffset !== undefined && findController.isOpen()) untrack(open);
   });
-  return <ChatContentLink searchable={searchable()} label={props.label} projectId={projectId()} document={document} testId="tool-content-link" />;
+  return <ChatContentLink searchable={searchable()} label={props.label} projectId={projectId()} document={document} testId={props.testId ?? "tool-content-link"} />;
 }

@@ -2,18 +2,15 @@
   "category": "source_files",
   "artifact": "lycaon/internal/oar/occurrence_facts.go",
   "kind": "data_record",
-  "workstream": "portable-command-source-facts",
+  "workstream": "command-recovery-facts",
   "disposition": "retain",
-  "reason": "Retain the shared typed occurrence declaration table at its measured 421-line ceiling. The same nine command source/resource facts serve path and parser producers; their merge adds no facts or runtime behavior. Existing path/span/output and syntax/resource/OAR tests remain the boundary. Splitting declarations would hide their shared names and types. Further growth requires renewed review.",
-  "reviewed_commit": "a4bfc82b66e6f71830a8330d23717766e553fae2",
-  "ceiling": 421,
+  "reason": "Retain the 521-line typed occurrence declaration table. It is one data record of rule-visible names, types and fact tiers, with no runtime behavior or mutable state. Recovery projections live in oarcopy and the host activation boundary. Catalog/environment parity, canonical tool identity, diagnostic knowledge and copy abstention contracts support this shape. Splitting declarations by producer would fragment the shared fact vocabulary. Further growth requires renewed review.",
+  "reviewed_commit": "617e7a5dcc8b735fbd6aeecaadd6a552b1740d49",
+  "ceiling": 521,
   "boundaries": {
-    "lycaon/internal/tools/native/edit_health_test.go": "e897de10b454ca7ea03f73a62289665254f68a331df68ff7a53abbafbaa530af",
-    "lycaon/internal/oar/mutation_candidate_copy_test.go": "8a734d4fe8335b691841b04740b625d4b84530f703edb19bc4ae22d1d76a8138",
-    "lycaon/internal/toolcommand/command_argv_test.go": "2e5eb69debd10d0f8d6e7a1b18cda76a6888b6cf085e3552f39b17fbcbd1a161",
-    "lycaon/test/contract/architecture/program_syntax_feedback_test.go": "a7f4b0778520e95b8530e06678804dcf60cfdfce2279715c61932cce011c81e6",
-    "lycaon/internal/tools/projectpaths/program_paths_test.go": "1a90f395caa4a3ee7d4a747192bd046f4ef41f7a47acf0bde71854ca9ecf2331",
-    "lycaon/test/contract/architecture/program_path_feedback_test.go": "01d0076d1672204e4f9d76757bed9c8bcb7c110e9eab84972e2b19e6754bcd18",
-    "lycaon/internal/tools/projectpaths/path_output_test.go": "d2e336465aa71b629c262fc995f0d7b96636d6d985502044ad2fcd5fcbd44483"
+    "lycaon/internal/oar/catalogue_test.go": "ce7b081696e3b9e013dadad7c1766919fc403ca541ba115c339f7a674ec7cbe2",
+    "lycaon/internal/oar/copy_test.go": "819234e3a9b8a174f6fbf454dc2ee8f17d5d6ddeb139751beb9165702596b6bf",
+    "lycaon/internal/oar/recovery_copy_test.go": "55f65eaa22391a2997929b320a7c9b04501e4353dd1e769d002c3708c045d07b",
+    "lycaon/internal/oarcopy/facts_test.go": "6a80b5a0a60fd2cc64b07835e4e0e154444a82196741b7822790d2cd6e01fbf1"
   }
 }

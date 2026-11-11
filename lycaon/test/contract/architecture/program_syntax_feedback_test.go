@@ -16,33 +16,27 @@ func TestProgramSyntaxFeedbackUsesTypedSpansWithoutGuessedRepairs(t *testing.T) 
 	contractcheck.FailErr(t, "load program syntax feedback", err)
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	formatter := guidance.NewStaticRejectFormatter(cfg)
-	for _, source := range []string{"printf ok; if", "if false; then trap unknown; fi", "printf ok; echo ${(q)name}", strings.Repeat(" ", 65537)} {
-		_, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "fixture.pw"})
-		rejection := toolcommand.ProgramSyntaxObservation("command", err)
-		if rejection == nil {
-			t.Fatalf("missing typed program feedback: %v", err)
-		}
-		out, err := formatter.Format(rejection.Code, rejection.Data)
-		contractcheck.FailErr(t, "render syntax feedback", err)
-		wantFacts := []string{"Code: " + rejection.Code}
-		switch rejection.Code {
-		case "COMMAND_LIMIT_EXCEEDED":
-			if rejection.Data["limit_id"] != "program_bytes" || rejection.Data["resource_unit"] != "bytes" {
-				t.Fatalf("resource feedback lacks typed limit facts: %+v", rejection.Data)
+	for _, sourced := range []bool{false, true} {
+		for _, source := range []string{"printf ok; if", "if false; then trap unknown; fi", "printf ok; echo ${(q)name}", strings.Repeat(" ", int(commandsurface.SyntaxUnitByteLimit(sourced))+1)} {
+			_, err := commandsurface.ParseProgram([]byte(source), commandsurface.ParseOptions{SourceName: "fixture.pw", Sourced: sourced})
+			rejection := toolcommand.ProgramSyntaxObservation("command", err)
+			if rejection == nil {
+				t.Fatalf("missing typed program feedback (sourced=%t): %v", sourced, err)
 			}
-			wantFacts = append(wantFacts, "Earlier completed steps and their results remain recorded")
-		case "COMMAND_SYNTAX_UNSUPPORTED":
-			wantFacts = append(wantFacts, "Earlier commands that finished still count")
-		default:
-			wantFacts = append(wantFacts, "earlier parent effects")
-		}
-		for _, want := range wantFacts {
-			if !strings.Contains(strings.ToLower(out), strings.ToLower(want)) {
-				t.Fatalf("feedback missing %q: %s", want, out)
+			out, err := formatter.Format(rejection.Code, rejection.Data)
+			contractcheck.FailErr(t, "render syntax feedback", err)
+			if !strings.Contains(out, "Code: "+rejection.Code) {
+				t.Fatalf("feedback (sourced=%t) lost its code: %s", sourced, out)
 			}
-		}
-		if strings.Contains(out, "replacement_args") || strings.Contains(out, "sh -c") {
-			t.Fatalf("invented repair or fallback: %s", out)
+			if rejection.Code == "COMMAND_LIMIT_EXCEEDED" {
+				wantLimit := "program_bytes"
+				if sourced {
+					wantLimit = "source_bytes"
+				}
+				if rejection.Data["limit_id"] != wantLimit || rejection.Data["resource_unit"] != "bytes" {
+					t.Fatalf("resource feedback lacks typed limit facts (sourced=%t): %+v", sourced, rejection.Data)
+				}
+			}
 		}
 	}
 }

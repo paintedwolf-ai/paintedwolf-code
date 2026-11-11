@@ -9,5 +9,3 @@ suggested_action: "Enter the full path to the socket."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "absolute path"

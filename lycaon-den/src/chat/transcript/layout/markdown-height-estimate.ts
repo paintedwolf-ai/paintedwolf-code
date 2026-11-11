@@ -22,18 +22,67 @@ function tokensFor(source: string): Token[] {
   return tokens;
 }
 
-function inlineText(tokens: Token[] | undefined, fallback: string): string {
-  if (!tokens) return fallback;
-  return tokens.map((token) => {
-    if (token.type === "br") return "\n";
-    if ("tokens" in token) return inlineText(token.tokens, "text" in token ? token.text : token.raw);
-    return "text" in token ? token.text : token.raw;
-  }).join("");
+export const PROPORTIONAL_GLYPH_EM = 0.5;
+export const MONOSPACE_GLYPH_EM = 0.6;
+export const WIDE_GLYPH_EM = 1.0;
+const INLINE_CODE_PADDING_EM = 0.4;
+const WIDE_GLYPH_RE =
+  /[\u1100-\u115f\u2e80-\u303e\u3040-\u33ff\u3400-\u4dbf\u4e00-\u9fff\ua960-\ua97f\uac00-\ud7ff\uf900-\ufaff\ufe10-\ufe6f\uff01-\uff60\uffe0-\uffe6]/u;
+
+/** Estimates horizontal advance in `em` for a single line of text, distinguishing wide CJK glyphs. */
+export function estimateLineEmWidth(line: string, baseGlyphEm = PROPORTIONAL_GLYPH_EM): number {
+  if (!WIDE_GLYPH_RE.test(line)) return line.length * baseGlyphEm;
+  let em = 0;
+  for (const ch of line) {
+    em += WIDE_GLYPH_RE.test(ch) ? WIDE_GLYPH_EM : baseGlyphEm;
+  }
+  return em;
 }
 
-function wrapped(text: string, width: number, font: number, lineHeight = DEFAULT_TRANSCRIPT_SPACING.proseLineHeight): number {
-  const capacity = Math.max(1, Math.floor(width / (font * 0.5)));
-  return text.split("\n").reduce((sum, line) => sum + Math.max(1, Math.ceil(line.length / capacity)), 0) * font * lineHeight;
+function appendInlineLineEms(tokens: Token[] | undefined, fallback: string, lines: number[]): void {
+  if (!tokens || tokens.length === 0) {
+    const parts = fallback.split("\n");
+    for (let i = 0; i < parts.length; i += 1) {
+      if (i > 0) lines.push(0);
+      lines[lines.length - 1]! += estimateLineEmWidth(parts[i]!);
+    }
+    return;
+  }
+  for (const token of tokens) {
+    if (token.type === "br") {
+      lines.push(0);
+      continue;
+    }
+    if (token.type === "codespan") {
+      const text = "text" in token ? token.text : token.raw;
+      lines[lines.length - 1]! +=
+        estimateLineEmWidth(text, MONOSPACE_GLYPH_EM) + INLINE_CODE_PADDING_EM;
+      continue;
+    }
+    if ("tokens" in token && token.tokens) {
+      appendInlineLineEms(token.tokens, "text" in token ? token.text : token.raw, lines);
+      continue;
+    }
+    const raw = "text" in token ? token.text : token.raw;
+    appendInlineLineEms(undefined, raw, lines);
+  }
+}
+
+function wrappedTokens(
+  tokens: Token[] | undefined,
+  fallback: string,
+  width: number,
+  font: number,
+  lineHeight = DEFAULT_TRANSCRIPT_SPACING.proseLineHeight,
+): number {
+  const lineEms = [0];
+  appendInlineLineEms(tokens, fallback, lineEms);
+  const lineCapacityEm = Math.max(PROPORTIONAL_GLYPH_EM, Math.floor(width / (font * PROPORTIONAL_GLYPH_EM)) * PROPORTIONAL_GLYPH_EM);
+  const totalLines = lineEms.reduce(
+    (sum, em) => sum + Math.max(1, Math.ceil(em / lineCapacityEm)),
+    0,
+  );
+  return totalLines * font * lineHeight;
 }
 
 function blockHeight(token: Token, width: number, font: number, spacing: TranscriptSpacing): number {
@@ -47,14 +96,14 @@ function blockHeight(token: Token, width: number, font: number, spacing: Transcr
     case "heading": {
       const heading = token as Tokens.Heading;
       const size = font * (heading.depth === 1 ? 1.5 : heading.depth === 2 ? 1.2 : 1);
-      return wrapped(inlineText(heading.tokens, heading.text), width, size, spacing.headingLineHeight) + size * (spacing.headingBefore + spacing.headingAfter);
+      return wrappedTokens(heading.tokens, heading.text, width, size, spacing.headingLineHeight) + size * (spacing.headingBefore + spacing.headingAfter);
     }
     case "table": {
       const table = token as Tokens.Table;
       const columns = Math.max(1, table.header.length);
       const cellWidth = Math.max(font, width / columns - font * (2 * spacing.cellPaddingX));
       return [table.header, ...table.rows].reduce((height, row) => height +
-        Math.max(...row.map((cell) => wrapped(inlineText(cell.tokens, cell.text), cellWidth, font, spacing.proseLineHeight))) + font * (2 * spacing.cellPaddingY) + 1, 0) + font * spacing.tableGap;
+        Math.max(...row.map((cell) => wrappedTokens(cell.tokens, cell.text, cellWidth, font, spacing.proseLineHeight))) + font * (2 * spacing.cellPaddingY) + 1, 0) + font * spacing.tableGap;
     }
     case "list": {
       const list = token as Tokens.List;
@@ -62,7 +111,7 @@ function blockHeight(token: Token, width: number, font: number, spacing: Transcr
     }
     case "blockquote": return blocksHeight((token as Tokens.Blockquote).tokens, width - font, font, spacing);
     case "hr": return font * (2 * spacing.ruleGap) + 1;
-    default: return wrapped(inlineText("tokens" in token ? token.tokens : undefined, "text" in token ? token.text : token.raw), width, font, spacing.proseLineHeight) + font * spacing.paragraphGap;
+    default: return wrappedTokens("tokens" in token ? token.tokens : undefined, "text" in token ? token.text : token.raw, width, font, spacing.proseLineHeight) + font * spacing.paragraphGap;
   }
 }
 

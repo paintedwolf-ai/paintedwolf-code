@@ -1,0 +1,9 @@
+steps:
+  - tool: "task"
+    args:
+      agent_type: "implementer"
+    say: "If implementation work remains, call {{ call }} with the actual remaining scope and artifact-based `done_when`."
+  - tool: "task"
+    args:
+      agent_type: "path-explorer"
+    say: "Use {{ call }} only when path discovery is still needed."

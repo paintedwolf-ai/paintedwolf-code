@@ -34,8 +34,16 @@ def main():
     verified.add_argument("sha")
     release = commands.add_parser("release")
     release.add_argument("step", help="the step whose leftover requests are withdrawn")
+    skipped_runs = commands.add_parser("delete-skipped-runs")
+    skipped_runs.add_argument("head", help="the pull request head whose skipped CI runs are deleted")
     args = parser.parse_args()
     if args.command == "matrix":
+        from ci_policy.admission_metadata import require_nix_bun
+        try:
+            require_nix_bun(Path(__file__).resolve().parents[1])
+        except (ValueError, OSError, KeyError, TypeError) as error:
+            print(f"::error file=packaging/nix/bun-lock.json::{error}")
+            return 1
         from ci_policy.impact import change
         scope = change() if args.affected else None
         if scope and os.environ.get("GITHUB_STEP_SUMMARY"):
@@ -71,6 +79,10 @@ def main():
         unreleased = hosted_execution.release_leftover_requests(args.step)
         if unreleased:
             print(f"::warning::queue requests still held after cancellation: {', '.join(unreleased)}", flush=True)
+    elif args.command == "delete-skipped-runs":
+        from ci_policy.skipped_runs import delete_skipped_runs
+        for failure in delete_skipped_runs(os.environ["GITHUB_REPOSITORY"], args.head, int(os.environ["GITHUB_RUN_ID"])):
+            print(f"::warning::{failure}", flush=True)
     else:
         verification_report.report(args.status)
     return 0

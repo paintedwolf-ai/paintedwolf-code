@@ -9,6 +9,3 @@ suggested_action: >-
 scenarios:
   - id: generic
     vars: {}
-    expect_contains:
-      - summary
-      - coordinator

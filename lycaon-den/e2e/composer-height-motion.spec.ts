@@ -17,11 +17,19 @@ type ComposerSample = {
   padBottom: number;
   /** Combined stream and composer height stays fixed during resizing. */
   column: number;
-  leaving: boolean;
+};
+
+type ComposerHeightMotion = { duration: number; easing: string };
+
+type ComposerTrace = {
+  samples: ComposerSample[];
+  /** Declared by each height animation, so dropped frames cannot change them. */
+  motions: ComposerHeightMotion[];
+  sawLeaving: boolean;
 };
 
 type ComposerTraceWindow = Window & {
-  __composerTrace?: { active: boolean; samples: ComposerSample[] };
+  __composerTrace?: ComposerTrace & { active: boolean; animations: Animation[]; release: () => void };
 };
 
 webE2e.afterEach(async ({ page }, info) => {
@@ -41,7 +49,30 @@ async function startComposerTrace(stage: Locator) {
     const pad = shell?.querySelector<HTMLElement>(".den-composer-action-pad");
     const stream = host.querySelector<HTMLElement>(".den-chat-stream");
     if (!shell || !body || !pad || !stream) throw new Error("composer geometry is missing");
-    const trace = { active: true, samples: [] as ComposerSample[] };
+    const leaving = new MutationObserver(() => {
+      trace.sawLeaving = true;
+    });
+    leaving.observe(shell, { subtree: true, attributes: true, attributeFilter: ["data-leaving"] });
+    const animate = shell.animate;
+    // The shell animates only its height.
+    shell.animate = (...args: Parameters<typeof animate>) => {
+      const animation = animate.apply(shell, args);
+      const timing = animation.effect!.getTiming();
+      trace.motions.push({ duration: Number(timing.duration), easing: timing.easing! });
+      trace.animations.push(animation);
+      return animation;
+    };
+    const trace = {
+      active: true,
+      samples: [] as ComposerSample[],
+      motions: [] as ComposerHeightMotion[],
+      animations: [] as Animation[],
+      sawLeaving: false,
+      release: () => {
+        delete (shell as Partial<HTMLElement>).animate;
+        leaving.disconnect();
+      },
+    };
     (window as ComposerTraceWindow).__composerTrace = trace;
     const sample = (time: number) => {
       if (!trace.active) return;
@@ -53,7 +84,6 @@ async function startComposerTrace(stage: Locator) {
         bodyBottom: body.getBoundingClientRect().bottom,
         padBottom: pad.getBoundingClientRect().bottom,
         column: stream.getBoundingClientRect().height + frame.height,
-        leaving: Boolean(shell.querySelector("[data-leaving]")),
       });
       requestAnimationFrame(sample);
     };
@@ -61,34 +91,34 @@ async function startComposerTrace(stage: Locator) {
   });
 }
 
-async function stopComposerTrace(page: Page): Promise<ComposerSample[]> {
-  return page.evaluate(() => {
+/** Waits until the traced shell has started a height animation and landed it. */
+async function waitForComposerMotion(page: Page) {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const animations = (window as ComposerTraceWindow).__composerTrace?.animations ?? [];
+          return animations.length > 0 && animations.every((a) => a.playState !== "running");
+        }),
+      { timeout: 30_000 },
+    )
+    .toBe(true);
+}
+
+async function stopComposerTrace(page: Page): Promise<ComposerTrace> {
+  return page.evaluate(async () => {
     const trace = (window as ComposerTraceWindow).__composerTrace;
     if (!trace) throw new Error("composer trace was not started");
+    // Sample the landed height before the trace ends.
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
     trace.active = false;
-    return trace.samples;
+    trace.release();
+    return { samples: trace.samples, motions: trace.motions, sawLeaving: trace.sawLeaving };
   });
 }
 
-/** Measures elapsed motion between the first moving and settled frames. */
-function motionSpan(samples: ComposerSample[]) {
-  const start = samples[0]!.height;
-  const end = samples[samples.length - 1]!.height;
-  const moving = samples.findIndex((sample) => Math.abs(sample.height - start) > 0.5);
-  const settled = samples.findIndex(
-    (sample, index) => index >= moving && Math.abs(sample.height - end) <= 0.5,
-  );
-  const between = samples.filter(
-    (sample) =>
-      sample.height > Math.min(start, end) + 0.5 &&
-      sample.height < Math.max(start, end) - 0.5,
-  );
-  return {
-    start,
-    end,
-    intermediateFrames: between.length,
-    ms: moving < 0 || settled < 0 ? 0 : samples[settled]!.time - samples[moving]!.time,
-  };
+function heightChange(samples: ComposerSample[]) {
+  return { start: samples[0]!.height, end: samples[samples.length - 1]!.height };
 }
 
 function expectBottomEdgeHeld(samples: ComposerSample[]) {
@@ -131,34 +161,40 @@ webE2e.describe("composer height motion", () => {
     await expect(stage.getByTestId("session-workflow-launcher")).toBeVisible();
     const composer = stage.getByTestId("chat-composer");
     await composer.click();
+    const shell = stage.locator(".den-composer");
+    const height = () => shell.evaluate((el) => el.getBoundingClientRect().height);
+    const restingHeight = await height();
 
     await startComposerTrace(stage);
     await page.keyboard.insertText("First line\nSecond line\nThird line\nFourth line");
-    await page.waitForTimeout(400);
+    await waitForComposerMotion(page);
     const growth = await stopComposerTrace(page);
 
-    const grew = motionSpan(growth);
+    const grew = heightChange(growth.samples);
     expect(grew.end).toBeGreaterThan(grew.start);
-    expect(grew.ms).toBeLessThanOrEqual(100);
-    expectBottomEdgeHeld(growth);
+    expect(growth.motions.length).toBeGreaterThan(0);
+    for (const motion of growth.motions) expect(motion.duration).toBeLessThanOrEqual(100);
+    expectBottomEdgeHeld(growth.samples);
 
     // A keystroke that keeps the line count moves nothing.
     await startComposerTrace(stage);
     await page.keyboard.insertText(" more");
     await page.waitForTimeout(200);
     const steady = await stopComposerTrace(page);
-    expect(new Set(steady.map((sample) => Math.round(sample.height))).size).toBe(1);
+    expect(steady.motions).toEqual([]);
+    expect(new Set(steady.samples.map((sample) => Math.round(sample.height))).size).toBe(1);
 
     await composer.fill("");
-    await page.waitForTimeout(300);
+    await expect.poll(height, { timeout: 30_000 }).toBeCloseTo(restingHeight, 0);
     const typed = `${"Quick typing wraps across several lines of the composer. ".repeat(6)}done`;
     await startComposerTrace(stage);
     await composer.pressSequentially(typed, { delay: 8 });
-    await page.waitForTimeout(300);
+    await waitForComposerMotion(page);
     const typing = await stopComposerTrace(page);
     await expect(composer).toHaveValue(typed);
-    expect(typing[typing.length - 1]!.height).toBeGreaterThan(typing[0]!.height);
-    expectBottomEdgeHeld(typing);
+    const wrapped = heightChange(typing.samples);
+    expect(wrapped.end).toBeGreaterThan(wrapped.start);
+    expectBottomEdgeHeld(typing.samples);
   });
 
   webE2e("the activity lane opens and closes on the disclosure timeline", async ({
@@ -176,14 +212,16 @@ webE2e.describe("composer height motion", () => {
       const prompt = await apiPostPrompt(request, sessionId, { text: "Hold the turn open." });
       expect(prompt.ok(), await prompt.text()).toBe(true);
       await expect(indicator).toBeVisible({ timeout: 30_000 });
-      await page.waitForTimeout(450);
+      await waitForComposerMotion(page);
       const opening = await stopComposerTrace(page);
 
-      const opened = motionSpan(opening);
+      const opened = heightChange(opening.samples);
       expect(opened.end).toBeGreaterThan(opened.start);
-      expect(opened.intermediateFrames).toBeGreaterThan(2);
-      expect(Math.round(opened.ms)).toBeGreaterThanOrEqual(140);
-      expect(opened.ms).toBeLessThanOrEqual(400);
+      expect(opening.motions.length).toBeGreaterThan(0);
+      for (const motion of opening.motions) {
+        expect(motion.duration).toBeGreaterThanOrEqual(140);
+        expect(motion.duration).toBeLessThanOrEqual(400);
+      }
 
       await startComposerTrace(stage);
       await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "Done." });
@@ -196,16 +234,16 @@ webE2e.describe("composer height motion", () => {
         await apiJson(request, "POST", "/harness/llm/respond", { id: pending.id, content: "Done." });
       }
       await expect(indicator).toHaveCount(0, { timeout: 30_000 });
-      await page.waitForTimeout(300);
+      await waitForComposerMotion(page);
       const closing = await stopComposerTrace(page);
 
-      const closed = motionSpan(closing);
+      const closed = heightChange(closing.samples);
       expect(closed.end).toBeLessThan(closed.start);
-      expect(closed.intermediateFrames).toBeGreaterThan(2);
-      expect(Math.round(closed.ms)).toBeGreaterThanOrEqual(140);
+      expect(closing.motions.length).toBeGreaterThan(0);
+      for (const motion of closing.motions) expect(motion.duration).toBeGreaterThanOrEqual(140);
       // Exit fading stays outside layout so the lane can collapse.
-      expect(closing.some((sample) => sample.leaving)).toBe(true);
-      expectBottomEdgeHeld(closing);
+      expect(closing.sawLeaving).toBe(true);
+      expectBottomEdgeHeld(closing.samples);
     } finally {
       await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "Done." });
       const pending = await apiJson<{ pending: boolean; id: string }>(

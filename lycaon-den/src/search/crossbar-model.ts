@@ -61,6 +61,7 @@ export type CrossbarSurfaceId =
   | "artifacts"
   | "blueprints"
   | "extensions"
+  | "running"
   | "chats"
   | "home"
   | "settings";

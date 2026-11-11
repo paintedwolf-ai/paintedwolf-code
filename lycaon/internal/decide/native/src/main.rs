@@ -26,7 +26,7 @@ struct LoadArgs {
     #[arg(long, default_value = "")]
     model_id: String,
 
-    /// Where to run: auto, cpu, mlx, vulkan or vulkan:N.
+    /// Where to run: auto, cpu, mlx, vulkan:N or vulkan-pci:ADDRESS.
     #[arg(long, default_value = "auto")]
     device: String,
 
@@ -49,6 +49,14 @@ struct LoadArgs {
     /// Rows per forward pass.
     #[arg(long, default_value_t = 0)]
     max_rows: usize,
+
+    /// Resident allocation grant between requests.
+    #[arg(long, default_value_t = 0)]
+    resident_bytes: usize,
+
+    /// Peak allocation grant during admitted GPU work.
+    #[arg(long, default_value_t = 0)]
+    peak_bytes: usize,
 
     /// Precision: f16 or f32. Defaults to the device's own.
     #[arg(long, default_value = "")]
@@ -125,6 +133,7 @@ fn options(args: &LoadArgs) -> Result<EngineOptions, String> {
         device,
         heads,
         max_rows: args.max_rows,
+        memory: bialy::memory::Limits { resident: args.resident_bytes, peak: args.peak_bytes },
         dtype: args.dtype.clone(),
         head_max_len: args.head_max_len,
         metallib: optional_path(&args.metallib),

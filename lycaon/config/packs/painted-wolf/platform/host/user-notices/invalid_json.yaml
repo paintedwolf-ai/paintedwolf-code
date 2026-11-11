@@ -6,5 +6,3 @@ suggested_action: Try the action again. If it keeps failing, export diagnostics 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Request could not be read

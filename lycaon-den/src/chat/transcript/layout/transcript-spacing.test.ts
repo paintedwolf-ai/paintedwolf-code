@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_SPACING, TRANSCRIPT_ROOT_REM_PX, setTranscriptSpacing, transcriptGeometryKey, transcriptInteriorSignature, transcriptSeamPx, transcriptSpacing, transcriptSpacingProperty, transcriptSpacingStyles } from "./transcript-spacing.ts";
 import { presentedVisualsHeight, transcriptRowContentEstimate } from "./transcript-row-content-estimate.ts";
+import { denSourceRoot, loadSourceCorpus } from "../../../test/source-corpus.ts";
+
+const cssCorpus = loadSourceCorpus(denSourceRoot, { extensions: [".css"] });
+const css = cssCorpus.files.map((file) => file.text).join("\n");
 
 afterEach(() => setTranscriptSpacing(DEFAULT_TRANSCRIPT_SPACING));
 describe("transcript spacing", () => {
@@ -76,5 +80,17 @@ describe("transcript spacing", () => {
     expect(transcriptGeometryKey(dimensions, signature, { ...typography, uiFont: "other" })).not.toBe(key);
     expect(transcriptGeometryKey(dimensions, signature, { ...typography, scale: 1.2 })).not.toBe(key);
     expect(transcriptGeometryKey(dimensions, signature, { ...typography, revision: "next" })).not.toBe(key);
+  });
+  it("agrees bidirectionally with --transcript-* custom properties in the CSS corpus", () => {
+    const declared = new Set(
+      Object.keys(TRANSCRIPT_SPACING).map((name) =>
+        transcriptSpacingProperty(name as keyof typeof TRANSCRIPT_SPACING),
+      ),
+    );
+    const used = new Set(
+      [...css.matchAll(/var\(\s*(--transcript-[\w-]+)/g)].map((match) => match[1]!),
+    );
+    expect([...used].filter((prop) => !declared.has(prop))).toEqual([]);
+    expect([...declared].filter((prop) => !used.has(prop))).toEqual([]);
   });
 });

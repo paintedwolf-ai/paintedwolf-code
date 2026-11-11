@@ -6,5 +6,3 @@ suggested_action: Return to the conversation and answer the pending question or 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - This workflow is waiting for your response

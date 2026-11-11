@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
 var sharedBranchViews sync.Map // map[string]branchViewState
@@ -39,14 +40,23 @@ const (
 	ProvisionDirectCopy ProvisionStrategy = "direct_copy"
 )
 
-// PreparationProgress is ephemeral worker-claim progress. TotalBytes is the copy declared up front,
-// known once the source has been counted.
+// StageCostDeclared is reported once a materialized worker's cost is known, before its first byte
+// moves, with the cost in TotalEntries and TotalBytes.
+const StageCostDeclared = "cost_declared"
+
+// StageBranchPrepared closes a worker's preparation with what it left out.
+const StageBranchPrepared = "branch_prepared"
+
+// PreparationProgress is ephemeral worker-claim progress.
 type PreparationProgress struct {
-	Strategy   ProvisionStrategy
-	Stage      string
-	Files      int64
-	Bytes      int64
-	TotalBytes int64
+	Strategy          ProvisionStrategy
+	Stage             string
+	Files             int64
+	Bytes             int64
+	TotalBytes        int64
+	TotalEntries      int64
+	UnreadableEntries int64
+	NotClonableReason workerplacement.NotClonableReason
 }
 
 type (
@@ -123,11 +133,21 @@ func reportPreparation(ctx context.Context, progress PreparationProgress) {
 // Binding is one isolated worker sandbox: a view of the project tree living
 // outside the repo. There is no git interaction and no linked worktree.
 type Binding struct {
-	ID        string
-	Root      string
-	Selection WorkspaceStrategySelection
-	View      *adapter.PreparedView
-	Adapter   adapter.Adapter
+	ID          string
+	Root        string
+	Selection   WorkspaceStrategySelection
+	View        *adapter.PreparedView
+	Adapter     adapter.Adapter
+	Preparation Preparation
+}
+
+// Preparation records where a worker's branch was placed and what building its view did. It is
+// empty for a binding that reused an already complete branch.
+type Preparation struct {
+	Clonable          bool
+	NotClonableReason workerplacement.NotClonableReason
+	PlacementFolder   string
+	Materialized      adapter.MaterializeStats
 }
 
 type branchViewState struct {
@@ -140,14 +160,16 @@ type branchViewState struct {
 // Manager creates and destroys per-job worker sandboxes.
 type Manager struct {
 	branchRoot string
-	// cloneAvailable answers selection's clone question for a branch. Placement supplies it.
-	cloneAvailable func(branchRoot string) adapter.CloneAvailability
-	cloneFile      adapter.FileCloner
-	selector       *adapter.Selector
-	recovery       *recovery.Coordinator
-	viewsMu        sync.Mutex
-	views          map[string]branchViewState
-	privateGit     *privategit.Manager
+	// stateRoot holds the placement registry; branchRoot sits directly under it.
+	stateRoot string
+	// cloneProbe replaces the real source-to-volume clone probe in fixtures.
+	cloneProbe func(ctx context.Context, dir string) (bool, error)
+	cloneFile  adapter.FileCloner
+	selector   *adapter.Selector
+	recovery   *recovery.Coordinator
+	viewsMu    sync.Mutex
+	views      map[string]branchViewState
+	privateGit *privategit.Manager
 
 	layeredOnce sync.Once
 	services    *layeredServices
@@ -155,9 +177,15 @@ type Manager struct {
 }
 
 // NewManager returns a workspace manager rooted at an out-of-repo branch base.
-func NewManager(branchRoot string, _ ...string) *Manager {
+func NewManager(branchRoot string) *Manager {
+	branchRoot = strings.TrimSpace(branchRoot)
+	stateRoot := filepath.Dir(branchRoot)
+	if registry, err := workerplacement.Load(stateRoot); err == nil {
+		workerplacement.Publish(registry)
+	}
 	return &Manager{
-		branchRoot: strings.TrimSpace(branchRoot),
+		branchRoot: branchRoot,
+		stateRoot:  stateRoot,
 		views:      make(map[string]branchViewState),
 	}
 }

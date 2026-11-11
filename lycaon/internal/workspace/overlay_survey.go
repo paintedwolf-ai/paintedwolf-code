@@ -110,8 +110,12 @@ func OverlaySurveyReadDir(branchRoot, rel string, opts sandbox.SurveyOptions) ([
 		if rel != "" && rel != "." {
 			childRel = rel + "/" + name
 		}
+		abs := filepath.Join(branchDir, name)
+		if !e.IsDir() && !opts.IncludeVCSMetadata && sandbox.IsGitlinkDirEntry(name, abs, e) {
+			continue
+		}
 		out = append(out, sandbox.SurveyEntry{
-			Rel: childRel, Abs: filepath.Join(branchDir, name), Depth: strings.Count(childRel, "/") + 1,
+			Rel: childRel, Abs: abs, Depth: strings.Count(childRel, "/") + 1,
 			IsDir: e.IsDir(), IsSymlink: e.Type()&fs.ModeSymlink != 0, DirEntry: e,
 		})
 	}

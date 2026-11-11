@@ -5,4 +5,5 @@ values:
   - id: direct_network
   - id: host_execution
   - id: process_control
+  - id: credential_store
   - id: local_service

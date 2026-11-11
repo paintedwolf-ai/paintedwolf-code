@@ -29,7 +29,7 @@ func definitionTags(rel, langName string, raw []gotreesitter.Tag, src []byte) []
 		line := int(t.NameRange.StartPoint.Row) + 1
 		out = append(out, Tag{
 			Kind:      strings.TrimPrefix(t.Kind, "definition."),
-			Name:      t.Name,
+			Name:      cleanTagName(langName, t.Name),
 			File:      rel,
 			Line:      line,
 			Language:  langName,
@@ -39,6 +39,13 @@ func definitionTags(rel, langName string, raw []gotreesitter.Tag, src []byte) []
 	}
 	sortTags(out)
 	return out
+}
+
+func cleanTagName(langName, name string) string {
+	if langName != "css" || !strings.ContainsAny(name, "\r\n") {
+		return name
+	}
+	return strings.Join(strings.Fields(name), " ")
 }
 
 // Bounds on the text carried with a tag.

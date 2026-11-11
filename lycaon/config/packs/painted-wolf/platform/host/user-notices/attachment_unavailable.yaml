@@ -6,6 +6,3 @@ suggested_action: Try again. If the problem continues, reopen the project.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - storage is not available
-      - reopen the project

@@ -1,0 +1,6 @@
+steps:
+  - when: "!paintedwolf.grounding_escalated"
+    tool: "recall"
+    args:
+      query: "handle:<handle>"
+    say: "To recover a result no longer in context, call {{ call }} with its exact handle, or a `path:` query, and cite the handle it returns."

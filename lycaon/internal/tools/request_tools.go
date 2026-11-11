@@ -71,6 +71,11 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 	if err != nil {
 		return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": err.Error()})
 	}
+	if _, registered := t.reg.Definition(need); !registered {
+		if reject := CommandOperationReject(need); reject != nil {
+			return "", reject
+		}
+	}
 	browsing := cursor != ""
 	started := time.Now()
 	profileID := strings.TrimSpace(tctx.Identity.Agent)
@@ -92,8 +97,9 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 			return "", err
 		}
 		result = t.activationResult(ctx, tctx, profileID, plan, constrained, outcome)
+		result.FullCatalog = outcome.FullCatalog
 	}
-	if !browsing && len(result.Loaded)+len(result.AlreadyLoaded) == 0 && (outcome.Failure == "" || len(cards) == 0) {
+	if !browsing && !result.FullCatalog && len(result.Loaded)+len(result.AlreadyLoaded) == 0 && (outcome.Failure == "" || len(cards) == 0) {
 		available := make([]string, 0, len(requestable))
 		for _, meta := range requestable {
 			available = append(available, meta.Name)
@@ -104,7 +110,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 			for _, card := range cards {
 				entries = append(entries, turnload.DiscoveryEntry(card))
 			}
-			discovery, err = DiscoveryPage(tctx, "request_tools", need, "", "no_match", "", entries, outcome.Order...)
+			discovery, err = DiscoveryPage(ctx, tctx, "request_tools", need, "", "no_match", "", entries, outcome.Order...)
 			if err != nil {
 				discovery = nil
 			}
@@ -115,7 +121,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		}
 		return "", FormatRequestToolsReject(t.deps, profileID, need, available, discovery)
 	}
-	if browsing || outcome.Failure != "" {
+	if !result.FullCatalog && (browsing || outcome.Failure != "") {
 		status := "ranking_unavailable"
 		if browsing {
 			status = "catalog"
@@ -127,7 +133,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 			}
 			entries = append(entries, turnload.DiscoveryEntry(card))
 		}
-		result.Discovery, err = DiscoveryPage(tctx, "request_tools", need, cursor, status, outcome.Failure, entries)
+		result.Discovery, err = DiscoveryPage(ctx, tctx, "request_tools", need, cursor, status, outcome.Failure, entries)
 		if err != nil {
 			return "", err
 		}
@@ -136,7 +142,7 @@ func (t requestTools) run(ctx context.Context, args map[string]any, tctx ToolCon
 		return "", err
 	}
 	if !browsing && len(result.Loaded)+len(result.AlreadyLoaded) > 0 {
-		t.deps.Activation.Activate(tctx.Identity.SessionID, result.Loaded, need)
+		t.deps.Activation.Activate(tctx.Identity.SessionID, append(slices.Clone(result.Loaded), result.AlreadyLoaded...), need)
 		result.Note = "Loaded schemas are on the next model call; this turn continues automatically."
 	}
 	if t.deps.Record != nil {
@@ -160,8 +166,7 @@ func (t requestTools) resolve(ctx context.Context, tctx ToolContext, need string
 }
 
 func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, profileID string, plan toolsurface.Plan, constrained bool, outcome turnload.RequestOutcome) turnload.RequestToolsResult {
-	// Declared companions load with a selected tool; the plan keeps out any the surface lacks.
-	names := toolcontract.WithCompanions(outcome.Loaded())
+	names := outcome.Loaded()
 	registered := make([]turnload.ToolCard, 0)
 	for _, meta := range t.reg.List() {
 		registered = append(registered, turnload.ToolCard{Name: meta.Name})
@@ -169,28 +174,14 @@ func (t requestTools) activationResult(ctx context.Context, tctx ToolContext, pr
 	names = append(names, turnload.ExactNames(outcome.Need, registered)...)
 	active := t.deps.Activation.Active(tctx.Identity.SessionID)
 	result := turnload.RequestToolsResult{Need: outcome.Need}
-	seen := make(map[string]bool, len(names))
-	for _, name := range names {
-		if seen[name] {
-			continue
-		}
-		seen[name] = true
-		if _, registered := t.reg.Meta(name); !registered {
-			continue
-		}
-		switch {
-		case plan.Deferred(name) && !active[name]:
+	availability := func(name string) toolsurface.Availability {
+		return t.availability(ctx, tctx, profileID, plan, constrained, name)
+	}
+	for _, name := range toolcontract.LoadFamilies(names, func(name string) bool { return availability(name) != toolsurface.Unavailable }) {
+		if availability(name) == toolsurface.Immediate || active[name] {
+			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
+		} else {
 			result.Loaded = append(result.Loaded, name)
-		case plan.Immediate(name) || (plan.Deferred(name) && active[name]):
-			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
-		case constrained && (plan.Compiled() || toolcontract.IsCatalog(name)):
-			continue
-		case active[name]:
-			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
-		case t.deps.Boundary.ToolDeferred(profileID, name, tctx.Turn.ToolAccess):
-			result.Loaded = append(result.Loaded, name)
-		case t.deps.Boundary.AssertToolAllowed(ctx, profileID, name, tctx.Turn.ToolAccess) == nil:
-			result.AlreadyLoaded = append(result.AlreadyLoaded, name)
 		}
 	}
 	sort.Strings(result.Loaded)

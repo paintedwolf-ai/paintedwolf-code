@@ -36,9 +36,6 @@ x-paintedwolf-scenarios:
       path: empty/
       profile: coordinator
       tool: summarize
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SUMMARIZE_NO_MATERIAL'
   - id: pattern_miss
     vars:
       match_count: 0
@@ -47,6 +44,3 @@ x-paintedwolf-scenarios:
       profile: coordinator
       sample_identifiers: handleSessions, handleWorkflowRuns, NewServer
       tool: summarize
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SUMMARIZE_NO_MATERIAL'

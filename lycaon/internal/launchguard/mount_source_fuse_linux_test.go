@@ -71,7 +71,7 @@ func startSourceFUSE(t *testing.T, volume string, module []byte) func() {
 				if err != nil {
 					t.Errorf("FUSE fixture protocol: %v", err)
 				}
-			case <-time.After(2 * time.Second):
+			case <-time.After(testutil.Timeout(time.Minute)):
 				_ = server.Process.Kill()
 				<-done
 				t.Error("own FUSE server did not settle after unmount")
@@ -176,6 +176,13 @@ func TestSourceFUSEServerProcess(t *testing.T) {
 	os.Exit(0)
 }
 
+// fuseConnectionEnded reports an unmount. The kernel answers ECONNABORTED when
+// the teardown aborts the connection, and ENODEV otherwise.
+func fuseConnectionEnded(err error) bool {
+	return errors.Is(err, unix.ENODEV) || errors.Is(err, unix.ECONNABORTED) ||
+		errors.Is(err, unix.EBADF) || errors.Is(err, io.EOF)
+}
+
 func serveSourceFUSE(device io.ReadWriter, uid, gid uint32, module []byte) error {
 	buffer := make([]byte, 1<<20)
 	for {
@@ -183,7 +190,7 @@ func serveSourceFUSE(device io.ReadWriter, uid, gid uint32, module []byte) error
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}
-		if errors.Is(err, unix.ENODEV) || errors.Is(err, unix.EBADF) || errors.Is(err, io.EOF) {
+		if fuseConnectionEnded(err) {
 			return nil
 		}
 		if err != nil {
@@ -213,8 +220,8 @@ func serveSourceFUSE(device io.ReadWriter, uid, gid uint32, module []byte) error
 		if errors.Is(err, unix.ENOENT) {
 			continue // The kernel interrupted this request.
 		}
-		if errors.Is(err, unix.ENODEV) {
-			return nil // The fixture was unmounted.
+		if fuseConnectionEnded(err) {
+			return nil
 		}
 		if err != nil {
 			return fmt.Errorf("write FUSE reply: %w", err)

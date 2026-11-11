@@ -1,9 +1,9 @@
 package extensionadmin
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -32,9 +32,7 @@ func TestEditorPromptCannotReadFiles(t *testing.T) {
 			if err == nil {
 				t.Fatalf("%s rendered instead of being refused: %q", name, out)
 			}
-			if strings.Contains(out, secret) {
-				t.Fatalf("%s leaked the target file into the prompt", name)
-			}
+			exposure.Absent(t, out, secret)
 		})
 	}
 }

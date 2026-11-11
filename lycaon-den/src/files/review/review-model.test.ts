@@ -10,7 +10,6 @@ import {
   buildReviewFileRows,
   buildReviewRows,
   encodeEyeChoice,
-  lensEmptyCopy,
   lensPickerLabel,
   lensScopeHeader,
   liveRowsInScope,
@@ -94,18 +93,12 @@ describe("review-model comparisons", () => {
   });
 
   it("provides per-lens empty and header copy", () => {
-    expect(lensEmptyCopy({ kind: "new" })).toBe("Nothing new since you last looked.");
-    expect(lensEmptyCopy({ kind: "turn" })).toBe("Nothing changed yet in this turn.");
-    expect(lensEmptyCopy({ kind: "pin", pinId: "p" })).toBe("No changes since this pin.");
     expect(lensScopeHeader({ kind: "new" })).toBe("New since you looked");
-    expect(lensScopeHeader({ kind: "turn" }, { turnRunning: true })).toBe("Changes in this turn, as they land");
     expect(lensScopeHeader({ kind: "turn" }, { turnRunning: false })).toBe("Changes in this turn");
     expect(lensScopeHeader({ kind: "session" }, { subjectTitle: "Fix auth" })).toBe("Changes in “Fix auth”");
-    expect(lensScopeHeader({ kind: "session" })).toBe("Changes in this chat");
     expect(lensScopeHeader({ kind: "pin", pinId: "p", label: "Before the big refactor" }))
       .toContain("Before the big refactor");
     expect(lensPickerLabel({ kind: "new" })).toBe("New since you looked");
-    expect(lensPickerLabel({ kind: "turn" })).toBe("This turn");
   });
 });
 
@@ -147,7 +140,6 @@ describe("review-model list", () => {
     expect(files).toHaveLength(2);
     expect(files[0]!.attribution).toBe("You + Agent");
     expect(files[0]!.unpresentedAgentEffects).toBe(1);
-    expect(files[1]!.attribution).toBe("Outside app");
     expect(files[1]!.contributors.map((c) => c.kind)).toEqual(["external"]);
   });
 

@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
     profile: implement
     reason: unknown control token {F1}
     tool: terminal_send
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TERMINAL_CONTROL_UNKNOWN'

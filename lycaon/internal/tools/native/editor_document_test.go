@@ -4,17 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/lycaon/lycaon/internal/documentcore"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
@@ -258,13 +258,13 @@ func TestReadRangesServeTheOpenDocument(t *testing.T) {
 
 // An edit to an open file lands in the document, not on disk, and the
 // receipt states where it went.
-func TestEditLandsInTheOpenDocument(t *testing.T) {
+func TestWriteLandsInTheOpenDocument(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.go"), []byte("package disk\n"), 0o644))
 	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.go": openDoc("doc-a", "package draft\n", true)}}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
+	edit := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out, err := edit.Run(context.Background(), map[string]any{
-		"path": "a.go", "old_string": "draft", "new_string": "agent",
+		"path": "a.go", "content": "package agent\n",
 	}, editorCtx(dir, docs))
 	testutil.FailErr(t, "edit", err)
 	if len(docs.applied) != 1 {
@@ -272,7 +272,7 @@ func TestEditLandsInTheOpenDocument(t *testing.T) {
 	}
 	applied := docs.applied[0]
 	if applied.DocumentID != "doc-a" || applied.ExpectedRevision != 4 || applied.Content != "package agent\n" ||
-		applied.ToolName != "edit" || applied.ToolCallID != "call-7" || applied.Turn != 3 || applied.OperationID == "" {
+		applied.ToolName != "write" || applied.ToolCallID != "call-7" || applied.Turn != 3 || applied.OperationID == "" {
 		t.Fatalf("apply = %+v", applied)
 	}
 	raw, err := os.ReadFile(filepath.Join(dir, "a.go"))
@@ -285,24 +285,8 @@ func TestEditLandsInTheOpenDocument(t *testing.T) {
 	}
 }
 
-// An edit against an old_string the person already changed on disk but not
-// in the editor is judged against the editor: that is what they see.
-func TestEditMatchesAgainstTheDocumentNotDisk(t *testing.T) {
-	dir := t.TempDir()
-	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.go"), []byte("package disk\n"), 0o644))
-	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.go": openDoc("doc-a", "package draft\n", true)}}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := edit.Run(context.Background(), map[string]any{
-		"path": "a.go", "old_string": "disk", "new_string": "agent",
-	}, editorCtx(dir, docs))
-	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != "EDIT_OLD_STRING_NOT_FOUND" {
-		t.Fatalf("err = %v, want EDIT_OLD_STRING_NOT_FOUND against the editor text", err)
-	}
-}
-
 // Retries preserve the agent read even when the host reports a newer head.
-func TestEditRetriesKeepTheAgentRead(t *testing.T) {
+func TestWriteRetriesKeepTheAgentRead(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x\n"), 0o644))
 	doc := openDoc("doc-a", "one\ntarget\n", true)
@@ -313,9 +297,9 @@ func TestEditRetriesKeepTheAgentRead(t *testing.T) {
 			d.Revision++
 		},
 	}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
+	edit := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := edit.Run(context.Background(), map[string]any{
-		"path": "a.txt", "old_string": "target", "new_string": "done",
+		"path": "a.txt", "content": "one\ndone\n",
 	}, editorCtx(dir, docs))
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDITOR_DOCUMENT_CHANGING" {
@@ -332,16 +316,16 @@ func TestEditRetriesKeepTheAgentRead(t *testing.T) {
 }
 
 // A document that never stops moving is reported, not written.
-func TestEditReportsADocumentThatKeepsChanging(t *testing.T) {
+func TestWriteReportsADocumentThatKeepsChanging(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x\n"), 0o644))
 	docs := &fakeEditorDocuments{
 		docs:        map[string]*tools.EditorDocumentText{"r1/a.txt": openDoc("doc-a", "target\n", true)},
 		alwaysMoved: true,
 	}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
+	edit := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err := edit.Run(context.Background(), map[string]any{
-		"path": "a.txt", "old_string": "target", "new_string": "done",
+		"path": "a.txt", "content": "done\n",
 	}, editorCtx(dir, docs))
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "EDITOR_DOCUMENT_CHANGING" {
@@ -354,16 +338,16 @@ func TestEditReportsADocumentThatKeepsChanging(t *testing.T) {
 
 // When disk moved outside the editor the document holds the edit unsaved,
 // and the receipt says so instead of claiming a save.
-func TestEditStatesAnUnsavedLanding(t *testing.T) {
+func TestWriteStatesAnUnsavedLanding(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x\n"), 0o644))
 	docs := &fakeEditorDocuments{
 		docs:    map[string]*tools.EditorDocumentText{"r1/a.txt": openDoc("doc-a", "target\n", true)},
 		unsaved: true,
 	}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
+	edit := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	out, err := edit.Run(context.Background(), map[string]any{
-		"path": "a.txt", "old_string": "target", "new_string": "done",
+		"path": "a.txt", "content": "done\n",
 	}, editorCtx(dir, docs))
 	testutil.FailErr(t, "edit", err)
 	if !strings.Contains(out, "not saved to disk") || !strings.Contains(out, "waits for the person's merge") || !strings.Contains(out, "still holds its earlier content") {
@@ -371,8 +355,8 @@ func TestEditStatesAnUnsavedLanding(t *testing.T) {
 	}
 }
 
-// write, replace_lines, and code_rewrite share the landing.
-func TestWriteAndReplaceLinesLandInTheOpenDocument(t *testing.T) {
+// Fresh reads establish the basis for subsequent writes.
+func TestWritesLandInTheOpenDocument(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "a.txt"), []byte("disk\n"), 0o644))
 	docs := &fakeEditorDocuments{docs: map[string]*tools.EditorDocumentText{"r1/a.txt": openDoc("doc-a", "one\ntwo\n", true)}}
@@ -389,9 +373,9 @@ func TestWriteAndReplaceLinesLandInTheOpenDocument(t *testing.T) {
 	docs.docs["r1/a.txt"].Revision++
 	_, err = (&surveytools.ReadTool{Boundary: nativefixture.Boundary(t)}).Run(t.Context(), map[string]any{"path": "a.txt"}, tctx)
 	testutil.FailErr(t, "read the changed document", err)
-	replace := &ReplaceLinesTool{Boundary: nativefixture.Boundary(t)}
+	replace := &WriteTool{Boundary: nativefixture.Boundary(t)}
 	_, err = replace.Run(context.Background(), map[string]any{
-		"path": "a.txt", "start_line": 2, "end_line": 2, "new_content": "TWO",
+		"path": "a.txt", "content": "one\nTWO\n",
 	}, tctx)
 	testutil.FailErr(t, "replace_lines", err)
 	if got := docs.docs["r1/a.txt"].Text; got != "one\nTWO\n" {
@@ -480,8 +464,8 @@ func TestDocumentLookupFailureCannotBecomeAFileWrite(t *testing.T) {
 	testutil.FailErr(t, "write file", os.WriteFile(path, []byte("disk"), 0o644))
 	lookupErr := errors.New("document store unavailable")
 	docs := &fakeEditorDocuments{openErr: lookupErr}
-	edit := &EditTool{Boundary: nativefixture.Boundary(t)}
-	_, err := edit.Run(t.Context(), map[string]any{"path": "a.txt", "old_string": "disk", "new_string": "replacement"}, editorCtx(dir, docs))
+	edit := &WriteTool{Boundary: nativefixture.Boundary(t)}
+	_, err := edit.Run(t.Context(), map[string]any{"path": "a.txt", "content": "replacement"}, editorCtx(dir, docs))
 	if !errors.Is(err, lookupErr) {
 		t.Fatalf("edit error = %v", err)
 	}
@@ -583,9 +567,9 @@ func TestRewritePreviewDoesNotRequireOrAuthorizeAnAgentRead(t *testing.T) {
 	tctx := editorCtx(dir, fake)
 	fake.reads = nil
 	resolved := projectpaths.Resolved{Root: tctx.Source.Roots[0], ScopeRel: "a.go", DisplayPath: "a.go"}
-	_, err := loadRewriteSource(t.Context(), tctx, resolved, true)
+	_, err := sourceview.LoadText(t.Context(), "code_rewrite", sourceview.AccessMutate, tctx, resolved)
 	testutil.FailErr(t, "preview without a prior read", err)
-	_, err = loadRewriteSource(t.Context(), tctx, resolved, false)
+	_, err = loadAgentSourceText(t.Context(), "code_rewrite", tctx, resolved)
 	var reject *toolrejection.ToolReject
 	if !errors.As(err, &reject) || reject.Code != "EDITOR_DOCUMENT_READ_REQUIRED" {
 		t.Fatalf("preview authorized an unseen full snapshot: %v", err)

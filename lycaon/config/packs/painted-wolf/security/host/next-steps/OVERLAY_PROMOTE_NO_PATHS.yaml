@@ -1,0 +1,17 @@
+steps:
+  - when: "size(paintedwolf.remaining_overlay_paths) > 0"
+    tool: "preview_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.job_id }}"
+    say: "Use {{ call }} for the current paths and resolve the remaining changes before retrying promotion; inspect its scope and change report if no paths qualify."
+  - when: "size(paintedwolf.remaining_overlay_paths) == 0"
+    tool: "reject_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.job_id }}"
+    say: "Use {{ call }} only when this empty overlay is no longer needed."
+  - when: "size(paintedwolf.remaining_overlay_paths) == 0"
+    tool: "update_progress"
+    say: "Then use {{ call }} to close only rows whose completion or skip is supported by evidence."
+  - when: "size(paintedwolf.remaining_overlay_paths) == 0"
+    tool: "task"
+    say: "Dispatch a fresh {{ call }} with a corrected brief only if work remains."

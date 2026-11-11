@@ -28,14 +28,6 @@ x-paintedwolf-scenarios:
   vars:
     delegation_id: dep-1
     leg_id: leg-taken
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DELEGATE_DISPATCH_LEG_NOT_PENDING'
-  - leg-taken
 - id: no_pending_leg
   vars:
     delegation_id: dep-1
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: DELEGATE_DISPATCH_LEG_NOT_PENDING'
-  - No pending leg

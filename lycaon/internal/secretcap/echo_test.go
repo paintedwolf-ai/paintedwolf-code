@@ -3,6 +3,7 @@ package secretcap
 import (
 	"encoding/base64"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net/url"
 	"strings"
 	"testing"
@@ -67,9 +68,7 @@ func TestReferenceEchoesInRewritesStructuredStrings(t *testing.T) {
 	encoded, err := json.Marshal(got)
 	testutil.FailErr(t, "json.Marshal failed", err)
 	for _, leaked := range []string{value, base64.StdEncoding.EncodeToString([]byte(value)), url.QueryEscape(value)} {
-		if strings.Contains(string(encoded), leaked) {
-			t.Errorf("structured echo survived: %s", encoded)
-		}
+		exposure.Absent(t, string(encoded), leaked)
 	}
 	if strings.Count(string(encoded), secretmatch.ReferenceToken(id)) != 3 {
 		t.Errorf("structured echoes were not written as references: %s", encoded)

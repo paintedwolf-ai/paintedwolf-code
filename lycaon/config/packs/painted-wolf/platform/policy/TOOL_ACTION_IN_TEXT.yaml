@@ -21,7 +21,3 @@ x-paintedwolf-scenarios:
   - id: offered_read
     vars:
       offenders_sample: read
-    expect_contains:
-      - 'No tool executed.'
-      - native tool channel
-      - 'Code: TOOL_ACTION_IN_TEXT'

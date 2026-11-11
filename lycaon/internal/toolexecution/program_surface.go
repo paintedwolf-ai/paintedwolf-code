@@ -38,6 +38,10 @@ func (e *Metadata) SelectNativeOperations(ctx context.Context, filter platform.T
 	}
 	selected := NativeOperationSelection{denied: map[string]map[string]bool{}, identityDenied: map[string]bool{}}
 	seen := map[string]bool{}
+	surfaceTools, err := surfaceCommandFormTools(filter.SurfaceID)
+	if err != nil {
+		return NativeOperationSelection{}, err
+	}
 	for _, definition := range active {
 		if err := definition.ValidateNativeCommands(); err != nil {
 			return NativeOperationSelection{}, err
@@ -51,6 +55,9 @@ func (e *Metadata) SelectNativeOperations(ctx context.Context, filter platform.T
 		if err != nil {
 			return NativeOperationSelection{}, err
 		}
+		if surfaceTools != nil && toolcontract.CommandFormTool(facts.Identity) && !surfaceTools[facts.Identity] {
+			identityAllowed = false
+		}
 		selected.identityDenied[facts.Identity] = !identityAllowed
 		denied := map[string]bool{}
 		anyAllowed := false
@@ -58,6 +65,9 @@ func (e *Metadata) SelectNativeOperations(ctx context.Context, filter platform.T
 			allowed, err := policy.CommandOperationAllowed(ctx, filter.ProfileID, facts.Identity, command.Name)
 			if err != nil {
 				return NativeOperationSelection{}, err
+			}
+			if !identityAllowed || !surfaceAllowsCommandForm(surfaceTools, command.Name) {
+				allowed = false
 			}
 			denied[command.Name] = !allowed
 			anyAllowed = anyAllowed || allowed

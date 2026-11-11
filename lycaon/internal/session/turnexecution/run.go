@@ -242,7 +242,7 @@ func (m *Service) executePromptRun(
 			return execution, err
 		}
 	}
-	if err := m.PostTurn.After(tools.WithRecoveryTools(ctx, result.OfferedTools), sessionID, assembly.ProfileID, result.TurnTools); err != nil {
+	if err := m.PostTurn.After(tools.WithCallReach(ctx, result.Reach), sessionID, assembly.ProfileID, result.TurnTools); err != nil {
 		return execution, err
 	}
 	checkpointJSON, err := sessionexecution.FinalizingCheckpoint(sessionID, result.LastAssistantID, result.LastOutputID)
@@ -259,14 +259,34 @@ func (m *Service) executePromptRun(
 		execution.CloseoutID = result.Closeout.ID
 	}
 	if strings.TrimSpace(result.LastAssistantID) == "" {
+		if result.Outcome == promptresult.OutcomeOutputTruncated {
+			execution.Response = &promptresult.Result{
+				Outcome:         result.Outcome,
+				OutputTruncated: result.OutputTruncated,
+				Reach:           result.Reach,
+			}
+		}
 		return execution, nil
 	}
 
 	_ = m.History.ScheduleChunks(ctx, sess)
 	m.Status.PublishAssistant(ctx, sessionID, result.LastAssistantContent)
-	execution.Response = &promptresult.Result{
-		MessageID:    result.LastAssistantID,
-		OfferedTools: result.OfferedTools,
-	}
+	execution.Response = m.recordPromptOutcome(ctx, sessionID, result)
 	return execution, nil
+}
+
+func (m *Service) recordPromptOutcome(ctx context.Context, sessionID string, result *promptloop.PromptRunResult) *promptresult.Result {
+	if result.IsCloseoutBlocked() {
+		m.Settlement.NoteCloseoutBlocked(sessionID, result.CloseoutBlocked)
+		if m.Guidance != nil {
+			m.Guidance.Emit(ctx, sessionID, anchor.GateBlocked, anchor.Envelope{})
+		}
+	}
+	return &promptresult.Result{
+		MessageID:       result.LastAssistantID,
+		Reach:           result.Reach,
+		Outcome:         result.Outcome,
+		CloseoutBlocked: result.CloseoutBlocked,
+		OutputTruncated: result.OutputTruncated,
+	}
 }

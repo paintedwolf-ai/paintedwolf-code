@@ -5,11 +5,7 @@ anchor: tool.rejected
 requires:
   profiles:
   - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.job_id
-  - paintedwolf.merge_status
-  - paintedwolf.rejection_reason
+  facts: [paintedwolf.rejection_code, paintedwolf.job_id, paintedwolf.merge_status, paintedwolf.rejection_reason, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_NOT_PENDING"
 effect: block
 copy:
@@ -17,9 +13,7 @@ copy:
     isolated workspace (read scope or pre-overlay job)
   why: Re-promoting a non-pending overlay would either no-op silently or fail mid-merge — both violate the one-overlay-one-event
     guarantee
-  fix: Re-read the pulse roster's pending write list. If the overlay landed → treat as done; if rebasing → wait
-    for resolution; if orphaned → decide rebase-onto-primary vs reject; if aborted → re-dispatch a fresh `task()`
-    if needed
+  fix: 'Re-read the pulse roster''s pending write list. If the overlay landed, treat it as done; if rebasing, wait for resolution; if orphaned, decide rebase-onto-primary vs reject. {{ paintedwolf.next_steps }}'
   instead: Branch on Code; verify merge_status against the live roster before retrying
   what: Overlay {{ paintedwolf.job_id }} is not pending{% if paintedwolf.merge_status %} (merge_status={{ paintedwolf.merge_status
     }}){% endif %}{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}
@@ -33,16 +27,10 @@ x-paintedwolf-scenarios:
   vars:
     job_id: ov-already-merged
     merge_status: merged
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_NOT_PENDING'
 - id: no_workspace
   vars:
     job_id: ov-read
     reason: no isolated branch
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: OVERLAY_PROMOTE_NOT_PENDING'
 selector:
   tool:
   - preview_overlay

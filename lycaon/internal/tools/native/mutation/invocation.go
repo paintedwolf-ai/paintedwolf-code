@@ -65,6 +65,21 @@ func (inv *invocation) value(key string) (string, bool) {
 	return option.Values[0].Value, true
 }
 
+// secretSink is a declared sink's admitted value: the host's resolved copy when
+// the option carried managed-secret references, otherwise the bound word.
+func (inv *invocation) secretSink(key string) (string, bool) {
+	value, ok := inv.value(key)
+	if !ok {
+		return "", false
+	}
+	if resolution := inv.tc.Effects.Secrets; resolution != nil {
+		if resolved, ok := resolution.Arguments[secretSinkOptions[inv.name()][key]].(string); ok {
+			return resolved, true
+		}
+	}
+	return value, true
+}
+
 func (inv *invocation) operands() []string { return inv.argv.Operands().Values() }
 
 // fail reports one operand's ordinary failure as the utility would and keeps
@@ -186,6 +201,7 @@ func (inv *invocation) outcome(err error) (toolcontract.ProducerResult, error) {
 	if certainty == toolcontract.NoEffect && !errors.Is(err, commandprogram.ErrConsumerClosed) {
 		certainty = toolcontract.EffectUnknown
 	}
+	_, _ = fmt.Fprintf(inv.stderr, "%s: %s\n", inv.name(), err.Error())
 	return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: certainty}, err
 }
 

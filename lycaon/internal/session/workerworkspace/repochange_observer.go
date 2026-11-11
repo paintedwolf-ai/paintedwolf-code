@@ -4,11 +4,11 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
@@ -152,9 +152,8 @@ func buildTrunkChangeFromRepoEvent(rootID, rootPath, rel string, kind repochange
 	}
 	ev.NewSize = info.Size()
 	ev.NewModTimeNS = info.ModTime().UnixNano()
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
-		ev.NewIno = uint64(sys.Ino)
-		ev.NewDev = uint64(sys.Dev)
+	if observed := fspath.ObserveFile(info); observed.Known {
+		ev.NewIno, ev.NewDev = observed.Identity.Inode, observed.Identity.Device
 	}
 	if info.Mode().IsRegular() && info.Size() >= 0 && info.Size() <= maxStatDigestBytes {
 		if f, oErr := os.Open(absPath); oErr == nil {

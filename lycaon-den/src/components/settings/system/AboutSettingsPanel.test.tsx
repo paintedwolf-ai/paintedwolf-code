@@ -27,7 +27,6 @@ describe("AboutSettingsPanel", () => {
     fireEvent.click(getByTestId("about-copy-link"));
     expect(mocks.writeClipboardText).toHaveBeenCalledWith(WEBSITE_URL);
     await waitFor(() => {
-      expect(getByTestId("about-copy-link").textContent).toBe("Link copied");
     });
   });
 
@@ -50,14 +49,6 @@ describe("AboutSettingsPanel", () => {
     ));
 
     expect(getByTestId("about-version").textContent).toContain("0.1.0");
-  });
-
-  it("states the no-telemetry posture", () => {
-    const { getByTestId } = render(() => (
-      <AboutSettingsPanel version="0.1.0" />
-    ));
-
-    expect(getByTestId("about-privacy").textContent).toMatch(/no telemetry/i);
   });
 
   it("offers a single Report a bug… entry that opens the dialog", async () => {

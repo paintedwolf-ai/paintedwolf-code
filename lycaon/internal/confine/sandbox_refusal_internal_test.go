@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -195,6 +196,12 @@ func TestNetworkAndProcessRefusalsRouteToTheirCapability(t *testing.T) {
 		grant, port       string
 	}{
 		{"network-outbound", "/var/run/docker.sock", RecoverSocketPath, "/var/run/docker.sock", ""},
+		{"network-outbound", "/run/user/1000/bus", RecoverCredentialStore, "/run/user/1000/bus", ""},
+		{"network-outbound", "/var/run/mDNSResponder", RecoverNone, "", ""},
+		{"network-outbound", "/private/var/run/mDNSResponder", RecoverNone, "", ""},
+		{"network-outbound", "/Users/p/repo/.git/fsmonitor--daemon.ipc", RecoverNone, "", ""},
+		{"network-outbound", "/Users/p/repo/.git/worktrees/w1/fsmonitor--daemon.ipc", RecoverNone, "", ""},
+		{"network-outbound", "fsmonitor--daemon.ipc", RecoverNone, "", ""},
 		{"network-outbound", "remote:*:5432", RecoverOutboundPort, "", "5432"},
 		{"network-bind", "local:*:8080", RecoverLocalListen, "", "8080"},
 		{"network-bind", "/Users/p/.colima/_lima/_networks/user-v2/user-v2_fd.sock", RecoverHostExecution, "", ""},
@@ -238,5 +245,109 @@ func TestBoundProfileTagsEveryDenyRule(t *testing.T) {
 	testutil.FailErr(t, "build untagged profile", err)
 	if strings.Contains(untagged, "with message") {
 		t.Fatalf("unbound profile carries a tag:\n%s", untagged)
+	}
+}
+
+func TestSandboxRefusalsGrants(t *testing.T) {
+	keychains := filepath.Join(t.TempDir(), "Keychains")
+	testutil.FailErr(t, "create keychains dir", os.MkdirAll(keychains, 0o700))
+	loginDB := filepath.Join(keychains, "login.keychain-db")
+
+	repo := filepath.Join(t.TempDir(), "repo")
+	repoSub := filepath.Join(repo, "sub")
+	testutil.FailErr(t, "create repo sub", os.MkdirAll(repoSub, 0o700))
+	dotenv := filepath.Join(repo, ".env")
+	agents := filepath.Join(repo, "AGENTS.md")
+
+	for _, tc := range []struct {
+		name     string
+		access   FilesystemAccess
+		refusals []SandboxRefusal
+		want     []string
+	}{
+		{
+			name:   "credential capability is not an ordinary read-path grant",
+			access: AccessRead,
+			refusals: []SandboxRefusal{
+				{Operation: "file-read-data", Target: loginDB, Layer: FloorReadCredentialStore, Recovery: RecoverCredentialStore, Grant: loginDB},
+			},
+			want: []string{},
+		},
+		{
+			name:   "keychain traversal metadata on ancestor drops ancestor grant",
+			access: AccessRead,
+			refusals: []SandboxRefusal{
+				{Operation: "file-read-metadata", Target: "/Users/person/Library/Keychains", Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: "/Users/person/Library/Keychains"},
+				{Operation: "file-read-metadata", Target: "/Users/person/Library/Keychains/login.keychain-db", Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: "/Users/person/Library/Keychains/login.keychain-db"},
+			},
+			want: []string{"/Users/person/Library/Keychains/login.keychain-db"},
+		},
+		{
+			name:   "existing directory metadata traversal still yields exact child grant",
+			access: AccessRead,
+			refusals: []SandboxRefusal{
+				{Operation: "file-read-metadata", Target: keychains, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: keychains},
+				{Operation: "file-read-metadata", Target: loginDB, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: loginDB},
+			},
+			want: []string{loginDB},
+		},
+		{
+			name:   "directory file-read-data refusal preserves directory grant",
+			access: AccessRead,
+			refusals: []SandboxRefusal{
+				{Operation: "file-read-metadata", Target: keychains, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: keychains},
+				{Operation: "file-read-data", Target: keychains, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: keychains},
+				{Operation: "file-read-metadata", Target: loginDB, Layer: FloorReadKeyMaterial, Recovery: RecoverReadPath, Grant: loginDB},
+			},
+			want: []string{keychains},
+		},
+		{
+			name:   "cross-layer write grants stay distinct while same-layer directory covers child",
+			access: AccessWrite,
+			refusals: []SandboxRefusal{
+				{Operation: "file-write-create", Target: filepath.Join(repo, "out.txt"), Layer: FloorOutsideWriteRoots, Recovery: RecoverWriteRoot, Grant: repo},
+				{Operation: "file-write-create", Target: filepath.Join(repoSub, "nested.txt"), Layer: FloorOutsideWriteRoots, Recovery: RecoverWriteRoot, Grant: repoSub},
+				{Operation: "file-write-data", Target: dotenv, Layer: FloorProtected, Recovery: RecoverWriteRoot, Grant: dotenv},
+				{Operation: "file-write-data", Target: agents, Layer: FloorAgentPolicy, Recovery: RecoverWriteRoot, Grant: agents},
+			},
+			want: []string{repo, dotenv, agents},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := (SandboxRefusals{Refusals: tc.refusals}).Grants(tc.access)
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("Grants(%s) = %v, want %v", tc.access, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCredentialStoreRefusalsRouteToCredentialStoreCapability(t *testing.T) {
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve home", err)
+	t.Setenv("HOME", home)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(home, ".config", "paintedwolf"))
+	t.Cleanup(installKeyMaterialFloor(t, "~/.ssh/", "~/Library/Keychains/", "~/.local/share/keyrings/", "~/.local/share/kwalletd/"))
+
+	project, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve project", err)
+	rules, err := filesystemRules(Confinement{Roots: []string{project}})
+	testutil.FailErr(t, "build rules", err)
+
+	for _, target := range []string{
+		filepath.Join(home, "Library", "Keychains", "login.keychain-db"),
+		filepath.Join(home, ".local", "share", "keyrings", "login.keyring"),
+		filepath.Join(home, ".local", "share", "kwalletd", "kdewallet.kwl"),
+	} {
+		got := routeRefusal(rules, "file-read-data", target, false)
+		if got.Recovery != RecoverCredentialStore || got.Layer != FloorReadCredentialStore {
+			t.Fatalf("read refusal on %s routed to %+v, want RecoverCredentialStore / FloorReadCredentialStore", target, got)
+		}
+	}
+
+	sshKey := filepath.Join(home, ".ssh", "id_ed25519")
+	gotSSH := routeRefusal(rules, "file-read-data", sshKey, false)
+	if gotSSH.Recovery != RecoverReadPath || gotSSH.Layer != FloorReadKeyMaterial {
+		t.Fatalf("read refusal on %s routed to %+v, want RecoverReadPath / FloorReadKeyMaterial", sshKey, gotSSH)
 	}
 }

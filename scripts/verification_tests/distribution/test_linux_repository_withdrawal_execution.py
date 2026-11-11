@@ -391,7 +391,7 @@ class LinuxReleaseCommandTests(unittest.TestCase):
 
     def test_admission_reads_the_shared_exact_source_qualification(self):
         from ci_policy import verification_verdict
-        from scripts.linux_release import release_qualification
+        from scripts.linux_release import release_signing as release_qualification
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/repository"}), \
                 patch.object(verification_verdict, "require_qualification", return_value={"id": 1}) as required:
             self.assertEqual(release_qualification.require("a" * 40), {"id": 1})

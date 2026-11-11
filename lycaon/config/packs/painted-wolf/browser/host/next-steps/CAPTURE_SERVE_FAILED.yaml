@@ -1,0 +1,3 @@
+steps:
+  - tool: "render_view"
+    say: "A mock visual from {{ call }} does not verify the running page."

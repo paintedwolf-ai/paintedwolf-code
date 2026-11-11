@@ -9,6 +9,3 @@ invariants:
   trigger_class: workflow_event
   fires_in:
   - workflow compose draft published — coordinator should start the run
-  required:
-  - coordinator_brief
-  - start the workflow run

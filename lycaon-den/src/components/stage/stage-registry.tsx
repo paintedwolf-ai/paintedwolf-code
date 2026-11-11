@@ -14,6 +14,7 @@ import { ProjectFilesView } from "../../files/components/ProjectFilesView.tsx";
 import { ProjectArtifactsView } from "../project/ProjectArtifactsView.tsx";
 import { ProjectBlueprintsView } from "../project/ProjectBlueprintsView.tsx";
 import { ProjectExtensionsView } from "../project/ProjectExtensionsView.tsx";
+import { ProjectRunningView } from "../project/ProjectRunningView.tsx";
 import { ProjectScansView } from "../scan/ProjectScansView.tsx";
 import { ProjectCostView } from "../project/ProjectCostView.tsx";
 import { GlobalSearchView } from "../search/GlobalSearchView.tsx";
@@ -26,6 +27,7 @@ import {
   StageCostIcon,
   StageExtensionsIcon,
   StageFilesIcon,
+  StageRunningIcon,
   StageSearchIcon,
   StageSecurityIcon,
 } from "./stage-icons.tsx";
@@ -278,6 +280,29 @@ export const STAGE_REGISTRY: Record<ContextNavItemId, StageDefinition> = {
           appStore={ctx.appStore}
           back={ctx.back()}
           onOpenScanners={() => ctx.callbacks.onOpenSettings("scanners")}
+        />
+      );
+    },
+  },
+  running: {
+    id: "running",
+    label: "Running",
+    navTestId: "project-running-entry",
+    icon: StageRunningIcon,
+    backPlacement: "stage",
+    featureEnabled: () => true,
+    available: (ctx) => ctx.projectExists,
+    render: (ctx) => {
+      const projectId = ctx.projectId;
+      if (!projectId) return <></>;
+      return (
+        <ProjectRunningView
+          projectId={projectId}
+          appStore={ctx.appStore}
+          back={ctx.back()}
+          onOpenSession={(sessionId) =>
+            ctx.callbacks.onOpenSession({ projectId, sessionId })
+          }
         />
       );
     },

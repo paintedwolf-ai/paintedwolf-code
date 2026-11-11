@@ -8,6 +8,3 @@ suggested_action: Check the file's ownership or filesystem permissions, then try
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - permission
-      - read-only

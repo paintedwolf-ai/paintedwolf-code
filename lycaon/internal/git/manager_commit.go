@@ -25,7 +25,7 @@ type GitCommitOpts struct {
 }
 
 // Commit stages paths and creates or amends a commit.
-func (m *Manager) Commit(ctx context.Context, projectDir string, opts GitCommitOpts) (hash string, err error) {
+func (m *gitCommitManager) Commit(ctx context.Context, projectDir string, opts GitCommitOpts) (hash string, err error) {
 	dir, err := repositoryProjectDir(projectDir)
 	if err != nil {
 		return "", err

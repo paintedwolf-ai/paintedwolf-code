@@ -102,6 +102,28 @@ describe("DraftRail", () => {
     expect(expanded.querySelector(".assistant-prose")).toBeNull();
   });
 
+  it("shows raw citation syntax verbatim in provisional text, with nothing navigable", () => {
+    const body = "The timeout starts in [read#3:42-58] and [src/a.go:12].\n[verify: targeted - ran the auth package] [command#4]";
+    render(() => (
+      <DraftRail
+        sessionId="sess-1"
+        slotId="slot-1"
+        body={body}
+        versionCount={1}
+        live={false}
+        client={mockClient([])}
+      />
+    ));
+    const rail = screen.getByTestId("draft-rail");
+    expect(rail.textContent).toContain("Drafts");
+    expect(screen.getByTestId("draft-rail-summary-body").textContent).toContain("[read#3:42-58]");
+    expandRail();
+    expect(screen.getByTestId("draft-rail-expanded-body").textContent).toBe(body);
+    expect(rail.querySelector(".den-source-path-link")).toBeNull();
+    expect(rail.querySelector("a")).toBeNull();
+    expect(screen.queryByTestId("citation-evidence-chicklet")).toBeNull();
+  });
+
   it("shows the generating token heartbeat only while live", () => {
     const { unmount } = render(() => (
       <DraftRail

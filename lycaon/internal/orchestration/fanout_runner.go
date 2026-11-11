@@ -75,7 +75,7 @@ func (o *OrchestratorImpl) runFanOut(ctx context.Context, req RunRequest, wf *wo
 	if err != nil {
 		return nil, err
 	}
-	defer o.destroyBindings(bindings)
+	defer o.destroyBindings(ctx, bindings)
 
 	if err := o.dispatchFanOutLegsParallel(ctx, req, runID, delegationID, profileID, fanSpec, legIDs, state.workflowRunID); err != nil {
 		return nil, err

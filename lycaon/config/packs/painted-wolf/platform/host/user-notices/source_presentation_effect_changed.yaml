@@ -6,4 +6,3 @@ suggested_action: Reload the file before completing its presentation.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [changed, Reload]

@@ -16,6 +16,7 @@ import (
 )
 
 func TestRepoSetCache_hitMissGenerationTTLInvalidate(t *testing.T) {
+	t.Parallel()
 	var probes atomic.Int32
 	fixture := []git.RepoRef{{ID: "r1", Toplevel: "/t", Label: "t", RootIDs: []string{"a"}, Available: true}}
 	discover := func(context.Context, []projectroot.RootRef) []git.RepoRef {
@@ -54,6 +55,7 @@ func TestRepoSetCache_hitMissGenerationTTLInvalidate(t *testing.T) {
 }
 
 func TestRepoSetCache_singleflightConcurrent(t *testing.T) {
+	t.Parallel()
 	var probes atomic.Int32
 	var started sync.WaitGroup
 	var release sync.WaitGroup
@@ -89,6 +91,7 @@ func TestRepoSetCache_singleflightConcurrent(t *testing.T) {
 }
 
 func TestRepoSetCache_PeekOrRevalidateColdReturnsBeforeDiscovery(t *testing.T) {
+	t.Parallel()
 	started := make(chan struct{}, 1)
 	release := make(chan struct{})
 	discover := func(context.Context, []projectroot.RootRef) []git.RepoRef {
@@ -127,6 +130,7 @@ func TestRepoSetCache_PeekOrRevalidateColdReturnsBeforeDiscovery(t *testing.T) {
 // Two roots inside one checkout describe the same porcelain, so they reach one cache entry
 // while each caller passes its own directory.
 func TestStatusCache_sharedPorcelainAcrossRootsInOneCheckout(t *testing.T) {
+	t.Parallel()
 	repo := initDiscoverRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(web, 0o755))
@@ -143,8 +147,9 @@ func TestStatusCache_sharedPorcelainAcrossRootsInOneCheckout(t *testing.T) {
 	}
 }
 
-// Invalidation must land on the same key a subdirectory load used.
+// Invalidation lands on the same key a subdirectory load used.
 func TestStatusCache_invalidationReachesSubdirectoryRoots(t *testing.T) {
+	t.Parallel()
 	repo := initDiscoverRepo(t)
 	web := filepath.Join(repo, "packages", "web")
 	testutil.FailErr(t, "mkdir", os.MkdirAll(web, 0o755))

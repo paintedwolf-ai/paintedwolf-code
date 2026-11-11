@@ -1,0 +1,32 @@
+{
+  "crates": [
+    {
+      "crate": "wgpu",
+      "version": "30.0.1",
+      "archive_sha256": "527ccdf43dd5b2e8676eed9984ce00e2bbb0a1b85b70c1969dcb6cd2eb55ab9e"
+    },
+    {
+      "crate": "wgpu-core",
+      "version": "30.0.1",
+      "archive_sha256": "14c018fce9b6270aa203c2fdd56f3cce996713534bd757e4ea58c8560b121f14"
+    },
+    {
+      "crate": "wgpu-hal",
+      "version": "30.0.1",
+      "archive_sha256": "b6b7fb58561a792bc237628ba0792e332de418fefe145f13b5ed8201e6d52f58"
+    },
+    {
+      "crate": "wgpu-types",
+      "version": "30.0.1",
+      "archive_sha256": "99dad6f1fbdbbdb4c278a6508b059d44688f5cebddf78d005a46a31340269286"
+    },
+    {
+      "crate": "cubecl-wgpu",
+      "version": "0.11.3",
+      "archive_sha256": "c644cb7afff37320c3df8edf6d41ace041e9f70edf37d38a104e97fdfd5074b1"
+    }
+  ],
+  "upstream_pr": "https://github.com/gfx-rs/wgpu/pull/9523",
+  "upstream_head": "9714094f96449cc6ad234d1120b1d3944db8a76c",
+  "patch_sha256": "be84225016d16253022ff1f641e23f06840cf90c13bce0ae5860b642fda12c8e"
+}

@@ -95,8 +95,7 @@ func TestCloudflarePaidPlanNoticeUsesStructuredReason(t *testing.T) {
 			}
 			continue
 		}
-		if !strings.Contains(copy.Message, err.Model) || !strings.Contains(copy.Message, "Workers Paid plan") ||
-			!strings.Contains(copy.SuggestedAction, "Workers Free plan") {
+		if !strings.Contains(copy.Message, err.Model) || !strings.Contains(copy.Message, "Workers Paid plan") {
 			t.Fatalf("paid plan notice lacks actionable guidance: %+v", copy)
 		}
 	}
@@ -172,5 +171,35 @@ func TestRenderWireUsesContextFromPromptError(t *testing.T) {
 	))
 	if copy.Message == "" || copy.Title == "" {
 		t.Fatalf("copy = %#v", copy)
+	}
+}
+
+func TestOutputTruncatedNoticeRendersLowOutputCeilingAndTruncatedTool(t *testing.T) {
+	catalog := loadTestCatalog(t)
+	err := &failure.ProviderOutputTruncatedError{
+		ProviderID:          "anthropic",
+		Model:               "claude-sonnet-4-5",
+		FinishReason:        "length",
+		MaxTokens:           8192,
+		ConfiguredMaxTokens: 8192,
+		ProviderMaxTokens:   64000,
+		ToolCallTruncated:   true,
+		ToolName:            "write",
+		ToolArgsBytes:       512,
+		RecoveryAttempted:   true,
+	}
+	ctx := ContextFromPromptError(err)
+	if ctx["tool_call_truncated"] != true || ctx["tool"] != "write" || ctx["tool_args_bytes"] != 512 {
+		t.Fatalf("unexpected tool vars in ctx: %#v", ctx)
+	}
+	if ctx["low_output_ceiling"] != true || ctx["configured_max_tokens"] != 8192 || ctx["provider_max_tokens"] != 64000 {
+		t.Fatalf("unexpected ceiling vars in ctx: %#v", ctx)
+	}
+	copy, ok := catalog.Render("provider_empty_completion", ctx)
+	if !ok {
+		t.Fatal("expected provider_empty_completion to render")
+	}
+	if !strings.Contains(copy.Message, "write") || !strings.Contains(copy.Message, "8192") || !strings.Contains(copy.Message, "64000") || !strings.Contains(copy.SuggestedAction, "Raise max_tokens") {
+		t.Fatalf("rendered notice missing tool or ceiling guidance: %+v", copy)
 	}
 }

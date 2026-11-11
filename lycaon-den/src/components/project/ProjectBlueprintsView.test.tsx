@@ -186,7 +186,6 @@ describe("ProjectBlueprintsView", () => {
       <ProjectBlueprintsView projectId="proj-1" appStore={appStore} hasRepo onCreateSupportingSession={createSupportingSession} />
     ));
     expect(await screen.findByTestId("project-blueprints-empty")).toBeTruthy();
-    expect(screen.getByText(/No blueprints yet/i)).toBeTruthy();
     expect(
       await screen.findByTestId("project-blueprints-workflow-launcher"),
     ).toBeTruthy();

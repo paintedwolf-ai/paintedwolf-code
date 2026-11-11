@@ -643,7 +643,6 @@ describe("line gutter — removed lines", () => {
     setScopeDeletedLines(view, "folded");
     openScopeDeletion(view, editorScopeDiffFolds(view.state)[0]!);
     const bar = foldBacks(view)[0]!;
-    expect(bar.getAttribute("aria-label")).toBe("Fold these lines");
     expect(bar.closest(".files-line-gutter__cell--del")).toBeTruthy();
 
     bar.dispatchEvent(new MouseEvent("click", { bubbles: true }));

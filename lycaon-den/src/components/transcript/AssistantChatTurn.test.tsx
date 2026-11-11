@@ -217,6 +217,26 @@ describe("AssistantChatTurn agent note", () => {
     expect(screen.queryByTestId("workflow-download-report")).toBeNull();
   });
 
+  it("shows an exempt note as a note with no evidence state", () => {
+    const messages = [
+      groundedMessage({
+        kind: "agent_note",
+        grounding: { traced: true, evidence_optional: true },
+      }),
+    ];
+
+    render(() => (
+      <AssistantChatTurn
+        item={{ kind: "assistant", key: "msg-1", text: "I'll inspect the auth paths." }}
+        wireRow={() => messages.find((row) => row.id === "msg-1")}
+      />
+    ));
+
+    expect(screen.getByTestId("agent-note-badge").textContent).toBe("Note");
+    expect(screen.queryByTestId("citation-evidence-chicklet")).toBeNull();
+    expect(screen.getByTestId("transcript-article-assistant").textContent).not.toMatch(/grounded/i);
+  });
+
   it("leaves a normal assistant row without the Note badge", () => {
     const messages = [groundedMessage()];
 

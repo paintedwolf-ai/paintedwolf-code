@@ -22,16 +22,20 @@ func TestBlockedLoopParksLiveCommandInsteadOfForcingCloseout(t *testing.T) {
 			},
 		},
 		Closeout: CloseoutDeps{
-			TurnCloseoutNudge: func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
-				closeoutCalls++
-				return HostNudge{Content: "must not run"}
+			CloseoutTrackingDeps: CloseoutTrackingDeps{
+				TurnCloseoutNudge: func(context.Context, *api.Session, string, TurnCloseoutCause) HostNudge {
+					closeoutCalls++
+					return HostNudge{Content: "must not run"}
+				},
 			},
 		},
 	})
 	st := &promptLoopTurnState{
-		lastAssistantID:      "draft-1",
-		lastAssistantContent: "the command is still running",
-		turnsRanThisRun:      8,
+		turnStreamState: turnStreamState{
+			lastAssistantID:      "draft-1",
+			lastAssistantContent: "the command is still running",
+			turnsRanThisRun:      8,
+		},
 	}
 
 	result, err := loop.finalizePromptLoopRun(
@@ -70,9 +74,11 @@ func TestFinalizePromptLoopRunFlushesCloseoutPolicyFeedback(t *testing.T) {
 		},
 	})
 	st := &promptLoopTurnState{
-		lastAssistantID:      "assistant-1",
-		lastAssistantContent: "done",
-		turnsRanThisRun:      1,
+		turnStreamState: turnStreamState{
+			lastAssistantID:      "assistant-1",
+			lastAssistantContent: "done",
+			turnsRanThisRun:      1,
+		},
 	}
 	res, err := loop.finalizePromptLoopRun(
 		context.Background(),

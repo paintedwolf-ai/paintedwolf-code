@@ -1,0 +1,3 @@
+steps:
+  - tool: "complete_leg"
+    say: "Call {{ call }} with a shorter brief."

@@ -18,14 +18,17 @@ const (
 
 // Order preserves effect certainty, identities and parser locations before
 // larger inventories.
-// Examples and partial calls are deliberately absent. The only replacement is
-// a validated exact byte span (toolcontract.ProgramRepair) for explicit
-// submission; it is never presented as an equivalent executed repair.
+// Whole replacement observations remain data for explicit submission.
+// Diagnostic projection never invents executable source.
 var diagnosticFields = []string{
+	"command_execution",
 	"program_completed_effects", "program_uncertain_effects", "program_replay_available", "program_effect_details_omitted",
 	"program_executed_children", "program_executed_reads", "native_operation", "native_command",
 	"operation_source_unit_id", "operation_source_start_byte", "operation_source_end_byte", "operation_source_line", "operation_source_column",
 	"source_start_byte", "source_end_byte", "source_line", "source_column",
+	"diagnostic_top_level", "parser_kind", "parser_message", "parser_expected", "parser_found",
+	"parser_detected_line", "parser_detected_column", "parser_incomplete", "parser_details_omitted", "source_unit_id_omitted",
+	"source_excerpt", "source_excerpt_start_byte", "source_excerpt_end_byte", "source_excerpt_line", "source_excerpt_column",
 	"diagnostic_stage", "diagnostic_pre_evaluation", "command", "diagnostic_word", "expected_form", "supported_options",
 	"replacement_source_unit_id", "replacement_start_byte", "replacement_end_byte", "replacement_text", "replacement_submission",
 	"limit", "limit_unit", "limit_maximum", "limit_observed",
@@ -36,7 +39,7 @@ var diagnosticFields = []string{
 	"program_completed_details_retained_omitted", "program_unknown_details_retained_omitted", "program_stopped_details_omitted",
 	"program_stopped_details", "program_completed_details", "program_unknown_details",
 	"action", "work_id", "question_id", "revision", "workflow_phase", "agent",
-	"field", "field_path", "path", "expected_type", "json_malformed", "json_encoded",
+	"env_var", "field", "field_path", "path", "expected_type", "json_malformed", "json_encoded",
 	"json_unexpected_token_at", "json_unterminated_string_at", "json_trailing_text_at",
 	"found_under", "belongs_under", "close_before", "did_you_mean", "reason", "text_base_changed",
 	"index", "type", "locators", "locators_truncated", "interactive_truncated", "timeout",

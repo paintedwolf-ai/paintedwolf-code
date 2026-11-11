@@ -1,0 +1,7 @@
+steps:
+  - tool: "answer_decision"
+    args:
+      job_id: "{{ paintedwolf.job_id }}"
+    say: "Call {{ call }}."
+  - tool: "ask_user"
+    say: "Use {{ call }} first only if this decision needs the human."

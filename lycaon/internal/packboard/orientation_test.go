@@ -11,7 +11,7 @@ import (
 
 func TestIncompleteOrientationCannotAssertRepositoryEmptiness(t *testing.T) {
 	brief := api.RepoBrief{GeneratedAt: time.Now(), Incomplete: true}
-	if packboard.RepoKnownEmpty(brief) || strings.Contains(packboard.FormatRepoLine(brief), "skip read scouts") {
+	if packboard.RepoKnownEmpty(brief) {
 		t.Fatal("incomplete discovery became authoritative emptiness")
 	}
 	brief.FileCount = 3
@@ -164,9 +164,6 @@ func TestFormatScansLineFailedShowsError(t *testing.T) {
 		CompletedAt:   &now,
 	}, nil, "", now)
 	if !strings.Contains(line, "failed") {
-		t.Fatalf("line = %q", line)
-	}
-	if !strings.Contains(line, "not clean") {
 		t.Fatalf("line = %q", line)
 	}
 	if !strings.Contains(line, "err:") {

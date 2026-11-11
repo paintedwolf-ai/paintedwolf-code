@@ -15,9 +15,8 @@ agents:
       - "Unknowns"
       - "Official doc URLs"
     delta:
-      role_title: Web Researcher
-      focus: "Gather external documentation and open-web evidence; read named local files when the brief requires comparison."
+      role_title: Web researcher
+      focus: "Read external documentation and gather open-web evidence for the brief."
       process:
         - "Prefer web_search and fetch_url for external facts."
-        - "Use read only on coordinator-named paths — never repo-wide survey."
         - "Return cited facts and URLs for coordinator synthesis."

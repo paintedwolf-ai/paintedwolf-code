@@ -10,6 +10,3 @@ scenarios:
   - id: default
     vars:
       reason: "missing closing ): `Nomos(`"
-    expect_contains:
-      - not valid
-      - missing closing

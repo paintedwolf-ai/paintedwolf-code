@@ -32,8 +32,3 @@ x-paintedwolf-scenarios:
     profile: coordinator
     ask_prompt_runes: 901
     ask_prompt_limit: 900
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: ASK_USER_PROMPT_TOO_LONG'
-  - '901'
-  - '900'

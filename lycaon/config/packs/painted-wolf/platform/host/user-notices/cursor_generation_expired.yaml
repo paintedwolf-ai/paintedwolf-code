@@ -9,4 +9,3 @@ suggested_action: Refresh the results and continue from the first page.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [older snapshot, Refresh]

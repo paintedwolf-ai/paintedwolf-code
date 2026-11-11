@@ -313,3 +313,38 @@ func TestRefusalFeedBoundsDistinctRefusals(t *testing.T) {
 		t.Fatalf("feed kept %d refusals, omitted %d, first count %d", len(got.Refusals), got.Omitted, got.Refusals[0].Count)
 	}
 }
+
+func TestRefusalFeedSuppressesBenignSocketProbes(t *testing.T) {
+	feed := &refusalFeed{witness: WitnessKernel, keys: map[string]int{}}
+	heard := atomic.Int32{}
+	feed.listen(func() { heard.Add(1) })
+
+	for _, target := range []string{
+		"/var/run/mDNSResponder",
+		"/private/var/run/mDNSResponder",
+		"/Users/p/repo/.git/fsmonitor--daemon.ipc",
+		"/Users/p/repo/.git/worktrees/w1/fsmonitor--daemon.ipc",
+		"fsmonitor--daemon.ipc",
+	} {
+		feed.record(kernelRefusal{
+			Operation: "network-outbound",
+			Target:    target,
+			Process:   "git",
+			Count:     1,
+		})
+	}
+	if got := feed.snapshot(); len(got.Refusals) != 0 || heard.Load() != 0 {
+		t.Fatalf("benign socket probes recorded = %+v, heard = %d", got.Refusals, heard.Load())
+	}
+
+	feed.record(kernelRefusal{
+		Operation: "network-outbound",
+		Target:    "/var/run/docker.sock",
+		Process:   "docker",
+		Count:     1,
+	})
+	got := feed.snapshot()
+	if len(got.Refusals) != 1 || got.Refusals[0].Recovery != RecoverSocketPath || heard.Load() != 1 {
+		t.Fatalf("actionable socket refusal = %+v, heard = %d", got.Refusals, heard.Load())
+	}
+}

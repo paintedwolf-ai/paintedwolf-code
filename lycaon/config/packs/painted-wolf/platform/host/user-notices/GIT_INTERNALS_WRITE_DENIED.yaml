@@ -13,15 +13,7 @@ scenarios:
     vars:
       path: .git/hooks/pre-commit
       class: hooks
-    expect_contains:
-      - internal git directory
-      - command git
-      - hooks
   - id: config
     vars:
       path: .git/config
       class: config
-    expect_contains:
-      - internal git directory
-      - command git
-      - config

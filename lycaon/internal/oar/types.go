@@ -151,6 +151,8 @@ type Rule struct {
 	// anchor and selector are broader than its `when` condition. Empty means
 	// the anchor and selector decide.
 	Audience []string
+	// NextSteps is the host catalog entry for this rule. It never reaches a decision.
+	NextSteps *NextSteps
 	// Scenarios are the authored conformance fixtures for this rule.
 	Scenarios []guidance.ScenarioEntry
 

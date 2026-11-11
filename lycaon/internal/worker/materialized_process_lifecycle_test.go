@@ -230,7 +230,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	t.Cleanup(func() {
 		lease.Release()
 		if !cleaned {
-			testutil.FailErr(t, "cleanup failed lifecycle", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
+			testutil.FailErr(t, "cleanup failed lifecycle", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 		}
 	})
 	assertFileHolds(t, filepath.Join(task.WorkspaceRoot, "main.go"), "package worker\n")
@@ -267,7 +267,7 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	trace("post-promote-source-verified")
 	lease.Release()
 	trace("cleanup-destroy-start")
-	testutil.FailErr(t, "cleanup worker", manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
+	testutil.FailErr(t, "cleanup worker", manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 	trace("cleanup-destroy-returned")
 	cleaned = true
 	if _, err := os.Stat(task.WorkspaceRoot); !errors.Is(err, fs.ErrNotExist) {

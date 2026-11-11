@@ -20,7 +20,7 @@ const (
 
 var findingLedgerPages = pagecursor.For[int]("finding_ledger")
 
-func (s *SQLStore) FindingLedger(ctx context.Context, canonicalPath string, req api.FindingLedgerQueryRequest) (*api.FindingLedgerResponse, error) {
+func (s *sqlIgnoreStore) FindingLedger(ctx context.Context, canonicalPath string, req api.FindingLedgerQueryRequest) (*api.FindingLedgerResponse, error) {
 	if s == nil {
 		return nil, fmt.Errorf("scan store not configured")
 	}
@@ -75,7 +75,7 @@ func (s *SQLStore) FindingLedger(ctx context.Context, canonicalPath string, req 
 	return out, nil
 }
 
-func (s *SQLStore) countLedger(ctx context.Context, filter db.CountFindingLedgerParams) (int, error) {
+func (s *sqlIgnoreStore) countLedger(ctx context.Context, filter db.CountFindingLedgerParams) (int, error) {
 	total, err := s.queries.CountFindingLedger(ctx, filter)
 	if err != nil {
 		return 0, fmt.Errorf("count finding ledger: %w", err)
@@ -83,7 +83,7 @@ func (s *SQLStore) countLedger(ctx context.Context, filter db.CountFindingLedger
 	return int(total), nil
 }
 
-func (s *SQLStore) ledgerPage(ctx context.Context, filter db.CountFindingLedgerParams, order ledgerOrder, limit, offset int) ([]api.FindingLedgerEntry, error) {
+func (s *sqlIgnoreStore) ledgerPage(ctx context.Context, filter db.CountFindingLedgerParams, order ledgerOrder, limit, offset int) ([]api.FindingLedgerEntry, error) {
 	descending := int64(0)
 	if order.descending {
 		descending = 1
@@ -178,7 +178,7 @@ func ledgerIgnoreFrom(row db.ListFindingLedgerRow) *api.FindingIgnore {
 }
 
 // ledgerTotals counts the whole ledger, regardless of the query's filters.
-func (s *SQLStore) ledgerTotals(ctx context.Context, canonicalPath string) (api.FindingLedgerCounts, map[string]int, error) {
+func (s *sqlIgnoreStore) ledgerTotals(ctx context.Context, canonicalPath string) (api.FindingLedgerCounts, map[string]int, error) {
 	counts := api.FindingLedgerCounts{}
 	byLevel := make(map[string]int, len(api.AllFindingLevelValues()))
 	for _, level := range api.AllFindingLevelValues() {

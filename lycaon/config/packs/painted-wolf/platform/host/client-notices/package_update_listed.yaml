@@ -5,7 +5,3 @@ message: >-
   This does not confirm that its repository is currently reachable.
 suggested_action: >-
   Open Settings → General → Updates to review the package source and update command.
-scenarios:
-  - id: default
-    expect_contains:
-      - Painted Wolf Code

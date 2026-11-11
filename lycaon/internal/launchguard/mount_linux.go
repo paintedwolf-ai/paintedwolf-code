@@ -100,9 +100,11 @@ func sameObject(retained, reopened *os.File) error {
 }
 
 // freshMountNamespace refuses to change mounts anywhere but a namespace this
-// stage was cloned into: the host's mount table is never touched.
+// stage was cloned into: the host's mount table is never touched. Mount
+// namespaces are per thread, and /proc/self names the leader's, so the
+// calling thread's own link is the one that governs its mounts.
 func freshMountNamespace() error {
-	own, err := os.Readlink("/proc/self/ns/mnt")
+	own, err := os.Readlink("/proc/thread-self/ns/mnt")
 	if err != nil {
 		return err
 	}

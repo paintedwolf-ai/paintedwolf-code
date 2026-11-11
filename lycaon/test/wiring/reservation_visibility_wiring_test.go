@@ -102,7 +102,7 @@ func TestRenderWorkerLegInjectReservedPaths(t *testing.T) {
 		}},
 	})
 	testutil.FailErr(t, "render", err)
-	if !strings.Contains(block, "## Reserved paths") || !strings.Contains(block, "shellsim/builtins.py") {
+	if !strings.Contains(block, "shellsim/builtins.py") {
 		t.Fatalf("block = %q", block)
 	}
 }

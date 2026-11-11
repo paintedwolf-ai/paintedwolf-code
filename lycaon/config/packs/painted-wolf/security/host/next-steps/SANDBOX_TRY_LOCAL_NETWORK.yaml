@@ -1,0 +1,7 @@
+steps:
+  - when: "paintedwolf.process_running"
+    tool: "command_output"
+    say: "Use {{ call }} on this job's handle to inspect its outcome."
+  - when: "paintedwolf.process_running"
+    tool: "command_stop"
+    say: "If this job is no longer needed, request {{ call }} once and observe its exit."

@@ -26,10 +26,7 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 		],
 		"set_asides": [{"scanner": "secrets", "paths": ["**/testdata/**"], "reason": "fixtures"}]
 	}` + "\n```"
-	read, ok := guidance.ReadCloseoutReport(content, "")
-	if !ok {
-		t.Fatal("the draft is a report")
-	}
+	read := markdownRead(content, true)
 	var noted struct {
 		code   string
 		unread []jsonshape.Issue
@@ -52,17 +49,19 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 				}
 				return &oar.Decision{Code: code, Data: gc.RejectData[code]}, nil
 			},
-			NoteCloseoutGroundingReject: func(_ context.Context, _, code, _, _ string, unread []jsonshape.Issue) (int, string) {
-				noted.code, noted.unread = code, unread
-				return 1, ""
-			},
-			RenderHostKick: func(_ context.Context, _ string, data map[string]any) (string, error) {
-				if _, ok := data["retained_document"]; ok {
-					kick = data
-				}
-				var err error
-				rendered, err = engine.RenderKick(t.Context(), "coordinator-report-document", data)
-				return rendered, err
+			CloseoutTrackingDeps: CloseoutTrackingDeps{
+				NoteCloseoutGroundingReject: func(_ context.Context, _, code, _ string, _ guidance.CloseoutDraft, unread []jsonshape.Issue) (int, string) {
+					noted.code, noted.unread = code, unread
+					return 1, ""
+				},
+				RenderHostKick: func(_ context.Context, _ string, data map[string]any) (string, error) {
+					if _, ok := data["retained_document"]; ok {
+						kick = data
+					}
+					var err error
+					rendered, err = engine.RenderKick(t.Context(), "coordinator-report-document", data)
+					return rendered, err
+				},
 			},
 		},
 		Projection: ProjectionDeps{
@@ -88,7 +87,7 @@ func TestUnreadReportFenceIsRefusedByName(t *testing.T) {
 			t.Fatalf("repair omitted %q: %s", want, rendered)
 		}
 	}
-	var fence guidance.CoordinatorCompletionReport
+	var fence guidance.WorkflowRunReportDocument
 	testutil.FailErr(t, "decode the retained fence", json.Unmarshal([]byte(kick["retained_document"].(string)), &fence))
 	if len(fence.Findings) != 2 || fence.Findings[0].Disposition != "act" || len(fence.SetAsides) != 1 || fence.Ask != nil {
 		t.Fatalf("retained fence = %+v, want every field the host read and nothing it did not", fence)
@@ -104,12 +103,11 @@ func TestUnreadReportFencePrecedesArtifactEmbed(t *testing.T) {
 			},
 		},
 	})
-	report := guidance.CoordinatorCompletionReport{Synthesis: "![report](90dcba36-946a-46c6-933d-e94207b897ab)"}
-	read, ok := guidance.ReadCloseoutReport("Report narrative.\n\n```json\n{\"findings\":[{\"id\":\"c1\",\"title\":\"Question\",\"disposition\":\"act\",\"ask\":{\"do\":\"x\"}}]}\n```", "")
-	if !ok || len(read.Unread) == 0 {
+	read := markdownRead("![report](90dcba36-946a-46c6-933d-e94207b897ab)\n\n```json\n{\"findings\":[{\"id\":\"c1\",\"title\":\"Question\",\"disposition\":\"act\",\"ask\":{\"do\":\"x\"}}]}\n```", true)
+	if len(read.Unread) == 0 {
 		t.Fatal("fixture must contain an unread report member")
 	}
-	observed, err := loop.Closeout.observeCloseoutReport(t.Context(), &api.Session{ID: "session"}, nil, "coordinator_security_synthesis", report, read.Unread, nil, true)
+	observed, err := loop.Closeout.observeCloseoutReport(t.Context(), &api.Session{ID: "session"}, nil, "coordinator_security_synthesis", read, true)
 	testutil.FailErr(t, "observe unread fence with embed", err)
 	if observed.facts.Rejection.RejectObservation != guidance.ReportDocumentObservation(guidance.ReportFenceUnreadableCode) {
 		t.Fatalf("unread fence was masked by embed: %s", observed.facts.Rejection.RejectObservation)

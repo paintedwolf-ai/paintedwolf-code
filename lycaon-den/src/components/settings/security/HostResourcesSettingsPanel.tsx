@@ -50,6 +50,7 @@ const CONNECTION_LABEL: Record<HostResourceConnectionMode, string> = {
   local_service: "Local service",
   direct_ip: "Direct IP",
   dynamic: "Resolved when used",
+  credential_store: "OS credential store",
 };
 
 const TRANSPORT_LABEL: Record<HostResourceLocalServiceTransport, string> = {
@@ -338,7 +339,7 @@ export function HostResourcesSettingsPanel(props: Props) {
 
                   <Show when={resource.docs_url} keyed>
                     {(url) => (
-                      <DenButton
+                      <DenButton data-testid="open-documentation"
                         variant="link"
                         class="den-resource-docs"
                         onClick={() => void confirmAndOpenExternalLink(url)}

@@ -33,6 +33,12 @@ func TestNativeOperationObservationKeepsRealToolAndSelectorConjunction(t *testin
 	if selectorMatches(Selector{"tool": {"read"}}, facts) || selectorMatches(Selector{"tool": {"write"}, "paintedwolf.native_operation": {"read"}}, facts) {
 		t.Fatal("native operation impersonated old tool or changed selector AND semantics")
 	}
+	gc.ObserveToolCall("verify", args)
+	testutil.FailErr(t, "observe verification operation", gc.ObserveNativeOperation(operation))
+	facts = activation(gc)
+	if facts["tool"] != "verify" || facts["paintedwolf.native_operation"] != "read" || !selectorMatches(Selector{"tool": {"verify"}, "paintedwolf.native_operation": {"read"}}, facts) {
+		t.Fatalf("verification operation attribution changed: %+v", facts)
+	}
 	gc.ObserveToolCall("read", map[string]any{"path": "input"})
 	if activation(gc)["paintedwolf.native_operation"] != "" {
 		t.Fatal("subsequent actual structured call inherited a native operation")
@@ -49,11 +55,7 @@ func TestNativeChmodBundledPoliciesKeepActualToolAttribution(t *testing.T) {
 }
 
 func TestNativeChownBundledPoliciesKeepNumericIdentityContract(t *testing.T) {
-	testNativeMetadataPolicies(t, "chown", []string{"CHOWN_BULK_DENIED", "CHOWN_NOT_FOUND", "CHOWN_PATH_DENIED", "CHOWN_ROOT_DENIED", "CHOWN_SYMLINK_ESCAPE", "CHOWN_TARGET_DENIED", "CHOWN_UNSUPPORTED"}, true)
-}
-
-func TestChownNameLookupPoliciesRemainStructuredOnly(t *testing.T) {
-	testNativeMetadataPolicies(t, "chown", []string{"CHOWN_GROUP_UNKNOWN", "CHOWN_USER_UNKNOWN", "CHOWN_RECURSIVE_DENIED"}, false)
+	testNativeMetadataPolicies(t, "chown", []string{"CHOWN_GROUP_UNKNOWN", "CHOWN_USER_UNKNOWN", "CHOWN_RECURSIVE_DENIED", "CHOWN_BULK_DENIED", "CHOWN_NOT_FOUND", "CHOWN_PATH_DENIED", "CHOWN_ROOT_DENIED", "CHOWN_SYMLINK_ESCAPE", "CHOWN_TARGET_DENIED", "CHOWN_UNSUPPORTED"}, true)
 }
 
 func testNativeMetadataPolicies(t *testing.T, operationName string, codes []string, nativeEligible bool) {

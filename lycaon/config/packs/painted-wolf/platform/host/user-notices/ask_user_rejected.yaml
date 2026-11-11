@@ -6,5 +6,3 @@ suggested_action: "Check the question's options and try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "did not accept"

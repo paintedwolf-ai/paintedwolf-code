@@ -1,1 +1,1 @@
-Specifics: grep(pattern, offset=…) for literal match pages; narrow path or pattern to reduce matches. By code shape: grep('caller($X)') for call-sites/defs, not a keyword OR.
+Specifics: narrow paths and pattern for bounded matches; use rg -n in command for text, -F for literals. Text matches locate candidates, not code structure.

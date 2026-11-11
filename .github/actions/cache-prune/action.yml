@@ -1,0 +1,19 @@
+name: Prune superseded caches
+description: Delete all but the newest generation of a cache family, so it cannot evict the others
+inputs:
+  family:
+    description: Key prefix that every generation of this cache shares
+    required: true
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        FAMILY: ${{ inputs.family }}
+      # Pruning only reclaims space; a failure leaves the entries to GitHub's eviction.
+      run: |
+        gh cache list --repo "$GITHUB_REPOSITORY" --ref refs/heads/main --key "$FAMILY" --sort created_at --order desc --limit 100 --json key --jq '.[1:][].key' |
+          while IFS= read -r key; do
+            gh cache delete "$key" --repo "$GITHUB_REPOSITORY" || true
+          done

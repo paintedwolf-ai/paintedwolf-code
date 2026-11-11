@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/chat/tool/tool-part-model.ts",
+  "kind": "projection",
+  "workstream": "command-activities",
+  "disposition": "retain",
+  "reason": "Retain the measured 379-line transcript view model within 400 lines. Shared tool identity, visibility and status conversion remain together; activity composition and receipt detail models have separate owners. Explicit program states and observed process exits extend the same host-fact conversion boundary.",
+  "reviewed_commit": "4edb4a6048691839a9ab5af4122d6f3d2e79766c",
+  "ceiling": 400,
+  "boundaries": {
+    "lycaon-den/src/chat/tool/tool-part-model.test.ts": "fa2f87411bfbd09aabb583276d87ef7b9bd8181acebe2e4016a81b71a080840b",
+    "lycaon-den/src/chat/tool/command-activity-model.test.ts": "169f0a458af9f8cd8439b59affd4c23a5ed33454b8b86fdc6b5b177e03723441"
+  }
+}

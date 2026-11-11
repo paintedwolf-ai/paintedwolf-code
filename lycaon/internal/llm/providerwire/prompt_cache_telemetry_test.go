@@ -82,7 +82,7 @@ func TestCacheWindowSeparatesColdAndUnobservableRequests(t *testing.T) {
 	}{
 		{"standing", "prefix_changed", func(f *cacheFixture) { f.req.Messages[0].Content += " changed" }},
 		{"schema", "prefix_changed", func(f *cacheFixture) { f.req.Tools = []tools.ToolMeta{{Name: "read"}} }},
-		{"controls", "prefix_changed", func(f *cacheFixture) { f.req.MaxTokens = 100 }},
+		{"controls", "prefix_changed", func(f *cacheFixture) { f.req.Think = modelcall.ThinkHigh }},
 		{"compaction", "history_changed", func(f *cacheFixture) { f.req.Messages[1].Content = "summary" }},
 		{"idle", "idle", func(f *cacheFixture) { f.now = f.now.Add(11 * time.Minute) }},
 		{"missing usage", "usage_unavailable", func(f *cacheFixture) { f.usage = modelcall.TokenUsage{} }},
@@ -123,6 +123,81 @@ func TestCacheWindowKeepsAppendOnlyHistoryAndIgnoresTailAndMetadata(t *testing.T
 	got := f.note()
 	if got.Comparison != "comparable" || got.HistoryChanged {
 		t.Fatalf("append invalidated prefix: %+v", got)
+	}
+	f.req.MaxTokens = 18952
+	f.req.ControlCapture = &modelcall.RequestControlCapture{}
+	f.req.ControlCapture.Record([]byte(`{"max_tokens":18952,"temperature":1}`))
+	f.note()
+	f.req.MaxTokens = 17261
+	f.req.ControlCapture = &modelcall.RequestControlCapture{}
+	f.req.ControlCapture.Record([]byte(`{"max_tokens":17261,"temperature":1}`))
+	if got = f.note(); got.Comparison != "comparable" || got.ControlsChanged {
+		t.Fatalf("output budget fit invalidated prefix controls: %+v", got)
+	}
+}
+
+func TestCacheControlSnapshotsStripOutputCaps(t *testing.T) {
+	if got := cacheControlSnapshots(nil); got != nil {
+		t.Fatalf("empty controls produced snapshots: %v", got)
+	}
+	snapshots := cacheControlSnapshots([]map[string]json.RawMessage{
+		{
+			"max_tokens":            json.RawMessage(`18952`),
+			"max_completion_tokens": json.RawMessage(`4096`),
+			"temperature":           json.RawMessage(`1`),
+			"options":               json.RawMessage(`{"num_predict":512,"temperature":0.7}`),
+			"generationConfig":      json.RawMessage(`{"maxOutputTokens":256,"stopSequences":["done"]}`),
+		},
+		{"options": json.RawMessage(`{"num_predict":512`)},
+	})
+	if len(snapshots) != 2 {
+		t.Fatalf("snapshot count = %d", len(snapshots))
+	}
+	snapshot := snapshots[0]
+	for _, dropped := range []string{"max_tokens", "max_completion_tokens"} {
+		if _, ok := snapshot[dropped]; ok {
+			t.Fatalf("%s survived filtering", dropped)
+		}
+	}
+	if len(snapshot["temperature"]) == 0 {
+		t.Fatal("unrelated control key was dropped")
+	}
+	var options map[string]any
+	testutil.FailErr(t, "decode filtered options", json.Unmarshal(snapshot["options"], &options))
+	if _, ok := options["num_predict"]; ok {
+		t.Fatal("num_predict survived filtering")
+	}
+	if options["temperature"] != 0.7 {
+		t.Fatalf("options lost unrelated keys: %v", options)
+	}
+	var generation map[string]any
+	testutil.FailErr(t, "decode filtered generationConfig", json.Unmarshal(snapshot["generationConfig"], &generation))
+	if _, ok := generation["maxOutputTokens"]; ok {
+		t.Fatal("maxOutputTokens survived filtering")
+	}
+	if generation["stopSequences"] == nil {
+		t.Fatal("generationConfig lost unrelated keys")
+	}
+	if string(snapshots[1]["options"]) != `{"num_predict":512` {
+		t.Fatalf("malformed control was rewritten: %s", snapshots[1]["options"])
+	}
+}
+
+func TestCacheIdentityControlsIgnoreOutputCaps(t *testing.T) {
+	f := newCacheFixture()
+	f.req.ControlCapture = &modelcall.RequestControlCapture{}
+	f.req.ControlCapture.Record([]byte(`{"max_tokens":18952,"options":{"num_predict":512}}`))
+	budgetA := cacheRequestIdentity(f.req, f.policy)
+	f.req.ControlCapture = &modelcall.RequestControlCapture{}
+	f.req.ControlCapture.Record([]byte(`{"max_tokens":17261,"options":{"num_predict":4096}}`))
+	budgetB := cacheRequestIdentity(f.req, f.policy)
+	if !budgetA.valid || !budgetB.valid || budgetA.controls != budgetB.controls {
+		t.Fatal("output budget fit changed the control identity")
+	}
+	f.req.ControlCapture = &modelcall.RequestControlCapture{}
+	f.req.ControlCapture.Record([]byte(`{"max_tokens":17261,"temperature":0}`))
+	if budgetC := cacheRequestIdentity(f.req, f.policy); budgetC.controls == budgetB.controls {
+		t.Fatal("real control change was ignored")
 	}
 }
 

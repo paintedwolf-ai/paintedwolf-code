@@ -55,8 +55,8 @@ func TestProgressUpdateSSECarriesMintedOrd(t *testing.T) {
 	flush := newProgressChangeEmitter(store, pub, fixedActiveRun(runID), prog)
 	flush(progress.FlushPayload{
 		SessionID: sessionID,
-		Baseline:  "",
-		Latest:    "- [ ] a\n- [ ] b\n",
+		Baseline:  progress.Snapshot{},
+		Latest:    progress.Snapshot{Content: "- [ ] a\n- [ ] b\n", ItemIDs: []string{"item-a", "item-b"}},
 		Seq:       1,
 		ChangedAt: time.Now().UTC(),
 	})

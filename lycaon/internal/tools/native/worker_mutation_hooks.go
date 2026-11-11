@@ -2,10 +2,10 @@ package native
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
@@ -56,8 +56,8 @@ func observeCommittedWorkerWrite(ctx context.Context, tctx tools.ToolContext, ab
 		if size == 0 {
 			size = info.Size()
 		}
-		if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
-			ino, dev = uint64(sys.Ino), uint64(sys.Dev)
+		if observed := fspath.ObserveFile(info); observed.Known {
+			ino, dev = observed.Identity.Inode, observed.Identity.Device
 		}
 	}
 	coord.ObserveWorkerWrite(ctx, tctx, tools.WorkerFileObservationFacts{

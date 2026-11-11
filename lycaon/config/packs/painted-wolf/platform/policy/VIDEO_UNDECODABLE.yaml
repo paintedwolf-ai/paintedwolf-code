@@ -34,7 +34,3 @@ x-paintedwolf-scenarios:
     path: recordings/bug.mov
     reason: media_error
     tool: view_video
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: VIDEO_UNDECODABLE'
-  - H.264

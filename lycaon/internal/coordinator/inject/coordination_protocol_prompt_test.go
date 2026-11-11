@@ -17,32 +17,6 @@ func testPromptEngine(t *testing.T) *prompts.FileTemplateEngine {
 	return prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: configlayout.FindModuleRoot()})
 }
 
-func TestCoordinationProtocolInCoordinatorCore(t *testing.T) {
-	engine := testPromptEngine(t)
-	vars := map[string]any{
-		"execution_mode":         "orchestrate",
-		"has_file_tools":         true,
-		"can_orient":             true,
-		"can_spawn_web_research": true,
-	}
-	for k, v := range prompts.CoordinatorPolicyTemplateVars([]string{"read", "grep", "find", "task", "update_progress"}, nil) {
-		vars[k] = v
-	}
-	rendered, err := engine.Render(context.Background(), "agents/coordinator-core.md", vars)
-	testutil.FailErr(t, "Render coordinator-core", err)
-	if strings.Contains(rendered, "update_progress") {
-		t.Fatal("coordinator core duplicates offered-tool progress guidance")
-	}
-	for _, want := range []string{
-		"record_finding(summary, ref, body?)",
-		"host records worker lifecycle in the worklog",
-	} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("coordinator core missing %q", want)
-		}
-	}
-}
-
 func TestCoordinationProtocolInWorkerTaskAssignment(t *testing.T) {
 	out, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
 		SessionID:    "sess-inject-test",

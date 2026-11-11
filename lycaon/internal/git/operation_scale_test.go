@@ -29,6 +29,7 @@ func writeWideTree(t *testing.T, dir string) {
 }
 
 func TestStressOperationCheckoutHasNoFileCountLimit(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	gittest.Run(t, dir, "checkout", "-b", "wide")
 	writeWideTree(t, dir)
@@ -57,6 +58,7 @@ func TestStressOperationCheckoutHasNoFileCountLimit(t *testing.T) {
 }
 
 func TestStressOperationStashApplyPublishesAWideIndexDelta(t *testing.T) {
+	t.Parallel()
 	dir := operationFixture(t)
 	writeWideTree(t, dir)
 	gittest.Run(t, dir, "add", "--", "wide-change-directory")

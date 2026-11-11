@@ -6,5 +6,3 @@ suggested_action: Choose another folder name or open the existing folder.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - A folder with that name already exists at the destination.

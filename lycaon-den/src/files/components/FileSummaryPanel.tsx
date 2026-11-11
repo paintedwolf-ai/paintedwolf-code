@@ -91,6 +91,7 @@ function FileSummarySectionLine(props: SummarySectionProps) {
                 <button
                   type="button"
                   class="den-file-summary__symbol"
+                  data-testid="file-summary-location"
                   data-tip={`${target().name} · Line ${target().line}`}
                   aria-label={`Open ${target().name} at line ${target().line}`}
                   onClick={() => props.onOpen(target().line)}
@@ -161,7 +162,7 @@ export function FileSummaryPanel(props: Props) {
               class="den-file-summary__meta"
               onClick={() => props.onOpenLocation(props.target, 1)}
             >
-              <span>{languageLabel()}</span>
+              <span data-testid="file-summary-language">{languageLabel()}</span>
               <span aria-hidden="true">·</span>
               <span>
                 {preview().line_count} {preview().line_count === 1 ? "line" : "lines"}
@@ -200,7 +201,7 @@ export function FileSummaryPanel(props: Props) {
           summarizing()
         }
       >
-        <p class="den-file-summary__state" role="status">
+        <p class="den-file-summary__state" role="status" data-testid="file-summary-summarizing">
           Summarizing this file…
         </p>
       </Show>
@@ -221,12 +222,12 @@ export function FileSummaryPanel(props: Props) {
         <Show when={!props.summary?.stale && !hasExplanation()}>
           <p class="den-file-summary__state">Detailed summary is not available yet.</p>
         </Show>
-        <button type="button" class="den-file-summary__action" onClick={props.onRetry}>
+        <button type="button" class="den-file-summary__action" data-testid="file-summary-retry" onClick={props.onRetry}>
           {retryLabel()}
         </button>
       </Show>
       <Show when={!summarizing() && props.summary?.truncated}>
-        <p class="den-file-summary__state">
+        <p class="den-file-summary__state" data-testid="file-summary-truncated">
           Summary shortened to fit the interactive budget.
         </p>
       </Show>

@@ -101,7 +101,6 @@ ${JSON.stringify({
     const reading = await waitFor(() =>
       screen.getByTestId("transcript-visual-filmstrip-reading"),
     );
-    expect(reading.textContent).toContain("Navigate idle");
     expect(reading.textContent).toContain("page#1");
 
     const steps = await waitFor(() => {

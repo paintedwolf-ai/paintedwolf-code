@@ -7,30 +7,42 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/llm/failure"
 	openai "github.com/sashabaranov/go-openai"
 )
 
+type openAICompatErrorFields struct {
+	Message       string `json:"message"`
+	Status        string `json:"status"`
+	Type          string `json:"type"`
+	Param         string `json:"param"`
+	Code          any    `json:"code"`
+	NCtx          int    `json:"n_ctx"`
+	NPromptTokens int    `json:"n_prompt_tokens"`
+	MaxModelLen   int    `json:"max_model_len"`
+	ContextLength int    `json:"context_length"`
+	MaxContextLen int    `json:"max_context_length"`
+	PromptTokens  int    `json:"prompt_tokens"`
+	Details       []struct {
+		Reason string `json:"reason"`
+	} `json:"details"`
+}
+
 type openAICompatErrorBody struct {
-	Error struct {
-		Message string `json:"message"`
-		Status  string `json:"status"`
-		Type    string `json:"type"`
-		Param   string `json:"param"`
-		Code    any    `json:"code"`
-		Details []struct {
-			Reason string `json:"reason"`
-		} `json:"details"`
-	} `json:"error"`
+	Error openAICompatErrorFields `json:"error"`
+	openAICompatErrorFields
 }
 
 // ProviderHTTPError preserves structured response fields.
 type ProviderHTTPError struct {
-	Status  int
-	Code    string
-	Param   string
-	Type    string
-	Message string
-	Cause   error
+	Status       int
+	Code         string
+	Param        string
+	Type         string
+	Message      string
+	MaxContext   int
+	PromptTokens int
+	Cause        error
 }
 
 func (e *ProviderHTTPError) Error() string {
@@ -76,12 +88,52 @@ func FormatOpenAIProviderError(err error) error {
 		if apiErr.Param != nil {
 			param = *apiErr.Param
 		}
-		return &ProviderHTTPError{Status: apiErr.HTTPStatusCode, Code: providerErrorCode(apiErr.Code), Param: param, Type: apiErr.Type, Message: apiErr.Message, Cause: err}
+		parsed := ParsedProviderError{
+			Message: apiErr.Message,
+			Code:    providerErrorCode(apiErr.Code),
+			Param:   param,
+			Type:    apiErr.Type,
+		}
+		cause := err
+		if src, ok := parsed.IsContextOverflow(); ok {
+			cause = &failure.ProviderContextTooSmallError{
+				PromptTokens: parsed.PromptTokens,
+				MaxContext:   parsed.MaxContext,
+				Source:       src,
+			}
+		}
+		return &ProviderHTTPError{
+			Status:       apiErr.HTTPStatusCode,
+			Code:         parsed.Code,
+			Param:        param,
+			Type:         apiErr.Type,
+			Message:      apiErr.Message,
+			MaxContext:   parsed.MaxContext,
+			PromptTokens: parsed.PromptTokens,
+			Cause:        cause,
+		}
 	}
 	var reqErr *openai.RequestError
 	if errors.As(err, &reqErr) {
 		if parsed, ok := ParseOpenAICompatError(reqErr.Body); ok {
-			return &ProviderHTTPError{Status: reqErr.HTTPStatusCode, Code: parsed.Code, Param: parsed.Param, Type: parsed.Type, Message: parsed.Message, Cause: err}
+			cause := err
+			if src, overflow := parsed.IsContextOverflow(); overflow {
+				cause = &failure.ProviderContextTooSmallError{
+					PromptTokens: parsed.PromptTokens,
+					MaxContext:   parsed.MaxContext,
+					Source:       src,
+				}
+			}
+			return &ProviderHTTPError{
+				Status:       reqErr.HTTPStatusCode,
+				Code:         parsed.Code,
+				Param:        parsed.Param,
+				Type:         parsed.Type,
+				Message:      parsed.Message,
+				MaxContext:   parsed.MaxContext,
+				PromptTokens: parsed.PromptTokens,
+				Cause:        cause,
+			}
 		}
 		if len(bytes.TrimSpace(reqErr.Body)) > 0 {
 			return &ProviderHTTPError{Status: reqErr.HTTPStatusCode, Message: strings.TrimSpace(string(reqErr.Body)), Cause: err}
@@ -97,7 +149,23 @@ type ParsedProviderError struct {
 	Param   string
 	Type    string
 	// Status is the structured symbolic status.
-	Status string
+	Status       string
+	MaxContext   int
+	PromptTokens int
+}
+
+// IsContextOverflow reports whether the provider error structurally classifies
+// as a context-window overflow via its type or code field.
+func (p ParsedProviderError) IsContextOverflow() (source string, ok bool) {
+	for _, candidate := range []string{p.Type, p.Code, p.Status} {
+		switch strings.ToLower(strings.TrimSpace(candidate)) {
+		case "exceed_context_size_error":
+			return "exceed_context_size_error", true
+		case "context_length_exceeded":
+			return "context_length_exceeded", true
+		}
+	}
+	return "", false
 }
 
 func ParseOpenAICompatError(body []byte) (ParsedProviderError, bool) {
@@ -120,25 +188,48 @@ func ParseOpenAICompatError(body []byte) (ParsedProviderError, bool) {
 }
 
 func fieldsFromErrorEnvelope(env openAICompatErrorBody) (ParsedProviderError, bool) {
-	msg := strings.TrimSpace(env.Error.Message)
-	if msg == "" {
+	fields := env.Error
+	if fields.Message == "" && fields.Code == nil && fields.Type == "" && fields.Status == "" {
+		fields = env.openAICompatErrorFields
+	}
+	msg := strings.TrimSpace(fields.Message)
+	code := providerErrorCode(fields.Code)
+	typ := strings.TrimSpace(fields.Type)
+	status := strings.TrimSpace(fields.Status)
+	if msg == "" && code == "" && typ == "" && status == "" {
 		return ParsedProviderError{}, false
 	}
-	for _, detail := range env.Error.Details {
+	for _, detail := range fields.Details {
 		reason := strings.TrimSpace(detail.Reason)
 		if reason == "" {
 			continue
 		}
-		msg += " (" + reason + ")"
+		if msg != "" {
+			msg += " (" + reason + ")"
+		} else {
+			msg = reason
+		}
 		break
 	}
-	return ParsedProviderError{
-		Message: msg,
-		Code:    providerErrorCode(env.Error.Code),
-		Param:   strings.TrimSpace(env.Error.Param),
-		Type:    strings.TrimSpace(env.Error.Type),
-		Status:  strings.TrimSpace(env.Error.Status),
-	}, true
+	parsed := ParsedProviderError{
+		Message:      msg,
+		Code:         code,
+		Param:        strings.TrimSpace(fields.Param),
+		Type:         typ,
+		Status:       status,
+		MaxContext:   firstPositiveInt(fields.NCtx, fields.MaxModelLen, fields.ContextLength, fields.MaxContextLen, env.NCtx),
+		PromptTokens: firstPositiveInt(fields.NPromptTokens, fields.PromptTokens, env.NPromptTokens),
+	}
+	return parsed, true
+}
+
+func firstPositiveInt(values ...int) int {
+	for _, v := range values {
+		if v > 0 {
+			return v
+		}
+	}
+	return 0
 }
 
 func providerErrorCode(code any) string {

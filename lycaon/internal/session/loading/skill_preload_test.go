@@ -8,9 +8,15 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/decide/decidetest"
+	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/skills"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
+	skilltools "github.com/lycaon/lycaon/internal/tools/native/skills"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestSkillPreloadRequiresOneQualifiedCatalogMatch(t *testing.T) {
@@ -49,7 +55,7 @@ func TestSkillPreloadRecordsOnlySuccessfulRendering(t *testing.T) {
 			}
 			return "rendered " + sk.Name, nil
 		})
-		decision := &Decision{skill: &skills.Skill{Name: "first"}, skillScore: 3.6}
+		decision := &Decision{skill: &skills.Skill{Name: "first", Resources: []string{"references/guide.md"}}, skillScore: 3.6}
 		m.renderSkillPreload(t.Context(), "s", tools.ToolContext{}, decision)
 		wire := transcript.TurnLoadWire(decision.receipt())
 		if fail {
@@ -57,7 +63,8 @@ func TestSkillPreloadRecordsOnlySuccessfulRendering(t *testing.T) {
 				t.Fatal("failed rendering was recorded as a preload")
 			}
 		} else {
-			if got := m.SkillPreload("s"); got == nil || got.Body != "rendered first" {
+			got := m.SkillPreload("s")
+			if got == nil || got.Body != "rendered first" || len(got.Resources) != 1 || got.Resources[0] != "references/guide.md" {
 				t.Fatalf("preload=%v", got)
 			}
 			if wire.PreloadedSkill == nil || wire.PreloadedSkill.Name != "first" {
@@ -67,5 +74,127 @@ func TestSkillPreloadRecordsOnlySuccessfulRendering(t *testing.T) {
 				t.Fatal("receipt identity duplicated the procedure body")
 			}
 		}
+	}
+}
+
+func TestSelectSkillPreloadGatesStockSkillsByTurnOfferedTools(t *testing.T) {
+	roster := []skills.Skill{
+		{
+			Name:        "review-accessibility",
+			Description: "Audit the rendered web page for accessibility.",
+			Body:        "Use `measure_page` and `page_open` to inspect the live page, and optionally {% if profile_has_capture_page %}`capture_page`{% endif %}.",
+		},
+		{
+			Name:         "user-skill",
+			Description:  "Custom project skill.",
+			Body:         "Use `measure_page` to inspect the page.",
+			UserProvided: true,
+		},
+	}
+	spec := turnload.Catalog{Turn: turnload.TurnSpec{DeadlineMS: 500, Skills: turnload.SkillPreloadSpec{PreloadAt: 3.4, Margin: 0.3}}}
+	sess := &api.Session{ID: "s1"}
+
+	// Absent required tools exclude the stock skill.
+	m := &Service{
+		Ledger:  turnload.NewLedger(),
+		decider: &decidetest.Fake{Scores: []float64{3.8}},
+		skills: func(context.Context, *api.Session, string, []string) ([]skills.Skill, []extpacks.Diagnostic) {
+			return roster[:1], nil
+		},
+	}
+	m.SetSkillBodyRenderer(func(_ context.Context, _ tools.ToolContext, sk skills.Skill) (string, error) {
+		return sk.Body, nil
+	})
+	decision := &Decision{
+		catalog:  spec,
+		floor:    []string{"command", "read"},
+		decision: turnload.Decision{Tools: map[string]float64{"edit": 0.8, "write": 0.9}},
+	}
+	m.selectSkillPreload(t.Context(), sess, "coordinator", "make a graphical web page tic tac toe", decision)
+	if decision.skill != nil {
+		t.Fatalf("stock skill with unoffered required tools was preloaded: %+v", decision.skill)
+	}
+
+	// Offered required tools admit the stock skill even when optional tools are absent.
+	m.Ledger.Activate(sess.ID, []string{"measure_page"}, "measure page geometry")
+	decision = &Decision{
+		catalog:  spec,
+		floor:    []string{"command", "read"},
+		decision: turnload.Decision{Tools: map[string]float64{"page_open": 0.9}},
+	}
+	m.selectSkillPreload(t.Context(), sess, "coordinator", "audit the web page accessibility", decision)
+	if decision.skill == nil || decision.skill.Name != "review-accessibility" {
+		t.Fatalf("eligible stock skill was not selected: %+v", decision.skill)
+	}
+
+	// User-provided skills remain eligible regardless of offered tools.
+	m.Ledger = turnload.NewLedger()
+	m.skills = func(context.Context, *api.Session, string, []string) ([]skills.Skill, []extpacks.Diagnostic) {
+		return roster[1:], nil
+	}
+	decision = &Decision{
+		catalog: spec,
+		floor:   []string{"command"},
+	}
+	m.selectSkillPreload(t.Context(), sess, "coordinator", "custom project workflow", decision)
+	if decision.skill == nil || decision.skill.Name != "user-skill" {
+		t.Fatalf("user-provided skill was blocked by tool gating: %+v", decision.skill)
+	}
+}
+
+func preloadRenderService(t *testing.T) *Service {
+	t.Helper()
+	read := &skilltools.SkillsReadTool{
+		TemplateVars: func(_ context.Context, tctx tools.ToolContext) map[string]any {
+			vars, err := prompts.SkillSurfaceTemplateVars(prompts.SkillSurfaceVarsInput{
+				ProfileID: prompts.CoordinatorProfileID,
+				SurfaceID: strings.TrimSpace(tctx.Turn.TurnSurfaceID),
+			})
+			testutil.FailErr(t, "skill surface vars", err)
+			return vars
+		},
+		PackConfiguration: func(context.Context, tools.ToolContext, string) map[string]any {
+			return map[string]any{"mode": "bounded"}
+		},
+	}
+	m := &Service{Ledger: turnload.NewLedger()}
+	m.SetSkillBodyRenderer(read.RenderBody)
+	return m
+}
+
+func TestRenderSkillPreloadUsesLiveCoordinatorSurfaceAndPackConfig(t *testing.T) {
+	m := preloadRenderService(t)
+	decision := &Decision{
+		skill: &skills.Skill{
+			Name:   "orchestrate",
+			PackID: "example/pack",
+			Body:   "cmd:{% if profile_has_command %}yes{% else %}no{% endif %} cfg:{{ configuration.mode }}",
+		},
+		skillScore: 3.6,
+	}
+	m.renderSkillPreload(t.Context(), "s", tools.ToolContext{Turn: tools.InvocationTurn{TurnSurfaceID: "implement_routing"}}, decision)
+	got := m.SkillPreload("s")
+	if got == nil || got.Body != "cmd:yes cfg:bounded" {
+		t.Fatalf("routing surface preload = %#v", got)
+	}
+
+	m.renderSkillPreload(t.Context(), "s2", tools.ToolContext{Turn: tools.InvocationTurn{TurnSurfaceID: "implement_dispatch"}}, decision)
+	got = m.SkillPreload("s2")
+	if got == nil || got.Body != "cmd:no cfg:bounded" {
+		t.Fatalf("dispatch surface preload = %#v", got)
+	}
+}
+
+func TestRenderSkillPreloadKeepsProjectSkillLiteral(t *testing.T) {
+	m := preloadRenderService(t)
+	const body = "literal {{ configuration.mode }} {% if profile_has_command %}cmd{% endif %}"
+	decision := &Decision{
+		skill:      &skills.Skill{Name: "project-skill", Project: true, Body: body},
+		skillScore: 3.6,
+	}
+	m.renderSkillPreload(t.Context(), "s", tools.ToolContext{Turn: tools.InvocationTurn{TurnSurfaceID: "implement_routing"}}, decision)
+	got := m.SkillPreload("s")
+	if got == nil || got.Body != body {
+		t.Fatalf("project skill body was evaluated: %#v", got)
 	}
 }

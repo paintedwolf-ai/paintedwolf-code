@@ -1,0 +1,13 @@
+steps:
+  - when: "paintedwolf.shell_metacharacters || paintedwolf.reissue_via_command"
+    tool: "command"
+    args:
+      command: "{{ paintedwolf.command }}"
+    say: "Run the program text through the command tool: {{ call }}."
+    otherwise: "The command tool is not offered on this request; request it, then run the program text through it."
+  - when: "paintedwolf.directory_change"
+    say: "Reissue {{ call }} with the directory the program needs in its `cwd` argument and the executable to run there."
+    otherwise: "Name the program's working directory in the `cwd` argument and supply the executable to run there."
+  - when: "paintedwolf.env_assignment"
+    say: "Reissue {{ call }} with the program named after the assignments; leading assignments become that program's environment."
+    otherwise: "Name the program the assignments apply to; leading assignments become its environment."

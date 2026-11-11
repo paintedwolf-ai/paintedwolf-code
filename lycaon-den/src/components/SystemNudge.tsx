@@ -22,6 +22,8 @@ export type SystemNudgeProps = {
   /** "status" for a card that reports what happened; default "note". */
   role?: "note" | "status";
   testId?: string;
+  /** Overrides the default `system-nudge-title` test id on the title line. */
+  titleTestId?: string;
 };
 
 /** Shared inline notification card. */
@@ -33,7 +35,7 @@ export function SystemNudge(props: SystemNudgeProps): JSX.Element {
       data-testid={props.testId ?? "system-nudge"}
     >
       <div class="system-nudge__text">
-        <span class="system-nudge__title">{props.title}</span>
+        <span class="system-nudge__title" data-testid={props.titleTestId ?? "system-nudge-title"}>{props.title}</span>
         <Show when={props.description}>
           <div class="system-nudge__sub">{props.description}</div>
         </Show>

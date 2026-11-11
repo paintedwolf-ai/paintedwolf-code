@@ -142,7 +142,11 @@ func (m *Service) appendHostKickMessage(ctx context.Context, sessionID, kickID, 
 		Visibility:   api.MessageVisibilityInternal,
 		CreatedAt:    time.Now().UTC(),
 	}
-	return kickMsg, m.transcript.Append(ctx, sessionID, kickMsg)
+	rows := []api.Message{kickMsg}
+	if err := m.transcript.Append(ctx, sessionID, rows...); err != nil {
+		return api.Message{}, err
+	}
+	return rows[0], nil
 }
 
 // TakePhase renders and records the guidance of a phase entered since
@@ -203,6 +207,12 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 			rc.CurrentPhase = strings.TrimSpace(frame.RunContext.CurrentPhase)
 			rc.AdvanceWhenGateMet = frame.RunContext.AdvanceWhenGateMet
 			rc.FailedLeaves = append([]string(nil), frame.RunContext.FailedLeaves...)
+		}
+	}
+	if !sess.IsWorkerChild() && msgErr == nil {
+		profile := surface.ResolveTurnProfile(frame.RunContext, sess, msgs, state)
+		if plan, err := surface.CompileToolPlan(profile, frame.ProjectRootCount); err == nil {
+			rc.ToolPlan = plan
 		}
 	}
 	rc.GateObligations = m.GateObligations(ctx, sessionID, frame)

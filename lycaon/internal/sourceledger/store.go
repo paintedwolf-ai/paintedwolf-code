@@ -87,7 +87,7 @@ func New(sqlDB db.Handle, contentDir string) *Store {
 	snapshots := sourcesnapshot.New(sqlDB, blobs, filepath.Join(filepath.Dir(contentDir), enginepaths.SourceObservationsDBName), backgroundwork.Process())
 	s := &Store{sqlDB: sqlDB, queries: queries, people: peoplestore.New(sqlDB), Content: blobs, Baselines: baselines, Snapshots: snapshots}
 	s.Inventory = &Inventory{inventoryJobs: make(map[string]*inventoryJob), inventoryNow: time.Now, observationBudget: commandObservationBudget, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, writer: s}
-	s.Commands = &Commands{inventoryPasses: make(map[string]uint64), objects: blobs, observationBudget: commandObservationBudget, openWindows: make(map[string][]*openCommandWindow), passWake: make(chan struct{}), queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, windowSettle: commandWindowSettle}
+	s.Commands = &Commands{observationBudget: commandObservationBudget, openWindows: make(map[string][]*openCommandWindow), now: time.Now, overduePasses: make(map[string]int), slowPasses: make(map[string]slowPass), queries: queries, recordMu: &s.recordMu, retention: &startRetention{objects: blobs, queries: queries, recordMu: &s.recordMu, snapshots: snapshots, sqlDB: sqlDB, budget: commandObservationBudget / 2, files: windowRetainFiles}, sqlDB: sqlDB, windowSettle: func() <-chan time.Time { return time.After(commandWindowSettle) }}
 	s.Git = &Git{queries: queries, recordMu: &s.recordMu, sqlDB: sqlDB}
 	s.History = &History{queries: queries, sqlDB: sqlDB}
 	s.Walk = &Walk{queries: queries, sqlDB: sqlDB}

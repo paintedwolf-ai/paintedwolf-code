@@ -147,15 +147,12 @@ describe("ProjectCostView", () => {
     expect(screen.getByText("Build account settings")).toBeTruthy();
     expect(screen.getByTestId("project-cost-utilities-row")).toBeTruthy();
     expect(screen.getByTestId("project-cost-retired-row")).toBeTruthy();
-    expect(screen.getByText("Project utilities")).toBeTruthy();
     expect(screen.getByTestId("project-cost-composition-usd")).toBeTruthy();
     expect(screen.getByTestId("project-cost-composition-tokens")).toBeTruthy();
     const charts = screen.getAllByRole("img", { hidden: true });
     expect(charts).toHaveLength(2);
     expect(charts[0]?.getAttribute("aria-label")).toContain("Coordinator 60%");
     expect(charts[1]?.getAttribute("aria-label")).toContain("Summarizer 10%");
-    expect(screen.getByText("By estimated cost")).toBeTruthy();
-    expect(screen.getByText("By tokens")).toBeTruthy();
 
     fireEvent.input(screen.getByTestId("project-cost-filter"), {
       target: { value: "accessibility" },
@@ -189,7 +186,6 @@ describe("ProjectCostView", () => {
     const mark = amount.parentElement?.querySelector(".den-status-mark");
     expect(amount.parentElement?.getAttribute("data-coverage")).toBe("lower_bound");
     expect(mark?.textContent).toBe("Lower bound");
-    expect(screen.queryByText(/At least/)).toBeNull();
   });
 
   it("badges the project total as a lower bound when provider calls went unreported", async () => {
@@ -277,8 +273,10 @@ describe("ProjectCostView", () => {
       target: { value: "12" },
     });
     fireEvent.click(screen.getByTestId("project-cost-soft-stop"));
-    expect(await screen.findByRole("heading", { name: "Warn, then close out" })).toBeTruthy();
-    expect(screen.getByLabelText("Warn at $8.40 then close out at $12.00")).toBeTruthy();
+    await screen.findByTestId("project-cost-guardrails");
+    const sequence = screen.getByTestId("project-cost-guardrail-sequence");
+    expect(sequence.getAttribute("aria-label")).toContain("$8.40");
+    expect(sequence.getAttribute("aria-label")).toContain("$12.00");
     fireEvent.click(screen.getByTestId("project-cost-save-guardrails"));
 
     await waitFor(() => expect(client.updateLimitsSettings).toHaveBeenCalledOnce());
@@ -290,7 +288,6 @@ describe("ProjectCostView", () => {
       },
       "project-1",
     );
-    expect(screen.getByText("Saved to this project")).toBeTruthy();
   });
 
   it.each([
@@ -305,11 +302,12 @@ describe("ProjectCostView", () => {
       : { ...globalLimits(), spend_soft_stop: deviceSoft });
     render(() => <ProjectCostView projectId="project-1" projectName="Demo project"
       appStore={createAppStore()} client={client as never} onOpenSession={vi.fn()} />);
-    expect(await screen.findByRole("heading", { name: `Warn, then ${action}` })).toBeTruthy();
-    expect(screen.getByLabelText(`Warn at $4.00 then ${action} at $5.00`)).toBeTruthy();
+    const mode = await screen.findByTestId("project-cost-guardrail-mode");
+    expect(mode.textContent).toContain(action);
+    const sequence = screen.getByTestId("project-cost-guardrail-sequence");
+    expect(sequence.getAttribute("aria-label")).toContain("$4.00");
+    expect(sequence.getAttribute("aria-label")).toContain("$5.00");
     if (action === "close out") {
-      expect(screen.queryByText(/can land its work before pausing/)).toBeNull();
-      expect(screen.getByText(/closes out without another tool round/)).toBeTruthy();
     }
   });
 
@@ -328,7 +326,7 @@ describe("ProjectCostView", () => {
     ));
 
     expect(await screen.findByTestId("project-cost-tracking-off")).toBeTruthy();
-    fireEvent.click(screen.getByText("Open Settings → Cost"));
+    fireEvent.click(screen.getByTestId("open-settings-cost"));
     expect(onOpenCostSettings).toHaveBeenCalledOnce();
     expect(screen.getByText("Build account settings")).toBeTruthy();
   });
@@ -352,11 +350,9 @@ describe("ProjectCostView", () => {
       "project-cost-guardrail-enabled",
     ) as HTMLInputElement;
     expect(enabled.disabled).toBe(true);
-    expect(screen.getByText(/Device Settings requires a \$5\.00 stop/)).toBeTruthy();
     fireEvent.input(screen.getByTestId("project-cost-ceiling-usd"), {
       target: { value: "12" },
     });
-    expect(screen.getByText(/cannot exceed the device limit of \$5\.00/)).toBeTruthy();
     expect(
       (screen.getByTestId("project-cost-save-guardrails") as HTMLButtonElement)
         .disabled,

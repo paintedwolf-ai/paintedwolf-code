@@ -3,8 +3,6 @@ import { LycaonApiError } from "../api/http.ts";
 import {
   composeFeedbackSubmitAnswer,
   isFeedbackNoLongerPendingError,
-  workflowFeedbackCardHint,
-  workflowFeedbackCardLabel,
   workflowFeedbackChickletDetail,
   workflowFeedbackCardView,
 } from "./workflow-feedback-card-model.ts";
@@ -42,13 +40,6 @@ describe("workflowFeedbackCardView", () => {
   });
 });
 
-describe("workflowFeedbackCardLabel / hint", () => {
-  it("labels closed cards as no longer needed", () => {
-    const view = { kind: "closed" as const };
-    expect(workflowFeedbackCardLabel(view)).toBe("No longer needed");
-    expect(workflowFeedbackCardHint(view)).toMatch(/moved on/i);
-  });
-});
 
 describe("workflowFeedbackChickletDetail", () => {
   it("prefers the answer over the prompt for the chicklet summary", () => {

@@ -137,3 +137,81 @@ func TestReadOnlyRemedyNeverIncludesMixedMutationArgv(t *testing.T) {
 		t.Fatalf("remedy widened allowed native forms: %q", forms)
 	}
 }
+
+func TestCommandFormToolsAndProgramEntriesHonorProfileAndSurfaceAdmission(t *testing.T) {
+	profiles, err := sandbox.LoadToolProfiles()
+	testutil.FailErr(t, "load stock profiles", err)
+	boundary := sandbox.NewBoundary(sandbox.Config{ProjectRootRequired: true, RejectSymlinkEscape: true}, profiles)
+	registry := tools.NewDefaultRegistry()
+	for _, name := range []string{"code_rewrite", "survey_repo", "summarize", "command", "verify"} {
+		contract, _ := toolcontract.Lookup(name)
+		testutil.FailErr(t, "register "+name, registry.RegisterDefinition(tools.Definition{
+			Meta:     tools.ToolMeta{Name: name, ArgsSchema: map[string]any{"type": "object"}},
+			Contract: contract,
+			Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+				return "ran", nil
+			},
+		}))
+	}
+	executor := NewExecutor(NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), nil), registry, "implement")
+	executor.programEntries = map[string]func(map[string]any) bool{
+		"command": nil,
+		"verify":  func(map[string]any) bool { return false },
+	}
+
+	reach := func(profile, surface string) func(string) bool {
+		programs, err := executor.Metadata.ProgramReach(t.Context(), platform.ToolFilter{ProfileID: profile, SurfaceID: surface})
+		testutil.FailErr(t, "ProgramReach", err)
+		return programs
+	}
+	for _, tc := range []struct {
+		profile, surface, program string
+		want                      bool
+	}{
+		{"implement", "", "code-rewrite", true},
+		{"implement", "", "repo-map", true},
+		{"implement", "", "summarize", true},
+		{"explore_readonly", "", "code-rewrite", false},
+		{"explore_readonly", "", "repo-map", true},
+		{"explore_readonly", "", "summarize", true},
+		{"editor_file", "", "code-rewrite", true},
+		{"editor_file", "", "repo-map", false},
+		{"editor_file", "", "summarize", true},
+		{"plan_write_only", "", "code-rewrite", false},
+		{"plan_write_only", "", "repo-map", false},
+		{"plan_write_only", "", "summarize", true},
+		{"coordinator", "implement_investigate", "code-rewrite", true},
+		{"coordinator", "implement_investigate", "repo-map", true},
+		{"coordinator", "implement_investigate", "summarize", true},
+		{"coordinator", "implement_routing", "code-rewrite", false},
+		{"coordinator", "implement_routing", "repo-map", false},
+		{"coordinator", "implement_routing", "summarize", false},
+		{"coordinator", "recon_reconcile", "code-rewrite", false},
+		{"coordinator", "recon_reconcile", "repo-map", false},
+		{"coordinator", "recon_reconcile", "summarize", true},
+		{"coordinator", "implement_synthesis", "code-rewrite", false},
+		{"coordinator", "implement_synthesis", "repo-map", true},
+		{"coordinator", "implement_synthesis", "summarize", true},
+	} {
+		if got := reach(tc.profile, tc.surface)(tc.program); got != tc.want {
+			t.Errorf("ProgramReach(%s, %s)(%s) = %v, want %v", tc.profile, tc.surface, tc.program, got, tc.want)
+		}
+	}
+
+	for _, tc := range []struct {
+		profile, tool string
+		wantAllowed   bool
+	}{
+		{"implement", "verify", true},
+		{"explore_readonly", "verify", false},
+		{"editor_file", "verify", false},
+		{"web_research", "command", false},
+	} {
+		_, err := executor.Invoke(t.Context(), tc.tool, map[string]any{"command": "true"}, tools.ToolContext{
+			Identity: tools.InvocationIdentity{SessionID: "sess", Agent: tc.profile},
+		})
+		if (err == nil) != tc.wantAllowed {
+			t.Errorf("Invoke(%s, %s) err = %v, wantAllowed = %v", tc.profile, tc.tool, err, tc.wantAllowed)
+		}
+	}
+}

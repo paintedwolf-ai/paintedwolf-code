@@ -18,12 +18,21 @@ func (s *Suggestions) HandleDetectFolder(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	out := wire.FolderDetect{Path: folder}
-	// Reuse the project that already contains this root.
-	known := requestscope.ProjectByRootPath(s.Projects, r.Context(), folder)
-	if known != nil {
-		out.ProjectID = known.ID
+	matches := requestscope.ProjectsByRootPath(s.Projects, r.Context(), folder)
+	var singleKnown *project.Project
+	if len(matches) > 0 {
+		out.Projects = make([]wire.FolderDetectProject, 0, len(matches))
+		for i := range matches {
+			out.Projects = append(out.Projects, project.ToFolderDetectProject(&matches[i], folder))
+			if singleKnown == nil && project.IsSingleRootForPath(&matches[i], folder) {
+				singleKnown = &matches[i]
+			}
+		}
 	}
-	out.ExtensionSuggestions = s.folderExtensionSuggestions(r, folder, known)
+	if singleKnown != nil {
+		out.ProjectID = singleKnown.ID
+	}
+	out.ExtensionSuggestions = s.folderExtensionSuggestions(r, folder, singleKnown)
 	httpio.WriteJSON(w, http.StatusOK, out)
 }
 

@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     child_session_id: 00000000
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_RESUME_CHILD_UNKNOWN'

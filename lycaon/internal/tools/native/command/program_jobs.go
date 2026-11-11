@@ -24,12 +24,10 @@ import (
 // jobs, wait, kill, command_output and command_stop share one set of handles.
 // A native job has a session numeric identifier; its stop cancels its context.
 type SessionJobs struct {
-	Registry      *bgprocess.Registry
-	Supervisor    *ProgramSupervisor
-	SessionID     string
-	RootSessionID string
-	ProjectID     string
-	ToolCallID    string
+	Registry   *bgprocess.Registry
+	Supervisor *ProgramSupervisor
+	SessionID  string
+	ProjectID  string
 
 	mu        sync.Mutex
 	closed    atomic.Bool
@@ -40,18 +38,30 @@ type SessionJobs struct {
 	// order is the job table in start order. A job takes one more than the
 	// highest number in the table and leaves it once waited, so numbers are
 	// reused as a shell reuses them.
-	order   []string
-	numbers map[string]int
-	// programOrder tracks handles started by the active program.
-	programOrder []string
+	order        []string
+	numbers      map[string]int
 	publicIDs    map[string]int
 	nextNativeID int
 }
 
 type jobWaiter struct{ unblock func() }
 
-// sessionJobsKey binds admission to this retained session owner.
+// ProgramJobOrigin binds a job to the call that started its program.
+type ProgramJobOrigin struct {
+	Tool, ToolCallID, RootSessionID string
+}
+
+type programJobsBinding struct {
+	owner  *SessionJobs
+	origin ProgramJobOrigin
+}
+
+// sessionJobsKey binds program provenance to its retained session owner.
 type sessionJobsKey struct{}
+
+// programJobs holds one program's bare-wait set under SessionJobs.mu.
+type programJobs struct{ handles []string }
+type programJobsKey struct{}
 
 type jobOutcome struct {
 	result toolcontract.ProducerResult
@@ -108,7 +118,7 @@ func noteJobNative(ctx context.Context, args []string) {
 
 // BeginProgram prunes finished jobs from prior programs before a new program
 // runs so %1 names the first active or newly started job.
-func (j *SessionJobs) BeginProgram(ctx context.Context) (context.Context, error) {
+func (j *SessionJobs) BeginProgram(ctx context.Context, origin ProgramJobOrigin) (context.Context, error) {
 	if j == nil || j.Registry == nil {
 		return ctx, nil
 	}
@@ -144,14 +154,18 @@ func (j *SessionJobs) BeginProgram(ctx context.Context) (context.Context, error)
 		}
 	}
 	j.order = kept
-	j.programOrder = nil
-	return context.WithValue(ctx, sessionJobsKey{}, j), nil
+	ctx = context.WithValue(ctx, programJobsKey{}, &programJobs{})
+	return context.WithValue(ctx, sessionJobsKey{}, programJobsBinding{owner: j, origin: origin}), nil
 }
 
 // start runs the job body detached from the launching statement's context.
 func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
 	if j == nil || j.Registry == nil || run == nil {
 		return "", fmt.Errorf("program jobs require a session registry and body")
+	}
+	binding, ok := ctx.Value(sessionJobsKey{}).(programJobsBinding)
+	if !ok || binding.owner != j || binding.origin.Tool == "" || binding.origin.ToolCallID == "" || binding.origin.RootSessionID == "" {
+		return "", fmt.Errorf("program job requires its initiating call")
 	}
 	// Serialize registration against closing this retained session owner.
 	j.mu.Lock()
@@ -169,8 +183,8 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	done := make(chan struct{})
 	tracker := &jobProcessTracker{ready: make(chan struct{})}
 	handle, err = j.Registry.StartProgram(ctx, bgprocess.ProgramJobSpec{
-		SessionID: j.SessionID, RootSessionID: j.RootSessionID, ProjectID: j.ProjectID,
-		CommandLine: commandLine, OriginTool: "command", ToolCallID: j.ToolCallID,
+		SessionID: j.SessionID, RootSessionID: binding.origin.RootSessionID, ProjectID: j.ProjectID,
+		CommandLine: commandLine, OriginTool: binding.origin.Tool, ToolCallID: binding.origin.ToolCallID,
 		Run: func(stopCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			defer close(done)
 			defer release()
@@ -199,7 +213,7 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 		close(ready)
 		return "", err
 	}
-	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle) })
+	setStop(func() { _, _ = j.Registry.Lifecycle.Stop(j.SessionID, handle, bgprocess.TerminationStoppedByAgent) })
 	if j.numbers == nil {
 		j.numbers = map[string]int{}
 	}
@@ -209,7 +223,9 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	}
 	j.numbers[handle] = number
 	j.order = append(j.order, handle)
-	j.programOrder = append(j.programOrder, handle)
+	if own, ok := ctx.Value(programJobsKey{}).(*programJobs); ok {
+		own.handles = append(own.handles, handle)
+	}
 	j.mu.Unlock()
 	tracker.onRecord = func(process jobProcess) {
 		j.recordProcess(handle, process)
@@ -339,7 +355,10 @@ func (j *SessionJobs) Resolve(reference string) (string, error) {
 // current program if any, otherwise all active session jobs.
 func (j *SessionJobs) Unwaited(ctx context.Context) ([]string, error) {
 	j.mu.Lock()
-	programHandles := slices.Clone(j.programOrder)
+	var programHandles []string
+	if own, ok := ctx.Value(programJobsKey{}).(*programJobs); ok {
+		programHandles = slices.Clone(own.handles)
+	}
 	j.mu.Unlock()
 	if len(programHandles) > 0 {
 		return programHandles, nil
@@ -408,12 +427,14 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *comm
 			}
 		}()
 	}
-	if _, _, err := j.Registry.Lifecycle.Wait(ctx, j.SessionID, handle); err != nil {
-		return toolcontract.ProducerResult{}, jobLookupError(err, handle)
-	}
+	_, _, waitErr := j.Registry.Lifecycle.Wait(ctx, j.SessionID, handle)
 	j.mu.Lock()
 	outcome, ok := j.results[handle]
 	j.mu.Unlock()
+	// The registry keeps few finished jobs; this table keeps every outcome.
+	if waitErr != nil && !(ok && errors.Is(waitErr, bgprocess.ErrProcessNotFound)) {
+		return toolcontract.ProducerResult{}, jobLookupError(waitErr, handle)
+	}
 	if !ok {
 		return toolcontract.ProducerResult{}, fmt.Errorf("job %s settled without an outcome", handle)
 	}
@@ -452,7 +473,7 @@ func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error 
 	}
 	j.signals[handle] = status
 	j.mu.Unlock()
-	if _, err := j.Registry.Lifecycle.Stop(j.SessionID, handle); err != nil {
+	if _, err := j.Registry.Lifecycle.Stop(j.SessionID, handle, bgprocess.TerminationStoppedByAgent); err != nil {
 		return jobLookupError(err, handle)
 	}
 	return nil
@@ -462,6 +483,14 @@ func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error 
 func (j *SessionJobs) List(context.Context) ([]jobStatus, error) {
 	var out []jobStatus
 	for _, job := range j.Registry.ActiveJobs(j.SessionID) {
+		// A foreground program past its budget is a live handle but no job: it never joins
+		// this table, so a bare wait must not reach it, its own included.
+		j.mu.Lock()
+		started := slices.Contains(j.order, job.Handle)
+		j.mu.Unlock()
+		if !started {
+			continue
+		}
 		line := ""
 		if len(job.Stages) > 0 {
 			line = job.Stages[0].Command

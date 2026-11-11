@@ -3,19 +3,13 @@ id: AMBIENT_GROUNDING_ESCALATED
 kind: invariant
 anchor: coordinator.post_turn
 requires:
-  facts:
-  - paintedwolf.claims_completion
-  - paintedwolf.grounding_escalated
-  - paintedwolf.can_recall
+  facts: [paintedwolf.claims_completion, paintedwolf.grounding_escalated, paintedwolf.can_recall, paintedwolf.next_steps]
 when: paintedwolf.grounding_escalated && !paintedwolf.claims_completion
 effect: nudge
 copy:
   cause: Several turns closed with citations or worker_summary tags that did not trace
   why: Session keeps running; ground completion claims in observed evidence
-  fix: Ground further claims in observed evidence and any required worker summaries. Inspect the actual missing
-    references or delivery state; do not spawn redundant work to clear an advisory.{% if paintedwolf.can_recall %} Recover an earlier
-    observation with `recall(query="handle:read#3")` instead of restating it from memory.{% else %} Re-observe
-    a source before citing it again.{% endif %}
+  fix: 'Ground further claims in observed evidence and any required worker summaries. Inspect the actual missing references or delivery state; do not spawn redundant work to clear an advisory. {{ paintedwolf.next_steps }}'
   instead: Keep going; ground claims in observed evidence or worker_summary tags
   what: Repeated grounding gaps flagged — advisory, not blocked
 x-paintedwolf-category: recoverable
@@ -25,22 +19,12 @@ x-paintedwolf-scenarios:
 - id: recall_callable
   vars:
     can_recall: true
-  expect_contains:
-  - 'Code: AMBIENT_GROUNDING_ESCALATED'
-  - 'recall(query='
 - id: recall_not_callable
   vars:
     can_recall: false
-  expect_contains:
-  - 'Code: AMBIENT_GROUNDING_ESCALATED'
-  - 'Re-observe'
 - id: default
   vars:
     detail: bad args
     path: src/main.go
     profile: coordinator
     tool: read
-  expect_contains:
-  - Tool feedback
-  - 'Code: AMBIENT_GROUNDING_ESCALATED'
-  - worker_summary

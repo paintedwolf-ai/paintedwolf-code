@@ -149,7 +149,7 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 		"job-mounted-v2",
 	)
 	testutil.FailErr(t, "CreateWorkerWorkspaceSelected mounted", err)
-	defer func() { _ = mgr.DestroyWorkerWorkspace(binding) }()
+	defer func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) }()
 
 	if binding.View == nil || binding.View.Core == nil {
 		t.Fatalf("expected mounted view with Core, got %+v", binding.View)

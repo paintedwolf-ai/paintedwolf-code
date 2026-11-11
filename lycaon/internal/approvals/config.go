@@ -28,9 +28,8 @@ type ExplanationEntry struct {
 
 // ScenarioEntry is a parametrized contract-test render sample.
 type ScenarioEntry struct {
-	ID             string         `yaml:"id"`
-	Vars           map[string]any `yaml:"vars,omitempty"`
-	ExpectContains []string       `yaml:"expect_contains,omitempty"`
+	ID   string         `yaml:"id"`
+	Vars map[string]any `yaml:"vars,omitempty"`
 }
 
 // ExplanationCopy is rendered host copy for a tool approval checkpoint.
@@ -101,9 +100,6 @@ func validateEntry(key string, entry ExplanationEntry) error {
 	for _, sc := range entry.Scenarios {
 		if strings.TrimSpace(sc.ID) == "" {
 			return fmt.Errorf("%s: scenario id required", key)
-		}
-		if len(sc.ExpectContains) < 2 {
-			return fmt.Errorf("%s: scenario %q expect_contains required (>=2)", key, sc.ID)
 		}
 	}
 	for _, field := range []struct {

@@ -66,6 +66,17 @@ func AllSurfaceExits() (map[string]ExitClass, error) {
 	return out, nil
 }
 
+// PublishesMidTurnText reports whether text accompanying tool calls on a surface
+// is speech. An unknown surface, such as a root editor session's, is private.
+func PublishesMidTurnText(surfaceID string) bool {
+	catalog, err := surfacecatalog.Load()
+	if err != nil {
+		return false
+	}
+	row, err := catalog.Surface(strings.TrimSpace(surfaceID))
+	return err == nil && row.PublishesMidTurnText
+}
+
 // SurfaceDeliversReport reports whether a surface delivers a report.
 func SurfaceDeliversReport(surfaceID string) bool {
 	c, err := SurfaceExit(surfaceID)

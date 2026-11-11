@@ -59,7 +59,7 @@ func TestStressFirefoxMountedSparseWorkerLifecycle(t *testing.T) {
 	task := claimFirefoxWorker(t, fixture, name)
 	t.Logf("prepare elapsed=%s", time.Since(started))
 	t.Cleanup(func() {
-		testutil.FailErr(t, "destroy scale worker", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
+		testutil.FailErr(t, "destroy scale worker", fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 	})
 	view, facts, _, ok := workspace.LookupBranchPreparedView(task.WorkspaceRoot)
 	if !ok || view == nil || view.Core == nil || facts.PreparationKind != adapter.PreparationMounted {

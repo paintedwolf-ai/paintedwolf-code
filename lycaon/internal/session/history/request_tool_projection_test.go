@@ -172,7 +172,7 @@ func TestRecallSearchFitKeepsRecoverableHits(t *testing.T) {
 func TestSmallObservationSurvivesModelFormattingOverhead(t *testing.T) {
 	raw, err := json.Marshal(map[string]any{"content": "   731: checksum=original-cypress-7826", "offset": 731, "end_line": 731, "mode": "content", "receipt": map[string]any{"tool": "read"}})
 	testutil.FailErr(t, "encode small observed row", err)
-	content := "[read#1]\n" + string(raw) + "\n>>> Tool feedback\n" + strings.Repeat("recorded feedback\n", 100)
+	content := "[read#1]\n" + string(raw) + "\n>>> Tool feedback\n" + strings.Repeat("recorded feedback\n", 105)
 	original := api.Message{ID: "small-read", Ord: 3, Role: api.MessageRoleTool, Origin: api.MessageOriginTool, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierUntrusted, Content: content, EvidenceHandles: []string{"read#1"}, ToolResult: &api.ToolResult{Tool: "read", Content: content, Outcome: api.ToolResultOutcomeCompleted}}
 	projected := transcript.Project([]api.Message{original})
 	var row api.Message
@@ -221,7 +221,7 @@ func TestFitRequestRetainsActiveTurnToolExchangesAcrossPriorTurns(t *testing.T) 
 	service := &Service{store: mem, Compactor: compaction.NewSimpleCompactor(cfg, nil), recallAvailable: func(context.Context, *api.Session) bool { return true }}
 	standing := api.Message{ID: "standing", Role: api.MessageRoleSystem, ContextPinned: true, Content: strings.Repeat("Standing instructions. ", 700)}
 	budgets := catalogRequestBudgets{modelcall.NewCatalog("fixture", []modelinfo.Entry{{ID: "small", ContextLength: 8192}})}
-	fitted, err := service.FitRequest(t.Context(), sess, rows, modelcall.CompletionRequest{Model: "small", Messages: append([]api.Message{standing}, rows...)}, budgets)
+	fitted, err := service.FitRequest(t.Context(), sess, rows, modelcall.CompletionRequest{Model: "small", Messages: append([]api.Message{standing}, rows...)}, budgets, nil)
 	testutil.FailErr(t, "fit multi-exchange active turn", err)
 	seen := map[string]api.Message{}
 	for _, row := range fitted.Messages {

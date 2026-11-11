@@ -1,6 +1,6 @@
 # Structural rewrite reference
 
-Maintained sources of truth: the command language help for `rg --help` and the live `code_rewrite` schema for arguments and supported grammars, and the project's own verification policy for completion. Tool confinement, write scope, mutation receipts, and structured rejection `Code:` values remain authoritative.
+Maintained sources of truth: command help for text-search syntax and the `code_rewrite` schema for structural patterns, replacements, and supported grammars, and the project's own verification policy for completion. Tool confinement, write scope, mutation receipts, and structured rejection `Code:` values remain authoritative.
 
 ## Pattern shape
 
@@ -18,14 +18,14 @@ Use the singular capture when arity is part of the claim and the sequence captur
 
 ## Safe rewrite loop
 
-1. Search the exact target paths structurally.
-2. Inspect representative matches and the total blast radius.
-3. Preview the same pattern, paths, recursion setting, and language with `code_rewrite(dry_run: true)`.
-4. Compare the preview count and paths with the search result.
+1. Bound candidate paths with text search.
+2. Inspect representative source and choose one complete syntax pattern.
+3. Preview that pattern, replacement, paths, recursion setting, and language with `code_rewrite` and `dry_run`.
+4. Inspect structural matches, affected paths, and proposed changes.
 5. Apply exactly the reviewed call.
 6. Inspect the resulting diff and verify behavior.
 
-Search and preview counts can differ when the replacement cannot be rendered at every captured site. Resolve that discrepancy before applying.
+Text-search counts are not structural match counts. Resolve failed or unrenderable replacements in the preview before applying.
 
 ## Stop using one codemod when
 

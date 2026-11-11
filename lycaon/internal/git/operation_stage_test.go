@@ -14,21 +14,22 @@ import (
 
 func stageFixture(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
-	gittest.Init(t, dir)
-	gittest.Run(t, dir, "config", "user.name", "Test")
-	gittest.Run(t, dir, "config", "user.email", "test@example.com")
-	for name, body := range map[string]string{"a.txt": "base\n", "gone.txt": "bye\n", "other.txt": "other\n"} {
-		testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
-	}
-	gittest.Run(t, dir, "add", "--", "a.txt", "gone.txt", "other.txt")
-	gittest.Run(t, dir, "commit", "-m", "Initial")
-	testutil.FailErr(t, "unrelated staged edit", os.WriteFile(filepath.Join(dir, "other.txt"), []byte("staged elsewhere\n"), 0o644))
-	gittest.Run(t, dir, "add", "--", "other.txt")
-	return dir
+	return CloneFixtureRepo(t, "stage-fixture", func(dir string) {
+		gittest.Init(t, dir)
+		gittest.Run(t, dir, "config", "user.name", "Test")
+		gittest.Run(t, dir, "config", "user.email", "test@example.com")
+		for name, body := range map[string]string{"a.txt": "base\n", "gone.txt": "bye\n", "other.txt": "other\n"} {
+			testutil.FailErr(t, "write "+name, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+		}
+		gittest.Run(t, dir, "add", "--", "a.txt", "gone.txt", "other.txt")
+		gittest.Run(t, dir, "commit", "-m", "Initial")
+		testutil.FailErr(t, "unrelated staged edit", os.WriteFile(filepath.Join(dir, "other.txt"), []byte("staged elsewhere\n"), 0o644))
+		gittest.Run(t, dir, "add", "--", "other.txt")
+	})
 }
 
 func TestStageWritesExactIndexEntriesAndLeavesTheWorkTree(t *testing.T) {
+	t.Parallel()
 	dir := stageFixture(t)
 	var reviewed []RestoreFile
 	result, err := NewManager().Operate(t.Context(), dir, OperationRequest{Kind: "stage", Entries: []IndexEntry{
@@ -72,6 +73,7 @@ func TestStageWritesExactIndexEntriesAndLeavesTheWorkTree(t *testing.T) {
 }
 
 func TestStageRecordsConflictStages(t *testing.T) {
+	t.Parallel()
 	dir := stageFixture(t)
 	operateStage := func(entries ...IndexEntry) (OperationResult, error) {
 		return NewManager().Operate(t.Context(), dir, OperationRequest{Kind: "stage", Entries: entries})
@@ -95,6 +97,7 @@ func TestStageRecordsConflictStages(t *testing.T) {
 }
 
 func TestStageRefusesInvalidRequests(t *testing.T) {
+	t.Parallel()
 	dir := stageFixture(t)
 	for name, entries := range map[string][]IndexEntry{
 		"empty":     nil,
@@ -112,6 +115,7 @@ func TestStageRefusesInvalidRequests(t *testing.T) {
 }
 
 func TestMergeFileMarksConflictsWithLabels(t *testing.T) {
+	t.Parallel()
 	merged, conflicts, err := MergeFile(t.Context(), []byte("a\nours\nc\n"), []byte("a\nb\nc\n"), []byte("a\ntheirs\nc\n"), [3]string{"ours", "base", "theirs"})
 	testutil.FailErr(t, "merge conflict", err)
 	if conflicts != 1 || string(merged) != "a\n<<<<<<< ours\nours\n=======\ntheirs\n>>>>>>> theirs\nc\n" {
@@ -125,6 +129,7 @@ func TestMergeFileMarksConflictsWithLabels(t *testing.T) {
 }
 
 func TestStagePreservesSymbolicLinkIndexMode(t *testing.T) {
+	t.Parallel()
 	dir := stageFixture(t)
 	result, err := NewManager().Operate(t.Context(), dir, OperationRequest{Kind: "stage", Entries: []IndexEntry{{Path: "link", Mode: "120000", Content: []byte("a.txt")}}})
 	testutil.FailErr(t, "stage symbolic link", err)
@@ -137,6 +142,7 @@ func TestStagePreservesSymbolicLinkIndexMode(t *testing.T) {
 }
 
 func TestStageReusesExistingObjectWithMetadataReview(t *testing.T) {
+	t.Parallel()
 	dir := stageFixture(t)
 	oid := strings.TrimSpace(gittest.Run(t, dir, "rev-parse", ":a.txt"))
 	var reviewed []RestoreFile

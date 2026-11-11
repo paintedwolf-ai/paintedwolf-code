@@ -26,7 +26,7 @@ func TestBuildCompletionMessagesOmitsWorkflowBoundaries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BuildCompletionMessages: %v", err)
 	}
-	if len(out) != 2 || out[0].Content != transcript.ContentAuthorityNotice() || out[1].ID != "u1" {
+	if len(out) != 2 || out[0].Content != transcript.ContentAuthorityNotice(transcript.AudiencePrivate) || out[1].ID != "u1" {
 		t.Fatalf("messages = %+v want user row plus host authority notice", out)
 	}
 }
@@ -134,3 +134,35 @@ func TestMergeWorkerVisibleToolsHidesSkillsReadFromMachine(t *testing.T) {
 		t.Fatalf("visible_tools = %v", got)
 	}
 }
+
+func TestCompiledMachineRefreshesCatalogVisibility(t *testing.T) {
+	selection := &selectionFixture{}
+	engine := &AssemblyEngine{}
+	engine.SetDeps(AssemblyDeps{Selection: selection})
+	frame := inject.CoordinatorTurnFrame{Machine: inject.Machine{ProfileID: "coordinator", Surface: prompts.AgentPromptSurface{Skills: []prompts.AgentSkillView{{Name: "review", Description: "Review the change."}}}}}
+	sess := &api.Session{ID: "s"}
+	vars := map[string]any{}
+	projection := testPromptSurface(engine)
+	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	first := vars["prompt_surface_fingerprint"]
+	selection.full = true
+	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	if vars["full_skill_catalog"] != true || vars["prompt_surface_fingerprint"] == first {
+		t.Fatal("mid-turn failure did not refresh catalog projection")
+	}
+	frame.Machine.Surface.Skills[0].Description = "Review accessibility."
+	first = vars["prompt_surface_fingerprint"]
+	projection.mergeEffectivePromptSurface(t.Context(), sess, frame, vars)
+	if vars["prompt_surface_fingerprint"] == first {
+		t.Fatal("changed catalog reused prompt identity")
+	}
+}
+
+type selectionFixture struct {
+	loaded, omitted map[string]bool
+	full            bool
+}
+
+func (s *selectionFixture) LoadedTools(string) map[string]bool  { return s.loaded }
+func (s *selectionFixture) OmittedUnits(string) map[string]bool { return s.omitted }
+func (s *selectionFixture) FullCatalog(string) bool             { return s.full }

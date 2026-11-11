@@ -224,6 +224,7 @@ export function SourceDiffRow(props: Props) {
           class="den-file-edit-diff-disclosure"
           aria-expanded={bodyOpen()}
           aria-label={`${bodyOpen() ? "Collapse" : "Show"} diff for ${path()}`}
+          data-testid="file-edit-diff-toggle"
           onClick={(event) => {
             event.stopPropagation();
             toggleDiff();
@@ -251,6 +252,7 @@ export function SourceDiffRow(props: Props) {
                 type="button"
                 class="den-file-edit-diff-step"
                 aria-pressed={activeIndex() === null}
+                data-testid="file-edit-diff-net"
                 onClick={() => setActive("net")}
               >
                 {props.source.netLabel}
@@ -263,6 +265,7 @@ export function SourceDiffRow(props: Props) {
                     class="den-file-edit-diff-step"
                     aria-pressed={activeIndex() === index()}
                     aria-label={revision.ariaLabel}
+                    data-testid={`file-edit-diff-step-${index() + 1}`}
                     onClick={() => setActive(index())}
                   >
                     {revision.label}

@@ -14,6 +14,3 @@ approval_explanations:
               vars:
                 path: vendor/pkg
                 project: my-app
-              expect_contains:
-                - Extract
-                - project

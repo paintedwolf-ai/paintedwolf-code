@@ -1,0 +1,15 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/coordinator/promptloop/promptloop.ToolsDeps",
+  "kind": "construction",
+  "workstream": "program-observation-evidence",
+  "disposition": "retain",
+  "reason": "This construction bundle binds existing tool admission, execution and settlement owners. The added typed program-observation port selects the evidence store without duplicating execution or source authority. Retain the measured nineteen fields and verify post-screening observation delivery.",
+  "reviewed_commit": "62c955c3704aaefe1d48fc485b09e6201a4244cd",
+  "ceiling": 19,
+  "boundaries": {
+    "lycaon/internal/coordinator/promptloop/program_observation_test.go": "40935de64422248c362110a4153dc2c9ca3c49b423b190a71d547111513a4975",
+    "lycaon/internal/coordinator/promptloop/tool_result_message_test.go": "14dc00b0679071fe9b220204f8b3a77db27879271a285e39294b6f5ebe37dd8e"
+  },
+  "reviewed_shape": "c3eed9ea05303271c9350fb481674355d02efc647bdd6c9744bfa43ff74a90e9"
+}

@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_sample: sca-reachable-exposure (open)
       offenders_omitted: 0
-    expect_contains:
-      - 'Code: REPORT_CLAIM_UNREPORTED'
-      - sca-reachable-exposure

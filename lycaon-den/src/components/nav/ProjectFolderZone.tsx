@@ -30,11 +30,11 @@ function PromotionStatus(props: Props) {
       </p>
       <Show when={props.promotionError}>
         <div class="project-folders__promotion-actions">
-          <button type="button" onClick={() => props.onRetryPromotion?.()}>
+          <button data-testid="retry" type="button" onClick={() => props.onRetryPromotion?.()}>
             Retry
           </button>
           <Show when={props.promotionPhase !== "committed"}>
-            <button type="button" onClick={() => props.onCancelPromotion?.()}>
+            <button data-testid="cancel" type="button" onClick={() => props.onCancelPromotion?.()}>
               Cancel
             </button>
           </Show>

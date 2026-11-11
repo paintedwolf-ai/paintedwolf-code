@@ -260,3 +260,51 @@ func TestSurveyWalkIncludeEngineOverlayDescends(t *testing.T) {
 		}
 	}
 }
+
+func TestSurveySkipsGitlinkFilesUnlessHumanVCSMetadataEnabled(t *testing.T) {
+	dir := t.TempDir()
+	writeTree(t, dir, []string{"worktree/main.go", "submodule/lib.go"})
+	if err := os.WriteFile(filepath.Join(dir, "worktree", ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644); err != nil {
+		t.Fatalf("write worktree .git: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "submodule", ".git"), []byte("gitdir: ../.git/modules/submodule\n"), 0o644); err != nil {
+		t.Fatalf("write submodule .git: %v", err)
+	}
+
+	got := surveyFiles(t, dir, SurveyOptions{IncludeHidden: true})
+	for _, rel := range got {
+		if strings.HasSuffix(rel, ".git") {
+			t.Fatalf("worker survey walk must omit gitlink .git files, got %v", got)
+		}
+	}
+
+	wtEntries, err := SurveyReadDir(filepath.Join(dir, "worktree"), "worktree", SurveyOptions{IncludeHidden: true})
+	if err != nil {
+		t.Fatalf("SurveyReadDir worktree: %v", err)
+	}
+	for _, e := range wtEntries {
+		if e.Rel == "worktree/.git" {
+			t.Fatalf("worker SurveyReadDir must omit worktree/.git, got %+v", wtEntries)
+		}
+	}
+
+	humanWt, err := SurveyReadDir(filepath.Join(dir, "worktree"), "worktree", HumanFilesSurveyOptions())
+	if err != nil {
+		t.Fatalf("SurveyReadDir human worktree: %v", err)
+	}
+	humanSub, err := SurveyReadDir(filepath.Join(dir, "submodule"), "submodule", HumanFilesSurveyOptions())
+	if err != nil {
+		t.Fatalf("SurveyReadDir human submodule: %v", err)
+	}
+	hasGit := func(entries []SurveyEntry, want string) bool {
+		for _, e := range entries {
+			if e.Rel == want {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasGit(humanWt, "worktree/.git") || !hasGit(humanSub, "submodule/.git") {
+		t.Fatalf("human listings must retain both .git files: wt=%+v sub=%+v", humanWt, humanSub)
+	}
+}

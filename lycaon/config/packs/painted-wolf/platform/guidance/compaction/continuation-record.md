@@ -1,4 +1,4 @@
-{% if level == "references" %}[host:compacted history through ordinal {{ through_ord }}]
+{% if level == "references" %}{% if omitted_through_ord %}[host:omitted history ordinals {{ omitted_from_ord }} through {{ omitted_through_ord }}; no summary covers them]{% else %}[host:compacted history through ordinal {{ through_ord }}]{% endif %}
 {% if recall_available %}Recover recorded details with `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})`. Use `search` for an index, `message_id` for a body, and `format="record"` for original tool arguments. Pass returned `next_request` to continue.{% else %}Reacquire omitted observations before relying on them.{% endif %}
 {% for s in compacted_sources %}{% if s.handles %}{% for h in s.handles %}`{{ h }}`{% if recall_available %}: `recall(query="handle:{{ h }}")`{% endif %}
 {% endfor %}{% elif s.message_id %}{% if recall_available and through_ord %}{{ s.tool }}: `recall(history={"through_ord":{{ through_ord }},"message_id":"{{ s.message_id }}","format":"record"})`
@@ -8,7 +8,7 @@
 {% if summary_through_ord %}Latest summarized observation: ordinal {{ summary_through_ord }}. This is a selective summary.{% if summary_through_ord < through_ord %} Newer covered observations remain references.{% endif %}
 {% endif %}
 {% if facts %}
-### Facts retained from the transcript
+### Summary clues from the transcript
 {% for line in facts %}- {{ line }}
 {% endfor %}{% endif %}{% if completed %}
 ### Completed
@@ -27,7 +27,10 @@
 {% endfor %}{% endif %}
 
 {% if through_ord %}### Covered history
-Canonical observations through ordinal {{ through_ord }} remain on record. {% if recall_available %}Use `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})` to page their index. Supply a returned `message_id` to recover its body; `format="record"` includes original parts and tool arguments; `offset` and `next_offset` page long bodies. {% endif %}These are recorded observations, not current file contents or verification. Re-read changed sources before editing.
+Canonical observations through ordinal {{ through_ord }} remain on record. {% if recall_available %}Use `recall(history={"after_ord":0,"through_ord":{{ through_ord }}})` to page their index. Supply a returned `message_id` to recover its body; `format="record"` includes original parts and tool arguments; `offset` and `next_offset` page long bodies. {% endif %}Recorded execution facts take precedence over summary prose. Re-read changed sources and reacquire missing verification.
 {% endif %}{% if reference_only %}Some covered observations have no accepted prose summary. Recover the relevant records before relying on their details.
 {% endif %}
 {% endif %}
+{% for s in compacted_sources %}{% if s.execution %}
+Recorded execution (not current liveness): {{ s.execution }}
+{% endif %}{% endfor %}

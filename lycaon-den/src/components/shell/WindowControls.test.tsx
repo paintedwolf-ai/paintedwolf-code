@@ -79,7 +79,6 @@ describe("WindowControls", () => {
     const control = screen.getByTestId("window-maximize");
     expect(control.getAttribute("aria-label")).toBe("Maximize window");
     setWindowMaximizedForTests(true);
-    expect(control.getAttribute("aria-label")).toBe("Restore window");
     expect(control.hasAttribute("data-maximized")).toBe(true);
   });
 

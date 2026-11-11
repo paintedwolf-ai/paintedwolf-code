@@ -3,15 +3,11 @@ package prompts_test
 import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 
-	"context"
 	"path/filepath"
-	"runtime"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolschema"
 )
@@ -26,41 +22,7 @@ func TestLoadCoordinatorSurfaceFloor_implementInvestigate(t *testing.T) {
 	}
 }
 
-func TestRenderInvestigateSurfaceRoutesSummarizeFirst(t *testing.T) {
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	root := filepath.Join(filepath.Dir(file), "..", "..")
-	engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{
-		ModuleRoot: root,
-	})
-	vars := map[string]any{
-		"execution_mode": "investigate",
-		"has_file_tools": true,
-	}
-	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
-		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
-	}
-	mergeUnits(t, engine, vars, promptunit.HostCoordinator, "investigate", nil)
-	rendered, err := engine.Render(context.Background(), "agents/coordinator-surface-investigate.md", vars)
-	if err != nil {
-		t.Fatalf("Render coordinator-surface-investigate: %v", err)
-	}
-	for _, want := range []string{
-		"summarize(", "find . -maxdepth 2 -type d", "summarize#N",
-	} {
-		if !strings.Contains(rendered, want) {
-			t.Fatalf("investigate surface missing floor survey route %q:\n%s", want, rendered)
-		}
-	}
-	// Orientation units follow the floor tools; the edit unit waits for its tools.
-	if strings.Contains(rendered, "**New file** → **`write`**") {
-		t.Fatalf("edit guidance rendered without edit tools:\n%s", rendered)
-	}
-}
-
-func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
+func TestMergeCoordinatorSurfacePathVarsHasCommandOnInvestigate(t *testing.T) {
 	vars := map[string]any{}
 	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
@@ -68,15 +30,12 @@ func TestMergeCoordinatorSurfacePathVarsHasListDirOnInvestigate(t *testing.T) {
 	if !vars["profile_has_command"].(bool) {
 		t.Fatalf("profile_has_command = %v want true on implement_investigate", vars["profile_has_command"])
 	}
-	if vars["profile_has_list_dir"].(bool) {
-		t.Fatalf("profile_has_list_dir = %v want false on implement_investigate floor", vars["profile_has_list_dir"])
-	}
 	vars = map[string]any{}
 	if err := prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{Loaded: map[string]bool{"jq_edit": true}}); err != nil {
 		t.Fatalf("MergeCoordinatorSurfacePathVars: %v", err)
 	}
 	if !vars["profile_has_jq_edit"].(bool) {
-		t.Fatalf("profile_has_jq_edit = %v want true when jq_edit is loaded", vars["profile_has_jq_edit"])
+		t.Fatalf("profile_has_jq_edit = %v want true for mutating command even without a standalone schema", vars["profile_has_jq_edit"])
 	}
 }
 
@@ -138,5 +97,40 @@ func TestMergeCoordinatorSurfacePathVarsListsRequestableToolsWithSummaries(t *te
 		if row["name"] == "fetch_url" {
 			t.Fatal("a loaded tool leaves the requestable roster")
 		}
+	}
+}
+
+func TestRequestableCapabilitiesDistinguishInteractiveTerminalsFromFloorCommand(t *testing.T) {
+	vars := map[string]any{}
+	testutil.FailErr(t, "MergeCoordinatorSurfacePathVars", prompts.MergeCoordinatorSurfacePathVars(toolcontract.SurfaceImplementInvestigate, nil, vars, prompts.SurfaceTurn{}))
+	caps, _ := vars["requestable_capabilities"].([]string)
+	hasInteractiveTerminal := false
+	hasBrowserScreenshots := false
+	for _, c := range caps {
+		if c == "interactive terminal sessions and screen snapshots" {
+			hasInteractiveTerminal = true
+		}
+		if c == "browser pages and screenshots" {
+			hasBrowserScreenshots = true
+		}
+	}
+	if !hasInteractiveTerminal || !hasBrowserScreenshots {
+		t.Fatalf("implement_investigate requestable_capabilities = %v; expected interactive terminal and browser screenshot labels", caps)
+	}
+
+	both := prompts.RequestableCapabilities([]prompts.RequestableToolView{
+		{Name: "command", Role: "command"},
+		{Name: "terminal_open", Role: "command"},
+	})
+	if len(both) != 1 || both[0] != "commands and interactive terminal sessions" {
+		t.Fatalf("both command and terminal_open = %v", both)
+	}
+
+	bgOnly := prompts.RequestableCapabilities([]prompts.RequestableToolView{
+		{Name: "command_output", Role: "command"},
+		{Name: "command_stop", Role: "command"},
+	})
+	if len(bgOnly) != 1 || bgOnly[0] != "commands and background output" {
+		t.Fatalf("background command tools only = %v", bgOnly)
 	}
 }

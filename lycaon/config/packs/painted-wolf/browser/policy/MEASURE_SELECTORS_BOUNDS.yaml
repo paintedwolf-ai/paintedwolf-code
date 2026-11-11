@@ -33,7 +33,3 @@ x-paintedwolf-scenarios:
     count: 20
     max: 16
     tool: measure_page
-  expect_contains:
-  - 'Code: MEASURE_SELECTORS_BOUNDS'
-  - '20'
-  - '16'

@@ -237,7 +237,7 @@ func (f *programFixture) call(t *testing.T, ctx context.Context, source string) 
 	tc.Host.SessionOutputDir = t.TempDir()
 	tc.Identity.Agent, tc.Identity.ProjectID, tc.Identity.SessionID, tc.Identity.ToolCallID = "fixture", testdbseed.DefaultProjectID, f.session, callID
 	tc.Invocation.ID = parent.ID
-	return f.runtime.Run(ctx, args, tc)
+	return f.runtime.Run(ctx, "command", args, tc)
 }
 
 func (f *programFixture) executions(t *testing.T) map[string]string {

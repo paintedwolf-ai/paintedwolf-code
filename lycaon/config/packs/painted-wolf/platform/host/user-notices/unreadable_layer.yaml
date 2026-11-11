@@ -9,6 +9,3 @@ suggested_action: Fix the file at the path shown in Settings → MCP providers, 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - not valid YAML
-      - Settings

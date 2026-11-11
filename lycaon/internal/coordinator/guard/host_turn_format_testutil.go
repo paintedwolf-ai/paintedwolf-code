@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"sync"
 
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -42,6 +43,7 @@ func hostFinishOARPipeline() *oar.GuardPipeline {
 		}
 		p := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
 		p.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)
+		p.EnableAnchor(oar.AnchorCoordinatorMidTurnNote)
 		p.EnableAnchor(oar.AnchorCoordinatorPreInvoke)
 		p.EnableAnchor(oar.AnchorToolPreInvoke)
 		hostFinishPipeline = p
@@ -64,8 +66,12 @@ func FormatHostNoToolTurnReject(
 	batchTurn BatchTurnGuard,
 ) (string, bool) {
 	gc := oar.NewGuardContext()
+	var draft guidance.CloseoutDraft
+	if surface.SurfaceDeliversReport(surfaceID) {
+		draft = guidance.ParseCloseoutDraft(lastAssistant, citationmd.Options{})
+	}
 	ObserveCoordinatorHostNoToolTurn(
-		sess, history, lastAssistant, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
+		sess, history, lastAssistant, draft, turnTools, surfaceID, workersIdle, implState, batchTurn, gc,
 	)
 	return formatFirstOARBlock(gc, rejectFmt, oar.AnchorCoordinatorCloseoutCheck, oar.AnchorCoordinatorPreInvoke)
 }

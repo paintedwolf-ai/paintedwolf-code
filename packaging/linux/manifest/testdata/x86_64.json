@@ -11,6 +11,11 @@
       "size": 64
     },
     {
+      "path": "/opt/painted-wolf-code/bin/nativegen",
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64
+    },
+    {
       "path": "/opt/painted-wolf-code/bin/painted-wolf-code",
       "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
       "size": 64
@@ -90,6 +95,14 @@
     },
     {
       "path": "bin/bialy",
+      "kind": "file",
+      "mode": 493,
+      "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",
+      "size": 64,
+      "target": null
+    },
+    {
+      "path": "bin/nativegen",
       "kind": "file",
       "mode": 493,
       "sha256": "caa6f4f58ad3ed35afa011abfdb3ef06a7799b5545082b32685f75cc9c454fe8",

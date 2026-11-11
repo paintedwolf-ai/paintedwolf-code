@@ -44,12 +44,26 @@ export function ConfirmDestructiveDialog(props: DialogProps) {
               data-testid="confirm-destructive-dialog"
             >
               <header class="den-dialog__header" {...chromeProps()}>
-                <h2 id="confirm-destructive-title">{req.title}</h2>
+                <h2 id="confirm-destructive-title" data-testid="confirm-destructive-title">{req.title}</h2>
               </header>
               <For each={messageLines(req.message)}>
                 {(line) => <p class="den-dialog__hint">{line}</p>}
               </For>
               <footer class="den-dialog__footer">
+                <Show when={req.onOpenRunning} keyed>
+                  {(openRunning) => (
+                    <DenButton
+                      variant="ghost"
+                      data-testid="confirm-destructive-open-running"
+                      onClick={() => {
+                        props.onCancel();
+                        openRunning();
+                      }}
+                    >
+                      Open Running
+                    </DenButton>
+                  )}
+                </Show>
                 <DenButton
                   variant="ghost"
                   data-testid="confirm-destructive-cancel"

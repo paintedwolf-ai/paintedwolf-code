@@ -234,7 +234,7 @@ func TestUnderBudgetMaterializedWorkerRetainsGitAndCheckpointBases(t *testing.T)
 	if !found {
 		t.Fatalf("the worker's commit left the checkpoint: %v want %s", manifest.PrivateGit.Refs, workerCommit)
 	}
-	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
+	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 }
 
 // The materialized path is the default selector's: a worker reads its pristine base and never writes
@@ -250,7 +250,7 @@ func TestMaterializedWorkerIsDeniedWritesToItsPristineTree(t *testing.T) {
 	task := fixture.claim(t)
 	root := task.WorkspaceRoot
 	binding := &workspace.Binding{ID: task.ID, Root: root}
-	t.Cleanup(func() { _ = fixture.manager.DestroyWorkerWorkspace(binding) })
+	t.Cleanup(func() { _ = fixture.manager.DestroyWorkerWorkspace(t.Context(), binding) })
 	snap, _, ok := WorkerClaimWorkspaceState(task.ID)
 	if !ok || snap.Adapter.PreparationKind != adapter.PreparationMaterialized {
 		t.Fatalf("the default selector chose: ok=%v %+v", ok, snap.Adapter)
@@ -313,7 +313,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 	binding := &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}
 	t.Cleanup(func() {
 		if !destroyed {
-			_ = fixture.manager.DestroyWorkerWorkspace(binding)
+			_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), binding)
 		}
 	})
 	if snap.Readiness != claim.StateReady || snap.GitInit != claim.GitInitLazyPending {
@@ -390,7 +390,7 @@ func TestOrdinaryWorkerClaimThroughARealMountedViewToCompletion(t *testing.T) {
 		t.Fatalf("completion published no checkpoint of the three changes: published=%v entries=%v", published, captured)
 	}
 
-	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(binding))
+	testutil.FailErr(t, "destroy branch", fixture.manager.DestroyWorkerWorkspace(t.Context(), binding))
 	destroyed = true
 	if _, ok := consumer.LookupBranchEngine(root); ok {
 		t.Fatal("settlement left the engine registered")
@@ -567,9 +567,9 @@ func TestCompletionPublishesEachWorkerIntoTheRecoveryStoreAndDestroyDropsItsRete
 		}
 	}
 
-	testutil.FailErr(t, "destroy first", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: first.ID, Root: first.WorkspaceRoot}))
+	testutil.FailErr(t, "destroy first", fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: first.ID, Root: first.WorkspaceRoot}))
 	t.Cleanup(func() {
-		_ = fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: second.ID, Root: second.WorkspaceRoot})
+		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: second.ID, Root: second.WorkspaceRoot})
 	})
 	if _, err := coordinator.LoadWorkerJournal(first.ID); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("destroy kept the journal: %v", err)
@@ -606,7 +606,7 @@ func TestDestroySettlesARecordedWriterByItsIdentity(t *testing.T) {
 		t.Fatalf("writer not recorded: ok=%v %+v", ok, identity)
 	}
 
-	testutil.FailErr(t, "destroy", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
+	testutil.FailErr(t, "destroy", fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 	<-waited
 	if _, ok, err := coordinator.LoadMountIdentity(task.ID, task.ID); err != nil || ok {
 		t.Fatalf("settled identity remains: ok=%v err=%v", ok, err)
@@ -617,7 +617,7 @@ func TestRecordingARepeatedWriterDropsTheOnesThatEnded(t *testing.T) {
 	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
 	task := fixture.claim(t)
 	t.Cleanup(func() {
-		_ = fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
+		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
 	})
 	record := workspace.BranchProcessRecorder(task.WorkspaceRoot)
 	for range 3 {
@@ -638,7 +638,7 @@ func TestEngineLaunchesInAViewAreRecordedLikeCommands(t *testing.T) {
 	fixture := newLayeredWorkerFixture(t, fixtureMountedSelector())
 	task := fixture.claim(t)
 	t.Cleanup(func() {
-		_ = fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
+		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot})
 	})
 	view, ok := workspace.LookupBranchClaimedView(task.WorkspaceRoot)
 	if !ok {
@@ -722,5 +722,5 @@ func TestAWorkerRepositoryIsPrivateAndLeavesTheCheckpoint(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(fixture.source, "nested")); !errors.Is(err, fs.ErrNotExist) {
 		t.Fatalf("nested repository reached the source: %v", err)
 	}
-	testutil.FailErr(t, "destroy", fixture.manager.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
+	testutil.FailErr(t, "destroy", fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}))
 }

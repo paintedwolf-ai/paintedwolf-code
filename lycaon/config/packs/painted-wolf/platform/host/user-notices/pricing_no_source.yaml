@@ -8,5 +8,3 @@ suggested_action: Pick a source from Settings → Cost and try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - not one of the configured

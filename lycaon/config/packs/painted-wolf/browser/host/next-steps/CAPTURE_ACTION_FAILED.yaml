@@ -1,0 +1,3 @@
+steps:
+  - tool: "measure_page"
+    say: "{{ call }} reports what covers or clips the target."

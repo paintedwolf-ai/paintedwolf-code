@@ -1,0 +1,14 @@
+steps:
+  - when: "paintedwolf.workspace_image_supported"
+    tool: "view_image"
+    args:
+      path: "{{ paintedwolf.path }}"
+    say: "Use {{ call }} to inspect this asset, then assess the returned evidence."
+    or:
+      - program: ["stat", "{{ paintedwolf.path }}"]
+        complete: true
+        say: "Use {{ call }} if metadata answers the question."
+  - when: "!paintedwolf.workspace_image_supported"
+    program: ["stat", "{{ paintedwolf.path }}"]
+    complete: true
+    say: "Use {{ call }} if metadata answers the question."

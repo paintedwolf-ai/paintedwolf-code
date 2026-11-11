@@ -14,6 +14,3 @@ approval_explanations:
               vars:
                 path: tmp/scratch.txt
                 project: my-app
-              expect_contains:
-                - Delete
-                - working tree

@@ -9,6 +9,6 @@ import "testing"
 // neither a path conversion nor evidence of a successful read.
 func TestNativeEntryPreservesRawFilesystemOperandBytes(t *testing.T) {
 	for name, path := range map[string]string{"ff": "input\xff", "fe": "input\xfe", "replacement_scalar": "input\ufffd"} {
-		t.Run(name, func(t *testing.T) { nativeReadAdmissionFixture(t, path) })
+		t.Run(name, func(t *testing.T) { nativeReadAdmissionFixture(t, path, "command") })
 	}
 }

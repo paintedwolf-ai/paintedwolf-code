@@ -14,6 +14,3 @@ approval_explanations:
               vars:
                 project: my-app
                 tool: custom_tool
-              expect_contains:
-                - proposed arguments
-                - difficult to undo

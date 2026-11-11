@@ -13,6 +13,7 @@ type grepFileEvent struct {
 	stderr  bool
 	mapping *toolcontract.StreamSourceMapping
 	pins    []toolcontract.ExecutionRevision
+	release func()
 }
 
 type grepEventSink struct {
@@ -108,6 +109,9 @@ func (w *grepFileWriter) RecordSourceMapping(mapping toolcontract.StreamSourceMa
 }
 
 func (p *grepFiles) apply(event grepFileEvent, base int64) error {
+	if event.release != nil {
+		defer event.release()
+	}
 	inv := p.run.inv
 	for _, pin := range event.pins {
 		if err := inv.recordPin(pin); err != nil {
@@ -121,6 +125,9 @@ func (p *grepFiles) apply(event grepFileEvent, base int64) error {
 		return inv.out.mappings.RecordSourceMapping(mapping)
 	}
 	if event.stderr {
+		if err := inv.out.drain(); err != nil {
+			return err
+		}
 		n, err := inv.stderr.Write(event.bytes)
 		if err == nil && n != len(event.bytes) {
 			err = io.ErrShortWrite

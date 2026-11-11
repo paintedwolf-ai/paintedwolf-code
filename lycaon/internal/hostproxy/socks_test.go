@@ -29,7 +29,7 @@ func TestSOCKSAuthenticatesAndCarriesOnlyPinnedNumericAddressThroughShortWrites(
 			address := netip.MustParseAddrPort(literal)
 			client, server := net.Pipe()
 			defer func() { _ = client.Close() }()
-			testutil.FailErr(t, "bound SOCKS client", client.SetDeadline(time.Now().Add(time.Second)))
+			testutil.FailErr(t, "bound SOCKS client", client.SetDeadline(time.Now().Add(testutil.Timeout(time.Minute))))
 			done := make(chan error, 1)
 			go func() {
 				defer func() { _ = server.Close() }()
@@ -97,7 +97,7 @@ func TestSOCKSAuthenticatesAndCarriesOnlyPinnedNumericAddressThroughShortWrites(
 func TestSOCKSRefusesAuthDowngradeMalformedAndDeniedReplies(t *testing.T) {
 	for _, response := range [][]byte{{5, 0}, {4, 2}, {5, 255}} {
 		client, server := net.Pipe()
-		testutil.FailErr(t, "bound malformed SOCKS", client.SetDeadline(time.Now().Add(time.Second)))
+		testutil.FailErr(t, "bound malformed SOCKS", client.SetDeadline(time.Now().Add(testutil.Timeout(time.Minute))))
 		go func() {
 			defer func() { _ = server.Close() }()
 			var greeting [3]byte
@@ -112,7 +112,7 @@ func TestSOCKSRefusesAuthDowngradeMalformedAndDeniedReplies(t *testing.T) {
 	}
 	for _, reply := range [][]byte{{5, 2, 0, 1}, {4, 0, 0, 1}, {5, 0, 1, 1}, {5, 0, 0, 9}} {
 		client, server := net.Pipe()
-		testutil.FailErr(t, "bound denied SOCKS", client.SetDeadline(time.Now().Add(time.Second)))
+		testutil.FailErr(t, "bound denied SOCKS", client.SetDeadline(time.Now().Add(testutil.Timeout(time.Minute))))
 		go func() {
 			defer func() { _ = server.Close() }()
 			var greeting [3]byte

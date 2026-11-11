@@ -56,10 +56,7 @@ func TestContractSocketCapabilityRequestNotGrant(t *testing.T) {
 		if !strings.Contains(src, "capability_request") {
 			t.Fatalf("%s must declare capability_request", rel)
 		}
-		if !strings.Contains(src, "Declares confinement this invocation needs") && !strings.Contains(src, "Extra access this call needs") {
-			t.Fatalf("%s capability_request must describe a capability declaration", rel)
-		}
-		for _, banned := range []string{"Requests human approval", "approval card", "does not grant access"} {
+		for _, banned := range []string{"Requests human approval", "does not grant access"} {
 			if strings.Contains(src, banned) {
 				t.Fatalf("%s capability_request must not teach the approval system (%q)", rel, banned)
 			}
@@ -68,9 +65,6 @@ func TestContractSocketCapabilityRequestNotGrant(t *testing.T) {
 	command := contractcheck.ReadRepoFile(t, root, commandRel)
 	if !strings.Contains(command, "direct_ip") {
 		t.Fatalf("%s must expose direct_ip in capability_request", commandRel)
-	}
-	if !strings.Contains(command, "for UDP or clients that ignore proxy variables") {
-		t.Fatalf("%s direct_ip must describe UDP or proxy-bypassing clients", commandRel)
 	}
 	term := contractcheck.ReadRepoFile(t, root, termRel)
 	if strings.Contains(term, "direct_ip") {

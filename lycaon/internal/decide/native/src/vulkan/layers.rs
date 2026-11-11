@@ -86,7 +86,14 @@ impl LayerNorm {
     }
 
     pub fn forward(&self, x: Tensor<3>) -> Tensor<3> {
-        module::layer_norm(x, self.weight.clone(), self.bias.clone(), self.eps)
+        let dtype = x.dtype();
+        // Squared activations can exceed the half-precision range.
+        module::layer_norm(
+            x.cast(DType::F32),
+            self.weight.clone().cast(DType::F32),
+            self.bias.clone().map(|bias| bias.cast(DType::F32)),
+            self.eps,
+        ).cast(dtype)
     }
 }
 
@@ -106,4 +113,29 @@ pub(super) fn merge(x: Tensor<4>) -> Tensor<3> {
 pub(super) fn padding_bias(mask: &Tensor<2>, fill: f64, dtype: DType) -> Tensor<4> {
     let [b, l] = mask.dims();
     ((mask.clone().neg() + 1.0) * fill).reshape([b, 1, 1, l]).cast(dtype)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn half_precision_normalization_preserves_large_activation_variance() {
+        let gpu = super::super::test_gpu();
+        let device = &gpu.device;
+        let values: Vec<f32> = (0..1536).map(|i| if i % 2 == 0 { 1000.0 } else { -1000.0 }).collect();
+        for dtype in [DType::F16, DType::F32] {
+            let layer = LayerNorm {
+                weight: Tensor::from_data(TensorData::new(vec![1.0f32; 768], [768]), (device, dtype)),
+                bias: None,
+                eps: 1e-5,
+            };
+            let input = Tensor::from_data(TensorData::new(values.clone(), [1, 2, 768]), (device, dtype));
+            let output = layer.forward(input).cast(DType::F32).into_data().try_to_vec::<f32>().unwrap();
+            for (i, value) in output.iter().enumerate() {
+                let expected = if i % 2 == 0 { 1.0 } else { -1.0 };
+                assert!((value - expected).abs() < 0.002, "{dtype:?} at {i}: {value}");
+            }
+        }
+    }
 }

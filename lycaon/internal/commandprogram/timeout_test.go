@@ -251,3 +251,38 @@ func TestFormatTimesMatchesBash(t *testing.T) {
 		t.Errorf("negative interval = %q, want %q", got, want)
 	}
 }
+
+// A launch's bound is the earliest of a call deadline and every enclosing timeout.
+func TestRemainingBoundTakesTheEarliestBound(t *testing.T) {
+	clock := newManualClock()
+	ctx := t.Context()
+	if _, bounded := RemainingBound(ctx); bounded {
+		t.Fatal("no deadline and no timeout reported a bound")
+	}
+	want := func(step string, ctx context.Context, remaining time.Duration) {
+		t.Helper()
+		got, bounded := RemainingBound(ctx)
+		if !bounded || got != remaining {
+			t.Fatalf("%s: remaining = %v (bounded %v), want %v", step, got, bounded, remaining)
+		}
+	}
+	outer := withTimeoutBound(ctx, clock, 10*time.Second)
+	want("one timeout", outer, 10*time.Second)
+	want("a longer nested timeout keeps the outer", withTimeoutBound(outer, clock, time.Hour), 10*time.Second)
+	want("a shorter nested timeout wins", withTimeoutBound(outer, clock, 2*time.Second), 2*time.Second)
+
+	longCall, cancelLong := context.WithDeadline(ctx, time.Now().Add(time.Hour))
+	defer cancelLong()
+	want("a timeout before the call's deadline", withTimeoutBound(longCall, clock, 10*time.Second), 10*time.Second)
+
+	shortCall, cancelShort := context.WithDeadline(ctx, time.Now().Add(time.Minute))
+	defer cancelShort()
+	for step, bound := range map[string]context.Context{"the call's deadline alone": shortCall, "the call's deadline before a timeout": withTimeoutBound(shortCall, clock, time.Hour)} {
+		if got, bounded := RemainingBound(bound); !bounded || got <= 0 || got > time.Minute {
+			t.Fatalf("%s: remaining = %v (bounded %v)", step, got, bounded)
+		}
+	}
+
+	clock.advance(time.Minute)
+	want("an expired timeout has nothing left", outer, 0)
+}

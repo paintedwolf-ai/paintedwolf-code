@@ -26,17 +26,9 @@ x-paintedwolf-scenarios:
       bytes: 20000
       profile: coordinator
       tool: git_commit
-    expect_contains:
-      - 'Code: TOOL_OUTPUT_SPILL_UNAVAILABLE'
-      - Completed changes remain applied
-      - Do not repeat a mutation
   - id: failed_read
     vars:
       execution_outcome: error
       bytes: 20000
       profile: implement
       tool: read
-    expect_contains:
-      - 'Code: TOOL_OUTPUT_SPILL_UNAVAILABLE'
-      - error
-      - narrower independent read

@@ -45,37 +45,3 @@ func extractSection(body, heading string) string {
 	}
 	return strings.TrimSpace(rest)
 }
-
-func TestRenderedOutputHasRequiredHeadings(t *testing.T) {
-	contractcheck.ActivateStockCatalog(t)
-	prompts.ResetPersonaContractCache()
-	cfg, err := prompts.LoadPersonaContract()
-	contractcheck.FailErr(t, "prompts.LoadPersonaContract failed", err)
-	engine := contractPersonaEngine(t)
-	for _, id := range cfg.WorkerAgentIDs() {
-		got, err := prompts.RenderPersona(context.Background(), engine, id, nil)
-		if err != nil {
-			t.Fatalf("agent %q: %v", id, err)
-		}
-		for _, heading := range cfg.RequiredHeadingsRendered {
-			// Required headings appear exactly once.
-			switch n := countHeadingLines(got, heading); {
-			case n == 0:
-				t.Fatalf("agent %q missing %s", id, heading)
-			case n > 1:
-				t.Fatalf("agent %q renders %s %d times — drop the duplicate; the archetype/partial already provides it", id, heading, n)
-			}
-		}
-	}
-}
-
-// countHeadingLines counts exact heading lines.
-func countHeadingLines(body, heading string) int {
-	n := 0
-	for _, line := range strings.Split(body, "\n") {
-		if strings.TrimRight(line, " \t") == heading {
-			n++
-		}
-	}
-	return n
-}

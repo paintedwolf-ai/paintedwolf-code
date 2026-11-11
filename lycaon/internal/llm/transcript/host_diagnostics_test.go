@@ -14,6 +14,7 @@ func TestOversizedHostFeedbackRetainsDiagnosticFacts(t *testing.T) {
 		tool, code string
 		details    map[string]any
 	}{
+		{"command", "COMMAND_SYNTAX_INVALID", map[string]any{"diagnostic_top_level": true, "parser_kind": "unclosed_quote", "parser_message": "reached EOF without closing quote", "source_line": 2, "source_column": 7}},
 		{"write", "TOOL_ARGS_INVALID", map[string]any{"field": "payload", "expected_type": "object", "json_malformed": true, "json_unexpected_token_at": 17}},
 		{"edit", "TEXT_WRITE_CONFLICT", map[string]any{"path": "src/app.go", "text_base_changed": true}},
 		{"browser", "CAPTURE_ACTION_FAILED", map[string]any{"index": 2, "completed_actions": []any{map[string]any{"index": 0, "type": "click"}}, "interactive_truncated": true}},
@@ -69,12 +70,12 @@ func TestHostDiagnosticsBoundEncodedValuesAndPreserveNumbers(t *testing.T) {
 	details := map[string]any{
 		"reason": strings.Repeat("\x00", 300),
 		"field":  "payload", "revision": json.Number("9007199254740993"), "issues": rows,
-		"replacement_calls": []any{map[string]any{"tool": "write", "args": map[string]any{"content": "must stay whole"}}},
+		"entries": []any{map[string]any{"tool": "write", "args": map[string]any{"content": "must stay whole"}}},
 	}
 	got := boundedHostDiagnostics(details, maxHostDiagnosticBytes)
 	raw, err := json.Marshal(got)
 	testutil.FailErr(t, "encode diagnostics", err)
-	if len(raw) > maxHostDiagnosticBytes || got["reason"] != nil || got["replacement_calls"] != nil || got["field"] != "payload" {
+	if len(raw) > maxHostDiagnosticBytes || got["reason"] != nil || got["entries"] != nil || got["field"] != "payload" {
 		t.Fatalf("bounds or identity lost: %s", raw)
 	}
 	if got["revision"] != json.Number("9007199254740993") {

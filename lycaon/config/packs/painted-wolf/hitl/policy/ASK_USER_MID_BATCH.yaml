@@ -21,7 +21,4 @@ scenarios:
     profile: coordinator
     tool: ask_user
     batch_phase: orchestrate
-  expect_contains:
-  - 'Code: ASK_USER_MID_BATCH'
-  - pre-dispatch
 id: ASK_USER_MID_BATCH

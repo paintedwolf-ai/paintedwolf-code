@@ -16,11 +16,13 @@ func TestAppendTurnCloseoutNudge(t *testing.T) {
 	var appended []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
-			TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
-				return HostNudge{
-					Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
-					SignalID: "turn.closeout",
-				}
+			CloseoutTrackingDeps: CloseoutTrackingDeps{
+				TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
+					return HostNudge{
+						Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
+						SignalID: "turn.closeout",
+					}
+				},
 			},
 		},
 		Projection: ProjectionDeps{
@@ -53,11 +55,13 @@ func TestAppendTurnCloseoutNudgeDedupsVerbatim(t *testing.T) {
 	var appended []api.Message
 	loop := NewPromptLoopForTest(PromptLoopDeps{
 		Closeout: CloseoutDeps{
-			TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
-				return HostNudge{
-					Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
-					SignalID: "turn.closeout",
-				}
+			CloseoutTrackingDeps: CloseoutTrackingDeps{
+				TurnCloseoutNudge: func(_ context.Context, _ *api.Session, _ string, cause TurnCloseoutCause) HostNudge {
+					return HostNudge{
+						Content:  "This is your final turn — " + cause.Text() + ". Give the user a closing summary.",
+						SignalID: "turn.closeout",
+					}
+				},
 			},
 		},
 		Projection: ProjectionDeps{

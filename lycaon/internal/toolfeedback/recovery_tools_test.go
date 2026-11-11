@@ -2,8 +2,12 @@ package toolfeedback
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -17,26 +21,25 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolvocab"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 	bp := stockBlockPlane(t)
-	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"read": true, "list_dir": true, "grep": true}}}, toolvocab.Provenance{})
-	testutil.FailErr(t, "load recovery vocabulary", err)
 	for _, tc := range []struct {
 		name    string
 		offered []string
 		listing bool
 	}{
-		{"listing offered", []string{"read", "grep", "list_dir"}, true},
-		{"narrow profile", []string{"read", "grep"}, false},
+		{"native programs offered", []string{"command"}, true},
+		{"command missing", []string{"recall"}, false},
 		{"no tools offered", []string{}, false},
 		{"non-model caller", nil, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := t.Context()
 			if tc.offered != nil {
-				ctx = tools.WithRecoveryTools(ctx, tc.offered)
+				ctx = tools.WithCallReach(ctx, toolreach.Offered(tc.offered).WithPrograms(func(string) bool { return true }))
 			}
 			// Producer metadata cannot invent an offered recovery tool.
 			err := bp.RejectObservation(ctx, "read", "plan_write_only", nil, &toolrejection.ToolReject{
@@ -49,13 +52,13 @@ func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 			if !ok || refusal.Copy == nil {
 				t.Fatalf("missing evaluated recovery: %v", err)
 			}
-			calls := toolvocab.NamedTools(catalog, refusal.Copy["fix"])
-			if got := slices.Contains(calls, "list_dir"); got != tc.listing {
+			calls, _ := refusal.Facts.FeedbackFor("READ_IS_DIRECTORY").Details[api.ToolFeedbackNextCalls].([]toolreach.Call)
+			if got := len(calls) > 0; got != tc.listing {
 				t.Fatalf("listing recommendation = %v, want %v: %v", got, tc.listing, calls)
 			}
 			for _, call := range calls {
-				if !slices.Contains(tc.offered, call) {
-					t.Errorf("recovery names unoffered tool %q", call)
+				if !slices.Contains(tc.offered, call.Tool) {
+					t.Errorf("recovery offers unoffered call %+v", call)
 				}
 			}
 		})
@@ -64,7 +67,7 @@ func TestRecoveryCopyUsesFrozenOfferedTools(t *testing.T) {
 
 func TestRecoveryFactsAreLazyAndKeepTheirRequestSnapshot(t *testing.T) {
 	names := []string{"read", "list_dir"}
-	ctx := tools.WithRecoveryTools(t.Context(), names)
+	ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 	names[1] = "task"
 	gc := oar.NewGuardContext()
 	tools.RegisterRecoveryFacts(ctx, gc)
@@ -89,7 +92,7 @@ func TestLocalFetchRecoveryOnlyOffersCurrentCaptureTools(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, []sandbox.ToolProfile{{ID: "fixture", Tools: map[string]bool{"capture_page": true, "measure_page": true}}}, toolvocab.Provenance{})
 	testutil.FailErr(t, "load browser recovery vocabulary", err)
 	for _, offered := range [][]string{nil, {"capture_page"}, {"measure_page"}, {"capture_page", "measure_page"}} {
-		ctx := tools.WithRecoveryTools(t.Context(), offered)
+		ctx := tools.WithCallReach(t.Context(), toolreach.Offered(offered))
 		err := bp.RejectObservation(ctx, "fetch_url", "fixture", nil, &toolrejection.ToolReject{Code: "FETCH_URL_BLOCKED", Data: map[string]any{"detail": "private address", "can_capture_page": true, "can_measure_page": true}})
 		refusal, ok := guidance.RefusalFromError(err)
 		if !ok || refusal.Copy == nil {
@@ -116,7 +119,7 @@ func TestUnmatchedToolDiscoveryUsesCurrentPageFacts(t *testing.T) {
 		{"legacy", "", false}, {"last page", "no_match", false}, {"more pages", "no_match", true},
 	} {
 		t.Run(state.name, func(t *testing.T) {
-			ctx := tools.WithRecoveryTools(t.Context(), []string{"request_tools"})
+			ctx := tools.WithCallReach(t.Context(), toolreach.Offered([]string{"request_tools"}))
 			err := bp.RejectObservation(ctx, "request_tools", "fixture", nil, &toolrejection.ToolReject{
 				Code: "TOOL_REQUEST_UNMATCHED", Data: map[string]any{"need": "dispatch a worker", "available": []string{"task"}, "tool_discovery_status": state.status, "tool_discovery_has_more": state.more},
 			})
@@ -199,7 +202,7 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 					}
 					ctx := t.Context()
 					if mask >= 0 {
-						ctx = tools.WithRecoveryTools(ctx, offered)
+						ctx = tools.WithCallReach(ctx, toolreach.Offered(offered))
 					}
 					var first map[string]string
 					for _, spoof := range []bool{false, true} {
@@ -229,7 +232,8 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 						})
 						for _, name := range names {
 							loadable := slices.Contains(offered, "request_tools") && (vars["tool_loadable"] == true || vars[name+"_loadable"] == true)
-							if !slices.Contains(offered, name) && !loadable && slices.Contains(words, name) {
+							// The refused call is the rule's subject, not a remedy.
+							if name != tool && !slices.Contains(offered, name) && !loadable && slices.Contains(words, name) {
 								t.Errorf("%s names unavailable %s with offered %v: %s", field, name, offered, first[field])
 							}
 						}
@@ -259,7 +263,7 @@ func TestRecoveryAvailabilityFactsMatchFrozenSchemas(t *testing.T) {
 				if offered {
 					names[0] = name
 				}
-				ctx := tools.WithRecoveryTools(t.Context(), names)
+				ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 				names[0] = "later_tool"
 				gc := oar.NewGuardContext()
 				gc.ObservationData = map[string]any{key: !offered}
@@ -289,12 +293,12 @@ func recoveryHostFacts(t *testing.T) []oar.HostFactDecl {
 func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T) {
 	bp := stockBlockPlane(t)
 	for _, supported := range []bool{false, true} {
-		for _, offered := range [][]string{nil, {}, {"view_image"}, {"stat"}, {"view_image", "stat"}} {
+		for _, offered := range [][]string{nil, {}, {"view_image"}, {"command"}, {"view_image", "command"}} {
 			for _, image := range []bool{false, true} {
 				t.Run(fmt.Sprintf("supported=%v/offered=%v/image=%v", supported, offered, image), func(t *testing.T) {
 					ctx := t.Context()
 					if offered != nil {
-						ctx = tools.WithRecoveryTools(ctx, offered)
+						ctx = tools.WithCallReach(ctx, toolreach.Offered(offered).WithPrograms(func(string) bool { return true }))
 					}
 					err := bp.RejectObservation(ctx, "read", "fixture", nil, &toolrejection.ToolReject{Code: "READ_BINARY_DENIED", Data: map[string]any{
 						"path": "asset", "bytes": 4, "reason": "binary", "is_image": image, "workspace_image_supported": supported,
@@ -306,17 +310,79 @@ func TestBinaryReadRecoveryRequiresOfferedViewerAndSupportedFormat(t *testing.T)
 					}
 					fix := refusal.Copy["fix"]
 					viewer := supported && slices.Contains(offered, "view_image")
-					if strings.Contains(fix, "Use view_image") != viewer {
+					if strings.Contains(fix, "`view_image(") != viewer {
 						t.Fatalf("incorrect viewer remedy: %s", fix)
 					}
-					if strings.Contains(fix, "Use stat") != (!viewer && slices.Contains(offered, "stat")) {
-						t.Fatalf("incorrect metadata remedy: %s", fix)
-					}
-					if strings.Contains(fix, "perceive") || !strings.Contains(fix, "unresolved content requirement") {
+					if strings.Contains(fix, "perceive") {
 						t.Fatalf("recovery overclaimed evidence: %s", fix)
 					}
 				})
 			}
 		}
+	}
+}
+
+func TestNextStepsRulesRenderNonEmptyRemediesWithoutReach(t *testing.T) {
+	_, file, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("runtime.Caller failed")
+	}
+	repoRoot := filepath.Join(filepath.Dir(file), "..", "..", "..")
+	loader, err := oar.NewLoader(filepath.Join(repoRoot, "schemas"))
+	testutil.FailErr(t, "oar.NewLoader", err)
+	rs, err := loader.LoadEffectivePolicy()
+	testutil.FailErr(t, "LoadEffectivePolicy", err)
+
+	cfg, err := guidance.LoadHintConfigStock()
+	testutil.FailErr(t, "load recovery catalogue", err)
+	checked := 0
+	for _, code := range slices.Sorted(maps.Keys(cfg.HintCodes)) {
+		entry := cfg.HintCodes[code]
+		rule, ok := rs.Get(code)
+		if !ok || rule == nil || rule.NextSteps == nil {
+			continue
+		}
+		checked++
+		for _, scenario := range entry.Scenarios {
+			t.Run(code+"/"+scenario.ID, func(t *testing.T) {
+				vars := guidance.ScenarioVars(entry, scenario)
+				gc := oar.NewGuardContext()
+				gc.ObservationData = maps.Clone(vars)
+				tool, _ := vars["tool"].(string)
+				if tool == "" && len(entry.Tools) > 0 {
+					tool = entry.Tools[0]
+				}
+				gc.ObserveToolCall(tool, nil)
+				steps := oar.ResolveNextSteps(rule, gc)
+				facts := oarcopy.FactsFromData(vars)
+				withPlaceholder := maps.Clone(facts)
+				withPlaceholder[oar.NextStepsFact] = "NEXT_STEP_PLACEHOLDER"
+				facts[oar.NextStepsFact] = steps.Text
+				for _, field := range []struct {
+					name string
+					raw  string
+				}{
+					{"fix", rule.Copy.Fix},
+					{"instead", rule.Copy.Instead},
+				} {
+					if strings.TrimSpace(field.raw) == "" {
+						continue
+					}
+					if !strings.Contains(oarcore.RenderCopy(field.raw, withPlaceholder), "NEXT_STEP_PLACEHOLDER") {
+						continue
+					}
+					got := strings.TrimSpace(oarcore.RenderCopy(field.raw, facts))
+					if got == "" {
+						t.Fatalf("%s/%s: %s rendered empty when reach is empty", code, scenario.ID, field.name)
+					}
+					if strings.HasPrefix(got, "Then ") || strings.HasPrefix(got, "Otherwise ") {
+						t.Fatalf("%s/%s: %s starts with dangling connector when reach is empty: %q", code, scenario.ID, field.name, got)
+					}
+				}
+			})
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no next-steps rule was checked")
 	}
 }

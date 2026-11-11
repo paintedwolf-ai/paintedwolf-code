@@ -190,17 +190,17 @@ func TestDirectoryMoveIsJournaledAndReversible(t *testing.T) {
 	}
 }
 
-func TestChownNumericForms(t *testing.T) {
+func TestChownNamesTheHostsOwnIdentity(t *testing.T) {
 	h := newHarness(t, map[string]string{"f.txt": "f\n"})
 	uid, gid := os.Getuid(), os.Getgid()
-	for _, spec := range []string{fmt.Sprint(uid), fmt.Sprintf("%d:%d", uid, gid)} {
+	for _, spec := range []string{fmt.Sprint(uid), fmt.Sprintf("%d:%d", uid, gid), "current", "current:current"} {
 		if r := h.run("", "chown", spec, "f.txt"); r.err != nil || r.result.Status != 0 {
 			t.Fatalf("chown %s: %+v %v", spec, r.result, r.err)
 		}
 	}
-	for _, spec := range []string{"root", "1:wheel", ":1"} {
+	for _, spec := range []string{"no-such-user-here", "current:no-such-group-here", ":1", "1:"} {
 		if r := h.run("", "chown", spec, "f.txt"); r.result.Terminal != toolcontract.ProducerRefused {
-			t.Fatalf("chown %s accepted a non-numeric form: %+v", spec, r.result)
+			t.Fatalf("chown %s was admitted: %+v", spec, r.result)
 		}
 	}
 	if r := h.run("", "chown", fmt.Sprint(uid+12345), "f.txt"); r.result.Terminal != toolcontract.ProducerRefused {

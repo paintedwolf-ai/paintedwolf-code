@@ -158,8 +158,8 @@ type MaterializeProgress struct {
 	GitReposBuilt int    `json:"git_repos_built"`
 }
 
-// MaterializeStats counts what building a view's two trees did. Entries and files count the source
-// once; CopiedBytes counts every byte written, so a byte copy of both trees counts its content twice.
+// MaterializeStats counts what building a view's two trees did. Entries count the source once; file
+// and byte counts cover both trees, so each source file is cloned or copied twice.
 type MaterializeStats struct {
 	Entries          int64 `json:"entries"`
 	ClonedFiles      int64 `json:"cloned_files"`
@@ -167,6 +167,9 @@ type MaterializeStats struct {
 	CopiedFiles      int64 `json:"copied_files"`
 	CopiedBytes      int64 `json:"copied_bytes"`
 	ContentBytesRead int64 `json:"content_bytes_read"`
+	// UnreadableEntries could not be read as this user. The worker could not read them either, so
+	// they are absent from its trees rather than a failed preparation.
+	UnreadableEntries int64 `json:"unreadable_entries,omitempty"`
 }
 
 // SeedGitRepoSpec describes a source repository (.git dir or gitlink) discovered during seed traversal.
@@ -227,6 +230,9 @@ type PrepareRequest struct {
 	SelectionFacts SelectionFacts
 	ProgressFn     func(MaterializeProgress)
 	SeedGitInit    SeedGitInitializer
+	// HiddenPaths are engine storage a broad root contains, such as the state folder. No view shows
+	// them and no materialization copies them.
+	HiddenPaths []string
 	// CloneFile replaces the host clone primitive for a fixture.
 	CloneFile       FileCloner
 	QuiesceHook     func(ctx context.Context, viewID string) error

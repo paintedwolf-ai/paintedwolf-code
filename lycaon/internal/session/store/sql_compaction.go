@@ -20,7 +20,7 @@ type compactionProjection struct {
 }
 
 // PutCompactionView atomically publishes a fresh view and its next generation.
-func (s *SQL) PutCompactionView(ctx context.Context, sessionID string, view CompactionView) error {
+func (s *sqlCompaction) PutCompactionView(ctx context.Context, sessionID string, view CompactionView) error {
 	if len(view.Messages) > messageview.MaxCompactionRows {
 		return fmt.Errorf("compaction projection exceeds its row budget")
 	}
@@ -28,16 +28,17 @@ func (s *SQL) PutCompactionView(ctx context.Context, sessionID string, view Comp
 	if err != nil {
 		return err
 	}
+	core := s.core
 	var oldRefs []messageSpillRef
 	previousGeneration := 0
-	err = s.updateSession(ctx, sessionID, func(sess *api.Session) {
+	err = updateSession(ctx, core, sessionID, func(sess *api.Session) {
 		previousGeneration = sess.CompactionGeneration
 		sess.CompactionGeneration = view.Generation
 	}, nil, func(tx *sql.Tx) error {
 		if view.Generation != previousGeneration+1 {
 			return fmt.Errorf("compaction generation changed")
 		}
-		qtx := s.queries.WithTx(tx)
+		qtx := core.queries.WithTx(tx)
 		if err := validateCompactionSource(ctx, qtx, sessionID, view); err != nil {
 			return err
 		}
@@ -74,7 +75,7 @@ func (s *SQL) PutCompactionView(ctx context.Context, sessionID string, view Comp
 	if err != nil {
 		return err
 	}
-	s.reclaimUnreferencedSpills(ctx, oldRefs)
+	reclaimUnreferencedSpills(ctx, core, oldRefs)
 	return nil
 }
 
@@ -109,11 +110,11 @@ func validateCompactionSource(ctx context.Context, queries *db.Queries, sessionI
 }
 
 // GetCompactionView returns the session's compacted view, ok=false when none exists.
-func (s *SQL) GetCompactionView(ctx context.Context, sessionID string) (*CompactionView, bool, error) {
+func (s *sqlCompaction) GetCompactionView(ctx context.Context, sessionID string) (*CompactionView, bool, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, false, err
 	}
-	row, err := s.queries.GetCompactionView(ctx, sessionID)
+	row, err := s.core.queries.GetCompactionView(ctx, sessionID)
 	if db.IsNoRows(err) {
 		return nil, false, nil
 	}
@@ -147,8 +148,8 @@ func (s *SQL) GetCompactionView(ctx context.Context, sessionID string) (*Compact
 }
 
 // CompactionViewCurrent detects mutations at or below the view watermark.
-func (s *SQL) CompactionViewCurrent(ctx context.Context, sessionID string, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) (bool, error) {
-	err := validateCompactionSource(ctx, s.queries, sessionID, CompactionView{
+func (s *sqlCompaction) CompactionViewCurrent(ctx context.Context, sessionID string, coveredThroughOrd int64, coveredThroughID string, sourceSeq int64) (bool, error) {
+	err := validateCompactionSource(ctx, s.core.queries, sessionID, CompactionView{
 		CoveredThroughOrd: coveredThroughOrd, CoveredThroughID: coveredThroughID, SourceSeq: sourceSeq,
 	})
 	if errors.Is(err, errCompactionSourceChanged) {

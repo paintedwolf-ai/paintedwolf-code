@@ -69,8 +69,9 @@ func ValidateCallArguments(qualifiedName string, args, schema map[string]any, tc
 			}
 			diag := argdiag.Diagnose(schema, args, ValidateToolArgs)
 			data := map[string]any{
-				"reason": diag.Reason(err, args),
-				"tool":   qualifiedName,
+				"reason":               diag.Reason(err, args),
+				"tool":                 qualifiedName,
+				"argument_schema_tool": qualifiedName,
 			}
 			diag.AddFacts(data)
 			if required := argdiag.MissingRequiredSummary(invalid, schema, args); required != "" {

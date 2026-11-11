@@ -33,3 +33,23 @@ func TestRecordedBriefPreservesOpeningAndRejectsCorruptRows(t *testing.T) {
 		t.Fatal("brief returned without session")
 	}
 }
+
+func TestACBRF06BriefStoredWithoutWorkingSetYieldsTheSameRows(t *testing.T) {
+	const stored = `{"files":[{"path":"a.go","actor":"user","op":"write","at":"14:02 UTC","effects":2}],"other_files":3,"other_effects":4}`
+	s := New(briefRecords{records: map[string]string{"opening": stored}}, nil)
+	got := s.Recorded(t.Context(), &api.Session{ID: "session"})["opening"]
+	want := inject.SourceChangeFile{Path: "a.go", Actor: "user", Op: "write", At: "14:02 UTC", Effects: 2}
+	if len(got.Files) != 1 || got.Files[0] != want || got.OtherFiles != 3 || got.OtherEffects != 4 {
+		t.Fatalf("recorded brief = %+v", got)
+	}
+	if got.OtherMayIncludeWorkingSet() {
+		t.Fatal("a stored brief's counted files were outside the working set")
+	}
+	raw, err := json.Marshal(got)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if string(raw) != stored {
+		t.Fatalf("round trip = %s, want the stored bytes", raw)
+	}
+}

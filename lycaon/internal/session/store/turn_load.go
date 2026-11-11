@@ -21,9 +21,11 @@ const (
 	TurnLoadTriggerLookup = "lookup"
 	// TurnLoadTriggerToolEvent is the skill read a turn's first loadable tool call asked for.
 	TurnLoadTriggerToolEvent = "tool_event"
+	// TurnLoadTriggerVisibility records a changed continuation surface.
+	TurnLoadTriggerVisibility = "visibility"
 )
 
-// TurnLoadReceipt records one decision the local decision model was asked.
+// TurnLoadReceipt records selection and visibility changes.
 type TurnLoadReceipt struct {
 	ID        int64
 	SessionID string
@@ -71,7 +73,8 @@ func (r *TurnLoadReceipt) normalize() error {
 }
 
 // PutTurnLoadReceipt appends one receipt and returns it with its id.
-func (s *SQL) PutTurnLoadReceipt(ctx context.Context, r TurnLoadReceipt) (TurnLoadReceipt, error) {
+func (t *sqlTurnTelemetry) PutTurnLoadReceipt(ctx context.Context, r TurnLoadReceipt) (TurnLoadReceipt, error) {
+	s := t.core
 	if err := r.normalize(); err != nil {
 		return TurnLoadReceipt{}, err
 	}
@@ -114,7 +117,7 @@ func (s *SQL) PutTurnLoadReceipt(ctx context.Context, r TurnLoadReceipt) (TurnLo
 
 // ListTurnLoadReceiptsForTurns returns the receipts of the turns the given
 // user messages opened, in the order they were recorded.
-func (s *SQL) ListTurnLoadReceiptsForTurns(ctx context.Context, openingMessageIDs []string) ([]TurnLoadReceipt, error) {
+func (t *sqlTurnTelemetry) ListTurnLoadReceiptsForTurns(ctx context.Context, openingMessageIDs []string) ([]TurnLoadReceipt, error) {
 	ids := trimmedIDs(openingMessageIDs)
 	if len(ids) == 0 {
 		return []TurnLoadReceipt{}, nil
@@ -123,7 +126,7 @@ func (s *SQL) ListTurnLoadReceiptsForTurns(ctx context.Context, openingMessageID
 	for i, id := range ids {
 		keys[i] = db.NullString(id)
 	}
-	rows, err := s.queries.ListTurnLoadReceiptsForTurns(ctx, keys)
+	rows, err := t.core.queries.ListTurnLoadReceiptsForTurns(ctx, keys)
 	if err != nil {
 		return nil, err
 	}
@@ -132,8 +135,8 @@ func (s *SQL) ListTurnLoadReceiptsForTurns(ctx context.Context, openingMessageID
 
 // LatestTurnLoadReceipt returns the session's most recent receipt, whose
 // loads are the chat's loaded set when it was recorded.
-func (s *SQL) LatestTurnLoadReceipt(ctx context.Context, sessionID string) (TurnLoadReceipt, bool, error) {
-	rows, err := s.queries.LatestTurnLoadReceiptForSession(ctx, strings.TrimSpace(sessionID))
+func (t *sqlTurnTelemetry) LatestTurnLoadReceipt(ctx context.Context, sessionID string) (TurnLoadReceipt, bool, error) {
+	rows, err := t.core.queries.LatestTurnLoadReceiptForSession(ctx, strings.TrimSpace(sessionID))
 	if err != nil || len(rows) == 0 {
 		return TurnLoadReceipt{}, false, err
 	}
@@ -176,7 +179,8 @@ func turnLoadReceipts(rows []db.TurnLoadReceipts) []TurnLoadReceipt {
 }
 
 // PutTurnLoadReceipt appends one receipt to the in-memory store.
-func (s *Memory) PutTurnLoadReceipt(ctx context.Context, r TurnLoadReceipt) (TurnLoadReceipt, error) {
+func (t *memoryTurnTelemetry) PutTurnLoadReceipt(ctx context.Context, r TurnLoadReceipt) (TurnLoadReceipt, error) {
+	s := t.core
 	if err := ctx.Err(); err != nil {
 		return TurnLoadReceipt{}, err
 	}
@@ -193,7 +197,8 @@ func (s *Memory) PutTurnLoadReceipt(ctx context.Context, r TurnLoadReceipt) (Tur
 
 // ListTurnLoadReceiptsForTurns returns the receipts of the turns the given
 // user messages opened, in the order they were recorded.
-func (s *Memory) ListTurnLoadReceiptsForTurns(_ context.Context, openingMessageIDs []string) ([]TurnLoadReceipt, error) {
+func (t *memoryTurnTelemetry) ListTurnLoadReceiptsForTurns(_ context.Context, openingMessageIDs []string) ([]TurnLoadReceipt, error) {
+	s := t.core
 	wanted := make(map[string]bool, len(openingMessageIDs))
 	for _, id := range trimmedIDs(openingMessageIDs) {
 		wanted[id] = true
@@ -213,7 +218,8 @@ func (s *Memory) ListTurnLoadReceiptsForTurns(_ context.Context, openingMessageI
 }
 
 // LatestTurnLoadReceipt returns the session's most recent receipt.
-func (s *Memory) LatestTurnLoadReceipt(_ context.Context, sessionID string) (TurnLoadReceipt, bool, error) {
+func (t *memoryTurnTelemetry) LatestTurnLoadReceipt(_ context.Context, sessionID string) (TurnLoadReceipt, bool, error) {
+	s := t.core
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rows := s.turnLoads[strings.TrimSpace(sessionID)]

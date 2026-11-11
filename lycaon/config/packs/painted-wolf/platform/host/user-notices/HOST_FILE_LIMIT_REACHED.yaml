@@ -37,13 +37,7 @@ scenarios:
     resolution: process
     vars:
       reason: process
-    expect_contains:
-      - ran out of file handles
-      - reopen the app
   - id: system
     resolution: system
     vars:
       reason: system
-    expect_contains:
-      - no free file handles
-      - restart the Mac

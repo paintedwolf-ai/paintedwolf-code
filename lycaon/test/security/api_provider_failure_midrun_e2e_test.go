@@ -22,6 +22,11 @@ type providerFaultCase struct {
 	fault  error
 	// classified reports whether err is the specific failure this case injected.
 	classified func(error) bool
+	// recovers marks a fault the turn absorbs instead of reporting.
+	recovers bool
+	// faultOnce marks a fault that fires a single time: recovery re-fits the
+	// prompt, and a real provider accepts the retried request.
+	faultOnce bool
 }
 
 func providerFaultCases() []providerFaultCase {
@@ -54,6 +59,8 @@ func providerFaultCases() []providerFaultCase {
 			fault: &failure.ProviderContextTooSmallError{
 				ProviderID: "mock", Model: "mock-1", PromptTokens: 200_000, MaxContext: 8_192,
 			},
+			recovers:  true,
+			faultOnce: true,
 			classified: func(err error) bool {
 				_, ok := failure.AsProviderContextTooSmall(err)
 				return ok
@@ -88,13 +95,17 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 	for _, tc := range providerFaultCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			// Distinct markers select the failing prompt and its recovery independently.
+			fault := errStep(tc.fault)
+			if tc.faultOnce {
+				fault = errOnce(tc.fault)
+			}
 			script := newScriptedLLM().
 				on(tc.marker,
 					toolStep("Reading the tree.",
 						call("f1", "update_progress", map[string]any{
 							"content": "## Progress\n- [>] mid-run fault rehearsal\n",
 						})),
-					errStep(tc.fault),
+					fault,
 				).
 				on(tc.marker+"_after", textStep("Recovered and finished."))
 
@@ -108,11 +119,15 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 
 			_, err := h.Sessions.Manager.Submissions.Prompt(ctx, sess.ID,
 				"[[scn:"+tc.marker+"]] do some work then hit the fault")
-			if err == nil {
-				t.Fatal("prompt succeeded despite an injected provider failure")
-			}
-			if !tc.classified(err) {
-				t.Fatalf("provider failure lost its classification: %v (%T)", err, err)
+			if tc.recovers {
+				testutil.FailErr(t, "context overflow recovers within the turn", err)
+			} else {
+				if err == nil {
+					t.Fatal("prompt succeeded despite an injected provider failure")
+				}
+				if !tc.classified(err) {
+					t.Fatalf("provider failure lost its classification: %v (%T)", err, err)
+				}
 			}
 
 			assertProgressToolRoundSurvived(t, h, sess.ID)

@@ -6,10 +6,13 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/surfacecatalog"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/extpackstest"
+	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,6 +28,11 @@ func (m archiveManifests) ActiveManifest(_ context.Context, sessionID string) (A
 
 func archiveTestEngine(t *testing.T) *AssemblyEngine {
 	t.Helper()
+	return boundArchiveEngine(t, archiveManifests{"sealed": sealedSurveyArchive, "live": ""})
+}
+
+func boundArchiveEngine(t *testing.T, bound archiveManifests) *AssemblyEngine {
+	t.Helper()
 	eff := extpackstest.StockCatalog(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{Catalog: eff})
 	gates, err := feedback.LoadGateFeedbackCatalogWithCatalog(eff)
@@ -35,7 +43,7 @@ func archiveTestEngine(t *testing.T) *AssemblyEngine {
 		Injects:                 prompts.NewInjectRenderer(pe),
 		GateFeedback:            gates,
 		ProjectOverlayRootPaths: func(context.Context, *api.Session) []string { return nil },
-		Workflows:               archiveManifests{"sealed": sealedSurveyArchive, "live": ""},
+		Workflows:               bound,
 	})
 	return engine
 }
@@ -86,5 +94,59 @@ func TestRetiredRunReadsSealedGateFeedback(t *testing.T) {
 	}
 	if sealed := render("sealed"); strings.Contains(sealed, "NEEDS_INVESTIGATION") {
 		t.Fatalf("retired run read the live gate feedback:\n%s", sealed)
+	}
+}
+
+// AC-COMPAT-04, MC-INV-17: a run pinned to each sealed version renders its own
+// guidance and runs on the surfaces of this host, with no retired publication
+// protocol reaching the model.
+func TestEverySealedVersionRendersOnThisHost(t *testing.T) {
+	eff := extpackstest.StockCatalog(t)
+	manifests, _, err := workflowdef.LoadManifestsFromCatalog(eff)
+	testutil.FailErr(t, "load manifests", err)
+	surfaces, err := surfacecatalog.Load()
+	testutil.FailErr(t, "load surfaces", err)
+	stems := map[string][]string{}
+	for _, unitID := range eff.LoadedUnitIDs() {
+		key, rest, ok := extpacks.SplitArchiveUnitID(unitID)
+		if stem, isGuidance := strings.CutPrefix(rest, "guidance/"); ok && isGuidance && !strings.Contains(stem, "/") {
+			stems[key] = append(stems[key], stem)
+		}
+	}
+	sealed := 0
+	for _, manifest := range manifests {
+		if !manifest.Retired {
+			continue
+		}
+		sealed++
+		key := extpacks.ArchiveKey(manifest.ID, manifest.Version)
+		t.Run(key, func(t *testing.T) {
+			for _, phase := range manifest.PhaseDefs {
+				if phase.CoordinatorSurface == "" {
+					continue
+				}
+				if _, err := surfaces.Surface(phase.CoordinatorSurface); err != nil {
+					t.Fatalf("phase %s names surface %q this host lacks: %v", phase.ID, phase.CoordinatorSurface, err)
+				}
+			}
+			prompt := testPromptSurface(boundArchiveEngine(t, archiveManifests{"pinned": key}))
+			pe, _, err := prompt.projectPromptsSnapshot(t.Context(), &api.Session{ID: "pinned", WorkspacePath: t.TempDir()})
+			testutil.FailErr(t, "snapshot prompts", err)
+			for _, stem := range stems[key] {
+				out, err := pe.Render(t.Context(), "guidance/"+stem, map[string]any{})
+				testutil.FailErr(t, "render "+stem, err)
+				if strings.TrimSpace(out) == "" {
+					t.Fatalf("%s rendered empty", stem)
+				}
+				for _, retired := range []string{"surface_note", "⟦D", "completion_report"} {
+					if strings.Contains(out, retired) {
+						t.Fatalf("%s teaches %q", stem, retired)
+					}
+				}
+			}
+		})
+	}
+	if sealed < 3 {
+		t.Fatalf("found %d sealed versions, want the three in the pack archives", sealed)
 	}
 }

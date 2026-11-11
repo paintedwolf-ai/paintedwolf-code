@@ -6,7 +6,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/lycaon/lycaon/internal/citationmd"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/jsonshape"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,15 +24,11 @@ func (l *turnCloseout) resumeWork(ctx context.Context, sessionID string, st *pro
 	st.closeoutRetry.codes = nil
 }
 
-// storedReportIssues are the requirements a run report the host stores
-// without accepting still fails: members of the draft the report could not
-// read, from the draft itself or, once retained as an envelope, from its latest
-// refusal, and then the run's document checks.
-func (l *turnCloseout) storedReportIssues(ctx context.Context, sessionID, draftedContent string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
+// storedReportIssues collects unread draft members and failed document checks.
+func (l *turnCloseout) storedReportIssues(ctx context.Context, sessionID string, report guidance.CoordinatorCompletionReport) ([]guidance.ReportDocumentIssue, error) {
 	var issues []guidance.ReportDocumentIssue
-	read, _ := guidance.ReadCloseoutReport(draftedContent, "")
-	unread := read.Unread
-	if len(unread) == 0 && l.Deps.CloseoutStallState != nil {
+	var unread []jsonshape.Issue
+	if l.Deps.CloseoutStallState != nil {
 		unread = l.Deps.CloseoutStallState(ctx, sessionID).Unread
 	}
 	if issue, ok := guidance.ReportFenceUnreadable(unread); ok {
@@ -48,7 +47,8 @@ func (l *turnCloseout) storedReportIssues(ctx context.Context, sessionID, drafte
 func (l *turnCloseout) emitAssembledCloseout(
 	ctx context.Context,
 	sess *api.Session,
-	sessionID, userPrompt, surfaceID, draftedContent string,
+	sessionID, userPrompt, surfaceID string,
+	draft guidance.CloseoutDraft,
 	forcedBy []string,
 	st *promptLoopTurnState,
 	history []api.Message,
@@ -58,25 +58,26 @@ func (l *turnCloseout) emitAssembledCloseout(
 		return out, errCloseoutAssemblerUnavailable
 	}
 	retryCount := min(st.closeoutRetry.attempt, l.maxCitationGroundingRetries())
-	report, grounding := l.Deps.AssembleLedgerCloseout(ctx, sessionID, surfaceID, forcedBy, draftedContent, retryCount)
+	report, grounding := l.Deps.AssembleLedgerCloseout(ctx, sessionID, surfaceID, forcedBy, draft, retryCount)
 	if strings.TrimSpace(report.Synthesis) == "" {
 		return out, nil
 	}
-	// Invalid artifact embeds become attachment references.
-	if clean, embedIDs := guidance.StripCloseoutMarkdownArtifactEmbeds(report.Synthesis); len(embedIDs) > 0 {
+	// Embeds the host cannot present leave the body: artifact ids become
+	// attachment references, unobserved sources are dropped.
+	observed, err := l.observedURLs(ctx, sess, history, citationmd.Parse(report.Synthesis, citationmd.Options{}))
+	if err != nil {
+		return out, err
+	}
+	if clean, embedIDs := guidance.StripCloseoutImageEmbeds(report.Synthesis, observed); clean != report.Synthesis {
 		report.Synthesis = clean
 		if len(report.ArtifactIDs) == 0 {
 			report.ArtifactIDs = embedIDs
 		}
 	}
 	report = guidance.BindCloseoutPresentArtifacts(report, history)
-	raw, err := guidance.MarshalCoordinatorCompletionReport(report)
-	if err != nil {
-		return out, err
-	}
 
 	msgID := ""
-	if st != nil {
+	if st != nil && st.draftSlotAppended {
 		msgID = st.draftSlotID
 	}
 	appendNew := strings.TrimSpace(msgID) == ""
@@ -86,7 +87,7 @@ func (l *turnCloseout) emitAssembledCloseout(
 	msg := newProvisionalAssistantMessage(api.Message{
 		ID:          msgID,
 		Origin:      api.MessageOriginHost,
-		Content:     raw,
+		Content:     report.Synthesis,
 		Grounding:   grounding,
 		DraftStatus: api.DraftStatusLive,
 		ArtifactIDs: append([]string(nil), report.ArtifactIDs...),
@@ -100,7 +101,7 @@ func (l *turnCloseout) emitAssembledCloseout(
 		)
 		// The host stores what the coordinator could not repair, and says so.
 		if msg.CompletionReport.Scope == api.CompletionReportScopeRun {
-			issues, err := l.storedReportIssues(ctx, sessionID, draftedContent, report)
+			issues, err := l.storedReportIssues(ctx, sessionID, report)
 			if err != nil {
 				return out, err
 			}
@@ -109,34 +110,43 @@ func (l *turnCloseout) emitAssembledCloseout(
 	} else {
 		msg.Kind = api.MessageKindDraft
 	}
-	// The wire carries narrative; loop history retains the structured report.
-	wire := wireCopy(msg, closeoutWireContent(surfaceID))
 	if appendNew {
 		if l.Projection.Deps.AppendMessages != nil {
-			if err := l.Projection.Deps.AppendMessages(ctx, sessionID, wire); err != nil {
+			var err error
+			msg, err = l.Projection.appendMessage(ctx, sessionID, msg)
+			if err != nil {
 				return out, err
 			}
 		}
 		history = append(history, msg)
 	} else {
 		if l.Projection.Deps.UpdateMessage != nil {
-			if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, msgID, wire); err != nil {
+			if err := l.Projection.Deps.UpdateMessage(ctx, sessionID, msgID, msg); err != nil {
 				return out, err
 			}
 		}
 		found := false
 		for i := range history {
 			if history[i].ID == msgID {
+				msg.Ord = history[i].Ord
+				msg.Seq = history[i].Seq
 				history[i] = msg
 				found = true
 				break
 			}
 		}
 		if !found {
+			if st != nil && st.usesCoordinatorDraftSlot(msgID) {
+				msg.Ord = st.draftSlotOrd
+				msg.Seq = st.draftSlotSeq
+			}
 			history = append(history, msg)
 		}
 	}
 
+	if st != nil && !tools.CallReach(ctx).Known() {
+		ctx = tools.WithCallReach(ctx, st.requestReach())
+	}
 	committed, err := l.Projection.commitGuardedAssistantTurn(ctx, sess, sessionID, history, userPrompt, surfaceID, msg)
 	if err != nil {
 		return out, err
@@ -146,6 +156,10 @@ func (l *turnCloseout) emitAssembledCloseout(
 			history[i] = committed
 			break
 		}
+	}
+	history, err = l.Nudges.retireToolFreeDraftRecovery(ctx, sessionID, history, committed.ID)
+	if err != nil {
+		return out, err
 	}
 	if st != nil {
 		if err := l.Nudges.closeCoordinatorDraftSlot(ctx, sessionID, st, committed.ID); err != nil {

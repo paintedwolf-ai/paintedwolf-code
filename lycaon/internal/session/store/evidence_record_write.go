@@ -12,9 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/evidence"
 )
 
-// writeEvidenceRecord is the complete typed record/body publication shared by
-// legacy tools and exact source delivery. The caller owns the transaction and
-// publication lease; bodies and reference metadata use the same existing stores.
+// writeEvidenceRecord publishes records and bodies within the caller's transaction and publication lease.
 func writeEvidenceRecord(ctx context.Context, q *db.Queries, dataDir, sessionID, projectID string, rec evidence.Record) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err

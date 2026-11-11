@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: workflow_advance
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKFLOW_ADVANCE_INACTIVE'

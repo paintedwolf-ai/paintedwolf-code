@@ -5,14 +5,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strings"
 
-	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// nativeArguments holds detached review inputs until admission, held review and
-// the complete owner call have released them. Strings are immutable; maps and
-// slices are cloned by the existing JSON value implementation.
+// nativeArguments owns the containers and scalar backing retained through review.
 type nativeArguments struct {
 	values map[string]any
 	leases []func()
@@ -22,96 +20,106 @@ func prepareNativeArguments(ctx context.Context, admission *toolcontract.Program
 	if ctx == nil || admission == nil {
 		return nil, fmt.Errorf("native review inputs require retained state admission")
 	}
+	ctx = toolcontract.WithMemoryPhase(ctx, toolcontract.ArgumentSnapshot)
 	snapshot := &nativeArguments{}
-	if err := snapshot.reserve(ctx, admission, values); err != nil {
+	value, err := snapshot.clone(ctx, admission, values, 0)
+	if err != nil {
 		snapshot.close()
 		return nil, err
 	}
-	snapshot.values = jsonvalue.CloneMap(values)
+	snapshot.values = value.(map[string]any)
 	return snapshot, nil
 }
-
-// Reserve each traversal frame before descending. This also bounds cyclic host
-// values through the same aggregate ceiling instead of an unmetered recursive
-// walk. The conservative payload bound covers JSON escaping, review projections
-// and the detached map while overlapping review/dispatch facts remain live.
-func (s *nativeArguments) reserve(ctx context.Context, admission *toolcontract.ProgramMemory, value any) error {
-	if err := ctx.Err(); err != nil {
-		return err
+func (s *nativeArguments) clone(ctx context.Context, memory *toolcontract.ProgramMemory, value any, depth int) (any, error) {
+	if depth > 1024 {
+		return nil, fmt.Errorf("native review nesting exceeds 1024")
 	}
-	const copies = int64(8)
-	bound := int64(2048)
-	add := func(size int64) bool {
-		if size < 0 || size > (math.MaxInt64-bound)/copies {
-			return false
-		}
-		bound += size * copies
-		return true
+	frame, err := memory.ReserveProgramState(ctx, 512)
+	if err != nil {
+		return nil, err
 	}
-	switch v := value.(type) {
+	defer frame()
+	bound := int64(128)
+	switch value := value.(type) {
 	case string:
-		if !add(int64(len(v))) {
-			return fmt.Errorf("native review string bound overflow")
-		}
-	case map[string]any:
-		if !add(int64(len(v)) * 256) {
-			return fmt.Errorf("native review object bound overflow")
-		}
-	case []any:
-		if !add(int64(len(v)) * 32) {
-			return fmt.Errorf("native review list bound overflow")
-		}
-	case []string:
-		if !add(int64(len(v)) * 32) {
-			return fmt.Errorf("native review list bound overflow")
-		}
+		bound += int64(len(value))
 	case json.Number:
-		if !add(int64(len(v))) {
-			return fmt.Errorf("native review number bound overflow")
-		}
+		bound += int64(len(value))
+	case map[string]any:
+		bound += int64(len(value)) * 256
+	case []any:
+		bound += int64(len(value)) * 32
+	case []string:
+		bound += int64(len(value)) * 32
 	case nil, bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
 	case float64:
-		if math.IsNaN(v) || math.IsInf(v, 0) {
-			return fmt.Errorf("non-JSON native review number")
+		if math.IsNaN(value) || math.IsInf(value, 0) {
+			return nil, fmt.Errorf("non-JSON native review number")
 		}
 	case float32:
-		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
-			return fmt.Errorf("non-JSON native review number")
+		if math.IsNaN(float64(value)) || math.IsInf(float64(value), 0) {
+			return nil, fmt.Errorf("non-JSON native review number")
 		}
 	default:
-		return fmt.Errorf("native review inputs must be JSON values")
+		return nil, fmt.Errorf("native review inputs must be JSON values")
 	}
-	release, err := admission.ReserveProgramState(ctx, bound)
+	release, err := memory.ReserveProgramState(ctx, bound)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	s.leases = append(s.leases, release)
-	switch v := value.(type) {
+	switch value := value.(type) {
+	case string:
+		return strings.Clone(value), nil
+	case json.Number:
+		return json.Number(strings.Clone(string(value))), nil
 	case map[string]any:
-		for key, item := range v {
-			if err := s.reserve(ctx, admission, key); err != nil {
-				return err
-			}
-			if err := s.reserve(ctx, admission, item); err != nil {
-				return err
-			}
+		if value == nil {
+			return map[string]any(nil), nil
 		}
+		result := make(map[string]any, len(value))
+		for key, child := range value {
+			name, err := s.clone(ctx, memory, key, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			cloned, err := s.clone(ctx, memory, child, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			result[name.(string)] = cloned
+		}
+		return result, nil
 	case []any:
-		for _, item := range v {
-			if err := s.reserve(ctx, admission, item); err != nil {
-				return err
-			}
+		if value == nil {
+			return []any(nil), nil
 		}
+		result := make([]any, len(value))
+		for i, child := range value {
+			cloned, err := s.clone(ctx, memory, child, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			result[i] = cloned
+		}
+		return result, nil
 	case []string:
-		for _, item := range v {
-			if err := s.reserve(ctx, admission, item); err != nil {
-				return err
-			}
+		var result []string
+		if value != nil {
+			result = make([]string, len(value))
 		}
+		for i, child := range value {
+			cloned, err := s.clone(ctx, memory, child, depth+1)
+			if err != nil {
+				return nil, err
+			}
+			result[i] = cloned.(string)
+		}
+		return result, nil
+	default:
+		return value, nil
 	}
-	return ctx.Err()
 }
-
 func (s *nativeArguments) close() {
 	s.values = nil
 	for i := len(s.leases) - 1; i >= 0; i-- {

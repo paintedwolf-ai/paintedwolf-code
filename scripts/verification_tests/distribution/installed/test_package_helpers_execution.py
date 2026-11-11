@@ -75,7 +75,7 @@ class PackageHelperTests(unittest.TestCase):
     def test_probe_catalog_uses_only_fixed_literal_roles_and_no_sandbox_bypass(self):
         self.assertEqual({item[1] for item in owner.PROBES},
                          {"pw", "pw-logs", "pw-vault-identity", "bialy", "git-observer",
-                          "git-lfs-observer", "browser-observer", "ocr-observer"})
+                          "nativegen", "git-lfs-observer", "browser-observer", "ocr-observer"})
         self.assertFalse(any("--no-sandbox" in item[2] for item in owner.PROBES))
         with self.assertRaisesRegex(ValueError, "different fixed case"):
             owner.execute(self.fixture(), "updates", "all-helpers-and-resources", Path("/unused"))

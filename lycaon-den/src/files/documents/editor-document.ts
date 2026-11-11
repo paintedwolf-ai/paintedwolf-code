@@ -1,12 +1,12 @@
 import type { EditorEditingBlock } from "./editor-draft.ts";
-import { applyFilesBufferDocumentStatus, projectFilesState, suspendFilesBufferContent } from "./files-buffer-state.ts";
+import { applyFilesBufferDocumentStatus, projectFilesState, registerFilesBufferReplicaReader, suspendFilesBufferContent, type FileBuffer, type LoadedDocumentText } from "./files-buffer-state.ts";
 import { batch } from "solid-js";
 import { documentResidency, documentResourceKey, documentOpeningReservation, documentAdmissionBytes, type DocumentReservation, type ResidencyPriority } from "./document-residency.ts";
-import { suspendFileDocument } from "./files-residency.ts";
 import { refreshFileDocumentRetention } from "./files-document-metadata.ts";
 import { documentCommand, resumeDocumentCommands } from "./document-command.ts";
 import { refreshFilesCollaborationEpoch } from "../editor/files-editor-collaboration.ts";
-import { getFilesEditorView } from "../editor/files-editor-host.ts";
+import { captureBufferViewState } from "../editor/editor-session-fidelity.ts";
+import { destroyFilesEditor, getFilesEditorView } from "../editor/files-editor-host.ts";
 import { createStore, reconcile } from "solid-js/store";
 import type { LycaonClient } from "../../api/client.ts";
 import type { EditorDocument, EditorDocumentEvent, SecretScreen, SecretScreenStatus, SourceEncoding } from "../../api/types.ts";
@@ -17,8 +17,6 @@ import { flushFilesDraftSync } from "./files-draft-sync.ts";
 import { DocumentReplica, decodeDocumentState, retainedCheckpointIdentity, type ReplicaStatus } from "./document-replica.ts";
 import { documentOutbox, recoveryBytes, readReservedRecovery, type ReplicaCheckpoint } from "./document-outbox.ts";
 import type { RetainedReplica } from "../../api/types.ts";
-import type { LoadedDocumentText } from "./project-files-buffers.ts";
-import type { FileBuffer } from "./files-buffer-state.ts";
 import type * as Y from "yjs";
 import { wakeDocumentOutbox } from "./document-outbox-relay.ts";
 import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
@@ -149,6 +147,22 @@ export function editorReplica(documentId: string | null | undefined): DocumentRe
   if (documentId) void documents[documentId];
   const replica = documentId ? replicas.get(documentId) : undefined;
   return replica?.initialized ? replica : undefined;
+}
+
+registerFilesBufferReplicaReader(editorReplica);
+
+export async function suspendFileDocument(projectId: string, rootId: string, path: string, documentId?: string, jobId?: string): Promise<boolean> {
+  const buffers = Object.values(projectFilesState(projectId).byKey).filter(buffer => documentId ? buffer.documentId === documentId : buffer.rootId === rootId && buffer.path === path && buffer.jobId === jobId);
+  const resource = documentResourceKey(projectId, { rootId, path, documentId, jobId, fileId: buffers[0]?.fileId });
+  if (documentResidency.isProtected(resource)) return false;
+  for (const buffer of buffers) {
+    captureBufferViewState(buffer, getFilesEditorView(projectId, buffer.key));
+    if (buffer.documentId && !(await evictEditorDocument(buffer.documentId, { retainRecovery: true, ifIdle: true }))) return false;
+    destroyFilesEditor(projectId, buffer.key, { dropHandlers: true });
+    suspendFilesBufferContent(projectId, buffer.key, documentResidency.isProtected(resource));
+  }
+  if (!buffers.length && documentId) return evictEditorDocument(documentId, { ifIdle: true });
+  return true;
 }
 
 export function editorDraftPersistenceError(projectId: string): string | null {

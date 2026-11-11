@@ -11,7 +11,3 @@ invariants:
   - Prompt turn after a run of consecutive tool batches in which every completed
     call was a read-only tool (tool lifecycle read_only), at each multiple of the
     streak cap
-  required:
-  - read-only
-  - required paging and canonical recovery
-  - needed evidence is complete

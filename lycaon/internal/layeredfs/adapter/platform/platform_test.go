@@ -362,7 +362,7 @@ func TestDestroyRefusesARootStillMountedWhateverItsRecordsSay(t *testing.T) {
 	testutil.FailErr(t, "write result", os.WriteFile(result, []byte("result\n"), 0o644))
 
 	stranger := workspace.NewManager(t.TempDir())
-	err = stranger.DestroyWorkerWorkspace(&workspace.Binding{ID: view.ViewID, Root: view.PrimaryWorkPath})
+	err = stranger.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: view.ViewID, Root: view.PrimaryWorkPath})
 	if !errors.Is(err, workspace.ErrBranchMounted) {
 		t.Fatalf("destroy through a live mount = %v, want ErrBranchMounted", err)
 	}

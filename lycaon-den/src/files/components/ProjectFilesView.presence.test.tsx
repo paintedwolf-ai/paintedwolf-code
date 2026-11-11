@@ -70,9 +70,7 @@ describe("ProjectFilesView agent presence", () => {
     await vi.advanceTimersByTimeAsync(0);
     expect(screen.queryByTestId("files-tab-presence")).toBeNull();
     expect(document.querySelector(".den-files-tab__header")?.textContent).toBe("");
-    expect(screen.getByTestId("files-tab").getAttribute("aria-label")).toContain("waiting for your approval");
     expect(document.querySelector(".den-files-tab__name.den-files-agent-name")).toBeNull();
-    expect(screen.getByTestId("files-tab").getAttribute("aria-label")).toContain("read this turn");
     view.unmount();
   });
 

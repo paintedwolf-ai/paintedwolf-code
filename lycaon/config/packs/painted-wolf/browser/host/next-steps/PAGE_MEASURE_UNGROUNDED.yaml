@@ -1,0 +1,5 @@
+steps:
+  - tool: "recall"
+    args:
+      query: "handle:<handle>"
+    say: "If the measurement is no longer in context, recover it with {{ call }}, passing its exact handle, and copy the excerpt from the returned body, not from memory."

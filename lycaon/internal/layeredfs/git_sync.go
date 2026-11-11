@@ -1,13 +1,13 @@
 package layeredfs
 
 import (
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 )
 
 type gitOverlayItem struct {
@@ -32,16 +32,6 @@ func resolveMutableGitTarget(c *Core, qpath QualifiedPath) (hostPath string, isR
 		return "", false, false, nil
 	}
 	return mgp.ResolveMutableGitTarget(qpath.Rel)
-}
-
-func fileInfoIno(info fs.FileInfo) uint64 {
-	if info == nil {
-		return 0
-	}
-	if st, ok := info.Sys().(*syscall.Stat_t); ok && st != nil {
-		return uint64(st.Ino)
-	}
-	return 0
 }
 
 // refreshMutableGitNodeLocked refreshes or retires a privateNode backed directly by privateGitDir
@@ -264,4 +254,11 @@ func copyGitOverlayFile(src, dst string, perm fs.FileMode) error {
 		return closeErr
 	}
 	return os.Chmod(dst, perm)
+}
+
+func fileInfoIno(info fs.FileInfo) uint64 {
+	if info == nil {
+		return 0
+	}
+	return fspath.ObserveFile(info).Identity.Inode
 }

@@ -1,0 +1,11 @@
+steps:
+  - tool: "task"
+    args:
+      scope.mode: "read"
+    say: "For read-only survey or analysis, use {{ call }} with a read-only profile."
+    otherwise: "Use a read-only profile for survey, or pass scope.mode: write when dispatching a mutation-capable worker."
+  - tool: "task"
+    args:
+      agent_type: "{{ paintedwolf.agent_type }}"
+      scope.mode: "write"
+    say: "For product edits or host mutations, use {{ call }}. Optional paths may guide focus."

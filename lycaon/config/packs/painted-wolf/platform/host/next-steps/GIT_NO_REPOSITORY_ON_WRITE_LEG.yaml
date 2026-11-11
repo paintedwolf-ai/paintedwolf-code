@@ -1,0 +1,5 @@
+steps:
+  - tool: "source_history"
+    complete: true
+    say: "Call {{ call }} for what changed on your branch this session, every actor; pass path and mode=\"diff\" for one file's change since the session began."
+    otherwise: "Work from the files on this leg, and state in your result anything that needs Git history."

@@ -9,7 +9,8 @@ type SkillPreload struct {
 	Body  string  `json:"body"`
 	// Tool names the loadable tool whose first call selected the skill;
 	// empty when the turn's opening decision selected it.
-	Tool string `json:"tool,omitempty"`
+	Tool      string   `json:"tool,omitempty"`
+	Resources []string `json:"resources,omitempty"`
 }
 
 func clonePreload(p *SkillPreload) *SkillPreload {
@@ -17,6 +18,7 @@ func clonePreload(p *SkillPreload) *SkillPreload {
 		return nil
 	}
 	copy := *p
+	copy.Resources = append([]string(nil), p.Resources...)
 	return &copy
 }
 

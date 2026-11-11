@@ -14,6 +14,10 @@ export class TranscriptPageIntent {
     this.input += 1;
   }
 
+  noteSeek(direction: HistoryDirection): void {
+    this.direction = direction;
+  }
+
   edge(older: boolean, newer: boolean): HistoryDirection | undefined {
     if (this.direction) return (this.direction === "older" ? older : newer) ? this.direction : undefined;
     if (older === newer) return undefined;

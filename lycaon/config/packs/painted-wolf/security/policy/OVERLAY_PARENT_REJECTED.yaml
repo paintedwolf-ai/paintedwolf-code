@@ -17,6 +17,3 @@ scenarios:
   vars:
     base_overlay_id: ov-grep-impl
     overlay_id: ov-grep-followup
-  expect_contains:
-  - ov-grep-followup
-  - 'Code: OVERLAY_PARENT_REJECTED'

@@ -326,7 +326,8 @@ EXTRACT="${TMP_DIR}/extract"
 mkdir -p "${EXTRACT}"
 
 echo "gitengine:fetch — downloading ${URL}" >&2
-curl -fsSL -o "${ARCHIVE}" "${URL}"
+# A release host outage must not fail a run; the job limit bounds a real one.
+curl -fsSL --retry 20 --retry-all-errors --retry-delay 30 --connect-timeout 20 -o "${ARCHIVE}" "${URL}"
 
 ACTUAL_SHA="$(sha256 "${ARCHIVE}" | awk '{print tolower($1)}')"
 if [[ "${ACTUAL_SHA}" != "${EXPECTED_SHA_LOWER}" ]]; then

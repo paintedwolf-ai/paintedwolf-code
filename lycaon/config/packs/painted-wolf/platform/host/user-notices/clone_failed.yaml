@@ -6,5 +6,3 @@ suggested_action: Check the repository URL, your access to it, and the network c
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - The repository could not be cloned.

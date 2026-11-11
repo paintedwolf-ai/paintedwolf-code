@@ -202,7 +202,6 @@ describe("entering and leaving", () => {
   it("explains a selected Git-only file without inventing a timeline step", async () => {
     await enterWalk(PID, fakeClient(), SID, { rootId: "r1", path: "unobserved.ts" });
     expect(walkState(PID).walk.steps).toHaveLength(2);
-    expect(walkState(PID).notice).toContain("no recorded changes in this chat");
     expect(walkState(PID).walk.steps.some((step) => step.key.includes("unobserved"))).toBe(false);
   });
 

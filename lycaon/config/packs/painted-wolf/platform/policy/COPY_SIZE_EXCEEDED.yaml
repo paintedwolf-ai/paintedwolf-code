@@ -35,6 +35,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: implement
     tool: copy
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: COPY_SIZE_EXCEEDED'

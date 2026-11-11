@@ -27,29 +27,42 @@ type Store interface {
 
 // Service drains stopped runtimes before recording workflow and idle boundaries.
 type Service struct {
-	store              Store
-	gate               *lifecycle.State
-	execution          *execution.Lifetime
-	chats              *chats.Service
-	queue              *queue.Store
-	drafts             *draftqueue.Service
-	Recovery           *execution.Recovery
-	status             *execution.Status
-	runtime            *coordinator.Runtime
-	Workers            WorkerAbort
-	workflowStop       WorkflowStop
-	checkpointStop     CheckpointStop
-	progress           progress.RunScopedStore
-	turnReleaseTimeout time.Duration
+	store                Store
+	gate                 *lifecycle.State
+	execution            *execution.Lifetime
+	chats                *chats.Service
+	queue                *queue.Store
+	drafts               *draftqueue.Service
+	Recovery             *execution.Recovery
+	status               *execution.Status
+	runtime              *coordinator.Runtime
+	Workers              WorkerAbort
+	workflowStop         WorkflowStop
+	checkpointStop       CheckpointStop
+	progress             progress.RunScopedStore
+	turnReleaseTimeout   time.Duration
+	workerReleaseTimeout time.Duration
 }
 
 func New(store Store, gate *lifecycle.State, execution *execution.Lifetime, chats *chats.Service, queue *queue.Store, drafts *draftqueue.Service, interruptions *execution.Recovery, status *execution.Status) *Service {
-	return &Service{store: store, gate: gate, execution: execution, chats: chats, queue: queue, drafts: drafts, Recovery: interruptions, status: status, turnReleaseTimeout: DefaultTurnReleaseTimeout}
+	return &Service{
+		store:                store,
+		gate:                 gate,
+		execution:            execution,
+		chats:                chats,
+		queue:                queue,
+		drafts:               drafts,
+		Recovery:             interruptions,
+		status:               status,
+		turnReleaseTimeout:   DefaultTurnReleaseTimeout,
+		workerReleaseTimeout: DefaultWorkerReleaseTimeout,
+	}
 }
-func (m *Service) SetWorkers(workers WorkerAbort)               { m.Workers = workers }
-func (m *Service) SetCoordinator(runtime *coordinator.Runtime)  { m.runtime = runtime }
-func (m *Service) SetProgress(progress progress.RunScopedStore) { m.progress = progress }
-func (m *Service) SetTurnReleaseTimeout(timeout time.Duration)  { m.turnReleaseTimeout = timeout }
+func (m *Service) SetWorkers(workers WorkerAbort)                { m.Workers = workers }
+func (m *Service) SetCoordinator(runtime *coordinator.Runtime)   { m.runtime = runtime }
+func (m *Service) SetProgress(progress progress.RunScopedStore)  { m.progress = progress }
+func (m *Service) SetTurnReleaseTimeout(timeout time.Duration)   { m.turnReleaseTimeout = timeout }
+func (m *Service) SetWorkerReleaseTimeout(timeout time.Duration) { m.workerReleaseTimeout = timeout }
 func (m *Service) QueueChecklistReconcileNudge(ctx context.Context, id string) {
 	if m == nil || m.progress == nil || m.runtime == nil {
 		return

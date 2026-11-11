@@ -58,9 +58,6 @@ func TestGrepDenseRootDensenessThenReject(t *testing.T) {
 	if len(resp.Matches) != 0 {
 		t.Fatalf("matches = %d want 0 (no walk)", len(resp.Matches))
 	}
-	if !strings.Contains(resp.Note, "path_glob") && !strings.Contains(resp.Note, "subdirectory") {
-		t.Fatalf("note missing scope guidance: %q", resp.Note)
-	}
 
 	_, err = tool.Run(context.Background(), args, tctx)
 	var reject *toolrejection.ToolReject

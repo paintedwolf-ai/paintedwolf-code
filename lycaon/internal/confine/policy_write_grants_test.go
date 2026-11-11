@@ -58,8 +58,8 @@ func TestPolicyWriteSubtreeStaysInsideALoaderTree(t *testing.T) {
 	}
 }
 
-func TestSeatbeltPolicyApprovalCannotBeReplacedByAncestorGrant(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryPolicyApprovalCannotBeReplacedByAncestorGrant(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := t.TempDir()
 	target, sibling := filepath.Join(dir, "AGENTS.md"), filepath.Join(dir, "nested", "AGENTS.md")
 	testutil.FailErr(t, "create nested directory", os.MkdirAll(filepath.Dir(sibling), 0o755))
@@ -81,8 +81,8 @@ func TestSeatbeltPolicyApprovalCannotBeReplacedByAncestorGrant(t *testing.T) {
 }
 
 // One approved skill tree lets a command create a new skill, and nothing else.
-func TestSeatbeltSkillTreeGrantCoversANewSkill(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundarySkillTreeGrantCoversANewSkill(t *testing.T) {
+	self := requireLiveBoundary(t)
 	dir := t.TempDir()
 	skills := filepath.Join(dir, ".agents", "skills")
 	testutil.FailErr(t, "create skills", os.MkdirAll(skills, 0o755))

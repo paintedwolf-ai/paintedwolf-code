@@ -54,5 +54,14 @@ func CommandResourceRejection(err error) error {
 	default:
 		return err
 	}
-	return errors.Join(err, CommandLimitExceeded(id, memory.Maximum, memory.Observed))
+	rejection := CommandLimitExceeded(id, memory.Maximum, memory.Observed)
+	if reject := toolrejection.AsToolReject(rejection); reject != nil {
+		if memory.Requested > 0 {
+			reject.Data["held_bytes"], reject.Data["requested_bytes"] = memory.Held, memory.Requested
+		}
+		if memory.Phase != "" {
+			reject.Data["resource_phase"] = string(memory.Phase)
+		}
+	}
+	return errors.Join(err, rejection)
 }

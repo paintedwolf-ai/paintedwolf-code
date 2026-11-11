@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { stubClient } from "../../test/client-fixture.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { ProjectSecretsPanel } from "./ProjectSecretsPanel.tsx";
 
 const frames = new Map<number, FrameRequestCallback>();
@@ -32,7 +33,7 @@ it("keeps the outgoing view until ignored values are ready and retains search on
   render(() => <ProjectSecretsPanel client={client} projectId="project" />);
   const surface = (key: string) => screen.getAllByTestId("resident-surface").find((node) => node.dataset.residentKey === key)!;
   await vi.waitFor(() => { paint(); expect(surface("managed").dataset.resident).toBe("active"); });
-  fireEvent.click(screen.getByRole("button", { name: "Ignored values" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("secrets-view-ignored"), "button"));
   paint();
   expect(surface("managed").dataset.resident).toBe("active");
   expect(surface("ignored").getAttribute("aria-hidden")).toBe("true");
@@ -42,13 +43,13 @@ it("keeps the outgoing view until ignored values are ready and retains search on
   expect(surface("managed").dataset.resident).toBe("active");
   resolveIgnores({ rules: [] });
   await vi.waitFor(() => { paint(); expect(surface("ignored").dataset.resident).toBe("active"); });
-  const search = screen.getByLabelText("Search ignored values") as HTMLInputElement;
+  const search = screen.getByTestId("ignored-values-search") as HTMLInputElement;
   fireEvent.input(search, { target: { value: "fixture" } });
-  fireEvent.click(screen.getByRole("button", { name: "Managed secrets" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("secrets-view-managed"), "button"));
   paint();
-  fireEvent.click(screen.getByRole("button", { name: "Ignored values" }));
+  fireEvent.click(assertNamedControl(screen.getByTestId("secrets-view-ignored"), "button"));
   paint();
-  expect(screen.getByLabelText("Search ignored values")).toBe(search);
+  expect(screen.getByTestId("ignored-values-search")).toBe(search);
   expect(search.value).toBe("fixture");
   expect(screen.getAllByTestId("resident-surface").filter((node) => node.dataset.resident === "active")).toHaveLength(1);
 });

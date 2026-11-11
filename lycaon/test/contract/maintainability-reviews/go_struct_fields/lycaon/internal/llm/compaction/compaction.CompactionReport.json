@@ -1,0 +1,16 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/llm/compaction/compaction.CompactionReport",
+  "kind": "data_record",
+  "workstream": "bounded-compaction-reduction",
+  "disposition": "retain",
+  "reason": "Retain the 14-field compaction result. It carries the continuation, measured outcomes, and the exact bounded source page needed by asynchronous enrichment. The source page is ephemeral and independent of persisted recovery hints; reconstructing it from hints can omit observations. The explicit API response mapping excludes this internal capture.",
+  "reviewed_commit": "515c793b129a749bbdcc5716ff59e46531e0e71c",
+  "ceiling": 14,
+  "boundaries": {
+    "lycaon/internal/llm/compaction/reduction_coverage_test.go": "49b19425a18631c14122d1d6818555aeec02251fc054172342c8e27073d8b95e",
+    "lycaon/internal/llm/compaction/projection_measure_test.go": "756b80cc66d6b241c18b31b27fc0de6b09f17c6aa46e43feba23366dd317cc83",
+    "lycaon/internal/api/promptadmin/compaction.go": "a9c22ef35e3503e28096880cf7f6154af19d6fd291b0ab5124cb60b5436b67ed"
+  },
+  "reviewed_shape": "a9a9d32f92cb053b0e003c316c7041ad6a6b088bd856ddcd41fd67e2fc527cf8"
+}

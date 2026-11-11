@@ -1,0 +1,4 @@
+steps:
+  - tool: "update_progress"
+    say: "Author the `## Progress` checklist with {{ call }}."
+    otherwise: "Keep the `## Progress` checklist in the host progress record rather than a file."

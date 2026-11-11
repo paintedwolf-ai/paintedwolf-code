@@ -60,24 +60,14 @@
   color: var(--den-accent-text);
 }
 
+/* Compact status-bar sizing on top of shared den-inset-icon-btn chrome. */
 .den-files-editor__status-toggle {
-  border: 0;
-  border-radius: var(--den-radius-sm);
-  background: none;
-  color: var(--den-text-muted);
-  font-size: var(--text-den-caption);
+  width: auto;
+  height: auto;
   padding: 2px 6px;
-  cursor: pointer;
-}
-
-.den-files-editor__status-toggle:hover {
-  background: var(--den-tint-2);
-  color: var(--den-text);
-}
-
-.den-files-editor__status-toggle:focus-visible {
-  outline: 1.5px solid var(--den-accent-signal);
-  outline-offset: -1.5px;
+  border-radius: var(--den-radius-sm);
+  font-size: var(--text-den-caption);
+  font-weight: inherit;
 }
 
 .project-files-view .den-browse-chrome,

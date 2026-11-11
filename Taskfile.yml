@@ -94,33 +94,9 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/repo-snapshot-lock.sh read -- go build -tags=paintedwolf_release ./...
 
   build:lycaon-dev:
-    desc: Build lycaon-dev + sibling pw-logs, bialy, and pw-document-core — local den:sidecar + stable @self MCP (not go run)
+    desc: Build the development host and its document, decision, and generation runtimes
     dir: '{{.GO_DIR}}'
-    sources:
-      - '**/*.go'
-      - 'internal/harnessfixture/contract.json'
-      - 'internal/documentcore/native/src/**/*.rs'
-      - internal/documentcore/native/Cargo.toml
-      - internal/documentcore/native/Cargo.lock
-      - '../scripts/build-document-core.sh'
-      - 'internal/db/*.sql'
-      - 'internal/db/released-baselines.json'
-      - 'internal/backup/archive-limits.json'
-      - 'config/**/*'
-      - go.mod
-      - go.sum
-      - '../VERSION'
-      - '../scripts/sign-dev-binary.sh'
-      - '../scripts/dev-signing-config.sh'
-      - '../scripts/build-dev-engine.sh'
-      - '../scripts/resolve-opengrep.sh'
-      - '../scripts/stage-bundled-opengrep.sh'
-    generates:
-      - '{{.BUILD_DIR}}/lycaon-dev'
-      - '{{.BUILD_DIR}}/pw-logs'
-      - '{{.BUILD_DIR}}/pw-document-core'
-    status:
-      - env -u LYCAON_OPENGREP_CANDIDATE '{{.BUILD_DIR}}/lycaon-dev' scan engines verify-bundled --root {{.ROOT_DIR}}/lycaon-den/src-tauri/engine-root >/dev/null
+    # Seed paths and signing inputs are selected outside the source tree.
     cmds:
       - bash {{.SCRIPTS_DIR}}/build-dev-engine.sh
 
@@ -128,6 +104,7 @@ tasks:
     desc: Build the decision engine sidecar (bialy) into the build directory
     sources:
       - 'lycaon/internal/decide/native/src/**/*.rs'
+      - 'lycaon/internal/decide/native/vendor/**/*'
       - lycaon/internal/decide/native/Cargo.toml
       - lycaon/internal/decide/native/Cargo.lock
       - scripts/build-decide.sh
@@ -188,7 +165,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/lint-go.sh fast {{.CLI_ARGS}}
 
   lint:full:
-    desc: GitHub workflows + Go vet + full golangci-lint + deadcode
+    desc: GitHub workflows + full golangci-lint + deadcode
     dir: '{{.GO_DIR}}'
     sources:
       - '**/*.go'
@@ -260,7 +237,7 @@ tasks:
         go run ./cmd/lycaon-perf
         --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
         --output '{{.ARTIFACT_DIR}}/perf/sidecar.json'
-        --scale medium --enforce {{.CLI_ARGS}}
+        --scale medium {{.CLI_ARGS}}
 
   perf:soak:
     desc: 'Long sidecar stability run; SOAK defaults to 30m and may be overridden'
@@ -277,7 +254,7 @@ tasks:
         go run ./cmd/lycaon-perf
         --binary '{{.BUILD_DIR}}/lycaon-perf-sidecar'
         --output '{{.ARTIFACT_DIR}}/perf/sidecar-soak.json'
-        --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} --enforce {{.CLI_ARGS}}
+        --scale medium --iterations 5 --prompts 2 --soak {{.SOAK}} {{.CLI_ARGS}}
 
   budgets:
     desc: 'Prompt and code size budgets for what the change touches; PW_BUDGETS_INSPECT="<path>" shows a path''s standing'
@@ -650,7 +627,7 @@ tasks:
       - bash {{.SCRIPTS_DIR}}/vitest-digest.sh --name den:test:digest -- {{.CLI_ARGS}}
 
   den:test:transcript-scale:
-    desc: 'Transcript hydration performance at 5000 and 10000 messages'
+    desc: 'Transcript hydration at 5000 and 10000 messages'
     preconditions:
       - sh: command -v bun
         msg: bun required — install from https://bun.sh
@@ -684,11 +661,37 @@ tasks:
     cmds:
       - python3 {{.SCRIPTS_DIR}}/ci_policy/native_verify.py den {{.CLI_ARGS}}
 
+  generation:prepare:
+    desc: Prepare pinned generation runtime dependencies or prototype artifacts
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/generation/run.sh prepare {{.CLI_ARGS}}
+
+  generation:build:
+    desc: Build a native generation runtime candidate
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/generation/run.sh build {{.CLI_ARGS}}
+
+  generation:test:
+    desc: Run fixture-only generation runtime tests
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/generation/run.sh test {{.CLI_ARGS}}
+
+  generation:bench:
+    desc: Measure an explicitly selected local prototype model
+    cmds:
+      - bash {{.SCRIPTS_DIR}}/generation/run.sh bench {{.CLI_ARGS}}
+
+  decide:prepare:
+    desc: Fetch pinned Bialy dependencies or refresh its workspace lockfile
+    cmds:
+      - python3 {{.SCRIPTS_DIR}}/toolchain/decide_prepare.py {{.CLI_ARGS}}
+
   decide:test:
     desc: Decision engine (bialy) Rust tests
     dir: lycaon/internal/decide/native
     sources:
       - 'src/**/*.rs'
+      - 'vendor/**/*'
       - Cargo.toml
       - Cargo.lock
     env:
@@ -1140,9 +1143,11 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
     generates:
       - internal/toolcontract/language_catalog.generated.go
     cmds:
@@ -1155,9 +1160,11 @@ tasks:
       - cmd/codegen-tool-command-equivalence/**/*
       - config/packs/painted-wolf/platform/tools/command-language-v1/*.json
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - internal/toolcontract/language_catalog.go
       - internal/toolcontract/language_contract.go
       - config/packs/painted-wolf/platform/tools/schemas/**/*
+      - config/packs/painted-wolf/platform/tools/operation-schemas/**/*
       - internal/toolcontract/language_catalog.generated.go
     cmds:
       - go run ./cmd/codegen-tool-command-equivalence --root . --check
@@ -1258,6 +1265,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
     generates:
@@ -1274,6 +1282,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-native-tool-contracts/**/*
       - internal/nativemanifest/**/*
       - internal/settings/approval_tiers.generated.go
@@ -1292,6 +1301,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-worker-branch-tools/**/*
       - internal/nativemanifest/**/*
     generates:
@@ -1306,6 +1316,7 @@ tasks:
     dir: '{{.GO_DIR}}'
     sources:
       - config/packs/painted-wolf/platform/tools/native-tools.yaml
+      - config/packs/painted-wolf/platform/tools/native-operations.yaml
       - cmd/codegen-worker-branch-tools/**/*
       - internal/nativemanifest/**/*
       - internal/tools/worker_branch_tools.generated.go
@@ -1323,6 +1334,7 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
       - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
       - cmd/codegen-tool-presentation/**/*
     generates:
       - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
@@ -1339,6 +1351,7 @@ tasks:
     sources:
       - config/packs/painted-wolf/platform/tools/tool-presentation.yaml
       - config/packs/painted-wolf/platform/tools/schemas/*.yaml
+      - config/packs/painted-wolf/platform/tools/operation-schemas/*.yaml
       - cmd/codegen-tool-presentation/**/*
       - ../lycaon-den/src/chat/tool/tool-presentation.generated.ts
       - internal/toolpresentation/visibility.generated.go
@@ -1555,10 +1568,11 @@ tasks:
   codegen:dependency-inventory:
     desc: >-
       Project dependencies/policy.yaml, the tree's pins, and the upstream snapshot into
-      docs/operations/dependency-inventory.md and .github/dependabot.yml
+      docs/operations/dependency-inventory.md and .github/dependabot.yml;
+      --nix-bun refreshes the pinned Nix Bun expression (requires Nix)
     dir: '{{.GO_DIR}}'
     cmds:
-      - go run ./cmd/codegen-dependency-inventory --repo ..
+      - go run ./cmd/codegen-dependency-inventory --repo .. {{.CLI_ARGS}}
 
   codegen:dependency-inventory:check:
     desc: Fail if dependencies/ no longer matches the manifests or .github/dependabot.yml is stale (offline)

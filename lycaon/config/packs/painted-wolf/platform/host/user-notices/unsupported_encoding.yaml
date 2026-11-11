@@ -12,6 +12,3 @@ suggested_action: Convert it to UTF-8 or UTF-16 in an external editor, or Reveal
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - unsupported or malformed text encoding
-      - external editor

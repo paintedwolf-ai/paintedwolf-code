@@ -167,3 +167,32 @@ func TestPinnedDiskAppendExtendsCapturedDestination(t *testing.T) {
 	_, err = f.write.Apply(t.Context(), WriteInput{Path: "new.txt", Content: "x\n", Append: true, Admission: WriteExecutionPinned, Destination: absent}, f.tctx)
 	requireRejectCode(t, err, "READ_PATH_NOT_FOUND")
 }
+
+func TestPinnedDiskWriteAppliesOnWorkerBranch(t *testing.T) {
+	f := newPinnedDiskFixture(t, map[string]string{"main.go": "package main\n\nvar x = 1\n"})
+	f.tctx.Identity.WorkerJobID = "job-1"
+	f.tctx.Source.WorkerBranchRoot = f.dir
+	f.tctx.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
+
+	source, err := f.revisions.CaptureSource(t.Context(), f.tctx, "main.go")
+	testutil.FailErr(t, "capture worker branch source", err)
+	if source.Revision.RootID != "worker-branch" {
+		t.Fatalf("source root = %q, want worker-branch", source.Revision.RootID)
+	}
+	destination, err := f.revisions.CaptureDestination(t.Context(), f.tctx, "main.go")
+	testutil.FailErr(t, "capture worker branch destination", err)
+	if destination.RootID != "worker-branch" {
+		t.Fatalf("destination root = %q, want worker-branch", destination.RootID)
+	}
+	result, err := f.write.Apply(t.Context(), WriteInput{
+		Path:        "main.go",
+		Content:     "package main\n\nvar x = 2\n",
+		Admission:   WriteExecutionPinned,
+		Destination: destination,
+		Sources:     []toolcontract.ExecutionRevision{source.Revision},
+	}, f.tctx)
+	testutil.FailErr(t, "apply pinned write on worker branch", err)
+	if !result.Saved || f.disk(t, "main.go") != "package main\n\nvar x = 2\n" {
+		t.Fatalf("result=%+v disk=%q", result, f.disk(t, "main.go"))
+	}
+}

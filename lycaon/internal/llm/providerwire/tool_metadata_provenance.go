@@ -9,7 +9,7 @@ func ProjectToolMetaForModel(meta tools.ToolMeta) tools.ToolMeta {
 	if !meta.UntrustedMetadata {
 		return meta
 	}
-	meta.Description = transcript.MarkData(meta.Description)
+	meta.Description = transcript.LabelToolMetadata(meta.Description)
 	meta.ArgsSchema = markToolSchemaAnnotations(meta.ArgsSchema)
 	return meta
 }
@@ -23,11 +23,12 @@ func markToolSchemaAnnotations(schema map[string]any) map[string]any {
 		switch key {
 		case "description", "title", "$comment":
 			if text, ok := value.(string); ok {
-				out[key] = transcript.MarkData(text)
+				out[key] = transcript.LabelToolMetadata(text)
 				continue
 			}
 		case "examples":
-			out[key] = markToolExampleStrings(value)
+			// An example is a value the schema accepts; a header would change it.
+			out[key] = value
 			continue
 		}
 		out[key] = cloneAndMarkToolSchema(value)
@@ -43,27 +44,6 @@ func cloneAndMarkToolSchema(value any) any {
 		out := make([]any, len(typed))
 		for i := range typed {
 			out[i] = cloneAndMarkToolSchema(typed[i])
-		}
-		return out
-	default:
-		return value
-	}
-}
-
-func markToolExampleStrings(value any) any {
-	switch typed := value.(type) {
-	case string:
-		return transcript.MarkData(typed)
-	case []any:
-		out := make([]any, len(typed))
-		for i := range typed {
-			out[i] = markToolExampleStrings(typed[i])
-		}
-		return out
-	case map[string]any:
-		out := make(map[string]any, len(typed))
-		for key, item := range typed {
-			out[key] = markToolExampleStrings(item)
 		}
 		return out
 	default:

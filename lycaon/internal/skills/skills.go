@@ -25,8 +25,6 @@ type Skill struct {
 	Compatibility string
 	Metadata      map[string]string
 	AllowedTools  string // display metadata only
-	// OptionalTools names tools mentioned in the body that are not required dependencies.
-	OptionalTools []string
 	UnitID        string
 	PackID        string
 	// Dir is a display-only provenance path.
@@ -89,7 +87,6 @@ type frontmatter struct {
 	Compatibility string         `yaml:"compatibility"`
 	Metadata      map[string]any `yaml:"metadata"`
 	AllowedTools  string         `yaml:"allowed-tools"`
-	OptionalTools []string       `yaml:"optional_tools"`
 }
 
 var namePattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
@@ -164,7 +161,6 @@ func Parse(dirName string, content []byte) ParseResult {
 		Compatibility: compat,
 		Metadata:      coerceMetadata(fm.Metadata),
 		AllowedTools:  strings.TrimSpace(fm.AllowedTools),
-		OptionalTools: append([]string(nil), fm.OptionalTools...),
 	}
 	return ParseResult{Skill: sk, Notes: notes}
 }
@@ -183,6 +179,28 @@ func (s *Skill) BindResources(fsys fs.FS, root string, catalog ResourceCatalog, 
 	for _, name := range catalog.Readable {
 		s.readableResources[name] = struct{}{}
 	}
+}
+
+// AnyOfTools returns the disjunctive tool requirement from
+// `metadata.paintedwolf.any_of_tools`: a comma-separated tool list of which
+// at least one member must be offered for the skill to be usable. Empty when
+// the skill declares no disjunction.
+func (s Skill) AnyOfTools() []string {
+	raw := strings.TrimSpace(s.Metadata["paintedwolf.any_of_tools"])
+	if raw == "" {
+		return nil
+	}
+	fields := strings.Split(raw, ",")
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		if name := strings.TrimSpace(field); name != "" {
+			out = append(out, name)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // SourcePath returns the host-backed location of the skill or a catalog resource.

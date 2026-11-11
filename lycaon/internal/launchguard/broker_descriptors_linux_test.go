@@ -25,7 +25,7 @@ func TestBrokerPreservesEverySparseDescriptorLayoutInTheChild(t *testing.T) {
 			testutil.FailErr(t, "create child observation pipe", err)
 			defer read.Close()
 			defer write.Close()
-			testutil.FailErr(t, "bound descriptor observation", read.SetReadDeadline(time.Now().Add(5*time.Second)))
+			testutil.FailErr(t, "bound descriptor observation", read.SetReadDeadline(time.Now().Add(testutil.Timeout(time.Minute))))
 			request := launchbroker.Request{
 				Argv:        []string{"sh", "-c", `for fd in 3 4 5; do if [ -e "/proc/$$/fd/$fd" ]; then printf 1; else printf 0; fi; done`},
 				Environment: []string{"PATH=/usr/bin:/bin"},

@@ -82,7 +82,7 @@ func BootRegisteredToolSet(reg *DefaultRegistry) (map[string]bool, error) {
 	}
 	for _, list := range lists {
 		for _, name := range list {
-			if name = strings.TrimSpace(name); name != "" {
+			if name = strings.TrimSpace(name); name != "" && !cfg.HasOperation(name) {
 				registered[name] = true
 			}
 		}

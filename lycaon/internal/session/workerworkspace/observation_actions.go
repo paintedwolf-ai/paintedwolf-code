@@ -3,9 +3,9 @@ package workerworkspace
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
@@ -285,12 +285,12 @@ func populateStatOnly(ev *layeredfs.ObservationEvent, diskPath string) {
 	if ev.ModTimeNS == 0 {
 		ev.ModTimeNS = info.ModTime().UnixNano()
 	}
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
+	if observed := fspath.ObserveFile(info); observed.Known {
 		if ev.Ino == 0 {
-			ev.Ino = uint64(sys.Ino)
+			ev.Ino = observed.Identity.Inode
 		}
 		if ev.Dev == 0 {
-			ev.Dev = uint64(sys.Dev)
+			ev.Dev = observed.Identity.Device
 		}
 	}
 }

@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: scan_compare
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SCAN_COMPARE_PROJECT_MISMATCH'

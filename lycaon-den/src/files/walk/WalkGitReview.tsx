@@ -195,6 +195,7 @@ export function WalkGitReview(props: Props) {
           <Show when={data().commit_comparison && data().commit.parents.length > 1}>
             <label>Parent <DenSelect
               aria-label="Comparison parent"
+              data-testid="git-review-parent-select"
               value={String(parent() ?? 1)}
               options={data().commit.parents.map((hash, index) => ({ value: String(index + 1), label: `${index + 1} · ${hash.slice(0, 12)}` }))}
               onValueChange={(value) => selectComparison({ movement: false, parent: Number(value) })}
@@ -204,23 +205,23 @@ export function WalkGitReview(props: Props) {
         <p class="den-walk-page__note" data-testid="git-review-basis">{data().before_commit ? data().before_commit.slice(0, 12) : "Empty tree"} → {data().after_commit.slice(0, 12)}. {data().commit_comparison ? "Changes recorded in this commit." : "Changes between the recorded branch tips."} Files are scoped to this project folder.</p>
         <section class="den-walk-page__files den-git-review__files" aria-label="Git review files">
           <h2 class="den-walk-page__files-title" data-testid="git-review-count">{data().files_total} {data().files_total === 1 ? "file" : "files"} {data().commit_comparison ? "committed" : "changed"}<span class="den-git-review__stats"><span>+{data().insertions}</span><span>−{data().deletions}</span></span></h2>
-          <Show when={data().files_total === 0}><p class="den-walk-page__empty">{data().commit_comparison ? "This commit contains no file changes in this folder." : "These commits contain the same files in this folder."}</p></Show>
+          <Show when={data().files_total === 0}><p class="den-walk-page__empty" data-testid="git-review-empty">{data().commit_comparison ? "This commit contains no file changes in this folder." : "These commits contain the same files in this folder."}</p></Show>
           <ReviewFileGroups groups={groups()} rootLabel={props.rootLabel} openingPath={opening()}
             fileTestId="git-review-file" onOpen={file => void openFile(file)} />
-          <Show when={!!data().next_cursor}><button type="button" class="den-git-review__button" disabled={loadingMore() || query.loading()} onClick={() => void loadMore()}>{loadingMore() ? "Loading…" : `Load more files (${data().files.length} of ${data().files_total})`}</button></Show>
+          <Show when={!!data().next_cursor}><button type="button" class="den-git-review__button" data-testid="git-review-load-more" disabled={loadingMore() || query.loading()} onClick={() => void loadMore()}>{loadingMore() ? "Loading…" : `Load more files (${data().files.length} of ${data().files_total})`}</button></Show>
         </section>
       </>}</ShowLatest>
       <Show when={query.showLoading()}><p role="status">Loading committed files…</p></Show>
       <Show when={canReviewDestination()}>
         <div class="den-git-review__controls">
-          <button type="button" class="den-git-review__button" onClick={() => selectComparison({ movement: false })}>Review destination commit</button>
+          <button data-testid="review-destination-commit" type="button" class="den-git-review__button" onClick={() => selectComparison({ movement: false })}>Review destination commit</button>
         </div>
       </Show>
       <span class="sr-only" role="status">{copyStatus()}</span>
       <Show when={observed().length > 0}>
-        <details class="den-git-review__observed"><summary><span class="den-disclosure-caret" aria-hidden="true" />{observed().length} working-tree {observed().length === 1 ? "file changed" : "files changed"} when this movement was observed</summary>
+        <details class="den-git-review__observed"><summary data-testid="git-review-observed-toggle"><span class="den-disclosure-caret" aria-hidden="true" />{observed().length} working-tree {observed().length === 1 ? "file changed" : "files changed"} when this movement was observed</summary>
           <p class="den-walk-page__note">These are the file changes recorded by the walk at observation time.</p>
-          <ul class="den-walk-page__list"><For each={observed()}>{(effect) => <li><button type="button" class="den-walk-page__file" onClick={() => props.onOpenFile(props.step, effect)}>{effect.path}<span class="den-walk-page__open">Open observed version</span></button></li>}</For></ul>
+          <ul class="den-walk-page__list"><For each={observed()}>{(effect) => <li><button type="button" class="den-walk-page__file" data-testid="git-review-observed-file" onClick={() => props.onOpenFile(props.step, effect)}>{effect.path}<span class="den-walk-page__open">Open observed version</span></button></li>}</For></ul>
         </details>
       </Show>
     </article>

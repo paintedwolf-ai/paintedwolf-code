@@ -1,0 +1,8 @@
+steps:
+  - tool: "ask_user"
+    say: "If a human decision is needed, use {{ call }} once and let the host park the run."
+  - tool: "workflow_transition"
+    say: "Use {{ call }} only when the current phase declares that transition and its requirements are satisfied."
+  - tool: "workflow_advance"
+    complete: true
+    say: "Use {{ call }} only when the current phase makes advancing available."

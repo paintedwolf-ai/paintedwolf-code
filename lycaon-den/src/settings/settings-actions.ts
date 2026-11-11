@@ -35,8 +35,11 @@ export async function refreshModelPolicy(
     projectDir,
     projects,
   );
-  const policy = await client.getModelPolicySettings(projectId);
-  if (shouldApply()) store.actions.setModelPolicy(policy);
+  const [policy, effectivePolicy] = await Promise.all([
+    client.getModelPolicySettings(projectId),
+    client.getModelPolicySettings(projectId, true),
+  ]);
+  if (shouldApply()) store.actions.setModelPolicy(policy, effectivePolicy);
 }
 
 export async function refreshPricing(
@@ -78,11 +81,12 @@ export async function loadSettingsPanel(
     const { projectId } = resolveEditorSettingsScope(opts?.alwaysProjectScope, projectDir, projects);
     switch (panel) {
       case "providers": {
-        const [providers, modelPolicy] = await Promise.all([
+        const [providers, modelPolicy, effectiveModelPolicy] = await Promise.all([
           client.listProviders(),
           client.getModelPolicySettings(projectId),
+          client.getModelPolicySettings(projectId, true),
         ]);
-        return { providers, modelPolicy };
+        return { providers, modelPolicy, effectiveModelPolicy };
       }
       case "approvals":
         return { approvals: await client.getApprovalsSettings(projectId) };

@@ -20,6 +20,12 @@ type Service struct {
 func New(work *Work, state *TurnState, tools *ToolState, authority *Authority, queue *queue.Store) *Service {
 	s := &Service{Registry: resourcelifecycle.New(), Work: work, State: state, Tools: tools, Authority: authority, Queue: queue}
 	_ = s.Registry.Register(resourcelifecycle.ScopeSession, "session-memory", 100, s.release)
+	_ = s.Registry.RegisterDisposal(resourcelifecycle.ScopeSession, "session-coordinator", 100, func(ctx context.Context, scope resourcelifecycle.Scope) error {
+		if scope.ID != "" {
+			s.Work.Dispose(ctx, scope.ID)
+		}
+		return nil
+	})
 	_ = s.Registry.RegisterDisposal(resourcelifecycle.ScopeSession, "chat-sandbox-authority", 101, authority.dispose)
 	return s
 }

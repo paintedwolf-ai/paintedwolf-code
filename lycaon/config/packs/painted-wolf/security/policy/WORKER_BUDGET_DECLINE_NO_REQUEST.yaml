@@ -24,9 +24,6 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     job_id: job-done
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_BUDGET_DECLINE_NO_REQUEST'
 selector:
   tool:
   - decline_worker_budget

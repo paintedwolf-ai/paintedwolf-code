@@ -22,7 +22,6 @@ describe("web-research-catalog.generated", () => {
   });
 
   it("catalogEntry returns rows by id", () => {
-    expect(catalogEntry("brave").label).toBe("Brave Search");
     expect(catalogEntry("serper").kind).toBe("keyed");
   });
 

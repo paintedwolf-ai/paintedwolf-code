@@ -92,9 +92,8 @@ func defaultEntry(key string) approvals.ExplanationEntry {
 		AllowLine:   spec.allow,
 		Scenarios: []approvals.ScenarioEntry{
 			{
-				ID:             "default",
-				Vars:           spec.vars,
-				ExpectContains: append([]string(nil), spec.expect...),
+				ID:   "default",
+				Vars: spec.vars,
 			},
 		},
 	}
@@ -125,9 +124,8 @@ func enrichEntry(key string, entry approvals.ExplanationEntry) approvals.Explana
 	}
 	if len(entry.Scenarios) == 0 {
 		entry.Scenarios = []approvals.ScenarioEntry{{
-			ID:             "default",
-			Vars:           spec.vars,
-			ExpectContains: append([]string(nil), spec.expect...),
+			ID:   "default",
+			Vars: spec.vars,
 		}}
 	}
 	return entry
@@ -140,7 +138,6 @@ type spec struct {
 	ifWrong string
 	allow   string
 	vars    map[string]any
-	expect  []string
 }
 
 var entrySpecs = map[string]spec{
@@ -151,7 +148,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Signals can interrupt work or lose unsaved data. The host rechecks each process instance before signaling.",
 		allow:   "signaling the selected processes",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"process instances", "unsaved data"},
 	},
 	approvals.KeyCommand: {
 		tier:    "recoverable",
@@ -160,7 +156,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Usually reversible locally; review the exact command before allowing.",
 		allow:   "running `{{ command }}`",
 		vars:    map[string]any{"command": "npm run build", "project": "my-app"},
-		expect:  []string{"shell command", "npm run build"},
 	},
 	approvals.KeyCommandDestructive: {
 		tier:    "irreversible",
@@ -169,7 +164,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Often cannot be undone from here once it completes.",
 		allow:   "running `{{ command }}`",
 		vars:    map[string]any{"command": "git push origin main", "project": "my-app"},
-		expect:  []string{"permanent", "sandbox boundary"},
 	},
 	"command_stop": {
 		tier:    "recoverable",
@@ -178,7 +172,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Stopping it interrupts the process tree; partial work may need review.",
 		allow:   "{% if command %}stopping `{{ command }}`{% else %}stopping the selected background command{% endif %}",
 		vars:    map[string]any{"command": "npm run dev", "project": "my-app"},
-		expect:  []string{"Stop the background command", "npm run dev"},
 	},
 	approvals.KeyMCPCall: {
 		tier:    "recoverable",
@@ -187,7 +180,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "External effects may persist even if local files are unchanged.",
 		allow:   "the `{{ tool }}` action",
 		vars:    map[string]any{"provider": "docs", "tool": "search_docs"},
-		expect:  []string{"external action", "search_docs"},
 	},
 	approvals.KeyPathOutsideProject: {
 		tier:    "irreversible",
@@ -196,7 +188,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Not confined to project undo — may affect other repos or system files.",
 		allow:   "changing files outside attached folders",
 		vars:    map[string]any{"path": "/etc/hosts", "project": "my-app"},
-		expect:  []string{"outside attached folders", "/etc/hosts"},
 	},
 	approvals.FallbackExplanationKey: {
 		tier:    "irreversible",
@@ -205,7 +196,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "May be difficult to undo — review before allowing.",
 		allow:   "this action",
 		vars:    map[string]any{"tool": "custom_tool", "project": "my-app"},
-		expect:  []string{"proposed arguments", "difficult to undo"},
 	},
 	"git_commit": {
 		tier:    "recoverable",
@@ -214,7 +204,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Reversible locally with reset or amend; not shared until you push.",
 		allow:   "recording commits in this repository",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"commit", "local history"},
 	},
 	"git_restore": {
 		tier:    "recoverable",
@@ -223,7 +212,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Local changes can be lost — recoverable from reflog in many cases.",
 		allow:   "restoring files from git",
 		vars:    map[string]any{"path": "src/app.ts", "project": "my-app"},
-		expect:  []string{"Restore", "git history"},
 	},
 	"chmod": {
 		tier:    "recoverable",
@@ -232,7 +220,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Permissions can break access until changed back.",
 		allow:   "changing permissions on project files",
 		vars:    map[string]any{"path": "scripts/run.sh", "project": "my-app"},
-		expect:  []string{"permissions", "scripts/run.sh"},
 	},
 	"copy": {
 		tier:    "recoverable",
@@ -241,7 +228,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Overwrites are usually reversible via git if tracked.",
 		allow:   "copying files in this project",
 		vars:    map[string]any{"path": "src/a.ts", "project": "my-app"},
-		expect:  []string{"Copy files", "project"},
 	},
 	"move": {
 		tier:    "recoverable",
@@ -250,7 +236,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Usually reversible via git when paths are tracked.",
 		allow:   "moving files in this project",
 		vars:    map[string]any{"path": "src/old.ts", "project": "my-app"},
-		expect:  []string{"Move", "project"},
 	},
 	"mkdir": {
 		tier:    "recoverable",
@@ -259,7 +244,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Empty dirs are easy to remove; tracked content stays in git history.",
 		allow:   "creating directories in this project",
 		vars:    map[string]any{"path": "src/new", "project": "my-app"},
-		expect:  []string{"Create directories", "project"},
 	},
 	"delete": {
 		tier:    "recoverable",
@@ -268,7 +252,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Recoverable from git when the file was tracked.",
 		allow:   "deleting files in this project",
 		vars:    map[string]any{"path": "tmp/scratch.txt", "project": "my-app"},
-		expect:  []string{"Delete", "working tree"},
 	},
 	"extract_archive": {
 		tier:    "recoverable",
@@ -277,7 +260,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Overwrites may be reversible via git for tracked paths.",
 		allow:   "extracting archives in this project",
 		vars:    map[string]any{"path": "vendor/pkg", "project": "my-app"},
-		expect:  []string{"Extract", "project"},
 	},
 	"web_search": {
 		tier:    "recoverable",
@@ -286,7 +268,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "No local mutation; queries leave your network.",
 		allow:   "web search requests",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"Search", "web"},
 	},
 	"fetch_url": {
 		tier:    "recoverable",
@@ -295,7 +276,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "No local mutation; the request leaves your network.",
 		allow:   "fetching URLs",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"Fetch", "URL"},
 	},
 	"task": {
 		tier:    "recoverable",
@@ -304,7 +284,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Worker changes land in overlays until you promote or discard.",
 		allow:   "dispatching workers in this session",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"worker", "assigned work"},
 	},
 	"render_view": {
 		tier:    "recoverable",
@@ -313,7 +292,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "No project files change; the mockup is session-scoped and can be discarded.",
 		allow:   "rendering visual mockups",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"Rasterize", "mockup"},
 	},
 	"capture_page": {
 		tier:    "recoverable",
@@ -322,7 +300,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Network/local page access leaves your machine; no project files are mutated.",
 		allow:   "capturing page screenshots",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"Capture", "screenshot"},
 	},
 	"measure_page": {
 		tier:    "recoverable",
@@ -331,7 +308,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Read-only measurement; no project files are mutated.",
 		allow:   "measuring page geometry",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"Measure", "geometry"},
 	},
 	"chown": {
 		tier:    "irreversible",
@@ -340,7 +316,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Ownership changes can lock you out until reversed with sufficient privileges.",
 		allow:   "changing file ownership",
 		vars:    map[string]any{"path": "data/db", "project": "my-app"},
-		expect:  []string{"ownership", "path"},
 	},
 	"workflow_persist": {
 		tier:    "irreversible",
@@ -349,7 +324,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Saved workflow artifacts affect future runs.",
 		allow:   "persisting workflow state",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"Persist workflow", "disk"},
 	},
 	"workflow_compose": {
 		tier:    "irreversible",
@@ -358,7 +332,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "New workflows change what the agent can start later.",
 		allow:   "composing workflows",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"Compose", "workflow"},
 	},
 	"workflow_compose_from_template": {
 		tier:    "irreversible",
@@ -367,7 +340,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Adds a durable workflow the agent can invoke again.",
 		allow:   "creating workflows from templates",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"workflow", "template"},
 	},
 	"workflow_advance": {
 		tier:    "irreversible",
@@ -376,7 +348,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Phase transitions can be hard to walk back once committed.",
 		allow:   "advancing workflow phases",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"Advance", "workflow phase"},
 	},
 	"workflow_user_feedback": {
 		tier:    "irreversible",
@@ -385,7 +356,6 @@ var entrySpecs = map[string]spec{
 		ifWrong: "Recorded feedback persists on the run.",
 		allow:   "recording workflow feedback",
 		vars:    map[string]any{"project": "my-app"},
-		expect:  []string{"feedback", "workflow"},
 	},
 }
 

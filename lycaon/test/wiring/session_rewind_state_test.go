@@ -22,8 +22,8 @@ import (
 
 func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
-		{Pattern: "first ask", FollowUpText: MockCoordinatorCloseoutJSON("Did the first ask.", "")},
-		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutJSON("Did the second ask.", "")},
+		{Pattern: "first ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Did the first ask.", "")},
+		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Did the second ask.", "")},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
 	cancel := h.StartBackgroundWorkers(t, context.Background())
@@ -73,8 +73,8 @@ func TestRewindResetsCoordinatorBatchAtTheNewBoundary(t *testing.T) {
 // store with nothing left to restore from — the suffix anchors are invalid.
 func TestRewindToFirstAskDropsSuffixCheckpoints(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
-		{Pattern: "first ask", FollowUpText: MockCoordinatorCloseoutJSON("Did the first ask.", "")},
-		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutJSON("Did the second ask.", "")},
+		{Pattern: "first ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Did the first ask.", "")},
+		{Pattern: "second ask", FollowUpText: MockCoordinatorCloseoutMarkdown("Did the second ask.", "")},
 	}})
 	h := BuildForTest(t, WithLLMClient(mock))
 	cancel := h.StartBackgroundWorkers(t, context.Background())

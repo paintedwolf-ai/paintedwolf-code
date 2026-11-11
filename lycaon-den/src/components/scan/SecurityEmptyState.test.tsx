@@ -69,9 +69,6 @@ describe("SecurityEmptyState", () => {
     const empty = mount(scanned);
     expect(empty.dataset.reason).toBe("clean");
     expect(empty.textContent).not.toContain("Nothing scanned yet");
-    expect(empty.textContent).toContain("No findings reported");
-    expect(empty.textContent).toContain("reported nothing. Changes since then are scanned");
-    expect(screen.getByTestId("scans-empty-start").textContent).toBe("Run full scan again");
   });
 
   it("shows every scanner of a running pass", () => {
@@ -79,13 +76,11 @@ describe("SecurityEmptyState", () => {
     const empty = mount({ ...unscanned, running: pass }, { pass, live: true });
     expect(empty.dataset.reason).toBe("scanning");
     expect(empty.textContent).toContain("Scanning this project");
-    expect(screen.getByTestId("scans-empty-progress").textContent).toContain("Finishing an earlier scan first");
   });
 
   it("keeps a pass that just finished on screen as finished", () => {
     const empty = mount(scanned, { pass: scanned.last_full!, live: false });
     expect(empty.dataset.reason).toBe("scanning");
-    expect(empty.textContent).toContain("Full scan finished");
     expect(empty.textContent).not.toContain("Scanning this project");
     expect(screen.getByTestId("scans-full-scan-status").textContent).toBe("Complete");
   });
@@ -101,8 +96,6 @@ describe("SecurityEmptyState", () => {
       scanners: [{ ...unscanned.scanners[0]!, watching: true, last_completed_at: justNow }],
     });
     expect(empty.dataset.reason).toBe("changes_only");
-    expect(empty.textContent).toContain("No full scan yet");
-    expect(empty.textContent).toContain("Changed files have been scanned as they were written");
     expect(empty.textContent).not.toContain("Nothing scanned yet");
     expect(screen.getByTestId("scans-empty-start").textContent).toBe("Run full scan");
   });

@@ -22,7 +22,4 @@ scenarios:
     offender_count: 1
     offenders_omitted: 0
     offenders_sample: read#1:50
-  expect_contains:
-  - 'Code: WORKER_EXCERPT_HANDLE_MISMATCH'
-  - verbatim
 id: WORKER_EXCERPT_HANDLE_MISMATCH

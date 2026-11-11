@@ -12,8 +12,8 @@ import (
 )
 
 // Privileged host effects remain outside the applied boundary.
-func TestSeatbeltHostCapabilityBoundary(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryHostCapability(t *testing.T) {
+	self := requireLiveBoundary(t)
 	proj := t.TempDir()
 	c := confine.Confinement{Roots: []string{proj}}
 
@@ -29,15 +29,18 @@ func TestSeatbeltHostCapabilityBoundary(t *testing.T) {
 		// Raw device writes.
 		{"dd", "/bin/dd", []string{"if=/dev/zero", "of=/dev/disk0", "bs=1", "count=1"}, "not permitted"},
 		{"dd", "/bin/dd", []string{"if=/dev/zero", "of=/dev/rdisk0", "bs=1", "count=1"}, "not permitted"},
+		{"dd", "/bin/dd", []string{"if=/dev/zero", "of=/dev/sda", "bs=1", "count=1"}, "not permitted"},
+		{"dd", "/bin/dd", []string{"if=/dev/zero", "of=/dev/nvme0n1", "bs=1", "count=1"}, "not permitted"},
 		// Partition and filesystem effects.
 		{"mkfs*", "/sbin/newfs_hfs", []string{"-N", "/dev/disk0"}, "not permitted"},
+		{"mkfs*", "/sbin/mkfs.ext4", []string{"-n", "/dev/sda"}, "not permitted"},
 		{"fdisk", "/usr/sbin/fdisk", []string{"/dev/disk0"}, "not permitted"},
 		{"sfdisk", "/sbin/sfdisk", []string{"/dev/disk0"}, "not permitted"},
 		{"parted", "/usr/local/bin/parted", []string{"/dev/disk0", "print"}, "not permitted"},
 		// Power control.
 		{"reboot", "/sbin/reboot", nil, "not permitted"},
 		{"halt", "/sbin/halt", nil, "not permitted"},
-		{"shutdown", "/sbin/shutdown", []string{"-h", "now"}, "not"}, // "NOT super-user" or seatbelt
+		{"shutdown", "/sbin/shutdown", []string{"-h", "now"}, "not"}, // "NOT super-user" or the boundary
 		{"poweroff", "/sbin/poweroff", nil, "not permitted"},
 		// Privilege escalation.
 		{"sudo", "/usr/bin/sudo", []string{"-n", "id"}, "not permitted"},
@@ -63,7 +66,7 @@ func TestSeatbeltHostCapabilityBoundary(t *testing.T) {
 			}
 			code, out := confinedRun(t, self, c, bin, p.args...)
 			if code == 0 {
-				t.Fatalf("%s must be denied under Seatbelt; exit=0 out=%q", p.capability, out)
+				t.Fatalf("%s must be denied under the boundary; exit=0 out=%q", p.capability, out)
 			}
 			if p.deniedSubstring != "" && !strings.Contains(strings.ToLower(out), strings.ToLower(p.deniedSubstring)) &&
 				!strings.Contains(strings.ToLower(out), "operation not permitted") &&
@@ -77,7 +80,7 @@ func TestSeatbeltHostCapabilityBoundary(t *testing.T) {
 
 	// Positive controls keep ordinary writes usable.
 	if code, out := confinedRun(t, self, c, "/bin/dd", "if=/dev/zero", "of="+filepath.Join(proj, "ok.bin"), "bs=1", "count=1"); code != 0 {
-		t.Fatalf("in-project dd must succeed under Seatbelt: exit=%d out=%q", code, out)
+		t.Fatalf("in-project dd must succeed under the boundary: exit=%d out=%q", code, out)
 	}
 	if code, out := confinedRun(t, self, c, "/bin/dd", "if=/dev/zero", "of=/dev/null", "bs=1", "count=1"); code != 0 {
 		t.Fatalf("dd to /dev/null must succeed: exit=%d out=%q", code, out)

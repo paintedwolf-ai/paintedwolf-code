@@ -16,64 +16,22 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func hasLayeredOverlayDivergence(ctx context.Context, task *api.WorkerTask) (bool, bool) {
-	if task == nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
-		return false, false
-	}
-	paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot)
-	if !handled {
-		return false, false
-	}
-	return err != nil || len(paths) > 0, true
-}
-
 // Complete commits the result only while the claim remains current.
-func (q *SQLQueue) Complete(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
-	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
+func (q *sqlQueueClaims) Complete(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
+	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
 		return q.completeAdmitted(ctx, claimed, result)
 	})
 }
 
-func (q *SQLQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
+func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
-	task := claimed
+	task, mergeStatus, teardown := q.resolveWriteCompletionTarget(ctx, claimed, result)
 	jobID := claimed.ID
-	claimToken := claimed.ClaimToken
-	// Overlay status and the terminal result share one transaction.
-	mergeStatus := api.WorkerMergeStatus("")
-	teardown := false
-	if task.EffectiveScope().IsWrite() {
-		if strings.TrimSpace(task.WorkspaceRoot) == "" {
-			if loaded, ok := q.store.getTask(ctx, jobID); ok && loaded != nil {
-				loaded.ClaimToken = claimToken
-				task = loaded
-			}
-		}
-		layeredDiverges, layeredHandled := hasLayeredOverlayDivergence(ctx, task)
-		switch {
-		case strings.TrimSpace(result.Status) == "needs_decision":
-			// Decision branches stay attached and non-promotable.
-		case layeredHandled && layeredDiverges:
-			mergeStatus = api.WorkerMergeStatusPending
-		case layeredHandled && !layeredDiverges:
-			mergeStatus = api.WorkerMergeStatusAborted
-			teardown = true
-		case session.OverlayAwaitingPromote(ctx, task):
-			mergeStatus = api.WorkerMergeStatusPending
-		case q.overlayDivergesFromProject(ctx, task):
-			// Preserve untracked overlay divergence for review.
-			workerWorkspaceLog.Warn("write overlay retained despite empty baseline diff",
-				"job_id", jobID, "branch_root", strings.TrimSpace(task.WorkspaceRoot))
-			mergeStatus = api.WorkerMergeStatusPending
-		default:
-			mergeStatus = api.WorkerMergeStatusAborted
-			teardown = true
-		}
-	}
 	overlayPath := ""
-	// A missing baseline or budget-exceeded overlay leaves the overlay unsealed for review.
+	// A view publishes its checkpoint; an earlier-format branch seals an overlay against its baseline.
+	// A budget-exceeded overlay stays unsealed for review.
 	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" {
 		published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
 		if err != nil {
@@ -93,15 +51,12 @@ func (q *SQLQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask
 			}
 		}
 	}
-	completion, err := q.store.CompleteJob(ctx, jobID, result, claimToken, mergeStatus, teardown, overlayPath)
+	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath)
 	if err != nil || !completion.Committed || completion.Suspended {
 		q.discardOverlay(ctx, overlayPath)
 	}
-	if err != nil {
+	if err != nil || !completion.Committed {
 		return false, err
-	}
-	if !completion.Committed {
-		return false, nil
 	}
 	if teardown && !completion.Suspended {
 		q.destroyWorkerWorkspace(ctx, task)
@@ -110,14 +65,44 @@ func (q *SQLQueue) completeAdmitted(ctx context.Context, claimed *api.WorkerTask
 	return true, nil
 }
 
+func (q *sqlQueueClaims) resolveWriteCompletionTarget(ctx context.Context, claimed *api.WorkerTask, result api.WorkerResult) (*api.WorkerTask, api.WorkerMergeStatus, bool) {
+	task := claimed
+	if !task.EffectiveScope().IsWrite() {
+		return task, "", false
+	}
+	if strings.TrimSpace(task.WorkspaceRoot) == "" {
+		if loaded, ok := q.store.getTask(ctx, claimed.ID); ok && loaded != nil {
+			loaded.ClaimToken = claimed.ClaimToken
+			task = loaded
+		}
+	}
+	layeredDiverges, layeredHandled := hasLayeredOverlayDivergence(ctx, task)
+	switch {
+	case strings.TrimSpace(result.Status) == "needs_decision":
+		return task, "", false
+	case layeredHandled && layeredDiverges:
+		return task, api.WorkerMergeStatusPending, false
+	case layeredHandled:
+		return task, api.WorkerMergeStatusAborted, true
+	case session.OverlayAwaitingPromote(ctx, task):
+		return task, api.WorkerMergeStatusPending, false
+	case q.overlayDivergesFromProject(ctx, task):
+		workerWorkspaceLog.Warn("write overlay retained despite empty baseline diff",
+			"job_id", claimed.ID, "branch_root", strings.TrimSpace(task.WorkspaceRoot))
+		return task, api.WorkerMergeStatusPending, false
+	default:
+		return task, api.WorkerMergeStatusAborted, true
+	}
+}
+
 // Fail commits a failure only while the claim remains current.
-func (q *SQLQueue) Fail(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
-	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
+func (q *sqlQueueClaims) Fail(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
 		return q.failAdmitted(ctx, claimed, runErr)
 	})
 }
 
-func (q *SQLQueue) failAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
@@ -152,13 +137,13 @@ func (q *SQLQueue) failAdmitted(ctx context.Context, claimed *api.WorkerTask, ru
 }
 
 // Retry records the failed attempt and keeps the child/workspace for resume.
-func (q *SQLQueue) Retry(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
-	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
+func (q *sqlQueueClaims) Retry(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
 		return q.retryAdmitted(ctx, claimed, runErr)
 	})
 }
 
-func (q *SQLQueue) retryAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
+func (q *sqlQueueClaims) retryAdmitted(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
@@ -180,13 +165,13 @@ func (q *SQLQueue) retryAdmitted(ctx context.Context, claimed *api.WorkerTask, r
 	return true, nil
 }
 
-func (q *SQLQueue) Park(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
-	return admitWorkerTransition(ctx, q, claimed, func() (bool, error) {
+func (q *sqlQueueClaims) Park(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
+	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
 		return q.parkAdmitted(ctx, claimed)
 	})
 }
 
-func (q *SQLQueue) parkAdmitted(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
+func (q *sqlQueueClaims) parkAdmitted(ctx context.Context, claimed *api.WorkerTask) (bool, error) {
 	won, err := q.store.ParkJob(ctx, claimed)
 	if err == nil && won {
 		q.refreshBoardByID(ctx, claimed.ID)
@@ -195,7 +180,7 @@ func (q *SQLQueue) parkAdmitted(ctx context.Context, claimed *api.WorkerTask) (b
 }
 
 // ResumeReadyWaits atomically expires deadlines and makes every resolved worker runnable.
-func (q *SQLQueue) ResumeReadyWaits(ctx context.Context) (int, error) {
+func (q *sqlQueueClaims) ResumeReadyWaits(ctx context.Context) (int, error) {
 	now := db.FormatTime(time.Now().UTC())
 	tx, err := q.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -236,4 +221,17 @@ func (q *SQLQueue) ResumeReadyWaits(ctx context.Context) (int, error) {
 		q.NotifyRunnable()
 	}
 	return len(jobIDs), nil
+}
+
+// hasLayeredOverlayDivergence answers from a branch's view when it has one: whether the worker changed
+// anything, and whether the view could answer.
+func hasLayeredOverlayDivergence(ctx context.Context, task *api.WorkerTask) (bool, bool) {
+	if task == nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
+		return false, false
+	}
+	paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot)
+	if !handled {
+		return false, false
+	}
+	return err != nil || len(paths) > 0, true
 }

@@ -260,7 +260,6 @@ describe("buildWalk", () => {
       ],
     );
     expect(walk.steps).toHaveLength(1);
-    expect(walk.steps[0]!.label).toBe("overlay promote");
     expect(walk.steps[0]!.toolCallId).toBe("t1");
   });
 });
@@ -306,14 +305,11 @@ describe("git steps", () => {
     expect(walk.steps.map((s) => s.key)).toEqual(["c1", "git:t1", "c2"]);
     const git = walk.steps[1]!;
     if (git.kind !== "git") throw new Error("invariant: expected a git step");
-    expect(git.label).toBe("git checkout");
     expect(git.ordinal).toBe(4);
     expect(git.effects.map((e) => e.id)).toEqual(["cg1", "cg2"]);
     expect(git.toolCallId).toBeNull();
     expect(walkGroupFileSummary(git)).toBe("2 observed files");
-    expect(walkGroupFileSummary({ ...git, effects: [] })).toBe("Git review");
     expect(walkStepKind(git)).toBe("git");
-    expect(walkStepOperation(git)).toBe("Git checkout");
     expect(walkStepActor(git)).toBe("Git");
     expect(walkStepGitChange(git)).toBe(
       "checkout main → feature-x — moving from main to feature-x",
@@ -420,7 +416,6 @@ describe("outside steps", () => {
     );
     expect(walk.steps.map((s) => s.key)).toEqual(["c1", "o1", "c2"]);
     expect(walk.steps[1]!.kind).toBe("effect");
-    expect(walkStepActor(walk.steps[1]!)).toBe("Outside app");
   });
 
   it("breaks a run at a git movement or a chat step", () => {

@@ -6,11 +6,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io/fs"
 	"os"
 	"path"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/layeredfs/observation"
@@ -129,10 +129,8 @@ func (e *Engine) readMountedOrCore(nq layeredfs.QualifiedPath, absMountPath stri
 }
 
 func statInoDev(info fs.FileInfo) (uint64, uint64) {
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
-		return uint64(sys.Ino), uint64(sys.Dev)
-	}
-	return 0, 0
+	observed := fspath.ObserveFile(info)
+	return observed.Identity.Inode, observed.Identity.Device
 }
 
 // ReadCheckpointEntry inspects a file in a published checkpoint. Changed files stored in the

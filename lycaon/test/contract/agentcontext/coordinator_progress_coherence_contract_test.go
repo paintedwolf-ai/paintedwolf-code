@@ -1,36 +1,13 @@
 package contract
 
 import (
-	"github.com/lycaon/lycaon/internal/toolcontract"
-
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
-	"github.com/lycaon/lycaon/pkg/api"
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 	coordinatorcoordinationplane "github.com/lycaon/lycaon/test/wiring/fixtures/coordinator_coordination_plane"
 )
-
-// TestCoordinatorProgressOneBoardAuthoringTool locks the invariant that plan authoring
-// names update_progress as the sole progress writer — no shadow file-board paths.
-func TestCoordinatorProgressOneBoardAuthoringTool(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	investigate := renderCoordinatorTripartiteForRunContext(
-		t, root, apiCoordinatorRunRunning(), nil, "Survey this repo", nil,
-		toolcontract.SurfaceImplementInvestigate,
-	)
-	if !strings.Contains(investigate, progress.AuthoringToolID) {
-		t.Fatalf("investigate prompt must name %q for plan authoring", progress.AuthoringToolID)
-	}
-	for _, shadow := range []string{settingsoverlay.Rel("plans/board.md"), settingsoverlay.Rel("plans/board.plan.md"), settingsoverlay.Rel("workbook/workbook.md"), settingsoverlay.Rel("scratchpad/board.md")} {
-		if strings.Contains(investigate, shadow) {
-			t.Fatalf("investigate prompt must not reference shadow board path %q", shadow)
-		}
-	}
-}
 
 // TestCoordinatorProgressShadowBoardPathsNotAuthoringTarget asserts shadow paths are
 // flagged and not treated as alternate board locations on plan-authoring surfaces.
@@ -69,8 +46,4 @@ func TestProgressBootstrapRefreshesOnNewRun(t *testing.T) {
 	if strings.Contains(got, "Map existing auth hooks") {
 		t.Fatalf("stale plan steps survived refresh: %q", got)
 	}
-}
-
-func apiCoordinatorRunRunning() api.CoordinatorRunContext {
-	return api.CoordinatorRunContext{RunStatus: "running"}
 }

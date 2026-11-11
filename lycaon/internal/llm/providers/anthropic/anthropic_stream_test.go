@@ -2,10 +2,12 @@ package anthropic
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -91,9 +93,97 @@ func TestAnthropicStreamRejectsMissingTerminalEvent(t *testing.T) {
 	provider := New("test", server.URL, "test-key", []modelinfo.Entry{{ID: "claude-test"}})
 	ch, err := provider.Stream(t.Context(), modelcall.CompletionRequest{})
 	testutil.FailErr(t, "start incomplete stream", err)
-	if _, _, err := modelcall.CollectStream(ch); err == nil || !strings.Contains(err.Error(), "message_stop") {
-		t.Fatalf("error = %v, want missing message_stop", err)
+	_, _, err = modelcall.CollectStream(ch)
+	interrupted, ok := failure.AsProviderResponseInterrupted(err)
+	if !ok || !errors.Is(err, io.ErrUnexpectedEOF) || interrupted.ProviderID != "test" || interrupted.Model != "claude-test" {
+		t.Fatalf("error = %v, want ProviderResponseInterruptedError wrapping unexpected EOF", err)
 	}
+}
+
+func abortAnthropicResponseMidBody(t *testing.T, w http.ResponseWriter, contentType, partial string) {
+	t.Helper()
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Content-Length", "4096")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte(partial))
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	if hijacker, ok := w.(http.Hijacker); ok {
+		if conn, _, err := hijacker.Hijack(); err == nil {
+			if tcp, ok := conn.(*net.TCPConn); ok {
+				_ = tcp.SetLinger(0)
+			}
+			_ = conn.Close()
+		}
+	}
+}
+
+func TestAnthropicHTTPServerInterruptedAndEmptyResponses(t *testing.T) {
+	req := modelcall.CompletionRequest{
+		Model:    "claude-test",
+		Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hello"}},
+	}
+
+	t.Run("mid-stream connection reset", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortAnthropicResponseMidBody(t, w, "text/event-stream", "data: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"half\"}}\n\n")
+		}))
+		defer srv.Close()
+
+		p := New("anthropic", srv.URL, "test-key", []modelinfo.Entry{{ID: "claude-test"}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "anthropic" || interrupted.Model != "claude-test" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
+
+	t.Run("stream closes after output without terminal event", func(t *testing.T) {
+		srv := anthropicSSEServer(t, []string{
+			`data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"half"}}`,
+		})
+		defer srv.Close()
+
+		p := New("anthropic", srv.URL, "test-key", []modelinfo.Entry{{ID: "claude-test"}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || !errors.Is(err, io.ErrUnexpectedEOF) || interrupted.ProviderID != "anthropic" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError wrapping unexpected EOF", err)
+		}
+	})
+
+	t.Run("stream closes before any output", func(t *testing.T) {
+		srv := anthropicSSEServer(t, nil)
+		defer srv.Close()
+
+		p := New("anthropic", srv.URL, "test-key", []modelinfo.Entry{{ID: "claude-test"}})
+		ch, err := p.Stream(t.Context(), req)
+		testutil.FailErr(t, "open stream", err)
+		_, _, err = modelcall.CollectStream(ch)
+		empty, ok := failure.AsProviderEmptyCompletion(err)
+		if !ok || !empty.Retryable || empty.ProviderID != "anthropic" {
+			t.Fatalf("err = %v, want retryable ProviderEmptyCompletionError", err)
+		}
+	})
+
+	t.Run("non-streaming complete body breaks after headers", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			abortAnthropicResponseMidBody(t, w, "application/json", `{"content":[{"type":"text","text":"half`)
+		}))
+		defer srv.Close()
+
+		p := New("anthropic", srv.URL, "test-key", []modelinfo.Entry{{ID: "claude-test"}})
+		_, err := p.Complete(t.Context(), req)
+		interrupted, ok := failure.AsProviderResponseInterrupted(err)
+		if !ok || interrupted.ProviderID != "anthropic" || interrupted.Model != "claude-test" {
+			t.Fatalf("err = %v, want ProviderResponseInterruptedError", err)
+		}
+	})
 }
 
 func TestAnthropicInterruptedStreamRetainsObservedCacheUsage(t *testing.T) {

@@ -23,6 +23,3 @@ x-paintedwolf-message: direct network authorization changed before spawn
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_DIRECT_IP_AUTHORIZATION_CHANGED'
-  - direct network

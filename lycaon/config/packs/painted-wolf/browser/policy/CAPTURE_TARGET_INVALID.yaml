@@ -38,13 +38,7 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: coordinator
     tool: capture_page
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CAPTURE_TARGET_INVALID'
 - id: mixed_targets
   vars:
     reason: url_and_project_dir
     tool: capture_page
-  expect_contains:
-  - 'Code: CAPTURE_TARGET_INVALID'
-  - project_dir

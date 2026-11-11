@@ -3,6 +3,7 @@ package promptloop
 import (
 	"bytes"
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -104,9 +104,7 @@ func TestToolResultSpillUsesStorageProjection(t *testing.T) {
 	)
 	// A capped result is cut from the storage projection, so the inline copy the
 	// model and the transcript receive can only carry screened bytes.
-	if strings.Contains(preview.content, storageBoundarySecret) {
-		t.Fatalf("capped preview kept the raw credential: %q", preview.content)
-	}
+	exposure.Absent(t, preview.content, storageBoundarySecret)
 	if !strings.Contains(preview.content, "[REDACTED]") {
 		t.Fatalf("capped preview is not the storage projection: %q", preview.content)
 	}
@@ -239,13 +237,14 @@ func TestToolResultSecretIsRedactedBeforeEveryDurableConsumer(t *testing.T) {
 			toolArgs:       raw.ToolResult.ToolArgs,
 			toolMsg:        raw,
 			handleEligible: true,
-			agentNote: &tools.AgentNoteCapture{
-				MessageID: "note-1",
-				Content:   "observed " + storageBoundarySecret,
-			},
 		}, &last, st,
 	)
 	testutil.FailErr(t, "commit storage-safe messages", err)
+	history, err = loop.Batch.commitMidTurnNote(context.Background(), sess.ID, history, api.Message{
+		ID: "note-1", Role: api.MessageRoleAssistant, Kind: api.MessageKindAgentNote,
+		Visibility: api.MessageVisibilityTranscript, Content: "observed " + storageBoundarySecret,
+	}, &last, st)
+	testutil.FailErr(t, "commit storage-safe note", err)
 	st.history = history
 
 	if strings.Contains(evidence, storageBoundarySecret) || strings.Contains(evidenceArg, storageBoundarySecret) ||

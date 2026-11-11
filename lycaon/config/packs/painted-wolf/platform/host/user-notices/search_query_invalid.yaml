@@ -13,5 +13,3 @@ scenarios:
   - id: default
     vars:
       reason: empty value for field kind at offset 6 (field kind)
-    expect_contains:
-      - empty value

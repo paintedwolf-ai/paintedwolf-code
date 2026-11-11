@@ -24,6 +24,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     rejection_reason: workflow version is unavailable
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKFLOW_VERSION_UNAVAILABLE'

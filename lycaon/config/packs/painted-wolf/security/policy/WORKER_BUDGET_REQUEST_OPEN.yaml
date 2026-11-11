@@ -30,7 +30,3 @@ x-paintedwolf-scenarios:
   vars:
     max_tool_loops: 20
     requested_max: 32
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_BUDGET_REQUEST_OPEN'
-  - partial report

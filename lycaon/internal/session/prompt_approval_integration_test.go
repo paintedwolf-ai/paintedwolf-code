@@ -31,7 +31,6 @@ import (
 	sessionprofiles "github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -62,14 +61,14 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "write",
 		ToolCalls: []llm.MockToolCall{{
-			ID: "call_write", Name: "edit", Args: map[string]any{"path": settingsoverlay.Rel("blueprints/a.md"), "old_string": "before", "new_string": "x"},
+			ID: "call_write", Name: "command", Args: map[string]any{"command": "printf x > blueprints/a.md"},
 		}},
 		FollowUpText: "done",
 	}}})
 
 	approvalDir := t.TempDir()
 	configtest.Overlay(t, map[config.Rel]string{
-		config.SecurityApprovals: "rules:\n  - category: tool\n    pattern: edit\n    effect: ask\n",
+		config.SecurityApprovals: "rules:\n  - category: tool\n    pattern: command\n    effect: ask\n",
 	})
 	approvalStore, err := settings.NewApprovalStoreAt(filepath.Join(approvalDir, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
@@ -87,13 +86,10 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	boundary := sandbox.NewBoundary(sandboxCfg, profiles)
 
 	reg := tools.NewDefaultRegistry()
-	if err := reg.Register("edit", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-		if err := reviewPromptWrite(ctx, args, tc); err != nil {
-			return "", err
-		}
+	if err := reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		return "write ok", nil
 	}); err != nil {
-		testutil.FailErr(t, "register approval write fixture", err)
+		testutil.FailErr(t, "register approval command fixture", err)
 	}
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
@@ -116,7 +112,7 @@ func TestPromptAskWriteApproveRunsTool(t *testing.T) {
 	mgr.SetProgressStore(prog)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	recordRequestedLoad(t, store, sess.ID, "edit")
+	recordRequestedLoad(t, store, sess.ID, "command")
 	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
 	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
@@ -183,14 +179,14 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "write",
 		ToolCalls: []llm.MockToolCall{{
-			ID: "call_write", Name: "edit", Args: map[string]any{"path": settingsoverlay.Rel("blueprints/a.md"), "old_string": "before", "new_string": "x"},
+			ID: "call_write", Name: "command", Args: map[string]any{"command": "printf x > blueprints/a.md"},
 		}},
 		FollowUpText: "done",
 	}}})
 
 	approvalDir := t.TempDir()
 	configtest.Overlay(t, map[config.Rel]string{
-		config.SecurityApprovals: "rules:\n  - category: tool\n    pattern: edit\n    effect: ask\n",
+		config.SecurityApprovals: "rules:\n  - category: tool\n    pattern: command\n    effect: ask\n",
 	})
 	approvalStore, err := settings.NewApprovalStoreAt(filepath.Join(approvalDir, "global.yaml"))
 	testutil.FailErr(t, "settings.NewApprovalStoreAt failed", err)
@@ -209,14 +205,11 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 
 	reg := tools.NewDefaultRegistry()
 	var mutations atomic.Int32
-	if err := reg.Register("edit", func(ctx context.Context, args map[string]any, tc tools.ToolContext) (string, error) {
-		if err := reviewPromptWrite(ctx, args, tc); err != nil {
-			return "", err
-		}
+	if err := reg.Register("command", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
 		mutations.Add(1)
 		return "write ok", nil
 	}); err != nil {
-		testutil.FailErr(t, "register rejection write fixture", err)
+		testutil.FailErr(t, "register rejection command fixture", err)
 	}
 	policy := toolexecution.NewApprovalPolicyEngine(toolprofiles.NewProfilePolicyEngine(boundary), gate)
 	exec := toolexecution.NewExecutor(policy, reg, "implement")
@@ -242,7 +235,7 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	mgr.SetProgressStore(prog)
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
-	recordRequestedLoad(t, store, sess.ID, "edit")
+	recordRequestedLoad(t, store, sess.ID, "command")
 	mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
 	// Keep progress terminal so the write runs once.
 	prog.Set(sess.ID, "## Progress\n- [x] write blueprint stub\n")
@@ -298,15 +291,6 @@ func TestPromptAskWriteRejectSurfacesApprovalDenied(t *testing.T) {
 	if !foundDenied {
 		t.Fatalf("expected approval denied tool message, got %+v", msgs)
 	}
-}
-
-func reviewPromptWrite(ctx context.Context, args map[string]any, tc tools.ToolContext) error {
-	path, _ := args["path"].(string)
-	content, _ := args["new_string"].(string)
-	return tc.ReviewFileChanges(ctx, tools.FileChange{
-		Path:    filepath.Join(tc.ActiveRootPath(), path),
-		Preview: api.ApprovalFileChange{Path: path, Operation: "create", After: content},
-	})
 }
 
 type outcomeRenderer struct {

@@ -23,14 +23,14 @@ func measureExecutionStateBlock(ctx context.Context, renderer *prompts.InjectRen
 				receipt.SourceVerdict, receipt.SourceRevision, receipt.SourceRootDigest = "failed", strings.Repeat("a", 64), strings.Repeat("b", 64)
 			}
 			history = append(history, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
-				Tool: tool, ToolCallID: id, Invocation: receipt,
+				Tool: tool, ToolCallID: id, AssistantMessageID: fmt.Sprintf("batch-%d", i), Invocation: receipt,
 				ToolArgs: map[string]any{"command": strings.Repeat("c", 254), "path": strings.Repeat("p", 254), "cwd": "."},
 			}})
 		}
 	}
 	for _, tool := range []string{"update_progress", "request_tools"} {
 		id := "call-" + tool
-		history = append(history, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: tool, ToolCallID: id, Invocation: &api.InvocationReceipt{ID: id, Tool: tool, ToolCallID: id, Status: api.InvocationStatusCompleted, Invoked: true}}})
+		history = append(history, api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{Tool: tool, ToolCallID: id, AssistantMessageID: "batch-3", Invocation: &api.InvocationReceipt{ID: id, Tool: tool, ToolCallID: id, Status: api.InvocationStatusCompleted, Invoked: true}}})
 	}
 	return inject.RenderExecutionStateMessage(ctx, renderer, "sess-inject-test", history, "./task check").Content
 }

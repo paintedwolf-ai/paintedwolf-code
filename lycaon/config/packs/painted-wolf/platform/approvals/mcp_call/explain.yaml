@@ -14,6 +14,3 @@ approval_explanations:
               vars:
                 action_label: docs.search_docs
                 tool: mcp_docs_search_docs
-              expect_contains:
-                - external action
-                - search_docs

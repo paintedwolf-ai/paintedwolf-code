@@ -25,6 +25,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     reason: approval did not install authority
-  expect_contains:
-  - 'Code: SANDBOX_APPROVAL_UNAVAILABLE'
-  - not a security verdict

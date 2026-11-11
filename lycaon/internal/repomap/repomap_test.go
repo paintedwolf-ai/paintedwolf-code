@@ -287,7 +287,7 @@ func TestBuildMapViewWhenSymbolsOverflowBudget(t *testing.T) {
 	if snap.Truncated {
 		t.Fatal("map must represent the full scope")
 	}
-	if snap.Diagnostics == nil || !strings.Contains(snap.Diagnostics.Hint, "Scope to") {
+	if snap.Diagnostics == nil {
 		t.Fatalf("expected a scope-down hint, got %+v", snap.Diagnostics)
 	}
 

@@ -14,6 +14,8 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/transcript"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -145,5 +147,46 @@ func TestManagerWithoutLedgerOrDeciderAbstains(t *testing.T) {
 	}
 	if (&Service{}).Decider().Available() {
 		t.Fatal("an unwired decider must be absent")
+	}
+}
+
+func TestNeededForTurnIncludesRecallWhenHistoryHasCompactedContent(t *testing.T) {
+	t.Parallel()
+	uncompacted := []api.Message{
+		{Role: api.MessageRoleUser, Content: "hello"},
+		{Role: api.MessageRoleTool, Content: "[read#1]\nfunc F() {}"},
+	}
+	if got := neededForTurn([]string{"jq_edit"}, uncompacted, ""); !slices.Equal(got, []string{"jq_edit"}) {
+		t.Fatalf("uncompacted history should not force recall: got %v", got)
+	}
+
+	withCompactedChunk := []api.Message{
+		{Role: api.MessageRoleTool, CompactedChunk: &api.CompactedChunkMeta{Strategy: "spill_summarize"}},
+	}
+	if got := neededForTurn([]string{"jq_edit"}, withCompactedChunk, ""); !slices.Equal(got, []string{"jq_edit", "recall"}) {
+		t.Fatalf("compacted chunk should mark recall needed: got %v", got)
+	}
+
+	withCheckpoint := []api.Message{
+		{Role: api.MessageRoleAssistant, CompactionCheckpoint: true},
+	}
+	if got := neededForTurn(nil, withCheckpoint, ""); !slices.Equal(got, []string{"recall"}) {
+		t.Fatalf("compaction checkpoint should mark recall needed: got %v", got)
+	}
+
+	if got := neededForTurn(nil, uncompacted, "epoch-1"); !slices.Equal(got, []string{"recall"}) {
+		t.Fatalf("history epoch should mark recall needed: got %v", got)
+	}
+}
+
+func TestToolEventOfferedToolsIncludesDeferredTurnPlanTools(t *testing.T) {
+	t.Parallel()
+	m := &Service{}
+	plan := toolsurface.Compile([]string{"command", "request_tools"}, []string{"terminal_open", "terminal_snapshot"})
+	got := m.toolEventOfferedTools(context.Background(), &api.Session{ID: "s1"}, tools.ToolContext{
+		Turn: tools.InvocationTurn{TurnToolPlan: plan},
+	}, "terminal_open", 1)
+	if !got["terminal_open"] || !got["terminal_snapshot"] {
+		t.Fatalf("expected deferred turn plan tools in toolEventOfferedTools, got %v", got)
 	}
 }

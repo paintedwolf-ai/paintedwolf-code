@@ -1,3 +1,4 @@
+import type { AppNotice } from "../../notices/notice-model.ts";
 import type { LycaonClient } from "../../api/client.ts";
 import type { PendingCheckpoint } from "../../chat/checkpoint/checkpoint-model.ts";
 
@@ -20,6 +21,7 @@ export type ApprovalCardProps = {
   sessionId?: string;
   projectId?: string;
   resolving?: boolean;
+  decisionNotice?: AppNotice;
   /** The checkpoint has resolved; the card stays only for the dock's exit. */
   inert?: boolean;
   onToolApproval: (

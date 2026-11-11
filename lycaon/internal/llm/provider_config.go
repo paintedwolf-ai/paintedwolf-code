@@ -181,6 +181,9 @@ func decodeProviderConfig(data []byte) (ProviderConfig, error) {
 			if err := model.ReasoningEffortLevels.Validate(); err != nil {
 				return ProviderConfig{}, fmt.Errorf("provider %q model %q: %w", provider.ID, model.ID, err)
 			}
+			if _, ok := modelinfo.ParseContinuationPolicy(model.ContinuationPolicy); !ok {
+				return ProviderConfig{}, fmt.Errorf("provider %q model %q: unknown continuation_policy %q", provider.ID, model.ID, model.ContinuationPolicy)
+			}
 		}
 	}
 	return cfg, nil

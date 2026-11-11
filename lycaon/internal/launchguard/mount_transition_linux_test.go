@@ -5,6 +5,7 @@ package launchguard
 import (
 	"debug/elf"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,11 +18,16 @@ import (
 
 func buildMountTransition(t *testing.T, output string) {
 	t.Helper()
+	testutil.FailErr(t, "build mount transition image", buildMountTransitionImage(output))
+}
+
+func buildMountTransitionImage(output string) error {
 	command := exec.Command("python3", "-m", "scripts.linux_release.mount_intake", "--output", output, "--architecture", runtime.GOARCH)
 	command.Dir = filepath.Join("..", "..", "..")
 	if out, err := command.CombinedOutput(); err != nil {
-		t.Fatalf("build actual fixed intake transition: %v\n%s", err, out)
+		return fmt.Errorf("build actual fixed intake transition: %w\n%s", err, out)
 	}
+	return nil
 }
 
 func TestMountTransitionBuildIsFreestandingAndRefusesUnprivilegedInputs(t *testing.T) {

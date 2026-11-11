@@ -80,6 +80,72 @@ func TestReaperHoldsAGroupTrackedTwiceUntilBothForgetIt(t *testing.T) {
 	}
 }
 
+func TestReaperKillsSurvivingSessionMembersAfterLeaderExitsAndSparesMismatchedStart(t *testing.T) {
+	dir := t.TempDir()
+	memberPIDFile := filepath.Join(dir, "member.pid")
+	grandchildPIDFile := filepath.Join(dir, "grandchild.pid")
+
+	script := fmt.Sprintf(
+		"set -m; sh -c 'echo $$ > %s; sleep 30 & echo $! > %s; wait' & exit 0",
+		strconv.Quote(memberPIDFile), strconv.Quote(grandchildPIDFile),
+	)
+	cmd := exec.Command("sh", "-c", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	testutil.FailErr(t, "start session leader", cmd.Start())
+	leaderInc, ok := osprocess.IncarnationOf(cmd.Process.Pid)
+	if !ok {
+		t.Fatal("failed to read leader incarnation")
+	}
+
+	memberPID := waitForPIDFile(t, memberPIDFile)
+	grandchildPID := waitForPIDFile(t, grandchildPIDFile)
+	t.Cleanup(func() {
+		_ = syscall.Kill(memberPID, syscall.SIGKILL)
+		_ = syscall.Kill(grandchildPID, syscall.SIGKILL)
+	})
+	memberInc, ok := osprocess.IncarnationOf(memberPID)
+	if !ok {
+		t.Fatal("failed to read surviving member incarnation")
+	}
+	testutil.FailErr(t, "reap exited leader", cmd.Wait())
+
+	bystander := exec.Command("cat")
+	stdin, err := bystander.StdinPipe()
+	testutil.FailErr(t, "bystander stdin", err)
+	defer func() { _ = stdin.Close() }()
+	testutil.FailErr(t, "start bystander", bystander.Start())
+	defer func() {
+		if bystander.ProcessState == nil {
+			_ = bystander.Process.Kill()
+			_ = bystander.Wait()
+		}
+	}()
+	bystanderInc, ok := osprocess.IncarnationOf(bystander.Process.Pid)
+	if !ok {
+		t.Fatal("failed to read bystander incarnation")
+	}
+
+	// Leader has exited and been forgotten (-g), while memberInc was transferred
+	// before leader reap and a stale registration for bystander's PID has a
+	// mismatched start timestamp.
+	reapLines(
+		fmt.Sprintf("+g%d:%d\n", leaderInc.PID, leaderInc.Start),
+		fmt.Sprintf("+m%d:%d:%d\n", leaderInc.PID, memberInc.PID, memberInc.Start),
+		fmt.Sprintf("-g%d\n", leaderInc.PID),
+		fmt.Sprintf("+p%d:%d\n", bystanderInc.PID, bystanderInc.Start-1),
+		fmt.Sprintf("+m%d:%d:%d\n", leaderInc.PID, bystanderInc.PID, bystanderInc.Start-1),
+	)
+
+	for _, pid := range []int{memberPID, grandchildPID} {
+		if err := waitForProcessGone(t.Context(), pid); err != nil {
+			testutil.FailErr(t, "surviving session member outlived reaper", err)
+		}
+	}
+	if !bystanderInc.Alive() {
+		t.Fatal("reaper killed process whose start time differed from its registration")
+	}
+}
+
 func TestReaperRemovesTrackedDirAfterKillingItsGroup(t *testing.T) {
 	leader, descendant := startGroup(t)
 	scratch := filepath.Join(t.TempDir(), "scratch")

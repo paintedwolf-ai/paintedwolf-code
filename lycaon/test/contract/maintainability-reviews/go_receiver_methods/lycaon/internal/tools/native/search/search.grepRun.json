@@ -1,16 +1,16 @@
 {
   "category": "go_receiver_methods",
   "artifact": "lycaon/internal/tools/native/search/search.grepRun",
-  "kind": "runtime_service",
-  "workstream": "command-search-throughput",
+  "kind": "algorithm",
+  "workstream": "large-command-resources",
   "disposition": "retain",
-  "reason": "Retain the utility-run owner after separating traversal, bounded file scheduling, transport storage, admitted record formatting and literal execution at their actual lifetimes. Its 955 receiver lines and 32 methods implement one grep/rg invocation: mode configuration, ordered operand traversal, verified file search and mode-specific emission. The 26 fields describe that run rather than independent services. Workers copy immutable configuration while owning local status, roots and statistics; one reducer publishes output and revision pins. Splitting mode state into forwarding owners would obscure those dependencies. Focused ordering, concurrency, source-mapping, cancellation and aggregate-resource contracts support this measured ceiling.",
-  "reviewed_commit": "d36f6ab1de7811aa1c7f569da5003181edc005e9",
+  "reason": "Retain the search algorithm at 964 receiver lines and 32 methods. One run binds matcher options, traversal selection, ordered workers, output modes and cumulative status. Discovery, matching, admitted transport and revision capture have explicit collaborators. Binary JSON record conversion preserves source offsets and identity within that output mode. Exact JSON, differential, pin-transfer and output-bound contracts support this shape.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
   "ceiling": 32,
   "boundaries": {
-    "lycaon/internal/tools/native/search/grep_parallel_test.go": "ae114897a52072f49f9af01e44d0f6ff7310d69e09dd7c55f739051c0e3a4546",
+    "lycaon/internal/tools/native/search/rg_json_test.go": "7d4206b4029195f16cd610f6eaec937a89077524d08c12230124df43211d9125",
     "lycaon/internal/tools/native/search/grep_parallel_bounds_test.go": "71bf71f82c028ed1173a08b61ca8d573407af1b8f81262ff18e0d5d834e0a188",
-    "lycaon/internal/tools/native/search/grep_record_test.go": "11a75b866acae9b6b08723aef01d63d0675fe19b3b582c6f53b459818ba924ad"
+    "lycaon/internal/tools/native/search/grep_pin_transfer_test.go": "09de0678551b99812680aa0ffb71c3095e048c9ab95e81329204bc7ac8783248"
   },
-  "reviewed_shape": "b3cac5d18c3df7893875d9a197c469f3afcf5180f54e367d41fc7d2d27913cfc"
+  "reviewed_shape": "0233fa0c1d5d8ecb30336f858bdb302d132f0b0f42a665619cacfe94fa768f3d"
 }

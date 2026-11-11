@@ -1,0 +1,5 @@
+steps:
+  - tool: "preview_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.job_id }}"
+    say: "Use {{ call }} for current path_status, conflict_digest and ready_resolutions."

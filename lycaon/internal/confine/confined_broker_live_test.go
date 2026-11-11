@@ -15,11 +15,11 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// The whole chain, as a real command runs it: the applied Seatbelt profile, the
+// The whole chain, as a real command runs it: the applied boundary, the
 // environment the boundary hands the process, the descendant marker it carries,
 // and the broker resolving that marker back to the action.
 func TestConfinedCommandReachesTheBrokerByLineage(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	if _, err := exec.LookPath("curl"); err != nil {
 		t.Skip("curl is required to drive a confined process through the broker")
 	}
@@ -40,7 +40,7 @@ func TestConfinedCommandReachesTheBrokerByLineage(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 	root := t.TempDir()
 	c, ok := confine.DefaultConfinement(confine.Request{
-		Roots: []string{root}, ProjectID: "live-probe", LoopbackConnect: true,
+		Roots: liveBoundaryRoots(root), ProjectID: "live-probe", LoopbackConnect: true,
 	})
 	if !ok || c == nil || c.Network != confine.NetworkProxyOnly {
 		t.Fatalf("expected a proxy-only boundary: ok=%v c=%+v", ok, c)

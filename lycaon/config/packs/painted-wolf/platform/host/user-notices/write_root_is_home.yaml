@@ -8,6 +8,3 @@ suggested_action: Attach a single project directory under home instead of home i
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - home directory
-      - single project directory

@@ -1,0 +1,64 @@
+[package]
+name = "nativegen"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.95"
+license = "Apache-2.0"
+publish = false
+description = "Native local generation service for Gemma 4 E4B"
+
+[lib]
+name = "nativegen"
+path = "src/lib.rs"
+
+[[bin]]
+name = "nativegen"
+path = "src/main.rs"
+
+[[bin]]
+name = "nativegen-render"
+path = "src/render.rs"
+
+[[bin]]
+name = "nativegen-bench"
+path = "src/mlx_bench.rs"
+required-features = ["mlx"]
+
+[dependencies]
+clap = { version = "4.5", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0", features = ["float_roundtrip"] }
+thiserror = "2.0"
+half = "2"
+memmap2 = "0.9"
+libc = "0.2"
+minijinja = { version = "2.24", features = ["fuel", "json", "loader"] }
+minijinja-contrib = { version = "2.24", features = ["pycompat"] }
+tokenizers = { version = "0.23", default-features = false, features = ["fancy-regex"] }
+
+llguidance = { version = "=1.9.1", default-features = false, features = ["lark", "referencing", "ahash"] }
+
+[target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
+mlx-rs = { version = "0.32", optional = true }
+mlx-sys = { version = "0.6", optional = true }
+
+[features]
+default = []
+vulkan = []
+# Apple silicon acceleration.
+mlx = ["dep:mlx-rs", "dep:mlx-sys"]
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true
+
+[profile.release.build-override]
+# Compiler plugins must retain aligned Mach-O metadata.
+strip = "none"
+
+[profile.dev.build-override]
+strip = "none"
+
+[patch.crates-io]
+mlx-sys = { path = "../../decide/native/vendor/mlx-sys" }

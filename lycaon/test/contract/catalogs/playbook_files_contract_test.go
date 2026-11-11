@@ -41,25 +41,6 @@ func TestPlaybookFilesExistForContract(t *testing.T) {
 	}
 }
 
-func TestPlaybookFileCount(t *testing.T) {
-	t.Parallel()
-	packs, err := extpacks.DiscoverStock()
-	contractcheck.FailErr(t, "DiscoverStock", err)
-	var count int
-	for _, playbooksDir := range extpacks.KindDirs(packs, "playbooks") {
-		entries, err := playbooksDir.List()
-		contractcheck.FailErr(t, "read directory entries", err)
-		for _, e := range entries {
-			if !e.IsDir() && strings.HasSuffix(e.Name(), ".yaml") {
-				count++
-			}
-		}
-	}
-	if count < 12 {
-		t.Fatalf("playbooks = %d want at least 12 (default + 11 addenda)", count)
-	}
-}
-
 func TestPlaybookMatcherLoadsFromModuleRoot(t *testing.T) {
 	t.Parallel()
 	contract, err := prompts.LoadPersonaContract()

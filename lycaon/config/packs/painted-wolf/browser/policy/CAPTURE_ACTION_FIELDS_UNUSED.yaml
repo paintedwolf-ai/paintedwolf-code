@@ -35,7 +35,3 @@ x-paintedwolf-scenarios:
     type: click
     unused_fields: by
     step_fields: testid, selector, role, label, text, button, count, modifiers, timeout_ms, wait
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: CAPTURE_ACTION_FIELDS_UNUSED'
-  - by

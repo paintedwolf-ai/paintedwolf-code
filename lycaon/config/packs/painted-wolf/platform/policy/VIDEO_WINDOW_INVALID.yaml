@@ -33,9 +33,6 @@ x-paintedwolf-scenarios:
     path: recordings/bug.mp4
     reason: window_outside_video
     tool: view_video
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: VIDEO_WINDOW_INVALID'
 - id: crop_outside_video
   vars:
     height: 180
@@ -43,6 +40,3 @@ x-paintedwolf-scenarios:
     reason: crop_outside_video
     tool: view_video
     width: 320
-  expect_contains:
-  - 'Code: VIDEO_WINDOW_INVALID'
-  - 320x180

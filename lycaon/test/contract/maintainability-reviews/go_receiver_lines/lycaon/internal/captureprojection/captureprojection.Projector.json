@@ -1,0 +1,15 @@
+{
+  "category": "go_receiver_lines",
+  "artifact": "lycaon/internal/captureprojection/captureprojection.Projector",
+  "kind": "runtime_service",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain the 306-line projection owner. Structured value screening and stream screening use the same classifier generation and redaction metadata. Typed allocation phases annotate the existing ledger without adding a permission decision. Wide projections, classification changes and failure cleanup qualify the retained lifetime.",
+  "reviewed_commit": "abd7258eca3ad0cdf084a28196481237096744cd",
+  "ceiling": 306,
+  "boundaries": {
+    "lycaon/internal/captureprojection/value_test.go": "aa7360a64b6a206587922626b45229ee886aeaac2ab40550dbcc292e112660bd",
+    "lycaon/internal/captureprojection/value_scale_test.go": "2823644af528cbb95abda234c271557bd327d7e7abbbe41da8fed30e520d78fa"
+  },
+  "reviewed_shape": "43ddc8c5659fa80431a8f62b765137cd8dbbad97289b4c23521cdc44769cafe5"
+}

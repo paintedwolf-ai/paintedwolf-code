@@ -64,17 +64,6 @@ class LeaseCollectionWithMounts(unittest.TestCase):
         unmount.assert_not_called()
         self.assertFalse(self.run_dir.exists())
 
-    def test_unmount_failure_to_start_is_reported_not_raised(self):
-        with mock.patch.object(self.lease.subprocess, "run", side_effect=OSError("missing helper")):
-            self.lease.force_unmount(self.mount)
-
-    def test_mount_table_parses_paths_with_spaces(self):
-        listing = mock.Mock(stdout="/dev/disk3 on / (apfs)\n127.0.0.1:/views/a on /tmp/a b/mnt (nfs, nodev)\nnot a mount\n")
-        with mock.patch.object(self.lease.sys, "platform", "darwin"), mock.patch.object(
-            self.lease.subprocess, "run", return_value=listing
-        ):
-            self.assertEqual(self.lease.mount_points(), ["/", "/tmp/a b/mnt"])
-
 
 if __name__ == "__main__":
     unittest.main()

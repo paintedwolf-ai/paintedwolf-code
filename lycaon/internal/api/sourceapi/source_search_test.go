@@ -1,7 +1,6 @@
 package sourceapi
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/backgroundwork"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/projectsource"
+	"github.com/lycaon/lycaon/internal/sourcecatalog"
+	catalogtest "github.com/lycaon/lycaon/internal/testsetup/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -50,8 +51,9 @@ func TestDeclarationSearchUsesExtraRowAsLimitProbe(t *testing.T) {
 			name := filepath.Join(root, fmt.Sprintf("match-%02d.go", i))
 			testutil.FailErr(t, "write definition match", os.WriteFile(name, []byte("package p\n\nfunc Target() {}\n"), 0o644))
 		}
-		hits, limited, err := searchDeclarations(context.Background(), declarationQuery("Target", "p1", root, projectsource.DeclarationMatchWholeWord, 3))
-		return len(hits), limited.Incomplete(), err
+		testutil.FailErr(t, "await source index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), "p1", sourcecatalog.Root{ID: "root", Path: root}))
+		hits, coverage, err := searchDeclarations(t.Context(), declarationQuery("Target", "p1", root, projectsource.DeclarationMatchWholeWord, 3))
+		return len(hits), coverage.Limited, err
 	}
 
 	count, limited, err := searchMatches(3)
@@ -77,8 +79,8 @@ func TestDeclarationSearchReportsColdCatalogAsPartial(t *testing.T) {
 	defer release()
 	hits, partial, err := searchDeclarations(t.Context(), declarationQuery("Target", "cold-definition", root, projectsource.DeclarationMatchWholeWord, 3))
 	testutil.FailErr(t, "search cold definition", err)
-	if len(hits) != 0 || !partial.Incomplete() || len(partial.Gaps) != 1 || partial.Gaps[0].Reason != projectsource.DeclarationCatalogWarming || partial.Gaps[0].Count != 1 {
-		t.Fatalf("cold definition hits=%d partial=%v", len(hits), partial)
+	if len(hits) != 0 || partial.Limited || !partial.Incomplete() || len(partial.Gaps) != 1 || partial.Gaps[0].Reason != projectsource.DeclarationCatalogWarming || partial.Gaps[0].Count != 1 {
+		t.Fatalf("cold definition hits=%d partial=%+v", len(hits), partial)
 	}
 }
 
@@ -86,9 +88,10 @@ func TestDeclarationSearchMatchModes(t *testing.T) {
 	root := t.TempDir()
 	testutil.FailErr(t, "write source", os.WriteFile(filepath.Join(root, "a.go"), []byte(
 		"package a\n\nfunc ParseConfig() {}\n\nfunc parser() {}\n\nvar x = \".+\"\n"), 0o644))
+	testutil.FailErr(t, "await source index", catalogtest.AwaitIndex(t.Context(), sourcecatalog.Process(), "modes", sourcecatalog.Root{ID: "root", Path: root}))
 	lines := func(pattern string, match projectsource.DeclarationMatch) []string {
 		t.Helper()
-		hits, _, err := searchDeclarations(context.Background(), declarationQuery(pattern, "modes", root, match, 10))
+		hits, _, err := searchDeclarations(t.Context(), declarationQuery(pattern, "modes", root, match, 10))
 		testutil.FailErr(t, "search "+pattern, err)
 		out := make([]string, 0, len(hits))
 		for _, hit := range hits {

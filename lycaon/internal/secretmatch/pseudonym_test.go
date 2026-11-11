@@ -2,6 +2,7 @@ package secretmatch
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 )
@@ -18,9 +19,7 @@ func TestPseudonymsIdentifyAValueWithoutDisclosingIt(t *testing.T) {
 	tagged := ApplyPseudonyms(redacted, spans)
 
 	for _, secret := range []string{"alpha-value-one-long", "beta-value-two-long"} {
-		if strings.Contains(tagged, secret) {
-			t.Fatalf("pseudonymised output still holds %q: %s", secret, tagged)
-		}
+		exposure.Absent(t, tagged, secret)
 	}
 	markers := markerTags(tagged)
 	if len(markers) != 3 {

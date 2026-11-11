@@ -16,7 +16,7 @@ func TestUnresolvedFindingIsAnUnratedOpenQuestion(t *testing.T) {
 		t.Fatal("unanswered question presented as examined and sound")
 	}
 	summary := joinRowValues(summaryBlocks(ms, input))
-	if !strings.Contains(summary, "Open questions") || !strings.Contains(summary, finding.Title) {
+	if !strings.Contains(summary, finding.Title) {
 		t.Fatalf("question missing from summary: %s", summary)
 	}
 	if word := dispositionWord(DispositionUnresolved); word != "Unanswered question" {

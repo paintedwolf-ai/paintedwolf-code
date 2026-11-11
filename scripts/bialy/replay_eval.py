@@ -433,7 +433,7 @@ def main():
         ap.error("--engine (or LYCAON_DECIDE_ENGINE) must name a bialy launcher")
 
     corpus = Corpus.load(args.corpus)
-    examples = rowfile.load(args.examples)
+    examples = rowfile.load(args.examples, corpus=corpus)
     if args.limit:
         examples = examples[: args.limit]
     schema_bytes, unit_bytes = load_sizes(corpus)

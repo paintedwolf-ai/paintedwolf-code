@@ -164,9 +164,11 @@ type ClaimHooks struct {
 
 // ClaimRequest specifies a worker view claim across selected roots (#1662).
 type ClaimRequest struct {
-	Identity            ClaimIdentity
-	Storage             ClaimStorage
-	Grants              []adapter.RootGrant
+	Identity ClaimIdentity
+	Storage  ClaimStorage
+	Grants   []adapter.RootGrant
+	// HiddenPaths are engine storage inside the granted roots that the view never shows.
+	HiddenPaths         []string
 	Selection           adapter.WorkspaceSelection
 	FocusPathHints      []string
 	ParentLayers        []layeredfs.ParentLayer

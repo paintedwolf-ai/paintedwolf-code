@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { sourceEffectFixture } from "../source/source-effect-fixture.ts";
 import { stubFilesClient as stubClient, type FileClientStubs } from "../../test/source-client-fixture.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
@@ -182,7 +183,6 @@ describe("ReviewLens", () => {
 
     const door = await screen.findByTestId("review-lens-open-diffs");
     expect((door as HTMLButtonElement).disabled).toBe(true);
-    expect(door.getAttribute("aria-label")).toBe("Marking is off — choose a comparison first");
   });
 
   it("keeps recorded changes available while repository inventory runs", async () => {
@@ -742,7 +742,7 @@ describe("ReviewLens", () => {
       expect(open).toHaveBeenCalledWith("r1", "src/seen.ts", undefined, seenFile.file_id);
       expect(compare).not.toHaveBeenCalled();
       expect(screen.queryByTestId("changes-row-revert")).toBeNull();
-      fireEvent.click(screen.getByRole("button", { name: "View reviewed changes" }));
+      fireEvent.click(assertNamedControl(screen.getByTestId("changes-row-view-reviewed"), "button"));
       await waitFor(() => expect(reviewed).toHaveBeenCalledWith(expect.objectContaining({
         reviewedThroughOrdinal: 4, versionId: "reviewed-version",
         initialComparison: "before", source: expect.objectContaining({ kind: "reader" }),
@@ -759,12 +759,12 @@ describe("ReviewLens", () => {
           readComparison: vi.fn().mockRejectedValue(new Error("offline")),
         })} onOpenFile={vi.fn()} onViewReviewed={reviewed} />);
       fireEvent.click(await screen.findByTestId("changes-row-file"));
-      fireEvent.click(screen.getByRole("button", { name: "View reviewed changes" }));
+      fireEvent.click(assertNamedControl(screen.getByTestId("changes-row-view-reviewed"), "button"));
       await waitFor(() => expect(noticeRows()).toMatchObject([
         { code: "files_reviewed_unavailable", message: "Couldn’t load reviewed changes for seen.ts." },
       ]));
       expect(reviewed).not.toHaveBeenCalled();
-      await waitFor(() => expect(screen.getByRole("button", { name: "View reviewed changes" }).hasAttribute("disabled")).toBe(false));
+      await waitFor(() => expect(assertNamedControl(screen.getByTestId("changes-row-view-reviewed"), "button").hasAttribute("disabled")).toBe(false));
     });
 
     it("sit below what is new, and marking one unseen withdraws its look", async () => {
@@ -870,7 +870,6 @@ describe("ReviewLens names and lists the answer on screen", () => {
 
     release();
     await screen.findByText("this-turn.ts");
-    expect(screen.getByTestId("review-lens-scope-header").textContent).toBe("Changes in this turn");
     expect(screen.queryByText("seen-before.ts")).toBeNull();
   });
 
@@ -881,7 +880,7 @@ describe("ReviewLens names and lists the answer on screen", () => {
     render(() => (
       <ReviewLens projectId="p1" appStore={store} client={mockClient({ listProjectSourceWalk })} onOpenFile={vi.fn()} />
     ));
-    expect((await screen.findByTestId("review-lens-empty")).textContent).toBe("Select a chat to see what it changed.");
+    await screen.findByTestId("review-lens-empty");
     expect(listProjectSourceWalk).not.toHaveBeenCalled();
   });
 

@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import {
   setupGlobalSearchViewTests,
   searchMock,
@@ -230,7 +231,6 @@ describe("GlobalSearchView", () => {
 
     const tools = await screen.findByTestId("search-tools");
     expect(tools.getAttribute("role")).toBe("toolbar");
-    expect(tools.getAttribute("aria-label")).toBe("Search tools");
     expect([...tools.children].map((segment) => segment.textContent)).toEqual([
       "Filter",
       "Recent",
@@ -625,7 +625,7 @@ describe("GlobalSearchView", () => {
       expect(screen.getByTestId("browse-stage-panel").dataset.boot).toBe("ready"),
     );
     expect(screen.getByTestId("search-type-filters")).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("search-type-code"), "button"));
     await waitFor(() =>
       expect(searchMock).toHaveBeenCalledWith(
         "project:current",
@@ -634,7 +634,7 @@ describe("GlobalSearchView", () => {
         expect.any(AbortSignal),
       ),
     );
-    fireEvent.click(screen.getByRole("button", { name: "Code" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("search-type-code"), "button"));
     await waitFor(() =>
       expect(searchMock).toHaveBeenCalledWith(
         "kind:code project:current",
@@ -723,7 +723,6 @@ describe("result type selectors", () => {
       expect(input.value).toContain("(kind:code OR kind:evidence OR kind:claim");
     });
     expect(input.value).toContain("kind:web");
-    expect(input.value).not.toContain("NOT kind:");
     expect(screen.getByTestId("search-type-code").getAttribute("aria-pressed")).toBe(
       "true",
     );

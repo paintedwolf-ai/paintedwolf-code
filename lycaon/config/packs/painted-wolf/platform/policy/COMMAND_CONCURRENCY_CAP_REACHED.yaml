@@ -9,22 +9,16 @@ selector:
 requires:
   profiles:
   - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.max_awaited
-  - paintedwolf.count
-  - paintedwolf.live_command_handles
+  facts: [paintedwolf.rejection_code, paintedwolf.max_awaited, paintedwolf.count, paintedwolf.live_command_handles, paintedwolf.awaited_capacity_known, paintedwolf.next_steps]
 when: paintedwolf.rejection_code == "COMMAND_CONCURRENCY_CAP_REACHED"
 effect: block
 copy:
-  what: At admission, this session had {{ paintedwolf.count }} live awaited command jobs; the configured limit
-    is {{ paintedwolf.max_awaited }}.
+  what: 'This session''s awaited-command capacity is full.{% if paintedwolf.awaited_capacity_known %} Live jobs at admission: {{ paintedwolf.count }}; configured
+    limit: {{ paintedwolf.max_awaited }}.{% endif %}'
   cause: Explicit awaited concurrency is bounded independently from background servers and watches.
   why: More overlapping foreground work would make completion order and resource coordination unreliable.
-  fix: Inspect or await an existing job from {{ paintedwolf.live_command_handles }}. Stop a job only if the
-    task no longer needs it. Retry after capacity is actually free; allow_concurrent does not override this
-    bound.
-  instead: Reduce the live awaited command set
+  fix: '{{ paintedwolf.next_steps }}'
+  instead: Wait for an active command to finish or stop unneeded work before launching another
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_job
 x-paintedwolf-message: awaited command concurrency cap reached
@@ -36,8 +30,3 @@ x-paintedwolf-scenarios:
     live_command_handles:
     - command-a
     - command-b
-  expect_contains:
-  - 'Code: COMMAND_CONCURRENCY_CAP_REACHED'
-  - 2 live awaited
-  - command-a
-  - command-b

@@ -22,6 +22,21 @@ func TestWrapDebugHubPassthroughWhenDisabled(t *testing.T) {
 	}
 }
 
+func TestDebugHubUnwrapReturnsInner(t *testing.T) {
+	t.Setenv("LYCAON_SSE_DEBUG", "1")
+	observability.CloseSSEDebug()
+
+	inner := NewMemoryHub()
+	hub := WrapDebugHub(inner)
+	unwrapped, ok := hub.(interface{ Unwrap() ReplayHub })
+	if !ok {
+		t.Fatal("wrapped hub does not expose Unwrap")
+	}
+	if unwrapped.Unwrap() != inner {
+		t.Fatal("unwrap did not return the inner hub")
+	}
+}
+
 func TestWrapDebugHubLogsPublish(t *testing.T) {
 	dir := t.TempDir()
 	logPath := filepath.Join(dir, "sse.jsonl")

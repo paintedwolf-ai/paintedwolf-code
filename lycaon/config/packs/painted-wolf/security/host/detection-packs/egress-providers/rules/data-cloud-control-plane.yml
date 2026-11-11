@@ -94,6 +94,9 @@ detection:
       - api.cohere.com
       - api.mistral.ai
       - api.deepseek.com
+      - api.deepinfra.com
+      - api.scaleway.ai
+      - api.cerebras.ai
   selection_suffix:
     DestinationHostname|endswith:
       # Warehouses / analytics
@@ -200,6 +203,9 @@ detection:
       - .cohere.ai
       - .mistral.ai
       - .deepseek.com
+      - .deepinfra.com
       - .groq.com
       - .perplexity.ai
+      - .scaleway.ai
+      - .cerebras.ai
   condition: selection_host or selection_suffix

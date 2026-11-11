@@ -41,9 +41,8 @@ func TestOptInBatchRequiresBothCalls(t *testing.T) {
 		t.Fatal("an omitted opt-in must keep the pair serial")
 	}
 	fetch := mustContract(t, "fetch_url")
-	writing := map[string]any{"parallel": true, "dest": "assets/page.bin"}
-	if fetch.ConcurrentFor(writing) {
-		t.Fatal("a destination-writing fetch must remain serial")
+	if !toolcontract.BatchGroupableCalls("fetch_url", parallel, fetch, "fetch_url", parallel, fetch) {
+		t.Fatal("independent research reads should group")
 	}
 }
 

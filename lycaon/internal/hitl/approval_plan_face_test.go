@@ -28,7 +28,7 @@ func planFixture(t *testing.T, kind hitl.ApprovalSubjectKind, options []hitl.App
 	case hitl.ApprovalSubjectDestinationSet:
 		gateName = api.GateFirstHost
 		stage = hitl.ApprovalStagePreDial
-	case hitl.ApprovalSubjectProcessControl, hitl.ApprovalSubjectHostExecution, hitl.ApprovalSubjectLocalListen,
+	case hitl.ApprovalSubjectProcessControl, hitl.ApprovalSubjectCredentialStore, hitl.ApprovalSubjectHostExecution, hitl.ApprovalSubjectLocalListen,
 		hitl.ApprovalSubjectLoopbackConnect, hitl.ApprovalSubjectReadPathSet:
 	}
 	target := hitl.ApprovalTarget{Kind: "t", Label: "x"}

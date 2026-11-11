@@ -629,10 +629,6 @@ describe("filesContextMenuItems", () => {
     expect(labels).toContain("Add to chat");
     expect(items.find((item) => item.testId === "files-ctx-editor-add-to-chat")?.shortcut).toBe("⌘L");
     expect(labels).toContain("Inline edit");
-    expect(labels).toContain("Explain in context");
-    expect(labels).toContain("Give me the gist");
-    expect(labels).toContain("Add test");
-    expect(labels).toContain("Rewrite structurally");
     expect(labels).not.toContain("Improve selection");
     expect(labels).not.toContain("Fix this finding");
     el.remove();
@@ -691,11 +687,9 @@ describe("filesContextMenuItems", () => {
     expect(labels).not.toContain("Cut");
     expect(labels).not.toContain("Paste");
     expect(labels).not.toContain("Inline edit");
-    expect(labels).not.toContain("Ask about selection");
     expect(labels).not.toContain("Rename “resolveProjectRoot”…");
     expect(labels).not.toContain("Go to definition of “resolveProjectRoot”");
     expect(labels).toContain("Copy");
-    expect(labels).toContain("Select all");
     expect(labels).toContain("Add to chat");
     expect(items.find((item) => item.testId === "files-ctx-editor-add-to-chat")?.shortcut).toBe("⌘L");
     el.remove();

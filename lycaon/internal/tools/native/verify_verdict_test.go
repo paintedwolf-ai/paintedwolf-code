@@ -2,14 +2,12 @@ package native
 
 import (
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostcmd"
-	"github.com/lycaon/lycaon/internal/isolation"
-	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools/native/command"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -17,31 +15,31 @@ import (
 func TestBoundaryRefusalIsUnverifiableNotFailed(t *testing.T) {
 	t.Parallel()
 	for _, refusal := range []string{"subject", "unattributed"} {
-		outcome, reason := verdictFor(&hostcmd.Result{
+		outcome, reason := command.VerdictFor(&hostcmd.Result{
 			ExitCode: 1,
 			OK:       false,
 			Report:   confine.Report{BoundaryRefusal: refusal},
 		})
-		if outcome != VerifyOutcomeUnverifiable {
-			t.Errorf("refusal %q gave outcome %q, want %q", refusal, outcome, VerifyOutcomeUnverifiable)
+		if outcome != api.SourceVerdictUnverifiable {
+			t.Errorf("refusal %q gave outcome %q, want %q", refusal, outcome, api.SourceVerdictUnverifiable)
 		}
-		if reason != unverifiableReasonBoundary {
-			t.Errorf("refusal %q gave reason %q, want %q", refusal, reason, unverifiableReasonBoundary)
+		if reason != "boundary_refused" {
+			t.Errorf("refusal %q gave reason %q, want %q", refusal, reason, "boundary_refused")
 		}
 	}
 }
 
 func TestOrdinaryExitCodesKeepTheirVerdict(t *testing.T) {
 	t.Parallel()
-	if outcome, reason := verdictFor(&hostcmd.Result{ExitCode: 0, OK: true}); outcome != VerifyOutcomePassed || reason != "" {
-		t.Errorf("clean exit gave (%q, %q), want (%q, \"\")", outcome, reason, VerifyOutcomePassed)
+	if outcome, reason := command.VerdictFor(&hostcmd.Result{ExitCode: 0, OK: true}); outcome != api.SourceVerdictPassed || reason != "" {
+		t.Errorf("clean exit gave (%q, %q), want (%q, \"\")", outcome, reason, api.SourceVerdictPassed)
 	}
-	if outcome, reason := verdictFor(&hostcmd.Result{ExitCode: 1, OK: false}); outcome != VerifyOutcomeFailed || reason != "" {
-		t.Errorf("failing exit gave (%q, %q), want (%q, \"\")", outcome, reason, VerifyOutcomeFailed)
+	if outcome, reason := command.VerdictFor(&hostcmd.Result{ExitCode: 1, OK: false}); outcome != api.SourceVerdictFailed || reason != "" {
+		t.Errorf("failing exit gave (%q, %q), want (%q, \"\")", outcome, reason, api.SourceVerdictFailed)
 	}
 	// Exit 127 is still an observed process failure.
-	if outcome, _ := verdictFor(&hostcmd.Result{ExitCode: 127, OK: false}); outcome != VerifyOutcomeFailed {
-		t.Errorf("exit 127 gave %q, want %q", outcome, VerifyOutcomeFailed)
+	if outcome, _ := command.VerdictFor(&hostcmd.Result{ExitCode: 127, OK: false}); outcome != api.SourceVerdictFailed {
+		t.Errorf("exit 127 gave %q, want %q", outcome, api.SourceVerdictFailed)
 	}
 }
 
@@ -80,57 +78,6 @@ func TestDeclaredGateAcceptsItsOwnCommand(t *testing.T) {
 	}
 }
 
-func TestStampUnverifiableFactsPrependsVerifyCode(t *testing.T) {
-	t.Parallel()
-	out := &tools.ToolInvocationOut{}
-	out.Facts = out.Facts.WithCode(isolation.CodeBoundaryRefused)
-	tctx := tools.ToolContext{
-		Effects: tools.InvocationEffects{Out: out},
-	}
-	stampUnverifiableFacts(tctx, VerifyOutcomeUnverifiable)
-	if out.Facts.PrimaryCode() != toolrejection.VerifyUnverifiableCode {
-		t.Fatalf("primary = %q want %q", out.Facts.PrimaryCode(), toolrejection.VerifyUnverifiableCode)
-	}
-	if !out.Facts.HasCode(isolation.CodeBoundaryRefused) {
-		t.Fatal("confine code was dropped")
-	}
-	failed := &tools.ToolInvocationOut{}
-	stampUnverifiableFacts(tools.ToolContext{
-		Effects: tools.InvocationEffects{Out: failed},
-	}, VerifyOutcomeFailed)
-	if failed.Facts.PrimaryCode() != "" {
-		t.Fatalf("failed verdict must not stamp: %q", failed.Facts.PrimaryCode())
-	}
-}
-
-func TestBrokerDeniedVerifyReceiptStaysCompleted(t *testing.T) {
-	t.Parallel()
-	stamped := confine.StampRefusal("verify", "sess", confine.Boundary{
-		Applied: true, Network: confine.NetworkProxyOnly, WriteRoots: []string{"/proj"},
-	}, confine.RefusalContext{MediatedNetwork: []confine.EgressHost{{Host: "blocked.test", Allowed: false}}})
-	out := &tools.ToolInvocationOut{}
-	out.Facts = tools.ApplyRefusalFacts(out.Facts, stamped)
-	stampUnverifiableFacts(tools.ToolContext{
-		Effects: tools.InvocationEffects{Out: out},
-	}, VerifyOutcomeUnverifiable)
-	if out.Facts.Resolution() != api.ToolResultOutcomeCompleted {
-		t.Fatalf("outcome = %q want completed", out.Facts.Resolution())
-	}
-	if out.Facts.PrimaryCode() != toolrejection.VerifyUnverifiableCode {
-		t.Fatalf("primary = %q want %q", out.Facts.PrimaryCode(), toolrejection.VerifyUnverifiableCode)
-	}
-	if !out.Facts.HasCode(isolation.CodeBoundaryRefused) {
-		t.Fatal("boundary code was dropped")
-	}
-	tr := guidance.ComposeToolResult(`{"outcome":"unverifiable","unverifiable_reason":"boundary_refused"}`, out.Facts, nil)
-	if tr == nil || tr.Outcome != api.ToolResultOutcomeCompleted {
-		t.Fatalf("wire outcome = %v", tr)
-	}
-	if tr.PrimaryCode() != toolrejection.VerifyUnverifiableCode {
-		t.Fatalf("wire primary = %q", tr.PrimaryCode())
-	}
-}
-
 // An undeclared project has no gate to substitute for, so nothing is rejected.
 func TestUndeclaredProjectRejectsNothing(t *testing.T) {
 	t.Parallel()
@@ -139,12 +86,11 @@ func TestUndeclaredProjectRejectsNothing(t *testing.T) {
 	}
 }
 
-func TestDeclaredGateRefusesChangedArgumentsAndPipelines(t *testing.T) {
+func TestDeclaredGateRefusesChangedArguments(t *testing.T) {
 	t.Parallel()
 	for _, args := range []map[string]any{
 		{"command": `tool 'two words'`},
 		{"command": `tool two words`},
-		{"pipeline": []any{`tool 'two  words'`}},
 	} {
 		err := rejectDeclaredCommandOverride(`tool 'two  words'`, args)
 		if err == nil {

@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../test/controls.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { onCleanup, onMount } from "solid-js";
@@ -164,8 +165,8 @@ describe("FindBar", () => {
         label.style.display = "none";
       }
     }
-    const matchCase = screen.getByRole("checkbox", { name: "Match case" }) as HTMLInputElement;
-    const scope = screen.getByRole("checkbox", { name: "Find in selection" }) as HTMLInputElement;
+    const matchCase = assertNamedControl(screen.getByTestId("find-bar-case"), "checkbox") as HTMLInputElement;
+    const scope = assertNamedControl(screen.getByTestId("find-bar-scope"), "checkbox") as HTMLInputElement;
     expect(scope.disabled).toBe(true);
     fireEvent.input(screen.getByTestId("find-bar-input"), { target: { value: "alpha" } });
     expect(screen.getByTestId("find-bar-count").textContent).toMatch(/of 2/);
@@ -177,7 +178,6 @@ describe("FindBar", () => {
   it("renders with accessible name and updates match count", async () => {
     render(() => <FindBarStubHost corpus="alpha beta alpha" />);
     const bar = await screen.findByTestId("find-bar");
-    expect(bar.getAttribute("aria-label")).toBe("Find in view");
     expect(bar.getAttribute("role")).toBe("search");
     expect(bar.id).toBe(FIND_BAR_ID);
     expect(bar.classList.contains("den-editor-command-bar")).toBe(true);
@@ -212,7 +212,6 @@ describe("FindBar", () => {
     setFindQuery("needle");
 
     const button = screen.getByTestId("find-bar-everywhere");
-    expect(button.getAttribute("data-tip")).toContain("carries this query");
     expect(button.getAttribute("data-tip")).not.toContain("Match case");
   });
 

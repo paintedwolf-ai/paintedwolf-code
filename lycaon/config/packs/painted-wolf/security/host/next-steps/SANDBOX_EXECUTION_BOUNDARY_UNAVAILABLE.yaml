@@ -1,0 +1,6 @@
+steps:
+  - program: ["ps"]
+    complete: true
+    say: "Inspect processes with {{ call }}."
+  - program: ["kill", "REFERENCE"]
+    say: "Signal one with {{ call }}."

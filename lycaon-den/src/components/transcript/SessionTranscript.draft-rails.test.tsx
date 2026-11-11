@@ -38,8 +38,9 @@ describe("SessionTranscript draft rails", () => {
       rail!.compareDocumentPosition(bubble!) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
-    const toggle = screen.getByTestId("draft-rail-toggle");
-    expect(toggle.textContent).toContain("Versions (2)");
+    expect(screen.getByTestId("draft-rail-toggle")).toBeTruthy();
+    expect(rail?.getAttribute("data-draft-version-count")).toBe("3");
+    expect(rail?.getAttribute("data-draft-variant")).toBe("b");
   });
 
   it("keeps the grounded answer's version rail with verbose off while mid-run drafts stay hidden", () => {
@@ -74,9 +75,8 @@ describe("SessionTranscript draft rails", () => {
     expect(container.textContent).not.toContain("Reading the build layout");
     const rails = container.querySelectorAll('[data-testid="draft-rail"]');
     expect(rails).toHaveLength(1);
-    expect(screen.getByTestId("draft-rail-toggle").textContent).toContain(
-      "Versions (1)",
-    );
+    expect(rails[0]?.getAttribute("data-draft-version-count")).toBe("2");
+    expect(rails[0]?.getAttribute("data-draft-variant")).toBe("b");
   });
 
   it("renders a committed orchestration step as a collapsed, expandable rail", async () => {
@@ -109,7 +109,7 @@ describe("SessionTranscript draft rails", () => {
     const summary = container.querySelector('[data-testid="draft-rail-summary-body"]');
     expect(summary?.textContent).toContain("Reading the build layout");
     const toggle = screen.getByTestId("draft-rail-toggle");
-    expect(toggle.textContent).toContain("Show");
+    expect(container.querySelector('[data-testid="draft-rail-expanded-body"]')).toBeNull();
     fireEvent.click(toggle);
     const expanded = container.querySelector('[data-testid="draft-rail-expanded-body"]');
     expect(expanded?.textContent).toContain(
@@ -167,9 +167,8 @@ describe("SessionTranscript draft rails", () => {
 
     const rails = container.querySelectorAll('[data-testid="draft-rail"]');
     expect(rails).toHaveLength(1);
-    expect(screen.getByTestId("draft-rail-toggle").textContent).toContain(
-      "Versions (1)",
-    );
+    expect(rails[0]?.getAttribute("data-draft-version-count")).toBe("2");
+    expect(rails[0]?.getAttribute("data-draft-variant")).toBe("b");
   });
 
   it("keeps the version-history rail when grounding lands on a blank content frame", () => {
@@ -194,9 +193,8 @@ describe("SessionTranscript draft rails", () => {
     ));
     const rails = container.querySelectorAll('[data-testid="draft-rail"]');
     expect(rails).toHaveLength(1);
-    expect(screen.getByTestId("draft-rail-toggle").textContent).toContain(
-      "Versions (1)",
-    );
+    expect(rails[0]?.getAttribute("data-draft-version-count")).toBe("2");
+    expect(rails[0]?.getAttribute("data-draft-variant")).toBe("b");
   });
 
   it("keeps one stable draft rail across supersede patches while live", async () => {

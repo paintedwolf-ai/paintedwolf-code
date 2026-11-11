@@ -10,6 +10,7 @@ import { createRecentsStore } from "../../store/recents-store.ts";
 import { createSettingsStore } from "../../store/settings-store.ts";
 import { createCostStore } from "../../store/cost-store.ts";
 import { createNoticeStore } from "../../notices/notice-store.ts";
+import { openRunningStage } from "../../platform/navigation/open-running.ts";
 import type { WorkspaceSidebar } from "./WorkspaceSidebar.tsx";
 import type { WorkspaceStage } from "./WorkspaceStage.tsx";
 import type { WorkspaceOverlays } from "./WorkspaceOverlays.tsx";
@@ -35,7 +36,10 @@ async function mountShell() {
   seams.stages.clear();
   const appStore = createAppStore(); const shell = createShellStore("connected");
   const projects = createProjectsStore(() => null, { onProjectEvent: () => () => undefined });
-  projects.load([{ id: "project", name: "Garden", roots: [{ id: "root", path: "/garden", is_primary: true }] }] as never);
+  projects.load([
+    { id: "project", name: "Garden", roots: [{ id: "root", path: "/garden", is_primary: true }] },
+    { id: "orchard", name: "Orchard", roots: [{ id: "orchard-root", path: "/orchard", is_primary: true }] },
+  ] as never);
   const recents = createRecentsStore(); await recents.load();
   const [inventory] = createStore({ projectId: "project", loaded: true, rows: [], sort: "recent", rowsSort: "recent", total: 0 });
   const projectSessions = { state: inventory, setProject: vi.fn(), setSort: vi.fn(), refresh: vi.fn(async () => undefined),
@@ -51,6 +55,16 @@ async function mountShell() {
 }
 
 describe("shell composition across navigation", () => {
+  it("opens the running stage in the active project, or switches to the requested one first", async () => {
+    const { shell } = await mountShell();
+    openRunningStage({ projectId: "project" });
+    await waitFor(() => expect(seams.stages.has("stage:project:running")).toBe(true));
+    expect(shell.state.activeProjectId).toBe("project");
+    openRunningStage({ projectId: "orchard" });
+    await waitFor(() => expect(seams.stages.has("stage:orchard:running")).toBe(true));
+    expect(shell.state.activeProjectId).toBe("orchard");
+  });
+
   it("routes workspace-local stages, settings, and overlays while retaining the foreground chat", async () => {
     const { shell } = await mountShell();
     await waitFor(() => expect(seams.chat?.chat.sessionId).toBe("session"));

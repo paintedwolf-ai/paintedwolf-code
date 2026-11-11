@@ -117,10 +117,10 @@ func (p *Provider) resolveControls(req modelcall.CompletionRequest, model string
 	entry, _ := p.ModelEntry(model)
 	think := p.resolveThink(req, model)
 	reducedReq := req
-	reducedReq.StrictBudget = true
+	reducedReq.ReasoningRecovery = true
 	reducedReq.AttemptBudget = nil
 	reduced := p.resolveThink(reducedReq, model)
-	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, req.StrictOutputBudget())
+	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, req.ReduceReasoning())
 	numPredict = modelcall.CompletionTokenLimit(req, entry.MaxTokens, 0, level, think != nil && think != false)
 	req.RecordBudget(numPredict, think, reduced)
 	mt := modelcall.ResolveModelThinking(p.profile, entry, model)
@@ -147,7 +147,7 @@ func (p *Provider) resolveThink(req modelcall.CompletionRequest, model string) a
 	if mt.Style == modelinfo.ThinkStyleNone {
 		return nil
 	}
-	strict := req.StrictOutputBudget()
+	strict := req.ReduceReasoning()
 	level := modelcall.ResolveThinkLevel(req, entry.ReasoningEffort, strict)
 	think := level.OllamaThink()
 	if mt.Style == modelinfo.ThinkStyleEffortLevels {
@@ -242,7 +242,7 @@ func (p *Provider) assemble(ctx context.Context, req modelcall.CompletionRequest
 	maxContext := p.ContextLimit(ctx, model)
 	// Keep automatic answer room inside the model's actual context window.
 	// An explicit request cap remains the caller's contract and must fit.
-	if (req.MaxTokens == 0 || req.StrictBudget) && maxContext > 0 && numPredict > 0 {
+	if (req.MaxTokens == 0 || req.ReasoningRecovery) && maxContext > 0 && numPredict > 0 {
 		available := maxContext - projectedPromptTokens - ollamaContextHeadroom
 		if available > 0 && numPredict > available {
 			numPredict = available
@@ -339,7 +339,7 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := providerhttp.ReadCompletionResponse("ollama", resp)
 	if err != nil {
-		return nil, err
+		return nil, failure.InterruptedResponse(ctx, p.id, payload.Model, err)
 	}
 	var decoded ollamaChatResponse
 	if err := json.Unmarshal(raw, &decoded); err != nil {
@@ -412,6 +412,7 @@ func (p *Provider) outputTruncatedError(payload Request, reason string, usage mo
 		PromptTokens:     usage.PromptTokens,
 		CompletionTokens: usage.CompletionTokens,
 		ContextTokens:    payload.Options.NumCtx,
+		MaxTokens:        payload.Options.NumPredict,
 	}
 }
 

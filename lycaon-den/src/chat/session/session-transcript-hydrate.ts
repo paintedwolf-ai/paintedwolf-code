@@ -9,6 +9,7 @@ import {
   mergeWorkflowRunsFromMessages,
 } from "../workflow/workflow-actions.ts";
 import { spanFromWireBounds } from "../transcript/layout/transcript-window.ts";
+import { noteTranscriptAnnouncementBaseline } from "../transcript/presentation/transcript-live-announcement.ts";
 
 /** Install a transcript and its workflow state atomically. */
 export async function applySessionTranscriptSnapshot(
@@ -67,6 +68,7 @@ export async function applySessionTranscriptSnapshot(
         turnLoads: Object.values(transcript.turn_loads).flat(),
       },
     );
+    noteTranscriptAnnouncementBaseline(sessionId, appStore.state.messages);
     syncWorkersFromSessionTranscript(appStore, sessionId, transcript.messages);
     appStore.actions.clearLlmTurn(sessionId);
     // Baseline rows reconcile echoes missed while disconnected.

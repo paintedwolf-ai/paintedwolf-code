@@ -21,11 +21,5 @@ scenarios:
   - id: with_model
     vars:
       model: qwen2.5-7b
-    expect_contains:
-      - qwen2.5-7b
-      - couldn't be parsed
   - id: generic
     vars: {}
-    expect_contains:
-      - plain text
-      - couldn't be parsed

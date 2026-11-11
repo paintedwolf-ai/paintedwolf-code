@@ -252,7 +252,14 @@ function buildStructuredToolPresentationFresh(
 
   if (part.outputReference) {
     const process = liveToolProcess(part);
-    if (process) sections.push({ kind: "background_process", handle: process.handle, running: process.running });
+    if (process) {
+      sections.push({
+        kind: "background_process",
+        handle: process.handle,
+        running: process.running,
+        ...(process.termination_reason ? { terminationReason: process.termination_reason } : {}),
+      });
+    }
     return emptyView({ rawOutputAvailable: true });
   }
   if (!output) {
@@ -343,10 +350,16 @@ function buildStructuredToolPresentationFresh(
       }
       const live = liveToolProcess(part);
       if (live && part.kind === "command") {
+        const terminationReason =
+          live.termination_reason ??
+          (typeof parsed.termination_reason === "string"
+            ? (parsed.termination_reason as import("../../api/types.ts").BackgroundProcessTerminationReason)
+            : undefined);
         sections.push({
           kind: "background_process",
           handle: live.handle,
           running: live.running,
+          ...(terminationReason ? { terminationReason } : {}),
         });
       }
       if (part.tool === "request_tools" || (part.tool === "skills_read" && isRecord(parsed.discovery))) {

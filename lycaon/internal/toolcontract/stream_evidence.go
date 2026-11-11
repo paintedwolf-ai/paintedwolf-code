@@ -9,4 +9,7 @@ type StreamSourceMapping struct {
 	Source                         SourcePin
 	SourceStartByte, SourceEndByte int64
 	OutputStartByte, OutputEndByte int64
+	// PrintedLine is the line number the producer printed beside these bytes, or
+	// zero. It says what the reader saw, which need not be the source's own number.
+	PrintedLine int64 `json:",omitempty"`
 }

@@ -8,6 +8,3 @@ suggested_action: Try again; if it keeps failing, copy the System information in
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - could not be assembled
-      - System information

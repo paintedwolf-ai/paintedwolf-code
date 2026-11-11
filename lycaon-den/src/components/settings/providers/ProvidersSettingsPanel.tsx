@@ -50,9 +50,10 @@ export function ProvidersSettingsPanel(props: Props) {
   };
 
   const policy = () => props.settingsStore.state.modelPolicy;
+  const effectivePolicy = () => props.settingsStore.state.effectiveModelPolicy ?? policy();
   const showAll = () => showAllModelsPref();
   const defaultRef = () => {
-    const p = policy();
+    const p = effectivePolicy();
     return p ? defaultModelRef(p) : { provider_id: "", model: "" };
   };
   const hasReady = () => readyProviders(providers()).length > 0;
@@ -89,7 +90,7 @@ export function ProvidersSettingsPanel(props: Props) {
   const defaultModelBlock = () => (
     <Show when={hasReady()}>
       <div class="den-settings-default-model" data-testid="default-model-settings">
-        <Show when={policy() && !hasDefaultModel(policy())}>
+        <Show when={effectivePolicy() && !hasDefaultModel(effectivePolicy())}>
           <p
             class="den-settings-warn"
             role="status"
@@ -158,7 +159,7 @@ export function ProvidersSettingsPanel(props: Props) {
     <div class="den-settings-prefs-band" data-testid="providers-toolbar">
       <div data-testid="default-model-settings" style={{ display: "contents" }}>
         <Show when={hasReady()}>
-          <Show when={policy() && !hasDefaultModel(policy())}>
+          <Show when={effectivePolicy() && !hasDefaultModel(effectivePolicy())}>
             <p
               class="den-settings-warn den-settings-prefs-band__warn"
               role="status"

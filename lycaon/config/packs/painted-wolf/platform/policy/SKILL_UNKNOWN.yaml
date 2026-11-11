@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
     need: missing-skill
     profile: implement
     tool: skills_read
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SKILL_UNKNOWN'

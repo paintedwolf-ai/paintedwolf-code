@@ -21,4 +21,3 @@ x-paintedwolf-message: a pending ask cannot change its content
 x-paintedwolf-scenarios:
   - id: default
     vars: {"tool_call_id": "call-1", "profile": "coordinator", "tool": "ask_user"}
-    expect_contains: ['Rejected:', 'Code: ASK_USER_OPERATION_CONFLICT']

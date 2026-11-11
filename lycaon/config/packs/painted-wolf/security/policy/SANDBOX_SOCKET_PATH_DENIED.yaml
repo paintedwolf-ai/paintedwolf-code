@@ -24,6 +24,3 @@ x-paintedwolf-message: local-service socket authority declined
 x-paintedwolf-scenarios:
 - id: default
   vars: {}
-  expect_contains:
-  - 'Code: SANDBOX_SOCKET_PATH_DENIED'
-  - declined

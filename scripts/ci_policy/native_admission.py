@@ -10,10 +10,17 @@ def targets(scope):
             if any(path.startswith(tuple(roots)) for path in scope['paths'])]
 
 
+def runs_script_coverage(scope):
+    """A script or workflow change gets its own suites before the queue, not only inside it."""
+    return bool(scope) and (scope['full'] or any(path.startswith(('.github/', 'scripts/')) for path in scope['paths']))
+
+
 def commands(scope):
     result = [['./task', target, '--', '--compile-only'] for target in targets(scope)]
     if scope is None or scope['full'] or any(
             path.endswith('.go') or path in {'lycaon/go.mod', 'lycaon/go.sum', 'Taskfile.yml', 'task'}
             or path.startswith(('.github/', 'scripts/')) for path in scope['paths']):
         result.extend(['./task', *check] for check in catalog()['ci']['ready'].get('admission_checks', []))
+    if runs_script_coverage(scope):
+        result.append(['./task', 'scripts:coverage:changes'])
     return result

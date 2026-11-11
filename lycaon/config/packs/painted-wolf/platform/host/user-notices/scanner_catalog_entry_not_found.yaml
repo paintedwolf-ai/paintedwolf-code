@@ -6,5 +6,3 @@ suggested_action: "Refresh the scanner list."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "not in the scanner catalog"

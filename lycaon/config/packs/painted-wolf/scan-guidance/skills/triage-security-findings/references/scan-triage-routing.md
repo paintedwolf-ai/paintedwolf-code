@@ -6,13 +6,13 @@ Maintained sources of truth: the live scan tool schemas and structured rejection
 
 | Need | Tool | Rule |
 |---|---|---|
-| Find stored runs | `scan_list` | Use a full returned id; omit project paths the host already knows |
-| Check completion and category totals | `scan_summary` | Summary first; full view only when ingest audit rows matter |
+{% if profile_has_scan_list %}| Find stored runs | `scan_list` | Use a full returned id; omit project paths the host already knows |{% endif %}
+{% if profile_has_scan_summary %}| Check completion and category totals | `scan_summary` | Summary first; full view only when ingest audit rows matter |{% endif %}
 | Inspect findings | `scan_query` | Filter and paginate; retain the scan id with every conclusion |
-| Run configured scanners | `scan_pack` | Use supported categories; completion may be asynchronous |
-| Prove a fix changed scanner state | `scan_compare` | Use the bound comparison pair; choose latest/baseline only when unbound |
+{% if profile_has_scan_pack %}| Run configured scanners | `scan_pack` | Use supported categories; completion may be asynchronous |{% endif %}
+{% if profile_has_scan_compare %}| Prove a fix changed scanner state | `scan_compare` | Use the bound comparison pair; choose latest/baseline only when unbound |{% endif %}
 
-Keep workflow-bound scan ids throughout. On `SCAN_NOT_FOUND`, report a missing bound run; use `scan_list` to resolve ids only for unbound work. On incomplete-scan rejection, wait for or report completion rather than querying around it. When the list is empty, distinguish no stored scan from a clean completed scan.
+Keep workflow-bound scan ids throughout. On `SCAN_NOT_FOUND`, report a missing bound run{% if profile_has_scan_list %}; use `scan_list` to resolve ids only for unbound work{% endif %}. On incomplete-scan rejection, wait for or report completion rather than querying around it. When the list is empty, distinguish no stored scan from a clean completed scan.
 
 ## Adjudicate a finding
 

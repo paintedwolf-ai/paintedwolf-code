@@ -28,7 +28,7 @@ func TestPinnedNavigationsDoNotBlockStructuralOrProjectionWrites(t *testing.T) {
 		t.Cleanup(func() { testutil.FailErr(t, "release snapshot", navigation.Close()) })
 		snapshots = append(snapshots, navigation)
 	}
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), testutil.Timeout(time.Minute))
 	defer cancel()
 	testutil.FailErr(t, "create unobserved directory", os.Mkdir(filepath.Join(root.Path, "new"), 0700))
 	testutil.FailErr(t, "create unobserved source", os.WriteFile(filepath.Join(root.Path, "new", "b.txt"), []byte("new source"), 0600))

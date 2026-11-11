@@ -7,7 +7,40 @@ import (
 	"os"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
+
+func prepareCredentialSocket(c Confinement) (Confinement, func(), error) {
+	if !c.CredentialStore {
+		return c, func() {}, nil
+	}
+	path, ok := ResolveCredentialStoreDBusSocket(os.LookupEnv, os.Getuid())
+	if !ok {
+		return c, func() {}, fmt.Errorf("OS credential-store session bus is unavailable")
+	}
+	lease, err := socketref.Capture(path)
+	if err != nil {
+		return c, func() {}, err
+	}
+	// Preserve explicit selectors but prevent an alias of this same retained
+	// bus from selecting a raw connection under a credential read approval.
+	c.SocketGrants = append([]SocketGrant(nil), c.SocketGrants...)
+	found := false
+	for i := range c.SocketGrants {
+		if c.SocketGrants[i].Binding.SameObject(lease.Binding()) {
+			c.SocketGrants[i].credentialRead = true
+			found = found || c.SocketGrants[i].ResolvedPath == path
+		}
+	}
+	if !found {
+		c.SocketGrants = append(c.SocketGrants, SocketGrant{ApprovedPath: path, ResolvedPath: path, Binding: lease.Binding(), credentialRead: true})
+	}
+	if len(c.SocketGrants) > MaxSocketGrants {
+		lease.Close()
+		return c, func() {}, ErrSocketGrantCap
+	}
+	return c, lease.Close, nil
+}
 
 func socketCommandFiles(grants []SocketGrant) ([]*os.File, func(), error) {
 	files := make([]*os.File, 0, len(grants))
@@ -56,7 +89,7 @@ var delegatedEndpoints = linuxsandbox.KnownDelegatedEndpoints()
 func socketPlan(grants []SocketGrant) []linuxsandbox.SocketGrant {
 	planned := make([]linuxsandbox.SocketGrant, 0, len(grants))
 	for i, grant := range grants {
-		next := linuxsandbox.SocketGrant{Path: grant.ResolvedPath, FD: linuxsandbox.SocketReferenceFD + i}
+		next := linuxsandbox.SocketGrant{Path: grant.ResolvedPath, FD: linuxsandbox.SocketReferenceFD + i, CredentialRead: grant.credentialRead}
 		for _, endpoint := range delegatedEndpoints {
 			if grant.ResolvedPath == endpoint.Path || grant.Binding.MatchesPath(endpoint.Path) {
 				next.Delegated = endpoint.Service

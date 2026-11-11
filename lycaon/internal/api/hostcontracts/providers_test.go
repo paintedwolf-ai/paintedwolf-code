@@ -2,6 +2,7 @@ package hostcontracts
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -180,9 +181,7 @@ func TestListProvidersCredentialNeverInJSON(t *testing.T) {
 	defer listResp.Body.Close()
 	body, err := io.ReadAll(listResp.Body)
 	testutil.FailErr(t, "io.ReadAll failed", err)
-	if strings.Contains(string(body), secret) {
-		t.Fatalf("GET /v1/providers leaked credential: %s", body)
-	}
+	exposure.Absent(t, string(body), secret)
 	if strings.Contains(string(body), `"api_key"`) {
 		t.Fatalf("GET /v1/providers should not include api_key field: %s", body)
 	}

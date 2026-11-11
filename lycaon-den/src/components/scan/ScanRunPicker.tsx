@@ -197,6 +197,7 @@ export function ScanRunPicker(props: ScanRunPickerProps) {
                   role: "listbox",
                   tabIndex: 0,
                   "aria-label": "Scan runs",
+                  "data-testid": "scans-run-listbox",
                   get "aria-activedescendant"() {
                     return props.scans[activeRun()]
                       ? `${listboxId}-option-${activeRun()}`

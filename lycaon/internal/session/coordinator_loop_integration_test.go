@@ -4,11 +4,9 @@ package session_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
-	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testutil"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -53,9 +51,6 @@ func TestLoopNoKickPlusSentinel(t *testing.T) {
 	for _, msg := range msgs {
 		if msg.Role != api.MessageRoleUser {
 			continue
-		}
-		if strings.Contains(msg.Content, surface.HostLoopWakeSentinel) && strings.Contains(strings.ToLower(msg.Content), "leg finished") {
-			t.Fatalf("loop-wake sentinel turn must not also include leg-finished kick: %q", msg.Content)
 		}
 	}
 }

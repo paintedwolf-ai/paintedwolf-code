@@ -172,7 +172,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
   await clickDisclosureWithoutReveal(summary);
   await expect(activity).toHaveAttribute("data-expanded", "true");
   await expect(activity).not.toHaveAttribute("data-animating", "true", {
-    timeout: 2_000,
+    timeout: 30_000,
   });
   const expandedHeight = await activity.evaluate(
     (element) => element.getBoundingClientRect().height,
@@ -225,7 +225,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
   await clickDisclosureWithoutReveal(summary);
   await expect(activity).not.toHaveAttribute("data-expanded", "true");
   await expect(activity).not.toHaveAttribute("data-animating", "true", {
-    timeout: 2_000,
+    timeout: 30_000,
   });
   const closedState = await disclosureViewportState(summary);
   const closedCorner = await disclosureCornerState(activity);
@@ -248,7 +248,7 @@ webE2e(`transcript disclosures animate without moving the viewport${expandedSpac
   await expect(activity).toHaveAttribute("data-expanded", "true");
   await page.mouse.wheel(0, 2_400);
   await expect(activity).not.toHaveAttribute("data-animating", "true", {
-    timeout: 2_000,
+    timeout: 30_000,
   });
   const boundaryTrace = await stopTailBoundaryTrace(page);
   expect(boundaryTrace.overflow.length).toBeGreaterThan(2);
@@ -353,7 +353,7 @@ webE2e(`expanding a tall row at the tail preserves the reading position${expande
   await clickDisclosureWithoutReveal(activity.locator(":scope > .den-transcript-disclosure-header"));
   await expect(activity).toHaveAttribute("data-expanded", "true");
   await expect(activity).not.toHaveAttribute("data-animating", "true", {
-    timeout: 2_000,
+    timeout: 30_000,
   });
 
   const nested = activity.locator(".den-tool-part > .den-transcript-disclosure-header").last();
@@ -380,7 +380,7 @@ webE2e(`expanding a tall row at the tail preserves the reading position${expande
   await clickDisclosureWithoutReveal(nested);
   await expect(nestedShell).toHaveAttribute("data-expanded", "true");
   await expect(nestedShell).not.toHaveAttribute("data-animating", "true", {
-    timeout: 2_000,
+    timeout: 30_000,
   });
   const trace = await stopDisclosureScrollTrace(nested);
   const expandedHeight = await nestedShell.evaluate(

@@ -71,7 +71,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 		if subject := processDisplaySubject(loop, tctx.Identity.SessionID, request.ProcessHandles); subject != "" {
 			tctx.SetDisplaySubject(subject)
 		}
-		if request.UntilComplete {
+		if len(request.ProcessHandles) > 0 {
 			winner, ready := loop.processConditionOutcome(tctx.Identity.SessionID, awaitstore.Condition{
 				Kind: "process_done", Handles: request.ProcessHandles,
 			})
@@ -118,7 +118,7 @@ func RegisterWaitTool(reg *tools.DefaultRegistry, loop *WaitSubscriptions, deps 
 				triggerNames,
 			)
 		}
-		if !request.UntilComplete && !batchClosed && !pendingUserInput && waitSubscribesProcessDone(triggers) && !loop.processCycleOpen(tctx.Identity.SessionID, processHandles) {
+		if len(processHandles) == 0 && !batchClosed && !pendingUserInput && waitSubscribesProcessDone(triggers) && !loop.processCycleOpen(tctx.Identity.SessionID, processHandles) {
 			return waitAlreadySatisfied(
 				"process_done",
 				"No selected commands are running for this session.",

@@ -163,7 +163,6 @@ describe("approval card copy is not duplicated across zones", () => {
         onContentApply={() => {}}
       />
     ));
-    expect(view.getByRole("button", {name:/Show all 8 packages in Files/})).toBeTruthy();
     expect(
       occurrences(
         view.container.textContent ?? "",

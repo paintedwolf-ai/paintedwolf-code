@@ -77,7 +77,6 @@ describe("worktree merge outcomes", () => {
       },
       branch,
     );
-    expect(conflict.sentence).toMatch(/conflicts and was not applied/);
     expect(conflict.conflicts).toEqual(["a.txt", "b.txt"]);
   });
 });

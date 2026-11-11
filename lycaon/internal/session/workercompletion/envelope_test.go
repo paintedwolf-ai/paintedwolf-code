@@ -234,3 +234,54 @@ func TestParseWorkerCompletionEnvelopeReportJSON(t *testing.T) {
 		t.Fatalf("report = %+v", env.Report)
 	}
 }
+
+func TestFormatWorkerCompletionEnvelopeFormatsJSONAcrossMultipleLines(t *testing.T) {
+	out := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
+		JobID:          "job-multiline",
+		ChildSessionID: "child-multiline",
+		AgentType:      "repo-researcher",
+		State:          "needs_decision",
+		Summary:        "mapped handlers",
+		Proof: workercompletion.WorkerCompletionProof{
+			ChangedPaths: []string{"internal/a.go", "internal/b.go"},
+			ReceiptCount: 4,
+		},
+		Report: workercompletion.WorkerCompletionReport{
+			LegStatus:     "partial",
+			Brief:         "mapped two handlers",
+			ObjectivesMet: []string{"first objective", "second objective"},
+			Findings: []workercompletion.WorkerFinding{
+				{Path: "internal/a.go", Line: 10, Note: "first finding"},
+				{Path: "internal/b.go", Line: 20, Note: "second finding"},
+			},
+		},
+		DecisionRequest: &api.WorkerDecisionRequest{
+			WorkerID: "job-multiline",
+			Question: "include generated files?",
+			Options:  []string{"yes", "no"},
+		},
+	})
+	lines := strings.Split(out, "\n")
+	if len(lines) < 20 {
+		t.Fatalf("expected multi-line envelope for line-based paging, got %d lines:\n%s", len(lines), out)
+	}
+	firstLine, secondLine := -1, -1
+	for i, line := range lines {
+		if strings.Contains(line, "internal/a.go") && strings.Contains(line, "path") {
+			firstLine = i
+		}
+		if strings.Contains(line, "internal/b.go") && strings.Contains(line, "path") {
+			secondLine = i
+		}
+	}
+	if firstLine < 0 || secondLine < 0 || firstLine == secondLine {
+		t.Fatalf("findings must span separate lines (first=%d second=%d):\n%s", firstLine, secondLine, out)
+	}
+	parsed, ok := workercompletion.ParseWorkerCompletionEnvelope(out)
+	if !ok {
+		t.Fatalf("expected multi-line envelope to round-trip:\n%s", out)
+	}
+	if len(parsed.Report.Findings) != 2 || parsed.DecisionRequest == nil || parsed.Proof.ReceiptCount != 4 {
+		t.Fatalf("round-trip parsed = %+v", parsed)
+	}
+}

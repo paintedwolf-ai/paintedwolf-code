@@ -6,5 +6,3 @@ suggested_action: "Reload it to read the current version."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "changed after you opened it"

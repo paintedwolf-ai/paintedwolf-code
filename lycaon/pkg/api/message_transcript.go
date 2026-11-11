@@ -2,6 +2,7 @@ package api
 
 import (
 	"reflect"
+	"slices"
 	"strings"
 )
 
@@ -51,6 +52,7 @@ func IsBlueprintMessage(msg Message) bool {
 func IsUserIntentMessage(msg Message) bool {
 	return msg.Role == MessageRoleUser &&
 		msg.Kind != MessageKindUserContinuation &&
+		!msg.CompactionCheckpoint &&
 		!IsInternalTranscriptMessage(msg) &&
 		!IsWorkflowBoundaryMessage(msg)
 }
@@ -77,8 +79,10 @@ func UserIntentBoundary(history []Message) int {
 
 // LastUserIntentMessage returns the most recent visible user intent message.
 func LastUserIntentMessage(history []Message) (Message, bool) {
-	if i := UserIntentBoundary(history); i > 0 {
-		return history[i-1], true
+	for _, msg := range slices.Backward(history) {
+		if IsUserIntentMessage(msg) {
+			return msg, true
+		}
 	}
 	return Message{}, false
 }
@@ -291,7 +295,7 @@ func FilterPromptHistory(messages []Message) []Message {
 			out = append(out, msg)
 		}
 	}
-	return EnsureToolCallGroupContiguityForPrompt(CloseToolCallGroupsForPrompt(orderDraftRecovery(out)))
+	return EnsureToolCallGroupContiguityForPrompt(CloseToolCallGroupsForPrompt(orderDraftRecovery(dropConsumedPolicyFeedback(dropDerivedMidTurnNotes(out)))))
 }
 
 // RehydrateTranscriptProjectionFields restores transcript projection fields that

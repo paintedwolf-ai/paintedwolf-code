@@ -68,13 +68,23 @@ export function ProjectListRow(props: Props) {
               />
             }
           >
-            <button
-              type="button"
-              class="project-list-row__name"
-              onClick={() => props.onOpen(props.project.id)}
-            >
-              {props.project.displayName}
-            </button>
+            <div class="project-list-row__heading">
+              <button
+                type="button"
+                class="project-list-row__name"
+                onClick={() => props.onOpen(props.project.id)}
+              >
+                {props.project.displayName}
+              </button>
+              <Show when={props.project.isDraft}>
+                <span
+                  class="project-list-row__draft-badge"
+                  data-testid={`project-list-draft-${props.project.id}`}
+                >
+                  Draft
+                </span>
+              </Show>
+            </div>
           </Show>
           <button
             type="button"
@@ -134,7 +144,7 @@ export function ProjectListRow(props: Props) {
                   Save as a project
                 </button>
               </Show>
-              <button type="button" role="menuitem" onClick={startRename}>
+              <button data-testid="rename" type="button" role="menuitem" onClick={startRename}>
                 Rename
               </button>
               <button

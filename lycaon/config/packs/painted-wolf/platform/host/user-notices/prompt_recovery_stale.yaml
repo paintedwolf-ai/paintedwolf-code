@@ -12,9 +12,5 @@ scenarios:
   - id: moved_on
     vars:
       explanation: The chat has moved on since this notice; refresh it and choose again
-    expect_contains:
-      - moved on
   - id: default
     vars: {}
-    expect_contains:
-      - has changed

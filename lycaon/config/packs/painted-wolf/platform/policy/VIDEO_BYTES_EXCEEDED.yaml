@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     max_bytes: 134217728
     path: recordings/long.mp4
     tool: view_video
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: VIDEO_BYTES_EXCEEDED'

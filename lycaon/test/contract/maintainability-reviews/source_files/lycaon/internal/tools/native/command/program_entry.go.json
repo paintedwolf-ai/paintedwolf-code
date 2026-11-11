@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon/internal/tools/native/command/program_entry.go",
+  "kind": "construction",
+  "workstream": "large-command-review",
+  "disposition": "retain",
+  "reason": "Retain the 772-line command entry composition. The entry binds runtime ports, creates the shared ledger and supplies projection bounds from the frozen catalog. Review, dispatch, capture and persistence remain separate collaborators. Keep this assembly explicit; wide composed commands and projection bounds qualify the changed configuration.",
+  "reviewed_commit": "99d8b089601dbd10107851c6e0900ad7bbcd3dcd",
+  "ceiling": 772,
+  "boundaries": {
+    "lycaon/internal/toolhost/command_review_scale_test.go": "76cc3d3ca9a003ea84416039669bb1c96c0f8d4c178818c2db0181c40a684f92",
+    "lycaon/internal/captureprojection/value_scale_test.go": "2823644af528cbb95abda234c271557bd327d7e7abbbe41da8fed30e520d78fa"
+  }
+}

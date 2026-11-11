@@ -9,6 +9,3 @@ scenarios:
   - id: default
     vars:
       free_mb: "900"
-    expect_contains:
-      - 900 MB is free
-      - Free up

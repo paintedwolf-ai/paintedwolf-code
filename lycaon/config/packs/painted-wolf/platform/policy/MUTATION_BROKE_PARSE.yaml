@@ -8,6 +8,7 @@ selector:
     - replace_lines
     - code_rewrite
     - write
+    - command
 requires:
   profiles:
     - filesystem
@@ -21,6 +22,8 @@ requires:
     - paintedwolf.parse_error
     - paintedwolf.path
     - paintedwolf.mutation_new_path
+    - paintedwolf.command_surface
+    - paintedwolf.syntax_override_commands
 when: paintedwolf.rejection_code == "MUTATION_BROKE_PARSE"
 effect: block
 copy:
@@ -37,11 +40,14 @@ copy:
     the rejected candidate was not created. Correct the candidate and retry a complete
     staged command redirect. If the path has since been created, read its current contents before replacing it.
     {% else %}Read the current file before repairing it; rejected candidate text is not
-    a saved edit base. Correct the candidate with an exact `edit`, a complete staged command redirect,
-    or one atomic `replace_lines.operations` batch.{% endif %}
+    a saved edit base. Correct the candidate with a complete staged command redirect,
+    or one `edit --path` or `replace-lines` whose span covers the whole change.{% endif %}
     Resolve this rejected source mutation before running checks that require its proposed contents.
     If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate,
-    supply `syntax_override_reason` on the mutation call to proceed.
+    {% if paintedwolf.command_surface %}use `tee --syntax-override-reason TEXT PATH`
+    with the complete candidate on stdin. The catalog supports this option on `{{ paintedwolf.syntax_override_commands }}`.
+    Redirects accept no override. The reason applies only to that operation.
+    {% else %}supply `syntax_override_reason` on the mutation call to proceed.{% endif %}
   instead: Correct the candidate and retry one atomic mutation
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
@@ -54,6 +60,22 @@ x-paintedwolf-scenarios:
       profile: implement
       tool: replace_lines
     expect_contains:
-      - 'Rejected:'
-      - 'Code: MUTATION_BROKE_PARSE'
-      - atomic
+      - 'supply `syntax_override_reason`'
+  - id: command-leg
+    vars:
+      native_operation: replace_lines
+      parse_error: 'line 55: raise ValueError'
+      path: ntp_check.py
+      profile: implement
+      tool: command
+    expect_contains:
+      - 'tee --syntax-override-reason'
+
+  - id: command-redirect
+    vars:
+      parse_error: 'missing newline'
+      path: Dockerfile
+      tool: command
+      profile: implement
+    expect_contains:
+      - 'tee --syntax-override-reason'

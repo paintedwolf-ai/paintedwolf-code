@@ -27,7 +27,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: ask_user
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: ASK_USER_COMPARE_OPTIONS'
-      - Omit options

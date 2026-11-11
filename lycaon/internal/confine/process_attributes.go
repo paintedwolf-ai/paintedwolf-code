@@ -35,7 +35,7 @@ const (
 type LimitCapability uint8
 
 const (
-	// LimitQuery reports the host process's current soft and hard limits.
+	// LimitQuery reports the limits a launched program with none set receives.
 	LimitQuery LimitCapability = 1 << iota
 	// LimitSetSoft starts a launched program with a soft limit up to the hard one.
 	LimitSetSoft

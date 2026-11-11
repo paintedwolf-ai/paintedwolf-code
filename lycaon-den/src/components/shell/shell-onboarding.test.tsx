@@ -31,7 +31,7 @@ describe("shell onboarding authority", () => {
     expect(screen.getByTestId("workspace")).toBeTruthy(); expect(controller.modelsChecked()).toBe(false);
     appStore.actions.setSidecarStatus("connected");
     await waitFor(() => expect(controller.modelsChecked()).toBe(true));
-    expect(seams.providers).toHaveBeenCalledOnce(); expect(seams.policy).toHaveBeenCalledOnce();
+    expect(seams.providers).toHaveBeenCalledOnce(); expect(seams.policy).toHaveBeenCalledTimes(2);
     expect(controller.providerGap()).toBeTruthy(); expect(controller.showNoProviderBanner()).toBe(true);
   });
 

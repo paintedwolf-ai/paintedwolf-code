@@ -81,16 +81,7 @@ func TestRenderPromptContent(t *testing.T) {
 	testutil.FailErr(t, "render prompt", err)
 	out := buf.String()
 
-	for _, want := range []string{
-		"LLM call #1",
-		"coordinator",
-		"↑1,000 prompt",
-		"┌─ system",
-		"# Coordinator",
-		"┌─ user",
-		"fix the bug",
-		"Available tools",
-	} {
+	for _, want := range []string{"LLM call #1", "coordinator", "↑1,000 prompt", "┌─ system", "# Coordinator", "┌─ user", "fix the bug"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("prompt render missing %q\n---\n%s", want, out)
 		}

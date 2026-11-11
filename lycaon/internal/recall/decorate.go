@@ -16,7 +16,7 @@ import (
 // decorate adds attribution, currency, and — on narrow answers — bodies.
 func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits []search.Hit) ([]Hit, []string) {
 	out := make([]Hit, 0, len(hits))
-	inline := len(hits) <= BodyInlineMaxHits
+	inline := distinctObservationCount(hits) <= BodyInlineMaxHits
 	var issues []string
 	for _, h := range hits {
 		out = append(out, Hit{
@@ -29,7 +29,7 @@ func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits
 			LegID:     h.LegID,
 			Mine:      strings.TrimSpace(h.SessionID) == strings.TrimSpace(caller.SessionID),
 			TS:        h.TS,
-			Path:      h.Path,
+			Path:      cleanRecallPath(h.Path),
 			Line:      h.Line,
 			URL:       h.URL,
 			Snippet:   clampChars(h.Snippet, SnippetMaxChars),
@@ -49,22 +49,43 @@ func (s *Service) decorate(ctx context.Context, caller Caller, scope Scope, hits
 			out[len(out)-1].TS = record.observedAt
 		}
 	}
+	s.enrichFromEvidenceRecords(ctx, out)
 	if inline {
-		issues = append(issues, s.attachBodies(ctx, out)...)
+		issues = append(issues, s.attachBodies(ctx, hits, out)...)
 	}
 	s.attachSourceContexts(ctx, hits, out)
+	for i := range out {
+		if len(out[i].Body) > 0 && !out[i].BodyTruncated {
+			out[i].Snippet = ""
+		}
+	}
 	s.attachCurrency(ctx, scope, out)
 	return out, issues
 }
 
-// attachBodies reads bodies from evidence_records; the projection carries only
-// a snippet.
-func (s *Service) attachBodies(ctx context.Context, hits []Hit) []string {
+// attachBodies reads bodies from evidence_records once per distinct observation.
+func (s *Service) attachBodies(ctx context.Context, sources []search.Hit, hits []Hit) []string {
+	primaryIdx := make(map[string]int, len(hits))
+	for i := range hits {
+		handle := strings.TrimSpace(hits[i].Handle)
+		session := strings.TrimSpace(hits[i].SessionID)
+		if handle == "" || session == "" {
+			continue
+		}
+		key := session + "\x00" + handle
+		prev, exists := primaryIdx[key]
+		if !exists || (i < len(sources) && sources[i].Source == search.SourceTool && sources[prev].Source != search.SourceTool) {
+			primaryIdx[key] = i
+		}
+	}
 	var issues []string
 	for i := range hits {
 		handle := strings.TrimSpace(hits[i].Handle)
 		session := strings.TrimSpace(hits[i].SessionID)
 		if handle == "" || session == "" {
+			continue
+		}
+		if primaryIdx[session+"\x00"+handle] != i {
 			continue
 		}
 		var projectID, sha string

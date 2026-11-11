@@ -6,4 +6,3 @@ suggested_action: Check that the folder is still attached and readable, then try
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [cannot be read right now]

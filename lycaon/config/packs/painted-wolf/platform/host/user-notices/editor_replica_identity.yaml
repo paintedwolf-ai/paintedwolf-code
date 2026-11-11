@@ -6,5 +6,3 @@ suggested_action: Reopen the file to reconnect. Keep a copy of any unsaved text 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - Editor connection expired

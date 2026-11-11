@@ -1,0 +1,6 @@
+steps:
+  - tool: "recall"
+    args:
+      query: "handle:<handle>"
+    say: "Recover an earlier observation with {{ call }} instead of restating it from memory."
+    otherwise: "Re-observe a source before citing it again."

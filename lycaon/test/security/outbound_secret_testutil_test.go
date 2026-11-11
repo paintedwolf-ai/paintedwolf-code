@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -243,11 +244,9 @@ func assertToolMessageContains(t *testing.T, h *wiring.Harness, sessionID, want 
 
 func assertCanaryAbsent(t *testing.T, canary string, parts ...any) {
 	t.Helper()
-	for i, part := range parts {
+	for _, part := range parts {
 		raw := stringifyCanaryPart(part)
-		if strings.Contains(raw, canary) {
-			t.Fatalf("canary leaked in part[%d]: %s", i, raw)
-		}
+		exposure.Absent(t, raw, canary)
 	}
 }
 

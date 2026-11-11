@@ -2,6 +2,7 @@ package httpaction
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -57,9 +58,7 @@ func resolvedBearer(t *testing.T, server *httptest.Server, extra map[string]any)
 
 func assertScrubbed(t *testing.T, where string, content string, reference string) {
 	t.Helper()
-	if strings.Contains(content, echoedCredential) {
-		t.Fatalf("%s carries the echoed credential", where)
-	}
+	exposure.Absent(t, content, echoedCredential)
 	if !strings.Contains(content, reference) {
 		t.Fatalf("%s does not read the echo as its reference", where)
 	}

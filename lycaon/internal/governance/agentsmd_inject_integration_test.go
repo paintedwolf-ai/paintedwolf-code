@@ -8,8 +8,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
-	"github.com/lycaon/lycaon/internal/governance"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/session/policyindex"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -24,35 +25,25 @@ func integrationEngine(t *testing.T) *prompts.FileTemplateEngine {
 func TestCoordinatorTurnIncludesChainOnWritePath(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo")
 	engine := integrationEngine(t)
-	injects := prompts.NewInjectRenderer(engine)
-
+	policies := policyindex.New(nil, integrationPolicyRoot{root})
+	policies.SetRenderer(engine)
 	deps := assembly.AssemblyDeps{
-		Prompts: engine,
-		Injects: injects,
-		AgentsMDIndex: func(_ context.Context, _ *api.Session) (api.Message, bool) {
-			index, err := governance.ListIndex(context.Background(), root)
-			if err != nil {
-				return api.Message{}, false
-			}
-			block, err := governance.BuildIndexInject(context.Background(), injects, "sess-inject-test", index)
-			if err != nil || strings.TrimSpace(block.Content) == "" {
-				return api.Message{}, false
-			}
-			return api.Message{Role: api.MessageRoleSystem, Content: block.Content}, true
-		},
-		AgentsMDChain: func(_ context.Context, _ *api.Session, relPath string) (api.Message, error) {
-			block, err := governance.BuildChainInject(context.Background(), injects, "sess-inject-test", root, relPath, governance.DefaultAgentsMDInjectMaxBodyBytes)
-			return api.Message{Role: api.MessageRoleSystem, Content: block.Content}, err
+		Prompts:       engine,
+		AgentsMDIndex: policies.Index,
+		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
+			delivery, err := policies.ResolveCurrent(ctx, sess, history)
+			return delivery.Messages, err
 		},
 	}
 	asm := &assembly.AssemblyEngine{}
 	asm.SetDeps(deps)
-	sess := &api.Session{ID: "sess-chain", WorkspacePath: root}
+	sess := &api.Session{ID: "sess-chain", ProjectID: "project", WorkspaceRootID: "root", WorkspacePath: root}
 	history := []api.Message{
 		{Role: api.MessageRoleUser, Content: "edit backend"},
-		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{
-			{Name: "write", Args: map[string]any{"path": "lycaon/foo.go", "content": "package foo"}},
-		}},
+		{Role: api.MessageRoleTool, Origin: api.MessageOriginTool,
+			SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "project", RootID: "root", Path: "lycaon/foo.go", EntryKind: api.NavigationEntryKindFile}}},
+			ToolResult:    &api.ToolResult{Tool: "command", ToolCallID: "observed", Invocation: &api.InvocationReceipt{Tool: "command", ToolCallID: "observed"}},
+		},
 	}
 	msgs, err := asm.BuildCompletionMessages(context.Background(), sess, history, nil)
 	testutil.FailErr(t, "BuildCompletionMessages", err)
@@ -75,16 +66,17 @@ func TestCoordinatorTurnIncludesChainOnWritePath(t *testing.T) {
 func TestCoordinatorTurnIncludesRootChainBeforeAnyPathTool(t *testing.T) {
 	root := agentsMDFixture(t, "monorepo")
 	engine := integrationEngine(t)
-	injects := prompts.NewInjectRenderer(engine)
+	policies := policyindex.New(nil, integrationPolicyRoot{root})
+	policies.SetRenderer(engine)
 	asm := &assembly.AssemblyEngine{}
 	asm.SetDeps(assembly.AssemblyDeps{
 		Prompts: engine,
-		AgentsMDChain: func(_ context.Context, _ *api.Session, relPath string) (api.Message, error) {
-			block, err := governance.BuildChainInject(context.Background(), injects, "sess-inject-test", root, relPath, governance.DefaultAgentsMDInjectMaxBodyBytes)
-			return api.Message{Role: api.MessageRoleSystem, Content: block.Content}, err
+		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
+			delivery, err := policies.ResolveCurrent(ctx, sess, history)
+			return delivery.Messages, err
 		},
 	})
-	sess := &api.Session{ID: "sess-root", WorkspacePath: root}
+	sess := &api.Session{ID: "sess-root", ProjectID: "project", WorkspaceRootID: "root", WorkspacePath: root}
 	msgs, err := asm.BuildCompletionMessages(context.Background(), sess, []api.Message{{Role: api.MessageRoleUser, Content: "start work"}}, nil)
 	testutil.FailErr(t, "BuildCompletionMessages", err)
 	combined := strings.Builder{}
@@ -96,4 +88,11 @@ func TestCoordinatorTurnIncludesRootChainBeforeAnyPathTool(t *testing.T) {
 	if !strings.Contains(combined.String(), "Root agents policy") {
 		t.Fatalf("missing root AGENTS.md chain:\n%s", combined.String())
 	}
+}
+
+type integrationPolicyRoot struct{ path string }
+
+func (integrationPolicyRoot) Applies(context.Context, string, *api.Session) bool { return true }
+func (r integrationPolicyRoot) Roots(context.Context, *api.Session) ([]projectroot.RootRef, error) {
+	return []projectroot.RootRef{{ID: "root", Label: "project", Path: r.path, IsPrimary: true}}, nil
 }

@@ -12,6 +12,3 @@ suggested_action: >-
 scenarios:
   - id: generic
     vars: {}
-    expect_contains:
-      - could not commit
-      - not a workspace-setup

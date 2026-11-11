@@ -3,18 +3,18 @@ package native
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"os"
 	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	surveytools "github.com/lycaon/lycaon/internal/tools/native/survey"
 	"strings"
 )
 
-func TestWriteEditGitInternalsDenied(t *testing.T) {
+func TestWriteGitInternalsDenied(t *testing.T) {
 	cases := []struct {
 		path  string
 		class string
@@ -40,16 +40,15 @@ func TestWriteEditGitInternalsDenied(t *testing.T) {
 				t.Fatalf("class = %v, want %s", reject.Data["class"], tc.class)
 			}
 		})
-		t.Run("edit/"+tc.path, func(t *testing.T) {
+		t.Run("overwrite/"+tc.path, func(t *testing.T) {
 			dir := t.TempDir()
 			abs := filepath.Join(dir, filepath.FromSlash(tc.path))
 			testutil.FailErr(t, "mkdir parent", os.MkdirAll(filepath.Dir(abs), 0o755))
 			testutil.FailErr(t, "seed file", os.WriteFile(abs, []byte("old\n"), 0o644))
-			tool := &EditTool{Boundary: nativefixture.Boundary(t)}
+			tool := &WriteTool{Boundary: nativefixture.Boundary(t)}
 			_, err := tool.Run(context.Background(), map[string]any{
-				"path":       tc.path,
-				"old_string": "old",
-				"new_string": "new",
+				"path":    tc.path,
+				"content": "new\n",
 			}, nativefixture.Context(dir))
 			var reject *toolrejection.ToolReject
 			if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
@@ -78,7 +77,7 @@ func TestWriteGitIndexRequiresNativeGitRoute(t *testing.T) {
 	}
 }
 
-func TestWriteAndEditDenyNestedSubmoduleAndGitMetadataWhileReadAllowsInspection(t *testing.T) {
+func TestWriteDeniesNestedSubmoduleAndGitMetadataWhileReadAllowsInspection(t *testing.T) {
 	dir := t.TempDir()
 	testutil.FailErr(t, "mkdir .git/refs/heads", os.MkdirAll(filepath.Join(dir, ".git", "refs", "heads"), 0o755))
 	testutil.FailErr(t, "mkdir sub/.git", os.MkdirAll(filepath.Join(dir, "sub", ".git"), 0o755))
@@ -89,22 +88,12 @@ func TestWriteAndEditDenyNestedSubmoduleAndGitMetadataWhileReadAllowsInspection(
 	boundary := nativefixture.Boundary(t)
 	tctx := nativefixture.Context(dir)
 	writeTool := &WriteTool{Boundary: boundary}
-	editTool := &EditTool{Boundary: boundary}
 
 	for _, rel := range []string{"sub/.git/HEAD", ".git/refs/heads/main", ".git"} {
 		_, err := writeTool.Run(context.Background(), map[string]any{"path": rel, "content": "hijack\n"}, tctx)
 		var reject *toolrejection.ToolReject
 		if !errors.As(err, &reject) || reject.Code != "GIT_INTERNALS_WRITE_DENIED" {
 			t.Fatalf("write %s: err = %v, want GIT_INTERNALS_WRITE_DENIED", rel, err)
-		}
-		if rel != ".git" {
-			_, editErr := editTool.Run(context.Background(), map[string]any{
-				"path": rel, "old_string": "main", "new_string": "pwned",
-			}, tctx)
-			var editReject *toolrejection.ToolReject
-			if !errors.As(editErr, &editReject) || editReject.Code != "GIT_INTERNALS_WRITE_DENIED" {
-				t.Fatalf("edit %s: err = %v, want GIT_INTERNALS_WRITE_DENIED", rel, editErr)
-			}
 		}
 	}
 

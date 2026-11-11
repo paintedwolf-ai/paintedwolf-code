@@ -1,0 +1,4 @@
+steps:
+  - when: "paintedwolf.profile_fetches_urls"
+    tool: "fetch_url"
+    say: "If the URL matters to the finding, call {{ call }} first and copy it verbatim from the result."

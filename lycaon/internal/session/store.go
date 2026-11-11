@@ -37,9 +37,10 @@ type QueryStore interface {
 	// Source turns retain their identities when transcript rows are removed.
 	ReadSourceTurn(context.Context, string, int) (messageview.SourceTurn, error)
 	UserIntentBefore(ctx context.Context, sessionID string, before time.Time) (time.Time, error)
-	// PutTurnSourceBrief records the source-change brief a turn opened with;
-	// TurnSourceBriefs returns them keyed by each turn's opening message.
-	PutTurnSourceBrief(ctx context.Context, sessionID, openingMessageID, briefJSON string) error
+	// PutTurnSourceBrief records the source-change brief a turn opened with and
+	// the evidence its rows cite; TurnSourceBriefs returns the briefs keyed by
+	// each turn's opening message.
+	PutTurnSourceBrief(ctx context.Context, sessionID, openingMessageID string, mint evidence.SourceChangeMint) error
 	TurnSourceBriefs(ctx context.Context, sessionID string) (map[string]string, error)
 	GetTranscriptPage(ctx context.Context, id string, q api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
 	// LatestTurnClock reads the durable clock of a root session's newest visible user turn.

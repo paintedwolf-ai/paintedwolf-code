@@ -2,6 +2,7 @@ package transcript
 
 import (
 	"encoding/json"
+	"maps"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -23,6 +24,11 @@ func toolFeedbackParts(msg api.Message) []api.MessageContentPart {
 	budget := maxToolFeedbackBytes - toolFeedbackEnvelopeReserve - len(invocation)
 	omitted := 0
 	for _, feedback := range msg.ToolResult.Feedback {
+		// The rendered copy already shows these calls.
+		if _, shown := feedback.Details[api.ToolFeedbackNextCalls]; shown {
+			feedback.Details = maps.Clone(feedback.Details)
+			delete(feedback.Details, api.ToolFeedbackNextCalls)
+		}
 		if len(feedback.Details) == 0 && feedback.Subject == nil {
 			continue
 		}

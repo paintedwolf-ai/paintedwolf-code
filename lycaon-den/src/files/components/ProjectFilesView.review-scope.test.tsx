@@ -1,5 +1,6 @@
 import "../../test/document-outbox-fixture.ts";
 import { required } from "../../test/at.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { filesBufferText } from "../documents/project-files-buffers.ts";
 import { filesBufferBase } from "../documents/project-files-buffers.ts";
 import { deletedSourceFixture } from "../../test/source-reader-fixture.ts";
@@ -646,8 +647,8 @@ describe("Review files use the current editor", () => {
     expect(page?.name).toBe("Git checkout · main → feature-x");
     await waitFor(() => expect(screen.getByTestId("walk-page-title").textContent).toContain("Record the changes"));
     expect(screen.getByTestId("walk-page-position").textContent).toContain("Step 2 of 2");
-    fireEvent.click(screen.getByText("2 working-tree files changed when this movement was observed"));
-    const rows = await screen.findAllByRole("button", { name: /Open observed version/ });
+    fireEvent.click(screen.getByTestId("git-review-observed-toggle"));
+    const rows = (await screen.findAllByTestId("git-review-observed-file")).map((row) => assertNamedControl(row, "button"));
     expect(rows).toHaveLength(2);
     expect(rows[0]!.textContent).toContain("src/b.ts");
     expect(rows[1]!.textContent).toContain("src/c.ts");

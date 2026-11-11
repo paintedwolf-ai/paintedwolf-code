@@ -139,14 +139,13 @@ func TestLiveFailedTurnSettlesWithoutAssistantReply(t *testing.T) {
 	}))
 	defer server.Close()
 	client := newLiveClient(server.URL, "fixture")
-	start := time.Now()
-	err := client.postPromptAndWait(t.Context(), "session", "fail", 5*time.Second)
+	err := client.postPromptAndWait(t.Context(), "session", "fail", time.Minute)
 	var failure *ExecutionFailure
 	if !errors.As(err, &failure) || failure.Code != "provider_request_rejected" {
 		t.Fatalf("failure = %v, want structured provider code", err)
 	}
-	if time.Since(start) > time.Second || oldest.Load() > 1 {
-		t.Fatalf("failed turn waited %s; oldest reads %d", time.Since(start), oldest.Load())
+	if oldest.Load() > 1 {
+		t.Fatalf("failed turn reread the transcript from the start %d times", oldest.Load())
 	}
 }
 

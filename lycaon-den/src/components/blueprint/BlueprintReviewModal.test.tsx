@@ -119,11 +119,6 @@ describe("BlueprintReviewModal", () => {
 
   it("approve remains the primary footer action", () => {
     const { onApprove } = renderModal();
-    expect(
-      screen.getByText(
-        "Approving accepts this blueprint and continues the workflow.",
-      ),
-    ).toBeTruthy();
     const button = screen.getByTestId(
       "blueprint-review-approve",
     ) as HTMLButtonElement;
@@ -182,8 +177,6 @@ describe("BlueprintReviewModal", () => {
 
   it("shows the changed lead when the blueprint moved under approval", () => {
     renderModal({ changed: true });
-    expect(screen.getByTestId("blueprint-review-lead").textContent).toContain(
-      "approve this revision",
-    );
+    expect(screen.getByTestId("blueprint-review-lead-changed")).toBeTruthy();
   });
 });

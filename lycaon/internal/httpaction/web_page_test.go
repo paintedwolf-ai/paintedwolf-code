@@ -88,13 +88,12 @@ func TestWebPageClassifiesDeliveredRemoteDocuments(t *testing.T) {
 func TestReportWebPageStatesFetchURLAvailability(t *testing.T) {
 	inline := bodyPlacement{inline: "<html></html>", encoding: "utf-8"}
 	cases := []struct {
-		name         string
-		plan         toolsurface.Plan
-		wantRaised   bool
-		wantDeferred bool
+		name       string
+		plan       toolsurface.Plan
+		wantRaised bool
 	}{
 		{name: "immediate", plan: toolsurface.Compile([]string{"http_request", "fetch_url"}, nil), wantRaised: true},
-		{name: "deferred", plan: toolsurface.Compile([]string{"http_request"}, []string{"fetch_url"}), wantRaised: true, wantDeferred: true},
+		{name: "deferred", plan: toolsurface.Compile([]string{"http_request"}, []string{"fetch_url"}), wantRaised: true},
 		{name: "withheld", plan: toolsurface.Compile([]string{"http_request"}, nil)},
 		{name: "no model surface"},
 	}
@@ -114,9 +113,6 @@ func TestReportWebPageStatesFetchURLAvailability(t *testing.T) {
 			feedback := tctx.Effects.Out.Facts.FeedbackFor(toolrejection.HTTPRequestWebPageCode)
 			if feedback.Details["host"] != "www.example.test" || feedback.Details["bytes"] != "612480" {
 				t.Fatalf("details = %+v want the redirected host and byte count", feedback.Details)
-			}
-			if feedback.Details["fetch_url_deferred"] != tc.wantDeferred {
-				t.Fatalf("fetch_url_deferred = %v want %v", feedback.Details["fetch_url_deferred"], tc.wantDeferred)
 			}
 		})
 	}

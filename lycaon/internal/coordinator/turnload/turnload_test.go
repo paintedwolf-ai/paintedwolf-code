@@ -3,6 +3,7 @@ package turnload
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -160,6 +161,33 @@ func TestDecideKeepsAGuideWhoseToolTheChatAlreadyUsed(t *testing.T) {
 	}
 }
 
+func TestDecideKeepsAGuideWhoseToolTheCurrentTurnLoads(t *testing.T) {
+	fake := &decidetest.Fake{Answers: decide.Answers{
+		"tools":  {Kind: decide.KindMulti, Probabilities: map[string]float64{"terminal_open": 0.9}, Confidence: 0.9},
+		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"claim-evidence": 0.05, "survey-ladder": 0.05}, Confidence: 0.95},
+		"kind":   {Kind: decide.KindChoice, Choice: KindRun, Confidence: 0.9},
+	}}
+	spec := testSpec()
+	spec.Guides.Omittable = []string{"claim-evidence", "survey-ladder"}
+	guides := GuideCandidates([]promptunit.Unit{
+		{ID: "claim-evidence", Description: "evidence for claims", NeededWith: []string{"terminal_open", "terminal_snapshot"}},
+		{ID: "survey-ladder", Description: "orienting", NeededWith: []string{"list_dir"}},
+	})
+	tools := ToolCandidates([]ToolCard{{Name: "terminal_open", Description: "Open an interactive terminal"}})
+	// Place guides before tools in candidates to verify order independence.
+	candidates := slices.Concat(guides, tools)
+	got := Decide(context.Background(), fake, spec, State{User: "play the terminal adventure game"}, candidates)
+	if _, loaded := got.Tools["terminal_open"]; !loaded {
+		t.Fatalf("tools = %v; expected terminal_open to load", got.Tools)
+	}
+	if _, omitted := got.Omitted["claim-evidence"]; omitted {
+		t.Fatalf("omitted = %v; a guide needed_with a tool loaded this turn must stay", got.Omitted)
+	}
+	if _, omitted := got.Omitted["survey-ladder"]; !omitted {
+		t.Fatalf("omitted = %v; unrelated guide should still be omitted", got.Omitted)
+	}
+}
+
 func TestDecideOmitBelowZeroKeepsEveryUnit(t *testing.T) {
 	fake := &decidetest.Fake{Answers: decide.Answers{
 		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"survey-ladder": 0, "read-tool": 0.01}, Confidence: 1},
@@ -291,9 +319,18 @@ func TestLookupSkills(t *testing.T) {
 }
 
 func TestToolAndSkillIdentifiersShareBoundaryMatching(t *testing.T) {
-	tools := []ToolCard{{Name: "read"}, {Name: "request_tools"}}
+	tools := []ToolCard{{Name: "git_commit"}, {Name: "read"}, {Name: "request_tools"}}
 	if got := ExactNames("Use REQUEST_TOOLS, then read the result", tools); strings.Join(got, ",") != "read,request_tools" {
 		t.Fatalf("tool identifiers = %v", got)
+	}
+	if got := ExactNames("git commit staged changes on branch", tools); strings.Join(got, ",") != "git_commit" {
+		t.Fatalf("space-separated multi-segment tool identifier = %v", got)
+	}
+	if got := ExactNames("run git-commit now", tools); strings.Join(got, ",") != "git_commit" {
+		t.Fatalf("hyphen-separated multi-segment tool identifier = %v", got)
+	}
+	if got := ResolveRequest(context.Background(), decide.Absent{}, RequestSpec{}, "git commit", tools); got.Abstained || strings.Join(got.Loaded(), ",") != "git_commit" {
+		t.Fatalf("exact space-separated ResolveRequest = %+v", got)
 	}
 	if got := ExactNames("request_tools_extra", tools); len(got) != 0 {
 		t.Fatalf("partial tool identifier = %v", got)
@@ -304,6 +341,27 @@ func TestToolAndSkillIdentifiersShareBoundaryMatching(t *testing.T) {
 	}
 	if got := ExactSkill("Use work-with-containers and work-with-containers-extra", skills); got != "" {
 		t.Fatalf("ambiguous skill identifiers = %q", got)
+	}
+}
+
+func TestGitCommitSchemaRequestCandidateLeadsWithBranchCommitAndPushOperation(t *testing.T) {
+	raw, err := config.Read(config.PlatformTools + "/operation-schemas/git_commit.yaml")
+	testutil.FailErr(t, "read git_commit schema", err)
+	var desc string
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.HasPrefix(line, "description:") {
+			desc = strings.Trim(strings.TrimSpace(strings.TrimPrefix(line, "description:")), `"`)
+			break
+		}
+	}
+	if desc == "" {
+		t.Fatal("git_commit.yaml missing description")
+	}
+	candidate := RequestCandidate(ToolCard{Name: "git_commit", Description: desc})
+	for _, want := range []string{"edited", "branch", "push"} {
+		if !strings.Contains(candidate, want) {
+			t.Fatalf("git_commit RequestCandidate %q missing %q within 60-word window", candidate, want)
+		}
 	}
 }
 

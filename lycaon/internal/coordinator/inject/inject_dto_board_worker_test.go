@@ -35,7 +35,7 @@ func TestRenderWorkerLegInject(t *testing.T) {
 		Checklist: []string{"do work"},
 	})
 	testutil.FailErr(t, "RenderWorkerLegInject failed", err)
-	for _, want := range []string{WorkerLegInjectSentinel, "## Leg", "leg-1", "phase_id: implement", "## Leg tools", "- read"} {
+	for _, want := range []string{WorkerLegInjectSentinel, "## Leg", "leg-1", "phase_id: implement", "- read"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in block = %q", want, block)
 		}
@@ -55,7 +55,7 @@ func TestRenderWorkerLegInjectSiblingNotes(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "RenderWorkerLegInject failed", err)
-	for _, want := range []string{"## Peer findings", "**repo-researcher:**", "config in resolve.go:40", "(resolve.go:40)"} {
+	for _, want := range []string{"**repo-researcher:**", "config in resolve.go:40", "(resolve.go:40)"} {
 		if !strings.Contains(block, want) {
 			t.Fatalf("missing %q in block = %q", want, block)
 		}
@@ -64,7 +64,7 @@ func TestRenderWorkerLegInjectSiblingNotes(t *testing.T) {
 
 func TestRenderBoardOrientationInject_NilRenderer(t *testing.T) {
 	_, err := RenderBoardOrientationInject(context.Background(), nil, "sess-inject-test", api.BoardSnapshot{}, packboard.InjectScopeFull, false, true, time.Now())
-	if err == nil || !strings.Contains(err.Error(), "not configured") {
+	if err == nil {
 		t.Fatalf("err = %v", err)
 	}
 }

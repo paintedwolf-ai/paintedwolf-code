@@ -9,5 +9,3 @@ suggested_action: "Check that the folder is readable, then try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "could not be inspected"

@@ -56,7 +56,9 @@ func buildReadLiteralFullResponse(path, text string) ReadResponse {
 
 func buildReadZoomedOutlineResponse(ctx context.Context, path, text string, outline fileoutline.Result) ReadResponse {
 	resp := OutlineResponse(path, outline)
-	resp.Note = toolkit.AppendNote(resp.Note, readSpecificsAffordance(ctx))
+	if resp.SurveyRecommended {
+		resp.Note = toolkit.AppendNote(resp.Note, readSpecificsAffordance(ctx))
+	}
 
 	totalCandidates := len(outline.Symbols)
 	if outline.LogDigest != nil {

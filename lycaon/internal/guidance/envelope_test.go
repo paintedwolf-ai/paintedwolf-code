@@ -10,7 +10,7 @@ func TestEnvelopeHintMessageUsesRegistryMessage(t *testing.T) {
 			Fix:     "Wait for scan_pack.",
 		},
 	}}
-	got := EnvelopeHintMessage(t.Context(), cfg, "SCAN_LIST_EMPTY", nil)
+	got := EnvelopeHintMessage(t.Context(), cfg, nil, "SCAN_LIST_EMPTY", nil)
 	if got != "No stored scans for this project.\nWait for scan_pack." {
 		t.Fatalf("got %q", got)
 	}

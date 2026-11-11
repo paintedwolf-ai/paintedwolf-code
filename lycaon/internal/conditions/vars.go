@@ -204,6 +204,21 @@ func DeleteDotPath(vars map[string]any, path string) {
 }
 
 // DotPathGet returns the value at a dotted path.
+// DotPathSet writes value at a dotted path, creating maps along the way.
+func DotPathSet(vars map[string]any, path string, value any) {
+	segments := strings.Split(path, ".")
+	cur := vars
+	for _, segment := range segments[:len(segments)-1] {
+		next, ok := cur[segment].(map[string]any)
+		if !ok {
+			next = map[string]any{}
+			cur[segment] = next
+		}
+		cur = next
+	}
+	cur[segments[len(segments)-1]] = value
+}
+
 func DotPathGet(vars map[string]any, path string) (any, bool) {
 	path = strings.TrimSpace(path)
 	if path == "" || vars == nil {

@@ -7,6 +7,7 @@ import {
   providerDiscoveryStatusHint,
   providerEndpointIsLoopback,
   providerKindIsCustom,
+  providerKindTemplateGroups,
   providerObservedStatusHints,
   providerToolCallSupport,
 } from "../../../settings/providers/models-editor-model.ts";
@@ -158,6 +159,11 @@ export function toolCallStateCopy(provider: ProviderMeta): string {
     : MODELS_SETTINGS_COPY.toolCallsUnknownNoEvidence;
 }
 
+/** Copy for a provider whose context window is not reported. */
+export function contextWindowStateCopy(_provider: ProviderMeta): string {
+  return MODELS_SETTINGS_COPY.contextWindowUnknown;
+}
+
 /** Only an explicit URL supplies an endpoint host. */
 
 export function secretScreenTrustEndpointNote(
@@ -182,4 +188,22 @@ export function flattenGroupedProviders(
   grouped: ReturnType<typeof groupProvidersByKind>,
 ): ProviderMeta[] {
   return grouped.flatMap((group) => group.providers);
+}
+
+export function filterProviderKindGroups(
+  groups: ReturnType<typeof providerKindTemplateGroups>,
+  query: string,
+): ReturnType<typeof providerKindTemplateGroups> {
+  const q = query.trim().toLowerCase();
+  if (!q) return groups;
+  return groups
+    .map((group) => ({
+      ...group,
+      templates: group.templates.filter(
+        (t) =>
+          t.label.toLowerCase().includes(q) ||
+          t.kind.toLowerCase().includes(q),
+      ),
+    }))
+    .filter((group) => group.templates.length > 0);
 }

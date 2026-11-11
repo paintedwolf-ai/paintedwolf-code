@@ -86,7 +86,7 @@ func TestProgramBackgroundReadTransfersUndeliveredDraftNotice(t *testing.T) {
 			var completion bgprocess.Completion
 			select {
 			case completion = <-completed:
-			case <-time.After(5 * time.Second):
+			case <-time.After(testutil.Timeout(time.Minute)):
 				t.Fatal("background completion not delivered")
 			}
 			if completion.ReleaseNotices != nil {

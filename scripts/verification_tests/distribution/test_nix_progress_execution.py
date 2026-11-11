@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from scripts.linux_release import nix_progress
+from scripts.linux_release import nix_runner as nix_progress
 
 
 class NixProgressTests(unittest.TestCase):

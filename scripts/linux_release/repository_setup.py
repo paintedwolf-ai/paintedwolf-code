@@ -9,13 +9,29 @@ import subprocess
 import tempfile
 from urllib.parse import urlsplit
 
+from scripts.release_semver import linux_package_version, parse
 from .openpgp import selection
 from .repository_objects import encoded, immutable
 from .repository_operations import identity
-from .repository_setup_identity import PACKAGE, package_identity
-from .repository_native import configuration
+from .repository_transaction import configuration
 from .repository_validation import admit
 from .signing import digest, sign, verify
+
+PACKAGE = "painted-wolf-code-repo"
+
+
+def package_identity(version, family, channel, signing_generation):
+    if (family not in {"deb", "rpm"} or channel not in {"stable", "preview"}
+            or type(signing_generation) is not int or signing_generation < 1):
+        raise ValueError("setup identity requires a native family, channel and positive trust generation")
+    native = linux_package_version(parse(version))
+    if family == "deb":
+        native += f"+repo.{signing_generation}.{channel}"
+        return {"name": PACKAGE, "version": native, "release": None, "architecture": "all",
+                "file": f"{PACKAGE}_{native}_all.deb"}
+    release = f"{signing_generation}.{channel}"
+    return {"name": PACKAGE, "version": native, "release": release, "architecture": "noarch",
+            "file": f"{PACKAGE}-{native}-{release}.noarch.rpm"}
 
 
 def build(manifest, directory, catalog, destination, base_url, private=None, rehearsal=False):

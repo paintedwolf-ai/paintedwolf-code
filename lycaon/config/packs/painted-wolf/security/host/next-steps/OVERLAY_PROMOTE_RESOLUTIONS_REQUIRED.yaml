@@ -1,0 +1,5 @@
+steps:
+  - tool: "preview_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.job_id }}"
+    say: "Run {{ call }} first."

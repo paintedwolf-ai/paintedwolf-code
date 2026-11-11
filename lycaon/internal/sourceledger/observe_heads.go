@@ -88,7 +88,12 @@ func (s *Inventory) observedRootHeads(ctx context.Context, projectID string, roo
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, heads...)
+		for _, head := range heads {
+			if head.State == "directory" {
+				continue
+			}
+			result = append(result, head)
+		}
 	}
 	return result, nil
 }

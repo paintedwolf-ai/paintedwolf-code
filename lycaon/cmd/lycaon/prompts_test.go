@@ -43,3 +43,35 @@ func TestPromptPreviewTypedVariables(t *testing.T) {
 		t.Fatalf("false flags must disable procedures: %s", result.Output)
 	}
 }
+
+func TestPromptRenderSkillFlags(t *testing.T) {
+	flags, err := parsePromptsRenderFlags([]string{
+		"--skill", "write-a-skill", "--resource", "references/FORMAT.md",
+		"--surface", "implement_routing", "--check",
+	})
+	testutil.FailErr(t, "parse skill flags", err)
+	if flags.skillName != "write-a-skill" || flags.resource != "references/FORMAT.md" ||
+		flags.surfaceID != "implement_routing" || !flags.check || flags.ref != "" {
+		t.Fatalf("flags = %#v", flags)
+	}
+	result, err := prompts.AuthorRender(t.Context(), prompts.AuthorRenderRequest{
+		ModuleRoot: configlayout.FindModuleRoot(), SkillName: flags.skillName,
+		Resource: flags.resource, SurfaceID: flags.surfaceID, Check: flags.check,
+	})
+	testutil.FailErr(t, "render skill resource", err)
+	if !strings.Contains(result.Output, "SKILL.md field table") {
+		t.Fatalf("resource preview did not render: %s", result.Output)
+	}
+}
+
+func TestPromptRenderSkillFlagExclusivity(t *testing.T) {
+	if _, err := parsePromptsRenderFlags([]string{"guidance/tool-procedures", "--skill", "write-a-skill"}); err == nil {
+		t.Fatal("a template ref and --skill must be mutually exclusive")
+	}
+	if _, err := parsePromptsRenderFlags([]string{"--resource", "references/FORMAT.md"}); err == nil {
+		t.Fatal("--resource without --skill must fail")
+	}
+	if _, err := parsePromptsRenderFlags([]string{"--surface", "implement_routing"}); err == nil {
+		t.Fatal("--surface without --skill must fail")
+	}
+}

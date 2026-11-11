@@ -117,7 +117,7 @@ func (e *turnContextAssembler) prependTransitionInject(
 		return "", false
 	}
 	profile, implState := e.surface.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	previous := e.surface.loadExecutionModeState(ctx, sess.ID).LastFamily
+	previous := e.surface.loadExecutionModeState(sess.ID).LastFamily
 	current := surface.ExecutionModeFamily(profile.SurfaceID)
 	transition := surface.ComputeModeTransition(previous, current, turn.ModeTransitionCauses)
 	if !inject.ShouldRenderTransitionInject(transition) {

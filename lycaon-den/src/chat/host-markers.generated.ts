@@ -4,6 +4,7 @@
 // Source: lycaon/internal/hostmarker and lycaon/internal/session/workercompletion.
 
 export const EVIDENCE_HANDLE_PATTERN = "(?:[a-zA-Z0-9_-]+:)*[a-z_]+#[1-9][0-9]*";
+export const EVIDENCE_COVERAGE_PATTERN = "(?:\"[^\"\\n\\]]*\"|[^\\s\\],\"]+):[0-9]+(?:-[0-9]+)?";
 export const OVERLAY_PROMOTE_EVENT_PREFIX = "[host:overlay-promote-event]";
 export const OVERLAY_REJECT_EVENT_PREFIX = "[host:overlay-reject-event]";
 export const COMPACTION_BANNER_OPEN = "[compacted ";

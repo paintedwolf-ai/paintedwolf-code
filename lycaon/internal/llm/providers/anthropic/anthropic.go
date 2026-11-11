@@ -6,9 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -119,7 +117,7 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 	defer func() { _ = resp.Body.Close() }()
 	respBody, err := providerhttp.ReadCompletionResponse("anthropic", resp)
 	if err != nil {
-		return nil, err
+		return nil, failure.InterruptedResponse(ctx, p.id, p.ResolveModel(req), err)
 	}
 	var wire Response
 	if err := json.Unmarshal(respBody, &wire); err != nil {
@@ -129,16 +127,15 @@ func (p *Provider) Complete(ctx context.Context, req modelcall.CompletionRequest
 	if err != nil {
 		return nil, err
 	}
+	model := p.ResolveModel(req)
+	entry, _ := p.ModelEntry(model)
 	if !modelcall.CompletionHasPayload(out) {
-		return out, &failure.ProviderEmptyCompletionError{
-			ProviderID: p.id,
-			Model:      p.ResolveModel(req),
-			Retryable:  EmptyCompletionRetryable(wire.StopReason),
-			Reason:     wire.StopReason,
-			Terminal:   wire.StopReason != "",
-		}
+		return out, modelcall.EmptyOrTruncatedOutputError(
+			p.id, model, wire.StopReason, EmptyCompletionRetryable(wire.StopReason), wire.StopReason != "",
+			out.Usage, modelcall.EffectiveOutputMaxTokens(req, entry), entry, out.ToolCalls,
+		)
 	}
-	return out, modelcall.OutputTruncation(req, p.id, p.ResolveModel(req), wire.StopReason, out.Usage, len(out.ToolCalls) > 0)
+	return out, modelcall.OutputTruncation(req, p.id, model, wire.StopReason, out.Usage, len(out.ToolCalls) > 0)
 }
 
 func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) (<-chan modelcall.StreamChunk, error) {
@@ -313,31 +310,21 @@ func (p *Provider) streamFromResponse(ctx context.Context, req modelcall.Complet
 				sawTerminal = true
 			}
 		}
-		if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Done: true})
-			return
-		}
-		if !sawTerminal {
-			if !sawOutput && len(toolAcc) == 0 {
-				modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: &failure.ProviderEmptyCompletionError{
-					ProviderID: p.id,
-					Model:      model,
-					Retryable:  true,
-					Reason:     "stream ended before message_stop",
-				}, Usage: usage, Done: true})
-				return
-			}
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: fmt.Errorf("anthropic: stream ended before message_stop"), Done: true})
+		if err := failure.ClassifyStreamEnd(ctx, p.id, model, scanner.Err(), sawTerminal, sawOutput || len(toolAcc) > 0, "stream ended before message_stop", true); err != nil {
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: err, Usage: usage, Done: true})
 			return
 		}
 		if !sawOutput {
-			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Err: &failure.ProviderEmptyCompletionError{
-				ProviderID: p.id,
-				Model:      model,
-				Retryable:  EmptyCompletionRetryable(stopReason),
-				Reason:     stopReason,
-				Terminal:   stopReason != "",
-			}, Usage: usage, Done: true})
+			entry, _ := p.ModelEntry(model)
+			modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{
+				Err: modelcall.EmptyOrTruncatedOutputError(
+					p.id, model, stopReason, EmptyCompletionRetryable(stopReason), stopReason != "",
+					usage, modelcall.EffectiveOutputMaxTokens(req, entry), entry, nil,
+				),
+				Usage:        usage,
+				FinishReason: stopReason,
+				Done:         true,
+			})
 			return
 		}
 		if len(toolAcc) > 0 {
@@ -345,11 +332,12 @@ func (p *Provider) streamFromResponse(ctx context.Context, req modelcall.Complet
 				ToolCalls:        providerwire.CollectToolCalls(toolAcc, stopReason == "max_tokens", true),
 				ReasoningDetails: anthropicReasoningDetails(reasoningBlocks),
 				Usage:            usage,
+				FinishReason:     stopReason,
 				Done:             true,
 			})
 			return
 		}
-		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Usage: usage, ReasoningDetails: anthropicReasoningDetails(reasoningBlocks), Done: true, Err: modelcall.OutputTruncation(req, p.id, model, stopReason, usage, false)})
+		modelcall.SendChunk(ctx, ch, modelcall.StreamChunk{Usage: usage, ReasoningDetails: anthropicReasoningDetails(reasoningBlocks), FinishReason: stopReason, Done: true, Err: modelcall.OutputTruncation(req, p.id, model, stopReason, usage, false)})
 	}()
 	return ch
 }

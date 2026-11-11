@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"io"
 	"os"
 	"path/filepath"
@@ -444,9 +445,7 @@ func TestScreenedSecretsAreRedactedOnceAndMatchOutputCopy(t *testing.T) {
 	secretCalls := harvestCalls.Load() - beforeSecret
 	out := decodeProgramOutcome(t, raw)
 
-	if strings.Contains(out.Stdout, secret) {
-		t.Fatalf("secret leaked in stdout: %q", out.Stdout)
-	}
+	exposure.Absent(t, out.Stdout, secret)
 	copyBytes, err := os.ReadFile(filepath.Join(f.OutputDir, out.ProgramID+".stdout"))
 	testutil.FailErr(t, "read scratch copy", err)
 	if string(copyBytes) != out.Stdout {

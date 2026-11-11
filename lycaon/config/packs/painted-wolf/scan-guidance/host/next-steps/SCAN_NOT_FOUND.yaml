@@ -1,0 +1,5 @@
+steps:
+  - tool: "scan_list"
+    complete: true
+    say: "Otherwise list scans with {{ call }}, or use per_scan[].scan_id from a pack result, then retry with full scan_ids."
+    otherwise: "Otherwise use per_scan[].scan_id from a pack result, then retry with full scan_ids."

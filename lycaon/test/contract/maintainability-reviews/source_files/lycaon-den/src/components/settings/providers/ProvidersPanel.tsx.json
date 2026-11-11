@@ -1,0 +1,14 @@
+{
+  "category": "source_files",
+  "artifact": "lycaon-den/src/components/settings/providers/ProvidersPanel.tsx",
+  "kind": "module",
+  "workstream": "included-model-settings",
+  "disposition": "retain",
+  "reason": "The panel composes provider selection, creation and detail navigation. Local recovery has its own operation state and card; the parent only selects the presentation and forwards host metadata. Retain the 646-line composition without moving state into forwarding modules.",
+  "reviewed_commit": "1668bbc7358a092317986a52060b4bee1fa5585b",
+  "ceiling": 646,
+  "boundaries": {
+    "lycaon-den/src/components/settings/providers/ProvidersPanel.test.tsx": "135495d11d315e62660078bb846153c057f12e7d1eddb59d0afc899f925be7bd",
+    "lycaon-den/src/components/settings/providers/ProvidersPanel.local.test.tsx": "14604fa5c51fb7da41d6aeb8d75d83d785d1a29ba4708ccdfc37256c9edaf42e"
+  }
+}

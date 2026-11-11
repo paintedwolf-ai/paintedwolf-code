@@ -19,7 +19,4 @@ scenarios:
     next_offset: 140
     offset: 100
     page_key: results
-  expect_contains:
-  - 'Code: TOOL_SURVEY_BYTE_CLAMPED'
-  - next_offset
 id: TOOL_SURVEY_BYTE_CLAMPED

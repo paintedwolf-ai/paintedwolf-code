@@ -9,5 +9,3 @@ invariants:
   trigger_class: workflow_event
   fires_in:
   - turn ended while the active workflow phase requires an exit action
-  required:
-  - workflow_advance

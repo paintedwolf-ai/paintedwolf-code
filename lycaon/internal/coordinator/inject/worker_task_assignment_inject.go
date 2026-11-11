@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/promptattach"
 	"github.com/lycaon/lycaon/internal/prompts"
@@ -60,6 +61,7 @@ type WorkerTaskAssignmentData struct {
 	ContextRefs        []string
 	ScopeMode          string
 	ScopePaths         []string
+	LinkedCheckout     bool
 	MaxToolLoops       int
 	FileOrientations   []ScopeFileOrientation
 	Attachments        []promptattach.ForwardedAttachment
@@ -99,18 +101,19 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 		verdicts[i].Fields = fields
 	}
 	data := WorkerTaskAssignmentData{
-		AgentType:     strings.TrimSpace(in.AgentType),
-		WorkerJobID:   strings.TrimSpace(in.WorkerJobID),
-		Goal:          strings.TrimSpace(in.Charter.Goal),
-		SharedContext: in.Charter.SharedContext,
-		KnownFacts:    charter("known facts", in.Charter.KnownFacts),
-		Constraints:   charter("constraints", in.Charter.Constraints),
-		DoneWhen:      charter("done-when criteria", in.Charter.DoneWhen),
-		ContextRefs:   charter("context refs", in.Charter.ContextRefs),
-		ScopeMode:     string(norm.Mode),
-		ScopePaths:    paths,
-		MaxToolLoops:  in.MaxToolLoops,
-		Attachments:   attachments,
+		AgentType:      strings.TrimSpace(in.AgentType),
+		WorkerJobID:    strings.TrimSpace(in.WorkerJobID),
+		Goal:           strings.TrimSpace(in.Charter.Goal),
+		SharedContext:  in.Charter.SharedContext,
+		KnownFacts:     charter("known facts", in.Charter.KnownFacts),
+		Constraints:    charter("constraints", in.Charter.Constraints),
+		DoneWhen:       charter("done-when criteria", in.Charter.DoneWhen),
+		ContextRefs:    charter("context refs", in.Charter.ContextRefs),
+		ScopeMode:      string(norm.Mode),
+		ScopePaths:     paths,
+		LinkedCheckout: norm.Mode == api.TaskScopeModeWrite && gitrepo.ScopeIncludesLinkedCheckout(in.ProjectDir, norm.Paths),
+		MaxToolLoops:   in.MaxToolLoops,
+		Attachments:    attachments,
 
 		RecordedVerdicts: verdicts,
 		ScanInventory:    in.ScanInventory,
@@ -207,6 +210,7 @@ func WorkerTaskAssignmentToMap(data WorkerTaskAssignmentData) map[string]any {
 		"context_refs":        data.ContextRefs,
 		"scope_mode":          data.ScopeMode,
 		"scope_paths":         data.ScopePaths,
+		"linked_checkout":     data.LinkedCheckout,
 		"max_tool_loops":      data.MaxToolLoops,
 		"file_orientations":   orientations,
 		"attachments":         attachments,

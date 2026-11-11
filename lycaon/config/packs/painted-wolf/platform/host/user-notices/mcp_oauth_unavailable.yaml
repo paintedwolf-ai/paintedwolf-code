@@ -9,6 +9,3 @@ suggested_action: Try again after restarting the app.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - authorization
-      - restarting

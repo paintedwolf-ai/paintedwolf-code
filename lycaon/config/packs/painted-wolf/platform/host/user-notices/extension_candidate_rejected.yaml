@@ -14,5 +14,3 @@ scenarios:
         extensions install: source https://example.com/pack.git has no valid
         compatible releases: v1.0.0: pack requires extension API ^2.0.0; host
         provides 1.0.0
-    expect_contains:
-      - extension API

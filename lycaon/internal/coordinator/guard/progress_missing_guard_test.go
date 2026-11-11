@@ -126,13 +126,10 @@ func TestProgressMissingRetainsBoundedRejectedCallOnProjection(t *testing.T) {
 			var feedback []api.ToolFeedback
 			for _, msg := range projected {
 				for _, line := range strings.Split(msg.Content, "\n") {
-					if !strings.HasPrefix(line, "⟦D⟧") {
-						continue
-					}
 					var data struct {
 						Feedback []api.ToolFeedback `json:"tool_feedback"`
 					}
-					if json.Unmarshal([]byte(strings.TrimPrefix(line, "⟦D⟧")), &data) == nil && len(data.Feedback) > 0 {
+					if json.Unmarshal([]byte(line), &data) == nil && len(data.Feedback) > 0 {
 						feedback = data.Feedback
 					}
 				}

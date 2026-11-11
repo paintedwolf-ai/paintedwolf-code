@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/governance"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,20 +24,10 @@ func (e *turnContextAssembler) agentsMDIndexInject(ctx context.Context, sess *ap
 	return []api.Message{block}
 }
 
-// agentsMDChainInject follows the latest tool path and stays outside the cached prefix.
-func (e *turnContextAssembler) agentsMDChainInject(ctx context.Context, sess *api.Session, history []api.Message, turn *TurnAssemblyScratch) []api.Message {
-	if e == nil || sess == nil || turn == nil {
-		return nil
+// agentsMDChainInject keeps current working guidance outside the cached prefix.
+func (e *turnContextAssembler) agentsMDChainInject(ctx context.Context, sess *api.Session, history []api.Message, turn *TurnAssemblyScratch) ([]api.Message, error) {
+	if e == nil || sess == nil || turn == nil || e.deps.AgentsMDPolicies == nil {
+		return nil, nil
 	}
-	deps := e.deps
-	if deps.AgentsMDChain == nil {
-		return nil
-	}
-	paths := governance.ExtractPathScopedToolPaths(history)
-	relPath := governance.FirstConcreteScopePath(paths)
-	block, err := deps.AgentsMDChain(ctx, sess, relPath)
-	if err != nil || strings.TrimSpace(block.Content) == "" {
-		return nil
-	}
-	return []api.Message{block}
+	return e.deps.AgentsMDPolicies(ctx, sess, history)
 }

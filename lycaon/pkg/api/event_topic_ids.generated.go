@@ -33,7 +33,10 @@ const (
 	EventTopicProgress    EventTopic = "progress"
 	EventTopicQueue       EventTopic = "queue"
 	EventTopicProject     EventTopic = "project"
-	EventTopicProcess     EventTopic = "process"
+	// EventTopicProjectBackground Project-scoped background command lifecycle and
+	// listening port changes.
+	EventTopicProjectBackground EventTopic = "project_background"
+	EventTopicProcess           EventTopic = "process"
 	// EventTopicPreview Streams read-only live page frames (CDP screencast) for
 	// Den.
 	EventTopicPreview EventTopic = "preview"
@@ -115,6 +118,7 @@ var allEventTopicValues = []EventTopic{
 	EventTopicProgress,
 	EventTopicQueue,
 	EventTopicProject,
+	EventTopicProjectBackground,
 	EventTopicProcess,
 	EventTopicPreview,
 	EventTopicAttention,

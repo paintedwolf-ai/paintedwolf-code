@@ -337,9 +337,13 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 	}
 	grants := grantsForSources(layout.Roots)
 	projectKey := filepath.Base(filepath.Dir(root))
+	decision, err := m.placedBranchClonability(ctx, root, layout.Roots)
+	if err != nil {
+		return false, err
+	}
 	var overrun *adapter.BudgetOverrunError
 	for {
-		choice, err := m.chooseWorkspaceAdapter(ctx, root, grants, journal.ProjectID, overrun)
+		choice, err := m.chooseWorkspaceAdapter(ctx, root, grants, journal.ProjectID, decision, overrun)
 		if err != nil {
 			return false, err
 		}
@@ -348,7 +352,7 @@ func (m *Manager) RebuildRecoveredBranch(ctx context.Context, root, jobID string
 		req := adapter.PrepareRequest{
 			ViewID: viewID, RuntimeDir: runtimeDir, BackingDir: filepath.Join(runtimeDir, viewID+".backing"),
 			PristineDir: enginepaths.PristineTreeForBranchRoot(root), StatManifestPath: enginepaths.StatManifestForBranchRoot(root),
-			CopyBudget: choice.CopyBudget, SelectionFacts: choice.Selection, CloneFile: m.cloneFile,
+			CopyBudget: choice.CopyBudget, SelectionFacts: choice.Selection, CloneFile: m.fileCloner(),
 		}
 		result, _, err := m.RebuildWorkerWorkspaceFromCheckpoint(ctx, root, coord, recovery.RecoverRequest{
 			WorkerID: jobID, ExpectedTaskID: journal.TaskID, ExpectedProjectID: journal.ProjectID, NewViewID: viewID,

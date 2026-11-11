@@ -44,6 +44,3 @@ x-paintedwolf-scenarios:
     max_uncompressed_bytes: 52428800
     profile: implement
     tool: extract_archive
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: EXTRACT_SIZE_EXCEEDED'

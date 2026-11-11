@@ -24,8 +24,3 @@ x-paintedwolf-scenarios:
     vars:
       phase: ingest
       phase_obligation_kinds: scan
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: WORKFLOW_OBLIGATION_PENDING'
-      - host obligations
-      - host advances

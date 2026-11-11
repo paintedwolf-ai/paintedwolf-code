@@ -315,9 +315,6 @@ func TestReviewAdjudicateUsesVerdictModeContract(t *testing.T) {
 			t.Fatalf("review adjudicate mode missing %q", want)
 		}
 	}
-	if strings.Contains(text, "## Synthesis turn") {
-		t.Fatal("review adjudicate must not receive synthesis mode copy")
-	}
 }
 
 // The shipped accessor and bundled flow definition share one source.

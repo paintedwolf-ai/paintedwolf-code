@@ -1036,7 +1036,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "tee [-a] [--] [PATH ...]",
+      "argv": "tee [-a] [--syntax-override-reason TEXT] [--] [PATH ...]",
       "forms": [
         {
           "spellings": [
@@ -1048,6 +1048,18 @@
           "fixture_id": "tee-option-a-append",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--syntax-override-reason"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "tee-option-syntax-override-reason",
+          "consumption": "fixed",
+          "sample_values": [
+            "intentional intermediate state"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. tee [-a] [--] [PATH ...]",
@@ -1122,7 +1134,8 @@
       "fixture_ids": [
         "tee-operands-valid",
         "tee-rejection",
-        "tee-option-a-append"
+        "tee-option-a-append",
+        "tee-option-syntax-override-reason"
       ]
     },
     {
@@ -1209,9 +1222,9 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "chown [--] UID[:GID] PATH ...",
+      "argv": "chown [--] OWNER[:GROUP] PATH ...",
       "forms": [],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. chown [--] UID[:GID] PATH ...",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. chown [--] OWNER[:GROUP] PATH ...",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -1288,7 +1301,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "edit --path PATH --old-string TEXT --new-string TEXT [--replace-all]",
+      "argv": "edit --path PATH --old-string TEXT --new-string TEXT [--replace-all] [--syntax-override-reason TEXT]",
       "forms": [
         {
           "spellings": [
@@ -1335,6 +1348,18 @@
           "fixture_id": "edit-option-replaceall",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--syntax-override-reason"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "edit-option-syntax-override-reason",
+          "consumption": "fixed",
+          "sample_values": [
+            "intentional intermediate state"
+          ]
         }
       ],
       "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. edit --path PATH --old-string TEXT --new-string TEXT [--replace-all]",
@@ -1391,9 +1416,9 @@
       },
       "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/edit_apply.go",
+        "implementation": "lycaon/internal/tools/native/mutation/source_edits.go",
         "tests": [
-          "lycaon/internal/tools/native/edit_test.go"
+          "lycaon/internal/tools/native/edit_health_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1412,7 +1437,8 @@
         "edit-option-path",
         "edit-option-oldstring",
         "edit-option-newstring",
-        "edit-option-replaceall"
+        "edit-option-replaceall",
+        "edit-option-syntax-override-reason"
       ]
     },
     {
@@ -1420,7 +1446,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "replace-lines --path PATH --start N --end N --content TEXT",
+      "argv": "replace-lines --path PATH --start N --end N --content TEXT [--syntax-override-reason TEXT]",
       "forms": [
         {
           "spellings": [
@@ -1468,6 +1494,18 @@
           "consumption": "fixed",
           "sample_values": [
             "alpha"
+          ]
+        },
+        {
+          "spellings": [
+            "--syntax-override-reason"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "replace-lines-option-syntax-override-reason",
+          "consumption": "fixed",
+          "sample_values": [
+            "intentional intermediate state"
           ]
         }
       ],
@@ -1546,7 +1584,8 @@
         "replace-lines-option-path",
         "replace-lines-option-start",
         "replace-lines-option-end",
-        "replace-lines-option-content"
+        "replace-lines-option-content",
+        "replace-lines-option-syntax-override-reason"
       ]
     },
     {
@@ -1554,7 +1593,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "code-rewrite --pattern PATTERN --rewrite TEXT --path PATH [--recursive] [--dry-run]",
+      "argv": "code-rewrite --pattern PATTERN --rewrite TEXT --path PATH ... [--recursive] [--dry-run] [--lang NAME] [--syntax-override-reason TEXT]",
       "forms": [
         {
           "spellings": [
@@ -1611,9 +1650,33 @@
           "fixture_id": "code-rewrite-option-dryrun",
           "consumption": "fixed",
           "sample_values": []
+        },
+        {
+          "spellings": [
+            "--lang"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "code-rewrite-option-lang",
+          "consumption": "fixed",
+          "sample_values": [
+            "go"
+          ]
+        },
+        {
+          "spellings": [
+            "--syntax-override-reason"
+          ],
+          "arity": 1,
+          "value_role": "text",
+          "fixture_id": "code-rewrite-option-syntax-override-reason",
+          "consumption": "fixed",
+          "sample_values": [
+            "intentional intermediate state"
+          ]
         }
       ],
-      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. code-rewrite --pattern PATTERN --rewrite TEXT --path PATH [--recursive] [--dry-run]",
+      "operands": "Declared PATH operands accept logical/native identity and --; scalar/text/query/program operands remain data. code-rewrite --pattern PATTERN --rewrite TEXT --path PATH ... [--recursive] [--dry-run] [--lang NAME] [--syntax-override-reason TEXT]",
       "encoding": "Exact bytes for streams; captured saved-file encoding/BOM/newline representation for native document inputs; UTF-8 LF for generated text unless stated.",
       "statuses": {
         "0": "complete result",
@@ -1671,11 +1734,11 @@
           }
         }
       },
-      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
+      "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring. Repeat --path for several targets. --lang overrides the grammar chosen from the file name.",
       "reuse": {
         "implementation": "lycaon/internal/tools/native/code_rewrite.go",
         "tests": [
-          "lycaon/internal/tools/native/code_rewrite_transaction_test.go"
+          "lycaon/internal/tools/native/code_rewrite_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -1956,7 +2019,7 @@
       "aliases": [],
       "family": "mutation",
       "owner": "filesystem",
-      "argv": "jq-edit --path PATH --query QUERY [--format FORMAT]",
+      "argv": "jq-edit --path PATH --query QUERY [--format FORMAT] [--arg NAME VALUE ...]",
       "forms": [
         {
           "spellings": [
@@ -1992,6 +2055,19 @@
           "consumption": "fixed",
           "sample_values": [
             "json"
+          ]
+        },
+        {
+          "spellings": [
+            "--arg"
+          ],
+          "arity": 2,
+          "value_role": "name-value-pair",
+          "fixture_id": "jq-edit-option-arg",
+          "consumption": "fixed",
+          "sample_values": [
+            "fixture",
+            "value"
           ]
         }
       ],
@@ -2049,9 +2125,9 @@
       },
       "notes": "Same typed native operation as retained loadable structured domain tool; no recursive JSON call. Domain output is explicit structured text, never substituted for ordinary cat/grep output. Command mutation uses execution pins; conversational tool retains delivered-read anchoring.",
       "reuse": {
-        "implementation": "lycaon/internal/tools/native/jq_edit.go",
+        "implementation": "lycaon/internal/tools/native/jq/edit.go",
         "tests": [
-          "lycaon/internal/tools/native/jq_edit_test.go"
+          "lycaon/internal/tools/native/jq/edit_test.go"
         ],
         "extension": "Reuse typed native operation; add complete CLI presentation/operand semantics. Pure new forms use host-controlled standard-library primitives; no copied native algorithm.",
         "evidence_kind": "existing operation and adjacent regression references; not new-command qualification"
@@ -2069,7 +2145,8 @@
         "jq-edit-rejection",
         "jq-edit-option-path",
         "jq-edit-option-query",
-        "jq-edit-option-format"
+        "jq-edit-option-format",
+        "jq-edit-option-arg"
       ]
     }
   ]

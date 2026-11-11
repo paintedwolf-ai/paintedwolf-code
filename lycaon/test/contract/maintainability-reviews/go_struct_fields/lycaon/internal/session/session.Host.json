@@ -1,0 +1,14 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/session/session.Host",
+  "kind": "construction",
+  "workstream": "local-inference",
+  "disposition": "retain",
+  "reason": "Retain explicit host construction and shutdown wiring. Preparation owns its disposable worker; the host cancels and joins it before releasing shared resources. Approval and capability authority remain with their existing services. Splitting these fields would obscure lifecycle dependencies. The assembly and shutdown fixtures exercise the added boundary.",
+  "reviewed_commit": "e033acac702d36f5e358de3cab884f372d152c6c",
+  "ceiling": 24,
+  "boundaries": {
+    "lycaon/internal/session/context_preparation_integration_test.go": "6231c64baf486080ae3bd004f7154101f99862c7e7fbc6021b46406eeae855f3"
+  },
+  "reviewed_shape": "6a75c696320aa35a12c002aeb338a505d5d4fb4c28b64e54b8ceab6b867f135c"
+}

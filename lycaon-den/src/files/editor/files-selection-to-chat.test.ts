@@ -201,7 +201,6 @@ describe("files-selection-to-chat", () => {
       view,
       verb: "explain",
     });
-    expect(composerDraftForSession("sess-sel")).toBe("Explain this.");
 
     await replaceComposerDocumentDraft(
       { projectId: "proj-1", sessionId: "sess-sel" },

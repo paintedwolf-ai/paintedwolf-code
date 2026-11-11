@@ -19,6 +19,7 @@ var (
 	DefaultGroundingRejectsPerTurn  int
 	DefaultGroundingRejectsPerCycle int
 	DefaultReportDocumentRetries    int
+	DefaultWaitVisibilityRepairs    int
 	bundledCompactionLimitsOnce     sync.Once
 	bundledCompactionLimitsErr      error
 )
@@ -30,6 +31,7 @@ type bundledCompactionLimitsYAML struct {
 	MaxGroundingRejectsPerTurn  int `yaml:"max_grounding_rejects_per_turn"`
 	MaxGroundingRejectsPerCycle int `yaml:"max_grounding_rejects_per_cycle"`
 	MaxReportDocumentRetries    int `yaml:"max_report_document_retries"`
+	MaxWaitVisibilityRepairs    int `yaml:"max_wait_visibility_repairs"`
 }
 
 func ensureBundledCompactionLimits() {
@@ -49,7 +51,8 @@ func ensureBundledCompactionLimits() {
 			doc.MaxWorkerGroundingRetries <= 0 ||
 			doc.MaxGroundingRejectsPerTurn <= 0 ||
 			doc.MaxGroundingRejectsPerCycle <= 0 ||
-			doc.MaxReportDocumentRetries <= 0 {
+			doc.MaxReportDocumentRetries <= 0 ||
+			doc.MaxWaitVisibilityRepairs <= 0 {
 			bundledCompactionLimitsErr = fmt.Errorf("bundled compaction.yaml missing required limit fields")
 			return
 		}
@@ -63,6 +66,7 @@ func ensureBundledCompactionLimits() {
 		DefaultGroundingRejectsPerTurn = doc.MaxGroundingRejectsPerTurn
 		DefaultGroundingRejectsPerCycle = doc.MaxGroundingRejectsPerCycle
 		DefaultReportDocumentRetries = doc.MaxReportDocumentRetries
+		DefaultWaitVisibilityRepairs = doc.MaxWaitVisibilityRepairs
 	})
 	if bundledCompactionLimitsErr != nil {
 		panic(bundledCompactionLimitsErr)

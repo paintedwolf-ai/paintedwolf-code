@@ -1,0 +1,14 @@
+{
+  "category": "go_receiver_methods",
+  "artifact": "lycaon/internal/bgprocess/bgprocess.Output",
+  "kind": "runtime_service",
+  "workstream": "command-output-publication",
+  "disposition": "retain",
+  "reason": "Retain process publication under its existing publication lock. Polling, events and completion tails share bounded whole-window managed-echo screening before cursor selection. Raw offsets, stream labels, eviction withholding and cleanup retain one custody boundary; project lifecycle and stop attribution stay with their current collaborators. Chunk, cursor, failed-admission and projection-memory contracts support this composition.",
+  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
+  "ceiling": 18,
+  "boundaries": {
+    "lycaon/internal/bgprocess/output_command_echo_test.go": "b29dbe32b7f66e1f431bb3ddfdf70fb0ca6a8a7e498dc66586e29cd2479f7eab"
+  },
+  "reviewed_shape": "5ae8c8ecdc581461bc8e2bc1c5855e2e6b66cea0112c0bdfcd3f3b1b6924e572"
+}

@@ -1,6 +1,6 @@
 """Independent CLI outcome oracles. Run only inside the isolated grading container."""
 import argparse
-from unittest_structure import preserved_definitions
+from candidate_tests import preserved_definitions
 from contextlib import contextmanager
 import json
 import pathlib

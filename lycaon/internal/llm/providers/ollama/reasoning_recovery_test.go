@@ -126,9 +126,9 @@ func TestOllamaContextAdmissionCountsReplayedReasoning(t *testing.T) {
 	}
 }
 
-func TestOllamaStrictBudgetRetryClampsFittedOutputAfterCalibration(t *testing.T) {
+func TestOllamaReasoningRecoveryRetryClampsFittedOutputAfterCalibration(t *testing.T) {
 	p := New("local", "http://unused.invalid", "", []modelinfo.Entry{{ID: "model", ContextLength: 16384}})
-	req := modelcall.CompletionRequest{Model: "model", MaxTokens: 2163, StrictBudget: true, Messages: []api.Message{
+	req := modelcall.CompletionRequest{Model: "model", MaxTokens: 2163, ReasoningRecovery: true, Messages: []api.Message{
 		{Role: api.MessageRoleUser, Content: strings.Repeat("observation ", 3500)},
 	}}
 	p.observePromptTokens("model", 8000, 10000)

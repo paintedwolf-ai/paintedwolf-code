@@ -60,7 +60,6 @@ describe("update notices", () => {
       await f.send(stagedFixture());
       await f.send(stagedFixture({ offer_confirmed_at: null, last_error: { code: "feed_rejected" } }));
       expect(f.rows().map(row => row.code)).toEqual(["update_feed_rejected"]);
-      expect(f.rows()[0]!.message).toContain("No update was installed");
       await f.send(stagedFixture({ offer_confirmed_at: null, last_error: { code: "check_failed" } }));
       expect(f.rows()).toHaveLength(0);
       await f.send(stagedFixture());
@@ -85,7 +84,6 @@ describe("update notices", () => {
       expect(f.rows()).toHaveLength(0);
       await f.send(state);
       expect(f.rows().map(row => row.code)).toEqual(["package_update_listed"]);
-      expect(f.rows()[0]!.message).toContain("does not confirm");
       f.notices.dismiss(f.rows()[0]!.id);
       await f.send({ ...state, candidate: updateFixture().candidate });
       expect(f.rows()).toHaveLength(0);

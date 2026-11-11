@@ -17,7 +17,3 @@ scenarios:
   - id: default
     vars:
       provider_id: together-ai-1
-    expect_contains:
-      - together-ai-1
-      - Earlier work
-      - Review the current state

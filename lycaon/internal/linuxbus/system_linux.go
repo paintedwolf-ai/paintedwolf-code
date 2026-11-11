@@ -15,7 +15,7 @@ const defaultSystemBusPath = "/run/dbus/system_bus_socket"
 // conventional socket.
 func SelectSystem(lookupEnv func(string) (string, bool)) ([]SocketAddress, error) {
 	if address, ok := lookupEnv("DBUS_SYSTEM_BUS_ADDRESS"); ok && address != "" {
-		return parseAddresses(address)
+		return ParseAddresses(address)
 	}
 	return []SocketAddress{{Path: defaultSystemBusPath}}, nil
 }

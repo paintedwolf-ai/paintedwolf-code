@@ -15,6 +15,7 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"golang.org/x/sys/unix"
 )
 
@@ -290,8 +291,9 @@ func resolveSocketPath(path string, target *targetProcess) (string, bool) {
 		}
 		path = filepath.Join(cwd, path)
 	}
-	resolved, err := filepath.EvalSymlinks(path)
-	return resolved, err == nil
+	// A name that does not exist yet is still a name the plan can decide: a
+	// bind creates one, and a connect to it refuses like any ungranted path.
+	return fspath.CanonicalPathOrMissing(path)
 }
 
 // hostSocketCall runs an admitted call on a fresh socket in the host's

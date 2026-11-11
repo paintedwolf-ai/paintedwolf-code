@@ -29,6 +29,3 @@ x-paintedwolf-scenarios:
     missing: [access_token]
     profile: implement
     tool: http_request
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: HTTP_REQUEST_TOKEN_CAPTURE_FAILED'

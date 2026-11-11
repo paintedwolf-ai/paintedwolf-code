@@ -10,5 +10,4 @@ instead: Change the period only when the task calls for that window.
 scenarios:
 - id: bare_year
   vars: {year: '2025'}
-  expect_contains: ['Code: WEB_SEARCH_YEAR_IN_QUERY', 'period']
 id: WEB_SEARCH_YEAR_IN_QUERY

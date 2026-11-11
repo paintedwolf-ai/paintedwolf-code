@@ -4,7 +4,7 @@ import html
 import json
 import pathlib
 from snapshot import file_hash
-from grading_state import report_lease
+from grading_identity import report_lease
 
 
 def result(root):

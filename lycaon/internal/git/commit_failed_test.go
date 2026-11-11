@@ -11,6 +11,7 @@ import (
 )
 
 func TestCommitFailedKeepsOutputTail(t *testing.T) {
+	t.Parallel()
 	raw := "task: [build] go build ./...\n" +
 		"pattern ./...: directory prefix . does not contain main module\n" +
 		"task: Failed to run task \"build\": exit status 1\n"
@@ -33,6 +34,7 @@ func TestCommitFailedKeepsOutputTail(t *testing.T) {
 }
 
 func TestMarshalCommitToolResponseHookFailure(t *testing.T) {
+	t.Parallel()
 	raw := strings.Repeat("noise\n", 100) +
 		"task: [build] go build ./...\n" +
 		"# github.com/lycaon/lycaon/internal/git\n" +
@@ -71,6 +73,7 @@ func TestMarshalCommitToolResponseHookFailure(t *testing.T) {
 }
 
 func TestCommitFailedDoesNotInferHookFromOutput(t *testing.T) {
+	t.Parallel()
 	cf := git.NewCommitFailed([]byte("pre-commit hook failed\nsome local lint\n"), 1)
 	if !strings.Contains(cf.Hint(), "Git or hook diagnostics") {
 		t.Fatalf("hint = %q", cf.Hint())
@@ -81,6 +84,7 @@ func TestCommitFailedDoesNotInferHookFromOutput(t *testing.T) {
 }
 
 func TestCommitReceiptRetainsSuccessfulHashWhenHistoryFails(t *testing.T) {
+	t.Parallel()
 	failure := errors.New("record Git history: unavailable")
 	raw, err := git.MarshalCommitToolResponse("committed", git.CommitStaging{Paths: []string{"a.txt"}}, failure)
 	if !errors.Is(err, failure) {

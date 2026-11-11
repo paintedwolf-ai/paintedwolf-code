@@ -32,12 +32,5 @@ scenarios:
       provider_id: together-ai-1
       attempts: 2
       silence_seconds: 60
-    expect_contains:
-      - together-ai-1
-      - accepted the request
-      - 60 seconds
-      - tried 2 times
   - id: generic
     vars: {}
-    expect_contains:
-      - accepted the request

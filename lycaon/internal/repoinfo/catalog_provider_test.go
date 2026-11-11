@@ -65,7 +65,7 @@ func TestCatalogProviderProjectsSharedGeneration(t *testing.T) {
 		return repoinfo.CatalogRoot{ProjectID: "p1", RootID: "r1"}, true, nil
 	}, "")
 	defer func() { _ = provider.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	brief, err := repoinfo.AwaitBrief(ctx, provider, root)
 	testutil.FailErr(t, "await brief", err)

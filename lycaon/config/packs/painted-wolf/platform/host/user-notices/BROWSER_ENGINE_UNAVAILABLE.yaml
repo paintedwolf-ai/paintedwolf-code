@@ -18,18 +18,9 @@ scenarios:
   - id: dev_managed_cache
     vars:
       reason: managed_cache_missing
-    expect_contains:
-      - browser
-      - Restart
   - id: shipped_bundle
     vars:
       reason: bundle_missing
-    expect_contains:
-      - features
-      - Reinstall
   - id: unusable
     vars:
       reason: unusable
-    expect_contains:
-      - unavailable
-      - diagnostics

@@ -102,10 +102,10 @@ def main():
     ks = args.k or sorted({int(skills_spec.get("roster_max", 6)), 8})
     train_positives = collections.Counter()
     if args.train:
-        for row in rowfile.load(args.train):
+        for row in rowfile.load(args.train, corpus=corpus):
             if not row["partial"]:
                 train_positives.update(rowfile.relevant(rowfile.skill_pairs(row)))
-    examples = [ex for ex in rowfile.load(args.examples) if not ex["partial"]]
+    examples = [ex for ex in rowfile.load(args.examples, corpus=corpus) if not ex["partial"]]
     engine = Engine(args.engine)
     try:
         report = {"engine": engine.hello.get("engine"), "roster": len(names), "list_at": list_at, "k": ks,

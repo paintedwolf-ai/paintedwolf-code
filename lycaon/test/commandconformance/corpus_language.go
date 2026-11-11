@@ -2,6 +2,16 @@ package commandconformance
 
 var languageCases = []Case{
 	{
+		ID:          "lang-ulimit-report-matches-children",
+		Description: "A report states what a child receives and changes nothing; a set limit reaches later children only in its own frame.",
+		Commands:    []string{"ulimit", "sh", "cat", "test", "printf"},
+		Program: `before=$(sh -c 'ulimit -n'); ulimit -n >report.txt; ulimit -a >/dev/null; after=$(sh -c 'ulimit -n'); reported=$(cat report.txt); ` +
+			`test "$before" = "$reported"; printf 'report %s\n' $?; test "$before" = "$after"; printf 'later %s\n' $?; ` +
+			`(ulimit -n 32; ulimit -n; sh -c 'ulimit -n'); test "$(sh -c 'ulimit -n')" = "$before"; printf 'outside %s\n' $?; ` +
+			`ulimit -n 48; ulimit -n; sh -c 'ulimit -n'`,
+		References: gnuUserland,
+	},
+	{
 		ID:          "lang-quoting-single-and-double",
 		Description: "Single quotes preserve metacharacters; double quotes expand variables and escapes without splitting.",
 		Commands:    []string{"printf"},

@@ -37,7 +37,7 @@ func TestObserveHostTurnRequiresWaitLedgerOverridesStaleEnvelope(t *testing.T) {
 		Role:    api.MessageRoleAssistant,
 		Content: `<task job_id="j1" agent_type="implementer" state="complete" merge_status="pending"><summary>wrote</summary></task>`,
 	}}
-	prose := coordinatorReportJSON(t, "All overlays are merged; here is the summary.", nil)
+	prose := coordinatorReportMarkdown("All overlays are merged; here is the summary.", nil)
 	reject, block := guard.FormatHostNoToolTurnReject(
 		sess, hostLoopHistory(
 
@@ -80,7 +80,7 @@ func TestObserveHostTurnRequiresWaitBlocksDispatchProse(t *testing.T) {
 func TestObserveHostTurnRequiresWaitAllowsSynthesisProseWhenIdle(t *testing.T) {
 	fmt := coordinatorRejectFmt(t)
 	sess := &api.Session{Posture: api.SessionPostureBuild}
-	prose := coordinatorReportJSON(t, "Here is the competitive assessment for your repo.", nil)
+	prose := coordinatorReportMarkdown("Here is the competitive assessment for your repo.", nil)
 	reject, block := guard.FormatHostNoToolTurnReject(
 		sess, hostLoopHistory(
 

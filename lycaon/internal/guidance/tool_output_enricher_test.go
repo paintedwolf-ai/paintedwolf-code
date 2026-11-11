@@ -1,6 +1,7 @@
 package guidance
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -12,7 +13,7 @@ func TestEnricher_DoesNotRenderSandboxCodes(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"SANDBOX_TRY_WRITE_ROOT": {Message: "reissue with capability_request.write_root"},
 	}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1"},
@@ -31,7 +32,7 @@ func TestEnricher_RendersRaisedBannerFacts(t *testing.T) {
 			Emit: "banner", What: "Worker {{ paintedwolf.job_id }} queued", Fix: "Wait for completion",
 		},
 	}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1"},
@@ -52,7 +53,7 @@ func TestEnricher_FindOverflowNarrowBanner(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"FIND_OVERFLOW_NARROW": {Message: "narrow with name_glob"},
 	}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	digest := `{"view":"digest","selected":0,"total":1225,"distribution":[{"kind":"ext","key":".md","count":500}],"truncated":true}`
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
@@ -72,7 +73,7 @@ func TestEnricher_FindOverflowNarrowOnWorkerChild(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"FIND_OVERFLOW_NARROW": {Message: "narrow with name_glob"},
 	}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	parent := "parent-1"
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "child-1",
@@ -89,7 +90,7 @@ func TestEnricher_ProgressBannerDedupHash(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"SPEC_POSTURE_PROGRESS": {Message: "progress {{ paintedwolf.progress }} next {{ paintedwolf.next_action }}"},
 	}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	in := EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1", Posture: api.SessionPostureSpec},
@@ -120,7 +121,7 @@ func TestEnricher_BoardEmptyBanner(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"BOARD_EMPTY_SKIP_TO_VERIFY": {Message: "board empty — skip to verify"},
 	}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1"},
@@ -137,7 +138,7 @@ func TestEnricher_WorkerChildSkipsCoordinatorBanners(t *testing.T) {
 		"BOARD_EMPTY_SKIP_TO_VERIFY": {Message: "board empty — skip to verify"},
 		"SPEC_POSTURE_PROGRESS":      {Message: "progress {{ paintedwolf.progress }} next {{ paintedwolf.next_action }}"},
 	}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	parent := "parent-1"
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "child-1",
@@ -161,7 +162,7 @@ func TestEnricher_WorkerChildSkipsCoordinatorBanners(t *testing.T) {
 }
 
 func TestEnricher_EmptyOutputNoBanners(t *testing.T) {
-	e := NewToolOutputEnricher(&HintConfig{}, nil)
+	e := NewToolOutputEnricher(&HintConfig{}, nil, nil)
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1", Posture: api.SessionPostureSpec},
@@ -175,7 +176,7 @@ func TestEnricher_EmptyOutputNoBanners(t *testing.T) {
 
 func TestEnricher_FeedbackPendingNoImperativeDup(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	in := EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1"},
@@ -202,7 +203,7 @@ func TestEnricher_ReviewLoopTaskCompletes(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"WORKFLOW_GATE_BLOCKED": {Message: "fallback blocked at {{ paintedwolf.phase }}"},
 	}}
-	e := NewToolOutputEnricher(hints, catalog)
+	e := NewToolOutputEnricher(hints, catalog, nil)
 	got := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1"},
@@ -229,7 +230,7 @@ func TestEnricher_HostHITLToolCompletes(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"WORKFLOW_GATE_BLOCKED": {Message: "fallback blocked at {{ paintedwolf.phase }}"},
 	}}
-	e := NewToolOutputEnricher(hints, catalog)
+	e := NewToolOutputEnricher(hints, catalog, nil)
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1", Posture: api.SessionPostureSpec},
@@ -255,7 +256,7 @@ func TestEnricher_WorkflowAdvanceBlocksOnHumanApproval(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"WORKFLOW_GATE_BLOCKED": {Message: "fallback blocked at {{ paintedwolf.phase }}"},
 	}}
-	e := NewToolOutputEnricher(hints, catalog)
+	e := NewToolOutputEnricher(hints, catalog, nil)
 	got := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1", Posture: api.SessionPostureSpec},
@@ -291,7 +292,7 @@ func TestEnricher_FanoutPlannedSurveyToolsComplete(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"WORKFLOW_GATE_BLOCKED": {Message: "fallback blocked at {{ paintedwolf.phase }}"},
 	}}
-	e := NewToolOutputEnricher(hints, catalog)
+	e := NewToolOutputEnricher(hints, catalog, nil)
 	for _, tool := range []string{"survey_repo", "summarize", "read", "grep"} {
 		got := e.Enrich(t.Context(), EnrichInput{
 			SessionID: "s1",
@@ -320,7 +321,7 @@ func TestEnricher_WorkflowGateStructuredFeedback(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"WORKFLOW_GATE_BLOCKED": {Message: "fallback blocked at {{ paintedwolf.phase }}"},
 	}}
-	e := NewToolOutputEnricher(hints, catalog)
+	e := NewToolOutputEnricher(hints, catalog, nil)
 	got := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1", Posture: api.SessionPostureSpec},
@@ -352,7 +353,7 @@ func TestEnricher_WorkflowPhaseExitRequired(t *testing.T) {
 	hints := &HintConfig{HintCodes: map[string]HintEntry{
 		"WORKFLOW_PHASE_EXIT_REQUIRED": {Message: "phase {{ paintedwolf.phase }} — call workflow_advance now"},
 	}}
-	e := NewToolOutputEnricher(hints, nil)
+	e := NewToolOutputEnricher(hints, nil, nil)
 	out := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1", Posture: api.SessionPostureSpec},
@@ -384,7 +385,7 @@ func TestEnricherBoardRequiresExplicitMeasurement(t *testing.T) {
 }
 
 func TestEnricherProgressChangesWithUnchangedChecklist(t *testing.T) {
-	e := NewToolOutputEnricher(&HintConfig{HintCodes: map[string]HintEntry{"SPEC_POSTURE_PROGRESS": {Message: "{{ paintedwolf.phase }} {{ paintedwolf.next_action }}"}}}, nil)
+	e := NewToolOutputEnricher(&HintConfig{HintCodes: map[string]HintEntry{"SPEC_POSTURE_PROGRESS": {Message: "{{ paintedwolf.phase }} {{ paintedwolf.next_action }}"}}}, nil, nil)
 	in := EnrichInput{SessionID: "s1", Session: &api.Session{ID: "s1", Posture: api.SessionPostureSpec}, Tool: "read", Output: "ok", PlanProgress: PlanProgress{ChecklistHash: "same", PhaseInferred: 1, NextAction: "review"}}
 	e.Enrich(t.Context(), in)
 	in.PlanProgress.PhaseInferred = 2
@@ -395,8 +396,8 @@ func TestEnricherProgressChangesWithUnchangedChecklist(t *testing.T) {
 }
 
 func TestEnricherBannerKeepsTunedRecovery(t *testing.T) {
-	e := NewToolOutputEnricher(&HintConfig{HintCodes: map[string]HintEntry{"FIXTURE": {What: "state", Cause: "cause", Why: "reason", Fix: "recover {{ paintedwolf.actual }}", Instead: "next"}}}, nil)
-	text := e.bannerMessage("FIXTURE", map[string]any{"actual": "field"})
+	e := NewToolOutputEnricher(&HintConfig{HintCodes: map[string]HintEntry{"FIXTURE": {What: "state", Cause: "cause", Why: "reason", Fix: "recover {{ paintedwolf.actual }}", Instead: "next"}}}, nil, nil)
+	text := e.bannerMessage(context.Background(), "FIXTURE", map[string]any{"actual": "field"})
 	for _, want := range []string{"state", "cause", "reason", "recover field", "next"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("lost %q: %s", want, text)

@@ -28,6 +28,7 @@ import {
   TRANSCRIPT_TAIL_BUDGET,
   type TranscriptWindow,
 } from "../transcript/layout/transcript-window.ts";
+import { noteTranscriptAnnouncementBaseline } from "../transcript/presentation/transcript-live-announcement.ts";
 
 /** Session snapshot stored without derived message rows. */
 /** Worker transcripts stay in memory; a restored run hydrates from the host. */
@@ -188,7 +189,9 @@ export function toSessionChatSnapshot(
   persisted: PersistedSessionChatSnapshot,
 ): SessionChatSnapshot {
   const { storeRevisionAtPersist: _, ...rest } = persisted;
-  return { ...rest, messages: materializeTranscriptWindow(rest.transcript), workerTranscripts: {} };
+  const messages = materializeTranscriptWindow(rest.transcript);
+  noteTranscriptAnnouncementBaseline(rest.scope.sessionId, messages);
+  return { ...rest, messages, workerTranscripts: {} };
 }
 
 export function persistedSnapshotMatchesRevision(

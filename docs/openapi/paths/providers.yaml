@@ -272,3 +272,34 @@ paths:
           $ref: ../components/responses.yaml#/components/responses/BadGateway
         '503':
           $ref: ../components/responses.yaml#/components/responses/ServiceUnavailable
+  /v1/providers/{provider_id}/repair:
+    post:
+      tags: [providers]
+      operationId: repairLocalGeneration
+      x-person-action: record
+      summary: Repair the bundled local generation model
+      description: Releases the generation reader, restores the authenticated packaged revision, and attempts admission. Failed attempts return their current recovery state.
+      parameters:
+      - name: provider_id
+        in: path
+        required: true
+        schema:
+          type: string
+          pattern: "^[a-zA-Z0-9_.-]+$"
+      responses:
+        '200':
+          description: Repair attempt completed
+          content:
+            application/json:
+              schema:
+                $ref: ../components/schemas/settings/local-runtime.yaml#/components/schemas/LocalGenerationRepairResult
+        '400':
+          $ref: ../components/responses.yaml#/components/responses/BadRequest
+        '401':
+          $ref: ../components/responses.yaml#/components/responses/Unauthorized
+        '404':
+          $ref: ../components/responses.yaml#/components/responses/NotFound
+        '429':
+          $ref: ../components/responses.yaml#/components/responses/TooManyRequests
+        default:
+          $ref: ../components/responses.yaml#/components/responses/Error

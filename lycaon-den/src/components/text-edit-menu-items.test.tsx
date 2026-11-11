@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../test/controls.ts";
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { textEditMenuItems } from "./text-edit-menu-items.ts";
@@ -93,7 +94,7 @@ describe("TextEditContextMenuHost", () => {
 
   it.each(["pointer", "keyboard"])("opens the URL destination menu from a source link (%s)", async (input) => {
     render(() => <><SourceUrlLink url="https://example.com/report" label="Report" /><TextEditContextMenuHost /></>);
-    const link = screen.getByRole("link", { name: "Report" });
+    const link = assertNamedControl(screen.getByTestId("source-url-link"), "link");
     if (input === "keyboard") {
       link.focus();
       fireEvent.keyDown(link, { key: "F10", shiftKey: true });

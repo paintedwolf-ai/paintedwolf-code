@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -12,7 +11,11 @@ import (
 )
 
 // BeginTurn creates a turn or adds an attempt to a recoverable turn.
-func (s *Memory) BeginTurn(ctx context.Context, in TurnStart) (TurnExecution, error) {
+func (t *memoryTurns) BeginTurn(ctx context.Context, in TurnStart) (TurnExecution, error) {
+	return beginTurnMemory(ctx, t.core, in)
+}
+
+func beginTurnMemory(ctx context.Context, s *memoryCore, in TurnStart) (TurnExecution, error) {
 	if err := ctx.Err(); err != nil {
 		return TurnExecution{}, err
 	}
@@ -49,14 +52,14 @@ func (s *Memory) BeginTurn(ctx context.Context, in TurnStart) (TurnExecution, er
 			turn := s.turns[turnIDs[i]]
 			if turn.Origin == in.Origin &&
 				(turn.Status == TurnStatusRecovering || turn.Status == TurnStatusFailed || turn.Status == TurnStatusInterrupted) {
-				return s.resumeTurnLocked(turnIDs[i], in, execution.Attempt, now)
+				return resumeTurnLocked(s, turnIDs[i], in, execution.Attempt, now)
 			}
 		}
 	}
 	if len(in.SubmissionIDs) > 0 {
 		if recoveredID := s.turnSubmissions[strings.TrimSpace(in.SubmissionIDs[0])]; recoveredID != "" &&
 			s.turns[recoveredID].Status == TurnStatusRecovering {
-			return s.resumeTurnLocked(recoveredID, in, execution.Attempt, now)
+			return resumeTurnLocked(s, recoveredID, in, execution.Attempt, now)
 		}
 	}
 	if _, exists := s.turns[in.ID]; exists {
@@ -77,7 +80,7 @@ func (s *Memory) BeginTurn(ctx context.Context, in TurnStart) (TurnExecution, er
 }
 
 // resumeTurnLocked adds a fresh attempt to a turn being retried.
-func (s *Memory) resumeTurnLocked(turnID string, in TurnStart, attempt TurnAttempt, now time.Time) (TurnExecution, error) {
+func resumeTurnLocked(s *memoryCore, turnID string, in TurnStart, attempt TurnAttempt, now time.Time) (TurnExecution, error) {
 	turn := s.turns[turnID]
 	if turn.SessionID != in.SessionID || turn.ProjectID != in.ProjectID {
 		return TurnExecution{}, fmt.Errorf("recovering turn identity mismatch: %s", turnID)
@@ -96,7 +99,8 @@ func (s *Memory) resumeTurnLocked(turnID string, in TurnStart, attempt TurnAttem
 	return TurnExecution{Turn: turn, Attempt: attempt}, nil
 }
 
-func (s *Memory) CheckpointTurn(ctx context.Context, turnID, attemptID string, phase TurnPhase, checkpointJSON string) error {
+func (t *memoryTurns) CheckpointTurn(ctx context.Context, turnID, attemptID string, phase TurnPhase, checkpointJSON string) error {
+	s := t.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -108,10 +112,10 @@ func (s *Memory) CheckpointTurn(ctx context.Context, turnID, attemptID string, p
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.checkpointTurnLocked(turnID, attemptID, phase, checkpointJSON)
+	return checkpointTurnLocked(s, turnID, attemptID, phase, checkpointJSON)
 }
 
-func (s *Memory) checkpointTurnLocked(turnID, attemptID string, phase TurnPhase, checkpointJSON string) error {
+func checkpointTurnLocked(s *memoryCore, turnID, attemptID string, phase TurnPhase, checkpointJSON string) error {
 	attempts := s.turnAttempts[turnID]
 	for i := range attempts {
 		if attempts[i].ID != attemptID || attempts[i].Status != TurnStatusRunning {
@@ -132,144 +136,11 @@ func (s *Memory) checkpointTurnLocked(turnID, attemptID string, phase TurnPhase,
 	return fmt.Errorf("turn attempt claim lost: %s", attemptID)
 }
 
-func (s *Memory) ProjectLiveModelOutput(ctx context.Context, out LiveModelOutput) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if out.ID == "" || out.TurnAttemptID == "" || out.SessionID == "" || out.MessageID == "" || out.Iteration <= 0 {
-		return fmt.Errorf("live model output identity required")
-	}
-	now := time.Now().UTC()
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if existing, ok := s.liveModelOutputs[out.ID]; ok {
-		out.CreatedAt = existing.CreatedAt
-	} else if out.CreatedAt.IsZero() {
-		out.CreatedAt = now
-	}
-	out.UpdatedAt = now
-	s.liveModelOutputs[out.ID] = out
-	return nil
+func (t *memoryTurns) FinishTurn(ctx context.Context, turnID, attemptID string, status TurnStatus, finalOutputID, resultJSON, failure string) (Turn, error) {
+	return finishTurnMemory(ctx, t.core, turnID, attemptID, status, finalOutputID, resultJSON, failure)
 }
 
-func (s *Memory) SettleModelOutput(ctx context.Context, out ModelOutput) (ModelOutput, error) {
-	if err := ctx.Err(); err != nil {
-		return ModelOutput{}, err
-	}
-	if out.ID == "" || out.TurnAttemptID == "" || out.SessionID == "" || out.MessageID == "" || out.Iteration <= 0 {
-		return ModelOutput{}, fmt.Errorf("model output identity required")
-	}
-	now := time.Now().UTC()
-	if out.CreatedAt.IsZero() {
-		out.CreatedAt = now
-	}
-	if out.SettledAt.IsZero() {
-		out.SettledAt = now
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if existing, ok := s.modelOutputs[out.ID]; ok {
-		if !sameModelOutput(existing, out) {
-			return ModelOutput{}, fmt.Errorf("model output id %s reused with different content or identity", out.ID)
-		}
-		return existing, nil
-	}
-	active := false
-	for _, turn := range s.turns {
-		active = active || (turn.SessionID == out.SessionID && turn.ActiveAttemptID == out.TurnAttemptID && turn.Status == TurnStatusRunning)
-	}
-	if !active {
-		return ModelOutput{}, fmt.Errorf("model output attempt claim lost")
-	}
-	for _, existing := range s.modelOutputs {
-		if existing.TurnAttemptID == out.TurnAttemptID && existing.Iteration == out.Iteration {
-			return ModelOutput{}, fmt.Errorf("model iteration already settled")
-		}
-	}
-	s.modelOutputs[out.ID] = out
-	delete(s.liveModelOutputs, out.ID)
-	return out, nil
-}
-
-// sameModelOutput compares the in-memory output values directly.
-func sameModelOutput(committed, proposed ModelOutput) bool {
-	return committed.ID == proposed.ID &&
-		committed.TurnAttemptID == proposed.TurnAttemptID &&
-		committed.SessionID == proposed.SessionID &&
-		committed.Iteration == proposed.Iteration &&
-		committed.MessageID == proposed.MessageID &&
-		committed.ProviderID == proposed.ProviderID &&
-		committed.Model == proposed.Model &&
-		committed.Content == proposed.Content &&
-		committed.ToolCallsJSON == proposed.ToolCallsJSON &&
-		committed.ReasoningJSON == proposed.ReasoningJSON &&
-		committed.FinishReason == proposed.FinishReason && committed.Scripted == proposed.Scripted
-}
-
-func (s *Memory) ListPendingModelOutputProjections(ctx context.Context) ([]PendingModelOutputProjection, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var out []PendingModelOutputProjection
-	for id, output := range s.modelOutputs {
-		if _, ok := s.projectedModelOutputs[id]; !ok {
-			workerJobID := ""
-			for jobID, turnIDs := range s.workerTurns {
-				for _, turnID := range turnIDs {
-					for _, attempt := range s.turnAttempts[turnID] {
-						if attempt.ID == output.TurnAttemptID {
-							workerJobID = jobID
-							break
-						}
-					}
-					if workerJobID != "" {
-						break
-					}
-				}
-				if workerJobID != "" {
-					break
-				}
-			}
-			out = append(out, PendingModelOutputProjection{Output: output, WorkerJobID: workerJobID})
-		}
-	}
-	sort.Slice(out, func(i, j int) bool {
-		if out[i].Output.SettledAt.Equal(out[j].Output.SettledAt) {
-			return out[i].Output.ID < out[j].Output.ID
-		}
-		return out[i].Output.SettledAt.Before(out[j].Output.SettledAt)
-	})
-	if len(out) > 256 {
-		out = out[:256]
-	}
-	return out, nil
-}
-
-func (s *Memory) MarkModelOutputProjected(ctx context.Context, outputID string) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	if strings.TrimSpace(outputID) == "" {
-		return fmt.Errorf("model output projection identity required")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	output, ok := s.modelOutputs[outputID]
-	if !ok {
-		return fmt.Errorf("model output not found: %s", outputID)
-	}
-	for _, message := range s.messages[output.SessionID] {
-		if message.ID == output.MessageID && message.Seq > 0 {
-			s.projectedModelOutputs[outputID] = message.Seq
-			return nil
-		}
-	}
-	return fmt.Errorf("model output projection not found: %s", outputID)
-}
-
-func (s *Memory) FinishTurn(ctx context.Context, turnID, attemptID string, status TurnStatus, finalOutputID, resultJSON, failure string) (Turn, error) {
+func finishTurnMemory(ctx context.Context, s *memoryCore, turnID, attemptID string, status TurnStatus, finalOutputID, resultJSON, failure string) (Turn, error) {
 	if err := ctx.Err(); err != nil {
 		return Turn{}, err
 	}
@@ -314,19 +185,19 @@ func (s *Memory) FinishTurn(ctx context.Context, turnID, attemptID string, statu
 	return turn, nil
 }
 
-func (s *Memory) RecoverTurns(ctx context.Context) ([]Turn, error) {
-	return s.recoverTurnsMatching(ctx, "")
+func (t *memoryTurns) RecoverTurns(ctx context.Context) ([]Turn, error) {
+	return recoverTurnsMatching(ctx, t.core, "")
 }
 
 // RecoverTurnsForSession fences one session while other sessions remain active.
-func (s *Memory) RecoverTurnsForSession(ctx context.Context, sessionID string) ([]Turn, error) {
+func (t *memoryTurns) RecoverTurnsForSession(ctx context.Context, sessionID string) ([]Turn, error) {
 	if strings.TrimSpace(sessionID) == "" {
 		return nil, fmt.Errorf("session id required")
 	}
-	return s.recoverTurnsMatching(ctx, sessionID)
+	return recoverTurnsMatching(ctx, t.core, sessionID)
 }
 
-func (s *Memory) recoverTurnsMatching(ctx context.Context, sessionID string) ([]Turn, error) {
+func recoverTurnsMatching(ctx context.Context, s *memoryCore, sessionID string) ([]Turn, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}

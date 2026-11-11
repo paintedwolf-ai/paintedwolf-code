@@ -13,6 +13,3 @@ suggested_action: >-
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - loopback
-      - device

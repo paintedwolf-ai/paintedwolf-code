@@ -15,7 +15,7 @@ import (
 func TestPlannedFanoutDoesNotAdvancePastMissingOrPartialWork(t *testing.T) {
 	mgr, _, _, dir := testManagerWithRegistry(t)
 	ctx := t.Context()
-	run, err := startRun(ctx, mgr, "sess-1", "security-survey", "2.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "security-survey", "2.0.1")
 	testutil.FailErr(t, "start run", err)
 	run.CurrentPhase = "execute"
 	testutil.FailErr(t, "set execution phase", mgr.Store.State.Update(ctx, run))
@@ -93,7 +93,7 @@ func TestPlannedFanoutDoesNotAdvancePastMissingOrPartialWork(t *testing.T) {
 func TestPlannedFanoutRecoveryRequiresCompleteReadableLedger(t *testing.T) {
 	mgr, _, _, dir := testManagerWithRegistry(t)
 	ctx := t.Context()
-	run, err := startRun(ctx, mgr, "sess-1", "security-survey", "2.0.0")
+	run, err := startRun(ctx, mgr, "sess-1", "security-survey", "2.0.1")
 	testutil.FailErr(t, "start recovery run", err)
 	run.CurrentPhase = "execute"
 	testutil.FailErr(t, "enter execution", mgr.Store.State.Update(ctx, run))

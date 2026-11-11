@@ -2,4 +2,4 @@ code: blueprint_writer_missing_surface
 message: |
   Blueprint writer phase {{phase}} in workflow {{workflow}} has no coordinator surface.
 replacement: |
-  Bind the phase to a coordinator surface that exposes write, edit, or replace_lines.
+  Bind the phase to a coordinator surface that allows mutations through command.

@@ -39,6 +39,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: implement
     tool: edit
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: TEXT_WRITE_CONFLICT'

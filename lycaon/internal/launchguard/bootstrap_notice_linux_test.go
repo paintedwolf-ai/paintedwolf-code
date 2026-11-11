@@ -88,7 +88,7 @@ func exerciseBootstrapNotice(image *os.File, caller Identity, blocked bool) erro
 		}
 	}()
 	if blocked {
-		deadline := time.Now().Add(time.Second)
+		deadline := time.Now().Add(testutil.Timeout(time.Minute))
 		for {
 			raw, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
 			if err == nil && guardianThreadProfile(raw, caller) == nil {

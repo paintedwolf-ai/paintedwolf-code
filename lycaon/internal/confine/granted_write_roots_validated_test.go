@@ -16,7 +16,7 @@ func TestDefaultConfinementValidatesGrantedWriteRoots(t *testing.T) {
 	t.Setenv("LYCAON_SANDBOX", "")
 	t.Setenv("LYCAON_SANDBOX_NETWORK", "")
 	if !confine.Available() {
-		t.Skip("darwin + seatbelt sandbox required")
+		t.Skip("this host has no confinement adapter")
 	}
 
 	// A sane request with only an attached root confines normally.

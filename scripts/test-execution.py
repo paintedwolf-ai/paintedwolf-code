@@ -574,13 +574,30 @@ def main():
         env = execution_environment({**os.environ, "PW_TEST_WORKERS": str(worker_budget(os.environ))})
         plan = request(task_request[2], env)
         if plan is not None and os.name != "nt":
+            plan["keep_going"] = os.environ.get("PW_TEST_KEEP_GOING") == "1"
             return subscribe(queue, Lease, lock_file, *task_request, plan, env)
         arguments = task_request[2]
         cli = arguments[arguments.index("--") + 1:] if "--" in arguments else []
         spec = invocation_profile(task_names(arguments), cli)
     if not command:
         parser.error("a command is required after --")
-    return run(queue, args.name, command, spec)
+    return reported_run(queue, args.name, command, spec) if task_request else run(queue, args.name, command, spec)
+
+
+def reported_run(queue, name, command, spec):
+    """A requested target outside a shared batch ends with the same block; a nested one execs away in run."""
+    from verification_lifecycle.digest import deliver, invocation_digest
+    from verification_plan import EXIT_UNVERIFIED, outcome_exit
+    try:
+        code = run(queue, name, command, spec)
+    except KeyboardInterrupt:
+        deliver(invocation_digest(name, 130, status="unverified", reason="Interrupted before a result"))
+        raise
+    if code:
+        # run returns 2 when it could not settle the command's cleanup.
+        unverified = code == EXIT_UNVERIFIED or outcome_exit(code) == EXIT_UNVERIFIED
+        deliver(invocation_digest(name, code, status="unverified" if unverified else "failed"))
+    return code
 
 
 def interrupted(signum, _frame):

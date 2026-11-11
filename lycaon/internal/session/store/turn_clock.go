@@ -75,12 +75,12 @@ func (c TurnClock) Wire() api.TurnClock {
 // PutTurnClock records a visible user turn's clock. A clock whose opening
 // message is not yet in the transcript is not recorded; the next edge after
 // the message lands records it.
-func (s *SQL) PutTurnClock(ctx context.Context, clock TurnClock) error {
+func (t *sqlTurnTelemetry) PutTurnClock(ctx context.Context, clock TurnClock) error {
 	clock = normalizeTurnClock(clock)
 	if clock.SessionID == "" || clock.OpeningMessageID == "" {
 		return fmt.Errorf("turn clock requires a session and opening message")
 	}
-	_, err := s.queries.UpsertTurnClock(ctx, db.UpsertTurnClockParams{
+	_, err := t.core.queries.UpsertTurnClock(ctx, db.UpsertTurnClockParams{
 		OpeningMessageID: clock.OpeningMessageID,
 		SessionID:        clock.SessionID,
 		ActiveMs:         clock.ActiveMs,
@@ -92,8 +92,8 @@ func (s *SQL) PutTurnClock(ctx context.Context, clock TurnClock) error {
 }
 
 // LatestTurnClock returns the clock of the session's newest visible user turn.
-func (s *SQL) LatestTurnClock(ctx context.Context, sessionID string) (TurnClock, bool, error) {
-	row, err := s.queries.GetLatestTurnClock(ctx, sessionID)
+func (t *sqlTurnTelemetry) LatestTurnClock(ctx context.Context, sessionID string) (TurnClock, bool, error) {
+	row, err := t.core.queries.GetLatestTurnClock(ctx, sessionID)
 	if db.IsNoRows(err) {
 		return TurnClock{}, false, nil
 	}
@@ -105,7 +105,8 @@ func (s *SQL) LatestTurnClock(ctx context.Context, sessionID string) (TurnClock,
 }
 
 // SettleAbandonedTurnClocks pauses clocks left running by process loss.
-func (s *SQL) SettleAbandonedTurnClocks(ctx context.Context) (int, error) {
+func (t *sqlTurnTelemetry) SettleAbandonedTurnClocks(ctx context.Context) (int, error) {
+	s := t.core
 	settled := 0
 	for {
 		rows, err := s.queries.ListRunningTurnClocks(ctx)
@@ -113,7 +114,7 @@ func (s *SQL) SettleAbandonedTurnClocks(ctx context.Context) (int, error) {
 			return settled, err
 		}
 		for _, row := range rows {
-			if err := s.settleAbandonedTurnClock(ctx, row); err != nil {
+			if err := settleAbandonedTurnClock(ctx, s, row); err != nil {
 				return settled, err
 			}
 			settled++
@@ -125,7 +126,11 @@ func (s *SQL) SettleAbandonedTurnClocks(ctx context.Context) (int, error) {
 }
 
 // LatestTurnProgress is when any of the session's turns last did durable work.
-func (s *SQL) LatestTurnProgress(ctx context.Context, sessionID string) (time.Time, error) {
+func (t *sqlTurnTelemetry) LatestTurnProgress(ctx context.Context, sessionID string) (time.Time, error) {
+	return latestTurnProgressSQL(ctx, t.core, sessionID)
+}
+
+func latestTurnProgressSQL(ctx context.Context, s *sqlCore, sessionID string) (time.Time, error) {
 	latest, err := s.queries.GetLatestTurnProgressForSession(ctx, sessionID)
 	if err != nil {
 		return time.Time{}, err
@@ -140,12 +145,12 @@ func (s *SQL) LatestTurnProgress(ctx context.Context, sessionID string) (time.Ti
 	return at, nil
 }
 
-func (s *SQL) settleAbandonedTurnClock(ctx context.Context, row db.TurnClocks) error {
+func settleAbandonedTurnClock(ctx context.Context, s *sqlCore, row db.TurnClocks) error {
 	clock, err := turnClockFromDB(row)
 	if err != nil {
 		return err
 	}
-	lastProgress, err := s.LatestTurnProgress(ctx, clock.SessionID)
+	lastProgress, err := latestTurnProgressSQL(ctx, s, clock.SessionID)
 	if err != nil {
 		return err
 	}
@@ -219,117 +224,4 @@ func parseNullTime(value sql.NullString) (*time.Time, error) {
 		return nil, err
 	}
 	return &parsed, nil
-}
-
-// PutTurnClock records a visible user turn's clock once its opening message exists.
-func (s *Memory) PutTurnClock(ctx context.Context, clock TurnClock) error {
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	clock = normalizeTurnClock(clock)
-	if clock.SessionID == "" || clock.OpeningMessageID == "" {
-		return fmt.Errorf("turn clock requires a session and opening message")
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.messageOrdLocked(clock.SessionID, clock.OpeningMessageID); !ok {
-		return nil
-	}
-	clocks := s.turnClocks[clock.SessionID]
-	if clocks == nil {
-		clocks = make(map[string]TurnClock)
-		s.turnClocks[clock.SessionID] = clocks
-	}
-	clocks[clock.OpeningMessageID] = cloneTurnClock(clock)
-	return nil
-}
-
-// LatestTurnClock returns the clock of the session's newest visible user turn.
-func (s *Memory) LatestTurnClock(ctx context.Context, sessionID string) (TurnClock, bool, error) {
-	if err := ctx.Err(); err != nil {
-		return TurnClock{}, false, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var latest TurnClock
-	latestOrd := int64(-1)
-	for openingID, clock := range s.turnClocks[sessionID] {
-		if ord, ok := s.messageOrdLocked(sessionID, openingID); ok && ord > latestOrd {
-			latest, latestOrd = clock, ord
-		}
-	}
-	return cloneTurnClock(latest), latestOrd >= 0, nil
-}
-
-// SettleAbandonedTurnClocks pauses clocks left running by process loss.
-func (s *Memory) SettleAbandonedTurnClocks(ctx context.Context) (int, error) {
-	if err := ctx.Err(); err != nil {
-		return 0, err
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	settled := 0
-	for sessionID, clocks := range s.turnClocks {
-		lastProgress := s.latestTurnProgressLocked(sessionID)
-		for openingID, clock := range clocks {
-			if clock.RunningAt == nil {
-				continue
-			}
-			clocks[openingID] = clock.settleAbandoned(lastProgress)
-			settled++
-		}
-	}
-	return settled, nil
-}
-
-func (s *Memory) turnClocksForMessagesLocked(sessionID string, window []api.Message) map[string]api.TurnClock {
-	clocks := s.turnClocks[sessionID]
-	out := map[string]api.TurnClock{}
-	for _, message := range window {
-		if clock, ok := clocks[message.ID]; ok {
-			out[message.ID] = clock.Wire()
-		}
-	}
-	return out
-}
-
-func (s *Memory) messageOrdLocked(sessionID, messageID string) (int64, bool) {
-	for _, message := range s.messages[sessionID] {
-		if message.ID == messageID {
-			return message.Ord, true
-		}
-	}
-	return 0, false
-}
-
-// LatestTurnProgress is when any of the session's turns last did durable work.
-func (s *Memory) LatestTurnProgress(ctx context.Context, sessionID string) (time.Time, error) {
-	if err := ctx.Err(); err != nil {
-		return time.Time{}, err
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return s.latestTurnProgressLocked(sessionID), nil
-}
-
-func (s *Memory) latestTurnProgressLocked(sessionID string) time.Time {
-	var latest time.Time
-	for _, turn := range s.turns {
-		if turn.SessionID == sessionID && turn.ProgressedAt.After(latest) {
-			latest = turn.ProgressedAt
-		}
-	}
-	return latest
-}
-
-func cloneTurnClock(clock TurnClock) TurnClock {
-	if clock.RunningAt != nil {
-		since := *clock.RunningAt
-		clock.RunningAt = &since
-	}
-	if clock.SettledAt != nil {
-		settled := *clock.SettledAt
-		clock.SettledAt = &settled
-	}
-	return clock
 }

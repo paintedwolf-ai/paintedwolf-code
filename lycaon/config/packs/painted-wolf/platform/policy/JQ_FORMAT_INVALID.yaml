@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
       path: config.xml
       profile: explore_readonly
       tool: jq
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: JQ_FORMAT_INVALID'

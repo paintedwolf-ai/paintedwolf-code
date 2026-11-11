@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/agentdef"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
@@ -184,6 +185,8 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				return "", err
 			}
 			task.Prompt = composed
+		} else if taskIncludesLinkedCheckout(tctx, projScope, task) {
+			task.Prompt += "\n\nOrientation: this scope is a git checkout (linked worktree or submodule) without VCS access in this workspace; history or branch work belongs to a read-scoped leg or the coordinator."
 		}
 
 		task.SourceArgsDigest = sourceDigest
@@ -198,6 +201,28 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		task.ID = enqueuedID
 		return taskEnqueueOutput(tctx, projScope, task)
 	})
+}
+
+func taskIncludesLinkedCheckout(tctx tools.ToolContext, scope project.ProjectScope, task api.WorkerTask) bool {
+	eff := task.EffectiveScope()
+	if !eff.IsWrite() {
+		return false
+	}
+	paths := eff.Paths
+	if len(paths) == 0 {
+		paths = task.Files
+	}
+	for _, root := range []string{scope.WorkspacePath, task.WorkspacePath, tctx.ActiveRootPath()} {
+		if gitrepo.ScopeIncludesLinkedCheckout(root, paths) {
+			return true
+		}
+	}
+	for _, r := range tctx.Source.Roots {
+		if gitrepo.ScopeIncludesLinkedCheckout(r.Path, paths) {
+			return true
+		}
+	}
+	return false
 }
 
 func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task api.WorkerTask) (string, error) {
@@ -226,6 +251,11 @@ func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task 
 	}
 	if task.EffectiveScope().IsWrite() {
 		out["workspace_kind"] = "private_snapshot"
+		if taskIncludesLinkedCheckout(tctx, scope, task) {
+			out["linked_checkout"] = true
+			out["vcs_access"] = false
+			out["vcs_note"] = "Scope includes a linked worktree or submodule without VCS access in this workspace; route history or branch work to a read-scoped leg or the coordinator."
+		}
 	} else {
 		out["workspace_kind"] = "primary"
 	}

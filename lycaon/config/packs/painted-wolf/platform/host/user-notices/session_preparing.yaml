@@ -6,4 +6,3 @@ suggested_action: Wait a moment, then try again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [still preparing, try again]

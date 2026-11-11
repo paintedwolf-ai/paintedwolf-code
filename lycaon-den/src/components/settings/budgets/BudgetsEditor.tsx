@@ -173,6 +173,7 @@ export function BudgetsEditor(props: Props) {
               <DenField label={settingLabel("max-iterations")} {...settingAnchor("max-iterations")}>
                 <DenNumberInput
                   min={1}
+                  data-testid="max-iterations"
                   value={limitsSnap().max_iterations ?? undefined}
                   onInput={(e) =>
                     patchNumber("max_iterations", e.currentTarget.value)

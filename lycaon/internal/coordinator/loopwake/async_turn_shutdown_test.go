@@ -5,6 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/kick"
 	"github.com/lycaon/lycaon/internal/promptresult"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 	"sync"
 	"testing"
@@ -176,7 +177,7 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 		t.Fatal("async turn never started")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	engine.Turns.WaitForAsyncTurns(ctx)
 	if ctx.Err() != nil {

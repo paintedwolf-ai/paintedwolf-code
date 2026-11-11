@@ -67,7 +67,7 @@ func TestBrowserProfileFollowsTheRequestedLoopbackPorts(t *testing.T) {
 }
 
 func TestBrowserConfinementKeepsANarrowedRequest(t *testing.T) {
-	t.Parallel()
+	confine.TestingSetAutoConfine(t)
 	c, ok := confine.BrowserConfinement(confine.Request{
 		Roots:                []string{t.TempDir()},
 		LoopbackConnect:      true,
@@ -81,8 +81,8 @@ func TestBrowserConfinementKeepsANarrowedRequest(t *testing.T) {
 	}
 }
 
-func TestSeatbeltComposedLocalNetworkGrantRunsServerAndClient(t *testing.T) {
-	self := requireSeatbelt(t)
+func TestBoundaryComposedLocalNetworkGrantRunsServerAndClient(t *testing.T) {
+	self := requireLiveBoundary(t)
 	python := requirePython(t)
 	c := confine.Confinement{
 		Roots: []string{t.TempDir()}, Network: confine.NetworkDeny,

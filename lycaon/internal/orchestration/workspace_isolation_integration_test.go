@@ -38,7 +38,7 @@ func (b *dirWorkspaceBinder) CreateWorkerWorkspace(_ context.Context, primaryDir
 	return &workspace.Binding{ID: legID, Root: root}, nil
 }
 
-func (b *dirWorkspaceBinder) DestroyWorkerWorkspace(binding *workspace.Binding) error {
+func (b *dirWorkspaceBinder) DestroyWorkerWorkspace(_ context.Context, binding *workspace.Binding) error {
 	if binding == nil {
 		return nil
 	}

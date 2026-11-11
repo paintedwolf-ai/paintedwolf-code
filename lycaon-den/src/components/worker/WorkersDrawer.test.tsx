@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, fireEvent } from "@solidjs/testing-library";
+import { assertNamedControl } from "../../test/controls.ts";
 import type { JSX } from "solid-js";
 import { createAppStore } from "../../store/app-state.ts";
 import { WorkersDrawer } from "./WorkersDrawer.tsx";
@@ -57,7 +58,7 @@ describe("WorkersDrawer", () => {
         onClose={onClose}
       />
     ));
-    fireEvent.click(screen.getByLabelText("Close worker"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("workers-drawer-close"), "button"));
     expect(onClose).toHaveBeenCalledOnce();
   });
 

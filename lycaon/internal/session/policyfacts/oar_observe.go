@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -40,9 +39,6 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 	gc.Execution.ConfineSignals = append([]string(nil), obs.Signals...)
 	gc.Execution.FailedStages = append([]string(nil), obs.FailedStages...)
 	gc.Execution.ProcessRunning = obs.Running
-	gc.Execution.ProcessTimedOut = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationTimedOut)
-	gc.Execution.ProcessStopped = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationStopped)
-	gc.Execution.ProcessExited = !obs.Running && obs.TerminationReason == string(bgprocess.TerminationExited)
 	observeSandboxRefusals(gc, obs.Refusals)
 	data := map[string]any{"tool": gc.Invocation.Tool}
 	if dest := obs.Destination; dest != "" {
@@ -60,10 +56,14 @@ func ObserveConfine(gc *oar.GuardContext, obs confine.Observation) {
 // capability whose rule would admit it. Refused paths carry the grant each
 // layer's recovery would request; control-plane paths have none.
 func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusals) {
-	gc.Refusals.SandboxRefusalWitness = string(refusals.Witness)
 	for _, refusal := range refusals.Refusals {
-		gc.Execution.SandboxRefusals = append(gc.Execution.SandboxRefusals, refusal.Display())
 		switch refusal.Recovery {
+		case confine.RecoverCredentialStore:
+			target := refusal.Target
+			if target == "" {
+				target = refusal.Grant
+			}
+			gc.Refusals.RefusedCredentialStorePaths = appendUnique(gc.Refusals.RefusedCredentialStorePaths, target)
 		case confine.RecoverSocketPath:
 			gc.Refusals.RefusedSocketPaths = appendUnique(gc.Refusals.RefusedSocketPaths, refusal.Grant)
 		case confine.RecoverOutboundPort:
@@ -79,25 +79,25 @@ func observeSandboxRefusals(gc *oar.GuardContext, refusals confine.SandboxRefusa
 		}
 	}
 	for _, path := range refusals.Paths(confine.AccessWrite) {
-		gc.Refusals.RefusedWritePaths = append(gc.Refusals.RefusedWritePaths, path.Path)
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalWritePaths = append(gc.Refusals.RefusedTerminalWritePaths, path.Path)
+			continue
 		}
-		if path.Grant != "" {
-			gc.Refusals.RefusedWriteGrants = append(gc.Refusals.RefusedWriteGrants, path.Grant)
-		}
+		gc.Refusals.RefusedWritePaths = append(gc.Refusals.RefusedWritePaths, path.Path)
 	}
 	for _, path := range refusals.Paths(confine.AccessRead) {
-		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
+		if path.Layer == confine.FloorReadCredentialStore {
+			gc.Refusals.RefusedCredentialStorePaths = appendUnique(gc.Refusals.RefusedCredentialStorePaths, path.Path)
+			continue
+		}
 		if path.Layer.Recovery().Terminal() {
 			gc.Refusals.RefusedTerminalReadPaths = append(gc.Refusals.RefusedTerminalReadPaths, path.Path)
+			continue
 		}
-		if path.Grant != "" {
-			gc.Refusals.RefusedReadGrants = append(gc.Refusals.RefusedReadGrants, path.Grant)
-		}
+		gc.Refusals.RefusedReadPaths = append(gc.Refusals.RefusedReadPaths, path.Path)
 	}
-	gc.Refusals.RefusedWriteGrants = confine.CoveringGrants(gc.Refusals.RefusedWriteGrants)
-	gc.Refusals.RefusedReadGrants = confine.CoveringGrants(gc.Refusals.RefusedReadGrants)
+	gc.Refusals.RefusedWriteGrants = refusals.Grants(confine.AccessWrite)
+	gc.Refusals.RefusedReadGrants = refusals.Grants(confine.AccessRead)
 }
 
 func appendUnique(list []string, value string) []string {
@@ -235,6 +235,16 @@ func ObserveEditorConfigMismatch(gc *oar.GuardContext, raised guidance.ToolResul
 	gc.PutRejectData(toolrejection.EditorConfigMismatchCode, raised.FeedbackFor(toolrejection.EditorConfigMismatchCode).Details)
 }
 
+// ObserveGitNoRepositoryOnWriteLeg publishes a program's write-leg Git miss and
+// whether the profile holds its answer to post-tool policy.
+func ObserveGitNoRepositoryOnWriteLeg(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
+	if gc == nil || !raised.HasCode(toolrejection.GitNoRepositoryOnWriteLegCode) {
+		return
+	}
+	gc.Source.GitNoRepositoryOnWriteLeg = true
+	gc.PutRejectData(toolrejection.GitNoRepositoryOnWriteLegCode, raised.FeedbackFor(toolrejection.GitNoRepositoryOnWriteLegCode).Details)
+}
+
 // ObserveHTTPRequestWebPage publishes a web page http_request delivered and
 // its details to post-tool policy.
 func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
@@ -243,6 +253,16 @@ func ObserveHTTPRequestWebPage(gc *oar.GuardContext, raised guidance.ToolResultF
 	}
 	gc.Invocation.HTTPRequestWebPage = true
 	gc.PutRejectData(toolrejection.HTTPRequestWebPageCode, raised.FeedbackFor(toolrejection.HTTPRequestWebPageCode).Details)
+}
+
+// ObserveHTTPRequestLoopbackOtherSession publishes loopback listener attribution
+// when http_request reaches a port held by another session or a competing listener.
+func ObserveHTTPRequestLoopbackOtherSession(gc *oar.GuardContext, raised guidance.ToolResultFacts) {
+	if gc == nil || !raised.HasCode(toolrejection.HTTPRequestLoopbackOtherSessionCode) {
+		return
+	}
+	gc.Invocation.HTTPRequestLoopbackOtherSession = true
+	gc.PutRejectData(toolrejection.HTTPRequestLoopbackOtherSessionCode, raised.FeedbackFor(toolrejection.HTTPRequestLoopbackOtherSessionCode).Details)
 }
 
 // DeferredUnactivatedCount is how many of surfaceID's deferred tools this

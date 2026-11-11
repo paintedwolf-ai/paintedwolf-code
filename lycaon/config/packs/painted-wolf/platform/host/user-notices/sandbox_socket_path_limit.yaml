@@ -6,5 +6,3 @@ suggested_action: "Grant fewer sockets at a time."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "more sockets"

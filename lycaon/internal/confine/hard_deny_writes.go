@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // HardDenyWriteSpec describes one protected write target and its override layer.
@@ -47,6 +48,9 @@ func HardDenyWriteSpecs(c Confinement) ([]HardDenyWriteSpec, error) {
 		return nil, fmt.Errorf("resolve launcher for hard-deny: %w", err)
 	}
 	addLit(FloorControlPlane, exe)
+	if pattern := socketref.ControlPlanePathPattern(); pattern != "" {
+		out = append(out, HardDenyWriteSpec{Layer: FloorControlPlane, Regex: pattern})
+	}
 
 	// Read roots remain read-only inside writable ancestors.
 	for _, r := range c.ReadRoots {
@@ -67,18 +71,22 @@ func HardDenyWriteSpecs(c Confinement) ([]HardDenyWriteSpec, error) {
 	if err != nil {
 		return nil, fmt.Errorf("resolve control plane for hard-deny: %w", err)
 	}
-	exceptions := resolveEach(agentWorkspaceRootsUnderControlPlane())
-	if c.SessionScratchRoot != "" {
-		exceptions = append(exceptions, fspath.CanonicalPath(c.SessionScratchRoot))
-	}
-	for _, tree := range append([]string{userDir}, placementFolders()...) {
-		if strings.TrimSpace(tree) == "" {
-			continue
-		}
+	if strings.TrimSpace(userDir) != "" {
 		// Validated workspaces are re-allowed after this tree deny.
-		out = append(out,
-			HardDenyWriteSpec{Layer: FloorBaseline, Subpath: fspath.CanonicalPath(tree)},
-			HardDenyWriteSpec{Layer: FloorControlPlane, Subpath: fspath.CanonicalPath(tree), ExceptSubpaths: exceptions})
+		out = append(out, HardDenyWriteSpec{Layer: FloorBaseline, Subpath: fspath.CanonicalPath(userDir)})
+		exceptions := resolveEach(agentWorkspaceRootsUnderControlPlane())
+		if c.SessionScratchRoot != "" {
+			exceptions = append(exceptions, fspath.CanonicalPath(c.SessionScratchRoot))
+		}
+		out = append(out, HardDenyWriteSpec{
+			Layer: FloorControlPlane, Subpath: fspath.CanonicalPath(userDir),
+			ExceptSubpaths: exceptions,
+		})
+		for _, folder := range placementFolders(userDir) {
+			canonical := fspath.CanonicalPath(folder.Path)
+			out = append(out, HardDenyWriteSpec{Layer: FloorBaseline, Subpath: canonical})
+			out = append(out, HardDenyWriteSpec{Layer: FloorControlPlane, Subpath: canonical, ExceptSubpaths: exceptions})
+		}
 	}
 
 	out = append(out, agentPolicySpecs(c.Roots)...)

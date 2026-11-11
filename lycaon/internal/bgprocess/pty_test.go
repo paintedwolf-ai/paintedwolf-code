@@ -83,7 +83,7 @@ func TestDisposeSessionReapsPTY(t *testing.T) {
 	}, runner, lycexec.WinSize{}, confine.SpawnFacts{})
 	testutil.FailErr(t, "StartPTY", err)
 
-	testutil.FailErr(t, "dispose session PTYs", reg.Lifecycle.DisposeSession(context.Background(), "s1"))
+	testutil.FailErr(t, "dispose session PTYs", reg.Lifecycle.DisposeSession(context.Background(), "s1", TerminationChatDeleted))
 	if err := reg.RequireRunning("s1", handle); !errors.Is(err, ErrProcessNotFound) {
 		t.Fatalf("after DisposeSession RequireRunning = %v, want not found", err)
 	}

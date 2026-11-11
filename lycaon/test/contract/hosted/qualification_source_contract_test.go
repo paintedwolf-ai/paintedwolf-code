@@ -3,36 +3,7 @@ package contract
 import (
 	"strings"
 	"testing"
-
-	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
-	"gopkg.in/yaml.v3"
 )
-
-func TestQualificationPreservesRequestsWithinOneExecutor(t *testing.T) {
-	t.Parallel()
-	var workflow struct {
-		Concurrency struct {
-			Group  string
-			Queue  string
-			Cancel bool `yaml:"cancel-in-progress"`
-		}
-	}
-	data := contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), ".github/workflows/qualification.yml")
-	contractcheck.FailErr(t, "decode qualification concurrency", yaml.Unmarshal([]byte(data), &workflow))
-	if workflow.Concurrency.Group != "qualification" || workflow.Concurrency.Queue != "max" || workflow.Concurrency.Cancel {
-		t.Fatal("qualification must preserve pending candidates in one non-canceling executor queue")
-	}
-	trigger := hostedWorkflowFile(t, "qualification").On
-	if _, ok := trigger["workflow_dispatch"]; !ok || len(trigger) != 1 {
-		t.Fatal("release qualification requires an explicit manual source dispatch")
-	}
-	jobs := hostedJobs(t, "qualification")
-	for _, name := range []string{"verification", "platform", "platform-lanes", "e2e"} {
-		if jobs[name].With["source-sha"] != "${{ needs.source.outputs.source-sha }}" {
-			t.Errorf("%s does not receive the selected source identity", name)
-		}
-	}
-}
 
 func TestQualificationCheckoutsBindSourceAndControllerSeparately(t *testing.T) {
 	t.Parallel()

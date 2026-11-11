@@ -21,6 +21,8 @@ func bundledHints() *guidance.HintConfig {
 }
 
 // Message renders a registered banner hint for tool JSON envelope fields.
+// Bundled hints carry no host RuleSet, so copy that binds the next-steps fact
+// renders it empty.
 func Message(ctx context.Context, code string, data map[string]any) string {
-	return guidance.EnvelopeHintMessage(ctx, bundledHints(), code, data)
+	return guidance.EnvelopeHintMessage(ctx, bundledHints(), nil, code, data)
 }

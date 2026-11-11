@@ -37,8 +37,8 @@ func TestWebIndexQueuePathsNormalizeText(t *testing.T) {
 	}
 
 	providers := []string{
-		"brave.go", "tavily.go", "searxng.go", "kagi.go",
-		"serper.go", "google_cse.go", "github.go", "gitlab.go", "marginalia.go", "mwmbl.go",
+		"providers_web_engines.go", "providers_post_engines.go", "providers_search_apis.go",
+		"providers_code_forges.go", "providers_docs.go",
 	}
 	for _, name := range providers {
 		p := filepath.Join(root, "lycaon", "internal", "webresearch", name)

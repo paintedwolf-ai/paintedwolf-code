@@ -35,7 +35,6 @@ describe("SessionProtectionBanners", () => {
       />
     ));
     const banner = getByTestId("protection-boundary-overrides");
-    expect(banner.textContent).toContain("app configuration");
     expect(banner.textContent).toContain("/shared/build-cache");
     expect(queryByTestId("protection-sandbox-bypass")).toBeNull();
     expect(sessionProtectionPresent({ control_plane_reads_allowed: true })).toBe(

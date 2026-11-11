@@ -1,7 +1,6 @@
 package guidance
 
 import (
-	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/jsonshape"
@@ -125,27 +124,4 @@ func RepairsReportDocument(codes []string) bool {
 		}
 	}
 	return false
-}
-
-// ReportDocumentFence renders the report fields the host read from a closeout
-// draft, every field but its prose, as the fence a repair returns whole.
-func ReportDocumentFence(drafted string) string {
-	read, ok := ReadCloseoutReport(drafted, "")
-	if !ok {
-		return "{}"
-	}
-	raw, err := json.Marshal(read.Report)
-	if err != nil {
-		return "{}"
-	}
-	var fields map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &fields); err != nil {
-		return "{}"
-	}
-	delete(fields, "synthesis")
-	out, err := json.Marshal(fields)
-	if err != nil {
-		return "{}"
-	}
-	return string(out)
 }

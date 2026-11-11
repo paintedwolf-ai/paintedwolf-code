@@ -25,7 +25,11 @@ type CheckpointRepository interface {
 	DropCheckpoint(context.Context, string, string) error
 }
 
-func (s *SQL) PutCheckpoint(ctx context.Context, root, session, anchor, sealed, manifest string, objects []CheckpointObject) error {
+func (r *sqlRewind) PutCheckpoint(ctx context.Context, root, session, anchor, sealed, manifest string, objects []CheckpointObject) error {
+	return putCheckpointSQL(ctx, r.core, root, session, anchor, sealed, manifest, objects)
+}
+
+func putCheckpointSQL(ctx context.Context, s *sqlCore, root, session, anchor, sealed, manifest string, objects []CheckpointObject) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -69,8 +73,8 @@ func (s *SQL) PutCheckpoint(ctx context.Context, root, session, anchor, sealed, 
 	return tx.Commit()
 }
 
-func (s *SQL) ReadCheckpoint(ctx context.Context, root, session, anchor string) (string, error) {
-	row, err := s.queries.GetCheckpointManifest(ctx, db.GetCheckpointManifestParams{
+func (r *sqlRewind) ReadCheckpoint(ctx context.Context, root, session, anchor string) (string, error) {
+	row, err := r.core.queries.GetCheckpointManifest(ctx, db.GetCheckpointManifestParams{
 		RootKey: root, SessionID: session, AnchorID: anchor,
 	})
 	if db.IsNoRows(err) {
@@ -85,11 +89,12 @@ func (s *SQL) ReadCheckpoint(ctx context.Context, root, session, anchor string) 
 	return row.ManifestJson, nil
 }
 
-func (s *SQL) DropCheckpoint(ctx context.Context, session, anchor string) error {
-	return s.queries.DeleteCheckpointAnchors(ctx, db.DeleteCheckpointAnchorsParams{SessionID: session, AnchorID: anchor})
+func (r *sqlRewind) DropCheckpoint(ctx context.Context, session, anchor string) error {
+	return r.core.queries.DeleteCheckpointAnchors(ctx, db.DeleteCheckpointAnchorsParams{SessionID: session, AnchorID: anchor})
 }
 
-func (s *Memory) PutCheckpoint(ctx context.Context, root, session, anchor, _, manifest string, _ []CheckpointObject) error {
+func (r *memoryRewind) PutCheckpoint(ctx context.Context, root, session, anchor, _, manifest string, _ []CheckpointObject) error {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -112,7 +117,8 @@ func (s *Memory) PutCheckpoint(ctx context.Context, root, session, anchor, _, ma
 	return nil
 }
 
-func (s *Memory) ReadCheckpoint(ctx context.Context, root, session, anchor string) (string, error) {
+func (r *memoryRewind) ReadCheckpoint(ctx context.Context, root, session, anchor string) (string, error) {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
@@ -125,7 +131,8 @@ func (s *Memory) ReadCheckpoint(ctx context.Context, root, session, anchor strin
 	return manifest.manifest, nil
 }
 
-func (s *Memory) DropCheckpoint(ctx context.Context, session, anchor string) error {
+func (r *memoryRewind) DropCheckpoint(ctx context.Context, session, anchor string) error {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -141,11 +148,12 @@ func (s *Memory) DropCheckpoint(ctx context.Context, session, anchor string) err
 
 type memoryCheckpoint struct{ root, manifest, projectID string }
 
-func (s *SQL) DropRootCheckpoints(ctx context.Context, projectID, root string) error {
-	return s.queries.DeleteRootCheckpointAnchors(ctx, db.DeleteRootCheckpointAnchorsParams{ProjectID: projectID, RootKey: root})
+func (r *sqlRewind) DropRootCheckpoints(ctx context.Context, projectID, root string) error {
+	return r.core.queries.DeleteRootCheckpointAnchors(ctx, db.DeleteRootCheckpointAnchorsParams{ProjectID: projectID, RootKey: root})
 }
 
-func (s *Memory) DropRootCheckpoints(ctx context.Context, projectID, root string) error {
+func (r *memoryRewind) DropRootCheckpoints(ctx context.Context, projectID, root string) error {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -166,8 +174,8 @@ func (s *Memory) DropRootCheckpoints(ctx context.Context, projectID, root string
 
 // ReadCheckpointForRewind reads metadata by its durable session and anchor,
 // independently of the project's current primary root or blob retention.
-func (s *SQL) ReadCheckpointForRewind(ctx context.Context, session, anchor string) (string, error) {
-	raw, err := s.queries.GetCheckpointRewindManifest(ctx, db.GetCheckpointRewindManifestParams{
+func (r *sqlRewind) ReadCheckpointForRewind(ctx context.Context, session, anchor string) (string, error) {
+	raw, err := r.core.queries.GetCheckpointRewindManifest(ctx, db.GetCheckpointRewindManifestParams{
 		SessionID: session, AnchorID: anchor,
 	})
 	if db.IsNoRows(err) {
@@ -175,7 +183,9 @@ func (s *SQL) ReadCheckpointForRewind(ctx context.Context, session, anchor strin
 	}
 	return raw, err
 }
-func (s *Memory) ReadCheckpointForRewind(ctx context.Context, session, anchor string) (string, error) {
+
+func (r *memoryRewind) ReadCheckpointForRewind(ctx context.Context, session, anchor string) (string, error) {
+	s := r.core
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}

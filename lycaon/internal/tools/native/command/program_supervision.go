@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -55,7 +56,7 @@ func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
 	}
 	jobs, ok := s.sessions[sessionID]
 	if !ok {
-		jobs = &SessionJobs{Registry: s.Background, Supervisor: s, SessionID: sessionID, RootSessionID: sessionID, ProjectID: projectID}
+		jobs = &SessionJobs{Registry: s.Background, Supervisor: s, SessionID: sessionID, ProjectID: projectID}
 		s.sessions[sessionID] = jobs
 	}
 	return jobs
@@ -77,7 +78,9 @@ func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontrac
 	if jobs == nil {
 		return "", ErrProgramStopped
 	}
-	return jobs.start(ctx, "background job "+invocation.Identity.ExecutionID, run)
+	return jobs.start(ctx, "background job "+invocation.Identity.ExecutionID, func(jobCtx context.Context, handle string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		return run(hitl.WithStopContext(jobCtx, jobCtx), handle, streams)
+	})
 }
 
 type supervisedProgram struct {
@@ -116,7 +119,7 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 		return toolcontract.ProducerResult{}, fmt.Errorf("program %s is already supervised", root.Identity.ProgramID)
 	}
 	program.sessionJobs = s.sessions[root.SessionID]
-	if admitted, ok := ctx.Value(sessionJobsKey{}).(*SessionJobs); ok && admitted != program.sessionJobs {
+	if admitted, ok := ctx.Value(sessionJobsKey{}).(programJobsBinding); ok && admitted.owner != program.sessionJobs {
 		s.mu.Unlock()
 		return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: toolcontract.EffectUnknown}, ErrProgramStopped
 	}
@@ -130,7 +133,9 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 	s.programs[root.Identity.ProgramID] = program
 	s.mu.Unlock()
 	defer s.foregroundDone(root.Identity.ProgramID)
-	result, err := run(context.WithValue(ctx, supervisedKey{}, root.Identity.ProgramID))
+	ctx = context.WithValue(ctx, supervisedKey{}, root.Identity.ProgramID)
+	// Approval waits follow supervision, including after the initiating turn ends.
+	result, err := run(hitl.WithStopContext(ctx, ctx))
 	switch cause := context.Cause(ctx); {
 	case errors.Is(cause, ErrProgramStopped), errors.Is(cause, errSupervisorLost), errors.Is(cause, ErrProgramInterrupted):
 		stopped := toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: result.EffectCertainty}
@@ -349,7 +354,7 @@ func (s *ProgramSupervisor) DisposeSession(ctx context.Context, sessionID string
 	}
 	s.Stop(sessionID)
 	if s.Background != nil {
-		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID); err != nil {
+		if err := s.Background.Lifecycle.DisposeSession(ctx, sessionID, bgprocess.TerminationReasonFromContext(ctx, bgprocess.TerminationChatDeleted)); err != nil {
 			return err
 		}
 	}

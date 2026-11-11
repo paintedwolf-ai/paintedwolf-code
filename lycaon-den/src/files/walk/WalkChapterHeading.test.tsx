@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AppStore } from "../../store/app-state-model.ts";
@@ -37,8 +38,7 @@ describe("Live chapter navigation", () => {
     render(() => <WalkChapterHeading projectId="p1" onRevealInTranscript={reveal} />);
 
     expect(screen.getByTestId("walk-chapter-heading").textContent).toContain("Turn 5");
-    expect(screen.queryByRole("button", { name: /jump to turn/i })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Show in chat" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("show-in-chat"), "button"));
     expect(reveal).toHaveBeenCalledWith({
       sessionId: "s1",
       anchor: { chicklet: "message", anchorId: "s1-user-5" },
@@ -46,7 +46,7 @@ describe("Live chapter navigation", () => {
 
     setWalkAt("p1", 0);
     await waitFor(() => expect(screen.getByTestId("walk-chapter-heading").textContent).toContain("Turn 2"));
-    fireEvent.click(screen.getByRole("button", { name: "Show in chat" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("show-in-chat"), "button"));
     expect(reveal).toHaveBeenLastCalledWith({
       sessionId: "s1",
       anchor: { chicklet: "message", anchorId: "s1-user-2" },

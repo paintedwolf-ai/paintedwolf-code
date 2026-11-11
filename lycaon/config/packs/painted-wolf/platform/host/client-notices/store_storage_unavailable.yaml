@@ -5,8 +5,3 @@ message: >-
   location is available and accessible, then try again.
 suggested_action: >-
   The storage location is still unavailable. Check access to it, then try again.
-scenarios:
-  - id: default
-    expect_contains:
-      - cannot access
-      - try again

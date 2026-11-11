@@ -94,11 +94,12 @@ func (m *SlowMockScanner) Run(ctx context.Context, req ScanRequest) (*scanoutput
 
 // MockRegistry wraps a scanner for runner tests.
 type MockRegistry struct {
-	Scanner  CodeScanner
-	Scanners []CodeScanner
-	Runtime  scancatalog.RuntimePolicy
-	Driver   string
-	Command  []string
+	Scanner   CodeScanner
+	Scanners  []CodeScanner
+	Runtime   scancatalog.RuntimePolicy
+	Driver    string
+	Command   []string
+	Contracts map[string]scancatalog.ScannerContract
 }
 
 func (r *MockRegistry) Register(_ CodeScanner) error { return nil }
@@ -127,7 +128,13 @@ func (r *MockRegistry) List(categories ...api.ScanCategory) []ScannerMeta {
 			ScopeKind: string(scancatalog.ScopeCustom), Categories: []string{string(api.ScanCategorySecurity)},
 			Runtime: r.Runtime, Command: append([]string(nil), r.Command...),
 		}
-		out = append(out, ScannerMeta{ID: scanner.ID(), Categories: scanner.Categories(), Contract: entry.Contract()})
+		contract := entry.Contract()
+		if r.Contracts != nil {
+			if override, ok := r.Contracts[scanner.ID()]; ok {
+				contract = override
+			}
+		}
+		out = append(out, ScannerMeta{ID: scanner.ID(), Categories: scanner.Categories(), Contract: contract})
 	}
 	return out
 }

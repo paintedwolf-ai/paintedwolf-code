@@ -34,22 +34,32 @@ const (
 )
 
 type pathMatch struct {
-	project project.Project
-	kind    matchKind
-	rootLen int
+	project      project.Project
+	kind         matchKind
+	isSingleRoot bool
+	rootLen      int
 }
 
-// ResolvePath matches a path against existing project roots, preferring exact matches over ancestors.
+// ResolvePath matches a path against existing project primary roots, preferring
+// exact single-root matches over multi-root or ancestor matches.
 func ResolvePath(projects []project.Project, path string) api.CLIOpenEvent {
 	want := canonical(path)
 	var best *pathMatch
 	for _, p := range projects {
 		for _, r := range p.Roots {
+			if len(p.Roots) > 1 && !r.IsPrimary {
+				continue
+			}
 			kind, rootLen := classify(canonical(r.Path), want)
 			if kind == matchNone {
 				continue
 			}
-			candidate := pathMatch{project: p, kind: kind, rootLen: rootLen}
+			candidate := pathMatch{
+				project:      p,
+				kind:         kind,
+				isSingleRoot: len(p.Roots) == 1,
+				rootLen:      rootLen,
+			}
 			if best == nil || better(candidate, *best) {
 				winner := candidate
 				best = &winner
@@ -78,10 +88,13 @@ func classify(root, want string) (matchKind, int) {
 	return matchAncestor, len(root)
 }
 
-// better ranks exact and deeper path matches first.
+// better ranks exact matches, single-root projects, and deeper ancestor roots first.
 func better(a, b pathMatch) bool {
 	if a.kind != b.kind {
 		return a.kind > b.kind
+	}
+	if a.kind == matchExact && a.isSingleRoot != b.isSingleRoot {
+		return a.isSingleRoot
 	}
 	if a.kind == matchAncestor && a.rootLen != b.rootLen {
 		return a.rootLen > b.rootLen

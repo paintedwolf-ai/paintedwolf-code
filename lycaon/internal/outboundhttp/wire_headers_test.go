@@ -29,14 +29,17 @@ func TestWireCaptureKeepsFinalBlockInReceivedOrder(t *testing.T) {
 }
 
 func TestBoundConnectLimitsEachDial(t *testing.T) {
+	const limit = 20 * time.Millisecond
 	transport := &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		if deadline, ok := ctx.Deadline(); !ok || deadline.After(time.Now().Add(limit)) {
+			t.Errorf("dial deadline = %v, %t; want within %v", deadline, ok, limit)
+		}
 		<-ctx.Done()
 		return nil, ctx.Err()
 	}}
-	boundConnect(transport, 20*time.Millisecond)
-	started := time.Now()
-	if _, err := transport.DialContext(context.Background(), "tcp", "192.0.2.1:80"); !errors.Is(err, context.DeadlineExceeded) || time.Since(started) > 2*time.Second {
-		t.Fatalf("dial was not bounded: %v after %v", err, time.Since(started))
+	boundConnect(transport, limit)
+	if _, err := transport.DialContext(context.Background(), "tcp", "192.0.2.1:80"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("dial was not bounded: %v", err)
 	}
 	unbounded := &http.Transport{}
 	boundConnect(unbounded, time.Second)

@@ -11,13 +11,13 @@ import (
 // CompletionBudget records the controls an adapter actually applied to one
 // attempt. It is shared only until that attempt's terminal result is received.
 type CompletionBudget struct {
-	Strict             bool `json:"-" yaml:"-"`
+	ReducedReasoning   bool `json:"-" yaml:"-"`
 	MaxTokens          int  `json:"-" yaml:"-"`
 	CanReduceReasoning bool `json:"-" yaml:"-"`
 }
 
-func (req CompletionRequest) StrictOutputBudget() bool {
-	return req.ThinkingOverride == nil && (req.StrictBudget || SessionStrictBudget(req.Debug.SessionID))
+func (req CompletionRequest) ReduceReasoning() bool {
+	return req.ThinkingOverride == nil && (req.ReasoningRecovery || SessionReasoningRecovery(req.Debug.SessionID))
 }
 
 func (req CompletionRequest) RecordBudget(maxTokens int, reasoning, reduced any) {
@@ -25,8 +25,8 @@ func (req CompletionRequest) RecordBudget(maxTokens int, reasoning, reduced any)
 		return
 	}
 	req.AttemptBudget.MaxTokens = maxTokens
-	req.AttemptBudget.Strict = req.StrictOutputBudget()
-	req.AttemptBudget.CanReduceReasoning = req.ThinkingOverride == nil && !req.StrictOutputBudget() && !reflect.DeepEqual(reasoning, reduced)
+	req.AttemptBudget.ReducedReasoning = req.ReduceReasoning()
+	req.AttemptBudget.CanReduceReasoning = req.ThinkingOverride == nil && !req.ReduceReasoning() && !reflect.DeepEqual(reasoning, reduced)
 }
 
 // Tool requests reserve answer room plus a bounded reasoning allowance. These
@@ -50,9 +50,6 @@ func CompletionTokenLimit(req CompletionRequest, catalog, fallback int, level Th
 		if catalog <= 0 || limit > room {
 			limit = room
 		}
-	}
-	if req.StrictOutputBudget() && (limit <= 0 || limit > StrictMaxTokens) {
-		limit = StrictMaxTokens
 	}
 	if req.MaxTokens > 0 {
 		limit = req.MaxTokens
@@ -84,27 +81,25 @@ func CapOutputTokens(limit, explicit, catalog int) int {
 	return limit
 }
 
-// Bounded: sessionID -> armed. A strict-budget mark is a hint for the next
-// turn, so eviction costs one recomputed mark and never a wrong budget.
-var sessionStrictBudget = scopedstore.New[struct{}](scopedstore.DefaultEntries)
+// Session recovery lowers reasoning on the next attempt without changing answer limits.
+var sessionReasoningRecovery = scopedstore.New[struct{}](scopedstore.DefaultEntries)
 
-// MarkSessionStrictBudget arms tighter caps on the next turn for sessionID after
-// a completion carried excessive hidden reasoning tokens.
-func MarkSessionStrictBudget(sessionID string) {
+// MarkSessionReasoningRecovery lowers reasoning after excessive hidden reasoning.
+func MarkSessionReasoningRecovery(sessionID string) {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return
 	}
-	sessionStrictBudget.Store(sessionID, struct{}{})
+	sessionReasoningRecovery.Store(sessionID, struct{}{})
 }
 
-// SessionStrictBudget reports whether a prior turn triggered closed-loop downgrade.
-func SessionStrictBudget(sessionID string) bool {
+// SessionReasoningRecovery reports whether a prior reply reduced reasoning.
+func SessionReasoningRecovery(sessionID string) bool {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return false
 	}
-	_, ok := sessionStrictBudget.Load(sessionID)
+	_, ok := sessionReasoningRecovery.Load(sessionID)
 	return ok
 }
 
@@ -117,17 +112,16 @@ func NoteCompletionTurnBudget(sessionID string, maxTokens, completionTokens, est
 	if hidden < maxTokens-maxTokens/4 {
 		return
 	}
-	MarkSessionStrictBudget(sessionID)
+	MarkSessionReasoningRecovery(sessionID)
 }
 
-// ResetTurnBudgetForTest clears session strict state in place, since turn
-// goroutines read sessionStrictBudget concurrently.
+// ResetTurnBudgetForTest clears recovery state without replacing the shared store.
 func ResetTurnBudgetForTest() {
-	sessionStrictBudget.Clear()
+	sessionReasoningRecovery.Clear()
 }
 
-// ClearSessionStrictBudget disarms a strict mark after a useful bounded response.
-func ClearSessionStrictBudget(sessionID string) { sessionStrictBudget.Delete(sessionID) }
+// ClearSessionReasoningRecovery restores reasoning after a useful response.
+func ClearSessionReasoningRecovery(sessionID string) { sessionReasoningRecovery.Delete(sessionID) }
 
 // TurnClass groups completion requests for request-control policy.
 type TurnClass string
@@ -143,8 +137,6 @@ const (
 	MinimumReasoningEffort = "low"
 	// Base answer room for tool-driven turns, before reasoning allowance.
 	OrchestrationMaxTokens = 16384
-	// Runaway turns use this tighter ceiling next.
-	StrictMaxTokens = 4096
 )
 
 var openTurnSurfaces = map[string]struct{}{

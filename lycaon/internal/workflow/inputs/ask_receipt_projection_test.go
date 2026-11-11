@@ -163,6 +163,11 @@ func TestAnswerProjectionUpdatesOnlyTheMatchingAskToolRow(t *testing.T) {
 	if answer.Response != "retained answer" || answer.PhaseID != "phase" {
 		t.Fatalf("answer projection=%+v", answer)
 	}
+	rows.rows[0] = rows.updated[0]
+	cards.PersistAskUserAnswerForToolCall(t.Context(), "session", "operation", AskUserAnswerBody{Status: "answered", PhaseID: "phase", Response: "retained answer"})
+	if len(rows.updated) != 1 {
+		t.Fatalf("expected idempotent ask answer persistence to skip unchanged row, got %d updates", len(rows.updated))
+	}
 }
 func TestAskToolPreservesStructuredRequestRejection(t *testing.T) {
 	reg := tools.NewDefaultRegistry()

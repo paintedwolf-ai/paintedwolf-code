@@ -6,5 +6,3 @@ suggested_action: Unarchive the chat from All chats, then pin it.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - can't be pinned

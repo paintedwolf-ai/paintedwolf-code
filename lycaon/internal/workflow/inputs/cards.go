@@ -66,6 +66,9 @@ func (m *Cards) PersistAskUserAnswerForToolCall(ctx context.Context, sessionID, 
 		if tool := strings.TrimSpace(msg.ToolResult.Tool); tool != "" && tool != "ask_user" {
 			continue
 		}
+		if msg.Content == content && msg.ToolResult.Content == content && msg.ToolResult.Tool == "ask_user" {
+			return
+		}
 		updated := msg
 		updated.Content = content
 		tr := *msg.ToolResult

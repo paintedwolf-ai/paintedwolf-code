@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -178,9 +179,7 @@ func TestInternalErrorSanitized(t *testing.T) {
 			t.Fatalf("expected rendered user notice: %+v", response)
 		}
 		for _, private := range []string{"private database detail", "fixture-secret", "internal server error"} {
-			if strings.Contains(w.Body.String(), private) {
-				t.Fatalf("response disclosed %q: %s", private, w.Body.String())
-			}
+			exposure.Absent(t, w.Body.String(), private)
 		}
 		if canonical == "" {
 			canonical = w.Body.String()

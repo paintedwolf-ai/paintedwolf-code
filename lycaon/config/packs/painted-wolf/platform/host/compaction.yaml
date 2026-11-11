@@ -7,6 +7,10 @@ window_source: auto
 live_budget_pct: 75
 model_context_window: 131072
 
+# Absolute live budget ceiling. A smaller model window lowers the budget; a
+# larger one never raises it.
+max_live_budget_tokens: 196608
+
 # Protected tail length.
 prune_protect_tail_messages: 8
 
@@ -45,6 +49,11 @@ max_worker_grounding_retries: 3
 # Coordinator grounding-rejection limits for one turn and closeout cycle.
 max_grounding_rejects_per_turn: 8
 max_grounding_rejects_per_cycle: 4
+
+# Refused waits one unpublished update may cost before the host reports worker
+# state itself, or permits a silent wait. Stays below the doom-loop bound on
+# identical rejected calls, or that guard would refuse the wait this permits.
+max_wait_visibility_repairs: 1
 
 # Repairs a run report may make to its document fields; separate from citation
 # friction, since a document repair adds conclusions rather than references.

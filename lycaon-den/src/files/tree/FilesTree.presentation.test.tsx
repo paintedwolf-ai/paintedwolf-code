@@ -1,4 +1,5 @@
 import { resetEditorPrefsForTests } from "../../settings/editor/editor-prefs.ts";
+import { assertNamedControl } from "../../test/controls.ts";
 import { createSignal } from "solid-js";
 import { describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor } from "@solidjs/testing-library";
@@ -36,7 +37,6 @@ describe("Files presentation lifecycle", () => {
       disclosures: [{ address: { root_id: "r1", path: "." }, open: true, recursive: true }] }));
     expect(getFileRow("README.md")).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
   });
 
   it("retains complete rows during preparation and reports host directory failures", async () => {
@@ -337,11 +337,11 @@ it("mounts row affordances only while a row is hovered or focused", async () => 
   mount(fixture);
   const file = await findFileRow("README.md");
   const fileRow = file.closest<HTMLElement>("[data-files-ctx='tree-row']")!;
-  expect(screen.queryByRole("button", { name: "More actions for README.md" })).toBeNull();
+  expect(screen.queryByTestId("files-tree-more-actions")).toBeNull();
   fireEvent.mouseOver(fileRow);
-  expect(screen.getByRole("button", { name: "More actions for README.md" })).toBeTruthy();
+  expect(assertNamedControl(fileRow.querySelector<HTMLButtonElement>('[data-testid="files-tree-more-actions"]')!, "button")).toBeTruthy();
   fireEvent.mouseOut(fileRow, { relatedTarget: document.body });
-  expect(screen.queryByRole("button", { name: "More actions for README.md" })).toBeNull();
+  expect(screen.queryByTestId("files-tree-more-actions")).toBeNull();
   const dirRow = button("src").closest<HTMLElement>("[data-files-ctx='tree-row']")!;
   expect(screen.queryByTestId("files-tree-new-file")).toBeNull();
   fireEvent.focusIn(button("src"));

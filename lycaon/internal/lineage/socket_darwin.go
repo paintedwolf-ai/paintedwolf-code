@@ -22,13 +22,7 @@ func SocketsOf(pid int) ([]SocketObservation, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := sockets[:0]
-	for _, socket := range sockets {
-		if socket.Protocol == ProtocolTCP {
-			out = append(out, socket)
-		}
-	}
-	return out, nil
+	return tcpOnly(sockets), nil
 }
 
 // observeSockets reads every TCP and UDP socket one current incarnation holds.
@@ -67,9 +61,22 @@ func observeSockets(pid int) ([]SocketObservation, error) {
 		// Keep opaque kernel pointers out of logs and later receipt projections.
 		identity := sha256.Sum256([]byte(fmt.Sprintf("darwin-%s:%d:%d:%d", protocol, row.socket_handle, row.pcb_handle, row.generation)))
 		result = append(result, SocketObservation{
-			Protocol: protocol, Local: netip.AddrPortFrom(local, uint16(row.local_port)), Remote: netip.AddrPortFrom(remote, uint16(row.remote_port)),
-			ResourceID: fmt.Sprintf("%s:%x", protocol, identity), Listening: row.listening != 0, Holder: holder, handle: uint64(row.socket_handle),
+			sharedBind: row.shared_bind != 0,
+			Protocol:   protocol, Local: netip.AddrPortFrom(local, uint16(row.local_port)), Remote: netip.AddrPortFrom(remote, uint16(row.remote_port)),
+			ResourceID: fmt.Sprintf("%s:%x", protocol, identity), Listening: row.listening != 0, IPv6Only: row.ipv6_only != 0, Holder: holder, handle: uint64(row.socket_handle), uid: uint32(row.uid),
 		})
 	}
 	return result, nil
+}
+
+// tcpOnly keeps the TCP observations; loopback admission and lineage socket
+// ownership never consider UDP.
+func tcpOnly(sockets []SocketObservation) []SocketObservation {
+	out := sockets[:0]
+	for _, socket := range sockets {
+		if socket.Protocol == ProtocolTCP {
+			out = append(out, socket)
+		}
+	}
+	return out
 }

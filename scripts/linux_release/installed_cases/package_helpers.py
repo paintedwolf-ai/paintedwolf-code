@@ -16,6 +16,7 @@ PROBES = (
     # This fixed Go flag parser reports flag.ErrHelp through its normal exit(1).
     ("vault-helper", "pw-vault-identity", ("--help",), 1),
     ("decision-helper", "bialy", ("--help",), 0),
+    ("generation-helper", "nativegen", ("--help",), 0),
     ("git-runtime", "git-observer", ("--version",), 0),
     ("git-lfs-runtime", "git-lfs-observer", ("version",), 0),
     ("browser-runtime", "browser-observer", ("--version",), 0),

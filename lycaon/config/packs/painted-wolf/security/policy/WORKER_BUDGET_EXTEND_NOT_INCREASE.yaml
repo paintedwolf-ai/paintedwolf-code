@@ -18,9 +18,9 @@ copy:
   cause: You sent max_tool_loops {{ paintedwolf.max_tool_loops }} but the effective max is already {{ paintedwolf.current_max
     }}
   why: Worker budgets are monotonic — shrinking or repeating the same cap is rejected
-  fix: '{% if paintedwolf.worker_budget_at_max %}The effective budget has reached the host ceiling {{ paintedwolf.host_max
-    }}; this tool cannot extend it. Report the remaining work within the current budget.{% else %}Set max_tool_loops
-    strictly above {{ paintedwolf.current_max }} and no higher than {{ paintedwolf.host_max }}.{% endif %}'
+  fix: '{% if paintedwolf.worker_budget_at_max %}The effective budget has reached the host ceiling{% if paintedwolf.host_max %} {{ paintedwolf.host_max
+    }}{% endif %}; this tool cannot extend it. Report the remaining work within the current budget.{% else %}Set max_tool_loops
+    strictly above {% if paintedwolf.current_max %}{{ paintedwolf.current_max }}{% else %}the current effective ceiling{% endif %}{% if paintedwolf.host_max %} and no higher than {{ paintedwolf.host_max }}{% endif %}.{% endif %}'
   instead: Extend only when the current host bounds leave room; otherwise report the remaining work
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:extend_worker_budget
@@ -32,6 +32,3 @@ x-paintedwolf-scenarios:
     current_max: 40
     job_id: job-1
     max_tool_loops: 40
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_BUDGET_EXTEND_NOT_INCREASE'

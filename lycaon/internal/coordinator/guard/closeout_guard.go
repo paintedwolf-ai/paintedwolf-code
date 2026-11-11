@@ -1,3 +1,3 @@
 package guard
 
-const CoordinatorCloseoutEnvelopeOnlyCode = "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY"
+const CoordinatorCloseoutNoAnswerCode = "COORDINATOR_CLOSEOUT_NO_ANSWER"

@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -50,6 +51,13 @@ func (*resourceSocketReview) ApprovalReviewSuppressed(context.Context, string, s
 }
 
 func TestHostResourceSocketCoverageFollowsRealBindingAtCapabilitiesOwner(t *testing.T) {
+	for _, operation := range []string{"http_request", "command"} {
+		t.Run(operation, func(t *testing.T) { assertHostResourceSocketBinding(t, operation) })
+	}
+}
+
+func assertHostResourceSocketBinding(t *testing.T, operation string) {
+	t.Helper()
 	ctx := socketInvocationContext(t)
 	root := shortTempDir(t)
 	path := filepath.Join(root, "service")
@@ -67,7 +75,15 @@ func TestHostResourceSocketCoverageFollowsRealBindingAtCapabilitiesOwner(t *test
 	tc.Host.RealizationSockets = []string{path}
 	tc.Host.HostResources = []string{"fixture-service"}
 	args := map[string]any{"url": "http://service.invalid/", "unix_socket": path}
-	first, err := executor.Capabilities.preflightSocketCapability(ctx, "http_request", args, tc)
+	if operation == "command" {
+		contract, ok := toolcontract.Lookup(operation)
+		if !ok {
+			t.Fatal("command contract is unavailable")
+		}
+		tc.Invocation.Contract = contract
+		args = map[string]any{"command": "external -- fixture-client", "capability_request": map[string]any{"socket_paths": []any{path}}}
+	}
+	first, err := executor.Capabilities.preflightSocketCapability(ctx, operation, args, tc)
 	testutil.FailErr(t, "retained request reaches explicit socket approval", err)
 	if review.calls != 1 || first.AuthorizationSource != authzledger.AuthorizationSourceHuman {
 		t.Fatalf("pathname lease covered retained request: calls=%d, source=%s", review.calls, first.AuthorizationSource)
@@ -80,7 +96,7 @@ func TestHostResourceSocketCoverageFollowsRealBindingAtCapabilitiesOwner(t *test
 	nextContext, scope := socketref.WithScope(t.Context())
 	defer scope.Close()
 	tc.Identity.ToolCallID = "same-live-object"
-	same, err := executor.Capabilities.preflightSocketCapability(nextContext, "http_request", args, tc)
+	same, err := executor.Capabilities.preflightSocketCapability(nextContext, operation, args, tc)
 	testutil.FailErr(t, "reuse live object", err)
 	if review.calls != 1 || same.AuthorizationSource != authzledger.AuthorizationSourceLease || same.SocketGrants[0].Binding != grant.Binding {
 		t.Fatalf("live binding reuse = %+v, calls=%d", same, review.calls)
@@ -98,25 +114,14 @@ func TestHostResourceSocketCoverageFollowsRealBindingAtCapabilitiesOwner(t *test
 	replacementContext, replacementScope := socketref.WithScope(t.Context())
 	defer replacementScope.Close()
 	tc.Identity.ToolCallID = "replacement-object"
-	changed, err := executor.Capabilities.preflightSocketCapability(replacementContext, "http_request", args, tc)
+	changed, err := executor.Capabilities.preflightSocketCapability(replacementContext, operation, args, tc)
 	testutil.FailErr(t, "replacement reaches fresh socket review", err)
 	if review.calls != 2 || changed.AuthorizationSource != authzledger.AuthorizationSourceHuman || changed.SocketGrants[0].Binding == grant.Binding {
 		t.Fatalf("replacement inherited authority: %+v, calls=%d", changed, review.calls)
 	}
 	assertSocketLedgerSource(t, recorder.records, authzledger.ActionCapabilityGranted, authzledger.AuthorizationSourceHuman)
 	_ = original
-	// Only the explicit kernel-pathname realization may use resource pathname coverage.
-	resolved, err := filepath.EvalSymlinks(path)
-	testutil.FailErr(t, "kernel realization label", err)
-	kernel := confine.SocketGrant{ApprovedPath: path, ResolvedPath: resolved, Binding: socketref.Binding{Enforcement: socketref.KernelPathname}}
-	covered, extras := executor.Capabilities.permitCoveredHostResourceSockets(t.Context(), hitl.ProposedAction{}, "kernel-action", []confine.SocketGrant{kernel}, tc)
-	if !covered || len(extras) != 0 {
-		t.Fatalf("kernel pathname lease = %v, %+v", covered, extras)
-	}
-	assertSocketLedgerSource(t, recorder.records, authzledger.ActionCapabilityGranted, authzledger.AuthorizationSourceLease)
-	if got := runtime.AuthorizedGrants(tc.ChatSessionID(), hitl.EffectPermitIdentity{SessionID: tc.Identity.SessionID, ToolCallID: tc.Identity.ToolCallID}, "kernel-action", []confine.SocketGrant{kernel}); len(got) != 1 {
-		t.Fatal("kernel pathname permit was not issued")
-	}
+
 }
 
 func assertSocketLedgerSource(t *testing.T, records []authzledger.CapabilityRecord, action, source string) {

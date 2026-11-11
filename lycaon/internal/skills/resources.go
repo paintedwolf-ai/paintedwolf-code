@@ -3,20 +3,38 @@ package skills
 import (
 	"io/fs"
 	"os"
-	"slices"
 	"sort"
 	"strings"
 )
 
-const TemplateResourcesMetadata = "paintedwolf.template_resources"
-
-// Templates are an explicit pack feature; project resources remain literal.
+// Pack markdown references render through the skill template by default;
+// project resources remain literal.
 func (s Skill) TemplatesResource(resource string) bool {
-	return !s.Project && slices.Contains(s.TemplateResources(), resource)
+	return !s.Project && isPackMarkdownResource(resource)
 }
 
-func (s Skill) TemplateResources() []string {
-	return strings.FieldsFunc(s.Metadata[TemplateResourcesMetadata], func(r rune) bool { return r == '|' })
+func isPackMarkdownResource(resource string) bool {
+	return strings.HasPrefix(resource, "references/") && strings.HasSuffix(resource, ".md")
+}
+
+// MarkdownResources lists the bundled pack markdown references that render
+// through the skill template, from the skill's readable resource catalog.
+func (s Skill) MarkdownResources() []string {
+	if s.Project {
+		return nil
+	}
+	names := make([]string, 0, len(s.readableResources))
+	for name := range s.readableResources {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	var out []string
+	for _, name := range names {
+		if isPackMarkdownResource(name) {
+			out = append(out, name)
+		}
+	}
+	return out
 }
 
 type ResourceCatalog struct {

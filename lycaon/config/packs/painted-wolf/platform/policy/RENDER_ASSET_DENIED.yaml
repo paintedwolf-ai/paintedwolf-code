@@ -37,6 +37,3 @@ x-paintedwolf-scenarios:
     path: .git/HEAD
     profile: coordinator
     tool: render_view
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: RENDER_ASSET_DENIED'

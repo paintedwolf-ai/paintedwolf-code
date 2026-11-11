@@ -5,7 +5,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
-	"runtime"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -60,7 +60,7 @@ func TestHostExecutionSelectsExplicitUnconfinedCommand(t *testing.T) {
 }
 
 func TestProcessControlSignalsOwnedOutsideProcess(t *testing.T) {
-	self := requireSeatbelt(t)
+	self := requireLiveBoundary(t)
 	child := exec.CommandContext(t.Context(), "/bin/sleep", "60")
 	testutil.FailErr(t, "start owned process", child.Start())
 	defer func() { _ = child.Process.Kill(); _ = child.Wait() }()
@@ -71,15 +71,29 @@ func TestProcessControlSignalsOwnedOutsideProcess(t *testing.T) {
 		t.Fatal("ordinary sandbox reached outside process")
 	}
 	c.ProcessControl = true
-	if code, out := confinedRun(t, self, c, "/bin/kill", "-0", pid); code != 0 {
-		t.Fatalf("approved process control failed: %d %s", code, out)
+	code, out := confinedRun(t, self, c, "/bin/kill", "-0", pid)
+	if (code == 0) != processControlSignalsOutside {
+		t.Fatalf("process control reach: exit=%d want reach=%v: %s", code, processControlSignalsOutside, out)
+	}
+}
+
+// Process control changes signals only: the filesystem and network stay bounded.
+func TestProcessControlKeepsTheOtherBoundaries(t *testing.T) {
+	self := requireLiveBoundary(t)
+	root := t.TempDir()
+	c := confine.Confinement{Roots: []string{root}, Network: confine.NetworkDeny, ProcessControl: true}
+	if code := confinedExit(t, self, c, "/usr/bin/touch", filepath.Join(root, "ok")); code != 0 {
+		t.Fatalf("project write exit=%d", code)
+	}
+	if code := confinedExit(t, self, c, "/usr/bin/touch", filepath.Join(outsideTemporaryWriteRoots(t), "escape")); code == 0 {
+		t.Fatal("process control opened a write outside the roots")
+	}
+	if code := confinedExit(t, self, c, "/usr/bin/curl", "-s", "--max-time", "3", "http://example.com"); code == 0 {
+		t.Fatal("process control opened the network")
 	}
 }
 
 func TestHostExecutionRunsSetuidProcessInspection(t *testing.T) {
-	if runtime.GOOS != "darwin" {
-		t.Skip("macOS setuid process inspection fixture")
-	}
 	root := t.TempDir()
 	c, _ := confine.DefaultConfinement(confine.Request{HostExecution: true, Roots: []string{root}})
 	identity := confine.EgressCommand{SessionID: "synthetic-session", ToolCallID: "host-process-inspection", ProjectDir: root}

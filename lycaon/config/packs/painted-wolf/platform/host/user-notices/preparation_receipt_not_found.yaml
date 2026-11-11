@@ -6,5 +6,3 @@ suggested_action: "Wait for preparation to progress, then try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "has not reached"

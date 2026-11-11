@@ -8,33 +8,11 @@ import (
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 )
 
-func loadCompactor(svc *llm.Service, configRoot string, tracker cost.CostTracker) (compaction.ContextCompactor, error) {
-	cfg := compaction.DefaultCompactionConfig()
-
-	windows, winErr := modelinfo.LoadModelContextWindows()
-	if winErr != nil {
-		return nil, winErr
-	}
-	var policy llm.ModelPolicy
-	var lookup llm.ContextLengthLookup
-	if svc != nil {
-		if svc.Policy != nil {
-			var err error
-			policy, err = svc.Policy.Get(llm.SettingsScopeGlobal, "")
-			if err != nil {
-				return nil, err
-			}
-		}
-		if svc.Registry != nil {
-			lookup = svc.Registry
-		}
-	}
-	applied, _, err := llm.ApplyLiveBudget(cfg, policy, lookup, windows)
-	if err != nil {
+// loadCompactor binds no window: every use takes its config from session limits.
+func loadCompactor(svc *llm.Service, tracker cost.CostTracker) (compaction.ContextCompactor, error) {
+	if _, err := modelinfo.LoadModelContextWindows(); err != nil {
 		return nil, err
 	}
-	cfg = applied
-
 	var summarizer compaction.Summarizer
 	if svc != nil && svc.Registry != nil && svc.Policy != nil && llm.ProviderUtilityCallsEnabled() {
 		summarizer = svc.BindSummarizer(&llm.RegistrySummarizer{
@@ -43,7 +21,7 @@ func loadCompactor(svc *llm.Service, configRoot string, tracker cost.CostTracker
 			Class:   llm.UtilityClassBackground,
 		})
 	}
-	return compaction.NewSimpleCompactor(cfg, summarizer), nil
+	return compaction.NewSimpleCompactor(compaction.DefaultCompactionConfig(), summarizer), nil
 }
 
 func loadProfileRuntimeRules() *toolpolicy.ProfileRuntimeRules {

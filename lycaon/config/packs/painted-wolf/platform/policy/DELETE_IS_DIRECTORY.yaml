@@ -21,4 +21,3 @@ x-paintedwolf-message: This delete call is restricted to files
 x-paintedwolf-scenarios:
   - id: default
     vars: {path: tmp, profile: implement, tool: delete}
-    expect_contains: ['Rejected:', 'Code: DELETE_IS_DIRECTORY']

@@ -16,6 +16,11 @@ func RenderSkillProcedureBlock(ctx context.Context, renderer *prompts.InjectRend
 	}
 	block, err := anchor.RenderInform(ctx, anchor.InjectSkillProcedure,
 		anchor.MatchContext{Surface: surface, Profile: profileID, SessionID: sessionID}, renderer,
-		map[string]any{"skill_name": preload.Name, "skill_body": strings.TrimSpace(preload.Body), "trigger_tool": preload.Tool})
+		map[string]any{
+			"skill_name":      preload.Name,
+			"skill_body":      strings.TrimSpace(preload.Body),
+			"trigger_tool":    preload.Tool,
+			"skill_resources": preload.Resources,
+		})
 	return strings.TrimSpace(block), err
 }

@@ -125,8 +125,8 @@ func TestRequestDiscoveryPartialSelectionAndCancellation(t *testing.T) {
 	testutil.FailErr(t, "partial selection", err)
 	var result turnload.RequestToolsResult
 	testutil.FailErr(t, "decode partial result", json.Unmarshal([]byte(raw), &result))
-	// The exact name loads with its declared companion; the rest goes to discovery.
-	if !activation.Active("partial")["write"] || !activation.Active("partial")["edit"] || result.Discovery == nil || result.Discovery.Failure != turnload.RankingUnavailable {
+	// The exact name loads; the rest goes to discovery.
+	if !activation.Active("partial")["write"] || result.Discovery == nil || result.Discovery.Failure != turnload.RankingUnavailable {
 		t.Fatalf("partial=%s", raw)
 	}
 	_, err = reg.Run(t.Context(), "request_tools", map[string]any{"need": "read"}, tctx)
@@ -148,6 +148,7 @@ func TestRequestDiscoveryCursorSurvivesPartialActivation(t *testing.T) {
 		names = append(names, fmt.Sprintf("mcp_fixture_tool_%02d", i))
 	}
 	registerRequestFixtureTools(t, reg, names...)
+	enlargeDiscoveryFixtureCards(t, reg, names)
 	testutil.FailErr(t, "register discovery", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{Activation: activation, Boundary: fakeRequestBoundary{}}))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "partial-page"},
@@ -161,11 +162,12 @@ func TestRequestDiscoveryCursorSurvivesPartialActivation(t *testing.T) {
 	if result.Discovery == nil || result.Discovery.Total != 43 || result.Discovery.Entries[0].Name != names[1] || result.Discovery.NextNeed == "" {
 		t.Fatalf("partial page=%s", raw)
 	}
+	nextIndex := 1 + len(result.Discovery.Entries)
 	tctx.Turn.TurnToolPlan = toolsurface.Compile([]string{"request_tools", names[0]}, names[1:])
 	next, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": result.Discovery.NextNeed}, tctx)
 	testutil.FailErr(t, "continue after activation", err)
 	testutil.FailErr(t, "decode continuation", json.Unmarshal([]byte(next), &result))
-	if result.Discovery.Entries[0].Name != names[21] || len(activation.Active(tctx.Identity.SessionID)) != 1 {
+	if result.Discovery.Entries[0].Name != names[nextIndex] || len(activation.Active(tctx.Identity.SessionID)) != 1 {
 		t.Fatalf("continuation=%s", next)
 	}
 }
@@ -224,6 +226,7 @@ func TestRequestNoMatchDiscoveryReachesDeferredTask(t *testing.T) {
 	}
 	names = append(names, "task")
 	registerRequestFixtureTools(t, reg, append(names, "write")...)
+	enlargeDiscoveryFixtureCards(t, reg, names)
 	taskContract, ok := toolcontract.Lookup("task")
 	if !ok {
 		t.Fatal("task contract missing")
@@ -346,4 +349,41 @@ func TestRequestNoMatchLongNeedPreservesProviderDiscovery(t *testing.T) {
 		return
 	}
 	t.Fatal("provider projection lost the tool result")
+}
+
+func TestRequestFailureReportsExpandedSchemasWithoutDiscoveryLoop(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	ledger := turnload.NewLedger()
+	const name = "mcp_fixture_review"
+	testutil.FailErr(t, "register fixture", reg.RegisterDefinition(tools.Definition{
+		Meta:     tools.ToolMeta{Name: name, Description: "Review a change", Source: tools.ToolSourceMCP, SourceID: "fixture", ArgsSchema: map[string]any{"type": "object"}},
+		Contract: toolcontract.External("mcp:fixture"), Handler: func(context.Context, map[string]any, tools.ToolContext) (string, error) { return "", nil },
+	}))
+	ledger.BeginTurn("s", turnload.TurnOpening{Loadable: []string{name}}, turnload.Decision{})
+	testutil.FailErr(t, "register request", tools.RegisterRequestTools(reg, tools.RequestToolsDeps{
+		Activation: ledger, Boundary: fakeRequestBoundary{},
+		Resolve: func(_ context.Context, _ tools.ToolContext, need string, _ []turnload.ToolCard) turnload.RequestOutcome {
+			ledger.ExposeCatalog("s", turnload.RankingTimeout)
+			return turnload.RequestOutcome{Need: need, Abstained: true, Failure: turnload.RankingTimeout, FullCatalog: ledger.FullCatalog("s")}
+		},
+	}))
+	raw, err := reg.Run(t.Context(), "request_tools", map[string]any{"need": "review a change"}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s"}, Turn: tools.InvocationTurn{TurnToolPlan: toolsurface.Compile([]string{"request_tools"}, []string{name})}})
+	testutil.FailErr(t, "request after failure", err)
+	var result turnload.RequestToolsResult
+	testutil.FailErr(t, "decode result", json.Unmarshal([]byte(raw), &result))
+	if !result.FullCatalog || result.Discovery != nil || !ledger.Active("s")[name] || len(ledger.Needed("s")) != 0 {
+		t.Fatalf("fallback result = %+v; standing = %+v", result, ledger.Standing("s"))
+	}
+}
+
+func enlargeDiscoveryFixtureCards(t *testing.T, reg *tools.DefaultRegistry, names []string) {
+	t.Helper()
+	for _, name := range names {
+		definition, ok := reg.Definition(name)
+		if !ok {
+			t.Fatalf("missing fixture tool %s", name)
+		}
+		definition.Meta.Description = strings.Repeat("界", turnload.CardMaxRunes)
+		testutil.FailErr(t, "describe fixture tool", reg.RegisterDefinition(definition))
+	}
 }

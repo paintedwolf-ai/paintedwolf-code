@@ -43,6 +43,7 @@ func newScannerScriptFixture(t *testing.T) scannerScriptFixture {
 	scannerScriptFile(t, filepath.Join(f.root, "scripts/build-decide.sh"), "#!/bin/bash\nmkdir -p \"$(dirname \"$1\")\"\n: > \"$1\"\n")
 	scannerScriptFile(t, filepath.Join(f.root, "scripts/build-document-core.sh"), "#!/bin/bash\nmkdir -p \"$(dirname \"$2\")\"\n: > \"$2\"\nprintf '%s\\n' \"$2\"\n")
 	scannerScriptFile(t, filepath.Join(f.root, "scripts/stage-decide-heads.sh"), "#!/bin/bash\nexit 0\n")
+	scannerScriptFile(t, filepath.Join(f.root, "scripts/generation/run.sh"), "#!/bin/bash\nwhile [[ $# -gt 0 ]]; do\n  if [[ $1 == --output ]]; then mkdir -p \"$(dirname \"$2\")\"; : > \"$2\"; fi\n  shift\ndone\n")
 	scannerScriptFile(t, filepath.Join(f.tools, "rustc"), "#!/bin/bash\nprintf 'rustc\\n' >> \"$SCANNER_TEST_LOG\"\nprintf 'aarch64-apple-darwin\\n'\n")
 
 	scannerScriptFile(t, filepath.Join(f.tools, "go"), scannerGoStub)
@@ -251,7 +252,9 @@ func TestOpenGrepCandidateStageIsCheckoutScoped(t *testing.T) {
 	}
 }
 
-func TestOpenGrepDevTaskRepairsMissingStageAfterCacheHit(t *testing.T) {
+// The development build takes seed and signing inputs from outside the tree, so
+// Task keeps no source cache and every run restages the verified payload.
+func TestOpenGrepDevTaskRestagesOnEveryRun(t *testing.T) {
 	f := newScannerScriptFixture(t)
 	scannerScriptFile(t, filepath.Join(f.root, "Taskfile.yml"), contractcheck.ReadRepoFile(t, contractcheck.RepoRoot(t), "Taskfile.yml"))
 	// The wrapper runs the pinned Task from the fixture's tool directory.
@@ -275,22 +278,22 @@ func TestOpenGrepDevTaskRepairsMissingStageAfterCacheHit(t *testing.T) {
 		t.Fatalf("first build count=%d:\n%s", first, f.calls(t))
 	}
 	run()
-	if count := strings.Count(f.calls(t), "buildIdentityBase64=qualified-identity"); count != first {
-		t.Fatalf("unchanged verified build did not cache: %d", count)
+	if count := strings.Count(f.calls(t), "buildIdentityBase64=qualified-identity"); count != first+2 {
+		t.Fatalf("unchanged build did not restage: %d\n%s", count, f.calls(t))
 	}
 	contractcheck.FailErr(t, "remove staged artifact proof", os.Remove(filepath.Join(f.root, "lycaon-den/src-tauri/engine-root/bundled/proof")))
 	run()
-	if count := strings.Count(f.calls(t), "buildIdentityBase64=qualified-identity"); count != first+2 {
+	if count := strings.Count(f.calls(t), "buildIdentityBase64=qualified-identity"); count != first+4 {
 		t.Fatalf("missing payload did not rebuild: %d\n%s", count, f.calls(t))
 	}
 	scannerScriptFile(t, filepath.Join(f.root, "lycaon-den/src-tauri/engine-root/bundled/proof"), "changed")
 	run()
-	if count := strings.Count(f.calls(t), "buildIdentityBase64=qualified-identity"); count != first+4 {
+	if count := strings.Count(f.calls(t), "buildIdentityBase64=qualified-identity"); count != first+6 {
 		t.Fatalf("changed payload did not rebuild: %d\n%s", count, f.calls(t))
 	}
 	scannerScriptFile(t, filepath.Join(f.root, "lycaon/config/runtime/scanners/bundled-manifest.yaml"), "selected release changed\n")
 	run()
-	if count := strings.Count(f.calls(t), "buildIdentityBase64=qualified-identity"); count != first+6 {
+	if count := strings.Count(f.calls(t), "buildIdentityBase64=qualified-identity"); count != first+8 {
 		t.Fatalf("changed release pin did not rebuild: %d\n%s", count, f.calls(t))
 	}
 	if strings.Contains(f.calls(t), "sidecar|candidate=/explicit/candidate") {

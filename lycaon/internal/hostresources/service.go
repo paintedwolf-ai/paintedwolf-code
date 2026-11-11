@@ -93,7 +93,7 @@ func NewService(configDir string) (*Service, error) {
 func defaultConnectionSupport(platform string, connection Connection) bool {
 	switch connection.Mode {
 	case ConnectionNone, ConnectionProxy, ConnectionSOCKS,
-		ConnectionBaselineLoopback, ConnectionDynamic:
+		ConnectionBaselineLoopback, ConnectionDynamic, ConnectionCredentialStore:
 		return true
 	case ConnectionLocalService:
 		return platform == "macos" && connection.Transport == LocalServiceUnixSocket
@@ -468,7 +468,8 @@ func (s *Service) ResolveAction(
 				if connection.Target != "" {
 					request.DirectDestinations = append(request.DirectDestinations, connection.Target)
 				}
-			case ConnectionNone, ConnectionProxy, ConnectionSOCKS, ConnectionBaselineLoopback, ConnectionDynamic:
+			case ConnectionNone, ConnectionProxy, ConnectionSOCKS, ConnectionBaselineLoopback,
+				ConnectionDynamic, ConnectionCredentialStore:
 			}
 		}
 	}

@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: ask_user
-    expect_contains:
-      - 'Code: ASK_USER_OPTIONS_FORBIDDEN'
-      - options

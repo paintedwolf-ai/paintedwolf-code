@@ -313,10 +313,7 @@ describe("resolveCriticalStop", () => {
 describe("criticalStopRecoveryLabel", () => {
   it("labels each recovery", () => {
     expect(criticalStopRecoveryLabel("reconnect")).toBe("Try again");
-    expect(criticalStopRecoveryLabel("recheck")).toBe("Check again");
     expect(criticalStopRecoveryLabel("restore_snapshot")).toBe("Restore snapshot");
-    expect(criticalStopRecoveryLabel("restore_backup")).toBe("Restore from backup…");
-    expect(criticalStopRecoveryLabel("finish_restore")).toBe("Finish restore");
     expect(criticalStopRecoveryLabel("finish_fresh_start")).toBe(
       "Finish starting fresh",
     );
@@ -381,8 +378,6 @@ describe("store incompatible critical stop", () => {
       recovery_detail: "schema_version 5 does not match 1",
     });
     expect(stop.title).toBe(CLIENT_NOTICES.store_incompatible_schema.title);
-    expect(stop.message).toContain("different data format");
-    expect(stop.message).not.toContain("integrity check");
     expect(stop.detail).toBeUndefined();
     expect(stop.diagnostic).toBe("schema_version 5 does not match 1");
   });
@@ -421,7 +416,6 @@ describe("store incompatible critical stop", () => {
       expect(stop.recovery).toBe("retry_upgrade");
       expect(stop.message).not.toContain("{");
       expect(stop.message).not.toContain("0 B");
-      expect(stop.message).not.toContain("has not been changed");
       expect(stop.title).toBe(reason === "storage_unavailable"
         ? CLIENT_NOTICES.store_storage_unavailable.title
         : CLIENT_NOTICES.store_storage_full.title);

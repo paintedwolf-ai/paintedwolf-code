@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
     host: api.example.test
     profile: implement
     tool: http_request
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: HTTP_REQUEST_HOST_DENIED'

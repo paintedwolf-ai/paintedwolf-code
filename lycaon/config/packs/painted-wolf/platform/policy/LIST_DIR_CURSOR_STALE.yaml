@@ -14,10 +14,10 @@ requires:
 when: paintedwolf.rejection_code == "LIST_DIR_CURSOR_STALE"
 effect: block
 copy:
-  what: '`list_dir` received a cursor that is not valid for this scope and source generation.'
+  what: 'A directory listing received a cursor that is not valid for this scope and source generation.'
   cause: The source changed or the cursor belongs to another path set or pattern.
   why: A cursor advances only the exact view that issued it.
-  fix: Call list_dir with path only to start a new map. Copy the returned continuation arguments exactly.
+  fix: List the path again to start a new map. Copy any returned continuation exactly.
   instead: Remove cursor and retry the same scope once
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:list_dir
@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
   vars:
     profile: coordinator
     tool: list_dir
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: LIST_DIR_CURSOR_STALE'

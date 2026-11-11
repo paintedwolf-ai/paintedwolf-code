@@ -50,7 +50,7 @@ func gatedSupervisedSleep(t *testing.T, gate string, launchGrace time.Duration) 
 	created, err := newRunGuard(ProcessPriorityNormal)
 	testutil.FailErr(t, "create guard", err)
 	guard := created.(*unixGuard)
-	guard.launchGrace = launchGrace
+	guard.timers.launchGrace = launchGrace
 	t.Cleanup(guard.release)
 	guard.configure(cmd)
 	testutil.FailErr(t, "start supervisor", cmd.Start())

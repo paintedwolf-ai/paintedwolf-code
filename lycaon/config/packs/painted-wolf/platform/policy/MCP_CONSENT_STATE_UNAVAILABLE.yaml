@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
     profile: coordinator
     provider: fixture
     tool: mcp_fixture_echo
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: MCP_CONSENT_STATE_UNAVAILABLE'

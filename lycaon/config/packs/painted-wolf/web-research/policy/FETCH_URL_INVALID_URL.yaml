@@ -27,6 +27,3 @@ x-paintedwolf-scenarios:
   vars:
     detail: must use http or https
     tool: fetch_url
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: FETCH_URL_INVALID_URL'

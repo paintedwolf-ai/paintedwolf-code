@@ -52,8 +52,8 @@ def file_digest(path):
 
 def download(url, destination):
     subprocess.run([
-        "curl", "--fail", "--location", "--silent", "--show-error", "--retry", "3",
-        "--max-time", "30", "--max-filesize", str(MAX_ARCHIVE_BYTES),
+        "curl", "--fail", "--location", "--silent", "--show-error", "--retry", "20", "--retry-all-errors", "--retry-delay", "30",
+        "--connect-timeout", "20", "--max-time", "600", "--max-filesize", str(MAX_ARCHIVE_BYTES),
         "--output", str(destination), url,
     ], check=True)
 

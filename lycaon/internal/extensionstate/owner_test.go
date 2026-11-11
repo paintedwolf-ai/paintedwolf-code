@@ -323,7 +323,7 @@ func TestDisablingStockToolSchemaUnitAcceptsCandidate(t *testing.T) {
 	res, err := owner.Apply(t.Context(), extensionstate.Intent{
 		Scope:            extensionstate.Scope{Kind: "device"},
 		ExpectedRevision: before,
-		Op:               extensionstate.SetUnitDisabledOp{UnitID: "tools/schemas/write", Disabled: true},
+		Op:               extensionstate.SetUnitDisabledOp{UnitID: "tools/schemas/parse_validate", Disabled: true},
 	})
 	testutil.FailErr(t, "disable stock tool schema unit", err)
 	if res.Revision == before {
@@ -335,7 +335,7 @@ func TestDisablingStockToolSchemaUnitAcceptsCandidate(t *testing.T) {
 	testutil.FailErr(t, "load desired", loadErr)
 	found := false
 	for _, id := range desired.Disabled {
-		if id == "tools/schemas/write" {
+		if id == "tools/schemas/parse_validate" {
 			found = true
 		}
 	}

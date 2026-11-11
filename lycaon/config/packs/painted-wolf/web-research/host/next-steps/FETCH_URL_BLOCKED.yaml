@@ -1,0 +1,7 @@
+steps:
+  - tool: "capture_page"
+    say: "For an intended local project page, {{ call }} can operate within its own target and approval rules."
+    otherwise: "This response offers no local-page capture recovery; report the required local access instead of routing around the boundary."
+    or:
+      - tool: "measure_page"
+        say: "For an intended local project page, {{ call }} can operate within its own target and approval rules."

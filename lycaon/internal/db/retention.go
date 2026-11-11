@@ -49,6 +49,7 @@ type RetentionReport struct {
 	// BlobFindings counts aged per-file findings cache rows removed.
 	BlobFindings        int64
 	IncrementalVacuumed bool
+	Vacuum              VacuumPass
 	FTSOptimized        []string
 }
 
@@ -64,8 +65,15 @@ func (r RetentionReport) JournalDeleted(table string) int64 {
 	return r.OperationJournals[table]
 }
 
-// RunRetention removes one bounded batch of stale store rows.
+// RunRetention removes one bounded batch of stale store rows and returns one
+// bounded vacuum pass of free pages to the file system.
 func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (RetentionReport, error) {
+	return runMaintenancePass(ctx, sqlDB, cfg, true)
+}
+
+// A pass without row work leaves the journal scans to the next wake: their cost
+// grows with retained rows and frees few of the pages a drain is returning.
+func runMaintenancePass(ctx context.Context, sqlDB Handle, cfg RetentionConfig, rowsDue bool) (RetentionReport, error) {
 	var rep RetentionReport
 	if sqlDB == nil || !cfg.Enabled {
 		return rep, nil
@@ -75,98 +83,57 @@ func RunRetention(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (Reten
 		return rep, err
 	}
 	defer release()
-	if store, ok := sqlDB.(*Store); ok {
-		pending, err := store.IntegrityAuditPending(ctx)
+	if rowsDue {
+		pending := false
+		if store, ok := sqlDB.(*Store); ok {
+			if pending, err = store.IntegrityAuditPending(ctx); err != nil {
+				return rep, err
+			}
+		}
+		if !pending {
+			rep, err = purgeRetainedRows(ctx, sqlDB, cfg)
+			if err != nil {
+				return rep, err
+			}
+		}
+	}
+	// Pages freed by any owner, retention or not, are returned to the file system.
+	if cfg.IncrementalVacuumMinFreelistPages > 0 {
+		rep.Vacuum, err = runIncrementalVacuum(ctx, sqlDB, cfg.IncrementalVacuumMinFreelistPages)
+		rep.IncrementalVacuumed = rep.Vacuum.Progressed
 		if err != nil {
 			return rep, err
 		}
-		if pending {
-			return pendingAuditResourceWork(ctx, sqlDB, cfg)
-		}
 	}
+	return rep, nil
+}
+
+func purgeRetainedRows(ctx context.Context, sqlDB Handle, cfg RetentionConfig) (RetentionReport, error) {
+	var rep RetentionReport
 	now := time.Now().UTC()
 	batchSize := cfg.BatchSize
 	if batchSize <= 0 {
 		batchSize = DefaultRetentionBatchSize
 	}
-
+	var err error
 	rep.OperationJournals, err = purgeOperationJournals(ctx, sqlDB, now, cfg.OperationJournals, batchSize)
 	if err != nil {
 		return rep, err
 	}
-
-	n, err := purgeUnreachableLLMCalls(ctx, sqlDB, batchSize)
+	rep.OrphanLLMCalls, err = purgeUnreachableLLMCalls(ctx, sqlDB, batchSize)
 	if err != nil {
 		return rep, err
 	}
-	rep.OrphanLLMCalls = n
-
-	optimized, err := optimizeFTSTables(ctx, sqlDB, now, cfg.FTSOptimizeInterval)
+	rep.FTSOptimized, err = optimizeFTSTables(ctx, sqlDB, now, cfg.FTSOptimizeInterval)
 	if err != nil {
 		return rep, err
 	}
-	rep.FTSOptimized = optimized
-
-	n, err = revokeOrphanBlueprintGrants(ctx, sqlDB, now)
+	rep.OrphanBlueprintGrants, err = revokeOrphanBlueprintGrants(ctx, sqlDB, now)
 	if err != nil {
 		return rep, err
 	}
-	rep.OrphanBlueprintGrants = n
-
-	n, err = purgeAgedBlobFindings(ctx, sqlDB, now, cfg.BlobFindings, batchSize)
-	if err != nil {
-		return rep, err
-	}
-	rep.BlobFindings = n
-
-	// Pages freed by any owner, retention or not, are returned to the file system.
-	if cfg.IncrementalVacuumMinFreelistPages > 0 {
-		vacuumed, err := runIncrementalVacuum(ctx, sqlDB, cfg.IncrementalVacuumMinFreelistPages)
-		if err != nil {
-			return rep, err
-		}
-		rep.IncrementalVacuumed = vacuumed
-	}
-	return rep, nil
-}
-
-// Each slice moves at most 128 pages before releasing the single writer.
-// The maintenance runner admits another pass only after foreground writes quiet.
-const (
-	vacuumSlicePages    = 128
-	vacuumSlicesPerPass = 16
-)
-
-func runIncrementalVacuum(ctx context.Context, sqlDB Handle, minFreelistPages int64) (bool, error) {
-	var mode int
-	if err := sqlDB.QueryRowContext(ctx, `PRAGMA auto_vacuum`).Scan(&mode); err != nil {
-		return false, fmt.Errorf("read auto_vacuum mode: %w", err)
-	}
-	if mode != 2 { // SQLite INCREMENTAL mode.
-		return false, nil
-	}
-	vacuumed := false
-	for range vacuumSlicesPerPass {
-		var freePages int64
-		if err := sqlDB.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&freePages); err != nil {
-			return vacuumed, fmt.Errorf("read freelist count: %w", err)
-		}
-		if freePages < minFreelistPages {
-			return vacuumed, nil
-		}
-		if _, err := sqlDB.ExecContext(ctx, fmt.Sprintf(`PRAGMA incremental_vacuum(%d)`, vacuumSlicePages)); err != nil {
-			return vacuumed, fmt.Errorf("incremental vacuum store: %w", err)
-		}
-		var remaining int64
-		if err := sqlDB.QueryRowContext(ctx, `PRAGMA freelist_count`).Scan(&remaining); err != nil {
-			return vacuumed, fmt.Errorf("read remaining freelist: %w", err)
-		}
-		if remaining >= freePages {
-			return vacuumed, nil
-		}
-		vacuumed = true
-	}
-	return vacuumed, nil
+	rep.BlobFindings, err = purgeAgedBlobFindings(ctx, sqlDB, now, cfg.BlobFindings, batchSize)
+	return rep, err
 }
 
 func retentionDisabledByEnv() bool {

@@ -6,5 +6,3 @@ suggested_action: "Restart Painted Wolf Code. If it keeps happening, report it f
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "no access token"

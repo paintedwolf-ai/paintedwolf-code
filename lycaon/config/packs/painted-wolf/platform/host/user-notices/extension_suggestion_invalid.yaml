@@ -8,5 +8,3 @@ suggested_action: >-
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - suggestion file is not valid

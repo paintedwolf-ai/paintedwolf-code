@@ -13,7 +13,7 @@ import (
 
 func runPrompts(ctx context.Context, args []string) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: pw prompts render <template-ref> [--agent ID] [--project DIR] [--var k=v]… [--check] [--json]")
+		return fmt.Errorf("usage: pw prompts render <template-ref> [--agent ID] [--skill NAME] [--resource PATH] [--surface ID] [--project DIR] [--var k=v]… [--check] [--json]")
 	}
 	switch args[0] {
 	case "render":
@@ -26,6 +26,9 @@ func runPrompts(ctx context.Context, args []string) error {
 type promptsRenderFlags struct {
 	agentID    string
 	projectDir string
+	skillName  string
+	resource   string
+	surfaceID  string
 	vars       map[string]any
 	check      bool
 	jsonOut    bool
@@ -54,6 +57,27 @@ func parsePromptsRenderFlags(args []string) (promptsRenderFlags, error) {
 			}
 			f.projectDir = dir
 			i++
+		case "--skill":
+			name, ok := nextArg(args, i)
+			if !ok {
+				return f, fmt.Errorf("--skill requires a skill name")
+			}
+			f.skillName = name
+			i++
+		case "--resource":
+			path, ok := nextArg(args, i)
+			if !ok {
+				return f, fmt.Errorf("--resource requires a skill-relative path")
+			}
+			f.resource = path
+			i++
+		case "--surface":
+			id, ok := nextArg(args, i)
+			if !ok {
+				return f, fmt.Errorf("--surface requires a surface id")
+			}
+			f.surfaceID = id
+			i++
 		case "--var":
 			raw, ok := nextArg(args, i)
 			if !ok {
@@ -79,6 +103,17 @@ func parsePromptsRenderFlags(args []string) (promptsRenderFlags, error) {
 			f.ref = args[i]
 		}
 	}
+	if f.ref != "" && f.skillName != "" {
+		return f, fmt.Errorf("--skill and a template ref are mutually exclusive")
+	}
+	if f.skillName == "" {
+		if f.resource != "" {
+			return f, fmt.Errorf("--resource requires --skill")
+		}
+		if f.surfaceID != "" {
+			return f, fmt.Errorf("--surface requires --skill")
+		}
+	}
 	return f, nil
 }
 
@@ -101,7 +136,7 @@ func runPromptsRender(ctx context.Context, args []string) error {
 			projectDir = cwd
 		}
 	}
-	if flags.check && strings.TrimSpace(flags.agentID) == "" {
+	if flags.check && flags.skillName == "" && strings.TrimSpace(flags.agentID) == "" {
 		fmt.Fprintln(os.Stderr, "pw: --check only checks persona contracts; pass --agent to enforce them")
 	}
 
@@ -110,6 +145,9 @@ func runPromptsRender(ctx context.Context, args []string) error {
 		ProjectDir:  projectDir,
 		TemplateRef: flags.ref,
 		AgentID:     flags.agentID,
+		SkillName:   flags.skillName,
+		Resource:    flags.resource,
+		SurfaceID:   flags.surfaceID,
 		Vars:        flags.vars,
 		Check:       flags.check,
 	})

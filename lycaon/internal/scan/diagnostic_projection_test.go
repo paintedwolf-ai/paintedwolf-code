@@ -1,6 +1,7 @@
 package scan
 
 import (
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 
@@ -37,9 +38,7 @@ func TestSecretScannerReportIsWithheldFromScanErrors(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := DiagnosticExcerpt(tc.subject, []byte(report))
-			if strings.Contains(got, probeSecret) {
-				t.Fatalf("scan error excerpt disclosed the reported secret: %q", got)
-			}
+			exposure.Absent(t, got, probeSecret)
 			if got != diagnosticWithheldMarker {
 				t.Fatalf("want an explicit withheld marker, got %q", got)
 			}
@@ -66,9 +65,7 @@ func TestNonSecretScannerOutputIsScreenedBeforeItIsBounded(t *testing.T) {
 	if got == "" {
 		t.Fatal("a non-secret scanner should still report a diagnostic excerpt")
 	}
-	if strings.Contains(got, probeSecret) {
-		t.Fatalf("excerpt disclosed the secret: %q", got)
-	}
+	exposure.Absent(t, got, probeSecret)
 	// Check fragments large enough to match.
 	if fragment := probeSecret[:len(probeSecret)/2]; strings.Contains(got, fragment) {
 		t.Fatalf("excerpt kept a fragment of the secret, so the cap ran before screening: %q", got)

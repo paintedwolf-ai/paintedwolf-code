@@ -8,7 +8,6 @@ import (
 	"time"
 
 	execution "github.com/lycaon/lycaon/internal/exec"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ptyCloseTimeout covers termination and the final terminal read.
@@ -27,7 +26,7 @@ func (r *Terminal) ClosePTY(sessionID, handle string) (PTYCloseResult, error) {
 	if kind != processKindPTY {
 		return PTYCloseResult{}, fmt.Errorf("%w: handle %s", ErrNotPTY, handle)
 	}
-	r.Lifecycle.killProcess(proc)
+	r.Lifecycle.killProcess(proc, TerminationStoppedByAgent)
 	select {
 	case <-proc.done:
 	case <-time.After(ptyCloseTimeout):
@@ -104,9 +103,8 @@ func (r *Terminal) waitPTY(ctx context.Context, proc *Process) {
 		proc.hasExit = true
 		proc.exitCode = exitCode
 		proc.finishedAt = time.Now().UTC()
-		proc.reason = TerminationExited
-		if proc.stopped {
-			proc.reason = TerminationStopped
+		if !proc.stopped || proc.reason == "" {
+			proc.reason = TerminationExited
 		}
 		if len(proc.Stages) == 1 {
 			code := exitCode
@@ -126,20 +124,11 @@ func (r *Terminal) waitPTY(ctx context.Context, proc *Process) {
 		proc.finalScreen = &final
 		r.jobs.mu.Unlock()
 	}
-	close(proc.done)
 	if proc.screen != nil {
 		proc.screen.Close()
 	}
 
-	if r.Output.publish != nil && !proc.silent {
-		exit := exitCode
-		r.Output.publish(ctx, proc.ProjectID, proc.SessionID, api.BackgroundProcessEvent{
-			ProcessID: proc.Handle,
-			SessionID: proc.SessionID,
-			Stream:    "exit",
-			EndOffset: proc.buffer.NextCursor(),
-			Running:   false,
-			ExitCode:  &exit,
-		})
-	}
+	r.Output.publishTerminal(ctx, proc)
+	r.sweeper.onJobEnded()
+	close(proc.done)
 }

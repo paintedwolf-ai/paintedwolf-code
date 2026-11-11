@@ -50,7 +50,7 @@ func TestRecordedProgramRetainsUtilityUntilBackgroundSettlement(t *testing.T) {
 	testutil.FailErr(t, "start actual background utility", err)
 	select {
 	case <-entered:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("utility never started")
 	}
 	if releases.Load() != 0 {
@@ -59,7 +59,7 @@ func TestRecordedProgramRetainsUtilityUntilBackgroundSettlement(t *testing.T) {
 	close(finish)
 	select {
 	case <-released:
-	case <-time.After(5 * time.Second):
+	case <-time.After(testutil.Timeout(time.Minute)):
 		t.Fatal("settled utility never released")
 	}
 	// A subsequent program exercises pruning and settlement without replaying

@@ -196,11 +196,6 @@ func factsToContext(facts map[string]any) *GuardContext {
 	setBool("tool_payload_chunkable", &gc.Invocation.ToolPayloadChunkable)
 	setBool("tool_is_delegation", &gc.Invocation.ToolIsDelegation)
 	setBool("tool_is_handoff", &gc.Invocation.ToolIsHandoff)
-	setBool("pack_runner_task", &gc.Invocation.PackRunnerTask)
-	setBool("posture_unresolved", &gc.Session.PostureUnresolved)
-	setBool("agent_is_plan_writer", &gc.Workers.AgentIsPlanWriter)
-	setBool("disallowed_agent", &gc.Workers.DisallowedAgent)
-	setBool("plan_awaiting_approval", &gc.Workflow.PlanAwaitingApproval)
 	setBool("path_outside_scope", &gc.Access.PathOutsideScope)
 	// Core observations a published fixture may set directly.
 	setBool("path_denied", &gc.Rejection.PathDenied)

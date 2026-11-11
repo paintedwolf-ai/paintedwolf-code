@@ -167,7 +167,7 @@ export function ContributionCommandFlow(props: Props) {
   return (
     <div class="den-command-flow" data-testid="contribution-command-flow" ref={(element) => (flowElement = element)}>
       <header class="den-command-flow__header">
-        <button type="button" class="den-command-flow__icon-button den-inset-icon-btn" aria-label="Back to results" onClick={props.onBack}>
+        <button type="button" class="den-command-flow__icon-button den-inset-icon-btn" aria-label="Back to results" data-testid="contribution-command-back" onClick={props.onBack}>
           <ThemeIcon slot="back" size={14} />
         </button>
         <div>
@@ -191,7 +191,7 @@ export function ContributionCommandFlow(props: Props) {
               <InputField field={field} value={answers()[field.id]} onValue={(value) => update(field.id, value)} />
             }</For>
             <Show when={error()}><div class="den-command-flow__error" role="alert">{error()}</div></Show>
-            <button class="den-command-flow__primary" type="submit" disabled={busy()}>{busy() ? "Running…" : "Run"}</button>
+            <button class="den-command-flow__primary" type="submit" data-testid="contribution-command-run" disabled={busy()}>{busy() ? "Running…" : "Run"}</button>
           </Scrollport>
         }>
           <Scrollport class="den-command-flow__body" contentClass="den-command-flow__content">
@@ -207,8 +207,8 @@ export function ContributionCommandFlow(props: Props) {
             </Show>
             <Show when={error()}><div class="den-command-flow__error" role="alert">{error()}</div></Show>
             <div class="den-command-flow__actions">
-              <button type="button" onClick={() => stepIndex() > 0 ? setStepIndex((index) => index - 1) : props.onBack()}>Back</button>
-              <button type="button" class="den-command-flow__primary" disabled={busy()} onClick={() => void advanceInteraction()}>
+              <button type="button" data-testid="contribution-command-step-back" onClick={() => stepIndex() > 0 ? setStepIndex((index) => index - 1) : props.onBack()}>Back</button>
+              <button type="button" class="den-command-flow__primary" data-testid="contribution-command-step-primary" disabled={busy()} onClick={() => void advanceInteraction()}>
                 {stepIndex() + 1 < steps().length ? "Next" : busy() ? "Running…" : "Run"}
               </button>
             </div>
@@ -218,8 +218,8 @@ export function ContributionCommandFlow(props: Props) {
         <Scrollport class="den-command-flow__body den-command-flow__result" contentClass="den-command-flow__content">
           <pre data-testid="contribution-command-output" tabindex="-1" aria-label="Command output">{output()}</pre>
           <div class="den-command-flow__actions">
-            <button type="button" onClick={props.onBack}>Back</button>
-            <button type="button" onClick={() => void copyTextToClipboard(output() ?? "")}>Copy</button>
+            <button type="button" data-testid="contribution-command-result-back" onClick={props.onBack}>Back</button>
+            <button data-testid="copy" type="button" onClick={() => void copyTextToClipboard(output() ?? "")}>Copy</button>
             <button type="button" class="den-command-flow__primary" onClick={props.onClose}>Close</button>
           </div>
         </Scrollport>
@@ -321,7 +321,7 @@ function InteractionStepView(props: { step: ContributionInteractionStep; value: 
     <Show when={props.step.kind === "choice"} fallback={
       <InputField field={{ id: props.step.id, title: "", type: stepInputType(props.step), required: props.step.required, min: props.step.min, max: props.step.max }} value={props.value} onValue={props.onValue} labelledBy={titleId} />
     }>
-      <Show when={!props.step.source || props.choices.length > 0} fallback={<button type="button" disabled={props.busy} onClick={props.onLoad}>{props.busy ? "Loading…" : "Load choices"}</button>}>
+      <Show when={!props.step.source || props.choices.length > 0} fallback={<button type="button" disabled={props.busy} data-testid="contribution-command-load-choices" onClick={props.onLoad}>{props.busy ? "Loading…" : "Load choices"}</button>}>
         <div class="den-command-flow__choices" role={props.step.multiple ? "group" : "radiogroup"} aria-labelledby={titleId}>
           <For each={props.choices}>{(choice) => {
             const content = () => <span><strong>{choice.label}</strong><Show when={choice.description}><small>{choice.description}</small></Show><Show when={choice.detail}><small>{choice.detail}</small></Show></span>;

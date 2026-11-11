@@ -21,6 +21,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // provenanceFixture is a host whose socket table, launch lineage, and
@@ -30,21 +31,24 @@ type provenanceFixture struct {
 	startErr       error
 	now            []socketListener
 	nowErr         error
+	withheld       bool
 	sessions       map[int]string
+	processNames   map[int]string
+	meta           map[string]holderSessionMeta
 	containers     []dockerContainerInfo
 	nativeObserver nativeListenerObserver
 }
 
 func (f *provenanceFixture) resolver(ctx context.Context) *DefaultLoopbackProvenance {
 	started := false
-	return newLoopbackProvenance(
+	p := newLoopbackProvenance(
 		ctx,
-		func(context.Context) ([]socketListener, error) {
+		func(context.Context) (listenerView, error) {
 			if !started {
 				started = true
-				return f.atStart, f.startErr
+				return listenerView{listeners: f.atStart, complete: !f.withheld}, f.startErr
 			}
-			return f.now, f.nowErr
+			return listenerView{listeners: f.now, complete: !f.withheld}, f.nowErr
 		},
 		func(pid int) (string, bool) {
 			s, ok := f.sessions[pid]
@@ -53,11 +57,30 @@ func (f *provenanceFixture) resolver(ctx context.Context) *DefaultLoopbackProven
 		func(context.Context) []dockerContainerInfo { return f.containers },
 		f.nativeObserver,
 	)
+	p.processName = func(pid int) (string, bool) {
+		if f.processNames == nil {
+			return "", false
+		}
+		name, ok := f.processNames[pid]
+		return name, ok
+	}
+	if f.meta != nil {
+		p.metaOverride = func(_ context.Context, sessionID, _, _ string) (holderSessionMeta, bool) {
+			m, ok := f.meta[sessionID]
+			return m, ok
+		}
+	}
+	return p
 }
 
 func listenerAt(pid int, addr string) socketListener {
 	ap := netip.MustParseAddrPort(addr)
 	return socketListener{PID: pid, Port: ap.Port(), Addr: ap.Addr()}
+}
+
+func listenerV6At(pid int, addr string, ipv6Only bool) socketListener {
+	ap := netip.MustParseAddrPort(addr)
+	return socketListener{PID: pid, Port: ap.Port(), Addr: ap.Addr(), IPv6Only: ipv6Only}
 }
 
 func TestLoopbackOwnershipByLaunchLineage(t *testing.T) {
@@ -70,9 +93,15 @@ func TestLoopbackOwnershipByLaunchLineage(t *testing.T) {
 	if !owned || evidence.Method != ProvenanceLineage {
 		t.Fatalf("listener launched by this session: owned=%v evidence=%+v", owned, evidence)
 	}
+	if len(evidence.Holders) != 1 || evidence.Holders[0].Kind != HolderThisSession {
+		t.Fatalf("expected HolderThisSession, got %+v", evidence.Holders)
+	}
 	owned, evidence = f.resolver(t.Context()).IsSessionOwned(ctx, "chat-2", "/workspace", 9999)
-	if owned {
-		t.Fatalf("another session's listener was attributed to this one: %+v", evidence)
+	if owned || evidence.Method != ProvenanceOtherSession {
+		t.Fatalf("another session's listener: owned=%v evidence=%+v", owned, evidence)
+	}
+	if len(evidence.Holders) != 1 || evidence.Holders[0].Kind != HolderOtherSession || evidence.Holders[0].SessionID != "chat-1" {
+		t.Fatalf("expected HolderOtherSession for chat-1, got %+v", evidence.Holders)
 	}
 }
 
@@ -92,10 +121,16 @@ func TestLoopbackOwnershipRefusesExposedChatListener(t *testing.T) {
 // A port that appears during the session is not the chat's merely because it
 // is new: a service the person starts, or another session's, stays foreign.
 func TestLoopbackOwnershipIgnoresListenersThatMerelyAppeared(t *testing.T) {
-	f := &provenanceFixture{now: []socketListener{listenerAt(777, "127.0.0.1:5173")}}
+	f := &provenanceFixture{
+		now:          []socketListener{listenerAt(777, "127.0.0.1:5173")},
+		processNames: map[int]string{777: "node"},
+	}
 	owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", "/workspace", 5173)
 	if owned {
 		t.Fatalf("a listener outside every chat lineage was owned: %+v", evidence)
+	}
+	if len(evidence.Holders) != 1 || evidence.Holders[0].Kind != HolderExternalProcess || evidence.Holders[0].ProcessName != "node" {
+		t.Fatalf("expected HolderExternalProcess node, got %+v", evidence.Holders)
 	}
 }
 
@@ -162,32 +197,213 @@ func workspaceContainer(workspace string, mappings ...containerPortMapping) dock
 func TestLoopbackOwnershipByWorkspaceContainer(t *testing.T) {
 	ctx := context.Background()
 	workspace := "/workspace/my-app"
-	loopback := containerPortMapping{PublicPort: 3000, LoopbackOnly: true}
-	wildcard := containerPortMapping{PublicPort: 3000}
+	loopback := containerPortMapping{IP: "127.0.0.1", PublicPort: 3000, LoopbackOnly: true}
+	wildcard := containerPortMapping{IP: "0.0.0.0", PublicPort: 3000}
 
-	f := &provenanceFixture{containers: []dockerContainerInfo{workspaceContainer(workspace, loopback)}}
+	f := &provenanceFixture{
+		now:          []socketListener{listenerAt(888, "127.0.0.1:3000")},
+		processNames: map[int]string{888: "docker-proxy"},
+		containers:   []dockerContainerInfo{workspaceContainer(workspace, loopback)},
+	}
 	owned, evidence := f.resolver(t.Context()).IsSessionOwned(ctx, "chat-1", workspace, 3000)
 	if !owned || evidence.Method != ProvenanceContainer || evidence.OwnerID != "app-web-1" {
 		t.Fatalf("loopback workspace container: owned=%v evidence=%+v", owned, evidence)
 	}
+	if len(evidence.Holders) != 1 || evidence.Holders[0].Kind != HolderContainerForwarder {
+		t.Fatalf("expected HolderContainerForwarder, got %+v", evidence.Holders)
+	}
 
-	f = &provenanceFixture{containers: []dockerContainerInfo{workspaceContainer(workspace, loopback, wildcard)}}
+	f = &provenanceFixture{
+		now:          []socketListener{listenerAt(888, "127.0.0.1:3000")},
+		processNames: map[int]string{888: "docker-proxy"},
+		containers:   []dockerContainerInfo{workspaceContainer(workspace, loopback, wildcard)},
+	}
 	owned, evidence = f.resolver(t.Context()).IsSessionOwned(ctx, "chat-1", workspace, 3000)
 	if owned || evidence.Method != ProvenanceExposed {
 		t.Fatalf("container also publishing on every interface: owned=%v evidence=%+v", owned, evidence)
 	}
 
-	f = &provenanceFixture{containers: []dockerContainerInfo{workspaceContainer("/workspace/other", loopback)}}
+	f = &provenanceFixture{
+		now:          []socketListener{listenerAt(888, "127.0.0.1:3000")},
+		processNames: map[int]string{888: "docker-proxy"},
+		containers:   []dockerContainerInfo{workspaceContainer("/workspace/other", loopback)},
+	}
 	if owned, _ = f.resolver(t.Context()).IsSessionOwned(ctx, "chat-1", workspace, 3000); owned {
 		t.Fatal("another workspace's container was attributed to this one")
+	}
+}
+
+func TestContainerPublicationWithoutHostListenerAttributesNothing(t *testing.T) {
+	workspace := "/workspace/my-app"
+	loopback := containerPortMapping{IP: "127.0.0.1", PublicPort: 3000, LoopbackOnly: true}
+	f := &provenanceFixture{
+		containers: []dockerContainerInfo{workspaceContainer(workspace, loopback)},
+	}
+	owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 3000)
+	if owned {
+		t.Fatalf("container publication without host listener attributed ownership: %+v", evidence)
+	}
+}
+
+func TestContainerPublicationWithUnrelatedHostServerIsNotContainerForwarder(t *testing.T) {
+	workspace := "/workspace/my-app"
+	loopback := containerPortMapping{IP: "127.0.0.1", PublicPort: 3000, LoopbackOnly: true}
+	f := &provenanceFixture{
+		now:          []socketListener{listenerAt(777, "127.0.0.1:3000")},
+		processNames: map[int]string{777: "python3"},
+		containers:   []dockerContainerInfo{workspaceContainer(workspace, loopback)},
+	}
+	owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 3000)
+	if owned {
+		t.Fatalf("unrelated host server started after baseline was treated as container forwarder: %+v", evidence)
+	}
+	if len(evidence.Holders) != 1 || evidence.Holders[0].Kind != HolderExternalProcess {
+		t.Fatalf("expected HolderExternalProcess, got %+v", evidence.Holders)
+	}
+	if !evidence.ContainerMismatch {
+		t.Fatalf("expected ContainerMismatch=true, got %+v", evidence)
+	}
+}
+
+func TestContainerPublicationOnIPv4WithOtherHolderOnIPv6IsNotOwned(t *testing.T) {
+	workspace := "/workspace/my-app"
+	loopbackV4 := containerPortMapping{IP: "127.0.0.1", PublicPort: 8000, LoopbackOnly: true}
+
+	t.Run("another session on IPv6", func(t *testing.T) {
+		f := &provenanceFixture{
+			now: []socketListener{
+				listenerAt(888, "127.0.0.1:8000"),
+				listenerAt(999, "[::1]:8000"),
+			},
+			sessions:     map[int]string{999: "chat-other"},
+			processNames: map[int]string{888: "docker-proxy", 999: "python3"},
+			meta: map[string]holderSessionMeta{
+				"chat-other": {
+					SessionID:     "chat-other",
+					RootSessionID: "chat-other",
+					SessionTitle:  "Tic Tac Toe Game with AI",
+					ProjectID:     "proj-ttt",
+					ProjectName:   "Tic-Tac-Toe",
+					Handle:        "proc-1",
+					Command:       "python3 -m http.server 8000",
+					Background:    true,
+				},
+			},
+			containers: []dockerContainerInfo{workspaceContainer(workspace, loopbackV4)},
+		}
+		owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 8000)
+		if owned || evidence.Method != ProvenanceOtherSession {
+			t.Fatalf("expected not owned and ProvenanceOtherSession, got owned=%v evidence=%+v", owned, evidence)
+		}
+		if !evidence.ContainerMismatch {
+			t.Fatalf("expected ContainerMismatch=true, got %+v", evidence)
+		}
+		if len(evidence.Holders) != 2 || evidence.Holders[0].Kind != HolderContainerForwarder || evidence.Holders[1].Kind != HolderOtherSession {
+			t.Fatalf("unexpected holders: %+v", evidence.Holders)
+		}
+		if !strings.Contains(evidence.Description, "Tic Tac Toe Game with AI") || !strings.Contains(evidence.Description, "app-web-1") {
+			t.Fatalf("description did not mention both holders: %q", evidence.Description)
+		}
+	})
+
+	t.Run("external process on IPv6", func(t *testing.T) {
+		f := &provenanceFixture{
+			now: []socketListener{
+				listenerAt(888, "127.0.0.1:8000"),
+				listenerAt(900, "[::1]:8000"),
+			},
+			processNames: map[int]string{888: "docker-proxy", 900: "node"},
+			containers:   []dockerContainerInfo{workspaceContainer(workspace, loopbackV4)},
+		}
+		owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 8000)
+		if owned {
+			t.Fatalf("expected not owned when external process holds IPv6, got %+v", evidence)
+		}
+		if !evidence.ContainerMismatch {
+			t.Fatalf("expected ContainerMismatch=true, got %+v", evidence)
+		}
+	})
+}
+
+func TestDualStackWildcardMatchingAndEndpointInspection(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("dual-stack [::]:port with IPV6_V6ONLY=0 matches 127.0.0.1:port when no IPv4 listener binds port", func(t *testing.T) {
+		f := &provenanceFixture{
+			now:      []socketListener{listenerV6At(500, "[::]:8000", false)},
+			sessions: map[int]string{500: "chat-other"},
+		}
+		res := f.resolver(t.Context())
+		_, ev := res.InspectEndpoint(ctx, "chat-1", "/workspace", netip.MustParseAddrPort("127.0.0.1:8000"))
+		if len(ev.Holders) != 1 || ev.Holders[0].PID != 500 || ev.Holders[0].Kind != HolderOtherSession {
+			t.Fatalf("dual-stack [::]:8000 did not match 127.0.0.1:8000: %+v", ev)
+		}
+	})
+
+	t.Run("IPv6-only [::]:port with IPV6_V6ONLY=1 does not match 127.0.0.1:port", func(t *testing.T) {
+		f := &provenanceFixture{
+			now:      []socketListener{listenerV6At(500, "[::]:8000", true)},
+			sessions: map[int]string{500: "chat-other"},
+		}
+		res := f.resolver(t.Context())
+		_, evV4 := res.InspectEndpoint(ctx, "chat-1", "/workspace", netip.MustParseAddrPort("127.0.0.1:8000"))
+		if len(evV4.Holders) != 0 {
+			t.Fatalf("IPv6-only [::]:8000 matched 127.0.0.1:8000: %+v", evV4.Holders)
+		}
+		_, evV6 := res.InspectEndpoint(ctx, "chat-1", "/workspace", netip.MustParseAddrPort("[::1]:8000"))
+		if len(evV6.Holders) != 1 || evV6.Holders[0].PID != 500 {
+			t.Fatalf("IPv6-only [::]:8000 did not match [::1]:8000: %+v", evV6.Holders)
+		}
+	})
+
+	t.Run("[::]:port and 0.0.0.0:port remain separate and IPv4 listener answers 127.0.0.1:port", func(t *testing.T) {
+		f := &provenanceFixture{
+			now: []socketListener{
+				listenerAt(400, "0.0.0.0:8000"),
+				listenerV6At(500, "[::]:8000", false),
+			},
+			sessions: map[int]string{400: "chat-v4", 500: "chat-v6"},
+		}
+		res := f.resolver(t.Context())
+		_, evPort := res.IsSessionOwned(ctx, "chat-1", "/workspace", 8000)
+		if len(evPort.Holders) != 2 {
+			t.Fatalf("expected 0.0.0.0:8000 and [::]:8000 kept separate, got %+v", evPort.Holders)
+		}
+		_, evV4 := res.InspectEndpoint(ctx, "chat-1", "/workspace", netip.MustParseAddrPort("127.0.0.1:8000"))
+		if len(evV4.Holders) != 1 || evV4.Holders[0].PID != 400 {
+			t.Fatalf("expected IPv4 listener 400 to answer 127.0.0.1:8000 when bound, got %+v", evV4.Holders)
+		}
+	})
+}
+
+func TestDescribePortHoldersFormatsOtherChatCopy(t *testing.T) {
+	holders := []LoopbackHolder{
+		{
+			Kind:         HolderOtherSession,
+			PID:          1234,
+			Addr:         netip.MustParseAddrPort("127.0.0.1:8000"),
+			SessionID:    "sess-ttt",
+			SessionTitle: "Tic Tac Toe Game with AI",
+			ProjectID:    "proj-ttt",
+			ProjectName:  "Tic-Tac-Toe",
+			Command:      "python3 -m http.server 8000",
+			Background:   true,
+		},
+	}
+	got := DescribePortHolders(8000, holders, nil)
+	want := "Port 8000 is served by `python3 -m http.server 8000`, a background command in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'."
+	if got != want {
+		t.Fatalf("DescribePortHolders = %q, want %q", got, want)
 	}
 }
 
 func TestLoopbackOwnershipPreExistingPortIsForeign(t *testing.T) {
 	workspace := "/workspace/my-app"
 	f := &provenanceFixture{
-		atStart:    []socketListener{listenerAt(555, "127.0.0.1:3000")},
-		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 3000, LoopbackOnly: true})},
+		atStart:      []socketListener{listenerAt(555, "127.0.0.1:3000")},
+		now:          []socketListener{listenerAt(555, "127.0.0.1:3000")},
+		processNames: map[int]string{555: "docker-proxy"},
+		containers:   []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{IP: "127.0.0.1", PublicPort: 3000, LoopbackOnly: true})},
 	}
 	owned, evidence := f.resolver(t.Context()).IsSessionOwned(context.Background(), "chat-1", workspace, 3000)
 	if owned || evidence.Method != ProvenancePreExisting {
@@ -199,10 +415,11 @@ func TestLoopbackOwnershipPreExistingPortIsForeign(t *testing.T) {
 func TestLoopbackOwnershipUnknownBaselineNeverCountsAbsence(t *testing.T) {
 	workspace := "/workspace/my-app"
 	f := &provenanceFixture{
-		startErr:   errors.New("socket table unavailable"),
-		now:        []socketListener{listenerAt(4242, "127.0.0.1:8000")},
-		sessions:   map[int]string{4242: "chat-1"},
-		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 3000, LoopbackOnly: true})},
+		startErr:     errors.New("socket table unavailable"),
+		now:          []socketListener{listenerAt(4242, "127.0.0.1:8000"), listenerAt(888, "127.0.0.1:3000")},
+		sessions:     map[int]string{4242: "chat-1"},
+		processNames: map[int]string{888: "docker-proxy"},
+		containers:   []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{IP: "127.0.0.1", PublicPort: 3000, LoopbackOnly: true})},
 	}
 	p := f.resolver(t.Context())
 	owned, evidence := p.IsSessionOwned(context.Background(), "chat-1", workspace, 3000)
@@ -232,6 +449,32 @@ func TestHeldByOtherSeparatesFreeOwnedAndForeignPorts(t *testing.T) {
 	}
 }
 
+// A host that withholds sockets leaves a port's absence unknown. What was
+// directly observed still decides, so a chat's own server keeps working.
+func TestWithheldListenerTableNeverReportsAPortFree(t *testing.T) {
+	ctx := context.Background()
+	workspace := "/workspace/my-app"
+	f := &provenanceFixture{
+		withheld:   true,
+		now:        []socketListener{listenerAt(4242, "127.0.0.1:8000")},
+		sessions:   map[int]string{4242: "chat-1"},
+		containers: []dockerContainerInfo{workspaceContainer(workspace, containerPortMapping{PublicPort: 3000, LoopbackOnly: true})},
+	}
+	p := f.resolver(t.Context())
+	if !p.HeldByOther(ctx, "chat-1", workspace, 8123) {
+		t.Error("a port missing from a withheld table was reported free")
+	}
+	if p.HeldByOther(ctx, "chat-1", workspace, 8000) {
+		t.Error("a chat's observed listener was reported held by another")
+	}
+	if owned, evidence := p.IsSessionOwned(ctx, "chat-1", workspace, 8000); !owned || evidence.Method != ProvenanceLineage {
+		t.Errorf("a chat's observed listener: owned=%v evidence=%+v", owned, evidence)
+	}
+	if owned, evidence := p.IsSessionOwned(ctx, "chat-1", workspace, 3000); owned || evidence.Method != ProvenanceUnverified {
+		t.Errorf("container port under a withheld start snapshot: owned=%v evidence=%+v", owned, evidence)
+	}
+}
+
 func TestHostListenersSeesALiveListener(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	testutil.FailErr(t, "listen", err)
@@ -243,7 +486,7 @@ func TestHostListenersSeesALiveListener(t *testing.T) {
 	if err != nil {
 		t.Skipf("host socket table unavailable: %v", err)
 	}
-	held := onPort(all, port)
+	held := onPort(all.listeners, port)
 	if len(held) != 1 || held[0].PID != os.Getpid() || held[0].Addr != netip.MustParseAddr("127.0.0.1") {
 		t.Fatalf("listener on %d from the host table = %+v, want this process on 127.0.0.1", port, held)
 	}
@@ -359,7 +602,7 @@ func TestQueryDockerContainersOverSocket(t *testing.T) {
 	go func() { _ = srv.Serve(ln) }()
 	defer srv.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	containers, err := queryDockerContainersOverSocket(ctx, sockPath)
 	testutil.FailErr(t, "query containers", err)
@@ -380,38 +623,84 @@ func TestQueryDockerContainersOverSocket(t *testing.T) {
 	}
 }
 
-func TestStdoutContainerIDAttributesPublishedPort(t *testing.T) {
-	containerID := "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff"
+func TestSandboxPortBrokersDescribeHoldersOnApprovalCards(t *testing.T) {
+	ctx := t.Context()
 	fixture := &provenanceFixture{
+		now: []socketListener{
+			listenerAt(401, "127.0.0.1:8000"),
+			listenerAt(888, "[::1]:8000"),
+			listenerAt(412, "127.0.0.1:5432"),
+		},
+		sessions: map[int]string{
+			401: "session-other",
+		},
+		processNames: map[int]string{
+			401: "python3",
+			888: "docker-proxy",
+			412: "postgres",
+		},
+		meta: map[string]holderSessionMeta{
+			"session-other": {
+				RootSessionID: "session-other",
+				SessionTitle:  "Tic Tac Toe Game with AI",
+				ProjectID:     "proj-ttt",
+				ProjectName:   "Tic-Tac-Toe",
+				Handle:        "bg-1",
+				Command:       "python3 -m http.server 8000",
+				Background:    true,
+			},
+		},
 		containers: []dockerContainerInfo{
 			{
-				ID:   containerID,
-				Name: "my-container",
+				ID:         "container-web-1",
+				Name:       "web-1",
+				WorkingDir: "/workspace/current",
 				Ports: []containerPortMapping{
-					{PublicPort: 9000, LoopbackOnly: true},
+					{IP: "127.0.0.1", PublicPort: 8000, LoopbackOnly: true},
 				},
 			},
 		},
 	}
-	res := fixture.resolver(t.Context())
-	owned, _ := res.IsSessionOwned(context.Background(), "session-1", "/workspace", 9000)
-	if owned {
-		t.Fatal("port should not be chat-owned before container is recorded")
+	res := fixture.resolver(ctx)
+
+	loopbackBroker := &LoopbackCheckpointBroker{Provenance: res}
+	connectCard, err := loopbackBroker.buildCard(t.Context(), tools.LoopbackConnectAsk{
+		ProjectID:  "proj-current",
+		ProjectDir: "/workspace/current",
+		SessionID:  "session-current",
+		ToolName:   "bash",
+		Command:    "python3 client.py",
+		Ports:      []uint16{8000},
+	}, "session-current", "session-current", []uint16{8000})
+	if err != nil {
+		t.Fatalf("build loopback card: %v", err)
+	}
+	wantLead8000 := "Port 8000 (127.0.0.1) is served by `python3 -m http.server 8000`, a background command (bg-1) in the chat 'Tic Tac Toe Game with AI' in the project 'Tic-Tac-Toe'. Port 8000 (::1) is held by external process `docker-proxy` (PID 888) running outside Painted Wolf Code. Container web-1 in this chat publishes port 8000 on IPv4 (127.0.0.1)."
+	if connectCard.Plan.Presentation.Lead != wantLead8000 {
+		t.Fatalf("loopback card lead = %q, want %q", connectCard.Plan.Presentation.Lead, wantLead8000)
+	}
+	holdersRaw, ok := connectCard.Plan.Subject.Targets[0].Details["holders"].([]any)
+	if !ok || len(holdersRaw) != 2 {
+		t.Fatalf("loopback card holders = %#v, want 2 entries", connectCard.Plan.Subject.Targets[0].Details["holders"])
+	}
+	if connectCard.Plan.Subject.Targets[0].Details["container_mismatch"] != true {
+		t.Fatalf("expected container_mismatch=true on target details, got %#v", connectCard.Plan.Subject.Targets[0].Details)
 	}
 
-	res.RecordSessionContainer("session-1", containerID, "/var/run/docker.sock")
-
-	owned, ev := res.IsSessionOwned(context.Background(), "session-1", "/workspace", 9000)
-	if !owned {
-		t.Fatal("port should be chat-owned after container ID is recorded from stdout")
+	listenBroker := &ListenCheckpointBroker{Provenance: res}
+	listenCard, err := listenBroker.buildListenCard(t.Context(), tools.LocalListenAsk{
+		ProjectID:  "proj-current",
+		ProjectDir: "/workspace/current",
+		SessionID:  "session-current",
+		ToolName:   "bash",
+		Command:    "postgres -D data",
+		Ports:      []uint16{5432},
+	}, "session-current", "session-current", []uint16{5432})
+	if err != nil {
+		t.Fatalf("build listen card: %v", err)
 	}
-	if ev.Method != ProvenanceContainer || ev.OwnerID != "my-container" {
-		t.Fatalf("unexpected evidence: %+v", ev)
-	}
-
-	res.ForgetSession("session-1")
-	owned, _ = res.IsSessionOwned(context.Background(), "session-1", "/workspace", 9000)
-	if owned {
-		t.Fatal("port should not be chat-owned after session is forgotten")
+	wantLead5432 := "Port 5432 is held by external process `postgres` (PID 412) running outside Painted Wolf Code."
+	if listenCard.Plan.Presentation.Lead != wantLead5432 {
+		t.Fatalf("listen card lead = %q, want %q", listenCard.Plan.Presentation.Lead, wantLead5432)
 	}
 }

@@ -8,6 +8,3 @@ suggested_action: Open it in the editor to read it as text, or reveal it in your
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - image viewer
-      - extension

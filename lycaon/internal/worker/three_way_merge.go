@@ -1,8 +1,11 @@
 package worker
 
 import (
+	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/runeclamp"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -126,4 +129,106 @@ func trimEmptyEdges(lines []string) []string {
 		end--
 	}
 	return lines[start:end]
+}
+
+const promoteBranchDeltaMaxBytes = 4096
+
+// BranchDelta renders a unified primary→branch diff (language-agnostic line diff).
+func BranchDelta(primary, branch string) string {
+	if primary == branch {
+		return ""
+	}
+	pLines := splitMergeLines(primary)
+	bLines := splitMergeLines(branch)
+	var out strings.Builder
+	i, j := 0, 0
+	for i < len(pLines) || j < len(bLines) {
+		if i < len(pLines) && j < len(bLines) && pLines[i] == bLines[j] {
+			i++
+			j++
+			continue
+		}
+		if j < len(bLines) && (i >= len(pLines) || (i+1 < len(pLines) && j+1 < len(bLines) && pLines[i+1] == bLines[j])) {
+			out.WriteString("+ " + bLines[j] + "\n")
+			j++
+			continue
+		}
+		if i < len(pLines) && (j >= len(bLines) || (i+1 < len(pLines) && j+1 < len(bLines) && pLines[i] == bLines[j+1])) {
+			out.WriteString("- " + pLines[i] + "\n")
+			i++
+			continue
+		}
+		if i < len(pLines) {
+			out.WriteString("- " + pLines[i] + "\n")
+			i++
+		}
+		if j < len(bLines) {
+			out.WriteString("+ " + bLines[j] + "\n")
+			j++
+		}
+		if out.Len() >= promoteBranchDeltaMaxBytes {
+			break
+		}
+	}
+	s := strings.TrimSpace(out.String())
+	if out.Len() >= promoteBranchDeltaMaxBytes {
+		s += "\n…"
+	}
+	return s
+}
+
+func buildConflictSummary(c PromoteConflict) []string {
+	var out []string
+	maxLines := tooloutput.MaxInlineConflictSummaryLines
+	for i, h := range c.Hunks {
+		if i >= maxLines {
+			out = append(out, "…")
+			break
+		}
+		if line := formatHunkSummaryLine(h); line != "" {
+			out = append(out, line)
+		}
+	}
+	if len(out) == 0 {
+		if delta := strings.TrimSpace(BranchDelta(c.Primary, c.Branch)); delta != "" {
+			for i, line := range strings.Split(delta, "\n") {
+				if i >= maxLines-1 {
+					out = append(out, "…")
+					break
+				}
+				line = strings.TrimSpace(line)
+				if line != "" {
+					out = append(out, line)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func formatHunkSummaryLine(h api.WorkerMergeHunk) string {
+	end := h.EndLine
+	if end <= 0 {
+		end = h.StartLine
+	}
+	rangeLabel := fmt.Sprintf("L%d", h.StartLine)
+	if end > h.StartLine {
+		rangeLabel = fmt.Sprintf("L%d-%d", h.StartLine, end)
+	}
+	var parts []string
+	if line := strings.TrimSpace(h.Primary); line != "" {
+		parts = append(parts, "primary: "+truncateConflictLine(line))
+	}
+	if line := strings.TrimSpace(h.Branch); line != "" {
+		parts = append(parts, "branch: "+truncateConflictLine(line))
+	}
+	if len(parts) == 0 {
+		return rangeLabel
+	}
+	return rangeLabel + ": " + strings.Join(parts, " | ")
+}
+
+func truncateConflictLine(s string) string {
+	const maxBytes = 120
+	return runeclamp.ClampBytes(strings.TrimSpace(s), maxBytes)
 }

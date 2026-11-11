@@ -99,7 +99,7 @@ WHERE t.session_id = ? ORDER BY t.turn DESC LIMIT 1), 0) AS INTEGER);
 SELECT opening_message_id FROM session_source_turns WHERE session_id = ? AND turn = ?;
 
 -- A turn's source-change brief is written once, when the turn opens.
--- name: SetSessionSourceTurnBrief :exec
+-- name: SetSessionSourceTurnBrief :execrows
 UPDATE session_source_turns SET source_change_brief = ?
 WHERE session_id = ? AND opening_message_id = ? AND source_change_brief IS NULL;
 

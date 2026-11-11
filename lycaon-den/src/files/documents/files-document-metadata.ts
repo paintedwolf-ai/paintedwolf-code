@@ -4,8 +4,7 @@ import { isTauriRuntime } from "../../platform/runtime.ts";
 import { createEffect, onCleanup, untrack } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import { clientIdentity, prepareClientIdentity } from "../../platform/connection/client-identity.ts";
-import { markFilesDocumentUnavailable } from "./project-files-buffers.ts";
-import { applyFilesBufferDocumentStatus, projectFilesState } from "./files-buffer-state.ts";
+import { applyFilesBufferDocumentStatus, markFilesDocumentUnavailable, projectFilesState } from "./files-buffer-state.ts";
 
 const readers = new Map<string, () => Promise<void>>();
 const publishers = new Map<string, () => void>();

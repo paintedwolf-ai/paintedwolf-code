@@ -12,19 +12,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// Provenance reads retained source facts.
-type Provenance interface {
-	ResolveHead(ctx context.Context, projectID string, branch sourcebranch.ID, rootID, path string) (sourceledger.BranchHead, error)
-	LatestFileEffect(ctx context.Context, projectID, fileID string) (sourceledger.Effect, bool, error)
-	SessionActivityFloor(ctx context.Context, projectID, sessionID string) (int64, bool, error)
-	QueryFileEffects(ctx context.Context, projectID, fileID string, afterOrdinal, beforeOrdinal int64, limit int) (sourceledger.FileEffectsResult, error)
-}
-
 const (
 	sourceStampSHAShortLen = 12
 	StampTimeLayout        = "2006-01-02 15:04 UTC"
 	// editForeignChangeRows bounds the provenance rows an edit reject carries.
 	editForeignChangeRows = 3
+	foreignChangePageSize = 200
 )
 
 // LedgerLocation resolves a path to its branch, root, and relative path.
@@ -75,7 +68,7 @@ func ReadStamp(
 	} else {
 		stamp.Note = "served bytes are newer than the last recorded state"
 	}
-	if latest, found, err := prov.LatestFileEffect(ctx, tctx.Identity.ProjectID, head.FileID); err == nil && found {
+	if latest, found, err := prov.LatestFileEffect(ctx, tctx.Identity.ProjectID, branch, head.FileID); err == nil && found {
 		stamp.LastChange = ChangeOf(latest, tctx.Identity.SessionID)
 	}
 	return stamp
@@ -92,7 +85,9 @@ func ChangeOf(effect sourceledger.Effect, viewerSessionID string) *surveyreceipt
 	return change
 }
 
-// ForeignChanges returns other actors' recorded changes, newest first; ok reports lookup completeness.
+// ForeignChanges returns other actors' recorded changes, newest first; ok reports
+// lookup completeness. Effects inside the session's own command windows are not
+// claimed as another actor's.
 func ForeignChanges(
 	ctx context.Context,
 	tctx tools.ToolContext,
@@ -114,20 +109,27 @@ func ForeignChanges(
 	if err != nil || !found {
 		return nil, 0, false
 	}
-	page, err := prov.QueryFileEffects(ctx, tctx.Identity.ProjectID, head.FileID, floor, 0, 50)
-	if err != nil {
-		return nil, 0, false
-	}
-	for _, effect := range page.Effects {
-		if effect.BranchID != branch || effect.ActorClassFor(tctx.Identity.SessionID) == sourceledger.ActorYou {
-			continue
+	// The session's own effects can only be told apart here, so read every page:
+	// they must not push a foreign effect out of the count.
+	for before := int64(0); ; {
+		page, err := prov.QueryFileEffects(ctx, tctx.Identity.ProjectID, branch, head.FileID, floor, before, foreignChangePageSize)
+		if err != nil {
+			return nil, 0, false
 		}
-		total++
-		if len(changes) < editForeignChangeRows {
-			changes = append(changes, ChangeOf(effect, tctx.Identity.SessionID))
+		for _, effect := range page.Effects {
+			if effect.ActorClassFor(tctx.Identity.SessionID) == sourceledger.ActorYou || effect.DuringCommandOf(tctx.Identity.SessionID) {
+				continue
+			}
+			total++
+			if len(changes) < editForeignChangeRows {
+				changes = append(changes, ChangeOf(effect, tctx.Identity.SessionID))
+			}
 		}
+		if page.NextBeforeOrdinal == 0 {
+			return changes, total, len(changes) > 0
+		}
+		before = page.NextBeforeOrdinal
 	}
-	return changes, total, len(changes) > 0
 }
 
 func ShortSHA(sha string) string {

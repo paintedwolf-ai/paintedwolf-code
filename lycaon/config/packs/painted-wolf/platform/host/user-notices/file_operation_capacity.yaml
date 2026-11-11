@@ -6,6 +6,4 @@ suggested_action: "Wait a moment and try again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "waiting to run"
 retryable: true

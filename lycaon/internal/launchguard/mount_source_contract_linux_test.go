@@ -250,7 +250,7 @@ func checkSourceRoleRefuses(frame, origin, entry, topology *os.File) error {
 		return err
 	}
 	defer func() { _ = read.Close(); _ = write.Close() }()
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
 	command := exec.CommandContext(ctx, "/proc/self/fd/"+strconv.Itoa(sourceSelfFD), MountSourceArgument)
 	command.Env = []string{}

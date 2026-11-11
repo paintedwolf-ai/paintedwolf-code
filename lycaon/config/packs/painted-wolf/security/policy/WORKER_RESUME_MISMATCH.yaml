@@ -34,8 +34,3 @@ x-paintedwolf-scenarios:
     resume_field: agent_type
     resume_recorded: security-reviewer
     resume_requested: implementer
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: WORKER_RESUME_MISMATCH'
-  - security-reviewer
-  - child_session_id

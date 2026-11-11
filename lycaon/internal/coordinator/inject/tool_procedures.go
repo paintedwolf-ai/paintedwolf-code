@@ -10,9 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 )
 
-// RenderToolProceduresBlock renders the procedure units that follow the
-// provider's actual schema set, not reachability. omitted names units the
-// turn decision left out.
+// RenderToolProceduresBlock renders procedure units for the offered schema set,
+// excluding units named in omitted.
 func RenderToolProceduresBlock(
 	ctx context.Context, renderer *prompts.InjectRenderer,
 	sessionID, profileID string, offered []string, omitted map[string]bool,
@@ -24,8 +23,7 @@ func RenderToolProceduresBlock(
 	if !prompts.ScopeAllowsCommandMutation(profileID) {
 		prompts.ApplyReadOnlyCommandEffects(names, nil, vars)
 	}
-	mergeRunnerCapabilityVars(names, vars)
-	prompts.MergeHTTPActionVars(names, vars)
+	prompts.MergeProfileRequestableVars(profileID, names, vars)
 	surface := "worker"
 	host := promptunit.HostWorker
 	if profileID == prompts.CoordinatorProfileID || prompts.IsCoordinatorSurfaceID(profileID) {

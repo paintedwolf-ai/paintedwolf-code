@@ -62,6 +62,7 @@ export function captureConnectionGuard(client: LycaonClient): () => boolean {
   return () => host.generation === generation && host.client === client;
 }
 export const setLycaonClientForTest = host.setClientForTest;
+export { onProjectBackgroundEvent } from "../../project/project-background-store.ts";
 export const resumeProjectEventsAfter = events.resumeProjectEventsAfter;
 export const onProjectEvent = events.onProjectEvent;
 export const onAttentionEvent = events.onAttentionEvent;

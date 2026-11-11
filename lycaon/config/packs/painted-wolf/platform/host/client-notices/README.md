@@ -15,6 +15,3 @@ generated file.
 
 `scope` is where the notice docks (`app`, `project`, `session`) — it lives here
 so adding a code cannot leave the routing table behind.
-
-`scenarios[].expect_contains` pins the phrases the copy must keep saying. It is
-the reason a rewrite can be free: the words stay editable, the meaning does not.

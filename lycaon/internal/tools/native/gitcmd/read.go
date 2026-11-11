@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // command is one bound Git invocation: its global -C directories and
@@ -296,12 +297,12 @@ func operandInvalid(spec toolcontract.CommandSpecification, word, expected strin
 // run resolves the directory and repository, then streams Git's output.
 // Git's own fatal messages and status 128 stand for a missing -C directory
 // or a directory outside any repository.
-func (p Prepared) run(ctx context.Context, streams commandprogram.Streams) (int, error) {
+func (p Prepared) run(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (int, error) {
 	stderr := streams.Error
 	if stderr == nil {
 		stderr = io.Discard
 	}
-	dir, _, status, err := resolveCommandRepo(ctx, p, stderr, false)
+	dir, _, status, err := resolveCommandRepo(ctx, p, tc, stderr, false)
 	if err != nil || status != 0 {
 		return status, err
 	}

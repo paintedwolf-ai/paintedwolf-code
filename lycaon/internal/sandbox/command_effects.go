@@ -30,12 +30,18 @@ func (b *Boundary) CommandOperationAllowed(ctx context.Context, profileID, ident
 	if profile.ToolDenied(identity) {
 		return false, nil
 	}
+	if len(profile.Tools) > 0 && toolcontract.CommandFormTool(identity) && !profile.ToolAllowed(identity) {
+		return false, nil
+	}
 	identities, err := toolcontract.CommandPolicyIdentities(command)
 	if err != nil {
 		return false, err
 	}
 	for _, candidate := range identities {
 		if profile.ToolDenied(candidate) {
+			return false, nil
+		}
+		if len(profile.Tools) > 0 && toolcontract.CommandFormTool(candidate) && !profile.ToolAllowed(candidate) {
 			return false, nil
 		}
 	}

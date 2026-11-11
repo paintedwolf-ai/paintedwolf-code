@@ -8,8 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from .repository_pending import activation_plan, marker as activation_marker_record
-from .repository_objects import encoded
+from .repository_objects import activation_plan, encoded, marker as activation_marker_record
 from .repository_transaction import publish
 from .r2_objects import prefix, public_bytes, current, put
 from .repository_operations import OPERATIONS, transition, identity, withdrawal, version_marker

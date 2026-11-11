@@ -35,12 +35,12 @@ type ProcessIdentity struct {
 
 // CurrentProcessIdentity identifies pid as it runs now.
 func CurrentProcessIdentity(pid int) (ProcessIdentity, error) {
-	incarnation, ok := osprocess.CurrentIncarnation(pid)
+	incarnation, ok := osprocess.IncarnationOf(pid)
 	if !ok {
 		return ProcessIdentity{}, fmt.Errorf("adapter: process %d has no readable start time", pid)
 	}
 	boot, _ := osprocess.BootID()
-	return ProcessIdentity{PID: incarnation.PID, Started: incarnation.Started, BootID: boot}, nil
+	return ProcessIdentity{PID: incarnation.PID, Started: incarnation.Start, BootID: boot}, nil
 }
 
 // Ended requires positive evidence that the recorded process is gone. A record from
@@ -51,7 +51,7 @@ func (p ProcessIdentity) Ended() bool {
 			return true
 		}
 	}
-	return osprocess.Incarnation{PID: p.PID, Started: p.Started}.Ended()
+	return osprocess.Incarnation{PID: p.PID, Start: p.Started}.Ended()
 }
 
 // RecordedConnection is the durable identity of one mounted root and the process serving

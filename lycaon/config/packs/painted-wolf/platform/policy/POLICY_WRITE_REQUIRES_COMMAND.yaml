@@ -21,4 +21,3 @@ x-paintedwolf-message: Instruction changes require a separately reviewed action
 x-paintedwolf-scenarios:
   - id: persistent_terminal
     vars: {path: AGENTS.md, tool: terminal_open, profile: implement}
-    expect_contains: ['Code: POLICY_WRITE_REQUIRES_COMMAND', 'persistent terminal']

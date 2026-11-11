@@ -35,7 +35,8 @@ func TestReleaseRootsGivesUpSnapshotsAndTheirManifests(t *testing.T) {
 	if got := countRows(t, store, `SELECT COUNT(*) FROM source_snapshot_heads`); got != 0 {
 		t.Fatalf("heads after release = %d want 0", got)
 	}
-	testutil.FailErr(t, "sweep released manifests", store.Sweep(t.Context(), time.Now().Add(-Retention)))
+	_, err = store.Sweep(t.Context(), time.Now().Add(-Retention))
+	testutil.FailErr(t, "sweep released manifests", err)
 
 	for _, check := range []struct {
 		what  string
@@ -114,7 +115,8 @@ func TestPublishLeavesNoStagingBehind(t *testing.T) {
 	if got := countRows(t, store, `SELECT COUNT(*) FROM source_manifest_staging`); got != 2 {
 		t.Fatalf("publication changed abandoned staging: %d rows", got)
 	}
-	testutil.FailErr(t, "collect abandoned staging", store.Sweep(t.Context(), time.Now().Add(-Retention)))
+	_, err = store.Sweep(t.Context(), time.Now().Add(-Retention))
+	testutil.FailErr(t, "collect abandoned staging", err)
 	if got := countRows(t, store, `SELECT COUNT(*) FROM source_manifest_staging`); got != 0 {
 		t.Fatalf("abandoned staging rows after sweep = %d want 0", got)
 	}

@@ -1,0 +1,13 @@
+{
+  "category": "source_files",
+  "artifact": "scripts/licenses-assemble.ts",
+  "kind": "construction",
+  "workstream": "local-model-distribution",
+  "disposition": "retain",
+  "reason": "Retain the notice assembly boundary at 405 production lines. It classifies and renders the Go, npm, Rust and bundled dependency inventories into one complete distributable notice; nativegen adds another Rust inventory through the same renderer. Platform build scripts select the inventories, while the renderer rejects unknown crate licenses. The focused generation notice fixture verifies attribution and rejection without running publication.",
+  "reviewed_commit": "66dad059dc2cfe0dee81f35de676bbc9377dd1a8",
+  "ceiling": 405,
+  "boundaries": {
+    "scripts/test_generation_notices_execution.py": "98da73a2de50cfdeb6cbb92ff81870c632012d7882a29b5724cd64f3236c1780"
+  }
+}

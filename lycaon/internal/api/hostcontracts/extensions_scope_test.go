@@ -106,7 +106,7 @@ func TestExtensionsProjectDisableRejectsDeviceUnit(t *testing.T) {
 	body, err := json.Marshal(wire.UpdateExtensionUnitRequest{Enabled: &disabled, ExpectedRevision: before})
 	testutil.FailErr(t, "encode forbidden project disable", err)
 	req := contractfixture.NewAuthedRequest(http.MethodPatch,
-		"/v1/extensions/units/"+url.PathEscape("tools/schemas/write")+"?scope=project&project_id="+p.ID,
+		"/v1/extensions/units/"+url.PathEscape("tools/schemas/parse_validate")+"?scope=project&project_id="+p.ID,
 		bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

@@ -2,14 +2,15 @@
   "category": "go_receiver_methods",
   "artifact": "lycaon/internal/tools/native/search/search.findRun",
   "kind": "algorithm",
-  "workstream": "indexed-command-discovery",
+  "workstream": "large-command-resources",
   "disposition": "retain",
-  "reason": "findRun owns one expression traversal, including boolean short circuiting, pruning, depth, child dispatch, and recoverable deletion. Shared discovery and metadata fetching live on walker. Retain this operation algorithm below 550 receiver lines, 16 methods, and 17 state fields so action ordering and traversal authority stay together. Indexed/live parity, current authorization, deletion order, and traversal accounting support this shape.",
-  "reviewed_commit": "99aa3821b0d3343b5bb9684c0c6d2ec7a86e0956",
+  "reason": "Retain 16 methods for one find expression traversal and ordered action sequence. Shared discovery remains on walker and actual child review remains in the dispatcher. Batch capacity adds a planning constraint within that sequence. Expression, action ordering and composed-tree contracts support the retained interface.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
   "ceiling": 16,
   "boundaries": {
+    "lycaon/internal/tools/native/search/find_test.go": "ec430d03c9d359db5e992b7dd0c7c9c39ceb5b323b5b95a957c85fbabbbf9040",
     "lycaon/internal/tools/native/search/discovery_test.go": "94fdf89e35d935d69b2731f8770c24884c759557f29caf8af3f7e2c7639781fc",
-    "lycaon/internal/tools/native/search/find_test.go": "a43f9faef0e322e864e264850611a66588a046143cd74955fb1e9e02ab57d8b7"
+    "lycaon/internal/toolhost/command_large_queries_stress_test.go": "fdb737c5312dc775cfabebb6d0d74c6b679c343443bbc24d16d431c5010022ac"
   },
-  "reviewed_shape": "0029d15b9e134435c87451878d98839749b224c50db9009083fac4adecd9fc49"
+  "reviewed_shape": "13cc43387f418f48a7cfb09ea30e95bf7fbea31a694979cb03770cb74413392b"
 }

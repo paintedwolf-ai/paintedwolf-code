@@ -241,7 +241,6 @@ describe("ProjectFilesView stage chrome", () => {
             .getByTestId("project-files-stage-boundary")
             .getAttribute("data-ready"),
         ).toBe("true"),
-      { timeout: 5000 },
     );
     fireEvent.click(screen.getByRole("button", { name: "@docs" }));
 
@@ -296,7 +295,6 @@ describe("ProjectFilesView stage chrome", () => {
             .getByTestId("project-files-stage-boundary")
             .getAttribute("data-ready"),
         ).toBe("true"),
-      { timeout: 5000 },
     );
     fireEvent.click(await screen.findByRole("button", { name: "docs" }));
 

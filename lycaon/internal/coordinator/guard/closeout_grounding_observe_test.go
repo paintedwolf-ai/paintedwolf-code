@@ -42,15 +42,10 @@ func TestObserveCoordinatorCloseoutGrounding_publishesRealOffenders(t *testing.T
 		return nil
 	}
 	ledger := ledgertest.CloseoutReader(root, []guidance.EvidenceLeg{{ChildSessionID: "child-1"}}, lookup)
-	report := guidance.CoordinatorCompletionReport{
-		Synthesis: "phantom path",
-		CitedEvidence: []guidance.CoordinatorCitedEvidence{{
-			Path: "phantom.go", Line: 1, Excerpt: "package phantom",
-		}},
-	}
+	draft := markdownDraft(`A phantom path [phantom.go:1 "package phantom"].`)
 	gc := oar.NewGuardContext()
 	verdict, err := guard.ObserveCoordinatorCloseoutGrounding(
-		context.Background(), ledger, sess, history, "implement_synthesis", report, []string{"task"}, evidence.CitationRoots{ProjectDir: root}, gc,
+		context.Background(), ledger, sess, history, "implement_synthesis", draft, evidence.CitationRoots{ProjectDir: root}, gc,
 	)
 	testutil.FailErr(t, "ObserveCoordinatorCloseoutGrounding", err)
 	if !verdict.CitationsRequired && len(verdict.UnobservedHandles) == 0 {

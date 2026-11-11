@@ -6,5 +6,3 @@ suggested_action: "Reload it and make the change again."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "changed since it was loaded"

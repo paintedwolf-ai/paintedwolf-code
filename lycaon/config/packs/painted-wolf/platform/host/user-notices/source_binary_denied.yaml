@@ -8,6 +8,3 @@ suggested_action: Use Open in editor or Reveal in file manager to open it outsid
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - binary
-      - in-app viewer

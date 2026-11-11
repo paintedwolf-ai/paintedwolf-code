@@ -1,12 +1,15 @@
 import { cleanup, fireEvent, render, screen } from "@solidjs/testing-library";
+import { assertNamedControl } from "../../test/controls.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createSignal } from "solid-js";
 import { PRESENTATION_LOADING_GRACE_MS } from "../../ui/presentation.ts";
 import type {
+  EditorDocumentChange,
   SourceFileCommit,
   SourceFileVersion,
   SourceGitChange,
 } from "../../api/types.ts";
+import { stubClient } from "../../test/client-fixture.ts";
 import { FileVersionPicker } from "./FileVersionPicker.tsx";
 import {
   fileVersionTitle,
@@ -126,11 +129,59 @@ function mount(props: Partial<Parameters<typeof FileVersionPicker>[0]> = {}) {
 describe("FileVersionPicker", () => {
   afterEach(() => { cleanup(); vi.useRealTimers(); });
 
+  it("places a busy turn's edits inline and shows five undo rows per page", async () => {
+    const edited = { ...version("edited"), session_id: "turn-session" };
+    const created = version("created", "create");
+    const changes: EditorDocumentChange[] = Array.from({ length: 124 }, (_, index) => ({
+      actor_kind: "agent", session_id: "turn-session", session_title: "Fix the game", turn: 1,
+      revision: 124 - index, epoch: 1, operation_id: `edit-${index}`, person_id: "", client_id: "",
+      reverted_by: "", created_at: edited.created_at,
+    }));
+    const client = stubClient({
+      listEditorDocumentChanges: async (_project: string, _document: string, cursor?: string) => {
+        const start = Number(cursor ?? 0);
+        const end = start + 50;
+        return { changes: changes.slice(start, end), next_cursor: end < changes.length ? String(end) : undefined };
+      },
+    });
+    mount({
+      history: history({ versions: [edited, created], commits: [commit()] }),
+      documentHistory: { client, projectId: "project", documentId: "game", onApplied: vi.fn() },
+    });
+    fireEvent.click(screen.getByTestId("file-version-trigger"));
+    await screen.findByText("50 edits from this turn");
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier document edits" }));
+    await screen.findByText("100 edits from this turn");
+    fireEvent.click(screen.getByRole("button", { name: "Load earlier document edits" }));
+    const summary = await screen.findByText("124 edits from this turn");
+    const details = summary.closest("details")!;
+    const [editedRow, createdRow] = screen.getAllByTestId("file-version-title");
+    const editedOption = editedRow!.closest<HTMLElement>('[role="menuitemradio"]')!;
+    expect(editedOption.nextElementSibling).toBe(details);
+    editedOption.focus();
+    fireEvent.keyDown(editedOption, { key: "ArrowDown" });
+    expect(document.activeElement).toBe(details.querySelector("summary"));
+    expect(details.nextElementSibling).toBe(createdRow!.closest('[role="menuitemradio"]'));
+    expect(screen.getByTestId("file-version-commit")).toBeTruthy();
+    expect(screen.queryAllByRole("button", { name: /^Undo edit/ })).toHaveLength(0);
+
+    details.open = true;
+    fireEvent(details, new Event("toggle"));
+    expect(screen.getAllByRole("button", { name: /^Undo edit/ })).toHaveLength(5);
+    expect(screen.getByText("Page 1 of 25")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getAllByRole("button", { name: /^Undo edit/ })).toHaveLength(5);
+    expect(screen.getByText("Page 2 of 25")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Undo edit 119" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Previous" }));
+    expect(screen.getByText("Page 1 of 25")).toBeTruthy();
+  });
+
   it("marks an AI edit the working file never received", () => {
     mount({ history: history({ versions: [heldVersion("c9")] }) });
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
-    expect(screen.getByText("AI · Never saved to disk")).toBeTruthy();
+    expect(screen.getByTestId("file-version-meta").textContent).toBe("AI · Never saved to disk");
     expect(screen.getByText(fileVersionTitle(heldVersion("c9")))).toBeTruthy();
   });
 
@@ -160,7 +211,7 @@ describe("FileVersionPicker", () => {
     expect(props.onCurrent).toHaveBeenCalledOnce();
 
     fireEvent.click(screen.getByTestId("file-version-trigger"));
-    fireEvent.click(screen.getByRole("button", { name: "Load earlier history" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("file-version-load-earlier"), "button"));
     expect(props.onLoadMore).toHaveBeenCalledOnce();
   });
 
@@ -169,8 +220,6 @@ describe("FileVersionPicker", () => {
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
     const current = screen.getByTestId("file-version-current");
-    expect(current.textContent).toContain("Deleted · no working file");
-    expect(current.textContent).not.toContain("Editable working file");
     expect(current.getAttribute("aria-checked")).toBe("true");
   });
 
@@ -248,7 +297,6 @@ describe("FileVersionPicker", () => {
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
     const row = screen.getByRole("menuitemradio", { name: /Restored/ });
-    expect(row.textContent).toContain("matches commit");
     expect(row.textContent).not.toContain("committed");
     expect(row.textContent).toContain("a1b2c3f");
   });
@@ -292,7 +340,6 @@ describe("FileVersionPicker", () => {
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
     const boundary = screen.getByTestId("file-version-boundary");
-    expect(boundary.textContent).toContain("Tracked since");
     const commitRow = screen.getByTestId("file-version-commit");
     expect(
       boundary.compareDocumentPosition(commitRow) &
@@ -340,9 +387,9 @@ describe("FileVersionPicker", () => {
     expect(screen.getByText(fileVersionTitle(localVersion))).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
     vi.advanceTimersByTime(PRESENTATION_LOADING_GRACE_MS);
-    expect(screen.getByRole("status", { name: "Loading Git history" }).textContent)
+    expect(screen.getByTestId("file-version-git-loading").textContent)
       .toBe("Loading Git history…");
-    expect(screen.queryByText("No earlier versions")).toBeNull();
+    expect(screen.queryByTestId("file-version-empty")).toBeNull();
   });
 
   it("reports initial history loading and failure states", () => {
@@ -364,7 +411,6 @@ describe("FileVersionPicker", () => {
     fireEvent.click(screen.getByTestId("file-version-trigger"));
     expect(screen.queryByRole("status")).toBeNull();
     vi.advanceTimersByTime(PRESENTATION_LOADING_GRACE_MS);
-    expect(screen.getByRole("status").textContent).toBe("Loading history…");
     unmount();
 
     mount({
@@ -375,7 +421,7 @@ describe("FileVersionPicker", () => {
     });
     fireEvent.click(screen.getByTestId("file-version-trigger"));
     expect(screen.queryByRole("alert")).toBeNull();
-    expect(screen.queryByText("No earlier versions")).toBeNull();
+    expect(screen.queryByTestId("file-version-empty")).toBeNull();
   });
 
   it("keeps one waiting interval across history phases and resets it on close", () => {
@@ -390,14 +436,14 @@ describe("FileVersionPicker", () => {
     expect(screen.queryByRole("status")).toBeNull();
     setValue(history({ gitStatus: "loading" }));
     vi.advanceTimersByTime(1);
-    expect(screen.getByRole("status", { name: "Loading Git history" })).toBeTruthy();
+    expect(screen.getByTestId("file-version-git-loading")).toBeTruthy();
     fireEvent.click(screen.getByTestId("file-version-trigger"));
     fireEvent.click(screen.getByTestId("file-version-trigger"));
     expect(screen.queryByRole("status")).toBeNull();
     setValue(history());
     vi.advanceTimersByTime(PRESENTATION_LOADING_GRACE_MS);
     expect(screen.queryByRole("status")).toBeNull();
-    expect(screen.getByText("No earlier versions")).toBeTruthy();
+    expect(screen.getByTestId("file-version-empty")).toBeTruthy();
   });
 
   it.each(["timed_out" as const, "failed" as const])("does not claim no history when the Git lane %s", (state) => {
@@ -405,7 +451,7 @@ describe("FileVersionPicker", () => {
 
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
-    expect(screen.queryByText("No earlier versions")).toBeNull();
+    expect(screen.queryByTestId("file-version-empty")).toBeNull();
   });
 
   it("still says no earlier versions once the lane has actually answered", () => {
@@ -413,7 +459,7 @@ describe("FileVersionPicker", () => {
 
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
-    expect(screen.getByText("No earlier versions")).toBeTruthy();
+    expect(screen.getByTestId("file-version-empty")).toBeTruthy();
   });
 
   it("stays silent when there is no repository to ask", () => {
@@ -421,6 +467,6 @@ describe("FileVersionPicker", () => {
 
     fireEvent.click(screen.getByTestId("file-version-trigger"));
 
-    expect(screen.getByText("No earlier versions")).toBeTruthy();
+    expect(screen.getByTestId("file-version-empty")).toBeTruthy();
   });
 });

@@ -20,10 +20,11 @@ type Store interface {
 	Get(context.Context, string) (*api.Session, error)
 }
 type Service struct {
-	store   Store
-	mu      sync.Mutex
-	prompts scopedstore.LRU[closeoutPromptState]
-	cycles  scopedstore.LRU[closeoutCycleState]
+	store          Store
+	mu             sync.Mutex
+	prompts        scopedstore.LRU[closeoutPromptState]
+	cycles         scopedstore.LRU[closeoutCycleState]
+	waivedProgress scopedstore.LRU[string]
 }
 
 type closeoutPromptState struct {
@@ -83,11 +84,35 @@ func (c *Service) Forget(sessionID string) {
 func (c *Service) forgetLocked(sessionID string) {
 	c.prompts.Delete(sessionID)
 	c.cycles.Delete(sessionID)
+	c.waivedProgress.Delete(sessionID)
 	for id, prompt := range c.prompts.Snapshot() {
 		if prompt.rootID == sessionID {
 			c.prompts.Delete(id)
 		}
 	}
+}
+
+// ProgressWaived reports whether rootID already waived the current open
+// checklist snapshot after exhausting its per-prompt delay cap.
+func (c *Service) ProgressWaived(rootID, content string) bool {
+	if c == nil || rootID == "" || strings.TrimSpace(content) == "" {
+		return false
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	waived, ok := c.waivedProgress.Load(rootID)
+	return ok && waived == content
+}
+
+// WaiveProgress records a waived checklist snapshot for rootID until the
+// checklist content changes or the session is rewound or forgotten.
+func (c *Service) WaiveProgress(rootID, content string) {
+	if c == nil || rootID == "" || strings.TrimSpace(content) == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.waivedProgress.Store(rootID, content)
 }
 
 func (c *Service) Rewind(sessionID, rootID string) {

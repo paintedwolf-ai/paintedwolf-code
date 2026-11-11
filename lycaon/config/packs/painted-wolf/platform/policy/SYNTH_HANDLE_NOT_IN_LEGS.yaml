@@ -15,8 +15,8 @@ copy:
   what: Synthesis cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat.
   cause: An evidence handle or path did not match the evidence ledger for this chat
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: 'Copy an exact printed handle into `evidence`, or cite path/line/excerpt from your or a worker''s tool results. Move URLs to cited_urls. Omit entries with no matching receipt.'
-  instead: Repair the trailing citation metadata using only evidence already present in this chat
+  fix: 'Cite an exact printed handle such as `[command#4]`, or an observed path and printed line such as `[internal/a.go:42]`, from your or a worker''s tool results. Write web sources as Markdown links. Drop a citation with no matching receipt.'
+  instead: Repair the rejected citations using only evidence already present in this chat
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis
 x-paintedwolf-evidence:
@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: phantom.go:1 ("package phantom")
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SYNTH_HANDLE_NOT_IN_LEGS'

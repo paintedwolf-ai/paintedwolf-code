@@ -24,9 +24,12 @@ type lmstudioModelListResponse struct {
 }
 
 type lmstudioModelRecord struct {
-	ID           string `json:"id"`
-	Type         string `json:"type"`
-	Capabilities struct {
+	ID                  string `json:"id"`
+	Type                string `json:"type"`
+	LoadedContextLength int    `json:"loaded_context_length"`
+	ContextLength       int    `json:"context_length"`
+	MaxContextLength    int    `json:"max_context_length"`
+	Capabilities        struct {
 		Vision            *bool `json:"vision"`
 		TrainedForToolUse *bool `json:"trained_for_tool_use"`
 	} `json:"capabilities"`
@@ -84,6 +87,10 @@ func LMStudioModels(ctx context.Context, baseURL, apiKey string, client *http.Cl
 		entry.Capabilities.Vision = modelinfo.Evidence(modelinfo.OptionalState(item.Capabilities.Vision), "lmstudio")
 		if typ == "vlm" || item.Capabilities.Vision != nil && *item.Capabilities.Vision {
 			entry.Capabilities.Vision = modelinfo.Evidence(modelinfo.CapabilitySupported, "lmstudio")
+		}
+		if ctxLen, _ := firstPositiveContextLength(item.LoadedContextLength, 0, item.ContextLength, item.MaxContextLength); ctxLen > 0 {
+			entry.ContextLength = ctxLen
+			entry.ContextLengthSource = "lmstudio"
 		}
 		out = append(out, entry)
 	}

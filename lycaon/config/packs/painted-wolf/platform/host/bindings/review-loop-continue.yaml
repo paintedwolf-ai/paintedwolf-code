@@ -8,7 +8,3 @@ invariants:
   trigger_class: workflow_event
   fires_in:
   - review_loop phase held on a non-terminal verdict below iteration_cap (host re-prompt)
-  required:
-  - submit_verdict
-  forbidden:
-  - workflow_advance

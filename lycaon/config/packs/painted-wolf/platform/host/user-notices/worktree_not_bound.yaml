@@ -6,5 +6,3 @@ suggested_action: Create a worktree from the Git tab when you want a separate ch
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - no worktree

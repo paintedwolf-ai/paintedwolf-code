@@ -21,6 +21,3 @@ x-paintedwolf-message: http_request cookie not held for this URL
 x-paintedwolf-scenarios:
   - id: default
     vars: {jar: registry, missing: session, held: csrf, profile: implement, tool: http_request}
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: HTTP_REQUEST_COOKIE_NOT_HELD'

@@ -14,4 +14,5 @@ type PrerequisiteState struct {
 	Content          string
 	WorkerChild      bool
 	ReviewLoopActive bool
+	Reconciliation   *Reconciliation
 }

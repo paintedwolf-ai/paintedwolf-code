@@ -41,7 +41,7 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		resolved := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, false, webSearchEnabled)
 		roster = &resolved
 	}
-	previous := e.loadExecutionModeState(ctx, sess.ID).LastFamily
+	previous := e.loadExecutionModeState(sess.ID).LastFamily
 	causes := []surface.ModeTransitionCause(nil)
 	if turn != nil {
 		causes = turn.ModeTransitionCauses
@@ -89,11 +89,11 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 	return rendered, nil
 }
 
-func (e *promptSurface) loadExecutionModeState(ctx context.Context, sessionID string) surface.ExecutionModeState {
-	if e == nil || e.deps.LoadExecutionModeState == nil {
+func (e *promptSurface) loadExecutionModeState(sessionID string) surface.ExecutionModeState {
+	if e == nil {
 		return surface.ExecutionModeState{}
 	}
-	return e.deps.LoadExecutionModeState(ctx, sessionID)
+	return e.deps.ExecutionModes.Load(sessionID)
 }
 
 func (e *promptSurface) renderTripartiteCoordinatorPrompt(
@@ -124,7 +124,7 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 		resolved := inject.ResolveAgentRoster(profile.SurfaceID, declared, rootCount, false, webSearchEnabled)
 		roster = &resolved
 	}
-	previous := e.loadExecutionModeState(ctx, sess.ID).LastFamily
+	previous := e.loadExecutionModeState(sess.ID).LastFamily
 	current := surface.ExecutionModeFamily(profile.SurfaceID)
 	causes := []surface.ModeTransitionCause(nil)
 	if turn != nil {
@@ -189,10 +189,10 @@ func rootCountFromVars(vars map[string]any) int {
 
 // loadedTools returns the turn ledger's loaded set for the session.
 func (e *promptSurface) loadedTools(sess *api.Session) map[string]bool {
-	if e == nil || sess == nil || e.deps.LoadedTools == nil {
+	if e == nil || sess == nil || e.deps.Selection == nil {
 		return nil
 	}
-	return e.deps.LoadedTools(sess.ID)
+	return e.deps.Selection.LoadedTools(sess.ID)
 }
 
 func sortedLoadedSet(loaded map[string]bool) []string {

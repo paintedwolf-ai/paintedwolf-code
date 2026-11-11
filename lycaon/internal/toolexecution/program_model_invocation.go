@@ -5,9 +5,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
-	"unicode/utf8"
 
-	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 )
@@ -42,16 +40,13 @@ type programFrameLifetime struct {
 }
 
 func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvocation, tc tools.ToolContext, model ProgramModelInvocation, admission *toolcontract.ProgramMemory) (*programFrameLifetime, error) {
-	if ctx == nil || admission == nil || model.ToolName != "command" || model.Arguments == nil {
-		return nil, fmt.Errorf("program frame requires actual command invocation and retained state admission")
+	if ctx == nil || admission == nil || !programModelTool(model.ToolName) || model.Arguments == nil {
+		return nil, fmt.Errorf("program frame requires an actual program invocation and retained state admission")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	// Reserve the root map and scalar attribution before the addressed map is
-	// allocated. The fixed feedback allowance survives effects so a reached
-	// refusal can still deliver a bounded failure descriptor. Strings remain
-	// immutable host values; this accounts retention.
+	// Keep feedback capacity available after effects reach a refusal.
 	bound := int64(4096 + programFeedbackAllowance)
 	add := func(value string) bool {
 		if int64(len(value)) > (math.MaxInt64-bound)/8 {
@@ -92,17 +87,13 @@ func captureProgramModel(ctx context.Context, parent toolcontract.OperationInvoc
 		return nil, err
 	}
 	lifetime.arguments = snapshot
-	if !modelJSONUTF8(snapshot.values) {
-		lifetime.close()
-		return nil, fmt.Errorf("submitted model arguments require valid JSON text strings")
-	}
-	canonical, err := jsonvalue.CanonicalJSON(snapshot.values)
+	canonical, releaseCanonical, err := toolcontract.CaptureModelJSON(ctx, admission, snapshot.values)
 	if err != nil {
 		lifetime.close()
 		return nil, err
 	}
-	lifetime.model = ProgramModelObservation{ToolName: model.ToolName, ToolCallID: tc.Identity.ToolCallID, CanonicalArguments: string(canonical)}
-	snapshot.values = nil
+	lifetime.releases = append(lifetime.releases, releaseCanonical)
+	lifetime.model = ProgramModelObservation{ToolName: model.ToolName, ToolCallID: tc.Identity.ToolCallID, CanonicalArguments: canonical}
 	return lifetime, nil
 }
 
@@ -174,34 +165,6 @@ func (l *programFrameLifetime) clear() {
 	l.releases = nil
 }
 
-// The model protocol is JSON text. Native operation operands use the separate
-// lossless review representation; they do not pass through this outer snapshot.
-func modelJSONUTF8(value any) bool {
-	switch v := value.(type) {
-	case string:
-		return utf8.ValidString(v)
-	case map[string]any:
-		for key, item := range v {
-			if !utf8.ValidString(key) || !modelJSONUTF8(item) {
-				return false
-			}
-		}
-	case []any:
-		for _, item := range v {
-			if !modelJSONUTF8(item) {
-				return false
-			}
-		}
-	case []string:
-		for _, item := range v {
-			if !utf8.ValidString(item) {
-				return false
-			}
-		}
-	}
-	return true
-}
-
 // beginUse retains the actual frame facts throughout one admission/owner call.
 // Close denies new uses immediately, but releases quota only after active uses
 // return. Shared maps are cleared under that same lifetime before release.
@@ -256,4 +219,8 @@ func (f ProgramFrame) retainProgramFacts(ctx context.Context, n int64) error {
 	}
 	l.releases = append(l.releases, release)
 	return nil
+}
+
+func programModelTool(name string) bool {
+	return name == "command" || name == "verify"
 }

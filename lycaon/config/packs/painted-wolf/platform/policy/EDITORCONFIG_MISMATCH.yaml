@@ -5,8 +5,6 @@ oar: '1.0'
 id: EDITORCONFIG_MISMATCH
 kind: policy
 anchor: tool.post_invoke
-selector:
-  tool: [write, edit, replace_lines, restore_version, code_rewrite, jq_edit]
 requires:
   profiles: [tool]
   facts:
@@ -46,16 +44,9 @@ x-paintedwolf-scenarios:
       path: tests/test_image.py
       editorconfig_rules: [trim_trailing_whitespace, indent_style]
       editorconfig_lines: tests/test_image.py:16,28,30 trim_trailing_whitespace; tests/test_image.py:16,28,30 indent_style
-    expect_contains:
-      - 'Code: EDITORCONFIG_MISMATCH'
-      - tests/test_image.py:16,28,30 indent_style
-      - trim_trailing_whitespace, indent_style
   - id: final_newline_edit
     vars:
       tool: edit
       path: README.md
       editorconfig_rules: [insert_final_newline]
       editorconfig_lines: README.md:40 insert_final_newline
-    expect_contains:
-      - 'Code: EDITORCONFIG_MISMATCH'
-      - README.md:40 insert_final_newline

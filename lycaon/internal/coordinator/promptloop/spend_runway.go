@@ -79,7 +79,7 @@ func (l *turnNudges) applySpendCeiling(
 		LastOutputID:         st.output.id,
 		LastAssistantContent: content,
 		TurnTools:            st.turnTools,
-		OfferedTools:         st.offeredToolNames,
+		Reach:                st.requestReach(),
 		TasksDispatchedCount: st.tasksDispatchedCount,
 	}
 	return out, nil
@@ -203,8 +203,7 @@ func (l *modelTurn) publishLLMCallOK(
 		return
 	}
 	var contextWindow, compactionThreshold int
-	if l.Deps.CompactionConfig != nil {
-		cc := l.Deps.CompactionConfig(ctx, sess)
+	if cc, ok := l.effectiveCompactionConfig(ctx, sess); ok {
 		contextWindow = cc.ModelContextWindow
 		compactionThreshold = cc.CompactionTriggerTokens()
 	}

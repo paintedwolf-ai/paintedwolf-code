@@ -58,7 +58,7 @@ type WorkerWorkspaceManager interface {
 	PublishSealedOverlayCheckpoint(ctx context.Context, sealed workspace.SealedOverlay) (string, error)
 	CheckpointCoordinator() (*recovery.Coordinator, error)
 	RebuildWorkerWorkspace(ctx context.Context, branchRoot string, restore func(ctx context.Context, layout workspace.SandboxLayout, branchRoot string) error) (workspace.SandboxLayout, error)
-	DestroyWorkerWorkspace(binding *workspace.Binding) error
+	DestroyWorkerWorkspace(ctx context.Context, binding *workspace.Binding) error
 }
 
 // ProjectStore loads project metadata for worker sandbox provisioning.
@@ -66,7 +66,7 @@ type ProjectStore interface {
 	Get(ctx context.Context, projectID string) (*project.Project, error)
 }
 
-func (q *SQLQueue) ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error) {
+func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -95,17 +95,17 @@ func (q *SQLQueue) ClaimWorkerBranch(ctx context.Context, jobID string) (*api.Wo
 	if strings.TrimSpace(task.WorkspaceRoot) != "" {
 		return task, nil
 	}
-	claimCtx := withWorkspacePreparation(q, ctx, task)
-	if err := provisionWorkerBranch(q, claimCtx, task); err != nil {
-		clearWorkspacePreparation(q, task)
+	claimCtx := q.withWorkspacePreparation(ctx, task)
+	if err := q.provisionWorkerBranch(claimCtx, task); err != nil {
+		q.clearWorkspacePreparation(task)
 		return nil, err
 	}
-	clearWorkspacePreparation(q, task)
+	q.clearWorkspacePreparation(task)
 	q.refreshBoard(ctx, *task, task.ProjectID)
 	return task, nil
 }
 
-func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTask) error {
+func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api.WorkerTask) error {
 	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) != "" {
 		return nil
 	}
@@ -119,7 +119,7 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 	if len(roots) == 0 {
 		return ErrWorkerBranchClaimFailed
 	}
-	parentCheckpoint, err := stackedParentCheckpoint(ctx, task, roots, q, ws)
+	parentCheckpoint, err := stackedParentCheckpoint(ctx, task, roots, q.self, ws)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrWorkerBranchClaimFailed, err)
 	}
@@ -163,16 +163,9 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 		return err
 	}
 	if !won {
-		stored, ok := q.store.getTask(ctx, task.ID)
-		if !ok || stored == nil || strings.TrimSpace(stored.WorkspaceRoot) == "" {
-			return ErrWorkerBranchClaimFailed
+		if err := q.adoptExistingWorkerWorkspace(ctx, task, binding, ws); err != nil {
+			return err
 		}
-		if filepath.Clean(stored.WorkspaceRoot) != filepath.Clean(binding.Root) {
-			if err := ws.DestroyWorkerWorkspace(binding); err != nil {
-				workerWorkspaceLog.Warn("losing worker workspace left in custody", "job_id", task.ID, "error", err)
-			}
-		}
-		task.WorkspaceRoot, task.WorkspaceBaselinePath = stored.WorkspaceRoot, stored.WorkspaceBaselinePath
 	} else {
 		task.WorkspaceRoot, task.WorkspaceBaselinePath = binding.Root, baselinePath
 	}
@@ -182,7 +175,22 @@ func provisionWorkerBranch(q *SQLQueue, ctx context.Context, task *api.WorkerTas
 	return nil
 }
 
-func withWorkspacePreparation(q *SQLQueue, ctx context.Context, task *api.WorkerTask) context.Context {
+// adoptExistingWorkerWorkspace takes the branch another claim recorded first and releases this one.
+func (q *sqlQueuePromotion) adoptExistingWorkerWorkspace(ctx context.Context, task *api.WorkerTask, binding *workspace.Binding, ws WorkerWorkspaceManager) error {
+	stored, ok := q.store.getTask(ctx, task.ID)
+	if !ok || stored == nil || strings.TrimSpace(stored.WorkspaceRoot) == "" {
+		return ErrWorkerBranchClaimFailed
+	}
+	if filepath.Clean(stored.WorkspaceRoot) != filepath.Clean(binding.Root) {
+		if err := ws.DestroyWorkerWorkspace(context.WithoutCancel(ctx), binding); err != nil {
+			workerWorkspaceLog.Warn("losing worker workspace left in custody", "job_id", task.ID, "error", err)
+		}
+	}
+	task.WorkspaceRoot, task.WorkspaceBaselinePath = stored.WorkspaceRoot, stored.WorkspaceBaselinePath
+	return nil
+}
+
+func (q *sqlQueueCore) withWorkspacePreparation(ctx context.Context, task *api.WorkerTask) context.Context {
 	if task == nil || !task.EffectiveScope().IsWrite() {
 		return ctx
 	}
@@ -193,8 +201,14 @@ func withWorkspacePreparation(q *SQLQueue, ctx context.Context, task *api.Worker
 		reportMu.Lock()
 		defer reportMu.Unlock()
 		preparation := &api.WorkspacePreparation{
-			Strategy: api.WorkspaceProvisionStrategy(progress.Strategy), Stage: progress.Stage,
-			Files: progress.Files, Bytes: progress.Bytes, TotalBytes: progress.TotalBytes,
+			Strategy:          api.WorkspaceProvisionStrategy(progress.Strategy),
+			Stage:             progress.Stage,
+			Files:             progress.Files,
+			Bytes:             progress.Bytes,
+			TotalBytes:        progress.TotalBytes,
+			TotalEntries:      progress.TotalEntries,
+			UnreadableEntries: progress.UnreadableEntries,
+			NotClonableReason: api.WorkspaceNotClonableReason(progress.NotClonableReason),
 		}
 		now := time.Now()
 		emit := progress.Stage != lastStage || now.Sub(lastEmit) >= workspacePreparationEmitInterval
@@ -209,7 +223,7 @@ func withWorkspacePreparation(q *SQLQueue, ctx context.Context, task *api.Worker
 	})
 }
 
-func clearWorkspacePreparation(q *SQLQueue, task *api.WorkerTask) {
+func (q *sqlQueueCore) clearWorkspacePreparation(task *api.WorkerTask) {
 	if task == nil {
 		return
 	}
@@ -219,7 +233,7 @@ func clearWorkspacePreparation(q *SQLQueue, task *api.WorkerTask) {
 	q.mu.Unlock()
 }
 
-func (q *SQLQueue) decorateWorkspacePreparations(tasks []api.WorkerTask) {
+func (q *sqlQueueCore) decorateWorkspacePreparations(tasks []api.WorkerTask) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	for i := range tasks {
@@ -228,7 +242,7 @@ func (q *SQLQueue) decorateWorkspacePreparations(tasks []api.WorkerTask) {
 }
 
 // overlayDivergesFromProject checks the full branch against the project.
-func (q *SQLQueue) overlayDivergesFromProject(ctx context.Context, task *api.WorkerTask) bool {
+func (q *sqlQueueCore) overlayDivergesFromProject(ctx context.Context, task *api.WorkerTask) bool {
 	if task == nil || !task.EffectiveScope().IsWrite() {
 		return false
 	}
@@ -238,7 +252,7 @@ func (q *SQLQueue) overlayDivergesFromProject(ctx context.Context, task *api.Wor
 	return len(session.OverlayWorkspaceDivergencePaths(task, TaskRootRefs(ctx, task, projects))) > 0
 }
 
-func (q *SQLQueue) destroyWorkerWorkspace(_ context.Context, task *api.WorkerTask) {
+func (q *sqlQueueCore) destroyWorkerWorkspace(ctx context.Context, task *api.WorkerTask) {
 	if task == nil || strings.TrimSpace(task.WorkspaceRoot) == "" {
 		return
 	}
@@ -248,14 +262,14 @@ func (q *SQLQueue) destroyWorkerWorkspace(_ context.Context, task *api.WorkerTas
 	if ws == nil {
 		return
 	}
-	if err := ws.DestroyWorkerWorkspace(&workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}); err != nil {
+	if err := ws.DestroyWorkerWorkspace(context.WithoutCancel(ctx), &workspace.Binding{ID: task.ID, Root: task.WorkspaceRoot}); err != nil {
 		workerWorkspaceLog.Warn("worker workspace left in custody", "job_id", task.ID, "error", err)
 	}
 }
 
 // captureOverlay seals a completing write worker's changes so its branch tree
 // can be reclaimed and rebuilt while the overlay waits for review.
-func (q *SQLQueue) captureOverlay(ctx context.Context, task *api.WorkerTask) (string, error) {
+func (q *sqlQueueCore) captureOverlay(ctx context.Context, task *api.WorkerTask) (string, error) {
 	q.mu.Lock()
 	baselines, projects := q.baselines, q.projects
 	q.mu.Unlock()
@@ -271,7 +285,7 @@ func (q *SQLQueue) captureOverlay(ctx context.Context, task *api.WorkerTask) (st
 }
 
 // discardOverlay drops a capture the completion did not publish.
-func (q *SQLQueue) discardOverlay(ctx context.Context, overlayPath string) {
+func (q *sqlQueueCore) discardOverlay(ctx context.Context, overlayPath string) {
 	if overlayPath == "" {
 		return
 	}
@@ -287,7 +301,7 @@ func (q *SQLQueue) discardOverlay(ctx context.Context, overlayPath string) {
 
 // EnsureWorkerBranch hands back the job's branch tree, rebuilding it first
 // when retention reclaimed it.
-func (q *SQLQueue) EnsureWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, *BranchLease, error) {
+func (q *sqlQueueCore) EnsureWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, *BranchLease, error) {
 	task, ok := q.Get(strings.TrimSpace(jobID)) //nolint:contextcheck // bounded Get
 	if !ok || task == nil {
 		return nil, nil, fmt.Errorf("%w: job %q not found", ErrWorkerBranchUnavailable, jobID)
@@ -310,7 +324,7 @@ func createTaskBranch(ctx context.Context, ws WorkerWorkspaceManager, roots []pr
 }
 
 // ListBranchJobs reports every job that still names a branch tree.
-func (q *SQLQueue) ListBranchJobs(ctx context.Context) ([]BranchJob, error) {
+func (q *sqlQueuePromotion) ListBranchJobs(ctx context.Context) ([]BranchJob, error) {
 	rows, err := q.store.queries.ListWorkerJobsForBranchRetention(ctx)
 	if err != nil {
 		return nil, err

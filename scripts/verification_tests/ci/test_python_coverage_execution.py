@@ -206,6 +206,7 @@ class ProvisionTests(unittest.TestCase):
         installed = [call.args[0] for call in provision.call_args_list]
         self.assertEqual(installed, [coverage_changes.python_coverage.REQUIREMENTS,
                                      coverage_changes.ROOT / "scripts/workflow_lint/requirements.txt",
+                                     ROOT / "scripts/generation/requirements-test.txt",
                                      ROOT / "scripts/coordinator-benchmark/requirements.txt",
                                      ROOT / "scripts/bialy/custom_model/requirements-test.txt"])
         with patch("sys.stderr"), self.assertRaises(SystemExit):

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"io"
 	"strings"
 
@@ -121,6 +122,7 @@ type CompactedSource struct {
 	Handles   []string
 	Tool      string
 	MessageID string
+	Execution *messageview.ContinuationExecution
 }
 
 func (s CompactedSource) templateVars() map[string]any {
@@ -128,6 +130,7 @@ func (s CompactedSource) templateVars() map[string]any {
 		"handles":    append([]string(nil), s.Handles...),
 		"tool":       s.Tool,
 		"message_id": s.MessageID,
+		"execution":  continuationExecutionJSON(s.Execution),
 	}
 }
 
@@ -196,4 +199,12 @@ var (
 // CompactionSummaryResponseFormat constrains durable continuation synthesis.
 func CompactionSummaryResponseFormat() *modelcall.ResponseFormat {
 	return modelcall.JSONSchemaFormat("compaction_summary", compactionSummarySchema)
+}
+
+func continuationExecutionJSON(execution *messageview.ContinuationExecution) string {
+	if execution == nil {
+		return ""
+	}
+	raw, _ := json.Marshal(execution) //nolint:errchkjson // Recorded fields contain no custom encoders.
+	return string(raw)
 }

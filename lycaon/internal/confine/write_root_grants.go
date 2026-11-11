@@ -85,11 +85,7 @@ func ControlPlaneReadDenied(root string) bool {
 	if p == "" || p == "." {
 		return false
 	}
-	p = fspath.CanonicalPath(p)
-	if underSecretReadAllowBack(p) {
-		return false
-	}
-	return underSecretReadDeny(p)
+	return underSecretReadDeny(fspath.CanonicalPath(p))
 }
 
 // ControlPlaneWriteDenied refuses writes to active host inputs. The state tree

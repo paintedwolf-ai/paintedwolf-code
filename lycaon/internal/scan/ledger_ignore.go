@@ -14,7 +14,7 @@ import (
 )
 
 // SyncIgnores refreshes cached verdicts when the declaration digest changes.
-func (s *SQLStore) SyncIgnores(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, error) {
+func (s *sqlIgnoreStore) SyncIgnores(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, error) {
 	catalog, secretDecisions, err := s.ignoreDeclarations(ctx, canonicalPath, rootPaths)
 	if err != nil {
 		return nil, err
@@ -34,7 +34,7 @@ func (s *SQLStore) SyncIgnores(ctx context.Context, canonicalPath string, rootPa
 
 // IgnoreMatches reads the declared ignores and counts the ledger rows each one
 // matches now, without recording the verdicts.
-func (s *SQLStore) IgnoreMatches(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, map[string]int, error) {
+func (s *sqlIgnoreStore) IgnoreMatches(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, map[string]int, error) {
 	catalog, secretDecisions, err := s.ignoreDeclarations(ctx, canonicalPath, rootPaths)
 	if err != nil {
 		return nil, nil, err
@@ -54,7 +54,7 @@ func (s *SQLStore) IgnoreMatches(ctx context.Context, canonicalPath string, root
 
 // ignoreDeclarations are the overlay ignore catalog and the secret decisions,
 // with a digest over both.
-func (s *SQLStore) ignoreDeclarations(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, map[string]projectignore.SecretEntry, error) {
+func (s *sqlIgnoreStore) ignoreDeclarations(ctx context.Context, canonicalPath string, rootPaths []string) (*scanignore.IgnoreCatalog, map[string]projectignore.SecretEntry, error) {
 	catalog, err := scanignore.LoadIgnoreCatalog(rootPaths)
 	if err != nil {
 		return nil, nil, err
@@ -88,7 +88,7 @@ func ignoreVerdict(subject db.ListScanFindingLedgerSubjectsRow, catalog *scanign
 }
 
 // Clearing cached verdicts restores findings whose declarations were removed.
-func (s *SQLStore) applyIgnores(ctx context.Context, canonicalPath string, catalog *scanignore.IgnoreCatalog, secretDecisions map[string]projectignore.SecretEntry) error {
+func (s *sqlIgnoreStore) applyIgnores(ctx context.Context, canonicalPath string, catalog *scanignore.IgnoreCatalog, secretDecisions map[string]projectignore.SecretEntry) error {
 	subjects, err := s.queries.ListScanFindingLedgerSubjects(ctx, canonicalPath)
 	if err != nil {
 		return fmt.Errorf("read ledger subjects: %w", err)
@@ -135,7 +135,7 @@ func (s *SQLStore) applyIgnores(ctx context.Context, canonicalPath string, catal
 }
 
 // InvalidateIgnoreDigest forces the next read to re-apply.
-func (s *SQLStore) InvalidateIgnoreDigest(ctx context.Context, canonicalPath string) error {
+func (s *sqlIgnoreStore) InvalidateIgnoreDigest(ctx context.Context, canonicalPath string) error {
 	if err := s.queries.PutScanIgnoreDigest(ctx, db.PutScanIgnoreDigestParams{
 		CanonicalPath: canonicalPath,
 		Digest:        "",

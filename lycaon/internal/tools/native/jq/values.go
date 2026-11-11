@@ -27,9 +27,6 @@ func NewValueStream(r io.Reader) *ValueStream {
 // Decode returns the next value, io.EOF at the end, or the syntax error.
 func (s *ValueStream) Decode() (any, error) { return s.decoder.Decode() }
 
-// InputOffset reports how many input bytes the decoded values consumed.
-func (s *ValueStream) InputOffset() int64 { return s.decoder.InputOffset() }
-
 func decodeJSONValue(raw []byte) (any, error) {
 	return gojq.NewDecoder(bytes.NewReader(raw)).Decode()
 }

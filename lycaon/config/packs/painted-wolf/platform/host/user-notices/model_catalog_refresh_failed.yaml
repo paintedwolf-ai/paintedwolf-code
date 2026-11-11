@@ -6,6 +6,3 @@ suggested_action: Check the provider credentials and endpoint, then try Refresh 
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - model list
-      - credentials

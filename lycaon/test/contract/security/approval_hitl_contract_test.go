@@ -1,8 +1,10 @@
 package contract
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -211,6 +213,33 @@ func TestStrictAsksOnMCPUntilLeased(t *testing.T) {
 	}
 }
 
+// A retired tool holds no tool tier. Its name keeps a tier only as the native
+// operation command reaches, so approvals keep their class after retirement.
+func TestRetiredToolsHoldNoToolTier(t *testing.T) {
+	t.Parallel()
+	raw, err := os.ReadFile(filepath.Join(contractcheck.RepoRoot(t), "schemas", "agent-public-retirements.json"))
+	contractcheck.FailErr(t, "read retirements", err)
+	var doc struct {
+		Vocabularies struct {
+			Tools map[string]json.RawMessage `json:"tools"`
+		} `json:"vocabularies"`
+	}
+	contractcheck.FailErr(t, "decode retirements", json.Unmarshal(raw, &doc))
+	if len(doc.Vocabularies.Tools) == 0 {
+		t.Fatal("no retired tools read")
+	}
+	for tool, entry := range doc.Vocabularies.Tools {
+		if settings.ToolTierDeclared(tool) {
+			t.Errorf("retired tool %s holds a tool tier", tool)
+		}
+		// A successor list names tools; a content contract replaces a tool with no operation.
+		var successors []string
+		if json.Unmarshal(entry, &successors) == nil && slices.Equal(successors, []string{"command"}) && !settings.OperationTierDeclared(tool) {
+			t.Errorf("retired tool %s lost the operation tier command reaches", tool)
+		}
+	}
+}
+
 // TestEveryNativeToolDeclaresATier checks approval classification coverage.
 func TestEveryNativeToolDeclaresATier(t *testing.T) {
 	t.Parallel()
@@ -219,13 +248,13 @@ func TestEveryNativeToolDeclaresATier(t *testing.T) {
 	if err := cfg.ValidateApprovalReversibility(); err != nil {
 		t.Fatalf("approval_reversibility map: %v", err)
 	}
-	manifest := cfg.AllTools()
+	manifest := append(cfg.AllTools(), cfg.AllOperations()...)
 	if len(manifest) == 0 {
 		t.Fatal("native tools manifest is empty")
 	}
 	var undeclared []string
 	for _, tool := range manifest {
-		if !settings.ToolTierDeclared(tool) {
+		if !settings.ToolTierDeclared(tool) && !settings.OperationTierDeclared(tool) {
 			undeclared = append(undeclared, tool)
 		}
 	}

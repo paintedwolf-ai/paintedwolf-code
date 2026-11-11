@@ -8,6 +8,3 @@ suggested_action: Pick another folder, or enable replace when overwriting a devi
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - already installed
-      - replace

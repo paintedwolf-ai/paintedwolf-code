@@ -91,6 +91,7 @@ type SurfaceProps = Props & {
   onReturnToParent?: () => void;
   surfaceRef?: (element: HTMLDivElement) => void;
   submenuLabel?: string;
+  testId?: string;
 };
 
 function actionable(item: ContextMenuItem): boolean {
@@ -310,7 +311,7 @@ function ContextMenuSurface(props: SurfaceProps) {
       menuFocus="managed"
       ariaLabel={props.submenuLabel ?? props.label ?? accessibleLabel()}
       tabIndex={-1}
-      testId="context-menu"
+      testId={props.testId ?? "context-menu"}
       chrome
       onKeyDown={onKeyDown}
       onMouseDown={(e) => {
@@ -485,6 +486,7 @@ function ContextMenuSurface(props: SurfaceProps) {
                               keyboard={props.keyboard}
                               depth={props.depth + 1}
                               dismissTree={props.dismissTree}
+                              testId="context-menu-submenu"
                               onDismiss={() => setOpenSubmenuIdx(null)}
                               onEscape={() => {
                                 setOpenSubmenuIdx(null);

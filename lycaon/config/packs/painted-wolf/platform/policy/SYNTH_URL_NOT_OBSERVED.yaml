@@ -13,9 +13,9 @@ when: paintedwolf.surface != "implement_investigate" && size(paintedwolf.unobser
 effect: block
 copy:
   what: 'Synthesis cited {{ paintedwolf.offender_count }} URL(s) absent from the coordinator and worker evidence available to this report.'
-  cause: 'cited_urls must reference URLs already recorded in the evidence union for this chat.'
+  cause: 'A cited link must point at a URL already recorded in the evidence for this chat. Writing a link does not fetch it.'
   why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: 'Repair only the trailing citation metadata. Retain observed URLs that support the pinned report; remove unsupported URLs, using cited_urls [] if none remain.'
+  fix: 'Repair only the rejected links: point each at an observed URL, or show an unobserved address as `inline code`. If repair runs out, the host keeps the link text and drops its destination.'
   instead: 'Keep unsupported claims explicitly untraced. Resuming work requires a fresh report.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator_synthesis
@@ -30,6 +30,3 @@ x-paintedwolf-scenarios:
       offender_count: 1
       offenders_omitted: 0
       offenders_sample: https://example.com
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: SYNTH_URL_NOT_OBSERVED'

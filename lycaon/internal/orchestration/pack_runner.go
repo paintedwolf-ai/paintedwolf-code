@@ -89,7 +89,7 @@ func (o *OrchestratorImpl) runPack(ctx context.Context, req RunRequest, wf *work
 	if err != nil {
 		return nil, err
 	}
-	defer o.destroyBindings(bindings)
+	defer o.destroyBindings(ctx, bindings)
 
 	if err := o.dispatchPackLegsParallel(ctx, req, runID, delegationID, profileID, count, legIDs, state.workflowRunID); err != nil {
 		return nil, err

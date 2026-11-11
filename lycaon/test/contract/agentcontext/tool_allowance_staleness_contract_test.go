@@ -12,11 +12,7 @@ import (
 // toolNameAllowances lists maps keyed by tool name.
 func toolNameAllowances() map[string]map[string]string {
 	return map[string]map[string]string{
-		"coordinatorPromptlessAllowlist":             coordinatorPromptlessAllowlist,
-		"implementPromptToolsNotOnWire":              implementPromptToolsNotOnWire,
-		"routingPromptToolsAllowedOffWire":           routingPromptToolsAllowedOffWire,
-		"orchestratePromptToolsAllowedOffWire":       orchestratePromptToolsAllowedOffWire,
-		"orchestrateSharedPromptToolsAllowedOffWire": orchestrateSharedPromptToolsAllowedOffWire,
+		"coordinatorPromptlessAllowlist": coordinatorPromptlessAllowlist,
 	}
 }
 

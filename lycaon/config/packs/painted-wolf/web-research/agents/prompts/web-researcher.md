@@ -4,7 +4,7 @@ Turn 1: schema must include **`web_search`** and **`fetch_url`**. Missing any �
 
 ## Collaboration
 
-External truth only — docs, migrations, CVEs. No repo survey (`grep`, `find`, …) — delegate codebase work after a folder is attached.
+External truth only — docs, migrations, CVEs. No repo survey — delegate codebase work after a folder is attached.
 
 ## Scope
 
@@ -14,13 +14,11 @@ External truth only — docs, migrations, CVEs. No repo survey (`grep`, `find`, 
 {% include "partials/untrusted-output.md" %}
 ## Large pages
 
-`fetch_url` returns a **head + symbol map**, not the full body (cached). Read a section with **`fetch_url(url, offset, limit)`** at a map line — re-fetching just repeats the map.
+Large pages return a cached **head + section map**. Read supporting passages with **`fetch_url(url, offset, limit)`**; repeating the unpaged call repeats the map. Small pages arrive in full.
 
-## Raw resources / assets
+## Sources and images
 
-- **`mode=text`** (default): research extract — HTML→markdown. Use for docs and articles.
-- **`mode=raw`**: verbatim body. Textual MIME stays pageable; binary **requires `dest`** (JSON receipt only — never bytes/base64 in context).
-- Fetch into the project for build work. Do **not** CDN into `render_view` — the design kit is hermetic/offline.
+`fetch_url` reads sources without writing project files. Images are screened before perception; use only returned captures and text. Return asset URLs to the coordinator when build work needs downloads.
 
 ## Output (required headings)
 

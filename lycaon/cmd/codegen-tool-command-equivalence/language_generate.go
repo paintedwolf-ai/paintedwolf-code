@@ -221,16 +221,19 @@ func validateLanguageReference(root, ref string) error {
 }
 
 func validateToolDispositions(root string, rows []toolcontract.ToolDisposition) error {
-	data, err := readTrackedFile(filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", "native-tools.yaml"))
-	if err != nil {
-		return err
-	}
 	var manifest struct {
 		Owner     map[string]string `yaml:"owner"`
 		Lifecycle map[string]string `yaml:"lifecycle"`
 	}
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		return fmt.Errorf("decode stock manifest: %w", err)
+	for _, name := range []string{"native-tools.yaml", "native-operations.yaml"} {
+		data, err := readTrackedFile(filepath.Join(root, "config", "packs", "painted-wolf", "platform", "tools", name))
+		if err != nil {
+			return err
+		}
+		// Decoding into the same maps accumulates both manifests.
+		if err := yaml.Unmarshal(data, &manifest); err != nil {
+			return fmt.Errorf("decode stock manifest: %w", err)
+		}
 	}
 	seen := map[string]bool{}
 	for _, row := range rows {

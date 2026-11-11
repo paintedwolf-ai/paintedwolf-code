@@ -128,6 +128,9 @@ CREATE TABLE IF NOT EXISTS invocation_program_executions (
     conflict_observed_revision TEXT NOT NULL DEFAULT '',
     started_at TEXT NOT NULL,
     settled_at TEXT,
+    -- A native name launched as its installed program: the command and the
+    -- unsupported form, counted so native coverage gaps stay visible.
+    native_gap_json TEXT NOT NULL DEFAULT '' CHECK (native_gap_json = '' OR json_valid(native_gap_json)),
     CHECK (id != parent_execution_id),
     CHECK ((conflict_path = '') = (conflict_expected_revision = '') AND (conflict_path = '') = (conflict_observed_revision = '')),
     UNIQUE (program_id, id),
@@ -148,7 +151,6 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     reference TEXT NOT NULL,
     retention_claim_id TEXT NOT NULL UNIQUE,
     initiating_claim_id TEXT NOT NULL,
-    blob_id TEXT NOT NULL CHECK (blob_id <> ''),
     blob_json TEXT NOT NULL CHECK (json_valid(blob_json)),
     complete INTEGER NOT NULL CHECK (complete IN (0,1)),
     redacted INTEGER NOT NULL CHECK (redacted IN (0,1)),
@@ -156,6 +158,9 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     preview TEXT NOT NULL DEFAULT '',
     preview_truncated INTEGER NOT NULL DEFAULT 0 CHECK (preview_truncated IN (0,1)),
     created_at TEXT NOT NULL,
+    inline_digest TEXT NOT NULL DEFAULT '' CHECK (length(inline_digest) IN (0,64)),
+    inline_body BLOB CHECK (inline_body IS NULL OR (stream='arguments' AND length(inline_body)<=16384 AND blob_json='{}' AND length(inline_digest)=64)),
+    blob_id TEXT CHECK (blob_id IS NULL OR blob_id <> ''),
     FOREIGN KEY (program_id, execution_id) REFERENCES invocation_program_executions(program_id, id) ON DELETE CASCADE
 ) STRICT;
 CREATE INDEX IF NOT EXISTS idx_invocation_program_outputs_program ON invocation_program_outputs(program_id, id);

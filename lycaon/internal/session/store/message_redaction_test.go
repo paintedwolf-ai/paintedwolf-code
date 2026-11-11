@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 
@@ -48,9 +49,7 @@ func TestEveryTranscriptWritePathIsScreenedByTheStore(t *testing.T) {
 		testutil.FailErr(t, "append", st.AppendMessages(ctx, sess.ID, batch...))
 
 		// The caller's batch carries the screened row.
-		if strings.Contains(batch[0].Content, storedCredential) {
-			t.Fatalf("caller batch kept the credential for publication: %q", batch[0].Content)
-		}
+		exposure.Absent(t, batch[0].Content, storedCredential)
 		assertStoredRowIsScreened(t, ctx, st, sess.ID, "direct-append")
 	})
 
@@ -69,9 +68,7 @@ func TestEveryTranscriptWritePathIsScreenedByTheStore(t *testing.T) {
 		replacement.Content = "token " + storedCredential + " here"
 		got, err := st.UpdateMessage(ctx, sess.ID, msg.ID, replacement)
 		testutil.FailErr(t, "update", err)
-		if strings.Contains(got.Content, storedCredential) {
-			t.Fatalf("update returned the credential: %q", got.Content)
-		}
+		exposure.Absent(t, got.Content, storedCredential)
 		assertStoredRowIsScreened(t, ctx, st, sess.ID, "updated")
 	})
 }
@@ -84,9 +81,7 @@ func assertStoredRowIsScreened(t *testing.T, ctx context.Context, st *SQL, sessi
 		if msg.ID != messageID {
 			continue
 		}
-		if strings.Contains(msg.Content, storedCredential) {
-			t.Fatalf("stored row kept the credential: %q", msg.Content)
-		}
+		exposure.Absent(t, msg.Content, storedCredential)
 		if !strings.Contains(msg.Content, "[REDACTED]") {
 			t.Fatalf("stored row lost the redaction marker: %q", msg.Content)
 		}

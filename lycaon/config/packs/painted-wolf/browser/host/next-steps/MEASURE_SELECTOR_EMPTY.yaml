@@ -1,0 +1,12 @@
+steps:
+  - when: "paintedwolf.capture_held_target"
+    tool: "page_snapshot"
+    args:
+      id: "{{ paintedwolf.measure_page_id }}"
+    say: "Inspect {{ call }} on that same ID."
+  - when: "paintedwolf.capture_held_target"
+    tool: "page_act"
+    args:
+      id: "{{ paintedwolf.measure_page_id }}"
+    say: "Use {{ call }} on that ID only for intended state changes, then re-measure it."
+    otherwise: "This surface offers no tool for page interaction; retain the missing measurement until the intended state can be established."

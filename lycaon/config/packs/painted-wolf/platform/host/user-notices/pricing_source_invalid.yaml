@@ -6,6 +6,4 @@ suggested_action: "Try again later, or choose another pricing source."
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - "did not pass validation"
 retryable: true

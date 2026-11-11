@@ -222,6 +222,19 @@ def go_units(touched, blocks, lines, module):
     return units
 
 
+def go_touched(changed, packages, tiers):
+    """Production units eligible for changed coverage, shared with ready test partitioning."""
+    by_dir = {info["dir"]: path for path, info in packages.items()}
+    exempt = exempt_packages()
+    touched = {}
+    for path in changed:
+        package = by_dir.get(Path(path).parent.as_posix())
+        if package is None or tiers.search(package) or any(package.endswith("/" + e) for e in exempt):
+            continue
+        touched.setdefault(package, []).append(path)
+    return touched
+
+
 def run_go(scope):
     floor = coverage_policy.changed("go")
     package_floor = coverage_policy.percentage(coverage_policy.get("go.package"))
@@ -231,14 +244,7 @@ def run_go(scope):
         return [], False, "no changed Go source"
     module = module_path()
     packages = go_packages()
-    by_dir = {info["dir"]: path for path, info in packages.items()}
-    exempt = exempt_packages()
-    touched = {}
-    for path in changed:
-        package = by_dir.get(Path(path).parent.as_posix())
-        if package is None or tiers.search(package) or any(package.endswith("/" + e) for e in exempt):
-            continue
-        touched.setdefault(package, []).append(path)
+    touched = go_touched(changed, packages, tiers)
     if not touched:
         return [], False, "changed Go source is exempt or outside measured packages"
 

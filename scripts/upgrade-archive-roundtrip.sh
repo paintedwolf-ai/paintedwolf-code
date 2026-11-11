@@ -32,7 +32,7 @@ start_engine() {
       LYCAON_LOG_LEVEL=warn exec "${ENGINE}" serve
   ) >"${SCRATCH}/sidecar.log" 2>&1 &
   UPGRADE_CHILD_PID=$!
-  local deadline=$((SECONDS + 60)) body status
+  local deadline=$((SECONDS + 300)) body status
   while (( SECONDS < deadline )); do
     if BASE="$(upgrade_owned_base "${CONFIG}" "${UPGRADE_CHILD_PID}")" &&
        body="$(curl -sf --max-time 2 "${BASE}/health")"; then

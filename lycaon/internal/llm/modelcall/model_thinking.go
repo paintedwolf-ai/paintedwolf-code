@@ -7,11 +7,12 @@ import (
 
 // ModelThinking is the resolved thinking treatment for one (provider, model).
 type ModelThinking struct {
-	EffortOff    string
-	Style        modelinfo.ThinkStyle
-	AlwaysOn     bool
-	DefaultOn    bool
-	EffortLevels modelinfo.ReasoningEffortLevels
+	EffortOff          string
+	Style              modelinfo.ThinkStyle
+	ContinuationPolicy modelinfo.ContinuationPolicy
+	AlwaysOn           bool
+	DefaultOn          bool
+	EffortLevels       modelinfo.ReasoningEffortLevels
 }
 
 // ResolveModelThinking intersects model evidence with transport controls.
@@ -22,11 +23,15 @@ func ResolveModelThinking(profile providerprofile.Profile, entry modelinfo.Entry
 	}
 	rule, ruleOK := modelinfo.MatchThinkingRule(model)
 	out := ModelThinking{
-		Style:        profile.Thinking,
-		EffortOff:    profile.ReasoningEffortOff,
-		AlwaysOn:     entry.ThinkingAlwaysOn || (ruleOK && rule.AlwaysOn),
-		DefaultOn:    ruleOK && rule.DefaultOn,
-		EffortLevels: rule.EffortLevels,
+		Style:              profile.Thinking,
+		ContinuationPolicy: modelinfo.ResolveContinuationPolicy(model),
+		EffortOff:          profile.ReasoningEffortOff,
+		AlwaysOn:           entry.ThinkingAlwaysOn || (ruleOK && rule.AlwaysOn),
+		DefaultOn:          ruleOK && rule.DefaultOn,
+		EffortLevels:       rule.EffortLevels,
+	}
+	if policy, ok := modelinfo.ParseContinuationPolicy(entry.ContinuationPolicy); ok && policy != modelinfo.ContinuationPolicyDefault {
+		out.ContinuationPolicy = policy
 	}
 	if style, ok := modelinfo.ParseThinkStyle(entry.ThinkStyle); ok {
 		out.Style = style

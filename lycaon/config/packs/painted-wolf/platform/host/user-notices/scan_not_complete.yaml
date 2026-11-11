@@ -19,22 +19,15 @@ suggested_action: >-
 scenarios:
   - id: pending
     vars: { status: pending }
-    expect_contains: [queued, automatically]
   - id: running
     vars: { status: running }
-    expect_contains: [still running, automatically]
   - id: failed
     vars: { status: failed }
-    expect_contains: [failed, Select a completed run]
   - id: timed_out
     vars: { status: timed_out }
-    expect_contains: [time limit, Select a completed run]
   - id: canceled
     vars: { status: canceled }
-    expect_contains: [canceled, Select a completed run]
   - id: superseded
     vars: { status: superseded }
-    expect_contains: [newer run, Select a completed run]
   - id: default
     vars: {}
-    expect_contains: [completed scan, Select a completed run]

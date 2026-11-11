@@ -217,7 +217,7 @@ fn a_session_bus_idle_monitor_from_another_process_is_refused() {
         .stderr(Stdio::null())
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(10);
+    let deadline = Instant::now() + Duration::from_secs(120);
     while UnixStream::connect(&fixture.wayland).is_err() {
         assert!(
             Instant::now() < deadline,

@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { valueOf } from "../../store/load-state.ts";
 import type { SessionBootstrap } from "../../api/types.ts";
 import { createAppStore } from "../../store/app-state.ts";
+import { bindAppConnection } from "../../platform/connection/app-connection.ts";
+import { connectionServicesFixture } from "../../test/connection-services-fixture.ts";
 import {
   applySessionBootstrapChrome,
   ensureSessionChrome,
@@ -143,7 +145,14 @@ describe("ensureSessionChrome", () => {
       workers: [],
       checkpoints: [],
       background_outputs: [],
-      previews: [],
+      previews: [
+        {
+          session_id: session.id,
+          page_id: "page-1",
+          assistant_message_id: "msg-1",
+          tool_call_id: "call-1",
+        },
+      ],
     };
     applySessionBootstrapChrome(store, bootstrap);
     const getSessionProgress = vi.fn();
@@ -177,5 +186,63 @@ describe("ensureSessionChrome", () => {
     expect(getSessionProgress).toHaveBeenCalledTimes(
       SESSION_CHROME_HYDRATION_CAP + 2,
     );
+  });
+
+  it("isolates and reports auxiliary chrome errors and leaves hydration retryable", async () => {
+    const store = createAppStore();
+    const services = connectionServicesFixture({ app: store });
+    const { dispose } = bindAppConnection(services);
+    try {
+      const session: SessionBootstrap["session"] = {
+        id: "session-aux-err",
+        owner_person_id: "00000000-0000-4000-8000-000000000002",
+        project_id: "project-1",
+        posture: "build",
+        status: "idle",
+        created_at: "t",
+        activity_at: "t",
+        updated_at: "t",
+      };
+      const bootstrap: SessionBootstrap = {
+        event_cursor: "",
+        session,
+        transcript: { messages: [], watermark: 0, turn_clocks: {}, turn_loads: {} },
+        progress: { revision: 1, steps: [] },
+        turn_clock: { session_id: session.id, active_ms: 0, work_ms: 0, running: false },
+        findings: { revision: 1, findings: [] },
+        queue: { revision: 1, queue_items: [], hold: false, sending: false },
+        coordinator: {},
+        workers: [],
+        checkpoints: [],
+        background_outputs: [],
+        previews: [],
+      };
+      Object.defineProperty(bootstrap, "previews", {
+        get() {
+          throw new Error("preview attachment corrupt");
+        },
+      });
+
+      expect(() => applySessionBootstrapChrome(store, bootstrap)).not.toThrow();
+      expect(store.state.currentSession?.id).toBe("session-aux-err");
+      expect([...services.notices.index().values()].flat()).toHaveLength(1);
+
+      const getSessionProgress = vi.fn().mockResolvedValue({ revision: 1, steps: [] });
+      await ensureSessionChrome(
+        store,
+        stubClient({
+          getSessionProgress,
+          getSessionFindings: vi.fn().mockResolvedValue({ revision: 1, findings: [] }),
+          getSessionQueue: vi.fn().mockResolvedValue({ revision: 1, queue_items: [] }),
+          getCoordinatorContext: vi.fn().mockResolvedValue(null),
+          listSessionBackgroundProcesses: vi.fn().mockResolvedValue([]),
+          listSessionPreviews: vi.fn().mockResolvedValue([]),
+        }),
+        "session-aux-err",
+      );
+      expect(getSessionProgress).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
   });
 });

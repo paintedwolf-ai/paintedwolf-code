@@ -92,14 +92,14 @@ func (p *UtilityPlane) acquireLane(ctx context.Context, provider modelcall.Provi
 	if p == nil || provider == nil {
 		return func() {}, nil
 	}
-	return p.lanes.acquire(ctx, provider.ID(), provider.Profile().UtilitySingleFlight, class)
+	return p.lanes.acquire(ctx, modelcall.CapacityKey(provider), provider.Profile().UtilitySingleFlight, class)
 }
 
 func (p *UtilityPlane) acquireForeground(ctx context.Context, provider modelcall.Provider) (func(), error) {
 	if p == nil || provider == nil {
 		return func() {}, nil
 	}
-	return p.lanes.acquireForeground(ctx, provider.ID(), provider.Profile().UtilitySingleFlight)
+	return p.lanes.acquireForeground(ctx, modelcall.CapacityKey(provider), provider.Profile().UtilitySingleFlight)
 }
 
 // Residency removes load time, not prompt evaluation or generation.

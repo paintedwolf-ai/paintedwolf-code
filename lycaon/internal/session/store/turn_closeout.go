@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -41,8 +42,73 @@ type TurnCloseoutCommit struct {
 	Message        *api.Message
 }
 
+func checkpointTurnTx(ctx context.Context, q *db.Queries, turnID, attemptID string, phase TurnPhase, checkpointJSON, now string) error {
+	rows, err := q.CheckpointTurnAttempt(ctx, db.CheckpointTurnAttemptParams{
+		Phase: string(phase), CheckpointJson: checkpointJSON, UpdatedAt: now,
+		ID: attemptID, TurnID: turnID,
+	})
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fmt.Errorf("turn attempt claim lost: %s", attemptID)
+	}
+	rows, err = q.TouchCheckpointedTurn(ctx, db.TouchCheckpointedTurnParams{
+		UpdatedAt: now, ProgressedAt: now, ID: turnID, ActiveAttemptID: db.NullString(attemptID),
+	})
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fmt.Errorf("turn head claim lost: %s", turnID)
+	}
+	return nil
+}
+
+func (t *sqlTurns) ListPendingModelOutputProjections(ctx context.Context) ([]PendingModelOutputProjection, error) {
+	s := t.core
+	rows, err := s.queries.ListPendingModelOutputs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []PendingModelOutputProjection
+	for _, row := range rows {
+		output, convertErr := modelOutputFromDB(s, row)
+		if convertErr != nil {
+			return nil, convertErr
+		}
+		workerJobID, workerErr := s.queries.GetWorkerJobForTurnAttempt(ctx, output.TurnAttemptID)
+		if workerErr != nil && !db.IsNoRows(workerErr) {
+			return nil, workerErr
+		}
+		out = append(out, PendingModelOutputProjection{Output: output, WorkerJobID: workerJobID})
+	}
+	return out, nil
+}
+
+func (t *sqlTurns) MarkModelOutputProjected(ctx context.Context, outputID string) error {
+	s := t.core
+	if strings.TrimSpace(outputID) == "" {
+		return fmt.Errorf("model output projection identity required")
+	}
+	rows, err := s.queries.MarkModelOutputProjected(ctx, db.MarkModelOutputProjectedParams{
+		ProjectedAt: db.FormatTime(time.Now().UTC()), ID: outputID,
+	})
+	if err != nil {
+		return err
+	}
+	if rows != 1 {
+		return fmt.Errorf("model output projection not found: %s", outputID)
+	}
+	return nil
+}
+
 // SealTurnCloseout atomically saves the closeout and its recovery checkpoint.
-func (s *SQL) SealTurnCloseout(ctx context.Context, commit TurnCloseoutCommit) error {
+func (t *sqlTurns) SealTurnCloseout(ctx context.Context, commit TurnCloseoutCommit) error {
+	return sealTurnCloseoutSQL(ctx, t.core, commit)
+}
+
+func sealTurnCloseoutSQL(ctx context.Context, s *sqlCore, commit TurnCloseoutCommit) error {
 	turnID, attemptID, outputID := commit.TurnID, commit.AttemptID, commit.OutputID
 	message := api.Message{}
 	if commit.Message != nil {
@@ -104,7 +170,11 @@ func (s *SQL) SealTurnCloseout(ctx context.Context, commit TurnCloseoutCommit) e
 	return tx.Commit()
 }
 
-func (s *Memory) SealTurnCloseout(ctx context.Context, commit TurnCloseoutCommit) error {
+func (t *memoryTurns) SealTurnCloseout(ctx context.Context, commit TurnCloseoutCommit) error {
+	return sealTurnCloseoutMemory(ctx, t.core, commit)
+}
+
+func sealTurnCloseoutMemory(ctx context.Context, s *memoryCore, commit TurnCloseoutCommit) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -141,7 +211,7 @@ func (s *Memory) SealTurnCloseout(ctx context.Context, commit TurnCloseoutCommit
 	if old, ok := s.turnCloseouts[attemptID]; ok && old != string(body) {
 		return fmt.Errorf("turn closeout identity changed")
 	}
-	if err := s.checkpointTurnLocked(turnID, attemptID, TurnPhaseFinalizing, commit.CheckpointJSON); err != nil {
+	if err := checkpointTurnLocked(s, turnID, attemptID, TurnPhaseFinalizing, commit.CheckpointJSON); err != nil {
 		return err
 	}
 	if s.turnCloseouts == nil {

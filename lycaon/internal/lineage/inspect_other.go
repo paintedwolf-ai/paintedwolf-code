@@ -15,8 +15,14 @@ func pipeHolders([]uint64) ([][]int, error) { return nil, ErrUnsupported }
 
 func peerPID(netip.AddrPort, netip.AddrPort) (int, bool) { return 0, false }
 
-func listeners(ListenerQuery) ([]Listener, error) { return nil, ErrUnsupported }
+func listeners(ListenerQuery) (ListenerTable, error) { return ListenerTable{}, ErrUnsupported }
 
 func livePIDs() ([]int, error) { return nil, ErrUnsupported }
+
+func socketWalker() func(int) ([]SocketObservation, error) { return SocketsOf }
+
+func unreadableByThisUser(int, error) bool { return false }
+
+func unreadHoldersExcluded(netip.AddrPort, endpointHolders) bool { return false }
 
 const supported = false

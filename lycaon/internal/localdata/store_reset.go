@@ -50,21 +50,26 @@ func ResetStoreCoupled(ctx context.Context, dbPath string) error {
 	if err := db.RemoveStore(dbPath); err != nil {
 		errs = append(errs, fmt.Errorf("remove store: %w", err))
 	}
-	errs = append(errs, resetStoreDependents(base)...)
+	errs = append(errs, resetStoreDependents(ctx, base)...)
 	return errors.Join(errs...)
 }
 
 // ResetStoreDependents removes state whose identities belong to a replaced store.
-func ResetStoreDependents(dbPath string) error {
+func ResetStoreDependents(ctx context.Context, dbPath string) error {
 	dbPath = filepath.Clean(strings.TrimSpace(dbPath))
 	if dbPath == "" || dbPath == "." {
 		return nil
 	}
-	return errors.Join(resetStoreDependents(filepath.Dir(dbPath))...)
+	return errors.Join(resetStoreDependents(ctx, filepath.Dir(dbPath))...)
 }
 
-func resetStoreDependents(base string) []error {
+func resetStoreDependents(ctx context.Context, base string) []error {
 	var errs []error
+	// Branches on other volumes are keyed by the same store identities. Folders on
+	// an absent volume stay recorded for a later purge.
+	if err := purgeWorkerPlacements(ctx, base); err != nil {
+		errs = append(errs, fmt.Errorf("purge worker placements: %w", err))
+	}
 	for _, rel := range storeCoupledRelPaths {
 		if isStoreFile(rel) {
 			continue

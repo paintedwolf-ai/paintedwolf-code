@@ -21,10 +21,21 @@ func (s *Store) Bytes(ctx context.Context, entry Entry) ([]byte, error) {
 			return raw, nil
 		}
 	}
-	if entry.GitOID != "" {
-		if raw, err := gitBlob(ctx, entry); err == nil {
+	// A file the host hashed is usually absent from Git's object store, and a
+	// digest-checked read costs far less than a Git process that finds nothing.
+	hashed := entry.SHA256 != ""
+	if hashed {
+		if raw, err := readLiveVerified(ctx, entry); err == nil {
 			return raw, nil
 		}
+	}
+	if entry.GitOID != "" {
+		if raw, err := s.gitObject(ctx, entry); err == nil {
+			return raw, nil
+		}
+	}
+	if hashed {
+		return nil, fmt.Errorf("%w: %s", ErrContentUnavailable, entry.Path)
 	}
 	raw, err := readLiveVerified(ctx, entry)
 	if err != nil {

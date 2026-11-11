@@ -382,6 +382,9 @@ func refusalKey(operation, target string) string { return operation + "\x00" + t
 
 // record folds one report into the feed; listeners hear each new refusal.
 func (f *refusalFeed) record(k kernelRefusal) {
+	if !k.Truncated && k.Operation == "network-outbound" && isBenignSocketProbe(k.Target) {
+		return
+	}
 	key := refusalKey(k.Operation, k.Target)
 	f.mu.Lock()
 	if i, seen := f.keys[key]; seen {

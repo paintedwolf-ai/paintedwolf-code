@@ -61,7 +61,7 @@ func TestProviderPromptAgainstStubBackend(t *testing.T) {
 	if err := creds.Set("test-openai", "test-key"); err != nil {
 		testutil.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := llm.NewRegistry(t.Context(), catalog, creds)
+	registry, err := llm.NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
@@ -142,7 +142,7 @@ agent_pool:
 
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(tmp, "providers.local.yaml"))
 	testutil.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")))
+	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(tmp, "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}

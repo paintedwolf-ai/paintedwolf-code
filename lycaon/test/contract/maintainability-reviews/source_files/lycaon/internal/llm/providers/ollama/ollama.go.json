@@ -4,12 +4,12 @@
   "kind": "runtime_service",
   "workstream": "project-reasoning-retention",
   "disposition": "retain",
-  "reason": "The native provider owns request preparation, context admission, and stream lifetime. It computes request projection once for estimation and serialization; replay selection and wire mapping remain separate domain boundaries. Catalog policies (HTTP retry, prompt cache, tool-call parser rejections) attach through setters, and request-frame admission checks the receiver context; parser rejection grammars and their classification live in providerprofile, so the driver only extracts its error message.",
-  "reviewed_commit": "5f7a2d7376fc3ed8ed1e222b3576772b3c7d86a1",
-  "ceiling": 405,
+  "reason": "The native adapter owns request preparation, model/endpoint observations, context admission, calibration and stream lifetime. Isolated effective-model copies and RequestBudget use the same dispatch projection; a second session cache would split that authority. Reviewed the composed shape at 458 receiver lines, 25 methods and 425 provider-file lines. Retain the existing protocol, context and request-budget file boundaries within these explicit ceilings. Cancellation before or during discovery cannot cache unknown and poison later requests; fitted output and replayed reasoning remain covered by focused native fixtures. No hard limit changes.",
+  "reviewed_commit": "83c65582f1c141fbc05ab908c7fd4a2709a39efc",
+  "ceiling": 425,
   "boundaries": {
-    "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "065c4be1d768fe005e7bfb2c5a192dc24caa5d94ae1e2f80d409823d7361968b",
-    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "761f807bacd5b77441f933cb84a612a37cd0bed9a62c477a9d7afe42fcacaa72",
+    "lycaon/internal/llm/providers/ollama/reasoning_recovery_test.go": "d6075ba7b3e5da1d48baad965bc3f023bddb007af8c173fa7f2e8e5bb82420af",
+    "lycaon/internal/llm/providers/ollama/context_cap_test.go": "7a81258764c7375f65dfbba7012355e6ec488a9d4429a15b3611c97177c586dc",
     "lycaon/internal/llm/providerprofile/tool_call_rejection_test.go": "8e66761a10268a19657d07971b5fc474105b1f90a0c0e09eb6260d89f6513103"
   }
 }

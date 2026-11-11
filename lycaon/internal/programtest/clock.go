@@ -56,6 +56,19 @@ func (c *ManualClock) Pending() int {
 	return len(c.pending)
 }
 
+// TimersDue lists how long each pending timer has left, soonest first, so a test can
+// wait for the timer it means rather than a count another timer can satisfy.
+func (c *ManualClock) TimersDue() []time.Duration {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	due := make([]time.Duration, 0, len(c.pending))
+	for _, timer := range c.pending {
+		due = append(due, timer.at.Sub(c.now))
+	}
+	sort.Slice(due, func(i, j int) bool { return due[i] < due[j] })
+	return due
+}
+
 // Advance moves the clock forward and runs every timer now due, in due order.
 func (c *ManualClock) Advance(d time.Duration) {
 	c.mu.Lock()

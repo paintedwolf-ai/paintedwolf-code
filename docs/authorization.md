@@ -157,11 +157,11 @@ The complete gate roster and one-line meanings live in `docs/openapi/vocab/Appro
 
 ## Capability grants and detection asks
 
-A tool may declare exceptional capability before spawn: write root, protected read, listener, loopback connection, direct IP, mediated destination, exact socket, named host resource, process control, or host execution. The request is validated against the tool contract and current platform support. If it is representable, the host adds the relevant approval subject and compiles approved authority into the launch boundary. If it is not representable, launch fails; approval cannot authorize a boundary the host cannot apply.
+A tool may declare exceptional capability before spawn: write root, protected read, listener, loopback connection, direct IP, mediated destination, exact socket, named host resource, process control, OS credential store access, or host execution. The request is validated against the tool contract and current platform support. If it is representable, the host adds the relevant approval subject and compiles approved authority into the launch boundary. If it is not representable, launch fails; approval cannot authorize a boundary the host cannot apply.
 
 Local development is contained work ([What stays quiet](security.md#what-stays-quiet-and-why)). Under Light posture, listeners and loopback connections run silently. Under Balanced posture, a listener runs silently unless it names a privileged port, and carries connect authority for the ports it names, unless a listener the chat does not own already holds one. Other loopback connections are silent only when the chat owns every named port: each listener descends from an action of this chat through launch lineage, or a workspace container the engine reports publishes the port loopback-only after the engine started. Ownership is never inferred from when a port appeared or from workspace files; any other service, including one started after the chat, asks to guard against local SSRF. Under Strict posture, every listener and connection requires human approval. See [Loopback-connect grant](security.md#loopback-connect-grant).
 
-Direct IP, host execution, and process control are approved per capability, not per command: one chat approval covers later commands that use it. That approval answers only its own reason; a detection or ask rule on a later command still asks.
+Direct IP, host execution, process control, and OS credential store access are approved per capability, not per command: one chat approval covers later commands that use it (and `credential_store` also offers Day, Project, and Device scopes). That approval answers only its own reason; a detection or ask rule on a later command still asks.
 
 Local secret disclosure consolidates command arguments, interactive terminal sessions, and localhost HTTP requests under `LocalRecipient`. Approving a secret release for a local recipient covers all local execution surfaces for the chat without prompting separately for each tool.
 
@@ -193,6 +193,8 @@ Advanced Off disables eligible prompted asks and allows the effect when enforcem
 
 Approving access does not edit the person's project definition. Native tools do not extend past attached project folders without an explicit path grant. Filesystem resolution checks attached roots, explicit grants, and the shared default temporary, cache, and tool data boundary. Ordinary scratch access needs no additional outside-folders grant, except that Strict reviews a native write there. Sensitive-location and protected-path rules still apply.
 
+Applied read-only confinement roots, including the current session’s command output, satisfy read scope without granting writes. Other sessions and paths reached through escaping symlinks remain outside that authority.
+
 Reaching a folder outside the attached folders always has a route to a card, at every posture; only the control plane is refused without one. The `outside_roots_read` and `outside_roots_write` gates are live at Light, Balanced, and Strict, and the path resolver admits an outside path only through an approved grant, so a posture that left the crossing silent would strand the call. The grant shapes are:
 
 | Crossing | Card subject |
@@ -222,7 +224,7 @@ Silent covered actions do not produce a syscall audit. The ledger records contex
 
 The composer's open lock leads to Project configuration → Approvals → Saved approvals
 when **elevated access** is available: saved direct-network,
-host-execution, process-control, and outside-sandbox local-service approvals.
+host-execution, process-control, OS credential-store, and outside-sandbox local-service approvals.
 The host selects live records for the root chat and workers plus applicable
 project/device records. Host-resource catalog modes and retained exact-action
 or quiet boundary descriptors qualify mixed records; revocation removes the
@@ -267,6 +269,27 @@ Approval resolution is one recoverable authorization transition:
 If installation or decision persistence fails, the operation revokes only authority installed by that prepared operation. Startup recovery applies the same operation-conditional compensation: every runtime store remembers the operation that installed each grant, quiet, or provider trust, and a rollback that does not match leaves the authority in place, so a person's own Settings decision survives an approval that never committed.
 
 Reject, expiry, user stop, and approval are all decisions over the held effect. The tool result receives the terminal decision stamp even when a denied capability occurred inside an otherwise successful process.
+
+---
+
+### Approval capacity
+
+Native approval authority has one persisted lossless representation. The codec
+validates its domain, digest, canonical grammar and declared host fields before
+installation. Its screened display must match the restored authority. Decoding
+and typed binding share one admitted tree; encoding scratch is released after
+the canonical bytes are retained.
+
+Before publishing a native approval, the host exercises restoration, display
+binding and preparation of every enabled choice under the production decision
+budget. This includes the measured read and person provenance. Resolution,
+recovery and saved-grant replay serialize against the same authority owner;
+recovery and replay release each record before reading the next. Rejection and
+session stop do not require restoring grant authority.
+
+Capacity failures preserve the pending decision and install no authority. The
+API returns `approval_capacity_exceeded` with bounded-account facts and a
+non-retryable notice that identifies rejection and stopping as available exits.
 
 ---
 
@@ -363,3 +386,9 @@ A human may attach explicit guidance when rejecting an action. The guidance is u
 - Human checkpoint outcomes fail closed if they cannot be recorded.
 - A decision names the person whose request made it, or it is refused.
 - Authorization chains live and die with their session.
+
+Socket recovery distinguishes a missing invocation permit
+(`SANDBOX_SOCKET_PERMIT_REQUIRED`) from an unusable recipient binding
+(`SANDBOX_SOCKET_PATH_CHANGED`). Each call declares its socket; reusable approval
+and client endpoint selection remain separate. Spawn applies the write roots
+frozen at admission, plus host-managed output roots, without rereading session grants.

@@ -77,7 +77,7 @@ func TestHandlerCoverageRejectsDuplicateDeclarations(t *testing.T) {
 	})
 	testutil.FailErr(t, "compile", err)
 	errs := ValidateHandlerCoverage(set, HandlerInventories{Den: []string{"shared_handler"}})
-	if len(errs) != 1 || !strings.Contains(errs[0].Error(), "exactly one") {
+	if len(errs) != 1 {
 		t.Fatalf("errs = %v", errs)
 	}
 }

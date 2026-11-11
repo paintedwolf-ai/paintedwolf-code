@@ -64,3 +64,20 @@ func ToAPI(p *Project) api.Project {
 	}
 	return out
 }
+
+func ToFolderDetectProject(p *Project, resolved string) api.FolderDetectProject {
+	if p == nil {
+		return api.FolderDetectProject{}
+	}
+	name := DisplayName(p)
+	if name == "" {
+		name = NameFromFolderPath(resolved)
+	}
+	return api.FolderDetectProject{
+		ID:           p.ID,
+		Name:         name,
+		Roots:        ToAPI(p).Roots,
+		IsSingleRoot: IsSingleRootForPath(p, resolved),
+		LastOpenedAt: p.LastOpenedAt,
+	}
+}

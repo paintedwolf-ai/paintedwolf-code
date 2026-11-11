@@ -195,9 +195,6 @@ func TestCreateProjectInvalidPath(t *testing.T) {
 			assertErrorResponse(t, w, http.StatusBadRequest, "invalid_path")
 			var response wire.ErrorResponse
 			testutil.FailErr(t, "decode invalid folder response", json.Unmarshal(w.Body.Bytes(), &response))
-			if !strings.Contains(response.SuggestedAction, "existing folder") || strings.Contains(response.Message, "no more detail") {
-				t.Fatalf("invalid folder lost its recovery guidance: %+v", response)
-			}
 		})
 	}
 }

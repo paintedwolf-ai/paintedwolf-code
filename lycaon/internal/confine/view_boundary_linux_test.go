@@ -4,6 +4,7 @@ package confine
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
@@ -45,8 +46,8 @@ func TestLinuxPlanMasksANestedDenialOnlyWhereItExists(t *testing.T) {
 		restored: map[string]bool{"/state/back": true},
 	}
 	for path, want := range map[string]bool{"/state": false, "/state/branches": true, "/state/back/storage": false} {
-		if got := pc.insidePlaceholder(path); got != want {
-			t.Fatalf("insidePlaceholder(%s) = %v", path, got)
+		if got := pc.concealed(filepath.Dir(path)); got != want {
+			t.Fatalf("concealed parent of %s = %v", path, got)
 		}
 	}
 }

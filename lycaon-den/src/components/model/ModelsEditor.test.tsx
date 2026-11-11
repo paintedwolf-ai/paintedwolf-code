@@ -194,14 +194,12 @@ describe("ModelsEditor", () => {
         expect(getByTestId("models-worker-pool-panel")).toBeTruthy();
         expect(getByTestId("pool-add-row")).toBeTruthy();
       },
-      { timeout: 3000 },
     );
 
     await waitFor(
       () => {
         expect(client.updateModelPolicySettings).toHaveBeenCalled();
       },
-      { timeout: 3000 },
     );
     expect(queryByTestId("models-save")).toBeNull();
   });
@@ -230,7 +228,6 @@ describe("ModelsEditor", () => {
       () => {
         expect(client.updateModelPolicySettings).toHaveBeenCalled();
       },
-      { timeout: 3000 },
     );
   });
 
@@ -264,7 +261,6 @@ describe("ModelsEditor", () => {
     );
     await waitFor(
       () => expect(client.updateModelPolicySettings).toHaveBeenCalledTimes(1),
-      { timeout: 3000 },
     );
     expect(getByTestId("model-policy-panel")).toBe(panelBefore);
 
@@ -276,7 +272,6 @@ describe("ModelsEditor", () => {
     );
     await waitFor(
       () => expect(client.updateModelPolicySettings).toHaveBeenCalledTimes(2),
-      { timeout: 3000 },
     );
     expect(getByTestId("model-policy-panel")).toBe(panelBefore);
   });

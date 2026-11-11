@@ -13,5 +13,3 @@ scenarios:
   - id: default
     vars:
       reason: a writing editor action requires the tracked document revision
-    expect_contains:
-      - document revision

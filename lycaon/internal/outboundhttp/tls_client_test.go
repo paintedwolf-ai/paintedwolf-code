@@ -1,8 +1,10 @@
 package outboundhttp
 
 import (
+	"crypto/aes"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/asn1"
 	"encoding/pem"
 	"errors"
 	"io"
@@ -25,9 +27,9 @@ func TestClientCertificateOpensPEMIdentities(t *testing.T) {
 	encrypted := tlstest.EncryptPKCS8(t, leaf.KeyDER, "correct horse")
 	block, _ := pem.Decode(leaf.KeyPEM)
 	legacy := pem.EncodeToMemory(&pem.Block{Type: "EC PRIVATE KEY", Headers: map[string]string{"Proc-Type": "4,ENCRYPTED"}, Bytes: block.Bytes})
-	corrupt, _ := pem.Decode(encrypted)
-	corrupt.Bytes = append([]byte(nil), corrupt.Bytes...)
-	corrupt.Bytes[len(corrupt.Bytes)-1] ^= 0xff
+	pad := aes.BlockSize - len(leaf.KeyDER)%aes.BlockSize
+	zeroPadding := pkcs8WithInvalidPadding(t, encrypted, len(leaf.KeyDER), 1, byte(pad))
+	unequalPadding := pkcs8WithInvalidPadding(t, encrypted, len(leaf.KeyDER), 2, 1)
 	for _, c := range []struct {
 		name          string
 		cert, key     []byte
@@ -38,7 +40,8 @@ func TestClientCertificateOpensPEMIdentities(t *testing.T) {
 		{name: "encrypted key", cert: leaf.CertPEM, key: encrypted, pass: "correct horse"},
 		{name: "wrong passphrase", cert: leaf.CertPEM, key: encrypted, pass: "battery staple", failure: "the passphrase does not open the private key"},
 		{name: "missing passphrase", cert: leaf.CertPEM, key: encrypted, failure: "the private key is encrypted and no passphrase was given"},
-		{name: "damaged ciphertext", cert: leaf.CertPEM, key: pem.EncodeToMemory(corrupt), pass: "correct horse", failure: "the passphrase does not open the private key"},
+		{name: "zero padding byte", cert: leaf.CertPEM, key: zeroPadding, pass: "correct horse", failure: "the passphrase does not open the private key"},
+		{name: "unequal padding bytes", cert: leaf.CertPEM, key: unequalPadding, pass: "correct horse", failure: "the passphrase does not open the private key"},
 		{name: "legacy encryption", cert: leaf.CertPEM, key: legacy, pass: "x", failure: "legacy PEM encryption is not supported; use a PKCS#8 encrypted key"},
 		{name: "unsupported scheme", cert: leaf.CertPEM, key: pem.EncodeToMemory(&pem.Block{Type: "ENCRYPTED PRIVATE KEY", Bytes: []byte{0x30, 0x00}}), pass: "x", failure: "the private key's encryption is not PBES2 with PBKDF2 and AES-CBC"},
 		{name: "mismatched key", cert: leaf.CertPEM, key: other.KeyPEM, failure: "the private key does not match the client certificate"},
@@ -62,6 +65,26 @@ func TestClientCertificateOpensPEMIdentities(t *testing.T) {
 	if _, err := TrustPool([]byte("not a bundle")); err == nil {
 		t.Fatal("a bundle without certificates was trusted")
 	}
+}
+
+func pkcs8WithInvalidPadding(t *testing.T, encrypted []byte, plainSize, offset int, mask byte) []byte {
+	t.Helper()
+	block, _ := pem.Decode(encrypted)
+	if block == nil {
+		t.Fatal("missing encrypted fixture block")
+	}
+	var info encryptedPrivateKeyInfo
+	rest, err := asn1.Unmarshal(block.Bytes, &info)
+	testutil.FailErr(t, "decode encrypted PKCS#8 fixture", err)
+	pad := aes.BlockSize - plainSize%aes.BlockSize
+	if len(rest) != 0 || len(info.Data) < 2*aes.BlockSize || len(info.Data)%aes.BlockSize != 0 || offset < 1 || offset > pad {
+		t.Fatal("fixture has no selected CBC padding byte")
+	}
+	// Toggling C[n-1] toggles the same final plaintext byte without randomizing its block.
+	info.Data[len(info.Data)-aes.BlockSize-offset] ^= mask
+	block.Bytes, err = asn1.Marshal(info)
+	testutil.FailErr(t, "encode invalid-padding fixture", err)
+	return pem.EncodeToMemory(block)
 }
 
 // Trust and the client identity reach the TLS handshake of the request that

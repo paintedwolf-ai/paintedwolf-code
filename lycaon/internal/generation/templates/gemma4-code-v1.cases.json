@@ -1,0 +1,335 @@
+[
+  {
+    "name": "text whitespace",
+    "messages": [
+      {
+        "role": "system",
+        "content": "  guide\n"
+      },
+      {
+        "role": "user",
+        "content": " hi "
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>system\n  guide\n<turn|>\n<|turn>user\n hi <turn|>\n<|turn>model\n"
+  },
+  {
+    "name": "adjacent result",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Reading.",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "café.rs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "source\n",
+        "name": "read",
+        "tool_call_id": "c1"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>model\nReading.<|tool_call>call:read{path:<|\"|>café.rs<|\"|>}<tool_call|><|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|>"
+  },
+  {
+    "name": "interrupted result",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Reading.",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "café.rs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "user",
+        "content": "Wait."
+      },
+      {
+        "role": "tool",
+        "content": "source\n",
+        "name": "read",
+        "tool_call_id": "c1"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>model\nReading.<|tool_call>call:read{path:<|\"|>café.rs<|\"|>}<tool_call|><turn|>\n<|turn>user\nWait.<turn|>\n<|turn>model\n<|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|>"
+  },
+  {
+    "name": "orphan result",
+    "messages": [
+      {
+        "role": "tool",
+        "content": "source\n",
+        "name": "read",
+        "tool_call_id": "c1"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>model\n<|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|>"
+  },
+  {
+    "name": "repeated results",
+    "messages": [
+      {
+        "role": "tool",
+        "content": "source\n",
+        "name": "read",
+        "tool_call_id": "c1"
+      },
+      {
+        "role": "tool",
+        "content": "source\n",
+        "name": "read",
+        "tool_call_id": "c1"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>model\n<|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|><|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|>"
+  },
+  {
+    "name": "assistant after result",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Reading.",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "café.rs"
+              }
+            }
+          }
+        ]
+      },
+      {
+        "role": "tool",
+        "content": "source\n",
+        "name": "read",
+        "tool_call_id": "c1"
+      },
+      {
+        "role": "assistant",
+        "content": "Found it."
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": false,
+    "expected": "<bos><|turn>model\nReading.<|tool_call>call:read{path:<|\"|>café.rs<|\"|>}<tool_call|><|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|>Found it.<turn|>\n"
+  },
+  {
+    "name": "tool call target",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Reading.",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "café.rs"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": false,
+    "expected": "<bos><|turn>model\nReading.<|tool_call>call:read{path:<|\"|>café.rs<|\"|>}<tool_call|><|tool_response>"
+  },
+  {
+    "name": "unresolved history call",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "Reading.",
+        "tool_calls": [
+          {
+            "id": "c1",
+            "type": "function",
+            "function": {
+              "name": "read",
+              "arguments": {
+                "path": "café.rs"
+              }
+            }
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>model\nReading.<|tool_call>call:read{path:<|\"|>café.rs<|\"|>}<tool_call|><turn|>\n<|turn>model\n"
+  },
+  {
+    "name": "result before user",
+    "messages": [
+      {
+        "role": "tool",
+        "content": "source\n",
+        "name": "read",
+        "tool_call_id": "c1"
+      },
+      {
+        "role": "user",
+        "content": "Continue."
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "expected": "<bos><|turn>model\n<|tool_response>response:read{value:<|\"|>source\n<|\"|>}<tool_response|><turn|>\n<|turn>user\nContinue.<turn|>\n<|turn>model\n"
+  },
+  {
+    "name": "assistant turns",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "First."
+      },
+      {
+        "role": "assistant",
+        "content": "Second."
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": false,
+    "expected": "<bos><|turn>model\nFirst.<turn|>\n<|turn>model\nSecond.<turn|>\n"
+  },
+  {
+    "name": "unknown role",
+    "messages": [
+      {
+        "role": "developer",
+        "content": "late guidance"
+      },
+      {
+        "role": "other",
+        "content": "lost"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "rejected": true
+  },
+  {
+    "name": "unnamed result",
+    "messages": [
+      {
+        "role": "tool",
+        "content": "lost"
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "rejected": true
+  },
+  {
+    "name": "embedded result",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_responses": [
+          {
+            "name": "read",
+            "response": "lost"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "rejected": true
+  },
+  {
+    "name": "user tool call",
+    "messages": [
+      {
+        "role": "user",
+        "content": "",
+        "tool_calls": [
+          {
+            "function": {
+              "name": "read",
+              "arguments": {}
+            }
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "rejected": true
+  },
+  {
+    "name": "nontext system",
+    "messages": [
+      {
+        "role": "system",
+        "content": [
+          {
+            "type": "text",
+            "text": "lost"
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "rejected": true
+  },
+  {
+    "name": "string arguments",
+    "messages": [
+      {
+        "role": "assistant",
+        "content": "",
+        "tool_calls": [
+          {
+            "function": {
+              "name": "read",
+              "arguments": "{}"
+            }
+          }
+        ]
+      }
+    ],
+    "tools": [],
+    "add_generation_prompt": true,
+    "rejected": true
+  }
+]

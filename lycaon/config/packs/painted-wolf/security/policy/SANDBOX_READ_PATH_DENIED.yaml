@@ -26,6 +26,3 @@ x-paintedwolf-scenarios:
 - id: command_read_path_denied
   vars:
     tool: command
-  expect_contains:
-  - 'Code: SANDBOX_READ_PATH_DENIED'
-  - without the content

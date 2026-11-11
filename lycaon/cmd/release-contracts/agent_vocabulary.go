@@ -1,23 +1,14 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"io"
 	"reflect"
 
 	"gopkg.in/yaml.v3"
 )
 
 const capabilityPath = packsRoot + "/painted-wolf/platform/host/anchors/oar-profile.yaml"
-
-type vocabularyRetirements struct {
-	FormatVersion int                            `json:"format_version"`
-	Vocabularies  map[string]map[string][]string `json:"vocabularies"`
-}
-
-var vocabularyKinds = []string{"host_facts", "rejection_codes", "tools", "workflow_terms", "anchors", "themes"}
 
 type factSignature struct {
 	Name        string `yaml:"name"`
@@ -32,7 +23,7 @@ type codeSignature struct {
 }
 
 func checkAgentVocabulary(release releaseSource, current releaseSource) error {
-	raw, err := current.show("schemas/agent-public-retirements.json")
+	raw, err := current.show(retirementCatalogPath)
 	if err != nil {
 		return err
 	}
@@ -45,7 +36,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 		return err
 	}
 	for _, rel := range paths {
-		if rel != "schemas/agent-public-retirements.json" {
+		if rel != retirementCatalogPath {
 			continue
 		}
 		raw, err := release.show(rel)
@@ -56,12 +47,8 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 		if err != nil {
 			return err
 		}
-		for kind, names := range previous.Vocabularies {
-			for name, successors := range names {
-				if !reflect.DeepEqual(retired.Vocabularies[kind][name], successors) {
-					return fmt.Errorf("released retirement %s %s was removed", kind, name)
-				}
-			}
+		if err := checkReleasedRetirements(previous, retired); err != nil {
+			return err
 		}
 	}
 	before, err := factVocabulary(release)
@@ -92,6 +79,9 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	}
 	afterPublic, err := publicVocabularies(current)
 	if err != nil {
+		return err
+	}
+	if err := checkContractIdentities(retired.ContentContracts, beforePublic["tools"], afterPublic["tools"], retired.Vocabularies["tools"]); err != nil {
 		return err
 	}
 	for _, kind := range []string{"tools", "workflow_terms", "anchors", "themes"} {
@@ -140,15 +130,15 @@ func codeVocabulary(source releaseSource) (map[string]codeSignature, error) {
 	return document.Codes, nil
 }
 
-func checkVocabulary[T any](kind string, before, after map[string]T, retired map[string][]string) error {
+func checkVocabulary[T any](kind string, before, after map[string]T, retired map[string]retirementSuccessors) error {
 	for name, successors := range retired {
-		if len(successors) == 0 {
+		if len(successors.Names) == 0 && successors.Contract == nil {
 			return fmt.Errorf("retired %s %s has no named successor", kind, name)
 		}
 		if _, active := after[name]; active {
 			return fmt.Errorf("retired %s %s was reused", kind, name)
 		}
-		for _, successor := range successors {
+		for _, successor := range successors.Names {
 			if _, ok := after[successor]; !ok {
 				return fmt.Errorf("retired %s %s names unavailable successor %s", kind, name, successor)
 			}
@@ -167,26 +157,4 @@ func checkVocabulary[T any](kind string, before, after map[string]T, retired map
 		}
 	}
 	return nil
-}
-
-func parseRetirements(raw []byte) (vocabularyRetirements, error) {
-	var retired vocabularyRetirements
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&retired); err != nil {
-		return retired, err
-	}
-	var extra any
-	if err := decoder.Decode(&extra); err != io.EOF {
-		return retired, fmt.Errorf("retirement catalog must contain one JSON document")
-	}
-	if retired.FormatVersion != 1 || len(retired.Vocabularies) != len(vocabularyKinds) {
-		return retired, fmt.Errorf("unsupported or incomplete agent-public retirement catalog")
-	}
-	for _, kind := range vocabularyKinds {
-		if retired.Vocabularies[kind] == nil {
-			return retired, fmt.Errorf("missing retirement vocabulary %s", kind)
-		}
-	}
-	return retired, nil
 }

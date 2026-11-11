@@ -1,5 +1,7 @@
 #include <libproc.h>
 #include <sys/proc_info.h>
+#include <netinet/in_pcb.h>
+#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <errno.h>
 #include <limits.h>
@@ -9,9 +11,11 @@
 
 struct pw_socket_row {
  uint64_t socket_handle, pcb_handle, generation;
+ unsigned char shared_bind;
  unsigned char local[16], remote[16];
+ uint32_t uid;
  uint16_t local_port, remote_port;
- unsigned char ipv4, listening, udp;
+ unsigned char ipv4, ipv6_only, listening, udp;
 };
 
 // One native descriptor walk serves listener, port-holder and exact
@@ -22,6 +26,9 @@ struct pw_socket_row {
 static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
  *rows = NULL;
  *count = 0;
+ errno = 0;
+ struct proc_bsdshortinfo holder;
+ if (proc_pidinfo(pid, PROC_PIDT_SHORTBSDINFO, 1, &holder, sizeof(holder)) != (int)sizeof(holder)) return errno ? errno : ESRCH;
  errno = 0;
  int size = proc_pidinfo(pid, PROC_PIDLISTFDS, 0, NULL, 0);
  if (size < 0) return errno ? errno : ESRCH;
@@ -73,7 +80,9 @@ static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
   }
   if (info.psi.soi_family != AF_INET && info.psi.soi_family != AF_INET6) continue;
   struct pw_socket_row *row = &out[(*count)++];
+  row->shared_bind = (info.psi.soi_options & SO_REUSEPORT) != 0;
   row->udp = udp;
+  row->uid = holder.pbsi_uid;
   row->socket_handle = info.psi.soi_so;
   row->pcb_handle = info.psi.soi_pcb;
   row->generation = in->insi_gencnt;
@@ -81,6 +90,7 @@ static int pw_socket_rows(int pid, struct pw_socket_row **rows, int *count) {
   row->remote_port = ntohs((uint16_t)in->insi_fport);
   row->listening = udp ? row->local_port != 0 && row->remote_port == 0 : info.psi.soi_proto.pri_tcp.tcpsi_state == TSI_S_LISTEN;
   row->ipv4 = info.psi.soi_family == AF_INET;
+  row->ipv6_only = !row->ipv4 && (in->insi_flags & IN6P_IPV6_V6ONLY) != 0;
   if (row->ipv4) {
    memcpy(row->local, &in->insi_laddr.ina_46.i46a_addr4, 4);
    memcpy(row->remote, &in->insi_faddr.ina_46.i46a_addr4, 4);

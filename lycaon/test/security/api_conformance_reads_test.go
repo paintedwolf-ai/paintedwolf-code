@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
@@ -47,11 +48,18 @@ func (s *conformanceSweep) sweepReads(ctx context.Context) {
 	for _, op := range reads {
 		params, _ := s.values.pathParams(op)
 		req := conformanceRequest{op: op, probe: "read", params: params, query: s.values.requiredQuery(op)}
-		ex, changes := s.observedRead(ctx, req)
-		if len(changes) > 0 {
-			s.findings.add(ruleReadsHaveNoEffects, op.ID, req.probe, "changed host state: %s", strings.Join(changes, ", "))
+		var ex conformanceExchange
+		if s.readObserved[op.ID] {
+			ex = s.send(ctx, req)
+		} else {
+			var changes []string
+			ex, changes = s.observedRead(ctx, req)
+			if len(changes) > 0 {
+				s.findings.add(ruleReadsHaveNoEffects, op.ID, req.probe, "changed host state: %s", strings.Join(changes, ", "))
+			}
 		}
 		if ex.status/100 == 2 {
+			s.readObserved[op.ID] = true
 			s.discover(op, ex)
 		}
 	}
@@ -137,6 +145,8 @@ type hostEffects struct {
 	settle func(context.Context)
 	// projectDir is the watched fixture tree whose change pipeline must drain.
 	projectDir string
+	// barrierStep makes every barrier write change the file's content.
+	barrierStep int
 }
 
 // watcherQuietGrace is how long the fixture tree's change debouncer must stay
@@ -147,6 +157,9 @@ const watcherQuietGrace = 2 * repochange.DefaultDebounce
 // watcherQuietBound caps one quiet wait so a continuously changing tree fails
 // the read it interferes with instead of hanging the sweep.
 const watcherQuietBound = 10 * time.Second
+
+// watcherBarrierFile proves the watcher has delivered every earlier change.
+const watcherBarrierFile = "conformance-barrier.txt"
 
 // settlePasses bounds the convergence loop against continuous producers.
 const settlePasses = 64
@@ -169,9 +182,72 @@ func openConformanceEffects(t *testing.T, h *wiring.Harness, hub *events.MemoryH
 }
 
 func (e *hostEffects) mark(ctx context.Context) (int64, error) {
+	if err := e.awaitWatcherBarrier(ctx); err != nil {
+		return 0, err
+	}
 	e.quiesce(ctx)
 	e.drain()
 	return e.dataVersion(ctx)
+}
+
+// awaitWatcherBarrier writes a file and waits for the watcher to report it. The
+// platform stream is ordered, so every earlier write has then reached the
+// pipeline, however long a contended host took to deliver it. A rewrite leaves a
+// later report outstanding, which the read that follows would be charged with, so
+// only a round that wrote once proves the pipeline empty.
+func (e *hostEffects) awaitWatcherBarrier(ctx context.Context) error {
+	for patience := time.Second; ; patience *= 2 {
+		rewrote, err := e.watcherBarrierRound(ctx, patience)
+		if err != nil || !rewrote {
+			return err
+		}
+		e.quiesce(ctx)
+		e.drain()
+	}
+}
+
+func (e *hostEffects) watcherBarrierRound(ctx context.Context, patience time.Duration) (bool, error) {
+	path := filepath.Join(e.projectDir, watcherBarrierFile)
+	e.barrierStep++
+	write := func() error {
+		return os.WriteFile(path, fmt.Appendf(nil, "effects-barrier-%d\n", e.barrierStep), 0o644)
+	}
+	if err := write(); err != nil {
+		return false, err
+	}
+	retry := time.NewTicker(patience)
+	defer retry.Stop()
+	rewrote := false
+	for {
+		select {
+		case envelope, ok := <-e.events:
+			if !ok {
+				return rewrote, errors.New("event stream dropped while awaiting the watcher barrier")
+			}
+			var changed wire.SourceChangesEvent
+			if envelope.Topic != wire.EventTopicSourceChanged || json.Unmarshal(envelope.Data, &changed) != nil {
+				continue
+			}
+			if slices.ContainsFunc(changed.Changes, func(c wire.SourceChange) bool { return c.Path == watcherBarrierFile }) {
+				return rewrote, nil
+			}
+			if changed.Resync {
+				rewrote = true
+				e.barrierStep++
+				if err := write(); err != nil {
+					return rewrote, err
+				}
+			}
+		case <-retry.C:
+			rewrote = true
+			e.barrierStep++
+			if err := write(); err != nil {
+				return rewrote, err
+			}
+		case <-ctx.Done():
+			return rewrote, ctx.Err()
+		}
+	}
 }
 
 func (e *hostEffects) since(ctx context.Context, mark int64) ([]string, error) {
@@ -242,7 +318,7 @@ func settleSourceWatcher(t *testing.T, settle func(context.Context), hub *events
 	ch, unsubscribe, err := hub.Subscribe(t.Context(), events.Subscription{Viewer: testutil.HostOwner()})
 	testutil.FailErr(t, "subscribe to source changes", err)
 	defer unsubscribe()
-	const barrier = "conformance-barrier.txt"
+	barrier := watcherBarrierFile
 	barrierPath := filepath.Join(projectDir, barrier)
 	writeBarrier := func(step int) {
 		testutil.FailErr(t, "write the watcher barrier", os.WriteFile(barrierPath, fmt.Appendf(nil, "barrier-%d\n", step), 0o644))

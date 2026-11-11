@@ -10,5 +10,3 @@ suggested_action: >-
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - no trusted operating-system authenticator

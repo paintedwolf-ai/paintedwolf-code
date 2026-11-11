@@ -108,11 +108,11 @@ func TestSurfaceGatedInvokeAllowsOnSurfaceDeniesOff(t *testing.T) {
 		want          bool
 	}{
 		{"implement_investigate", "read", false},
-		{"implement_investigate", "command", true}, // command is on-surface on investigate
-		{"implement_investigate", "edit", true},    // product edit is on-surface on investigate
+		{"implement_investigate", "command", true},         // command is on-surface on investigate
+		{"implement_investigate", "restore_version", true}, // restore_version is on-surface on investigate
 		{"implement_dispatch", "task", true},
-		{"implement_dispatch", "command", false}, // off-surface command denied on orchestrate
-		{"implement_dispatch", "edit", false},    // off-surface edit denied on orchestrate
+		{"implement_dispatch", "command", false},         // off-surface command denied on orchestrate
+		{"implement_dispatch", "restore_version", false}, // off-surface restore_version denied on orchestrate
 	}
 	for _, c := range cases {
 		plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: c.surface}, 1)

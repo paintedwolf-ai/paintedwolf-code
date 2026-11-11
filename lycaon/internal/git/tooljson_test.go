@@ -12,6 +12,7 @@ import (
 )
 
 func TestNormalizeToolErrorFromError(t *testing.T) {
+	t.Parallel()
 	got := git.NormalizeToolError(
 		fmt.Errorf("git diff failed: %w", git.ErrNotRepository),
 	)
@@ -21,6 +22,7 @@ func TestNormalizeToolErrorFromError(t *testing.T) {
 }
 
 func TestMarshalToolFailureJSON(t *testing.T) {
+	t.Parallel()
 	out, err := git.MarshalToolFailure(fmt.Errorf("git diff failed: %w", git.ErrNotRepository))
 	if !errors.Is(err, git.ErrNotRepository) {
 		t.Fatalf("serialized failure lost its cause: %v", err)
@@ -38,6 +40,7 @@ func TestMarshalToolFailureJSON(t *testing.T) {
 }
 
 func TestMarshalDiffToolResponseSuccess(t *testing.T) {
+	t.Parallel()
 	out, err := git.MarshalDiffToolResponse(git.DiffToolResponse{
 		Offset: 0, Limit: 80, MaxBytes: 5120,
 		Files:      []git.DiffToolEntry{{Path: "a.go", Insertions: 1, Diff: "diff --git a/a.go b/a.go\n"}},
@@ -58,6 +61,7 @@ func TestMarshalDiffToolResponseSuccess(t *testing.T) {
 }
 
 func TestMarshalDiffToolResponseEmptyPageKeepsFilesList(t *testing.T) {
+	t.Parallel()
 	out, err := git.MarshalDiffToolResponse(git.DiffToolResponse{Limit: 80}, nil)
 	testutil.FailErr(t, "git.MarshalDiffToolResponse failed", err)
 	var obj map[string]any
@@ -71,6 +75,7 @@ const twoFileDiff = "diff --git a/a.go b/a.go\nindex 1..2 100644\n--- a/a.go\n++
 
 // Hunk prefixes distinguish content containing a header string from a file header.
 func TestSplitDiffBlocksSplitsAtFileHeaders(t *testing.T) {
+	t.Parallel()
 	text := twoFileDiff + "diff --git a/c.txt b/c.txt\n--- a/c.txt\n+++ b/c.txt\n@@ -1 +1 @@\n+diff --git a/x b/x mentioned inside a hunk\n"
 	blocks := git.SplitDiffBlocks(text)
 	if len(blocks) != 3 {
@@ -90,6 +95,7 @@ func TestSplitDiffBlocksSplitsAtFileHeaders(t *testing.T) {
 }
 
 func TestCountHunkLinesSkipsFileHeaders(t *testing.T) {
+	t.Parallel()
 	blocks := git.SplitDiffBlocks(twoFileDiff)
 	if ins, del := git.CountHunkLines(blocks[0]); ins != 1 || del != 0 {
 		t.Fatalf("a.go counts = +%d -%d want +1 -0", ins, del)
@@ -110,6 +116,7 @@ func diffEntries(sizes ...int) []git.DiffToolEntry {
 // Whole files fill the budget in order; the first file that does not fit ends
 // the page, and the caller learns where to resume.
 func TestFitDiffPageKeepsWholeFilesInOrder(t *testing.T) {
+	t.Parallel()
 	kept, cut := git.FitDiffPage(diffEntries(300, 300, 300, 300), 750)
 	if len(kept) != 2 || !cut {
 		t.Fatalf("kept %d files cut=%v want 2 files, cut", len(kept), cut)
@@ -125,6 +132,7 @@ func TestFitDiffPageKeepsWholeFilesInOrder(t *testing.T) {
 }
 
 func TestFitDiffPageWholePageFits(t *testing.T) {
+	t.Parallel()
 	kept, cut := git.FitDiffPage(diffEntries(300, 300), 1000)
 	if len(kept) != 2 || cut {
 		t.Fatalf("kept %d cut=%v want 2 files uncut", len(kept), cut)
@@ -135,9 +143,9 @@ func TestFitDiffPageWholePageFits(t *testing.T) {
 	}
 }
 
-// A single file over budget is still delivered — cut at a line and marked —
-// rather than producing an empty page the caller could never get past.
+// A single file over budget is still delivered, cut at a line and marked.
 func TestFitDiffPageCutsAnOversizedFirstFileAtALine(t *testing.T) {
+	t.Parallel()
 	kept, cut := git.FitDiffPage(diffEntries(900, 30), 100)
 	if len(kept) != 1 || !cut {
 		t.Fatalf("kept %d cut=%v want the first file alone, cut", len(kept), cut)
@@ -153,6 +161,7 @@ func TestFitDiffPageCutsAnOversizedFirstFileAtALine(t *testing.T) {
 }
 
 func TestMarshalStatusToolResponseCarriesBranchFacts(t *testing.T) {
+	t.Parallel()
 	status := &git.GitStatus{Branch: "main", HeadShort: "c656e1a0", Upstream: "origin/main", Ahead: 2, Behind: 1, Files: []git.GitStatusEntry{}}
 	obj := decodeStatusTool(t, status, git.StatusToolPage{Limit: 80})
 	if obj["head_short"] != "c656e1a0" || obj["upstream"] != "origin/main" || obj["ahead"].(float64) != 2 || obj["behind"].(float64) != 1 {
@@ -163,6 +172,7 @@ func TestMarshalStatusToolResponseCarriesBranchFacts(t *testing.T) {
 // group_depth rolls the selection up by leading segments, largest first, with
 // short paths as their own group and no groups until asked for.
 func TestMarshalStatusToolResponseGroupsByDepth(t *testing.T) {
+	t.Parallel()
 	status := &git.GitStatus{Branch: "main", Dirty: true, Files: []git.GitStatusEntry{
 		{Path: "lycaon/internal/scan/a.go", Status: " M"},
 		{Path: "lycaon/internal/scan/b.go", Status: "M "},
@@ -203,6 +213,7 @@ func TestMarshalStatusToolResponseGroupsByDepth(t *testing.T) {
 }
 
 func TestMarshalStatusToolResponseUnavailable(t *testing.T) {
+	t.Parallel()
 	out, err := git.MarshalStatusToolResponse(git.StatusToolResponse{}, fmt.Errorf("git status failed: %w", git.ErrNotRepository))
 	if !errors.Is(err, git.ErrNotRepository) {
 		t.Fatalf("status failure lost typed cause: %v", err)
@@ -243,9 +254,9 @@ func statusToolPaths(obj map[string]any) []string {
 	return out
 }
 
-// Every file is reachable: a page carries its total and the next offset, and
-// walking next_offset visits each entry exactly once.
+// Each page carries its total and next offset, visiting every entry once.
 func TestMarshalStatusToolResponsePagesEveryFile(t *testing.T) {
+	t.Parallel()
 	status := statusToolFixture(231)
 	first := decodeStatusTool(t, status, git.StatusToolPage{Limit: 80})
 	if got := len(statusToolPaths(first)); got != 80 {
@@ -287,6 +298,7 @@ func TestMarshalStatusToolResponsePagesEveryFile(t *testing.T) {
 }
 
 func TestMarshalStatusToolResponseOffsetPastEndIsEmptyPage(t *testing.T) {
+	t.Parallel()
 	obj := decodeStatusTool(t, statusToolFixture(5), git.StatusToolPage{Offset: 50, Limit: 80})
 	if got := len(statusToolPaths(obj)); got != 0 {
 		t.Fatalf("files = %d want 0", got)
@@ -303,6 +315,7 @@ func TestMarshalStatusToolResponseOffsetPastEndIsEmptyPage(t *testing.T) {
 }
 
 func TestMarshalStatusToolResponseUnboundedWhenLimitZero(t *testing.T) {
+	t.Parallel()
 	obj := decodeStatusTool(t, statusToolFixture(231), git.StatusToolPage{})
 	if got := len(statusToolPaths(obj)); got != 231 {
 		t.Fatalf("files = %d want 231", got)
@@ -312,9 +325,9 @@ func TestMarshalStatusToolResponseUnboundedWhenLimitZero(t *testing.T) {
 	}
 }
 
-// paths selects by repo-relative prefix: a file exactly, or a directory and its
-// subtree — never a bare string prefix of a sibling name.
+// paths selects by repo-relative prefix: a file or a directory subtree.
 func TestMarshalStatusToolResponsePathsArePrefixes(t *testing.T) {
+	t.Parallel()
 	status := &git.GitStatus{Branch: "main", Dirty: true, Files: []git.GitStatusEntry{
 		{Path: "docs/a.md", Status: " M"},
 		{Path: "docs-old/b.md", Status: " M"},
@@ -342,6 +355,7 @@ func TestMarshalStatusToolResponsePathsArePrefixes(t *testing.T) {
 }
 
 func TestMarshalStatusToolResponseDotPathSelectsWholeTree(t *testing.T) {
+	t.Parallel()
 	obj := decodeStatusTool(t, statusToolFixture(3), git.StatusToolPage{Paths: []string{"."}, Limit: 80})
 	if obj["files_total"].(float64) != 3 {
 		t.Fatalf("files_total = %v want 3", obj["files_total"])
@@ -349,6 +363,7 @@ func TestMarshalStatusToolResponseDotPathSelectsWholeTree(t *testing.T) {
 }
 
 func TestStatusSummaryOmitsFilesAndKeepsSelectionCounts(t *testing.T) {
+	t.Parallel()
 	status := &git.GitStatus{Branch: "main", Dirty: true, Files: []git.GitStatusEntry{{Path: "src/a.go", Status: " M"}, {Path: "src/b.go", Status: "??"}, {Path: "docs/a.md", Status: " M"}}}
 	got := git.BuildStatusToolResponse(status, git.StatusToolPage{Summary: true, Paths: []string{"src"}, Limit: 80})
 	if !got.Summary || len(got.Files) != 0 || got.FilesTotal != 2 || got.UnstagedCount != 2 || got.UntrackedCount != 1 || len(got.Groups) != 1 || got.Groups[0].Files != 2 || got.NextOffset != nil {

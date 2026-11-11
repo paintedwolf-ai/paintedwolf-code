@@ -1,0 +1,6 @@
+steps:
+  - tool: "recall"
+    args:
+      query: "handle:<handle>"
+    say: "Confirm what a handle recorded with {{ call }} before citing it."
+    otherwise: "Cite only handles shown in this chat or the observed sample."

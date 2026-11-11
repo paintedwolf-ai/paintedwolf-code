@@ -622,7 +622,7 @@ export function SidebarScopePicker(props: Props) {
               </li>
             </Show>
             <Show when={settledEmpty(pinsState(), (list) => list.length === 0)}>
-              <li class="den-sidebar-scope-picker__menu-empty" role="presentation">
+              <li class="den-sidebar-scope-picker__menu-empty" role="presentation" data-testid="sidebar-scope-pins-empty">
                 No pins yet
               </li>
             </Show>

@@ -20,7 +20,7 @@ func TestFollowUpAfterCompletedWorkflowCanAskAndReceiveAnswer(t *testing.T) {
 	mock := llm.NewKickDrivenMock(llm.KickDrivenConfig{
 		Fallback: func(context.Context, llm.Snapshot) modelcall.Completion {
 			if calls.Add(1) > 1 {
-				return modelcall.Completion{Content: MockCoordinatorCloseoutJSON("Question was not parked.", "")}
+				return modelcall.Completion{Content: MockCoordinatorCloseoutMarkdown("Question was not parked.", "")}
 			}
 			return modelcall.Completion{ToolCalls: []api.ToolCall{{
 				ID: "followup-platform", Name: "ask_user",

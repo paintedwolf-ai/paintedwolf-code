@@ -222,3 +222,81 @@ func TestCloseoutRollsBackWhenFinalizingCheckpointLosesItsClaim(t *testing.T) {
 		t.Fatalf("partial closeout committed: records=%d heads=%d", records, heads)
 	}
 }
+
+func TestSettleModelOutputIterationCollisionReturnsTypedErrorParity(t *testing.T) {
+	if got := (*ModelOutputIterationCollisionError)(nil).Error(); got != ErrModelOutputIterationCollision.Error() {
+		t.Fatalf("nil collision error = %q want %q", got, ErrModelOutputIterationCollision.Error())
+	}
+	for _, name := range []string{"memory", "sql"} {
+		t.Run(name, func(t *testing.T) {
+			var st modelExecutionStore = NewMemory()
+			if name == "sql" {
+				st = openTurnSQLStore(t).(modelExecutionStore)
+			}
+			ctx := t.Context()
+			sess, err := st.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+			testutil.FailErr(t, "create session", err)
+			turn, err := st.BeginTurn(ctx, TurnStart{SessionID: sess.ID, ProjectID: sess.ProjectID, Origin: TurnOriginUser, InputJSON: "{}"})
+			testutil.FailErr(t, "begin turn", err)
+
+			emptySeed, err := SettledModelOutputIteration(ctx, st, "")
+			testutil.FailErr(t, "read empty attempt iteration", err)
+			if emptySeed != 0 {
+				t.Fatalf("empty attempt iteration = %d want 0", emptySeed)
+			}
+			unknownStoreSeed, err := SettledModelOutputIteration(ctx, struct{}{}, turn.Attempt.ID)
+			testutil.FailErr(t, "read unknown store attempt iteration", err)
+			if unknownStoreSeed != 0 {
+				t.Fatalf("unknown store attempt iteration = %d want 0", unknownStoreSeed)
+			}
+			initialSeed, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+			testutil.FailErr(t, "read initial attempt iteration", err)
+			if initialSeed != 0 {
+				t.Fatalf("initial attempt iteration = %d want 0", initialSeed)
+			}
+
+			first, err := st.SettleModelOutput(ctx, ModelOutput{
+				ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
+				Iteration: 1, MessageID: uuid.NewString(), Content: "First output.",
+			})
+			testutil.FailErr(t, "settle iteration 1", err)
+			_, err = st.SettleModelOutput(ctx, first)
+			testutil.FailErr(t, "replay identical iteration 1 output", err)
+
+			afterFirst, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+			testutil.FailErr(t, "read settled iteration after first output", err)
+			if afterFirst != 1 {
+				t.Fatalf("settled iteration = %d want 1", afterFirst)
+			}
+
+			_, err = st.SettleModelOutput(ctx, ModelOutput{
+				ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
+				Iteration: 1, MessageID: uuid.NewString(), Content: "Duplicate iteration 1 output.",
+			})
+			if !errors.Is(err, ErrModelOutputIterationCollision) {
+				t.Fatalf("collision error = %v, want errors.Is(_, ErrModelOutputIterationCollision)", err)
+			}
+			var collision *ModelOutputIterationCollisionError
+			if !errors.As(err, &collision) {
+				t.Fatalf("collision error = %T (%v), want *ModelOutputIterationCollisionError", err, err)
+			}
+			if collision.TurnAttemptID != turn.Attempt.ID || collision.Iteration != 1 {
+				t.Fatalf("collision = %+v, want TurnAttemptID=%s Iteration=1", collision, turn.Attempt.ID)
+			}
+			if collision.Error() == "" {
+				t.Fatal("collision error string is empty")
+			}
+
+			_, err = st.SettleModelOutput(ctx, ModelOutput{
+				ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: sess.ID,
+				Iteration: 3, MessageID: uuid.NewString(), Content: "Third output.",
+			})
+			testutil.FailErr(t, "settle iteration 3", err)
+			afterThird, err := SettledModelOutputIteration(ctx, st, turn.Attempt.ID)
+			testutil.FailErr(t, "read settled iteration after third output", err)
+			if afterThird != 3 {
+				t.Fatalf("settled iteration = %d want 3", afterThird)
+			}
+		})
+	}
+}

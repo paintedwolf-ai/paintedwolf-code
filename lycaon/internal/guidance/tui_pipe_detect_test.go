@@ -23,7 +23,7 @@ func TestOutputLooksLikePipedTUI_altScreen(t *testing.T) {
 func TestAppendTUINotDrivenBanner(t *testing.T) {
 	e := NewToolOutputEnricher(&HintConfig{HintCodes: map[string]HintEntry{
 		"TUI_NOT_DRIVEN": {Message: "drive with terminal_open"},
-	}}, nil)
+	}}, nil, nil)
 	first := e.Enrich(t.Context(), EnrichInput{
 		SessionID: "s1",
 		Session:   &api.Session{ID: "s1"},

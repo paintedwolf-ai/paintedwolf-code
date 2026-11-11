@@ -1,16 +1,28 @@
-"""Provision the pinned Nix toolchain and locked inputs before an offline hosted lane."""
+"""Provision the pinned Nix toolchain, locked inputs, and build progress tracking."""
 
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 import platform
+import re
+import shlex
 import subprocess
+import sys
 import tarfile
 import tempfile
+import threading
 import urllib.request
 
+ROOT = Path(__file__).resolve().parents[2]
+SYSTEMS = {"x86_64": "x86_64-linux", "aarch64": "aarch64-linux"}
+NIX = ["nix", "--extra-experimental-features", "nix-command flakes"]
+CREDENTIALS = ("GH_TOKEN", "GITHUB_TOKEN", "LINUX_PACKAGE_SIGNING_KEY", "FEED_SIGNING_KEYS_JSON",
+               "TAURI_SIGNING_PRIVATE_KEY", "TAURI_SIGNING_PRIVATE_KEY_PASSWORD")
+FIELDS = ("bash", "coreutils", "stdenv")
+STORE_TOOL = re.compile(r"/nix/store/[0-9abcdfghijklmnpqrsvwxyz]{32}-[^\s]+\Z")
 VERSION = "2.35.3"
 INSTALLERS = {
     "x86_64": "6ce3ce3703fdc241b560cba401c5d338042122fe5b1a81e07bf1a623f259eba0",
@@ -77,3 +89,79 @@ def prepare(nix: list[str], root: Path, environment: dict, run=subprocess.run, i
         if result.returncode != 0:
             return result.returncode
     return 0
+
+
+def environment_from(fixture: dict) -> dict:
+    if fixture.get("schema") != 1 or set(fixture) != {"schema", *FIELDS}:
+        raise ValueError("invalid locked Nix workflow fixture")
+    values = {}
+    for field in FIELDS:
+        value = fixture[field]
+        if not isinstance(value, str) or not STORE_TOOL.fullmatch(value):
+            raise ValueError("invalid locked Nix workflow path")
+        values["PW_NIX_FIXTURE_" + field.upper()] = value
+    return values
+
+
+def build(root: Path = ROOT, run=subprocess.run) -> dict:
+    """Realize the fixture from this checkout's lock and return the suites' environment."""
+    if platform.system() != "Linux" or platform.machine() not in SYSTEMS:
+        raise ValueError("the Nix workflow fixture builds on native Linux amd64 or arm64")
+    target = f"git+file://{root}#packages.{SYSTEMS[platform.machine()]}.nix-workflow-fixture"
+    environment = {name: value for name, value in os.environ.items() if name not in CREDENTIALS}
+    result = run(NIX + ["build", "--json", "--no-link", "--no-write-lock-file", target],
+                 cwd=root, env=environment, text=True, stdout=subprocess.PIPE)
+    if result.returncode != 0:
+        raise ValueError("the locked Nix workflow fixture did not build")
+    outputs = [path for item in json.loads(result.stdout) for path in item["outputs"].values()]
+    if len(outputs) != 1:
+        raise ValueError("the Nix workflow fixture has exactly one output")
+    return environment_from(json.loads(Path(outputs[0]).read_text()))
+
+
+def run(command, *, cwd, env):
+    destination = env.get("PW_TEST_STAGE_PROGRESS")
+    if not destination:
+        return subprocess.run(command, cwd=cwd, env=env, text=True, stdout=subprocess.PIPE)
+    # Nix's stdout remains its machine-readable result; stderr is the build log.
+    with Path(destination).open("ab", buffering=0) as progress:
+        with subprocess.Popen(command, cwd=cwd, env=env, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE) as process:
+            errors = []
+
+            def copy_log():
+                while chunk := process.stderr.read1(64 << 10):
+                    if errors:
+                        continue
+                    try:
+                        progress.write(chunk)
+                        sys.stderr.write(chunk.decode("utf-8", errors="replace"))
+                        sys.stderr.flush()
+                    except (OSError, ValueError) as error:
+                        errors.append(error)
+
+            reader = threading.Thread(target=copy_log)
+            reader.start()
+            try:
+                output = process.stdout.read()
+                status = process.wait()
+            finally:
+                reader.join()
+            if errors:
+                raise errors[0]
+    return subprocess.CompletedProcess(command, status, output.decode("utf-8"))
+
+
+def main() -> int:
+    try:
+        values = build()
+    except (OSError, ValueError, KeyError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    for name, value in values.items():
+        print(f"export {name}={shlex.quote(value)}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

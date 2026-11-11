@@ -2,8 +2,10 @@ package providerwire
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -52,5 +54,69 @@ func TestReasoningReplayScopes(t *testing.T) {
 	}
 	if ProjectReasoning(nil, "p", "m", ReasoningReplayHistory) != nil {
 		t.Fatal("empty projection allocated history")
+	}
+}
+
+func TestProjectReasoningContinuationPolicies(t *testing.T) {
+	modelinfo.SetThinkingRules([]modelinfo.ThinkingRule{
+		{Match: []string{"claude-opus"}, Style: "adaptive", ContinuationPolicy: "require_fields"},
+		{Match: []string{"strip-model"}, Style: "effort_levels", ContinuationPolicy: "strip_reasoning"},
+		{Match: []string{"loop-model"}, Style: "thinking_type", ContinuationPolicy: "tool_loop_only"},
+		{Match: []string{"retain-model"}, Style: "budget_tokens", ContinuationPolicy: "retain_blocks"},
+	})
+	t.Cleanup(func() { modelinfo.SetThinkingRules(nil) })
+
+	omitted := json.RawMessage(`{"type":"thinking","signature":"sig-1"}`)
+	unsigned := json.RawMessage(`{"type":"thinking","thinking":"draft"}`)
+	redacted := json.RawMessage(`{"type":"redacted_thinking","data":"enc"}`)
+	emptyRedacted := json.RawMessage(`{"type":"redacted_thinking"}`)
+	original := []json.RawMessage{omitted, unsigned, redacted, emptyRedacted}
+	msg := api.Message{
+		Role: api.MessageRoleAssistant,
+		ModelReasoning: &api.ModelReasoning{
+			ProviderID: "anthropic",
+			Model:      "claude-opus-4-7",
+			Details:    original,
+		},
+	}
+	projected := ProjectReasoning([]api.Message{msg}, "anthropic", "claude-opus-4-7", ReasoningReplayHistory)
+	if projected[0].ModelReasoning == nil || len(projected[0].ModelReasoning.Details) != 2 {
+		t.Fatalf("projected details = %+v", projected[0].ModelReasoning)
+	}
+	if !strings.Contains(string(projected[0].ModelReasoning.Details[0]), `"thinking":""`) || !strings.Contains(string(projected[0].ModelReasoning.Details[0]), `"signature":"sig-1"`) {
+		t.Fatalf("normalized thinking block = %s", projected[0].ModelReasoning.Details[0])
+	}
+	if string(projected[0].ModelReasoning.Details[1]) != string(redacted) {
+		t.Fatalf("redacted block = %s", projected[0].ModelReasoning.Details[1])
+	}
+	if string(msg.ModelReasoning.Details[0]) != string(omitted) || len(msg.ModelReasoning.Details) != 4 {
+		t.Fatal("require_fields mutated durable message details")
+	}
+
+	stripped := ProjectReasoning([]api.Message{{
+		Role:           api.MessageRoleAssistant,
+		ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "strip-model", Text: "secret"},
+	}}, "p", "strip-model", ReasoningReplayHistory)
+	if stripped[0].ModelReasoning != nil {
+		t.Fatalf("strip_reasoning kept reasoning: %+v", stripped[0].ModelReasoning)
+	}
+
+	loopHistory := []api.Message{
+		{Role: api.MessageRoleUser, Content: "turn 1"},
+		{
+			Role:           api.MessageRoleAssistant,
+			ToolCalls:      []api.ToolCall{{ID: "c1", Name: "read"}},
+			ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "loop-model", Text: "old tool thought"},
+		},
+		{Role: api.MessageRoleUser, Content: "turn 2"},
+		{
+			Role:           api.MessageRoleAssistant,
+			ToolCalls:      []api.ToolCall{{ID: "c2", Name: "read"}},
+			ModelReasoning: &api.ModelReasoning{ProviderID: "p", Model: "loop-model", Text: "active tool thought"},
+		},
+	}
+	loopProjected := ProjectReasoning(loopHistory, "p", "loop-model", ReasoningReplayHistory)
+	if loopProjected[1].ModelReasoning != nil || loopProjected[3].ModelReasoning == nil {
+		t.Fatalf("tool_loop_only projection = %+v / %+v", loopProjected[1].ModelReasoning, loopProjected[3].ModelReasoning)
 	}
 }

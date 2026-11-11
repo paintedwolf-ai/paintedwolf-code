@@ -69,9 +69,16 @@ func (s *Conversation) replayStream(w http.ResponseWriter, r *http.Request, flus
 		}
 		return
 	}
+	// Text the host has not accepted stays on its labelled draft row, never here.
+	if msg.Visibility == wire.MessageVisibilityInternal || msg.Kind == wire.MessageKindDraft {
+		if writePromptChunk(w, flusher, wire.PromptStreamChunk{Reset: true}) {
+			writePromptChunk(w, flusher, wire.PromptStreamChunk{Done: true})
+		}
+		return
+	}
 	tokens, found := s.sessions.Runner.Transcript.Streams.Tokens(messageID)
 	if !found {
-		if cached, cachedOK := s.sessions.Runner.Transcript.Streams.Content(messageID); cachedOK {
+		if cached, cachedOK := s.sessions.Runner.Transcript.Streams.Content(messageID); cachedOK && cached != "" {
 			content = cached
 		}
 		if !writePromptChunk(w, flusher, wire.PromptStreamChunk{Token: content, Reset: true}) {

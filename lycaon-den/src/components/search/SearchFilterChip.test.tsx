@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SearchFilterChip } from "./SearchFilterChip.tsx";
@@ -22,12 +23,12 @@ describe("SearchFilterChip", () => {
     expect(trigger.getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.click(trigger);
-    const panel = screen.getByRole("dialog", { name: "Search filters" });
+    const panel = assertNamedControl(screen.getByTestId("search-filter-panel"), "dialog");
     expect(panel.dataset.denAnchoredSurface).toBeTruthy();
     expect(trigger.getAttribute("aria-expanded")).toBe("true");
 
     fireEvent.pointerDown(document.body);
-    expect(screen.queryByRole("dialog", { name: "Search filters" })).toBeNull();
+    expect(screen.queryByTestId("search-filter-panel")).toBeNull();
   });
 
   it("shows active state for advanced query and glob filters", () => {
@@ -66,7 +67,7 @@ describe("SearchFilterChip", () => {
 
     fireEvent.keyDown(firstChoice, { key: "Escape" });
     await waitFor(() =>
-      expect(screen.queryByRole("dialog", { name: "Search filters" })).toBeNull(),
+      expect(screen.queryByTestId("search-filter-panel")).toBeNull(),
     );
     expect(document.activeElement).toBe(trigger);
   });

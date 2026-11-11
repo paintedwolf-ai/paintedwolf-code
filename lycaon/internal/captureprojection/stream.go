@@ -13,6 +13,7 @@ import (
 // StreamOptions are complete-stream limits and an optional admitted span sink.
 // Observe must reserve any metadata it retains; no span list is retained here.
 type StreamOptions struct {
+	Policy        secretmatch.StreamPolicy
 	WorkingMemory secretmatch.StreamMemoryAdmission
 	Bounds        secretmatch.StreamBounds
 	Observe       func(context.Context, secretmatch.StreamSpan) error
@@ -55,7 +56,7 @@ func (p *Projector) ScreenStream(ctx context.Context, scope Scope, label string,
 		}
 		return nil
 	}
-	result, err := p.matcher.ScreenBytes(ctx, io.TeeReader(src, raw), streamHashWriter{dst, emitted}, label, options.Bounds, options.WorkingMemory, check, options.Observe)
+	result, err := p.matcher.ScreenBytes(ctx, io.TeeReader(src, raw), streamHashWriter{dst, emitted}, label, options.Policy, options.Bounds, options.WorkingMemory, check, options.Observe)
 	metadata.RawBytes = result.InputBytes
 	metadata.EmittedBytes = result.OutputBytes
 	metadata.Redacted = result.Redacted

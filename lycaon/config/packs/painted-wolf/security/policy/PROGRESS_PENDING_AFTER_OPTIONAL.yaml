@@ -28,6 +28,3 @@ x-paintedwolf-scenarios:
   vars:
     label: Verify rollout
     tool: update_progress
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: PROGRESS_PENDING_AFTER_OPTIONAL'

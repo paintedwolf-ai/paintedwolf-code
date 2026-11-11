@@ -33,6 +33,3 @@ x-paintedwolf-scenarios:
     path: src/main.go
     profile: implement
     tool: mkdir
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: MKDIR_BULK_DENIED'

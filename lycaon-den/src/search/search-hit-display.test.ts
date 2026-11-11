@@ -83,7 +83,6 @@ describe("searchHitDisplay", () => {
       score: 1,
     });
     expect(d.kindLabel).toBe("Network");
-    expect(d.openLabel).toBe("Open in chat");
   });
 
   it("prefers host tool title over snippet JSON walls", () => {

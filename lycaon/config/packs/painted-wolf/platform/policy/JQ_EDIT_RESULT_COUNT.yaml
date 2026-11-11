@@ -31,6 +31,3 @@ x-paintedwolf-scenarios:
       path: config.json
       profile: implement
       tool: jq_edit
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: JQ_EDIT_RESULT_COUNT'

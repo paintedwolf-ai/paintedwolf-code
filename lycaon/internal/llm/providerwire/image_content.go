@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/lycaon/lycaon/internal/bytebound"
+	"github.com/lycaon/lycaon/internal/contactsheet"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/timelinearchive"
 	_ "golang.org/x/image/webp"
@@ -28,16 +29,25 @@ const RejectImageDimension = 4096
 var perceiveDropLog = observability.LazyComponent("llm_perceive")
 
 // perceptionImage is the image a model sees for an artifact: the artifact itself, or the
-// poster of a recording that is not an image.
+// poster of a recording or filmstrip that is not a single raster image.
 func perceptionImage(raw []byte, mime string) ([]byte, string, error) {
-	if !strings.EqualFold(strings.TrimSpace(mime), timelinearchive.Mime) {
+	trimmed := strings.TrimSpace(mime)
+	switch {
+	case strings.EqualFold(trimmed, timelinearchive.Mime):
+		poster, err := timelinearchive.Poster(raw)
+		if err != nil {
+			return nil, "", err
+		}
+		return poster, "image/png", nil
+	case strings.EqualFold(trimmed, contactsheet.FilmstripMime):
+		poster, err := contactsheet.FilmstripPoster(raw, MaxImageDimension)
+		if err != nil {
+			return nil, "", err
+		}
+		return poster, "image/png", nil
+	default:
 		return raw, mime, nil
 	}
-	poster, err := timelinearchive.Poster(raw)
-	if err != nil {
-		return nil, "", err
-	}
-	return poster, "image/png", nil
 }
 
 // ImageWirePart is a normalized provider image.

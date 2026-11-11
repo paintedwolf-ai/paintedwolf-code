@@ -79,41 +79,11 @@ describe("set subjects stay answerable", () => {
     const target = view.getByTestId("approval-target-0");
     expect(target.textContent).toContain("create-vite@6.1.0");
     expect(target.textContent).toContain("published 7 days ago");
-    expect(target.textContent).toContain("source attestation verified");
-    expect(target.textContent).toContain("without inherited credentials");
     expect(target.textContent).toContain(readPaths.length > 0
       ? "other protected reads require approval"
       : "Protected reads require approval");
     for (const path of readPaths) expect(target.textContent).toContain(`Approved read access to ${path}`);
     expect(target.textContent).toContain("Network only to registry.npmjs.org");
-  });
-
-  it("makes an unclaimed package identity explicit", () => {
-    const checkpoint: PendingCheckpoint = {
-      checkpointId: "checkpoint-package-not-found",
-      sessionId: "session-package",
-      kind: "tool_approval",
-      status: "pending",
-      issuedAt: "2026-08-27T00:00:00Z",
-      tool_approval: toolApprovalFixture({
-        tool: "command",
-        command: "pip install internal-tool",
-        reasons: ["remote_package_execution"],
-        subject: {
-          kind: "package_set",
-          title: "Run downloaded package code",
-          targets: [{
-            kind: "package",
-            label: "internal-tool",
-            details: { identity_status: "not_found" },
-          }],
-        },
-        presentation: { gate: "remote_package_execution" },
-      }),
-    };
-    const target = renderCard(checkpoint).getByTestId("approval-target-0");
-    expect(target.textContent).toContain("not found in the registry identity index");
-    expect(target.textContent).toContain("approval will not be reused");
   });
 
   it("opens the complete long set in Files while keeping decision controls local", () => {

@@ -1,0 +1,4 @@
+steps:
+  - tool: "command"
+    say: "Use the native form through {{ call }}; `COMMAND --help` lists supported forms."
+    otherwise: "Use an available capability or report the missing operation."

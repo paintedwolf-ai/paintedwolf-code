@@ -3,11 +3,11 @@ package sourceview
 import (
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"io"
 	"os"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
@@ -179,9 +179,8 @@ func extractFileStatFacts(info os.FileInfo) FileStatFacts {
 		return FileStatFacts{}
 	}
 	facts := FileStatFacts{Size: info.Size(), ModTimeNS: info.ModTime().UnixNano()}
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil {
-		facts.Ino = uint64(sys.Ino)
-		facts.Dev = uint64(sys.Dev)
+	if observed := fspath.ObserveFile(info); observed.Known {
+		facts.Ino, facts.Dev = observed.Identity.Inode, observed.Identity.Device
 	}
 	return facts
 }

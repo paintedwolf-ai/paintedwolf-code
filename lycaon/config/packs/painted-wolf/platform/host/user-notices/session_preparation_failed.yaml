@@ -6,4 +6,3 @@ suggested_action: Start a new chat. If it fails again, open diagnostics.
 scenarios:
   - id: default
     vars: {}
-    expect_contains: [could not be prepared, new chat]

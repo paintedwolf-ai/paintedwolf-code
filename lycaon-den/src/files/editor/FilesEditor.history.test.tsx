@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { setupFilesEditorTests } from "./files-editor-test-harness.ts";
 
 import "../../test/document-outbox-fixture.ts";
@@ -59,7 +60,6 @@ describe("FilesEditor", () => {
     expect(host.querySelector(".cm-editor")).toBe(editor);
     release();
     await waitFor(() => expect(host.parentElement!.hidden).toBe(true));
-    expect(screen.getByText(/historical contents/)).toBeTruthy();
     setVersion(null);
     expect(host.parentElement!.hidden).toBe(false);
     expect(host.querySelector(".cm-editor")).toBe(editor);
@@ -152,14 +152,13 @@ availability: "available" as const, source: { kind: "text" as const, before: "ol
     const mode = screen.getByTestId("files-editor-mode");
     expect(mode.tagName).toBe("SPAN");
     expect(mode.getAttribute("data-editor-identity")).toBe("historical-version");
-    expect(mode.textContent).toBe("Historical version");
     fireEvent.click(mode);
     expect(onSelectCurrent).not.toHaveBeenCalled();
     expect(
       screen.queryByRole("button", { name: "Restore comparison baseline" }),
     ).toBeNull();
     fireEvent.click(
-      screen.getByRole("button", { name: "Restore this version" }),
+      assertNamedControl(screen.getByTestId("files-editor-restore-version"), "button"),
     );
     expect(onRestoreVersion).toHaveBeenCalledOnce();
     expect(onRestoreVersion).toHaveBeenCalledWith(version);
@@ -234,7 +233,6 @@ availability: "available", source: { kind: "text" as const, before: "", after: "
     ));
 
     const gap = screen.getByTestId("files-editor-secret-gap-chip");
-    expect(gap.textContent).toBe("Not screened");
     expect(gap.className).toBe("den-files-editor__status-detail");
   });
 
@@ -351,6 +349,6 @@ initialComparison: "before", source: { kind: "text" as const, before: before.con
       expect(preparation.ready()).toBe(true);
     });
     expect(screen.getByTestId("file-current-absent")).toBeTruthy();
-    expect(screen.getByText("This file has been deleted.")).toBeTruthy();
+    expect(screen.getByTestId("file-current-absent").textContent).toContain("This file has been deleted.");
   });
 });

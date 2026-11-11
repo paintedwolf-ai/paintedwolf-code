@@ -39,6 +39,7 @@ func TestBundledProvidersShipKindTemplates(t *testing.T) {
 	}{
 		{id: "anthropic", kind: "anthropic", baseURL: "https://api.anthropic.com/v1", apiKeyEnv: "ANTHROPIC_API_KEY", label: "Anthropic"},
 		{id: "together", kind: "together", baseURL: "https://api.together.xyz/v1", apiKeyEnv: "TOGETHER_API_KEY"},
+		{id: "doubleword", kind: "doubleword", baseURL: "https://api.doubleword.ai/v1", apiKeyEnv: "DOUBLEWORD_API_KEY", label: "Doubleword"},
 		{id: "azure", kind: "azure", apiKeyEnv: "AZURE_OPENAI_API_KEY"},
 		// Bedrock takes a pasteable API key by default and names the AWS SDK
 		// chain as the opt-in alternative; Vertex has no pasteable credential
@@ -80,7 +81,7 @@ func TestAnthropicRegistryConfiguredWithKey(t *testing.T) {
 	if err := creds.Set("anthropic", "sk-ant-test"); err != nil {
 		contractcheck.FailErr(t, "creds.Set failed", err)
 	}
-	registry, err := llm.NewRegistry(t.Context(), catalog, creds)
+	registry, err := llm.NewRegistry(t.Context(), catalog, creds, nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}
@@ -103,7 +104,7 @@ func TestAnthropicRegistryUnconfiguredWithoutKey(t *testing.T) {
 	// Bundled providers come from the binary; the local overlay stays a real path.
 	catalog, err := llm.NewProviderCatalogAt(filepath.Join(t.TempDir(), "providers.local.yaml"))
 	contractcheck.FailErr(t, "llm.NewProviderCatalogAt failed", err)
-	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")))
+	registry, err := llm.NewRegistry(t.Context(), catalog, providercredentials.NewAt(filepath.Join(t.TempDir(), "credential-vault.age")), nil)
 	if err == nil {
 		registry.SetOutboundSecretScreen(llm.NewModelSecretScreen(nil, nil))
 	}

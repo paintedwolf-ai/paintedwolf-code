@@ -9,5 +9,3 @@ invariants:
   trigger_class: host_api
   fires_in:
   - user abort left open checklist steps
-  required:
-  - update_progress

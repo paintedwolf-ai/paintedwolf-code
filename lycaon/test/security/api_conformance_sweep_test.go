@@ -135,8 +135,10 @@ type conformanceSweep struct {
 	notices   *usernotice.Catalog
 	values    *conformanceValues
 	effects   conformanceEffects
-	secrets   *conformanceSecrets
-	findings  *conformanceFindings
+	// readObserved names reads whose answered request has already been checked for effects.
+	readObserved map[string]bool
+	secrets      *conformanceSecrets
+	findings     *conformanceFindings
 	// children maps a collection path to the path parameters addressed below it.
 	children map[string][]string
 }
@@ -145,7 +147,7 @@ func newConformanceSweep(doc *openapi3.T, validator *openapi.Validator, handler 
 	s := &conformanceSweep{
 		ops: conformanceOperations(doc), validator: validator, handler: handler, notices: notices,
 		values: newConformanceValues(), secrets: &conformanceSecrets{}, findings: newConformanceFindings(),
-		children: map[string][]string{},
+		children: map[string][]string{}, readObserved: map[string]bool{},
 	}
 	seen := map[string]bool{}
 	for _, op := range s.ops {

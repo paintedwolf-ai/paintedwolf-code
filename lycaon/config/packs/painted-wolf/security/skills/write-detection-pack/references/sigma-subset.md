@@ -81,7 +81,7 @@ Argument content — populated for **every** tool, including MCP tools and nativ
 
 `ToolArg`, `TargetFile`
 
-`ToolArg` holds one `name=value` entry per short scalar argument, nested keys dotted (`nested.url=https://…`), so a rule reads `ToolArg|contains: 'query=169.254.169.254'`. Values over 256 bytes are dropped, not truncated — file bodies never reach a rule. `TargetFile` holds the paths the action names. Both are capped at 32 entries. For `command`-family tools these sit alongside `CommandLine`, which remains the real argv.
+`ToolArg` holds one `name=value` entry per short scalar argument, nested keys dotted (`nested.url=https://…`), so a rule reads `ToolArg|contains: 'query=169.254.169.254'`. Values over 256 bytes are dropped, not truncated — file bodies never reach a rule. `TargetFile` holds the paths the action names. Both are capped at 32 entries. For command-family tools these sit alongside `CommandLine`, which remains the real argv.
 
 Containment and capability context:
 

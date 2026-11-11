@@ -11,7 +11,7 @@ import time
 from scripts.artifact_paths import artifact_root
 
 from . import installed_evidence as evidence
-from .installed_coverage import coverage
+from .installed_evidence import coverage
 from .support_matrix import CATALOG, expand
 
 STATUSES = {"passed", "failed", "unverified", "skipped"}

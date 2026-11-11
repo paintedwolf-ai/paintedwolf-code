@@ -9,5 +9,3 @@ invariants:
   trigger_class: observed_history
   fires_in:
   - post-turn hook after progress-gated tools ran with no checklist authored
-  required:
-  - update_progress

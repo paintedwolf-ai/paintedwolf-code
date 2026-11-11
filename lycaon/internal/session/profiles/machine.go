@@ -2,9 +2,6 @@ package profiles
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -19,6 +16,15 @@ import (
 
 // CompileMachine builds one turn's host-resource snapshot, gated skills, and prompt surface.
 func (m *Service) CompileMachine(ctx context.Context, sess *api.Session, profileID string) inject.Machine {
+	return m.compileMachine(ctx, sess, profileID, true)
+}
+
+// ProjectMachine reads the prompt surface without delivering posture changes.
+func (m *Service) ProjectMachine(ctx context.Context, sess *api.Session, profileID string) inject.Machine {
+	return m.compileMachine(ctx, sess, profileID, false)
+}
+
+func (m *Service) compileMachine(ctx context.Context, sess *api.Session, profileID string, observe bool) inject.Machine {
 	if m == nil || sess == nil {
 		return inject.Machine{}
 	}
@@ -36,7 +42,7 @@ func (m *Service) CompileMachine(ctx context.Context, sess *api.Session, profile
 	return inject.Machine{
 		ProfileID:  profileID,
 		SkillCount: len(loaded),
-		Surface:    m.PromptSurface(ctx, sess, loaded, snapshot, surfaces, m.MutationCapable(ctx, sess, profileID)),
+		Surface:    m.promptSurface(ctx, sess, loaded, snapshot, surfaces, m.MutationCapable(ctx, sess, profileID), observe),
 		ReadRoots:  SkillReadRoots(loaded),
 	}
 }
@@ -98,6 +104,10 @@ func (m *Service) PromptSurface(
 	surfaces []hostresources.ExecutionSurface,
 	mutationCapable bool,
 ) prompts.AgentPromptSurface {
+	return m.promptSurface(ctx, sess, loaded, snapshot, surfaces, mutationCapable, true)
+}
+
+func (m *Service) promptSurface(ctx context.Context, sess *api.Session, loaded []skills.Skill, snapshot hostresources.Snapshot, surfaces []hostresources.ExecutionSurface, mutationCapable, observe bool) prompts.AgentPromptSurface {
 	out := prompts.AgentPromptSurface{Posture: gate.PostureStrict}
 	if m == nil || sess == nil {
 		return out
@@ -110,14 +120,14 @@ func (m *Service) PromptSurface(
 	})
 	out.HostResources = hostResourceViews(ambient)
 	out.HostResourcesOmitted = ambient.Omitted
-	out.Posture = m.EffectiveApprovalPosture(ctx, sess)
+	out.Posture = m.effectiveApprovalPosture(ctx, sess, observe)
 	if m.commandExternalHidden != nil {
 		out.CommandExternalHidden = m.commandExternalHidden()
-		if m.externalObserver != nil && strings.TrimSpace(sess.ID) != "" {
+		if observe && m.externalObserver != nil && strings.TrimSpace(sess.ID) != "" {
 			m.externalObserver(ctx, sess.ID, out.Posture, out.CommandExternalHidden)
 		}
 	}
-	out.Fingerprint = promptSurfaceFingerprint(out)
+	out.Fingerprint = out.CacheFingerprint()
 	return out
 }
 
@@ -125,6 +135,10 @@ func (m *Service) PromptSurface(
 // through settings.ApprovalStore.EffectivePosture, notifying the posture
 // observer when the effective posture changes.
 func (m *Service) EffectiveApprovalPosture(ctx context.Context, sess *api.Session) gate.Posture {
+	return m.effectiveApprovalPosture(ctx, sess, true)
+}
+
+func (m *Service) effectiveApprovalPosture(ctx context.Context, sess *api.Session, observe bool) gate.Posture {
 	if m == nil || sess == nil {
 		return gate.PostureStrict
 	}
@@ -136,7 +150,7 @@ func (m *Service) EffectiveApprovalPosture(ctx context.Context, sess *api.Sessio
 		projectDir = sess.WorkspacePath
 	}
 	posture := m.approvals.EffectivePosture(settings.ProjectRef{ID: sess.ProjectID, Dir: projectDir})
-	if m.postureObserver != nil && strings.TrimSpace(sess.ID) != "" {
+	if observe && m.postureObserver != nil && strings.TrimSpace(sess.ID) != "" {
 		m.postureObserver(ctx, sess.ID, posture)
 	}
 	return posture
@@ -159,30 +173,4 @@ func hostResourceViews(plan hostresources.AmbientPlan) []prompts.AgentHostResour
 		})
 	}
 	return out
-}
-
-// promptSurfaceFingerprint keys the stable prompt on what it renders: whether
-// skills are available and the host resources. Skill identifiers and cards
-// stay out of the prompt.
-func promptSurfaceFingerprint(surface prompts.AgentPromptSurface) string {
-	payload, err := json.Marshal(struct {
-		HasSkills             bool
-		HostResources         []prompts.AgentHostResourceView
-		HostResourcesOmitted  int
-		SessionScratchDir     string
-		ReviewsConfinedWrites bool
-		CommandExternalHidden bool
-	}{
-		len(surface.Skills) > 0,
-		surface.HostResources,
-		surface.HostResourcesOmitted,
-		surface.SessionScratchDir,
-		surface.Posture.ReviewsConfinedWrites(),
-		surface.CommandExternalHidden,
-	})
-	if err != nil {
-		return surface.Fingerprint
-	}
-	sum := sha256.Sum256(payload)
-	return base64.RawURLEncoding.EncodeToString(sum[:])
 }

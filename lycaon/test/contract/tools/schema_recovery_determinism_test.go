@@ -17,7 +17,7 @@ import (
 func TestSchemaRecoveryDeterminism(t *testing.T) {
 	t.Parallel()
 	root := contractcheck.RepoRoot(t)
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(root, "lycaon", "config", "packs", "painted-wolf", "platform", "tools", "schemas"))
 	contractcheck.FailErr(t, "LoadSchemaDir", err)
 
 	cmdSchema := cfg.Tools["command"].Schema
@@ -63,7 +63,7 @@ func TestSchemaRecoveryDeterminism(t *testing.T) {
 // Schema failures do not establish that replacing the whole file is appropriate,
 // even when write is offered. Preserve the operation and its source prerequisites.
 func TestSchemaRecoveryPreservesOperation(t *testing.T) {
-	cfg, err := toolschema.LoadSchemaDir(filepath.Join(contractcheck.RepoRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
+	cfg, err := toolschema.LoadSchemaDirWithOperations(filepath.Join(contractcheck.RepoRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
 	contractcheck.FailErr(t, "load tool schemas", err)
 	for _, tool := range []string{"edit", "replace_lines", "code_rewrite", "read"} {
 		for _, surface := range []struct {

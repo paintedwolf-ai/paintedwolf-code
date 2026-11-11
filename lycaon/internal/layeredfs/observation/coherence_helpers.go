@@ -3,12 +3,12 @@ package observation
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
@@ -62,9 +62,8 @@ func populateTrunkChangeFromDiskLocked(t *Tracker, ev *TrunkChangeEvent, qpath l
 	if ev.NewModTimeNS == 0 {
 		ev.NewModTimeNS = info.ModTime().UnixNano()
 	}
-	if sys, ok := info.Sys().(*syscall.Stat_t); ok && sys != nil && ev.NewIno == 0 {
-		ev.NewIno = uint64(sys.Ino)
-		ev.NewDev = uint64(sys.Dev)
+	if observed := fspath.ObserveFile(info); observed.Known && ev.NewIno == 0 {
+		ev.NewIno, ev.NewDev = observed.Identity.Inode, observed.Identity.Device
 	}
 	if ev.NewSHA256 == "" && info.Mode().IsRegular() {
 		if digest, n, ok := hashBoundedFile(absPath, info.Size(), 4<<20); ok {

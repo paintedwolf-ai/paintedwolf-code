@@ -1,3 +1,4 @@
+import { assertNamedControl } from "../../test/controls.ts";
 import { afterEach, describe, expect, it, vi, onTestFinished } from "vitest";
 import { applyWebEngineFact } from "../../platform/desktop/webkit-atspi-workaround.ts";
 import { loadFailed, loaded } from "../../store/load-state.ts";
@@ -6,7 +7,6 @@ import { createSignal } from "solid-js";
 import { ALL_PROJECTS_PAGE_SIZE } from "../../home/home-model.ts";
 import type { ProjectSummary } from "../../project/project-summary.ts";
 import { HomeView } from "./HomeView.tsx";
-import { MODELS_SETTINGS_COPY } from "../../settings/providers/models-settings-copy.ts";
 
 afterEach(() => {
   cleanup();
@@ -64,7 +64,7 @@ describe("HomeView missing provider config", () => {
 
   // The two halves of the config need different instructions.
   it("asks for a model, not a provider, when a provider is already ready", () => {
-    const { getByText } = render(() => (
+    const { getByTestId } = render(() => (
       <HomeView
         summaries={[]}
         section="recents"
@@ -74,7 +74,7 @@ describe("HomeView missing provider config", () => {
         {...homeHandlers}
       />
     ));
-    expect(getByText(MODELS_SETTINGS_COPY.noDefaultModelTitle)).toBeTruthy();
+    expect(getByTestId("no-provider-title-model")).toBeTruthy();
   });
 
   it("omits the card when config is complete", () => {
@@ -165,7 +165,6 @@ describe("HomeView draft materialization", () => {
     expect(
       (screen.getByTestId("home-idea-send") as HTMLButtonElement).disabled,
     ).toBe(true);
-    expect(screen.getByRole("status").textContent).toContain("Starting chat");
 
     fireEvent.click(screen.getByTestId("home-idea-send"));
     expect(onSubmitIdea).toHaveBeenCalledTimes(1);
@@ -197,6 +196,28 @@ describe("HomeView all projects list", () => {
     ));
     expect(getByTestId("home-list")).toBeTruthy();
     expect(queryByTestId("home-list-pager")).toBeNull();
+  });
+
+  it("includes drafts in all projects with draft badge and promote/discard actions", () => {
+    const onOpenProject = vi.fn(), onPromote = vi.fn(), onDelete = vi.fn();
+    const summaries = [stubSummary(0), { ...stubSummary(1), id: "d1", displayName: "Draft Idea", isDraft: true }];
+    const { getByTestId, queryByTestId } = render(() => (
+      <HomeView summaries={summaries} section="all" registry={loaded(null)} {...homeHandlers} onOpenProject={onOpenProject} onPromote={onPromote} onDelete={onDelete} />
+    ));
+    expect(getByTestId("project-list-row-p0")).toBeTruthy();
+    expect(getByTestId("project-list-row-d1")).toBeTruthy();
+    expect(queryByTestId("project-list-draft-p0")).toBeNull();
+    expect(getByTestId("project-list-draft-d1").textContent).toBe("Draft");
+    fireEvent.click(screen.getByText("Draft Idea"));
+    expect(onOpenProject).toHaveBeenCalledWith("d1");
+    fireEvent.click(getByTestId("project-list-menu-d1"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("project-list-promote-d1"), "menuitem"));
+    expect(onPromote).toHaveBeenCalledWith("d1");
+    fireEvent.click(getByTestId("project-list-menu-d1"));
+    const discardBtn = assertNamedControl(screen.getByTestId("project-list-delete-d1"), "menuitem");
+    expect(discardBtn.textContent).toBe("Discard draft");
+    fireEvent.click(discardBtn);
+    expect(onDelete).toHaveBeenCalledWith("d1");
   });
 
   it("multi-selects and runs bulk star / delete", async () => {
@@ -246,7 +267,7 @@ describe("HomeView all projects list", () => {
       />
     ));
     fireEvent.click(getByTestId("project-card-menu-p0"));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Delete" }));
+    fireEvent.click(assertNamedControl(screen.getByTestId("project-card-delete-p0"), "menuitem"));
     expect(onDelete).toHaveBeenCalledWith("p0");
     expect(confirmSpy).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
@@ -303,44 +324,57 @@ describe("HomeView all projects list", () => {
   });
 
   it("shows first-run teaching only for a settled, empty registry", () => {
-    render(() => (
-      <HomeView
-        summaries={[]}
-        section="recents"
-        registry={loaded(null)}
-        {...homeHandlers}
-      />
-    ));
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} />);
     expect(screen.getByTestId("home-teaching")).toBeTruthy();
+  });
+
+  it("shows section empty hint instead of first-run teaching on recents when only drafts exist", () => {
+    const summaries = [{ ...stubSummary(1), id: "d1", isDraft: true }];
+    render(() => <HomeView summaries={summaries} section="recents" registry={loaded(null)} {...homeHandlers} />);
+    expect(screen.queryByTestId("home-teaching")).toBeNull();
+    expect(screen.getByTestId("home-empty").textContent).toBe("No projects yet.");
   });
 });
 
 
 describe("HomeView project identity", () => {
+  // The card (recents) and row (all) surfaces name their controls per project id.
+  const renameTestId = (section: "recents" | "all") =>
+    section === "recents" ? "project-card-rename-p1" : "project-list-rename-p1";
+  const renameField = (section: "recents" | "all") =>
+    assertNamedControl(screen.getByTestId(renameTestId(section)), "textbox");
+  const projectMenuTrigger = (section: "recents" | "all") =>
+    assertNamedControl(
+      screen.getByTestId(
+        section === "recents" ? "project-card-menu-p1" : "project-list-menu-p1",
+      ),
+      "button",
+    );
+
   it.each(["recents", "all"] as const)("removes and recreates a project safely in %s", (section) => {
     const [summaries, setSummaries] = createSignal([stubSummary(1), stubSummary(2)]);
     render(() => <HomeView summaries={summaries()} section={section} registry={loaded(null)} {...homeHandlers} />);
-    fireEvent.click(screen.getAllByRole("button", { name: "Project actions" })[0]!);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
-    fireEvent.input(screen.getByRole("textbox", { name: "Rename" }), { target: { value: "Unsubmitted name" } });
+    fireEvent.click(projectMenuTrigger(section));
+    fireEvent.click(assertNamedControl(screen.getByTestId("rename"), "menuitem"));
+    fireEvent.input(renameField(section), { target: { value: "Unsubmitted name" } });
     setSummaries([stubSummary(2)]);
-    expect(screen.queryByRole("textbox", { name: "Rename" })).toBeNull();
+    expect(screen.queryByTestId(renameTestId(section))).toBeNull();
     expect(screen.queryByText("Project 1")).toBeNull();
     setSummaries([{ ...stubSummary(1), displayName: "Recreated project" }, stubSummary(2)]);
     expect(screen.getByText("Recreated project")).toBeTruthy();
-    expect(screen.queryByRole("textbox", { name: "Rename" })).toBeNull();
+    expect(screen.queryByTestId(renameTestId(section))).toBeNull();
   });
 
   it.each(["recents", "all"] as const)("keeps an unfinished rename through %s refresh and reorder", (section) => {
     const [summaries, setSummaries] = createSignal([stubSummary(1), stubSummary(2)]);
     const onRename = vi.fn();
     render(() => <HomeView summaries={summaries()} section={section} registry={loaded(null)} {...homeHandlers} onRename={onRename} />);
-    fireEvent.click(screen.getAllByRole("button", { name: "Project actions" })[0]!);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
-    const input = screen.getByRole("textbox", { name: "Rename" }) as HTMLInputElement;
+    fireEvent.click(projectMenuTrigger(section));
+    fireEvent.click(assertNamedControl(screen.getByTestId("rename"), "menuitem"));
+    const input = renameField(section) as HTMLInputElement;
     fireEvent.input(input, { target: { value: "Unsaved café rename" } });
     setSummaries([{ ...stubSummary(2), lastActivityAtMs: 999 }, { ...stubSummary(1), displayName: "Host updated name" }]);
-    expect(screen.getByRole("textbox", { name: "Rename" })).toBe(input);
+    expect(renameField(section)).toBe(input);
     expect(input.value).toBe("Unsaved café rename");
     expect(onRename).not.toHaveBeenCalled();
     fireEvent.keyDown(input, { key: "Enter" });

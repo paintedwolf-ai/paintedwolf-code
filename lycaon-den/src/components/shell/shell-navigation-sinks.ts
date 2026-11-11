@@ -19,6 +19,7 @@ import { setProjectFilesRevealRequest } from "../../files/tree/project-files-rev
 import { openSourceInFilesStage } from "../../files/components/project-files-open.ts";
 import { applyOpenFilesSurfaceRequest, registerOpenFilesSurfaceSink } from "../../platform/navigation/open-files-surface.ts";
 import { registerOpenFindingSink, setFindingFocusRequest } from "../../platform/navigation/open-finding.ts";
+import { registerOpenRunningStageSink } from "../../platform/navigation/open-running.ts";
 import { selectSecurityFolder } from "../../platform/files/security-folder-selection.ts";
 import { registerNotificationSessionOpenSink } from "../../notifications/notification-open.ts";
 import { registerChatDestinationOpenSink } from "../../chat/composer/chat-destination.ts";
@@ -36,6 +37,7 @@ type NavigationSinkDependencies = Pick<ShellScope, "shell" | "projects" | "appSt
   & Pick<ShellSearchState, "openSearch" | "closeSearch" | "closeCrossbar"> & Pick<ShellPaneVisibility, "revealConversation">
   & Pick<SessionNavigation, "resumeSession"> & {
   openStageWithPlacement: (stage: ContextNavItemId, arrival: "routed", open?: () => void) => void;
+  openRunningForProject?: (projectId?: string) => void;
   openNotificationSession: (sessionId: string) => void;
   openWorkers: (workerId?: string) => void;
   openSettings: ShellNavigation["openSettings"];
@@ -45,7 +47,7 @@ type NavigationSinkDependencies = Pick<ShellScope, "shell" | "projects" | "appSt
 
 /** Register before the shell becomes visible; cleanup shares the shell lifetime. */
 export function installShellNavigationSinks({ shell, projects, appStore, openStageWithPlacement,
-  openSearch, openNotificationSession, revealConversation,
+  openRunningForProject, openSearch, openNotificationSession, revealConversation,
   resumeSession, activeChat, openWorkers, closeSearch, closeCrossbar, setNav, openSettings,
   selectContextSection, showNoProviderBanner }: NavigationSinkDependencies) {
   // Provider nudges share shell-level navigation.
@@ -161,6 +163,13 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
     setFindingFocusRequest(req);
     openStageWithPlacement("security", "routed");
   });
+  const unregisterOpenRunning = registerOpenRunningStageSink((req) => {
+    if (req?.projectId && openRunningForProject) {
+      openRunningForProject(req.projectId);
+      return;
+    }
+    openStageWithPlacement("running", "routed");
+  });
   const unregisterProjectLookup = registerOpenSourceProjectLookup((id) => {
     const project = projects.byId(id);
     return project ? { roots: project.roots } : undefined;
@@ -211,6 +220,7 @@ export function installShellNavigationSinks({ shell, projects, appStore, openSta
     unregisterOpenSource();
     unregisterOpenFilesSurface();
     unregisterOpenFinding();
+    unregisterOpenRunning();
     unregisterProjectLookup();
     unregisterNotificationOpen();
     unregisterChatDestinationOpen();

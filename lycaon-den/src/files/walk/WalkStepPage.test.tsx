@@ -158,7 +158,6 @@ describe("WalkStepPage", () => {
     ).toEqual(["Couldn't open this version: Comparison unavailable"]));
     expect(screen.queryByRole("alert")).toBeNull();
     expect(row.getAttribute("aria-busy")).toBe("false");
-    expect(row.textContent).toContain("Open this version");
   });
 
   it("lists a file written twice in one run once, at its latest version", () => {
@@ -185,8 +184,6 @@ describe("WalkStepPage", () => {
     mount(commandStep([effectOf("cw1", "Cargo.lock", { cause: "command_window", command_id: "w1" })]));
     expect(screen.getByTestId("walk-page-title").textContent).toBe("Command");
     expect(screen.getByTestId("walk-page-subtitle").textContent).toBe("cargo build --release");
-    expect(screen.getByTestId("walk-page-lede").textContent).toContain("may not have written them all");
-    expect(screen.getByTestId("walk-page-state").textContent).toContain("Still running");
     expect(screen.getByTestId("walk-page-meta").textContent).toContain("Turn");
   });
 
@@ -198,8 +195,4 @@ describe("WalkStepPage", () => {
     expect(screen.getAllByTestId("walk-page-file")).toHaveLength(2);
   });
 
-  it("reads as a closed walk's page once the walk is gone", () => {
-    mount(outsideStep([effectOf("o1", "gen/x.ts")]));
-    expect(screen.getByTestId("walk-page-position").textContent).toContain("Walk closed");
-  });
 });

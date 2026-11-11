@@ -27,13 +27,13 @@ func GateableKeys() []string {
 			seen[k] = struct{}{}
 		}
 	}
-	for _, tool := range settings.ApprovalRecoverableToolIDs() {
+	for _, tool := range settings.ApprovalRecoverableIDs() {
 		if tool == "command" {
 			continue
 		}
 		add(tool)
 	}
-	add(settings.ApprovalIrreversibleToolIDs()...)
+	add(settings.ApprovalIrreversibleIDs()...)
 	add(KeyCommand, KeyCommandDestructive, KeyMCPCall, KeyPathOutsideProject, KeyOutboundSecret, FallbackExplanationKey)
 	out := make([]string, 0, len(seen))
 	for k := range seen {

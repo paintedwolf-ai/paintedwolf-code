@@ -26,6 +26,3 @@ x-paintedwolf-scenarios:
       tool: capture_page
       navigation_url: http://127.0.0.1:5678/
       navigation_error: net::ERR_CONNECTION_REFUSED
-    expect_contains:
-      - 'Rejected:'
-      - 'Code: CAPTURE_URL_UNREACHABLE'

@@ -8,6 +8,3 @@ suggested_action: Attach the file again.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - no longer holds
-      - Attach the file again

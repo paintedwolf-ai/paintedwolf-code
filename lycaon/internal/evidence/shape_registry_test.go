@@ -2,6 +2,7 @@ package evidence_test
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
@@ -203,5 +204,20 @@ func TestVerificationAndOverlayOutcomesProduceCitableReceipts(t *testing.T) {
 				t.Fatal("worker outcome lost its scoped citation handle")
 			}
 		})
+	}
+}
+
+// AC-MID-18: a dispatch is a structured event carrying worker identity and status,
+// never a file observation.
+func TestDispatchToolsRecordTaskEvidence(t *testing.T) {
+	t.Parallel()
+	for _, tool := range []string{"task", "delegate_dispatch"} {
+		rec := evidence.BuildEvidenceRecord("", tool, map[string]any{"path": "ignored.go"}, `{"job_id":"w1","status":"enqueued"}`)
+		if rec.Kind != evidence.KindTask || rec.Shape != evidence.ShapeStructuredEvent || rec.Survey || rec.Path != "" {
+			t.Fatalf("%s record = %+v", tool, rec)
+		}
+		if body := strings.Join(rec.Body, "\n"); !strings.Contains(body, `"job_id":"w1"`) || !strings.Contains(body, `"status":"enqueued"`) {
+			t.Fatalf("%s record lost worker identity or status: %q", tool, body)
+		}
 	}
 }

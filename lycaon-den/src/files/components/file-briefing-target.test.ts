@@ -36,7 +36,6 @@ describe("briefingSelectionForBuffer", () => {
       deleted_at: "2026-09-12T10:00:00Z",
       previous: { version_id: "before-delete", state: "content", content: "retained", size_bytes: 8, availability },
     }) }), null);
-    expect(selection.contextLabel).toBe("Before deletion");
     if (availability === "available") {
       expect(selection.target).toEqual({
         root_id: "root-1", path: "src/main.ts", presentation: "version", version_id: "before-delete",

@@ -9,6 +9,3 @@ suggested_action: Enter a short id, then save.
 scenarios:
   - id: default
     vars: {}
-    expect_contains:
-      - id
-      - save

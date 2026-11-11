@@ -126,5 +126,8 @@ func (a ProviderAttempt) exhausted(fault Fault, body []byte, attempts int) error
 	if rejected, ok := AsProviderRequestRejected(err); ok {
 		rejected.responseBody = append([]byte(nil), body...)
 	}
+	if wait, ok := headerWait(a.Policy.WaitHeaders, fault.Header); ok {
+		declareRetryAfter(err, wait)
+	}
 	return err
 }

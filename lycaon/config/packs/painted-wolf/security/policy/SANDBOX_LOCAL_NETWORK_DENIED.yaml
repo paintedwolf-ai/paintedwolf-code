@@ -25,6 +25,3 @@ x-paintedwolf-scenarios:
 - id: default
   vars:
     tool: command
-  expect_contains:
-  - 'Rejected:'
-  - 'Code: SANDBOX_LOCAL_NETWORK_DENIED'

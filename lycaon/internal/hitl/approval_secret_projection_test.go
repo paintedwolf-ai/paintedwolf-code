@@ -2,6 +2,7 @@ package hitl
 
 import (
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/testutil/exposure"
 	"strings"
 	"testing"
 
@@ -49,9 +50,7 @@ func TestApprovalPlanUsesCatalogRedactionForDisplayProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal approval plan: %v", err)
 	}
-	if strings.Contains(string(raw), secret) {
-		t.Fatalf("approval display retained catalog secret: %s", raw)
-	}
+	exposure.Absent(t, string(raw), secret)
 	// The file review keeps its exact identity beside the screened text.
 	if len(plan.Presentation.FileChanges) != 1 {
 		t.Fatalf("file changes = %+v", plan.Presentation.FileChanges)
@@ -98,9 +97,7 @@ func TestContentApplyWireUsesRedactedProjectionAndKeepsExactPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("marshal content apply projection: %v", err)
 	}
-	if strings.Contains(string(raw), secret) {
-		t.Fatalf("content apply projection retained catalog secret: %s", raw)
-	}
+	exposure.Absent(t, string(raw), secret)
 	afterProjection, err := json.Marshal(plan)
 	if err != nil {
 		t.Fatalf("marshal exact content apply plan after projection: %v", err)

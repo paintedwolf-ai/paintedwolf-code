@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 source "${ROOT}/scripts/artifact-paths.sh"
 SNAPSHOT_PARENT="${PW_TEST_SNAPSHOT_ROOT:-/tmp/paintedwolf-source-snapshots-${UID}}"
 CAPTURE_ATTEMPTS="${PW_TEST_SNAPSHOT_CAPTURE_ATTEMPTS:-20}"
-CAPTURE_LOCK_TIMEOUT="${PW_TEST_SNAPSHOT_LOCK_TIMEOUT:-900}"
+CAPTURE_LOCK_TIMEOUT="${PW_TEST_SNAPSHOT_LOCK_TIMEOUT:-3600}"
 CAPTURE_LOCKDIR="${PW_LOCK_ROOT}/source-capture.lockdir"
 LOCK_SH="${ROOT}/scripts/digest-run-lock.sh"
 # shellcheck source=digest-run-lock.sh

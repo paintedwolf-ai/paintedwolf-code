@@ -175,7 +175,7 @@ describe("ActivitySpanCard", () => {
     expect(container.querySelector(".den-activity-span-composition")).toBeTruthy();
   });
 
-  it("uses the activity composition when no distinct detail is available", () => {
+  it("keys composition chips by operation label for non-command entries", () => {
     const repeated: ActivitySpanEntry[] = parts.map((part) => ({
       kind: "tool",
       part: { ...part, title: "read", args: { path: "read" } },
@@ -186,7 +186,14 @@ describe("ActivitySpanCard", () => {
 
     expect(
       container.querySelector(".den-activity-span-hint")?.textContent,
-    ).toBe("Read ×2");
+    ).toBe("");
+    const chips = [...container.querySelectorAll(".den-activity-span-cmd")].map(
+      (c) => ({
+        name: c.querySelector(".den-activity-span-cmd-name")?.textContent,
+        count: c.querySelector(".den-activity-span-cmd-count")?.textContent,
+      }),
+    );
+    expect(chips).toEqual([{ name: "Read", count: undefined }]);
   });
 
   it("renders a singleton through the same span without a redundant count", () => {
@@ -277,8 +284,8 @@ describe("ActivitySpanCard", () => {
       }),
     );
     expect(chips).toEqual([
-      { name: "Read", count: "×2" },
-      { name: "Grep", count: "×2" },
+      { name: "Read", count: undefined },
+      { name: "Grep", count: undefined },
     ]);
   });
 

@@ -13,13 +13,19 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
+// nativeCoverageMode is the managed test binary's counter mode; covdata refuses
+// to combine profiles written in different modes.
+func nativeCoverageMode() string {
+	if mode := testing.CoverMode(); mode != "" {
+		return mode
+	}
+	return "atomic"
+}
+
 // Native counters must be convertible together with the managed parent's mode.
 func requireManagedNativeCoverageMerge(t *testing.T, build, directory, overlay, linked string) {
 	t.Helper()
-	mode := testing.CoverMode()
-	if mode == "" {
-		mode = "atomic"
-	}
+	mode := nativeCoverageMode()
 	parent := filepath.Join(build, "pw-launch-parent-mode")
 	goBuild(t, parent, "github.com/lycaon/lycaon/cmd/pw-launch", linked,
 		"-cover", "-covermode="+mode,

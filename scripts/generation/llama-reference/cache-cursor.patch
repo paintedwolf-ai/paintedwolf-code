@@ -1,0 +1,18 @@
+--- a/src/llama-kv-cache.h
++++ b/src/llama-kv-cache.h
+@@ -159,6 +159,15 @@
+     uint32_t get_n_seq_max() const;
+     uint32_t get_n_stream() const;
+ 
++    uint32_t get_allocation_head(uint32_t stream) const {
++        return v_heads.at(stream);
++    }
++
++    void set_allocation_head(uint32_t stream, uint32_t head) {
++        GGML_ASSERT(head <= get_size());
++        v_heads.at(stream) = head;
++    }
++
+     bool get_has_shift() const;
+ 
+     ggml_type type_k() const;

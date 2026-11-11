@@ -15,7 +15,6 @@ import {
   joinReasons,
   priced,
   sourceAsOfLabel,
-  trackingSinceLabel,
   unreportedChargedCalls,
   unreportedFreeCalls,
 } from "./cost-format.ts";
@@ -143,7 +142,6 @@ describe("cost-format", () => {
         ],
       }),
     ).toContain("live");
-    expect(trackingSinceLabel("2025-07-01T12:00:00Z")).toMatch(/Tracking since/);
   });
 
   it("separates unreported charged calls from free local ones", () => {

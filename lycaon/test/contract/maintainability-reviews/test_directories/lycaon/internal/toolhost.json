@@ -1,0 +1,15 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/toolhost",
+  "kind": "test_suite",
+  "workstream": "large-command-resources",
+  "disposition": "retain",
+  "reason": "Retain 40 host test members beside the shared composed host fixtures. Large-command tests exercise production review, capture, nested dispatch and durable pin recording together. Moving them behind a separate fixture package would expose host setup while weakening composed coverage. Both repeated operands and distinct-tree workloads support this test boundary.",
+  "reviewed_commit": "9c52255f59510a4c08bc91b794da326c0fc1682b",
+  "ceiling": 40,
+  "boundaries": {
+    "lycaon/internal/toolhost/command_review_scale_test.go": "76cc3d3ca9a003ea84416039669bb1c96c0f8d4c178818c2db0181c40a684f92",
+    "lycaon/internal/toolhost/command_large_queries_stress_test.go": "fdb737c5312dc775cfabebb6d0d74c6b679c343443bbc24d16d431c5010022ac"
+  },
+  "reviewed_shape": "475eee5401623f440889d8726c127fd5c2e4b4f947aea1c0008848aad172c825"
+}

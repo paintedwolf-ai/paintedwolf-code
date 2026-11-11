@@ -81,6 +81,37 @@ describe("CitationGroundingPanel source clicks", () => {
     });
   });
 
+  it("opens a cited range and labels it as one", () => {
+    render(() => (
+      <CitationGroundingPanel
+        projectId="proj-1"
+        view={baseView({
+          citedEvidence: [{ handle: "read#3", path: "src/a.go", line: 42, endLine: 58 }],
+        })}
+      />
+    ));
+    const row = screen.getByTestId("citation-grounding-citation");
+    expect(row.getAttribute("data-line")).toBe("42");
+    expect(row.getAttribute("data-end-line")).toBe("58");
+    const link = screen.getByTestId("source-path-link");
+    expect(link.textContent).toBe("src/a.go:42-58");
+    fireEvent.click(link);
+    expect(openSourceLocation).toHaveBeenCalledWith(
+      expect.objectContaining({ path: "src/a.go", line: 42, endLine: 58 }),
+    );
+  });
+
+  it("keeps a single-line citation free of a range", () => {
+    render(() => (
+      <CitationGroundingPanel
+        projectId="proj-1"
+        view={baseView({ citedEvidence: [{ handle: "read#3", path: "src/a.go", line: 42 }] })}
+      />
+    ));
+    expect(screen.getByTestId("citation-grounding-citation").getAttribute("data-end-line")).toBeNull();
+    expect(screen.getByTestId("source-path-link").textContent).toBe("src/a.go:42");
+  });
+
   it("opens cited_urls via confirmAndOpenExternalLink", async () => {
     render(() => (
       <CitationGroundingPanel

@@ -82,7 +82,7 @@ func (b *LoopbackCheckpointBroker) raise(ctx context.Context, in tools.LoopbackC
 		InvokingSessionID: invokingSessionID, Key: in.SecretPermission.Key(loopbackAxisKey), ToolCallID: in.ToolCallID,
 		ProjectID: in.ProjectID, Tool: "loopback_connect",
 		AskFamily: authzledger.AskFamilyLoopbackConnect, CheckpointLabel: "loopback-connect",
-		BuildCard: func() (sandboxAskCard, error) { return b.buildCard(in, invokingSessionID, rootSessionID, ports) },
+		BuildCard: func() (sandboxAskCard, error) { return b.buildCard(ctx, in, invokingSessionID, rootSessionID, ports) },
 	})
 	if err != nil || !resolved.Answered {
 		return tools.LoopbackConnectResult{}, err
@@ -94,7 +94,7 @@ func (b *LoopbackCheckpointBroker) raise(ctx context.Context, in tools.LoopbackC
 	}, nil
 }
 
-func (b *LoopbackCheckpointBroker) buildCard(in tools.LoopbackConnectAsk, invokingSessionID, rootSessionID string, ports []uint16) (sandboxAskCard, error) {
+func (b *LoopbackCheckpointBroker) buildCard(ctx context.Context, in tools.LoopbackConnectAsk, invokingSessionID, rootSessionID string, ports []uint16) (sandboxAskCard, error) {
 	summary := sandboxAskCommandSummary(in.Command)
 	label := loopbackGrantLabel(ports)
 	action := hitl.ProposedAction{
@@ -133,11 +133,13 @@ func (b *LoopbackCheckpointBroker) buildCard(in tools.LoopbackConnectAsk, invoki
 	title := "Allow a local service connection"
 	target := hitl.ApprovalTarget{Kind: "loopback_connect", Label: label,
 		Details: map[string]any{"connect_ports": listenPortInts(ports)}}
+	lead := applyPortHolderDetails(ctx, b.Provenance, invokingSessionID, in.ProjectDir, ports, target.Details)
 	primary, cited, reasons := hitl.PresentDecision(decision)
 	plan, err := hitl.NewApprovalPlan(action, hitl.ApprovalStagePreSpawn, hitl.ApprovalSubject{
 		Kind: hitl.ApprovalSubjectLoopbackConnect, Title: title, Targets: []hitl.ApprovalTarget{target},
 	}, hitl.ApprovalPresentation{
 		Action: "Local service connection", Tool: strings.TrimSpace(in.ToolName), Command: summary,
+		Lead:   lead,
 		Impact: hitl.LoopbackConnectWhat, Who: hitl.WhoAgentAction,
 		IfWrong: hitl.LoopbackConnectIfWrong, AllowLine: hitl.LoopbackConnectAllowLine,
 		Gate: primary, Cited: cited, ConsequenceBand: string(api.ConsequenceBandStandard),

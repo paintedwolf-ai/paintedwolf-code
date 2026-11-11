@@ -354,12 +354,13 @@ function newestActivity(
   })[0];
 }
 
-/** What the local decision model is doing, by what asked it. */
+/** Labels the host-reported selection activity. */
 const DECIDING_LABELS: Record<TurnLoadTrigger, string> = {
   turn: "Local AI is deciding what to load",
   request: "Local AI is matching tools",
   lookup: "Local AI is matching skills",
   tool_event: "Local AI is choosing a skill for this tool",
+  visibility: "Updating available tools and skills",
 };
 
 function decidingLabel(activity: ActivityEvent): string {
@@ -411,7 +412,7 @@ function hostActivityCandidate(
     };
   }
   if (activity.kind === "running_tool") {
-    if (activity.progress) {
+    if (activity.progress && activity.progress.phase !== "executing") {
       const progress = activity.progress;
       return {
         label: progress.phase === "selecting"

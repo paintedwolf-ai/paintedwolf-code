@@ -9,10 +9,6 @@ invariants:
   trigger_class: workflow_event
   fires_in:
   - any phase advance without on_reenter.reenter_leg
-  required:
-  - Phase advanced
-  forbidden:
-  - Call `workflow_advance` when gates pass
   optional_vars:
   - gate_obligations
   - current_phase

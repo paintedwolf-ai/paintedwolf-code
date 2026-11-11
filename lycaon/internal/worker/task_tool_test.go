@@ -6,6 +6,8 @@ import (
 	"errors"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -459,5 +461,56 @@ func TestTaskToolDoesNotClampExplicitBudget(t *testing.T) {
 				t.Fatalf("budget=%d want %d", enqueued.MaxToolLoops, requested)
 			}
 		}
+	}
+}
+
+func TestTaskToolDispatchWriteScopeInsideLinkedWorktree(t *testing.T) {
+	root := t.TempDir()
+	wt := filepath.Join(root, "worktree")
+	testutil.FailErr(t, "mkdir worktree/pkg", os.MkdirAll(filepath.Join(wt, "pkg"), 0o755))
+	testutil.FailErr(t, "write worktree .git", os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
+	testutil.FailErr(t, "write worktree file", os.WriteFile(filepath.Join(wt, "pkg", "a.go"), []byte("package pkg\n"), 0o644))
+
+	reg := tools.NewDefaultRegistry()
+	var enqueued api.WorkerTask
+	cq := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(4), out: &enqueued}
+	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
+		Queue:   cq,
+		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
+		Workers: worker.DefaultWorkersConfig(),
+	}))
+
+	rawReceipt, err := reg.Run(t.Context(), "task", map[string]any{
+		"agent_type": "implementer",
+		"brief":      taskBrief("update pkg/a.go in linked worktree"),
+		"scope":      map[string]any{"mode": "write", "paths": []any{"worktree/pkg/a.go"}},
+	}, toolContext("parent-wt", root))
+	testutil.FailErr(t, "dispatch write leg in linked worktree", err)
+
+	if !strings.Contains(enqueued.Prompt, "without VCS access") || !strings.Contains(enqueued.Prompt, "read-scoped leg or the coordinator") {
+		t.Fatalf("expected worker orientation note in enqueued prompt, got:\n%s", enqueued.Prompt)
+	}
+
+	var receipt map[string]any
+	testutil.FailErr(t, "decode dispatch receipt", json.Unmarshal([]byte(rawReceipt), &receipt))
+	if receipt["linked_checkout"] != true || receipt["vcs_access"] != false {
+		t.Fatalf("expected dispatch receipt to report linked_checkout=true and vcs_access=false, got: %#v", receipt)
+	}
+	note, _ := receipt["vcs_note"].(string)
+	if !strings.Contains(note, "without VCS access") {
+		t.Fatalf("expected dispatch receipt vcs_note, got: %#v", receipt)
+	}
+
+	// Read-scoped leg in the same linked worktree does not set the write-isolation fact.
+	rawReadReceipt, err := reg.Run(t.Context(), "task", map[string]any{
+		"agent_type": "repo-researcher",
+		"brief":      taskBrief("inspect git history in linked worktree"),
+		"scope":      map[string]any{"mode": "read", "paths": []any{"worktree/pkg/a.go"}},
+	}, toolContext("parent-wt", root))
+	testutil.FailErr(t, "dispatch read leg in linked worktree", err)
+	var readReceipt map[string]any
+	testutil.FailErr(t, "decode read dispatch receipt", json.Unmarshal([]byte(rawReadReceipt), &readReceipt))
+	if _, has := readReceipt["linked_checkout"]; has {
+		t.Fatalf("read leg receipt must not report write-only linked_checkout restriction: %#v", readReceipt)
 	}
 }

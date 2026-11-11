@@ -51,7 +51,7 @@ type Props = {
 
 export function TranscriptVisualArtifact(props: Props) {
   return <Show when={!artifactWasDeleted(props.artifact.id)} fallback={
-    <p role="status" data-artifact-id={props.artifact.id}>This artifact was deleted.</p>
+    <p role="status" data-testid="artifact-tombstone" data-artifact-id={props.artifact.id}>This artifact was deleted.</p>
   }><TranscriptVisualMedia {...props} /></Show>;
 }
 
@@ -218,6 +218,7 @@ function TranscriptVisualRaster(props: Props) {
         classList={{ "den-transcript-visual__frame--sized": !!reservedAspect() }}
         style={{ "aspect-ratio": reservedAspect() }}
         aria-label={caption() ? `Enlarge ${caption()}` : "Enlarge visual artifact"}
+        data-testid="transcript-visual-artifact-enlarge"
         aria-haspopup="dialog"
         aria-busy={!srcFailed() && !revealed()}
         disabled={!src() || !revealed()}
@@ -289,7 +290,7 @@ function TranscriptVisualRaster(props: Props) {
                   <span class="den-overlay__title">
                     {caption() || "Visual artifact"}
                   </span>
-                  <ChromeCloseButton
+                  <ChromeCloseButton testId="close-enlarged-visual"
                     class="den-overlay__close den-inset-icon-btn"
                     label="Close enlarged visual"
                     onClick={() => setLightbox(false)}

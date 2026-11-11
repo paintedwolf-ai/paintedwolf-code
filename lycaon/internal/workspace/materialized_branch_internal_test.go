@@ -130,7 +130,7 @@ func TestCompletionCheckpointTakesBaseBytesFromThePristineTree(t *testing.T) {
 	if manifest.Trigger != checkpoint.TriggerWorkerCompletion {
 		t.Fatalf("trigger = %s", manifest.Trigger)
 	}
-	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(binding))
+	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(t.Context(), binding))
 	if _, err := os.Stat(enginepaths.MetaDirForBranchRoot(binding.Root)); !os.IsNotExist(err) {
 		t.Fatalf("destroy left the pristine tree: %v", err)
 	}
@@ -154,14 +154,12 @@ func TestACopyThatPassesItsBudgetMovesOnToTheMount(t *testing.T) {
 	}
 	branches := t.TempDir()
 	mgr := newMaterializedManager(t, branches).WithSelector(selector)
-	mgr.cloneAvailable = func(string) adapter.CloneAvailability {
-		return func(context.Context, adapter.RootGrant) (bool, error) { return true, nil }
-	}
+	mgr.cloneProbe = func(context.Context, string) (bool, error) { return true, nil }
 	mgr.cloneFile = func(string, string) (bool, error) { return false, nil }
 
 	binding, err := mgr.CreateWorkerWorkspace(t.Context(), source, "job-overrun")
 	testutil.FailErr(t, "create", err)
-	t.Cleanup(func() { _ = mgr.DestroyWorkerWorkspace(binding) })
+	t.Cleanup(func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) })
 	facts := binding.Selection.Selection
 	if binding.Selection.Facts.PreparationKind != adapter.PreparationMounted || !facts.CopyPassedBudget || facts.Reason != adapter.SelectionOverBudgetMounted {
 		t.Fatalf("selection = %+v", binding.Selection)
@@ -187,9 +185,7 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 		return adapter.BudgetFact{Class: class, Limit: 100_000, EntryCost: 1000}
 	}
 	mgr := newMaterializedManager(t, t.TempDir()).WithSelector(selector)
-	mgr.cloneAvailable = func(string) adapter.CloneAvailability {
-		return func(context.Context, adapter.RootGrant) (bool, error) { return false, nil }
-	}
+	mgr.cloneProbe = func(context.Context, string) (bool, error) { return false, nil }
 	var declaredBeforeCopy atomic.Bool
 	var declared atomic.Int64
 	mgr.cloneFile = func(string, string) (bool, error) {
@@ -203,7 +199,7 @@ func TestTheCostIsDeclaredBeforeTheFirstCopy(t *testing.T) {
 	})
 	binding, err := mgr.CreateWorkerWorkspace(ctx, source, "job-declared")
 	testutil.FailErr(t, "create", err)
-	t.Cleanup(func() { _ = mgr.DestroyWorkerWorkspace(binding) })
+	t.Cleanup(func() { _ = mgr.DestroyWorkerWorkspace(t.Context(), binding) })
 	if !declaredBeforeCopy.Load() {
 		t.Fatal("the first copy started before the cost was declared")
 	}
@@ -283,7 +279,7 @@ func TestRestartReDerivesChangesAndRepositoryState(t *testing.T) {
 	if !found {
 		t.Fatalf("the worker's commit left the checkpoint: refs=%v want %s", manifest.PrivateGit.Refs, commit)
 	}
-	testutil.FailErr(t, "destroy", next.DestroyWorkerWorkspace(&Binding{ID: "job-restart", Root: root}))
+	testutil.FailErr(t, "destroy", next.DestroyWorkerWorkspace(t.Context(), &Binding{ID: "job-restart", Root: root}))
 }
 
 func TestEvictedMaterializedBranchRebuildsFromItsCheckpoint(t *testing.T) {
@@ -327,7 +323,7 @@ func TestEvictedMaterializedBranchRebuildsFromItsCheckpoint(t *testing.T) {
 	if !handled {
 		t.Fatal("the rebuilt view does not publish")
 	}
-	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(&Binding{ID: "job-evict", Root: root}))
+	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(t.Context(), &Binding{ID: "job-evict", Root: root}))
 }
 
 func TestCanceledWorkKeepsOnlyWhatChanged(t *testing.T) {
@@ -351,7 +347,7 @@ func TestCanceledWorkKeepsOnlyWhatChanged(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(records[0].QuarantineDir, "changed", "primary", "kept", "untouched.go")); !os.IsNotExist(err) {
 		t.Fatalf("an unchanged file was retained: %v", err)
 	}
-	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(binding))
+	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(t.Context(), binding))
 }
 
 func TestOneMaterializedViewServesEveryRoot(t *testing.T) {
@@ -382,7 +378,7 @@ func TestOneMaterializedViewServesEveryRoot(t *testing.T) {
 	if len(manifest.Entries) != 1 || manifest.Entries[0].Path != (layeredfs.QualifiedPath{RootID: "s", Rel: "main.go"}) {
 		t.Fatalf("entries = %+v", manifest.Entries)
 	}
-	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(binding))
+	testutil.FailErr(t, "destroy", mgr.DestroyWorkerWorkspace(t.Context(), binding))
 }
 
 func TestABranchWithoutAManifestKeepsItsBaselinePath(t *testing.T) {

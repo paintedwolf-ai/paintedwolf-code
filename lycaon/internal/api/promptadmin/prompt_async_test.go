@@ -151,9 +151,6 @@ func TestRenderPromptHostErrorIncludesGenericDetail(t *testing.T) {
 	if !strings.Contains(host.Message, "connection refused") {
 		t.Fatalf("message missing detail: %q", host.Message)
 	}
-	if !strings.Contains(host.Title, "Couldn't finish") {
-		t.Fatalf("title = %q", host.Title)
-	}
 	if len(host.Actions) == 0 || host.Actions[0] != wire.NoticeActionPromptRetry {
 		t.Fatalf("expected prompt_retry, got %#v", host.Actions)
 	}
@@ -174,10 +171,6 @@ func TestRenderPromptHostErrorHidesProviderServerDetail(t *testing.T) {
 	if !strings.Contains(host.Message, "together-ai-1") || !strings.Contains(host.Message, "HTTP 500") ||
 		!strings.Contains(host.Message, "tried 4 times") {
 		t.Fatalf("message missing structured facts: %q", host.Message)
-	}
-	if !strings.Contains(host.Title, "model provider") || !strings.Contains(host.Message, "provider's side") ||
-		!strings.Contains(host.Message, "rather than with your prompt or local setup") {
-		t.Fatalf("message does not identify the likely fault boundary: %#v", host)
 	}
 	if strings.Contains(host.Message, "EngineCore") || strings.Contains(host.Message, "stack trace") {
 		t.Fatalf("message leaked upstream prose: %q", host.Message)

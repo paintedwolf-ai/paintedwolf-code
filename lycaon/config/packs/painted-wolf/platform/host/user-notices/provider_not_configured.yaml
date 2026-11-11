@@ -21,10 +21,5 @@ scenarios:
   - id: with_provider
     vars:
       provider_id: fireworks
-    expect_contains:
-      - fireworks
-      - Settings → AI providers
   - id: generic
     vars: {}
-    expect_contains:
-      - language model

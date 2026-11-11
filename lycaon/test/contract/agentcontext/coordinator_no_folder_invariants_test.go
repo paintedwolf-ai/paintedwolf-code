@@ -3,7 +3,7 @@ package contract
 import (
 	"context"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 
@@ -20,10 +20,6 @@ import (
 )
 
 // No-folder prompts name only available tools.
-
-var noFolderForbiddenPromptTools = []string{
-	"read", "write", "edit", "grep", "find", "list_dir", "command", "pack_board", "scan_pack",
-}
 
 func TestNoFolderCoordinatorToolsSubsetOfAllowlist(t *testing.T) {
 	t.Parallel()
@@ -95,73 +91,11 @@ func TestNoFolderDenyGateAndSurfaceAgree(t *testing.T) {
 	}
 }
 
-func TestNoFolderCoordinatorPromptSubsetOfWireTools(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	for _, rootCount := range []int{0, 1, 2} {
-		t.Run(rootCountLabel(rootCount), func(t *testing.T) {
-			t.Parallel()
-			corpus := renderCoordinatorTripartiteAtRootCount(t, root, rootCount, surfaceImplementRouting)
-			wire := coordinatorWireToolsAtRootCount(t, root, surfaceImplementRouting, rootCount)
-			extra := mergeToolAllowlists(routingPromptToolsAllowedOffWire, orchestrateSharedPromptToolsAllowedOffWire)
-			if rootCount == 0 {
-				extra = mergeToolAllowlists(extra, map[string]string{
-					"update_progress": "no-folder orchestrate copy scoped to folder attach",
-					"promote_overlay": "orchestrate cycle table names lifecycle triggers",
-					"pack_board":      "orchestrate cycle table names lifecycle triggers",
-				})
-			}
-			assertPromptToolsSubsetOfWire(t, corpus, wire, extra)
-		})
-	}
-}
-
-func TestNoFolderCoordinatorPromptNamesNoFileTools(t *testing.T) {
-	t.Parallel()
-	corpus := renderCoordinatorTripartiteAtRootCount(t, contractcheck.RepoRoot(t), 0, surfaceImplementRouting)
-	for _, tool := range noFolderForbiddenPromptTools {
-		if mentionsToolName(corpus, tool) {
-			t.Fatalf("0-root coordinator prompt mentions forbidden tool %q", tool)
-		}
-	}
-}
-
 func TestNoFolderSpawnRosterWebResearcherOnly(t *testing.T) {
 	t.Parallel()
-	engine := contractcheck.BundledPromptEngineForRoot(t)
-	renderer := prompts.NewInjectRenderer(engine)
-	block, err := inject.RenderImplementSpawnInject(
-		context.Background(), renderer, "sess-inject-test",
-		inject.ResolveAgentRoster(surfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, true).Effective,
-		spawn.MaxInFlightTaskWorkers, surfaceImplementRouting, 0, false, true,
-		nil, nil)
-	contractcheck.FailErr(t, "RenderImplementSpawnInject", err)
-	if !strings.Contains(block, "web-researcher") {
-		t.Fatalf("0-root roster missing web-researcher:\n%s", block)
-	}
-	spawnSection := block
-	if idx := strings.Index(block, "**Excluded:**"); idx >= 0 {
-		spawnSection = block[:idx]
-	}
-	for _, forbidden := range []string{"implementer", "repo-researcher", "path-explorer"} {
-		if mentionsToolName(spawnSection, forbidden) {
-			t.Fatalf("0-root spawn roster mentions excluded agent %q", forbidden)
-		}
-	}
-}
-
-func TestNoFolderTransitionRestoresFileGuidance(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	zero := renderCoordinatorTripartiteAtRootCount(t, root, 0, surfaceImplementRouting)
-	one := renderCoordinatorTripartiteAtRootCount(t, root, 1, surfaceImplementRouting)
-	for _, tool := range []string{"command", "pack_board"} {
-		if mentionsToolName(zero, tool) {
-			t.Fatalf("0-root prompt mentions %q", tool)
-		}
-		if !mentionsToolName(one, tool) {
-			t.Fatalf("1-root prompt should mention %q after folder attach", tool)
-		}
+	roster := inject.ResolveAgentRoster(surfaceImplementRouting, spawn.AmbientAllowedAgents(), 0, false, true).Effective
+	if !slices.Equal(roster, []string{"web-researcher"}) {
+		t.Fatalf("0-root roster = %v, want only web-researcher", roster)
 	}
 }
 
@@ -238,55 +172,4 @@ func renderCoordinatorTripartiteForRunContextWithRoots(
 		}
 	}
 	return strings.Join(parts, "\n\n")
-}
-
-func coordinatorWireToolsAtRootCount(t *testing.T, root, surfaceID string, rootCount int) []string {
-	t.Helper()
-	profile := surface.TurnProfile{SurfaceID: surfaceID}
-	plan, err := surface.CompileToolPlan(profile, rootCount)
-	contractcheck.FailErr(t, "CompileToolPlan", err)
-	tools := plan.ImmediateNames()
-	sort.Strings(tools)
-	return tools
-}
-
-func assertPromptToolsSubsetOfWire(t *testing.T, corpus string, wire []string, extraAllow map[string]string) {
-	t.Helper()
-	wireSet := make(map[string]struct{}, len(wire))
-	for _, name := range wire {
-		wireSet[name] = struct{}{}
-	}
-	profile := loadCoordinatorProfileTools(t)
-	var violations []string
-	for tool, enabled := range profile.Tools {
-		if !enabled || !mentionsToolName(corpus, tool) {
-			continue
-		}
-		if _, ok := implementPromptToolsNotOnWire[tool]; ok {
-			continue
-		}
-		if extraAllow != nil {
-			if _, ok := extraAllow[tool]; ok {
-				continue
-			}
-		}
-		if _, ok := wireSet[tool]; !ok {
-			violations = append(violations, tool)
-		}
-	}
-	sort.Strings(violations)
-	if len(violations) > 0 {
-		t.Fatalf("prompt ⊆ wire violations: %s", strings.Join(violations, ", "))
-	}
-}
-
-func rootCountLabel(n int) string {
-	switch n {
-	case 0:
-		return "zero_root"
-	case 1:
-		return "one_root"
-	default:
-		return "multi_root"
-	}
 }

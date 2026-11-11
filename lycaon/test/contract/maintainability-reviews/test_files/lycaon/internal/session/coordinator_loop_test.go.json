@@ -1,0 +1,14 @@
+{
+  "category": "test_files",
+  "artifact": "lycaon/internal/session/coordinator_loop_test.go",
+  "kind": "test_suite",
+  "workstream": "coordinator-loop-fixtures",
+  "disposition": "retain",
+  "reason": "The coordinator loop suite shares a host/store/workflow fixture and covers admission, wake and worker completion interactions. Resolve the current plan trigger for new runs while preserving archived-run semantics. Retain the cohesive suite within 620 measured lines; the tagged leg-finished contract passed after this change. New behavior or fixture growth renews review.",
+  "reviewed_commit": "83c65582f1c141fbc05ab908c7fd4a2709a39efc",
+  "ceiling": 620,
+  "boundaries": {
+    "lycaon/internal/session/coordinator_loop_test.go": "5113af1143e049b08acfb4ee9069a053fcf6be68854f12ea0686fd14da385ee0",
+    "lycaon/internal/session/coordinator_closeout_integration_test.go": "99be7b9c932fedafec1e3b0187944c7097f1416c45742cb717ad038ec00d666a"
+  }
+}

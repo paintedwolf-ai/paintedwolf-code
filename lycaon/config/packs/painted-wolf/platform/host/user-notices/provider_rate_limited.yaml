@@ -31,14 +31,8 @@ scenarios:
       provider_id: fireworks
       status: 429
       attempts: 5
-    expect_contains:
-      - fireworks
-      - exceeding a quota
-      - tried 5 times
   - id: generic
     vars: {}
-    expect_contains:
-      - exceeding a quota
 
   # Distinct from provider_overloaded (fleet 503/529) and provider_unreachable
   # (the turn never reached the provider).

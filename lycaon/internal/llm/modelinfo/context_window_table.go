@@ -11,6 +11,10 @@ import (
 // DefaultFallbackTrueWindow is used when YAML omits fallback_true_window.
 const DefaultFallbackTrueWindow = 262144
 
+// DefaultLocalFallbackTrueWindow is the conservative true-window fallback for
+// local endpoints when no serving window can be discovered or declared.
+const DefaultLocalFallbackTrueWindow = 32768
+
 // ModelContextWindowRule maps model-id substrings to a true context window.
 type ModelContextWindowRule struct {
 	Match         []string `yaml:"match"`
@@ -20,8 +24,9 @@ type ModelContextWindowRule struct {
 
 // ModelContextWindows is the on-disk model-context-windows.yaml shape.
 type ModelContextWindows struct {
-	FallbackTrueWindow int                      `yaml:"fallback_true_window"`
-	Windows            []ModelContextWindowRule `yaml:"windows"`
+	FallbackTrueWindow      int                      `yaml:"fallback_true_window"`
+	LocalFallbackTrueWindow int                      `yaml:"local_fallback_true_window"`
+	Windows                 []ModelContextWindowRule `yaml:"windows"`
 }
 
 var (
@@ -54,6 +59,9 @@ func LoadModelContextWindows() (ModelContextWindows, error) {
 	}
 	if doc.FallbackTrueWindow <= 0 {
 		doc.FallbackTrueWindow = DefaultFallbackTrueWindow
+	}
+	if doc.LocalFallbackTrueWindow <= 0 {
+		doc.LocalFallbackTrueWindow = DefaultLocalFallbackTrueWindow
 	}
 	for i, rule := range doc.Windows {
 		if _, err := tokenest.NewCounter(rule.TextEncoding); err != nil {

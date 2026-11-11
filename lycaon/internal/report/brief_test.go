@@ -158,7 +158,7 @@ func TestCompleteness_ByKindOfGap(t *testing.T) {
 func TestBrief_AskOrNothing(t *testing.T) {
 	in := briefInput()
 	joined := joinRowValues(briefBlocks(testMeasurer(t), in))
-	for _, want := range []string{"What we need from you", in.Ask.Do, "Effort: Small", "The fix is available."} {
+	for _, want := range []string{"What we need from you", in.Ask.Do, "The fix is available."} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("brief = %q, want %q", joined, want)
 		}

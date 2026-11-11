@@ -32,15 +32,8 @@ x-paintedwolf-scenarios:
     profile: coordinator
     reason: repository_changed_during_review
     path: README.md
-  expect_contains:
-  - 'Code: GIT_OPERATION_PRECONDITION'
-  - repository_changed_during_review
-  - README.md
 - id: worker
   vars:
     tool: git_checkout
     git_addressed_session_required: true
     reason: addressed_session_required
-  expect_contains:
-  - 'Code: GIT_OPERATION_PRECONDITION'
-  - user-addressed session

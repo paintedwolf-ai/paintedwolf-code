@@ -8,7 +8,7 @@ from ci_policy import hosted_plan, impact
 
 class GoSourceImpactTests(unittest.TestCase):
     def test_go_source_roots_keep_the_backend_lanes(self):
-        expected = {"limits", "contracts", "integration-build", "behavior", "lint", "vulnerabilities", "command-scale"}
+        expected = {"limits", "build", "behavior", "lint", "vulnerabilities", "command-scale"}
         for path in ["lycaon/internal/a/a.go", "lycaon/cmd/engine/main.go",
                      "lycaon/test/contract/release/corpus_test.go", "lycaon/test/wiring/host_test.go",
                      "lycaon/test/security/scan_test.go", "lycaon/test/contract/snapshot_test.go"]:
@@ -18,23 +18,42 @@ class GoSourceImpactTests(unittest.TestCase):
                 rows = hosted_plan.matrix("integration", scope=dict(full=full, paths=[path]))["include"]
                 self.assertEqual({row["lane"] for row in rows}, expected)
 
-    def test_data_public_packages_and_unknown_roots_still_run_the_whole_gate(self):
-        for path in ["lycaon/test/contract/release/testdata/manifest.json", "lycaon/test/fixtures/go.mod",
-                     "lycaon/cmd/engine/assets/config.yaml", "lycaon/pkg/api/types.go",
-                     "lycaon/new/code.go", "scripts/verification_tests/ci/test_plan.py"]:
+    def test_public_packages_and_unknown_roots_still_run_the_whole_gate(self):
+        for path in ["lycaon/test/fixtures/go.mod", "lycaon/pkg/api/types.go", "lycaon/new/code.go",
+                     "scripts/verification_execute.py", "scripts/verification-plan.json",
+                     ".github/actions/setup-verification/action.yml", "lycaon/config/prompt.md"]:
             with self.subTest(path=path):
                 self.assertEqual(impact.broad_scope([path]), (True, [path]))
 
-    def test_go_outside_the_module_graph_runs_the_whole_gate(self):
-        # Harness projects are nested modules other lanes copy and run; Go ignores testdata and _ or . directories.
+    def test_nested_modules_run_the_whole_gate(self):
+        # Harness projects are nested modules other lanes copy and run.
         for path in ["lycaon/test/fixtures/e2e/minimal-go-project/internal/app/app.go",
-                     "lycaon/test/fixtures/e2e/hostile-project/main.go", "lycaon/test/testdata/scan/vuln.go",
-                     "lycaon/internal/confine/testdata/probe/main.go", "lycaon/internal/a/_scratch/a.go",
-                     "lycaon/cmd/tool/.cache/a.go"]:
+                     "lycaon/test/fixtures/e2e/hostile-project/main.go"]:
             with self.subTest(path=path):
                 self.assertEqual(impact.broad_scope([path]), (True, [path]))
-        self.assertEqual(impact.broad_scope(["lycaon/test/wiring/fixtures/coordinator_batch/fixture.go"]),
-                         (False, []))
+
+    def test_ci_tooling_adds_only_its_own_lane(self):
+        lanes = hosted_plan.lanes()
+        baseline = impact.selected_lanes(dict(full=False, paths=["docs/git.md"]), lanes)
+        for path in ["scripts/verification_tests/ci/test_plan.py", "scripts/ci_policy/health.py",
+                     ".github/workflows/nightly.yml"]:
+            with self.subTest(path=path):
+                self.assertEqual(impact.broad_scope([path]), (False, []))
+                self.assertEqual(impact.selected_lanes(dict(full=False, paths=[path]), lanes), baseline | {"runner"})
+
+    def test_files_that_run_every_lane_widen(self):
+        for path in [".github/workflows/ci.yml", ".github/workflows/verification.yml",
+                     "scripts/ci_policy/hosted_execution.py", "scripts/ci_policy/hosted_plan.py"]:
+            with self.subTest(path=path):
+                self.assertEqual(impact.broad_scope([path]), (True, [path]))
+
+    def test_data_files_seed_their_nearest_package(self):
+        directories = {"lycaon/internal/a": "module/internal/a", "lycaon/internal/a/b": "module/internal/a/b"}
+        self.assertEqual(impact.owning_package("lycaon/internal/a/testdata/deep/x.json", directories), "module/internal/a")
+        self.assertEqual(impact.owning_package("lycaon/internal/a/b/assets.yaml", directories), "module/internal/a/b")
+        self.assertIsNone(impact.owning_package("lycaon/test/testdata/x.json", directories))
+        for path in ["lycaon/internal/a/testdata/x.json", "lycaon/cmd/engine/assets/config.yaml"]:
+            self.assertEqual(impact.broad_scope([path]), (False, []))
 
     def test_changed_test_support_reaches_importers_and_keeps_all_contracts_and_smoke(self):
         module = "github.com/lycaon/lycaon/"
