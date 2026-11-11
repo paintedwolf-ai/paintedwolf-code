@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/gitexec"
@@ -24,11 +25,14 @@ func TestFirstGitStatusOfAMaterializedBranchReadsNoContent(t *testing.T) {
 		t.Skip("root reads everything")
 	}
 	source := t.TempDir()
+	aged := time.Now().Add(-time.Hour)
 	var files []string
 	for i := range 40 {
 		name := fmt.Sprintf("file-%02d.txt", i)
 		files = append(files, name)
 		testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(source, name), []byte(fmt.Sprintf("body %02d\n", i)), 0o644))
+		// Git rereads files written in the second its index is written; these were written long before.
+		testutil.FailErr(t, "age", os.Chtimes(filepath.Join(source, name), aged, aged))
 	}
 	gittest.InitCommit(t, source, "initial")
 	state, err := filepath.EvalSymlinks(t.TempDir())

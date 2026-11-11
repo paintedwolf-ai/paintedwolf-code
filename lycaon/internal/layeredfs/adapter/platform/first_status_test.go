@@ -22,8 +22,12 @@ import (
 func TestFirstGitStatusThroughAMountReadsNoContent(t *testing.T) {
 	trunk, err := filepath.EvalSymlinks(t.TempDir())
 	testutil.FailErr(t, "resolve trunk", err)
+	aged := time.Now().Add(-time.Hour)
 	for i := range 40 {
-		testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(trunk, fmt.Sprintf("file-%02d.txt", i)), []byte(fmt.Sprintf("body %02d\n", i)), 0o644))
+		name := filepath.Join(trunk, fmt.Sprintf("file-%02d.txt", i))
+		testutil.FailErr(t, "seed", os.WriteFile(name, []byte(fmt.Sprintf("body %02d\n", i)), 0o644))
+		// Git rereads files written in the second its index is written; these were written long before.
+		testutil.FailErr(t, "age", os.Chtimes(name, aged, aged))
 	}
 	gittest.InitCommit(t, trunk, "initial")
 	mgr, err := privategit.NewManager(privategit.ManagerConfig{BackingDir: filepath.Join(t.TempDir(), "pgit")})
