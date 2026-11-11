@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
@@ -33,10 +34,10 @@ func TestSelectorSupportedAndUnsupportedFixtures(t *testing.T) {
 
 	source := filepath.Join(tmp, "source")
 	if err := os.MkdirAll(source, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(source, "f.txt"), []byte("f"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	overBudget := func(sel *Selector) ChooseRequest {
 		sel.BudgetFor = ZeroBudget
@@ -100,10 +101,10 @@ func TestSelectorTransientRetryOnce(t *testing.T) {
 	})
 	source := filepath.Join(tmp, "source")
 	if err := os.MkdirAll(source, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(source, "f.txt"), []byte("f"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	overBudget := func(sel *Selector) ChooseRequest {
 		sel.BudgetFor = ZeroBudget
@@ -141,10 +142,10 @@ func TestMountedPrepareCommandAccessBarrierAndRelease(t *testing.T) {
 	tmp := t.TempDir()
 	srcRoot := filepath.Join(tmp, "repo")
 	if err := os.MkdirAll(filepath.Join(srcRoot, "nested", ".git"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "hello.txt"), []byte("v1"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	var mountCalls atomic.Int32

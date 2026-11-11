@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine/linuxsandbox"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 // The plan cannot refuse one loopback port, so a boundary naming one fails closed rather than
@@ -23,13 +24,9 @@ func TestLinuxPlanRefusesADeniedLoopbackPort(t *testing.T) {
 func TestLinuxPlanHidesViewStorage(t *testing.T) {
 	root, storage := t.TempDir(), t.TempDir()
 	rules, err := filesystemRules(Confinement{Roots: []string{root}, View: ViewBoundary{DeniedPaths: []string{storage}}})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "filesystemRules failed", err)
 	plan, err := compileFilesystemPlan(rules)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "compileFilesystemPlan failed", err)
 	for _, hidden := range plan.Hidden {
 		if hidden == resolveEach([]string{storage})[0] {
 			return

@@ -141,7 +141,8 @@ func TestTwoWorkersReuseObjectsConcurrentInitFailedImportAndGC(t *testing.T) {
 		t.Fatalf("w2 must not see w1's private file, got %v", err)
 	}
 
-	// Failed import leaves retryable ErrGitPending state, never a partially usable repo; concurrent lookups succeed on retry.
+	// Failed import leaves retryable ErrGitPending state, never a partially usable repo; concurrent
+	// lookups succeed on retry.
 	var failOnce atomic.Bool
 	failOnce.Store(true)
 	mgr.cfg.FailObjectImportHook = func(vID, _ string) error {

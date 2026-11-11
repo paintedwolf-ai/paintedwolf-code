@@ -67,7 +67,7 @@ func TestRebuildingEvictedHandlesListsADirectoryOnce(t *testing.T) {
 	testutil.FailErr(t, "remove", os.Remove(filepath.Join(trunk, "dir", "f00")))
 	for i := range 8 { // evict f00 again
 		if _, err := table.Resolve(wires[10+i][:], 0); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "table.Resolve failed", err)
 		}
 	}
 	if _, err := table.Resolve(wires[0][:], 0); err == nil {

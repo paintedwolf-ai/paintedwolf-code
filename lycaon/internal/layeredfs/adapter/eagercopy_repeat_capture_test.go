@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
 
@@ -21,7 +22,7 @@ func TestEagerCopyRepeatCaptureModifyRevertAndCreateDelete(t *testing.T) {
 	tmp := t.TempDir()
 	srcRoot := filepath.Join(tmp, "src")
 	if err := os.MkdirAll(srcRoot, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	seedContentA := []byte("version-A\n")
 	seedContentB := []byte("version-B-modified\n")
@@ -32,13 +33,13 @@ func TestEagerCopyRepeatCaptureModifyRevertAndCreateDelete(t *testing.T) {
 	chmodFile := filepath.Join(srcRoot, "chmod_revert.sh")
 	untouchedFile := filepath.Join(srcRoot, "untouched.txt")
 	if err := os.WriteFile(seedFile, seedContentA, 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(chmodFile, chmodContent, 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(untouchedFile, untouchedContent, 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	xattrSupported := unix.Lsetxattr(seedFile, "user.seed", []byte("orig"), 0) == nil
 
@@ -60,30 +61,30 @@ func TestEagerCopyRepeatCaptureModifyRevertAndCreateDelete(t *testing.T) {
 
 	// Capture #1: modify seeded.txt (content + mode + xattrs), chmod chmod_revert.sh, create ephemeral file & dir.
 	if err := os.WriteFile(workSeeded, seedContentB, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.Chmod(workSeeded, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	if xattrSupported {
 		if err := unix.Lsetxattr(workSeeded, "user.seed", []byte("mutated"), 0); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "unix.Lsetxattr failed", err)
 		}
 		if err := unix.Lsetxattr(workSeeded, "user.extra", []byte("temp"), 0); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "unix.Lsetxattr failed", err)
 		}
 	}
 	if err := os.Chmod(workChmod, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	if err := os.WriteFile(workEphemeral, []byte("temp-created\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.MkdirAll(workEphemeralDir, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(workEphemeralDir, "nested.txt"), []byte("nested\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	_, release1, err := adp.CheckpointBarrier(ctx, view.ViewID)
@@ -95,27 +96,27 @@ func TestEagerCopyRepeatCaptureModifyRevertAndCreateDelete(t *testing.T) {
 
 	// Capture #2: revert seeded.txt back to seed state, revert chmod_revert.sh mode, delete ephemeral file & dir.
 	if err := os.WriteFile(workSeeded, seedContentA, 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.Chmod(workSeeded, 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	if xattrSupported {
 		if err := unix.Lsetxattr(workSeeded, "user.seed", []byte("orig"), 0); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "unix.Lsetxattr failed", err)
 		}
 		if err := unix.Lremovexattr(workSeeded, "user.extra"); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "unix.Lremovexattr failed", err)
 		}
 	}
 	if err := os.Chmod(workChmod, 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	if err := os.Remove(workEphemeral); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Remove failed", err)
 	}
 	if err := os.RemoveAll(workEphemeralDir); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.RemoveAll failed", err)
 	}
 
 	_, release2, err := adp.CheckpointBarrier(ctx, view.ViewID)
@@ -243,16 +244,16 @@ func TestEagerCopyRepeatCaptureSymlinksAndXattrErrorPropagation(t *testing.T) {
 	tmp := t.TempDir()
 	srcRoot := filepath.Join(tmp, "src-sym")
 	if err := os.MkdirAll(srcRoot, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "a.txt"), []byte("A"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "b.txt"), []byte("B"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.Symlink("a.txt", filepath.Join(srcRoot, "seed-link")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 
 	adp := NewEagerCopyAdapter()
@@ -271,13 +272,13 @@ func TestEagerCopyRepeatCaptureSymlinksAndXattrErrorPropagation(t *testing.T) {
 
 	// Capture #1: retarget seed-link -> b.txt, create new-link -> b.txt.
 	if err := os.Remove(seedLinkPath); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Remove failed", err)
 	}
 	if err := os.Symlink("b.txt", seedLinkPath); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	if err := os.Symlink("b.txt", newLinkPath); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	_, rel1, err := adp.CheckpointBarrier(ctx, view.ViewID)
 	if err != nil {
@@ -287,10 +288,10 @@ func TestEagerCopyRepeatCaptureSymlinksAndXattrErrorPropagation(t *testing.T) {
 
 	// Capture #2: keep new-link unchanged (must not fail with ErrExist) and revert seed-link -> a.txt.
 	if err := os.Remove(seedLinkPath); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Remove failed", err)
 	}
 	if err := os.Symlink("a.txt", seedLinkPath); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	_, rel2, err := adp.CheckpointBarrier(ctx, view.ViewID)
 	if err != nil {
@@ -306,11 +307,11 @@ func TestEagerCopyRepeatCaptureSymlinksAndXattrErrorPropagation(t *testing.T) {
 
 	// Capture #3: delete new-link and verifyreadPathXattrs error propagation preserves existing xattrs in Core.
 	if err := os.Remove(newLinkPath); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Remove failed", err)
 	}
 	qpA := layeredfs.QualifiedPath{RootID: "repo", Rel: "a.txt"}
 	if err := view.Core.SetXattr(qpA, "user.keep", []byte("preserved"), true); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "view.Core.SetXattr failed", err)
 	}
 	readPathXattrsHook = func(p string) error {
 		if strings.HasSuffix(p, "a.txt") {

@@ -187,7 +187,8 @@ func overlayTreeAdmits(roots []projectroot.RootRef, path string) bool {
 	return len(FilterOverlayPromoteCandidatePathsForRoots(roots, []string{path})) == 1
 }
 
-// OverlayWorkspaceAvailable reports whether the task's overlay root is a real directory or has a published checkpoint store.
+// OverlayWorkspaceAvailable reports whether the task's overlay root is a real directory or has a
+// published checkpoint store.
 func OverlayWorkspaceAvailable(task *api.WorkerTask) bool {
 	if task == nil {
 		return false

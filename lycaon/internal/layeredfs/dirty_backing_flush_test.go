@@ -59,7 +59,8 @@ func TestDirtyBackingFilesFlushedAtCheckpointBarrierWithZeroPerOpFlushes(t *test
 	core.mu.RLock()
 	dirtyBefore := len(core.state.dirtyBackingFiles)
 	core.mu.RUnlock()
-	// Expected dirty files: work for created_closed.txt, base+work for lower1.txt, base+work for lower2.txt, work for still_open.txt = 6.
+	// Expected dirty files: work for created_closed.txt, base+work for lower1.txt, base+work for
+	// lower2.txt, work for still_open.txt = 6.
 	if dirtyBefore != 6 {
 		t.Fatalf("expected 6 dirty backing files tracked before barrier, got %d", dirtyBefore)
 	}

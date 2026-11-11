@@ -52,7 +52,8 @@ func TestCheckpointBarrierHookAndDirtyMmapFlushContract(t *testing.T) {
 		t.Fatalf("expected CheckpointBarrier without QuiesceHook to fail, got rec=%+v err=%v", rec1, err)
 	}
 
-	// 2. QuiesceHook present but missing FlushClientHook must fail with WritersQuiesced=true, WritableMappingsFlushed=false.
+	// 2. QuiesceHook present but missing FlushClientHook must fail with WritersQuiesced=true,
+	// WritableMappingsFlushed=false.
 	if err := adp.SetBarrierHooks(viewID, fuselinux.NoopQuiesceHook, nil); err != nil {
 		t.Fatalf("SetBarrierHooks: %v", err)
 	}
@@ -178,7 +179,8 @@ func TestReleaseRetainsStateOnUnmountAndRuntimeCleanupFailureAndSucceedsOnRetry(
 		t.Fatalf("expected view %s state and server to remain tracked when unmount fails", viewID)
 	}
 
-	// 2. Restore FusermountBin, inject RemoveAllFn failure; Release must unmount but retain view state for runtime cleanup retry.
+	// 2. Restore FusermountBin, inject RemoveAllFn failure; Release must unmount but retain view state
+	// for runtime cleanup retry.
 	adp.SetFusermountBinForTest("")
 	adp.SetConfigCallbacksForTest(nil, func(p string) error {
 		return errors.New("injected runtime dir remove failure on " + p)

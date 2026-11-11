@@ -89,7 +89,8 @@ func TestCompactPackOverlappingAndMixedInventoryAccountingAndGC(t *testing.T) {
 	c2 := strings.TrimSpace(gittest.Run(t, repoA, "rev-parse", "HEAD"))
 	gittest.Run(t, repoA, "repack", "-a", "-d")
 
-	// Clone Repo A into Repo B and add commit c3 -> repack -a -d creates an overlapping compact pack B containing c1, c2, and c3!
+	// Clone Repo A into Repo B and add commit c3 -> repack -a -d creates an overlapping compact pack B
+	// containing c1, c2, and c3!
 	repoB := filepath.Join(t.TempDir(), "repoB")
 	gittest.Run(t, t.TempDir(), "clone", repoA, repoB)
 	testutil.FailErr(t, "write b3", os.WriteFile(filepath.Join(repoB, "b.txt"), []byte("b3\n"), 0o644))

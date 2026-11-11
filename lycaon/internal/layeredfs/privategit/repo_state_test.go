@@ -194,7 +194,8 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 		mgr2 := newTestManager(t, backingRoot)
 		core2 := newMountedViewWithManager(t, mgr2, "view-prior-ev", srcDir)
 
-		// Must preserve existing private .git evidence and reconstruct established durable record rather than overwriting as no_source_repo.
+		// Must preserve existing private .git evidence and reconstruct established durable record rather
+		// than overwriting as no_source_repo.
 		gotHead, rErr := core2.ReadFile(qp(".git/HEAD"))
 		testutil.FailErr(t, "ReadFile(.git/HEAD) from preserved private evidence", rErr)
 		if string(gotHead) != string(headBytes) {
@@ -207,7 +208,8 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			t.Fatalf("expected reconstructed durable status %q, got rec=%+v ok=%v err=%v", repoStatusEstablished, rec, ok, dErr)
 		}
 
-		// And if the retained object store is subsequently corrupted across another restart with the record removed again, it must fail closed.
+		// And if the retained object store is subsequently corrupted across another restart with the record
+		// removed again, it must fail closed.
 		testutil.FailErr(t, "remove durable record again", os.Remove(recPath))
 		testutil.FailErr(t, "remove store objectsDir", os.RemoveAll(mgr2.Store().ObjectsDir()))
 
@@ -312,7 +314,8 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			t.Fatalf("expected ErrGitPending on WriteFile(.git/HEAD) across immediate restart with missing source, got %v", err)
 		}
 
-		// Case B: When source .git remains intact across immediate restart, a fresh Manager recovers cleanly and clears the intent marker.
+		// Case B: When source .git remains intact across immediate restart, a fresh Manager recovers cleanly
+		// and clears the intent marker.
 		srcKeep := t.TempDir()
 		gittest.Init(t, srcKeep)
 		testutil.FailErr(t, "write p.txt", os.WriteFile(filepath.Join(srcKeep, "p.txt"), []byte("v1\n"), 0o644))
@@ -412,7 +415,8 @@ func TestDurableRepoRecordFailClosedAcrossRestart(t *testing.T) {
 			}
 		}
 
-		// 3. Missing non-HEAD dependencies (tracked blob, root tree, non-HEAD branch commit) fail closed while HEAD commit remains intact.
+		// 3. Missing non-HEAD dependencies (tracked blob, root tree, non-HEAD branch commit) fail closed
+		// while HEAD commit remains intact.
 		for _, depSpec := range []struct {
 			name string
 			rev  string

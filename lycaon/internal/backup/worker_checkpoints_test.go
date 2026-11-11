@@ -150,7 +150,8 @@ func copyGitObjectsDir(t *testing.T, srcObjects, dstObjects string) {
 func TestBackupValidatesPublishedWorkerCheckpointsAndGitObjects(t *testing.T) {
 	fx := setupCheckpointBackupFixture(t)
 
-	// Even with the branch working tree evicted on disk, Create succeeds because the checkpoint and retained Git objects are complete.
+	// Even with the branch working tree evicted on disk, Create succeeds because the checkpoint and
+	// retained Git objects are complete.
 	opts := backup.CreateOpts{ConfigDir: fx.root, DBPath: filepath.Join(fx.root, "store.db"), SQLDB: fx.database, AppVersion: "test", SchemaUserVersion: db.SchemaVersion}
 	rawArchive, manifest, err := createArchive(t, t.Context(), opts)
 	testutil.FailErr(t, "create archive for evicted checkpoint-backed worker", err)

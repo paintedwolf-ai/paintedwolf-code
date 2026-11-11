@@ -77,7 +77,8 @@ func TestPrepareViewGitOperationMountedBindingAndCopiedWorktreeDoubleIsolation(t
 	_, err = exec.Commit(t.Context(), "worker mounted commit")
 	testutil.FailErr(t, "git commit", err)
 
-	// (d) Verify materialized mode (eagercopy) shares zero trunk inodes and protects trunk from in-place write/truncate/chmod.
+	// (d) Verify materialized mode (eagercopy) shares zero trunk inodes and protects trunk from in-place
+	// write/truncate/chmod.
 	matDir := filepath.Join(tmp, "materialized-wt")
 	_, err = mgr.InitializeMaterializedSeed(t.Context(), MaterializedSeedConfig{
 		ViewID: "view-mat", WorkerID: "worker-view-mat", TrunkDir: trunk, TargetDir: matDir,

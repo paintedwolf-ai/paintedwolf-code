@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"golang.org/x/sys/unix"
 )
 
@@ -63,35 +64,35 @@ func TestUnderLimitMaterializedWorkerPrivateGitAndCheckpointSuite(t *testing.T) 
 func createFixtureRepoWithSubmodule(t *testing.T, srcRoot string) string {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Join(srcRoot, ".git", "objects", "aa"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.MkdirAll(filepath.Join(srcRoot, ".git", "modules", "sub"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, ".git", "objects", "aa", "11223344556677889900112233445566778899"), []byte("git-object-payload"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, ".git", "modules", "sub", "HEAD"), []byte("ref: refs/heads/sub-branch\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.MkdirAll(filepath.Join(srcRoot, "sub"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	// Gitlink file in submodule
 	if err := os.WriteFile(filepath.Join(srcRoot, "sub", ".git"), []byte("gitdir: ../.git/modules/sub\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "sub", "lib.go"), []byte("package sub\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "main.go"), []byte("package main\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "untouched.txt"), []byte("initial-fixed-seed"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	return srcRoot
 }
@@ -119,7 +120,7 @@ func verifyFixedSourceVisibilityAndCheckpoint(t *testing.T, ctx context.Context,
 	t.Helper()
 	// Mutate live host source after Prepare; fixed-source visibility must preserve seed content.
 	if err := os.WriteFile(filepath.Join(srcRoot, "untouched.txt"), []byte("host-live-mutation"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	untouchedGot, err := view.Core.ReadFile(layeredfs.QualifiedPath{RootID: "repo", Rel: "untouched.txt"})
 	if err != nil || string(untouchedGot) != "initial-fixed-seed" {
@@ -208,30 +209,30 @@ func TestEagerCopySeedMetadataFailureFailsClosedAndUnchangedCaptureIsClean(t *te
 	srcRoot := filepath.Join(tmp, "src-meta")
 	subDir := filepath.Join(srcRoot, "subdir")
 	if err := os.MkdirAll(subDir, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.Chmod(subDir, 0o775); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	scriptFile := filepath.Join(subDir, "script.sh")
 	if err := os.WriteFile(scriptFile, []byte("#!/bin/sh\necho seed\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.Chmod(scriptFile, 0o750); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	if err := os.Symlink("script.sh", filepath.Join(subDir, "link")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	roDir := filepath.Join(srcRoot, "rodir")
 	if err := os.MkdirAll(roDir, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(roDir, "inside.txt"), []byte("read-only-dir-child\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.Chmod(roDir, 0o555); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(roDir, 0o755) })
 

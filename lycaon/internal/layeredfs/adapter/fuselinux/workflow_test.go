@@ -152,7 +152,8 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 
 	cpStore := publishWorkflowCheckpoint(t, adp, gitMgr, prep.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID, cpGitState)
 
-	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
+	// 6. Release the mounted view and verify subsequent privategit operations fail closed with
+	// ErrMountedWorktreeUnavailable.
 	relReceipt, err := adp.Release(t.Context(), viewID)
 	if err != nil || !relReceipt.Settled {
 		t.Fatalf("Release failed: receipt=%+v err=%v", relReceipt, err)

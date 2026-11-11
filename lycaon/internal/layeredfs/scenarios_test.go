@@ -308,8 +308,9 @@ func TestHandleLifecycleAndGitInterception(t *testing.T) {
 		t.Fatalf("unexpected content after handle write across rename: %q", string(gotRenamed))
 	}
 
-	// Create a new file at the old pathname (`handle_file.txt`) and replace `renamed_file.txt`:
-	// old handle still points to `attr1.NodeID` + `attr1.Generation`, while new replacement gets a distinct NodeID/Generation.
+	// Create a new file at the old pathname (`handle_file.txt`) and replace `renamed_file.txt`: old
+	// handle still points to `attr1.NodeID` + `attr1.Generation`, while new replacement gets a distinct
+	// NodeID/Generation.
 	_, attr2, err := core.CreateFile(qp("handle_file.txt"), 0o644, true)
 	testutil.FailErr(t, "recreate handle_file.txt", err)
 	if attr2.NodeID == attr1.NodeID || attr2.Generation == attr1.Generation {

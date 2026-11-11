@@ -17,8 +17,9 @@ import (
 	"github.com/lycaon/lycaon/internal/workerplacement"
 )
 
-// BuildLocalDataInventory aggregates workspace job trees and coordinator recovery records into the three local-data buckets:
-// BucketRetainedWorkerResults, BucketInterruptedWorkingData, and BucketDisposableRuntimeCache.
+// BuildLocalDataInventory aggregates workspace job trees and coordinator recovery records into the
+// three local-data buckets: BucketRetainedWorkerResults, BucketInterruptedWorkingData, and
+// BucketDisposableRuntimeCache.
 func BuildLocalDataInventory(
 	ctx context.Context,
 	branchRoot string,

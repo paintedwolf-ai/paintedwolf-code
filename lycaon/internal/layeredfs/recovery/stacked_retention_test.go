@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestStackedWorkerParentContinuationEvictionAndBothPromotionOrders(t *testing.T) {
@@ -22,9 +23,7 @@ func TestStackedWorkerParentContinuationEvictionAndBothPromotionOrders(t *testin
 
 	// 1. Parent worker modifies app.go, creates parent_only.txt, deletes sub/dir.txt, and publishes cp-parent-A.
 	parentView, err := fx.mountedAdp.Prepare(ctx, fx.prepareRequest("view-parent"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.mountedAdp.Prepare failed", err)
 	defer func() { _, _ = fx.mountedAdp.Release(ctx, parentView.ViewID) }()
 
 	qpApp := layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}
@@ -50,11 +49,9 @@ func TestStackedWorkerParentContinuationEvictionAndBothPromotionOrders(t *testin
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	if _, err := parentPub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-parent-A"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "parentPub.Publish failed", err)
 	}
 	_ = fx.coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
 		FormatVersion:             recovery.FormatVersion,
@@ -124,11 +121,9 @@ func TestStackedWorkerParentContinuationEvictionAndBothPromotionOrders(t *testin
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	if _, err := childPub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-child-C"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "childPub.Publish failed", err)
 	}
 
 	// 5. Verify both promotion orders produce identical, non-duplicated trunk state.
@@ -148,9 +143,7 @@ func verifyStackedPromotionOrders(t *testing.T, fx *recoveryFixture) {
 		Store:       fx.cpStore,
 		TargetRoots: map[string]string{"primary": trunkDirect},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPromoter failed", err)
 	planDirect, err := fx.coord.ResolveStackedPromotionPlan(ctx, recovery.StackedPromotionRequest{
 		ChildCheckpointID: "cp-child-C",
 		TargetRoots:       map[string]string{"primary": trunkDirect},
@@ -179,22 +172,16 @@ func verifyStackedPromotionOrders(t *testing.T, fx *recoveryFixture) {
 		Store:       fx.cpStore,
 		TargetRoots: map[string]string{"primary": trunkSeq},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPromoter failed", err)
 	prevParent, err := promoterSeq.Preview(ctx, checkpoint.PreviewRequest{CheckpointID: "cp-parent-A"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "promoterSeq.Preview failed", err)
 	parentTxn, err := checkpoint.BeginTransaction(checkpoint.TransactionConfig{Dir: filepath.Join(t.TempDir(), "tx"), ID: "parent"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.BeginTransaction failed", err)
 	if _, err := parentTxn.ApplyCheckpoint(ctx, promoterSeq, checkpoint.ApplyRequest{TransactionID: "tx-cp-parent-A", Preview: prevParent}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "parentTxn.ApplyCheckpoint failed", err)
 	}
 	if err := parentTxn.Commit(); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "parentTxn.Commit failed", err)
 	}
 	_ = fx.coord.RecordCheckpointLanded(recovery.LandingReceipt{
 		CheckpointID:  "cp-parent-A",
@@ -249,9 +236,7 @@ func TestEvictDisposableWorkingMaterialAndGarbageCollection(t *testing.T) {
 	ctx := t.Context()
 
 	view, err := fx.mountedAdp.Prepare(ctx, fx.prepareRequest("view-evict"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.mountedAdp.Prepare failed", err)
 	defer func() { _, _ = fx.mountedAdp.Release(ctx, view.ViewID) }()
 
 	qpApp := layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}
@@ -271,13 +256,9 @@ func TestEvictDisposableWorkingMaterialAndGarbageCollection(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	pubRes, err := pub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-evict-1"})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "pub.Publish failed", err)
 	_ = fx.coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
 		FormatVersion:             recovery.FormatVersion,
 		WorkerID:                  "worker-evict",
@@ -296,7 +277,7 @@ func TestEvictDisposableWorkingMaterialAndGarbageCollection(t *testing.T) {
 
 	// Publish cp-evict-2 to seal the mutation, then EvictDisposableWorkingMaterial must succeed.
 	if _, err := pub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-evict-2"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "pub.Publish failed", err)
 	}
 	_ = fx.coord.RecordTransition("worker-evict", view.ViewID, recovery.PhasePublication, recovery.StateCommitted, "cp-evict-2", "publish", nil, false)
 
@@ -305,11 +286,10 @@ func TestEvictDisposableWorkingMaterialAndGarbageCollection(t *testing.T) {
 		t.Fatalf("expected EvictDisposableWorkingMaterial to reclaim bytes, got %+v err=%v", evRep, err)
 	}
 
-	// Write an unreferenced blob and an orphaned staged checkpoint; GC must collect them while keeping cp-evict-1 and cp-evict-2 blobs.
+	// Write an unreferenced blob and an orphaned staged checkpoint; GC must collect them while keeping
+	// cp-evict-1 and cp-evict-2 blobs.
 	orphanSHA, _, err := fx.cpStore.WriteBlobBytes([]byte("orphan-unreferenced-blob-payload\n"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.cpStore.WriteBlobBytes failed", err)
 	orphanCP := filepath.Join(fx.cpStore.RootDir(), "checkpoints", "cp-orphan-tmp")
 	_ = os.MkdirAll(orphanCP, 0o700)
 	writeFile(t, filepath.Join(orphanCP, "manifest.json.tmp"), "{}")

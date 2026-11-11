@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
@@ -18,7 +19,7 @@ func TestEagerCopyGitStoreReuseConfigSanitizationAndUnauthorizedGitlinks(t *test
 	srcRoot := createFixtureRepoWithSubmodule(t, filepath.Join(tmp, "source"))
 	rawCfg := "[core]\n\tfsmonitor = true\n\thooksPath = /tmp/evil\n[remote \"origin\"]\n\turl = https://user:secret@example.com/org/repo.git\n"
 	if err := os.WriteFile(filepath.Join(srcRoot, ".git", "config"), []byte(rawCfg), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 
 	adp := NewEagerCopyAdapter()
@@ -72,20 +73,20 @@ func verifyGitlinkRejectionsAndLimits(t *testing.T, ctx context.Context, tmp str
 	// repository.
 	outsideGit := filepath.Join(tmp, "outside-git")
 	if err := os.MkdirAll(outsideGit, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(outsideGit, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	extRepo := filepath.Join(tmp, "ext-repo")
 	if err := os.MkdirAll(extRepo, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(extRepo, ".git"), []byte("gitdir: "+outsideGit+"\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(extRepo, "kept.txt"), []byte("kept\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	external, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "external-gitlink",
@@ -109,10 +110,10 @@ func verifyGitlinkRejectionsAndLimits(t *testing.T, ctx context.Context, tmp str
 	// 2. Unresolved gitlink must fail without publishing ready repository.
 	badLinkRepo := filepath.Join(tmp, "badlink-repo")
 	if err := os.MkdirAll(badLinkRepo, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(badLinkRepo, ".git"), []byte("gitdir: ./.git/modules/missing\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	_, err = adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "unresolved-gitlink",
@@ -142,25 +143,25 @@ func TestEagerCopyJournalSyncDirectoryRemovalSymlinkReplacementAndMetadata(t *te
 	tmp := t.TempDir()
 	srcRoot := filepath.Join(tmp, "sync-src")
 	if err := os.MkdirAll(filepath.Join(srcRoot, "olddir", "nested"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.MkdirAll(filepath.Join(srcRoot, "dir2file"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "olddir", "nested", "gone.txt"), []byte("bye"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "dir2file", "child.txt"), []byte("child"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "file2dir"), []byte("was-file"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.WriteFile(filepath.Join(srcRoot, "modeonly.sh"), []byte("#!/bin/sh\necho hi\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if err := os.Symlink("modeonly.sh", filepath.Join(srcRoot, "link")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 
 	adp := NewEagerCopyAdapter()
@@ -185,7 +186,7 @@ func TestEagerCopyJournalSyncDirectoryRemovalSymlinkReplacementAndMetadata(t *te
 	// Verify sync errors are propagated rather than ignored when Core view is released early.
 	_ = view.Core.ReleaseView()
 	if err := os.WriteFile(filepath.Join(view.PrimaryWorkPath, "after-release.txt"), []byte("fail"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if _, _, err := adp.CheckpointBarrier(ctx, view.ViewID); err == nil {
 		t.Fatalf("expected CheckpointBarrier to propagate Core sync error after view release")
@@ -197,35 +198,35 @@ func applyMaterializedFilesystemMutations(t *testing.T, workPath string) {
 	t.Helper()
 	// 1. Delete nested directory tree.
 	if err := os.RemoveAll(filepath.Join(workPath, "olddir")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.RemoveAll failed", err)
 	}
 	// 2. Replace directory with regular file.
 	if err := os.RemoveAll(filepath.Join(workPath, "dir2file")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.RemoveAll failed", err)
 	}
 	if err := os.WriteFile(filepath.Join(workPath, "dir2file"), []byte("now-a-file"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	// 3. Replace regular file with directory + child file.
 	if err := os.Remove(filepath.Join(workPath, "file2dir")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Remove failed", err)
 	}
 	if err := os.MkdirAll(filepath.Join(workPath, "file2dir"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(workPath, "file2dir", "inside.txt"), []byte("inside-dir"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	// 4. Retarget symlink.
 	if err := os.Remove(filepath.Join(workPath, "link")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Remove failed", err)
 	}
 	if err := os.Symlink("dir2file", filepath.Join(workPath, "link")); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Symlink failed", err)
 	}
 	// 5. Metadata-only chmod on unchanged file content.
 	if err := os.Chmod(filepath.Join(workPath, "modeonly.sh"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "os.Chmod failed", err)
 	}
 }
 
@@ -313,15 +314,13 @@ func TestLinkedWorktreeGitlinkIsAuthorizedOnlyByItsStructuralLinkage(t *testing.
 	gitDirFor := func(t *testing.T) (repo, worktree, admin string) {
 		t.Helper()
 		base, err := filepath.EvalSymlinks(t.TempDir())
-		if err != nil {
-			t.Fatal(err)
-		}
+		testutil.FailErr(t, "filepath.EvalSymlinks failed", err)
 		repo, worktree = filepath.Join(base, "repo"), filepath.Join(base, "wt")
 		if err := os.MkdirAll(repo, 0o755); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "create directory", err)
 		}
 		if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("hello\n"), 0o644); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 		gittest.InitCommit(t, repo, "init")
 		gittest.Run(t, repo, "worktree", "add", "-b", "linked", worktree)
@@ -355,7 +354,7 @@ func TestLinkedWorktreeGitlinkIsAuthorizedOnlyByItsStructuralLinkage(t *testing.
 	t.Run("a back-reference to another worktree is refused", func(t *testing.T) {
 		_, worktree, admin := gitDirFor(t)
 		if err := os.WriteFile(filepath.Join(admin, "gitdir"), []byte(filepath.Join(t.TempDir(), ".git")+"\n"), 0o644); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 		refused(t, prepare(t, "forged-back-reference", worktree))
 	})
@@ -363,7 +362,7 @@ func TestLinkedWorktreeGitlinkIsAuthorizedOnlyByItsStructuralLinkage(t *testing.
 		_, _, admin := gitDirFor(t)
 		impostor := t.TempDir()
 		if err := os.WriteFile(filepath.Join(impostor, ".git"), []byte("gitdir: "+admin+"\n"), 0o644); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 		refused(t, prepare(t, "borrowed-administrative-dir", impostor))
 	})
@@ -372,14 +371,14 @@ func TestLinkedWorktreeGitlinkIsAuthorizedOnlyByItsStructuralLinkage(t *testing.
 		elsewhere := t.TempDir()
 		gittest.Init(t, elsewhere)
 		if err := os.WriteFile(filepath.Join(admin, "commondir"), []byte(filepath.Join(elsewhere, ".git")+"\n"), 0o644); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "write file", err)
 		}
 		refused(t, prepare(t, "foreign-common-dir", worktree))
 	})
 	t.Run("an administrative directory without a common directory is refused", func(t *testing.T) {
 		_, worktree, admin := gitDirFor(t)
 		if err := os.Remove(filepath.Join(admin, "commondir")); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "os.Remove failed", err)
 		}
 		refused(t, prepare(t, "no-common-dir", worktree))
 	})

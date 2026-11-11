@@ -155,7 +155,8 @@ func TestRetainedObjectStoreInspectStockCancellationAndCorruptionErrors(t *testi
 	_, _, err = store.ImportRepositoryObjects(ctx, []string{filepath.Join(srcRepo, ".git", "objects")}, []string{headOID})
 	testutil.FailErr(t, "ImportRepositoryObjects", err)
 
-	// 1. Canceled context returns Complete=false and context.Canceled for both InspectStock and NewRetainedObjectStoreContext.
+	// 1. Canceled context returns Complete=false and context.Canceled for both InspectStock and
+	// NewRetainedObjectStoreContext.
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel()
 	if inv, cErr := store.InspectStock(cancelCtx); !errors.Is(cErr, context.Canceled) || inv.Complete {

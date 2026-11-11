@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
@@ -20,7 +21,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 
 	trunkSecond := filepath.Join(fx.baseDir, "trunk-second")
 	if err := os.MkdirAll(trunkSecond, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	gittest.Init(t, trunkSecond)
 	writeFile(t, filepath.Join(trunkSecond, "sec.txt"), "sec-v0\n")
@@ -40,9 +41,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 
 	const workerID = "worker-multi-git-rec"
 	viewA, err := fx.mountedAdp.Prepare(ctx, multiPrepareReq("view-multi-a"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.mountedAdp.Prepare failed", err)
 	defer func() { _, _ = fx.mountedAdp.Release(context.Background(), viewA.ViewID) }()
 	if err := fx.mountedAdp.BindPrivateGit(viewA.ViewID, workerID, fx.gitMgr); err != nil {
 		t.Fatalf("BindPrivateGit viewA: %v", err)
@@ -61,9 +60,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 		t.Fatalf("primary commit: %v", err)
 	}
 	wantPrimaryOID, err := primaryExec.Run(ctx, ".", "rev-parse", "HEAD")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "primaryExec.Run failed", err)
 	wantPrimaryOID = strings.TrimSpace(wantPrimaryOID)
 
 	secViewID := privategit.SecondaryViewID(viewA.ViewID, "second")
@@ -79,9 +76,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 		t.Fatalf("second commit: %v", err)
 	}
 	wantSecondOID, err := secExec.Run(ctx, ".", "rev-parse", "HEAD")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "secExec.Run failed", err)
 	wantSecondOID = strings.TrimSpace(wantSecondOID)
 
 	cpGit, err := fx.gitMgr.CaptureCheckpointGitState(ctx, viewA.ViewID, "cp-multi-git")
@@ -104,9 +99,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 			{ID: "second", Label: "second", TrunkPath: trunkSecond, IsPrimary: false},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	manifest, err := pub.Publish(ctx, checkpoint.PublishRequest{
 		CheckpointID: "cp-multi-git",
 		PrivateGit: checkpoint.PrivateGitSnapshot{
@@ -127,9 +120,7 @@ func TestApplyCheckpointToViewRestoresPrimaryAndSecondaryRootGitRefs(t *testing.
 
 	// Prepare a fresh view without any pre-initialized private git repos and restore the checkpoint into it.
 	viewRec, err := fx.mountedAdp.Prepare(ctx, multiPrepareReq("view-multi-rec"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.mountedAdp.Prepare failed", err)
 	defer func() { _, _ = fx.mountedAdp.Release(context.Background(), viewRec.ViewID) }()
 	if err := fx.mountedAdp.BindPrivateGit(viewRec.ViewID, workerID+"-rec", fx.gitMgr); err != nil {
 		t.Fatalf("BindPrivateGit viewRec: %v", err)

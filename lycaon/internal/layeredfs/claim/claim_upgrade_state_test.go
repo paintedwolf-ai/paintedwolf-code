@@ -161,7 +161,8 @@ func TestHostAndDenWorkspaceStateAndReceiptsDistinguishGitCommandAndCheckpoint(t
 		t.Fatalf("command running must keep readiness=ready and checkpoint distinct, got %+v", snapCmd)
 	}
 
-	// 3. Failed checkpoint persistence surfaces CheckpointFailedPersistence + ActionRetryCheckpoint while Readiness stays StateReady.
+	// 3. Failed checkpoint persistence surfaces CheckpointFailedPersistence + ActionRetryCheckpoint while
+	// Readiness stays StateReady.
 	snapCPFail, err := coord.RecordCheckpointFailure("v-mat", "cp-attempt-1", adapter.ReasonBarrierFailed, "disk full writing checkpoint")
 	testutil.FailErr(t, "RecordCheckpointFailure", err)
 	recCPFail := BuildReceipt(snapCPFail)

@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 type mockProcessMountRig struct {
@@ -58,14 +59,10 @@ func TestStorageLossOrderingENOSPCAndCorruptMetadata(t *testing.T) {
 			return nil
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "recovery.NewCoordinator failed", err)
 
 	view, err := fx.mountedAdp.Prepare(ctx, fx.prepareRequest("view-enospc"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.mountedAdp.Prepare failed", err)
 	defer func() { _, _ = fx.mountedAdp.Release(ctx, view.ViewID) }()
 
 	qpApp := layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}
@@ -80,11 +77,9 @@ func TestStorageLossOrderingENOSPCAndCorruptMetadata(t *testing.T) {
 		SourceGeneration: "g-1",
 		SelectedRoots:    []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: fx.trunkDir, IsPrimary: true}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	if _, err := pub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-durable-1"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "pub.Publish failed", err)
 	}
 
 	if err := coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
@@ -115,7 +110,7 @@ func TestStorageLossOrderingENOSPCAndCorruptMetadata(t *testing.T) {
 	unknownPath := filepath.Join(fx.baseDir, "recovery-enospc", "journals", "worker-future.json")
 	unknownRaw := []byte(`{"format_version":99,"worker_id":"worker-future","project_id":"p-1"}`)
 	if err := os.WriteFile(unknownPath, unknownRaw, 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if _, err := coord.LoadWorkerJournal("worker-future"); !errors.Is(err, recovery.ErrUnsupportedFormatVersion) {
 		t.Fatalf("expected ErrUnsupportedFormatVersion, got %v", err)
@@ -128,7 +123,7 @@ func TestStorageLossOrderingENOSPCAndCorruptMetadata(t *testing.T) {
 	corruptPath := filepath.Join(fx.baseDir, "recovery-enospc", "journals", "worker-corrupt.json")
 	corruptRaw := []byte(`{"format_version":1,"worker_id":"worker-corrupt","project_id":"p-1","unexpected_field":true}`)
 	if err := os.WriteFile(corruptPath, corruptRaw, 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	if _, err := coord.LoadWorkerJournal("worker-corrupt"); !errors.Is(err, recovery.ErrCorruptRecoveryMetadata) {
 		t.Fatalf("expected ErrCorruptRecoveryMetadata, got %v", err)
@@ -150,14 +145,10 @@ func TestSameBootSurvivingWriterSettlementAndScopedReconciliation(t *testing.T) 
 		ProcessCtrl:     rig,
 		MountReconciler: rig,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "recovery.NewCoordinator failed", err)
 
 	view1, err := fx.mountedAdp.Prepare(ctx, fx.prepareRequest("view-w1"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.mountedAdp.Prepare failed", err)
 	defer func() { _, _ = fx.mountedAdp.Release(ctx, view1.ViewID) }()
 
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
@@ -169,12 +160,10 @@ func TestSameBootSurvivingWriterSettlementAndScopedReconciliation(t *testing.T) 
 		SourceGeneration: "g-1",
 		SelectedRoots:    []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: fx.trunkDir, IsPrimary: true}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	_, _ = view1.Core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}, []byte("package main // w1\n"), 0o644)
 	if _, err := pub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-w1"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "pub.Publish failed", err)
 	}
 
 	// Register both worker-1 and worker-2 under the same runtime prefix.
@@ -257,9 +246,7 @@ func TestRebuildWithAdapterAndReleaseSeparation(t *testing.T) {
 	eagerAdp := adapter.NewEagerCopyAdapter()
 
 	viewEager, err := eagerAdp.Prepare(ctx, fx.prepareRequest("view-eager-1"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "eagerAdp.Prepare failed", err)
 	qpApp := layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}
 	_, _ = viewEager.Core.WriteFile(qpApp, []byte("package main // adapter-switch-v1\n"), 0o644)
 
@@ -272,11 +259,9 @@ func TestRebuildWithAdapterAndReleaseSeparation(t *testing.T) {
 		SourceGeneration: "g-sw",
 		SelectedRoots:    []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: fx.trunkDir, IsPrimary: true}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	if _, err := pub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-sw-1"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "pub.Publish failed", err)
 	}
 	_ = fx.coord.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
 		FormatVersion:             recovery.FormatVersion,

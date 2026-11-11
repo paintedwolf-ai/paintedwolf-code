@@ -97,7 +97,8 @@ func taskLatestCheckpointID(task *api.WorkerTask, store *checkpoint.Store) (stri
 	return store.LatestCheckpointID()
 }
 
-// TargetRootsForTaskCheckpoint resolves the target root map for a task's checkpoint manifest and rejects unmapped RootIDs.
+// TargetRootsForTaskCheckpoint resolves the target root map for a task's checkpoint manifest and
+// rejects unmapped RootIDs.
 func TargetRootsForTaskCheckpoint(task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest) (map[string]string, error) {
 	targetRoots := make(map[string]string, len(roots)+4)
 	primaryDir := ""

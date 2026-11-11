@@ -147,7 +147,8 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 		t.Fatalf("expected no trunk.changed notice for unobserved/dirty-upper paths, got err=%v notice=%+v", err, assembled.TrunkNotice)
 	}
 
-	// 3. Lower source change on observed pkg/dep.py via real repochange.Notify invalidates GateState & OverlaySourceProof and queues trunk.changed.
+	// 3. Lower source change on observed pkg/dep.py via real repochange.Notify invalidates GateState &
+	// OverlaySourceProof and queues trunk.changed.
 	testutil.FailErr(t, "WriteFile dep v2", os.WriteFile(filepath.Join(primary, "pkg", "dep.py"), []byte("dep = 2\n"), 0o644))
 	repochange.Notify(ctx, repochange.Event{
 		ProjectDir: primary,
@@ -170,7 +171,8 @@ func TestHostEndToEndWorkerWorkspaceObservationVerificationAndNextTurnNotice(t *
 
 	assertTrunkNoticeDeliveredOnce(t, workerCtx, mgr, child)
 
-	// 4. Watcher overflow via real repochange.Notify (WorktreeChangeResync) marks matching root uncertain without affecting unrelated root.
+	// 4. Watcher overflow via real repochange.Notify (WorktreeChangeResync) marks matching root uncertain
+	// without affecting unrelated root.
 	repochange.Notify(ctx, repochange.Event{
 		ProjectDir: other.primary,
 		Kind:       repochange.WorktreeChanged,

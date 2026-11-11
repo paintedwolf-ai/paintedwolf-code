@@ -43,7 +43,7 @@ func newRecoveryFixture(t *testing.T) *recoveryFixture {
 	baseDir := t.TempDir()
 	trunkDir := filepath.Join(baseDir, "trunk")
 	if err := os.MkdirAll(filepath.Join(trunkDir, "sub"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	gittest.Init(t, trunkDir)
 	writeFile(t, filepath.Join(trunkDir, "app.go"), "package main // v0\n")
@@ -52,15 +52,11 @@ func newRecoveryFixture(t *testing.T) *recoveryFixture {
 	gittest.CommitAll(t, trunkDir, "initial trunk")
 
 	cpStore, err := checkpoint.NewStore(filepath.Join(baseDir, "cpstore"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewStore failed", err)
 	gitMgr, err := privategit.NewManager(privategit.ManagerConfig{
 		BackingDir: filepath.Join(baseDir, "privategit"),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "privategit.NewManager failed", err)
 
 	fx := &recoveryFixture{t: t, baseDir: baseDir, trunkDir: trunkDir, cpStore: cpStore, gitMgr: gitMgr}
 	fx.coord = fx.coordinatorOnBoot("boot-1")
@@ -96,10 +92,10 @@ func (fx *recoveryFixture) coordinatorOnBoot(boot string) *recovery.Coordinator 
 func writeFile(t *testing.T, p, body string) {
 	t.Helper()
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 }
 
@@ -131,14 +127,12 @@ func TestFaultInjectionAllSevenPhasesAndQuarantine(t *testing.T) {
 	}
 
 	view1, err := fx.mountedAdp.Prepare(ctx, fx.prepareRequest("view-init"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.mountedAdp.Prepare failed", err)
 	defer func() { _, _ = fx.mountedAdp.Release(ctx, view1.ViewID) }()
 
 	qpApp := layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}
 	if _, err := view1.Core.WriteFile(qpApp, []byte("package main // cpA\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "view1.Core.WriteFile failed", err)
 	}
 
 	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
@@ -155,9 +149,7 @@ func TestFaultInjectionAllSevenPhasesAndQuarantine(t *testing.T) {
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 
 	// Publish valid baseline Checkpoint A.
 	resA, err := pub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-A"})
@@ -165,12 +157,12 @@ func TestFaultInjectionAllSevenPhasesAndQuarantine(t *testing.T) {
 		t.Fatalf("publish cp-A: %v", err)
 	}
 	if err := fx.coord.RecordTransition(workerID, view1.ViewID, recovery.PhasePublication, recovery.StateCommitted, "cp-A", "publish", nil, false); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "fx.coord.RecordTransition failed", err)
 	}
 
 	// Inject fault during barrier_flush and publication (leaving a half-written manifest.json.tmp for cp-B).
 	if _, err := view1.Core.WriteFile(qpApp, []byte("package main // unsealed-B\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "view1.Core.WriteFile failed", err)
 	}
 	_, err = pub.Publish(ctx, checkpoint.PublishRequest{
 		CheckpointID: "cp-B-half",
@@ -234,9 +226,7 @@ func TestFaultInjectionAllSevenPhasesAndQuarantine(t *testing.T) {
 	}
 
 	inv, err := fx.coord.LoadInventory()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.coord.LoadInventory failed", err)
 	var hasRetained, hasInterrupted, hasRuntime bool
 	for _, e := range inv.Entries {
 		switch e.Bucket {
@@ -269,9 +259,7 @@ func TestOverwriteAndDeleteAfterCheckpointACrashReconstructsA(t *testing.T) {
 	})
 
 	viewA, err := fx.mountedAdp.Prepare(ctx, fx.prepareRequest("view-a"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "fx.mountedAdp.Prepare failed", err)
 	defer func() { _, _ = fx.mountedAdp.Release(ctx, viewA.ViewID) }()
 
 	qpApp := layeredfs.QualifiedPath{RootID: "primary", Rel: "app.go"}
@@ -292,11 +280,9 @@ func TestOverwriteAndDeleteAfterCheckpointACrashReconstructsA(t *testing.T) {
 		SourceGeneration: "gen-a",
 		SelectedRoots:    []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: fx.trunkDir, IsPrimary: true}},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	if _, err := pub.Publish(ctx, checkpoint.PublishRequest{CheckpointID: "cp-A"}); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "pub.Publish failed", err)
 	}
 	_ = fx.coord.RecordTransition(workerID, viewA.ViewID, recovery.PhasePublication, recovery.StateCommitted, "cp-A", "publish", nil, false)
 

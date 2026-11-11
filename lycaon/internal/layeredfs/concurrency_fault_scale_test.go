@@ -145,7 +145,8 @@ func TestSymlinkRetargetingAndParentReplacementRejectsEscape(t *testing.T) {
 	testutil.FailErr(t, "symlink escape_rel", os.Symlink("../../outside/secret.txt", filepath.Join(trunk, "sub", "escape_rel")))
 	testutil.FailErr(t, "symlink escape_abs", os.Symlink(outsideSecret, filepath.Join(trunk, "sub", "escape_abs")))
 
-	// Hook that replaces a real directory `trunk/racedir` with a symlink to `outside` right before descriptor traversal opens it.
+	// Hook that replaces a real directory `trunk/racedir` with a symlink to `outside` right before
+	// descriptor traversal opens it.
 	testutil.FailErr(t, "mkdir trunk/racedir", os.MkdirAll(filepath.Join(trunk, "racedir"), 0o755))
 	replaceRaceActive := false
 

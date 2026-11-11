@@ -29,7 +29,7 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 
 	trunkDir := filepath.Join(baseDir, "trunk")
 	if err := os.MkdirAll(filepath.Join(trunkDir, "src"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	gittest.Init(t, trunkDir)
 	writeFile(t, filepath.Join(trunkDir, "README.md"), "trunk readme v0\n")
@@ -37,15 +37,11 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 	gittest.CommitAll(t, trunkDir, "initial trunk commit")
 
 	cpStore, err := checkpoint.NewStore(filepath.Join(baseDir, "cpstore"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewStore failed", err)
 	gitMgr, err := privategit.NewManager(privategit.ManagerConfig{
 		BackingDir: filepath.Join(baseDir, "privategit"),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "privategit.NewManager failed", err)
 
 	views := watchMountedViews(t, adp)
 	onBoot := func(boot string) *recovery.Coordinator {
@@ -93,9 +89,7 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 		t.Fatalf("git commit: %v", err)
 	}
 	headOIDA, err := gitExec.Run(t.Context(), ".", "rev-parse", "HEAD")
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "gitExec.Run failed", err)
 	headOIDA = strings.TrimSpace(headOIDA)
 
 	cpGitA, err := gitMgr.CaptureCheckpointGitState(t.Context(), parentViewID, "cp-nfs-A")
@@ -117,9 +111,7 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 			},
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	if _, err := parentPub.Publish(t.Context(), checkpoint.PublishRequest{
 		CheckpointID: "cp-nfs-A",
 		PrivateGit: checkpoint.PrivateGitSnapshot{
@@ -236,9 +228,7 @@ func verifyRecoveredMountAndStackedChild(
 			FlushClientDirtyData: func(ctx context.Context) error { return adp.FlushClientData(ctx, stacked.ChildViewID) },
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPublisher failed", err)
 	if _, err := childPub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: "cp-nfs-child-C"}); err != nil {
 		t.Fatalf("Publish cp-nfs-child-C: %v", err)
 	}
@@ -247,9 +237,7 @@ func verifyRecoveredMountAndStackedChild(
 		Store:       cpStore,
 		TargetRoots: map[string]string{"primary": trunkDir},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "checkpoint.NewPromoter failed", err)
 	if err := promoteStackedAndCommit(t, coord, recovery.StackedPromotionRequest{
 		ChildCheckpointID: "cp-nfs-child-C",
 		TargetRoots:       map[string]string{"primary": trunkDir},

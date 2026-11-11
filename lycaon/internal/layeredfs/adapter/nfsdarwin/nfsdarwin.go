@@ -222,7 +222,8 @@ func (a *Adapter) TrackDirtyClientPath(viewID, rootID, relPath string) {
 	st.dirtyMu.Unlock()
 }
 
-// LastFlushStatsForView returns the counts of regular files and directories synced during the most recent flush on viewID.
+// LastFlushStatsForView returns the counts of regular files and directories synced during the most
+// recent flush on viewID.
 func (a *Adapter) LastFlushStatsForView(viewID string) (filesSynced, dirsSynced int) {
 	a.mu.RLock()
 	st := a.views[viewID]

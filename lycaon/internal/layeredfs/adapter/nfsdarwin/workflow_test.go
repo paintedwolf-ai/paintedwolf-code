@@ -182,7 +182,8 @@ func TestNarrowRealMountedWorkerWorkflowEndToEnd(t *testing.T) {
 
 	cpStore := publishWorkflowCheckpoint(t, adp, gitMgr, prep.Core, cpStoreDir, trunkDir, viewID, workerID, checkpointID, cpGitState)
 
-	// 6. Release the mounted view and verify subsequent privategit operations fail closed with ErrMountedWorktreeUnavailable.
+	// 6. Release the mounted view and verify subsequent privategit operations fail closed with
+	// ErrMountedWorktreeUnavailable.
 	assertReleaseClosesPrivateGit(t, adp, gitExec, viewID, trunkDir, workerID)
 
 	// 7. Import checkpoint refs and promote the checkpoint into TrunkRoot (#1671 + #1663).
