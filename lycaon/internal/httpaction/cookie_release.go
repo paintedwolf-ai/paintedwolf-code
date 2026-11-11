@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/httpcookies"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -152,9 +153,7 @@ func managedJarCookieDelivery(
 			return err
 		}
 		target := hop.URL
-		hopSpec := spec
-		hopSpec.target = target
-		hopSpec.hostHeader = hop.HostHeader
+		hopSpec := spec.forHop(hop)
 		hopIssuer := cookieHopIssuer(hopSpec)
 		destination, label := requestDestination(hopSpec)
 		for {
@@ -216,6 +215,9 @@ func managedJarCookieDelivery(
 			}
 			// A denial/redaction withholds only these bytes, not the HTTP operation.
 			allowed := resolution.Decision == secretmatch.SendUnchanged
+			if allowed {
+				egressgate.ApproveRecipient(hopCtx, destination)
+			}
 			for _, cookie := range foreign {
 				if reviewed[cookie] == nil {
 					reviewed[cookie] = make(map[string]bool)
@@ -264,9 +266,7 @@ func frontendJarCookieDelivery(
 	store.SetDelivery("", func(cookie httpcookies.Cookie) bool { return current[cookie] })
 	beforeHop := func(hopCtx context.Context, hop outboundhttp.HopRequest) error {
 		target := hop.URL
-		hopSpec := spec
-		hopSpec.target = target
-		hopSpec.hostHeader = hop.HostHeader
+		hopSpec := spec.forHop(hop)
 		hopIssuer := cookieHopIssuer(hopSpec)
 		destination, label := requestDestination(hopSpec)
 		selected := store.Selected(target)
@@ -357,6 +357,9 @@ func frontendJarCookieDelivery(
 			tctx.Effects.Secrets.Withhold(hopCtx)
 		}
 		allowed := resolution.Decision == secretmatch.SendUnchanged
+		if allowed {
+			egressgate.ApproveRecipient(hopCtx, destination)
+		}
 		for _, cookie := range matchedCookies {
 			if reviewed[cookie] == nil {
 				reviewed[cookie] = make(map[string]bool)

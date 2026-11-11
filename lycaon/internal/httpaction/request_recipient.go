@@ -22,6 +22,13 @@ func requestDestination(spec requestSpec) (id, label string) {
 	return secretmatch.DestinationKey(id, "request_overrides", strings.Join(overrides, "\x00")), label + " (" + strings.Join(overrides, "; ") + ")"
 }
 
+// forHop is the request as one hop sends it.
+func (spec requestSpec) forHop(hop outboundhttp.HopRequest) requestSpec {
+	spec.target = hop.URL
+	spec.hostHeader = hop.HostHeader
+	return spec
+}
+
 func (spec requestSpec) recipientOverrides() []string {
 	if spec.target == nil {
 		return nil
