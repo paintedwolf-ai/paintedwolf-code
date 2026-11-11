@@ -14783,6 +14783,8 @@ export interface components {
             tool_call_id?: string;
             /** Format: date-time */
             recorded_at: string;
+            /** @description The change that wrote this text; its Walk step explains it. */
+            effect_id?: string;
         };
         /**
          * @description Line provenance for one file. head_sha256 is the tip after hash the

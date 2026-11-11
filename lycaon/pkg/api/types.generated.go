@@ -6866,6 +6866,8 @@ type SourceAttributionInterval struct {
 	Turn       int       `json:"turn"`
 	ToolCallID *string   `json:"tool_call_id,omitempty"`
 	RecordedAt time.Time `json:"recorded_at"`
+	// The change that wrote this text; its Walk step explains it.
+	EffectID *string `json:"effect_id,omitempty"`
 }
 
 // SourceAttributionResponse Line provenance for one file. head_sha256 is the tip after hash the

@@ -2,6 +2,7 @@ import { createEffect, createMemo, For, Show } from "solid-js";
 import { AnchoredSurface } from "../../primitives/AnchoredSurface.tsx";
 import { ShowLatest } from "../../primitives/ShowLatest.tsx";
 import type { LineFacts, LineFactRow } from "./line-facts.ts";
+import { LineFactsBriefing } from "./line-facts-briefing.tsx";
 
 export type LineFactsCardState = {
   anchor: HTMLElement;
@@ -9,6 +10,8 @@ export type LineFactsCardState = {
   path: string;
   facts: LineFacts;
   enter: boolean;
+  /** Present where the card may explain its latest change. */
+  projectId?: string;
 };
 type Props = {
   state: LineFactsCardState | null;
@@ -76,6 +79,10 @@ export function LineFactsCard(props: Props) {
             return <Show when={sectionRows().length}>
             <section aria-label={label()}>
               <div class="files-line-facts__section">{label()}</div>
+              <Show when={section === "changed" && state().projectId && sectionRows()[0]?.effectId}>
+                <LineFactsBriefing projectId={state().projectId!} effectId={sectionRows()[0]!.effectId!} line={state().line}
+                  onOpenEvidence={props.onDismiss} returnFocus={() => state().anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts")?.focus()} />
+              </Show>
               <For each={sectionRows().map(row => row.key)}>{key => {
                 const initial = sectionRows().find(item => item.key === key);
                 if (!initial) return null;

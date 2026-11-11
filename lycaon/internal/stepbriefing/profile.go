@@ -87,7 +87,13 @@ func (p *Profile) Resolve(ctx context.Context, target briefing.Target) (briefing
 	if err != nil {
 		return briefing.Request{}, err
 	}
-	if got := resolved.fingerprint(); got != wanted.ScopeFingerprint {
+	got := resolved.fingerprint()
+	// An effect never changes, so a target naming only its id is complete.
+	if wanted.Kind == "effect" && wanted.ScopeFingerprint == "" {
+		wanted.ScopeFingerprint = got
+		wanted.Scope = wire.SourceStepBriefingScope{Kind: "file", RootIds: []string{resolved.effects[0].RootID}, FileID: resolved.effects[0].FileID}
+	}
+	if got != wanted.ScopeFingerprint {
 		return briefing.Request{}, fmt.Errorf("%w: the step changed since it was listed", briefing.ErrTargetUnavailable)
 	}
 	sections, err := p.sections(ctx, target.ProjectID, resolved)

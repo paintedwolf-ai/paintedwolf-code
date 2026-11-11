@@ -116,3 +116,10 @@
 @utility den-walk-briefing-area {
   display: contents;
 }
+
+@utility files-line-facts__briefing {
+  display: grid;
+  gap: 4px;
+  padding: 2px 8px 6px;
+  font-size: var(--text-den-hint);
+}

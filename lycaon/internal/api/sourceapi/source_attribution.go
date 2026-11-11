@@ -116,6 +116,9 @@ func (s *History) HandleGetProjectSourceAttribution(w http.ResponseWriter, r *ht
 		if iv.ToolCallID != "" {
 			row.ToolCallID = &iv.ToolCallID
 		}
+		if iv.EffectID != "" {
+			row.EffectID = &iv.EffectID
+		}
 		intervals = append(intervals, row)
 	}
 	httpio.WriteJSON(w, http.StatusOK, wire.SourceAttributionResponse{

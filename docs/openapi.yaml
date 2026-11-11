@@ -36914,6 +36914,10 @@ components:
           x-go-name: RecordedAt
           type: string
           format: date-time
+        effect_id:
+          x-go-pointer: true
+          type: string
+          description: The change that wrote this text; its Walk step explains it.
     SourceAttributionResponse:
       x-go-generate: true
       type: object
