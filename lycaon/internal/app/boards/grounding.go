@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/briefing"
+	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
 	"github.com/lycaon/lycaon/internal/browserengine"
@@ -269,7 +270,7 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 		enabledFn = perms.AIRationaleEnabled
 	}
 	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Cause:       r.deps.Sessions.Manager.Runner.Transcript,
+		Cause:       briefingstore.NewCausal(r.deps.Storage.Database),
 		Workers:     r.deps.Delegations.Queue,
 		Progress:    r.Progress,
 		Root:        sessionRootResolver{store: r.deps.Storage.Sessions},

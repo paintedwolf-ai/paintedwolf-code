@@ -13,7 +13,7 @@ import (
 const briefingActionOutput = `-- name: BriefingActionOutput :one
 SELECT m.id, m.ord,
        CAST(substr(m.content, 1, CAST(?1 AS INTEGER)) AS TEXT) AS prose,
-       CAST(length(CAST(m.reasoning_json AS BLOB)) AS INTEGER) AS reasoning_bytes,
+       CAST(COALESCE(length(CAST(m.reasoning_json AS BLOB)), 0) AS INTEGER) AS reasoning_bytes,
        CAST(CASE WHEN m.reasoning_json IS NOT NULL AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?2 AS INTEGER)
             THEN m.reasoning_json ELSE '' END AS TEXT) AS reasoning_payload,
        CAST(json_array_length(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) AS INTEGER) AS call_count

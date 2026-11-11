@@ -1,4 +1,6 @@
-package store
+// Package briefingstore persists briefing state and reads its evidence from
+// the store.
+package briefingstore
 
 import (
 	"context"
@@ -11,15 +13,25 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 )
 
+// Causal reads action evidence from the transcript.
+type Causal struct {
+	handle  db.ReadHandle
+	queries *db.Queries
+}
+
+func NewCausal(handle db.ReadHandle) *Causal {
+	return &Causal{handle: handle, queries: db.New(handle)}
+}
+
 // ReadActionCause reads the bounded transcript material around one tool call:
 // its model output, the user turn before it and the results between them.
-func (s *sqlTranscript) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (briefing.CausalRead, error) {
-	tx, err := s.core.db.BeginReadTx(ctx)
+func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (briefing.CausalRead, error) {
+	tx, err := c.handle.BeginReadTx(ctx)
 	if err != nil {
 		return briefing.CausalRead{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	q := s.core.queries.WithTx(tx)
+	q := c.queries.WithTx(tx)
 	before := int64(math.MaxInt64)
 	if ord, err := q.BriefingToolResultOrd(ctx, db.BriefingToolResultOrdParams{SessionID: ref.SessionID, ToolCallID: db.NullString(ref.ToolCallID)}); err == nil {
 		before = ord
