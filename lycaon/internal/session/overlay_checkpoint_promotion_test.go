@@ -75,13 +75,13 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 
 	danglingOID := "1111111111111111111111111111111111111111"
 	unauthImporter := func(ctx context.Context, _, worker string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
-		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, storeDir, "chk-1", worker, git, map[string]string{"primary": primary})
+		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, checkpoint.GitObjectSources{StoreDir: storeDir}, "chk-1", worker, git, map[string]string{"primary": primary})
 	}
 	if _, err := unauthImporter(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": danglingOID}}); !errors.Is(err, checkpoint.ErrUnauthorizedGitDir) {
 		t.Fatalf("expected ErrUnauthorizedGitDir for external worktree gitdir without grant, got %v", err)
 	}
 	importer := func(ctx context.Context, _, worker string, git checkpoint.PrivateGitSnapshot) (map[string]string, error) {
-		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, storeDir, "chk-1", worker, git, map[string]string{"primary": primary}, worktreeGit, commonGit)
+		return checkpoint.ImportAndValidateCheckpointGitRefs(ctx, checkpoint.GitObjectSources{StoreDir: storeDir}, "chk-1", worker, git, map[string]string{"primary": primary}, worktreeGit, commonGit)
 	}
 	if _, err := importer(t.Context(), "tx-1", "w-1", checkpoint.PrivateGitSnapshot{Refs: map[string]string{"refs/heads/feat": danglingOID}}); err == nil {
 		t.Fatal("expected error for dangling object OID, got nil")
@@ -90,7 +90,7 @@ func TestCheckpointRefImportValidatesReachableObjectsConflictsAndWorktreeGitdir(
 		t.Fatalf("dangling ref must not be written, stat err = %v", err)
 	}
 
-	objsDir := filepath.Join(storeDir, "objects")
+	objsDir := checkpoint.CheckpointGitObjectsDir(storeDir, "chk-1", "")
 	blobOID, err := checkpoint.WriteLooseGitObject(objsDir, "blob", []byte("hello world\n"))
 	testutil.FailErr(t, "write blob", err)
 	blobRaw, _ := hex.DecodeString(blobOID)
