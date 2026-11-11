@@ -3,6 +3,7 @@
 package fuselinux
 
 import (
+	"container/list"
 	"path"
 	"sort"
 	"strings"
@@ -26,6 +27,9 @@ type nodeTable struct {
 	// adoptedInos keeps the inode number a file had before its first copy-up, so it survives
 	// eviction of the node. One entry per copied-up object, the same order as Core's private nodes.
 	adoptedInos map[layeredfs.NodeID]uint64
+	// budget and lru bound how many nodes the kernel holds; see node_budget.go.
+	budget int
+	lru    *list.List
 }
 
 // privateInoBase separates Core's small private node IDs from the root inode and from its
@@ -49,6 +53,8 @@ func newNodeTable() *nodeTable {
 		dirtyRels:       make(map[string]struct{}),
 		nextDirFH:       1 << 50,
 		adoptedInos:     make(map[layeredfs.NodeID]uint64),
+		budget:          DefaultNodeBudget,
+		lru:             newNodeLRU(),
 	}
 }
 
@@ -158,6 +164,7 @@ func (t *nodeTable) acquireNode(rel string, attr layeredfs.EntryAttr) *fuseNode 
 	defer t.mu.Unlock()
 	fn := t.resolveForRefLocked(clean, attr)
 	fn.nlookup++
+	t.touchLocked(fn)
 	return fn
 }
 
@@ -241,6 +248,7 @@ func (t *nodeTable) evictIfUnreferencedLocked(fn *fuseNode) {
 	if fn.corePrivID != 0 && t.byCorePrivateID[fn.corePrivID] == fn {
 		delete(t.byCorePrivateID, fn.corePrivID)
 	}
+	t.untrackLocked(fn)
 	delete(t.byFuseID, fn.fuseID)
 }
 

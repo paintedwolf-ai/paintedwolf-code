@@ -7,7 +7,9 @@ import (
 	"encoding/binary"
 	"errors"
 	"io/fs"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"golang.org/x/sys/unix"
@@ -153,14 +155,45 @@ func encodeEntryOut(s *Server, nodeID, ino uint64, attr layeredfs.EntryAttr) []b
 	out := make([]byte, 128)
 	binary.LittleEndian.PutUint64(out[0:8], nodeID)
 	binary.LittleEndian.PutUint64(out[8:16], 1)
+	ttl := s.cacheTTL(nodeID)
+	putValid(out[16:24], out[32:36], ttl)
+	putValid(out[24:32], out[36:40], ttl)
 	fillFuseAttr(s, out[40:128], ino, attr)
 	return out
 }
 
-func encodeAttrOut(s *Server, ino uint64, attr layeredfs.EntryAttr) []byte {
+func encodeAttrOut(s *Server, nodeID, ino uint64, attr layeredfs.EntryAttr) []byte {
 	out := make([]byte, 104)
+	putValid(out[0:8], out[8:12], s.cacheTTL(nodeID))
 	fillFuseAttr(s, out[16:104], ino, attr)
 	return out
+}
+
+func putValid(seconds, nanos []byte, ttl time.Duration) {
+	binary.LittleEndian.PutUint64(seconds, uint64(ttl/time.Second))
+	binary.LittleEndian.PutUint32(nanos, uint32(ttl%time.Second))
+}
+
+// cacheTTL is the kernel's validity for one node. Git metadata is never cached: engine Git tools
+// write it directly, so the kernel would serve stale sizes and names.
+func (s *Server) cacheTTL(nodeID uint64) time.Duration {
+	if s.cfg.CacheTTL <= 0 {
+		return 0
+	}
+	rel, ok := s.nodes.resolveNodeRel(nodeID)
+	if !ok || gitMetadataRel(rel) {
+		return 0
+	}
+	return s.cfg.CacheTTL
+}
+
+func gitMetadataRel(rel string) bool {
+	for part := range strings.SplitSeq(rel, "/") {
+		if part == ".git" {
+			return true
+		}
+	}
+	return false
 }
 
 func fillFuseAttr(s *Server, dst []byte, ino uint64, attr layeredfs.EntryAttr) {

@@ -252,6 +252,7 @@ func (a *Adapter) mountSingleRoot(
 	}
 
 	srv, err := mountAndStartFUSEServer(ctx, a.cfg, ServerConfig{
+		CacheTTL:              DefaultCacheTTL,
 		ViewID:                viewID,
 		RootID:                grant.RootID,
 		MountPath:             canonMount,

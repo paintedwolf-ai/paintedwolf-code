@@ -16,6 +16,9 @@ const (
 	fuseCapAtomicOTrunc = 1 << 3
 	fuseCapBigWrites    = 1 << 5
 	fuseCapFlockLocks   = 1 << 10
+	// The kernel lists with attributes, so a listing that stats every entry costs one request per batch.
+	fuseCapDoReaddirplus   = 1 << 13
+	fuseCapReaddirplusAuto = 1 << 14
 
 	fattrMode     = 1 << 0
 	fattrUID      = 1 << 1
@@ -63,6 +66,8 @@ func (s *Server) serveRequest(st *fuseRequestState, req []byte) {
 		payload, errno = s.opOpendir(nodeID)
 	case fuseOpReaddir:
 		payload, errno = s.opReaddir(nodeID, body)
+	case fuseOpReaddirplus:
+		payload, errno = s.opReaddirplus(nodeID, body)
 	case fuseOpReleasedir:
 		payload, errno = s.opReleasedir(body)
 	case fuseOpGetxattr:
@@ -143,7 +148,7 @@ func (s *Server) opInit(body []byte) ([]byte, int32) {
 		return nil, -int32(syscall.EPROTO)
 	}
 	maxReadahead := binary.LittleEndian.Uint32(body[8:12])
-	granted := binary.LittleEndian.Uint32(body[12:16]) & uint32(fuseCapPOSIXLocks|fuseCapAtomicOTrunc|fuseCapBigWrites|fuseCapFlockLocks)
+	granted := binary.LittleEndian.Uint32(body[12:16]) & uint32(fuseCapPOSIXLocks|fuseCapAtomicOTrunc|fuseCapBigWrites|fuseCapFlockLocks|fuseCapDoReaddirplus|fuseCapReaddirplusAuto)
 	s.negotiated.Store(&NegotiatedProtocol{KernelMajor: kernelMajor, KernelMinor: kernelMinor, GrantedFlags: granted})
 	out := make([]byte, 64)
 	binary.LittleEndian.PutUint32(out[0:4], FUSEProtocolMajor)
@@ -176,19 +181,20 @@ func (s *Server) opLookup(nodeID uint64, body []byte) ([]byte, int32) {
 		return nil, mapFUSEErrno(err)
 	}
 	fn := s.nodes.acquireNode(childRel, attr)
+	s.wakeEvictor()
 	return encodeEntryOut(s, fn.fuseID, fn.ino, attr), 0
 }
 
 func (s *Server) opGetattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if nodeID == pollProbeNodeID {
-		return encodeAttrOut(s, pollProbeNodeID, pollProbeAttr()), 0
+		return encodeAttrOut(s, pollProbeNodeID, pollProbeNodeID, pollProbeAttr()), 0
 	}
 	if rel, ok := s.nodes.resolveNodeRel(nodeID); ok {
 		attr, err := s.core.LstatAttrs(s.qpath(rel))
 		if err != nil {
 			return nil, mapFUSEErrno(err)
 		}
-		return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
+		return encodeAttrOut(s, nodeID, s.nodes.refreshNode(nodeID, attr), attr), 0
 	}
 	var fh uint64
 	if len(body) >= 16 {
@@ -199,7 +205,7 @@ func (s *Server) opGetattr(nodeID uint64, body []byte) ([]byte, int32) {
 		if err != nil {
 			return nil, mapFUSEErrno(err)
 		}
-		return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
+		return encodeAttrOut(s, nodeID, s.nodes.refreshNode(nodeID, attr), attr), 0
 	}
 	return nil, -int32(syscall.ENOENT)
 }
@@ -251,7 +257,7 @@ func (s *Server) opSetattr(nodeID uint64, body []byte) ([]byte, int32) {
 	if err != nil {
 		return nil, mapFUSEErrno(err)
 	}
-	return encodeAttrOut(s, s.nodes.refreshNode(nodeID, attr), attr), 0
+	return encodeAttrOut(s, nodeID, s.nodes.refreshNode(nodeID, attr), attr), 0
 }
 
 // setAttrDetached serves a replaced or unlinked object. Its old name may now belong to another

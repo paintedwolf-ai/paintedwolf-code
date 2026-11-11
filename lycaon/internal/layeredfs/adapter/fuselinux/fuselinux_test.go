@@ -29,7 +29,8 @@ func TestAdapterFactsAndFailureClassifications(t *testing.T) {
 	}
 	facts := adp.Facts()
 	if facts.PreparationKind != adapter.PreparationMounted || facts.UntouchedSourceVisibility != adapter.VisibilityLive ||
-		!facts.CacheRevalidation.ExplicitInvalidation || facts.CacheRevalidation.AttributeTTL != 0 ||
+		!facts.CacheRevalidation.ExplicitInvalidation || facts.CacheRevalidation.AttributeTTL != fuselinux.DefaultCacheTTL ||
+		facts.CacheRevalidation.Mode != fuselinux.DefaultCachePolicy ||
 		!facts.SupportsPrivateGit || !facts.SupportsCheckpointBarrier {
 		t.Fatalf("unexpected AdapterFacts: %+v", facts)
 	}

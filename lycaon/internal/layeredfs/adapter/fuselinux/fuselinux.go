@@ -31,10 +31,13 @@ const (
 	DefaultFuseDevicePath = "/dev/fuse"
 	// DefaultSubtype is the FUSE filesystem subtype reported in /proc/self/mountinfo.
 	DefaultSubtype = "lycaon_layeredfs"
-	// DefaultCachePolicy states the kernel cache contract. Entries and attributes revalidate on
-	// every use. Writes are write-through. Page cache is dropped at open: a descriptor already
-	// open keeps its pages until notify_inval or a size change.
-	DefaultCachePolicy = "entry_valid=0,attr_valid=0,writeback_cache=0,fopen_keep_cache=0,notify_inval"
+	// DefaultCachePolicy states the kernel cache contract. Entries and attributes are cached for
+	// DefaultCacheTTL and invalidated by notification when the engine sees a change; the TTL bounds
+	// a missed notification. Private Git metadata is never cached, because engine Git tools change it
+	// outside the kernel. Writes are write-through, and page cache is dropped at open.
+	DefaultCachePolicy = "entry_valid=60s,attr_valid=60s,git_metadata_valid=0,writeback_cache=0,fopen_keep_cache=0,notify_inval,readdirplus"
+	// DefaultCacheTTL is how long the kernel keeps an entry or attribute without asking again.
+	DefaultCacheTTL = 60 * time.Second
 	// DefaultMaxReadAhead is the negotiated FUSE max_readahead size (128 KiB).
 	DefaultMaxReadAhead = 131072
 	// DefaultMaxWrite is the negotiated FUSE max_write payload size (128 KiB).
@@ -143,7 +146,7 @@ func New(cfg Config) *Adapter {
 			CacheRevalidation: adapter.CacheRevalidation{
 				Mode:                 DefaultCachePolicy,
 				ExplicitInvalidation: true,
-				AttributeTTL:         0,
+				AttributeTTL:         DefaultCacheTTL,
 			},
 			MetadataCapabilities: adapter.MetadataCapabilities{
 				SupportsSymlinks: true, SupportsHardLinks: true, SupportsXattrs: true,

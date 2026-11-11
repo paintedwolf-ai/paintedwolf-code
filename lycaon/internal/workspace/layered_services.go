@@ -397,3 +397,31 @@ func privateGitSnapshot(ctx context.Context, mgr *privategit.Manager, viewID, ch
 	}
 	return snapshot, nil
 }
+
+// PathInvalidator drops what a mounted view's kernel cache holds for one path.
+type PathInvalidator interface {
+	InvalidatePath(viewID string, qpath layeredfs.QualifiedPath) error
+}
+
+// BranchPathInvalidator tells a branch's mounted view that a trunk path changed, so the kernel
+// asks again instead of serving its cache until the TTL runs out. A view without kernel
+// invalidation relies on its TTL alone.
+func BranchPathInvalidator(branchRoot string) func(layeredfs.QualifiedPath) {
+	clean := filepath.Clean(branchRoot)
+	return func(qpath layeredfs.QualifiedPath) {
+		raw, ok := sharedBranchViews.Load(clean)
+		if !ok {
+			return
+		}
+		st := raw.(branchViewState)
+		invalidator, ok := st.selection.Adapter.(PathInvalidator)
+		if !ok || st.selection.Facts.PreparationKind != adapter.PreparationMounted {
+			return
+		}
+		for _, view := range st.views {
+			if view != nil {
+				_ = invalidator.InvalidatePath(view.ViewID, qpath)
+			}
+		}
+	}
+}

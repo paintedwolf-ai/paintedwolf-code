@@ -41,10 +41,14 @@ const (
 	DefaultRetrans = 2
 	// DefaultTimeo is the soft mount timeout in deciseconds (1.0s).
 	DefaultTimeo = 10
-	// DefaultCachePolicy is the explicit cache option set: no attribute or negative-name caching, and
-	// no READDIRPLUS. With READDIRPLUS the client answers a lookup from the last listing, which omits
-	// the ._ files that present held attributes, and then refuses to create the one it needs.
-	DefaultCachePolicy = "actimeo=0,acregmin=0,acregmax=0,acdirmin=0,acdirmax=0,nonegnamecache,nordirplus"
+	// DefaultAttributeTTL is how long the client trusts a file's cached attributes. Nothing tells the
+	// macOS client of a change it did not make, so this bounds when a trunk file changed in place is
+	// visible; opening a file still revalidates it.
+	DefaultAttributeTTL = 30 * time.Second
+	// DefaultCachePolicy caches file attributes for DefaultAttributeTTL and lists with attributes.
+	// Directory attributes are not cached and a missing name is always asked again, so a name the
+	// trunk adds, removes or replaces is seen at once.
+	DefaultCachePolicy = "acregmin=30,acregmax=30,acdirmin=0,acdirmax=0,nonegnamecache,rdirplus"
 
 	// unmountWaitBound limits how long one unmount attempt may hold Release. A helper stuck in the
 	// kernel cannot be killed, so the wait has to end on its own.
@@ -148,11 +152,13 @@ func New(cfg Config) *Adapter {
 			CacheRevalidation: adapter.CacheRevalidation{
 				Mode:                 fmt.Sprintf("%s,rsize=%d,wsize=%d,retrans=%d,timeo=%d,soft", DefaultCachePolicy, DefaultRSize, DefaultWSize, DefaultRetrans, DefaultTimeo),
 				ExplicitInvalidation: false,
-				AttributeTTL:         0,
+				AttributeTTL:         DefaultAttributeTTL,
 			},
 			MetadataCapabilities: adapter.MetadataCapabilities{
 				ClientMayRemoveEarlySidecar: true,
-				SupportsSymlinks:            true, SupportsHardLinks: true, SupportsXattrs: true,
+				// The client reads attributes from ._ files, which listings leave out so that no tool
+				// sees them. A caching client takes a listing as complete and stops finding them.
+				SupportsSymlinks: true, SupportsHardLinks: true, SupportsXattrs: false,
 				SupportsChmod: true, SupportsTimestamps: true, SupportsPOSIXLocks: true, SupportsFlock: true,
 			},
 			SupportsPrivateGit:        true,

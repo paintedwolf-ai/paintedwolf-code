@@ -3,10 +3,12 @@
 package fuselinux
 
 import (
+	"container/list"
 	"path"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
@@ -25,8 +27,10 @@ type ServerConfig struct {
 	MaxConcurrentRequests int
 	MaxLockWaiters        int
 	BackingDir            string
-	OnMutationHook        func(opcode uint32, rel string)
-	OnLockWait            func(unique, start, end uint64, waiting bool)
+	// CacheTTL is how long the kernel keeps entries and attributes; zero disables caching.
+	CacheTTL       time.Duration
+	OnMutationHook func(opcode uint32, rel string)
+	OnLockWait     func(unique, start, end uint64, waiting bool)
 }
 
 // NegotiatedProtocol records the kernel's FUSE_INIT offer and the capabilities granted to it.
@@ -45,6 +49,7 @@ type fuseNode struct {
 	openCount   int
 	paths       map[string]struct{}
 	unlinked    bool
+	lruElem     *list.Element
 }
 
 func (n *fuseNode) primaryRel() (string, bool) {
@@ -165,6 +170,9 @@ type Server struct {
 	controlSem    chan struct{}
 	requests      *requestTable
 	gate          *mutationGate
+	evictWake     chan struct{}
+	// invalidateEntry asks the kernel to drop one dentry; tests observe it.
+	invalidateEntry func(parent uint64, name string)
 }
 
 func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe [2]int) *Server {
@@ -189,6 +197,8 @@ func newServerInstance(cfg ServerConfig, core *layeredfs.Core, fd int, stopPipe 
 		controlSem:    make(chan struct{}, 32),
 		requests:      &requestTable{inFlight: make(map[uint64]*fuseRequestState)},
 	}
+	s.evictWake = make(chan struct{}, 1)
+	s.invalidateEntry = func(parent uint64, name string) { notifyInvalEntry(s, parent, name) }
 	s.locks.closed = &s.closed
 	s.gate = newMutationGate(&s.closed)
 	return s
