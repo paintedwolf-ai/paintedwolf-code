@@ -51,14 +51,17 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 			return err
 		}
 
+		caseOnly := false
 		if srcPath == dstPath {
 			given := path.Base(cleanRelPath(newPath.Rel))
 			if given == path.Base(dstPath.Rel) {
 				_, err := lookupExactComponent(c, srcPath)
 				return err
 			}
-			// Only the spelling changes, which a folding source records as a rename.
+			// Only the spelling changes, which a folding source records as a rename. The new spelling
+			// names no other entry, though a folding host volume would find the source under it.
 			dstPath.Rel = joinRel(newParent.Rel, given)
+			caseOnly = true
 		}
 		if strings.HasPrefix(dstPath.Rel, srcPath.Rel+"/") {
 			return syscall.EINVAL
@@ -68,7 +71,11 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 		if err != nil {
 			return err
 		}
-		dstRes, dstErr := lookupExactComponent(c, dstPath)
+		var dstRes resolvedLayerEntry
+		dstErr := error(os.ErrNotExist)
+		if !caseOnly {
+			dstRes, dstErr = lookupExactComponent(c, dstPath)
+		}
 		if dstErr != nil && !os.IsNotExist(dstErr) {
 			return dstErr
 		}
@@ -97,7 +104,12 @@ func renamePath(c *Core, oldPath, newPath QualifiedPath) error {
 		if _, err := ensureBaseCaptured(c, srcPath); err != nil {
 			return err
 		}
-		dstBase, err := ensureBaseCaptured(c, dstPath)
+		var dstBase BaseCapture
+		if caseOnly {
+			dstBase, err = recordAbsentBase(c, dstPath)
+		} else {
+			dstBase, err = ensureBaseCaptured(c, dstPath)
+		}
 		if err != nil {
 			return err
 		}
