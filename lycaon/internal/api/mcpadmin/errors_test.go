@@ -127,23 +127,28 @@ func testHandler(t *testing.T) *Handler {
 }
 
 func TestHandlerPostCommitFinalizationDeferredReportsSuccessAtAPIBoundary(t *testing.T) {
-	s := testHandler(t)
-	s.administration.OpenStaticCredentials = func(dir string) (*mcp.StaticCredentialStore, error) {
-		store, err := mcp.NewStaticCredentialStoreForDir(dir)
-		if err != nil {
-			return nil, err
-		}
-		verifyCalls := 0
-		store.VerifyDurable = func(slot credentialstore.Slot, key, want string) error {
-			verifyCalls++
-			if verifyCalls == 3 {
+	cfg, err := usernotice.LoadNoticeDir(filepath.Join("..", "..", "..", "config", "packs", "painted-wolf", "platform", "host", "user-notices"))
+	testutil.FailErr(t, "load notice catalog", err)
+	stateDir := t.TempDir()
+	failedFinalizationOnce := false
+	reg, err := mcp.NewRuntime(mcp.RuntimeOptions{
+		StatePath:          stateDir,
+		GlobalOverridePath: filepath.Join(stateDir, "mcp.yaml"),
+		OAuthStore:         mcp.NewOAuthTokenStoreAt(filepath.Join(stateDir, "mcp-oauth.vault")),
+		Connector:          &mcp.MockConnector{},
+		VerifyStaticCredentialWrite: func(slot credentialstore.Slot, key, want string) error {
+			if !failedFinalizationOnce && strings.Contains(want, `"tok-v2"`) && !strings.Contains(want, `"pending_commit"`) {
+				failedFinalizationOnce = true
 				return errors.New("injected post-commit finalization verification failure")
 			}
 			return credentialstore.VerifyDurable(slot, key, want)
-		}
-		return store, nil
-	}
-	t.Cleanup(func() { s.administration.OpenStaticCredentials = nil })
+		},
+	})
+	testutil.FailErr(t, "mcp registry", err)
+	t.Cleanup(func() { _ = reg.Close(t.Context()) })
+	deps := apitestdeps.Deps{MCP: reg}
+	apitestdeps.Fill(t, &deps)
+	s := New(deps.MCP, deps.Projects, &httpio.Responder{Notices: usernotice.NewCatalog(cfg)})
 
 	createBody := `{"source":"custom","id":"api-deferred","url":"https://mcp.example.com/v1","enabled":false,"token":"tok-v1"}`
 	createReq := httptest.NewRequest(http.MethodPost, "/v1/mcp/providers", strings.NewReader(createBody))

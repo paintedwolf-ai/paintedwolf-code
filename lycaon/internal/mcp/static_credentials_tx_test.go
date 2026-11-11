@@ -172,12 +172,12 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 		if openErr != nil {
 			return nil, openErr
 		}
-		s.VerifyDurable = func(credentialstore.Slot, string, string) error {
+		s.verifyDurable = func(credentialstore.Slot, string, string) error {
 			return errors.New("injected durable verification failure")
 		}
 		return s, nil
 	}
-	reg.Administration.OpenStaticCredentials = failAllVerify
+	reg.Administration.openStaticCredentials = failAllVerify
 	enabled := false
 	_, err = reg.Administration.CreateProvider(ctx, CallScope{}, api.CreateMcpProviderRequest{
 		Source:  "custom",
@@ -189,7 +189,7 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 	if err == nil {
 		t.Fatal("expected CreateProvider to fail when durable verification fails")
 	}
-	reg.Administration.OpenStaticCredentials = nil
+	reg.Administration.openStaticCredentials = nil
 
 	store, err := NewStaticCredentialStoreForDir(stateDir)
 	testutil.FailErr(t, "open store after failed create", err)
@@ -206,7 +206,7 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 	}, "")
 	testutil.FailErr(t, "CreateProvider existing-prov", err)
 
-	reg.Administration.OpenStaticCredentials = failAllVerify
+	reg.Administration.openStaticCredentials = failAllVerify
 	newTok := "unverified-token-v2"
 	_, err = reg.Administration.UpdateProvider(ctx, CallScope{}, "existing-prov", api.UpdateMcpProviderRequest{
 		Token: &newTok,
@@ -214,7 +214,7 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 	if err == nil {
 		t.Fatal("expected UpdateProvider to fail when durable verification fails")
 	}
-	reg.Administration.OpenStaticCredentials = nil
+	reg.Administration.openStaticCredentials = nil
 
 	store, err = NewStaticCredentialStoreForDir(stateDir)
 	testutil.FailErr(t, "open store after failed update", err)
@@ -224,11 +224,11 @@ func TestCommittedButVerificationFailedBoundaryForCreateUpdateDelete(t *testing.
 		t.Fatalf("failed update did not preserve working-token-v1: ok=%v rec=%+v", ok, rec)
 	}
 
-	reg.Administration.OpenStaticCredentials = failAllVerify
+	reg.Administration.openStaticCredentials = failAllVerify
 	if err := reg.Administration.DeleteOverlay(ctx, "existing-prov", ""); err == nil {
 		t.Fatal("expected DeleteOverlay to fail when durable verification fails")
 	}
-	reg.Administration.OpenStaticCredentials = nil
+	reg.Administration.openStaticCredentials = nil
 
 	store, err = NewStaticCredentialStoreForDir(stateDir)
 	testutil.FailErr(t, "open store after failed delete", err)
@@ -455,14 +455,14 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 				return nil, openErr
 			}
 			setCalls, verifyCalls := 0, 0
-			s.SetEntry = func(key, val string) error {
+			s.setEntry = func(key, val string) error {
 				setCalls++
 				if setCalls == failSetCall {
 					return errors.New("injected restoreRaw set failure")
 				}
 				return s.store.Set(key, val)
 			}
-			s.VerifyDurable = func(slot credentialstore.Slot, key, want string) error {
+			s.verifyDurable = func(slot credentialstore.Slot, key, want string) error {
 				verifyCalls++
 				if verifyCalls == failVerifyCall {
 					return errors.New("injected durable verification failure")
@@ -472,7 +472,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 			return s, nil
 		}
 	}
-	reg.Administration.OpenStaticCredentials = withFaultyStore(0, 3)
+	reg.Administration.openStaticCredentials = withFaultyStore(0, 3)
 	reg.Administration.crashHook = nil
 	urlV4 := "https://mcp.example.com/survive-v4"
 	tokV4 := "committed-token-v4"
@@ -485,7 +485,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 		t.Fatalf("UpdateProvider row = %+v, want URL=%q TokenPresent=true", updatedRow, urlV4)
 	}
 	assertInProcessCatalog(reg, "p-survive", urlV4, tokV4)
-	reg.Administration.OpenStaticCredentials = nil
+	reg.Administration.openStaticCredentials = nil
 	reg = newReg()
 	assertProviderAndToken("p-survive", urlV4, "committed-token-v4")
 
@@ -493,7 +493,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 	// (TargetConfigSHA256 != PreviousConfigSHA256; restoreRaw fails and rollback crashes at
 	// after_file_rollback_before_cred_rollback after restoring old mcp.yaml): both in-process
 	// catalog and startup reconciliation match PreviousConfigSHA256 and preserve V4.
-	reg.Administration.OpenStaticCredentials = withFaultyStore(3, 2)
+	reg.Administration.openStaticCredentials = withFaultyStore(3, 2)
 	reg.Administration.crashHook = func(stage, op, id string) error {
 		if stage == "after_file_rollback_before_cred_rollback" && op == "update" && id == "p-survive" {
 			return errors.New("simulated crash after file rollback with unverified commit mark")
@@ -509,7 +509,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 		t.Fatal("expected UpdateProvider to fail when commit-mark verification and rollback fail")
 	}
 	assertInProcessCatalog(reg, "p-survive", urlV4, "committed-token-v4")
-	reg.Administration.OpenStaticCredentials = nil
+	reg.Administration.openStaticCredentials = nil
 	reg.Administration.crashHook = nil
 	reg = newReg()
 	assertProviderAndToken("p-survive", urlV4, "committed-token-v4")
@@ -518,7 +518,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 	// with the case-6 shape (commit-mark verify fails, restoreRaw fails, crash before credential
 	// rollback): Committed=true remains in the vault at TargetConfigSHA256, so both in-process
 	// catalog and post-restart reconciliation coherently roll forward to tokV5CredOnly.
-	reg.Administration.OpenStaticCredentials = withFaultyStore(3, 2)
+	reg.Administration.openStaticCredentials = withFaultyStore(3, 2)
 	reg.Administration.crashHook = func(stage, op, id string) error {
 		if stage == "after_file_rollback_before_cred_rollback" && op == "update" && id == "p-survive" {
 			return errors.New("simulated crash after file rollback on equal-digest commit mark")
@@ -532,7 +532,7 @@ func TestPendingCommitRecoveryAcrossCrashValidationAndRollbackBoundaries(t *test
 		t.Fatal("expected credential-only UpdateProvider to fail when commit-mark verify and rollback crash")
 	}
 	assertInProcessCatalog(reg, "p-survive", urlV4, tokV5CredOnly)
-	reg.Administration.OpenStaticCredentials = nil
+	reg.Administration.openStaticCredentials = nil
 	reg.Administration.crashHook = nil
 	reg = newReg()
 	assertProviderAndToken("p-survive", urlV4, tokV5CredOnly)
@@ -586,20 +586,20 @@ func TestSubprocessCrashAtPersistentPrefixBoundaries(t *testing.T) {
 					return nil
 				}
 			}
-			r.Administration.OpenStaticCredentials = func(dir string) (*StaticCredentialStore, error) {
+			r.Administration.openStaticCredentials = func(dir string) (*StaticCredentialStore, error) {
 				s, openErr := NewStaticCredentialStoreForDir(dir)
 				if openErr != nil {
 					return nil, openErr
 				}
 				setCalls, verifyCalls := 0, 0
-				s.SetEntry = func(key, val string) error {
+				s.setEntry = func(key, val string) error {
 					setCalls++
 					if setCalls == failSet {
 						return errors.New("subprocess restoreRaw failure")
 					}
 					return s.store.Set(key, val)
 				}
-				s.VerifyDurable = func(slot credentialstore.Slot, key, want string) error {
+				s.verifyDurable = func(slot credentialstore.Slot, key, want string) error {
 					verifyCalls++
 					if verifyCalls == failVerify {
 						return errors.New("subprocess verify failure")

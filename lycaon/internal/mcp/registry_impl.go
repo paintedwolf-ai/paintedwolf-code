@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -30,14 +31,15 @@ type registeredTool struct {
 type RuntimeOptions struct {
 	// StatePath overrides the user config directory that holds device-level MCP
 	// state (tool pins). Empty resolves configdir.UserConfigDir.
-	StatePath          string
-	GlobalOverridePath string
-	Connector          SessionConnector
-	BreakerThreshold   uint32
-	OnSettingsChange   func()
-	OAuthStore         *OAuthTokenStore
-	OAuthClient        *OAuthClient
-	OAuthRedirectURI   string
+	StatePath                   string
+	GlobalOverridePath          string
+	Connector                   SessionConnector
+	BreakerThreshold            uint32
+	OnSettingsChange            func()
+	OAuthStore                  *OAuthTokenStore
+	OAuthClient                 *OAuthClient
+	OAuthRedirectURI            string
+	VerifyStaticCredentialWrite func(slot credentialstore.Slot, key, want string) error
 }
 
 // Runtime composes provider catalogs, connections, credentials and tools.
@@ -111,6 +113,17 @@ func NewRuntime(opts RuntimeOptions) (*Runtime, error) {
 	r.Credentials.oauth = opts.OAuthClient
 	r.Credentials.recipes = recipes
 	r.Tools.resync = make(chan string, 16)
+	if opts.VerifyStaticCredentialWrite != nil {
+		verifyFn := opts.VerifyStaticCredentialWrite
+		r.Administration.openStaticCredentials = func(dir string) (*StaticCredentialStore, error) {
+			store, openErr := NewStaticCredentialStoreForDir(dir)
+			if openErr != nil {
+				return nil, openErr
+			}
+			store.verifyDurable = verifyFn
+			return store, nil
+		}
+	}
 
 	r.Catalog.Connections = r.Connections
 	r.Catalog.Credentials = r.Credentials

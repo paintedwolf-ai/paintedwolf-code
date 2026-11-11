@@ -48,8 +48,8 @@ func overlayRollbackActive(ctx context.Context, target string) bool {
 }
 
 func (r *ProviderAdministration) openCredentialStore() (*StaticCredentialStore, error) {
-	if r.OpenStaticCredentials != nil {
-		return r.OpenStaticCredentials(r.Catalog.statePath)
+	if r.openStaticCredentials != nil {
+		return r.openStaticCredentials(r.Catalog.statePath)
 	}
 	return NewStaticCredentialStoreForDir(r.Catalog.statePath)
 }

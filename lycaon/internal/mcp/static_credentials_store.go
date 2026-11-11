@@ -19,8 +19,8 @@ const staticCredentialsContext = "mcp static credentials"
 type StaticCredentialStore struct {
 	slot          credentialstore.Slot
 	store         *credentialstore.Store
-	SetEntry      func(string, string) error
-	VerifyDurable func(credentialstore.Slot, string, string) error
+	setEntry      func(string, string) error
+	verifyDurable func(credentialstore.Slot, string, string) error
 }
 
 // DefaultCredentialsSlot returns the default vault slot for MCP static credentials.
@@ -50,7 +50,7 @@ func NewStaticCredentialStoreForDir(dir string) (*StaticCredentialStore, error) 
 	return &StaticCredentialStore{
 		slot:          slot,
 		store:         inner,
-		VerifyDurable: credentialstore.VerifyDurable,
+		verifyDurable: credentialstore.VerifyDurable,
 	}, nil
 }
 
@@ -104,14 +104,14 @@ func (s *StaticCredentialStore) PutVerified(providerID string, rec StaticCredent
 	}
 	payload := string(encoded)
 	prevRaw, hadPrevRaw := s.store.Get(key)
-	setFn := s.SetEntry
+	setFn := s.setEntry
 	if setFn == nil {
 		setFn = s.store.Set
 	}
 	if err := setFn(key, payload); err != nil {
 		return err
 	}
-	verifyFn := s.VerifyDurable
+	verifyFn := s.verifyDurable
 	if verifyFn == nil {
 		verifyFn = credentialstore.VerifyDurable
 	}
