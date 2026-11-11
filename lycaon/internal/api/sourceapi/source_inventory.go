@@ -70,7 +70,7 @@ func (s *Watch) scheduleWorkspaceInventory(parent context.Context, p *project.Pr
 				s.responses.Logger.WarnContext(ctx, "source structure", "project_id", p.ID, "root", root.ID, "err", err)
 			}
 		}
-		if inventory == nil {
+		if inventory == nil || len(req.Roots) == 0 {
 			return
 		}
 		for _, root := range p.Roots {
@@ -116,6 +116,10 @@ func (s *Watch) sourceInventoryState(
 ) (sourceledger.InventoryState, error) {
 	if p == nil || s.SourceInventory == nil {
 		return sourceledger.InventoryState{Phase: sourceledger.InventoryUninitialized}, nil
+	}
+	// Editor-only roots have no eager pass, so a project of only those is ready.
+	if len(project.AdmittedRoots(p)) == 0 {
+		return sourceledger.InventoryState{Phase: sourceledger.InventoryReady}, nil
 	}
 	return s.SourceInventory.InventoryState(ctx, p.ID, p.SourceBranch, p.RootsGeneration)
 }
