@@ -75,8 +75,9 @@ func TestAuthoredAskRuleReachesTheGateWithItsCitation(t *testing.T) {
 	}
 }
 
-// A retrieval capability's dial is decided as the gate would decide it:
-// quietly, unless a rule asks.
+// A retrieval capability's dial is decided as the gate would decide it: below
+// Strict quietly unless a rule asks; at Strict it reaches the gate, which
+// confirms a first contact.
 func TestRetrievalDialsFollowTheirContract(t *testing.T) {
 	b := newTestBroker()
 	reached := false
@@ -89,8 +90,19 @@ func TestRetrievalDialsFollowTheirContract(t *testing.T) {
 	if !b.decideAttributedEndpoint(context.Background(), cmd, ep) || reached {
 		t.Fatalf("a retrieval dial asked: reached %v", reached)
 	}
+	SetEgressPosture(PostureAsk)
+	t.Cleanup(func() { SetEgressPosture(PostureObserve) })
+	strict := cmd
+	strict.ToolCallID = "a2"
+	if b.decideAttributedEndpoint(context.Background(), strict, ep) || !reached {
+		t.Fatal("a retrieval dial at Strict did not reach the gate")
+	}
+	SetEgressPosture(PostureObserve)
+	reached = false
+	asked := cmd
+	asked.ToolCallID = "a3"
 	withRule(t, EgressRuleAsk, "page.example")
-	if b.decideAttributedEndpoint(context.Background(), cmd, ep) || !reached {
+	if b.decideAttributedEndpoint(context.Background(), asked, ep) || !reached {
 		t.Fatal("an ask rule on a retrieval dial did not reach the gate")
 	}
 }

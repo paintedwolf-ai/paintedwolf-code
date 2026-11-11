@@ -138,18 +138,21 @@ type Endpoint struct {
 	ConfiguredBy string
 	// Configured identifies destinations supplied by user or project configuration.
 	Configured bool
+	// Declared is an endpoint the requesting capability declared before it
+	// ran, such as a configured search provider.
+	Declared bool
 	// PublicRegistry names the catalogued public package registry serving the
 	// host; empty for any other destination.
 	PublicRegistry string
 	// Opaque is true when the transport is a tunnel whose payload the broker
 	// cannot read.
 	Opaque bool
-	// FirstUseThisSession is true when this chat's own dials have not yet
-	// reached this host.
+	// FirstUseThisSession is true when this chat has not yet reached this
+	// host in the same way: by its own dial, or for a retrieval dial, by any.
 	FirstUseThisSession bool
 	// Retrieval is a dial made under a declared retrieval capability, such
-	// as web research, whose contract already covers reaching its sources;
-	// the outbound destination gates leave it to that contract.
+	// as web research, whose contract covers reaching its sources; only
+	// Strict's first-contact confirmation applies to it.
 	Retrieval bool
 }
 

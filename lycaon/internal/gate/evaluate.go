@@ -723,8 +723,10 @@ func secretExposedOutbound(f Facts) (bool, []Fact, string) {
 	}, f.Destination.Host
 }
 
+// firstHost confirms each first contact at Strict, retrieval included, except
+// an endpoint the capability declared before it ran.
 func firstHost(f Facts) (bool, []Fact, string) {
-	if f.Destination == nil || f.Leased || f.RequestConsented || !f.Destination.FirstUseThisSession || f.Destination.Retrieval {
+	if f.Destination == nil || f.Leased || f.RequestConsented || !f.Destination.FirstUseThisSession || f.Destination.Declared {
 		return false, nil, ""
 	}
 	return true, []Fact{
