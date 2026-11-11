@@ -17,7 +17,7 @@ const CLAUSES = new Set([
 ]);
 /** Words that start a join clause when a `join` follows them. */
 const JOIN_MODIFIERS = new Set(["left", "right", "inner", "outer", "cross", "full", "natural"]);
-/** Clause words that a following clause word joins, as `insert` joins `into`'s clause. */
+/** Words after which a clause word continues the same clause, as `FROM` does in `DELETE FROM`. */
 const JOINING = new Set(["group", "order", "insert", "delete", "update", "join", "on", "left", "right", "inner", "outer", "cross", "full", "natural"]);
 /** Clauses whose items break at commas when the clause does not fit. */
 const LISTS = new Set(["select", "set", "returning", "group", "order", "values"]);
