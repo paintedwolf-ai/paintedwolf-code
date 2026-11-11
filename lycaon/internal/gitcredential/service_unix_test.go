@@ -60,7 +60,7 @@ func TestServiceAnswersOnlyTheBoundInvocation(t *testing.T) {
 	testutil.FailErr(t, "serve", err)
 	defer func() { _ = elsewhere.Close() }()
 	testutil.FailErr(t, "bind another invocation", elsewhere.Bind(other.Process.Pid))
-	if out := helperChild(t, elsewhere.Path(), "bound.example"); strings.Contains(out, "secret") {
+	if out := helperChild(t, elsewhere.Path(), "bound.example"); strings.Contains(out, "password=") {
 		t.Fatalf("helper outside the bound invocation received a credential: %q", out)
 	}
 	if err := elsewhere.Bind(os.Getpid()); err == nil {
@@ -72,7 +72,7 @@ func TestServiceAnswersOnlyTheBoundInvocation(t *testing.T) {
 	testutil.FailErr(t, "serve", err)
 	defer func() { _ = unbound.Close() }()
 	unbound.deadline = 500 * time.Millisecond
-	if out := helperChild(t, unbound.Path(), "bound.example"); strings.Contains(out, "secret") {
+	if out := helperChild(t, unbound.Path(), "bound.example"); strings.Contains(out, "password=") {
 		t.Fatalf("unbound service answered: %q", out)
 	}
 
@@ -141,7 +141,7 @@ func TestServiceRefusesPeersOutsideTheServedGitProcess(t *testing.T) {
 	testutil.FailErr(t, "serve for a foreign git", err)
 	defer func() { _ = service.Close() }()
 	testutil.FailErr(t, "bind", service.Bind(os.Getpid()))
-	if out := helperChild(t, service.Path(), "example.com"); strings.Contains(out, "secret") {
+	if out := helperChild(t, service.Path(), "example.com"); strings.Contains(out, "password=") {
 		t.Fatalf("peer beneath no served git binary received a credential: %q", out)
 	}
 	if _, err := Serve(t.Context(), ServeOptions{GitBinary: ""}); err == nil {
@@ -208,14 +208,14 @@ func TestScopedServiceAnswersOnlyAdmittedRecipients(t *testing.T) {
 	t.Cleanup(func() { _ = service.Close() })
 	testutil.FailErr(t, "bind", service.Bind(os.Getpid()))
 
-	if out := helperChild(t, service.Path(), "admitted.example"); strings.Contains(out, "secret") {
+	if out := helperChild(t, service.Path(), "admitted.example"); strings.Contains(out, "password=") {
 		t.Fatalf("answered before admission: %q", out)
 	}
 	scope.Admit(Recipient{Protocol: "https", Host: "admitted.example"})
 	if out := helperChild(t, service.Path(), "admitted.example"); !strings.Contains(out, "password=secret-admitted.example") {
 		t.Fatalf("admitted recipient = %q", out)
 	}
-	if out := helperChild(t, service.Path(), "other.example"); strings.Contains(out, "secret") {
+	if out := helperChild(t, service.Path(), "other.example"); strings.Contains(out, "password=") {
 		t.Fatalf("recipient outside the scope answered: %q", out)
 	}
 	_, _ = helperOperation(t, service.Path(), "erase", "protocol=https\nhost=admitted.example\n\n")
