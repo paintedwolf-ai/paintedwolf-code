@@ -34,11 +34,15 @@ const (
 	provisionalCloneLimit = 2 * 200_000 * provisionalEntryCost
 	// A byte copy also holds its 5 GiB of content twice.
 	provisionalCopyLimit = provisionalCloneLimit + 2*5*1024*1024*1024
+	// An APFS directory clone prepared both trees of 500,000 entries in 41 s at load 10, about 12,000
+	// entries a second and falling slowly with size; 650,000 entries is the count that finishes within
+	// 60 s at that rate.
+	darwinCloneLimit = 2 * 650_000 * provisionalEntryCost
 )
 
 // budgetFacts holds one fact per platform and filesystem class. Nothing edits them at runtime.
 var budgetFacts = map[BudgetClass]BudgetFact{
-	{Platform: "darwin", Filesystem: FilesystemClonable}: {Limit: provisionalCloneLimit, EntryCost: provisionalEntryCost, Provisional: true},
+	{Platform: "darwin", Filesystem: FilesystemClonable}: {Limit: darwinCloneLimit, EntryCost: provisionalEntryCost},
 	{Platform: "darwin", Filesystem: FilesystemCopyOnly}: {Limit: provisionalCopyLimit, EntryCost: provisionalEntryCost, Provisional: true},
 	{Platform: "linux", Filesystem: FilesystemClonable}:  {Limit: provisionalCloneLimit, EntryCost: provisionalEntryCost, Provisional: true},
 	{Platform: "linux", Filesystem: FilesystemCopyOnly}:  {Limit: provisionalCopyLimit, EntryCost: provisionalEntryCost, Provisional: true},
