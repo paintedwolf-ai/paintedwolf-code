@@ -116,7 +116,7 @@ func inheritUntrustedRecord() evidence.Record {
 	}
 }
 
-func (ev *memoryEvidence) SessionVisitedHosts(sessionID string) map[string]struct{} {
+func (ev *memoryEvidence) SessionContactedHosts(sessionID string) map[string]struct{} {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
@@ -125,10 +125,10 @@ func (ev *memoryEvidence) SessionVisitedHosts(sessionID string) map[string]struc
 	if err != nil {
 		return nil
 	}
-	return evidence.VisitedHostsFromLedger(ledger)
+	return evidence.ContactedHostsFromLedger(ledger)
 }
 
-func (ev *sqlEvidence) SessionVisitedHosts(sessionID string) map[string]struct{} {
+func (ev *sqlEvidence) SessionContactedHosts(sessionID string) map[string]struct{} {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
@@ -137,7 +137,7 @@ func (ev *sqlEvidence) SessionVisitedHosts(sessionID string) map[string]struct{}
 	if err != nil {
 		return nil
 	}
-	return evidence.VisitedHostsFromLedger(ledger)
+	return evidence.ContactedHostsFromLedger(ledger)
 }
 
 // RecordHostVisit adds a mediated dial to the chat's visited-host set. The record

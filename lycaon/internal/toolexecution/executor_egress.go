@@ -124,7 +124,7 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 
 	verdict, decision := gate.Evaluate(facts, e.egressPosture(cmd))
 	if verdict != gate.Ask {
-		e.recordHostVisit(ctx, action.Scope.ChatSession(), ep.Host)
+		e.recordHostVisit(ctx, cmd, action.Scope.ChatSession(), ep.Host)
 		return true
 	}
 
@@ -149,12 +149,13 @@ func (e *Network) firstUseThisSession(chatSessionID, host string) bool {
 	if e == nil || e.hostLedger == nil {
 		return true
 	}
-	return !evidence.HostVisited(e.hostLedger.SessionVisitedHosts(chatSessionID), host)
+	return !evidence.HostVisited(e.hostLedger.SessionContactedHosts(chatSessionID), host)
 }
 
-// recordHostVisit records only destinations whose dial was allowed.
-func (e *Network) recordHostVisit(ctx context.Context, chatSessionID, host string) {
-	if e == nil || e.hostLedger == nil {
+// recordHostVisit records only destinations whose dial was allowed. A
+// retrieval capability's dial is not this chat's own contact.
+func (e *Network) recordHostVisit(ctx context.Context, cmd confine.EgressCommand, chatSessionID, host string) {
+	if e == nil || e.hostLedger == nil || confine.RetrievalDial(cmd) {
 		return
 	}
 	_ = e.hostLedger.RecordHostVisit(ctx, chatSessionID, host)

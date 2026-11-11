@@ -2,17 +2,17 @@ package evidence
 
 import "testing"
 
-func TestDialedHostJoinsTheVisitedSet(t *testing.T) {
+func TestDialedHostJoinsTheContactedSet(t *testing.T) {
 	rec, ok := DialedHostRecord("Registry.Example.com")
 	if !ok {
 		t.Fatal("a plain host must produce a record")
 	}
 	ledger := Ledger{Handles: map[string]Record{rec.Handle: rec}}
-	if !HostVisited(VisitedHostsFromLedger(ledger), "registry.example.com") {
-		t.Fatal("a dialed host must be visited")
+	if !HostVisited(ContactedHostsFromLedger(ledger), "registry.example.com") {
+		t.Fatal("a dialed host must be contacted")
 	}
-	if HostVisited(VisitedHostsFromLedger(ledger), "other.example") {
-		t.Fatal("an undialed host must not be visited")
+	if HostVisited(ContactedHostsFromLedger(ledger), "other.example") {
+		t.Fatal("an undialed host must not be contacted")
 	}
 }
 

@@ -42,6 +42,7 @@ func destinationFact(cmd confine.EgressCommand, ep egressproxy.Endpoint, firstUs
 		PublicRegistry:      registry,
 		Opaque:              tunnelled,
 		FirstUseThisSession: firstUse,
+		Retrieval:           confine.RetrievalDial(cmd),
 	}
 }
 

@@ -19,17 +19,20 @@ func TestHostKey(t *testing.T) {
 	}
 }
 
-func TestVisitedHostsFromLedger(t *testing.T) {
+// Hosts that only appear in ingested content are not contacts.
+func TestContactedHostsAreOnlyDialedHosts(t *testing.T) {
+	dialed, _ := DialedHostRecord("dialed.example")
 	ev := AssembleLedger([]Record{
 		{Handle: "web#1", URL: "https://a.example/x", SourceTool: "fetch_url"},
 		{Handle: "web#2", URL: "https://B.example/y", SourceTool: "web_search"},
 		{Handle: "file#1", Path: "a.go", SourceTool: "read"},
+		dialed,
 	})
-	hosts := VisitedHostsFromLedger(ev)
-	if _, ok := hosts["a.example"]; !ok {
-		t.Fatalf("missing a.example: %v", hosts)
+	hosts := ContactedHostsFromLedger(ev)
+	if len(hosts) != 1 {
+		t.Fatalf("contacted %v, want only dialed.example", hosts)
 	}
-	if _, ok := hosts["b.example"]; !ok {
-		t.Fatalf("missing b.example: %v", hosts)
+	if _, ok := hosts["dialed.example"]; !ok {
+		t.Fatalf("missing dialed.example: %v", hosts)
 	}
 }

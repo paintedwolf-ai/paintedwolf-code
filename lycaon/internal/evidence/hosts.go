@@ -19,12 +19,16 @@ func HostKey(rawURL string) string {
 	return strings.ToLower(strings.TrimSpace(u.Hostname()))
 }
 
-// VisitedHostsFromLedger returns the set of hosts observed on ledger URL records
-// (web_search harvest, fetch_url targets, and worker-merged URLs).
-func VisitedHostsFromLedger(ev Ledger) map[string]struct{} {
+// ContactedHostsFromLedger returns the hosts this chat's own outbound dials
+// reached. Hosts that only appear in ingested content, such as search results
+// or a fetched page, are not contacts.
+func ContactedHostsFromLedger(ev Ledger) map[string]struct{} {
 	out := make(map[string]struct{})
-	for _, raw := range ObservedURLsSorted(ev) {
-		if h := HostKey(raw); h != "" {
+	for handle, record := range ev.Handles {
+		if !strings.HasPrefix(handle, DialedHostHandlePrefix) || record.SourceTool != DialedHostSourceTool {
+			continue
+		}
+		if h := HostKey(record.URL); h != "" {
 			out[h] = struct{}{}
 		}
 	}

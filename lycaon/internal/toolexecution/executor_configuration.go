@@ -8,9 +8,9 @@ import (
 
 // renderReject is the single exit for a structured reject leaving Invoke.
 
-// SessionHostLedger records hosts observed across page and command egress.
+// SessionHostLedger records the hosts a chat's own outbound dials reached.
 type SessionHostLedger interface {
-	SessionVisitedHosts(chatSessionID string) map[string]struct{}
+	SessionContactedHosts(chatSessionID string) map[string]struct{}
 	RecordHostVisit(ctx context.Context, chatSessionID, host string) error
 }
 

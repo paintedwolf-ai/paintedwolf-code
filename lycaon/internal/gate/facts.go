@@ -144,8 +144,13 @@ type Endpoint struct {
 	// Opaque is true when the transport is a tunnel whose payload the broker
 	// cannot read.
 	Opaque bool
-	// FirstUseThisSession is true when this session has not yet used this dial.
+	// FirstUseThisSession is true when this chat's own dials have not yet
+	// reached this host.
 	FirstUseThisSession bool
+	// Retrieval is a dial made under a declared retrieval capability, such
+	// as web research, whose contract already covers reaching its sources;
+	// the outbound destination gates leave it to that contract.
+	Retrieval bool
 }
 
 // FileMode is which direction a filesystem action moves content.
