@@ -23,7 +23,15 @@ func writeIdentified(conn *net.UnixConn, data []byte) error {
 	if pid <= 0 || pid > math.MaxInt32 {
 		return errors.New("process id does not fit the credential message")
 	}
-	credentials := unix.UnixCredentials(&unix.Ucred{Pid: int32(pid), Uid: uint32(os.Getuid()), Gid: uint32(os.Getgid())})
+	uid := os.Getuid()
+	if uid < 0 || uid > math.MaxUint32 {
+		return errors.New("process uid does not fit the credential message")
+	}
+	gid := os.Getgid()
+	if gid < 0 || gid > math.MaxUint32 {
+		return errors.New("process gid does not fit the credential message")
+	}
+	credentials := unix.UnixCredentials(&unix.Ucred{Pid: int32(pid), Uid: uint32(uid), Gid: uint32(gid)})
 	n, oobn, err := conn.WriteMsgUnix(data, credentials, nil)
 	if err == nil && (n != len(data) || oobn != len(credentials)) {
 		err = errors.New("short credential helper write")
