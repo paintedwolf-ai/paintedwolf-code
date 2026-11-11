@@ -666,14 +666,20 @@ func fileFacts(t FileTarget) []Fact {
 }
 
 // agentChosenOutbound reviews the first contact with a destination nobody
-// configured. Readable HTTP follows the same authority as a tunnel: a method
-// is an execution fact, not proof that a request only retrieves. A declared
-// retrieval capability already covers reaching its sources.
+// configured once the chat has read content this app did not author, or
+// cannot say whether it has: until then the broker's record of the contact is
+// the audit, and after it the agent's choice may not be its own. Readable HTTP
+// follows the same authority as a tunnel, since a method is an execution
+// fact, not proof that a request only retrieves. A declared retrieval
+// capability already covers reaching its sources.
 func agentChosenOutbound(f Facts, p Posture) (bool, []Fact, string) {
 	if f.Destination == nil || f.Leased || f.RequestConsented || f.Destination.Configured || f.Destination.Retrieval {
 		return false, nil, ""
 	}
 	if !f.Destination.FirstUseThisSession {
+		return false, nil, ""
+	}
+	if f.Ran.Has(ProducerIngestion) && !f.UntrustedIngested {
 		return false, nil, ""
 	}
 	if p.QuietsPublicRegistry(f) {
