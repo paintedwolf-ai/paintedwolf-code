@@ -233,7 +233,10 @@ export function useBriefing(projectId: Accessor<string | undefined>, target: Acc
     const wanted = target();
     untrack(() => {
       if (!id || !wanted) return attach(null);
-      if (attach(ensureEntry(id, wanted))) requestBriefing(id, wanted, { fresh: true });
+      const entry = ensureEntry(id, wanted);
+      // A held answer stays current through events and reconnect, so only a
+      // target never answered here is asked for.
+      if (attach(entry) && !entry.view().snapshot) requestBriefing(id, wanted, { fresh: true });
     });
   });
   onCleanup(() => attach(null));
