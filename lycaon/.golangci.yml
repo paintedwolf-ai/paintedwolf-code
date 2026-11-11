@@ -254,6 +254,23 @@ linters:
       - path: '^internal/tools/native/'
         linters:
           - gosec
+      # The FUSE and NFS servers translate fixed-width wire fields to and from the core's types.
+      - path: '^internal/layeredfs/(adapter/fuselinux|nfsserver)/'
+        text: 'G115'
+        linters:
+          - gosec
+      # Worker trees keep the modes their source and Git give them; engine storage sits under
+      # owner-only roots.
+      - path: '^internal/layeredfs/'
+        text: 'G30[126]'
+        linters:
+          - gosec
+      # Paths name entries of engine-owned branch, backing and checkpoint trees, resolved against
+      # their root before use.
+      - path: '^internal/(layeredfs|workspace|worker)/'
+        text: 'G(703|122)'
+        linters:
+          - gosec
       # CLI commands print user-facing output.
       - path: '^cmd/'
         text: 'use slog instead of'
