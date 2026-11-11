@@ -155,4 +155,3 @@ func ListRemotes(ctx context.Context, repoDir string) ([]RemoteEntry, bool) {
 	}
 	return remotes, true
 }
-

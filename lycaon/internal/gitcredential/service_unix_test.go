@@ -88,7 +88,7 @@ func TestServiceAnswersOnlyTheBoundInvocation(t *testing.T) {
 		t.Fatalf("helper connecting before the bind = %q", out)
 	}
 
-	exited := exec.Command("/bin/true")
+	exited := exec.Command("true")
 	testutil.FailErr(t, "run exited process", exited.Run())
 	if err := late.Bind(exited.Process.Pid); err == nil {
 		t.Fatal("bound an exited process")

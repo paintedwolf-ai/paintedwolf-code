@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
 	"slices"
 	"strings"
@@ -71,7 +72,27 @@ var networkForms = map[string]bool{"git fetch": true, "git push": true, "git pul
 
 // AgentLaunch admits one agent Git command's confined launch; release closes
 // its action lease.
-type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string) (plan exec.LaunchPlan, release func(context.Context), err error)
+type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string, hostSockets []confine.SocketGrant) (plan exec.LaunchPlan, release func(context.Context), err error)
+
+func (p Prepared) commandLine() string {
+	return strings.Join(append([]string{"git"}, p.command.args...), " ")
+}
+
+// grantedSSHAgent is the user's SSH agent when this call holds a socket
+// capability for it; SSH remotes otherwise authenticate without the agent.
+func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) string {
+	agent := gitexec.HostSSHAgentSocket(ctx)
+	if agent == "" {
+		return ""
+	}
+	resolved := fspath.CanonicalPath(agent)
+	for _, grant := range append(slices.Clone(tc.Socket.SocketGrants), tc.Socket.DurableSocketGrants...) {
+		if grant.ResolvedPath == resolved {
+			return agent
+		}
+	}
+	return ""
+}
 
 // NewOwners binds the frozen catalog's Git command specifications. A command
 // whose structured tool row exists keeps that operation identity; the rest
@@ -219,38 +240,16 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.owners.Launch == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, gitexec.ErrLaunchAuthorityRequired
 	}
-	launchTC := tc
-	var credentials *gitexec.AgentCredentials
-	sshAgent := ""
-	if networkForms[p.command.spec.Name] {
-		var err error
-		if credentials, err = gitexec.StartAgentCredentials(ctx); err != nil {
-			return settle(0, err, p.command.spec.Name)
-		}
-		defer func() { _ = credentials.Close() }()
-		grant, err := confine.ResolveSocketRequest(credentials.Socket())
+	// Network forms bind their launch once their remotes are admitted, so the
+	// confinement carries exactly those recipients and local paths.
+	if !networkForms[p.command.spec.Name] {
+		plan, release, err := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
 		if err != nil {
 			return settle(0, err, p.command.spec.Name)
 		}
-		launchTC.Socket.SocketGrants = append(slices.Clone(tc.Socket.SocketGrants), grant)
-		// SSH remotes authenticate through the user's agent; the broker still
-		// limits which hosts the command can reach with it.
-		if agentSocket := gitexec.HostSSHAgentSocket(ctx); agentSocket != "" {
-			if grant, err := confine.ResolveSocketRequest(agentSocket); err == nil {
-				launchTC.Socket.SocketGrants = append(launchTC.Socket.SocketGrants, grant)
-				sshAgent = agentSocket
-			}
-		}
+		defer release(context.WithoutCancel(ctx))
+		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
 	}
-	plan, release, err := p.owners.Launch(ctx, launchTC, "git", strings.Join(append([]string{"git"}, p.command.args...), " "))
-	if err != nil {
-		return settle(0, err, p.command.spec.Name)
-	}
-	if sshAgent != "" {
-		plan = plan.WithExtraEnv("SSH_AUTH_SOCK=" + sshAgent)
-	}
-	defer release(context.WithoutCancel(ctx))
-	ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials})
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)
 	}

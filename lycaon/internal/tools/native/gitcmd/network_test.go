@@ -330,10 +330,14 @@ esac
 	// for it, and the host's own SSH command must not apply.
 	gitexec.SetHostConfig(sshTestHostConfig{sshCmd: "/bin/false"})
 	t.Cleanup(func() { gitexec.SetHostConfig(nil) })
-	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string) (lycexec.LaunchPlan, func(context.Context), error) {
-		plan, release, err := UnconfinedLaunch(ctx, tc, subject, line)
-		return plan.WithExtraEnv("GIT_SSH_COMMAND=" + sshShim), release, err
+	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, sockets []confine.SocketGrant) (lycexec.LaunchPlan, func(context.Context), error) {
+		plan, release, err := UnconfinedLaunch(ctx, tc, subject, line, sockets)
+		return plan.WithReducedEnvironment().WithExtraEnv("GIT_SSH_COMMAND=" + sshShim), release, err
 	}
+	// The user's SSH agent reaches agent Git only through a socket capability.
+	grant, err := confine.ResolveSocketRequest(sockPath)
+	testutil.FailErr(t, "resolve agent socket grant", err)
+	h.tc.Socket.DurableSocketGrants = []confine.SocketGrant{grant}
 
 	return sockPath, argvLog, envLog
 }
@@ -470,6 +474,15 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 		if !strings.Contains(envText, want+"\n") {
 			t.Fatalf("ssh transport env missing %q:\n%s", want, envText)
 		}
+	}
+	h.tc.Socket.DurableSocketGrants = nil
+	if ls := h.exec("git", "ls-remote", "--heads", "origin"); ls.err != nil || ls.result.Status != 0 {
+		t.Fatalf("ssh ls-remote without the agent capability: %+v %v %s", ls.result, ls.err, ls.stderr)
+	}
+	envBytes, err = os.ReadFile(envLog)
+	testutil.FailErr(t, "read ssh env log", err)
+	if strings.Contains(string(envBytes), "SSH_AUTH_SOCK="+sockPath) {
+		t.Fatalf("SSH agent reached Git without a socket capability:\n%s", envBytes)
 	}
 	argvBytes, err := os.ReadFile(argvLog)
 	testutil.FailErr(t, "read ssh argv log", err)
