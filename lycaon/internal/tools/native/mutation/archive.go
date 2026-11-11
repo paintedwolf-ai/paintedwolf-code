@@ -170,13 +170,9 @@ func (inv *invocation) collect(base string, operands []string, rule collectRule,
 			if !rule.recursive {
 				return nil
 			}
-			children, err := os.ReadDir(bound.Resolved.Abs)
+			names, err := bound.ReadDir()
 			if err != nil {
 				return err
-			}
-			names := make([]string, 0, len(children))
-			for _, child := range children {
-				names = append(names, child.Name())
 			}
 			sort.Strings(names)
 			for _, child := range names {

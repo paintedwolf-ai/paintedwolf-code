@@ -158,7 +158,6 @@ agent_pool:
 		Router:      llm.NewStaticModelRouter(policy),
 	}
 
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mgr := session.NewHost(store, session.Models{Client: nil, Provider: svc, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	srv := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}, Providers: hostapi.ProvidersDependencies{LLM: svc}}), nil, hostapi.TestAPIToken)

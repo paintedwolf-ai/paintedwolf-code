@@ -76,7 +76,6 @@ func withSessions(sessions session.Store) fixtureOption {
 
 func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
 	testutil.FailErr(t, "build secret matcher", err)
 	fingerprints, err := secretmatch.NewFingerprinter(bytes.Repeat([]byte{0x5a}, 32))

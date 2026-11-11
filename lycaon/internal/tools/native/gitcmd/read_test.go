@@ -187,6 +187,7 @@ func newUninitializedHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "resolve root", err)
 	owners, err := NewOwners(git.NewManager())
 	testutil.FailErr(t, "owners", err)
+	owners.Launch = UnconfinedLaunch
 	boundary := nativefixture.Boundary(t)
 	owners.Boundary = boundary
 	tc := nativefixture.Context(root)

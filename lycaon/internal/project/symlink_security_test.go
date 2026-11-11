@@ -45,19 +45,19 @@ func TestResolveExistingDirFollowsSymlinks(t *testing.T) {
 	}
 }
 
-// TestValidateOpenPathBlocksResolvedSymlinkToDeniedPrefix ensures a symlink under
-// an allowed directory cannot bypass the deny list when the target is resolved.
-func TestValidateOpenPathBlocksResolvedSymlinkToDeniedPrefix(t *testing.T) {
+// TestResolveExistingDirCanonicalizesSymlinkToProtectedPrefix ensures a symlink
+// to a protected directory (such as ~/.ssh) resolves to its canonical target
+// path without attach-time refusal.
+func TestResolveExistingDirCanonicalizesSymlinkToProtectedPrefix(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink tests are unreliable on Windows CI")
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip(err)
-	}
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	ssh := filepath.Join(home, ".ssh")
-	if st, err := os.Stat(ssh); err != nil || !st.IsDir() {
-		t.Skip("~/.ssh not present as directory")
+	if err := os.MkdirAll(ssh, 0o700); err != nil {
+		t.Fatalf("mkdir .ssh: %v", err)
 	}
 
 	linkDir := t.TempDir()
@@ -68,14 +68,13 @@ func TestValidateOpenPathBlocksResolvedSymlinkToDeniedPrefix(t *testing.T) {
 
 	resolved, err := ResolveExistingDir(link)
 	if err != nil {
-		// confine.AttachedWriteRootRefused refuses secret-store targets before
-		// OpenPolicy runs, so a resolve failure passes.
-		if !errors.Is(err, ErrRootRefused) {
-			t.Fatalf("resolve: %v (want ErrRootRefused or open-policy deny)", err)
-		}
-		return
+		t.Fatalf("resolve symlink to .ssh: %v", err)
 	}
-	if err := DefaultOpenPolicy().ValidateOpenPath(resolved); err == nil {
-		t.Fatalf("policy unexpectedly allowed resolved=%q via link=%q", resolved, link)
+	wantSSH, err := filepath.EvalSymlinks(ssh)
+	if err != nil {
+		t.Fatalf("eval symlinks of .ssh: %v", err)
+	}
+	if resolved != wantSSH {
+		t.Fatalf("resolved = %q, want canonical target %q", resolved, wantSSH)
 	}
 }

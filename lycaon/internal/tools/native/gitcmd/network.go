@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/confine"
@@ -23,9 +24,15 @@ import (
 )
 
 func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer, certainty toolcontract.EffectCertainty) (toolcontract.ProducerResult, error) {
-	if err := authorizeRepoNetwork(ctx, p, tc, dir, repo.Root, stderr); err != nil {
+	admitted, err := authorizeRepoNetwork(ctx, p, tc, repo.Root, stderr)
+	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
+	ctx, done, err := bindNetworkLaunch(ctx, p, tc, admitted)
+	if err != nil {
+		return settleMutationError(err, toolcontract.NoEffect)
+	}
+	defer done()
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
 	if out.err != nil {
 		return settleMutationError(out.err, certainty)
@@ -43,9 +50,15 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 }
 
 func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
-	if err := authorizeRepoNetwork(ctx, p, tc, dir, repo.Root, stderr); err != nil {
+	admitted, err := authorizeRepoNetwork(ctx, p, tc, repo.Root, stderr)
+	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
+	ctx, done, err := bindNetworkLaunch(ctx, p, tc, admitted)
+	if err != nil {
+		return settleMutationError(err, toolcontract.NoEffect)
+	}
+	defer done()
 	fetchArgs := []string{"fetch"}
 	if has(p.Argv, "-q") {
 		fetchArgs = append(fetchArgs, "-q")
@@ -82,7 +95,8 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	}
 	ops := p.Argv.Operands().Values()
 	rawURL := ops[0]
-	if err := authorizeRemote(ctx, p, tc, dir, rawURL, stderr); err != nil {
+	admitted := admittedRemotes{urls: []string{rawURL}}
+	if err := authorizeRemote(ctx, p, tc, dir, rawURL, false, &admitted, stderr); err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	var destTarget string
@@ -101,6 +115,12 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
+	admitted.writes = append(admitted.writes, filepath.Dir(boundDest.Resolved.Abs))
+	ctx, done, err := bindNetworkLaunch(ctx, p, tc, admitted)
+	if err != nil {
+		return settleMutationError(err, toolcontract.NoEffect)
+	}
+	defer done()
 	var flags []string
 	if has(p.Argv, "-q") {
 		flags = append(flags, "-q")
@@ -138,29 +158,77 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
 }
 
-func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir, repoRoot string, stderr io.Writer) error {
+// admittedRemotes is what a network command was authorized to reach: its
+// remote URLs, and the local repositories among them it may read or write.
+type admittedRemotes struct {
+	urls          []string
+	reads, writes []string
+}
+
+// authorizeRepoNetwork admits every URL the command will contact, as Git
+// itself resolves them, then confirms the resolution still holds once any
+// approval wait ends.
+func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, repoRoot string, stderr io.Writer) (admittedRemotes, error) {
+	intent := gitexec.RemoteIntent{Push: p.command.spec.Name == "git push"}
 	if p.command.spec.Name == "git fetch" && has(p.Argv, "--all") {
-		if remotes, ok := gitexec.ListRemotes(ctx, repoRoot); ok {
-			for _, r := range remotes {
-				if err := authorizeRemote(ctx, p, tc, dir, r.URL, stderr); err != nil {
-					return err
-				}
-			}
+		intent.All = true
+	} else if ops := p.Argv.Operands().Values(); len(ops) > 0 {
+		intent.Remote = ops[0]
+	}
+	urls, err := gitexec.ResolveRemoteURLs(ctx, repoRoot, intent)
+	if err != nil {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: '%s' does not appear to be a git repository [COMMAND_OPERAND_INVALID]", p.command.spec.Name, intent.Remote))
+		return admittedRemotes{}, &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": p.command.spec.Name, "word": intent.Remote, "expected": "a configured remote or a repository URL", "reason": "Git cannot resolve the remote to a URL."}}
+	}
+	admitted := admittedRemotes{urls: urls}
+	for _, rawURL := range urls {
+		if err := authorizeRemote(ctx, p, tc, repoRoot, rawURL, intent.Push, &admitted, stderr); err != nil {
+			return admittedRemotes{}, err
 		}
 	}
-	remoteURL := p.owners.Git.RemoteURL(ctx, repoRoot, remoteQueryArgs(p))
-	return authorizeRemote(ctx, p, tc, dir, remoteURL, stderr)
-}
-
-func remoteQueryArgs(p Prepared) []string {
-	sub := firstOrEmpty(p.command.args)
-	if ops := p.Argv.Operands().Values(); len(ops) > 0 {
-		return []string{sub, ops[0]}
+	if current, err := gitexec.ResolveRemoteURLs(ctx, repoRoot, intent); err != nil || !slices.Equal(current, urls) {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: the remote configuration changed while it was being authorized [GIT_REMOTE_CHANGED]", p.command.spec.Name))
+		return admittedRemotes{}, &toolrejection.ToolReject{Code: "GIT_REMOTE_CHANGED", Retryable: true, Data: map[string]any{"command": p.command.spec.Name}}
 	}
-	return []string{sub}
+	return admitted, nil
 }
 
-func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir, rawURL string, stderr io.Writer) error {
+// bindNetworkLaunch binds the command's confined launch for what was
+// admitted: a credential service scoped to its HTTP recipients, the local
+// repositories it may read or write, and the user's SSH agent when the call
+// holds that socket capability.
+func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, admitted admittedRemotes) (context.Context, func(), error) {
+	credentials, err := gitexec.StartAgentCredentials(ctx)
+	if err != nil {
+		return ctx, nil, err
+	}
+	grant, err := confine.ResolveSocketRequest(credentials.Socket())
+	if err != nil {
+		_ = credentials.Close()
+		return ctx, nil, err
+	}
+	launchTC := tc
+	launchTC.Files.SessionReadPaths = append(slices.Clone(tc.Files.SessionReadPaths), admitted.reads...)
+	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), admitted.writes...)
+	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), []confine.SocketGrant{grant})
+	if err != nil {
+		_ = credentials.Close()
+		return ctx, nil, err
+	}
+	if agent := grantedSSHAgent(ctx, tc); agent != "" {
+		plan = plan.WithExtraEnv("SSH_AUTH_SOCK=" + agent)
+	}
+	credentials.Admit(admitted.urls...)
+	done := func() {
+		release(context.WithoutCancel(ctx))
+		_ = credentials.Close()
+	}
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials}), done, nil
+}
+
+// authorizeRemote admits one remote: network hosts through the egress gate,
+// local repositories through filesystem authority, write for push.
+func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir, rawURL string, push bool, admitted *admittedRemotes, stderr io.Writer) error {
 	rawURL = strings.TrimSpace(rawURL)
 	if rawURL == "" {
 		return nil
@@ -172,6 +240,19 @@ func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir,
 	}
 	host := remoteNetworkHost(rawURL)
 	if host == "" {
+		local := strings.TrimPrefix(rawURL, "file://")
+		if !filepath.IsAbs(local) {
+			local = filepath.Join(dir, local)
+		}
+		bound, err := p.paths.Bind(ctx, local, push)
+		if err != nil {
+			return err
+		}
+		if push {
+			admitted.writes = append(admitted.writes, bound.Resolved.Abs)
+		} else {
+			admitted.reads = append(admitted.reads, bound.Resolved.Abs)
+		}
 		return nil
 	}
 	if egressgate.From(ctx) == nil {

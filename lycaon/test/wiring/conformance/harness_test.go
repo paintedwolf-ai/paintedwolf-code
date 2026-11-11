@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gate"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -232,8 +233,10 @@ func (r *conformanceRunner) promptAnsweringApprovals(t *testing.T, projectID, se
 }
 
 // runningProgramPolls bounds joinRunningProgram in reads, so a program that never ends
-// fails its case and names itself instead of taking the package timeout.
-const runningProgramPolls = 1 << 15
+// fails its case and names itself instead of taking the package timeout. Race
+// instrumentation slows every read, so the read budget scales with the runner's
+// timeout allowance.
+var runningProgramPolls = (1 << 15) * runnerbudget.TimeoutScale()
 
 // joinRunningProgram follows a program past the foreground budget to its end: how long
 // a case takes on a given host decides nothing about what it prints. The program's

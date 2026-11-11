@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/presence"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/tsparse"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -62,8 +61,6 @@ func (b *serveBuilder) wireEvents() error {
 	if err := b.wireCheckpointRuntime(); err != nil {
 		return err
 	}
-
-	project.SetDefaultOpenPolicy(project.DefaultOpenPolicy())
 
 	b.identity, err = deviceidentity.Load(b.startup.cfg.APIToken)
 	if err != nil {

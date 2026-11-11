@@ -19,11 +19,6 @@ var networkCommands = map[string]bool{"fetch": true, "push": true, "ls-remote": 
 // NetworkCommandTimeout bounds one network command.
 const NetworkCommandTimeout = 10 * time.Minute
 
-// RemoteURL names the remote a network argv contacts in dir.
-func (m *Manager) RemoteURL(ctx context.Context, dir string, args []string) string {
-	return gitexec.RemoteURLFor(ctx, dir, args)
-}
-
 // NetworkCommand runs fetch, push or ls-remote with the host's credential
 // helper and proxy policy, streaming Git's stdout. fetch and push hold the
 // repository lease; none of them touch the work tree or index.
@@ -38,7 +33,7 @@ func (m *Manager) NetworkCommand(ctx context.Context, dir string, args []string,
 		}
 		defer release()
 	}
-	opts := networkOpts(m.RemoteURL(ctx, dir, args), NetworkCommandTimeout)
+	opts := networkOpts("", NetworkCommandTimeout)
 	opts.ExtraConfig = []string{"color.ui=false", "fetch.recurseSubmodules=false", "submodule.recurse=false"}
 	diagnostics, code, err := gitexec.RunTo(ctx, dir, args, opts, stdout)
 	if err == nil && args[0] == "fetch" {
