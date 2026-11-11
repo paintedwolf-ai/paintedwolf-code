@@ -79,9 +79,10 @@ function platformTimersThrottled(): boolean {
   return typeof document.hasFocus === "function" && !document.hasFocus();
 }
 
-type PerfDetail = Record<string, string | number | boolean | undefined>;
+export type PerfDetail = Record<string, string | number | boolean | undefined>;
 
-function emitStall(event: string, detail: PerfDetail): void {
+/** Records one diagnostic in every enabled capture. */
+export function recordPerfDiagnostic(event: string, detail: PerfDetail): void {
   if (isStreamScrollDebugEnabled()) {
     denScrollDebugLog("perf", event, detail);
   }
@@ -102,7 +103,7 @@ export function installMainThreadPerfObserver(): void {
       performanceObserver = new PO((list) => {
         for (const entry of list.getEntries()) {
           if (entry.duration < LONG_TASK_MS) continue;
-          emitStall("longtask", {
+          recordPerfDiagnostic("longtask", {
             dur_ms: Math.round(entry.duration),
             start_ms: Math.round(entry.startTime),
             name: entry.name,
@@ -131,7 +132,7 @@ export function installMainThreadPerfObserver(): void {
     flushSyncTotals(actual);
     if (lag >= LAG_STALL_MS) {
       // Background timer throttling is not a main-thread stall.
-      emitStall(platformTimersThrottled() ? "loop-throttled" : "loop-stall", {
+      recordPerfDiagnostic(platformTimersThrottled() ? "loop-throttled" : "loop-stall", {
         lag_ms: Math.round(lag),
         recent: recentTrail(actual) || undefined,
       });
