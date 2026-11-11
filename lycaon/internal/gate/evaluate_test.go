@@ -115,6 +115,7 @@ func fixtures() []fixture {
 	outsideReadSilent.File = &FileTarget{Path: "/proj/notes.md", Mode: ModeRead}
 
 	outboundFires := baseFacts(StagePreDial)
+	outboundFires.UntrustedIngested = true
 	outboundFires.Destination = &Endpoint{Host: "paste.example", Transport: "http", Opaque: true, FirstUseThisSession: true}
 	outboundSilent := baseFacts(StagePreDial)
 	outboundSilent.Destination = &Endpoint{
