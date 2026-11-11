@@ -5,6 +5,7 @@ package delegations
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -40,9 +41,15 @@ type realEngineHost struct {
 	detach            func(mountPath string)
 }
 
+// helperWorker is one mounted worker the dying engine serves.
+type helperWorker struct {
+	Task, Root, Runtime, Backing, Key string
+}
+
 // TestRealMountKilledEngineRecoversThroughStartup [process-crash evidence, not physical
-// power-loss proof] kills a real serving process with a holder inside its mount, then a new
-// engine settles it through the production startup entrypoint and reconstructs the checkpoint.
+// power-loss proof] kills a real serving process with several mounted workers and a holder inside
+// one mount. A new engine settles every recorded mount through the production startup entrypoint
+// and reconstructs each checkpoint, and leaves a mount it never recorded, beside them, untouched.
 func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	if os.Getenv(realEngineHelperEnv) != "" {
 		runRealEngine(t)
@@ -52,26 +59,37 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	mountedHost.requireAvailable(t)
 	f := newEngineFixture(t)
 	f.engine.Workspace.WithSelector(nil)
-	task := f.claimDefaultWorker()
-	projectKey := filepath.Base(filepath.Dir(task.WorkspaceRoot))
 	branchRoot := enginepaths.WorkerBranchesRootUnder(f.stateRoot)
-	runtimeDir := filepath.Join(branchRoot, ".adapter", projectKey)
-	backing := filepath.Join(runtimeDir, task.ID+".backing")
-	metaDir := enginepaths.MetaDirForBranchRoot(task.WorkspaceRoot)
-	meta, err := workspace.LoadJobMeta(metaDir)
-	testutil.FailErr(t, "load meta", err)
-	meta.AdapterID, meta.PreparationKind, meta.ViewID = mountedHost.adapter.ID(), adapter.PreparationMounted, task.ID
-	meta.JournalPath = filepath.Join(backing, "journal")
-	testutil.FailErr(t, "write meta", workspace.WriteJobMeta(metaDir, meta))
-	testutil.FailErr(t, "empty the mount point", clearDir(task.WorkspaceRoot))
+	var workers []helperWorker
+	for range 2 {
+		task := f.claimDefaultWorker()
+		projectKey := filepath.Base(filepath.Dir(task.WorkspaceRoot))
+		runtimeDir := filepath.Join(branchRoot, ".adapter", projectKey)
+		backing := filepath.Join(runtimeDir, task.ID+".backing")
+		metaDir := enginepaths.MetaDirForBranchRoot(task.WorkspaceRoot)
+		meta, err := workspace.LoadJobMeta(metaDir)
+		testutil.FailErr(t, "load meta", err)
+		meta.AdapterID, meta.PreparationKind, meta.ViewID = mountedHost.adapter.ID(), adapter.PreparationMounted, task.ID
+		meta.JournalPath = filepath.Join(backing, "journal")
+		testutil.FailErr(t, "write meta", workspace.WriteJobMeta(metaDir, meta))
+		testutil.FailErr(t, "empty the mount point", clearDir(task.WorkspaceRoot))
+		workers = append(workers, helperWorker{Task: task.ID, Root: task.WorkspaceRoot, Runtime: runtimeDir, Backing: backing, Key: projectKey})
+	}
+	// The foreign mount sits beside the workers' branches under a name like theirs, served by the
+	// same adapter, with its records kept where the engine never looks.
+	foreignRoot := workers[0].Root + "-foreign"
+	testutil.FailErr(t, "foreign mount point", os.MkdirAll(foreignRoot, 0o755))
+	foreignRuntime := t.TempDir()
+	encoded, err := json.Marshal(workers)
+	testutil.FailErr(t, "encode workers", err)
 
 	exe, err := os.Executable()
 	testutil.FailErr(t, "executable", err)
 	engine := exec.Command(exe, "-test.run=^TestRealMountKilledEngineRecoversThroughStartup$")
 	engine.Env = append(os.Environ(), realEngineHelperEnv+"=1",
-		"HELPER_TASK="+task.ID, "HELPER_ROOT="+task.WorkspaceRoot, "HELPER_RUNTIME="+runtimeDir, "HELPER_BACKING="+backing,
+		"HELPER_WORKERS="+string(encoded), "HELPER_FOREIGN_ROOT="+foreignRoot, "HELPER_FOREIGN_RUNTIME="+foreignRuntime,
 		"HELPER_PROJECT="+f.project, "HELPER_STORE="+filepath.Join(enginepaths.WorkerRecoveryRootUnder(f.stateRoot), "checkpoints"),
-		"HELPER_STATE="+filepath.Join(enginepaths.WorkerRecoveryRootUnder(f.stateRoot), "state"), "HELPER_KEY="+projectKey)
+		"HELPER_STATE="+filepath.Join(enginepaths.WorkerRecoveryRootUnder(f.stateRoot), "state"))
 	engine.Stderr = os.Stderr
 	stdout, err := engine.StdoutPipe()
 	testutil.FailErr(t, "helper stdout", err)
@@ -85,14 +103,17 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 			_ = engine.Process.Kill()
 			_ = engine.Wait()
 		}
-		mountedHost.detach(task.WorkspaceRoot)
+		for _, w := range workers {
+			mountedHost.detach(w.Root)
+		}
+		mountedHost.detach(foreignRoot)
 	})
 	line, err := bufio.NewReader(stdout).ReadString('\n')
 	if err != nil || line != "ready\n" {
 		t.Fatalf("helper engine not ready: %q err=%v", line, err)
 	}
 
-	holder := exec.Command("/bin/sh", "-c", `cd "$1" && echo inside; read _; exit 0`, "sh", task.WorkspaceRoot)
+	holder := exec.Command("/bin/sh", "-c", `cd "$1" && echo inside; read _; exit 0`, "sh", workers[0].Root)
 	holderIn, err := holder.StdinPipe()
 	testutil.FailErr(t, "holder stdin", err)
 	holderOut, err := holder.StdoutPipe()
@@ -108,10 +129,13 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	testutil.FailErr(t, "kill engine", engine.Process.Kill())
 	_ = engine.Wait()
 	killed = true
-	mountedHost.requireServerGone(t, task.WorkspaceRoot)
-	if err := workspace.RefuseMountedBranch(task.WorkspaceRoot); !errors.Is(err, workspace.ErrBranchMounted) {
-		t.Fatalf("a dead mount must refuse deletion: %v", err)
+	for _, w := range workers {
+		mountedHost.requireServerGone(t, w.Root)
+		if err := workspace.RefuseMountedBranch(w.Root); !errors.Is(err, workspace.ErrBranchMounted) {
+			t.Fatalf("a dead mount must refuse deletion: %v", err)
+		}
 	}
+	mountedHost.requireServerGone(t, foreignRoot)
 
 	coordinator, err := newWorkerRecovery(f.stateRoot, nil)
 	testutil.FailErr(t, "production coordinator", err)
@@ -121,27 +145,32 @@ func TestRealMountKilledEngineRecoversThroughStartup(t *testing.T) {
 	next.Queue.SetWorkerWorkspaceManager(next.Workspace)
 	testutil.FailErr(t, "startup recovery", next.RecoverWorkerViews(t.Context()))
 
-	if err := workspace.RefuseMountedBranch(task.WorkspaceRoot); err != nil {
-		t.Fatalf("mount remains after recovery: %v", err)
+	for i, w := range workers {
+		if err := workspace.RefuseMountedBranch(w.Root); err != nil {
+			t.Fatalf("mount remains after recovery: %v", err)
+		}
+		if resumed, ok := next.Queue.Get(w.Task); !ok || resumed.Status.IsTerminal() {
+			t.Fatalf("worker did not resume from its checkpoint: %+v", resumed)
+		}
+		if got, want := f.readBranch(w.Root, "app.txt"), fmt.Sprintf("checkpoint-A-%d\n", i); got != want {
+			t.Fatalf("rebuilt branch shows %q, want %q", got, want)
+		}
+		records, err := next.Recovery.ListInterruptedRecords(w.Task)
+		testutil.FailErr(t, "interrupted", err)
+		if len(records) != 1 || !quarantineHolds(t, records[0].QuarantineDir, fmt.Sprintf("unsealed-after-A-%d\n", i)) {
+			t.Fatalf("interrupted work: %+v", records)
+		}
+		if idents, err := next.Recovery.ListMountIdentities(w.Task); err != nil {
+			t.Fatalf("identities: %v", err)
+		} else if len(idents) != 1 || idents[0].ViewID == w.Task {
+			t.Fatalf("killed view identity must be gone, rebuilt view recorded: %+v", idents)
+		}
+	}
+	if mounted, err := adapter.MountBoundaryPresent(foreignRoot); err != nil || !mounted {
+		t.Fatalf("startup touched a mount it never recorded: mounted=%v err=%v", mounted, err)
 	}
 	if err := holder.Process.Signal(syscall.Signal(0)); err != nil {
 		t.Fatalf("holder inside the mount was affected: %v", err)
-	}
-	if resumed, ok := next.Queue.Get(task.ID); !ok || resumed.Status.IsTerminal() {
-		t.Fatalf("worker did not resume from its checkpoint: %+v", resumed)
-	}
-	if got := f.readBranch(task.WorkspaceRoot, "app.txt"); got != "checkpoint-A\n" {
-		t.Fatalf("rebuilt branch shows %q", got)
-	}
-	records, err := next.Recovery.ListInterruptedRecords(task.ID)
-	testutil.FailErr(t, "interrupted", err)
-	if len(records) != 1 || !quarantineHolds(t, records[0].QuarantineDir, "unsealed-after-A\n") {
-		t.Fatalf("interrupted work: %+v", records)
-	}
-	if idents, err := next.Recovery.ListMountIdentities(task.ID); err != nil {
-		t.Fatalf("identities: %v", err)
-	} else if len(idents) != 1 || idents[0].ViewID == task.ID {
-		t.Fatalf("killed view identity must be gone, rebuilt view recorded: %+v", idents)
 	}
 	_ = holderIn.Close()
 	if err := <-holderDone; err != nil {
@@ -162,41 +191,52 @@ func clearDir(dir string) error {
 	return nil
 }
 
-// runRealEngine is the engine that dies: it serves a real mount, publishes through it and
-// leaves later work unsealed.
+// runRealEngine is the engine that dies: it serves a real mount per worker, publishes through
+// each and leaves later work unsealed, and serves one more mount it records nowhere.
 func runRealEngine(t *testing.T) {
-	task, root := os.Getenv("HELPER_TASK"), os.Getenv("HELPER_ROOT")
+	var workers []helperWorker
+	testutil.FailErr(t, "helper workers", json.Unmarshal([]byte(os.Getenv("HELPER_WORKERS")), &workers))
 	store, err := checkpoint.NewStore(os.Getenv("HELPER_STORE"))
 	testutil.FailErr(t, "helper store", err)
 	coordinator, err := recovery.NewCoordinator(recovery.CoordinatorConfig{RootDir: os.Getenv("HELPER_STATE"), CheckpointStore: store})
 	testutil.FailErr(t, "helper coordinator", err)
 	mountedHost := newRealEngineHost()
 	adp := mountedHost.adapter
-	view, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
-		ViewID: task, RuntimeDir: os.Getenv("HELPER_RUNTIME"), BackingDir: os.Getenv("HELPER_BACKING"),
-		TargetRootDirs: map[string]string{fixtureRootID: root},
-		QuiesceHook:    mountedHost.quiesce, FlushClientHook: mountedHost.flushClients,
-		Grants: []adapter.RootGrant{{RootID: fixtureRootID, Label: fixtureRootID, SourcePath: os.Getenv("HELPER_PROJECT"), IsPrimary: true}},
-	})
-	testutil.FailErr(t, "helper prepare", err)
-	testutil.FailErr(t, "helper journal", coordinator.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
-		WorkerID: task, ViewID: task, TaskID: task, ProjectID: os.Getenv("HELPER_KEY"), AdapterID: adp.ID(), BackingDir: view.BackingDir,
-	}))
-	testutil.FailErr(t, "helper write", os.WriteFile(filepath.Join(root, "app.txt"), []byte("checkpoint-A\n"), 0o644))
-	publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
-		Core: view.Core, Store: store, WorkerID: task, TaskID: task, ProjectID: os.Getenv("HELPER_KEY"), SourceGeneration: "1",
-		SelectedRoots: []layeredfs.RootSpec{{ID: fixtureRootID, Label: fixtureRootID, TrunkPath: os.Getenv("HELPER_PROJECT"), IsPrimary: true}},
-		Callbacks:     adp.NewBarrierProvider(task),
-	})
-	testutil.FailErr(t, "helper publisher", err)
-	_, err = publisher.Publish(context.Background(), checkpoint.PublishRequest{CheckpointID: "cp-A"})
-	testutil.FailErr(t, "helper publish", err)
-	testutil.FailErr(t, "helper journal publish", coordinator.RecordTransition(task, task, recovery.PhasePublication, recovery.StateCommitted, "cp-A", "publish", nil, false))
-	testutil.FailErr(t, "helper unsealed", os.WriteFile(filepath.Join(root, "app.txt"), []byte("unsealed-after-A\n"), 0o644))
-	file, err := os.Open(filepath.Join(root, "app.txt"))
-	testutil.FailErr(t, "helper reopen", err)
-	testutil.FailErr(t, "helper sync", file.Sync())
-	_ = file.Close()
+	prepare := func(viewID, root, runtime, backing string) *adapter.PreparedView {
+		view, err := adp.Prepare(t.Context(), adapter.PrepareRequest{
+			ViewID: viewID, RuntimeDir: runtime, BackingDir: backing,
+			TargetRootDirs: map[string]string{fixtureRootID: root},
+			QuiesceHook:    mountedHost.quiesce, FlushClientHook: mountedHost.flushClients,
+			Grants: []adapter.RootGrant{{RootID: fixtureRootID, Label: fixtureRootID, SourcePath: os.Getenv("HELPER_PROJECT"), IsPrimary: true}},
+		})
+		testutil.FailErr(t, "helper prepare", err)
+		return view
+	}
+	for i, w := range workers {
+		view := prepare(w.Task, w.Root, w.Runtime, w.Backing)
+		testutil.FailErr(t, "helper journal", coordinator.SaveWorkerJournal(recovery.WorkerLifecycleJournal{
+			WorkerID: w.Task, ViewID: w.Task, TaskID: w.Task, ProjectID: w.Key, AdapterID: adp.ID(), BackingDir: view.BackingDir,
+		}))
+		app := filepath.Join(w.Root, "app.txt")
+		testutil.FailErr(t, "helper write", os.WriteFile(app, fmt.Appendf(nil, "checkpoint-A-%d\n", i), 0o644))
+		publisher, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
+			Core: view.Core, Store: store, WorkerID: w.Task, TaskID: w.Task, ProjectID: w.Key, SourceGeneration: "1",
+			SelectedRoots: []layeredfs.RootSpec{{ID: fixtureRootID, Label: fixtureRootID, TrunkPath: os.Getenv("HELPER_PROJECT"), IsPrimary: true}},
+			Callbacks:     adp.NewBarrierProvider(w.Task),
+		})
+		testutil.FailErr(t, "helper publisher", err)
+		checkpointID := fmt.Sprintf("cp-A-%d", i)
+		_, err = publisher.Publish(context.Background(), checkpoint.PublishRequest{CheckpointID: checkpointID})
+		testutil.FailErr(t, "helper publish", err)
+		testutil.FailErr(t, "helper journal publish", coordinator.RecordTransition(w.Task, w.Task, recovery.PhasePublication, recovery.StateCommitted, checkpointID, "publish", nil, false))
+		testutil.FailErr(t, "helper unsealed", os.WriteFile(app, fmt.Appendf(nil, "unsealed-after-A-%d\n", i), 0o644))
+		file, err := os.Open(app)
+		testutil.FailErr(t, "helper reopen", err)
+		testutil.FailErr(t, "helper sync", file.Sync())
+		_ = file.Close()
+	}
+	foreignRuntime := os.Getenv("HELPER_FOREIGN_RUNTIME")
+	prepare("foreign", os.Getenv("HELPER_FOREIGN_ROOT"), foreignRuntime, filepath.Join(foreignRuntime, "backing"))
 	fmt.Println("ready")
 	_, _ = os.Stdin.Read(make([]byte, 1))
 }
