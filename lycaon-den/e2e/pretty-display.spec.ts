@@ -76,9 +76,7 @@ async function caretTop(page: Page): Promise<number> {
 }
 
 async function place(page: Page, pos: number) {
-  await page.evaluate((pos) => {
-    window.__pretty.view().dispatch({ selection: { anchor: pos }, scrollIntoView: true });
-  }, pos);
+  await page.evaluate((pos) => window.__pretty.view().dispatch({ selection: { anchor: pos }, scrollIntoView: true }), pos);
   await settle(page);
 }
 
