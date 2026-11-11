@@ -2,7 +2,6 @@ package transcript
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/briefing"
 
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/pagecursor"
@@ -82,9 +81,4 @@ func (m *Service) TurnLoadsForPage(ctx context.Context, page api.SessionTranscri
 		out = append(out, TurnLoadWire(r))
 	}
 	return out, nil
-}
-
-// ReadActionCause reads bounded evidence around one tool call.
-func (m *Service) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (briefing.CausalRead, error) {
-	return m.store.ReadActionCause(ctx, ref)
 }

@@ -2,7 +2,6 @@ package transcript
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/briefing"
 
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/people"
@@ -23,7 +22,6 @@ type Store interface {
 	AppendMessages(context.Context, string, ...api.Message) error
 	GetMessage(context.Context, string, string) (api.Message, error)
 	GetMessages(context.Context, string) ([]api.Message, error)
-	ReadActionCause(context.Context, briefing.ActionRef) (briefing.CausalRead, error)
 	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
 	ListTurnLoadReceiptsForTurns(context.Context, []string) ([]store.TurnLoadReceipt, error)
 	GetWorkerJobMessages(context.Context, string, string) ([]api.Message, error)
