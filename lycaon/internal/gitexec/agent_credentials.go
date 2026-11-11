@@ -8,6 +8,9 @@ import (
 	"github.com/lycaon/lycaon/internal/gitcredential"
 )
 
+// agentCredentialStore is the host store an agent's credential service reads.
+var agentCredentialStore = gitcredential.PlatformBackend
+
 // AgentCredentials is the credential service one agent network command's Git
 // asks. It answers get only, only for recipients admitted to it, from the
 // host's own store; the confined helper never reads the store itself.
@@ -24,7 +27,7 @@ func StartAgentCredentials(ctx context.Context) (*AgentCredentials, error) {
 		return nil, err
 	}
 	scope := &gitcredential.Scope{}
-	service, err := gitcredential.Serve(ctx, gitcredential.ServeOptions{GitBinary: bin, Store: gitcredential.PlatformBackend(), Scope: scope})
+	service, err := gitcredential.Serve(ctx, gitcredential.ServeOptions{GitBinary: bin, Store: agentCredentialStore(), Scope: scope})
 	if err != nil {
 		return nil, err
 	}

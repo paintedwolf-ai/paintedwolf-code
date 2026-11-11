@@ -8,7 +8,7 @@ import (
 )
 
 // ErrOutOfScope refuses a helper request the served invocation was not
-// admitted for. Nothing reaches the backend.
+// admitted for. Nothing reaches the store.
 var ErrOutOfScope = errors.New("credential request is outside the invocation's admitted scope")
 
 // Scope limits one service to the recipients its invocation was admitted to
@@ -44,7 +44,7 @@ func (s *Scope) admits(c Credential) bool {
 }
 
 type scopedBackend struct {
-	inner backend
+	inner Backend
 	scope *Scope
 }
 
@@ -62,4 +62,4 @@ func (scopedBackend) Erase(Credential) error { return ErrOutOfScope }
 // PlatformBackend is the host's own credential store: the macOS Keychain, or
 // the vault elsewhere. A scoped service reads it on the helper's behalf, so the
 // helper process itself never holds store access.
-func PlatformBackend() backend { return newBackend() }
+func PlatformBackend() Backend { return newBackend() }

@@ -16,7 +16,7 @@ import (
 )
 
 // The test process stands in for the served git process and for the helper.
-func serveForSelf(t *testing.T, store backend) *Service {
+func serveForSelf(t *testing.T, store Backend) *Service {
 	t.Helper()
 	self, err := os.Executable()
 	testutil.FailErr(t, "resolve test binary", err)
