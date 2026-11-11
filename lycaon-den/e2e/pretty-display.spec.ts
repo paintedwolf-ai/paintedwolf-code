@@ -172,6 +172,15 @@ modelIndependentWebE2e("edits at visual line ends and drags across breaks", asyn
   await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
   await page.keyboard.press(process.platform === "darwin" ? "Meta+z" : "Control+z");
   await expect.poll(() => page.evaluate(() => window.__pretty.view().state.doc.toString())).toBe(before);
+  if (page.context().browser()?.browserType().name() === "chromium") {
+    // Composition through the input method, committed at the visual line end.
+    await page.mouse.click(end!.right + 40, (end!.top + end!.bottom) / 2);
+    const ime = await page.context().newCDPSession(page);
+    await ime.send("Input.imeSetComposition", { text: "に", selectionStart: 1, selectionEnd: 1 });
+    await ime.send("Input.insertText", { text: "日" });
+    await expect.poll(() => page.evaluate((pos) => window.__pretty.view().state.doc.sliceString(pos, pos + 1), b.pos)).toBe("日");
+    expect((await selection(page)).head).toBe(b.pos + 1);
+  }
 
   await place(page, 0);
   const breaks = await viewportBreaks(page);
