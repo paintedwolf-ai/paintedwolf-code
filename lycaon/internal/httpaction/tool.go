@@ -313,7 +313,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		return exchanged{}, invalid(err)
 	}
 	cookieSpec.hostHeader = screened.hostHeader
-	screened.beforeCookieHop, err = prepareCookieDelivery(ctx, deps, cookieSpec, jar)
+	screened.beforeCookieHop, err = prepareRequestCookieDelivery(ctx, deps, cookieSpec, tctx, jar, jarReq, opts.Jar, hasCookieReference(screened))
 	if err != nil {
 		return exchanged{}, err
 	}
@@ -346,6 +346,11 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if err != nil {
 		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
 			return exchanged{}, capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
+		}
+		var exErr *outboundhttp.ExchangeError
+		if reject := toolrejection.AsToolReject(err); reject != nil && (!errors.As(err, &exErr) || (exErr.RequestsStarted == 0 && exErr.ResponsesReceived == 0)) &&
+			(reject.Code == CookieJarFailedCode || reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode) {
+			return exchanged{}, reject
 		}
 		return exchanged{}, &TransportFailure{Reject: sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err), Cause: err}
 	}
@@ -481,17 +486,19 @@ func send(
 				return err
 			}
 		}
+		if outbound.beforeCookieHop != nil {
+			if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
+				return err
+			}
+		}
 		if !firstHopSeen {
 			firstHopSeen = true
 			loopbackObs.beforeFirstHop(hopCtx, tctx, spec)
 		}
-		if outbound.beforeCookieHop != nil {
-			return outbound.beforeCookieHop(hopCtx, hop)
-		}
 		return nil
 	}
 	if jar != nil {
-		req.Jar = jar.Store
+		req.Jar = &managedJarAdapter{jar: jar}
 	}
 	if opts.Jar != nil {
 		req.Jar = opts.Jar

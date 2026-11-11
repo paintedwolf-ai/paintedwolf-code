@@ -118,6 +118,24 @@ type HopRequest struct {
 	URL        *url.URL
 	Method     string
 	HostHeader string
+	setCookies func([]*http.Cookie)
+}
+
+// FreezeCookies binds the exact owned cookie snapshot authorized for this hop
+// so Do transmits those exact cookies without another Jar.Cookies lookup.
+func (h HopRequest) FreezeCookies(cookies []*http.Cookie) bool {
+	if h.setCookies == nil {
+		return false
+	}
+	cp := make([]*http.Cookie, 0, len(cookies))
+	for _, c := range cookies {
+		if c != nil {
+			clone := *c
+			cp = append(cp, &clone)
+		}
+	}
+	h.setCookies(cp)
+	return true
 }
 
 // Hop records a followed redirect and its destination.
@@ -231,10 +249,24 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 				return Response{}, err
 			}
 		}
+		var hopCookies []*http.Cookie
+		var cookiesFrozen bool
 		if in.BeforeHopRequest != nil {
-			if err := in.BeforeHopRequest(ctx, HopRequest{URL: current, Method: method, HostHeader: hostHeader}); err != nil {
+			hopReq := HopRequest{
+				URL:        current,
+				Method:     method,
+				HostHeader: hostHeader,
+				setCookies: func(c []*http.Cookie) {
+					hopCookies = c
+					cookiesFrozen = true
+				},
+			}
+			if err := in.BeforeHopRequest(ctx, hopReq); err != nil {
 				return Response{}, err
 			}
+		}
+		if in.Jar != nil && !cookiesFrozen {
+			return Response{}, invalidRequest("cookie jar requires BeforeHopRequest to call FreezeCookies")
 		}
 		remaining := timeout - ioElapsed
 		if remaining <= 0 {
@@ -282,6 +314,11 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		for _, h := range originHeaders {
 			req.Header.Add(h.Name, h.Value)
 		}
+		for _, c := range hopCookies {
+			if c != nil {
+				req.AddCookie(c)
+			}
+		}
 		progress.RequestsStarted++
 		resp, err := client.Do(req)
 		if resp != nil {
@@ -296,28 +333,17 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 			ioCancel()
 			return Response{}, err
 		}
+		if in.Jar != nil {
+			if rc := resp.Cookies(); len(rc) > 0 {
+				in.Jar.SetCookies(req.URL, rc)
+			}
+		}
 		hopTiming := tracer.timing(ioStarted, dnsElapsed)
 		observed := tracer.observation(begun, resolved, method, req.URL.RequestURI())
 		observed.TLS = extractTLSInfo(resp.TLS)
 		if !isRedirect(resp.StatusCode) || redirectMode == RedirectNone {
-			tlsInfo := observed.TLS
-			result, readErr := readResponse(resp, method, current.String(), hops, limit, in.DiscardBody, in.StreamBody, hopTiming)
-			ioElapsed += time.Since(ioStarted)
-			hopTiming.Total = time.Since(ioStarted).Milliseconds()
-			transport.CloseIdleConnections()
-			ioCancel()
-			if in.WireHeaders {
-				result.Headers = responseHeaders(resp.Header, true)
-			}
-			result.DurationMS = ioElapsed.Milliseconds()
-			result.Timing = hopTiming
-			result.TLS = tlsInfo
-			result.Observed, result.Elapsed = observed, time.Since(begun)
-			if wire != nil && readErr == nil {
-				result.Wire = wire.headers(resp.StatusCode)
-			}
-			result.FirstHopLocal, result.FirstHopPeer = firstHopLocal, firstHopPeer
-			return result, readErr
+			return in.finishResponse(resp, method, current, hops, limit, hopTiming, ioStarted, ioElapsed,
+				transport, ioCancel, wire, observed, begun, firstHopLocal, firstHopPeer)
 		}
 		_ = resp.Body.Close()
 		ioElapsed += time.Since(ioStarted)
@@ -340,6 +366,34 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		originHeaders = adv.originHeaders
 		hostHeader = adv.hostHeader
 	}
+}
+
+// finishResponse assembles the terminal result once the hop chain ends without
+// another redirect, releasing this hop's transport and timer budget.
+func (in Request) finishResponse(
+	resp *http.Response, method string, current *url.URL, hops []Hop, limit int64,
+	hopTiming *HopTiming, ioStarted time.Time, ioElapsed time.Duration,
+	transport *http.Transport, ioCancel context.CancelFunc, wire *wireCapture,
+	observed *HopObservation, begun time.Time, firstHopLocal, firstHopPeer netip.AddrPort,
+) (Response, error) {
+	tlsInfo := observed.TLS
+	result, readErr := readResponse(resp, method, current.String(), hops, limit, in.DiscardBody, in.StreamBody, hopTiming)
+	ioElapsed += time.Since(ioStarted)
+	hopTiming.Total = time.Since(ioStarted).Milliseconds()
+	transport.CloseIdleConnections()
+	ioCancel()
+	if in.WireHeaders {
+		result.Headers = responseHeaders(resp.Header, true)
+	}
+	result.DurationMS = ioElapsed.Milliseconds()
+	result.Timing = hopTiming
+	result.TLS = tlsInfo
+	result.Observed, result.Elapsed = observed, time.Since(begun)
+	if wire != nil && readErr == nil {
+		result.Wire = wire.headers(resp.StatusCode)
+	}
+	result.FirstHopLocal, result.FirstHopPeer = firstHopLocal, firstHopPeer
+	return result, readErr
 }
 
 type redirectAdvance struct {
@@ -466,7 +520,6 @@ func (in Request) clientForHop(remaining time.Duration, transport *http.Transpor
 		client = httpclient.WithTransport(httpclient.Streaming(class), transport)
 	}
 	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
-	client.Jar = in.Jar
 	return client
 }
 
