@@ -69,11 +69,11 @@ func guardedGetWithHopPolicy(
 		// gates the dial, and RedirectNone hands the redirect decision back
 		// so every hop is revalidated here.
 		resp, err := outboundhttp.Do(ctx, outboundhttp.Request{
-			Class:        egressclass.WebResearchRequest,
-			Method:       http.MethodGet,
-			URL:          current.String(),
-			HopHeaders:   hopHeaders,
-			Timeout:      defaultFetchTimeout,
+			Class:      egressclass.WebResearchRequest,
+			Method:     http.MethodGet,
+			URL:        current.String(),
+			HopHeaders: hopHeaders,
+			Timeout:    defaultFetchTimeout,
 			// Callers read a prefix, as a streamed body once let them stop.
 			MaxBodyBytes: limit,
 			TruncateBody: true,
