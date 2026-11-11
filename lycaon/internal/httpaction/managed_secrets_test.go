@@ -464,7 +464,7 @@ func TestHTTPSecretDeliveryTimingAndLiveRevalidation(t *testing.T) {
 						break
 					}
 				}
-				// Immediately refuse with 401 before sending 100 Continue, then observe whether any body bytes ever arrive.
+				// Refuse before 100 Continue, then record any body bytes that still arrive.
 				_, _ = io.WriteString(conn, "HTTP/1.1 401 Unauthorized\r\nContent-Length: 12\r\nConnection: close\r\n\r\nunauthorized")
 				_ = conn.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 				rest, _ := io.ReadAll(conn)
@@ -511,7 +511,7 @@ func TestHTTPSecretDeliveryTimingAndLiveRevalidation(t *testing.T) {
 				t.Fatalf("status = %d, want 401", ex.Response.Status)
 			}
 
-			// Independent server byte oracle: header secret reached the server, body secret did not.
+			// The server saw the header secret and never the body secret.
 			var wireReceived string
 			testutil.WaitFor(t, func() bool {
 				wireReceived = serverWire.Load().(string)
@@ -524,14 +524,14 @@ func TestHTTPSecretDeliveryTimingAndLiveRevalidation(t *testing.T) {
 				t.Fatalf("server wire received body secret despite early 401 refusal before 100-continue: %q", wireReceived)
 			}
 
-			// Header secret was written to the wire -> DeliveryHandedOff.
+			// Headers were dispatched, so the header secret is handed off.
 			headerHistory, err := service.Uses(t.Context(), testdbseed.DefaultProjectID, headerMeta.Reference, 0)
 			testutil.FailErr(t, "read header secret history", err)
 			if len(headerHistory.Items) != 1 || headerHistory.Items[0].Delivery != secretcap.DeliveryHandedOff {
 				t.Fatalf("header secret history = %+v, want DeliveryHandedOff", headerHistory.Items)
 			}
 
-			// Body person-held secret was never written to the wire -> DeliveryNotDispatched and vault unlock untouched!
+			// The body never left, so its secret is not dispatched and the unlock is unused.
 			bodyHistory, err := service.Uses(t.Context(), testdbseed.DefaultProjectID, bodyMeta.Reference, 0)
 			testutil.FailErr(t, "read body secret history", err)
 			if len(bodyHistory.Items) != 1 || bodyHistory.Items[0].Delivery != secretcap.DeliveryNotDispatched || bodyHistory.Items[0].UnlockID != "" {
@@ -609,15 +609,14 @@ func TestHTTPSecretDeliveryTimingAndLiveRevalidation(t *testing.T) {
 			if !errors.As(runErr, &tf) || tf.Reject == nil || tf.Reject.Code != "HTTP_REQUEST_FAILED" {
 				t.Fatalf("partial send err = %v, want TransportFailure HTTP_REQUEST_FAILED", runErr)
 			}
-			// HTTP exchange outcome remains unknown (started=1, received=0), never recipient-completed.
+			// With no response the exchange outcome stays unknown.
 			if tf.Reject.Data["http_requests_started"] != 1 || tf.Reject.Data["http_responses_received"] != 0 {
 				t.Fatalf("partial send transport data = %+v, want started=1 received=0", tf.Reject.Data)
 			}
 			if connHits.Load() != 1 || !strings.Contains(serverWire.Load().(string), heldSecretVal) {
 				t.Fatalf("connHits=%d serverWire=%q, want 1 and secret bytes observed on wire", connHits.Load(), serverWire.Load())
 			}
-			// Because the secret bytes were written to the socket and received by the server before close,
-			// secretcap truthfully records DeliveryHandedOff and consumes the unlock.
+			// The body was dispatched before the close, so the secret is handed off.
 			history, err := service.Uses(t.Context(), testdbseed.DefaultProjectID, meta.Reference, 0)
 			testutil.FailErr(t, "read use history", err)
 			if len(history.Items) != 1 || history.Items[0].Delivery != secretcap.DeliveryHandedOff || history.Items[0].UnlockID != unlockID {
@@ -785,7 +784,7 @@ func TestHTTPSecretDeliveryTimingAndLiveRevalidation(t *testing.T) {
 			t.Fatalf("cookie withhold header secret history = %+v, want DeliveryHandedOff with unlockID=%s", history.Items, unlockID)
 		}
 
-		// Contrast: withholding the header secret itself refuses before dialing and records DeliveryWithheld without touching the unlock.
+		// Withholding the header secret refuses before dialing and leaves the unlock unused.
 		service2, _, meta2, matcher2, unlocks2, opened2, now2 := newHeldSetup(t)
 		*now2 = opened2.Add(time.Minute)
 		hits.Store(0)

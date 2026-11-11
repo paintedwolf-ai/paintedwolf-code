@@ -979,8 +979,8 @@ func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) 
 
 	owner := s.h.OwnerCtx(t, t.Context())
 
-	// 1. Header value passes initial screenRequest under active .secretignore classification, then pauses on the Hop 0 cookie release checkpoint in BeforeHopRequest.
-	// Withdrawing the classification while paused on that Hop 0 checkpoint must fail closed before any socket dial with OUTBOUND_SECRET_SCREEN_FAILED when BeforeHopRequest revalidates CheckClassification.
+	// Withdrawing the classification during the first hop's cookie review
+	// refuses before any dial.
 	cookieCard1, done1 := waitCookieCard("step 1 withdraw classification while paused on cookie checkpoint")
 	if hits.Load() != 0 {
 		t.Fatalf("step 1 hit server before cookie checkpoint resolution: %d", hits.Load())
@@ -997,7 +997,7 @@ func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) 
 		t.Fatalf("step 1 server hits = %d, want 0", hits.Load())
 	}
 
-	// 2. Restoring the classification and withholding the secret cookie allows the curl command to proceed without the denied cookie while preserving the benign cookie and header.
+	// Withholding the secret cookie sends the request without it.
 	ignoreActive.Store(true)
 	hits.Store(0)
 	seenAuth.Store("")
