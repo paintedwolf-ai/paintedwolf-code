@@ -32,7 +32,16 @@ func TestConfinedLaunchStaysOutOfEditorOnlyRoots(t *testing.T) {
 	_, err = h.Sessions.Manager.Submissions.Prompt(t.Context(), sess.ID, "create two files")
 	testutil.FailErr(t, "prompt", err)
 
-	outcomes := sessionProgramOutcomes(t, h, sess.ID)
+	var outcomes []programOutcome
+	testutil.WaitFor(t, func() bool {
+		outcomes = sessionProgramOutcomes(t, h, sess.ID)
+		for _, outcome := range outcomes {
+			if outcome.state == "running" {
+				return false
+			}
+		}
+		return len(outcomes) == 2
+	})
 	if _, err := os.Stat(inside); err != nil {
 		logToolResults(t, h, sess.ID)
 		t.Fatalf("the program did not write in the admitted root (outcomes %+v): %v", outcomes, err)
