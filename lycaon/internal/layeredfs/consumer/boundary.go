@@ -31,7 +31,7 @@ type EngineConfig struct {
 }
 
 // Engine coordinates indexed source inventory, private change overlays, mount-enforced
-// live reads, checkpoint inspection, and bounded search for a worker view (#1664).
+// live reads, checkpoint inspection, and bounded search for a worker view.
 type Engine struct {
 	viewID       string
 	core         *layeredfs.Core

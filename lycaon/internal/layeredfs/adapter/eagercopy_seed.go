@@ -114,6 +114,9 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir stri
 			if srcPath != srcRoot && errors.Is(walkErr, fs.ErrPermission) {
 				a.out.stats.UnreadableEntries++
 				if d != nil && d.IsDir() {
+					// A directory that cannot be listed was already seeded empty; it leaves the view
+					// whole, as a file that cannot be read does.
+					a.unseedDirectory(seedDir, pristineDir, srcRoot, srcPath)
 					return filepath.SkipDir
 				}
 				return nil
@@ -121,6 +124,10 @@ func (a *seedAccumulator) walkAndSeedRoot(g RootGrant, seedDir, pristineDir stri
 			return walkErr
 		}
 		if d.IsDir() && srcPath != srcRoot && a.hidden(srcPath) {
+			return filepath.SkipDir
+		}
+		if d.IsDir() && srcPath != srcRoot && unlistable(d) {
+			a.out.stats.UnreadableEntries++
 			return filepath.SkipDir
 		}
 		if err := a.ctx.Err(); err != nil {
@@ -211,6 +218,11 @@ func (a *seedAccumulator) handleDiscoveredGit(g RootGrant, gitRel, srcGitPath st
 		initFn = defaultSeedGitInitializer
 	}
 	res, err := initFn(a.ctx, spec)
+	if errors.Is(err, errExternalGitlink) {
+		// The nested tree keeps its files and gets no repository: its history is outside what this
+		// worker may read.
+		return nil
+	}
 	if err != nil {
 		if errors.Is(err, privategit.ErrSeedLimitExceeded) {
 			return a.overrun(g.RootID)
@@ -280,6 +292,27 @@ func (a *seedAccumulator) seedDirectory(rootID, rel, dstPath, pristinePath strin
 		dstPath: dstPath, rootID: rootID, rel: rel, perm: info.Mode().Perm(), modTime: info.ModTime(),
 	})
 	return nil
+}
+
+// unlistable is a directory its owner may not list or enter, whose contents a materialization cannot
+// copy and a capture could not read back.
+func unlistable(d fs.DirEntry) bool {
+	info, err := d.Info()
+	return err == nil && info.Mode().Perm()&0o500 != 0o500
+}
+
+func (a *seedAccumulator) unseedDirectory(seedDir, pristineDir, srcRoot, srcPath string) {
+	relOS, err := filepath.Rel(srcRoot, srcPath)
+	if err != nil {
+		return
+	}
+	dstPath := filepath.Join(seedDir, relOS)
+	if n := len(a.seededDirs); n > 0 && a.seededDirs[n-1].dstPath == dstPath {
+		a.seededDirs = a.seededDirs[:n-1]
+		a.out.stats.Entries--
+	}
+	_ = os.Remove(dstPath)
+	_ = os.Remove(filepath.Join(pristineDir, relOS))
 }
 
 func (a *seedAccumulator) seedSymlink(rootID, rel, srcPath, dstPath, pristinePath string, xattrs map[string][]byte) error {

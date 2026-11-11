@@ -14,7 +14,7 @@ import (
 )
 
 // GitExecutor executes write-leg repository operations against a view's private Git state
-// while enforcing egress/remote policy and syncing working-tree mutations (#1671).
+// while enforcing egress/remote policy and syncing working-tree mutations.
 type GitExecutor struct {
 	mgr    *Manager
 	viewID string

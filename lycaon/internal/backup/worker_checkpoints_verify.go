@@ -38,7 +38,7 @@ func pinWorkerRecoveryClosure(ctx context.Context, tmpDir string, files map[stri
 	return nil
 }
 
-func validateWorkerCheckpoints(ctx context.Context, snapshot db.DBTX, files map[string]archiveSource) error {
+func validateWorkerCheckpoints(ctx context.Context, snapshot db.DBTX, files map[string]archiveSource, leftInPlace func(root string) bool) error {
 	ctx, closeClosureSession := ensureGitClosureSession(ctx)
 	defer closeClosureSession()
 	rows, err := snapshot.QueryContext(ctx, `SELECT DISTINCT workspace_relpath FROM worker_jobs WHERE workspace_relpath IS NOT NULL AND workspace_relpath != '' AND (workspace_overlay_id IS NULL OR workspace_overlay_id = '')`)
@@ -55,6 +55,9 @@ func validateWorkerCheckpoints(ctx context.Context, snapshot db.DBTX, files map[
 		}
 		if branchTreeRoot(root) != root {
 			return &InvalidError{Detail: "invalid retained worker branch root"}
+		}
+		if leftInPlace(root) {
+			continue
 		}
 		roots = append(roots, root)
 	}

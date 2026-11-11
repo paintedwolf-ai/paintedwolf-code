@@ -363,7 +363,6 @@ func TestUnifiedCaptureProductionPathMutationLockAndCleanup(t *testing.T) {
 		},
 	})
 	testutil.FailErr(t, "NewManager", err)
-	t.Cleanup(func() { _ = mgr.Store().Close() })
 
 	core := newMountedViewWithManager(t, mgr, "view-exhausted", repoDir)
 	_, err = core.Stat(layeredfs.QualifiedPath{RootID: "primary", Rel: ".git/HEAD"})
@@ -431,9 +430,6 @@ func TestPrivateGitFallbackDistinguishesNoSourceRepoFromEstablishedAndFailed(t *
 		testutil.FailErr(t, "remove source .git", os.RemoveAll(filepath.Join(srcDir, ".git")))
 
 		// Induce a private-store failure by removing the retained store objects directory.
-		mgr.Store().mu.Lock()
-		unlockStoreWriteBoundary(mgr.Store())
-		mgr.Store().mu.Unlock()
 		testutil.FailErr(t, "remove store objectsDir", os.RemoveAll(mgr.Store().ObjectsDir()))
 
 		// Both read and write paths must fail closed with ErrGitPending, never falling back to mutable backing.

@@ -1,6 +1,6 @@
 // Package checkpoint implements durable, immutable worker checkpoints,
 // the 6-step publication transaction under the checkpoint barrier, exact-base
-// validation, and transactional three-way promotion (#1663).
+// validation, and transactional three-way promotion.
 package checkpoint
 
 import (
@@ -65,7 +65,7 @@ type SourceObservation struct {
 	ObservedAt time.Time               `json:"observed_at"`
 }
 
-// PrivateGitSnapshot records private Git refs, index digest, and retained objects (#1663, #1671).
+// PrivateGitSnapshot records private Git refs, index digest, and retained objects.
 type PrivateGitSnapshot struct {
 	HeadRef             string            `json:"head_ref,omitempty"`
 	Refs                map[string]string `json:"refs,omitempty"`
@@ -140,7 +140,7 @@ type Manifest struct {
 }
 
 // CheckpointParentLayer mounts an immutable published checkpoint as a read-only
-// layeredfs.ParentLayer for stacked worker views (#1663, #1666).
+// layeredfs.ParentLayer for stacked worker views.
 type CheckpointParentLayer struct {
 	*layeredfs.MemoryParentLayer
 	manifest Manifest

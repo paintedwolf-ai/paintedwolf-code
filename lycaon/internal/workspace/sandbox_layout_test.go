@@ -135,7 +135,7 @@ func TestCreateWorkerWorkspaceFromSourcesMountedClaimZeroLowerWalksAndFormatV2Me
 			return adapter.ReasonNone, "", nil
 		},
 	})
-	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	sel := adapter.NewSelector(runtime.GOOS, mountedAdp, mountedAdp, adapter.NewEagerCopyAdapter())
 	sel.BudgetFor = adapter.ZeroBudget
 	sel.Confinement = fixtureConfinement{}
 	mgr := workspace.NewManager(filepath.Join(base, "branches")).WithSelector(sel)

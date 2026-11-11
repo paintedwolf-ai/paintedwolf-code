@@ -281,7 +281,7 @@ func TestHandleLifecycleAndGitInterception(t *testing.T) {
 	// Seed a raw .git gitlink file in trunk (simulating a linked worktree or submodule).
 	testutil.FailErr(t, "write trunk .git gitlink", os.WriteFile(filepath.Join(trunk, ".git"), []byte("gitdir: /outside/repo/.git/worktrees/w1\n"), 0o644))
 
-	// Lookup of .git must never expose an unrewritten source gitlink while initialization is pending (#1657, #1671).
+	// Lookup of .git must never expose an unrewritten source gitlink while initialization is pending.
 	if _, err := core.Stat(qp(".git")); !errors.Is(err, ErrGitPending) {
 		t.Fatalf("expected ErrGitPending on uninitialized .git lookup, got %v", err)
 	}
@@ -316,7 +316,7 @@ func TestHandleLifecycleAndGitInterception(t *testing.T) {
 		t.Fatalf("expected distinct NodeID and Generation on recreated file, got attr1=%+v attr2=%+v", attr1, attr2)
 	}
 
-	// A descriptor opened to create a read-only file keeps its write access (#1660).
+	// A descriptor opened to create a read-only file keeps its write access.
 	roHID, _, err := core.CreateFile(qp("loose_obj"), 0o444, true)
 	testutil.FailErr(t, "create 0444 loose_obj", err)
 	_, err = core.WriteHandle(roHID, []byte("git-blob-bytes"), 0)

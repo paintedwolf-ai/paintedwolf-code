@@ -82,7 +82,7 @@ func TestSelectionTableEveryCombination(t *testing.T) {
 func assertSelectionRow(t *testing.T, entries, fileBytes int, clonable bool, mount mountOutcome) {
 	t.Helper()
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mount, &calls), nil, NewEagerCopyAdapter(ReasonNone))
+	sel := NewSelector("linux", ruleMount(mount, &calls), nil, NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	source := writeSizedTree(t, entries, fileBytes)
 	choice, err := sel.Choose(t.Context(), ChooseRequest{
@@ -131,7 +131,7 @@ func assertSelectionRow(t *testing.T, entries, fileBytes int, clonable bool, mou
 
 func TestSelectionFromIndexFactsSurveysNothing(t *testing.T) {
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter(ReasonNone))
+	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	missing := filepath.Join(t.TempDir(), "never-walked")
 	choice, err := sel.Choose(t.Context(), ChooseRequest{
@@ -147,7 +147,7 @@ func TestSelectionFromIndexFactsSurveysNothing(t *testing.T) {
 
 func TestSurveyStopsAtTheBudget(t *testing.T) {
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter(ReasonNone))
+	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	source := writeSizedTree(t, 200, 1)
 	choice, err := sel.Choose(t.Context(), ChooseRequest{
@@ -164,7 +164,7 @@ func TestSurveyStopsAtTheBudget(t *testing.T) {
 
 func TestDiskThatCannotHoldTheResultRefusesWithTheNumber(t *testing.T) {
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mountOutcome{reason: ReasonMountDenied}, &calls), nil, NewEagerCopyAdapter(ReasonNone))
+	sel := NewSelector("linux", ruleMount(mountOutcome{reason: ReasonMountDenied}, &calls), nil, NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	source := writeSizedTree(t, 3, 100)
 	testutil.FailErr(t, "subdir", os.Mkdir(filepath.Join(source, "sub"), 0o755))
@@ -184,7 +184,7 @@ func TestDiskThatCannotHoldTheResultRefusesWithTheNumber(t *testing.T) {
 
 func TestAStaleEstimateOverrunsAndMovesOnToTheMount(t *testing.T) {
 	var calls atomic.Int32
-	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter(ReasonNone))
+	sel := NewSelector("linux", ruleMount(mountOutcome{}, &calls), nil, NewEagerCopyAdapter())
 	sel.BudgetFor = ruleBudgetFor
 	source := writeSizedTree(t, 60, 1)
 	grants := []RootGrant{{RootID: "r", SourcePath: source, IsPrimary: true, Estimate: &SourceIndexEstimate{EstimatedEntries: 1}}}
@@ -195,7 +195,7 @@ func TestAStaleEstimateOverrunsAndMovesOnToTheMount(t *testing.T) {
 	}
 
 	runtimeDir, target := t.TempDir(), filepath.Join(t.TempDir(), "target")
-	sibling := NewEagerCopyAdapter(ReasonNone)
+	sibling := NewEagerCopyAdapter()
 	kept, err := sibling.Prepare(t.Context(), PrepareRequest{
 		ViewID: "kept-view", RuntimeDir: runtimeDir, Grants: []RootGrant{{RootID: "s", SourcePath: writeSizedTree(t, 1, 1), IsPrimary: true}},
 	})

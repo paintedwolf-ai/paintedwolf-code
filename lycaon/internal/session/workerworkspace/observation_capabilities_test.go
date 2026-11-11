@@ -201,7 +201,7 @@ func TestOrdinaryWorkspacePreparationSuppliesMountedPartialAttributionFactsWitho
 			return nil
 		},
 	})
-	selector := adapter.NewSelector("darwin", nil, mountedAdp, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	selector := adapter.NewSelector("darwin", nil, mountedAdp, adapter.NewEagerCopyAdapter())
 	selector.BudgetFor = adapter.ZeroBudget
 	selector.Confinement = fixtureConfinement{}
 	wsMgr := workspace.NewManager(filepath.Join(t.TempDir(), "branches")).WithSelector(selector)

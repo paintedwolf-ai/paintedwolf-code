@@ -17,7 +17,7 @@ func newHostSelector(cfg Config) *adapter.Selector {
 		}
 		nfsCfg.ConfinementVerifyFn = cfg.Confinement.VerifyView
 	}
-	return adapter.NewSelector("darwin", nil, nfsdarwin.New(nfsCfg), adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	return adapter.NewSelector("darwin", nil, nfsdarwin.New(nfsCfg), adapter.NewEagerCopyAdapter())
 }
 
 // ConnectionRecoveries names the adapters able to settle connections left by an earlier engine

@@ -10,7 +10,7 @@ import (
 )
 
 // Link creates a hard link at newPath sharing the exact private node identity of oldPath
-// without scanning the project for aliases (#1657).
+// without scanning the project for aliases.
 func (c *Core) Link(oldPath, newPath QualifiedPath) (EntryAttr, error) {
 	return linkPath(c, oldPath, newPath)
 }
@@ -126,7 +126,7 @@ func linkPath(c *Core, oldPath, newPath QualifiedPath) (EntryAttr, error) {
 }
 
 // Unlink removes a file or symlink (or empty directory when removeDir is true).
-// Open handles to an unlinked file remain valid for read/write/stat until closed (#1657).
+// Open handles to an unlinked file remain valid for read/write/stat until closed.
 func (c *Core) Unlink(qpath QualifiedPath, removeDir bool) error {
 	if err := c.barrier.enterMutation(); err != nil {
 		return err
@@ -251,7 +251,7 @@ func unlinkPathAdmitted(c *Core, qpath QualifiedPath, removeDir bool) error {
 	}
 }
 
-// RemoveAll recursively removes a file or directory subtree, capturing bases only for the affected subtree (#1657).
+// RemoveAll recursively removes a file or directory subtree, capturing bases only for the affected subtree.
 func (c *Core) RemoveAll(qpath QualifiedPath) error {
 	if err := c.barrier.enterMutation(); err != nil {
 		return err

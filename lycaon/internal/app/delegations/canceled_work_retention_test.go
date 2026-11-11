@@ -26,7 +26,7 @@ import (
 func (f *engineFixture) claimMaterializedWorker() *api.WorkerTask {
 	f.t.Helper()
 	ctx := f.t.Context()
-	f.engine.Workspace.WithSelector(adapter.NewSelector("", nil, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone)))
+	f.engine.Workspace.WithSelector(adapter.NewSelector("", nil, nil, adapter.NewEagerCopyAdapter()))
 	_, err := f.engine.Queue.Enqueue(ctx, api.WorkerTask{
 		ProjectID: testdbseed.DefaultProjectID, WorkspacePath: f.project, WorkspaceRootID: fixtureRootID,
 		Scope:     &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"."}},

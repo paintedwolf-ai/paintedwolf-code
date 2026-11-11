@@ -36,8 +36,7 @@ const (
 	provisionalCopyLimit = provisionalCloneLimit + 2*5*1024*1024*1024
 )
 
-// budgetFacts holds one fact per platform and filesystem class. #1667 replaces these provisional
-// values with measured ones; nothing edits them at runtime.
+// budgetFacts holds one fact per platform and filesystem class. Nothing edits them at runtime.
 var budgetFacts = map[BudgetClass]BudgetFact{
 	{Platform: "darwin", Filesystem: FilesystemClonable}: {Limit: provisionalCloneLimit, EntryCost: provisionalEntryCost, Provisional: true},
 	{Platform: "darwin", Filesystem: FilesystemCopyOnly}: {Limit: provisionalCopyLimit, EntryCost: provisionalEntryCost, Provisional: true},
@@ -89,9 +88,8 @@ func (c MaterializeCost) Total(fact BudgetFact) int64 {
 type SelectionReason string
 
 const (
-	SelectionUnderBudget        SelectionReason = "under_budget"
-	SelectionOverBudgetMounted  SelectionReason = "over_budget_mounted"
-	SelectionOverBudgetMaterial SelectionReason = "over_budget_mount_unavailable"
+	SelectionUnderBudget       SelectionReason = "under_budget"
+	SelectionOverBudgetMounted SelectionReason = "over_budget_mounted"
 )
 
 // SelectionFacts record one worker's selection.
@@ -143,8 +141,8 @@ type DiskSpace struct {
 	Known     bool
 }
 
-// WorkspaceCapacityError refuses a workspace the disk cannot hold. It is the only refusal selection
-// makes, and it carries the numbers a person needs to choose a smaller workspace.
+// WorkspaceCapacityError refuses a workspace the disk cannot hold, with the numbers a person needs to
+// choose a smaller workspace.
 type WorkspaceCapacityError struct {
 	Path              string
 	Required          uint64
@@ -158,10 +156,10 @@ func (e *WorkspaceCapacityError) Error() string {
 }
 
 // CloneAvailability says whether a root's trees can be cloned where this worker's branch is placed.
-// Placement supplies the real answer; ProbeCloneAt is the probe behind it today.
 type CloneAvailability func(ctx context.Context, grant RootGrant) (bool, error)
 
-// lastingMountReasons are failures a retry would not change, so a large copy may be the answer.
+// lastingMountReasons are failures a retry would not change, so selection refuses at once instead of
+// retrying the probe.
 var lastingMountReasons = map[ReasonCode]bool{
 	ReasonUnsupportedKernel:        true,
 	ReasonUnsupportedPlatform:      true,

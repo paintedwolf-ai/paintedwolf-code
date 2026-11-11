@@ -41,7 +41,6 @@ func (l *ActionLease) captureLaunch(c *Confinement) {
 	frozen.View.DeniedPaths = slices.Clone(c.View.DeniedPaths)
 	frozen.View.ReopenedPaths = slices.Clone(c.View.ReopenedPaths)
 	frozen.View.ReopenedReadPaths = slices.Clone(c.View.ReopenedReadPaths)
-	frozen.View.WriteDeniedPaths = slices.Clone(c.View.WriteDeniedPaths)
 	frozen.View.DeniedLoopbackPorts = slices.Clone(c.View.DeniedLoopbackPorts)
 	frozen.SocketGrants = slices.Clone(c.SocketGrants)
 	frozen.socketEndpoints = maps.Clone(c.socketEndpoints)

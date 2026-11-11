@@ -155,7 +155,7 @@ func (v *VerificationTracker) EvaluateReceiptFreshness(
 	return res
 }
 
-// BuildPromotionPreviewHints returns stale-observation review hints for promotion preview (#1663).
+// BuildPromotionPreviewHints returns stale-observation review hints for promotion preview.
 // Hints never substitute for exact-base conflict checks or target revalidation.
 func (v *VerificationTracker) BuildPromotionPreviewHints() []StaleObservationHint {
 	t := v.tr

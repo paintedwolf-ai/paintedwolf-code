@@ -52,7 +52,7 @@ type storeStock struct {
 	startupDuration       time.Duration
 }
 
-// RetainedObjectStore manages the engine-retained content-addressed Git object store (#1671).
+// RetainedObjectStore manages the engine-retained content-addressed Git object store.
 type RetainedObjectStore struct {
 	rootDir    string
 	objectsDir string
@@ -128,11 +128,6 @@ func NewRetainedObjectStoreContext(ctx context.Context, rootDir string) (*Retain
 	}
 	if err := loadPersistedLeasesFromDiskLocked(ctx, s); err != nil {
 		return nil, err
-	}
-	// A store with nothing retained has nothing to protect, and read-only directories
-	// would stop its host directory from being removed.
-	if storeHoldsObjects(objectsDir) {
-		lockStoreReadOnlyBoundary(s)
 	}
 	return s, nil
 }
@@ -368,9 +363,6 @@ func decodeAndValidatePersistedLeaseFile(path, expectedID string) (*leaseRecord,
 	if strings.TrimSpace(p.Holder) == "" {
 		return nil, 0, fmt.Errorf("%w: empty lease holder in %s", ErrCorruptObjectStore, path)
 	}
-	if len(p.OIDs) == 0 && len(p.Packs) == 0 {
-		return nil, 0, fmt.Errorf("%w: empty lease record %q in %s", ErrCorruptObjectStore, p.ID, path)
-	}
 	oidSet := make(map[string]struct{}, len(p.OIDs))
 	for _, oid := range p.OIDs {
 		if len(oid) != 40 || !isHexString(oid) || oid != strings.ToLower(oid) {
@@ -515,72 +507,6 @@ func (s *RetainedObjectStore) ActiveLeases() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.leases)
-}
-
-// Close restores write permissions on store directories, so the engine's data directory stays removable
-// once it stops. Opening the store again restores the read-only boundary.
-func (s *RetainedObjectStore) Close() error {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	unlockStoreWriteBoundary(s)
-	return nil
-}
-
-func storeHoldsObjects(objectsDir string) bool {
-	entries, err := os.ReadDir(objectsDir)
-	if err != nil {
-		return false
-	}
-	for _, entry := range entries {
-		switch entry.Name() {
-		case "info":
-		case "pack":
-			packs, packErr := os.ReadDir(filepath.Join(objectsDir, "pack"))
-			if packErr != nil || len(packs) > 0 {
-				return true
-			}
-		default:
-			if entry.IsDir() {
-				sub, subErr := os.ReadDir(filepath.Join(objectsDir, entry.Name()))
-				if subErr != nil || len(sub) > 0 {
-					return true
-				}
-				continue
-			}
-			return true
-		}
-	}
-	return false
-}
-
-func unlockStoreWriteBoundary(s *RetainedObjectStore) {
-	_ = filepath.WalkDir(s.objectsDir, func(path string, d fs.DirEntry, err error) error {
-		if err == nil && d.IsDir() {
-			_ = os.Chmod(path, 0o755)
-		}
-		return nil
-	})
-}
-
-func lockStoreReadOnlyBoundary(s *RetainedObjectStore) {
-	var dirs []string
-	_ = filepath.WalkDir(s.objectsDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return nil
-		}
-		if d.IsDir() {
-			dirs = append(dirs, path)
-		} else {
-			_ = os.Chmod(path, 0o444)
-		}
-		return nil
-	})
-	sort.Slice(dirs, func(i, j int) bool {
-		return len(dirs[i]) > len(dirs[j])
-	})
-	for _, dir := range dirs {
-		_ = os.Chmod(dir, 0o555)
-	}
 }
 
 func storeLeaseIntactOnDisk(s *RetainedObjectStore, leaseID string) bool {

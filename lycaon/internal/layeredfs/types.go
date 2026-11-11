@@ -1,5 +1,5 @@
 // Package layeredfs implements the platform-neutral layered filesystem core
-// and mutation journal for worker views (#1657).
+// and mutation journal for worker views.
 package layeredfs
 
 import (

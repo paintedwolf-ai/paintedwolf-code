@@ -330,7 +330,7 @@ func TestMountedAndMaterializedAdaptersProduceIdenticalLogicalConsumerResults(t 
 	}
 
 	mountedAdp := adapter.NewMountedAdapter(adapter.MountedAdapterConfig{AdapterID: adapter.AdapterFUSELinux})
-	copyAdp := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	copyAdp := adapter.NewEagerCopyAdapter()
 
 	mOrient, mSearch, mEv, mDiv := runWithAdapter("mounted", mountedAdp)
 	cOrient, cSearch, cEv, cDiv := runWithAdapter("copy", copyAdp)

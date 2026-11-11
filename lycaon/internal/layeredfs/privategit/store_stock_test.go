@@ -89,10 +89,8 @@ func TestRetainedObjectStoreIncrementalStockRestartDuplicatesGCAndInspect(t *tes
 	}
 
 	// (b) Restart on preexisting store with packs and loose objects:
-	testutil.FailErr(t, "store.Close", store.Close())
 	reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "NewRetainedObjectStoreContext restart", err)
-	t.Cleanup(func() { _ = reopened.Close() })
 
 	mReopen := reopened.Metrics()
 	if mReopen.StartupInitDuration <= 0 {
@@ -168,7 +166,6 @@ func TestRetainedObjectStoreInspectStockCancellationAndCorruptionErrors(t *testi
 	}
 
 	// 2. Unreadable loose shard fails InspectStock and NewRetainedObjectStore with Complete=false.
-	testutil.FailErr(t, "store.Close before shard chmod", store.Close())
 	badShard := filepath.Join(store.ObjectsDir(), "aa")
 	testutil.FailErr(t, "mkdir shard aa", os.MkdirAll(badShard, 0o755))
 	badLoose := filepath.Join(badShard, strings.Repeat("b", 38))
@@ -260,10 +257,8 @@ func TestCheckpointCreatedObjectsUpdateRetainedStockAndReopen(t *testing.T) {
 
 	// Reopen the store at the same root and verify startup duration and reconstructed stock match.
 	storeRoot := mgr.Store().RootDir()
-	testutil.FailErr(t, "store.Close", mgr.Store().Close())
 	reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "NewRetainedObjectStoreContext reopen", err)
-	t.Cleanup(func() { _ = reopened.Close() })
 
 	mReopen := reopened.Metrics()
 	if mReopen.StartupInitDuration <= 0 || mReopen.RetainedObjects != mAfterCP.RetainedObjects || mReopen.RetainedBytes != mAfterCP.RetainedBytes {
@@ -320,7 +315,6 @@ func TestRetainedObjectStoreInterruptedPackRetirementReopenAtEachBoundary(t *tes
 			testutil.FailErr(t, "import keep", err)
 			_, _, err = store.ImportRepositoryObjects(ctx, []string{objDirRetire}, []string{oidRetire})
 			testutil.FailErr(t, "import retire", err)
-			testutil.FailErr(t, "store.Close", store.Close())
 
 			packDir := filepath.Join(store.ObjectsDir(), "pack")
 			srcPack := filepath.Join(packDir, baseRetire+".pack")
@@ -345,7 +339,6 @@ func TestRetainedObjectStoreInterruptedPackRetirementReopenAtEachBoundary(t *tes
 
 			reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 			testutil.FailErr(t, "reopen after "+boundary, err)
-			defer func() { _ = reopened.Close() }()
 
 			if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) {
 				t.Fatalf("expected retained pack %s (%s) preserved across %s", baseKeep, oidKeep, boundary)
@@ -428,11 +421,9 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 		if !errors.Is(err, injectedErr) {
 			t.Fatalf("expected CollectGarbage to propagate %v, got %v", injectedErr, err)
 		}
-		testutil.FailErr(t, "store.Close", store.Close())
 
 		reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 		testutil.FailErr(t, "reopen after .pack unlink failure", err)
-		defer func() { _ = reopened.Close() }()
 
 		if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) {
 			t.Fatalf("expected leased pack %s preserved after .pack unlink failure", baseKeep)
@@ -465,7 +456,6 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 		if !errors.Is(err, injectedErr) {
 			t.Fatalf("expected CollectGarbage to propagate %v, got %v", injectedErr, err)
 		}
-		testutil.FailErr(t, "store.Close", store.Close())
 
 		// Reopen while unlink failure is still active must propagate the I/O failure.
 		if _, err := NewRetainedObjectStoreContext(hookCtx, storeRoot); !errors.Is(err, injectedErr) {
@@ -475,7 +465,6 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 		// Once the transient unlink failure clears, reopen reconciles the retired pack and preserves keep.
 		reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 		testutil.FailErr(t, "reopen after .idx unlink failure cleared", err)
-		defer func() { _ = reopened.Close() }()
 
 		if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) {
 			t.Fatalf("expected leased pack %s preserved", baseKeep)
@@ -534,11 +523,9 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 			if !errors.Is(err, context.Canceled) {
 				t.Fatalf("expected context.Canceled at %s, got %v", cancelPoint, err)
 			}
-			testutil.FailErr(t, "store.Close", store.Close())
 
 			reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 			testutil.FailErr(t, "reopen after "+cancelPoint, err)
-			defer func() { _ = reopened.Close() }()
 
 			if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) {
 				t.Fatalf("expected leased pack %s preserved across %s", baseKeep, cancelPoint)
@@ -595,11 +582,9 @@ func TestRetainedObjectStoreGCCancellationAndUnlinkFailureReopen(t *testing.T) {
 		if removed, err := store.CollectGarbage(ctx); err != nil || removed != 0 {
 			t.Fatalf("expected 0 removed when both packs are leased, got removed=%d err=%v", removed, err)
 		}
-		testutil.FailErr(t, "store.Close", store.Close())
 
 		reopened, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 		testutil.FailErr(t, "reopen after re-import", err)
-		defer func() { _ = reopened.Close() }()
 		if !reopened.HasObject(oidKeep) || !reopened.HasObject("pack:"+baseKeep) || !reopened.HasObject(oidRetire) || !reopened.HasObject("pack:"+baseRetire) {
 			t.Fatalf("expected both packs preserved after reopen")
 		}

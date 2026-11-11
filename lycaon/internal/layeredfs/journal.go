@@ -41,7 +41,7 @@ type JournalOperation struct {
 	Timestamp  time.Time      `json:"timestamp"`
 }
 
-// ChangeFinalAttr carries the final state metadata and hard-link membership for a changed entry (#1658, #1663).
+// ChangeFinalAttr carries the final state metadata and hard-link membership for a changed entry.
 type ChangeFinalAttr struct {
 	Mode          fs.FileMode       `json:"mode,omitempty"`
 	Size          int64             `json:"size,omitempty"`
@@ -113,7 +113,7 @@ func (c *Core) JournalOperations() []JournalOperation {
 	return out
 }
 
-// EnumerateChanges returns the O(changed nodes/paths) index without reading any lower directories (#1657, #1663).
+// EnumerateChanges returns the O(changed nodes/paths) index without reading any lower directories.
 func (c *Core) EnumerateChanges(logicalOnly bool) ([]ChangeEntry, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()

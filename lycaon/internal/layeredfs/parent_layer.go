@@ -33,7 +33,7 @@ func (h *osFileReadHandle) Close() error {
 }
 
 // MemoryParentLayer is an in-memory and backing-file ParentLayer implementation
-// for retained parent checkpoints (#1663, #1666).
+// for retained parent checkpoints.
 type MemoryParentLayer struct {
 	id      string
 	mu      sync.RWMutex

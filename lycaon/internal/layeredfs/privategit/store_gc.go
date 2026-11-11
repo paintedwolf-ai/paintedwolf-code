@@ -70,7 +70,7 @@ func (s *RetainedObjectStore) HasObject(oid string) bool {
 }
 
 // CollectGarbage removes unreferenced loose objects and packfiles from the retained store
-// while preserving every object and pack reachable from any active lease (#1671).
+// while preserving every object and pack reachable from any active lease.
 func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
@@ -84,14 +84,6 @@ func (s *RetainedObjectStore) CollectGarbage(ctx context.Context) (int, error) {
 	if err := loadPersistedLeasesFromDiskLocked(ctx, s); err != nil {
 		return 0, err
 	}
-
-	unlockStoreWriteBoundary(s)
-	// A store left with nothing retained has nothing to protect, as at open.
-	defer func() {
-		if storeHoldsObjects(s.objectsDir) {
-			lockStoreReadOnlyBoundary(s)
-		}
-	}()
 
 	leasedOIDs := make(map[string]struct{})
 	leasedPacks := make(map[string]struct{})

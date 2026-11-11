@@ -94,7 +94,7 @@ func WithPreparationReporter(ctx context.Context, report func(PreparationProgres
 }
 
 // WithWorkspaceSelection attaches an explicit WorkspaceSelection and optional informational
-// task path hints to a workspace provisioning context (#1658).
+// task path hints to a workspace provisioning context.
 func WithWorkspaceSelection(ctx context.Context, selection adapter.WorkspaceSelection, taskPathHints ...string) context.Context {
 	return context.WithValue(ctx, workspaceSelectionKey{}, workspaceSelectionContext{
 		selection:     selection,
@@ -199,7 +199,7 @@ func (m *Manager) WithRecovery(coord *recovery.Coordinator) *Manager {
 	return m
 }
 
-// WithSelector configures an explicit workspace adapter Selector on the Manager (#1658).
+// WithSelector configures an explicit workspace adapter Selector on the Manager.
 func (m *Manager) WithSelector(selector *adapter.Selector) *Manager {
 	m.selector = selector
 	return m
@@ -305,7 +305,7 @@ func releaseAdapterView(adp adapter.Adapter, viewID string) error {
 }
 
 // LookupBranchPreparedView returns the active PreparedView (when in-process) and its
-// durable AdapterFacts and ViewID for a prepared worker branch root (#1658/#1665).
+// durable AdapterFacts and ViewID for a prepared worker branch root.
 func LookupBranchPreparedView(branchRoot string) (*adapter.PreparedView, adapter.AdapterFacts, string, bool) {
 	clean, err := cleanBranchRoot(branchRoot)
 	if err != nil {

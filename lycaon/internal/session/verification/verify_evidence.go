@@ -114,6 +114,9 @@ func (m *Service) RecordSourceRunTerminal(
 			slog.ErrorContext(ctx, "Record verification evidence", "session_id", sess.ID, "error", err)
 		}
 	}
+	if verifyVerdict(run.Verdict) == evidence.GateVerdictPassed {
+		autoBindPassingRun(m, ctx, sess, run.CheckID, run.SourceRevision)
+	}
 }
 
 // SourceVerifyCommand resolves the project check independently of the execution tool.
@@ -238,6 +241,9 @@ func (m *Service) GateState(ctx context.Context, sess *api.Session, history []ap
 			continue
 		}
 		seen[checkID] = true
+		if checkStaleByObservation(m, ctx, sess, checkID) {
+			continue
+		}
 		if declared != "" {
 			cwd, _ := rec.Artifacts["cwd"].(string)
 			if !commandsurface.SameCommandLine(cmd, declared) || cwd != "." {

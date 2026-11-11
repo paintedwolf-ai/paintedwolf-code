@@ -11,6 +11,16 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
+// RetainedGitObjectsDirOfView is the object store the repositories of a materialized view borrow
+// from, shared by every view prepared under the same runtime directory.
+func RetainedGitObjectsDirOfView(runtimeViewDir string) string {
+	return filepath.Join(retainedGitStoreDir(filepath.Dir(filepath.Dir(runtimeViewDir))), "objects")
+}
+
+func retainedGitStoreDir(runtimeDir string) string {
+	return filepath.Join(runtimeDir, "retained-git-store")
+}
+
 func initViewDirs(viewID, runtimeDir, backingDir string) (string, string, error) {
 	if viewID == "" {
 		return "", "", fmt.Errorf("ViewID is required")
@@ -234,7 +244,7 @@ func (r *ActiveViewRegistry) AdapterForView(viewID string) (Adapter, *PreparedVi
 	return e.adapter, e.view, true
 }
 
-// RecoverOrTransition handles adapter failure on an active view without erasing mutated worker data (#1658, #1666).
+// RecoverOrTransition handles adapter failure on an active view without erasing mutated worker data.
 func (r *ActiveViewRegistry) RecoverOrTransition(
 	ctx context.Context,
 	viewID string,

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// Core is the platform-neutral layered filesystem engine and mutation journal (#1657).
+// Core is the platform-neutral layered filesystem engine and mutation journal.
 type Core struct {
 	cfg      Config
 	backing  *backingWorkspace

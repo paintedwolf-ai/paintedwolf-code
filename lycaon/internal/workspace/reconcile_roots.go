@@ -14,7 +14,7 @@ import (
 
 // ResolveDispatchWorkspaceSelection validates an explicit adapter.WorkspaceSelection against attached
 // project roots, narrowing the materialized/visible roots and subroots while keeping informational
-// taskPathHints separate (#1658).
+// taskPathHints separate.
 func ResolveDispatchWorkspaceSelection(
 	attached []projectroot.RootRef,
 	selection adapter.WorkspaceSelection,
@@ -47,7 +47,7 @@ func ResolveDispatchWorkspaceSelection(
 }
 
 // ReconcileSelectedSandboxRoots validates an explicit WorkspaceSelection against attached project roots
-// and reconciles branches against the narrowed root set while keeping taskPathHints separate (#1658).
+// and reconciles branches against the narrowed root set while keeping taskPathHints separate.
 func ReconcileSelectedSandboxRoots(
 	ctx context.Context,
 	branchRoot string,

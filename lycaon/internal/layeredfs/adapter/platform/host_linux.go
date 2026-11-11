@@ -17,7 +17,7 @@ func newHostSelector(cfg Config) *adapter.Selector {
 		}
 		fuseCfg.ConfinementVerifyFn = cfg.Confinement.VerifyView
 	}
-	return adapter.NewSelector("linux", fuselinux.New(fuseCfg), nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+	return adapter.NewSelector("linux", fuselinux.New(fuseCfg), nil, adapter.NewEagerCopyAdapter())
 }
 
 // ConnectionRecoveries names the adapters able to settle connections left by an earlier engine

@@ -46,7 +46,7 @@ func validateLayout(layout SandboxLayout) error {
 }
 
 // CreateWorkerWorkspaceSelected narrows attached roots and subroots using an explicit WorkspaceSelection
-// (keeping informational taskPathHints separate) before provisioning the worker workspace (#1658).
+// (keeping informational taskPathHints separate) before provisioning the worker workspace.
 func (m *Manager) CreateWorkerWorkspaceSelected(
 	ctx context.Context,
 	roots []projectroot.RootRef,

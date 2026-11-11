@@ -154,11 +154,11 @@ func ConfinementFailureReason(err error) ReasonCode {
 // Selector chooses one workspace provider per worker from typed facts: the cost of materializing
 // its roots, the recorded budget for that cost, and whether a mount can actually serve it.
 type Selector struct {
-	TargetOS        string
-	LinuxAdapter    Adapter
-	DarwinAdapter   Adapter
-	FallbackAdapter Adapter
-	Registry        *ActiveViewRegistry
+	TargetOS            string
+	LinuxAdapter        Adapter
+	DarwinAdapter       Adapter
+	MaterializedAdapter Adapter
+	Registry            *ActiveViewRegistry
 	// BudgetFor reads the recorded budgets. Fixtures replace it to force a side of the rule; no
 	// setting or request reaches it.
 	BudgetFor func(BudgetClass) BudgetFact
@@ -168,20 +168,20 @@ type Selector struct {
 }
 
 // NewSelector constructs a capability-based Selector with an ActiveViewRegistry.
-func NewSelector(targetOS string, linuxAdp, darwinAdp, fallbackAdp Adapter) *Selector {
+func NewSelector(targetOS string, linuxAdp, darwinAdp, materializedAdp Adapter) *Selector {
 	if targetOS == "" {
 		targetOS = runtime.GOOS
 	}
-	if fallbackAdp == nil {
-		fallbackAdp = NewEagerCopyAdapter(ReasonNone)
+	if materializedAdp == nil {
+		materializedAdp = NewEagerCopyAdapter()
 	}
 	return &Selector{
-		TargetOS:        targetOS,
-		LinuxAdapter:    linuxAdp,
-		DarwinAdapter:   darwinAdp,
-		FallbackAdapter: fallbackAdp,
-		Registry:        NewActiveViewRegistry(),
-		BudgetFor:       RecordedBudget,
+		TargetOS:            targetOS,
+		LinuxAdapter:        linuxAdp,
+		DarwinAdapter:       darwinAdp,
+		MaterializedAdapter: materializedAdp,
+		Registry:            NewActiveViewRegistry(),
+		BudgetFor:           RecordedBudget,
 	}
 }
 
@@ -232,7 +232,7 @@ func (s *Selector) Choose(ctx context.Context, req ChooseRequest) (Choice, error
 
 	if req.Overrun == nil && !cost.Partial && cost.Total(fact) <= fact.Limit {
 		facts.Reason = SelectionUnderBudget
-		return s.chooseMaterialized(ctx, req, facts, ReasonNone, ProbeResult{}, &CopyBudget{Limit: fact.Limit, EntryCost: fact.EntryCost})
+		return s.chooseMaterialized(ctx, req, facts, &CopyBudget{Limit: fact.Limit, EntryCost: fact.EntryCost})
 	}
 
 	primary := s.primaryForOS()
@@ -258,16 +258,15 @@ func (s *Selector) Choose(ctx context.Context, req ChooseRequest) (Choice, error
 	}
 }
 
-func (s *Selector) chooseMaterialized(ctx context.Context, req ChooseRequest, facts SelectionFacts, fallback ReasonCode, probe ProbeResult, budget *CopyBudget) (Choice, error) {
+func (s *Selector) chooseMaterialized(ctx context.Context, req ChooseRequest, facts SelectionFacts, budget *CopyBudget) (Choice, error) {
 	if err := ctx.Err(); err != nil {
-		return Choice{Probe: probe}, err
+		return Choice{}, err
 	}
 	if err := checkCapacity(req, facts); err != nil {
-		return Choice{Probe: probe}, err
+		return Choice{}, err
 	}
-	adp := s.withFallbackReason(fallback)
-	facts.Provider = adp.ID()
-	return Choice{Adapter: adp, Probe: probe, Facts: facts, CopyBudget: budget}, nil
+	facts.Provider = s.MaterializedAdapter.ID()
+	return Choice{Adapter: s.MaterializedAdapter, Facts: facts, CopyBudget: budget}, nil
 }
 
 func checkCapacity(req ChooseRequest, facts SelectionFacts) error {
@@ -372,13 +371,6 @@ func (s *Selector) primaryForOS() Adapter {
 	default:
 		return nil
 	}
-}
-
-func (s *Selector) withFallbackReason(reason ReasonCode) Adapter {
-	if ec, ok := s.FallbackAdapter.(*EagerCopyAdapter); ok {
-		return ec.WithFallbackReason(reason)
-	}
-	return s.FallbackAdapter
 }
 
 func shouldRetryTransient(res ProbeResult, err error) bool {

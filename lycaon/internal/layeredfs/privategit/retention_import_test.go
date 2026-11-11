@@ -343,7 +343,6 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	storeRoot := filepath.Join(tmp, "store")
 	store, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "NewRetainedObjectStoreContext", err)
-	t.Cleanup(func() { _ = store.Close() })
 
 	_, reachableKeep, err := store.ImportRepositoryObjects(ctx, []string{objKeep}, []string{oidKeep})
 	testutil.FailErr(t, "import keep", err)
@@ -408,9 +407,7 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	// Remove any preexisting .rev in the store so keepBase starts with only .pack and .idx in the store,
 	// while ensuring the source directory has a .rev companion to copy.
 	storeKeepRevPath := filepath.Join(packDstDir, keepBase+".rev")
-	_ = os.Chmod(packDstDir, 0o755)
 	_ = os.Remove(storeKeepRevPath)
-	_ = os.Chmod(packDstDir, 0o555)
 	srcKeepRevPath := filepath.Join(objKeep, "pack", keepBase+".rev")
 	if _, err := os.Stat(srcKeepRevPath); os.IsNotExist(err) {
 		testutil.FailErr(t, "write synthetic src .rev for keep", os.WriteFile(srcKeepRevPath, []byte("RIDX\x00\x00\x00\x01"), 0o644))
@@ -519,7 +516,6 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	if !errors.Is(s1SyncErr2, ErrCorruptObjectStore) || !errors.Is(s1SyncErr2, errIntentSyncFault) {
 		t.Fatalf("expected joined ErrCorruptObjectStore and errIntentSyncFault on second S1 Barrier-1 fault, got %v", s1SyncErr2)
 	}
-	testutil.FailErr(t, "close after S1 Barrier-1 fault", store.Close())
 	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "reopen after S1 Barrier-1 fault", err)
 	if !store.HasObject(oidKeep) || store.HasObject(oidPack) {
@@ -550,7 +546,6 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	if _, err := os.Stat(candidateMarkerPath); err != nil {
 		t.Fatalf("expected .retiring- marker retained on disk when S4 companion unlink fails, got %v", err)
 	}
-	testutil.FailErr(t, "close after S4 fault", store.Close())
 	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "reopen after S4 fault", err)
 	if !store.HasObject(oidKeep) || store.HasObject(oidPack) {
@@ -590,7 +585,6 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	if _, err := os.Stat(candidateMarkerPath); err != nil {
 		t.Fatalf("expected .retiring- marker retained on disk when S5 Barrier-2 fails, got %v", err)
 	}
-	testutil.FailErr(t, "close after S5 Barrier-2 fault", store.Close())
 	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "reopen after S5 Barrier-2 fault", err)
 	if !store.HasObject(oidKeep) || store.HasObject(oidPack) {
@@ -614,7 +608,6 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	if _, err := os.Stat(candidateMarkerPath); err != nil {
 		t.Fatalf("expected .retiring- marker still on disk after S6 marker removal fault, got %v", err)
 	}
-	testutil.FailErr(t, "close after S6 fault", store.Close())
 	store, err = NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "reopen after S6 fault", err)
 
@@ -639,11 +632,9 @@ func TestImportRepositoryObjectsPostRenameSyncAndRollbackRemovalFaults(t *testin
 	if !errors.Is(s7Err, ErrCorruptObjectStore) || !errors.Is(s7Err, errBarrier3SyncFault) {
 		t.Fatalf("expected joined ErrCorruptObjectStore and errBarrier3SyncFault, got %v", s7Err)
 	}
-	testutil.FailErr(t, "close after S7 Barrier-3 fault", store.Close())
 
 	reopenedFinal, err := NewRetainedObjectStoreContext(ctx, storeRoot)
 	testutil.FailErr(t, "reopen after S7 fault", err)
-	t.Cleanup(func() { _ = reopenedFinal.Close() })
 	if !reopenedFinal.HasObject(oidKeep) || reopenedFinal.HasObject(oidPack) {
 		t.Fatalf("expected keep object preserved and failed pack retired on final reopen")
 	}

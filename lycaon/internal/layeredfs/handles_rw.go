@@ -66,7 +66,7 @@ func readHandleAdmitted(c *Core, hid HandleID, p []byte, offset int64) (int, err
 }
 
 // WriteHandle writes bytes to an open handle at the specified offset.
-// Conflicting writes, appends, and truncates on the same node are serialized through commit (#1657).
+// Conflicting writes, appends, and truncates on the same node are serialized through commit.
 func (c *Core) WriteHandle(hid HandleID, data []byte, offset int64) (int, error) {
 	if err := c.barrier.enterMutation(); err != nil {
 		return 0, err

@@ -129,7 +129,7 @@ func TestEvictVerifiedCheckpointBranchAndRebuildWithLocalDataInventory(t *testin
 	})
 	testutil.FailErr(t, "recovery.NewCoordinator", err)
 
-	adp := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	adp := adapter.NewEagerCopyAdapter()
 	prepReq := adapter.PrepareRequest{
 		ViewID:     "view-cp-evict",
 		BackingDir: t.TempDir(),

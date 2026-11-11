@@ -202,7 +202,6 @@ func TestJobMetaFormatV1BackwardCompatibilityAndV2Persistence(t *testing.T) {
 			AdapterID:       adapter.AdapterNFSDarwin,
 			PreparationKind: adapter.PreparationMounted,
 			VisibilityMode:  adapter.VisibilityLive,
-			FallbackReason:  adapter.ReasonNone,
 			CopiedEntries:   0,
 			CopiedBytes:     0,
 			PendingGitInit:  true,

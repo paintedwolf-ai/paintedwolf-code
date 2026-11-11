@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
+	"github.com/lycaon/lycaon/internal/osprocess"
+	"syscall"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
@@ -159,15 +160,13 @@ func (RecordedProcessController) SettleProcesses(ctx context.Context, workerID, 
 	}
 }
 
+// killRecordedProcess signals only the recorded incarnation, so a reused PID is never killed.
 func killRecordedProcess(process adapter.ProcessIdentity) error {
-	handle, err := os.FindProcess(process.PID)
-	if err != nil {
-		return err
+	err := osprocess.Signal(osprocess.Incarnation{PID: process.PID, Start: process.Started}, syscall.SIGKILL)
+	if errors.Is(err, syscall.ESRCH) {
+		return nil
 	}
-	if err := handle.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return err
-	}
-	return nil
+	return err
 }
 
 // RecordWorkerProcess adds a started writer's identity to its view's record before the process

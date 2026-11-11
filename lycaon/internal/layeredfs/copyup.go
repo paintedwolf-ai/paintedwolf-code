@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// BaseCapture records the immutable captured base state for a mutated path (#1657, #1663).
+// BaseCapture records the immutable captured base state for a mutated path.
 type BaseCapture struct {
 	Path        QualifiedPath     `json:"path"`
 	Layer       LayerSource       `json:"layer"`
@@ -37,7 +37,7 @@ func (c *Core) AddedInView(qpath QualifiedPath) bool {
 	return captured && base.Kind == EntryAbsent
 }
 
-// RegisterSeedBase records a pre-captured base for materialized views (#1658)
+// RegisterSeedBase records a pre-captured base for materialized views
 // without re-reading the live trunk.
 func (c *Core) RegisterSeedBase(base BaseCapture) error {
 	if err := c.barrier.enterMutation(); err != nil {

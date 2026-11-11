@@ -36,6 +36,17 @@ func plantTrees(t *testing.T, branchRoot, project string, trees []fixtureTree) m
 	return paths
 }
 
+func allocatedByJob(t *testing.T, branchRoot string) map[string]int64 {
+	t.Helper()
+	trees, err := workspace.ListJobTrees(t.Context(), branchRoot)
+	testutil.FailErr(t, "list trees", err)
+	out := map[string]int64{}
+	for _, tree := range trees {
+		out[tree.JobID] = tree.AllocatedBytes
+	}
+	return out
+}
+
 func TestSweepReclaimsIdleThenBudgetOldestFirst(t *testing.T) {
 	branchRoot := t.TempDir()
 	project := t.TempDir()
@@ -61,9 +72,11 @@ func TestSweepReclaimsIdleThenBudgetOldestFirst(t *testing.T) {
 		},
 		Now: func() time.Time { return now },
 	}
-	// Budget admits the two fresh trees but not the idle ones on top; the
-	// idle unsealed tree is never a candidate.
-	cfg := Config{IdleAge: 7 * 24 * time.Hour, BudgetBytes: 400 << 10, SweepInterval: time.Hour}
+	// The budget holds the trees that stay with room to spare, and not the oldest fresh tree on top;
+	// the idle unsealed tree is never a candidate.
+	allocated := allocatedByJob(t, branchRoot)
+	budget := allocated["idle-unsealed"] + allocated["fresh-new"] + allocated["fresh-old"]/2
+	cfg := Config{IdleAge: 7 * 24 * time.Hour, BudgetBytes: budget, SweepInterval: time.Hour}
 	report, err := Sweep(context.Background(), deps, cfg)
 	testutil.FailErr(t, "sweep", err)
 	if report.EvictedIdle != 1 || report.EvictedBudget != 1 {

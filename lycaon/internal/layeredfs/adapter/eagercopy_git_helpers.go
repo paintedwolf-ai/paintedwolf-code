@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -203,6 +204,20 @@ func isPathUnderAllowed(target string, allowed []string) bool {
 		}
 	}
 	return false
+}
+
+// errExternalGitlink is a gitlink whose repository lies outside the granted roots and is not a linked
+// worktree of one inside them.
+var errExternalGitlink = errors.New("gitlink target is outside the granted roots")
+
+func externalGitlinkError() error {
+	return &AdapterError{
+		AdapterID:  AdapterEagerCopy,
+		Op:         "seed_git",
+		ReasonCode: ReasonUnauthorizedRoot,
+		Diagnostic: "external gitlink target is outside granted roots",
+		Cause:      fmt.Errorf("%w: %w", privategit.ErrUnauthorizedGitTarget, errExternalGitlink),
+	}
 }
 
 func unauthorizedGitError(diag string) error {

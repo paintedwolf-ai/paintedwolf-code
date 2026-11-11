@@ -44,12 +44,11 @@ func (r *gitStoreRegistry) storeForPrepare(runtimeDir string, grants []RootGrant
 			return s, nil
 		}
 	}
-	storeDir := filepath.Join(runtimeDir, "retained-git-store")
+	storeDir := retainedGitStoreDir(runtimeDir)
 	s, err := privategit.NewRetainedObjectStore(storeDir)
 	if err != nil {
 		return nil, err
 	}
-	_ = s.Close()
 	r.byRoot[key] = s
 	sharedRootGitStores.Store(key, s)
 	return s, nil
@@ -177,7 +176,6 @@ func defaultSeedGitInitializer(ctx context.Context, spec SeedGitRepoSpec) (SeedG
 		}
 	}
 	metrics, reachable, err := store.ImportRepositoryObjects(ctx, objDirs, nil)
-	_ = store.Close()
 	if err != nil {
 		cleanupStage()
 		return SeedGitInitResult{}, err
@@ -248,7 +246,7 @@ func resolveAndValidateGitSpec(spec SeedGitRepoSpec) (string, string, []string, 
 		if !isPathUnderAllowed(gitDir, allowed) {
 			common, proofErr := privategit.ProveLinkedWorktree(spec.SourceGitPath, gitDir)
 			if proofErr != nil {
-				return "", "", nil, unauthorizedGitError("external gitlink target is outside granted roots")
+				return "", "", nil, externalGitlinkError()
 			}
 			// The worktree's shared repository is authorized by that linkage, and its
 			// alternates still answer to the same check as any other.

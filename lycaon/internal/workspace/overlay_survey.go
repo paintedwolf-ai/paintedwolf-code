@@ -32,7 +32,7 @@ func (d layeredSurveyDirEntry) ModTime() time.Time         { return d.mod }
 func (d layeredSurveyDirEntry) Sys() any                   { return nil }
 
 // OverlayWorkspaceDivergencePaths returns workspace divergence paths without a baseline: O(changed)
-// from a mounted view's consumer.Engine (#1664), and from a materialized view's stat manifest, which
+// from a mounted view's consumer.Engine, and from a materialized view's stat manifest, which
 // reads only files whose stat differs.
 func OverlayWorkspaceDivergencePaths(ctx context.Context, branchRoot string) ([]string, bool, error) {
 	eng, ok := consumer.LookupBranchEngine(branchRoot)
@@ -122,7 +122,7 @@ func OverlaySurveyReadDir(branchRoot, rel string, opts sandbox.SurveyOptions) ([
 	return out, nil
 }
 
-// OverlaySurveyWalk walks a branch, using the indexed consumer overlay when available (#1664).
+// OverlaySurveyWalk walks a branch, using the indexed consumer overlay when available.
 func OverlaySurveyWalk(ctx context.Context, branchRoot string, opts sandbox.SurveyOptions, fn func(sandbox.SurveyEntry) (sandbox.SurveyAction, error)) error {
 	branchRoot = filepath.Clean(strings.TrimSpace(branchRoot))
 	if eng, rootID, scopedRel, ok := consumer.ResolveBranchEnginePath(branchRoot, "."); ok && eng != nil && eng.HasIndex() {

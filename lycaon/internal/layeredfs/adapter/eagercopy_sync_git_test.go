@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/layeredfs"
-	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
 )
 
@@ -22,7 +21,7 @@ func TestEagerCopyGitStoreReuseConfigSanitizationAndUnauthorizedGitlinks(t *test
 		t.Fatal(err)
 	}
 
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	adp := NewEagerCopyAdapter()
 	view1, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "git-reuse-1",
 		RuntimeDir: filepath.Join(tmp, "rt"),
@@ -67,9 +66,10 @@ func TestEagerCopyGitStoreReuseConfigSanitizationAndUnauthorizedGitlinks(t *test
 
 func verifyGitlinkRejectionsAndLimits(t *testing.T, ctx context.Context, tmp string) {
 	t.Helper()
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	adp := NewEagerCopyAdapter()
 
-	// 1. External gitlink outside granted roots must be rejected.
+	// 1. A gitlink outside the granted roots leaves its tree's files in the view and gives it no
+	// repository.
 	outsideGit := filepath.Join(tmp, "outside-git")
 	if err := os.MkdirAll(outsideGit, 0o755); err != nil {
 		t.Fatal(err)
@@ -84,14 +84,27 @@ func verifyGitlinkRejectionsAndLimits(t *testing.T, ctx context.Context, tmp str
 	if err := os.WriteFile(filepath.Join(extRepo, ".git"), []byte("gitdir: "+outsideGit+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := adp.Prepare(ctx, PrepareRequest{
-		ViewID:     "unauth-gitlink",
+	if err := os.WriteFile(filepath.Join(extRepo, "kept.txt"), []byte("kept\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	external, err := adp.Prepare(ctx, PrepareRequest{
+		ViewID:     "external-gitlink",
 		RuntimeDir: filepath.Join(tmp, "rt"),
 		Grants:     []RootGrant{{RootID: "repo", Label: "repo", SourcePath: extRepo, IsPrimary: true}},
 	})
-	if err == nil || (!errors.Is(err, privategit.ErrUnauthorizedGitTarget) && !strings.Contains(err.Error(), string(ReasonUnauthorizedRoot))) {
-		t.Fatalf("expected unauthorized git target rejection, got %v", err)
+	if err != nil {
+		t.Fatalf("an external gitlink refused the view: %v", err)
 	}
+	if len(external.SeededGitRepos) != 0 {
+		t.Fatalf("an external gitlink got a repository: %+v", external.SeededGitRepos)
+	}
+	if _, err := os.Stat(filepath.Join(external.PrimaryWorkPath, "kept.txt")); err != nil {
+		t.Fatalf("the external gitlink's tree lost its files: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(external.PrimaryWorkPath, ".git")); !os.IsNotExist(err) {
+		t.Fatalf("the external gitlink reached the view: %v", err)
+	}
+	_, _ = adp.Release(ctx, external.ViewID)
 
 	// 2. Unresolved gitlink must fail without publishing ready repository.
 	badLinkRepo := filepath.Join(tmp, "badlink-repo")
@@ -150,7 +163,7 @@ func TestEagerCopyJournalSyncDirectoryRemovalSymlinkReplacementAndMetadata(t *te
 		t.Fatal(err)
 	}
 
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	adp := NewEagerCopyAdapter()
 	view, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "sync-journal-1",
 		RuntimeDir: filepath.Join(tmp, "rt"),
@@ -259,7 +272,7 @@ func TestWorkspaceSelectionNarrowsMaterializedRootsWhileTaskPathHintsDoNot(t *te
 		{RootID: "rootA", Label: "A", SourcePath: rootA, IsPrimary: true},
 		{RootID: "rootB", Label: "B", SourcePath: rootB},
 	}
-	adp := NewEagerCopyAdapter(ReasonNone)
+	adp := NewEagerCopyAdapter()
 
 	view, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "narrowed-view",
@@ -316,7 +329,7 @@ func TestLinkedWorktreeGitlinkIsAuthorizedOnlyByItsStructuralLinkage(t *testing.
 	}
 	prepare := func(t *testing.T, viewID, source string) error {
 		t.Helper()
-		view, err := NewEagerCopyAdapter(ReasonMountDenied).Prepare(t.Context(), PrepareRequest{
+		view, err := NewEagerCopyAdapter().Prepare(t.Context(), PrepareRequest{
 			ViewID: viewID, RuntimeDir: t.TempDir(),
 			Grants: []RootGrant{{RootID: "wt", Label: "wt", SourcePath: source, IsPrimary: true}},
 		})

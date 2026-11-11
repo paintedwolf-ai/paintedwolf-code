@@ -42,7 +42,7 @@ func TestEagerCopyRepeatCaptureModifyRevertAndCreateDelete(t *testing.T) {
 	}
 	xattrSupported := unix.Lsetxattr(seedFile, "user.seed", []byte("orig"), 0) == nil
 
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	adp := NewEagerCopyAdapter()
 	view, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "repeat-capture-1",
 		RuntimeDir: filepath.Join(tmp, "rt"),
@@ -255,7 +255,7 @@ func TestEagerCopyRepeatCaptureSymlinksAndXattrErrorPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	adp := NewEagerCopyAdapter(ReasonMountDenied)
+	adp := NewEagerCopyAdapter()
 	view, err := adp.Prepare(ctx, PrepareRequest{
 		ViewID:     "repeat-symlink-1",
 		RuntimeDir: filepath.Join(tmp, "rt"),

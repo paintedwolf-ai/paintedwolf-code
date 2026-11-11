@@ -126,7 +126,6 @@ func runWorkerLifecyclePhase(t *testing.T, root, phase string, mounted, sourceCo
 	branches := filepath.Join(testbaseline.DataDir(t, database), "worker-branches")
 	gitManager, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "open private Git", err)
-	t.Cleanup(func() { _ = gitManager.Store().Close() })
 	selector := workspace.DefaultWorkspaceSelector()
 	selector.BudgetFor = func(class adapter.BudgetClass) adapter.BudgetFact {
 		return adapter.BudgetFact{Class: class, Limit: 1 << 20, EntryCost: 1}

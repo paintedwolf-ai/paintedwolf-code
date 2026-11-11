@@ -59,7 +59,6 @@ func newRecoveryFixture(t *testing.T) *recoveryFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = gitMgr.Store().Close() })
 
 	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{
 		RootDir:         filepath.Join(baseDir, "recovery"),

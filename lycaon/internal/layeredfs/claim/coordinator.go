@@ -17,7 +17,7 @@ import (
 )
 
 // Coordinator orchestrates O(selected roots) worker view claiming, retention registration,
-// confinement verification, Format-v2 metadata persistence, and typed workspace state (#1662).
+// confinement verification, Format-v2 metadata persistence, and typed workspace state.
 type Coordinator struct {
 	selector        *adapter.Selector
 	mu              sync.RWMutex
@@ -38,7 +38,7 @@ type unsettledView struct {
 // NewCoordinator constructs a claim Coordinator backed by an adapter Selector.
 func NewCoordinator(sel *adapter.Selector) *Coordinator {
 	if sel == nil {
-		sel = adapter.NewSelector("", nil, nil, adapter.NewEagerCopyAdapter(adapter.ReasonNone))
+		sel = adapter.NewSelector("", nil, nil, adapter.NewEagerCopyAdapter())
 	}
 	return &Coordinator{
 		selector:        sel,
@@ -50,7 +50,7 @@ func NewCoordinator(sel *adapter.Selector) *Coordinator {
 
 // ClaimWorkerView validates attached-root identities and explicit WorkspaceSelection, calls
 // Adapter.Prepare once, registers retention before readiness, verifies confinement usability,
-// commits Format-v2 metadata, and exposes the ready view (#1662).
+// commits Format-v2 metadata, and exposes the ready view.
 func (c *Coordinator) ClaimWorkerView(
 	ctx context.Context,
 	req ClaimRequest,
@@ -162,7 +162,7 @@ func (c *Coordinator) ClaimSelectedView(
 		return fail(classifyClaimReason(err), err)
 	}
 
-	meta := buildCommittedMetadataV2(req, adp, prepared, probeRes.ReasonCode)
+	meta := buildCommittedMetadataV2(req, adp, prepared)
 	if err := SaveViewMetadata(metaPath, meta); err != nil {
 		return fail(adapter.ReasonMountDenied, err)
 	}
@@ -197,7 +197,7 @@ func (c *Coordinator) AdoptPreparedView(ctx context.Context, req ClaimRequest, a
 		}
 		retentionClaimID = cid
 	}
-	meta := buildCommittedMetadataV2(req, adp, prepared, adapter.ReasonNone)
+	meta := buildCommittedMetadataV2(req, adp, prepared)
 	claimed := &ClaimedView{
 		Identity: req.Identity, Adapter: adp, Prepared: prepared, Metadata: meta,
 		RetentionClaimID: retentionClaimID, State: buildReadySnapshot(meta), privateGit: req.Hooks.PrivateGit,
@@ -335,13 +335,8 @@ func buildCommittedMetadataV2(
 	req ClaimRequest,
 	adp adapter.Adapter,
 	prepared *adapter.PreparedView,
-	fallbackReason adapter.ReasonCode,
 ) ViewMetadataV2 {
 	facts := adp.Facts()
-	fbReason := facts.FallbackReason
-	if fbReason == adapter.ReasonNone && facts.PreparationKind == adapter.PreparationMaterialized {
-		fbReason = fallbackReason
-	}
 	roots := make([]RootMappingRecord, 0, len(prepared.Roots))
 	for _, r := range prepared.Roots {
 		roots = append(roots, RootMappingRecord{
@@ -372,7 +367,6 @@ func buildCommittedMetadataV2(
 			AdapterID:        adp.ID(),
 			PreparationKind:  facts.PreparationKind,
 			SourceVisibility: facts.UntouchedSourceVisibility,
-			FallbackReason:   fbReason,
 			CopiedEntries:    prepared.Materialize.Entries,
 			CopiedBytes:      prepared.Materialize.CopiedBytes,
 			SelectionReason:  req.SelectionFacts.Reason,

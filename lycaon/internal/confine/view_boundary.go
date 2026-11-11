@@ -48,9 +48,6 @@ type ViewBoundary struct {
 	// ReopenedReadPaths stay read-only below a denied path, such as the object store a private
 	// repository borrows from.
 	ReopenedReadPaths []string
-	// WriteDeniedPaths stay readable and are refused for writing, after everything above: a pristine
-	// tree is the exact base of a later merge.
-	WriteDeniedPaths []string
 	// DeniedLoopbackPorts are the live view listeners. Only a process is refused: the kernel's own
 	// client traffic is not subject to its profile.
 	DeniedLoopbackPorts []uint16
@@ -61,23 +58,22 @@ type ViewBoundary struct {
 func (v ViewBoundary) normalized() ViewBoundary {
 	return ViewBoundary{
 		DeniedPaths: normalizePathList(v.DeniedPaths), ReopenedPaths: normalizePathList(v.ReopenedPaths), ReopenedReadPaths: normalizePathList(v.ReopenedReadPaths),
-		WriteDeniedPaths: normalizePathList(v.WriteDeniedPaths), DeniedLoopbackPorts: normalizeListenPorts(v.DeniedLoopbackPorts),
-		Roots: normalizeViewRoots(v.Roots),
+		DeniedLoopbackPorts: normalizeListenPorts(v.DeniedLoopbackPorts),
+		Roots:               normalizeViewRoots(v.Roots),
 	}
 }
 
-// addViewStorageFloor closes the view's storage last, so no earlier allow-back reopens it. The paths
-// are canonical, because a rule on an alias of a path does not apply to the path itself.
+// addViewStorageFloor closes the view's storage after every grant and allow-back and reopens the
+// worker's own roots. The paths are canonical, because a rule on an alias of a path does not apply to
+// the path itself.
 func addViewStorageFloor(rules *FilesystemRules, view ViewBoundary) {
 	denied := resolveEach(slices.Clone(view.DeniedPaths))
 	reopened := resolveEach(slices.Clone(view.ReopenedPaths))
 	reopenedRead := resolveEach(slices.Clone(view.ReopenedReadPaths))
-	writeDenied := resolveEach(slices.Clone(view.WriteDeniedPaths))
 	rules.view = ViewBoundary{
 		DeniedPaths:         denied,
 		ReopenedPaths:       reopened,
 		ReopenedReadPaths:   reopenedRead,
-		WriteDeniedPaths:    writeDenied,
 		DeniedLoopbackPorts: view.DeniedLoopbackPorts,
 		Roots:               resolveViewRoots(view.Roots),
 	}
@@ -87,7 +83,19 @@ func addViewStorageFloor(rules *FilesystemRules, view ViewBoundary) {
 	rules.add(fsRule{op: opRead, allow: true, matches: subpathMatches(readable, "")})
 	rules.add(fsRule{op: opReadMetadata, allow: true, matches: literalMatches(traversalAncestors(denied, readable), "")})
 	rules.add(fsRule{op: opWrite, allow: true, matches: subpathMatches(reopened, "")})
-	rules.add(fsRule{op: opWrite, matches: subpathMatches(writeDenied, FloorControlPlane)})
+}
+
+// closeViewStorage refuses writes to view storage once more after every later grant. A denied path
+// holding one of the worker's own roots is left to the floor above, which reopened that root.
+func closeViewStorage(rules *FilesystemRules, view ViewBoundary) {
+	denied := resolveEach(slices.Clone(view.DeniedPaths))
+	reopened := resolveEach(slices.Clone(view.ReopenedPaths))
+	storage := slices.DeleteFunc(denied, func(path string) bool {
+		return slices.ContainsFunc(reopened, func(own string) bool { return PathAtOrUnder(own, path) })
+	})
+	if len(storage) > 0 {
+		rules.add(fsRule{op: opWrite, matches: subpathMatches(storage, FloorControlPlane)})
+	}
 }
 
 func normalizeViewRoots(roots []ViewRootBoundary) []ViewRootBoundary {

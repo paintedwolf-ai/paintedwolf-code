@@ -38,7 +38,7 @@ func (c *Coordinator) StateSnapshot(viewID string) (WorkspaceStateSnapshot, erro
 }
 
 // SetCommandState updates the live/completed command execution state for viewID while
-// keeping workspace readiness and checkpoint persistence strictly distinct (#1662).
+// keeping workspace readiness and checkpoint persistence strictly distinct.
 func (c *Coordinator) SetCommandState(viewID string, cmdState CommandState) (WorkspaceStateSnapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -88,7 +88,7 @@ func (c *Coordinator) RecordCheckpointPublished(viewID, checkpointID string) (Wo
 }
 
 // RecordCheckpointFailure records a failed checkpoint persistence on viewID without marking
-// the workspace unready, and surfaces ActionRetryCheckpoint in SupportedActions (#1662).
+// the workspace unready, and surfaces ActionRetryCheckpoint in SupportedActions.
 func (c *Coordinator) RecordCheckpointFailure(
 	viewID, checkpointID string,
 	reason adapter.ReasonCode,
@@ -106,7 +106,7 @@ func (c *Coordinator) RecordCheckpointFailure(
 	cv.State.Checkpoint.PendingCheckpointID = checkpointID
 	cv.State.Checkpoint.FailedReasonCode = reason
 	cv.State.Checkpoint.Diagnostic = diagnostic
-	cv.State.Notice = FallbackNotice{
+	cv.State.Notice = WorkspaceNotice{
 		Severity:   SeverityWarning,
 		ReasonCode: reason,
 		Diagnostic: diagnostic,
@@ -115,7 +115,7 @@ func (c *Coordinator) RecordCheckpointFailure(
 	return cv.State, nil
 }
 
-// RecordGitInitState updates the private Git initialization state for viewID (#1662, #1671).
+// RecordGitInitState updates the private Git initialization state for viewID.
 func (c *Coordinator) RecordGitInitState(
 	viewID string,
 	gitState GitInitState,
@@ -131,7 +131,7 @@ func (c *Coordinator) RecordGitInitState(
 	cv.State.GitInit = gitState
 	cv.Metadata.Adapter.PendingGitInit = gitState == GitInitLazyPending
 	if gitState == GitInitFailed {
-		cv.State.Notice = FallbackNotice{
+		cv.State.Notice = WorkspaceNotice{
 			Severity:   SeverityWarning,
 			ReasonCode: reason,
 			Diagnostic: diagnostic,
@@ -154,7 +154,7 @@ func (c *Coordinator) RecordViewRecoveryRequired(
 		return WorkspaceStateSnapshot{}, ErrViewNotFound
 	}
 	cv.State.Readiness = StateRecoveryRequired
-	cv.State.Notice = FallbackNotice{
+	cv.State.Notice = WorkspaceNotice{
 		Severity:   SeverityError,
 		ReasonCode: reason,
 		Diagnostic: diagnostic,
@@ -164,7 +164,7 @@ func (c *Coordinator) RecordViewRecoveryRequired(
 }
 
 // UpdateFocusPathHints updates task-path focus hints on viewID without altering SelectedRoots
-// or workspace filesystem content (#1662).
+// or workspace filesystem content.
 func (c *Coordinator) UpdateFocusPathHints(viewID string, focusHints []string) (WorkspaceStateSnapshot, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -215,7 +215,7 @@ func (c *Coordinator) ReleaseWorkerView(ctx context.Context, viewID string, rete
 	}
 	if active {
 		cv.State.Readiness = StateRecoveryRequired
-		cv.State.Notice = FallbackNotice{Severity: SeverityError, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: err.Error()}
+		cv.State.Notice = WorkspaceNotice{Severity: SeverityError, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: err.Error()}
 		cv.State.SupportedActions = deriveSupportedActions(cv.State)
 	}
 	return err
@@ -240,7 +240,7 @@ func (c *Coordinator) SettlementUnresolved(viewID string) bool {
 
 func (c *Coordinator) recordRecoveryRequired(viewID string, snap WorkspaceStateSnapshot, cause error) WorkspaceStateSnapshot {
 	snap.Readiness = StateRecoveryRequired
-	snap.Notice = FallbackNotice{Severity: SeverityError, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: cause.Error()}
+	snap.Notice = WorkspaceNotice{Severity: SeverityError, ReasonCode: adapter.ReasonCleanupFailed, Diagnostic: cause.Error()}
 	snap.SupportedActions = deriveSupportedActions(snap)
 	c.mu.Lock()
 	c.failedSnapshots[viewID] = snap
@@ -249,7 +249,7 @@ func (c *Coordinator) recordRecoveryRequired(viewID string, snap WorkspaceStateS
 }
 
 // LoadOrUpgradeRetainedView loads a Format-v2 or Format-v1 metadata file and returns its
-// reconstructed ClaimedView state without converting legacy materialized views into live mounts (#1662).
+// reconstructed ClaimedView state without converting legacy materialized views into live mounts.
 func (c *Coordinator) LoadOrUpgradeRetainedView(metaPath string) (*ClaimedView, bool, error) {
 	meta, upgraded, err := LoadViewMetadata(metaPath)
 	if err != nil {

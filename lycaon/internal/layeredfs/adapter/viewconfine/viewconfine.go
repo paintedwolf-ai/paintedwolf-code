@@ -1,4 +1,4 @@
-// Package viewconfine enforces direct-storage denial for mounted worker views. Everything it claims
+// Package viewconfine enforces what a worker view's processes must not reach. Everything it claims
 // comes from a process started through the real launcher under the boundary a worker gets, reporting
 // what the kernel answered, so a host that cannot enforce falls back with a typed reason.
 package viewconfine
@@ -41,12 +41,36 @@ type Enforcer struct {
 // New returns an Enforcer with nothing yet proven.
 func New() *Enforcer { return &Enforcer{} }
 
-// Boundary is what the processes of a mounted view must not reach: its storage, its sources and
-// every other worker's branch beside it. Only its own roots stay open.
+// Boundary is what the processes of a view must not reach: every other worker's branch beside it
+// and, for a mounted view, its storage, its sources and its listener. Only its own roots stay open,
+// with the object stores its repositories borrow from readable.
 func Boundary(view *adapter.PreparedView) confine.ViewBoundary {
-	if view == nil || view.Facts.PreparationKind != adapter.PreparationMounted {
+	if view == nil {
 		return confine.ViewBoundary{}
 	}
+	var boundary confine.ViewBoundary
+	if view.Facts.PreparationKind == adapter.PreparationMounted {
+		boundary = mountedStorageBoundary(view)
+	}
+	base := enginepaths.WorkerBranchesRootOf(view.PrimaryWorkPath)
+	if base == "" {
+		return boundary
+	}
+	boundary.DeniedPaths = append(boundary.DeniedPaths, base)
+	boundary.ReopenedReadPaths = append(boundary.ReopenedReadPaths, privategit.RetainedObjectsDir(enginepaths.PrivateGitDirUnder(base)))
+	if view.Facts.PreparationKind == adapter.PreparationMaterialized && view.RuntimeViewDir != "" {
+		boundary.ReopenedReadPaths = append(boundary.ReopenedReadPaths, adapter.RetainedGitObjectsDirOfView(view.RuntimeViewDir))
+	}
+	for _, root := range view.Roots {
+		boundary.ReopenedPaths = append(boundary.ReopenedPaths, root.WorkspacePath)
+		if root.PristinePath != "" {
+			boundary.ReopenedReadPaths = append(boundary.ReopenedReadPaths, root.PristinePath)
+		}
+	}
+	return boundary
+}
+
+func mountedStorageBoundary(view *adapter.PreparedView) confine.ViewBoundary {
 	boundary := confine.ViewBoundary{DeniedLoopbackPorts: slices.Clone(view.ListenerPorts), DeniedPaths: slices.Clone(view.SourcePaths)}
 	if view.BackingDir != "" {
 		boundary.DeniedPaths = append(boundary.DeniedPaths, view.BackingDir)
@@ -69,13 +93,6 @@ func Boundary(view *adapter.PreparedView) confine.ViewBoundary {
 			}
 		}
 		boundary.Roots = append(boundary.Roots, vr)
-	}
-	if base := enginepaths.WorkerBranchesRootOf(view.PrimaryWorkPath); base != "" {
-		boundary.DeniedPaths = append(boundary.DeniedPaths, base)
-		boundary.ReopenedReadPaths = []string{privategit.RetainedObjectsDir(enginepaths.PrivateGitDirUnder(base))}
-		for _, root := range view.Roots {
-			boundary.ReopenedPaths = append(boundary.ReopenedPaths, root.WorkspacePath)
-		}
 	}
 	return boundary
 }

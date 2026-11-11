@@ -27,7 +27,7 @@ type eagerViewState struct {
 	accessCount     atomic.Int64
 }
 
-// EagerCopyAdapter materializes a working tree and a pristine tree as its exact base (#1658).
+// EagerCopyAdapter materializes a working tree and a pristine tree as its exact base.
 type EagerCopyAdapter struct {
 	facts     AdapterFacts
 	mu        sync.RWMutex
@@ -35,9 +35,8 @@ type EagerCopyAdapter struct {
 	gitStores *gitStoreRegistry
 }
 
-// NewEagerCopyAdapter constructs a materialized EagerCopyAdapter. FallbackReason names the lasting
-// reason a mount could not serve an over-budget worker, when that is why this adapter was chosen.
-func NewEagerCopyAdapter(fallbackReason ReasonCode) *EagerCopyAdapter {
+// NewEagerCopyAdapter constructs a materialized EagerCopyAdapter.
+func NewEagerCopyAdapter() *EagerCopyAdapter {
 	return &EagerCopyAdapter{
 		facts: AdapterFacts{
 			AdapterID:                 AdapterEagerCopy,
@@ -62,21 +61,10 @@ func NewEagerCopyAdapter(fallbackReason ReasonCode) *EagerCopyAdapter {
 			},
 			SupportsPrivateGit:        true,
 			SupportsCheckpointBarrier: true,
-			FallbackReason:            fallbackReason,
 		},
 		views:     make(map[string]*eagerViewState),
 		gitStores: newGitStoreRegistry(),
 	}
-}
-
-// WithFallbackReason returns an EagerCopyAdapter carrying the specified FallbackReason.
-func (a *EagerCopyAdapter) WithFallbackReason(reason ReasonCode) *EagerCopyAdapter {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	clone := NewEagerCopyAdapter(reason)
-	clone.views = a.views
-	clone.gitStores = a.gitStores
-	return clone
 }
 
 func (a *EagerCopyAdapter) ID() AdapterID       { return AdapterEagerCopy }

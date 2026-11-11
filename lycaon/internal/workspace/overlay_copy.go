@@ -121,7 +121,7 @@ func markSnapshotCompleteWithClaim(branchRoot string, choice WorkspaceStrategySe
 	}
 	meta.FormatVersion, meta.SnapshotComplete = JobMetaFormatV2, true
 	meta.AdapterID, meta.PreparationKind = choice.AdapterID, choice.Facts.PreparationKind
-	meta.VisibilityMode, meta.FallbackReason = choice.Facts.UntouchedSourceVisibility, choice.Facts.FallbackReason
+	meta.VisibilityMode = choice.Facts.UntouchedSourceVisibility
 	meta.SelectionReason, meta.DeclaredCost = choice.Selection.Reason, choice.Selection.DeclaredCost
 	meta.PendingGitInit = choice.Facts.PreparationKind == adapter.PreparationMounted
 	meta.SourceGeneration, meta.FocusPathHints, meta.AdapterFacts = 1, append([]string(nil), hints...), &cpFacts
@@ -154,20 +154,12 @@ func snapshotFromJobMeta(branchRoot string, meta JobMeta) claim.WorkspaceStateSn
 	if meta.PendingGitInit {
 		gitState = claim.GitInitLazyPending
 	}
-	notice := claim.FallbackNotice{Severity: claim.SeverityInfo}
-	if meta.FallbackReason != "" {
-		notice = claim.FallbackNotice{
-			Severity: claim.SeverityWarning, ReasonCode: meta.FallbackReason,
-			CopiedEntries: meta.CopiedEntries, CopiedBytes: meta.CopiedBytes,
-		}
-	}
 	return claim.WorkspaceStateSnapshot{
 		Identity:       claim.ClaimIdentity{WorkerID: jobIDForBranch(branchRoot), ViewID: meta.ViewID, SourceGeneration: uint64(max(meta.SourceGeneration, 0))},
 		Readiness:      claim.StateReady,
-		Adapter:        claim.AdapterMetadataFacts{AdapterID: meta.AdapterID, PreparationKind: meta.PreparationKind, SourceVisibility: meta.VisibilityMode, FallbackReason: meta.FallbackReason, CopiedEntries: meta.CopiedEntries, CopiedBytes: meta.CopiedBytes, PendingGitInit: meta.PendingGitInit},
+		Adapter:        claim.AdapterMetadataFacts{AdapterID: meta.AdapterID, PreparationKind: meta.PreparationKind, SourceVisibility: meta.VisibilityMode, CopiedEntries: meta.CopiedEntries, CopiedBytes: meta.CopiedBytes, PendingGitInit: meta.PendingGitInit},
 		SelectedRoots:  roots,
 		FocusPathHints: append([]string(nil), meta.FocusPathHints...),
-		Notice:         notice,
 		GitInit:        gitState,
 		Command:        claim.CommandIdle,
 		Checkpoint:     claim.CheckpointStatus{State: claim.CheckpointNone},

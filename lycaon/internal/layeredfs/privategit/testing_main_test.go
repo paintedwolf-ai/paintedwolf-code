@@ -88,9 +88,6 @@ func newTestManager(t *testing.T, baseDir string) *Manager {
 	mgrDir := filepath.Join(baseDir, "privategit-mgr")
 	mgr, err := NewManager(ManagerConfig{BackingDir: mgrDir})
 	testutil.FailErr(t, "NewManager", err)
-	t.Cleanup(func() {
-		_ = mgr.Store().Close()
-	})
 	return mgr
 }
 

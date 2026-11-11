@@ -4,8 +4,8 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 )
 
-// FallbackNotice carries structured fallback or preparation/recovery status for Host and Den.
-type FallbackNotice struct {
+// WorkspaceNotice carries a structured preparation or recovery status for Host and Den.
+type WorkspaceNotice struct {
 	Severity      NoticeSeverity     `json:"severity"`
 	ReasonCode    adapter.ReasonCode `json:"reason_code,omitempty"`
 	Diagnostic    string             `json:"diagnostic,omitempty"`
@@ -22,7 +22,7 @@ type CheckpointStatus struct {
 	Diagnostic          string             `json:"diagnostic,omitempty"`
 }
 
-// WorkspaceStateSnapshot is the typed Host/Den workspace state surface (#1662).
+// WorkspaceStateSnapshot is the typed Host/Den workspace state surface.
 // Command completion, workspace readiness, and checkpoint persistence are strictly distinct.
 type WorkspaceStateSnapshot struct {
 	Identity         ClaimIdentity        `json:"identity"`
@@ -33,24 +33,23 @@ type WorkspaceStateSnapshot struct {
 	Command          CommandState         `json:"command"`
 	GitInit          GitInitState         `json:"git_init"`
 	Checkpoint       CheckpointStatus     `json:"checkpoint"`
-	Notice           FallbackNotice       `json:"notice"`
+	Notice           WorkspaceNotice      `json:"notice"`
 	SupportedActions []RecoveryAction     `json:"supported_actions,omitempty"`
 }
 
 // DispatchWorkspaceReceipt is the wire-level receipt attached to worker dispatch and turn results.
 type DispatchWorkspaceReceipt struct {
-	WorkerID         string             `json:"worker_id"`
-	ViewID           string             `json:"view_id"`
-	AdapterID        adapter.AdapterID  `json:"adapter_id"`
-	Readiness        ReadinessState     `json:"readiness"`
-	Command          CommandState       `json:"command"`
-	GitInit          GitInitState       `json:"git_init"`
-	Checkpoint       CheckpointStatus   `json:"checkpoint"`
-	FallbackReason   adapter.ReasonCode `json:"fallback_reason,omitempty"`
-	CopiedEntries    int64              `json:"copied_entries"`
-	CopiedBytes      int64              `json:"copied_bytes"`
-	Notice           FallbackNotice     `json:"notice"`
-	SupportedActions []RecoveryAction   `json:"supported_actions,omitempty"`
+	WorkerID         string            `json:"worker_id"`
+	ViewID           string            `json:"view_id"`
+	AdapterID        adapter.AdapterID `json:"adapter_id"`
+	Readiness        ReadinessState    `json:"readiness"`
+	Command          CommandState      `json:"command"`
+	GitInit          GitInitState      `json:"git_init"`
+	Checkpoint       CheckpointStatus  `json:"checkpoint"`
+	CopiedEntries    int64             `json:"copied_entries"`
+	CopiedBytes      int64             `json:"copied_bytes"`
+	Notice           WorkspaceNotice   `json:"notice"`
+	SupportedActions []RecoveryAction  `json:"supported_actions,omitempty"`
 }
 
 // BuildReceipt projects a WorkspaceStateSnapshot into a DispatchWorkspaceReceipt without prose parsing.
@@ -63,7 +62,6 @@ func BuildReceipt(snap WorkspaceStateSnapshot) DispatchWorkspaceReceipt {
 		Command:          snap.Command,
 		GitInit:          snap.GitInit,
 		Checkpoint:       snap.Checkpoint,
-		FallbackReason:   snap.Adapter.FallbackReason,
 		CopiedEntries:    snap.Adapter.CopiedEntries,
 		CopiedBytes:      snap.Adapter.CopiedBytes,
 		Notice:           snap.Notice,
@@ -80,16 +78,6 @@ func buildReadySnapshot(meta ViewMetadataV2) WorkspaceStateSnapshot {
 	if meta.Checkpoints.LastPublishedCheckpointID != "" {
 		cpState = CheckpointPublished
 	}
-	var notice FallbackNotice
-	if meta.Adapter.PreparationKind == adapter.PreparationMaterialized {
-		notice = FallbackNotice{
-			Severity:      SeverityInfo,
-			ReasonCode:    meta.Adapter.FallbackReason,
-			Diagnostic:    "using bounded materialized workspace seed; worker can proceed normally",
-			CopiedEntries: meta.Adapter.CopiedEntries,
-			CopiedBytes:   meta.Adapter.CopiedBytes,
-		}
-	}
 	snap := WorkspaceStateSnapshot{
 		Identity:       meta.Identity,
 		Adapter:        meta.Adapter,
@@ -102,7 +90,6 @@ func buildReadySnapshot(meta ViewMetadataV2) WorkspaceStateSnapshot {
 			State:              cpState,
 			LatestCheckpointID: meta.Checkpoints.LastPublishedCheckpointID,
 		},
-		Notice: notice,
 	}
 	snap.SupportedActions = deriveSupportedActions(snap)
 	return snap
@@ -131,7 +118,6 @@ func buildFailedPreparationSnapshot(
 			AdapterID:        adpID,
 			PreparationKind:  prepKind,
 			SourceVisibility: vis,
-			FallbackReason:   reason,
 			CopiedEntries:    observedEntries,
 			CopiedBytes:      observedBytes,
 		},
@@ -140,7 +126,7 @@ func buildFailedPreparationSnapshot(
 		Command:        CommandIdle,
 		GitInit:        GitInitLazyPending,
 		Checkpoint:     CheckpointStatus{State: CheckpointNone},
-		Notice: FallbackNotice{
+		Notice: WorkspaceNotice{
 			Severity:      sev,
 			ReasonCode:    reason,
 			Diagnostic:    diagnostic,

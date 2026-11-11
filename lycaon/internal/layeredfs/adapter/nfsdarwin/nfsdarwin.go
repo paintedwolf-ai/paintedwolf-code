@@ -1,6 +1,6 @@
 //go:build darwin
 
-// Package nfsdarwin implements the macOS built-in NFSv3 loopback worker mount adapter (#1661).
+// Package nfsdarwin implements the macOS built-in NFSv3 loopback worker mount adapter.
 //
 // It mounts an engine-served NFSv3 loopback export (127.0.0.1:<exportPath>) onto a
 // user-owned directory under the worker runtime/storage root using /sbin/mount_nfs

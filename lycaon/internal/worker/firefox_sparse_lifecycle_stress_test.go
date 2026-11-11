@@ -117,7 +117,6 @@ func newFirefoxWorkerFixture(t *testing.T, source string) *layeredWorkerFixture 
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Dir(branches))
 	git, err := workspace.OpenPrivateGit(branches)
 	testutil.FailErr(t, "scale private Git", err)
-	t.Cleanup(func() { _ = git.Store().Close() })
 	selector := workspace.EnforcedWorkspaceSelector()
 	selector.BudgetFor = adapter.ZeroBudget
 	manager := workspace.NewManager(branches).WithPrivateGit(git).WithSelector(selector)

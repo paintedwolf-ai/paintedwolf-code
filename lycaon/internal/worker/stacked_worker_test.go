@@ -189,7 +189,7 @@ func testStackedWorkerPromotion(t *testing.T, selector *adapter.Selector, write 
 	fixture := newLayeredWorkerFixture(t, selector)
 	parent := fixture.claim(t)
 	if snap, _, ok := WorkerClaimWorkspaceState(parent.ID); !ok || snap.Adapter.PreparationKind != adapter.PreparationMounted {
-		t.Skipf("this host cannot mount a view: %+v", snap.Adapter)
+		t.Fatalf("the parent worker did not get a mounted view: %+v", snap.Adapter)
 	}
 	t.Cleanup(func() {
 		_ = fixture.manager.DestroyWorkerWorkspace(t.Context(), &workspace.Binding{ID: parent.ID, Root: parent.WorkspaceRoot})
@@ -295,6 +295,8 @@ func TestStackedWorkerClaimsAndPromotesThroughTheOneTransaction(t *testing.T) {
 	t.Run("fixture view", func(t *testing.T) { testStackedWorkerPromotion(t, fixtureMountedSelector(), writeCore) })
 	t.Run("real mount", func(t *testing.T) {
 		selector := workspace.EnforcedWorkspaceSelector()
+		selector.BudgetFor = adapter.ZeroBudget
+		skipWithoutMount(t, selector)
 		testStackedWorkerPromotion(t, selector, func(t *testing.T, task *api.WorkerTask, rel, content string) {
 			testutil.FailErr(t, "write through the mount", os.WriteFile(filepath.Join(task.WorkspaceRoot, rel), []byte(content), 0o644))
 		})
@@ -316,14 +318,15 @@ func TestNonPrimaryRootRefsReachPromotionAndRollBack(t *testing.T) {
 	}
 	privateGit, err := workspace.OpenPrivateGit(filepath.Join(base, "branches"))
 	testutil.FailErr(t, "open private Git", err)
-	t.Cleanup(func() { _ = privateGit.Store().Close() })
 	selector := workspace.EnforcedWorkspaceSelector()
+	selector.BudgetFor = adapter.ZeroBudget
+	skipWithoutMount(t, selector)
 	manager := workspace.NewManager(filepath.Join(base, "branches")).WithPrivateGit(privateGit).WithSelector(selector)
 	binding, _, err := manager.CreateWorkerBranch(workspace.WithWorkspaceProject(t.Context(), testdbseed.DefaultProjectID), roots, "p", "job-roots")
 	testutil.FailErr(t, "create branch", err)
 	t.Cleanup(func() { _ = manager.DestroyWorkerWorkspace(t.Context(), binding) })
 	if binding.Selection.Facts.PreparationKind != adapter.PreparationMounted {
-		t.Skipf("this host cannot mount a view: %s", binding.Selection.Facts.FallbackReason)
+		t.Fatalf("a host that mounts did not mount this worker: %+v", binding.Selection.Facts)
 	}
 	dir, err := projectroot.BranchDirForID("s")
 	testutil.FailErr(t, "branch dir", err)

@@ -46,7 +46,6 @@ func TestMountedWorkerWorkflowCheckpointCrashRecoveryAndStackedPromotion(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = gitMgr.Store().Close() })
 
 	views := watchMountedViews(t, adp)
 	coord, err := recovery.NewCoordinator(recovery.CoordinatorConfig{

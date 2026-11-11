@@ -452,7 +452,7 @@ func ValidateLiveReferences(ctx context.Context, database db.DBTX, dataDir strin
 			return err
 		}
 	}
-	return validateArchiveReferences(ctx, database, files)
+	return validateArchiveReferences(ctx, database, files, placedOnDevice(dataDir))
 }
 
 // StageLatestUpgradeRecovery verifies and stages a host-created directory snapshot.

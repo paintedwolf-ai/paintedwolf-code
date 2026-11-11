@@ -20,10 +20,17 @@ var archiveV1Directories = []string{
 	"source-content", "worker-baselines", "worker-branches",
 }
 
+// Version 2 added configured command programs.
+var archiveV2Files = append(slices.Clone(archiveV1Files), "command-programs.yaml")
+
+var archiveV2Directories = archiveV1Directories
+
 func archiveScope(version int, currentFiles, currentDirectories []string) ([]string, []string, error) {
 	switch version {
 	case 1:
 		return archiveV1Files, archiveV1Directories, nil
+	case 2:
+		return archiveV2Files, archiveV2Directories, nil
 	case FormatVersion:
 		return currentFiles, currentDirectories, nil
 	default:
@@ -31,18 +38,21 @@ func archiveScope(version int, currentFiles, currentDirectories []string) ([]str
 	}
 }
 
-// The validated legacy snapshot has no configured programs or worker-recovery
-// directory. Include their new paths in the restore transaction, preserving any
-// live content in its pre-image.
+// An earlier snapshot lacks the paths later formats added. Restoring it replaces them too, so their
+// absence is restored and any live content stays in the transaction's pre-image.
 func upgradeArchiveScope(manifest Manifest) Manifest {
-	if manifest.FormatVersion == 1 {
-		manifest.FormatVersion = FormatVersion
-		manifest.ReplaceRelPaths = append(append([]string(nil), manifest.ReplaceRelPaths...), "command-programs.yaml")
-		manifest.ReplaceRelDirs = append([]string(nil), manifest.ReplaceRelDirs...)
-		if !slices.Contains(manifest.ReplaceRelDirs, enginepaths.WorkerRecoveryDirName) {
-			manifest.ReplaceRelDirs = append(manifest.ReplaceRelDirs, enginepaths.WorkerRecoveryDirName)
-			slices.Sort(manifest.ReplaceRelDirs)
-		}
+	if manifest.FormatVersion >= FormatVersion {
+		return manifest
 	}
+	manifest.ReplaceRelPaths = append([]string(nil), manifest.ReplaceRelPaths...)
+	manifest.ReplaceRelDirs = append([]string(nil), manifest.ReplaceRelDirs...)
+	if manifest.FormatVersion == 1 && !slices.Contains(manifest.ReplaceRelPaths, "command-programs.yaml") {
+		manifest.ReplaceRelPaths = append(manifest.ReplaceRelPaths, "command-programs.yaml")
+	}
+	if !slices.Contains(manifest.ReplaceRelDirs, enginepaths.WorkerRecoveryDirName) {
+		manifest.ReplaceRelDirs = append(manifest.ReplaceRelDirs, enginepaths.WorkerRecoveryDirName)
+		slices.Sort(manifest.ReplaceRelDirs)
+	}
+	manifest.FormatVersion = FormatVersion
 	return manifest
 }

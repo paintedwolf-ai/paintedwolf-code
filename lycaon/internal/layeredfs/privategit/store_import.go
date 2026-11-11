@@ -27,9 +27,6 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	unlockStoreWriteBoundary(s)
-	defer lockStoreReadOnlyBoundary(s)
-
 	var metrics InitMetrics
 	var addedPaths []string
 	var packNames []string
@@ -113,7 +110,6 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 		// S1: Publish recovery intent + Barrier-1 BEFORE any destructive companion unlink.
 		// If any marker write or Barrier-1 directory sync fails, stop immediately with zero unlinks.
 		if len(R) > 0 {
-			_ = os.Chmod(packDstDir, 0o755)
 			for _, base := range R {
 				if err := gcBeforeRollbackMarkerWrite(ctx, packDstDir, base); err != nil {
 					rbErrs = append(rbErrs, fmt.Errorf("rollback interrupted before marker write %s: %w", base, err))
@@ -142,7 +138,6 @@ func (s *RetainedObjectStore) ImportRepositoryObjects(
 					continue
 				}
 			}
-			_ = os.Chmod(dir, 0o755)
 			if hookErr := gcBeforeRollbackUnlink(ctx, p); hookErr != nil {
 				rbErrs = append(rbErrs, fmt.Errorf("rollback interrupted before unlinking %s: %w", p, hookErr))
 				return errors.Join(rbErrs...)

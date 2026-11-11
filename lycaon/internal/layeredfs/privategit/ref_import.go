@@ -15,7 +15,7 @@ import (
 )
 
 // NamespacedRef constructs and validates a namespaced trunk ref under
-// `refs/paintedwolf/workers/<job>/<checkpoint>/<ref>` (#1671).
+// `refs/paintedwolf/workers/<job>/<checkpoint>/<ref>`.
 func NamespacedRef(jobID, checkpointID, ref string) (string, error) {
 	if err := ValidateRefComponent(jobID); err != nil {
 		return "", fmt.Errorf("invalid jobID %q: %w", jobID, err)
@@ -56,7 +56,7 @@ func ValidateRefComponent(comp string) error {
 }
 
 // ImportRefsToTrunk performs a crash-recoverable, idempotent namespaced ref import
-// of created/moved worker refs and their reachable objects into the trunk repository (#1671).
+// of created/moved worker refs and their reachable objects into the trunk repository.
 func (m *Manager) ImportRefsToTrunk(ctx context.Context, req RefImportRequest) (*RefImportResult, error) {
 	return importRefsToTrunk(ctx, m, req)
 }

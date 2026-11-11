@@ -421,7 +421,7 @@ func (m *Manager) reopenMaterializedBranch(ctx context.Context, branchRoot, jobI
 	if viewID == "" {
 		viewID = jobID
 	}
-	eager := adapter.NewEagerCopyAdapter(meta.FallbackReason)
+	eager := adapter.NewEagerCopyAdapter()
 	// The tree holds the result; the old backing only held what the last capture derived from it.
 	backing := filepath.Join(metaDir, "backing")
 	if err := os.RemoveAll(backing); err != nil {
@@ -523,7 +523,7 @@ func materializedViewOf(ctx context.Context, branchRoot string) (*adapter.Prepar
 
 func reopenForRead(ctx context.Context, branchRoot, manifest string) (*adapter.PreparedView, error) {
 	metaDir, viewID := enginepaths.MetaDirForBranchRoot(branchRoot), filepath.Base(branchRoot)+"-read"
-	eager := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	eager := adapter.NewEagerCopyAdapter()
 	if view, ok := eager.LoadedView(viewID); ok {
 		return view, nil
 	}
@@ -540,7 +540,7 @@ func materializedDivergencePaths(ctx context.Context, branchRoot string) ([]stri
 	if !ok || err != nil {
 		return nil, ok, err
 	}
-	changed, _, err := adapter.NewEagerCopyAdapter(adapter.ReasonNone).ChangedPaths(ctx, view.ViewID)
+	changed, _, err := adapter.NewEagerCopyAdapter().ChangedPaths(ctx, view.ViewID)
 	if err != nil {
 		return nil, true, err
 	}
@@ -566,7 +566,7 @@ func materializedChangedWorkingFiles(ctx context.Context, branchRoot string) ([]
 	if !ok {
 		return nil, fmt.Errorf("branch %s has no materialized view", branchRoot)
 	}
-	reader := adapter.NewEagerCopyAdapter(adapter.ReasonNone)
+	reader := adapter.NewEagerCopyAdapter()
 	changed, _, err := reader.ChangedPaths(ctx, view.ViewID)
 	if err != nil {
 		return nil, err

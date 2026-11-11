@@ -123,8 +123,8 @@ func overrunCost(overrun *BudgetOverrunError, counted MaterializeCost) Materiali
 	return counted
 }
 
-// ProbeCloneAt is the clone probe a placement answer stands behind: one file of the root cloned into
-// dir, which reads no content. A root with no regular file has nothing that would need cloning.
+// ProbeCloneAt answers clone availability by cloning one file of the root into dir, which reads no
+// content. A root with no regular file has nothing that would need cloning.
 func ProbeCloneAt(dir string) CloneAvailability {
 	return func(ctx context.Context, grant RootGrant) (bool, error) {
 		sample, err := firstRegularFile(ctx, grant.SourcePath)

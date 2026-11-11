@@ -1,5 +1,5 @@
 // Package recovery implements worker view crash recovery, cancellation,
-// retention, garbage collection, and stacked checkpoints (#1666).
+// retention, garbage collection, and stacked checkpoints.
 package recovery
 
 import (
