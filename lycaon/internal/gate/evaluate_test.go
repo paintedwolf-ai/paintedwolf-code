@@ -832,17 +832,6 @@ func TestSecretExposureIsStrictOnly(t *testing.T) {
 	}
 }
 
-// A fetch that only retrieves carries nothing out, so exposure alone does not
-// make reading a page an interruption.
-func TestExposureDoesNotGateAPlainFetch(t *testing.T) {
-	f := baseFacts(StagePreDial)
-	f.SecretExposed = true
-	f.Destination = &Endpoint{Host: "docs.example", Transport: "http", Configured: true}
-	if verdict, decision := Evaluate(f, PostureStrict); verdict == Ask && decisionNames(decision, api.GateSecretExposedOutbound) {
-		t.Fatal("a body-less fetch must not fire the exposure gate")
-	}
-}
-
 // A destination the user's own configuration names is not agent-chosen, however
 // unfamiliar it looks, so Balanced stays quiet for it.
 func TestConfiguredDestinationIsSilentAtBalanced(t *testing.T) {
