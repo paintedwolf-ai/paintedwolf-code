@@ -341,6 +341,7 @@
   flex: 0 1 auto;
   min-width: 0;
   max-width: 45%;
+  margin-left: auto;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
