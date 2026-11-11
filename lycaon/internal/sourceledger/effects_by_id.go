@@ -2,6 +2,7 @@ package sourceledger
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/lycaon/lycaon/internal/db"
@@ -26,3 +27,28 @@ func (s *Walk) EffectsByID(ctx context.Context, projectID string, ids []string) 
 	}
 	return out, s.hydrateEffectAuthors(ctx, projectID, out)
 }
+
+// EffectsInGroup reads, oldest first, the effects one command window or one
+// Git movement covers; pass exactly one id.
+func (s *Walk) EffectsInGroup(ctx context.Context, projectID, commandWindowID, gitTransitionID string) ([]Effect, error) {
+	if (commandWindowID == "") == (gitTransitionID == "") {
+		return nil, fmt.Errorf("name one command window or one Git movement")
+	}
+	rows, err := s.queries.ListSourceEffectsByGroup(ctx, db.ListSourceEffectsByGroupParams{
+		ProjectID: projectID, CommandWindowID: commandWindowID, GitTransitionID: gitTransitionID, RowLimit: maxEffectsByID + 1,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) > maxEffectsByID {
+		return nil, ErrGroupTooLarge
+	}
+	out := make([]Effect, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, effectFromFields(effectFieldsOf(r.EffectID, r.ProjectID, r.OperationID, r.FileID, r.BeforeVersionID, r.AfterVersionID, r.RootID, r.Path, r.FromRootID, r.FromPath, r.Op, r.EntryKind, r.Ordinal, r.CreatedTs, r.BranchID, r.Origin, r.Cause, r.ActorLabel, r.SessionID, r.JobID, r.Turn, r.ToolCallID, r.ToolName, r.BatchID, r.CaptureQuality, r.GitTransitionID, r.CommandWindowID)))
+	}
+	return out, s.hydrateEffectAuthors(ctx, projectID, out)
+}
+
+// ErrGroupTooLarge reports a group with more effects than one read returns.
+var ErrGroupTooLarge = errors.New("the group has more effects than one read returns")
