@@ -80,7 +80,9 @@ func TestFoldingRootSeesOnePrivateNameUnderEverySpelling(t *testing.T) {
 	if names := listedNames(t, c, "docs"); len(names) != 0 {
 		t.Fatalf("docs lists %v after its only file was deleted", names)
 	}
-	if names := listedNames(t, c, "."); !slices.Equal(names, []string{"New.txt", "README.md", "docs"}) {
+	names := listedNames(t, c, ".")
+	slices.Sort(names)
+	if !slices.Equal(names, []string{"New.txt", "README.md", "docs"}) {
 		t.Fatalf("root lists %v", names)
 	}
 }
