@@ -1,9 +1,18 @@
 import type { LycaonClient } from "../../../api/client.ts";
-import type { ChatContentReference, ChatContentRow } from "../../../api/types.ts";
+import type { ChatContentReference, ChatContentRow, RedactedSpan } from "../../../api/types.ts";
+import { DEFAULT_PRETTY_RESOURCE_LIMITS, utf8ByteLength } from "../../../components/source/pretty/pretty-limits.ts";
 import { ByteCache, retainedValueBytes } from "../../../utils/byte-cache.ts";
+
+export type ChatContentBoundedSnapshot = {
+  readonly sha256: string;
+  readonly totalRunes: number;
+  readonly text: string;
+  readonly spans: RedactedSpan[];
+};
 
 const rows = new ByteCache<string, ChatContentRow>(4 * 1024 * 1024, 8192);
 const positions = new ByteCache<string, number>(512 * 1024, 2048);
+const snapshots = new ByteCache<string, ChatContentBoundedSnapshot>(4 * 1024 * 1024, 64);
 export type ChatContentAccess = {
   reference: ChatContentReference;
   messageId: string;
@@ -13,6 +22,7 @@ export type ChatContentAccess = {
   read: (index: number, signal: AbortSignal) => Promise<ChatContentRow[]>;
   locate: (offset: number, signal: AbortSignal) => Promise<ChatContentRow[]>;
   text: (from: number, to: number, signal: AbortSignal) => Promise<string>;
+  readBoundedSnapshot: (signal: AbortSignal) => Promise<ChatContentBoundedSnapshot | null>;
   search: (query: string, cursor: string | undefined, caseSensitive: boolean, signal: AbortSignal) => ReturnType<LycaonClient["searchChatContent"]>;
 };
 
@@ -52,6 +62,78 @@ export function createChatContentAccess(options: {
       }
       return parts.join("");
     },
+    readBoundedSnapshot: async (signal) => {
+      if (
+        reference.size_bytes > DEFAULT_PRETTY_RESOURCE_LIMITS.maxInputUtf8Bytes ||
+        reference.total_runes > DEFAULT_PRETTY_RESOURCE_LIMITS.maxInputUtf16Units
+      ) {
+        return null;
+      }
+      const cacheKey = `${prefix}snapshot`;
+      const cached = snapshots.get(cacheKey);
+      if (cached && cached.sha256 === reference.sha256 && cached.totalRunes === reference.total_runes) {
+        return cached;
+      }
+      if (reference.total_runes === 0) {
+        const empty: ChatContentBoundedSnapshot = {
+          sha256: reference.sha256,
+          totalRunes: 0,
+          text: "",
+          spans: [],
+        };
+        snapshots.set(cacheKey, empty, prefix.length * 2 + 64);
+        return empty;
+      }
+      const parts: string[] = [];
+      const spans: RedactedSpan[] = [];
+      let utf16Total = 0;
+      for (let offset = 0; offset < reference.total_runes; ) {
+        const page = await client.getChatContent(
+          sessionId,
+          messageId,
+          reference,
+          { offset, limit: Math.min(16384, reference.total_runes - offset) },
+          signal,
+        );
+        if (signal.aborted) throw new DOMException("Canceled", "AbortError");
+        if (!page || page.reference?.sha256 !== reference.sha256) return null;
+        if (page.offset !== offset || page.end_offset <= offset || page.end_offset > reference.total_runes) {
+          return null;
+        }
+        const pageRunes = Array.from(page.text).length;
+        if (pageRunes !== page.end_offset - page.offset) return null;
+        if (!Array.isArray(page.spans)) return null;
+        for (const span of page.spans) {
+          if (
+            typeof span.start !== "number" ||
+            typeof span.length !== "number" ||
+            span.start < 0 ||
+            span.length < 0 ||
+            span.start + span.length > pageRunes
+          ) {
+            return null;
+          }
+          spans.push({ ...span, start: offset + span.start });
+        }
+        utf16Total += page.text.length;
+        if (utf16Total > DEFAULT_PRETTY_RESOURCE_LIMITS.maxInputUtf16Units) return null;
+        parts.push(page.text);
+        offset = page.end_offset;
+        if (offset === reference.total_runes && page.complete === false) return null;
+      }
+      const fullText = parts.join("");
+      if (utf8ByteLength(fullText) > DEFAULT_PRETTY_RESOURCE_LIMITS.maxInputUtf8Bytes) {
+        return null;
+      }
+      const result: ChatContentBoundedSnapshot = {
+        sha256: reference.sha256,
+        totalRunes: reference.total_runes,
+        text: fullText,
+        spans,
+      };
+      snapshots.set(cacheKey, result, retainedValueBytes(result) + cacheKey.length * 2);
+      return result;
+    },
     search: (query, cursor, sensitive, signal) => client.searchChatContent(sessionId, messageId, reference, query, cursor, sensitive, signal),
   };
 }
@@ -63,4 +145,4 @@ function connectionKey(client: object): number {
   if (id === undefined) { id = ++sequence; connections.set(client, id); }
   return id;
 }
-export function clearChatContentCache(): void { rows.clear(); positions.clear(); }
+export function clearChatContentCache(): void { rows.clear(); positions.clear(); snapshots.clear(); }

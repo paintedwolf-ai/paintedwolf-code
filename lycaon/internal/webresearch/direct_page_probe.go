@@ -22,7 +22,7 @@ func fetchPageProbe(ctx context.Context, rawURL string) pageProbe {
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, verifyFetchTimeout)
 	defer cancel()
-	resp, finalURL, err := politeGuardedGet(fetchCtx, u, acceptHeaderForMode("text"), true)
+	resp, finalURL, err := politeGuardedGet(fetchCtx, u, researchAcceptHeader, true)
 	if err != nil {
 		if errors.Is(err, errRobotsBlocked) {
 			return pageProbe{robotsBlocked: true}

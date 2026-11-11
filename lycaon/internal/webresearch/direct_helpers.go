@@ -267,7 +267,7 @@ func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int
 			FetchMs:  elapsed.Milliseconds(),
 		})
 	}()
-	resp, _, err := politeGuardedGet(ctx, u, acceptHeaderForMode("text"), false)
+	resp, _, err := politeGuardedGet(ctx, u, researchAcceptHeader, false)
 	if err != nil {
 		return "", 0, err
 	}

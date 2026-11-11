@@ -1,9 +1,5 @@
-// Package mutation is the command frontend for redirects, tee and filesystem
-// mutations. Each utility binds argv through the catalog and calls the same
-// typed write, delete, move, copy, mkdir and chmod operations as the structured
-// tools, so scope, review, attribution, the source journal and recovery are
-// the existing owners'. Redirect publication captures every destination
-// before its producer starts and publishes only at that captured revision.
+// Package mutation binds command syntax to typed filesystem operations.
+// Redirects capture destination revisions before starting their producers.
 package mutation
 
 import (
@@ -20,10 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// PinRecorder retains the revisions one execution captured
-// (invocation.SQLRecorder.AppendRevisionPin). Each capture appends at the
-// execution's next position, so redirects and the utility's own captures in
-// one execution never contend for an ordinal.
+// PinRecorder assigns each revision capture a unique execution position.
 type PinRecorder interface {
 	AppendRevisionPin(ctx context.Context, executionID string, pin toolcontract.ExecutionRevision) error
 }
@@ -221,7 +214,10 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := newInvocation(ctx, p, tc, streams)
-	err := p.run(inv)
+	err := inv.applySyntaxOverride()
+	if err == nil {
+		err = p.run(inv)
+	}
 	if err == nil {
 		err = ctx.Err()
 	}

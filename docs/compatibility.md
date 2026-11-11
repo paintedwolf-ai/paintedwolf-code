@@ -498,3 +498,11 @@ Internal packages that do not leak into a sticky surface can be reshaped directl
 - Rebuildable cache identity may outlive its evictable bytes; durable history keeps the bytes it names.
 - Version fields keep distinct meanings.
 - Breaking evolution is explicit, attributable, and recoverable.
+
+### Progress result summary
+
+The agent-public `deliverable_closed` result field is retired. New results use
+`closed_item_ids` for the changed rows and a computed snapshot `summary` for
+current state. Completed and explicitly not-pursued work remain distinct.
+Retained transcript results keep their original bytes; this does not change
+persisted checklist documents or their revisions.

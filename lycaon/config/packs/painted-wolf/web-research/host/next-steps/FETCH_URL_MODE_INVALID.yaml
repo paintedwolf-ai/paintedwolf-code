@@ -1,0 +1,4 @@
+steps:
+  - program: ["curl", "--help"]
+    complete: true
+    say: "If the task requires raw bytes, {{ call }} describes the transfer syntax. Any transfer still needs its normal access checks."

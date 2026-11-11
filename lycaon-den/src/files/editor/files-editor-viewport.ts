@@ -6,6 +6,7 @@ import {
   rebindFilesCollaboration,
   canRestoreFilesCollaborationView,
 } from "./files-editor-collaboration.ts";
+import { documentSynchronization } from "../documents/document-editor-binding.ts";
 import { editorReplica } from "../documents/editor-document.ts";
 import { Compartment, Transaction } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
@@ -19,6 +20,10 @@ import {
   sourceUsesSimplifiedDisplay,
   type SourceEditorHandlers,
 } from "../../components/source/editor/codemirror-theme.ts";
+import {
+  applyPrettyNativeConfig,
+  createPrettyNativeDecorationsExtension,
+} from "../../components/source/pretty/pretty-native-layout.ts";
 import { applyBufferReveal, hasPendingReveal } from "./files-editor-reveal.ts";
 import { restoreEditorScrollTop } from "../../components/source/editor/editor-view-state.ts";
 import { lineGutterExtension } from "../../components/source/annotations/line-gutter.ts";
@@ -37,6 +42,12 @@ import {
   settleFilesEditorView,
   softDetachFilesEditor,
 } from "./files-editor-host.ts";
+import {
+  clearPrettyDisplayTab,
+  isPrettyDisplayEnabled,
+  registerPrettySurfaceCapability,
+  togglePrettyDisplayPref,
+} from "./pretty-display-state.ts";
 import { filesGutterContextExtension } from "./files-gutter-context.ts";
 import { hunkPlaybackExtension } from "../walk/hunk-playback.ts";
 import { JUMP_CURSOR_LINE_THRESHOLD } from "../history/jump-history.ts";
@@ -100,6 +111,25 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
     const draft = untrack(() => filesBufferText(buffer()));
     const prefs = untrack(() => currentDisplayPrefs(buffer()));
     const projectId = currentProjectId();
+    const initialPrettyEnabled = untrack(() =>
+      isPrettyDisplayEnabled(projectId, key),
+    );
+    const unregisterPretty = registerPrettySurfaceCapability(projectId, key, {
+      enabled: () => isPrettyDisplayEnabled(projectId, key),
+      available: () => !historicalActive() && !currentAbsent(),
+      onToggle: () => {
+        const next = togglePrettyDisplayPref(projectId, key);
+        const v = binding.view;
+        if (v) {
+          applyPrettyNativeConfig(
+            v,
+            { enabled: next, path: buffer().path },
+            [documentSynchronization.of(true)],
+          );
+        }
+        return true;
+      },
+    });
 
     const wireHandlers = (handlers: SourceEditorHandlers) => {
       handlers.onDocChange = (update) => {
@@ -153,6 +183,11 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       const replica = editorReplica(buffer().documentId);
       if (replica) rebindFilesCollaboration(reused, replica);
       applyEditable(reused, canEdit);
+      applyPrettyNativeConfig(
+        reused,
+        { enabled: initialPrettyEnabled, path },
+        [documentSynchronization.of(true)],
+      );
       setSimplifiedDisplay(sourceUsesSimplifiedDisplay(reused.state));
       if (plan.scrollTop > 0) {
         setEditorScrollTop(reused, plan.scrollTop);
@@ -166,6 +201,10 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       const replica = editorReplica(buffer().documentId);
       const hostExtensions = [
         filesCollaborationExtension(replica),
+        createPrettyNativeDecorationsExtension({
+          enabled: initialPrettyEnabled,
+          path,
+        }),
         filesGutterContextExtension,
         hunkPlaybackExtension,
         lineGutterExtension,
@@ -257,6 +296,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       }
     }
     onCleanup(() => {
+      unregisterPretty();
       cancelChrome?.();
       setChromeReady(false);
       flushFilesDraftSyncFor(projectId, key);
@@ -272,9 +312,26 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         softDetachFilesEditor(projectId, key, el);
         return;
       }
+      clearPrettyDisplayTab(projectId, key);
       destroyFilesEditor(projectId, key, { dropHandlers: true });
     });
   }));
+
+  createEffect(() => {
+    const projectId = currentProjectId();
+    const key = buffer().key;
+    const path = buffer().path;
+    const enabled = isPrettyDisplayEnabled(projectId, key);
+    const v = editorView();
+    if (!v) return;
+    untrack(() => {
+      applyPrettyNativeConfig(
+        v,
+        { enabled, path },
+        [documentSynchronization.of(true)],
+      );
+    });
+  });
 
   // Joining rebinds the document while preserving editor chrome.
   createEffect(() => {

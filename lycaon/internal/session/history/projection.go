@@ -254,9 +254,6 @@ func (m *Service) ApplyView(ctx context.Context, sess *api.Session, history []ap
 
 // withCurrentRequest restores the active human opener when it predates the tail.
 func withCurrentRequest(ctx context.Context, store Store, sess *api.Session, tail []api.Message) ([]api.Message, error) {
-	if len(tail) == 0 {
-		return tail, nil
-	}
 	currentTurn := sess.CurrentTurn
 	if currentTurn <= 0 {
 		if latest, err := store.Get(ctx, sess.ID); err == nil && latest != nil {
@@ -277,8 +274,8 @@ func withCurrentRequest(ctx context.Context, store Store, sess *api.Session, tai
 	if err != nil {
 		return nil, err
 	}
-	if opener.ID == "" || opener.Ord >= tail[0].Ord {
+	if opener.ID == "" || !api.IsUserIntentMessage(opener) {
 		return tail, nil
 	}
-	return append([]api.Message{opener}, tail...), nil
+	return messageview.PreserveRequestIntent(tail, []api.Message{opener}), nil
 }

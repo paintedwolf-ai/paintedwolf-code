@@ -232,3 +232,18 @@ If the model cannot produce a valid closeout after bounded repair, the host may 
 - A parent card or wake can lag a committed worker result; it cannot define that result.
 - A worker's ceiling rises only when its coordinator grants it; the host neither extends nor shrinks it.
 - A resume continues the child it names: same agent, scope mode, and planned leg.
+
+### Tool family loading
+
+The native family catalog defines capabilities offered together, including
+web research, browser pages, and terminals. Prediction and `request_tools`
+load each selected family member permitted by the current surface. Search and
+read-only page reading share the web-research family.
+Loading does not change tool authorization or make an unavailable member
+requestable. Explicitly requested schemas retain their normal
+standing-surface lifetime.
+
+Research proceeds from source discovery to reading relevant passages and citing
+them inline. Search snippets locate candidates; they do not establish that a
+page was read. A failed fetch remains an evidence limitation, and a citation
+records attribution without proving that its source supports the claim.

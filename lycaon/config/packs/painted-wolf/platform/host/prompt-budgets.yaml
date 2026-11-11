@@ -18,6 +18,19 @@ sizes:
     # Each exception admits one prompt up to its cap, with room for ordinary
     # edits, for a reason a reviewer can weigh.
     exceptions:
+        coordinator_tripartite:
+            implement_investigate_first_user:
+                cap: 40500
+                reason: Complete optional-selection fallback includes every applicable skill card; the measured catalog is 8918 bytes and bodies remain on demand. The combined request still obeys the model window.
+            implement_investigate_follow_up:
+                cap: 40500
+                reason: Follow-up turns retain the complete applicable skill catalog until successful cold selection; catalog bodies remain on demand and the combined request obeys the model window.
+            implement_investigate_idle:
+                cap: 40500
+                reason: Continuations retain the complete applicable skill catalog across parked turns; catalog bodies remain on demand and the combined request obeys the model window.
+            implement_overlay_promote_pending_writes:
+                cap: 45000
+                reason: Promotion combines pending-write instructions with the complete applicable skill catalog during optional-selection fallback. Bodies remain on demand and the combined request obeys the model window.
         coordinator_tool_surfaces:
             implement_overlay_promote:
                 cap: 82000

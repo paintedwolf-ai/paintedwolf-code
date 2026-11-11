@@ -131,15 +131,15 @@ func continuationSegments(rows []ContextMessage, tokens int) ([]messageview.Cont
 		}
 		sources = append(sources, messageview.ContinuationSource{MessageID: row.ID, Ord: row.Ord,
 			Tool: tool, Handles: append([]string(nil), row.EvidenceHandles...),
-			Disposition: "reference", Tokens: tokenest.EstimateDefault(content)})
+			Disposition: "reference", Tokens: tokenest.EstimateDefault(content), Execution: row.Execution})
 		runes := []rune(content)
 		for start := 0; start < len(runes); start += width {
 			segment := row
-			segment.Content = string(runes[start:min(start+width, len(runes))])
+			segment.Content, err = summaryFragment(row, string(runes[start:min(start+width, len(runes))]), start/width+1, (len(runes)+width-1)/width)
+			sourceErr = errors.Join(sourceErr, err)
 			segment.ContentParts = nil
 			segment.ToolCalls = nil
-			segment.ToolCallID = ""
-			segment.ToolName = ""
+			segment.ToolName = tool
 			segment.Authority = api.ContentAuthorityNone
 			segments = append(segments, segment)
 		}

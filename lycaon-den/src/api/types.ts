@@ -8386,10 +8386,10 @@ export interface components {
             match?: components["schemas"]["TurnLoadMatch"];
         };
         /**
-         * @description What asked the decision engine. A turn decision runs before the model's first call of a visible user turn or a worker leg; a request resolves request_tools text; a lookup resolves skills_read text; a tool_event ranks the skills against the request and the first loadable tool the turn called, and reads or points to the best one.
+         * @description What asked the decision engine. A turn decision runs before the model's first call of a visible user turn or a worker leg; a request resolves request_tools text; a lookup resolves skills_read text; a tool_event ranks the skills against the request and the first loadable tool the turn called, and reads or points to the best one. A visibility receipt records a changed continuation surface without asking the decision engine.
          * @enum {string}
          */
-        TurnLoadTrigger: "turn" | "request" | "lookup" | "tool_event";
+        TurnLoadTrigger: "turn" | "request" | "lookup" | "tool_event" | "visibility";
         /**
          * @description How a request or lookup resolved its text to names: the engine ranked the candidates, the text spelled names out, or nothing matched.
          * @enum {string}
@@ -8413,10 +8413,10 @@ export interface components {
             confidence: number;
         };
         /**
-         * @description Why a tool stands loaded: a turn decision predicted it, the model asked for it through request_tools, or it is a declared companion of a predicted tool.
+         * @description Why a tool stands loaded: a turn decision predicted it, the model asked for it through request_tools, selection failed and exposed it, or it was recorded as a companion of a predicted tool.
          * @enum {string}
          */
-        TurnLoadToolSource: "predicted" | "requested" | "companion";
+        TurnLoadToolSource: "predicted" | "requested" | "companion" | "fallback";
         /** @description One tool the chat's standing set offered beyond the surface floor when the turn opened. */
         TurnLoadTool: {
             tool: string;

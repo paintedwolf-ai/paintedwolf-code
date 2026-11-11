@@ -6,11 +6,12 @@ import "strings"
 // after another observation replaces it for unqualified path lookup. A supplied
 // handle is provenance, not a hint permitting substitution of another record.
 func ResolveObservation(roots CitationRoots, ev Ledger, handle string, triple Triple) Resolution {
-	out := Resolution{Handle: handle, Line: triple.Line, Excerpt: strings.TrimSpace(triple.Excerpt), Verdict: VerdictUnverifiable}
+	out := Resolution{Handle: handle, Line: triple.Line, Excerpt: strings.TrimSpace(triple.Excerpt), Verdict: VerdictUnverifiable, Reason: VerifyReasonUnknownHandle}
 	rec, ok := ResolveHandle(ev, handle)
 	if !ok {
 		return out
 	}
+	out.Reason = ""
 	out.Path = rec.Path
 	if strings.TrimSpace(triple.Path) != "" {
 		paths := make(map[string][]string)
@@ -19,12 +20,14 @@ func ResolveObservation(roots CitationRoots, ev Ledger, handle string, triple Tr
 		}
 		path := LedgerPathKey(roots, triple.Path, paths)
 		if path == "" || len(paths[path]) == 0 {
+			out.Reason = VerifyReasonSourcePath
 			out.Path = NormalizeResolvePath(roots.ProjectDir, triple.Path)
 			return out
 		}
 		out.Path = path
 	}
-	matched, _ := VerifyRecord(rec, Claim{Handle: handle, Path: out.Path, Line: out.Line, Excerpt: out.Excerpt})
+	matched, reason := VerifyRecord(rec, Claim{Handle: handle, Path: out.Path, Line: out.Line, Excerpt: out.Excerpt})
+	out.Reason = reason
 	if matched {
 		out.Verdict = VerdictMatched
 		if out.Excerpt == "" {

@@ -308,8 +308,6 @@ observe_investigate:
     - extend_worker_budget
     - decline_worker_budget
 
-# No fetch_url: a remote body written to dest changes the project, and fetching
-# belongs to the researcher leg.
 observe_plan:
   command_effects: [read_only]
   activity_label: Reviewing worker legs
@@ -318,7 +316,6 @@ observe_plan:
   publishes_mid_turn_text: true
   floor: [recall, command, command_output, command_stop, web_search, scan_pack, scan_query, scan_summary, scan_list, scan_compare, fanout_plan, workflow_advance, ask_user, request_tools, summarize, survey_repo]
 
-# No fetch_url, for the reason above.
 observe_synthesis:
   command_effects: [read_only]
   activity_label: Reviewing findings

@@ -56,6 +56,7 @@ func openAICompatConformanceCases() []openAICompatConformanceCase {
 		{kind: "vertex", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "mistral", wantBearer: true, promptCache: promptCacheForbidKey},
 		{kind: "cerebras", wantBearer: true, promptCache: promptCacheForbidKey},
+		{kind: "doubleword", wantBearer: true, promptCache: promptCacheForbidKey},
 	}
 }
 

@@ -19,8 +19,9 @@ func TestHTTPActionVarsFollowOfferedTools(t *testing.T) {
 		t.Fatalf("vars = %#v want %#v", vars, want)
 	}
 	prompts.MergeHTTPActionVars([]string{"fetch_url"}, vars)
+	vars["profile_has_web_search"] = true
 	prompts.MergeWebResearchUnavailable(vars)
-	if vars["profile_has_fetch_url"] != false {
+	if vars["profile_has_fetch_url"] != false || vars["profile_has_web_search"] != false {
 		t.Fatalf("disabled web research still teaches fetch_url: %#v", vars)
 	}
 	absent := map[string]any{}
