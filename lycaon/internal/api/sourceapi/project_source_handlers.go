@@ -54,7 +54,7 @@ func (s *Workspace) HandleGetProjectSource(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if !branch.IsWorker() {
-		rootID, _, rootErr := project.ResolveWorkspaceRoot(p, req.RootID)
+		rootID, rootErr := sourceRootID(p, req.RootID)
 		if rootErr != nil {
 			s.writeSourceReadError(w, r, rootErr)
 			return
@@ -476,4 +476,19 @@ func ToProjectSourceReadDTO(
 		out.ModifiedAt = r.MTime.UTC().Format(time.RFC3339)
 	}
 	return out
+}
+
+// sourceRootID resolves a source request's root among every attached root;
+// an empty id names the primary.
+func sourceRootID(p *project.Project, rootID string) (string, error) {
+	want := strings.TrimSpace(rootID)
+	for _, root := range p.SourceRoots() {
+		if root.ID == want || (want == "" && root.IsPrimary) {
+			return root.ID, nil
+		}
+	}
+	if want == "" {
+		return "", nil
+	}
+	return "", fmt.Errorf("%w: root_id %s", project.ErrNotFound, want)
 }

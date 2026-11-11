@@ -29,7 +29,6 @@ import (
 // TestMain installs process-global test dependencies.
 func TestMain(m *testing.M) {
 	gittestsetup.Enable()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	os.Exit(m.Run())
 }
 
