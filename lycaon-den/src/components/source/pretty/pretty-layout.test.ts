@@ -1,13 +1,8 @@
 import { indentUnit } from "@codemirror/language";
 import { EditorState, type Extension } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
-import {
-  createPrettyExtension,
-  PRETTY_MAX_INPUT,
-  type PrettyConfig,
-  prettyOutcomeOf,
-  prettyWorkOf,
-} from "./pretty-layout.ts";
+import { createPrettyExtension, prettyOutcomeOf, prettyWorkOf } from "./pretty-layout.ts";
+import { PRETTY_MAX_INPUT, type PrettyConfig } from "./pretty-rescan.ts";
 import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 

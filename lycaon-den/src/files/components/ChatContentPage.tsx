@@ -23,11 +23,11 @@ import {
 import {
   applyPrettyConfig,
   createPrettyExtension,
-  type PrettyConfig,
   prettyOutcomeListener,
   prettyOutcomeOf,
 } from "../../components/source/pretty/pretty-layout.ts";
 import { prettyTargetFor } from "../../components/source/pretty/pretty-recognition.ts";
+import type { PrettyConfig } from "../../components/source/pretty/pretty-rescan.ts";
 import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
 import { resolveEditorIdentity } from "../documents/editor-identity.ts";

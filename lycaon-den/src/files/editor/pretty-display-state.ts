@@ -1,5 +1,6 @@
 import { createSignal } from "solid-js";
-import { PRETTY_LIMIT_MESSAGES, type PrettyOutcome } from "../../components/source/pretty/pretty-layout.ts";
+import { PRETTY_LIMIT_MESSAGES } from "../../components/source/pretty/pretty-layout.ts";
+import type { PrettyOutcome } from "../../components/source/pretty/pretty-rescan.ts";
 
 export type PrettySurfaceCapability = {
   enabled: () => boolean;

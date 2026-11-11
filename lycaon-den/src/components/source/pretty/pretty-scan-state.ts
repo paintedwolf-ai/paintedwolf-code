@@ -1,8 +1,10 @@
 import type { Text } from "@codemirror/state";
 import type { Container, Frame } from "./pretty-bracket.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
+import { type ClauseState, INITIAL_CLAUSE } from "./pretty-clause-state.ts";
 import type { MarkupState } from "./pretty-markup.ts";
 import type { TextWindow } from "./pretty-text-window.ts";
+import type { PrettyTokenSource } from "./pretty-tokens.ts";
 
 /** Laid-out groups stay flat when their visual line fits this many columns. */
 export const PRETTY_TARGET_COLUMNS = 80;
@@ -24,6 +26,8 @@ export interface BracketRule {
   readonly afterBlock: "script" | "style" | null;
   /** Each line is its own record; containers never span lines. */
   readonly records: boolean;
+  /** Protected text comes from the editor's syntax tree, so only parsed text is laid out. */
+  readonly parsed: boolean;
   readonly lexer: () => PrettyLexer;
 }
 
@@ -32,7 +36,17 @@ export interface MarkupRule {
   readonly kind: "markup";
 }
 
-export type PrettyRule = BracketRule | MarkupRule;
+/** SQL: a break before each clause, clause lists that do not fit, and parenthesised groups. */
+export interface ClauseRule {
+  readonly kind: "clause";
+}
+
+export type PrettyRule = BracketRule | MarkupRule | ClauseRule;
+
+/** Whether a rule reads the editor's syntax tree and so lays out only what it has parsed. */
+export function readsSyntaxTree(rule: PrettyRule): boolean {
+  return rule.kind === "clause" || (rule.kind === "bracket" && rule.parsed);
+}
 
 /** Where a document's rules apply. */
 export type PrettyPlan =
@@ -64,6 +78,8 @@ export interface PrettyScanOptions {
   readonly tabSize: number;
   readonly indentUnit: number;
   readonly facts: PrettyBlockFacts;
+  /** Tokens from the editor's syntax tree, for rules that read them. */
+  readonly tokens?: PrettyTokenSource | null;
 }
 
 export interface Fence {
@@ -79,6 +95,7 @@ export class ScanState {
   frames: Frame | null = null;
   containers: Container | null = null;
   markup: MarkupState;
+  clause: ClauseState = INITIAL_CLAUSE;
   fence: Fence | null = null;
   inLine = false;
   /** The current source line is laid out. */

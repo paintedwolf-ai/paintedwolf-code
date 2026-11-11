@@ -14,24 +14,34 @@ import {
 import { prettyLayoutForLanguage, prettyLayoutForPath } from "../editor/codemirror-lang.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
 import type { PrettyLayout } from "./pretty-outcome.ts";
-import type { BracketRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan-state.ts";
+import type { BracketRule, ClauseRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan-state.ts";
+import { TreeLexer } from "./pretty-tokens.ts";
 
 export const DATA_RULE: BracketRule = {
-  kind: "bracket", data: true, statements: false, afterBlock: null, records: false,
+  kind: "bracket", data: true, statements: false, afterBlock: null, records: false, parsed: false,
   lexer: () => new DataLexer({ singleQuotes: false, comments: false }),
 };
 const COMMENTED_DATA_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: true }) };
 const RECORDS_RULE: BracketRule = { ...DATA_RULE, records: true };
+/** Unknown text recognised as JSON-like data, which may quote with `'`. */
+const DATA_LIKE_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: false }) };
 export const SCRIPT_RULE: BracketRule = {
-  kind: "bracket", data: false, statements: true, afterBlock: "script", records: false,
+  kind: "bracket", data: false, statements: true, afterBlock: "script", records: false, parsed: false,
   lexer: () => new ScriptLexer(),
 };
 export const STYLE_RULE: BracketRule = {
-  kind: "bracket", data: false, statements: true, afterBlock: "style", records: false,
+  kind: "bracket", data: false, statements: true, afterBlock: "style", records: false, parsed: false,
   lexer: () => new StyleLexer(false),
 };
 const LINE_COMMENT_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
 export const MARKUP_RULE: MarkupRule = { kind: "markup" };
+/** Any brace language: groups over the editor's tokens, with `;` separating statements where the language has them. */
+const BRACKET_RULE: BracketRule = {
+  kind: "bracket", data: false, statements: false, afterBlock: null, records: false, parsed: true,
+  lexer: () => new TreeLexer(),
+};
+const BRACKET_STATEMENTS_RULE: BracketRule = { ...BRACKET_RULE, statements: true };
+const CLAUSE_RULE: ClauseRule = { kind: "clause" };
 
 /** The rule that applies a declared layout, or null where no rule exists. */
 function ruleFor(layout: PrettyLayout): PrettyRule | null {
@@ -39,8 +49,8 @@ function ruleFor(layout: PrettyLayout): PrettyRule | null {
     case "data": return layout.records ? RECORDS_RULE : layout.comments ? COMMENTED_DATA_RULE : DATA_RULE;
     case "markup": return MARKUP_RULE;
     case "code": return layout.dialect === "script" ? SCRIPT_RULE : layout.dialect === "style" ? STYLE_RULE : LINE_COMMENT_STYLE_RULE;
-    case "bracket":
-    case "clause":
+    case "bracket": return layout.statements ? BRACKET_STATEMENTS_RULE : BRACKET_RULE;
+    case "clause": return CLAUSE_RULE;
     case "fenced":
     case "none":
       return null;
@@ -128,7 +138,8 @@ export function containerStartColumn(lineText: string): number | null {
 }
 
 const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
-const LITERAL = /^(?:true|false|null)/;
+// JSON literals, and Python's, so a printed dict or list is recognised too.
+const LITERAL = /^(?:true|false|null|True|False|None)\b/;
 
 /**
  * Reads a JSON container starting at `from`. Returns its end, or the negated
@@ -148,12 +159,12 @@ function readJsonContainer(text: string, from: number): number {
       if (stack.pop() !== c) return -i;
       i += 1;
       if (stack.length === 0) return i;
-    } else if (c === 0x22) {
+    } else if (c === 0x22 || c === 0x27) {
       i += 1;
       while (i < text.length) {
         const s = text.charCodeAt(i);
         if (s === 0x5c) i += 2;
-        else if (s === 0x22) break;
+        else if (s === c) break;
         else if (s === 0x0a) return -i;
         else i += 1;
       }
@@ -169,7 +180,7 @@ function readJsonContainer(text: string, from: number): number {
   return -i;
 }
 
-/** Balanced JSON containers at line starts or after host markers and log prefixes. */
+/** Balanced JSON-like containers at line starts or after host markers and log prefixes. */
 export function recognizeJsonContainers(doc: Text): PrettySpan[] {
   const text = doc.toString();
   const spans: PrettySpan[] = [];
@@ -183,7 +194,7 @@ export function recognizeJsonContainers(doc: Text): PrettySpan[] {
     }
     const end = readJsonContainer(text, line.from + column);
     if (end > 0) {
-      spans.push({ from: line.from + column, to: end, rule: DATA_RULE });
+      spans.push({ from: line.from + column, to: end, rule: DATA_LIKE_RULE });
       lineNumber = doc.lineAt(end).number + 1;
     } else {
       // Lines already read as part of a failed candidate are not tried again.

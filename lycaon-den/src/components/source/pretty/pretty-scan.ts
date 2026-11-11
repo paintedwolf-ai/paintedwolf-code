@@ -1,4 +1,6 @@
 import { closeBracketLine, type Container, containersEqual, type Frame, framesEqual, stepBracket } from "./pretty-bracket.ts";
+import { SQL_GROUPS, stepClause } from "./pretty-clause.ts";
+import { type ClauseState, clausesEqual, INITIAL_CLAUSE } from "./pretty-clause-state.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import { INITIAL_MARKUP, type MarkupState, markupEqual, startMarkupLine, stepMarkup } from "./pretty-markup.ts";
 import {
@@ -22,6 +24,7 @@ export interface PrettySnapshot {
   readonly frames: Frame | null;
   readonly containers: Container | null;
   readonly markup: MarkupState;
+  readonly clause: ClauseState;
   readonly fence: Fence | null;
   readonly inLine: boolean;
   readonly laidOut: boolean;
@@ -41,7 +44,7 @@ export function snapshotsEqual(a: PrettySnapshot, b: PrettySnapshot): boolean {
   if (a.visualBack !== b.visualBack || (a.visualBack >= 0 && a.visualColumns !== b.visualColumns)) return false;
   if ((a.lexer === null) !== (b.lexer === null) || (a.lexer && !a.lexer.equals(b.lexer!))) return false;
   if (!framesEqual(a.frames, b.frames) || !containersEqual(a.containers, b.containers)) return false;
-  if (!markupEqual(a.markup, b.markup)) return false;
+  if (!markupEqual(a.markup, b.markup) || !clausesEqual(a.clause, b.clause)) return false;
   const fa = a.fence;
   const fb = b.fence;
   return fa === fb || (!!fa && !!fb && fa.char === fb.char && fa.length === fb.length && fa.rule === fb.rule);
@@ -60,7 +63,7 @@ export class PrettyScanner implements ScanCursor {
   private spanEntered = -1;
 
   constructor(readonly options: PrettyScanOptions, private readonly sink: PrettySink) {
-    this.text = new TextWindow(options.doc);
+    this.text = new TextWindow(options.doc, options.tokens ?? null);
     if (options.plan.kind === "document") this.enterRule(options.plan.rule);
   }
 
@@ -85,6 +88,7 @@ export class PrettyScanner implements ScanCursor {
       frames: s.frames,
       containers: s.containers,
       markup: s.markup,
+      clause: s.clause,
       fence: s.fence,
       inLine: s.inLine,
       laidOut: s.laidOut,
@@ -105,6 +109,7 @@ export class PrettyScanner implements ScanCursor {
     s.frames = snapshot.frames;
     s.containers = snapshot.containers;
     s.markup = snapshot.markup;
+    s.clause = snapshot.clause;
     s.fence = snapshot.fence;
     s.inLine = snapshot.inLine;
     s.laidOut = snapshot.laidOut;
@@ -119,11 +124,11 @@ export class PrettyScanner implements ScanCursor {
   }
 
   /**
-   * Scans from `pos`. Whenever the position reaches `stop`, `onStop` is called
-   * with the position and returns the next stop, or -1 to halt. Returns the
-   * position reached.
+   * Scans from `pos` up to the line starting at `endAt`. Whenever the position
+   * reaches `stop`, `onStop` is called with the position and returns the next
+   * stop, or -1 to halt. Returns the position reached.
    */
-  run(pos: number, stop: number, onStop: (pos: number) => number): number {
+  run(pos: number, stop: number, onStop: (pos: number) => number, endAt = this.options.doc.length): number {
     const doc = this.options.doc;
     const s = this.state;
     while (pos <= doc.length) {
@@ -132,6 +137,7 @@ export class PrettyScanner implements ScanCursor {
         if (stop < 0) return pos;
       }
       if (s.failure) return pos;
+      if (!s.inLine && pos >= endAt && endAt < doc.length) return pos;
       if (!s.inLine) {
         const line = doc.lineAt(pos);
         pos = this.startLine(line.from, line.to);
@@ -184,16 +190,21 @@ export class PrettyScanner implements ScanCursor {
       this.emitBreak(pos, s.pendingColumns);
     }
     const rule = s.rule!;
-    return rule.kind === "bracket" ? stepBracket(this, rule, pos, end) : stepMarkup(this, pos);
+    switch (rule.kind) {
+      case "bracket": return stepBracket(this, rule, pos, end);
+      case "markup": return stepMarkup(this, pos);
+      case "clause": return stepClause(this, pos, end);
+    }
   }
 
   private enterRule(rule: PrettyRule | null): void {
     const s = this.state;
     s.rule = rule;
-    s.lexer = rule?.kind === "bracket" ? rule.lexer() : null;
+    s.lexer = rule?.kind === "bracket" ? rule.lexer() : rule?.kind === "clause" ? SQL_GROUPS.lexer() : null;
     s.frames = null;
     s.containers = null;
     s.markup = INITIAL_MARKUP;
+    s.clause = INITIAL_CLAUSE;
   }
 
   /** Starts the line; returns the first position to scan, leaving `inLine` false when nothing on it is laid out. */
@@ -250,6 +261,7 @@ export class PrettyScanner implements ScanCursor {
     s.visualFrom = -1;
     if (rule.kind === "bracket" && rule.records) s.containers = null;
     if (rule.kind === "markup") s.markup = startMarkupLine(s.markup);
+    if (rule.kind === "clause") s.clause = INITIAL_CLAUSE;
     return start;
   }
 
@@ -273,7 +285,7 @@ export class PrettyScanner implements ScanCursor {
     s.visualFrom = -1;
     s.pending = -1;
     s.inLine = false;
-    if (s.rule?.kind === "bracket") closeBracketLine(s);
+    if (s.rule?.kind === "bracket" || s.rule?.kind === "clause") closeBracketLine(s);
     if (this.spanEnd >= 0) this.enterRule(null);
   }
 }
