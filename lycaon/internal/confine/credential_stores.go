@@ -57,13 +57,23 @@ func keyMaterialTreeRoots() []string {
 	return expandHomePaths(catalogedKeyMaterialPaths())
 }
 
+var keyMaterialPathsMemo sourceFloorMemo
+
+// keyMaterialPathsResolved canonicalizes the key-material floor once per
+// source and home directory.
+func keyMaterialPathsResolved() []string {
+	return keyMaterialPathsMemo.get(keyMaterialPathsSource.Load(), func() []string {
+		return resolveEach(keyMaterialTreeRoots())
+	})
+}
+
 // KeyMaterialWritePaths returns resolved protected key paths.
-func KeyMaterialWritePaths() []string { return resolveEach(keyMaterialTreeRoots()) }
+func KeyMaterialWritePaths() []string { return keyMaterialPathsResolved() }
 
 // KeyMaterialReadDenyPaths is the command-plane read floor: the same key trees,
 // denied for reads until a declared read_path or credential_store grant opens
 // an exception. CLI credential files outside this floor stay readable.
-func KeyMaterialReadDenyPaths() []string { return resolveEach(keyMaterialTreeRoots()) }
+func KeyMaterialReadDenyPaths() []string { return keyMaterialPathsResolved() }
 
 var osCredentialStoreRelDirs = []string{
 	filepath.Join("Library", "Keychains"),
@@ -121,13 +131,17 @@ func SetCredentialStorePathsSource(fn func() []string) (previous func() []string
 	return nil
 }
 
+var credentialStorePathsMemo sourceFloorMemo
+
 // CredentialStorePaths returns resolved catalogued CLI credential-file write floor paths.
 func CredentialStorePaths() []string {
 	fn := credentialStorePathsSource.Load()
 	if fn == nil {
 		return nil
 	}
-	return resolveEach(expandHomePaths((*fn)()))
+	return credentialStorePathsMemo.get(fn, func() []string {
+		return resolveEach(expandHomePaths((*fn)()))
+	})
 }
 
 func expandHomePaths(paths []string) []string {
@@ -227,7 +241,7 @@ func linuxCredentialStoreReadRoots() []string {
 	if shareCanonical == "" {
 		shareCanonical = shareLexical
 	}
-	controlRoots := resolveEach(controlPlaneReadDenyRoots())
+	controlRoots := controlPlaneReadDenyRootsResolved()
 	seen := map[string]bool{}
 	var out []string
 	add := func(p string) {
