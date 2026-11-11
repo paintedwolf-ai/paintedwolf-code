@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -267,10 +268,19 @@ func resumeWorkingView(ctx context.Context, c *Coordinator, req RecoverRequest, 
 	if prevBacking == "" {
 		prevBacking = j.BackingDir
 	}
-	if prevViewID == "" || prevBacking == "" || req.Adapter == nil || j.BootID != c.cfg.CurrentBootID ||
-		(j.ActivePhase != "" && j.ActivePhase != PhaseActiveMutation) ||
-		req.Adapter.Facts().PreparationKind != adapter.PreparationMounted {
+	notResumed := func(reason string, attrs ...any) (*adapter.PreparedView, bool, error) {
+		slog.InfoContext(ctx, "worker working storage not resumed", append([]any{"worker_id", req.WorkerID, "reason", reason}, attrs...)...)
 		return nil, false, nil
+	}
+	switch {
+	case prevViewID == "" || prevBacking == "":
+		return notResumed("no_recorded_view")
+	case j.BootID != c.cfg.CurrentBootID:
+		return notResumed("other_boot")
+	case j.ActivePhase != "" && j.ActivePhase != PhaseActiveMutation:
+		return notResumed("lifecycle_operation", "phase", j.ActivePhase)
+	case req.Adapter == nil || req.Adapter.Facts().PreparationKind != adapter.PreparationMounted:
+		return notResumed("not_mounted")
 	}
 	prepReq := req.PrepareReq
 	prepReq.BackingDir, prepReq.ResumeWorkingState = prevBacking, true
@@ -283,7 +293,7 @@ func resumeWorkingView(ctx context.Context, c *Coordinator, req RecoverRequest, 
 	}
 	view, err := prepareRecoveredView(ctx, c, req.WorkerID, prevViewID, req.Adapter, prepReq, nil)
 	if errors.Is(err, layeredfs.ErrWorkingStateUnusable) {
-		return nil, false, nil
+		return notResumed("working_state_unusable", "error", err)
 	}
 	return view, err == nil, err
 }
