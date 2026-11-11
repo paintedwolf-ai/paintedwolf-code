@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectsource"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
@@ -24,56 +24,88 @@ func (p *Project) SourceID() string {
 	return p.ID
 }
 
-// SourceRoots exposes only attached filesystem facts to source operations.
+// SourceRoots returns every attached root for source operations, primary first.
 func (p *Project) SourceRoots() []projectroot.RootRef {
-	return RootRefsFrom(p)
-}
-
-// RootPaths returns unique project root paths, primary first.
-func RootPaths(p *Project) []string {
-	if p == nil || len(p.Roots) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(p.Roots))
-	seen := make(map[string]struct{}, len(p.Roots))
-	appendRoot := func(r Root) {
-		path := strings.TrimSpace(r.Path)
-		if path == "" {
-			return
-		}
-		if _, ok := seen[path]; ok {
-			return
-		}
-		seen[path] = struct{}{}
-		out = append(out, path)
-	}
-	for _, r := range p.Roots {
-		if r.IsPrimary {
-			appendRoot(r)
-		}
-	}
-	for _, r := range p.Roots {
-		if !r.IsPrimary {
-			appendRoot(r)
-		}
-	}
-	return out
-}
-
-// RootRefsFrom converts persisted project roots to path-resolution refs (primary first).
-func RootRefsFrom(p *Project) []projectroot.RootRef {
 	if p == nil || len(p.Roots) == 0 {
 		return nil
 	}
 	out := make([]projectroot.RootRef, 0, len(p.Roots))
-	for _, r := range p.Roots {
-		if r.IsPrimary {
-			out = append(out, rootRefFrom(r))
+	for _, r := range primaryFirst(p.Roots) {
+		out = append(out, rootRefFrom(r))
+	}
+	return out
+}
+
+// Admission reports whether agents work in r. A root the standing write-root
+// check refuses stays attached for the editor only; code names the class.
+func (r Root) Admission() (admitted bool, code string) {
+	refused, code := confine.AttachedWriteRootRefused(r.Path)
+	return !refused, code
+}
+
+// AdmittedRoots returns the roots agents work in, primary first. When the
+// stored primary is not admitted, the first admitted root is primary.
+func AdmittedRoots(p *Project) []Root {
+	if p == nil || len(p.Roots) == 0 {
+		return nil
+	}
+	out := make([]Root, 0, len(p.Roots))
+	for _, r := range primaryFirst(p.Roots) {
+		if admitted, _ := r.Admission(); admitted {
+			out = append(out, r)
 		}
 	}
-	for _, r := range p.Roots {
+	if len(out) > 0 && !out[0].IsPrimary {
+		out[0].IsPrimary = true
+	}
+	return out
+}
+
+// RootPaths returns unique admitted root paths, primary first.
+func RootPaths(p *Project) []string {
+	roots := AdmittedRoots(p)
+	out := make([]string, 0, len(roots))
+	seen := make(map[string]struct{}, len(roots))
+	for _, r := range roots {
+		path := strings.TrimSpace(r.Path)
+		if path == "" {
+			continue
+		}
+		if _, ok := seen[path]; ok {
+			continue
+		}
+		seen[path] = struct{}{}
+		out = append(out, path)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// RootRefsFrom returns the admitted roots exposed to agents, primary first.
+func RootRefsFrom(p *Project) []projectroot.RootRef {
+	roots := AdmittedRoots(p)
+	if len(roots) == 0 {
+		return nil
+	}
+	out := make([]projectroot.RootRef, 0, len(roots))
+	for _, r := range roots {
+		out = append(out, rootRefFrom(r))
+	}
+	return out
+}
+
+func primaryFirst(roots []Root) []Root {
+	out := make([]Root, 0, len(roots))
+	for _, r := range roots {
+		if r.IsPrimary {
+			out = append(out, r)
+		}
+	}
+	for _, r := range roots {
 		if !r.IsPrimary {
-			out = append(out, rootRefFrom(r))
+			out = append(out, r)
 		}
 	}
 	return out
@@ -157,33 +189,6 @@ func ResolveExistingDir(path string) (string, error) {
 		return "", fmt.Errorf("%w: %s", ErrNotDirectory, resolved)
 	}
 	return resolved, nil
-}
-
-// RootRefusedError reports a refused attached root.
-type RootRefusedError struct {
-	Code string
-	Path string
-}
-
-func (e *RootRefusedError) Error() string {
-	if e == nil {
-		return ErrRootRefused.Error()
-	}
-	if e.Code == "" {
-		return fmt.Sprintf("%s: %s", ErrRootRefused.Error(), e.Path)
-	}
-	return fmt.Sprintf("%s: %s", ErrRootRefused.Error(), e.Code)
-}
-
-func (e *RootRefusedError) Unwrap() error { return ErrRootRefused }
-
-// RootRefusedCode extracts the machine code from an ErrRootRefused chain.
-func RootRefusedCode(err error) (string, bool) {
-	var refused *RootRefusedError
-	if errors.As(err, &refused) && refused.Code != "" {
-		return refused.Code, true
-	}
-	return "", false
 }
 
 const gitRemoteHashTimeout = 3 * time.Second

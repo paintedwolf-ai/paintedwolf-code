@@ -14,29 +14,26 @@ func (p *Project) WorkspaceID() string {
 	if p == nil {
 		return ""
 	}
-	return sourceworkspace.ID(p.ID, RootRefsFrom(p))
+	return sourceworkspace.ID(p.ID, p.SourceRoots())
 }
 
-// ResolveWorkspaceRoot selects the requested or primary project root.
+// ResolveWorkspaceRoot selects the requested or primary admitted root for a
+// chat. A project without admitted roots has no workspace root.
 func ResolveWorkspaceRoot(p *Project, workspaceRootID string) (rootID, workspacePath string, err error) {
-	if p == nil || len(p.Roots) == 0 {
+	roots := AdmittedRoots(p)
+	if len(roots) == 0 {
 		return "", "", nil
 	}
 	want := strings.TrimSpace(workspaceRootID)
-	if want != "" {
-		for _, root := range p.Roots {
-			if root.ID == want {
-				return root.ID, root.Path, nil
-			}
-		}
-		return "", "", fmt.Errorf("%w: workspace_root_id %s", ErrNotFound, want)
+	if want == "" {
+		return roots[0].ID, roots[0].Path, nil
 	}
-	for _, root := range p.Roots {
-		if root.IsPrimary {
+	for _, root := range roots {
+		if root.ID == want {
 			return root.ID, root.Path, nil
 		}
 	}
-	return "", "", ErrRootNotFound
+	return "", "", fmt.Errorf("%w: workspace_root_id %s", ErrNotFound, want)
 }
 
 // WithRootRefs resolves a physical workspace without changing logical root IDs.
