@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
@@ -144,17 +145,24 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 	testutil.FailErr(t, "resolve test binary", err)
 	shims := t.TempDir()
 	testutil.FailErr(t, "write ssh shim", os.WriteFile(filepath.Join(shims, "ssh"), []byte("#!/bin/sh\nexec '"+self+"' "+sshAgentProbeVerb+" \"$@\"\n"), 0o755))
-	t.Setenv("PATH", shims+string(os.PathListSeparator)+os.Getenv("PATH"))
 	remote := "ssh://git@ssh.example.test/org/repo.git"
+	// Launches take the engine's resolved PATH; the stand-in goes first.
+	shimFirst := func() {
+		base := lycexec.EffectivePathValue()
+		lycexec.SetResolvedPathSource(func() string { return shims + string(os.PathListSeparator) + base })
+		t.Cleanup(func() { lycexec.SetResolvedPathSource(nil) })
+	}
 
 	ungranted := newCommandProgramSession(t, "git ls-remote "+remote, "")
+	shimFirst()
 	gittest.InitCommit(t, ungranted.dir, "work")
-	runCommandWithApprovals(t, ungranted, "recommended")
+	runCommandWithApprovals(t, ungranted)
 	if got := ungranted.outcome(t, "program-1"); strings.Contains(got.Stderr, sshAgentAnswered) || requests() != 0 {
 		t.Fatalf("SSH agent reached Git without a capability: %d requests, %+v", requests(), got)
 	}
 
 	granted := newCommandProgramSession(t, "git ls-remote "+remote, "")
+	shimFirst()
 	gittest.InitCommit(t, granted.dir, "work")
 	lease, err := socketref.Capture(agent)
 	testutil.FailErr(t, "capture agent", err)
@@ -163,7 +171,7 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 	if !granted.h.Server.Admin.Capabilities.Installation.Sockets.GrantChat(granted.session, grant, "ssh-agent", "test-agent", "", nil) {
 		t.Fatal("socket grant failed")
 	}
-	runCommandWithApprovals(t, granted, "recommended")
+	runCommandWithApprovals(t, granted)
 	got := granted.outcome(t, "program-1")
 	if !strings.Contains(got.Stderr, sshAgentAnswered) || requests() == 0 {
 		t.Fatalf("granted SSH agent unreachable from the confined Git: %d requests, %+v", requests(), got)
