@@ -22,7 +22,7 @@ func fetchPageProbe(ctx context.Context, rawURL string) pageProbe {
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, verifyFetchTimeout)
 	defer cancel()
-	resp, finalURL, err := politeGuardedGet(fetchCtx, u, researchAcceptHeader, true)
+	resp, finalURL, err := politeGuardedGet(fetchCtx, u, researchAcceptHeader, verifyBodyByteLimit, true)
 	if err != nil {
 		if errors.Is(err, errRobotsBlocked) {
 			return pageProbe{robotsBlocked: true}
@@ -34,7 +34,7 @@ func fetchPageProbe(ctx context.Context, rawURL string) pageProbe {
 		// 429 and 5xx say "not now", not "not there".
 		return pageProbe{inconclusive: resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500}
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, verifyBodyByteLimit))
+	body, err := io.ReadAll(resp.Body)
 	if err != nil && len(body) == 0 {
 		return pageProbe{inconclusive: true}
 	}

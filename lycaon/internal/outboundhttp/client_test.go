@@ -172,6 +172,30 @@ func TestDoRejectsOversizedResponse(t *testing.T) {
 	}
 }
 
+// A truncating request keeps the first MaxBodyBytes of a longer body, declared
+// or not, and says it was cut.
+func TestDoTruncatesALongerBodyWhenAsked(t *testing.T) {
+	for _, declared := range []bool{true, false} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			if !declared {
+				w.Header().Set("Transfer-Encoding", "chunked")
+			}
+			_, _ = w.Write([]byte("0123456789"))
+		}))
+		response, err := Do(t.Context(), Request{URL: server.URL, MaxBodyBytes: 4, TruncateBody: true, AllowAddress: allowLoopback})
+		server.Close()
+		if err != nil {
+			t.Fatalf("truncating request: %v", err)
+		}
+		if string(response.Body) != "0123" || response.Bytes != 4 || !response.Truncated {
+			t.Fatalf("declared %v: body %q, bytes %d, truncated %v", declared, response.Body, response.Bytes, response.Truncated)
+		}
+	}
+	if _, err := Do(t.Context(), Request{URL: "http://127.0.0.1:9/", TruncateBody: true, DiscardBody: true}); err == nil {
+		t.Fatal("truncation of a discarded body was accepted")
+	}
+}
+
 func TestDoUsesOneNetworkTimeoutAcrossRedirects(t *testing.T) {
 	server := httptest.NewUnstartedServer(nil)
 	server.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
