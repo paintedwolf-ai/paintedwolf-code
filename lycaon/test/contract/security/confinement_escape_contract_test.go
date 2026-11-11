@@ -341,7 +341,7 @@ func newTestBrokerFor(decide egressproxy.EndpointDecider, resolve egressproxy.Pe
 	return b
 }
 
-// AC-ER02-3: a confined program gets the agent root reading, so it writes in
+// A confined program gets the agent root reading, so it writes in
 // the admitted root and the boundary refuses a write into an attached
 // editor-only root of each class.
 func TestConfinedLaunchStaysOutOfEditorOnlyRoots(t *testing.T) {
