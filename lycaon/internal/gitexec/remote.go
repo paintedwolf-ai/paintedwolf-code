@@ -123,4 +123,3 @@ func runRemoteQuery(ctx context.Context, repoDir string, args []string) ([]byte,
 	}
 	return out, true
 }
-
