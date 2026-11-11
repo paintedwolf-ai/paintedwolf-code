@@ -3432,9 +3432,10 @@ type FolderDetectProject struct {
 	LastOpenedAt time.Time `json:"last_opened_at"`
 }
 
-// FormatSettings Settings a tool's configuration declares, in one vocabulary across
-// tools. Every property is omitted when the configuration does not
-// declare it or declares the tool's automatic choice.
+// FormatSettings Settings in effect under a tool's configuration, in one vocabulary
+// across tools: what the configuration declares, else the tool's fixed
+// default. A property is omitted when neither gives a value or the tool
+// chooses automatically.
 type FormatSettings struct {
 	// Column the tool keeps lines within.
 	LineWidth   int    `json:"line_width,omitempty"`

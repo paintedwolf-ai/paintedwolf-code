@@ -13319,9 +13319,10 @@ export interface components {
         /** @enum {string} */
         FormatTool: "editorconfig" | "prettier" | "biome" | "dprint" | "ruff" | "black" | "rustfmt" | "clang_format" | "scalafmt" | "swift_format" | "dart" | "rubocop" | "stylua" | "ocamlformat" | "fourmolu" | "julia_formatter" | "sqlfluff" | "foundry" | "taplo";
         /**
-         * @description Settings a tool's configuration declares, in one vocabulary across
-         *     tools. Every property is omitted when the configuration does not
-         *     declare it or declares the tool's automatic choice.
+         * @description Settings in effect under a tool's configuration, in one vocabulary
+         *     across tools: what the configuration declares, else the tool's fixed
+         *     default. A property is omitted when neither gives a value or the tool
+         *     chooses automatically.
          */
         FormatSettings: {
             /** @description Column the tool keeps lines within. */

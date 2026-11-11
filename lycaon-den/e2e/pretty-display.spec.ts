@@ -19,14 +19,17 @@ const ITEMS_1_MB = 14_000;
 
 type Probe = { content: Locator; scroller: Locator };
 
-type Source = number | { name: string; text: string };
+type Source = number | { name: string; text: string; alongside?: Record<string, string> };
 
 async function openPretty(page: Page, request: Parameters<typeof openProjectFilesFixture>[1], source: Source): Promise<Probe> {
-  const { name, text } = typeof source === "number" ? { name: `one-line-${source}.json`, text: oneLineJson(source) } : source;
+  const { name, text, alongside = {} } = typeof source === "number" ? { name: `one-line-${source}.json`, text: oneLineJson(source) } : source;
   const { project } = await openProjectFilesFixture(page, request, {
     prefix: "pretty-display",
     name: "Pretty display",
-    seed: (root) => writeFileSync(path.join(root, name), text),
+    seed: (root) => {
+      writeFileSync(path.join(root, name), text);
+      for (const [file, body] of Object.entries(alongside)) writeFileSync(path.join(root, file), body);
+    },
   });
   await page.getByTestId("files-tree-file").filter({ hasText: name }).click();
   const host = page.getByTestId("files-editor-host");
@@ -418,6 +421,15 @@ modelIndependentWebE2e("stays in Pretty and wraps a file it cannot lay out", asy
   const rows = await host.locator(".cm-line").nth(1).evaluate((element) =>
     Math.round(element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight)));
   expect(rows).toBeGreaterThan(1);
+});
+
+modelIndependentWebE2e("lays out to the width the project's formatter declares", async ({ page, request }) => {
+  const call = `run(${Array.from({ length: 12 }, (_, i) => `value${i}`).join(", ")});\n`;
+  const breaks = () => page.evaluate(() => window.__pretty.breaksIn(0, window.__pretty.view().state.doc.length).length);
+  await openPretty(page, request, { name: "plain.ts", text: call });
+  await expect.poll(breaks).toBe(0);
+  await openPretty(page, request, { name: "narrow.ts", text: call, alongside: { ".prettierrc": "printWidth: 60\n" } });
+  await expect.poll(breaks).toBeGreaterThan(0);
 });
 
 modelIndependentWebE2e("renders source text at every scroll position", async ({ page, request }) => {
