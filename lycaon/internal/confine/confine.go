@@ -146,6 +146,8 @@ type Confinement struct {
 	EgressOff EgressOffCause
 	// SocketGrants are exact AF_UNIX connect literals validated at the choke point.
 	SocketGrants []SocketGrant
+	// HostServicePaths are host-served sockets admitted by exact path.
+	HostServicePaths []string
 	// socketEndpoints are compiled from retained action authority, never input.
 	socketEndpoints map[string]string
 	// DroppedSocketGrants records rejected socket grants.
@@ -215,6 +217,7 @@ func DefaultConfinement(req Request) (*Confinement, bool) {
 		ReadRoots:                   prepared.ReadRoots,
 		ReadDenyPaths:               prepared.ReadDenyPaths,
 		SocketGrants:                prepared.SocketGrants,
+		HostServicePaths:            prepared.HostServicePaths,
 		DroppedSocketGrants:         prepared.Dropped,
 		ProtectedWriteGrants:        prepared.ProtectedWrites,
 		PolicyWriteGrants:           prepared.PolicyWrites,
