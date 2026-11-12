@@ -152,3 +152,32 @@ func (s *Store) Dispositions(ctx context.Context, actor Actor, workerID string) 
 	}
 	return out, nil
 }
+
+// ResultRef locates a result: its worker, its job and, once landed, its
+// landed-change receipt.
+type ResultRef struct {
+	ResultID       string `json:"result_id"`
+	WorkerID       string `json:"worker_id"`
+	JobID          string `json:"job_id"`
+	LandedChangeID string `json:"landed_change_id,omitempty"`
+}
+
+// Result resolves a result for its worker's coordinator.
+func (s *Store) Result(ctx context.Context, actor Actor, resultID string) (ResultRef, error) {
+	if err := actor.check(); err != nil {
+		return ResultRef{}, err
+	}
+	w, owner, err := resultWorker(ctx, s.q, actor, resultID)
+	if err != nil {
+		return ResultRef{}, err
+	}
+	ref := ResultRef{ResultID: strings.TrimSpace(resultID), WorkerID: w.ID, JobID: owner.WorkerJobID}
+	landed, err := s.q.GetLandedChangeIDByWorkerJobID(ctx, owner.WorkerJobID)
+	switch {
+	case err == nil:
+		ref.LandedChangeID = landed
+	case !db.IsNoRows(err):
+		return ResultRef{}, err
+	}
+	return ref, nil
+}

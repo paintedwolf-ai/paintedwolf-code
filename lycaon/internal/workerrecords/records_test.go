@@ -81,6 +81,14 @@ func TestDispositionsSeparateAccountingFromChanges(t *testing.T) {
 	f.insertLanded(t, "landed-other", "job-other")
 	f.insertLanded(t, "landed-1", "job-1")
 
+	ref, err := f.store.Result(t.Context(), f.coord, "result-1")
+	testutil.FailErr(t, "resolve result", err)
+	if ref.WorkerID != w.WorkerID || ref.JobID != "job-1" || ref.LandedChangeID != "landed-1" {
+		t.Fatalf("result ref = %+v", ref)
+	}
+	_, err = f.store.Result(t.Context(), f.other, "result-1")
+	wantErr(t, "another session's result", err, workerrecords.ErrResultNotFound)
+
 	d, err := f.store.AccountResult(t.Context(), f.coord, op("account"), "result-1")
 	testutil.FailErr(t, "account", err)
 	if d.AccountedAt == "" || d.ChangeState != "" || d.WorkerID != w.WorkerID {
