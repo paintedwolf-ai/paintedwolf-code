@@ -164,6 +164,23 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
+// SelectMode names the effect mode argv selects, as Prepare does.
+func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
+	if len(argv) == 0 {
+		return "", false
+	}
+	spec, ok := o.specs[argv[0].Value]
+	if !ok {
+		return "", false
+	}
+	bound, err := commandprogram.CatalogBinder{}.Bind(spec, argv)
+	if err != nil {
+		return "", false
+	}
+	mode := mutationMode(spec, bound)
+	return mode, mode != ""
+}
+
 func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
 	hasOpt := func(key string) bool {
 		_, ok := bound.Last(key)

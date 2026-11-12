@@ -117,6 +117,36 @@ type Prepared struct {
 	run       utility
 }
 
+// SelectMode names the effect mode argv selects, as Prepare does.
+func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
+	if len(argv) == 0 {
+		return "", false
+	}
+	spec, ok := o.specs[argv[0].Value]
+	if !ok {
+		return "", false
+	}
+	bound, err := commandprogram.CatalogBinder{}.Bind(spec, argv)
+	if err != nil {
+		return "", false
+	}
+	mode := queryMode(spec, bound)
+	return mode, mode != ""
+}
+
+func queryMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
+	if spec.Name == "yq" {
+		if _, ok := bound.Last("-i"); ok {
+			return "-i"
+		}
+		return "query"
+	}
+	if len(spec.Effects) > 0 {
+		return spec.Effects[0].Mode
+	}
+	return ""
+}
+
 // Prepare binds a reached command through the catalog option grammar. It
 // reads and writes nothing.
 func (o *Owners) Prepare(program Program, request commandprogram.OperationRequest) (Prepared, error) {
@@ -135,17 +165,7 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	mode := ""
-	if len(spec.Effects) > 0 {
-		mode = spec.Effects[0].Mode
-	}
-	if command == "yq" {
-		if _, ok := bound.Last("-i"); ok {
-			mode = "-i"
-		} else {
-			mode = "query"
-		}
-	}
+	mode := queryMode(spec, bound)
 	review := bound.Review(o.ops[command])
 	if command == "jq-edit" {
 		review.PairSinks = map[string]string{"--arg": editVarsSlot}

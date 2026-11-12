@@ -386,7 +386,7 @@ func programOperationDefinition(definition toolcontract.OperationDefinition, sec
 	return updated
 }
 
-func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecification, mode string, request commandprogram.OperationRequest) *toolcontract.CommandEffects {
+func (d *ProgramDispatcher) childEffectSet(ctx context.Context, spec toolcontract.CommandSpecification, mode string, request commandprogram.OperationRequest) *toolcontract.CommandEffects {
 	requiresBound := false
 	for _, effect := range spec.Effects {
 		if effect.Mode == mode && slices.Contains(effect.Requires, "bound-child-effect-set") {
@@ -396,7 +396,7 @@ func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecificatio
 	}
 	var effects toolcontract.CommandEffects
 	if requiresBound {
-		effects = d.boundChildEffects(spec, request)
+		effects = d.boundChildEffects(ctx, spec, request)
 	}
 	if request.StreamPreparation != nil {
 		effects |= request.StreamPreparation.RequiredEffects()
@@ -410,7 +410,7 @@ func (d *ProgramDispatcher) childEffectSet(spec toolcontract.CommandSpecificatio
 // boundChildEffects is the effect set of the command a dispatcher runs, so the
 // outer preflight reviews what the child will do. A child it cannot classify
 // counts as every effect.
-func (d *ProgramDispatcher) boundChildEffects(spec toolcontract.CommandSpecification, request commandprogram.OperationRequest) toolcontract.CommandEffects {
+func (d *ProgramDispatcher) boundChildEffects(ctx context.Context, spec toolcontract.CommandSpecification, request commandprogram.OperationRequest) toolcontract.CommandEffects {
 	readonly, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
 	childArgv, dispatches := d.childArgv(spec, request.Argv)
 	if !dispatches {
@@ -419,7 +419,7 @@ func (d *ProgramDispatcher) boundChildEffects(spec toolcontract.CommandSpecifica
 	if len(childArgv) == 0 {
 		return readonly
 	}
-	return d.commandEffects(childArgv, 0)
+	return d.commandEffects(ctx, childArgv, 0)
 }
 
 // childArgv is the command line a dispatching utility runs; dispatches is false
@@ -440,6 +440,13 @@ func (d *ProgramDispatcher) childArgv(spec toolcontract.CommandSpecification, ar
 			}
 		}
 		return nil, true
+	case "git":
+		// Global options end at the subcommand, which resolves as a two-word
+		// command the way dispatch resolves it.
+		if bound, err := d.binder.Bind(spec, argv); err == nil && len(bound.Operands()) > 0 {
+			return append([]string{"git"}, bound.Operands().Values()...), true
+		}
+		return nil, false
 	case "find":
 		values := argv.Values()
 		for i := 1; i < len(values); i++ {
@@ -455,9 +462,11 @@ func (d *ProgramDispatcher) childArgv(spec toolcontract.CommandSpecification, ar
 // maxChildDepth bounds dispatchers nested in dispatchers (env FOO=1 xargs ...).
 const maxChildDepth = 4
 
-// commandEffects is the union of what argv's command may do across its modes;
-// sed without -i is a read. A dispatcher contributes its own child's effects.
-func (d *ProgramDispatcher) commandEffects(argv []string, depth int) toolcontract.CommandEffects {
+// commandEffects is what argv's command will do: the mode its owner selects
+// for argv, or the union across its modes when no owner can say from argv
+// alone. A dispatcher contributes its own child's effects, and a child that
+// needs a nested command it does not name counts as every effect.
+func (d *ProgramDispatcher) commandEffects(ctx context.Context, argv []string, depth int) toolcontract.CommandEffects {
 	every, _ := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly, toolcontract.CommandMutation, toolcontract.CommandExternalExec, toolcontract.CommandNetworkEgress)
 	spec, ok := d.childSpec(argv)
 	if !ok || depth >= maxChildDepth {
@@ -468,21 +477,27 @@ func (d *ProgramDispatcher) commandEffects(argv []string, depth int) toolcontrac
 		return external
 	}
 	effects := spec.Effects
-	if spec.Name == "sed" && len(effects) > 1 && !slices.Contains(argv[1:], "-i") {
-		effects = effects[:1]
-	}
 	if len(effects) == 0 {
 		return every
+	}
+	if mode, known := d.childMode(ctx, spec, argv); known {
+		effects = slices.DeleteFunc(slices.Clone(effects), func(effect toolcontract.CommandEffectRequirement) bool { return effect.Mode != mode })
+		if len(effects) == 0 {
+			return every
+		}
 	}
 	var union toolcontract.CommandEffects
 	for _, effect := range effects {
 		var child *toolcontract.CommandEffects
 		if slices.Contains(effect.Requires, "bound-child-effect-set") {
 			nested, dispatches := d.childArgv(spec, valueFields(argv))
-			if !dispatches || len(nested) == 0 {
+			switch {
+			case !dispatches:
+				return every
+			case len(nested) == 0:
 				continue
 			}
-			set := d.commandEffects(nested, depth+1)
+			set := d.commandEffects(ctx, nested, depth+1)
 			child = &set
 		}
 		compiled, err := effect.CommandEffects(child)
@@ -496,6 +511,25 @@ func (d *ProgramDispatcher) commandEffects(argv []string, depth int) toolcontrac
 		return readonly
 	}
 	return union
+}
+
+// childMode is the mode argv's owner selects, asked of the native owner's
+// selector or a builtin's own mode choice.
+func (d *ProgramDispatcher) childMode(ctx context.Context, spec toolcontract.CommandSpecification, argv []string) (string, bool) {
+	if len(spec.Effects) == 1 {
+		return spec.Effects[0].Mode, true
+	}
+	fields := valueFields(argv)
+	if native := d.natives[spec.Name]; native.SelectMode != nil {
+		return native.SelectMode(ctx, fields)
+	}
+	if builtin, ok := d.builtins[spec.Name].(interface {
+		EffectMode(context.Context, commandprogram.OperationRequest) string
+	}); ok {
+		mode := builtin.EffectMode(ctx, commandprogram.OperationRequest{OperationID: spec.Name, Argv: fields})
+		return mode, mode != ""
+	}
+	return "", false
 }
 
 func valueFields(values []string) commandprogram.Fields {
