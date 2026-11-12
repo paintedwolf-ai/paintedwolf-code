@@ -111,7 +111,6 @@ func (g *countingGenerator) Generate(ctx context.Context, _ Invocation) (string,
 }
 
 type snapshotLog struct {
-	mu   sync.Mutex
 	seen chan Snapshot
 }
 
