@@ -57,7 +57,6 @@ export const coordinationBoardFixture = {
       agent_type: "implementer",
       status: "running",
       reservations: ["pkg/a.go"],
-      max_tool_loops: 40,
       tool_loops_used: 34,
     },
     {
@@ -85,7 +84,6 @@ export function coordinationWorkersFixture(sessionId: string): WorkerTask[] {
       status: "running",
       brief: "Fix auth handler",
       created_at: "2026-01-02T11:00:00Z",
-      max_tool_loops: 40,
       tool_loops_used: 34,
       tool_calls_used: 128,
       // Partial tool completion exercises the batch progress bar.

@@ -73,9 +73,6 @@ const limitsDoc: SettingsLimitsResponse = {
   coordinator_host_turn_timeout_ms: 10800000,
   coordinator_max_sleep_ms: 10800000,
   await_parent_workers_timeout_ms: 10800000,
-  worker_tool_budget_default: 20,
-  worker_tool_budget_min: 2,
-  worker_tool_budget_max: 120,
   spend_soft_stop: true,
   merged_from: ["bundled"],
 };
