@@ -1,6 +1,10 @@
 package toolcontract
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+)
 
 // A command registers only when every effect mode it declares compiles: a
 // mode with no requirements or an unknown one is refused, and a bound child
@@ -23,9 +27,7 @@ func TestCommandEffectModesCompileAtRegistration(t *testing.T) {
 		t.Fatalf("dispatcher: %v", err)
 	}
 	catalog, err := ReadOnlyLanguageV1()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "catalog", err)
 	for _, spec := range catalog.Commands {
 		if err := spec.CompileEffectModes(); err != nil {
 			t.Errorf("catalog %s: %v", spec.Name, err)
