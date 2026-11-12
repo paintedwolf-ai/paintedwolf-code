@@ -13,6 +13,8 @@ describe("project-summary", () => {
       is_primary: false,
       added_at: "t",
       kind: "attached",
+      admitted: true,
+      admission_code: null,
     });
     expect(folderLabel(p.roots)).toContain("+1");
   });

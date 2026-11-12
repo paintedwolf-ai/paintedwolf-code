@@ -22,8 +22,10 @@ func sourceInventoryRequest(p *project.Project) sourceledger.InventoryRequest {
 	if p == nil {
 		return sourceledger.InventoryRequest{}
 	}
-	roots := make([]sourceledger.RootSpec, 0, len(p.Roots))
-	for _, root := range p.Roots {
+	// An editor-only root is observed on demand, so the eager pass skips it.
+	admitted := project.AdmittedRoots(p)
+	roots := make([]sourceledger.RootSpec, 0, len(admitted))
+	for _, root := range admitted {
 		roots = append(roots, sourceledger.RootSpec{ID: root.ID, BranchID: p.BranchForRoot(root.ID), Path: root.Path})
 	}
 	return sourceledger.InventoryRequest{
@@ -68,7 +70,7 @@ func (s *Watch) scheduleWorkspaceInventory(parent context.Context, p *project.Pr
 				s.responses.Logger.WarnContext(ctx, "source structure", "project_id", p.ID, "root", root.ID, "err", err)
 			}
 		}
-		if inventory == nil {
+		if inventory == nil || len(req.Roots) == 0 {
 			return
 		}
 		for _, root := range p.Roots {
@@ -90,7 +92,8 @@ func (s *Watch) noteScanCadenceInventory(ctx context.Context, p *project.Project
 	if s == nil || s.ScanCadence == nil || p == nil {
 		return
 	}
-	for _, root := range p.Roots {
+	// Scans run for agents, so only admitted roots enter the cadence.
+	for _, root := range project.AdmittedRoots(p) {
 		files, err := sourcecatalog.Process().Trees.RootFileCount(ctx, p.ID,
 			sourcecatalog.Root{ID: root.ID, Path: root.Path}, sourcecatalog.FileScope{Audience: sourcecatalog.AgentAudience, IncludeHidden: true}, 0)
 		if err != nil {
@@ -113,6 +116,10 @@ func (s *Watch) sourceInventoryState(
 ) (sourceledger.InventoryState, error) {
 	if p == nil || s.SourceInventory == nil {
 		return sourceledger.InventoryState{Phase: sourceledger.InventoryUninitialized}, nil
+	}
+	// Editor-only roots have no eager pass, so a project of only those is ready.
+	if len(project.AdmittedRoots(p)) == 0 {
+		return sourceledger.InventoryState{Phase: sourceledger.InventoryReady}, nil
 	}
 	return s.SourceInventory.InventoryState(ctx, p.ID, p.SourceBranch, p.RootsGeneration)
 }

@@ -2,6 +2,7 @@ package webresearch
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
@@ -143,7 +144,7 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 		t.Fatalf("normalize metadata url: %v", err)
 	}
 	//nolint:bodyclose // the assertion is that guardedGet errors before any response exists
-	if _, _, err := guardedGet(context.Background(), u, researchAcceptHeader); err == nil || !strings.Contains(err.Error(), "blocked") {
+	if _, _, err := guardedGet(context.Background(), u, researchAcceptHeader, fetchBodyByteLimit); err == nil || !strings.Contains(err.Error(), "blocked") {
 		t.Fatalf("redirect to metadata address must be blocked, got err=%v", err)
 	}
 
@@ -151,12 +152,37 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize hop url: %v", err)
 	}
-	resp, finalURL, err := guardedGet(context.Background(), u, researchAcceptHeader)
+	resp, finalURL, err := guardedGet(context.Background(), u, researchAcceptHeader, fetchBodyByteLimit)
 	if err != nil {
 		t.Fatalf("same-host redirect should be followed: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK || !strings.HasSuffix(finalURL, "/final") {
 		t.Fatalf("expected 200 at /final, got %d at %s", resp.StatusCode, finalURL)
+	}
+}
+
+// A guarded read returns the prefix its caller reads, however large the page.
+func TestGuardedGetReturnsTheCallersPrefix(t *testing.T) {
+	prev := ipAllowed
+	ipAllowed = func(a netip.Addr) bool { return a.IsLoopback() }
+	t.Cleanup(func() { ipAllowed = prev })
+	page := strings.Repeat("p", fetchBodyByteLimit+1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	t.Cleanup(srv.Close)
+	u, err := normalizeFetchURL(srv.URL)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	resp, _, err := guardedGet(context.Background(), u, researchAcceptHeader, verifyBodyByteLimit)
+	if err != nil {
+		t.Fatalf("a page past the fetch bound failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || string(body) != page[:verifyBodyByteLimit] {
+		t.Fatalf("read %d bytes, err %v; want the first %d", len(body), err, verifyBodyByteLimit)
 	}
 }

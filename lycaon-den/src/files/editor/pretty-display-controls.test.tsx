@@ -262,7 +262,7 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
     expect(icons[0]?.getAttribute("data-tip")).toBe("File comparison");
   });
 
-  it("drives persistent depressed styling for both Pretty and Wrap from aria-pressed while keeping their selection independent (FMT-AC-06)", async () => {
+  it("shows Wrap pressed and disabled while Pretty is on and restores the stored Wrap preference after (FMT-AC-06)", async () => {
     const projectId = "proj-independent-toggles";
     const tabKey = fileBufferKey("root", "both.json");
     const initialWrap = editorWordWrapPref();
@@ -295,24 +295,34 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
       const prettyBtn = view.getByTestId("files-editor-pretty-toggle") as HTMLButtonElement;
       const wrapBtn = view.getByTestId("files-editor-wrap-toggle") as HTMLButtonElement;
 
-      // 1. Both off
+      // Both off.
       expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
       expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.disabled).toBe(false);
 
-      // 2. Pretty on, Wrap off
+      // Pretty on: Wrap shows pressed and disabled; its preference is unchanged.
       fireEvent.click(prettyBtn);
       expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
-      expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
-
-      // 3. Both Pretty and Wrap on simultaneously
-      fireEvent.click(wrapBtn);
-      expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
       expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(wrapBtn.disabled).toBe(true);
+      fireEvent.click(wrapBtn);
+      expect(editorWordWrapPref()).toBe(false);
 
-      // 4. Pretty off via Alt+P/menu handler while Wrap remains on
+      // Pretty off: the stored preference applies again.
       expect(invokePrettyToggleForTab(projectId, tabKey)).toBe(true);
       expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.disabled).toBe(false);
+
+      // Wrap on, then Pretty on and off: Wrap stays pressed throughout.
+      fireEvent.click(wrapBtn);
+      await Promise.resolve();
       expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(prettyBtn);
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(invokePrettyToggleForTab(projectId, tabKey)).toBe(true);
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(editorWordWrapPref()).toBe(true);
 
       unregister();
     } finally {
