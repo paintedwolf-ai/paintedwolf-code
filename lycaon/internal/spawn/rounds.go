@@ -22,7 +22,7 @@ type RoundPolicy struct {
 
 // DefaultRoundPolicy is the policy a host without workers config uses.
 func DefaultRoundPolicy() RoundPolicy {
-	return RoundPolicy{ToollessResponseBound: 3, ConsumptionNoticeModelCalls: 40, QuietNoticeAfter: 10 * time.Minute}
+	return RoundPolicy{ToollessResponseBound: 3, ConsumptionNoticeModelCalls: 60, QuietNoticeAfter: 10 * time.Minute}
 }
 
 // ThresholdCrossed reports whether a measurement that moved from prev to cur

@@ -12,7 +12,7 @@ rounds:
   toolless_response_bound: 3
   # Model calls in one round before the first consumption notice; later
   # notices follow at each doubling.
-  consumption_notice_model_calls: 40
+  consumption_notice_model_calls: 60
   # Time without durable progress before the first quiet notice; later
   # notices follow at each doubling.
   quiet_notice_after_ms: 600000
