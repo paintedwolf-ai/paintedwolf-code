@@ -21,7 +21,6 @@ function local(state: EditorState, changes: ChangeSpec): EditorState {
   return state.update({ changes }).state;
 }
 
-/** Replaces line `number` with new text. */
 function rewrite(state: EditorState, number: number): ChangeSpec {
   const line = state.doc.line(number);
   return { from: line.from, to: line.to, insert: `changed ${number}` };
