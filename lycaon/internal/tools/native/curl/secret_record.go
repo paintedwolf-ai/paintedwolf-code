@@ -1,6 +1,7 @@
 package curl
 
 import (
+	"context"
 	"maps"
 	"net/url"
 	"slices"
@@ -168,7 +169,7 @@ func (inv *invocation) passphrase() (string, error) {
 	}
 	tls, _ := inv.resolvedRecord()["tls"].(map[string]any)
 	value, _ := tls["passphrase"].(string)
-	if err := inv.reviewPassphrase(); err != nil {
+	if err := inv.reviewPassphrase(inv.ctx); err != nil {
 		return "", err
 	}
 	if err := inv.tc.Effects.Secrets.HandOff(inv.ctx, func(path string) bool { return path == passphrasePath }); err != nil {
@@ -183,7 +184,7 @@ const passphraseShape = "Client key passphrase"
 // presents to its recipient: the review the http_request screen gives every
 // other reference the request sends, and the release a held value needs. A
 // passphrase written into the command is the model's own and is not asked.
-func (inv *invocation) reviewPassphrase() error {
+func (inv *invocation) reviewPassphrase(ctx context.Context) error {
 	resolution := inv.tc.Effects.Secrets
 	if resolution == nil || !resolution.Binds(passphrasePath) {
 		return nil
@@ -201,7 +202,7 @@ func (inv *invocation) reviewPassphrase() error {
 		return passphraseFault(secretmatch.FaultStageScreenUnwired)
 	}
 	id, label := secretmatch.HTTPDestination(target)
-	ctx := secretmatch.WithAskAttribution(inv.ctx, secretmatch.AskAttribution{
+	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 		SessionID: inv.tc.Identity.SessionID, RootSessionID: inv.tc.ChatSessionID(), ProjectID: inv.tc.Identity.ProjectID,
 		ProjectDir: inv.tc.ActiveRootPath(), ToolCallID: inv.tc.Identity.ToolCallID,
 	})
@@ -220,7 +221,7 @@ func (inv *invocation) reviewPassphrase() error {
 		return passphraseFault(stage)
 	}
 	if decision.Decision != secretmatch.SendUnchanged {
-		resolution.Withhold(inv.ctx)
+		resolution.Withhold(ctx)
 		reject := &toolrejection.ToolReject{Code: toolrejection.OutboundSecretDeniedCode, Data: map[string]any{
 			"surface": "http_request", "rule_id": matches[0].RuleID, "host": label, "shape": passphraseShape,
 		}}
