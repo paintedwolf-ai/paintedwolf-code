@@ -1,6 +1,9 @@
 package spawn
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // RoundPolicy bounds a worker round's tool-less responses and sets when its
 // coordinator is told the round is long or quiet. Notices inform; none stops
@@ -22,11 +25,19 @@ func DefaultRoundPolicy() RoundPolicy {
 	return RoundPolicy{ToollessResponseBound: 3, ConsumptionNoticeModelCalls: 40, QuietNoticeAfter: 10 * time.Minute}
 }
 
-// NoticeDue reports whether a measured value has reached the next notice
-// threshold after sent earlier notices: base, then each doubling.
-func NoticeDue(measured, base, sent int) bool {
-	if base <= 0 || measured < base {
+// ThresholdCrossed reports whether a measurement that moved from prev to cur
+// passed base or one of its doublings, so each threshold fires once.
+func ThresholdCrossed(prev, cur, base int64) bool {
+	if base <= 0 || cur < base || cur <= prev {
 		return false
 	}
-	return measured >= base<<min(sent, 30)
+	for threshold := base; threshold <= cur; threshold *= 2 {
+		if threshold > prev {
+			return true
+		}
+		if threshold > math.MaxInt64/2 {
+			return false
+		}
+	}
+	return false
 }

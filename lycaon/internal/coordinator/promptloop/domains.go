@@ -154,6 +154,9 @@ type NudgesDeps struct {
 	WorkerJob             func(ctx context.Context, workerJobID string) (*api.WorkerTask, bool)
 	// WorkerRounds bounds tool-less worker responses and sets round notice thresholds.
 	WorkerRounds spawn.RoundPolicy
+	// WorkerRoundConsumption tells the worker's coordinator its round crossed a
+	// consumption threshold at modelCalls.
+	WorkerRoundConsumption func(ctx context.Context, sess *api.Session, workerJobID string, modelCalls int)
 }
 
 type ControlDeps struct {

@@ -215,6 +215,7 @@ loop:
 				usage = l.Nudges.workerContextUsage(turnCtx, sess, completion.ContextInputTokens())
 			}
 			l.Nudges.publishWorkerProgress(turnCtx, sess, st.workerJobID, st.progress().CompleteRound(completed, usage), true)
+			l.Nudges.maybeConsumptionNotice(turnCtx, sess, st.workerJobID, completed)
 		}
 		if sent, sendErr := l.Inbox.takeUserSend(turnCtx, id, st, &userPrompt); sendErr != nil {
 			return nil, sendErr
@@ -423,4 +424,19 @@ func (l *turnNudges) toollessResponseBound() int {
 		return bound
 	}
 	return spawn.DefaultRoundPolicy().ToollessResponseBound
+}
+
+// maybeConsumptionNotice tells the coordinator when a worker round's model
+// calls reach the configured threshold or one of its doublings.
+func (l *turnNudges) maybeConsumptionNotice(ctx context.Context, sess *api.Session, workerJobID string, modelCalls int) {
+	if l.Deps.WorkerRoundConsumption == nil || strings.TrimSpace(workerJobID) == "" {
+		return
+	}
+	base := l.Deps.WorkerRounds.ConsumptionNoticeModelCalls
+	if base <= 0 {
+		base = spawn.DefaultRoundPolicy().ConsumptionNoticeModelCalls
+	}
+	if spawn.ThresholdCrossed(int64(modelCalls-1), int64(modelCalls), int64(base)) {
+		l.Deps.WorkerRoundConsumption(ctx, sess, workerJobID, modelCalls)
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/api"
@@ -396,7 +397,34 @@ func (b *serveBuilder) wireOrchestrator() error {
 	b.worker.poller = worker.NewLocalWorkerPoller(b.delegations.Queue, executor, b.worker.cfg, workerOutcomes)
 	b.delegations.Queue.SetRunningCancel(b.worker.poller.Abort)
 	b.worker.poller.ParentWaiter = b.boards.ParentWaiter
+	b.worker.poller.Quiet = b.quietRounds()
 	return nil
+}
+
+// quietRounds measures working rounds against their turns' durable progress.
+func (b *serveBuilder) quietRounds() *worker.QuietRounds {
+	queries := db.New(b.storage.Database)
+	quiet := &worker.QuietRounds{
+		Jobs: func(ctx context.Context) ([]wire.WorkerTask, error) {
+			return b.delegations.Queue.List(ctx, "", wire.WorkerStatusPending, wire.WorkerStatusRunning)
+		},
+		Progress: func(ctx context.Context, childSessionID string) (time.Time, error) {
+			raw, err := queries.GetLatestTurnProgressForSession(ctx, childSessionID)
+			if err != nil || raw == "" {
+				return time.Time{}, err
+			}
+			return db.ParseTime(raw)
+		},
+		Notify: b.sessions.Manager.Coordinator.Workers.RoundNotice,
+		After:  b.worker.cfg.RoundPolicy().QuietNoticeAfter,
+	}
+	if checkpoints, ok := b.sessions.Checkpoints.(*hitl.Checkpoints); ok {
+		quiet.AwaitingApproval = func(ctx context.Context, childSessionID string) bool {
+			pending, err := checkpoints.ListPending(ctx, childSessionID, nil)
+			return err == nil && len(pending) > 0
+		}
+	}
+	return quiet
 }
 
 func (b *serveBuilder) serveApp() *ServeApp {
