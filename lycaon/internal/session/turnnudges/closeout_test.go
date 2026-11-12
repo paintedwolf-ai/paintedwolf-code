@@ -42,13 +42,6 @@ func TestCloseoutPreservesCancellationAndIterationContext(t *testing.T) {
 	if n.SignalID != string(anchor.TurnIterationsLow) || r.data["remaining"] != 3 {
 		t.Fatalf("iteration guidance=%+v data=%v", n, r.data)
 	}
-	n = s.BudgetAnswer(anchor.WorkerBudgetRaised)(t.Context(), child, 4, 9)
-	if n.Content == "" || r.data["tool_loops_used"] != 4 || r.data["max_tool_loops"] != 9 || r.data["remaining"] != 5 {
-		t.Fatalf("budget guidance=%+v data=%v", n, r.data)
-	}
-	if n = s.BudgetAnswer(anchor.WorkerBudgetRaised)(t.Context(), &api.Session{ID: "parent"}, 4, 9); n.Content != "" {
-		t.Fatalf("worker budget leaked to coordinator: %+v", n)
-	}
 }
 
 // AC-COMPAT-08: both forced final turns read exactly what Closeout sends.

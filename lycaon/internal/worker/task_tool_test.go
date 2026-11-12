@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -23,8 +22,8 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// A resume continues its child: the host supplies the agent, scope, planned
-// leg, and ceiling, raised to the child's unanswered budget request.
+// A resume continues its child: the host supplies the agent, scope and planned
+// leg.
 func TestTaskToolResumeInheritsTheChild(t *testing.T) {
 	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
@@ -32,11 +31,7 @@ func TestTaskToolResumeInheritsTheChild(t *testing.T) {
 		WorkerQueue: worker.NewInMemoryQueue(2),
 		prior: &api.WorkerTask{
 			ID: "prior-job", ChildSessionID: "child-1", AgentType: "implementer",
-			Scope:        &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/**"}},
-			MaxToolLoops: 20,
-			BudgetRequest: &api.WorkerBudgetRequest{
-				Rounds: 12, RequestedMax: 32, RemainingWork: []string{"finish the parser"}, ToolLoopsUsed: 17,
-			},
+			Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"src/**"}},
 		},
 		out: &enqueued,
 	}
@@ -55,9 +50,6 @@ func TestTaskToolResumeInheritsTheChild(t *testing.T) {
 	}
 	if !enqueued.EffectiveScope().IsWrite() || len(enqueued.EffectiveScope().Paths) != 1 {
 		t.Fatalf("scope = %+v want the child's write scope", enqueued.Scope)
-	}
-	if enqueued.MaxToolLoops != 32 {
-		t.Fatalf("max_tool_loops = %d want the unanswered request 32", enqueued.MaxToolLoops)
 	}
 	var payload map[string]any
 	testutil.FailErr(t, "unmarshal JSON document", json.Unmarshal([]byte(out), &payload))
@@ -125,7 +117,7 @@ func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
 			}
 			return spawn.WorkflowWork{
 				RunID: "run-1", Phase: "execute", AgentType: "repo-researcher",
-				Scope: &api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}}, MaxToolLoops: 36,
+				Scope: &api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"internal/**"}},
 			}, true, nil
 		},
 		BindWorkflowTask: func(_ context.Context, _ tools.ToolContext, workID string, _ *api.WorkerTask) error {
@@ -137,8 +129,8 @@ func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
 		"brief": taskBrief("trace the subsystem"), "workflow_work_id": "leg-2",
 	}, toolContext("parent-1", t.TempDir()))
 	testutil.FailErr(t, "dispatch a planned leg by id", err)
-	if enqueued.AgentType != "repo-researcher" || enqueued.MaxToolLoops != 36 || boundWorkID != "leg-2" {
-		t.Fatalf("task = %+v bound=%q want the leg's agent and ceiling", enqueued, boundWorkID)
+	if enqueued.AgentType != "repo-researcher" || boundWorkID != "leg-2" {
+		t.Fatalf("task = %+v bound=%q want the leg's agent", enqueued, boundWorkID)
 	}
 	if paths := enqueued.EffectiveScope().Paths; len(paths) != 1 || paths[0] != "internal/**" {
 		t.Fatalf("scope paths = %v want the leg's", paths)
@@ -160,7 +152,7 @@ func TestTaskToolResumeKeepsItsWorkOnlyInItsPhase(t *testing.T) {
 			prior := &api.WorkerTask{
 				ID: "prior-job", ChildSessionID: "child-1", AgentType: "repo-researcher",
 				Scope: &api.TaskScope{Mode: api.TaskScopeModeRead}, WorkflowRunID: "run-1",
-				WorkflowPhase: "execute", WorkflowWorkID: tc.priorWorkID, MaxToolLoops: 12,
+				WorkflowPhase: "execute", WorkflowWorkID: tc.priorWorkID,
 			}
 			testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
 				Queue:  &priorJobQueue{WorkerQueue: worker.NewInMemoryQueue(2), prior: prior},
@@ -179,39 +171,6 @@ func TestTaskToolResumeKeepsItsWorkOnlyInItsPhase(t *testing.T) {
 			testutil.FailErr(t, "resume", err)
 			if boundWorkID != tc.wantWorkID {
 				t.Fatalf("bound workflow_work_id = %q want %q", boundWorkID, tc.wantWorkID)
-			}
-		})
-	}
-}
-
-func TestTaskToolOmittedBudgetIsTheHostDefault(t *testing.T) {
-	budget := spawn.WorkerToolBudget{Default: 17, Min: 2, Max: 40}
-	for _, tc := range []struct {
-		name, agent, mode string
-		want              int
-	}{
-		{name: "read", agent: "repo-researcher", mode: "read", want: 17},
-		{name: "write", agent: "implementer", mode: "write", want: 17},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			reg := tools.NewDefaultRegistry()
-			var enqueued api.WorkerTask
-			queue := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued}
-			err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-				Queue:  queue,
-				Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-				ToolBudget: func(string) spawn.WorkerToolBudget { return budget },
-			})
-			testutil.FailErr(t, "register task tool", err)
-			exec := toolexecution.NewExecutor(nil, reg, "coordinator")
-			_, err = exec.Invoke(t.Context(), "task", map[string]any{
-				"agent_type": tc.agent,
-				"brief":      taskBrief("bounded work"),
-				"scope":      map[string]any{"mode": tc.mode},
-			}, toolContext("parent-1", t.TempDir()))
-			testutil.FailErr(t, "invoke task tool", err)
-			if enqueued.MaxToolLoops != tc.want {
-				t.Fatalf("%s max_tool_loops = %d want %d", tc.mode, enqueued.MaxToolLoops, tc.want)
 			}
 		})
 	}
@@ -439,29 +398,6 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 func toolContext(sessionID, dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
 	return tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{Roots: roots, ActiveRootID: "r1"}}
-}
-
-func TestTaskToolDoesNotClampExplicitBudget(t *testing.T) {
-	budget := spawn.WorkerToolBudget{Default: 17, Min: 2, Max: 40}
-	for _, requested := range []int{1, 2, 40, 41} {
-		reg := tools.NewDefaultRegistry()
-		var enqueued api.WorkerTask
-		queue := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued}
-		err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{Queue: queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(), ToolBudget: func(string) spawn.WorkerToolBudget { return budget }})
-		testutil.FailErr(t, "register budgeted task", err)
-		_, err = reg.Run(t.Context(), "task", map[string]any{"agent_type": "repo-researcher", "brief": taskBrief("bounded work"), "scope": map[string]any{"mode": "read"}, "max_tool_loops": requested}, toolContext("parent", t.TempDir()))
-		if requested < budget.Min || requested > budget.Max {
-			var reject *toolrejection.ToolReject
-			if !errors.As(err, &reject) || reject.Code != workeradmission.TaskMaxToolLoopsInvalidCode || reject.Data["max_tool_loops"] != requested || reject.Data["host_max"] != budget.Max || enqueued.ID != "" {
-				t.Fatalf("explicit budget changed or enqueued: requested=%d err=%v task=%+v", requested, err, enqueued)
-			}
-		} else {
-			testutil.FailErr(t, "enqueue exact budget", err)
-			if enqueued.MaxToolLoops != requested {
-				t.Fatalf("budget=%d want %d", enqueued.MaxToolLoops, requested)
-			}
-		}
-	}
 }
 
 func TestTaskToolDispatchWriteScopeInsideLinkedWorktree(t *testing.T) {

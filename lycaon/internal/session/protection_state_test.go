@@ -348,14 +348,14 @@ func TestWorkerFinalizationStorageFailureDoesNotBecomeCompletion(t *testing.T) {
 				var result workercloseout.WorkerSummaryOutcome
 				var err error
 				if canceled {
-					result, err = workercloseout.FinalizeWorkerSummaryForCanceled(t.Context(), resolver, base, "child", "path-explorer", "canceled", opts)
+					result, err = workercloseout.FinalizeWorkerSummaryForCanceled(t.Context(), resolver, base, "child", "canceled", opts)
 				} else {
 					result, err = workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, base, "child", "path-explorer", opts)
 				}
 				if !errors.Is(err, failure) {
 					t.Fatalf("finalization failure = %v, want original cause", err)
 				}
-				if result.Summary != "" || result.HintCode != "" || result.HostAssembled {
+				if result.Summary != "" || result.HintCode != "" {
 					t.Fatalf("storage failure produced deliverable completion: %+v", result)
 				}
 			})

@@ -110,7 +110,7 @@ func TestSkillSurfaceVarsInputMapsReaderFacts(t *testing.T) {
 			want := tc.want
 			if got.ProfileID != want.ProfileID || got.SurfaceID != want.SurfaceID ||
 				got.OnWorkerBranch != want.OnWorkerBranch || got.HasGit != want.HasGit ||
-				got.RootCount != want.RootCount || got.DelegationBudget != want.DelegationBudget ||
+				got.RootCount != want.RootCount ||
 				!slices.Equal(got.Offered, want.Offered) {
 				t.Fatalf("skillSurfaceVarsInput = %+v, want %+v", got, want)
 			}

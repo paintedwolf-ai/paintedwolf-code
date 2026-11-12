@@ -80,7 +80,6 @@ func FinalizeWorkerSummaryForChild(
 ) (outcome WorkerSummaryOutcome, err error) {
 	opts.hostTurns = hostTurns
 	childSessionID = strings.TrimSpace(childSessionID)
-	agentType = strings.TrimSpace(agentType)
 	ctx = workercontext.WithJob(ctx, opts.WorkerJobID)
 	opts = scopeWorkerFinalizeLedger(resolver, opts)
 	defer func() {
@@ -116,12 +115,11 @@ func FinalizeWorkerSummaryForCanceled(
 	ctx context.Context,
 	resolver WorkerSummaryResolver,
 	hostTurns HostTurnRunner,
-	childSessionID, agentType, cancelReason string,
+	childSessionID, cancelReason string,
 	opts WorkerSummaryFinalizeOpts,
 ) (WorkerSummaryOutcome, error) {
 	opts.hostTurns = hostTurns
 	childSessionID = strings.TrimSpace(childSessionID)
-	agentType = strings.TrimSpace(agentType)
 	cancelReason = strings.TrimSpace(cancelReason)
 	ctx = workercontext.WithJob(ctx, opts.WorkerJobID)
 	opts = scopeWorkerFinalizeLedger(resolver, opts)
