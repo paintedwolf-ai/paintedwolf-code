@@ -4,15 +4,14 @@ import (
 	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"math"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerprogress"
@@ -108,7 +107,7 @@ func (l *PromptLoop) runPreparedPromptLoop(ctx context.Context, in PromptRunInpu
 	sess, id := setup.sess, setup.sessionID
 	profileID, userPrompt := setup.profileID, setup.userPrompt
 	st := setup.state
-	baseLim, surfaceID := setup.limits, setup.surfaceID
+	surfaceID := setup.surfaceID
 	maxIter, completed := setup.maxIter, setup.completed
 	var closeoutNudgeSent bool
 	var loopExit loopExitKind
@@ -116,14 +115,6 @@ func (l *PromptLoop) runPreparedPromptLoop(ctx context.Context, in PromptRunInpu
 	firstModelTurn := st.turnsRanThisRun == 0
 loop:
 	for {
-		if sess.IsWorkerChild() {
-			var hold bool
-			maxIter, hold = l.Nudges.workerLoopCeiling(ctx, sess, st, baseLim, surfaceID, completed, maxIter)
-			if hold {
-				l.Nudges.awaitWorkerBudgetAnswer(ctx, sess, st)
-				continue
-			}
-		}
 		if completed >= maxIter {
 			break
 		}
@@ -222,7 +213,7 @@ loop:
 			if completion != nil {
 				usage = l.Nudges.workerContextUsage(turnCtx, sess, completion.ContextInputTokens())
 			}
-			l.Nudges.publishWorkerProgress(turnCtx, sess, st.workerJobID, st.progress().CompleteRound(completed, maxIter, usage), true)
+			l.Nudges.publishWorkerProgress(turnCtx, sess, st.workerJobID, st.progress().CompleteRound(completed, usage), true)
 		}
 		if sent, sendErr := l.Inbox.takeUserSend(turnCtx, id, st, &userPrompt); sendErr != nil {
 			return nil, sendErr
@@ -253,30 +244,6 @@ loop:
 	}
 
 	return l.finalizePromptLoopRun(ctx, sess, id, profileID, userPrompt, maxIter, closeoutNudgeSent, loopExit, in, st)
-}
-
-// workerLoopCeiling refreshes a worker's round ceiling from its job ledger and
-// reports whether an open budget request holds the loop.
-func (l *turnNudges) workerLoopCeiling(ctx context.Context, sess *api.Session, st *promptLoopTurnState, baseLim settings.SessionLimits, surfaceID string, completed, maxIter int) (int, bool) {
-	var task *api.WorkerTask
-	if l.Deps.WorkerJob != nil {
-		if job, ok := l.Deps.WorkerJob(ctx, st.workerJobID); ok && job != nil {
-			task = job
-			if task.MaxToolLoops > 0 {
-				sess.MaxToolLoops = task.MaxToolLoops
-			}
-		}
-	}
-	var workerLim settings.SessionLimits
-	if l.Context.Deps.Limits != nil {
-		workerLim = l.Context.Deps.Limits(ctx, sess)
-	} else {
-		workerLim = applyWorkerMaxToolLoops(baseLim, sess)
-	}
-	next := max(surface.EffectivePromptLoopIterations(workerLim, surfaceID), st.repairCeiling)
-	st.progress().SetMaxToolLoops(next)
-	st.workerBudget.observe(task, completed > 0 && next > maxIter)
-	return next, st.workerBudget.holdDue(completed, next)
 }
 
 func (l *turnInbox) takeUserSend(
@@ -349,14 +316,13 @@ func (l *PromptLoop) preparePromptLoop(ctx context.Context, in PromptRunInput) (
 		return nil, err
 	}
 	setup.maxIter = surface.EffectivePromptLoopIterations(setup.limits, setup.surfaceID)
+	if setup.sess.IsWorkerChild() {
+		setup.maxIter = workerRoundIterations
+	}
 	setup.state.workerJobID = strings.TrimSpace(in.ToolCtx.Identity.WorkerJobID)
 	setup.state.workerProgress = workerprogress.NewTracker(l.Nudges.seededWorkerProgress(ctx, setup.sess, setup.state.workerJobID))
 	setup.completed = setup.state.progress().ToolLoopsUsed()
-	setup.state.progress().SetMaxToolLoops(setup.maxIter)
 	setup.state.proseFinish = in.ProseFinish
-	if setup.sess.IsWorkerChild() && in.HostSignalID == string(anchor.WorkerCitationGrounding) {
-		setup.state.repairCeiling = setup.completed + spawn.WorkerRepairRounds
-	}
 	return setup, nil
 }
 
@@ -438,18 +404,6 @@ func (l *turnNudges) workerContextUsage(ctx context.Context, sess *api.Session, 
 	return usage
 }
 
-func applyWorkerMaxToolLoops(lim settings.SessionLimits, sess *api.Session) settings.SessionLimits {
-	if sess == nil || strings.TrimSpace(sess.ParentSessionID) == "" {
-		return lim
-	}
-	if sess.MaxToolLoops > 0 {
-		lim.MaxIterations = sess.MaxToolLoops
-		return lim
-	}
-	lim.MaxIterations = lim.WorkerToolBudgetDefault
-	return lim
-}
-
 // MessageStreams provides transient projection and exact replay for the prompt loop.
 type MessageStreams interface {
 	CacheLive(sessionID, messageID, content string, tokens []string, generatingTokens int)
@@ -457,3 +411,7 @@ type MessageStreams interface {
 	Project(context.Context, string, api.Message) error
 	Finish(context.Context, string)
 }
+
+// workerRoundIterations leaves a worker round without an iteration cap: it
+// ends at delivery, a blocking question, a stop, a failure or a limit.
+const workerRoundIterations = math.MaxInt32

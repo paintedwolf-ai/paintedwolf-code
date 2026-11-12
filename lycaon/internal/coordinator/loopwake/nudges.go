@@ -99,8 +99,8 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 		return
 	}
 	blocked := l.Turns.hostTurnBlocked(ctx, sessionID)
-	// A budget request is actionable while its job is running.
-	perJobWake := strings.TrimSpace(completingJobID) != "" || wake == anchor.WorkerBudgetRequested
+	// A round notice is actionable while its job is running.
+	perJobWake := strings.TrimSpace(completingJobID) != "" || wake == anchor.WorkerRoundNotice
 	if !l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) && !perJobWake {
 		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle")
 		l.deferNudge(ctx, sessionID, pending)
@@ -192,8 +192,8 @@ func (l *Nudges) NudgeProcessFinished(ctx context.Context, sessionID, handle str
 func (l *Nudges) NudgeProcessRefused(ctx context.Context, sessionID, handle string, env anchor.Envelope) {
 	l.Nudge(ctx, sessionID, anchor.ProcessRefused, anchor.ProcessRefused, handle, env)
 }
-func (l *Nudges) NudgeWorkerBudgetRequested(ctx context.Context, sessionID, jobID string, env anchor.Envelope) {
-	l.Nudge(ctx, sessionID, anchor.WorkerBudgetRequested, anchor.WorkerBudgetRequested, jobID, env)
+func (l *Nudges) NudgeWorkerRoundNotice(ctx context.Context, sessionID, jobID string, env anchor.Envelope) {
+	l.Nudge(ctx, sessionID, anchor.WorkerRoundNotice, anchor.WorkerRoundNotice, jobID, env)
 }
 func (l *Nudges) NudgeLegFinished(ctx context.Context, parentID string, completedAt time.Time, legID string) {
 	env := anchor.Envelope{}
@@ -355,12 +355,12 @@ func (l *Nudges) kickStillQueued(sessionID string, wake anchor.ID) bool {
 	kickID := anchor.InformRender(wake)
 	return kickID != "" && deps.HasQueuedKick(sessionID, kickID)
 }
-func (l *Nudges) dropDeferredBudgetRequestForJob(sessionID, jobID string) {
+func (l *Nudges) dropDeferredRoundNoticesForJob(sessionID, jobID string) {
 	if l == nil || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(jobID) == "" {
 		return
 	}
-	if l.sessionDeferredQueue(sessionID).removeBudgetRequestForJob(jobID) {
-		loopLogNudge(sessionID, anchor.WorkerBudgetRequested, anchor.WorkerBudgetRequested, jobID, "", "drop:job_terminal")
+	if l.sessionDeferredQueue(sessionID).removeRoundNoticesForJob(jobID) {
+		loopLogNudge(sessionID, anchor.WorkerRoundNotice, anchor.WorkerRoundNotice, jobID, "", "drop:job_terminal")
 	}
 }
 func (l *Nudges) deferNudge(ctx context.Context, sessionID string, d pendingLoopWake) {

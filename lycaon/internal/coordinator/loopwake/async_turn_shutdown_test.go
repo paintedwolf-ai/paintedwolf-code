@@ -46,7 +46,7 @@ func TestWaitForAsyncTurnsForceCancelsAndBlocksUntilExit(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -106,7 +106,7 @@ func TestForgetSessionCancelsAndDrainsInFlightAsyncTurn(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -169,7 +169,7 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
 
 	select {
 	case <-started:

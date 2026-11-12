@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
-	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -110,42 +109,9 @@ func (m *Service) IterationRunway(
 		return promptloop.HostNudge{}
 	}
 	if sess.IsWorkerChild() {
-		return m.WorkerRunway(ctx, sess, remaining)
+		return promptloop.HostNudge{}
 	}
 	return m.Render(ctx, sess, anchor.TurnIterationsLow, map[string]any{
 		"remaining": remaining,
 	})
-}
-
-// WorkerRunway tells any worker its ceiling is near and whether it may ask for more.
-func (m *Service) WorkerRunway(ctx context.Context, sess *api.Session, remaining int) promptloop.HostNudge {
-	if m.tasks == nil {
-		return promptloop.HostNudge{}
-	}
-	task, ok := m.tasks.Get(workercontext.Job(ctx))
-	if !ok || task == nil {
-		return promptloop.HostNudge{}
-	}
-	budget := m.budget.BudgetForTask(ctx, task)
-	return m.Render(ctx, sess, anchor.WorkerIterationsLow, map[string]any{
-		"remaining":      remaining,
-		"max_tool_loops": task.MaxToolLoops,
-		"at_host_max":    task.MaxToolLoops >= budget.Max,
-		"request_open":   task.BudgetRequest != nil,
-	})
-}
-
-// BudgetAnswer renders how the coordinator answered a worker's
-// budget: worker.budget.raised or worker.budget.declined.
-func (m *Service) BudgetAnswer(id anchor.ID) func(context.Context, *api.Session, int, int) promptloop.HostNudge {
-	return func(ctx context.Context, sess *api.Session, used, max int) promptloop.HostNudge {
-		if m == nil || sess == nil || !sess.IsWorkerChild() {
-			return promptloop.HostNudge{}
-		}
-		return m.Render(ctx, sess, id, map[string]any{
-			"tool_loops_used": used,
-			"max_tool_loops":  max,
-			"remaining":       max - used,
-		})
-	}
 }

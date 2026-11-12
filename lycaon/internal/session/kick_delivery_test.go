@@ -68,7 +68,7 @@ func TestTurnDeliversEveryQueuedKickAndDropsAnsweredBudgetRequests(t *testing.T)
 	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	for _, job := range []string{"job-answered", "job-open"} {
 		facts := kick.WorkerBudgetFacts{JobID: job, Used: 15, Max: 20, HostMax: 120, Request: request}
-		mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.WorkerBudgetRequested, anchor.Envelope{Subject: job, WorkerBudget: &facts})
+		mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.WorkerRoundNotice, anchor.Envelope{Subject: job, WorkerBudget: &facts})
 	}
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {
 		testutil.FailErr(t, "prompt", err)

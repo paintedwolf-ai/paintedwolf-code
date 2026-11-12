@@ -17,8 +17,6 @@ type FanoutPlanLeg struct {
 	Prompt   string         `json:"prompt"`
 	DoneWhen []string       `json:"done_when,omitempty"`
 	Scope    *api.TaskScope `json:"scope,omitempty"`
-	// MaxToolLoops is the leg's planned ceiling; zero selects the host default.
-	MaxToolLoops int `json:"max_tool_loops,omitempty"`
 }
 
 type FanoutPlan struct {
@@ -93,9 +91,6 @@ func FormatFanoutPlan(plan FanoutPlan) string {
 		fmt.Fprintf(&b, "%d. %s: **%s** [workflow_work_id=%s] — %s", i+1, leg.Subject, leg.AgentType, leg.ID, leg.Prompt)
 		if leg.Scope != nil && len(leg.Scope.Paths) > 0 {
 			fmt.Fprintf(&b, " (focus: %s)", strings.Join(leg.Scope.Paths, ", "))
-		}
-		if leg.MaxToolLoops > 0 {
-			fmt.Fprintf(&b, " (ceiling: %d tool rounds)", leg.MaxToolLoops)
 		}
 	}
 	if r := strings.TrimSpace(plan.Rationale); r != "" {

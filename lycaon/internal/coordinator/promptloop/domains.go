@@ -140,20 +140,17 @@ type ProjectionDeps struct {
 }
 
 type NudgesDeps struct {
-	DoomLoop                  DoomLoopGuard
-	FormatDoomLoopReject      func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error)
-	EscalateRepeatedCode      func(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal
-	CheckSpendCeiling         func(ctx context.Context, sessionID string, sess *api.Session) (SpendCeilingCheck, error)
-	IsSpendCeiling            func(error) bool
-	SecretWithheldNudge       SecretWithheldNudge
-	SurveyStreakNudge         SurveyStreakNudge
-	SpendRunwayNudge          SpendRunwayNudge
-	SpendSoftStopNudge        SpendSoftStopNudge
-	PublishWorkerProgress     func(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool)
-	WorkerJob                 func(ctx context.Context, workerJobID string) (*api.WorkerTask, bool)
-	WorkerBudgetRaisedNudge   func(ctx context.Context, sess *api.Session, used, max int) HostNudge
-	WorkerBudgetDeclinedNudge func(ctx context.Context, sess *api.Session, used, max int) HostNudge
-	WorkerBudgetAnswerWait    time.Duration
+	DoomLoop              DoomLoopGuard
+	FormatDoomLoopReject  func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error)
+	EscalateRepeatedCode  func(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal
+	CheckSpendCeiling     func(ctx context.Context, sessionID string, sess *api.Session) (SpendCeilingCheck, error)
+	IsSpendCeiling        func(error) bool
+	SecretWithheldNudge   SecretWithheldNudge
+	SurveyStreakNudge     SurveyStreakNudge
+	SpendRunwayNudge      SpendRunwayNudge
+	SpendSoftStopNudge    SpendSoftStopNudge
+	PublishWorkerProgress func(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool)
+	WorkerJob             func(ctx context.Context, workerJobID string) (*api.WorkerTask, bool)
 }
 
 type ControlDeps struct {

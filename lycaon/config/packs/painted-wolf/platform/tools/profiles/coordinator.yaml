@@ -12,8 +12,6 @@ tools:
   task: sticky
   worker_cancel: sticky
   answer_decision: sticky
-  extend_worker_budget: sticky
-  decline_worker_budget: sticky
   promote_overlay: sticky
   reject_overlay: sticky
   preview_overlay: sticky
@@ -63,9 +61,7 @@ tools:
   terminal_read: sticky
   terminal_snapshot: sticky
   terminal_close: sticky
-# A worker asks for rounds; the coordinator grants with extend_worker_budget.
 deny_tools:
-  - request_budget
 read_scope: coordinator_product_read
 write_scope: coordinator_orchestration
 wait_conditions: [next_worker_done, all_workers_idle, overlay_promote_pending, scan_done, process_done, http_ready, port_ready]

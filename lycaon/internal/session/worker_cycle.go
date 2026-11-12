@@ -32,7 +32,6 @@ func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
 		m.Verification.Evidence.SetWorkers(q)
 		m.Runner.Settlement.SetWorkers(q)
 		m.Coordinator.Batch.SetWorkers(q)
-		m.Coordinator.Nudges.SetTasks(q)
 		m.Workers.State.SetWorkers(q)
 		m.Workers.Notes.SetWorkers(q)
 		m.Verification.SetWorkers(q)

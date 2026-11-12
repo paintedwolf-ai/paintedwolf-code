@@ -366,7 +366,6 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 }
 
 func (b *serveBuilder) wireOrchestrator() error {
-	b.delegations.Manager.ToolBudget = b.sessions.WorkerToolBudgetFor
 	orchDeps := orchestration.OrchestratorDeps{
 		Delegation: b.delegations.Manager,
 		Store:      b.delegations.Store,

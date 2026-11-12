@@ -15,9 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/session"
-	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/session/workerresults"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -39,7 +37,6 @@ type Manager struct {
 	HeadSHA           HeadSHAReader
 	InspectorCloseout *InspectorCloseoutGate
 	OnCloseout        CloseoutHook
-	ToolBudget        func(projectDir string) spawn.WorkerToolBudget
 
 	// createMu keeps a replayed create from making a coordinator session
 	// before its receipt is found.
@@ -433,24 +430,19 @@ func legStatusForOutcome(outcome api.WorkerResult) api.LegStatus {
 		return api.LegStatusCanceled
 	case "needs_decision", "held":
 		return api.LegStatusHeld
-	case "partial":
-		if strings.TrimSpace(outcome.HintCode) == workeroutcomes.WorkerBudgetExhaustedCode {
-			return api.LegStatusRetryPending
-		}
-		return api.LegStatusFailed
 	default:
 		// Only complete results release dependencies.
 		return api.LegStatusFailed
 	}
 }
 
-// ResumeLeg continues a budget-limited leg in its existing child session.
+// ResumeLeg continues a leg stored as retry_pending on its preserved child session.
 func (m *Manager) ResumeLeg(ctx context.Context, delegationID, legID string) (*api.Leg, error) {
 	leg, err := m.Store.GetLeg(ctx, delegationID, legID)
 	if err != nil {
 		return nil, err
 	}
-	if leg.Status != api.LegStatusRetryPending || leg.Result == nil || strings.TrimSpace(leg.Result.HintCode) != workeroutcomes.WorkerBudgetExhaustedCode {
+	if leg.Status != api.LegStatusRetryPending {
 		return nil, ErrLegNotPending
 	}
 	prior, ok := m.Queue.Get(strings.TrimSpace(leg.WorkerID))
@@ -460,30 +452,6 @@ func (m *Manager) ResumeLeg(ctx context.Context, delegationID, legID string) (*a
 	delegation, err := m.Store.Get(ctx, delegationID)
 	if err != nil {
 		return nil, err
-	}
-	budget := spawn.DefaultWorkerToolBudget()
-	if m.ToolBudget != nil {
-		budget = m.ToolBudget(delegation.WorkspacePath)
-	}
-	currentMax := prior.MaxToolLoops
-	if currentMax <= 0 {
-		currentMax = budget.Default
-	}
-	if currentMax >= budget.Max {
-		now := time.Now().UTC()
-		leg.Status = api.LegStatusFailed
-		leg.CompletedAt = &now
-		if err := m.Store.UpdateLeg(ctx, *leg); err != nil {
-			return nil, err
-		}
-		if err := m.tryCloseout(ctx, delegationID); err != nil {
-			return nil, err
-		}
-		return nil, fmt.Errorf("worker budget exhausted at host cap %d", budget.Max)
-	}
-	nextMax := currentMax * 2
-	if nextMax > budget.Max {
-		nextMax = budget.Max
 	}
 	sessionID, ok := m.Store.SessionID(delegationID)
 	if !ok {
@@ -496,7 +464,6 @@ func (m *Manager) ResumeLeg(ctx context.Context, delegationID, legID string) (*a
 		Scope: prior.Scope, Files: append([]string(nil), prior.Files...), WorkspaceRoot: prior.WorkspaceRoot,
 		SpawnReason: api.SpawnReasonRetry, Status: api.WorkerStatusPending, ExecutionTarget: prior.ExecutionTarget,
 		ProjectID: prior.ProjectID, WorkspaceRootID: prior.WorkspaceRootID, WorkspacePath: prior.WorkspacePath,
-		MaxToolLoops: nextMax,
 	}
 	if err := worker.ApplyEnqueueDefaults(&task, project.ProjectScope{
 		ProjectID: task.ProjectID, WorkspaceRootID: task.WorkspaceRootID,

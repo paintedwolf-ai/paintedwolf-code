@@ -8,7 +8,7 @@ schema:
   required: [legs]
   properties:
     legs:
-      description: "Leg objects: agent_type, subject, prompt, optional scope and max_tool_loops."
+      description: "Leg objects: agent_type, subject, prompt and optional scope."
       type: array
       minItems: 1
       items:
@@ -45,15 +45,6 @@ schema:
                 type: array
                 items:
                   type: string
-          max_tool_loops:
-            type: integer
-            minimum: 2
-            maximum: 120
-            description: >-
-              Optional tool-round ceiling for this leg; omit for the host default.
-              Size it to the ground the leg must cover: a leg spanning a
-              whole subsystem needs more rounds than one reading a few files.
-              task() for the leg uses it unless the call sets its own.
     rationale:
       description: "Why this fan-out shape (shown in host/UI)."
       type: string

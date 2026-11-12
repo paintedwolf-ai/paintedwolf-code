@@ -32,7 +32,7 @@ func TestKickTemplateIDRoundTrip(t *testing.T) {
 	for _, id := range []anchor.ID{
 		anchor.GateBlocked, anchor.ComposeDone, anchor.LegFinished, anchor.WorkerTaskFinished,
 		anchor.PhaseAdvanced, anchor.WaitTimerFired, anchor.ScanFinished, anchor.ProcessFinished,
-		anchor.WorkerBudgetRequested, anchor.FeedbackPending, anchor.FeedbackReceived,
+		anchor.WorkerRoundNotice, anchor.FeedbackPending, anchor.FeedbackReceived,
 		anchor.OverlayPromoteComplete, anchor.EditFollowUpRepeat,
 	} {
 		if got := anchor.MustAnchor(string(id)); got != id {
@@ -75,7 +75,7 @@ func TestCatalogContainsKickMappedAnchors(t *testing.T) {
 		anchor.ReviewLoopContinue, anchor.ReviewLoopDecide,
 		anchor.FeedbackPending, anchor.FeedbackReceived, anchor.WorkerTaskStarted, anchor.WorkerLegStarted,
 		anchor.WaitTimerFired, anchor.OverlayPromoteComplete, anchor.ScanFinished, anchor.ScanDelta, anchor.ProcessFinished,
-		anchor.WorkerBudgetRequested, anchor.WorkerBudgetRaised, anchor.WorkerBudgetDeclined, anchor.EditFollowUpRepeat, anchor.CoordinatorCloseout,
+		anchor.WorkerRoundNotice, anchor.WorkerBudgetRaised, anchor.WorkerBudgetDeclined, anchor.EditFollowUpRepeat, anchor.CoordinatorCloseout,
 		anchor.CoordinatorCitationGrounding, anchor.CoordinatorReportDocument, anchor.ProjectRootsChanged, anchor.ProjectPostureChanged, anchor.ProjectRootDetachCanceled,
 		anchor.WorkerCloseout, anchor.WorkerIterationsLow, anchor.WorkerCancelCloseout,
 		anchor.WorkerCitationGrounding, anchor.LoopWake, anchor.BoardChanged,

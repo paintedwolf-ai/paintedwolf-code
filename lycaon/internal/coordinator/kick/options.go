@@ -1,6 +1,7 @@
 package kick
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -24,7 +25,7 @@ type kickMeta struct {
 	scanStatus                string
 	scanCategories            string
 	scanFindingsCount         int
-	workerBudget              *WorkerBudgetFacts
+	workerRoundNotice         *WorkerRoundNoticeFacts
 	batchSeq                  int
 	batchSeqSet               bool
 	vars                      map[string]any
@@ -227,48 +228,62 @@ func WithScanFinished(scanID, status, categories string, findingsCount int) Kick
 	}
 }
 
-// WorkerBudgetFacts describes one worker's tool-round ceiling for coordinator guidance.
-type WorkerBudgetFacts struct {
-	JobID          string
-	ChildSessionID string
-	Used           int
-	Max            int
-	HostMax        int
-	// Request is the worker's unanswered ask for more rounds.
-	Request *api.WorkerBudgetRequest
-	// Exhausted marks a partial finish at the ceiling.
-	Exhausted bool
-	// ResumeMax is the ceiling a resume of an exhausted worker should carry.
-	ResumeMax int
+// Round notice kinds.
+const (
+	// RoundNoticeConsumption reports a round's measured consumption.
+	RoundNoticeConsumption = "consumption"
+	// RoundNoticeQuiet reports a round with no durable progress for a while.
+	RoundNoticeQuiet = "quiet"
+)
+
+// Round in-flight states a quiet notice names.
+const (
+	RoundInFlightQueued    = "queued"
+	RoundInFlightModelCall = "model_call"
+	RoundInFlightTools     = "tools"
+)
+
+// WorkerRoundNoticeFacts are the measurements a round notice carries to the
+// coordinator. They inform; nothing in them stops or judges the round.
+type WorkerRoundNoticeFacts struct {
+	JobID     string
+	AgentType string
+	Kind      string
+	// ModelCalls, Tokens and SpendNanoUSD measure the round so far.
+	ModelCalls   int
+	Tokens       int
+	SpendNanoUSD int64
+	SpendPriced  bool
+	// QuietFor and InFlight describe a quiet round.
+	QuietFor  time.Duration
+	InFlight  string
+	ToolCalls int
+	ToolsDone int
 }
 
-// WithWorkerBudget passes one worker's ceiling facts into budget and finish kicks.
-func WithWorkerBudget(facts WorkerBudgetFacts) KickOption {
+// WithWorkerRoundNotice passes one round notice's measurements into its kick.
+func WithWorkerRoundNotice(facts WorkerRoundNoticeFacts) KickOption {
 	return func(m *kickMeta) {
 		facts.JobID = strings.TrimSpace(facts.JobID)
-		facts.ChildSessionID = strings.TrimSpace(facts.ChildSessionID)
-		m.workerBudget = &facts
+		m.workerRoundNotice = &facts
 	}
 }
 
-// renderData projects budget facts under the names budget templates read.
-func (f WorkerBudgetFacts) renderData(data map[string]any) {
+// renderData projects round notice facts under the names the template reads.
+func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
 	data["job_id"] = f.JobID
-	data["tool_loops_used"] = f.Used
-	data["max_tool_loops"] = f.Max
-	data["host_max_tool_loops"] = f.HostMax
-	if f.ChildSessionID != "" {
-		data["child_session_id"] = f.ChildSessionID
+	data["agent_type"] = f.AgentType
+	data["notice_kind"] = f.Kind
+	data["model_calls"] = f.ModelCalls
+	data["tokens"] = f.Tokens
+	if f.SpendPriced {
+		data["estimated_spend_usd"] = fmt.Sprintf("%.2f", float64(f.SpendNanoUSD)/1e9)
 	}
-	if f.Request != nil {
-		data["budget_request_open"] = true
-		data["requested_max"] = f.Request.RequestedMax
-		data["requested_rounds"] = f.Request.Rounds
-		data["remaining_work"] = append([]string(nil), f.Request.RemainingWork...)
-	}
-	if f.Exhausted {
-		data["worker_budget_exhausted"] = true
-		data["suggested_resume_max"] = f.ResumeMax
+	if f.Kind == RoundNoticeQuiet {
+		data["quiet_minutes"] = int(f.QuietFor / time.Minute)
+		data["in_flight"] = f.InFlight
+		data["tool_calls"] = f.ToolCalls
+		data["tools_done"] = f.ToolsDone
 	}
 }
 
@@ -329,14 +344,9 @@ func cloneKickMeta(m kickMeta) kickMeta {
 		t := m.completedAt.UTC()
 		out.completedAt = &t
 	}
-	if m.workerBudget != nil {
-		facts := *m.workerBudget
-		if facts.Request != nil {
-			req := *facts.Request
-			req.RemainingWork = append([]string(nil), req.RemainingWork...)
-			facts.Request = &req
-		}
-		out.workerBudget = &facts
+	if m.workerRoundNotice != nil {
+		facts := *m.workerRoundNotice
+		out.workerRoundNotice = &facts
 	}
 	if len(m.workerDecisionRequest) > 0 {
 		out.workerDecisionRequest = make(map[string]any, len(m.workerDecisionRequest))

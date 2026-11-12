@@ -47,7 +47,7 @@ func TestParallelTaskDefaultCapsMatchTotal(t *testing.T) {
 }
 
 func TestPolicyTemplateVarsSizingHintsMatchStockDefaults(t *testing.T) {
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	vars := spawn.PolicyTemplateVars()
 	cases := map[string]int{
 		"hunt_wave_workers":        8,
 		"throwaway_tool_loops_min": 2,

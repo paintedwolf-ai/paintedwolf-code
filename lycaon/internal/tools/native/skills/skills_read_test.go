@@ -359,7 +359,7 @@ func TestSkillsReadRendersPackBody(t *testing.T) {
 	wantBody := fmt.Sprintf(
 		"Worker loops: %d. Hunt: %d.\n",
 		spawn.DefaultWorkerMaxToolLoops,
-		spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())["hunt_wave_workers"],
+		spawn.PolicyTemplateVars()["hunt_wave_workers"],
 	)
 	if !strings.Contains(got, wantBody) {
 		t.Fatalf("envelope missing rendered body %q:\n%s", wantBody, got)

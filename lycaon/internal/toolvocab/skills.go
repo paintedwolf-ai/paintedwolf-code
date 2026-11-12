@@ -180,7 +180,7 @@ func (c *Catalog) profileCommandMutates(profileID string) bool {
 // stay unset, which renders false. root_count is 1: validation checks the
 // workspace case, where guarded command guidance is visible.
 func skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	vars := spawn.PolicyTemplateVars()
 	spawn.RefreshSizingHintVars(vars)
 	for name, ok := range held {
 		if ok && name != ReachCommandMutation {

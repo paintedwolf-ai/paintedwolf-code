@@ -225,7 +225,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	workerCancellations := workeroutcomes.NewCancellations(workeroutcomes.CancellationPorts{Sessions: store, Execution: turnExecution, Stops: m.Stops, Graceful: workerCancel, Cards: workerCards})
 	workerDelivery := workeroutcomes.NewDeliveryPolicy(workeroutcomes.DeliveryPolicyPorts{Sessions: store, Profiles: m.Profiles, Facts: m.ToolPolicy, Feedback: m.Coordinator.Feedback})
 	workerResults := workeroutcomes.NewResults(workeroutcomes.ResultPorts{Sessions: store, Limits: m.Limits, Cancellations: workerCancellations, Digests: workerDigests})
-	workerSummaries := workeroutcomes.NewSummaries(workeroutcomes.SummaryPorts{Sessions: store, Limits: m.Limits, Budget: workerResults, Verification: m.Verification, Resources: m.Chats, Delivery: workerDelivery, Cards: workerCards, Digests: workerDigests, InspectChanges: InspectOverlayChanges, OverlayStatus: ResolveWorkerSummaryStatus, OverlayPending: OverlayAwaitingPromote})
+	workerSummaries := workeroutcomes.NewSummaries(workeroutcomes.SummaryPorts{Sessions: store, Limits: m.Limits, Verification: m.Verification, Resources: m.Chats, Delivery: workerDelivery, Cards: workerCards, Digests: workerDigests, InspectChanges: InspectOverlayChanges, OverlayStatus: ResolveWorkerSummaryStatus, OverlayPending: OverlayAwaitingPromote})
 	workerResults.SetSummaries(workerSummaries)
 	m.Coordinator.Guidance = guidancedelivery.New(store, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
 	m.Processes = processcontrol.New(store, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
@@ -234,7 +234,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	turnPostTurn := postturn.New(store, m.Coordinator.Guidance)
 	m.Coordinator.Batch = batchcontrol.New(store, workerState, m.Verification, m.Coordinator.Guidance)
 	turnSettlement := turnsettlement.New(store, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
-	m.Coordinator.Nudges = turnnudges.New(m.Coordinator.Loading.Ledger, workerResults, turnSpend)
+	m.Coordinator.Nudges = turnnudges.New(m.Coordinator.Loading.Ledger, turnSpend)
 	turnInstructions := instructions.New(store, turnTranscript, captures, m.Coordinator.Guidance.DeliverPending)
 	turnInstructions.SetWaitEnds(func(sessionID string) []string {
 		var texts []string

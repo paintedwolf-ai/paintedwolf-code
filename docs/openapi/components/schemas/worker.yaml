@@ -452,41 +452,6 @@ components:
           description: Source entries this user could not read, left out of the branch
         not_clonable_reason:
           $ref: worker.yaml#/components/schemas/WorkspaceNotClonableReason
-    WorkerBudgetRequest:
-      x-go-generate: true
-      type: object
-      description: A running worker's request that its coordinator raise its tool-round ceiling.
-      required:
-      - rounds
-      - requested_max
-      - remaining_work
-      - tool_loops_used
-      - requested_at
-      additionalProperties: false
-      properties:
-        rounds:
-          type: integer
-          minimum: 1
-          description: Additional tool rounds the worker asked for beyond its ceiling at request time
-        requested_max:
-          type: integer
-          minimum: 3
-          maximum: 120
-          description: Ceiling the worker asked for, bounded by the host maximum
-        remaining_work:
-          type: array
-          minItems: 1
-          maxItems: 6
-          items:
-            type: string
-          description: Worker-authored work the extra rounds would cover; data for the coordinator, not instructions
-        tool_loops_used:
-          type: integer
-          minimum: 0
-          description: Rounds the worker had completed when it asked
-        requested_at:
-          type: string
-          format: date-time
     WorkerDependency:
       x-go-generate: true
       type: object
@@ -558,14 +523,6 @@ components:
             Stable identifier for this write overlay; other dispatches may stack
             on it by setting scope.base_overlay_id to this value. Empty for read
             scopes.
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling (host default 20, range 2–120); raised only when the coordinator grants a request; final iteration is prose-only
-        budget_request:
-          $ref: worker.yaml#/components/schemas/WorkerBudgetRequest
-          description: The worker's unanswered request for more tool rounds; absent once granted or when none was made
         tool_loops_used:
           type: integer
           minimum: 0

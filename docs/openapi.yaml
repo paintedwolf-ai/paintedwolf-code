@@ -15260,15 +15260,6 @@ components:
           description: Worker assignment goal included in full board detail.
         error:
           type: string
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Effective worker tool-round ceiling when known (host default 20, maximum 120)
-        budget_request:
-          x-go-pointer: true
-          $ref: '#/components/schemas/WorkerBudgetRequest'
-          description: The worker's unanswered request for more tool rounds; grant it with extend_worker_budget
         tool_loops_used:
           type: integer
           minimum: 0
@@ -15586,13 +15577,6 @@ components:
           description: Worker assignment goal used for card titles.
         merge_status:
           $ref: '#/components/schemas/WorkerMergeStatus'
-        max_tool_loops:
-          type: integer
-          minimum: 0
-        budget_request:
-          x-go-pointer: true
-          $ref: '#/components/schemas/WorkerBudgetRequest'
-          description: The worker's unanswered request for more tool rounds; absent once granted
         tool_loops_used:
           type: integer
           minimum: 0
@@ -20235,7 +20219,6 @@ components:
         - model
         - status
         - parent_session_id
-        - max_tool_loops
         - compaction_generation
         - untrusted_content
         - current_turn
@@ -20304,11 +20287,6 @@ components:
         parent_session_id:
           type: string
           format: uuid
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Effective worker tool-loop cap. Omitted task budgets default to 12 for read scope and 20 for write scope; maximum 120. The final iteration is prose-only.
         compaction_generation:
           type: integer
           minimum: 0
@@ -23626,27 +23604,6 @@ components:
           minimum: 1000
           multipleOf: 1000
           description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
-        worker_tool_budget_default:
-          type:
-            - integer
-            - 'null'
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-        worker_tool_budget_min:
-          type:
-            - integer
-            - 'null'
-          minimum: 2
-          maximum: 120
-          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-        worker_tool_budget_max:
-          type:
-            - integer
-            - 'null'
-          minimum: 2
-          maximum: 120
-          description: Largest worker tool-round ceiling the coordinator may set or grant.
         session_spend_ceiling_nano_usd:
           x-go-name: SessionSpendCeilingNanoUSD
           type:
@@ -23685,9 +23642,6 @@ components:
         - coordinator_host_turn_timeout_ms
         - coordinator_max_sleep_ms
         - await_parent_workers_timeout_ms
-        - worker_tool_budget_default
-        - worker_tool_budget_min
-        - worker_tool_budget_max
         - spend_soft_stop
         - merged_from
       additionalProperties: false
@@ -23730,21 +23684,6 @@ components:
           minimum: 1000
           multipleOf: 1000
           description: Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
-        worker_tool_budget_default:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-        worker_tool_budget_min:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-        worker_tool_budget_max:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Largest worker tool-round ceiling the coordinator may set or grant.
         session_spend_ceiling_nano_usd:
           x-go-name: SessionSpendCeilingNanoUSD
           type: integer
@@ -25021,14 +24960,6 @@ components:
             Stable identifier for this write overlay; other dispatches may stack
             on it by setting scope.base_overlay_id to this value. Empty for read
             scopes.
-        max_tool_loops:
-          type: integer
-          minimum: 2
-          maximum: 120
-          description: Worker tool-round ceiling (host default 20, range 2–120); raised only when the coordinator grants a request; final iteration is prose-only
-        budget_request:
-          $ref: '#/components/schemas/WorkerBudgetRequest'
-          description: The worker's unanswered request for more tool rounds; absent once granted or when none was made
         tool_loops_used:
           type: integer
           minimum: 0
@@ -28952,41 +28883,6 @@ components:
             - ready
             - waiting
             - blocked
-    WorkerBudgetRequest:
-      x-go-generate: true
-      type: object
-      description: A running worker's request that its coordinator raise its tool-round ceiling.
-      required:
-        - rounds
-        - requested_max
-        - remaining_work
-        - tool_loops_used
-        - requested_at
-      additionalProperties: false
-      properties:
-        rounds:
-          type: integer
-          minimum: 1
-          description: Additional tool rounds the worker asked for beyond its ceiling at request time
-        requested_max:
-          type: integer
-          minimum: 3
-          maximum: 120
-          description: Ceiling the worker asked for, bounded by the host maximum
-        remaining_work:
-          type: array
-          minItems: 1
-          maxItems: 6
-          items:
-            type: string
-          description: Worker-authored work the extra rounds would cover; data for the coordinator, not instructions
-        tool_loops_used:
-          type: integer
-          minimum: 0
-          description: Rounds the worker had completed when it asked
-        requested_at:
-          type: string
-          format: date-time
     WorkerContextUsage:
       x-go-generate: true
       type: object

@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
@@ -14,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/turnnudges"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -60,9 +58,6 @@ func (m *Nudges) Build() promptloop.NudgesDeps {
 	}
 	deps.IsSpendCeiling = func(err error) bool { return errors.Is(err, spendguard.ErrCeiling) }
 	deps.SecretWithheldNudge = m.Nudges.SecretWithheld
-	deps.WorkerBudgetRaisedNudge = m.Nudges.BudgetAnswer(anchor.WorkerBudgetRaised)
-	deps.WorkerBudgetDeclinedNudge = m.Nudges.BudgetAnswer(anchor.WorkerBudgetDeclined)
-	deps.WorkerBudgetAnswerWait = spawn.WorkerBudgetAnswerWait
 	deps.SurveyStreakNudge = m.Nudges.SurveyStreak
 	deps.SpendRunwayNudge = m.Nudges.SpendRunway
 	deps.SpendSoftStopNudge = m.Nudges.SpendSoftStop

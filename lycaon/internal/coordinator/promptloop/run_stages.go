@@ -101,10 +101,6 @@ type turnProvenanceState struct {
 	// workerProgress tracks durable rounds and the active batch.
 	workerProgress *workerprogress.Tracker
 	workerJobID    string
-	// workerBudget follows the ceiling and budget request between rounds.
-	workerBudget workerBudgetWatch
-	// repairCeiling is the round ceiling a grounding retry may reach.
-	repairCeiling int
 	// secretStorageOverlays retain raw fields until their approval decision.
 	secretStorageOverlays map[string]secretStorageOverlay
 	// secretWithheldRetries bounds repeated credential approval requests.

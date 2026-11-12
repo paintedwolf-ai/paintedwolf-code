@@ -214,7 +214,7 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 	case anchor.ProcessFinished, anchor.ProcessRefused:
 		_, ok := set[WaitTriggerProcessDone]
 		return ok && handleMatches(in.ProcessHandles, in.ProcessHandle)
-	case anchor.WorkerBudgetRequested:
+	case anchor.WorkerRoundNotice:
 		_, ok := workerWaitCondition(set)
 		return ok
 	case anchor.WorkerTaskFinished, anchor.LegFinished:
@@ -270,7 +270,7 @@ func waitConditionForWake(triggers []WaitTrigger, in waitMatchInput) (awaitstore
 		_, ok := set[WaitTriggerProcessDone]
 		ok = ok && handleMatches(in.ProcessHandles, in.ProcessHandle)
 		return awaitstore.Condition{Kind: string(WaitTriggerProcessDone), Handles: []string{in.ProcessHandle}, Outcome: "refused"}, ok
-	case anchor.WorkerBudgetRequested:
+	case anchor.WorkerRoundNotice:
 		trigger, ok := workerWaitCondition(set)
 		return awaitstore.Condition{Kind: string(trigger)}, ok
 	case anchor.WorkerTaskFinished, anchor.LegFinished:

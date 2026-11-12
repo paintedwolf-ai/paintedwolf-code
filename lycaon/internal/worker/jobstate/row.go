@@ -2,11 +2,8 @@ package jobstate
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -58,24 +55,11 @@ func FromRow(ctx context.Context, database db.DBTX, r db.WorkerJobs) (*api.Worke
 	if ms := db.StringFromNull(r.MergeStatus); ms != "" {
 		task.MergeStatus = api.WorkerMergeStatus(ms)
 	}
-	if r.MaxToolLoops.Valid && r.MaxToolLoops.Int64 > 0 {
-		task.MaxToolLoops = int(r.MaxToolLoops.Int64)
-	}
 	if r.ToolLoopsUsed.Valid && r.ToolLoopsUsed.Int64 >= 0 {
 		task.ToolLoopsUsed = int(r.ToolLoopsUsed.Int64)
 	}
 	if r.ToolCallsUsed.Valid && r.ToolCallsUsed.Int64 >= 0 {
 		task.ToolCallsUsed = int(r.ToolCallsUsed.Int64)
-	}
-	if task.MaxToolLoops <= 0 {
-		task.MaxToolLoops = spawn.DefaultWorkerToolBudget().Default
-	}
-	if r.BudgetRequestJson != "" {
-		var req api.WorkerBudgetRequest
-		if err := json.Unmarshal([]byte(r.BudgetRequestJson), &req); err != nil {
-			return nil, fmt.Errorf("worker job %s budget request: %w", r.ID, err)
-		}
-		task.BudgetRequest = &req
 	}
 	var err error
 	if err := loadWorkerPrerequisites(ctx, database, &task); err != nil {

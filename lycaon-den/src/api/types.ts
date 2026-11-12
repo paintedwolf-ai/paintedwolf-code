@@ -5729,10 +5729,6 @@ export interface components {
             /** @description Worker assignment goal included in full board detail. */
             brief?: string;
             error?: string;
-            /** @description Effective worker tool-round ceiling when known (host default 20, maximum 120) */
-            max_tool_loops?: number;
-            /** @description The worker's unanswered request for more tool rounds; grant it with extend_worker_budget */
-            budget_request?: components["schemas"]["WorkerBudgetRequest"];
             /** @description Completed tool rounds this worker run */
             tool_loops_used?: number;
             /** @description Repo-relative paths held by handoff_reserve for this worker */
@@ -5826,9 +5822,6 @@ export interface components {
             /** @description Worker assignment goal used for card titles. */
             brief?: string;
             merge_status?: components["schemas"]["WorkerMergeStatus"];
-            max_tool_loops?: number;
-            /** @description The worker's unanswered request for more tool rounds; absent once granted */
-            budget_request?: components["schemas"]["WorkerBudgetRequest"];
             tool_loops_used?: number;
             tool_calls_used?: number;
             turn_tool_calls?: number;
@@ -7790,8 +7783,6 @@ export interface components {
             updated_at: string;
             /** Format: uuid */
             parent_session_id?: string;
-            /** @description Effective worker tool-loop cap. Omitted task budgets default to 12 for read scope and 20 for write scope; maximum 120. The final iteration is prose-only. */
-            max_tool_loops?: number;
             compaction_generation?: number;
             /** @description Server-derived: true once this session has ingested untrusted external content (web tools, MCP, or web-researcher worker summary). Read-only; ignored on input. */
             untrusted_content?: boolean;
@@ -9208,12 +9199,6 @@ export interface components {
             coordinator_max_sleep_ms?: number | null;
             /** @description Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds. */
             await_parent_workers_timeout_ms?: number | null;
-            /** @description Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget. */
-            worker_tool_budget_default?: number | null;
-            /** @description Smallest worker tool-round ceiling the coordinator may set (host floor is 2). */
-            worker_tool_budget_min?: number | null;
-            /** @description Largest worker tool-round ceiling the coordinator may set or grant. */
-            worker_tool_budget_max?: number | null;
             /**
              * Format: int64
              * @description Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
@@ -9246,12 +9231,6 @@ export interface components {
             coordinator_max_sleep_ms: number;
             /** @description Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds. */
             await_parent_workers_timeout_ms: number;
-            /** @description Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget. */
-            worker_tool_budget_default: number;
-            /** @description Smallest worker tool-round ceiling the coordinator may set (host floor is 2). */
-            worker_tool_budget_min: number;
-            /** @description Largest worker tool-round ceiling the coordinator may set or grant. */
-            worker_tool_budget_max: number;
             /**
              * Format: int64
              * @description Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
@@ -9769,10 +9748,6 @@ export interface components {
              *     scopes.
              */
             overlay_id?: string;
-            /** @description Worker tool-round ceiling (host default 20, range 2–120); raised only when the coordinator grants a request; final iteration is prose-only */
-            max_tool_loops?: number;
-            /** @description The worker's unanswered request for more tool rounds; absent once granted or when none was made */
-            budget_request?: components["schemas"]["WorkerBudgetRequest"];
             /** @description Completed tool rounds this worker run; omitted when zero and the job never started */
             tool_loops_used?: number;
             /** @description Tool calls this worker has settled over its lifetime; moves forward only */
@@ -11271,19 +11246,6 @@ export interface components {
             worker_id: string;
             /** @enum {string} */
             state: "ready" | "waiting" | "blocked";
-        };
-        /** @description A running worker's request that its coordinator raise its tool-round ceiling. */
-        WorkerBudgetRequest: {
-            /** @description Additional tool rounds the worker asked for beyond its ceiling at request time */
-            rounds: number;
-            /** @description Ceiling the worker asked for, bounded by the host maximum */
-            requested_max: number;
-            /** @description Worker-authored work the extra rounds would cover; data for the coordinator, not instructions */
-            remaining_work: string[];
-            /** @description Rounds the worker had completed when it asked */
-            tool_loops_used: number;
-            /** Format: date-time */
-            requested_at: string;
         };
         /** @description Per-worker context occupancy mirrored to the Den worker-card ring: prompt tokens on the latest turn against the model window, plus the compaction trigger point. Same shape the coordinator context ring uses. */
         WorkerContextUsage: {
@@ -30551,7 +30513,6 @@ export type SessionTranscriptPage = components["schemas"]["SessionTranscriptPage
 export type WorkflowRequestState = components["schemas"]["WorkflowRequestState"];
 export type CoordinatorBatchPhase = components["schemas"]["CoordinatorBatchPhase"];
 export type WorkerDependency = components["schemas"]["WorkerDependency"];
-export type WorkerBudgetRequest = components["schemas"]["WorkerBudgetRequest"];
 export type WorkerContextUsage = components["schemas"]["WorkerContextUsage"];
 export type WorkspaceProvisionStrategy = components["schemas"]["WorkspaceProvisionStrategy"];
 export type WorkspaceNotClonableReason = components["schemas"]["WorkspaceNotClonableReason"];

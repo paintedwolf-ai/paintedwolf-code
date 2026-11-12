@@ -212,15 +212,6 @@ func (r *Runtime) wireVisualAndRenderTools(ctx context.Context) error {
 func (r *Runtime) wireDecisionAndCallTools() error {
 	r.deps.Sessions.Decisions = decisions.NewSQL(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetDecisionStore(r.deps.Sessions.Decisions)
-	r.BudgetLedger = worker.NewSQLBudgetLedger(r.deps.Storage.Sessions, r.deps.Delegations.Queue)
-	if err := worker.RegisterRequestBudgetTool(r.deps.Execution.Host.Registry, worker.RequestBudgetToolDeps{
-		Queue:      r.deps.Delegations.Queue,
-		Ledger:     r.BudgetLedger,
-		ToolBudget: r.deps.Sessions.WorkerToolBudgetFor,
-		Notify:     r.deps.Sessions.Manager.Coordinator.Workers.BudgetRequested,
-	}); err != nil {
-		return fmt.Errorf("request_budget tool: %w", err)
-	}
 	r.AnswerDecision = &worker.AnswerDecisionService{
 		Queue:     r.deps.Delegations.Queue,
 		Decisions: r.deps.Sessions.Decisions,

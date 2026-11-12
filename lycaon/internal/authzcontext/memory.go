@@ -39,7 +39,7 @@ func (m *MemoryStore) AppendContext(ctx context.Context, c Context) (bool, error
 		c.PrevHash = ""
 	}
 	if c.HashVersion == 0 {
-		c.HashVersion = HashVersion1
+		c.HashVersion = HashVersion2
 	}
 	payload := chainPayloadFromContext(c)
 	var err error

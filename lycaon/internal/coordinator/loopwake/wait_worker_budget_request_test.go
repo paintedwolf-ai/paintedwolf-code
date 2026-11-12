@@ -22,7 +22,7 @@ func TestWorkerBudgetRequestWakesEveryWorkerWait(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			in := waitMatchInput{Wake: anchor.WorkerBudgetRequested}
+			in := waitMatchInput{Wake: anchor.WorkerRoundNotice}
 			if !waitEventMatches(tc.triggers, in) {
 				t.Fatalf("budget request must wake a %s wait", tc.name)
 			}
@@ -37,13 +37,13 @@ func TestWorkerBudgetRequestWakesEveryWorkerWait(t *testing.T) {
 		{WaitTriggerTimer, WaitTriggerProcessDone},
 		{WaitTriggerTimer, WaitTriggerScanDone},
 	} {
-		if waitEventMatches(triggers, waitMatchInput{Wake: anchor.WorkerBudgetRequested}) {
+		if waitEventMatches(triggers, waitMatchInput{Wake: anchor.WorkerRoundNotice}) {
 			t.Fatalf("budget request must not wake a wait on %v", triggers)
 		}
 	}
 }
 
-func TestNudgeWorkerBudgetRequestedBreaksWorkerSleepOnly(t *testing.T) {
+func TestNudgeWorkerRoundNoticeBreaksWorkerSleepOnly(t *testing.T) {
 	loop := NewLoopEngine()
 	deps := loopDepsForTest()
 	deps.GetSession = func(_ context.Context, sessionID string) (*api.Session, error) {
@@ -54,8 +54,8 @@ func TestNudgeWorkerBudgetRequestedBreaksWorkerSleepOnly(t *testing.T) {
 	loop.Waits.EnterSleep(context.Background(), "worker-waiter", deadline, "waiting for workers", []WaitTrigger{WaitTriggerTimer, WaitTriggerAllWorkersIdle}, nil, SleepMoverHost)
 	loop.Waits.EnterSleep(context.Background(), "process-waiter", deadline, "waiting for a command", []WaitTrigger{WaitTriggerTimer, WaitTriggerProcessDone}, nil, SleepMoverHost)
 
-	loop.Nudges.NudgeWorkerBudgetRequested(context.Background(), "worker-waiter", "job-1", budgetRequestEnvelope("job-1"))
-	loop.Nudges.NudgeWorkerBudgetRequested(context.Background(), "process-waiter", "job-1", budgetRequestEnvelope("job-1"))
+	loop.Nudges.NudgeWorkerRoundNotice(context.Background(), "worker-waiter", "job-1", budgetRequestEnvelope("job-1"))
+	loop.Nudges.NudgeWorkerRoundNotice(context.Background(), "process-waiter", "job-1", budgetRequestEnvelope("job-1"))
 
 	if loop.Waits.IsSleeping("worker-waiter") {
 		t.Fatal("budget request must break a sleep on workers")

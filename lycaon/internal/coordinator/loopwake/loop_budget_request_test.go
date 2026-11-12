@@ -44,13 +44,13 @@ func TestBudgetRequestRunsWhileWorkerInFlight(t *testing.T) {
 		return &promptresult.Result{}, nil
 	}
 	deps.QueueInform = func(_ context.Context, sessionID string, inform anchor.ID, env anchor.Envelope) {
-		if inform == anchor.WorkerBudgetRequested {
+		if inform == anchor.WorkerRoundNotice {
 			requestKicks.Add(1)
 		}
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
 	drainAsyncTurns(t, engine)
 	if requestKicks.Load() != 1 {
 		t.Fatalf("budget-request kicks = %d want 1 while worker running", requestKicks.Load())
@@ -90,10 +90,10 @@ func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-A", budgetRequestEnvelope("job-A"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-A", budgetRequestEnvelope("job-A"))
 	drainAsyncTurns(t, engine)
 
-	wantID := anchor.InformRender(anchor.WorkerBudgetRequested)
+	wantID := anchor.InformRender(anchor.WorkerRoundNotice)
 	if id := kicks.TakePendingKickID("s1"); id != wantID {
 		t.Fatalf("pending kick id = %q want %q", id, wantID)
 	}
@@ -111,18 +111,18 @@ func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
 func TestBudgetRequestDeferralIsJobScoped(t *testing.T) {
 	engine := NewLoopEngine()
 	q := engine.Nudges.sessionDeferredQueue("s1")
-	q.push(pendingLoopWake{wake: anchor.WorkerBudgetRequested, inform: anchor.WorkerBudgetRequested, legID: "job-1"})
-	q.push(pendingLoopWake{wake: anchor.WorkerBudgetRequested, inform: anchor.WorkerBudgetRequested, legID: "job-2"})
+	q.push(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-1"})
+	q.push(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-2"})
 	q.push(pendingLoopWake{wake: anchor.LegFinished, inform: anchor.LegFinished, legID: "leg-1"})
 
-	engine.Nudges.dropDeferredBudgetRequestForJob("s1", "job-1")
+	engine.Nudges.dropDeferredRoundNoticesForJob("s1", "job-1")
 
 	remaining := q.drain()
 	if len(remaining) != 2 {
 		t.Fatalf("remaining = %d want 2 (job-2 request + leg-finished kept)", len(remaining))
 	}
 	for _, d := range remaining {
-		if d.wake == anchor.WorkerBudgetRequested && d.legID == "job-1" {
+		if d.wake == anchor.WorkerRoundNotice && d.legID == "job-1" {
 			t.Fatal("job-1 budget request should have been evicted")
 		}
 	}
