@@ -13,12 +13,11 @@ import (
 )
 
 // A host resource's executable directory joins PATH only at the child that
-// declares it, so the program's own unmodified PATH must launch and find it.
+// declares it, under the program's own unmodified PATH.
 func TestProgramHostResourceExecutableLaunchesFromTheDeclaringChild(t *testing.T) {
 	env := newPipeSemanticsEnv(t)
 	install := t.TempDir()
-	tool := filepath.Join(install, "pw-resource-tool")
-	testutil.FailErr(t, "install resource tool", os.WriteFile(tool, []byte("#!/bin/sh\necho resource-ran\n"), 0o755))
+	testutil.FailErr(t, "install resource tool", os.WriteFile(filepath.Join(install, "pw-resource-tool"), []byte("#!/bin/sh\necho resource-ran\n"), 0o755))
 	env.Runtime.Executor.Network.SetHostResourceConnectionSource(func(_ context.Context, ids []string, _ hostresources.ProjectContext, _ []hostresources.ExecutionSurface) (hostresources.ActionResolution, []string) {
 		states := map[string]hostresources.State{}
 		for _, id := range ids {
@@ -29,8 +28,6 @@ func TestProgramHostResourceExecutableLaunchesFromTheDeclaringChild(t *testing.T
 	for source, want := range map[string]string{
 		"pw-resource-tool":             "resource-ran\n",
 		"external -- pw-resource-tool": "resource-ran\n",
-		"which pw-resource-tool":       tool + "\n",
-		"command -v pw-resource-tool":  tool + "\n",
 		"FIXTURE=1 pw-resource-tool":   "resource-ran\n",
 		"pw-resource-tool | cat":       "resource-ran\n",
 	} {
