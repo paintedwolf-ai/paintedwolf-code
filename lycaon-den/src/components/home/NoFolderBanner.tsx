@@ -5,12 +5,12 @@ type Props = {
   onDismiss: () => void;
 };
 
-/** Notification-stack nudge when a non-draft project has no folder attached. */
+/** Notification-stack nudge when a non-draft project has no folder agents use. */
 export function NoFolderBanner(props: Props) {
   return (
     <SystemNudge
       testId="nofolder-banner"
-      title="No folder attached"
+      title="No folder for the assistant"
       description="Add a folder so the assistant can read and edit your code."
       secondaryAction={{
         label: "Not now",

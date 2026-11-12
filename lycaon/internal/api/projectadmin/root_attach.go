@@ -112,7 +112,10 @@ func (s *Roots) ensureProjectRootsMutable(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Roots) afterRootAttached(ctx context.Context, projectID, workspacePath string) {
-	s.ScanCadence.RootAttached(workspacePath)
+	admitted, _ := (project.Root{Path: workspacePath}).Admission()
+	if admitted {
+		s.ScanCadence.RootAttached(workspacePath)
+	}
 	if files := s.Sessions.ToolContext.CredentialFiles; files != nil {
 		if err := files.EnsureProject(ctx, projectID); err != nil {
 			slog.WarnContext(ctx, "credential-file index unavailable", "project_id", projectID, "err", err)
@@ -140,7 +143,9 @@ func (s *Roots) afterRootAttached(ctx context.Context, projectID, workspacePath 
 			slog.WarnContext(ctx, "warm project rules overlay on root attach", "paths", overlayPaths, "err", err)
 		}
 	}
-	s.Git.WarmRepoBrief(workspacePath)
+	if admitted {
+		s.Git.WarmRepoBrief(workspacePath)
+	}
 	s.sourceWatch.ScheduleSourceInventory(ctx, projectID)
 	s.background.Go(ctx, func(ctx context.Context) {
 		s.attachRootBackgroundWarm(ctx, projectID, workspacePath)

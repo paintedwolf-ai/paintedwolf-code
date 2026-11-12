@@ -63,7 +63,7 @@ func (s *Review) HandleResolveProjectSourceRevisions(w http.ResponseWriter, r *h
 
 // revisionRoots orders the primary root first; found is false only for an unknown root_id.
 func revisionRoots(p *project.Project, rootID string) ([]projectroot.RootRef, bool) {
-	all := project.RootRefsFrom(p)
+	all := p.SourceRoots()
 	ordered := make([]projectroot.RootRef, 0, len(all))
 	for _, root := range all {
 		if rootID != "" && root.ID != rootID {
