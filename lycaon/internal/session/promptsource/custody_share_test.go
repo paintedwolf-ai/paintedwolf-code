@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -40,16 +41,16 @@ func TestWorkerCustodyIsSharedWithTheChat(t *testing.T) {
 	m := &Tools{Sessions: repo}
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "out"), 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "out", "data.json"), []byte("{}"), 0o600); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write file", err)
 	}
 	args := map[string]any{"url": "https://api.example.test/data", "response_path": "out/data.json"}
 	result := `{"status":200,"response_path":"out/data.json","written":true}`
 
 	if err := m.shareCustodyWithChat(t.Context(), "worker", dir, "http_request", args, result); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "m.shareCustodyWithChat failed", err)
 	}
 	got := repo.committed["chat"]
 	if len(got) != 1 || got[0].UntrustedContent || !slices.Contains(got[0].CustodyPaths, "out/data.json") || !slices.Contains(got[0].ObservedURLs, "https://api.example.test/data") {
@@ -57,10 +58,10 @@ func TestWorkerCustodyIsSharedWithTheChat(t *testing.T) {
 	}
 
 	if err := m.shareCustodyWithChat(t.Context(), "chat", dir, "http_request", args, result); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "m.shareCustodyWithChat failed", err)
 	}
 	if err := m.shareCustodyWithChat(t.Context(), "worker", dir, "read", map[string]any{"path": "a.go"}, "package a"); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "m.shareCustodyWithChat failed", err)
 	}
 	if len(repo.committed["chat"]) != 1 {
 		t.Fatalf("shared custody that was not a worker's external write: %+v", repo.committed["chat"])

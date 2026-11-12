@@ -367,12 +367,15 @@ func reachedNetworkURLs(hosts []confine.EgressHost) []string {
 		if !h.Allowed || h.Attempts == 0 || h.Host == "" || egress.SyntacticLoopback(h.Host) {
 			continue
 		}
-		scheme := "tcp"
+		var scheme string
 		switch egressproxy.Transport(h.Transport) {
 		case egressproxy.TransportHTTPConnect:
 			scheme = "https"
 		case egressproxy.TransportHTTPRequest:
 			scheme = "http"
+		default:
+			// SOCKS tunnels and unknown transports carry a raw TCP stream.
+			scheme = "tcp"
 		}
 		u := url.URL{Scheme: scheme, Host: h.Host}
 		if h.Port != 0 {

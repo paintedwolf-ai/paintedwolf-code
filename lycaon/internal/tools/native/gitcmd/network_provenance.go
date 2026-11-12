@@ -57,12 +57,13 @@ func provenanceURL(raw string) string {
 	return (&url.URL{Scheme: "ssh", Host: host, Path: "/" + strings.TrimPrefix(repoPath, "/")}).String()
 }
 
-// mergedPaths are the absolute paths a merge or rebase reviewed in root.
-func mergedPaths(root string, paths []string) []string {
+// mergedPaths are the absolute paths a merge or rebase reviewed in the
+// repository rooted at repoRoot.
+func mergedPaths(repoRoot string, paths []string) []string {
 	out := make([]string, 0, len(paths))
 	for _, p := range paths {
 		if p = strings.TrimSpace(p); p != "" {
-			out = append(out, filepath.Join(root, filepath.FromSlash(p)))
+			out = append(out, filepath.Join(repoRoot, filepath.FromSlash(p)))
 		}
 	}
 	return out
