@@ -145,7 +145,9 @@ func (p *Profile) read(ctx context.Context, target wire.ToolActivityBriefingTarg
 		out.facts.activities = append(out.facts.activities, activity)
 		out.executions = append(out.executions, page.Executions...)
 		covered[member.ProgramID]++
-		programs[member.ProgramID] = len(page.Program.Activities)
+		// The page lists every activity of the program; only executions are
+		// narrowed to the member.
+		programs[member.ProgramID] = len(page.Activities)
 	}
 	for program, total := range programs {
 		out.partial = out.partial || covered[program] < total
