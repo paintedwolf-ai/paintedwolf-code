@@ -228,13 +228,14 @@ func TestFallbackStandsInAndUpgradesAtTheSameHash(t *testing.T) {
 
 func TestFailedGenerationWithoutFallbackFailsTheAttempt(t *testing.T) {
 	engine, store, log := newTestEngine(t, &countingGenerator{err: errors.New("provider down")})
-	_, err := engine.Request(t.Context(), request("x", false, purposeSection("anything", Generated)))
+	// A deterministic outcome beside the failed section must not settle it.
+	_, err := engine.Request(t.Context(), request("x", false, purposeSection("anything", Generated), outcomeSection("exit 1")))
 	testutil.FailErr(t, "request", err)
 	if snap := receive(t, log.seen); snap.Status != StatusFailed || snap.Error == "" {
 		t.Fatalf("failure not published: %+v", snap)
 	}
-	if len(store.results) != 0 || len(store.attempts) != 0 {
-		t.Fatalf("failure left state: %+v %+v", store.results, store.attempts)
+	if len(store.results) != 0 || len(store.records) != 0 || len(store.attempts) != 0 || len(store.settled) != 0 {
+		t.Fatalf("failure left state: %+v %+v %+v %+v", store.results, store.records, store.attempts, store.settled)
 	}
 }
 
