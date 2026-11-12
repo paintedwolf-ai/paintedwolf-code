@@ -111,9 +111,6 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 		}
 		out.CredentialStore = true
 	}
-	if out.HostExecution && len(obj) != 1 {
-		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{"reason": "host_execution replaces sandbox capabilities; request it alone"})
-	}
 	if out.HostExecution && BoolArg(args, "socks_proxy") {
 		return nil, toolrejection.RejectInvalidArguments(isolation.CodeCapabilityRequestInvalid, map[string]any{"reason": "host_execution does not use the mediated proxy"})
 	}
@@ -172,7 +169,33 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 			"reason": "capability_request requires at least one declared capability",
 		})
 	}
+	if out.HostExecution {
+		// Host execution replaces every sandbox capability; the others are checked
+		// for shape above but carry no authority.
+		return &CapabilityRequest{HostExecution: true}, nil
+	}
 	return out, nil
+}
+
+// CanonicalArguments reduces a host_execution request to itself, so every
+// reader of the raw arguments, review and grant identity included, sees the
+// request that takes effect. Arguments that do not parse are returned as they
+// are for the parser to refuse.
+func CanonicalArguments(args map[string]any) map[string]any {
+	obj, _ := args["capability_request"].(map[string]any)
+	if len(obj) < 2 {
+		return args
+	}
+	request, reject := ParseCapabilityRequest(args)
+	if reject != nil || request == nil || !request.HostExecution {
+		return args
+	}
+	out := make(map[string]any, len(args))
+	for key, value := range args {
+		out[key] = value
+	}
+	out["capability_request"] = map[string]any{"host_execution": true}
+	return out
 }
 
 func parseWriteRoot(raw any) (string, *toolrejection.ToolReject) {

@@ -21,7 +21,7 @@ copy:
   what: In `{{ tool }}`, the sandbox refused {{ paintedwolf.unsandboxed_refusals }}{% if paintedwolf.process_running %}, and the job is still running{% endif %}.
   cause: '{% if paintedwolf.missing_capability_host_execution %}This invocation did not request host execution.{% endif %}'
   why: ''
-  fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_host_execution %}{% if paintedwolf.unsandboxed_refusals %}If the operation is still needed, submit only the remaining work. Request `capability_request.host_execution` alone for the refused operation; it requires review outside confinement. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
+  fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_host_execution %}{% if paintedwolf.unsandboxed_refusals %}If the operation is still needed, submit only the remaining work. Request `capability_request.host_execution` for the refused operation; it requires review outside confinement. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
   instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox

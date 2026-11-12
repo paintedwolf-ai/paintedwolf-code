@@ -2,6 +2,8 @@ package tools_test
 
 import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
+	"github.com/lycaon/lycaon/internal/hitl"
+	"reflect"
 
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -312,6 +314,54 @@ func TestParseCapabilityRequestAcceptsCatalogFields(t *testing.T) {
 	}
 }
 
+// Host execution replaces every sandbox capability: accompanying fields are
+// checked for shape and then carry nothing into the request or its identity.
+func TestHostExecutionReplacesAccompanyingCapabilities(t *testing.T) {
+	alone := map[string]any{"command": "docker build .", "capability_request": map[string]any{"host_execution": true}}
+	aloneKey := hitl.GrantKey(hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command", Args: capabilityrequest.CanonicalArguments(alone)}})
+	accompanying := map[string]any{
+		"host_resources":   []any{"docker"},
+		"process_control":  true,
+		"credential_store": true,
+		"socket_paths":     []any{"/tmp/a.sock"},
+		"direct_ip":        map[string]any{},
+		"local_listen":     map[string]any{"ports": []any{8080}},
+		"loopback_connect": map[string]any{},
+		"write_root":       filepath.Join(t.TempDir(), "cache"),
+		"read_path":        filepath.Join(t.TempDir(), "key.pem"),
+	}
+	all := map[string]any{"host_execution": true}
+	for field, value := range accompanying {
+		all[field] = value
+		for name, request := range map[string]map[string]any{field: {"host_execution": true, field: value}, "all": all} {
+			args := map[string]any{"command": "docker build .", "capability_request": request}
+			parsed, reject := capabilityrequest.ParseCapabilityRequest(args)
+			if reject != nil || parsed == nil || !reflect.DeepEqual(*parsed, capabilityrequest.CapabilityRequest{HostExecution: true}) {
+				t.Fatalf("%s: parsed (%+v, %+v), want host execution alone", name, parsed, reject)
+			}
+			canonical := capabilityrequest.CanonicalArguments(args)
+			if key := hitl.GrantKey(hitl.ProposedAction{Invocation: hitl.ActionInvocation{Tool: "command", Args: canonical}}); key != aloneKey {
+				t.Fatalf("%s: grant identity differs from host execution alone", name)
+			}
+			if len(request) < 2 {
+				t.Fatalf("%s: fixture lost its accompanying field", name)
+			}
+		}
+	}
+	for field, malformed := range map[string]any{"host_resources": []any{}, "local_listen": map[string]any{"ports": []any{"x"}}, "write_root": "relative"} {
+		if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"host_execution": true, field: malformed}}); reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
+			t.Fatalf("malformed %s beside host_execution: %+v", field, reject)
+		}
+	}
+	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"socks_proxy": true, "capability_request": map[string]any{"host_execution": true}}); reject == nil {
+		t.Fatal("socks_proxy with host_execution accepted")
+	}
+	untouched := map[string]any{"capability_request": map[string]any{"host_resources": []any{"docker"}, "local_listen": map[string]any{}}}
+	if got := capabilityrequest.CanonicalArguments(untouched); !reflect.DeepEqual(got, untouched) {
+		t.Fatalf("sandbox request rewritten: %+v", got)
+	}
+}
+
 func TestParseCapabilityRequestCredentialStore(t *testing.T) {
 	req, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{
 		"capability_request": map[string]any{"credential_store": true},
@@ -326,12 +376,6 @@ func TestParseCapabilityRequestCredentialStore(t *testing.T) {
 		if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
 			t.Fatalf("credential_store: %#v reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", invalid, reject)
 		}
-	}
-	_, reject = capabilityrequest.ParseCapabilityRequest(map[string]any{
-		"capability_request": map[string]any{"credential_store": true, "host_execution": true},
-	})
-	if reject == nil || reject.Code != "SANDBOX_CAPABILITY_REQUEST_INVALID" {
-		t.Fatalf("credential_store + host_execution reject = %+v, want SANDBOX_CAPABILITY_REQUEST_INVALID", reject)
 	}
 	for _, toolName := range []string{"command", "verify"} {
 		contract, ok := toolcontract.Lookup(toolName)

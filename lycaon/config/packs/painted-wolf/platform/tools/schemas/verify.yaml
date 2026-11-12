@@ -82,8 +82,8 @@ schema:
           description: >-
             `true` requests execution outside the command sandbox, including
             setuid programs and passwordless sudo (`sudo -n`). Filesystem,
-            network, and process effects are unobserved. Cannot combine with
-            other capability_request fields or socks_proxy.
+            network, and process effects are unobserved. Replaces every other
+            capability_request field; cannot combine with socks_proxy.
           oneOf:
             - type: boolean
               enum: [true]
