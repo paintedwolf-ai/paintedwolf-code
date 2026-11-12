@@ -1,4 +1,4 @@
-import { For, Show, createEffect, on } from "solid-js";
+import { For, Show, createEffect, on, type JSX } from "solid-js";
 import type { BriefingEvidenceRef, BriefingSnapshot, BriefingSummarySection } from "../api/types.ts";
 import { RandomLetterReveal, markLetterRevealOnceKey } from "../components/primitives/RandomLetterReveal.tsx";
 import { announce } from "../platform/interaction/announcer.tsx";
@@ -10,6 +10,8 @@ export type SummarySection = {
   id: string;
   text?: string;
   source?: BriefingSummarySection["source"];
+  /** Names the section before its text, as a labelled summary does. */
+  label?: string;
 };
 
 /**
@@ -44,6 +46,16 @@ function Mark(props: { disclaimer: string }) {
   );
 }
 
+// The label flows with its text so a narrow pane wraps the sentence, not the label.
+function Labelled(props: { label?: string; children: JSX.Element }) {
+  return (
+    <span class="den-briefing-summary__text">
+      <Show when={props.label}>{(label) => <><strong class="den-briefing-summary__label">{label()}:</strong>{" "}</>}</Show>
+      {props.children}
+    </span>
+  );
+}
+
 /**
  * Shows model-written text with its mark, waiting text while a section is
  * written, and deterministic text plainly. The mark follows each section's
@@ -67,19 +79,21 @@ export function BriefingSummary(props: Props) {
               return (
                 <p class="den-briefing-summary__section" data-section={section.id} data-state="waiting">
                   <Mark disclaimer={disclaimer()} />
-                  <span class="den-briefing-summary__waiting">{briefingCopy.waiting}</span>
+                  <Labelled label={section.label}><span class="den-briefing-summary__waiting">{briefingCopy.waiting}</span></Labelled>
                 </p>
               );
             })()}
           >
             <p class="den-briefing-summary__section" data-section={section.id} data-source={section.source}>
-              <Show when={section.source === "summarizer"} fallback={<span class="den-briefing-summary__text">{section.text}</span>}>
+              <Show when={section.source === "summarizer"} fallback={<Labelled label={section.label}>{section.text}</Labelled>}>
                 <Mark disclaimer={disclaimer()} />
-                {(() => {
-                  // Text already settled when this view opened shows at once.
-                  if (!watched.has(section.id)) markLetterRevealOnceKey(onceKey(section.id));
-                  return <RandomLetterReveal text={section.text ?? ""} onceKey={onceKey(section.id)} class="den-briefing-summary__text" />;
-                })()}
+                <Labelled label={section.label}>
+                  {(() => {
+                    // Text already settled when this view opened shows at once.
+                    if (!watched.has(section.id)) markLetterRevealOnceKey(onceKey(section.id));
+                    return <RandomLetterReveal text={section.text ?? ""} onceKey={onceKey(section.id)} />;
+                  })()}
+                </Labelled>
               </Show>
             </p>
           </Show>

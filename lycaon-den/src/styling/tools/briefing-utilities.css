@@ -123,3 +123,7 @@
   padding: 2px 8px 6px;
   font-size: var(--text-den-hint);
 }
+
+@utility den-briefing-summary__label {
+  font-weight: 600;
+}
