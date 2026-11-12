@@ -79,9 +79,15 @@ export function LineFactsCard(props: Props) {
             return <Show when={sectionRows().length}>
             <section aria-label={label()}>
               <div class="files-line-facts__section">{label()}</div>
-              <Show when={section === "changed" && state().projectId && sectionRows()[0]?.effectId}>
-                <LineFactsBriefing projectId={state().projectId!} effectId={sectionRows()[0]!.effectId!} line={state().line}
-                  onOpenEvidence={props.onDismiss} returnFocus={() => state().anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts")?.focus()} />
+              <Show when={section === "changed" ? state().projectId : undefined}>
+                {(projectId) => (
+                  <Show when={sectionRows()[0]?.effectId}>
+                    {(effectId) => (
+                      <LineFactsBriefing projectId={projectId()} effectId={effectId()} line={state().line}
+                        onOpenEvidence={props.onDismiss} returnFocus={() => state().anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts")?.focus()} />
+                    )}
+                  </Show>
+                )}
               </Show>
               <For each={sectionRows().map(row => row.key)}>{key => {
                 const initial = sectionRows().find(item => item.key === key);
