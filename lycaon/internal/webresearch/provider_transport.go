@@ -82,8 +82,7 @@ func providerHTTPTimeout(timeoutSec int) time.Duration {
 	return timeout
 }
 
-// providerBodyMax bounds the provider response body, matching the previous
-// LimitReader budget.
+// providerBodyMax is the provider response prefix a search reads.
 const providerBodyMax = 1 << 20
 
 // newProviderRequest builds the provider request as inert data. The exchange
@@ -152,12 +151,11 @@ func providerHTTPThroughDoor(ctx context.Context, req *http.Request, timeout tim
 		Redirects:     outboundhttp.RedirectSafe,
 		RedirectLimit: outboundhttp.MaxRedirectLimit,
 		MaxBodyBytes:  providerBodyMax,
+		TruncateBody:  true,
 		AllowAddress: func(addr netip.Addr, _ uint16) bool {
 			return ipProviderEgress(addr, allowPrivate)
 		},
-		BeforeHop: func(hopCtx context.Context, hopURL *url.URL) error {
-			return egressgate.AwaitHost(hopCtx, hopURL.Hostname())
-		},
+		BeforeHop: providerHop(allowPrivate),
 	}
 	started := time.Now()
 	resp, err := outboundhttp.Do(ctx, doorReq)
@@ -180,6 +178,17 @@ func providerHTTPThroughDoor(ctx context.Context, req *http.Request, timeout tim
 		return nil, 0, sanitizeProviderHTTPError(req, err)
 	}
 	return resp.Body, resp.Status, nil
+}
+
+// providerHop holds every hop, redirects included, to the provider endpoint
+// policy before the host gate.
+func providerHop(allowPrivate bool) func(context.Context, *url.URL) error {
+	return func(ctx context.Context, hopURL *url.URL) error {
+		if _, err := validateProviderEndpoint(hopURL.String(), allowPrivate); err != nil {
+			return err
+		}
+		return egressgate.AwaitHost(ctx, hopURL.Hostname())
+	}
 }
 
 // providerOriginHeaders carries the built request headers to the door.

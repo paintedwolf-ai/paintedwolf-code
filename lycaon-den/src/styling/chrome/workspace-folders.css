@@ -100,6 +100,13 @@
   color: var(--den-text-muted);
 }
 
+.workspace-folders-panel__note {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: var(--text-den-compact);
+  color: var(--den-text-muted);
+}
+
 .workspace-folders-panel__actions {
   display: flex;
   flex-wrap: wrap;

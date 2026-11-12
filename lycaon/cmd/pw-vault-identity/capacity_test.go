@@ -18,7 +18,7 @@ func TestConnectionCapacityRejectsBeforeVerificationAndReclaimsSlots(t *testing.
 	var verified atomic.Int64
 	f.server.PeerOf = func(net.Conn) (Peer, error) {
 		verified.Add(1)
-		return f.peer, nil
+		return f.getPeer(), nil
 	}
 	_ = f.start()
 	clients := make([]*vaultidentity.Client, 0, maxConnections+1)
