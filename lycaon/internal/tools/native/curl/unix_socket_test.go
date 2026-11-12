@@ -69,15 +69,17 @@ func TestCurlUnixSocketReachesItsReviewedService(t *testing.T) {
 	if reject := toolrejection.AsToolReject(refused.err); reject == nil || reject.Code != isolation.CodeSocketPermitRequired {
 		t.Fatalf("unreviewed socket: %v", refused.err)
 	}
+	// The executor retains a reviewed socket argument as an object, as here.
+	ctx, scope := socketref.WithScope(t.Context())
+	t.Cleanup(scope.Close)
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(filepath.Dir(path), "state"))
 	grant, err := confine.ResolveSocketRequest(path)
 	testutil.FailErr(t, "resolve socket", err)
-	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(filepath.Dir(path), "state"))
-	owner, err := socketref.Capture(grant.ApprovedPath)
+	grant.Binding.Enforcement = socketref.RetainedObject
+	grant, err = confine.CaptureSocketGrant(ctx, grant)
 	testutil.FailErr(t, "retain reviewed socket", err)
-	t.Cleanup(owner.Close)
-	grant.Binding = owner.Binding()
 	h.tc.Socket.SocketGrants = []confine.SocketGrant{grant}
-	r := h.curl(t.Context(), "-s", "--max-time", "5", "--unix-socket", path, "http://localhost/version")
+	r := h.curl(ctx, "-s", "--max-time", "5", "--unix-socket", path, "http://localhost/version")
 	testutil.FailErr(t, "reviewed socket request", r.err)
 	if r.result.Status != 0 || r.stdout != "daemon localhost/version" {
 		t.Fatalf("socket request = %+v stdout %q", r.result, r.stdout)
