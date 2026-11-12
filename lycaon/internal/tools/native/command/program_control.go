@@ -107,7 +107,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	}
 	definition := definitions[spec.Name]
 	mode := selectEffectMode(spec, request.EffectMode)
-	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 	if err != nil {
 		return ownerFailure(err), err
 	}
