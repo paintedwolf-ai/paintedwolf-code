@@ -457,12 +457,13 @@ func TestRequestProjectionReplaceKeepsTrailingFrameAfterOpenerFirstAndMovedCover
 	sum := api.Message{ID: "sum", Role: api.MessageRoleAssistant, Content: "Summary",
 		ContentParts: []api.MessageContentPart{{Source: "compaction_summary", Content: "Summary"}}}
 	brief := api.Message{ID: "host-source-changes-u2", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Source brief"}
+	view := api.Message{ID: "host-view-context-u2", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "View context"}
 	u2 := api.Message{ID: "u2", Ord: 10, Role: api.MessageRoleUser, Origin: api.MessageOriginUser, ContextPinned: true, Content: "Current turn"}
 	a2 := api.Message{ID: "a2", Ord: 40, Role: api.MessageRoleAssistant, Content: "Working reply"}
 	execState := api.Message{ID: "exec-state", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "<execution_state>"}
 	toolProc := api.Message{ID: "tool-proc", Role: api.MessageRoleSystem, Origin: api.MessageOriginHost, Content: "Tool procedure"}
 
-	messages := []api.Message{standing, chk, sum, brief, u2, a2, execState, toolProc}
+	messages := []api.Message{standing, chk, sum, brief, view, u2, a2, execState, toolProc}
 	initialHistory := []api.Message{chk, sum, u2, a2}
 	proj := projectRequest(messages, initialHistory)
 
@@ -470,7 +471,7 @@ func TestRequestProjectionReplaceKeepsTrailingFrameAfterOpenerFirstAndMovedCover
 	reorderedHistory := []api.Message{u2, chk, sum, notice, a2}
 	replaced := proj.replace(reorderedHistory)
 
-	wantIDs := []string{"standing", "host-source-changes-u2", "u2", "chk", "sum", historyCoverageNoticeID, "a2", "exec-state", "tool-proc"}
+	wantIDs := []string{"standing", "host-source-changes-u2", "host-view-context-u2", "u2", "chk", "sum", historyCoverageNoticeID, "a2", "exec-state", "tool-proc"}
 	gotIDs := make([]string, 0, len(replaced))
 	for _, m := range replaced {
 		gotIDs = append(gotIDs, m.ID)

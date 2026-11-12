@@ -1308,7 +1308,7 @@ CREATE TABLE IF NOT EXISTS messages (
     completion_report_json TEXT CHECK (completion_report_json = '' OR json_valid(completion_report_json)),
     -- Secret-screen revision; zero means unscreened.
     secret_screen_generation INTEGER NOT NULL DEFAULT 0,
-    editor_context_json TEXT CHECK (editor_context_json = '' OR json_valid(editor_context_json))
+    view_context_json TEXT CHECK (view_context_json = '' OR json_valid(view_context_json))
 ) STRICT;
 
 CREATE INDEX idx_messages_user_turn ON messages(session_id, ord, id)

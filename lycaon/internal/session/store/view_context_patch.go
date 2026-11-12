@@ -9,9 +9,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// PatchMessageEditorContext records a prompt's editor context once; a message
+// PatchMessageViewContext records a prompt's view context once; a message
 // that already carries one keeps it.
-func (s *sqlTranscript) PatchMessageEditorContext(ctx context.Context, sessionID, messageID string, editor api.EditorContext) (api.Message, error) {
+func (s *sqlTranscript) PatchMessageViewContext(ctx context.Context, sessionID, messageID string, view api.ViewContext) (api.Message, error) {
 	core := s.core
 	unlock := core.lockMutation(sessionID)
 	defer unlock()
@@ -19,11 +19,11 @@ func (s *sqlTranscript) PatchMessageEditorContext(ctx context.Context, sessionID
 	if err != nil {
 		return api.Message{}, err
 	}
-	if msg.EditorContext != nil {
+	if msg.ViewContext != nil {
 		return msg, nil
 	}
-	msg.EditorContext = &editor
-	encoded, err := db.MarshalJSON(msg.EditorContext)
+	msg.ViewContext = &view
+	encoded, err := db.MarshalJSON(msg.ViewContext)
 	if err != nil {
 		return api.Message{}, err
 	}
@@ -40,8 +40,8 @@ func (s *sqlTranscript) PatchMessageEditorContext(ctx context.Context, sessionID
 	if msg.Seq, err = nextTranscriptSeq(ctx, qtx, sessionID); err != nil {
 		return api.Message{}, err
 	}
-	if err := qtx.PatchMessageEditorContext(ctx, db.PatchMessageEditorContextParams{
-		EditorContextJson: encoded, Seq: msg.Seq, SessionID: sessionID, ID: messageID,
+	if err := qtx.PatchMessageViewContext(ctx, db.PatchMessageViewContextParams{
+		ViewContextJson: encoded, Seq: msg.Seq, SessionID: sessionID, ID: messageID,
 	}); err != nil {
 		return api.Message{}, err
 	}
@@ -56,7 +56,7 @@ func (s *sqlTranscript) PatchMessageEditorContext(ctx context.Context, sessionID
 	return msg, nil
 }
 
-func (s *memoryTranscript) PatchMessageEditorContext(ctx context.Context, sessionID, messageID string, editor api.EditorContext) (api.Message, error) {
+func (s *memoryTranscript) PatchMessageViewContext(ctx context.Context, sessionID, messageID string, view api.ViewContext) (api.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return api.Message{}, err
 	}
@@ -70,10 +70,10 @@ func (s *memoryTranscript) PatchMessageEditorContext(ctx context.Context, sessio
 		if msg.ID != messageID {
 			continue
 		}
-		if msg.EditorContext != nil {
+		if msg.ViewContext != nil {
 			return msg, nil
 		}
-		msg.EditorContext = &editor
+		msg.ViewContext = &view
 		msg.Seq = nextSeqLocked(core, sessionID)
 		core.messages[sessionID][i] = msg
 		return msg, nil

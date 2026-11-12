@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/heldcall"
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -32,7 +33,7 @@ func (e *turnContextAssembler) appendPreHistorySystemInjects(
 // fixed at turn open, so history stays append-only until the surface's tools
 // change, when the provider's cached prefix has already moved.
 func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
-	blocks := e.sourceBriefBlocks(ctx, sess, e.surface.sourceHistoryOffered(ctx, sess, frame, history, turn), turn)
+	blocks := e.sourceBriefBlocks(ctx, sess, e.surface.toolAddressable(ctx, sess, frame, history, turn, "source_history"), turn)
 	if len(blocks) == 0 {
 		return messages
 	}
@@ -40,10 +41,34 @@ func (e *turnContextAssembler) interleaveSourceBriefs(ctx context.Context, sess 
 	for _, m := range messages {
 		if block, ok := blocks[m.ID]; ok {
 			out = append(out, api.Message{
-				ID:   "host-source-changes-" + m.ID,
+				ID:   hostmarker.SourceChangesBlockPrefix + m.ID,
 				Role: api.MessageRoleSystem, Content: block,
 				Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
 			})
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// interleaveViewContexts places each prompt's recorded view context
+// directly before that prompt. The context is fixed on the prompt, so history
+// stays append-only until the surface's tools change.
+func (e *turnContextAssembler) interleaveViewContexts(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch, messages []api.Message) []api.Message {
+	readOffered, checked := false, false
+	out := make([]api.Message, 0, len(messages))
+	for _, m := range messages {
+		if m.ViewContext != nil && m.Role == api.MessageRoleUser {
+			if !checked {
+				readOffered, checked = e.surface.toolAddressable(ctx, sess, frame, history, turn, "read"), true
+			}
+			if block := inject.RenderViewContextBlock(ctx, e.deps.Injects, sess.ID, *m.ViewContext, readOffered); block != "" {
+				out = append(out, api.Message{
+					ID:   hostmarker.ViewContextBlockPrefix + m.ID,
+					Role: api.MessageRoleSystem, Content: block,
+					Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
+				})
+			}
 		}
 		out = append(out, m)
 	}

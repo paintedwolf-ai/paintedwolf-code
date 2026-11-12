@@ -289,13 +289,9 @@ func redactMessageContent(msg api.Message) api.Message {
 		}
 		msg.ProgressUpdate = &progress
 	}
-	if msg.EditorContext != nil {
-		editor := *msg.EditorContext
-		editor.Files = append([]api.EditorContextFile(nil), editor.Files...)
-		for i := range editor.Files {
-			editor.Files[i].Path = RedactCaptureText(editor.Files[i].Path)
-		}
-		msg.EditorContext = &editor
+	if msg.ViewContext != nil {
+		view := msg.ViewContext.MapText(func(_, value string) string { return RedactCaptureText(value) })
+		msg.ViewContext = &view
 	}
 	if msg.IndexWarming != nil {
 		warming := *msg.IndexWarming

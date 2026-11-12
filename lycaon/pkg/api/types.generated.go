@@ -2552,23 +2552,6 @@ type EditorCommandHistory struct {
 	Update       []byte `json:"update"`
 }
 
-// EditorContext What the sender had open in the editor when this prompt opened a turn. Recorded only when it differs from the last context still in the agent's history; an empty list means everything had been closed.
-type EditorContext struct {
-	// Files with a live editor first, most recently moved first; then root order and path.
-	Files []EditorContextFile `json:"files"`
-	// Open files beyond those listed.
-	MoreFiles int `json:"more_files"`
-}
-
-// EditorContextFile
-type EditorContextFile struct {
-	RootID string `json:"root_id"`
-	// Root-relative slash path.
-	Path    string      `json:"path"`
-	Unsaved bool        `json:"unsaved"`
-	View    *EditorView `json:"view,omitempty"`
-}
-
 // EditorDocument Accepted collaborative document for a stable logical file in the project branch.
 type EditorDocument struct {
 	// Original revision reserved for this save operation when its publication already has a durable journal. The document itself is the current accepted state.
@@ -2761,14 +2744,6 @@ type EditorReplicaFrame struct {
 	HeldAgentVersionID *string            `json:"held_agent_version_id,omitempty"`
 	SecretScreenStatus SecretScreenStatus `json:"secret_screen_status"`
 	SecretScreen       *SecretScreen      `json:"secret_screen,omitempty"`
-}
-
-// EditorView The main selection of the sender's most recently moved editor of the file.
-type EditorView struct {
-	StartLine int `json:"start_line"`
-	EndLine   int `json:"end_line"`
-	// No text is selected; start_line is the cursor's line.
-	Cursor bool `json:"cursor"`
 }
 
 // EffectComparisonSource
@@ -5507,6 +5482,18 @@ type ReplaceEditorDocumentRetentionRequest struct {
 type ReplaceManagedSecretValueRequest struct {
 	// The new credential. Never echoed back. Named so the host's own request-capture scrubber redacts it by name. It holds the same length floor as minting: a replacement the screen could not recognize would silently retire a protection that worked.
 	SecretValue string `json:"secret_value"`
+}
+
+// ReplaceProjectViewRequest What one window of this person shows of the project right now. Send only surfaces that are visible; a window that shows none of them, or is hidden, sends none. Reports expire unless renewed.
+type ReplaceProjectViewRequest struct {
+	ClientID string `json:"client_id"`
+	// The window has keyboard focus.
+	Focused  bool                `json:"focused"`
+	Editor   *ViewReportEditor   `json:"editor,omitempty"`
+	Diff     *ViewReportPath     `json:"diff,omitempty"`
+	Folder   *ViewReportPath     `json:"folder,omitempty"`
+	Search   *ViewReportSearch   `json:"search,omitempty"`
+	Findings []ViewReportFinding `json:"findings,omitempty"`
 }
 
 // RepoBrief Project orientation summary — languages detected by content via enry, listed in dominant-bytes order.
@@ -8795,6 +8782,98 @@ type VerifySettingsResponse struct {
 type VersionComparisonSource struct {
 	Kind      string `json:"kind"`
 	VersionID string `json:"version_id"`
+}
+
+// ViewContext What the sender had in view when this prompt opened a turn, across their visible windows, most recently focused first. Recorded only when it differs from the last view still in the agent's history; empty lists and no folder or search mean nothing was in view.
+type ViewContext struct {
+	// Files shown in a visible editor, with that editor's selection.
+	Editors []ViewEditor `json:"editors"`
+	// Files shown in a visible diff.
+	Diffs  []ViewPath  `json:"diffs"`
+	Folder *ViewPath   `json:"folder,omitempty"`
+	Search *ViewSearch `json:"search,omitempty"`
+	// Security findings open or selected in a visible security view.
+	Findings []ViewFinding `json:"findings"`
+}
+
+// ViewEditor
+type ViewEditor struct {
+	RootID      string         `json:"root_id"`
+	Path        string         `json:"path"`
+	DisplayPath string         `json:"display_path"`
+	Unsaved     bool           `json:"unsaved"`
+	Selection   *ViewSelection `json:"selection,omitempty"`
+}
+
+// ViewFinding
+type ViewFinding struct {
+	Fingerprint string        `json:"fingerprint"`
+	RuleID      string        `json:"rule_id"`
+	Level       FindingLevel  `json:"level"`
+	Location    *ViewLocation `json:"location,omitempty"`
+}
+
+// ViewLocation
+type ViewLocation struct {
+	RootID      string `json:"root_id"`
+	Path        string `json:"path"`
+	DisplayPath string `json:"display_path"`
+	Line        int    `json:"line,omitempty"`
+}
+
+// ViewPath
+type ViewPath struct {
+	RootID string `json:"root_id"`
+	// Root-relative slash path.
+	Path string `json:"path"`
+	// The path as the agent was shown it, @label-qualified off the primary root.
+	DisplayPath string `json:"display_path"`
+}
+
+// ViewReportEditor The document a visible editor shows; its selection is the window's editor presence.
+type ViewReportEditor struct {
+	DocumentID string `json:"document_id"`
+}
+
+// ViewReportFinding
+type ViewReportFinding struct {
+	Fingerprint string              `json:"fingerprint"`
+	RuleID      string              `json:"rule_id"`
+	Level       FindingLevel        `json:"level"`
+	Location    *ViewReportLocation `json:"location,omitempty"`
+}
+
+// ViewReportLocation
+type ViewReportLocation struct {
+	RootID string `json:"root_id"`
+	Path   string `json:"path"`
+	Line   int    `json:"line,omitempty"`
+}
+
+// ViewReportPath
+type ViewReportPath struct {
+	RootID string `json:"root_id"`
+	Path   string `json:"path"`
+}
+
+// ViewReportSearch
+type ViewReportSearch struct {
+	Query string              `json:"query"`
+	Hit   *ViewReportLocation `json:"hit,omitempty"`
+}
+
+// ViewSearch
+type ViewSearch struct {
+	Query string        `json:"query"`
+	Hit   *ViewLocation `json:"hit,omitempty"`
+}
+
+// ViewSelection The editor's main selection.
+type ViewSelection struct {
+	StartLine int `json:"start_line"`
+	EndLine   int `json:"end_line"`
+	// No text is selected; start_line is the cursor's line.
+	Cursor bool `json:"cursor"`
 }
 
 // VisualArtifact

@@ -176,17 +176,17 @@ func (e *promptSurface) resolveTurnRoster(
 	return &roster
 }
 
-// sourceHistoryOffered answers from the compile the turn's plan starts from: the
+// toolAddressable answers from the compile the turn's plan starts from: the
 // plan freezes after assembly, and nothing later adds a catalog tool the surface
 // leaves out.
-func (e *promptSurface) sourceHistoryOffered(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch) bool {
+func (e *promptSurface) toolAddressable(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch, tool string) bool {
 	if e == nil {
 		return false
 	}
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
 	_, rootCount, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
 	plan, err := surface.CompileToolPlan(profile, rootCount)
-	return err == nil && plan.Addressable("source_history")
+	return err == nil && plan.Addressable(tool)
 }
 
 func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCount int) bool {

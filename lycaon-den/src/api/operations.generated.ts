@@ -260,6 +260,7 @@ export const API_OPERATIONS = {
   replaceEditorDocumentRetention: { method: "PUT", path: "/v1/projects/{id}/editor-documents/retention" },
   replaceProjectManagedSecretValue: { method: "PUT", path: "/v1/projects/{id}/secrets/{secret_id}/value" },
   replaceProjectSource: { method: "PUT", path: "/v1/projects/{id}/source" },
+  replaceProjectView: { method: "PUT", path: "/v1/projects/{id}/view" },
   replaceProviderCredential: { method: "PUT", path: "/v1/providers/{provider_id}/credential" },
   replaceScannerSlot: { method: "PUT", path: "/v1/scanners/slots/{category}" },
   replaceSourceViewportInterest: { method: "PUT", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
@@ -606,6 +607,7 @@ export type OperationPathParameters = {
   replaceEditorDocumentRetention: { id: string | number; };
   replaceProjectManagedSecretValue: { id: string | number; secret_id: string | number; };
   replaceProjectSource: { id: string | number; };
+  replaceProjectView: { id: string | number; };
   replaceProviderCredential: { provider_id: string | number; };
   replaceScannerSlot: { category: string | number; };
   replaceSourceViewportInterest: { id: string | number; view_id: string | number; interest_id: string | number; };

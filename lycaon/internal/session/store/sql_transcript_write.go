@@ -242,7 +242,7 @@ func updateMessageSQL(ctx context.Context, s *sqlCore, sessionID, messageID stri
 		WorkerSummaryJson:       encoded.workerSummary,
 		GroundingJson:           encoded.grounding,
 		NavigationRefsJson:      encoded.navigationRefs,
-		EditorContextJson:       encoded.editorContext,
+		ViewContextJson:         encoded.viewContext,
 		CompactedChunkJson:      encoded.compactedChunk,
 		WorkflowFeedbackJson:    encoded.workflowFeedback,
 		BlueprintJson:           encoded.blueprint,
