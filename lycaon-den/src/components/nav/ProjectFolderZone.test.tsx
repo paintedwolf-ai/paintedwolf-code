@@ -12,6 +12,8 @@ const roots: ProjectRoot[] = [
     is_primary: true,
     added_at: "2025-01-01T00:00:00Z",
     kind: "attached",
+    admitted: true,
+    admission_code: null,
   },
 ];
 
@@ -49,6 +51,8 @@ function manyRoots(n: number): ProjectRoot[] {
     is_primary: i === 0,
     added_at: "2025-01-01T00:00:00Z",
     kind: "attached" as const,
+    admitted: true,
+    admission_code: null,
   }));
 }
 

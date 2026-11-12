@@ -520,8 +520,8 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
         }),
       });
 
-      expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBe(3);
-      expect(view.dom.querySelectorAll(".pw-virtual-indent").length).toBe(2);
+      expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBe(3);
+      expect(view.dom.querySelectorAll(".pw-pretty-line").length).toBe(2);
 
       const commaOffset = raw.indexOf(",");
       view.dispatch({
@@ -535,7 +535,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       expect(view.state.field(prettyNativeStateField).outcome).toBe(
         "formatted",
       );
-      expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBe(2);
+      expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBe(2);
 
       view.dispatch({
         changes: { from: commaOffset, to: commaOffset, insert: "," },
@@ -560,7 +560,7 @@ describe("pretty-native-layout (Decisions 004 & 005, FMT01, FMT05)", () => {
       const docBeforeOff = view.state.doc.toString();
       applyPrettyNativeConfig(view, { enabled: false, path: "config.json" });
       expect(view.state.doc.toString()).toBe(docBeforeOff);
-      expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBe(0);
+      expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBe(0);
 
       view.destroy();
     } finally {

@@ -158,8 +158,7 @@ func (s *Handler) HandleCreateGitRepo(w http.ResponseWriter, r *http.Request) {
 	if s.RepoSetCache != nil {
 		s.RepoSetCache.Invalidate(p.ID)
 	}
-	roots := project.RootRefsFrom(p)
-	repos, err := s.LoadOrderedRepos(r.Context(), p, roots, "", "")
+	repos, err := s.LoadOrderedRepos(r.Context(), p, p.SourceRoots(), "", "")
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return

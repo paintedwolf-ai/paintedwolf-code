@@ -56,6 +56,7 @@ function StatusChipView(props: { chip: StatusChip; testId: string; class?: strin
 }
 
 export function FilesEditorStatus(props: FilesEditorStatusProps) {
+  const prettyOn = () => props.pretty?.available !== false && Boolean(props.pretty?.enabled);
   return <div class="den-files-editor__status" data-files-ctx="no-menu" data-editor-identity={props.identity.id}>
     {props.windows}
     <Show when={props.identity.id !== "editing"}><span class="den-files-editor__mode" classList={{"den-files-editor__mode--readonly":props.identity.readOnly}}
@@ -72,12 +73,13 @@ export function FilesEditorStatus(props: FilesEditorStatusProps) {
     <Show when={props.simplified}><span class="den-files-editor__status-detail" data-testid="files-editor-simplified-chip">Simplified</span></Show>
     <span class="den-files-editor__status-spacer" />
     <button type="button" class="den-files-editor__status-toggle den-inset-icon-btn den-files-editor__status-pretty"
-      data-testid="files-editor-pretty-toggle" aria-pressed={props.pretty?.available !== false ? Boolean(props.pretty?.enabled) : false}
+      data-testid="files-editor-pretty-toggle" aria-pressed={prettyOn()}
       disabled={!props.pretty || props.pretty.available === false}
       onClick={() => { if (props.pretty && props.pretty.available !== false) props.pretty.onToggle(); }}>Pretty</button>
+    {/* Pretty wraps its view; the stored Wrap preference returns when Pretty goes off. */}
     <button type="button" class="den-files-editor__status-toggle den-inset-icon-btn den-files-editor__status-wrap"
-      data-testid="files-editor-wrap-toggle" aria-pressed={editorWordWrapPref()}
-      onClick={() => void saveEditorWordWrap(!editorWordWrapPref())}>Wrap</button>
+      data-testid="files-editor-wrap-toggle" aria-pressed={prettyOn() || editorWordWrapPref()} disabled={prettyOn()}
+      onClick={() => { if (!prettyOn()) void saveEditorWordWrap(!editorWordWrapPref()); }}>Wrap</button>
   </div>;
 }
 
