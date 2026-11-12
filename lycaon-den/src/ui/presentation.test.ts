@@ -18,6 +18,20 @@ describe("presentation preparation", () => {
     dispose();
   }));
 
+  it("reports pending paths through the conditions a participant names", () => createRoot((dispose) => {
+    const preparation = createPreparation();
+    const [inner, setInner] = createSignal<readonly string[]>(["tree", "document"]);
+    const [ready, setReady] = createSignal(false);
+    preparation.register("files-stage", ready, { pending: inner });
+    preparation.register("chat", () => true, { pending: () => ["ignored"] });
+    expect(preparation.pending()).toEqual(["files-stage/tree", "files-stage/document"]);
+    setInner([]);
+    expect(preparation.pending()).toEqual(["files-stage"]);
+    setReady(true);
+    expect(preparation.pending()).toEqual([]);
+    dispose();
+  }));
+
   it("never confuses participants with the same diagnostic name", () => {
     const preparation = createPreparation();
     const first = preparation.register("body", () => false);

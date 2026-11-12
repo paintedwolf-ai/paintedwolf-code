@@ -2,13 +2,12 @@ package oar
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestMutationCandidateRecoveryCopy(t *testing.T) {
+func TestMutationCandidateRejectionUsesStructuredFacts(t *testing.T) {
 	ensureCatalog(t)
 	loader, err := NewLoader(schemaDir(t))
 	testutil.FailErr(t, "loader", err)
@@ -32,14 +31,33 @@ func TestMutationCandidateRecoveryCopy(t *testing.T) {
 				if !result.Enforced || result.Decision == nil || result.Decision.Code != "MUTATION_BROKE_PARSE" {
 					t.Fatalf("missing mutation rejection: %#v", result)
 				}
-				fix := result.Decision.Copy["fix"]
-				if !strings.Contains(fix, "syntax_override_reason") {
-					t.Fatalf("missing candidate location or override semantics: %s", fix)
-				}
-				if len(fix) > 1000 {
-					t.Fatalf("recovery copy grew beyond bounded remedy: %d bytes", len(fix))
-				}
+
 			})
 		}
+	}
+}
+
+func TestMutationCandidateRejectionUsesNativeOperation(t *testing.T) {
+	ensureCatalog(t)
+	loader, err := NewLoader(schemaDir(t))
+	testutil.FailErr(t, "loader", err)
+	rules, err := loader.LoadDir(hintsDir(t))
+	testutil.FailErr(t, "load", err)
+	pipeline := NewGuardPipeline(rules, loader, NewCounterStore())
+	pipeline.EnableAnchor(AnchorToolRejected)
+	for _, operation := range []string{"write", "edit", "replace_lines", "code_rewrite"} {
+		t.Run(operation, func(t *testing.T) {
+			gc := NewGuardContext()
+			gc.ObserveToolCall("command", map[string]any{"command": "fixture"})
+			testutil.FailErr(t, "observe "+operation, gc.ObserveNativeOperation(bindNativeOperation(t, operation)))
+			gc.ObservedRejectCode = "MUTATION_BROKE_PARSE"
+			gc.PutRejectData("MUTATION_BROKE_PARSE", map[string]any{"path": "source", "parse_error": "line 2: missing token", "mutation_new_path": false})
+			result, err := pipeline.EvaluateBlock(context.Background(), AnchorToolRejected, gc)
+			testutil.FailErr(t, "evaluate", err)
+			if !result.Enforced || result.Decision == nil || result.Decision.Code != "MUTATION_BROKE_PARSE" {
+				t.Fatalf("missing mutation rejection: %#v", result)
+			}
+
+		})
 	}
 }

@@ -1,9 +1,23 @@
 package oar
 
-import "github.com/lycaon/lycaon/internal/oarcore"
+import (
+	"github.com/lycaon/lycaon/internal/oarcore"
+	"github.com/lycaon/lycaon/internal/toolcontract"
+)
 
 // Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-27]).
-var occurrenceFactDecls = []factDecl{
+var occurrenceFactDecls = buildOccurrenceFactDecls()
+
+func buildOccurrenceFactDecls() []factDecl {
+	out := make([]factDecl, 0, len(staticOccurrenceFactDecls)+len(toolcontract.CapabilityRequestFields()))
+	out = append(out, staticOccurrenceFactDecls...)
+	for _, field := range toolcontract.CapabilityRequestFields() {
+		out = append(out, factDecl{"missing_capability_" + field, oarcore.TypeBool, FactTierHost, ""})
+	}
+	return out
+}
+
+var staticOccurrenceFactDecls = []factDecl{
 	{"native_command", oarcore.TypeString, FactTierHost, ""},
 	{"source_line", oarcore.TypeInt, FactTierHost, ""},
 	{"source_column", oarcore.TypeInt, FactTierHost, ""},
@@ -213,14 +227,6 @@ var occurrenceFactDecls = []factDecl{
 	{"capability", oarcore.TypeString, FactTierHost, ""},
 	{"capability_request_fields", oarcore.TypeListString, FactTierHost, ""},
 	{"capability_contract_known", oarcore.TypeBool, FactTierHost, ""},
-	{"missing_capability_socket_paths", oarcore.TypeBool, FactTierHost, ""},
-	{"missing_capability_process_control", oarcore.TypeBool, FactTierHost, ""},
-	{"missing_capability_credential_store", oarcore.TypeBool, FactTierHost, ""},
-	{"missing_capability_host_execution", oarcore.TypeBool, FactTierHost, ""},
-	{"missing_capability_local_listen", oarcore.TypeBool, FactTierHost, ""},
-	{"missing_capability_loopback_connect", oarcore.TypeBool, FactTierHost, ""},
-	{"missing_capability_write_root", oarcore.TypeBool, FactTierHost, ""},
-	{"missing_capability_read_path", oarcore.TypeBool, FactTierHost, ""},
 	{"supports_socket_paths", oarcore.TypeBool, FactTierHost, ""},
 	{"supports_local_listen", oarcore.TypeBool, FactTierHost, ""},
 	{"missing_summary_job_ids", oarcore.TypeListString, FactTierHost, ""},

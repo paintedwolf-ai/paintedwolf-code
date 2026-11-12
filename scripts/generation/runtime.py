@@ -43,9 +43,13 @@ def prepare(args):
         if args.backend in {"reference-swift", "reference-rust"} and sys.platform == "darwin":
             run(["xcodebuild", "-downloadComponent", "MetalToolchain"])
         elif args.backend in {"reference-llama", "native"} and sys.platform == "linux":
+            packages = ["cmake", "ninja-build", "libvulkan-dev"]
+            if platform.machine().lower() in vulkan_tools.AARCH64_MACHINES:
+                # LunarG publishes no arm64 Linux SDK, so the shader compiler
+                # comes from the distribution package.
+                packages.append("glslc")
             run(["sudo", "-n", "apt-get", "update"])
-            run(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends",
-                 "cmake", "ninja-build", "libvulkan-dev"])
+            run(["sudo", "-n", "apt-get", "install", "-y", "--no-install-recommends", *packages])
         else:
             raise ValueError("build tool preparation requires Swift/macOS or Vulkan/Linux")
     if args.backend == "reference-swift":

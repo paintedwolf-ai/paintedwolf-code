@@ -76,7 +76,7 @@ func runCommandTerminalCapture(
 	if err := runner.ValidateStages(ctx, stages); err != nil {
 		return RunOutcome{}, err
 	}
-	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, commandLine, toolName, true)
+	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, nil, commandLine, toolName, true)
 	if err != nil {
 		return RunOutcome{}, err
 	}
@@ -105,6 +105,11 @@ func runCommandTerminalCapture(
 		facts.Network = bound.lease.ObservedHosts
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		// Nothing ran: release the action's boundary before refusing.
+		bound.close(ctx)
+		if directIPApplied {
+			tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
+		}
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
 	var sourceRevision, sourceRootDigest string

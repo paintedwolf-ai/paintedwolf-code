@@ -80,10 +80,10 @@ func (s prefixedScope) PruneDir(rel, abs string) (string, bool) {
 }
 
 func (s prefixedScope) LazyDir(rel, _ string) (string, bool) {
-	if s.includeDependencies {
+	reason := s.scope.BoundaryDir(s.rel(rel))
+	if s.includeDependencies && reason != sourcescope.BoundaryControlPlane {
 		return "", false
 	}
-	reason := s.scope.BoundaryDir(s.rel(rel))
 	return reason, reason != ""
 }
 
@@ -132,16 +132,36 @@ func defaultCatalogPolicy(root string) walkPolicy {
 }
 
 func (p walkPolicy) boundaryDir(rel string) string {
-	if p.scope == nil || p.includeDependencies {
+	if p.scope == nil {
 		return ""
 	}
-	return p.scope.BoundaryDir(prefixedScope{base: p.base, scope: p.scope}.rel(rel))
+	reason := p.scope.BoundaryDir(prefixedScope{base: p.base, scope: p.scope}.rel(rel))
+	if p.includeDependencies && reason != sourcescope.BoundaryControlPlane {
+		return ""
+	}
+	return reason
 }
+
+// rootOnDemand reports an editor-only root, which no scan descends on its own.
+func (p walkPolicy) rootOnDemand() bool {
+	return p.scope != nil && p.scope.BoundaryDir(".") != ""
+}
+
 func (p walkPolicy) boundaryPath(rel string, isDir bool) string {
-	if p.scope == nil || p.includeDependencies {
+	if p.scope == nil {
 		return ""
 	}
-	return p.scope.BoundaryPath(prefixedScope{base: p.base, scope: p.scope}.rel(rel), isDir)
+	full := prefixedScope{base: p.base, scope: p.scope}.rel(rel)
+	if !p.includeDependencies {
+		return p.scope.BoundaryPath(full, isDir)
+	}
+	if !isDir {
+		full = path.Dir(full)
+	}
+	if p.scope.InControlPlane(full) {
+		return sourcescope.BoundaryControlPlane
+	}
+	return ""
 }
 
 func (p walkPolicy) selects(rel string, isDir bool) bool {

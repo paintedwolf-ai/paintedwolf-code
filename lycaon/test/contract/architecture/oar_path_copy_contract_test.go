@@ -8,8 +8,8 @@ import (
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/projectroot"
-	"github.com/lycaon/lycaon/internal/tools"
 	guidancetestsetup "github.com/lycaon/lycaon/internal/testsetup/guidance"
+	"github.com/lycaon/lycaon/internal/tools"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
 

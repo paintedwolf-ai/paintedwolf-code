@@ -12,7 +12,7 @@ import (
 func TestRecordSourcePathResolvesAgainstTheActiveRoot(t *testing.T) {
 	c := ToolContext{
 		Identity: InvocationIdentity{ProjectID: "p"},
-		Source:   InvocationSource{Roots: []projectroot.RootRef{
+		Source: InvocationSource{Roots: []projectroot.RootRef{
 			{ID: "primary", Label: "app", Path: t.TempDir(), IsPrimary: true},
 			{ID: "active", Label: "worktree", Path: t.TempDir()},
 		}, ActiveRootID: "active"},

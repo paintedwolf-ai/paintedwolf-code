@@ -678,12 +678,6 @@
           "requires": [
             "read"
           ]
-        },
-        {
-          "mode": "dispatch",
-          "requires": [
-            "bound-child-effect-set"
-          ]
         }
       ],
       "platform_capabilities": [

@@ -16,7 +16,7 @@ requires:
 when: paintedwolf.rejection_code == "EXTRACT_IS_DIRECTORY"
 effect: block
 copy:
-  what: extract_archive path {{ paintedwolf.path }} is a directory, not an archive file.
+  what: The archive extraction path {{ paintedwolf.path }} is a directory, not an archive file.
   cause: Pass a file path to a zip/tar archive, not a directory.
   why: Structured rejects let agents branch without parsing free-form errors.
   fix: Point path at the archive file and retry.

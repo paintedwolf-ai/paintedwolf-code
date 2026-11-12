@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -14,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egress"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -22,13 +27,10 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// ExternalStages launches one confined external stage per request through the
-// existing launch plan, confinement lease and process-tree supervision. Argv
-// stays literal: no shell, no PATH re-resolution by the host, no fallback.
+// ExternalStages launches literal argv under the admitted boundary.
 type ExternalStages struct {
 	ToolContext     tools.ToolContext
 	Cwd             projectpaths.Resolved
-	ExtraWriteRoots []string
 	BaseEnvironment []string
 	ObserveStage    func(tools.ToolContext, confine.StampedRefusal, []confine.EgressHost, bool)
 	// window observes the source changes of the program this launch belongs to.
@@ -65,7 +67,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		return externalLaunchFailure(err, refusedResult("COMMAND_OPERAND_INVALID")), err
 	}
 	commandLine := (lycexec.Stage{Name: argv[0], Args: argv[1:]}).CommandLine()
-	bound, err := bindCommandForegroundConfine(ctx, tctx, l.ExtraWriteRoots, commandLine, "command", true)
+	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, nil, commandLine, "command", true)
 	if err != nil {
 		if ctx.Err() != nil {
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, EffectCertainty: toolcontract.NoEffect}, errors.Join(ctx.Err(), err)
@@ -355,4 +357,34 @@ func (d *ProgramDispatcher) recordExternalStage(admitted tools.ToolContext, stam
 	childTC := admitted
 	childTC.Effects.Out = d.run.tc.Effects.Out
 	tools.CaptureExternalAccess(childTC, hosts, directIPApplied)
+}
+
+// reachedNetworkURLs names the destinations beyond this machine a stage's
+// processes connected to, in the URL form the evidence ledger keys hosts by.
+func reachedNetworkURLs(hosts []confine.EgressHost) []string {
+	var urls []string
+	for _, h := range hosts {
+		if !h.Allowed || h.Attempts == 0 || h.Host == "" || egress.SyntacticLoopback(h.Host) {
+			continue
+		}
+		var scheme string
+		switch egressproxy.Transport(h.Transport) {
+		case egressproxy.TransportHTTPConnect:
+			scheme = "https"
+		case egressproxy.TransportHTTPRequest:
+			scheme = "http"
+		default:
+			// SOCKS tunnels and unknown transports carry a raw TCP stream.
+			scheme = "tcp"
+		}
+		u := url.URL{Scheme: scheme, Host: h.Host}
+		if h.Port != 0 {
+			u.Host = net.JoinHostPort(h.Host, strconv.Itoa(int(h.Port)))
+		}
+		if scheme == "http" {
+			u.Path = h.RequestPath
+		}
+		urls = appendUniqueProvenanceStrings(urls, u.String())
+	}
+	return urls
 }

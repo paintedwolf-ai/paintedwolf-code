@@ -15,22 +15,22 @@ effect: block
 copy:
   what: >-
     {% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}.
-    The requested new_string is already present {{ paintedwolf.replacement_matches }} time(s),
+    The requested replacement is already present {{ paintedwolf.replacement_matches }} time(s),
     first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}:
-    old_string ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis
+    The searched text ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis
     ({{ paintedwolf.total_lines }} lines).{% endif %}
   cause: >-
-    {% if paintedwolf.replacement_matches %}The edit basis contains the replacement text but not old_string.
-    This does not prove an earlier edit succeeded.{% else %}old_string must match source text exactly.
+    {% if paintedwolf.replacement_matches %}The edit basis contains the replacement text but not the searched text.
+    This does not prove an earlier edit succeeded.{% else %}The searched text must match the source exactly.
     Stale text, displayed line labels, indentation changes, or literal backslash escapes can prevent a match.
     Valid JSON Unicode escapes are decoded before matching.{% endif %}
-  why: This rejected call made no change. Repeating the same old_string and new_string cannot resolve this miss.
+  why: This rejected call made no change. Repeating the same old text and replacement cannot resolve this miss.
   fix: >-
     {% if paintedwolf.replacement_matches %}Read {{ paintedwolf.path }} around line {{ paintedwolf.replacement_line }}
     and compare the existing replacement with the intended result. If it is the intended result,
     continue with the remaining task without applying this edit again. Otherwise, compute a different edit
     from the fresh source.{% else %}Read {{ paintedwolf.path }} and check whether the intended change is still needed.
-    If needed, copy a fresh verbatim substring into old_string, without displayed line labels and preserving indentation.{% endif %}
+    If needed, use a fresh verbatim substring as the searched text, without displayed line labels and preserving indentation.{% endif %}
   instead: '{{ paintedwolf.next_steps }} Do not replace the whole file to bypass a missing match.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit

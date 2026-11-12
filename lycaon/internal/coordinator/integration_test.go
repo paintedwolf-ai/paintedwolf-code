@@ -375,7 +375,7 @@ func TestAssemblyImplementSpawnInjectWithoutWorkflow(t *testing.T) {
 		}},
 		PromptToolLister: prompttest.CoordinatorTools,
 		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		LoadedTools:      workerToolsLoaded,
+		Selection:        workerToolSelection{},
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
 	workspace := t.TempDir()
@@ -412,7 +412,7 @@ func TestAssemblyWorkflowSessionIncludesSpawnRoster(t *testing.T) {
 		}},
 		PromptToolLister: prompttest.CoordinatorTools,
 		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		LoadedTools:      workerToolsLoaded,
+		Selection:        workerToolSelection{},
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
 	workspace := t.TempDir()
@@ -454,7 +454,7 @@ func TestAssemblyImplementSpawnInjectEveryIteration(t *testing.T) {
 		}},
 		PromptToolLister: prompttest.CoordinatorTools,
 		WorkspaceRoots:   stubWorkspaceRootsOne(),
-		LoadedTools:      workerToolsLoaded,
+		Selection:        workerToolSelection{},
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
 	workspace := t.TempDir()
@@ -725,9 +725,10 @@ func countTransitionBlocks(msgs []api.Message) int {
 	return n
 }
 
-// workerToolsLoaded models a turn whose load decision offered the worker
-// tools on the investigate surface, so the spawn roster has a task schema
-// to accompany.
-func workerToolsLoaded(string) map[string]bool {
+type workerToolSelection struct{}
+
+func (workerToolSelection) FullCatalog(string) bool             { return false }
+func (workerToolSelection) OmittedUnits(string) map[string]bool { return nil }
+func (workerToolSelection) LoadedTools(string) map[string]bool {
 	return map[string]bool{"task": true, "pack_board": true, "worker_cancel": true, "answer_decision": true, "extend_worker_budget": true}
 }

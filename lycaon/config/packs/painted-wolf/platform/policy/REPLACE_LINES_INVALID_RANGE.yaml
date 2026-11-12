@@ -15,16 +15,18 @@ requires:
   - paintedwolf.path
   - paintedwolf.start_line
   - paintedwolf.rejection_reason
+  - paintedwolf.native_operation
 when: paintedwolf.rejection_code == "REPLACE_LINES_INVALID_RANGE"
 effect: block
 copy:
-  what: replace_lines on {{ paintedwolf.path }} rejected range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line
+  what: The line-range replacement on {{ paintedwolf.path }} rejected range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line
     }} — {{ paintedwolf.rejection_reason }}.
   cause: start_line and end_line are 1-based inclusive; end_line must be >= start_line.
   why: Line-range edits need a valid window before splicing file content.
-  fix: Re-read with offset at the first intended line and limit covering the range; its source block starts
-    at offset. Pass start_line and end_line from that block's line range.
-  instead: Branch on Code; fix the line range and retry with a valid 1-based start_line and end_line
+  fix: '{% if paintedwolf.native_operation %}Re-read the intended span with `sed -n ''A,Bp''` or `cat -n` inside
+    command, then pass --start and --end from that line range.{% else %}Re-read the intended span, then pass
+    start_line and end_line from that block''s line range.{% endif %}'
+  instead: Branch on Code; fix the line range and retry with a valid 1-based range
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:replace_lines
 x-paintedwolf-message: replace_lines line range is invalid
@@ -37,3 +39,14 @@ x-paintedwolf-scenarios:
     reason: end_line must be >= start_line
     start_line: 20
     tool: replace_lines
+- id: command-leg
+  vars:
+    end_line: 10
+    native_operation: replace_lines
+    path: internal/foo.go
+    profile: implement
+    reason: end_line must be >= start_line
+    start_line: 20
+    tool: command
+  expect_contains:
+  - '--start'

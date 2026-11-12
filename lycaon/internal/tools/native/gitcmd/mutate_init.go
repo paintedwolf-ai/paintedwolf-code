@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
-func runInit(ctx context.Context, p Prepared, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
+func runInit(ctx context.Context, p Prepared, tc tools.ToolContext, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
 	dir, status, err := resolveCommandDir(ctx, p, stderr, false)
 	if err != nil || status != 0 {
 		return settle(status, err, p.command.spec.Name)
@@ -25,6 +26,12 @@ func runInit(ctx context.Context, p Prepared, out *meteredOutput, stderr io.Writ
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
+	ctx, done, err := bindTargetLaunch(ctx, p, tc, writeRoot(bound.Resolved.Abs))
+	if err != nil {
+		return settleMutationError(err, toolcontract.NoEffect)
+	}
+	failed := true
+	defer func() { done(failed) }()
 	options := []string{}
 	if has(p.Argv, "-q") {
 		options = append(options, "-q")
@@ -40,6 +47,7 @@ func runInit(ctx context.Context, p Prepared, out *meteredOutput, stderr io.Writ
 		gitTarget = bound.Resolved.Abs
 	}
 	diagnostics, code, err := p.owners.Git.InitCommand(ctx, dir, gitTarget, p.command.config, options, out)
+	failed = err != nil || code != 0 || out.err != nil
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}

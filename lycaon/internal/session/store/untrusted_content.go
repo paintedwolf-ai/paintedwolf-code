@@ -116,7 +116,7 @@ func inheritUntrustedRecord() evidence.Record {
 	}
 }
 
-func (ev *memoryEvidence) SessionVisitedHosts(sessionID string) map[string]struct{} {
+func (ev *memoryEvidence) SessionContacts(sessionID string) map[string]evidence.Contact {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
@@ -125,10 +125,10 @@ func (ev *memoryEvidence) SessionVisitedHosts(sessionID string) map[string]struc
 	if err != nil {
 		return nil
 	}
-	return evidence.VisitedHostsFromLedger(ledger)
+	return evidence.ContactsFromLedger(ledger)
 }
 
-func (ev *sqlEvidence) SessionVisitedHosts(sessionID string) map[string]struct{} {
+func (ev *sqlEvidence) SessionContacts(sessionID string) map[string]evidence.Contact {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
 		return nil
@@ -137,24 +137,39 @@ func (ev *sqlEvidence) SessionVisitedHosts(sessionID string) map[string]struct{}
 	if err != nil {
 		return nil
 	}
-	return evidence.VisitedHostsFromLedger(ledger)
+	return evidence.ContactsFromLedger(ledger)
 }
 
-// RecordHostVisit adds a mediated dial to the chat's visited-host set. The record
-// carries no content tool, so it does not mark the session untrusted.
-func (ev *memoryEvidence) RecordHostVisit(ctx context.Context, sessionID, host string) error {
-	rec, ok := evidence.DialedHostRecord(host)
+// RecordContact adds an allowed dial to the chat's contacts. The record carries
+// no content tool, so it does not mark the session untrusted.
+func (ev *memoryEvidence) RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error {
+	rec, ok := contactRecord(host, contact)
 	if !ok || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
 	return upsertEvidenceRecordMemory(ctx, ev.core, sessionID, rec)
 }
 
-// RecordHostVisit adds a mediated dial to the chat's visited-host set.
-func (ev *sqlEvidence) RecordHostVisit(ctx context.Context, sessionID, host string) error {
-	rec, ok := evidence.DialedHostRecord(host)
+// RecordContact adds an allowed dial to the chat's contacts.
+func (ev *sqlEvidence) RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error {
+	rec, ok := contactRecord(host, contact)
 	if !ok || strings.TrimSpace(sessionID) == "" {
 		return nil
 	}
 	return upsertEvidenceRecordSQL(ctx, ev.core, sessionID, rec)
+}
+
+func contactRecord(host string, contact evidence.Contact) (evidence.Record, bool) {
+	switch contact {
+	case evidence.ContactNone:
+		// No contact: nothing was dialed, so there is no record.
+		return evidence.Record{}, false
+	case evidence.ContactRetrieval:
+		return evidence.RetrievedHostRecord(host)
+	case evidence.ContactAudited:
+		return evidence.AuditedHostRecord(host)
+	case evidence.ContactOwn:
+		return evidence.DialedHostRecord(host)
+	}
+	return evidence.DialedHostRecord(host)
 }

@@ -1,12 +1,82 @@
 package evidence
 
 import (
+	"context"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// ExchangeProvenance summarizes the external provenance of one completed
+// network read: an HTTP exchange, or a Git transfer.
+type ExchangeProvenance struct {
+	External     bool
+	ObservedURLs []string
+	WroteStdout  bool
+	WroteStderr  bool
+	WrittenFiles []string
+	// WrittenTrees are directories whose whole contents the read placed.
+	WrittenTrees []string
+}
+
+type exchangeProvenanceObserverKey struct{}
+
+// WithExchangeProvenanceObserver attaches a callback to ctx that receives provenance
+// for each HTTP exchange performed within that context.
+func WithExchangeProvenanceObserver(ctx context.Context, fn func(ExchangeProvenance)) context.Context {
+	if ctx == nil || fn == nil {
+		return ctx
+	}
+	prev, _ := ctx.Value(exchangeProvenanceObserverKey{}).(func(ExchangeProvenance))
+	if prev != nil {
+		combined := func(p ExchangeProvenance) {
+			prev(p)
+			fn(p)
+		}
+		return context.WithValue(ctx, exchangeProvenanceObserverKey{}, combined)
+	}
+	return context.WithValue(ctx, exchangeProvenanceObserverKey{}, fn)
+}
+
+// ContentFlow is stored content an operation delivered: Source is what it
+// read, and Files, when set, now hold content derived from it.
+type ContentFlow struct {
+	Source string
+	Files  []string
+}
+
+type contentFlowObserverKey struct{}
+
+// WithContentFlowObserver attaches a callback to ctx that receives each
+// content flow reported within that context.
+func WithContentFlowObserver(ctx context.Context, fn func(ContentFlow)) context.Context {
+	if ctx == nil || fn == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, contentFlowObserverKey{}, fn)
+}
+
+// ReportContentFlow notifies any observer attached to ctx.
+func ReportContentFlow(ctx context.Context, flow ContentFlow) {
+	if ctx == nil || flow.Source == "" {
+		return
+	}
+	if fn, ok := ctx.Value(contentFlowObserverKey{}).(func(ContentFlow)); ok && fn != nil {
+		fn(flow)
+	}
+}
+
+// ReportExchangeProvenance notifies any observer attached to ctx.
+func ReportExchangeProvenance(ctx context.Context, p ExchangeProvenance) {
+	if ctx == nil {
+		return
+	}
+	if fn, ok := ctx.Value(exchangeProvenanceObserverKey{}).(func(ExchangeProvenance)); ok && fn != nil {
+		fn(p)
+	}
+}
 
 // BuildProgramObservation captures execution output without inferring source access.
 func BuildProgramObservation(tool string, receipt *api.CommandProgramReceipt, content string) Record {
@@ -22,5 +92,90 @@ func BuildProgramObservation(tool string, receipt *api.CommandProgramReceipt, co
 		body += fmt.Sprintf("\nstatus_code: %d", *receipt.StatusCode)
 	}
 	captureRecordBody(&rec, body+"\n\n"+content)
+	return rec
+}
+
+// ProgramHTTPProvenance describes external HTTP deliveries and file-custody writes
+// observed during a command program run.
+type ProgramHTTPProvenance struct {
+	ProgramID        string
+	UntrustedContent bool
+	ObservedURLs     []string
+	CustodyPaths     []string
+	CustodyTrees     []string
+	ClearedPaths     []string
+}
+
+// BuildProgramHTTPRecord constructs an http_response ledger record for a command
+// program that observed external HTTP traffic or wrote external custody files.
+func BuildProgramHTTPRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+	if !prov.UntrustedContent && len(prov.ObservedURLs) == 0 && len(prov.CustodyPaths) == 0 {
+		return Record{}
+	}
+	rec := Record{
+		Kind:             "http_response",
+		Shape:            ShapeSurfaceSnapshot,
+		Fidelity:         FidelityStructured,
+		Surface:          SurfaceHTTP,
+		SourceTool:       "command",
+		UntrustedContent: prov.UntrustedContent,
+		Custody:          FileCustody{External: len(prov.CustodyPaths) > 0},
+	}
+	for _, u := range prov.ObservedURLs {
+		rec.touchURL(u)
+	}
+	for _, p := range prov.CustodyPaths {
+		addRecordPath(CitationRoots{ProjectDir: projectDir}, &rec, p, FidelityStructured)
+	}
+	if strings.TrimSpace(prov.ProgramID) != "" {
+		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))
+	}
+	return rec
+}
+
+// BuildProgramTreeRecord constructs the custody record for directories a
+// command program filled from the network, such as a clone.
+func BuildProgramTreeRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+	if len(prov.CustodyTrees) == 0 {
+		return Record{}
+	}
+	rec := Record{
+		Kind:       "http_response",
+		Shape:      ShapeSurfaceSnapshot,
+		Fidelity:   FidelityStructured,
+		Surface:    SurfaceHTTP,
+		SourceTool: "command",
+		Custody:    FileCustody{External: true, Tree: true},
+	}
+	for _, u := range prov.ObservedURLs {
+		rec.touchURL(u)
+	}
+	for _, p := range prov.CustodyTrees {
+		addRecordPath(CitationRoots{ProjectDir: projectDir}, &rec, p, FidelityStructured)
+	}
+	if strings.TrimSpace(prov.ProgramID) != "" {
+		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))
+	}
+	return rec
+}
+
+// BuildProgramCustodyReplacementRecord constructs a whole-file local write record
+// when a command program overwrites or removes paths that previously held external custody.
+func BuildProgramCustodyReplacementRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+	if len(prov.ClearedPaths) == 0 {
+		return Record{}
+	}
+	rec := Record{
+		Kind:       "write",
+		Shape:      ShapeStructuredEvent,
+		Fidelity:   FidelityStructured,
+		SourceTool: "command",
+	}
+	for _, p := range prov.ClearedPaths {
+		addRecordPath(CitationRoots{ProjectDir: projectDir}, &rec, p, FidelityStructured)
+	}
+	if strings.TrimSpace(prov.ProgramID) != "" {
+		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))
+	}
 	return rec
 }

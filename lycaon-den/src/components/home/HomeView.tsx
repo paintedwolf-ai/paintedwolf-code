@@ -126,7 +126,7 @@ export function HomeView(props: Props) {
   // First-run guidance requires a settled empty registry.
   const teaching = () =>
     isLoaded(props.registry) &&
-    rows().length === 0 &&
+    props.summaries.length === 0 &&
     (props.section === "recents" || props.section === "all");
   const registryFailed = () => errorOf(props.registry) !== undefined;
   const sortedAllRows = () =>

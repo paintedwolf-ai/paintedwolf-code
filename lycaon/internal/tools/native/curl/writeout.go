@@ -20,15 +20,34 @@ func (inv *invocation) writeOut(exit int) error {
 		return nil
 	}
 	var b strings.Builder
+	carried := false
 	for _, token := range inv.opts.writeOut {
 		if token.variable == "" {
 			b.WriteString(token.literal)
 			continue
 		}
-		b.WriteString(inv.writeOutValue(token.variable, exit))
+		value := inv.writeOutValue(token.variable, exit)
+		b.WriteString(value)
+		carried = carried || (value != "" && writeOutCarriesResponseText(token.variable, inv.exchange))
 	}
 	_, err := io.WriteString(inv.stdout, b.String())
+	if err == nil && carried && inv.exchange != nil && inv.exchange.External {
+		inv.provenance.WroteStdout = true
+	}
 	return err
+}
+
+// writeOutCarriesResponseText is whether a variable's value is text the server
+// chose rather than a measurement of the transfer. Status, sizes, timings and
+// addresses are measurements; a format's literal text is the agent's own.
+func writeOutCarriesResponseText(variable string, ex *httpaction.Exchange) bool {
+	switch variable {
+	case "content_type", "redirect_url":
+		return true
+	case "url_effective":
+		return ex != nil && len(ex.Redirects) > 0
+	}
+	return false
 }
 
 func seconds6(d time.Duration) string { return fmt.Sprintf("%.6f", d.Seconds()) }

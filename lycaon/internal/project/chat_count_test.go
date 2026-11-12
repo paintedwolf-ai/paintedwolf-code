@@ -11,7 +11,6 @@ import (
 )
 
 func TestProjectChatCountTracksRootLifecycleWithoutWorkers(t *testing.T) {
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "chat-count.db")
 	reg := NewSQLRegistry(sqlDB)
 	p, err := CreateWithRoot(t.Context(), reg, t.TempDir())

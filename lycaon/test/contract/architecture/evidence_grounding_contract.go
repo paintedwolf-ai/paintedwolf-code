@@ -74,5 +74,4 @@ var workerSummaryGuardCodesPreEvidenceGrounding = []string{
 	"WORKER_SUMMARY_NO_ARTIFACT",
 	"WORKER_SUMMARY_TOO_LONG",
 	"WORKER_TURN_NO_PROSE",
-	"WORKER_IMPLEMENT_NO_ARTIFACT",
 }

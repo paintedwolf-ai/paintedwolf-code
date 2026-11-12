@@ -165,11 +165,6 @@ mutates_content:
 mutates_path:
   - restore_version
   - content_apply
-  # fetch_url writes only when the model supplies `dest`; those remote-origin
-  # bytes classify as a write crossing, not a fetch.
-  - fetch_url
-  # http_request writes only when the model supplies `response_path`; the same
-  # remote-origin classification applies.
   # render_view writes only when the model supplies `dest`.
   - render_view
   - code_rewrite
@@ -260,6 +255,9 @@ execution_capabilities:
 # names the control tools made available by a live resource; command's job
 # controls arrive only with a live command job.
 families:
+  web_research:
+    - web_search
+    - fetch_url
   held_call:
     - held_result
     - held_stop
@@ -630,8 +628,7 @@ batch_concurrency_limit:
   summarize: 4
 
 # Presence of the named argument keeps that call serial even when opted in.
-batch_serial_when_arg:
-  fetch_url: dest
+batch_serial_when_arg: {}
 
 # Execution-order exceptions for one assistant tool-call slice.
 turn_order:

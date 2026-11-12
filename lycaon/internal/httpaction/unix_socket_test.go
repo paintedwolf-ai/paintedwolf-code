@@ -56,8 +56,8 @@ func TestHTTPRequestUnixSocketRequiresReviewedAuthority(t *testing.T) {
 		"url": "http://localhost/info", "unix_socket": path,
 	}, sessionContext(t.TempDir(), "call-sock"))
 	reject := toolrejection.AsToolReject(err)
-	if reject == nil || reject.Code != isolation.CodeSocketPathChanged {
-		t.Fatalf("err = %v, want %s", err, isolation.CodeSocketPathChanged)
+	if reject == nil || reject.Code != isolation.CodeSocketPermitRequired {
+		t.Fatalf("err = %v, want %s", err, isolation.CodeSocketPermitRequired)
 	}
 	if hit {
 		t.Fatal("an unreviewed socket was dialed")

@@ -10,6 +10,7 @@ import (
 
 var (
 	progressGatedOnce  sync.Once
+	progressGatedOrder []string
 	progressGatedTools map[string]struct{}
 	progressGatedErr   error
 )
@@ -17,15 +18,15 @@ var (
 // InitProgressGatedTools loads the progress-gated tool catalog.
 func InitProgressGatedTools(configRoot string) error {
 	progressGatedOnce.Do(func() {
-		progressGatedTools, progressGatedErr = loadProgressGatedTools(configRoot)
+		progressGatedOrder, progressGatedTools, progressGatedErr = loadProgressGatedTools(configRoot)
 	})
 	return progressGatedErr
 }
 
-func loadProgressGatedTools(configRoot string) (map[string]struct{}, error) {
+func loadProgressGatedTools(configRoot string) ([]string, map[string]struct{}, error) {
 	data, err := readProgressGatedToolsBytes()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	return parseProgressGatedToolsYAML(data)
 }
@@ -41,37 +42,52 @@ func readProgressGatedToolsBytes() ([]byte, error) {
 	return data, nil
 }
 
-func parseProgressGatedToolsYAML(data []byte) (map[string]struct{}, error) {
+func parseProgressGatedToolsYAML(data []byte) ([]string, map[string]struct{}, error) {
 	var raw struct {
 		Tools []string `yaml:"tools"`
 	}
 	if err := config.DecodeYAML(data, &raw); err != nil {
-		return nil, fmt.Errorf("parse progress-gated tools: %w", err)
+		return nil, nil, fmt.Errorf("parse progress-gated tools: %w", err)
 	}
+	order := make([]string, 0, len(raw.Tools))
 	out := make(map[string]struct{}, len(raw.Tools))
 	for _, name := range raw.Tools {
 		name = strings.TrimSpace(strings.ToLower(name))
 		if name == "" {
 			continue
 		}
+		if _, seen := out[name]; !seen {
+			order = append(order, name)
+		}
 		out[name] = struct{}{}
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("parse progress-gated tools: tools list is empty")
+		return nil, nil, fmt.Errorf("parse progress-gated tools: tools list is empty")
 	}
-	return out, nil
+	return order, out, nil
 }
 
 func progressGatedToolSet() map[string]struct{} {
 	if progressGatedTools != nil {
 		return progressGatedTools
 	}
-	// Tests that never call Init still resolve the bundled YAML via embed.
-	set, err := loadProgressGatedTools("")
+	_, set, err := loadProgressGatedTools("")
 	if err != nil {
 		panic(err)
 	}
 	return set
+}
+
+// GatedToolOrder returns the declared progress-gated tool and operation order.
+func GatedToolOrder() []string {
+	if progressGatedOrder != nil {
+		return append([]string(nil), progressGatedOrder...)
+	}
+	order, _, err := loadProgressGatedTools("")
+	if err != nil {
+		panic(err)
+	}
+	return order
 }
 
 // IsProgressGatedTool reports whether name needs a coordinator progress checklist.

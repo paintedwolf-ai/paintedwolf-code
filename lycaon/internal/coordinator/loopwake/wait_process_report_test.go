@@ -2,6 +2,7 @@ package loopwake
 
 import (
 	"context"
+	"encoding/json"
 	awaitstore "github.com/lycaon/lycaon/internal/await"
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/promptresult"
@@ -89,7 +90,7 @@ func TestReconciliationWaitsForThePublishedCompletion(t *testing.T) {
 	loop.SetDeps(deps)
 	delivered := recordDeliveries(loop)
 
-	lease, err := store.Arm(t.Context(), awaitstore.Lease{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID, UntilComplete: true,
+	lease, err := store.Arm(t.Context(), awaitstore.Lease{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID,
 		Conditions: []awaitstore.Condition{{Kind: "process_done", Handles: []string{"command-1"}}}})
 	testutil.FailErr(t, "arm process wait", err)
 	if done := reconcileWaitConditions(t.Context(), loop.Subscriptions, store, lease); done {
@@ -111,5 +112,45 @@ func TestReconciliationWaitsForThePublishedCompletion(t *testing.T) {
 	testutil.FailErr(t, "wait on finished job", err)
 	if !strings.Contains(out, "termination=exited") {
 		t.Fatalf("inline completion lacks its report: %s", out)
+	}
+}
+
+func TestTimedProcessWaitReturnsPublishedFailure(t *testing.T) {
+	loop, store, reg := completionWaitFixture(t)
+	deps := loopDepsSnapshotForTest(loop)
+	deps.ProcessState = func(string, string) (bool, bool) { return true, false }
+	const report = "handle=command-1 termination=exited exit_code=1 output=command#16"
+	deps.ProcessReport = func(string, string) (string, bool) { return report, true }
+	loop.SetDeps(deps)
+	args := completionWaitArgs()
+	delete(args, "until_complete")
+	args["timeout_ms"] = 1000
+	out, err := reg.Run(t.Context(), "wait", args, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID}})
+	testutil.FailErr(t, "wait after failed process exit", err)
+	var result WaitToolResult
+	testutil.FailErr(t, "decode wait outcome", json.Unmarshal([]byte(out), &result))
+	if result.Status != "process_done" || len(result.Conditions) != 1 || result.Conditions[0].Report != report {
+		t.Fatalf("terminal failure was lost: %+v", result)
+	}
+	active, err := store.Active(t.Context())
+	testutil.FailErr(t, "read leases", err)
+	if len(active) != 0 {
+		t.Fatalf("completed process parked: %+v", active)
+	}
+}
+
+func TestTimedProcessWaitReportsUnavailableHandle(t *testing.T) {
+	loop, _, reg := completionWaitFixture(t)
+	deps := loopDepsSnapshotForTest(loop)
+	deps.ProcessState = func(string, string) (bool, bool) { return false, false }
+	loop.SetDeps(deps)
+	args := completionWaitArgs()
+	delete(args, "until_complete")
+	out, err := reg.Run(t.Context(), "wait", args, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1", ProjectID: testdbseed.DefaultProjectID}})
+	testutil.FailErr(t, "wait on unavailable process", err)
+	var result WaitToolResult
+	testutil.FailErr(t, "decode unavailable outcome", json.Unmarshal([]byte(out), &result))
+	if len(result.Conditions) != 1 || result.Conditions[0].Outcome != "unavailable" {
+		t.Fatalf("unknown handle presented as completion: %+v", result)
 	}
 }

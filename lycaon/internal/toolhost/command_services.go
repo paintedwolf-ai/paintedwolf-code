@@ -3,6 +3,7 @@ package toolhost
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/commandprogram"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/captureprojection"
@@ -53,9 +54,6 @@ func (r *CommandServices) SetBackgroundRegistry(reg *bgprocess.Registry) {
 func (r *CommandServices) SetSandboxWriteRootGate(writeRoot command.SandboxWriteRootGate) {
 	if r == nil {
 		return
-	}
-	if r.commandTool != nil {
-		r.commandTool.WriteRootGate = writeRoot
 	}
 	if r.paths != nil {
 		r.paths.SetSessionWriteRootOverlay(writeRoot.SessionWriteRoots)
@@ -118,6 +116,8 @@ type ProgramServices struct {
 	SourceRuns command.SourceRunRecorder
 	// ExternalHidden withdraws the explicit external selector.
 	ExternalHidden bool
+	// Clock times program waits; nil is the system clock.
+	Clock commandprogram.Clock
 }
 
 func (r *CommandServices) programs() *command.ProgramRuntime {
@@ -139,6 +139,7 @@ func (r *CommandServices) SetProgramServices(services ProgramServices) error {
 	programs.Progress, programs.Sessions, programs.SourceRuns = services.Progress, services.Sessions, services.SourceRuns
 	programs.Supervisor.Interrupter = services.Recorder
 	programs.ExternalHidden = services.ExternalHidden
+	programs.Clock = services.Clock
 	if programs.Executor != nil {
 		programs.Executor.Metadata.SetCommandExternalHidden(services.ExternalHidden)
 	}

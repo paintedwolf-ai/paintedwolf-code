@@ -60,7 +60,7 @@ func readGitIndex(ctx context.Context, root string) (*gitIndex, error) {
 	opts := gitexec.Opts{Profile: gitexec.ProfileHermetic, MaxOutput: exec.DefaultMaxScanOutputBytes}
 	index := &gitIndex{clean: make(map[string][20]byte, 1024)}
 	conflicted := make(map[string]struct{})
-	err = gitexec.RunRecords(ctx, root, []string{"ls-files", "--stage", "-z"}, opts, func(record []byte) error {
+	err = gitexec.RunRecords(gitexec.WithHostPurpose(ctx, "source_snapshot"), root, []string{"ls-files", "--stage", "-z"}, opts, func(record []byte) error {
 		if len(record) == 0 {
 			return nil
 		}
@@ -92,7 +92,7 @@ func readGitIndex(ctx context.Context, root string) (*gitIndex, error) {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
 	var status statusParser
-	err = gitexec.RunRecords(ctx, root, []string{
+	err = gitexec.RunRecords(gitexec.WithHostPurpose(ctx, "source_snapshot"), root, []string{
 		"--no-optional-locks", "status", "--porcelain=v2", "-z", "--untracked-files=no", "--ignore-submodules=all", "--", ".",
 	}, opts, status.record)
 	if err != nil {

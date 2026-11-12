@@ -10,8 +10,8 @@ requires:
 when: paintedwolf.rejection_code == "REPLACE_LINES_INDENT_MISMATCH"
 effect: block
 copy:
-  what: 'replace_lines did not change {{ paintedwolf.path }} because line {{ paintedwolf.line }} does not begin with the exact dedent prefix.'
-  cause: '`shift_indent` is atomic and refuses partial dedents when any nonblank line differs.'
+  what: 'The line-range replacement did not change {{ paintedwolf.path }} because line {{ paintedwolf.line }} does not begin with the exact dedent prefix.'
+  cause: The dedent is atomic and refuses partial dedents when any nonblank line differs.
   why: 'Exact-prefix removal prevents mixed indentation from being silently normalized into a different block structure.'
   fix: 'Read the range, choose its actual shared whitespace prefix, and retry the same atomic operation.'
   instead: 'Branch on Code; read the range and use its exact shared prefix'

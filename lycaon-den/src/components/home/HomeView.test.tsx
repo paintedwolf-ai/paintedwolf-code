@@ -198,6 +198,28 @@ describe("HomeView all projects list", () => {
     expect(queryByTestId("home-list-pager")).toBeNull();
   });
 
+  it("includes drafts in all projects with draft badge and promote/discard actions", () => {
+    const onOpenProject = vi.fn(), onPromote = vi.fn(), onDelete = vi.fn();
+    const summaries = [stubSummary(0), { ...stubSummary(1), id: "d1", displayName: "Draft Idea", isDraft: true }];
+    const { getByTestId, queryByTestId } = render(() => (
+      <HomeView summaries={summaries} section="all" registry={loaded(null)} {...homeHandlers} onOpenProject={onOpenProject} onPromote={onPromote} onDelete={onDelete} />
+    ));
+    expect(getByTestId("project-list-row-p0")).toBeTruthy();
+    expect(getByTestId("project-list-row-d1")).toBeTruthy();
+    expect(queryByTestId("project-list-draft-p0")).toBeNull();
+    expect(getByTestId("project-list-draft-d1").textContent).toBe("Draft");
+    fireEvent.click(screen.getByText("Draft Idea"));
+    expect(onOpenProject).toHaveBeenCalledWith("d1");
+    fireEvent.click(getByTestId("project-list-menu-d1"));
+    fireEvent.click(assertNamedControl(screen.getByTestId("project-list-promote-d1"), "menuitem"));
+    expect(onPromote).toHaveBeenCalledWith("d1");
+    fireEvent.click(getByTestId("project-list-menu-d1"));
+    const discardBtn = assertNamedControl(screen.getByTestId("project-list-delete-d1"), "menuitem");
+    expect(discardBtn.textContent).toBe("Discard draft");
+    fireEvent.click(discardBtn);
+    expect(onDelete).toHaveBeenCalledWith("d1");
+  });
+
   it("multi-selects and runs bulk star / delete", async () => {
     const onToggleStar = vi.fn();
     const onDelete = vi.fn();
@@ -302,15 +324,15 @@ describe("HomeView all projects list", () => {
   });
 
   it("shows first-run teaching only for a settled, empty registry", () => {
-    render(() => (
-      <HomeView
-        summaries={[]}
-        section="recents"
-        registry={loaded(null)}
-        {...homeHandlers}
-      />
-    ));
+    render(() => <HomeView summaries={[]} section="recents" registry={loaded(null)} {...homeHandlers} />);
     expect(screen.getByTestId("home-teaching")).toBeTruthy();
+  });
+
+  it("shows section empty hint instead of first-run teaching on recents when only drafts exist", () => {
+    const summaries = [{ ...stubSummary(1), id: "d1", isDraft: true }];
+    render(() => <HomeView summaries={summaries} section="recents" registry={loaded(null)} {...homeHandlers} />);
+    expect(screen.queryByTestId("home-teaching")).toBeNull();
+    expect(screen.getByTestId("home-empty").textContent).toBe("No projects yet.");
   });
 });
 

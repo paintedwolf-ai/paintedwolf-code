@@ -78,9 +78,11 @@ implement_overlay_promote:
   exit: none
   publishes_mid_turn_text: true
   # skills_read resolves a described need and opens one procedure.
-  floor: [recall, promote_overlay, reject_overlay, preview_overlay, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, task, pack_board, skills_read, web_search, fetch_url, command, verify, secret_generate, secret_list, secret_revoke, wait, scan_query, scan_summary, scan_list, terminal_open, terminal_send, terminal_read, terminal_snapshot, terminal_close, ask_user, request_tools, summarize, survey_repo]
-  # Visual and browser checks load when the landed change needs them.
-  loadable: [command_output, command_stop, render_view, view_image, view_video, capture_page, measure_page, page_open, page_act, page_snapshot, page_close]
+  # Terminal and secret tools load on demand like on implement_investigate.
+  floor: [recall, promote_overlay, reject_overlay, preview_overlay, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, task, pack_board, skills_read, web_search, fetch_url, command, verify, wait, scan_query, scan_summary, scan_list, ask_user, request_tools, summarize, survey_repo]
+  # Visual, browser, terminal, and secret checks load when the landed change
+  # needs them.
+  loadable: [command_output, command_stop, render_view, view_image, view_video, capture_page, measure_page, page_open, page_act, page_snapshot, page_close, terminal_open, terminal_send, terminal_read, terminal_snapshot, terminal_close, secret_generate, secret_list, secret_revoke]
 
 # The open-intent surface: read the project on the floor, load everything
 # else per turn.
@@ -308,8 +310,6 @@ observe_investigate:
     - extend_worker_budget
     - decline_worker_budget
 
-# No fetch_url: a remote body written to dest changes the project, and fetching
-# belongs to the researcher leg.
 observe_plan:
   command_effects: [read_only]
   activity_label: Reviewing worker legs
@@ -318,7 +318,6 @@ observe_plan:
   publishes_mid_turn_text: true
   floor: [recall, command, command_output, command_stop, web_search, scan_pack, scan_query, scan_summary, scan_list, scan_compare, fanout_plan, workflow_advance, ask_user, request_tools, summarize, survey_repo]
 
-# No fetch_url, for the reason above.
 observe_synthesis:
   command_effects: [read_only]
   activity_label: Reviewing findings

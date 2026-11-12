@@ -2,7 +2,6 @@
 name: upgrade-dependencies
 description: Upgrade dependencies or fix advisories using the existing package manager, resolver, lockfile, and test gate.
 metadata:
-  paintedwolf.template_resources: references/upgrade_dotnet_dependencies.md|references/upgrade_go_dependencies.md|references/upgrade_jvm_dependencies.md|references/upgrade_node_dependencies.md|references/upgrade_php_dependencies.md|references/upgrade_python_dependencies.md|references/upgrade_ruby_dependencies.md|references/upgrade_rust_dependencies.md
   host_resources: dotnet|go|gradle|maven|node|php|python|ruby|rust|uv
 ---
 

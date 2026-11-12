@@ -42,7 +42,6 @@ type Guidance interface {
 type Limits interface {
 	Compaction(context.Context, *api.Session) compaction.CompactionConfig
 }
-type History interface{ WorkerGroundingRetries() int }
 type Decisions interface {
 	Get(context.Context, string) (api.WorkerDecisionRequest, bool, error)
 }
@@ -66,7 +65,6 @@ type Service struct {
 	guidance       Guidance
 	router         *llm.StaticModelRouter
 	limits         Limits
-	history        History
 	prompts        prompts.PromptTemplateEngine
 	workerContext  assembly.WorkerContextBuilder
 	workflowHints  *guidance.HintConfig
@@ -75,8 +73,8 @@ type Service struct {
 	decisions      Decisions
 }
 
-func New(sessions Sessions, workspace Workspace, gate Admission, guidance Guidance, limits Limits, history History, router *llm.StaticModelRouter, peers PeerServices) *Service {
-	return &Service{Workspaces: peers.Workspaces, Cancel: peers.Cancel, Cards: peers.Cards, Cancellations: peers.Cancellations, Delivery: peers.Delivery, Summaries: peers.Summaries, Results: peers.Results, Digests: peers.Digests, State: peers.State, Notes: peers.Notes, Rejections: peers.Rejections, store: sessions, workspace: workspace, gate: gate, guidance: guidance, limits: limits, history: history, router: router}
+func New(sessions Sessions, workspace Workspace, gate Admission, guidance Guidance, limits Limits, router *llm.StaticModelRouter, peers PeerServices) *Service {
+	return &Service{Workspaces: peers.Workspaces, Cancel: peers.Cancel, Cards: peers.Cards, Cancellations: peers.Cancellations, Delivery: peers.Delivery, Summaries: peers.Summaries, Results: peers.Results, Digests: peers.Digests, State: peers.State, Notes: peers.Notes, Rejections: peers.Rejections, store: sessions, workspace: workspace, gate: gate, guidance: guidance, limits: limits, router: router}
 }
 func (m *Service) SessionByID(ctx context.Context, id string) (*api.Session, error) {
 	return m.store.Get(ctx, id)

@@ -25,7 +25,6 @@ import (
 // (even when the session path is a worker branch directory) and the row list
 // caps at the prompt collection limit with an omitted count.
 func TestWorkspaceRootsPromptMarksSessionFolderAndOmittedCount(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	ctx := context.Background()
 
@@ -123,7 +122,6 @@ func TestWorkspaceRootsPromptMarksSessionFolderAndOmittedCount(t *testing.T) {
 // AC-WR03-01: one @label workspace folder block at any root count, with no
 // host absolute paths in prompts or kicks.
 func TestUnifiedFolderBlockGrammarAtEveryRootCount(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	renderer := prompts.NewInjectRenderer(engine)
 	ctx := context.Background()

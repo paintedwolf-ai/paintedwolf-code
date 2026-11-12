@@ -6,28 +6,21 @@ import (
 
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
-// implementDeferUntilUserReplyTools require prose after worker completion.
-var implementDeferUntilUserReplyTools = []string{
-	"pack_board",
-}
-
-// ImplementDeferUntilUserReplyTools returns deferred completion tools.
-func ImplementDeferUntilUserReplyTools() []string {
-	return append([]string(nil), implementDeferUntilUserReplyTools...)
-}
-
-// LaneSyncTool reports an inline survey tool.
+// LaneSyncTool reports whether toolName is an inline survey tool or operation.
 func LaneSyncTool(toolName string) bool {
 	toolName = strings.TrimSpace(strings.ToLower(toolName))
-	switch toolName {
-	case "command", "read", "grep", "find", "list_dir":
+	if toolName == "command" || strings.HasPrefix(toolName, "pack_") {
 		return true
-	default:
-		return strings.HasPrefix(toolName, "pack_") || strings.HasPrefix(toolName, "git_")
 	}
+	contract, ok := toolcontract.Lookup(toolName)
+	if !ok || contract.Lifecycle != toolcontract.LifecycleReadOnly {
+		return false
+	}
+	return contract.Owner == "filesystem" || contract.Owner == "git"
 }
 
 // LaneSyncTools filters visible inline survey tools.
@@ -40,17 +33,6 @@ func LaneSyncTools(visibleTools []string) []string {
 	}
 	sort.Strings(out)
 	return out
-}
-
-// IsImplementDeferUntilUserReplyTool matches a deferred tool.
-func IsImplementDeferUntilUserReplyTool(toolName string) bool {
-	toolName = strings.TrimSpace(strings.ToLower(toolName))
-	for _, blocked := range implementDeferUntilUserReplyTools {
-		if toolName == blocked {
-			return true
-		}
-	}
-	return false
 }
 
 // CoordinatorPolicyTemplateVars builds shared coordinator template data from
@@ -68,15 +50,10 @@ func CoordinatorPolicyTemplateVars(offered, requestable []string) map[string]any
 	for k, v := range progress.ProgressTemplateVars() {
 		out[k] = v
 	}
-	// Guidance follows the offered schemas: a tool that is not on this call
-	// is untaught until it loads.
 	for k, v := range VisibleToolsNativePartialVars(offered) {
 		out[k] = v
 	}
-	// Coordinator surfaces render for root sessions, which may widen recall;
-	// set after the spawn merge so the worker default does not win.
 	out["recall_may_widen"] = true
-	// The partial vars above default this for a worker profile.
 	out["is_coordinator"] = true
 	out["more_tools_loadable"] = len(requestable) > 0
 	out["profile_can_request"] = requestableToolSet(offered, requestable)

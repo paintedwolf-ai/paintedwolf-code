@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/indexwatch"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -114,16 +115,20 @@ func WaitBudget(args map[string]any) time.Duration {
 }
 
 // commandWaitBudget resolves the inline wait budget from wait_ms (clamped to MaxCommandWait),
-// falling back to DefaultCommandWait.
+// falling back to DefaultCommandWait. Verification runners scale the resolved budget
+// with the scheduler's timeout allowance, so race instrumentation does not promote
+// commands that would finish inline uninstrumented.
 func commandWaitBudget(args map[string]any) time.Duration {
+	budget := exec.DefaultCommandWait
 	if v, ok := args["wait_ms"].(float64); ok && v > 0 {
 		d := time.Duration(v) * time.Millisecond
 		if d > exec.MaxCommandWait {
-			return exec.MaxCommandWait
+			budget = exec.MaxCommandWait
+		} else {
+			budget = d
 		}
-		return d
 	}
-	return exec.DefaultCommandWait
+	return budget * time.Duration(runnerbudget.TimeoutScale())
 }
 
 func commandTimeout(args map[string]any, toolName string) time.Duration {
@@ -205,7 +210,7 @@ func runCommandForeground(
 	if err := runner.ValidateStages(ctx, stages); err != nil {
 		return RunOutcome{}, err
 	}
-	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, cmdKey, toolName, confineJob)
+	bound, err := bindCommandForegroundConfine(ctx, tctx, extraWriteRoots, nil, cmdKey, toolName, confineJob)
 	if err != nil {
 		return RunOutcome{}, err
 	}
@@ -356,10 +361,50 @@ func (b commandForegroundConfine) close(ctx context.Context) []confine.EgressHos
 	return b.lease.Close(ctx)
 }
 
+// BindAgentLaunch admits the confined launch for an agent-chosen host program
+// such as the bundled Git. services are sockets the host serves to that
+// program itself, so they need no user capability. release closes its action
+// lease.
+func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, commandLine string, services []confine.HostService) (exec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
+	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, services, commandLine, subject, true)
+	if err != nil {
+		return exec.LaunchPlan{}, nil, err
+	}
+	release := func(ctx context.Context, outcome tools.AgentLaunchOutcome) {
+		observeAgentLaunch(ctx, tctx, bound, commandLine, outcome)
+	}
+	return agentCommandLaunch(tctx, subject, bound.confinement, bound.lease, commandLine), release, nil
+}
+
+// observeAgentLaunch settles a native owner's confined launch into the
+// command's confinement facts, as an external stage's are: what the kernel
+// refused, what the host's own services declined, and whether it failed.
+func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, commandLine string, outcome tools.AgentLaunchOutcome) {
+	settleCtx := context.WithoutCancel(ctx)
+	refusals := bound.lease.SettledRefusals(settleCtx)
+	if len(outcome.Refusals) > 0 {
+		refusals = refusals.Merge(confine.SandboxRefusals{Refusals: outcome.Refusals})
+	}
+	network := bound.close(settleCtx)
+	boundary := confine.BoundaryOf(bound.confinement)
+	if !boundary.Applied || tctx.Effects.Out == nil {
+		return
+	}
+	var failed []string
+	if outcome.Failed {
+		failed = []string{commandLine}
+	}
+	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
+		MediatedNetwork: network, FailedStages: failed, Refusals: refusals,
+	})
+	tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
+}
+
 func bindCommandForegroundConfine(
 	ctx context.Context,
 	tctx tools.ToolContext,
 	extraWriteRoots []string,
+	services []confine.HostService,
 	cmdKey string,
 	toolName string,
 	confineJob bool,
@@ -371,6 +416,7 @@ func bindCommandForegroundConfine(
 		if tr != nil {
 			return commandForegroundConfine{}, tr
 		}
+		confReq.HostServices = services
 		resolved, applied := confine.DefaultConfinement(confReq)
 		bound.confinement = resolved
 		if err := confine.RequireApplied(applied); err != nil {

@@ -409,9 +409,9 @@ func TestActivityPresentationWeights(t *testing.T) {
 		weight   int
 	}{
 		"update_progress": {headline: "coordinating", weight: 0},
-		"read":            {headline: "investigating", weight: 1},
+		"read":            {headline: "reading files", weight: 1},
 		"command":         {headline: "running commands", weight: 3},
-		"edit":            {headline: "making changes", weight: 6},
+		"edit":            {headline: "editing files", weight: 6},
 	} {
 		activity := activities[tool]
 		if activity.Headline != want.headline || activity.Weight() != want.weight {

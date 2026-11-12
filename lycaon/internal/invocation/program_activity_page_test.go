@@ -88,7 +88,7 @@ func TestActivityPageCoversFoldedRoots(t *testing.T) {
 	testutil.FailErr(t, "settle representative", err)
 	// A second same-phase root folds into the first activity's row.
 	_, err = f.database.ExecContext(t.Context(), `INSERT INTO invocation_program_executions (id,program_id,node_id,ordinal,parent_execution_id,actor_id,scope_json,operation_id,definition_digest,arguments_representation,arguments_digest,arguments_ref,reviewed_arguments_ref,canonical,state,owner,lifecycle,native_command,effect_mode,effect_classes_json,started_at,status_code,effect_certainty)
- SELECT 'folded-root',program_id,'untaken-node',2,parent_execution_id,actor_id,scope_json,'sed',definition_digest,arguments_representation,arguments_digest,arguments_ref,reviewed_arguments_ref,canonical,'completed',owner,lifecycle,'sed',effect_mode,effect_classes_json,started_at,0,'none'
+ SELECT 'folded-root',program_id,'untaken-node',2,parent_execution_id,actor_id,scope_json,'grep',definition_digest,arguments_representation,arguments_digest,arguments_ref,reviewed_arguments_ref,canonical,'completed',owner,lifecycle,'grep',effect_mode,effect_classes_json,started_at,0,'none'
  FROM invocation_program_executions WHERE id=?`, id)
 	testutil.FailErr(t, "record folded root", err)
 	summary, err := f.recorder.ActivitySummary(t.Context(), f.session, f.program)

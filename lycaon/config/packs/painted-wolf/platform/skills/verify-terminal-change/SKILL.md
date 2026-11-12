@@ -5,7 +5,7 @@ description: Verify changed CLI/TUI output, including non-interactive reports, T
 
 # Verify a terminal change
 
-1. A built or changed CLI report needs a screen capture even without interaction or an explicit screenshot request. Plan a separate `Snapshot the terminal` progress row. Routine test/build output or exit-status checks alone use ordinary `command` / `verify` without capture.
+1. A built or changed CLI report needs a screen capture even without interaction or an explicit screenshot request. Plan a separate `Snapshot the terminal` step rather than folding the capture into another check. Routine test/build output or exit-status checks alone use ordinary `command` / `verify` without capture.
 2. Choose the runner from the behavior:
    - For a sealed one-shot screen, including a non-interactive CLI/TUI or an action needing one-action authority such as direct network access, call `command` with `terminal_capture: {}`. Put the exact program argv, working directory, capability request, terminal size, and caption on that one invocation.
    - For prompts, keyboard interaction, or multiple material states, call `terminal_open`, inspect its returned screen, drive it with `terminal_send`, and take `terminal_snapshot` at each material state. A held terminal cannot carry one-action direct network authority.

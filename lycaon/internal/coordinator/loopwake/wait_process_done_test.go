@@ -114,6 +114,7 @@ func TestNudgeProcessFinishedMatchesExactHandleSelection(t *testing.T) {
 func processCycleLoopDeps(running bool) LoopDeps {
 	deps := idleWaitLoopDeps()
 	deps.ProcessRunning = func(string, []string) bool { return running }
+	deps.ProcessState = func(string, string) (bool, bool) { return true, running }
 	return deps
 }
 
@@ -214,9 +215,9 @@ func TestWaitProcessDoneFastPathUsesExactHandles(t *testing.T) {
 	loop := NewLoopEngine()
 	var selected []string
 	deps := idleWaitLoopDeps()
-	deps.ProcessRunning = func(_ string, handles []string) bool {
-		selected = append([]string(nil), handles...)
-		return false
+	deps.ProcessState = func(_ string, handle string) (bool, bool) {
+		selected = append(selected, handle)
+		return true, false
 	}
 	loop.SetDeps(deps)
 	reg := tools.NewDefaultRegistry()

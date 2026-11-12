@@ -2,11 +2,15 @@ package evidence
 
 // RecordAux carries unexported index fields for durable store round-trip.
 type RecordAux struct {
-	PathsTouched []string
-	URLsTouched  []string
-	URLTitles    map[string]string
-	GrepLines    map[string]map[int]string
-	PathTiers    map[string]string
+	PathsTouched     []string
+	URLsTouched      []string
+	URLTitles        map[string]string
+	GrepLines        map[string]map[int]string
+	PathTiers        map[string]string
+	UntrustedContent bool
+	ExternalCustody  bool
+	CustodyTree      bool
+	CustodySeq       int
 	// PathRoots maps a stored path key to its owning root ID for keys whose
 	// root differs from the record's primary RootID; empty values mark
 	// legacy tokens.
@@ -17,10 +21,14 @@ type RecordAux struct {
 func CloneRecordForStore(rec Record) RecordAux {
 	cloned := cloneRecord(rec)
 	out := RecordAux{
-		PathsTouched: append([]string(nil), cloned.pathsTouched...),
-		URLsTouched:  append([]string(nil), cloned.urlsTouched...),
-		URLTitles:    cloned.urlTitles,
-		PathRoots:    cloned.pathRoots,
+		PathsTouched:     append([]string(nil), cloned.pathsTouched...),
+		URLsTouched:      append([]string(nil), cloned.urlsTouched...),
+		URLTitles:        cloned.urlTitles,
+		UntrustedContent: cloned.UntrustedContent,
+		ExternalCustody:  cloned.Custody.External,
+		CustodyTree:      cloned.Custody.Tree,
+		CustodySeq:       cloned.Custody.Seq,
+		PathRoots:        cloned.pathRoots,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -73,5 +81,17 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		for path, rootID := range aux.PathRoots {
 			rec.pathRoots[NormalizeLedgerPath(path)] = rootID
 		}
+	}
+	if aux.UntrustedContent {
+		rec.UntrustedContent = true
+	}
+	if aux.ExternalCustody {
+		rec.Custody.External = true
+	}
+	if aux.CustodyTree {
+		rec.Custody.Tree = true
+	}
+	if aux.CustodySeq > 0 {
+		rec.Custody.Seq = aux.CustodySeq
 	}
 }

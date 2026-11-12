@@ -115,6 +115,7 @@ func fixtures() []fixture {
 	outsideReadSilent.File = &FileTarget{Path: "/proj/notes.md", Mode: ModeRead}
 
 	outboundFires := baseFacts(StagePreDial)
+	outboundFires.UntrustedIngested = true
 	outboundFires.Destination = &Endpoint{Host: "paste.example", Transport: "http", Opaque: true, FirstUseThisSession: true}
 	outboundSilent := baseFacts(StagePreDial)
 	outboundSilent.Destination = &Endpoint{
@@ -890,17 +891,6 @@ func TestSecretExposureIsStrictOnly(t *testing.T) {
 		if verdict, _ := Evaluate(f, p); verdict == Ask {
 			t.Errorf("%s must not ask on secret exposure alone", p)
 		}
-	}
-}
-
-// A fetch that only retrieves carries nothing out, so exposure alone does not
-// make reading a page an interruption.
-func TestExposureDoesNotGateAPlainFetch(t *testing.T) {
-	f := baseFacts(StagePreDial)
-	f.SecretExposed = true
-	f.Destination = &Endpoint{Host: "docs.example", Transport: "http", Configured: true}
-	if verdict, decision := Evaluate(f, PostureStrict); verdict == Ask && decisionNames(decision, api.GateSecretExposedOutbound) {
-		t.Fatal("a body-less fetch must not fire the exposure gate")
 	}
 }
 

@@ -47,7 +47,6 @@ func runObservedPromotion(t *testing.T, reg Registry) (fired bool, before, after
 
 func TestPromotionCommitNotifiesRootsChangedObserver(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	fired, before, after := runObservedPromotion(t, NewMemoryRegistry())
 	if !fired {
 		t.Fatal("promotion commit did not notify the roots-changed observer")
@@ -68,7 +67,6 @@ func TestPromotionCommitNotifiesRootsChangedObserver(t *testing.T) {
 
 func TestSQLPromotionCommitNotifiesRootsChangedObserver(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "promotion-observer.db")
 	defer sqlDB.Close()
 	fired, before, after := runObservedPromotion(t, NewSQLRegistry(sqlDB))

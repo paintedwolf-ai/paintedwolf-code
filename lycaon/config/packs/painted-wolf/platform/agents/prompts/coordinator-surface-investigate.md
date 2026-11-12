@@ -3,8 +3,8 @@
 
 Product read/write on the project tree.
 
-- **Read:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %} (`{{ read_scope_name }}`)
-- **Write:** {% for g in write_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %} (`coordinator_product_write`)
+- **Read:** {% for g in read_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
+- **Write:** {% for g in write_globs %}`{{ g }}`{% if not forloop.Last %}, {% endif %}{% endfor %}
 - Project instruction, skill, prompt, rule, workflow, and settings files are writable under approval; they ask before they change.
 
 ### Rules

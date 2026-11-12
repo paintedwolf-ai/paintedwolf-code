@@ -536,8 +536,8 @@ func TestCommandEntryBareWaitIgnoresItsOwnContinuation(t *testing.T) {
 	f := newWaitStateFixture(t)
 	done := f.start(t, f.externalHelper()+"; wait; echo after")
 	f.awaitExternal(t)
-	f.awaitTimers(t, command.DefaultProgramInlineWait)
-	f.clock.Advance(command.DefaultProgramInlineWait)
+	f.awaitTimers(t, command.ProgramInlineWait())
+	f.clock.Advance(command.ProgramInlineWait())
 	var running command.RunningProgramResult
 	testutil.FailErr(t, "decode running program", json.Unmarshal([]byte(receive(t, f, done, "the call's result")), &running))
 	if running.State != "running" || running.Handle == "" {

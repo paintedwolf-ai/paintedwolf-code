@@ -444,14 +444,14 @@ func OperationOutputFailure() (int, wire.CommandInvokeResponse, bool) {
 // editorPromptVars is the closed prompt variable set.
 func editorPromptVars(ctx wire.CommandInvokeContext, roots []projectroot.RootRef, activeRootID string) map[string]any {
 	return map[string]any{
-		"path":        strings.TrimSpace(ctx.Path),
+		"path":         strings.TrimSpace(ctx.Path),
 		"path_display": editorPathDisplay(roots, activeRootID, ctx),
-		"root_id":     strings.TrimSpace(ctx.RootID),
-		"start_line":  ctx.StartLine,
-		"end_line":    ctx.EndLine,
-		"symbol":      strings.TrimSpace(ctx.Symbol),
-		"finding_id":  strings.TrimSpace(ctx.FindingID),
-		"instruction": strings.TrimSpace(ctx.Instruction),
+		"root_id":      strings.TrimSpace(ctx.RootID),
+		"start_line":   ctx.StartLine,
+		"end_line":     ctx.EndLine,
+		"symbol":       strings.TrimSpace(ctx.Symbol),
+		"finding_id":   strings.TrimSpace(ctx.FindingID),
+		"instruction":  strings.TrimSpace(ctx.Instruction),
 	}
 }
 

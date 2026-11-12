@@ -70,6 +70,9 @@ components:
         coverage_review:
           x-go-pointer: true
           $ref: worker.yaml#/components/schemas/CoverageReview
+        verification:
+          x-go-pointer: true
+          $ref: session/worker-reports.yaml#/components/schemas/CitationVerification
         declared_leg_status:
           type: string
           enum: [complete, partial, blocked]
@@ -154,6 +157,9 @@ components:
         evidence: { type: string }
         line: { type: integer }
         excerpt: { type: string }
+        cite:
+          type: string
+          description: Host-resolved citation the parent can use.
         note: { type: string }
         claim: { type: string }
         adversary: { type: string }

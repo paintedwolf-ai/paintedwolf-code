@@ -1,14 +1,12 @@
 package webresearch
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 	"github.com/lycaon/lycaon/internal/webindex"
-	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -199,15 +197,14 @@ func (p *RESTSearchProvider) Search(ctx context.Context, s Settings, query strin
 	if err != nil {
 		return providerOutcome{providerID: providerID, reason: "parse_error", detail: err.Error()}
 	}
-	var bodyReader io.Reader
+	var body []byte
 	if p.spec.BuildBody != nil {
-		body, err := p.spec.BuildBody(s, query, maxResults)
+		body, err = p.spec.BuildBody(s, query, maxResults)
 		if err != nil {
 			return providerOutcome{providerID: providerID, reason: "parse_error", detail: err.Error()}
 		}
-		bodyReader = bytes.NewReader(body)
 	}
-	req, err := http.NewRequestWithContext(ctx, p.spec.Method, url, bodyReader)
+	req, err := newProviderRequest(ctx, p.spec.Method, url, body)
 	if err != nil {
 		return providerOutcome{providerID: providerID, reason: "parse_error", detail: err.Error()}
 	}

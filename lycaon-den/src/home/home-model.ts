@@ -4,13 +4,9 @@ export type HomeSection = "recents" | "drafts" | "starred" | "all";
 
 export const DEFAULT_HOME_SECTION: HomeSection = "recents";
 
-/** Page size for the All projects list view. */
 export const ALL_PROJECTS_PAGE_SIZE = 12;
 
-/**
- * Card-grid sections (Recents, Drafts, Starred) render at most this many
- * cards; the overflow lives in the paged All projects table.
- */
+/** Card grids cap at this count; overflow links to All projects. */
 export const HOME_GRID_CAP = 12;
 
 export type ProjectListSortKey = "name" | "updated";
@@ -56,29 +52,25 @@ export function sortProjectSummaries(
   });
 }
 
-/** Recents and All list saved projects; Starred honors explicit stars in either state. */
+/** Recents lists saved projects; Drafts and Starred filter by state; All includes every project. */
 export function projectsForSection(
   summaries: ProjectSummary[],
   section: HomeSection,
 ): ProjectSummary[] {
-  const saved = summaries.filter((s) => !s.isDraft);
   switch (section) {
     case "drafts":
       return summaries.filter((s) => s.isDraft);
     case "starred":
       return summaries.filter((s) => s.starred);
     case "all":
+      return summaries;
     case "recents":
     default:
-      return saved;
+      return summaries.filter((s) => !s.isDraft);
   }
 }
 
-/**
- * Home keeps the rows it showed while a submitted idea becomes a project. The
- * draft record lands in the registry before the shell leaves Home, and a card
- * or count that appears for it would paint the transition twice.
- */
+/** Holds the prior rows while an idea materializes so the new draft does not flash on Home before chat opens. */
 export function retainedHomeSummaries(
   previous: ProjectSummary[] | undefined,
   next: ProjectSummary[],

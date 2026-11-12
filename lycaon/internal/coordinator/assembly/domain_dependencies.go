@@ -22,8 +22,7 @@ type promptSurfaceDeps struct {
 	ImplementSessionState   func(ctx context.Context, sess *api.Session) surface.ImplementSessionState
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits
 	ExecutionModes          *surface.ExecutionModeStateStore
-	LoadedTools             func(sessionID string) map[string]bool
-	OmittedUnits            func(sessionID string) map[string]bool
+	Selection               SelectionSource
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
 	PromptToolLister        PromptToolLister
 	Prompts                 prompts.PromptTemplateEngine
@@ -76,8 +75,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		ImplementSessionState:   snapshot.ImplementSessionState,
 		Limits:                  snapshot.Limits,
 		ExecutionModes:          snapshot.ExecutionModes,
-		LoadedTools:             snapshot.LoadedTools,
-		OmittedUnits:            snapshot.OmittedUnits,
+		Selection:               snapshot.Selection,
 		ProjectOverlayRootPaths: snapshot.ProjectOverlayRootPaths,
 		PromptToolLister:        snapshot.PromptToolLister,
 		Prompts:                 snapshot.Prompts,

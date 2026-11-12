@@ -15,11 +15,10 @@ import (
 func TestReadSkillForToolGatesStockSkillsByOfferedToolsAndCopiesResources(t *testing.T) {
 	roster := []skills.Skill{
 		{
-			Name:          "review-accessibility",
-			Description:   "Audit a page for accessibility.",
-			Body:          "Use `measure_page` and `page_open` to inspect the page, and optionally `capture_page`.",
-			OptionalTools: []string{"capture_page"},
-			Resources:     []string{"references/wcag.md"},
+			Name:        "review-accessibility",
+			Description: "Audit a page for accessibility.",
+			Body:        "Use `measure_page` and `page_open` to inspect the page, and optionally {% if profile_has_capture_page %}`capture_page`{% endif %}.",
+			Resources:   []string{"references/wcag.md"},
 		},
 	}
 	sess := &api.Session{ID: "s1"}

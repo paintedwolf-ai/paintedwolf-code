@@ -16,7 +16,6 @@ import (
 
 func promptRootsService(t *testing.T, rootCount int) (*scope.Service, *api.Session, string) {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := context.Background()
 	reg := project.NewMemoryRegistry()
 	base := t.TempDir()

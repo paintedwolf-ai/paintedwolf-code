@@ -15,7 +15,7 @@ requires:
 when: paintedwolf.rejection_code == "EXTRACT_DEST_NOT_DIR"
 effect: block
 copy:
-  what: extract_archive destination {{ paintedwolf.dest }} exists but is not a directory.
+  what: The archive extraction destination {{ paintedwolf.dest }} exists but is not a directory.
   cause: Destination must be an existing directory or a creatable directory path.
   why: The destination is separate from the archive input and must contain the extracted entries.
   fix: Choose the intended directory destination. Do not delete or overwrite the existing non-directory target

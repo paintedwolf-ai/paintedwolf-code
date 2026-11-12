@@ -17,8 +17,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -129,10 +129,10 @@ func TestPathAddressingRuleStatedInSchemas(t *testing.T) {
 		sort.Strings(names)
 		for _, name := range names {
 			props, ok := schemas.Tools[name].Schema["properties"].(map[string]any)
-		if !ok {
-			continue
-		}
-		pathAddressingWalk(dir.label, name, props, "", &args)
+			if !ok {
+				continue
+			}
+			pathAddressingWalk(dir.label, name, props, "", &args)
 		}
 		if len(args) == 0 {
 			t.Fatalf("no path arguments found in %s — the walk is broken", dir.name)
@@ -205,18 +205,18 @@ type noneClassifiedPathArgEntry struct {
 // classified as addressed (with its resolver) or documented non-addressed.
 var noneClassifiedPathArgs = map[string]noneClassifiedPathArgEntry{
 	// Addressed through the shared resolvers.
-	"capture_page/routes.body_path":            {resolver: "read"},
-	"page_act/actions.routes.body_path":        {resolver: "read"},
-	"page_open/routes.body_path":               {resolver: "read"},
-	"fetch_url/dest":                           {resolver: "write"},
-	"render_view/dest":                         {resolver: "write"},
-	"http_request/body_path":                   {resolver: "bind"},
-	"http_request/form.path":                   {resolver: "bind"},
+	"capture_page/routes.body_path":     {resolver: "read"},
+	"page_act/actions.routes.body_path": {resolver: "read"},
+	"page_open/routes.body_path":        {resolver: "read"},
+	"fetch_url/dest":                    {resolver: "write"},
+	"render_view/dest":                  {resolver: "write"},
+	"http_request/body_path":            {resolver: "bind"},
+	"http_request/form.path":            {resolver: "bind"},
 	// Deliberately not addressed: keys, filters, URL paths, reported metadata.
-	"capture_page/path":                        {marker: "url path"},
-	"measure_page/path":                        {marker: "url path"},
-	"page_open/path":                           {marker: "url path"},
-	"complete_leg/coverage_gaps.paths":         {marker: "not addressed paths"},
+	"capture_page/path":                {marker: "url path"},
+	"measure_page/path":                {marker: "url path"},
+	"page_open/path":                   {marker: "url path"},
+	"complete_leg/coverage_gaps.paths": {marker: "not addressed paths"},
 	"complete_leg/coverage_review.assessments.cited_evidence.path": {marker: "cited receipt"},
 	"complete_leg/findings.path":                                   {marker: "its receipt"},
 	"fanout_plan/legs.scope.paths":                                 {marker: "leg's session"},

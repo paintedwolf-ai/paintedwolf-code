@@ -263,8 +263,8 @@ func TestConfineRequestForSpawnConsumesPermit(t *testing.T) {
 	if reject == nil {
 		t.Fatal("expected reject after permit consumption")
 	}
-	if reject.Code != "SANDBOX_SOCKET_PATH_CHANGED" {
-		t.Fatalf("reject code = %q, want SANDBOX_SOCKET_PATH_CHANGED", reject.Code)
+	if reject.Code != "SANDBOX_SOCKET_PERMIT_REQUIRED" {
+		t.Fatalf("reject code = %q, want SANDBOX_SOCKET_PERMIT_REQUIRED", reject.Code)
 	}
 }
 

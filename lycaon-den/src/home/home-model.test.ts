@@ -33,7 +33,7 @@ const rows: ProjectSummary[] = [
 ];
 
 describe("projectsForSection", () => {
-  it("keeps drafts out of saved views and honors stars across project states", () => {
+  it("keeps drafts out of recents, includes them in all, and honors stars across project states", () => {
     expect(projectsForSection(rows, "recents").map((r) => r.id)).toEqual([
       "saved",
       "starred-saved",
@@ -41,6 +41,8 @@ describe("projectsForSection", () => {
     expect(projectsForSection(rows, "all").map((r) => r.id)).toEqual([
       "saved",
       "starred-saved",
+      "draft",
+      "starred-draft",
     ]);
     expect(projectsForSection(rows, "starred").map((r) => r.id)).toEqual([
       "starred-saved",

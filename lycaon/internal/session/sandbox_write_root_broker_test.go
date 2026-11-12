@@ -120,7 +120,7 @@ func TestSessionOverlayCoveringKeepsMissingPath(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "not-yet-created")
 	rt.GrantSessionWriteRoot(root, missing)
 	got := sessionOverlayCovering(rt, root, filepath.Join(missing, "child"))
-	if got == "" || !confine.PathWithinWriteRoots(filepath.Join(missing, "child"), []string{got}) {
+	if got == "" || !confine.PathWithinRoots(filepath.Join(missing, "child"), []string{got}) {
 		t.Fatalf("covering = %q, want the live grant for %s", got, missing)
 	}
 	if sessionOverlayCovering(rt, root, filepath.Join(t.TempDir(), "other")) != "" {

@@ -2,6 +2,7 @@ package credentialstore
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 )
 
@@ -13,6 +14,12 @@ func TestKeychainStatusesMapToCustodianSentinels(t *testing.T) {
 		if errors.Is(status, errIdentityMissing) || errors.Is(status, errIdentityExists) {
 			t.Fatalf("status %d reads as missing or duplicate", status)
 		}
+	}
+	if got, ok := KeychainOSStatus(fmt.Errorf("wrapped: %w", keychainMissingEntitlement)); !ok || got != KeychainMissingEntitlementStatus {
+		t.Fatalf("KeychainOSStatus(wrapped -34018) = (%d, %v), want (%d, true)", got, ok, KeychainMissingEntitlementStatus)
+	}
+	if got, ok := KeychainOSStatus(errors.New("plain error")); ok || got != 0 {
+		t.Fatalf("KeychainOSStatus(plain) = (%d, %v), want (0, false)", got, ok)
 	}
 	p := newKeychainIdentityProvider("/a/credential-vault.age").(*itemsIdentityProvider)
 	if p.account != identityAccount("/a/credential-vault.age") {

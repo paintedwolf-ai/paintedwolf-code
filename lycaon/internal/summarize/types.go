@@ -274,9 +274,9 @@ type StructureCandidate struct {
 	ErrorKind     string
 	LogDigest     string
 	// Structured root identity of RelPath; empty for legacy callers.
-	RootID   string
-	ScopeRel string
-	ImportPath    string
+	RootID     string
+	ScopeRel   string
+	ImportPath string
 }
 
 // FitEdges are optional one-hop context.
