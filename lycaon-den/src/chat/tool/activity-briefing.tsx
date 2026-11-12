@@ -1,4 +1,4 @@
-import { createMemo, type Accessor } from "solid-js";
+import { Show, createMemo, type Accessor } from "solid-js";
 import { BriefingEvidenceLink, BriefingSummary, snapshotSections } from "../../briefing/BriefingSummary.tsx";
 import { useBriefing, type BriefingTarget } from "../../briefing/briefing-live.ts";
 import { fileSummariesEnabled, fileSummariesSettingKnown } from "../../settings/editor/file-summary-settings.ts";
@@ -59,7 +59,7 @@ export function useActivityBriefingSlots(args: Args): ToolBriefingSlots {
   const reference = () => view().snapshot?.result?.evidence_ref;
   const purposeElement = <BriefingSummary sections={purpose()} recordId={recordId()} data-testid="activity-briefing-purpose" />;
   const changeElement = <BriefingSummary sections={change()} recordId={recordId()} data-testid="activity-briefing-change" />;
-  const evidenceElement = <BriefingEvidenceLink reference={reference()!} />;
+  const evidenceElement = <Show when={reference()}>{(ref) => <BriefingEvidenceLink reference={ref()} />}</Show>;
   return {
     get purpose() {
       return purpose().length ? purposeElement : undefined;
