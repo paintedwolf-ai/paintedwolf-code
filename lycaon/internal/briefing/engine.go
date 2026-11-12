@@ -227,7 +227,9 @@ func (e *Engine) generate(ctx context.Context, r resolved, attempt string, store
 		r.results[hash] = result
 	}
 	settleCtx := context.WithoutCancel(ctx)
-	if len(failures) > 0 && len(r.present()) == 0 {
+	// Any section left without text fails the attempt; generated sections stay
+	// stored, so a retry asks only for the rest.
+	if len(failures) > 0 {
 		e.fail(settleCtx, r, attempt, Failure{Code: CodeGenerationFailed, Message: strings.Join(failures, "; ")})
 		return
 	}
