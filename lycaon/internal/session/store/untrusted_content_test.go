@@ -39,10 +39,12 @@ func testRecordContactBuildsSessionContacts(t *testing.T, st contactStore, proje
 
 	testutil.FailErr(t, "RecordContact own", st.RecordContact(ctx, sess.ID, "Example.COM", evidence.ContactOwn))
 	testutil.FailErr(t, "RecordContact retrieval", st.RecordContact(ctx, sess.ID, "  Retrieved.Example.Net ", evidence.ContactRetrieval))
+	testutil.FailErr(t, "RecordContact audited", st.RecordContact(ctx, sess.ID, "audited.example", evidence.ContactAudited))
 
 	want := map[string]evidence.Contact{
 		"example.com":           evidence.ContactOwn,
 		"retrieved.example.net": evidence.ContactRetrieval,
+		"audited.example":       evidence.ContactAudited,
 	}
 	if got := st.SessionContacts(sess.ID); !maps.Equal(got, want) {
 		t.Fatalf("SessionContacts = %v, want %v", got, want)

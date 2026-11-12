@@ -160,8 +160,11 @@ func (ev *sqlEvidence) RecordContact(ctx context.Context, sessionID, host string
 }
 
 func contactRecord(host string, contact evidence.Contact) (evidence.Record, bool) {
-	if contact == evidence.ContactRetrieval {
+	switch contact {
+	case evidence.ContactRetrieval:
 		return evidence.RetrievedHostRecord(host)
+	case evidence.ContactAudited:
+		return evidence.AuditedHostRecord(host)
 	}
 	return evidence.DialedHostRecord(host)
 }
