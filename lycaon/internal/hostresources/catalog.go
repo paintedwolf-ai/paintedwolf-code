@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/lycaon/lycaon/internal/exec"
 )
 
 type Catalog struct {
@@ -47,6 +49,9 @@ type ConnectionTemplate struct {
 	Transport  LocalServiceTransport `yaml:"transport"`
 	Target     string                `yaml:"target"`
 	TargetFrom string                `yaml:"target_from"`
+	// ClientEnv names the variable a client reads for this endpoint as a
+	// unix:// URL, such as DOCKER_HOST. Only a local Unix socket sets it.
+	ClientEnv string `yaml:"client_env"`
 }
 
 // Expression is a closed declarative probe tree. Exactly one member is allowed.
@@ -467,6 +472,14 @@ func validateConnections(id string, connections []ConnectionTemplate, discover E
 		}
 		if connection.Mode == ConnectionLocalService && !validLocalServiceTransport(connection.Transport) {
 			return fmt.Errorf("host resources catalog: %q local_service connection requires a valid transport", id)
+		}
+		if connection.ClientEnv != "" {
+			if connection.Mode != ConnectionLocalService || connection.Transport != LocalServiceUnixSocket {
+				return fmt.Errorf("host resources catalog: %q client_env is valid only for a local Unix socket", id)
+			}
+			if err := exec.ValidateInlineEnv(map[string]string{connection.ClientEnv: ""}); err != nil {
+				return fmt.Errorf("host resources catalog: %q client_env: %w", id, err)
+			}
 		}
 		if connection.Mode != ConnectionLocalService && connection.Transport != "" {
 			return fmt.Errorf("host resources catalog: %q transport is valid only for local_service", id)
