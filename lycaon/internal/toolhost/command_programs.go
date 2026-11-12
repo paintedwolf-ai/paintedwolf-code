@@ -250,6 +250,7 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 	}
 	owners.Boundary = t.boundary
 	owners.Launch = command.BindAgentLaunch
+	owners.SecretAsk, owners.SecretMatcher = t.http.SecretAsk, t.http.SecretMatcher
 	registered := func(tool string) bool {
 		if tool == "" || t.registry == nil {
 			return false
