@@ -19,9 +19,9 @@ func CloneRecordForStore(rec Record) RecordAux {
 	cloned := cloneRecord(rec)
 	out := RecordAux{
 		PathsTouched:     append([]string(nil), cloned.pathsTouched...),
-		URLsTouched:      append([]string(nil), cloned.urlsTouched...),
-		URLTitles:        cloned.urlTitles,
-		URLsShown:        append([]string(nil), cloned.urlsShown...),
+		URLsTouched:      append([]string(nil), cloned.urls.touched...),
+		URLTitles:        cloned.urls.titles,
+		URLsShown:        append([]string(nil), cloned.urls.shown...),
 		UntrustedContent: cloned.UntrustedContent,
 		ExternalCustody:  cloned.Custody.External,
 		CustodyTree:      cloned.Custody.Tree,
@@ -52,9 +52,9 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		return
 	}
 	rec.pathsTouched = append([]string(nil), aux.PathsTouched...)
-	rec.urlsTouched = append([]string(nil), aux.URLsTouched...)
-	rec.urlsShown = append([]string(nil), aux.URLsShown...)
-	rec.urlTitles = nil
+	rec.urls.touched = append([]string(nil), aux.URLsTouched...)
+	rec.urls.shown = append([]string(nil), aux.URLsShown...)
+	rec.urls.titles = nil
 	for u, t := range aux.URLTitles {
 		rec.touchURLTitle(u, t)
 	}

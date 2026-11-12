@@ -160,16 +160,16 @@ func cloneRecord(rec Record) Record {
 	if len(rec.pathsTouched) > 0 {
 		out.pathsTouched = append([]string(nil), rec.pathsTouched...)
 	}
-	if len(rec.urlsTouched) > 0 {
-		out.urlsTouched = append([]string(nil), rec.urlsTouched...)
+	if len(rec.urls.touched) > 0 {
+		out.urls.touched = append([]string(nil), rec.urls.touched...)
 	}
-	if len(rec.urlsShown) > 0 {
-		out.urlsShown = append([]string(nil), rec.urlsShown...)
+	if len(rec.urls.shown) > 0 {
+		out.urls.shown = append([]string(nil), rec.urls.shown...)
 	}
-	if rec.urlTitles != nil {
-		out.urlTitles = make(map[string]string, len(rec.urlTitles))
-		for u, t := range rec.urlTitles {
-			out.urlTitles[u] = t
+	if rec.urls.titles != nil {
+		out.urls.titles = make(map[string]string, len(rec.urls.titles))
+		for u, t := range rec.urls.titles {
+			out.urls.titles[u] = t
 		}
 	}
 	if len(rec.LineRanges) > 0 {
