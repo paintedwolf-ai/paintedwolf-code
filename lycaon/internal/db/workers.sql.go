@@ -158,6 +158,17 @@ func (q *Queries) CountSessionWorkersByAgent(ctx context.Context, arg CountSessi
 	return count, err
 }
 
+const getLandedChangeJobID = `-- name: GetLandedChangeJobID :one
+SELECT worker_job_id FROM landed_changes WHERE id = ?
+`
+
+func (q *Queries) GetLandedChangeJobID(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getLandedChangeJobID, id)
+	var worker_job_id string
+	err := row.Scan(&worker_job_id)
+	return worker_job_id, err
+}
+
 const getLatestWorkerWorkspacePreparation = `-- name: GetLatestWorkerWorkspacePreparation :one
 SELECT worker_id, generation, source_result_id, promotion_ref, preparation_ref,
        binding_generation, operation_id, created_at
@@ -276,6 +287,23 @@ func (q *Queries) GetWorkerByName(ctx context.Context, arg GetWorkerByNameParams
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
+	return i, err
+}
+
+const getWorkerJobBinding = `-- name: GetWorkerJobBinding :one
+SELECT COALESCE(parent_session_id, '') AS parent_session_id, COALESCE(child_session_id, '') AS child_session_id
+FROM worker_jobs WHERE id = ?
+`
+
+type GetWorkerJobBindingRow struct {
+	ParentSessionID string `json:"parent_session_id"`
+	ChildSessionID  string `json:"child_session_id"`
+}
+
+func (q *Queries) GetWorkerJobBinding(ctx context.Context, id string) (GetWorkerJobBindingRow, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerJobBinding, id)
+	var i GetWorkerJobBindingRow
+	err := row.Scan(&i.ParentSessionID, &i.ChildSessionID)
 	return i, err
 }
 
@@ -422,6 +450,33 @@ func (q *Queries) GetWorkerRoundByJob(ctx context.Context, jobID string) (Worker
 		&i.SettledAt,
 	)
 	return i, err
+}
+
+const getWorkerSessionBinding = `-- name: GetWorkerSessionBinding :one
+SELECT project_id, COALESCE(parent_session_id, '') AS parent_session_id FROM sessions WHERE id = ?
+`
+
+type GetWorkerSessionBindingRow struct {
+	ProjectID       string `json:"project_id"`
+	ParentSessionID string `json:"parent_session_id"`
+}
+
+func (q *Queries) GetWorkerSessionBinding(ctx context.Context, id string) (GetWorkerSessionBindingRow, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerSessionBinding, id)
+	var i GetWorkerSessionBindingRow
+	err := row.Scan(&i.ProjectID, &i.ParentSessionID)
+	return i, err
+}
+
+const getWorkflowRunSessionID = `-- name: GetWorkflowRunSessionID :one
+SELECT session_id FROM workflow_runs WHERE id = ?
+`
+
+func (q *Queries) GetWorkflowRunSessionID(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getWorkflowRunSessionID, id)
+	var session_id string
+	err := row.Scan(&session_id)
+	return session_id, err
 }
 
 const insertWorker = `-- name: InsertWorker :exec

@@ -119,7 +119,7 @@ CREATE TABLE worker_message_deliveries (
     PRIMARY KEY (worker_id, recipient_session_id, generation),
     CHECK (
         (page_id = '' AND page_first_seq IS NULL AND page_last_seq IS NULL)
-        OR (page_id != '' AND page_first_seq = delivered_through_seq + 1 AND page_last_seq >= page_first_seq)
+        OR (page_id != '' AND page_first_seq > delivered_through_seq AND page_last_seq >= page_first_seq)
     )
 ) STRICT, WITHOUT ROWID;
 

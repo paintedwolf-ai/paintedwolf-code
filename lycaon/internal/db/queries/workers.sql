@@ -189,3 +189,16 @@ FROM worker_operations WHERE operation_id = ?;
 -- name: InsertWorkerOperation :exec
 INSERT INTO worker_operations (operation_id, session_id, kind, request_digest, receipt_json, created_at)
 VALUES (?, ?, ?, ?, ?, ?);
+
+-- name: GetWorkerSessionBinding :one
+SELECT project_id, COALESCE(parent_session_id, '') AS parent_session_id FROM sessions WHERE id = ?;
+
+-- name: GetWorkflowRunSessionID :one
+SELECT session_id FROM workflow_runs WHERE id = ?;
+
+-- name: GetWorkerJobBinding :one
+SELECT COALESCE(parent_session_id, '') AS parent_session_id, COALESCE(child_session_id, '') AS child_session_id
+FROM worker_jobs WHERE id = ?;
+
+-- name: GetLandedChangeJobID :one
+SELECT worker_job_id FROM landed_changes WHERE id = ?;
