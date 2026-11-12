@@ -248,10 +248,10 @@ export function ToolPartShell(props: Props) {
             toolCallId: props.part.toolCallId ?? props.part.id, title: `${toolLabel()} · ${props.part.title ?? ""}` }),
         }}>
           <Show when={open()}>
-            <Show when={props.slots?.purpose}><div class="den-activity-purpose" data-testid="activity-purpose">{props.slots!.purpose}</div></Show>
-            <Show when={props.slots?.result}><div class="den-activity-result" data-testid="activity-result">{props.slots!.result}</div></Show>
+            <Show when={props.slots?.purpose}>{(purpose) => <div class="den-activity-purpose" data-testid="activity-purpose">{purpose()}</div>}</Show>
+            <Show when={props.slots?.result}>{(result) => <div class="den-activity-result" data-testid="activity-result">{result()}</div>}</Show>
             {props.children}
-            <Show when={props.slots?.evidence}><nav class="den-activity-footer" aria-label="Activity records">{props.slots!.evidence}</nav></Show>
+            <Show when={props.slots?.evidence}>{(evidence) => <nav class="den-activity-footer" aria-label="Activity records">{evidence()}</nav></Show>
           </Show>
         </ToolContentProvider>
       </TranscriptDisclosurePanel>

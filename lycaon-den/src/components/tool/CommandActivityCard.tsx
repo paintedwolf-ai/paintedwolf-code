@@ -72,7 +72,7 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
   }));
   return <div class="den-activity-detail" data-testid="command-activity-details">
     <ActivityCommand activity={activity()} projectId={props.projectId} />
-    <Show when={props.slots?.purpose}><div class="den-activity-purpose" data-testid="activity-purpose">{props.slots!.purpose}</div></Show>
+    <Show when={props.slots?.purpose}>{(purpose) => <div class="den-activity-purpose" data-testid="activity-purpose">{purpose()}</div>}</Show>
     <ActivityResult line={activityResultLine(activity(), executions())}>{props.slots?.result}</ActivityResult>
     <ActivityOutputRegion output={activityOutput(activity(), executions())} />
     <ActivitySteps activity={activity()} projectId={props.projectId} />
