@@ -130,6 +130,57 @@ func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 	}
 }
 
+// writeCredentialHelperScript writes an executable helper that drains its
+// request and answers with a fixed credential.
+func writeCredentialHelperScript(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "helper")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestUserHelpersGetRunsConfiguredHelper(t *testing.T) {
+	useBundledGit(t)
+	helper := writeCredentialHelperScript(t, "cat > /dev/null\necho username=alice\necho password=helper-secret\n")
+	executablePath = func() (string, error) { return helper, nil }
+	SetHostConfig(stubHostConfig{helper: "osxkeychain"})
+
+	got, ok, err := (userHelpers{}).Get(gitcredential.Credential{Protocol: "https", Host: "example.com", Path: "repo.git"})
+	if err != nil || !ok {
+		t.Fatalf("Get = (%+v, %v, %v)", got, ok, err)
+	}
+	if got.Username != "alice" || got.Password != "helper-secret" {
+		t.Fatalf("credential = %+v", got)
+	}
+}
+
+func TestUserHelpersGetFailsClosedWithoutHelper(t *testing.T) {
+	useBundledGit(t)
+	SetHostConfig(nil)
+
+	got, ok, err := (userHelpers{}).Get(gitcredential.Credential{Protocol: "https", Host: "example.com"})
+	if err != nil || ok {
+		t.Fatalf("Get without a helper = (%+v, %v, %v)", got, ok, err)
+	}
+	if got != (gitcredential.Credential{}) {
+		t.Fatalf("credential = %+v", got)
+	}
+}
+
+func TestUserHelpersStoreAndErase(t *testing.T) {
+	useBundledGit(t)
+
+	cred := gitcredential.Credential{Protocol: "https", Host: "example.com", Username: "alice", Password: "helper-secret"}
+	if err := (userHelpers{}).Store(cred); err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+	if err := (userHelpers{}).Erase(cred); err != nil {
+		t.Fatalf("Erase: %v", err)
+	}
+}
+
 // TestCredentialHelperProcess is the helper verb Git runs, forwarding to the
 // service named in its environment.
 func TestCredentialHelperProcess(t *testing.T) {

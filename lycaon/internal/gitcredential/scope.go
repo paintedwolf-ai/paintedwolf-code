@@ -123,8 +123,3 @@ func (b scopedBackend) Get(c Credential) (Credential, bool, error) {
 func (scopedBackend) Store(Credential) error { return nil }
 
 func (scopedBackend) Erase(Credential) error { return nil }
-
-// PlatformBackend is the host's own credential store: the macOS Keychain, or
-// the vault elsewhere. A scoped service reads it on the helper's behalf, so the
-// helper process itself never holds store access.
-func PlatformBackend() Backend { return newBackend() }
