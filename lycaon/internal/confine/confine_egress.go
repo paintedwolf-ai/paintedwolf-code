@@ -47,6 +47,9 @@ type EgressCommand struct {
 	CommandLine string // exact command attributed to this execution
 	// DeclaredHosts is the host-derived destination set for this action.
 	DeclaredHosts []string
+	// Origin is how a retrieval tool came by the requested address. It holds
+	// for every redirect hop of that request.
+	Origin AddressOrigin
 	// ReducedPackageExecution restricts egress to reviewed registries.
 	ReducedPackageExecution bool
 	// UserRule is the matching ask-rule citation.

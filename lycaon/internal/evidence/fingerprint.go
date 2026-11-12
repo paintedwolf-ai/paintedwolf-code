@@ -128,6 +128,9 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		rec.Fidelity = FidelityStructured
 		rec.touchURL(stringArg(args, "url"))
 		populateFetchTitle(&rec, stringArg(args, "url"), content)
+		for _, shown := range urlsInToolBody(stripToolHostSuffix(content)) {
+			rec.showURL(shown)
+		}
 		if dest := stringArg(args, "dest"); dest != "" {
 			addRecordPath(projectDir, &rec, dest, FidelityStructured)
 			rec.Custody.External = true

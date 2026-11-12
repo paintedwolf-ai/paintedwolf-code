@@ -54,6 +54,9 @@ type ToolDeps struct {
 	SecretAsk secretmatch.AskFunc
 	// VisualScreen coordinates pre-perception credential screening.
 	VisualScreen *visualscreen.Gate
+	// AddressOrigin reports how a session's evidence knows this exact
+	// address; nil means the agent wrote every address.
+	AddressOrigin func(sessionID, rawURL string) confine.AddressOrigin
 }
 
 const (
@@ -94,7 +97,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			}
 		}
 		contest, _ := args["unredact"].(string)
-		ctx = withToolEgressGate(ctx, deps, tctx, "web_search", DeclaredEndpointHosts(settings, deps.Registry), contest,
+		ctx = withToolEgressGate(ctx, deps, tctx, toolEgress{image: "web_search", declaredHosts: DeclaredEndpointHosts(settings, deps.Registry)}, contest,
 			webSearchDestination(settings, deps.Registry))
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		var discoverer DirectDiscoverer
@@ -173,8 +176,15 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 	return registerFetchTool(reg, deps)
 }
 
-// withToolEgressGate attaches declared destinations and secret fanout.
-func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolContext, image string, declaredHosts []string, contestToken string, fanout screenDestination) context.Context {
+// toolEgress is what one web tool invocation states about its dials.
+type toolEgress struct {
+	image         string
+	declaredHosts []string
+	origin        confine.AddressOrigin
+}
+
+// withToolEgressGate attaches the invocation's dial facts and secret fanout.
+func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolContext, dial toolEgress, contestToken string, fanout screenDestination) context.Context {
 	attr := secretmatch.AskAttribution{
 		SessionID:     tctx.Identity.SessionID,
 		RootSessionID: tctx.ChatSessionID(),
@@ -189,8 +199,9 @@ func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolConte
 		ProjectID:     tctx.Identity.ProjectID,
 		ProjectDir:    tctx.ActiveRootPath(),
 		ToolCallID:    tctx.Identity.ToolCallID,
-		Image:         image,
-		DeclaredHosts: declaredHosts,
+		Image:         dial.image,
+		DeclaredHosts: dial.declaredHosts,
+		Origin:        dial.origin,
 	})
 	return withSecretScreen(ctx, deps.SecretMatcher, deps.SecretAsk, contestToken, fanout)
 }
