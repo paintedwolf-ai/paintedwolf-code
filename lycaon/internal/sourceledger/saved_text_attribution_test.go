@@ -50,9 +50,9 @@ func TestSavedTextAttributionNamesThePublishingEffect(t *testing.T) {
 	if effectID == "" {
 		t.Fatalf("the agent's line names no change: %+v", res.Intervals)
 	}
-	var operation string
-	testutil.FailErr(t, "effect", sqlDB.QueryRowContext(ctx, `SELECT operation_id FROM source_effects WHERE id = ?`, effectID).Scan(&operation))
-	if operation != "op-edit" {
-		t.Fatalf("line names effect of %s, want the edit", operation)
+	var call string
+	testutil.FailErr(t, "effect", sqlDB.QueryRowContext(ctx, `SELECT o.tool_call_id FROM source_effects e JOIN source_operations o ON o.id = e.operation_id WHERE e.id = ?`, effectID).Scan(&call))
+	if call != "call-1" {
+		t.Fatalf("line names the change made by %q, want the edit's call", call)
 	}
 }
