@@ -104,6 +104,13 @@ describe("activity exceptions", () => {
     for (const supplied of ["S2", "held-1", "recovery-1", "file.rs", "r1", "r3", "job-1", "/supplied", "FEEDBACK", "write-op"]) expect(values).toContain(supplied);
     expect(facts.some(fact => fact.label === "supplied-command")).toBe(true);
   });
+  it("leave out a finished process's unobserved effects and the root directory", () => {
+    const run = execution("completed", [], { command: "go test ./...", effect_certainty: "attempted" });
+    expect(activityExceptions(view({ phase: "execute", directory: "." }), [run])).toEqual([]);
+    const write = execution("completed", [], { command: "write-file", effect_certainty: "attempted" });
+    expect(activityExceptions(view({ phase: "mutate", directory: "sub" }), [write]).map(fact => fact.label)).toEqual(["Effects", "Directory", "write-file"]);
+    expect(activityExceptions(view({ phase: "execute", state: "failed" }), [run]).map(fact => fact.label)).toEqual(["Effects", "go test ./..."]);
+  });
   it("count whole-activity failures beyond the loaded page", () => {
     const facts = activityExceptions(view({ execution_count: 10705, failed_count: 4, uncertain_effects: 2, completed_effects: 1 }), []);
     expect(facts.map(fact => fact.value)).toContain((4).toLocaleString());
