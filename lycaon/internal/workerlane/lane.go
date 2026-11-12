@@ -103,9 +103,16 @@ func (s *Service) Admit(ctx context.Context, req Request) (Binding, error) {
 // preparation succeeds. The earlier generation is then offered to retention,
 // which keeps any checkpoint still referenced.
 func (s *Service) switchLane(ctx context.Context, req Request, sel Selection) (Binding, error) {
-	previous, hadLane, err := s.current(ctx, req.Actor, req.WorkerID)
+	latest, hadLane, err := s.records.LatestPreparation(ctx, req.Actor, req.WorkerID)
 	if err != nil {
 		return Binding{}, err
+	}
+	previous := Binding{Root: latest.PreparationRef, Generation: latest.BindingGeneration}
+	// A replay after the switch committed returns that switch instead of
+	// preparing an orphan view.
+	if hadLane && req.SourceResultID != "" && latest.SourceResultID == req.SourceResultID {
+		previous.Action = sel.Action
+		return previous, nil
 	}
 	generation := previous.Generation + 1
 	viewID := laneViewID(req.WorkerID, generation)
