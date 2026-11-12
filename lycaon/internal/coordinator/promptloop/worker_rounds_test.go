@@ -6,6 +6,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/spawn"
@@ -79,6 +80,17 @@ func TestToollessResponseBoundFallsBackToDefault(t *testing.T) {
 	}
 }
 
+// refuseWorkerProse refuses a worker's tool-less response the way the host's
+// report guard does, so the loop's own bound decides when the round ends.
+func refuseWorkerProse(h *attemptHarness) {
+	h.deps.Closeout.BeforeFinishNoToolTurn = func(_ context.Context, sess *api.Session, _ []api.Message, _, _ string, _ guidance.CloseoutDraft, _ string, _ bool, _ []string, _ bool) (*guidance.Refusal, bool) {
+		if !sess.IsWorkerChild() {
+			return nil, false
+		}
+		return guidance.NewRefusal("WORKER_REPORT_REQUIRED", "Rejected: finish with complete_leg\n\nCode: WORKER_REPORT_REQUIRED\n"), true
+	}
+}
+
 func workerReadCall(id string) scriptedModelStep {
 	return scriptedModelStep{completion: &modelcall.Completion{
 		ToolCalls: []api.ToolCall{{ID: id, Name: "command", Args: map[string]any{"command": "cat a.txt"}}},
@@ -97,6 +109,7 @@ func TestWorkerRoundEndsOnlyAtToollessBound(t *testing.T) {
 	bound := spawn.DefaultRoundPolicy().ToollessResponseBound
 	steps := []scriptedModelStep{workerReadCall("r1"), workerReadCall("r2"), workerReadCall("r3"), workerReadCall("r4")}
 	h, client := newAttemptHarness(t, true, maxIter, steps)
+	refuseWorkerProse(h)
 	testutil.FailErr(t, "run worker round", h.runAttempt(t, "Survey the package.", "implementer", "job-1"))
 	if client.index != len(steps) {
 		t.Fatalf("model consumed %d scripted steps, want %d", client.index, len(steps))
@@ -115,6 +128,7 @@ func TestWorkerToolCallResetsToollessCount(t *testing.T) {
 		steps = append(steps, workerReadCall("read-"+string(rune('a'+i))))
 	}
 	h, client := newAttemptHarness(t, true, 50, steps)
+	refuseWorkerProse(h)
 	testutil.FailErr(t, "run worker round", h.runAttempt(t, "Survey the package.", "implementer", "job-1"))
 	if client.index != len(steps) {
 		t.Fatalf("round ended after %d of %d scripted steps", client.index, len(steps))

@@ -8,13 +8,15 @@ import (
 )
 
 func TestSessionUsageSinceSumsOnlyTheWindow(t *testing.T) {
-	tracker, _ := newTestTracker(t, fixedPricer{})
+	tracker, _ := newTestTracker(t, nil)
 	start := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
 	record := func(id, session string, at time.Time, prompt, completion int) {
 		t.Helper()
+		nano := int64(prompt+completion) * 1000
 		event := UsageEvent{
 			ID: id, SessionID: session, ProjectID: "project-1", ProviderID: "mock", Model: "m",
 			Caller: CallerWorker, StartedAt: at, PromptTokens: prompt, CompletionTokens: completion,
+			EstimatedNanoUSD: &nano,
 		}
 		testutil.FailErr(t, "begin call", tracker.BeginCall(t.Context(), event))
 		testutil.FailErr(t, "record usage", tracker.RecordUsage(t.Context(), event))
@@ -26,7 +28,7 @@ func TestSessionUsageSinceSumsOnlyTheWindow(t *testing.T) {
 
 	got, err := tracker.SessionUsageSince(t.Context(), "child", start)
 	testutil.FailErr(t, "session usage", err)
-	if got.Calls != 2 || got.Tokens != 350 || !got.Priced || got.SpendNanoUSD <= 0 {
+	if got.Calls != 2 || got.Tokens != 350 || !got.Priced || got.SpendNanoUSD != 350_000 {
 		t.Fatalf("usage = %+v, want 2 priced calls and 350 tokens", got)
 	}
 

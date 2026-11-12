@@ -104,8 +104,7 @@ func TestSeal_idempotentAndDrift(t *testing.T) {
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("rows = %d err = %v", len(rows), err)
 	}
-	sess.Posture = api.SessionPostureVet
-	if err := sealer.Seal(context.Background(), sess, "implement", ""); err != nil {
+	if err := sealer.Seal(context.Background(), sess, "review", ""); err != nil {
 		testutil.FailErr(t, "drift seal", err)
 	}
 	rows, err = mem.ListContexts(context.Background(), "sess-a")

@@ -311,7 +311,9 @@ func (o *outcomeRunner) WorkerSummaryFinalizeOpts(context.Context, *api.Session)
 	}
 }
 
-func TestExecutePreservesObservedPartialWithoutAcceptedReport(t *testing.T) {
+// A round that ends without an accepted report fails; the host writes no
+// report from the worker's tool results.
+func TestExecuteFailsWithoutAcceptedReport(t *testing.T) {
 	dir := t.TempDir()
 	readJSON := `{"path":"a.go","content":"1|package a","offset":1,"end_line":1,"limit":10}`
 	runner := &outcomeRunner{
@@ -332,14 +334,11 @@ func TestExecutePreservesObservedPartialWithoutAcceptedReport(t *testing.T) {
 		AgentType:       "path-explorer",
 	}, WorkerRunContext{ProjectDir: dir})
 	testutil.FailErr(t, "exec.Execute failed", err)
-	if strings.TrimSpace(result.Summary) == "" {
-		t.Fatal("result summary empty after closeout synthesis")
+	if result.Status != string(api.WorkerSummaryStatusFailed) || strings.TrimSpace(result.Summary) != "" {
+		t.Fatalf("result = %+v want a failed round with no summary", result)
 	}
-	if result.Status != "partial" {
-		t.Fatalf("status = %q want partial", result.Status)
-	}
-	if result.CompletionReport == nil || result.CompletionReport.Brief == "" {
-		t.Fatalf("completion report = %+v", result.CompletionReport)
+	if result.CompletionReport != nil && result.CompletionReport.Brief != "" {
+		t.Fatalf("host wrote a completion report: %+v", result.CompletionReport)
 	}
 	if len(runner.promptCalls) != 1 {
 		t.Fatalf("promptCalls = %d want one primary turn", len(runner.promptCalls))
