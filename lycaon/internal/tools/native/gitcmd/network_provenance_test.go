@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -44,16 +45,14 @@ func TestNetworkReadsReportTheirRemotes(t *testing.T) {
 // derived from it; other mutations report none.
 func TestGitCommandsReportTheirObjectStore(t *testing.T) {
 	root, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "resolve temp root", err)
 	for _, dir := range []string{".git/objects", ".git/refs", "sub"} {
 		if err := os.MkdirAll(filepath.Join(root, dir), 0o755); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "create object-store dirs", err)
 		}
 	}
 	if err := os.WriteFile(filepath.Join(root, ".git", "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "write HEAD", err)
 	}
 	var flows []evidence.ContentFlow
 	ctx := evidence.WithContentFlowObserver(context.Background(), func(f evidence.ContentFlow) { flows = append(flows, f) })
