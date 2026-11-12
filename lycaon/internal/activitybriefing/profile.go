@@ -147,6 +147,11 @@ func (p *Profile) read(ctx context.Context, target wire.ToolActivityBriefingTarg
 	if err != nil {
 		return out, err
 	}
+	// A call the transcript does not hold would leave the model nothing to
+	// explain, so the target is refused instead of summarized.
+	if !read.Found {
+		return out, fmt.Errorf("%w: call %s is not in the session", briefing.ErrTargetUnavailable, target.ToolCallIds[0])
+	}
 	out.cause = read
 	out.facts.settled = settled(out)
 	return out, nil

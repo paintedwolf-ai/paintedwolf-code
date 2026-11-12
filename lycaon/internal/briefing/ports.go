@@ -37,13 +37,19 @@ type Results interface {
 	PutResult(ctx context.Context, projectID string, epoch int64, manifest Manifest, hash string, result Result) error
 }
 
-// Attempt is the target attempt a request started or joined.
+// Attempt is the target attempt a request started or joined. Cooling holds
+// a recent generation failure an automatic request reports instead.
 type Attempt struct {
 	ID       string
 	Joined   bool
 	Epoch    int64
 	Revision int64
+	Cooling  *Failure
 }
+
+// FailureCooldown is how long automatic requests report a generation failure
+// before asking the model again; manual retries skip it.
+const FailureCooldown = 30 * time.Second
 
 // Settled is a target mutation's outcome. Applied is false when the attempt
 // was no longer the target's active one.
