@@ -100,3 +100,30 @@ func TestForegroundBudgetCountsOnlyRunTime(t *testing.T) {
 		t.Fatal("closed budget expired or rescheduled")
 	}
 }
+
+// After promotion, a program's waits on a person mark its job; one open at
+// promotion is reported from then.
+func TestProgramWaitsFollowTheProgramIntoTheBackground(t *testing.T) {
+	clock := &budgetClock{now: time.Unix(0, 0), timers: map[int]budgetTimer{}}
+	waits := &programWaits{budget: newForegroundBudget(clock, 30*time.Second)}
+	begun, ended := 0, 0
+	job := func() func() {
+		begun++
+		return func() { ended++ }
+	}
+	endOpen := waits.BeginHumanWait()
+	waits.promoted(job)
+	if begun != 1 || ended != 0 {
+		t.Fatalf("open wait at promotion: begun=%d ended=%d", begun, ended)
+	}
+	endOverlap := waits.BeginHumanWait()
+	endOpen()
+	if begun != 1 || ended != 0 {
+		t.Fatalf("overlapping wait reached the job separately: begun=%d ended=%d", begun, ended)
+	}
+	endOverlap()
+	waits.BeginHumanWait()()
+	if begun != 2 || ended != 2 {
+		t.Fatalf("job waits: begun=%d ended=%d, want 2 and 2", begun, ended)
+	}
+}

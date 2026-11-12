@@ -349,7 +349,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		SourceRevision: proc.sourceRevision, SourceRootDigest: proc.sourceRootDigest, Cwd: proc.cwd,
 		Handle: proc.Handle, SessionID: proc.SessionID, ProjectID: proc.ProjectID,
 		OriginTool: proc.originTool, ToolCallID: proc.toolCallID, RunID: proc.runID,
-		Mode: proc.mode, StartedAt: proc.startedAt, FinishedAt: proc.finishedAt,
+		Mode: proc.mode, StartedAt: proc.startedAt, FinishedAt: proc.finishedAt, PersonWait: proc.personWaitedLocked(proc.finishedAt),
 		TerminationReason: proc.reason, ExitCode: proc.exitCode, Failure: proc.failure,
 		Stages: append([]hostcmd.StageResult(nil), proc.Stages...),
 	}
