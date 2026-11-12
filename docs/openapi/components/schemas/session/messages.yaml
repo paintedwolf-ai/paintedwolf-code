@@ -32,6 +32,68 @@ components:
         compacted_at:
           type: string
           format: date-time
+    EditorContext:
+      x-go-generate: true
+      type: object
+      required:
+      - files
+      - more_files
+      additionalProperties: false
+      description: >-
+        What the sender had open in the editor when this prompt opened a turn.
+        Recorded only when it differs from the last context still in the
+        agent's history; an empty list means everything had been closed.
+      properties:
+        files:
+          type: array
+          maxItems: 12
+          description: Files with a live editor first, most recently moved first; then root order and path.
+          items:
+            $ref: "#/components/schemas/EditorContextFile"
+        more_files:
+          type: integer
+          minimum: 0
+          description: Open files beyond those listed.
+    EditorContextFile:
+      x-go-generate: true
+      type: object
+      required:
+      - root_id
+      - path
+      - unsaved
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+          description: Root-relative slash path.
+        unsaved:
+          type: boolean
+        view:
+          x-go-pointer: true
+          $ref: "#/components/schemas/EditorView"
+    EditorView:
+      x-go-generate: true
+      type: object
+      required:
+      - start_line
+      - end_line
+      - cursor
+      additionalProperties: false
+      description: The main selection of the sender's most recently moved editor of the file.
+      properties:
+        start_line:
+          type: integer
+          minimum: 1
+        end_line:
+          type: integer
+          minimum: 1
+        cursor:
+          type: boolean
+          description: No text is selected; start_line is the cursor's line.
     Message:
       type: object
       required:
@@ -113,6 +175,8 @@ components:
           $ref: worker-reports.yaml#/components/schemas/CitationGrounding
         source_context:
           $ref: navigation.yaml#/components/schemas/SourceContext
+        editor_context:
+          $ref: "#/components/schemas/EditorContext"
         navigation_refs:
           type: array
           maxItems: 128

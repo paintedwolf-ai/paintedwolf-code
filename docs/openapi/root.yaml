@@ -1057,6 +1057,12 @@ components:
       $ref: components/schemas/scan/scanners.yaml#/components/schemas/UpdateProjectScannerRequest
     CompactedChunkMeta:
       $ref: components/schemas/session/messages.yaml#/components/schemas/CompactedChunkMeta
+    EditorContext:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/EditorContext
+    EditorContextFile:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/EditorContextFile
+    EditorView:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/EditorView
     CreateSessionRequest:
       $ref: components/schemas/session/identity.yaml#/components/schemas/CreateSessionRequest
     Message:

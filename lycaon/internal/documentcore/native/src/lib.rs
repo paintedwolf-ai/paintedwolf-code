@@ -104,6 +104,23 @@ fn anchored_edits(doc: &Doc, edits: Vec<Edit>) -> Result<Vec<AnchoredEdit>, Stri
     Ok(result)
 }
 
+/// Places each range where its anchors sit now, in request order and in either
+/// direction. Unlike resolve, nothing about the text is checked.
+fn located(doc: &Doc, ranges: Vec<AnchoredEdit>) -> Result<Vec<Edit>, String> {
+    let txn = doc.transact();
+    let mut result = Vec::with_capacity(ranges.len());
+    for range in ranges {
+        let mut offsets = [0u32; 2];
+        for (offset, encoded) in offsets.iter_mut().zip([&range.start, &range.end]) {
+            let index = StickyIndex::decode_v1(&decode(encoded)?).map_err(|_| "invalid_anchor")?;
+            *offset = index.get_offset(&txn).ok_or("anchor_conflict")?.index;
+        }
+        let (start, end) = (offsets[0].min(offsets[1]), offsets[0].max(offsets[1]));
+        result.push(Edit { index: start, delete: end - start, insert: String::new() });
+    }
+    Ok(result)
+}
+
 fn resolve_anchored(doc: &Doc, edits: Vec<AnchoredEdit>, whole_lines: bool) -> Result<Vec<Edit>, String> {
     let txn = doc.transact();
     let deleted = txn.snapshot().delete_set;
@@ -324,6 +341,7 @@ fn execute(req: Request) -> Result<Response, String> {
                 resolve_anchored(doc, req.guards, true)?;
                 resolved = resolve_anchored(doc, req.anchors, false)?;
             }
+            "locate" => resolved = located(doc, req.anchors)?,
             _ => return Err("invalid_action".into()),
         }
         if matches!(req.action.as_str(), "apply" | "edit" | "undo") {

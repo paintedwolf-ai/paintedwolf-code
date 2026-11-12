@@ -7506,6 +7506,28 @@ export interface components {
             /** Format: date-time */
             compacted_at: string;
         };
+        /** @description What the sender had open in the editor when this prompt opened a turn. Recorded only when it differs from the last context still in the agent's history; an empty list means everything had been closed. */
+        EditorContext: {
+            /** @description Files with a live editor first, most recently moved first; then root order and path. */
+            files: components["schemas"]["EditorContextFile"][];
+            /** @description Open files beyond those listed. */
+            more_files: number;
+        };
+        EditorContextFile: {
+            /** Format: uuid */
+            root_id: string;
+            /** @description Root-relative slash path. */
+            path: string;
+            unsaved: boolean;
+            view?: components["schemas"]["EditorView"];
+        };
+        /** @description The main selection of the sender's most recently moved editor of the file. */
+        EditorView: {
+            start_line: number;
+            end_line: number;
+            /** @description No text is selected; start_line is the cursor's line. */
+            cursor: boolean;
+        };
         CreateSessionRequest: {
             /** Format: uuid */
             project_id: string;
@@ -7559,6 +7581,7 @@ export interface components {
             worker_summary?: components["schemas"]["WorkerSummaryMeta"];
             grounding?: components["schemas"]["CitationGrounding"];
             source_context?: components["schemas"]["SourceContext"];
+            editor_context?: components["schemas"]["EditorContext"];
             /** @description Host-validated interaction targets mentioned by this message. Navigation references are independent of citation grounding and never support factual claims. */
             navigation_refs?: components["schemas"]["NavigationReference"][];
             compacted_chunk?: components["schemas"]["CompactedChunkMeta"];
@@ -30197,6 +30220,9 @@ export type CreateScannerRequest = components["schemas"]["CreateScannerRequest"]
 export type UpdateScannerRequest = components["schemas"]["UpdateScannerRequest"];
 export type UpdateProjectScannerRequest = components["schemas"]["UpdateProjectScannerRequest"];
 export type CompactedChunkMeta = components["schemas"]["CompactedChunkMeta"];
+export type EditorContext = components["schemas"]["EditorContext"];
+export type EditorContextFile = components["schemas"]["EditorContextFile"];
+export type EditorView = components["schemas"]["EditorView"];
 export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"];
 export type Message = components["schemas"]["Message"];
 export type MessageKind = components["schemas"]["MessageKind"];

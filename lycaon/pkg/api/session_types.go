@@ -615,6 +615,7 @@ type Message struct {
 	Grounding            *CitationGrounding    `json:"grounding,omitempty"`
 	NavigationRefs       []NavigationReference `json:"navigation_refs,omitempty"`
 	SourceContext        *SourceContext        `json:"source_context,omitempty"`
+	EditorContext        *EditorContext        `json:"editor_context,omitempty"`
 	CompactedChunk       *CompactedChunkMeta   `json:"compacted_chunk,omitempty"`
 	CompactionCheckpoint bool                  `json:"compaction_checkpoint,omitempty"`
 	Visibility           MessageVisibility     `json:"visibility,omitempty"`

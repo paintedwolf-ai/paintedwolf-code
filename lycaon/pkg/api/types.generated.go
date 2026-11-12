@@ -2552,6 +2552,23 @@ type EditorCommandHistory struct {
 	Update       []byte `json:"update"`
 }
 
+// EditorContext What the sender had open in the editor when this prompt opened a turn. Recorded only when it differs from the last context still in the agent's history; an empty list means everything had been closed.
+type EditorContext struct {
+	// Files with a live editor first, most recently moved first; then root order and path.
+	Files []EditorContextFile `json:"files"`
+	// Open files beyond those listed.
+	MoreFiles int `json:"more_files"`
+}
+
+// EditorContextFile
+type EditorContextFile struct {
+	RootID string `json:"root_id"`
+	// Root-relative slash path.
+	Path    string      `json:"path"`
+	Unsaved bool        `json:"unsaved"`
+	View    *EditorView `json:"view,omitempty"`
+}
+
 // EditorDocument Accepted collaborative document for a stable logical file in the project branch.
 type EditorDocument struct {
 	// Original revision reserved for this save operation when its publication already has a durable journal. The document itself is the current accepted state.
@@ -2744,6 +2761,14 @@ type EditorReplicaFrame struct {
 	HeldAgentVersionID *string            `json:"held_agent_version_id,omitempty"`
 	SecretScreenStatus SecretScreenStatus `json:"secret_screen_status"`
 	SecretScreen       *SecretScreen      `json:"secret_screen,omitempty"`
+}
+
+// EditorView The main selection of the sender's most recently moved editor of the file.
+type EditorView struct {
+	StartLine int `json:"start_line"`
+	EndLine   int `json:"end_line"`
+	// No text is selected; start_line is the cursor's line.
+	Cursor bool `json:"cursor"`
 }
 
 // EffectComparisonSource

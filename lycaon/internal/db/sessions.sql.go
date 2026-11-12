@@ -742,8 +742,8 @@ INSERT INTO messages (
     id, entry_id, session_id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
     progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json, evidence_handles_json,
     tool_calls_json, tool_result_json, worker_summary_json,
-    grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertMessageParams struct {
@@ -776,6 +776,7 @@ type InsertMessageParams struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -819,6 +820,7 @@ func (q *Queries) InsertMessage(ctx context.Context, arg InsertMessageParams) er
 		arg.WorkerSummaryJson,
 		arg.GroundingJson,
 		arg.NavigationRefsJson,
+		arg.EditorContextJson,
 		arg.CompactedChunkJson,
 		arg.CompactionCheckpoint,
 		arg.Visibility,
@@ -1705,7 +1707,7 @@ const listSessionMessages = `-- name: ListSessionMessages :many
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ?
 ORDER BY ord
@@ -1739,6 +1741,7 @@ type ListSessionMessagesRow struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -1788,6 +1791,7 @@ func (q *Queries) ListSessionMessages(ctx context.Context, sessionID string) ([]
 			&i.WorkerSummaryJson,
 			&i.GroundingJson,
 			&i.NavigationRefsJson,
+			&i.EditorContextJson,
 			&i.CompactedChunkJson,
 			&i.CompactionCheckpoint,
 			&i.Visibility,
@@ -1816,7 +1820,7 @@ const listSessionMessagesAfterOrd = `-- name: ListSessionMessagesAfterOrd :many
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND ord > ?
 ORDER BY ord ASC
@@ -1857,6 +1861,7 @@ type ListSessionMessagesAfterOrdRow struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -1906,6 +1911,7 @@ func (q *Queries) ListSessionMessagesAfterOrd(ctx context.Context, arg ListSessi
 			&i.WorkerSummaryJson,
 			&i.GroundingJson,
 			&i.NavigationRefsJson,
+			&i.EditorContextJson,
 			&i.CompactedChunkJson,
 			&i.CompactionCheckpoint,
 			&i.Visibility,
@@ -1934,7 +1940,7 @@ const listSessionMessagesBeforeOrd = `-- name: ListSessionMessagesBeforeOrd :man
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND ord < ?
 ORDER BY ord DESC
@@ -1975,6 +1981,7 @@ type ListSessionMessagesBeforeOrdRow struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -2024,6 +2031,7 @@ func (q *Queries) ListSessionMessagesBeforeOrd(ctx context.Context, arg ListSess
 			&i.WorkerSummaryJson,
 			&i.GroundingJson,
 			&i.NavigationRefsJson,
+			&i.EditorContextJson,
 			&i.CompactedChunkJson,
 			&i.CompactionCheckpoint,
 			&i.Visibility,
@@ -2052,7 +2060,7 @@ const listSessionMessagesTail = `-- name: ListSessionMessagesTail :many
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ?
 ORDER BY ord DESC
@@ -2092,6 +2100,7 @@ type ListSessionMessagesTailRow struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -2142,6 +2151,7 @@ func (q *Queries) ListSessionMessagesTail(ctx context.Context, arg ListSessionMe
 			&i.WorkerSummaryJson,
 			&i.GroundingJson,
 			&i.NavigationRefsJson,
+			&i.EditorContextJson,
 			&i.CompactedChunkJson,
 			&i.CompactionCheckpoint,
 			&i.Visibility,
@@ -2472,7 +2482,7 @@ const listWorkerJobMessages = `-- name: ListWorkerJobMessages :many
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND worker_job_id = ?
 ORDER BY ord
@@ -2511,6 +2521,7 @@ type ListWorkerJobMessagesRow struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -2560,6 +2571,7 @@ func (q *Queries) ListWorkerJobMessages(ctx context.Context, arg ListWorkerJobMe
 			&i.WorkerSummaryJson,
 			&i.GroundingJson,
 			&i.NavigationRefsJson,
+			&i.EditorContextJson,
 			&i.CompactedChunkJson,
 			&i.CompactionCheckpoint,
 			&i.Visibility,
@@ -2588,7 +2600,7 @@ const listWorkerJobMessagesAfterOrd = `-- name: ListWorkerJobMessagesAfterOrd :m
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND worker_job_id = ? AND ord > ?
 ORDER BY ord ASC
@@ -2630,6 +2642,7 @@ type ListWorkerJobMessagesAfterOrdRow struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -2684,6 +2697,7 @@ func (q *Queries) ListWorkerJobMessagesAfterOrd(ctx context.Context, arg ListWor
 			&i.WorkerSummaryJson,
 			&i.GroundingJson,
 			&i.NavigationRefsJson,
+			&i.EditorContextJson,
 			&i.CompactedChunkJson,
 			&i.CompactionCheckpoint,
 			&i.Visibility,
@@ -2712,7 +2726,7 @@ const listWorkerJobMessagesBeforeOrd = `-- name: ListWorkerJobMessagesBeforeOrd 
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND worker_job_id = ? AND ord < ?
 ORDER BY ord DESC
@@ -2754,6 +2768,7 @@ type ListWorkerJobMessagesBeforeOrdRow struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -2808,6 +2823,7 @@ func (q *Queries) ListWorkerJobMessagesBeforeOrd(ctx context.Context, arg ListWo
 			&i.WorkerSummaryJson,
 			&i.GroundingJson,
 			&i.NavigationRefsJson,
+			&i.EditorContextJson,
 			&i.CompactedChunkJson,
 			&i.CompactionCheckpoint,
 			&i.Visibility,
@@ -2836,7 +2852,7 @@ const listWorkerJobMessagesTail = `-- name: ListWorkerJobMessagesTail :many
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND worker_job_id = ?
 ORDER BY ord DESC
@@ -2877,6 +2893,7 @@ type ListWorkerJobMessagesTailRow struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	CompactionCheckpoint    int64          `json:"compaction_checkpoint"`
 	Visibility              string         `json:"visibility"`
@@ -2926,6 +2943,7 @@ func (q *Queries) ListWorkerJobMessagesTail(ctx context.Context, arg ListWorkerJ
 			&i.WorkerSummaryJson,
 			&i.GroundingJson,
 			&i.NavigationRefsJson,
+			&i.EditorContextJson,
 			&i.CompactedChunkJson,
 			&i.CompactionCheckpoint,
 			&i.Visibility,
@@ -3003,6 +3021,27 @@ func (q *Queries) PatchLiveProjection(ctx context.Context, arg PatchLiveProjecti
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const patchMessageEditorContext = `-- name: PatchMessageEditorContext :exec
+UPDATE messages SET editor_context_json = ?, seq = ? WHERE session_id = ? AND id = ?
+`
+
+type PatchMessageEditorContextParams struct {
+	EditorContextJson sql.NullString `json:"editor_context_json"`
+	Seq               int64          `json:"seq"`
+	SessionID         string         `json:"session_id"`
+	ID                string         `json:"id"`
+}
+
+func (q *Queries) PatchMessageEditorContext(ctx context.Context, arg PatchMessageEditorContextParams) error {
+	_, err := q.db.ExecContext(ctx, patchMessageEditorContext,
+		arg.EditorContextJson,
+		arg.Seq,
+		arg.SessionID,
+		arg.ID,
+	)
+	return err
 }
 
 const patchMessageNavigation = `-- name: PatchMessageNavigation :exec
@@ -3338,7 +3377,7 @@ func (q *Queries) TouchSessionUpdatedAt(ctx context.Context, arg TouchSessionUpd
 
 const updateMessage = `-- name: UpdateMessage :execrows
 UPDATE messages SET role = ?, content = ?, origin = ?, authority = ?, trust_tier = ?, content_parts_json = ?, host_secret_redaction_json = ?, kind = ?, host_signal_id = ?, tool_calls_json = ?, tool_result_json = ?,
-    worker_summary_json = ?, grounding_json = ?, navigation_refs_json = ?, compacted_chunk_json = ?, workflow_feedback_json = ?, blueprint_json = ?,
+    worker_summary_json = ?, grounding_json = ?, navigation_refs_json = ?, editor_context_json = ?, compacted_chunk_json = ?, workflow_feedback_json = ?, blueprint_json = ?,
     artifact_ids_json = ?, evidence_handles_json = ?,
     compaction_checkpoint = ?, visibility = ?, draft_version_count = ?, draft_status = ?, seq = ?, reasoning_json = ?,
     completion_report_json = ?
@@ -3360,6 +3399,7 @@ type UpdateMessageParams struct {
 	WorkerSummaryJson       sql.NullString `json:"worker_summary_json"`
 	GroundingJson           sql.NullString `json:"grounding_json"`
 	NavigationRefsJson      sql.NullString `json:"navigation_refs_json"`
+	EditorContextJson       sql.NullString `json:"editor_context_json"`
 	CompactedChunkJson      sql.NullString `json:"compacted_chunk_json"`
 	WorkflowFeedbackJson    sql.NullString `json:"workflow_feedback_json"`
 	BlueprintJson           sql.NullString `json:"blueprint_json"`
@@ -3394,6 +3434,7 @@ func (q *Queries) UpdateMessage(ctx context.Context, arg UpdateMessageParams) (i
 		arg.WorkerSummaryJson,
 		arg.GroundingJson,
 		arg.NavigationRefsJson,
+		arg.EditorContextJson,
 		arg.CompactedChunkJson,
 		arg.WorkflowFeedbackJson,
 		arg.BlueprintJson,

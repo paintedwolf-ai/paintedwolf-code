@@ -655,6 +655,7 @@ func TestRedactMessageForStorageCoversWorkflowAndCheckpointProjections(t *testin
 		WorkerSummary:  &api.WorkerSummaryMeta{Envelope: "result " + secret, SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "p", RootID: "r", Path: "worker-" + secret, EntryKind: api.NavigationEntryKindFile}}}},
 		SourceContext:  &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "p", RootID: "r", Path: "source-" + secret, EntryKind: api.NavigationEntryKindFile}}},
 		NavigationRefs: []api.NavigationReference{{Mention: "mention " + secret, Path: "path-" + secret}},
+		EditorContext:  &api.EditorContext{Files: []api.EditorContextFile{{RootID: "r", Path: "open-" + secret}}},
 	}
 	stored, changed := RedactMessageForStorage(context.Background(), modelScreenMatcher(t), original)
 	if !changed {

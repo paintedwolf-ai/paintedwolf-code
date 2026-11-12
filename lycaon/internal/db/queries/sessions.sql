@@ -158,7 +158,7 @@ LIMIT 1;
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ?
 ORDER BY ord;
@@ -167,7 +167,7 @@ ORDER BY ord;
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND worker_job_id = ?
 ORDER BY ord;
@@ -176,7 +176,7 @@ ORDER BY ord;
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND worker_job_id = ?
 ORDER BY ord DESC
@@ -186,7 +186,7 @@ LIMIT ?;
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND worker_job_id = ? AND ord < ?
 ORDER BY ord DESC
@@ -196,7 +196,7 @@ LIMIT ?;
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND worker_job_id = ? AND ord > ?
 ORDER BY ord ASC
@@ -213,7 +213,7 @@ WHERE session_id = ? AND worker_job_id = ?;
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ?
 ORDER BY ord DESC
@@ -223,7 +223,7 @@ LIMIT ?;
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND ord < ?
 ORDER BY ord DESC
@@ -233,7 +233,7 @@ LIMIT ?;
 SELECT id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
        progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json,
        evidence_handles_json, tool_calls_json, tool_result_json, worker_summary_json,
-       grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+       grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
 FROM messages
 WHERE session_id = ? AND ord > ?
 ORDER BY ord ASC
@@ -270,8 +270,8 @@ INSERT INTO messages (
     id, entry_id, session_id, role, content, origin, authority, trust_tier, author_person_id, content_parts_json, host_secret_redaction_json, kind, host_signal_id, worker_job_id, workflow_run_id, workflow_boundary_json,
     progress_complete_json, progress_update_json, workflow_feedback_json, workflow_explain_json, index_warming_json, blueprint_json, artifact_ids_json, evidence_handles_json,
     tool_calls_json, tool_result_json, worker_summary_json,
-    grounding_json, navigation_refs_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    grounding_json, navigation_refs_json, editor_context_json, compacted_chunk_json, compaction_checkpoint, visibility, draft_version_count, draft_status, seq, ord, ts, reasoning_json, completion_report_json
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: InsertSessionEntry :exec
 INSERT INTO session_entries (id, session_id, ord, resource_kind, resource_id, created_at)
@@ -281,7 +281,7 @@ VALUES (?, ?, ?, ?, ?, ?);
 -- updates; a settled draft displays when it began.
 -- name: UpdateMessage :execrows
 UPDATE messages SET role = ?, content = ?, origin = ?, authority = ?, trust_tier = ?, content_parts_json = ?, host_secret_redaction_json = ?, kind = ?, host_signal_id = ?, tool_calls_json = ?, tool_result_json = ?,
-    worker_summary_json = ?, grounding_json = ?, navigation_refs_json = ?, compacted_chunk_json = ?, workflow_feedback_json = ?, blueprint_json = ?,
+    worker_summary_json = ?, grounding_json = ?, navigation_refs_json = ?, editor_context_json = ?, compacted_chunk_json = ?, workflow_feedback_json = ?, blueprint_json = ?,
     artifact_ids_json = ?, evidence_handles_json = ?,
     compaction_checkpoint = ?, visibility = ?, draft_version_count = ?, draft_status = ?, seq = ?, reasoning_json = ?,
     completion_report_json = ?
@@ -289,6 +289,9 @@ WHERE session_id = ? AND id = ?;
 
 -- name: PatchMessageNavigation :exec
 UPDATE messages SET navigation_refs_json = ?, seq = ? WHERE session_id = ? AND id = ?;
+
+-- name: PatchMessageEditorContext :exec
+UPDATE messages SET editor_context_json = ?, seq = ? WHERE session_id = ? AND id = ?;
 
 -- Content always. NULL tool_calls_json leaves the column.
 -- name: PatchLiveProjection :execrows

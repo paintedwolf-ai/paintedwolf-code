@@ -470,6 +470,14 @@ func (r *messageRedactor) message(msg api.Message) api.Message {
 	}
 	out.Grounding = r.grounding("grounding", msg.Grounding)
 	out.SourceContext = r.sourceContext("source_context", msg.SourceContext)
+	if msg.EditorContext != nil {
+		editor := *msg.EditorContext
+		editor.Files = append([]api.EditorContextFile(nil), editor.Files...)
+		for i := range editor.Files {
+			editor.Files[i].Path = r.text(atIndex("editor_context.files", i)+".path", "", editor.Files[i].Path)
+		}
+		out.EditorContext = &editor
+	}
 	if len(msg.NavigationRefs) > 0 {
 		out.NavigationRefs = append([]api.NavigationReference(nil), msg.NavigationRefs...)
 		for i := range out.NavigationRefs {

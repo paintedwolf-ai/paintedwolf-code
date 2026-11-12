@@ -97,6 +97,12 @@ func messageFromRow(r db.ListSessionMessagesRow) (api.Message, error) {
 	if r.NavigationRefsJson.Valid {
 		msg.SourceContext = &navigationRefs.Context
 	}
+	if r.EditorContextJson.Valid && strings.TrimSpace(r.EditorContextJson.String) != "" {
+		var editor api.EditorContext
+		if err := db.UnmarshalJSON(r.EditorContextJson, &editor); err == nil {
+			msg.EditorContext = &editor
+		}
+	}
 	_ = db.UnmarshalJSON(r.CompactedChunkJson, &msg.CompactedChunk)
 	var err error
 	msg.CreatedAt, err = db.ParseTime(r.Ts)
@@ -140,6 +146,7 @@ func insertMessage(ctx context.Context, q *db.Queries, sessionID string, msg api
 		WorkerSummaryJson:       encoded.workerSummary,
 		GroundingJson:           encoded.grounding,
 		NavigationRefsJson:      encoded.navigationRefs,
+		EditorContextJson:       encoded.editorContext,
 		CompactedChunkJson:      encoded.compactedChunk,
 		CompactionCheckpoint:    int64(boolToInt(msg.CompactionCheckpoint)),
 		Visibility:              messageVisibilityColumn(msg.Visibility),
@@ -160,6 +167,7 @@ type messageJSONFields struct {
 	workerSummary       sql.NullString
 	grounding           sql.NullString
 	navigationRefs      sql.NullString
+	editorContext       sql.NullString
 	compactedChunk      sql.NullString
 	workflowBoundary    sql.NullString
 	progressComplete    sql.NullString
@@ -187,6 +195,7 @@ func encodeMessageJSONFields(msg api.Message) (messageJSONFields, error) {
 		{"tool_result", &encoded.toolResult, msg.ToolResult},
 		{"worker_summary", &encoded.workerSummary, msg.WorkerSummary},
 		{"grounding", &encoded.grounding, msg.Grounding},
+		{"editor_context", &encoded.editorContext, msg.EditorContext},
 		{"compacted_chunk", &encoded.compactedChunk, msg.CompactedChunk},
 		{"workflow_boundary", &encoded.workflowBoundary, msg.WorkflowBoundary},
 		{"progress_complete", &encoded.progressComplete, msg.ProgressComplete},
