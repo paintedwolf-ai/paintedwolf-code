@@ -65,6 +65,13 @@ type engineRoutes struct {
 	host    *briefinghost.Host
 }
 
+// textGenerator stands in for a configured model.
+type textGenerator struct{}
+
+func (textGenerator) Generate(context.Context, briefing.Invocation) (string, string, string, error) {
+	return "Ran the fixture.", "provider", "model", nil
+}
+
 func newEngineRoutes(t *testing.T, setting *switchable, policy briefing.Policy) engineRoutes {
 	t.Helper()
 	deps := apitest.Dependencies(t, api.Dependencies{})
@@ -72,7 +79,7 @@ func newEngineRoutes(t *testing.T, setting *switchable, policy briefing.Policy) 
 	testutil.FailErr(t, "create project", err)
 	database := testdbfixture.Open(t, "briefing-routes.db")
 	testdbseed.InsertProjectRoot(t, database, p.ID, t.TempDir())
-	host := briefinghost.New(context.Background(), database, t.TempDir(), nil)
+	host := briefinghost.New(context.Background(), database, t.TempDir(), textGenerator{})
 	t.Cleanup(func() { _ = host.Close(context.Background()) })
 	testutil.FailErr(t, "register", host.Registry.Register(fixtureProfile{policy: policy}))
 	files := filebriefing.NewService(context.Background(), filebriefing.Dependencies{Store: filebriefing.NewMemory(), Settings: setting})
