@@ -49,7 +49,7 @@ export function ShortcutHelpOverlay(props: ShortcutHelpOverlayProps) {
   // Groups such as Navigation recur across scopes, so each renders beneath its scope heading.
   const scopes = createMemo(() => {
     const sections = commandDisplaySections(
-      shortcutDisplayEntries(contributionFrame()),
+      shortcutDisplayEntries(contributionFrame(), platform()),
     );
     return COMMAND_SCOPE_ORDER.map((scope) => {
       const inScope = sections.filter((section) => section.scope === scope);

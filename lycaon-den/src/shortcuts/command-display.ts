@@ -1,4 +1,5 @@
 import type { ContributionFrameResponse } from "../api/types.ts";
+import type { TauriPlatform } from "../platform/runtime.ts";
 import type { CommandScope } from "./keymap.ts";
 
 export const COMMAND_SCOPE_ORDER: readonly CommandScope[] = [
@@ -62,14 +63,19 @@ function commandScope(value: string): CommandScope | null {
     : null;
 }
 
-/** One Settings/help row per keybinding declaration, including inactive ones. */
+/**
+ * One Settings/help row per keybinding declared on this platform, including
+ * inactive ones. A binding another platform's system menu owns has no row.
+ */
 export function shortcutDisplayEntries(
   frame: ContributionFrameResponse | null,
+  platform: TauriPlatform,
 ): ShortcutDisplayEntry[] {
   if (!frame) return [];
   const commands = new Map(frame.commands.map((command) => [command.id, command]));
   const entries: ShortcutDisplayEntry[] = [];
   for (const binding of frame.keybindings) {
+    if (!(platform in binding.bindings)) continue;
     const command = commands.get(binding.command);
     const scope = commandScope(binding.scope);
     if (!command || !scope) continue;

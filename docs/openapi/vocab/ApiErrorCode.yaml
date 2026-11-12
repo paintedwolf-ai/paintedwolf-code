@@ -330,22 +330,6 @@ values:
     status: 400
     comment: >-
       path traversal or unsafe path argument
-  - id: write_root_is_filesystem_root
-    status: 400
-    comment: >-
-      Retired refusal: filesystem root is now permitted; per-path protected floors still apply.
-  - id: write_root_is_home
-    status: 400
-    comment: >-
-      Retired refusal: home directory is now permitted; per-path protected floors still apply.
-  - id: write_root_not_absolute
-    status: 400
-    comment: >-
-      project root or write_root grant is not an absolute path
-  - id: write_root_under_secret_store
-    status: 400
-    comment: >-
-      project root or write_root grant intersects a credential store
   - id: blueprint_content_conflict
     status: 409
     comment: >-

@@ -23,7 +23,7 @@ func (s *Handler) requireProjectScanPaths(w http.ResponseWriter, r *http.Request
 func (s *Handler) RequireScanRoots(w http.ResponseWriter, r *http.Request, p *project.Project, allByDefault bool) ([]string, bool) {
 	id := strings.TrimSpace(r.URL.Query().Get("root_id"))
 	if id != "" {
-		for _, root := range p.Roots {
+		for _, root := range project.AdmittedRoots(p) {
 			if root.ID == id {
 				return []string{root.Path}, true
 			}

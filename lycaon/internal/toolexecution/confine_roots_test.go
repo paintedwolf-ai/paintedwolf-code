@@ -271,7 +271,10 @@ func TestValidateAttachedRootsForActionStillRefusesProtectedAndControlPlaneRoots
 		if err != nil {
 			t.Fatalf("%s: project registration should succeed, got %v", tc.name, err)
 		}
-		reject := tools.ValidateAttachedRootsForAction(project.RootPaths(p))
+		if paths := project.RootPaths(p); len(paths) != 0 {
+			t.Fatalf("%s: agent root paths = %v, want none for an editor-only root", tc.name, paths)
+		}
+		reject := tools.ValidateAttachedRootsForAction([]string{tc.dir})
 		if reject == nil {
 			t.Fatalf("%s: expected ValidateAttachedRootsForAction to refuse %q", tc.name, tc.dir)
 		}

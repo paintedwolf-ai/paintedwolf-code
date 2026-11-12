@@ -28,9 +28,11 @@ const (
 )
 
 // Adapter reports the realizations supplied by the platform implementation.
+// Service is how a confinement admits a socket the host itself serves.
 type Adapter struct {
 	Command Enforcement
 	Native  Enforcement
+	Service Enforcement
 }
 
 // Mode preserves the interpretation of saved intent, including older macOS

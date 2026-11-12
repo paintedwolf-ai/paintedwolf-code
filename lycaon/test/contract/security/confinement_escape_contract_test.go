@@ -19,7 +19,10 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
+	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
 
@@ -262,17 +265,23 @@ func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 
 func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	srv := wiring.BuildForTest(t).Server
-	body := `{"roots":[{"path":"/"}]}`
+	ancestor := rootfacts.Install(t).ContainsState
+	body := `{"roots":[{"path":` + jsonQuote(ancestor) + `}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
 	req.Header.Set("Authorization", api.TestAuthHeader())
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
 	if w.Code != http.StatusCreated {
-		t.Fatalf("filesystem root project registration failed: status=%d body=%s", w.Code, w.Body.String())
+		t.Fatalf("state ancestor project registration failed: status=%d body=%s", w.Code, w.Body.String())
 	}
-	if err := confine.ValidateAttachedWriteRoots([]string{"/"}); err == nil || err.Code != confine.WriteRootCodeContainsState {
-		t.Fatalf("execution boundary admitted state ancestor root /: %v", err)
+	var created wire.Project
+	testutil.FailErr(t, "decode project", json.Unmarshal(w.Body.Bytes(), &created))
+	if len(created.Roots) != 1 || created.Roots[0].Admitted || created.Roots[0].AdmissionCode == nil || *created.Roots[0].AdmissionCode != confine.WriteRootCodeContainsState {
+		t.Fatalf("state ancestor root = %+v, want editor-only with %q", created.Roots, confine.WriteRootCodeContainsState)
+	}
+	if err := confine.ValidateAttachedWriteRoots([]string{ancestor}); err == nil || err.Code != confine.WriteRootCodeContainsState {
+		t.Fatalf("execution boundary admitted state ancestor root: %v", err)
 	}
 
 	okDir := t.TempDir()
@@ -330,4 +339,29 @@ func newTestBrokerFor(decide egressproxy.EndpointDecider, resolve egressproxy.Pe
 	b := egressproxy.New(decide)
 	b.SetPeerResolver(resolve)
 	return b
+}
+
+// A confined program gets the agent root reading, so it writes in
+// the admitted root and the boundary refuses a write into an attached
+// editor-only root of each class.
+func TestConfinedLaunchStaysOutOfEditorOnlyRoots(t *testing.T) {
+	self := requireLiveBoundary(t)
+	facts := rootfacts.Install(t)
+	params := project.CreateParams{Roots: []project.AttachRootParams{{Path: facts.Work}}}
+	for _, root := range facts.EditorOnly() {
+		params.Roots = append(params.Roots, project.AttachRootParams{Path: root.Path})
+	}
+	p, err := project.NewMemoryRegistry().Create(t.Context(), params)
+	testutil.FailErr(t, "create project", err)
+	c := confine.Confinement{Roots: project.RootPaths(p)}
+	assertInProjectWriteOK(t, self, c, facts.Work)
+	for _, root := range facts.EditorOnly() {
+		target := filepath.Join(root.Path, "agent-write.txt")
+		if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", target); code == 0 {
+			t.Errorf("%s: a confined program wrote into an editor-only root", root.Name)
+		}
+		if _, err := os.Stat(target); !os.IsNotExist(err) {
+			t.Errorf("%s: %s exists after the refused write (err %v)", root.Name, target, err)
+		}
+	}
 }
