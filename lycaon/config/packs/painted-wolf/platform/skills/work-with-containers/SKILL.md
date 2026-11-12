@@ -7,7 +7,7 @@ metadata:
 
 # Work with containers
 
-Run the engine CLI in `command` and declare `docker` or `podman` in `capability_request.host_resources` on that call. Podman accepts the same commands. The engine daemon works outside the session sandbox, so it is never a way around a sandbox refusal; answer a refusal with the capability it names.
+{% if profile_has_command and root_count %}Run the engine CLI in `command` and declare `docker` or `podman` in `capability_request.host_resources` on that call.{% endif %} Podman accepts the same commands. The engine daemon works outside the session sandbox, so it is never a way around a sandbox refusal; answer a refusal with the capability it names.
 
 ## Facts behind most container problems
 
