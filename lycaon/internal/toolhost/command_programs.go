@@ -191,7 +191,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		for _, name := range searchOwners.Commands() {
 			tool, _ := searchOwners.Operation(name)
-			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			owners.Natives[name] = command.NativeOperation{Tool: tool, SelectMode: func(_ context.Context, argv commandprogram.Fields) (string, bool) {
+				return searchOwners.SelectMode(argv)
+			}, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				prepared, err := searchOwners.Prepare(frame, dispatch, request)
 				if err != nil {
 					return command.NativePrepared{}, err

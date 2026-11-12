@@ -39,7 +39,7 @@ func TestMultiModeNativesNameTheirMode(t *testing.T) {
 			t.Errorf("%s has %d effect modes and no mode selector", spec.Name, len(spec.Effects))
 		}
 	}
-	for source, want := range map[string]string{"sort": "always", "sed -Ei s/a/b/ f": "-i", "yq .a f.yaml": "query", "tar -tf a.tar": "listing-or-stream-decode"} {
+	for source, want := range map[string]string{"sort": "always", "sed -Ei s/a/b/ f": "-i", "yq .a f.yaml": "query", "tar -tf a.tar": "listing-or-stream-decode", "find . -name x -delete": "-delete"} {
 		var argv commandprogram.Fields
 		for _, word := range strings.Fields(source) {
 			argv = append(argv, commandprogram.Field{Value: word})
