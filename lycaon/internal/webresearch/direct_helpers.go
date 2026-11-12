@@ -238,6 +238,9 @@ func fetchTextURL(ctx context.Context, rawURL string) (string, error) {
 	return body, nil
 }
 
+// indexBodyByteLimit is the index or robots page prefix discovery reads.
+const indexBodyByteLimit = 1 << 20
+
 func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int, err error) {
 	u, err := normalizeFetchURL(rawURL)
 	if err != nil {
@@ -267,13 +270,13 @@ func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int
 			FetchMs:  elapsed.Milliseconds(),
 		})
 	}()
-	resp, _, err := politeGuardedGet(ctx, u, researchAcceptHeader, false)
+	resp, _, err := politeGuardedGet(ctx, u, researchAcceptHeader, indexBodyByteLimit, false)
 	if err != nil {
 		return "", 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	status = resp.StatusCode
-	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		return "", resp.StatusCode, readErr
 	}

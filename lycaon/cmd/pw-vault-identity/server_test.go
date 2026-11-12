@@ -16,6 +16,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -41,6 +42,7 @@ type fixture struct {
 	locksDir         string
 	activeGeneration string
 	state            string
+	peerMu           sync.Mutex
 	peer             Peer
 	server           *Server
 	socket           string
@@ -90,6 +92,26 @@ func (f *fixture) addProcess(p process) {
 
 func (f *fixture) removeProcess(pid int) {
 	testutil.FailErr(f.t, "remove proc", os.RemoveAll(filepath.Join(f.procRoot, strconv.Itoa(pid))))
+}
+
+// The server reads peer credentials from serve goroutines while tests swap
+// them between requests, so every access goes through the lock.
+func (f *fixture) getPeer() Peer {
+	f.peerMu.Lock()
+	defer f.peerMu.Unlock()
+	return f.peer
+}
+
+func (f *fixture) setPeer(peer Peer) {
+	f.peerMu.Lock()
+	defer f.peerMu.Unlock()
+	f.peer = peer
+}
+
+func (f *fixture) mutatePeer(mutate func(*Peer)) {
+	f.peerMu.Lock()
+	defer f.peerMu.Unlock()
+	mutate(&f.peer)
 }
 
 func entry(path string, image []byte) pkgmanifest.Executable {
@@ -226,7 +248,7 @@ func newFixture(t *testing.T) *fixture {
 				return launchverify.NamespaceFacts{Device: 1, Inode: 20, FullUIDMap: true, FullGIDMap: true, NoNewPrivileges: true}, nil
 			},
 		},
-		PeerOf: func(net.Conn) (Peer, error) { return f.peer, nil },
+		PeerOf: func(net.Conn) (Peer, error) { return f.getPeer(), nil },
 		Log:    slog.New(slog.NewTextHandler(io.Discard, nil)),
 	}
 	return f
@@ -305,7 +327,7 @@ func TestServiceKeepsUsersApart(t *testing.T) {
 	const account = "age-x25519-identity-v1:0a"
 	do(t, client, vaultidentity.Request{Op: vaultidentity.OpCreate, Account: account, Value: []byte("first user")})
 	testutil.FailErr(t, "close", client.Close())
-	f.peer = Peer{UID: 1001, PID: 401}
+	f.setPeer(Peer{UID: 1001, PID: 401})
 	if resp := do(t, client, vaultidentity.Request{Op: vaultidentity.OpRead, Account: account}); resp.Status != vaultidentity.StatusNotFound || resp.LauncherPID != 400 {
 		t.Fatalf("other user's read = %+v", resp)
 	}
@@ -327,10 +349,10 @@ func TestServiceRefusesUnverifiedCallersAndClosesTheConnection(t *testing.T) {
 			f.addProcess(process{pid: 300, ppid: 1, uid: 1000, start: 10, image: []byte("bash")})
 		}},
 		{name: "peer uid differs from the process", status: vaultidentity.StatusRefused, code: launchverify.CodeUIDMismatch, setup: func(f *fixture) {
-			f.peer.UID = 1001
+			f.mutatePeer(func(p *Peer) { p.UID = 1001 })
 		}},
 		{name: "no such process", status: vaultidentity.StatusRefused, code: launchverify.CodeProcessGone, setup: func(f *fixture) {
-			f.peer.PID = 999
+			f.mutatePeer(func(p *Peer) { p.PID = 999 })
 		}},
 		{name: "manifest missing", status: vaultidentity.StatusUnavailable, code: launchverify.CodeManifestUnreadable, setup: func(f *fixture) {
 			testutil.FailErr(f.t, "remove manifest", os.Remove(filepath.Join(f.generationsDir, f.activeGeneration, "manifest.json")))
