@@ -15,7 +15,7 @@ import type { ToolPartView } from "./tool-part-model.ts";
 export function activityBriefingTarget(part: ToolPartView, sessionId: string | undefined): BriefingTarget | null {
   if (!sessionId) return null;
   const activity = part.commandActivity;
-  if (!activity) return { profileId: "tool_activity", ref: { session_id: sessionId, tool_call_ids: [part.id] } };
+  if (!activity) return { profileId: "tool_activity", ref: { session_id: sessionId, tool_call_ids: [part.toolCallId] } };
   const members: { program_id: string; activity_id: string }[] = [];
   let index = 0;
   for (const call of activity.calls) {
@@ -28,7 +28,7 @@ export function activityBriefingTarget(part: ToolPartView, sessionId: string | u
     profileId: "tool_activity",
     ref: {
       session_id: sessionId,
-      tool_call_ids: activity.calls.map((call) => call.id),
+      tool_call_ids: activity.calls.map((call) => call.toolCallId),
       ...(members.length ? { members } : {}),
       activity_revision: activity.fact.state,
     },
