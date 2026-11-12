@@ -90,7 +90,7 @@ function currentItems(marks: readonly AgentMark[]): Set<unknown> {
   return new Set([...chosen.values()].map((mark) => mark.source.item));
 }
 
-/** Keeps fade timing across updates, marks matches their chat moved on from, and retains ended marks until they are gone. */
+/** Keeps fade timing across updates, supersedes matches their chat moved past, and keeps ended marks until gone. */
 export function nextAgentPaint(
   previous: readonly PaintedAgentMark[],
   reported: readonly ReportedAgentMark[],
