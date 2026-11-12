@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/spendguard"
 	"github.com/lycaon/lycaon/internal/session/turnnudges"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/workerprogress"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -27,6 +28,8 @@ type Nudges struct {
 	Policy   *policyfacts.Service
 	Spend    *spendguard.Service
 	Workers  workeroutcomes.CycleLedger
+	// Rounds bounds tool-less worker responses and sets round notice thresholds.
+	Rounds spawn.RoundPolicy
 }
 
 func (m *Nudges) Build() promptloop.NudgesDeps {
@@ -63,6 +66,7 @@ func (m *Nudges) Build() promptloop.NudgesDeps {
 	deps.SpendSoftStopNudge = m.Nudges.SpendSoftStop
 	deps.PublishWorkerProgress = m.PublishWorkerProgress
 	deps.WorkerJob = m.WorkerJob
+	deps.WorkerRounds = m.Rounds
 
 	return deps
 }

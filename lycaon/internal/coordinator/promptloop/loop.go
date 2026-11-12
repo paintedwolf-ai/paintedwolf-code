@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerprogress"
@@ -415,3 +416,11 @@ type MessageStreams interface {
 // workerRoundIterations leaves a worker round without an iteration cap: it
 // ends at delivery, a blocking question, a stop, a failure or a limit.
 const workerRoundIterations = math.MaxInt32
+
+// toollessResponseBound is how many consecutive tool-less responses end a worker round.
+func (l *turnNudges) toollessResponseBound() int {
+	if bound := l.Deps.WorkerRounds.ToollessResponseBound; bound > 0 {
+		return bound
+	}
+	return spawn.DefaultRoundPolicy().ToollessResponseBound
+}

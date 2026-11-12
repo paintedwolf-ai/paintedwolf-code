@@ -242,6 +242,7 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	r.Snapshot.ActiveReservations = r.deps.Sessions.Manager.Workers.Workspaces.ReservationEntries
 
 	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Delegations.Queue)
+	r.deps.Sessions.Manager.SetWorkerRounds(r.deps.WorkersCfg.RoundPolicy())
 	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Delegations.Cancel)
 	r.ParentWaiter = worker.NewParentWorkerWaiter()
 

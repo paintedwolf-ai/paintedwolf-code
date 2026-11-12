@@ -9077,7 +9077,6 @@ type WorkerResult struct {
 	Status           string                  `json:"status,omitempty"`
 	HintCode         string                  `json:"hint_code,omitempty"`
 	PolicyFeedback   *WorkerPolicyFeedback   `json:"policy_feedback,omitempty"`
-	HostAssembled    bool                    `json:"host_assembled,omitempty"`
 }
 
 // WorkerSummaryMeta

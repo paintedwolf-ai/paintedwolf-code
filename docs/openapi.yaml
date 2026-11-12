@@ -24525,8 +24525,6 @@ components:
         policy_feedback:
           x-go-pointer: true
           $ref: '#/components/schemas/WorkerPolicyFeedback'
-        host_assembled:
-          type: boolean
     ExecutionTarget:
       type: string
       enum:

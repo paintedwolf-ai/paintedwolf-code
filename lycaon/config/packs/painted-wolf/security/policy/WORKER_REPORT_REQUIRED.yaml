@@ -9,7 +9,7 @@ effect: block
 copy:
   what: 'This worker job has no accepted completion report.'
   cause: 'A prose response does not submit a structured report.'
-  why: 'The assignment remains active within its existing tool budget.'
+  why: 'The round continues with your tools. Repeated responses without a tool call end it as failed, keeping your work.'
   fix: 'Continue any unfinished work. {{ paintedwolf.next_steps }}'
   instead: 'Reuse completed work and its evidence.'
 x-paintedwolf-category: recoverable

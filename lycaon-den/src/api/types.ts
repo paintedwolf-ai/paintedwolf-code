@@ -9565,7 +9565,6 @@ export interface components {
             status?: string;
             hint_code?: string;
             policy_feedback?: components["schemas"]["WorkerPolicyFeedback"];
-            host_assembled?: boolean;
         };
         /** @enum {string} */
         ExecutionTarget: "local" | "runner";

@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -151,6 +152,8 @@ type NudgesDeps struct {
 	SpendSoftStopNudge    SpendSoftStopNudge
 	PublishWorkerProgress func(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool)
 	WorkerJob             func(ctx context.Context, workerJobID string) (*api.WorkerTask, bool)
+	// WorkerRounds bounds tool-less worker responses and sets round notice thresholds.
+	WorkerRounds spawn.RoundPolicy
 }
 
 type ControlDeps struct {

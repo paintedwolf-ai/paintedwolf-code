@@ -37,8 +37,6 @@ components:
         policy_feedback:
           x-go-pointer: true
           $ref: worker.yaml#/components/schemas/WorkerPolicyFeedback
-        host_assembled:
-          type: boolean
     WorkerPolicyFeedback:
       x-go-generate: true
       description: Policy feedback frozen when the worker report was evaluated; retained through queue persistence and parent delivery.

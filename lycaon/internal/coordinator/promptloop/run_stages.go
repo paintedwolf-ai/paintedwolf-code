@@ -30,6 +30,9 @@ const (
 	loopExitSecretWithheld
 	loopExitOutputTruncated
 	loopExitBlockedLoop
+	// loopExitReportMissing ends a worker round after its bound of
+	// consecutive responses without a tool call.
+	loopExitReportMissing
 )
 
 type promptLoopTurnState struct {
@@ -90,6 +93,8 @@ type turnCloseoutState struct {
 	blockedStreakCodes        map[string]struct{}
 	blockedTool               string
 	blockedCode               string
+	// toollessResponses counts a worker's consecutive responses without a tool call.
+	toollessResponses int
 	// closeoutCauseText is the clause the final-turn nudge opened with.
 	closeoutCauseText    string
 	proseFinishDelivered bool
@@ -235,6 +240,15 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 	}
 
 	if completion == nil || len(completion.ToolCalls) == 0 {
+		if sess.IsWorkerChild() {
+			st.toollessResponses++
+			if st.toollessResponses >= l.Nudges.toollessResponseBound() {
+				st.turnEndedGuidanceReject = true
+				out.breakLoop = true
+				out.exit = loopExitReportMissing
+				return out, nil
+			}
+		}
 		read, err := l.Closeout.readCloseoutDraft(ctx, sess, surfaceID, st, st.history, assistantMsg)
 		if err != nil {
 			return out, err
@@ -254,7 +268,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			if lastTurn {
 				return l.Closeout.applyAssembledFinalTurn(ctx, sess, sessionID, userPrompt, surfaceID, st, read.Draft, assistantMsg.Content, refusal)
 			}
-			if refusal != nil && st.noteBlockedBatch(refusal.Code(), "") {
+			if refusal != nil && !sess.IsWorkerChild() && st.noteBlockedBatch(refusal.Code(), "") {
 				out.breakLoop = true
 				out.exit = loopExitBlockedLoop
 				return out, nil
@@ -267,6 +281,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 			return l.Closeout.applyAcceptedCloseoutReport(ctx, sess, sessionID, userPrompt, surfaceID, st, assistantMsg, read)
 		}
 	} else {
+		st.toollessResponses = 0
 		settleRetained := l.Closeout.keepRetainedForObservers(ctx, sessionID, st, completion.ToolCalls)
 		if st != nil && st.turnID != "" && st.attemptID != "" && l.Projection.Deps.CheckpointTurn != nil {
 			checkpoint := fmt.Sprintf(`{"model_output_id":%q,"assistant_message_id":%q}`, st.output.id, assistantMsg.ID)
@@ -464,7 +479,7 @@ func (l *PromptLoop) finalizePromptLoopRun(
 		}
 	}
 	// A refused credential ends without another provider request.
-	if !blockedLiveCommandParked && !st.proseFinishDelivered && strings.TrimSpace(st.lastAssistantID) != "" &&
+	if !sess.IsWorkerChild() && !blockedLiveCommandParked && !st.proseFinishDelivered && strings.TrimSpace(st.lastAssistantID) != "" &&
 		loopExit != loopExitCompleted && loopExit != loopExitToolBoundary &&
 		loopExit != loopExitGracefulCancel && loopExit != loopExitSecretWithheld &&
 		loopExit != loopExitOutputTruncated {
@@ -476,22 +491,9 @@ func (l *PromptLoop) finalizePromptLoopRun(
 			reason = TurnCloseoutLLMTimeout
 		case loopExitBlockedLoop:
 			reason = TurnCloseoutBlockedLoop
-		case loopExitNone, loopExitCompleted, loopExitToolBoundary, loopExitGracefulCancel, loopExitSecretWithheld, loopExitOutputTruncated:
+		case loopExitNone, loopExitCompleted, loopExitToolBoundary, loopExitGracefulCancel, loopExitSecretWithheld, loopExitOutputTruncated, loopExitReportMissing:
 		}
 		closedHistory, aid, content, cerr := l.Closeout.runEarlyTurnCloseout(ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter, reason, "", closeoutNudgeSent, in, st)
-		if cerr != nil {
-			return nil, cerr
-		}
-		st.history = closedHistory
-		if aid != "" {
-			st.lastAssistantID = aid
-			st.lastAssistantContent = content
-		}
-	}
-
-	// A resumed worker with no remaining budget receives an exhaustion summary.
-	if st.lastAssistantID == "" && st.turnsRanThisRun == 0 && sess.IsWorkerChild() && !st.turnEndedGuidanceReject {
-		closedHistory, aid, content, cerr := l.Closeout.runEarlyTurnCloseout(ctx, sess, sessionID, profileID, userPrompt, st.history, maxIter, TurnCloseoutIterationCap, "", closeoutNudgeSent, in, st)
 		if cerr != nil {
 			return nil, cerr
 		}

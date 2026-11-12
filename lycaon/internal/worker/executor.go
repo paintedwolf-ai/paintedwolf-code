@@ -181,6 +181,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 
 	finalizeOpts := e.workerFinalizeOpts(ctx, task, child, run.ProjectDir)
 	finalizeOpts.Reach = turn.RequestReach()
+	finalizeOpts.SpendLimitReached = turn != nil && turn.Outcome == promptresult.OutcomeSpendLimit
 	if _, reason, pending := e.Graceful.Closeout(child.ID); pending {
 		result, finishErr := e.completeGracefulStop(ctx, task, child, reason, finalizeOpts)
 		e.Graceful.Finish(child.ID)
@@ -210,7 +211,6 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 		HintCode:         outcome.HintCode,
 		PolicyFeedback:   outcome.PolicyFeedback,
 		Grounding:        outcome.Grounding,
-		HostAssembled:    outcome.HostAssembled,
 	}, nil
 }
 
