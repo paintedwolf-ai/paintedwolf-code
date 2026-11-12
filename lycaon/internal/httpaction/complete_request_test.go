@@ -323,13 +323,25 @@ func TestHTTPRequestSupportsBodyFormAndSentHeaders(t *testing.T) {
 	}
 }
 
-// approveDials approves every attributed dial: every dial reaches the approval
-// gate, and these tests are about what a request carries, not whether it may
-// be sent.
+// approveAll stands in for the approval gate, which admits these loopback
+// requests under their capability. Every attributed dial reaches it.
+func approveAll(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
+	return true
+}
+
+func TestMain(m *testing.M) {
+	confine.SetEgressResolver(approveAll)
+	os.Exit(m.Run())
+}
+
+// restoreResolver puts the package's approving gate back after a test that
+// installed its own.
+func restoreResolver() { confine.SetEgressResolver(approveAll) }
+
+// approveDials makes a test independent of whatever an earlier test left
+// installed.
 func approveDials(t *testing.T) {
 	t.Helper()
-	release := confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
-		return true
-	})
-	t.Cleanup(func() { _ = release(context.Background()) })
+	restoreResolver()
+	t.Cleanup(restoreResolver)
 }

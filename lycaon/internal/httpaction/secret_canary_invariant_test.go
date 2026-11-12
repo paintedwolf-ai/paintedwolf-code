@@ -184,7 +184,7 @@ func TestSecretCanaryNeverEchoedByHTTPRequestResult(t *testing.T) {
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	executor.Approvals.SetCheckpointManager(t.Context(), review, authority)
-	t.Cleanup(func() { confine.SetEgressResolver(nil) })
+	t.Cleanup(func() { restoreResolver() })
 	executor.Secrets.SetSecretResolver(service)
 	matcher := testSecretMatcher(t)
 	executor.Secrets.SetSecretMatcher(matcher)
