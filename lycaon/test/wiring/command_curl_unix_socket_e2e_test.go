@@ -43,7 +43,7 @@ func TestNativeCurlUnixSocketAsksOnceForTheService(t *testing.T) {
 	link := filepath.Join(filepath.Dir(path), "linked.sock")
 	testutil.FailErr(t, "link daemon socket", os.Symlink(path, link))
 	program := func(socket string) string {
-		return "curl -s --max-time 10 --unix-socket '" + socket + "' http://localhost/version"
+		return "curl -s --max-time 5 --unix-socket '" + socket + "' http://localhost/version"
 	}
 	for _, tc := range []struct {
 		name string

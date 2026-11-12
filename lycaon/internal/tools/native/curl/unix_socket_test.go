@@ -77,7 +77,7 @@ func TestCurlUnixSocketReachesItsReviewedService(t *testing.T) {
 	t.Cleanup(owner.Close)
 	grant.Binding = owner.Binding()
 	h.tc.Socket.SocketGrants = []confine.SocketGrant{grant}
-	r := h.curl(t.Context(), "-s", "--max-time", "10", "--unix-socket", path, "http://localhost/version")
+	r := h.curl(t.Context(), "-s", "--max-time", "5", "--unix-socket", path, "http://localhost/version")
 	testutil.FailErr(t, "reviewed socket request", r.err)
 	if r.result.Status != 0 || r.stdout != "daemon localhost/version" {
 		t.Fatalf("socket request = %+v stdout %q", r.result, r.stdout)
