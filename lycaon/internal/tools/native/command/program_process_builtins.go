@@ -356,7 +356,31 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 		if len(matches) == 0 {
 			return readResult(1), nil
 		}
+		_, name, err := jobSignal(signal)
+		if err != nil {
+			return refusedResult("COMMAND_OPERAND_INVALID"), err
+		}
+		// Jobs first: stopping one ends its descendants, which then need no
+		// signal of their own.
+		slices.SortStableFunc(matches, func(a, b procCandidate) int {
+			switch {
+			case a.job == b.job:
+				return 0
+			case a.job:
+				return -1
+			}
+			return 1
+		})
 		for _, m := range matches {
+			if !m.job {
+				if err := jobs.signalDescendant(ctx, m.pid, name); err != nil && !errors.Is(err, errDescendantGone) {
+					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
+						reject.Data["command"] = "pkill"
+					}
+					return ownerFailure(err), err
+				}
+				continue
+			}
 			ref := m.handle
 			if ref == "" {
 				ref = m.id

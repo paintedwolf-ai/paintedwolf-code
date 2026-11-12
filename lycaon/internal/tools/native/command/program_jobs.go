@@ -447,26 +447,35 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *comm
 	return outcome.result, outcome.err
 }
 
+// jobSignal maps the catalog's TERM/INT/KILL, by name or number, to the
+// status a stopped job settles with and the signal's name.
+func jobSignal(signal string) (status int, name string, err error) {
+	switch signal {
+	case "TERM", "15":
+		return 143, "TERM", nil
+	case "INT", "2":
+		return 130, "INT", nil
+	case "KILL", "9":
+		return 137, "KILL", nil
+	}
+	return 0, "", toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"signal": signal, "expected": "TERM, INT or KILL"})
+}
+
 // Signal accepts the catalog's TERM/INT/KILL. A job's signal requests the
 // job's stop; a process descended from a job is signaled itself, by its
 // kernel instance. Acknowledgement is not proof of exit.
 func (j *SessionJobs) Signal(ctx context.Context, reference, signal string) error {
-	var status int
-	var name string
-	switch signal {
-	case "TERM", "15":
-		status, name = 143, "TERM"
-	case "INT", "2":
-		status, name = 130, "INT"
-	case "KILL", "9":
-		status, name = 137, "KILL"
-	default:
-		return toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"signal": signal, "expected": "TERM, INT or KILL"})
+	status, name, err := jobSignal(signal)
+	if err != nil {
+		return err
 	}
 	handle, err := j.Resolve(reference)
 	if err != nil {
 		if pid, convErr := strconv.Atoi(reference); convErr == nil && pid > 0 && (pid == os.Getpid() || hostprocess.ProcessExists(pid)) {
-			return j.signalDescendant(ctx, pid, name)
+			if err := j.signalDescendant(ctx, pid, name); !errors.Is(err, errDescendantGone) {
+				return err
+			}
+			return unknownJob(reference)
 		}
 		return err
 	}
@@ -482,6 +491,9 @@ func (j *SessionJobs) Signal(ctx context.Context, reference, signal string) erro
 	return nil
 }
 
+// errDescendantGone is a descendant that exited before its signal arrived.
+var errDescendantGone = errors.New("the process exited before it was signaled")
+
 // signalDescendant signals a process this session's launches started; any
 // other process is not the session's to signal.
 func (j *SessionJobs) signalDescendant(ctx context.Context, pid int, signal string) error {
@@ -494,16 +506,18 @@ func (j *SessionJobs) signalDescendant(ctx context.Context, pid int, signal stri
 		return processNotOwned("kill", reference)
 	}
 	process, err := hostprocess.Observe(pid)
-	if err != nil {
+	if err == nil {
+		err = hostprocess.SignalOwned(ctx, j.SessionID, process, signal)
+	}
+	switch {
+	case err == nil:
+		return nil
+	case !hostprocess.ProcessExists(pid):
+		return errDescendantGone
+	case errors.Is(err, hostprocess.ErrNotOwned), errors.Is(err, hostprocess.ErrStale):
 		return processNotOwned("kill", reference)
 	}
-	if err := hostprocess.SignalOwned(ctx, j.SessionID, process, signal); err != nil {
-		if errors.Is(err, hostprocess.ErrNotOwned) || errors.Is(err, hostprocess.ErrStale) {
-			return processNotOwned("kill", reference)
-		}
-		return err
-	}
-	return nil
+	return err
 }
 
 // List reports this session's live jobs, never host-global processes.
