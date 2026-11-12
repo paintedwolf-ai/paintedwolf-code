@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"sync"
 )
 
@@ -53,6 +54,11 @@ func ToolOperation(name string, schema json.RawMessage, contract Contract) (Oper
 					break
 				}
 			}
+		}
+	}
+	for _, command := range commands {
+		if err := command.CompileEffectModes(); err != nil {
+			return OperationDefinition{}, fmt.Errorf("tool %q: %w", name, err)
 		}
 	}
 	return NewOperationDefinition(OperationFacts{

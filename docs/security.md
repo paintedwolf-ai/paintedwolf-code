@@ -217,7 +217,7 @@ Process control and OS credential store access require a supported, active sandb
 
 The standard approval card offers chat reuse as the primary action. That permission covers subsequent uses of the named capability in the chat, including different sudo commands; independent rules and detections still apply. Native inspection and signaling have separate chat permissions. Allow once covers only the reviewed invocation, bound to its arguments and boundary and consumed at launch.
 
-Background job receipts and protection banners retain the applied boundary. Revocation prevents future use; it does not stop an existing process. Unknown liveness keeps the warning visible until exit is observed. Command-job handles remain controlled through `command_output`, `wait`, and `command_stop`.
+Background job receipts and protection banners retain the applied boundary. Revocation applies from the next decision: it does not stop a running process, but that process's later mediated connections, and the file operations the host performs for it, are decided without the revoked permission. Effects the kernel already admitted, such as an open file or an established connection, continue. Unknown liveness keeps the warning visible until exit is observed. Command-job handles remain controlled through `command_output`, `wait`, and `command_stop`.
 
 ### Environment switches on the boundary
 
