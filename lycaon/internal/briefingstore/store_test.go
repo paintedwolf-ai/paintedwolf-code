@@ -160,7 +160,7 @@ func TestSupersededAttemptDoesNotApply(t *testing.T) {
 	if !joined.Joined || joined.ID != first.ID {
 		t.Fatalf("pending attempt not joined: %+v %+v", first, joined)
 	}
-	failed, err := f.store.FailAttempt(ctx, req, first.ID, briefing.Failure{Code: briefing.CodeGenerationFailed, Message: "down"})
+	failed, err := f.store.FailAttempt(ctx, req, first.ID, briefing.Failure{Code: briefing.CodeQueueExpired, Message: "waited"})
 	testutil.FailErr(t, "fail", err)
 	second, err := f.store.StartAttempt(ctx, req, epoch, []briefing.SectionHash{hash})
 	testutil.FailErr(t, "restart", err)
@@ -178,6 +178,53 @@ func TestSupersededAttemptDoesNotApply(t *testing.T) {
 	testutil.FailErr(t, "target", err)
 	if interrupted != 1 || target.Attempt.Status != "failed" || target.Attempt.ErrorCode != briefing.CodeInterrupted {
 		t.Fatalf("interrupted %d target %+v", interrupted, target.Attempt)
+	}
+}
+
+func TestGenerationFailureCoolsAutomaticRequests(t *testing.T) {
+	f := newFixture(t)
+	clock := time.Date(2026, 11, 12, 1, 0, 0, 0, time.UTC)
+	f.store.Targets.now = func() time.Time { return clock }
+	ctx, epoch := t.Context(), f.epoch(t)
+	req, plan := request("t", "change", "evidence")
+	hashes := []briefing.SectionHash{{SectionID: "change", ManifestHash: hashOf(t, plan.Manifest)}}
+	failWith := func(code string) briefing.Attempt {
+		t.Helper()
+		started, err := f.store.StartAttempt(ctx, req, epoch, hashes)
+		testutil.FailErr(t, "start", err)
+		_, err = f.store.FailAttempt(ctx, req, started.ID, briefing.Failure{Code: code, Message: "down"})
+		testutil.FailErr(t, "fail", err)
+		return started
+	}
+	first := failWith(briefing.CodeGenerationFailed)
+	clock = clock.Add(briefing.FailureCooldown - time.Second)
+	cooled, err := f.store.StartAttempt(ctx, req, epoch, hashes)
+	testutil.FailErr(t, "cooled", err)
+	if cooled.Cooling == nil || cooled.Cooling.Code != briefing.CodeGenerationFailed || cooled.ID != first.ID {
+		t.Fatalf("automatic request inside the cooldown started work: %+v", cooled)
+	}
+	changed, _ := request("t", "change", "new evidence")
+	fresh, err := f.store.StartAttempt(ctx, changed, epoch, []briefing.SectionHash{{SectionID: "change", ManifestHash: hashOf(t, changed.Sections[0].Manifest)}})
+	testutil.FailErr(t, "changed", err)
+	if fresh.Cooling != nil || fresh.ID == first.ID {
+		t.Fatalf("changed material waited out the cooldown: %+v", fresh)
+	}
+	_, err = f.store.FailAttempt(ctx, req, fresh.ID, briefing.Failure{Code: briefing.CodeGenerationFailed, Message: "down"})
+	testutil.FailErr(t, "fail changed", err)
+	manual := req
+	manual.Manual = true
+	retried, err := f.store.StartAttempt(ctx, manual, epoch, hashes)
+	testutil.FailErr(t, "manual", err)
+	if retried.Cooling != nil {
+		t.Fatalf("manual retry waited out the cooldown: %+v", retried)
+	}
+	_, err = f.store.FailAttempt(ctx, req, retried.ID, briefing.Failure{Code: briefing.CodeGenerationFailed, Message: "down"})
+	testutil.FailErr(t, "fail manual", err)
+	clock = clock.Add(briefing.FailureCooldown)
+	later, err := f.store.StartAttempt(ctx, req, epoch, hashes)
+	testutil.FailErr(t, "after cooldown", err)
+	if later.Cooling != nil || later.Joined {
+		t.Fatalf("cooldown never ended: %+v", later)
 	}
 }
 
