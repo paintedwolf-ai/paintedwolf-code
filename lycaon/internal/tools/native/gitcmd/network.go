@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -246,8 +247,13 @@ func (l networkLaunch) refusal(form string) error {
 // reviewed, the local repositories it may read or write, and the user's SSH
 // agent when the call holds that socket capability.
 func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, admitted admittedRemotes) (context.Context, networkLaunch, error) {
+	// The review card belongs to this command's call.
+	reviewCtx := secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
+		SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ProjectID: tc.Identity.ProjectID,
+		ProjectDir: tc.ActiveRootPath(), ToolCallID: tc.Identity.ToolCallID,
+	})
 	credentials, err := gitexec.StartAgentCredentials(ctx, func(r gitcredential.Recipient, c gitcredential.Credential) bool {
-		return p.owners.releaseCredential(ctx, r, c)
+		return p.owners.releaseCredential(reviewCtx, r, c)
 	})
 	if err != nil {
 		return ctx, networkLaunch{}, err
