@@ -79,6 +79,7 @@ func TestCurlUnixSocketReachesItsReviewedService(t *testing.T) {
 	grant, err = confine.CaptureSocketGrant(ctx, grant)
 	testutil.FailErr(t, "retain reviewed socket", err)
 	h.tc.Socket.SocketGrants = []confine.SocketGrant{grant}
+	h.tc.Socket.DurableSocketGrants = []confine.SocketGrant{grant}
 	r := h.curl(ctx, "-s", "--max-time", "5", "--unix-socket", path, "http://localhost/version")
 	testutil.FailErr(t, "reviewed socket request", r.err)
 	if r.result.Status != 0 || r.stdout != "daemon localhost/version" {
