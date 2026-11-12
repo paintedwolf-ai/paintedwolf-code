@@ -4629,7 +4629,10 @@ CREATE TABLE worker_rounds (
     operation_id TEXT NOT NULL CHECK (operation_id != ''),
     created_at TEXT NOT NULL,
     settled_at TEXT,
+    -- The checkpoint the round published at settlement; '' when it changed nothing.
+    checkpoint_id TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (worker_id, ordinal),
+    CHECK (settled_at IS NOT NULL OR checkpoint_id = ''),
     CHECK ((instruction_first_seq IS NULL) = (instruction_last_seq IS NULL)),
     CHECK (instruction_first_seq IS NULL OR (instruction_first_seq > 0 AND instruction_last_seq >= instruction_first_seq))
 ) STRICT, WITHOUT ROWID;

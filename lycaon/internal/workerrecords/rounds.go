@@ -20,6 +20,8 @@ type Round struct {
 	ReviewSubject       string `json:"review_subject,omitempty"`
 	CreatedAt           string `json:"created_at"`
 	SettledAt           string `json:"settled_at,omitempty"`
+	// CheckpointID is what the round published; a result handle resolves to it.
+	CheckpointID string `json:"checkpoint_id,omitempty"`
 }
 
 func roundFromRow(r db.WorkerRounds) Round {
@@ -27,7 +29,7 @@ func roundFromRow(r db.WorkerRounds) Round {
 		WorkerID: r.WorkerID, Ordinal: r.Ordinal, JobID: r.JobID,
 		InstructionFirstSeq: r.InstructionFirstSeq.Int64, InstructionLastSeq: r.InstructionLastSeq.Int64,
 		ExecutionTarget: r.ExecutionTarget, ReviewSubject: r.ReviewSubjectJson,
-		CreatedAt: r.CreatedAt, SettledAt: r.SettledAt.String,
+		CreatedAt: r.CreatedAt, SettledAt: r.SettledAt.String, CheckpointID: r.CheckpointID,
 	}
 }
 
@@ -104,16 +106,19 @@ func (s *Store) AdmitRound(ctx context.Context, actor Actor, op Op, workerID str
 
 // SettleReceipt confirms a settled round.
 type SettleReceipt struct {
-	WorkerID  string `json:"worker_id"`
-	Ordinal   int64  `json:"ordinal"`
-	SettledAt string `json:"settled_at"`
+	WorkerID     string `json:"worker_id"`
+	Ordinal      int64  `json:"ordinal"`
+	SettledAt    string `json:"settled_at"`
+	CheckpointID string `json:"checkpoint_id,omitempty"`
 }
 
-// SettleRound ends the worker's unsettled round on job jobID. Settling an
-// already settled round returns its settlement.
-func (s *Store) SettleRound(ctx context.Context, actor Actor, op Op, workerID, jobID string) (SettleReceipt, error) {
+// SettleRound ends the worker's unsettled round on job jobID, linking the
+// checkpoint it published. Settling an already settled round returns its
+// settlement.
+func (s *Store) SettleRound(ctx context.Context, actor Actor, op Op, workerID, jobID, checkpointID string) (SettleReceipt, error) {
 	jobID = strings.TrimSpace(jobID)
-	return run(ctx, s, actor, op, "settle_round", []string{workerID, jobID}, func(q *db.Queries, _ *sql.Tx) (SettleReceipt, error) {
+	checkpointID = strings.TrimSpace(checkpointID)
+	return run(ctx, s, actor, op, "settle_round", []string{workerID, jobID, checkpointID}, func(q *db.Queries, _ *sql.Tx) (SettleReceipt, error) {
 		w, sd, err := loadWorker(ctx, q, actor, workerID)
 		if err != nil {
 			return SettleReceipt{}, err
@@ -129,13 +134,13 @@ func (s *Store) SettleRound(ctx context.Context, actor Actor, op Op, workerID, j
 			return SettleReceipt{}, err
 		}
 		if r.SettledAt.Valid {
-			return SettleReceipt{WorkerID: w.ID, Ordinal: r.Ordinal, SettledAt: r.SettledAt.String}, nil
+			return SettleReceipt{WorkerID: w.ID, Ordinal: r.Ordinal, SettledAt: r.SettledAt.String, CheckpointID: r.CheckpointID}, nil
 		}
 		now := s.stamp()
-		if _, err := q.SettleWorkerRound(ctx, db.SettleWorkerRoundParams{SettledAt: nullString(now), WorkerID: w.ID, Ordinal: r.Ordinal}); err != nil {
+		if _, err := q.SettleWorkerRound(ctx, db.SettleWorkerRoundParams{SettledAt: nullString(now), CheckpointID: checkpointID, WorkerID: w.ID, Ordinal: r.Ordinal}); err != nil {
 			return SettleReceipt{}, err
 		}
-		return SettleReceipt{WorkerID: w.ID, Ordinal: r.Ordinal, SettledAt: now}, nil
+		return SettleReceipt{WorkerID: w.ID, Ordinal: r.Ordinal, SettledAt: now, CheckpointID: checkpointID}, nil
 	})
 }
 

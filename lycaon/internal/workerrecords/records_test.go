@@ -173,7 +173,7 @@ func TestPreparationsAppendInOrder(t *testing.T) {
 func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
 	f := newFixture(t)
 	w, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
-	_, err := f.store.SettleRound(t.Context(), f.coord, op("settle"), w.WorkerID, "job-1")
+	_, err := f.store.SettleRound(t.Context(), f.coord, op("settle"), w.WorkerID, "job-1", "")
 	testutil.FailErr(t, "settle", err)
 	_, err = f.store.Close(t.Context(), f.coord, op("close"), w.WorkerID, "withdrawn")
 	testutil.FailErr(t, "close", err)

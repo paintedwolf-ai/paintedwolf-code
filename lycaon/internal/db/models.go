@@ -2328,6 +2328,7 @@ type WorkerRounds struct {
 	OperationID         string         `json:"operation_id"`
 	CreatedAt           string         `json:"created_at"`
 	SettledAt           sql.NullString `json:"settled_at"`
+	CheckpointID        string         `json:"checkpoint_id"`
 }
 
 type WorkerTurns struct {

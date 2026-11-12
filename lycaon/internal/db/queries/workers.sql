@@ -52,21 +52,21 @@ INSERT INTO worker_rounds (
 
 -- name: GetUnsettledWorkerRound :one
 SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
-       execution_target, review_subject_json, operation_id, created_at, settled_at
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
 FROM worker_rounds WHERE worker_id = ? AND settled_at IS NULL;
 
 -- name: GetWorkerRoundByJob :one
 SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
-       execution_target, review_subject_json, operation_id, created_at, settled_at
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
 FROM worker_rounds WHERE job_id = ?;
 
 -- name: ListWorkerRounds :many
 SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
-       execution_target, review_subject_json, operation_id, created_at, settled_at
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
 FROM worker_rounds WHERE worker_id = ? ORDER BY ordinal;
 
 -- name: SettleWorkerRound :execrows
-UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at)
+UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
 WHERE worker_id = sqlc.arg(worker_id) AND ordinal = sqlc.arg(ordinal) AND settled_at IS NULL;
 
 -- name: InsertWorkerMessage :exec
