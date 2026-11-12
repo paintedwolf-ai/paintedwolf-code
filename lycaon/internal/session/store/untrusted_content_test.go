@@ -123,9 +123,17 @@ func testSessionObservedURL(t *testing.T, st observedURLStore, projectID string)
 		Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "web_search", URL: recorded,
 	}))
 	testutil.FailErr(t, "RecordContact", st.RecordContact(ctx, sess.ID, "dialed.example.net", evidence.ContactOwn))
+	const displayed = "https://docs.example.org/next?page=3#top"
+	page := evidence.BuildEvidenceRecord("", "fetch_url", map[string]any{"url": "https://docs.example.org/read"},
+		`{"url":"https://docs.example.org/read","content":"continue at `+displayed+` for more"}`)
+	page.Handle = "web#2"
+	testutil.FailErr(t, "UpsertEvidenceRecord page", st.UpsertEvidenceRecord(ctx, sess.ID, page))
 
 	for address, want := range map[string]bool{
 		recorded:                                true,
+		displayed:                               true,
+		"https://docs.example.org/read":         true,
+		"https://docs.example.org/next?page=4":  false,
 		"  " + recorded + " ":                   true,
 		"https://docs.example.org/guide?page=3": false,
 		"https://docs.example.org/guide":        false,

@@ -176,6 +176,39 @@ func TestVerifyURLObservedIgnoresFetchBodyLinks(t *testing.T) {
 	}
 }
 
+// A read page's links are addresses the chat was shown, apart from the sources
+// it read, and they survive the store round trip.
+func TestURLShownCoversFetchBodyLinksOnly(t *testing.T) {
+	body := `{"url":"https://example.com/page","content":"see also https://example.com/other?p=2 and [x](https://third.example/x)"}`
+	rec := evidence.BuildEvidenceRecord("", "fetch_url", map[string]any{"url": "https://example.com/page"}, body)
+	rec.Handle = "web#1"
+	restored := evidence.Record{Handle: rec.Handle, Kind: rec.Kind, Shape: rec.Shape, URL: rec.URL}
+	evidence.ApplyRecordAux(&restored, evidence.CloneRecordForStore(rec))
+
+	for name, stored := range map[string]evidence.Record{"built": rec, "restored": restored} {
+		ev := evidence.Ledger{Handles: map[string]evidence.Record{stored.Handle: stored}}
+		for _, href := range []string{"https://example.com/other?p=2", "https://third.example/x"} {
+			if !evidence.URLShown(ev, href) {
+				t.Errorf("%s: %q was displayed by the page", name, href)
+			}
+			if evidence.VerifyURLObserved(ev, href) {
+				t.Errorf("%s: displayed address %q must not ground a citation", name, href)
+			}
+		}
+		for _, href := range []string{"https://example.com/other", "https://example.com/other?p=3", "https://third.example/", ""} {
+			if evidence.URLShown(ev, href) {
+				t.Errorf("%s: %q was never displayed", name, href)
+			}
+		}
+	}
+
+	search := evidence.BuildEvidenceRecord("", "web_search", map[string]any{"query": "q"}, `{"results":[{"url":"https://hit.example/a","title":"A"}]}`)
+	search.Handle = "web#2"
+	if evidence.URLShown(evidence.Ledger{Handles: map[string]evidence.Record{search.Handle: search}}, "https://hit.example/a") {
+		t.Fatal("a search result is a source, not a displayed address")
+	}
+}
+
 func TestVerificationAndOverlayOutcomesProduceCitableReceipts(t *testing.T) {
 	for _, tc := range []struct{ tool, handle, body string }{
 		{"verify", "command#1", `{"outcome":"passed","command":"python3 -m unittest","exit_code":0}`},

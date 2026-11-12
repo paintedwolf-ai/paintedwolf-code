@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"path"
+	"slices"
 	"sort"
 	"strings"
 
@@ -164,6 +165,33 @@ func (rec *Record) touchURL(rawURL string) {
 		}
 	}
 	rec.urlsTouched = append(rec.urlsTouched, url)
+}
+
+// showURL remembers an address a read page displayed. It is not a source the
+// chat read, so it grounds no citation.
+func (rec *Record) showURL(rawURL string) {
+	if rec == nil {
+		return
+	}
+	url := strings.TrimSpace(rawURL)
+	if url == "" || slices.Contains(rec.urlsShown, url) {
+		return
+	}
+	rec.urlsShown = append(rec.urlsShown, url)
+}
+
+// URLShown reports whether a read page displayed exactly this address.
+func URLShown(ev Ledger, rawURL string) bool {
+	url := strings.TrimSpace(rawURL)
+	if url == "" {
+		return false
+	}
+	for _, rec := range ev.Handles {
+		if slices.Contains(rec.urlsShown, url) {
+			return true
+		}
+	}
+	return false
 }
 
 // ObservedURLsForRecord returns distinct URLs observed on a record.

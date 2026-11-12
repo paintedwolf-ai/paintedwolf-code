@@ -36,6 +36,7 @@ type Record struct {
 	pathTiers    map[string]string         // normalized path → trust tier at capture
 	urlsTouched  []string                  // every URL named by the result
 	urlTitles    map[string]string         // URL → page title the tool reported
+	urlsShown    []string                  // addresses a read page displayed; not sources
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`

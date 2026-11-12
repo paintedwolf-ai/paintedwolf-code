@@ -163,6 +163,9 @@ func cloneRecord(rec Record) Record {
 	if len(rec.urlsTouched) > 0 {
 		out.urlsTouched = append([]string(nil), rec.urlsTouched...)
 	}
+	if len(rec.urlsShown) > 0 {
+		out.urlsShown = append([]string(nil), rec.urlsShown...)
+	}
 	if rec.urlTitles != nil {
 		out.urlTitles = make(map[string]string, len(rec.urlTitles))
 		for u, t := range rec.urlTitles {

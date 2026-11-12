@@ -5,6 +5,7 @@ type RecordAux struct {
 	PathsTouched     []string
 	URLsTouched      []string
 	URLTitles        map[string]string
+	URLsShown        []string
 	GrepLines        map[string]map[int]string
 	PathTiers        map[string]string
 	UntrustedContent bool
@@ -20,6 +21,7 @@ func CloneRecordForStore(rec Record) RecordAux {
 		PathsTouched:     append([]string(nil), cloned.pathsTouched...),
 		URLsTouched:      append([]string(nil), cloned.urlsTouched...),
 		URLTitles:        cloned.urlTitles,
+		URLsShown:        append([]string(nil), cloned.urlsShown...),
 		UntrustedContent: cloned.UntrustedContent,
 		ExternalCustody:  cloned.Custody.External,
 		CustodyTree:      cloned.Custody.Tree,
@@ -51,6 +53,7 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 	}
 	rec.pathsTouched = append([]string(nil), aux.PathsTouched...)
 	rec.urlsTouched = append([]string(nil), aux.URLsTouched...)
+	rec.urlsShown = append([]string(nil), aux.URLsShown...)
 	rec.urlTitles = nil
 	for u, t := range aux.URLTitles {
 		rec.touchURLTitle(u, t)
