@@ -560,6 +560,8 @@ The complete outbound inventory and user controls are in [Privacy](privacy.md).
 
 Fetched pages, search results, tool output, MCP results, project prose, and model output are data unless their structured origin grants instruction authority.
 
+A chat has read network content when text from beyond this machine reaches its transcript: a response body, headers or a write-out variable the server filled, a Git transfer's ref names and remote messages, or the output of a program whose processes connected to a remote destination. Measurements of a transfer (status, sizes, timings, addresses) are not content. Content a read places in the workspace (a saved response, files a pull changed, a cloned directory) is held in external custody instead, and marks the chat only when the chat reads it; custody follows a file until a later whole-file write replaces it, and a worker's custody is recorded for its chat too.
+
 ### Rule of two
 
 The host avoids combining all three conditions in one unbounded path: access to private data, exposure to untrusted content, and the ability to communicate or act externally. Where a workflow necessarily combines them, confinement, explicit tool boundaries, outbound screening, and approval reduce the authority of the combined path.
