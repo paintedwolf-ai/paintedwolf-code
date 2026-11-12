@@ -5,7 +5,6 @@ import {
   FileSummaryPanel,
   fileSummaryFallbackMarkdown,
   fileSummaryLocationsByName,
-  splitFileSummaryInline,
 } from "./FileSummaryPanel.tsx";
 import { assertNamedControl } from "../../test/controls.ts";
 import { registerOpenFilesSurfaceSink, resetOpenFilesSurfaceForTests } from "../../platform/navigation/open-files-surface.ts";
@@ -316,16 +315,5 @@ describe("FileSummaryPanel", () => {
       { line: 10, name: "render", kind: "method" },
     ]);
     expect(locations.get("render")?.line).toBe(10);
-  });
-
-  it("parses only single-backtick inline code spans", () => {
-    expect(splitFileSummaryInline("Calls `buildReview` safely.")).toEqual([
-      { kind: "text", text: "Calls " },
-      { kind: "code", text: "buildReview" },
-      { kind: "text", text: " safely." },
-    ]);
-    expect(splitFileSummaryInline("Keeps ```raw``` literal.")).toEqual([
-      { kind: "text", text: "Keeps ```raw``` literal." },
-    ]);
   });
 });

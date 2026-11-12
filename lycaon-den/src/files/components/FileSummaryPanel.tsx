@@ -7,6 +7,7 @@ import { languageLabelForDetectedLanguage } from "../../components/source/editor
 import { MarkdownBody } from "../../components/transcript/MarkdownBody.tsx";
 import { RandomLetterReveal } from "../../components/primitives/RandomLetterReveal.tsx";
 import { BriefingEvidenceLink, BriefingMark, BriefingSummary } from "../../briefing/BriefingSummary.tsx";
+import { briefingRevealText, splitBriefingInline } from "../../briefing/briefing-inline.ts";
 import type { LiveFileBriefing } from "./file-briefing-live.ts";
 import type { FileBriefingTarget } from "./file-briefing-target.ts";
 
@@ -30,28 +31,6 @@ export function fileSummaryFallbackMarkdown(summary: LiveFileBriefing): string {
   if (summary.sections.length > 0) return "";
   if (summary.status === "pending") return "";
   return summary.fallback_text.trim();
-}
-
-export type FileSummaryInlinePart = {
-  kind: "text" | "code";
-  text: string;
-};
-
-/** Briefing prose supports inline code spans only. */
-export function splitFileSummaryInline(text: string): FileSummaryInlinePart[] {
-  const parts: FileSummaryInlinePart[] = [];
-  const codeSpan = /`([^`\n]+)`/g;
-  let cursor = 0;
-  for (const match of text.matchAll(codeSpan)) {
-    const start = match.index;
-    const end = start + match[0].length;
-    if (text[start - 1] === "`" || text[end] === "`") continue;
-    if (start > cursor) parts.push({ kind: "text", text: text.slice(cursor, start) });
-    parts.push({ kind: "code", text: match[1] ?? "" });
-    cursor = end;
-  }
-  if (cursor < text.length) parts.push({ kind: "text", text: text.slice(cursor) });
-  return parts.length > 0 ? parts : [{ kind: "text", text }];
 }
 
 /** Only a unique, exact host-known declaration name is navigable. */
@@ -90,7 +69,7 @@ function FileSummarySectionLine(props: SummarySectionProps) {
     <Show when={revealed()} fallback={
       <p class="den-file-summary__section">
         <BriefingMark /> <strong>{sectionLabel[props.section.kind]}:</strong>{" "}
-        <RandomLetterReveal text={props.section.text} onceKey={props.revealKey} onRevealed={() => setRevealed(true)} />
+        <RandomLetterReveal text={briefingRevealText(props.section.text)} onceKey={props.revealKey} onRevealed={() => setRevealed(true)} />
       </p>
     }>
       <NavigableSectionLine {...props} />
@@ -99,7 +78,7 @@ function FileSummarySectionLine(props: SummarySectionProps) {
 }
 
 function NavigableSectionLine(props: SummarySectionProps) {
-  const parts = createMemo(() => splitFileSummaryInline(props.section.text));
+  const parts = createMemo(() => splitBriefingInline(props.section.text));
   return (
     <p class="den-file-summary__section">
       <BriefingMark /> <strong>{sectionLabel[props.section.kind]}:</strong>{" "}
