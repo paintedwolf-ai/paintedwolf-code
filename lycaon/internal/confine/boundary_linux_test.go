@@ -4,6 +4,7 @@ package confine
 
 import (
 	"errors"
+	"net"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -14,7 +15,6 @@ import (
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/protectedpath"
 	"github.com/lycaon/lycaon/internal/testutil"
-	"net"
 )
 
 // Denials inside a grant become mounts; denials Landlock already refuses do not.
@@ -508,5 +508,43 @@ func TestLinuxCredentialStorePlanAdmitsDBusSocketAndKeyringsReadOnly(t *testing.
 	}
 	if !containsPath(planCred.Filesystem.Hidden, sshDir) {
 		t.Fatalf("credential_store plan did not keep ~/.ssh hidden: %v", planCred.Filesystem.Hidden)
+	}
+}
+
+// The plan cannot refuse one loopback port, so a boundary naming one fails closed rather than
+// running without it.
+func TestLinuxPlanRefusesADeniedLoopbackPort(t *testing.T) {
+	_, err := renderProfile(Confinement{Roots: []string{t.TempDir()}, View: ViewBoundary{DeniedLoopbackPorts: []uint16{2049}}})
+	var unsupported *linuxsandbox.Unsupported
+	if !errors.As(err, &unsupported) || unsupported.Code != linuxsandbox.UnsupportedNetworkGrant {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestLinuxPlanHidesViewStorage(t *testing.T) {
+	root, storage := t.TempDir(), t.TempDir()
+	rules, err := filesystemRules(Confinement{Roots: []string{root}, View: ViewBoundary{DeniedPaths: []string{storage}}})
+	testutil.FailErr(t, "filesystemRules failed", err)
+	plan, err := compileFilesystemPlan(rules)
+	testutil.FailErr(t, "compileFilesystemPlan failed", err)
+	for _, hidden := range plan.Hidden {
+		if hidden == resolveEach([]string{storage})[0] {
+			return
+		}
+	}
+	t.Fatalf("storage is not hidden: %v", plan.Hidden)
+}
+
+// A denied tree inside a denied tree has nothing to cover, unless a restored path brought it back.
+func TestLinuxPlanMasksANestedDenialOnlyWhereItExists(t *testing.T) {
+	pc := &planCompiler{
+		readOnly: map[string]bool{},
+		hidden:   map[string]bool{"/state": true, "/state/branches": true, "/state/back/storage": true},
+		restored: map[string]bool{"/state/back": true},
+	}
+	for path, want := range map[string]bool{"/state": false, "/state/branches": true, "/state/back/storage": false} {
+		if got := pc.concealed(filepath.Dir(path)); got != want {
+			t.Fatalf("concealed parent of %s = %v", path, got)
+		}
 	}
 }
