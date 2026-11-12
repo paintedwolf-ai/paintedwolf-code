@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/url"
 
-	"github.com/lycaon/lycaon/internal/gitcredential"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -16,7 +16,7 @@ const savedCredentialShape = "Saved Git credential"
 // decision names the credential and the recipient, so a remembered approval
 // covers that pair and nothing else. A fault or anything but sending it
 // unchanged keeps the credential.
-func (o *Owners) releaseCredential(ctx context.Context, r gitcredential.Recipient, c gitcredential.Credential) bool {
+func (o *Owners) releaseCredential(ctx context.Context, r gitexec.Recipient, c gitexec.Credential) bool {
 	if o.SecretAsk == nil || o.SecretMatcher == nil || c.Password == "" {
 		return false
 	}
@@ -36,7 +36,7 @@ func (o *Owners) releaseCredential(ctx context.Context, r gitcredential.Recipien
 	return err == nil && resolution.Decision == secretmatch.SendUnchanged
 }
 
-func credentialRecipient(r gitcredential.Recipient) (id, label string) {
+func credentialRecipient(r gitexec.Recipient) (id, label string) {
 	return secretmatch.HTTPDestination(&url.URL{Scheme: r.Protocol, Host: r.Host})
 }
 
@@ -46,11 +46,12 @@ func credentialDenied(form string, declined []string) *toolrejection.ToolReject 
 	if len(declined) == 0 {
 		return nil
 	}
-	u, err := url.Parse(declined[0])
-	if err != nil {
-		return nil
+	label := declined[0]
+	// Declined URLs are the service's own reconstruction of an admitted
+	// recipient; if one ever fails to parse, the raw URL still names it.
+	if u, err := url.Parse(declined[0]); err == nil {
+		_, label = secretmatch.HTTPDestination(u)
 	}
-	_, label := secretmatch.HTTPDestination(u)
 	return &toolrejection.ToolReject{Code: toolrejection.OutboundSecretDeniedCode, Data: map[string]any{
 		"surface": "command", "rule_id": secretmatch.ManagedRuleID, "host": label, "shape": savedCredentialShape, "command": form,
 	}}

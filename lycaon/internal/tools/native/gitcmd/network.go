@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/gitargv"
-	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -252,7 +251,7 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ProjectID: tc.Identity.ProjectID,
 		ProjectDir: tc.ActiveRootPath(), ToolCallID: tc.Identity.ToolCallID,
 	})
-	credentials, err := gitexec.StartAgentCredentials(ctx, func(r gitcredential.Recipient, c gitcredential.Credential) bool {
+	credentials, err := gitexec.StartAgentCredentials(ctx, func(r gitexec.Recipient, c gitexec.Credential) bool {
 		return p.owners.releaseCredential(reviewCtx, r, c)
 	})
 	if err != nil {
