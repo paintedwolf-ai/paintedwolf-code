@@ -4,7 +4,11 @@ package launchguard
 
 import (
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"os"
@@ -51,6 +55,25 @@ func (l *runningLaunch) vaultRequest(t *testing.T, socket string, req testVaultR
 	var resp testVaultResponse
 	if err := json.Unmarshal([]byte(line), &resp); err != nil {
 		t.Fatalf("decode vault response %q: %v", line, err)
+	}
+	return resp
+}
+
+func (l *runningLaunch) vaultWorkflow(t *testing.T, socket, op, dir string) testVaultResponse {
+	t.Helper()
+	payload, err := json.Marshal(struct {
+		Socket      string `json:"socket"`
+		WorkflowOp  string `json:"workflow_op"`
+		WorkflowDir string `json:"workflow_dir"`
+	}{Socket: socket, WorkflowOp: op, WorkflowDir: dir})
+	testutil.FailErr(t, "encode vault workflow command", err)
+	_, err = l.stdin.Write(append(payload, '\n'))
+	testutil.FailErr(t, "write vault workflow command", err)
+	line, err := l.reader.ReadString('\n')
+	testutil.FailErr(t, "read vault workflow response", err)
+	var resp testVaultResponse
+	if err := json.Unmarshal([]byte(line), &resp); err != nil {
+		t.Fatalf("decode vault workflow response %q: %v", line, err)
 	}
 	return resp
 }
@@ -104,9 +127,30 @@ func startVaultIdentityServer(t *testing.T, f launchFixture) string {
 func TestProtectedLaunchUpgradePreservesVaultIdentityCustody(t *testing.T) {
 	f := installLaunchFixture(t)
 	socketPath := startVaultIdentityServer(t, f)
-	env := []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
+	homeDir := t.TempDir()
+	env := []string{"HOME=" + homeDir, "PATH=/usr/bin:/bin", "LANG=C.UTF-8"}
 	const account = "age-x25519-identity-v1:0a"
 	secret := []byte("AGE-SECRET-KEY-1UPGRADEWHILERUNNING")
+
+	workflowDir := filepath.Join(homeDir, "profile")
+	testutil.FailErr(t, "mkdir workflow profile", os.MkdirAll(workflowDir, 0o700))
+	_, priv, err := ed25519.GenerateKey(rand.Reader)
+	testutil.FailErr(t, "generate legacy ed25519 key", err)
+	pkcs8, err := x509.MarshalPKCS8PrivateKey(priv)
+	testutil.FailErr(t, "marshal legacy pkcs8", err)
+	pemBytes := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: pkcs8})
+	testutil.FailErr(t, "seed legacy host-identity.pem", os.WriteFile(filepath.Join(workflowDir, "host-identity.pem"), pemBytes, 0o600))
+	legacyMCP := "providers:\n" +
+		"  - id: wf-http\n" +
+		"    url: https://mcp.example.com/workflow\n" +
+		"    enabled: false\n" +
+		"    token: legacy-mcp-bearer-token\n" +
+		"    headers:\n" +
+		"      X-Custom-Auth: legacy-header-secret\n" +
+		"    env:\n" +
+		"      MCP_API_KEY: legacy-env-secret\n"
+	testutil.FailErr(t, "seed legacy mcp.yaml", os.WriteFile(filepath.Join(workflowDir, "mcp.yaml"), []byte(legacyMCP), 0o600))
+	testutil.FailErr(t, "seed legacy api.token", os.WriteFile(filepath.Join(workflowDir, "api.token"), []byte("legacy-api-token\n"), 0o600))
 
 	// Launch session A on generation A (1.0.0) and create a vault identity.
 	launchA := startLaunch(t, f, env)
@@ -117,6 +161,10 @@ func TestProtectedLaunchUpgradePreservesVaultIdentityCustody(t *testing.T) {
 	})
 	if created.Status != "ok" {
 		t.Fatalf("create on generation A = %+v", created)
+	}
+	wfA := launchA.vaultWorkflow(t, socketPath, "migrate_and_persist", workflowDir)
+	if wfA.Status != "ok" || string(wfA.Value) == "" {
+		t.Fatalf("secret workflow on generation A = %+v", wfA)
 	}
 
 	// Upgrade in place to generation B (1.0.1) while session A stays running:
@@ -151,6 +199,11 @@ func TestProtectedLaunchUpgradePreservesVaultIdentityCustody(t *testing.T) {
 	})
 	if fromB.Status != "ok" || string(fromB.Value) != string(secret) {
 		t.Fatalf("read from new session B on generation B = %+v, want %q", fromB, secret)
+	}
+	wfB := launchB.vaultWorkflow(t, socketPath, "verify_reopen_and_token_print", workflowDir)
+	wantWorkflowB := string(wfA.Value) + "|daemon-bearer-token-from-protected-launch"
+	if wfB.Status != "ok" || string(wfB.Value) != wantWorkflowB {
+		t.Fatalf("secret workflow reopen on generation B = %+v, want %q", wfB, wantWorkflowB)
 	}
 
 	// Closing session A releases generation A's lifetime lock while session B continues.

@@ -85,6 +85,21 @@ fn external_daemon_token_print_handles_success_failure_timeout_and_never_leaks_s
         timeout_err.contains("timed out"),
         "unexpected timeout error: {timeout_err}"
     );
+
+    let mut fallback_ok = Command::new("sh");
+    fallback_ok.args(["-c", "printf 'fallback-token-xyz\\n'"]);
+    assert_eq!(
+        run_token_print_command_bounded_fallback(fallback_ok, Duration::from_secs(2))
+            .expect("non-unix bounded fallback success"),
+        "fallback-token-xyz"
+    );
+    let mut fallback_slow = Command::new("sh");
+    fallback_slow.args(["-c", "exec sleep 10"]);
+    assert!(
+        run_token_print_command_bounded_fallback(fallback_slow, Duration::from_millis(50))
+            .expect_err("non-unix bounded fallback timeout")
+            .contains("timed out")
+    );
 }
 
 #[cfg(unix)]

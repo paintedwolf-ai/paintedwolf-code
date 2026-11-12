@@ -121,9 +121,59 @@ pub(super) fn run_token_print_command(
     }
     #[cfg(not(unix))]
     {
-        let _ = (command, timeout);
-        Err("daemon token print is only supported on Unix platforms".to_string())
+        run_token_print_command_bounded_fallback(command, timeout)
     }
+}
+
+#[cfg_attr(unix, allow(dead_code))]
+pub(super) fn run_token_print_command_bounded_fallback(
+    mut command: Command,
+    timeout: Duration,
+) -> Result<String, String> {
+    command
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    let mut guard = HelperProcessGuard(
+        command
+            .spawn()
+            .map_err(|e| format!("run daemon token print: {e}"))?,
+    );
+    let stdout = guard
+        .0
+        .stdout
+        .take()
+        .ok_or_else(|| "daemon token print stdout unavailable".to_string())?;
+    let max_capture = (API_TOKEN_MAX_BYTES + 64) as u64;
+    let (tx, rx) = std::sync::mpsc::sync_channel(1);
+    std::thread::spawn(move || {
+        let mut buf = Vec::with_capacity(128);
+        let res = stdout.take(max_capture).read_to_end(&mut buf).map(|_| buf);
+        let _ = tx.send(res);
+    });
+
+    let deadline = Instant::now() + timeout;
+    let status = loop {
+        match guard.0.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    return Err("daemon token print timed out".to_string());
+                }
+                std::thread::sleep(GRACEFUL_STOP_POLL);
+            }
+            Err(e) => return Err(format!("wait daemon token print: {e}")),
+        }
+    };
+    let rem = deadline
+        .saturating_duration_since(Instant::now())
+        .max(Duration::from_millis(50));
+    let stdout_bytes = rx
+        .recv_timeout(rem)
+        .map_err(|_| "daemon token print timed out".to_string())?
+        .map_err(|e| format!("read daemon token print stdout: {e}"))?;
+    drop(guard);
+    validate_printed_token(status, stdout_bytes)
 }
 
 #[cfg(unix)]
@@ -178,7 +228,13 @@ where
     };
     drop(stdout);
     drop(guard);
+    validate_printed_token(status, stdout_bytes)
+}
 
+fn validate_printed_token(
+    status: std::process::ExitStatus,
+    stdout_bytes: Vec<u8>,
+) -> Result<String, String> {
     if !status.success() {
         return Err(match status.code() {
             Some(code) => format!("daemon token print failed (exit {code})"),
