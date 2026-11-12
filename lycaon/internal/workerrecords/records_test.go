@@ -184,7 +184,7 @@ func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
 	}
 	rounds, err := f.store.Rounds(t.Context(), f.coord, w.WorkerID)
 	testutil.FailErr(t, "rounds", err)
-	if len(rounds) != 1 || rounds[0].SettledAt == "" {
+	if len(rounds) != 1 || rounds[0].SettledAt == "" || rounds[0].ResultID != "" {
 		t.Fatalf("rounds = %+v", rounds)
 	}
 	f.insertJob(t, "job-2", coordSession, "child-1", "pending")

@@ -988,20 +988,37 @@ func (q *Queries) ListWorkerResultDispositions(ctx context.Context, workerID str
 }
 
 const listWorkerRounds = `-- name: ListWorkerRounds :many
-SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
-       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
-FROM worker_rounds WHERE worker_id = ? ORDER BY ordinal
+SELECT r.worker_id, r.ordinal, r.job_id, r.instruction_first_seq, r.instruction_last_seq,
+       r.execution_target, r.review_subject_json, r.operation_id, r.created_at, r.settled_at, r.checkpoint_id,
+       COALESCE(res.id, '') AS result_id
+FROM worker_rounds r LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+WHERE r.worker_id = ? ORDER BY r.ordinal
 `
 
-func (q *Queries) ListWorkerRounds(ctx context.Context, workerID string) ([]WorkerRounds, error) {
+type ListWorkerRoundsRow struct {
+	WorkerID            string         `json:"worker_id"`
+	Ordinal             int64          `json:"ordinal"`
+	JobID               string         `json:"job_id"`
+	InstructionFirstSeq sql.NullInt64  `json:"instruction_first_seq"`
+	InstructionLastSeq  sql.NullInt64  `json:"instruction_last_seq"`
+	ExecutionTarget     string         `json:"execution_target"`
+	ReviewSubjectJson   string         `json:"review_subject_json"`
+	OperationID         string         `json:"operation_id"`
+	CreatedAt           string         `json:"created_at"`
+	SettledAt           sql.NullString `json:"settled_at"`
+	CheckpointID        string         `json:"checkpoint_id"`
+	ResultID            string         `json:"result_id"`
+}
+
+func (q *Queries) ListWorkerRounds(ctx context.Context, workerID string) ([]ListWorkerRoundsRow, error) {
 	rows, err := q.db.QueryContext(ctx, listWorkerRounds, workerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []WorkerRounds
+	var items []ListWorkerRoundsRow
 	for rows.Next() {
-		var i WorkerRounds
+		var i ListWorkerRoundsRow
 		if err := rows.Scan(
 			&i.WorkerID,
 			&i.Ordinal,
@@ -1014,6 +1031,7 @@ func (q *Queries) ListWorkerRounds(ctx context.Context, workerID string) ([]Work
 			&i.CreatedAt,
 			&i.SettledAt,
 			&i.CheckpointID,
+			&i.ResultID,
 		); err != nil {
 			return nil, err
 		}
