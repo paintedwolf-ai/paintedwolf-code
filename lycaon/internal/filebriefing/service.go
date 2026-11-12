@@ -184,10 +184,10 @@ func (s *Service) ensureJob(ctx context.Context, target Target, b Briefing, prom
 	if b.Trigger == "automatic" {
 		group = fileJobPrefix + b.ProjectID
 	}
-	joined, err := s.scheduler.Submit(briefing.Job{
+	joined, err := s.scheduler.Submit(ctx, briefing.Job{
 		Key: fileJobPrefix + fileBriefingJobKey(b), Project: b.ProjectID, Group: group, Manual: b.Trigger == "manual",
-		Policy: briefing.Policy{Admission: briefing.Superseding}, Values: ctx,
-		Run: func(jobCtx context.Context) { s.completeFileBriefing(jobCtx, b, prompt, target.ProjectDir) },
+		Policy: briefing.Policy{Admission: briefing.Superseding},
+		Run:    func(jobCtx context.Context) { s.completeFileBriefing(jobCtx, b, prompt, target.ProjectDir) },
 	})
 	if err != nil || joined {
 		return

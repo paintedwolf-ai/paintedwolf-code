@@ -144,9 +144,8 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 		Manual: request.Manual, Policy: request.Policy,
 		Run:     func(ctx context.Context) { e.generate(ctx, r, attempt, stored) },
 		Expired: func(ctx context.Context) { e.fail(ctx, request, attempt, ErrQueueExpired.Error()) },
-		Values:  ctx,
 	}
-	if _, err := e.scheduler.Submit(job); err != nil {
+	if _, err := e.scheduler.Submit(ctx, job); err != nil {
 		e.fail(context.WithoutCancel(ctx), request, attempt, err.Error())
 		return Snapshot{}, err
 	}
