@@ -8,10 +8,11 @@ function commandPart(state: string): ToolPartView {
     id: "row",
     commandActivity: {
       fact: { state },
+      // Card ids pair the assistant row with the call; targets name host calls.
       calls: [
-        { id: "call-1", commandProgram: { id: "prog-1" } },
-        { id: "read-output" },
-        { id: "call-2", commandProgram: { id: "prog-2" } },
+        { id: "row:call-1", toolCallId: "call-1", commandProgram: { id: "prog-1" } },
+        { id: "row:read-output", toolCallId: "read-output" },
+        { id: "row:call-2", toolCallId: "call-2", commandProgram: { id: "prog-2" } },
       ],
       members: [
         { id: "act-1", execution_ids: ["e1"] },
@@ -40,7 +41,7 @@ describe("activityBriefingTarget", () => {
   });
 
   it("names a non-command call alone, and nothing without a session", () => {
-    const part = { id: "call-9" } as ToolPartView;
+    const part = { id: "row:call-9", toolCallId: "call-9" } as ToolPartView;
     expect(activityBriefingTarget(part, "s")).toEqual({ profileId: "tool_activity", ref: { session_id: "s", tool_call_ids: ["call-9"] } });
     expect(activityBriefingTarget(part, undefined)).toBeNull();
   });

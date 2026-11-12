@@ -62,7 +62,11 @@ func (e *Engine) resolve(ctx context.Context, request Request) (resolved, error)
 				return out, fmt.Errorf("briefing section %q has no prompt", section.ID)
 			}
 			lookup = append(lookup, hash)
-			out.missing = append(out.missing, i)
+			// Without a model only a fallback can fill the section, so no
+			// attempt waits on text that cannot arrive.
+			if e.generator != nil || section.Fallback != "" {
+				out.missing = append(out.missing, i)
+			}
 		default:
 			lookup = append(lookup, hash)
 		}
@@ -133,6 +137,11 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 		return Snapshot{}, err
 	}
 	attempt := started.ID
+	if started.Cooling != nil {
+		snap := r.snapshot(StatusFailed, attempt, "", started.Revision, stored)
+		snap.ErrorCode, snap.Error = started.Cooling.Code, started.Cooling.Message
+		return snap, nil
+	}
 	snap := r.snapshot(StatusPending, attempt, "", started.Revision, stored)
 	if request.Manual {
 		snap.Regenerate = Started
@@ -253,7 +262,9 @@ func (e *Engine) generate(ctx context.Context, r resolved, attempt string, store
 		r.results[hash] = result
 	}
 	settleCtx := context.WithoutCancel(ctx)
-	if len(failures) > 0 && len(r.present()) == 0 {
+	// Any section left without text fails the attempt; generated sections stay
+	// stored, so a retry asks only for the rest.
+	if len(failures) > 0 {
 		e.fail(settleCtx, r, attempt, Failure{Code: CodeGenerationFailed, Message: strings.Join(failures, "; ")})
 		return
 	}

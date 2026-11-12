@@ -130,6 +130,9 @@ func TestResolveRefusals(t *testing.T) {
 	if _, err := other.Resolve(t.Context(), commandTarget()); !errors.Is(err, store.ErrSessionNotFound) {
 		t.Fatalf("another project's session: %v", err)
 	}
+	if _, err := profile.Resolve(t.Context(), commandTarget()); !errors.Is(err, briefing.ErrTargetUnavailable) {
+		t.Fatalf("a call missing from the transcript was summarized: %v", err)
+	}
 	if _, err := profile.Resolve(t.Context(), briefing.Target{ProjectID: project, Ref: json.RawMessage(`{"session_id":"s","tool_call_ids":["c"],"extra":1}`)}); !errors.Is(err, briefing.ErrInvalidTarget) {
 		t.Fatalf("unknown field: %v", err)
 	}

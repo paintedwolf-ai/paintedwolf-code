@@ -85,6 +85,10 @@ func (s *Targets) StartAttempt(ctx context.Context, request briefing.Request, ep
 		case current.AttemptStatus == "pending":
 			attempt = briefing.Attempt{ID: current.AttemptID, Joined: true, Epoch: epoch, Revision: current.Revision}
 			return nil
+		case !request.Manual && s.cooling(current, hashes):
+			attempt = briefing.Attempt{ID: current.AttemptID, Epoch: epoch, Revision: current.Revision,
+				Cooling: &briefing.Failure{Code: current.ErrorCode, Message: current.ErrorMessage}}
+			return nil
 		}
 		revision, err := q.StartBriefingTargetAttempt(ctx, db.StartBriefingTargetAttemptParams{
 			TargetKind: request.TargetKind, TargetJson: targetJSON(request), ScopeFingerprint: request.ScopeFingerprint,
@@ -99,6 +103,28 @@ func (s *Targets) StartAttempt(ctx context.Context, request briefing.Request, ep
 		return err
 	})
 	return attempt, err
+}
+
+// cooling reports a generation failure for the same sections within the
+// cooldown; changed material asks again at once.
+func (s *Targets) cooling(current db.BriefingTargets, hashes []briefing.SectionHash) bool {
+	if current.AttemptStatus != "failed" || current.ErrorCode != briefing.CodeGenerationFailed {
+		return false
+	}
+	failedAt, err := db.ParseTime(current.UpdatedAt)
+	if err != nil || s.now().Sub(failedAt) >= briefing.FailureCooldown {
+		return false
+	}
+	var prior []targetSection
+	if json.Unmarshal([]byte(current.SectionsJson), &prior) != nil || len(prior) != len(hashes) {
+		return false
+	}
+	for i, hash := range hashes {
+		if prior[i].SectionID != hash.SectionID || prior[i].ManifestHash != hash.ManifestHash {
+			return false
+		}
+	}
+	return true
 }
 
 func targetJSON(request briefing.Request) string {
