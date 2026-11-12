@@ -116,3 +116,13 @@
 @utility den-briefing-summary__label {
   font-weight: 600;
 }
+
+@utility den-briefing-summary__code {
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: var(--den-tint-2);
+  box-decoration-break: clone;
+  font-family: var(--font-den-mono);
+  font-size: var(--text-den-compact);
+  overflow-wrap: anywhere;
+}
