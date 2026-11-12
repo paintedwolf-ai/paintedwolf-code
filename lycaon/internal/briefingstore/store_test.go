@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -90,7 +89,6 @@ func (g fixedGenerator) Generate(context.Context, briefing.Invocation) (string, 
 }
 
 type publishLog struct {
-	mu   sync.Mutex
 	seen chan briefing.Snapshot
 }
 
