@@ -178,9 +178,8 @@ func ParseCapabilityRequest(args map[string]any) (*CapabilityRequest, *toolrejec
 }
 
 // CanonicalArguments reduces a host_execution request to itself, so every
-// reader of the raw arguments, review and grant identity included, sees the
-// request that takes effect. Arguments that do not parse are returned as they
-// are for the parser to refuse.
+// reader of the arguments sees the request that takes effect. Arguments that
+// do not parse are left for the parser to refuse.
 func CanonicalArguments(args map[string]any) map[string]any {
 	obj, _ := args["capability_request"].(map[string]any)
 	if len(obj) < 2 {
