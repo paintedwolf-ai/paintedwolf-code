@@ -172,6 +172,9 @@ type procCandidate struct {
 	// job marks a session job; every other candidate descends from one.
 	job     bool
 	started uint64
+	// parents maps each visible process to its parent, to find a candidate's
+	// job.
+	parents map[int]int
 }
 
 func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern string, fullMatch, exactMatch bool) ([]procCandidate, error) {
@@ -200,6 +203,10 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 	var matches []procCandidate
 	seenHandles := map[string]bool{}
 	selfPID := os.Getpid()
+	parents := make(map[int]int, len(visible))
+	for _, proc := range visible {
+		parents[proc.PID] = proc.ParentPID
+	}
 	// Every visible process is the session's own: a job, or a process
 	// descending from one, which pkill signals by its kernel instance.
 	for _, proc := range visible {
@@ -233,6 +240,7 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 				cmd:     cmdLine,
 				job:     isJob,
 				started: proc.StartOrder,
+				parents: parents,
 			})
 		}
 	}
@@ -371,9 +379,19 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 			}
 			return 1
 		})
+		stopped := map[int]bool{}
 		for _, m := range matches {
 			if !m.job {
-				if err := jobs.signalDescendant(ctx, m.pid, name); err != nil && !errors.Is(err, errDescendantGone) {
+				if underStoppedJob(m, stopped) {
+					continue
+				}
+				err := jobs.signalDescendant(ctx, m.pid, name)
+				// A process the scan found as the session's own and no longer is
+				// left with a job this pkill stopped.
+				if reject := toolrejection.AsToolReject(err); reject != nil && reject.Code == "PROCESS_NOT_OWNED" && len(stopped) > 0 {
+					continue
+				}
+				if err != nil && !errors.Is(err, errDescendantGone) {
 					if reject := toolrejection.AsToolReject(err); reject != nil && reject.Data != nil {
 						reject.Data["command"] = "pkill"
 					}
@@ -391,9 +409,25 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 				}
 				return ownerFailure(err), err
 			}
+			if m.pid > 0 {
+				stopped[m.pid] = true
+			}
 		}
 		return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectAttempted}, nil
 	})
+}
+
+// underStoppedJob reports whether a descendant's job was already stopped,
+// which stops its whole process tree.
+func underStoppedJob(m procCandidate, stopped map[int]bool) bool {
+	seen := map[int]bool{}
+	for pid := m.parents[m.pid]; pid > 1 && !seen[pid]; pid = m.parents[pid] {
+		if stopped[pid] {
+			return true
+		}
+		seen[pid] = true
+	}
+	return false
 }
 
 func selectProcessAge(matches []procCandidate, newest bool) []procCandidate {
