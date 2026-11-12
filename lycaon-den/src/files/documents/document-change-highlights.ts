@@ -1,37 +1,125 @@
-import { Decoration, ViewPlugin, type DecorationSet, type EditorView, type ViewUpdate } from "@codemirror/view";
-import { StateEffect } from "@codemirror/state";
+import { MapMode, StateEffect, StateField, type EditorState, type Transaction } from "@codemirror/state";
+import { Decoration, EditorView, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+import { AGENT_LINGER_MS } from "../components/agent-presence.ts";
 import { documentRemoteChange } from "./document-editor-binding.ts";
 
-const clearHighlights = StateEffect.define<void>();
+/** How long a landed line takes to fade once its linger time is over. */
+export const LANDED_LINE_FADE_MS = 600;
+/** Lines recorded per document; the oldest go first. */
+export const LANDED_LINES_MAX = 512;
 
-/** Remote changes settle in the binding transaction. Only their line tint expires. */
-export const documentChangeHighlights = ViewPlugin.fromClass(class {
-  decorations: DecorationSet = Decoration.none;
-  private timer: ReturnType<typeof setTimeout> | undefined;
-  constructor(private readonly view: EditorView) {}
+export type LandedLine = {
+  /** Start of the line in the current document. */
+  from: number;
+  kind: "add" | "del";
+  /** When a change from elsewhere last landed on the line. */
+  at: number;
+};
 
-  update(update: ViewUpdate): void {
-    this.decorations = this.decorations.map(update.changes);
-    if (update.transactions.some((transaction) => transaction.effects.some((effect) => effect.is(clearHighlights)))) {
-      this.decorations = Decoration.none;
+const expireLandedLines = StateEffect.define<number>();
+
+function mapLines(lines: readonly LandedLine[], transaction: Transaction): LandedLine[] {
+  const { doc } = transaction.state;
+  const byLine = new Map<number, LandedLine>();
+  for (const line of lines) {
+    // A line whose start was deleted no longer exists.
+    const mapped = transaction.changes.mapPos(line.from, 1, MapMode.TrackDel);
+    if (mapped === null) continue;
+    const from = doc.lineAt(mapped).from;
+    const held = byLine.get(from);
+    if (!held || held.at < line.at) byLine.set(from, { ...line, from });
+  }
+  return [...byLine.values()];
+}
+
+/** Lines in the new document that a transaction changed, at most `limit`. */
+function changedLines(transaction: Transaction, limit: number): Array<{ from: number; kind: LandedLine["kind"] }> {
+  const { doc } = transaction.state;
+  const out = new Map<number, LandedLine["kind"]>();
+  transaction.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
+    const kind = fromB === toB ? "del" : "add";
+    const last = doc.lineAt(toB).number;
+    for (let number = doc.lineAt(fromB).number; number <= last && out.size < limit; number++) {
+      out.set(doc.line(number).from, kind);
     }
-    if (!update.docChanged || !update.transactions.some((transaction) => transaction.annotation(documentRemoteChange))) return;
-    const lines = new Map<number, string>();
-    update.changes.iterChangedRanges((_fromA, _toA, fromB, toB) => {
-      for (const visible of update.view.visibleRanges) {
-        const from = Math.max(fromB, visible.from), to = Math.min(toB, visible.to);
-        if (from > to) continue;
-        const first = update.state.doc.lineAt(from).number;
-        const last = update.state.doc.lineAt(to).number;
-        for (let line = first; line <= last && lines.size < 128; line++) {
-          lines.set(update.state.doc.line(line).from, fromB === toB ? "cm-den-hunk-del" : "cm-den-hunk-add");
-        }
+  });
+  return [...out].map(([from, kind]) => ({ from, kind }));
+}
+
+function withoutTouched(lines: readonly LandedLine[], transaction: Transaction): LandedLine[] {
+  const touched = new Set(changedLines(transaction, Number.POSITIVE_INFINITY).map((line) => line.from));
+  return lines.filter((line) => !touched.has(line.from));
+}
+
+function newestFirst(lines: LandedLine[]): LandedLine[] {
+  return lines.sort((a, b) => b.at - a.at || a.from - b.from).slice(0, LANDED_LINES_MAX);
+}
+
+/** Lines changes from elsewhere landed on, each kept for the agent linger time after its own last change. */
+export const landedLinesField = StateField.define<readonly LandedLine[]>({
+  create: () => [],
+  update(lines, transaction) {
+    let next = lines;
+    if (transaction.docChanged) {
+      next = mapLines(next, transaction);
+      if (transaction.annotation(documentRemoteChange)) {
+        const at = Date.now();
+        const landed = changedLines(transaction, LANDED_LINES_MAX).map((line) => ({ ...line, at }));
+        const fresh = new Set(landed.map((line) => line.from));
+        next = newestFirst([...landed, ...next.filter((line) => !fresh.has(line.from))]);
+      } else {
+        // The person's own edit is now the newest thing on the line.
+        next = withoutTouched(next, transaction);
       }
-    });
-    this.decorations = Decoration.set([...lines].map(([from, className]) => Decoration.line({ class: className }).range(from)), true);
-    clearTimeout(this.timer);
-    this.timer = setTimeout(() => this.view.dispatch({ effects: clearHighlights.of(undefined) }), 800);
+    }
+    for (const effect of transaction.effects) {
+      if (effect.is(expireLandedLines)) next = next.filter((line) => effect.value - line.at < AGENT_LINGER_MS + LANDED_LINE_FADE_MS);
+    }
+    return next;
+  },
+  provide: (field) => EditorView.decorations.compute([field], (state) => {
+    const now = Date.now();
+    const lines = [...state.field(field)].sort((a, b) => a.from - b.from);
+    return Decoration.set(lines.map((line) => Decoration.line({
+      class: `cm-den-hunk-${line.kind}${now - line.at >= AGENT_LINGER_MS ? " cm-den-hunk--leaving" : ""}`,
+    }).range(line.from)));
+  }),
+});
+
+export function landedLines(state: EditorState): readonly LandedLine[] {
+  return state.field(landedLinesField, false) ?? [];
+}
+
+/** Wakes once for the next line that starts leaving or goes. */
+const landedLineExpiry = ViewPlugin.fromClass(class {
+  private timer: ReturnType<typeof setTimeout> | undefined;
+  constructor(private readonly view: EditorView) {
+    this.schedule();
   }
 
-  destroy(): void { clearTimeout(this.timer); }
-}, { decorations: (plugin) => plugin.decorations });
+  update(update: ViewUpdate): void {
+    if (landedLines(update.startState) !== landedLines(update.state)) this.schedule();
+  }
+
+  private schedule(): void {
+    clearTimeout(this.timer);
+    this.timer = undefined;
+    const now = Date.now();
+    let due = Number.POSITIVE_INFINITY;
+    for (const line of landedLines(this.view.state)) {
+      const leaving = line.at + AGENT_LINGER_MS;
+      due = Math.min(due, leaving > now ? leaving : leaving + LANDED_LINE_FADE_MS);
+    }
+    if (!Number.isFinite(due)) return;
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      this.view.dispatch({ effects: expireLandedLines.of(Date.now()) });
+    }, Math.max(0, due - now));
+  }
+
+  destroy(): void {
+    clearTimeout(this.timer);
+  }
+});
+
+export const documentChangeHighlights = [landedLinesField, landedLineExpiry];
