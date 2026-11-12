@@ -139,27 +139,27 @@ func TestReconcileListenersDatesWalkOnlyListenersBeforeWithholding(t *testing.T)
 	}{
 		{
 			name:        "a handle the read delivered in another state",
-			read:        socketTableRead{Listening: []kernelListener{ownRow}, Records: records(1, 2)},
+			read:        socketTableRead{Protocol: ProtocolTCP, Listening: []kernelListener{ownRow}, Records: records(1, 2)},
 			rereadCalls: 0,
 			complete:    true,
 		},
 		{
 			name:        "a fresh read dates the listener",
-			read:        socketTableRead{Listening: []kernelListener{ownRow}, Records: records(1)},
+			read:        socketTableRead{Protocol: ProtocolTCP, Listening: []kernelListener{ownRow}, Records: records(1)},
 			reread:      socketTableRead{Records: records(1, 2)},
 			rereadCalls: 1,
 			complete:    true,
 		},
 		{
 			name:        "a listener closed before the re-observation",
-			read:        socketTableRead{Listening: []kernelListener{ownRow}, Records: records(1)},
+			read:        socketTableRead{Protocol: ProtocolTCP, Listening: []kernelListener{ownRow}, Records: records(1)},
 			reread:      socketTableRead{Records: records(1)},
 			rereadCalls: 1,
 			complete:    true,
 		},
 		{
 			name:         "a holder exited before the re-observation",
-			read:         socketTableRead{Listening: []kernelListener{ownRow}, Records: records(1)},
+			read:         socketTableRead{Protocol: ProtocolTCP, Listening: []kernelListener{ownRow}, Records: records(1)},
 			reread:       socketTableRead{Records: records(1)},
 			reobserveErr: syscall.ESRCH,
 			rereadCalls:  1,
@@ -167,14 +167,14 @@ func TestReconcileListenersDatesWalkOnlyListenersBeforeWithholding(t *testing.T)
 		},
 		{
 			name:        "a listener a holder still observes is withheld",
-			read:        socketTableRead{Listening: []kernelListener{ownRow}, Records: records(1)},
+			read:        socketTableRead{Protocol: ProtocolTCP, Listening: []kernelListener{ownRow}, Records: records(1)},
 			reread:      socketTableRead{Records: records(1)},
 			reobserve:   []SocketObservation{churned},
 			rereadCalls: 1,
 		},
 		{
 			name:         "an unreadable holder keeps withholding",
-			read:         socketTableRead{Listening: []kernelListener{ownRow}, Records: records(1)},
+			read:         socketTableRead{Protocol: ProtocolTCP, Listening: []kernelListener{ownRow}, Records: records(1)},
 			reread:       socketTableRead{Records: records(1)},
 			reobserveErr: syscall.EPERM,
 			rereadCalls:  1,
