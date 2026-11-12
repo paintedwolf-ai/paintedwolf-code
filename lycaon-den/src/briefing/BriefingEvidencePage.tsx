@@ -45,8 +45,14 @@ export function BriefingEvidencePage(props: Props) {
             )}
           </Show>
         </header>
-        <Show when={loaded() && "missing" in loaded()!}><p class="den-walk-page__note" role="status">{copy.expired}</p></Show>
-        <Show when={loaded() && "failed" in loaded()!}><p class="den-walk-page__error" role="alert">{copy.loadFailed}</p></Show>
+        <Show when={loaded()}>
+          {(state) => (
+            <>
+              <Show when={"missing" in state()}><p class="den-walk-page__note" role="status">{copy.expired}</p></Show>
+              <Show when={"failed" in state()}><p class="den-walk-page__error" role="alert">{copy.loadFailed}</p></Show>
+            </>
+          )}
+        </Show>
         <Show when={record()}>{(current) => <RecordBody record={current()} />}</Show>
       </article>
     </Scrollport>
@@ -58,16 +64,18 @@ function RecordBody(props: { record: BriefingRecord }) {
   const items = () => readable().flatMap((section) => section.items ?? []);
   const sent = () => items().filter((item) => item.inclusion === "included" || item.inclusion === "truncated");
   const limits = () => items().filter((item) => item.inclusion !== "included");
-  const sources = () => [...new Set(items().filter((item) => item.ref).map((item) => item.revision ? `${item.ref} @ ${item.revision}` : item.ref!))];
+  const sources = () => [...new Set(items().flatMap((item) => (item.ref ? [item.revision ? `${item.ref} @ ${item.revision}` : item.ref] : [])))];
   return (
     <>
       <section class="den-briefing-evidence__section" aria-labelledby="briefing-evidence-summary">
         <h2 id="briefing-evidence-summary" class="den-walk-page__files-title">{copy.summary}</h2>
         <For each={props.record.sections}>
           {(section) => (
-            <Show when={section.available && section.result} fallback={<p class="den-walk-page__note">{copy.unavailableSection}</p>}>
-              <BriefingSummary recordId={props.record.record_id}
-                sections={[{ id: section.section_id, text: section.result!.text, source: section.result!.source }]} />
+            <Show when={section.available ? section.result : undefined} fallback={<p class="den-walk-page__note">{copy.unavailableSection}</p>}>
+              {(result) => (
+                <BriefingSummary recordId={props.record.record_id}
+                  sections={[{ id: section.section_id, text: result().text, source: result().source }]} />
+              )}
             </Show>
           )}
         </For>
@@ -129,7 +137,7 @@ function GenerationFacts(props: { section: BriefingRecordSection }) {
       <dt>{props.section.section_id}</dt>
       <dd>
         {props.section.template_id} {props.section.template_version}
-        <Show when={result()?.model}>{(model) => <> · {result()!.provider_id} {model()}</>}</Show>
+        <Show when={result()?.model ? result() : undefined}>{(generated) => <> · {generated().provider_id} {generated().model}</>}</Show>
       </dd>
     </>
   );
