@@ -131,9 +131,13 @@ export function activityExceptions(view: CommandActivityView, executions: readon
   const facts: ActivityFact[] = [];
   const fact = view.fact;
   const program = view.calls.find(call => call.commandProgram)?.commandProgram;
+  // The host never observes what a finished process changed, so an unknown
+  // outcome is its default rather than an exception.
+  const observed = !(fact.phase === "execute" && fact.state === "completed");
+  const uncertain = (row: CommandExecutionReceipt) => observed && (row.effect_certainty === "attempted" || row.effect_certainty === "unknown");
   if (fact.failed_count && (fact.execution_count ?? 0) > 1) facts.push({ label: "Reported failures", value: fact.failed_count.toLocaleString() });
   if (program?.stop_code && fact.state !== "refused") facts.push({ label: "Command stop", value: program.stop_code });
-  if (fact.uncertain_effects || executions.some(row => row.effect_certainty === "attempted" || row.effect_certainty === "unknown")) {
+  if ((observed && fact.uncertain_effects) || executions.some(uncertain)) {
     facts.push({ label: "Effects", value: fact.completed_effects || executions.some(row => row.effect_certainty === "completed") ? "Partial effects; unknown outcome" : "Unknown outcome" });
   }
   for (const entry of feedback ?? []) {
@@ -142,10 +146,11 @@ export function activityExceptions(view: CommandActivityView, executions: readon
     if (typeof operation === "string") facts.push({ label: "Operation", value: operation });
   }
   if (fact.job_handle) facts.push({ label: "Background job", value: fact.job_handle });
-  if (fact.directory) facts.push({ label: "Directory", value: fact.directory });
+  // "." is the project root, the default directory.
+  if (fact.directory && fact.directory !== ".") facts.push({ label: "Directory", value: fact.directory });
   for (const row of executions) {
     if (row.host_stop_code && row.host_stop_code !== row.stop_code) facts.push({ label: "Host stop", value: row.host_stop_code });
-    if (row.effect_certainty === "attempted" || row.effect_certainty === "unknown") facts.push({ label: row.command, value: UNCERTAIN[row.effect_certainty] });
+    if (uncertain(row)) facts.push({ label: row.command, value: UNCERTAIN[row.effect_certainty as keyof typeof UNCERTAIN] });
     if (row.owner_started && !row.owner_invoked && row.state !== "completed") facts.push({ label: "Owner", value: "Started, invocation unknown" });
     if (row.revision_conflict) {
       facts.push({ label: "Conflict", value: row.revision_conflict.path }, { label: "Expected revision", value: row.revision_conflict.expected_revision }, { label: "Observed revision", value: row.revision_conflict.observed_revision });
