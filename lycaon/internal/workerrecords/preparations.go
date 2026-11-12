@@ -66,3 +66,35 @@ func (s *Store) RecordPreparation(ctx context.Context, actor Actor, op Op, worke
 		return PreparationReceipt{WorkerID: w.ID, Generation: generation}, nil
 	})
 }
+
+// PreparationRecord is one recorded preparation.
+type PreparationRecord struct {
+	Generation        int64  `json:"generation"`
+	SourceResultID    string `json:"source_result_id,omitempty"`
+	PromotionRef      string `json:"promotion_ref,omitempty"`
+	PreparationRef    string `json:"preparation_ref,omitempty"`
+	BindingGeneration int64  `json:"binding_generation"`
+	CreatedAt         string `json:"created_at"`
+}
+
+// LatestPreparation returns the worker's most recent preparation.
+func (s *Store) LatestPreparation(ctx context.Context, actor Actor, workerID string) (PreparationRecord, bool, error) {
+	if err := actor.check(); err != nil {
+		return PreparationRecord{}, false, err
+	}
+	w, _, err := loadWorker(ctx, s.q, actor, workerID)
+	if err != nil {
+		return PreparationRecord{}, false, err
+	}
+	p, err := s.q.GetLatestWorkerWorkspacePreparation(ctx, w.ID)
+	if db.IsNoRows(err) {
+		return PreparationRecord{}, false, nil
+	}
+	if err != nil {
+		return PreparationRecord{}, false, err
+	}
+	return PreparationRecord{
+		Generation: p.Generation, SourceResultID: p.SourceResultID.String, PromotionRef: p.PromotionRef,
+		PreparationRef: p.PreparationRef, BindingGeneration: p.BindingGeneration, CreatedAt: p.CreatedAt,
+	}, true, nil
+}
