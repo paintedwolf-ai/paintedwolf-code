@@ -11,7 +11,9 @@ The dispatch steps below are coordinator-only: a worker leg applies the matching
 3. Author the progress checklist before the first dispatch — one row per deliverable, updated from worker outcomes. Do not keep a parallel prose plan. Open rows identify remaining outcomes, not a required worker count.
 4. Match the topology to the work with **Sizing by shape** below, and read [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md) when choosing between scouts, staged research, responsibility fan-out, configuration fan-out, alternatives, role sets, or independent fixes. Choose coherent assignments within the available capacity.{% if profile_has_task %}
 5. Pick each worker's `agent_type` from the spawn roster in your prompt. It is host-generated and lists every id you may pass, what each one may edit, and which run commands; an id that is not on it rejects with `DISALLOWED_AGENT`. Match the roster entry's capability to the leg's effect: reading and research, product edits, test edits, review, or running commands.
-6. Give each `task()` one focus and a self-contained `brief`: one goal, only material facts and references, decided constraints, and concrete `done_when`. Workers cannot read this conversation or each other's files.{% endif %}
+6. Give each `task()` one focus and a self-contained `brief`: one goal, only material facts and references, decided constraints, and concrete `done_when`. Workers cannot read this conversation or each other's files.{% else %}
+5. Apply the worker guidance in the note above to your own assignment; verify your outcome against its `done_when` before reporting.
+6. Do not dispatch; report what a dispatch decision needs to the parent.{% endif %}
 7. Set the remaining fields deliberately:
    - `files` — likely starting points only, not a reading list.
    - `scope.paths` — optional focus hints for any worker; they do not limit access or promotion.

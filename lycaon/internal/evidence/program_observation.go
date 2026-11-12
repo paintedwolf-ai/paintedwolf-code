@@ -40,6 +40,34 @@ func WithExchangeProvenanceObserver(ctx context.Context, fn func(ExchangeProvena
 	return context.WithValue(ctx, exchangeProvenanceObserverKey{}, fn)
 }
 
+// ContentFlow is stored content an operation delivered: Source is what it
+// read, and Files, when set, now hold content derived from it.
+type ContentFlow struct {
+	Source string
+	Files  []string
+}
+
+type contentFlowObserverKey struct{}
+
+// WithContentFlowObserver attaches a callback to ctx that receives each
+// content flow reported within that context.
+func WithContentFlowObserver(ctx context.Context, fn func(ContentFlow)) context.Context {
+	if ctx == nil || fn == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, contentFlowObserverKey{}, fn)
+}
+
+// ReportContentFlow notifies any observer attached to ctx.
+func ReportContentFlow(ctx context.Context, flow ContentFlow) {
+	if ctx == nil || flow.Source == "" {
+		return
+	}
+	if fn, ok := ctx.Value(contentFlowObserverKey{}).(func(ContentFlow)); ok && fn != nil {
+		fn(flow)
+	}
+}
+
 // ReportExchangeProvenance notifies any observer attached to ctx.
 func ReportExchangeProvenance(ctx context.Context, p ExchangeProvenance) {
 	if ctx == nil {

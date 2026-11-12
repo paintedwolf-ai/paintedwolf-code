@@ -40,10 +40,10 @@ func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
 
 	t.Run("missing ledger is first use", func(t *testing.T) {
 		var nilNetwork *Network
-		if !nilNetwork.firstUseThisSession(ownDial, "chat", "example.com") {
+		if !nilNetwork.firstUseThisSession(ownDial, "chat", "example.com", false) {
 			t.Fatal("nil network must be first use")
 		}
-		if !(&Network{}).firstUseThisSession(retrievalDial, "chat", "example.com") {
+		if !(&Network{}).firstUseThisSession(retrievalDial, "chat", "example.com", false) {
 			t.Fatal("unwired ledger must be first use")
 		}
 	})
@@ -52,6 +52,7 @@ func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
 		for name, contact := range map[string]evidence.Contact{
 			"none":      evidence.ContactNone,
 			"retrieval": evidence.ContactRetrieval,
+			"audited":   evidence.ContactAudited,
 			"own":       evidence.ContactOwn,
 		} {
 			ledger := &fakeHostLedger{}
@@ -60,7 +61,7 @@ func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
 			}
 			e := &Network{}
 			e.SetSessionHostLedger(ledger)
-			got := e.firstUseThisSession(retrievalDial, "chat", "example.com")
+			got := e.firstUseThisSession(retrievalDial, "chat", "example.com", false)
 			if want := contact == evidence.ContactNone; got != want {
 				t.Fatalf("%s: firstUse = %v, want %v", name, got, want)
 			}
@@ -70,11 +71,15 @@ func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
 	t.Run("own dial is familiar only after the chat's own dial", func(t *testing.T) {
 		for name, tc := range map[string]struct {
 			contact evidence.Contact
+			clean   bool
 			want    bool
 		}{
-			"none":      {evidence.ContactNone, true},
-			"retrieval": {evidence.ContactRetrieval, true},
-			"own":       {evidence.ContactOwn, false},
+			"none":                        {evidence.ContactNone, false, true},
+			"retrieval":                   {evidence.ContactRetrieval, false, true},
+			"own":                         {evidence.ContactOwn, false, false},
+			"audited, chat still clean":   {evidence.ContactAudited, true, false},
+			"audited, chat now untrusted": {evidence.ContactAudited, false, true},
+			"own, chat clean":             {evidence.ContactOwn, true, false},
 		} {
 			ledger := &fakeHostLedger{}
 			if tc.contact != evidence.ContactNone {
@@ -82,7 +87,7 @@ func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
 			}
 			e := &Network{}
 			e.SetSessionHostLedger(ledger)
-			got := e.firstUseThisSession(ownDial, "chat", "example.com")
+			got := e.firstUseThisSession(ownDial, "chat", "example.com", tc.clean)
 			if got != tc.want {
 				t.Fatalf("%s: firstUse = %v, want %v", name, got, tc.want)
 			}
@@ -93,7 +98,7 @@ func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
 		ledger := &fakeHostLedger{contacts: map[string]evidence.Contact{"example.com": evidence.ContactOwn}}
 		e := &Network{}
 		e.SetSessionHostLedger(ledger)
-		if e.firstUseThisSession(ownDial, "chat", "  Example.COM ") {
+		if e.firstUseThisSession(ownDial, "chat", "  Example.COM ", false) {
 			t.Fatal("normalized host must match the recorded contact")
 		}
 	})
@@ -109,6 +114,17 @@ func TestRecordHostVisitSeparatesDialKinds(t *testing.T) {
 		e.recordHostVisit(t.Context(), ownDial, "chat", "Example.com")
 		if !slices.Equal(ledger.hosts, []string{"Example.com"}) || !slices.Equal(ledger.kinds, []evidence.Contact{evidence.ContactOwn}) {
 			t.Fatalf("recorded hosts = %v contacts = %v", ledger.hosts, ledger.kinds)
+		}
+	})
+
+	t.Run("a clean chat's allowed dial records only its audit", func(t *testing.T) {
+		ledger := &fakeHostLedger{}
+		e := &Network{}
+		e.SetSessionHostLedger(ledger)
+		e.recordAuditedVisit(t.Context(), ownDial, "chat", "example.com")
+		e.recordAuditedVisit(t.Context(), retrievalDial, "chat", "source.example.net")
+		if !slices.Equal(ledger.kinds, []evidence.Contact{evidence.ContactAudited, evidence.ContactRetrieval}) {
+			t.Fatalf("recorded contacts = %v", ledger.kinds)
 		}
 	})
 
