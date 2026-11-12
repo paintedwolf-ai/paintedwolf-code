@@ -69,7 +69,7 @@ func TestRenderCatalogUtilityAndSurvey(t *testing.T) {
 			"weekday": "Saturday", "date": "2026-08-15", "cutoff": "2024-01",
 			"file_count": 12, "count": 8, "bytes": 4000,
 			"goal": "ship", "tool": "command", "command": "ls",
-			"user_intent": "ship the feature", "gated_action": "command ls",
+			"user_intent": "ship the feature", "action": "command ls",
 			"omitted_lines": "4,182", "omitted_size": "184 KB",
 			"output_path": "@output/prog.stdout", "next_line": 251, "end_line": 400,
 		})

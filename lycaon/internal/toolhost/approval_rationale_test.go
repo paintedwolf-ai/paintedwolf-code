@@ -1,42 +1,37 @@
 package toolhost_test
 
 import (
-	"github.com/lycaon/lycaon/internal/toolapproval"
-
 	"context"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/llm/compaction"
+	"github.com/lycaon/lycaon/internal/toolapproval"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-type memMessages struct {
-	msgs []api.Message
+type memCause struct {
+	read briefing.CausalRead
+	refs chan briefing.ActionRef
 }
 
-func (m memMessages) GetMessages(context.Context, string) ([]api.Message, error) {
-	return m.msgs, nil
-}
-
-type memWorkers struct {
-	task *api.WorkerTask
-}
-
-func (m memWorkers) Get(string) (*api.WorkerTask, bool) {
-	if m.task == nil {
-		return nil, false
+func (m memCause) ReadActionCause(_ context.Context, ref briefing.ActionRef) (briefing.CausalRead, error) {
+	if m.refs != nil {
+		m.refs <- ref
 	}
-	return m.task, true
+	return m.read, nil
 }
 
-type memProgress struct {
-	content string
-}
+type memWorkers struct{ task *api.WorkerTask }
+
+func (m memWorkers) Get(string) (*api.WorkerTask, bool) { return m.task, m.task != nil }
+
+type memProgress struct{ content string }
 
 func (m memProgress) Get(context.Context, string) string { return m.content }
 
@@ -44,13 +39,55 @@ type rootID struct{}
 
 func (rootID) RootSessionID(_ context.Context, sessionID string) string { return sessionID }
 
-type patchCapture struct {
-	mu     sync.Mutex
-	calls  []string
-	clears int
-	events int
+type scriptedGenerator struct {
+	mu          sync.Mutex
+	out         string
+	invocations []briefing.Invocation
 }
 
+func (g *scriptedGenerator) Generate(_ context.Context, invocation briefing.Invocation) (string, string, string, error) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.invocations = append(g.invocations, invocation)
+	return g.out, "", "", nil
+}
+
+func (g *scriptedGenerator) calls() []briefing.Invocation {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	return append([]briefing.Invocation(nil), g.invocations...)
+}
+
+// checkpointEvent is a patch (text) or a clear (empty).
+type checkpointEvent struct{ text string }
+
+type patchCapture struct{ events chan checkpointEvent }
+
+func newPatchCapture() *patchCapture { return &patchCapture{events: make(chan checkpointEvent, 4)} }
+
+func (p *patchCapture) next(t *testing.T) checkpointEvent {
+	t.Helper()
+	var expired <-chan time.Time
+	if deadline, ok := t.Deadline(); ok {
+		expired = time.After(time.Until(deadline) - 5*time.Second)
+	}
+	select {
+	case event := <-p.events:
+		return event
+	case <-expired:
+		t.Fatal("checkpoint was never patched or cleared")
+		return checkpointEvent{}
+	}
+}
+
+func (p *patchCapture) PatchPendingToolApprovalAIRationale(_ context.Context, _, text string) error {
+	p.events <- checkpointEvent{text: text}
+	return nil
+}
+func (p *patchCapture) ClearPendingToolApprovalAIRationale(context.Context, string) error {
+	p.events <- checkpointEvent{}
+	return nil
+}
 func (p *patchCapture) RequestCheckpoint(context.Context, hitl.CheckpointRequest) (*hitl.CheckpointResponse, error) {
 	return nil, nil
 }
@@ -63,302 +100,96 @@ func (p *patchCapture) ResolveCheckpoint(context.Context, string, string, api.Ch
 func (p *patchCapture) ListPending(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
 	return nil, nil
 }
+func (p *patchCapture) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
+	return nil, nil
+}
 func (p *patchCapture) SessionApprovalDenied(context.Context, string) (bool, error) {
 	return false, nil
 }
 func (p *patchCapture) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (p *patchCapture) PatchPendingToolApprovalAIRationale(_ context.Context, _, text string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.calls = append(p.calls, text)
-	p.events++
-	return nil
-}
-func (p *patchCapture) ClearPendingToolApprovalAIRationale(_ context.Context, _ string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.clears++
-	p.events++
-	return nil
-}
 func (p *patchCapture) PatchPendingToolApprovalJoined(context.Context, string, int, []string, string, string) error {
 	return nil
 }
-
-type recordingSummarizer struct {
-	mu     sync.Mutex
-	called bool
-	out    string
-}
-
-func (r *recordingSummarizer) Summarize(context.Context, string, string, int) (string, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.called = true
-	if r.out == "" {
-		return "Advances the current task.", nil
-	}
-	return r.out, nil
-}
-
-func (r *recordingSummarizer) wasCalled() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.called
-}
-
-// scriptedSummarizer answers each Summarize call from a queue and records the
-// system prompt it was asked with, so call count is observable.
-type scriptedSummarizer struct {
-	mu      sync.Mutex
-	outs    []string
-	systems []string
-}
-
-func (s *scriptedSummarizer) Summarize(_ context.Context, system, _ string, _ int) (string, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.systems = append(s.systems, system)
-	if len(s.outs) == 0 {
-		return "", nil
-	}
-	out := s.outs[0]
-	s.outs = s.outs[1:]
-	return out, nil
-}
-
-func (s *scriptedSummarizer) systemPrompts() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]string(nil), s.systems...)
-}
-
-func rationaleAttacher(t *testing.T, sum compaction.Summarizer, caps *patchCapture) toolapproval.AIRationaleAttacher {
-	t.Helper()
-	return toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Messages: memMessages{msgs: []api.Message{
-			{Role: api.MessageRoleUser, Content: "git push"},
-			{Role: api.MessageRoleAssistant, Content: "Pushing.", ToolCalls: []api.ToolCall{{ID: "tc1", Name: "command"}}},
-		}},
-		Workers:     memWorkers{},
-		Progress:    memProgress{},
-		Root:        rootID{},
-		Summarizer:  sum,
-		Checkpoints: caps,
-	})
-}
-
-func awaitPatch(t *testing.T, caps *patchCapture) string {
-	t.Helper()
-	for t.Context().Err() == nil {
-		caps.mu.Lock()
-		n := len(caps.calls)
-		text := ""
-		if n > 0 {
-			text = caps.calls[0]
-		}
-		caps.mu.Unlock()
-		if n > 0 {
-			return text
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for a rationale patch")
-	return ""
-}
-
-// An over-long answer is clipped to its first sentence, on one summarize call.
-func TestApprovalRationale_clipsToOneSentence(t *testing.T) {
-	t.Setenv("LYCAON_LLM_MOCK", "")
-	caps := &patchCapture{}
-	sum := &scriptedSummarizer{outs: []string{
-		"Pushes the branch the user asked to ship. This advances the goal by publishing the reviewed work to the remote.",
-	}}
-	rationaleAttacher(t, sum, caps).AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
-		CheckpointID: "chk-clip",
-		ToolContext: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "s1",
-				ToolCallID: "tc1"},
-		},
-		Tool: "command",
-		Args: map[string]any{"command": "git push"},
-	})
-	if got := awaitPatch(t, caps); got != "Pushes the branch the user asked to ship." {
-		t.Fatalf("got %q", got)
-	}
-	if n := len(sum.systemPrompts()); n != 1 {
-		t.Fatalf("the card note costs exactly one call, got %d", n)
-	}
-}
-
-// Every non-egress tool_approval card gets a rationale attempt.
-func TestApprovalRationale_attemptsOneShot(t *testing.T) {
-	t.Setenv("LYCAON_LLM_MOCK", "")
-	caps := &patchCapture{}
-	sum := &recordingSummarizer{out: "Pushes the branch the user asked to ship."}
-	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Messages: memMessages{msgs: []api.Message{
-			{Role: api.MessageRoleUser, Content: "git push"},
-			{Role: api.MessageRoleAssistant, Content: "Pushing.", ToolCalls: []api.ToolCall{{ID: "tc1", Name: "command"}}},
-		}},
-		Workers:     memWorkers{},
-		Progress:    memProgress{},
-		Root:        rootID{},
-		Summarizer:  sum,
-		Checkpoints: caps,
-	})
-	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
-		CheckpointID: "chk-1",
-		ToolContext: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "s1",
-				ToolCallID: "tc1"},
-		},
-		Tool: "command",
-		Args: map[string]any{"command": "git push"},
-	})
-	for t.Context().Err() == nil {
-		caps.mu.Lock()
-		n := len(caps.calls)
-		caps.mu.Unlock()
-		if n > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("expected a rationale patch")
-}
-
-// Fail-soft: a summarizer that returns empty clears the reserved slot instead of
-// leaving a placeholder hanging.
-func TestApprovalRationale_clearsPendingOnEmpty(t *testing.T) {
-	t.Setenv("LYCAON_LLM_MOCK", "")
-	caps := &patchCapture{}
-	sum := &recordingSummarizer{out: "   "}
-	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Messages: memMessages{msgs: []api.Message{
-			{Role: api.MessageRoleUser, Content: "git push"},
-			{Role: api.MessageRoleAssistant, Content: "Pushing.", ToolCalls: []api.ToolCall{{ID: "tc1", Name: "command"}}},
-		}},
-		Workers:     memWorkers{},
-		Progress:    memProgress{},
-		Root:        rootID{},
-		Summarizer:  sum,
-		Checkpoints: caps,
-	})
-	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
-		CheckpointID: "chk-1",
-		ToolContext: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "s1",
-				ToolCallID: "tc1"},
-		},
-		Tool: "command",
-		Args: map[string]any{"command": "git push"},
-	})
-	for t.Context().Err() == nil {
-		caps.mu.Lock()
-		clears := caps.clears
-		patches := len(caps.calls)
-		caps.mu.Unlock()
-		if patches > 0 {
-			t.Fatal("empty summary must not patch text")
-		}
-		if clears > 0 {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("expected the reserved slot to be cleared on empty summary")
-}
-
-// The global toggle disables the whole feature: no summarize, no patch, no clear.
-func TestApprovalRationale_disabledDoesNothing(t *testing.T) {
-	t.Setenv("LYCAON_LLM_MOCK", "1")
-	caps := &patchCapture{}
-	sum := &recordingSummarizer{}
-	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Messages:    memMessages{},
-		Workers:     memWorkers{},
-		Progress:    memProgress{},
-		Root:        rootID{},
-		Summarizer:  sum,
-		Checkpoints: caps,
-		EnabledFn:   func() bool { return false },
-	})
-	if attacher.Enabled() {
-		t.Fatal("Enabled() must reflect the disabled toggle")
-	}
-	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
-		CheckpointID: "chk-1",
-		ToolContext: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "s1",
-				ToolCallID: "tc1"},
-		},
-		Tool: "command",
-	})
-	caps.mu.Lock()
-	defer caps.mu.Unlock()
-	if caps.events != 0 {
-		t.Fatalf("disabled attacher must not touch the checkpoint, got %d events", caps.events)
-	}
-	if sum.wasCalled() {
-		t.Fatal("disabled attacher must not call the summarizer")
-	}
-}
-
-func TestApprovalRationale_mockStub(t *testing.T) {
-	t.Setenv("LYCAON_LLM_MOCK", "1")
-	caps := &patchCapture{}
-	sum := &recordingSummarizer{}
-	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
-		Messages: memMessages{msgs: []api.Message{
-			{Role: api.MessageRoleUser, Content: "Ship the auth fix"},
-			{Role: api.MessageRoleAssistant, Content: "Working."},
-			{Role: api.MessageRoleTool, Content: "ok"},
-			{Role: api.MessageRoleAssistant, Content: "Pushing.", ToolCalls: []api.ToolCall{{ID: "tc1", Name: "command"}}},
-		}},
-		Workers:     memWorkers{},
-		Progress:    memProgress{content: "- [ ] Push the branch\n"},
-		Root:        rootID{},
-		Summarizer:  sum,
-		Checkpoints: caps,
-	})
-	attacher.AttachAsync(context.Background(), toolapproval.AIRationaleAttachRequest{
-		CheckpointID: "chk-2",
-		ToolContext: tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "s1",
-				ToolCallID: "tc1"},
-		},
-		Tool: "command",
-		Args: map[string]any{"command": "git push"},
-	})
-	for t.Context().Err() == nil {
-		caps.mu.Lock()
-		n := len(caps.calls)
-		text := ""
-		if n > 0 {
-			text = caps.calls[0]
-		}
-		caps.mu.Unlock()
-		if n > 0 {
-			if text == "" {
-				t.Fatal("empty stub")
-			}
-			if sum.wasCalled() {
-				t.Fatal("mock path must not call summarizer")
-			}
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("timed out waiting for mock ai_rationale patch")
-}
-
-func (p *patchCapture) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
-	return nil, nil
-}
-
 func (p *patchCapture) ApprovalReviewSuppressed(context.Context, string, string) (bool, error) {
 	return false, nil
+}
+
+func attachRequest() toolapproval.AIRationaleAttachRequest {
+	return toolapproval.AIRationaleAttachRequest{
+		CheckpointID: "chk",
+		ToolContext:  tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "s1", WorkerJobID: "job-1", ToolCallID: "tc1"}},
+		Tool:         "command", Args: map[string]any{"command": "git push"},
+		Explanation: &hitl.ApprovalExplanation{What: "SUPPLIED_WHAT", Who: "SUPPLIED_WHO", IfWrong: "SUPPLIED_IF_WRONG"},
+	}
+}
+
+func cause() briefing.CausalRead {
+	return briefing.CausalRead{Found: true, OutputID: "out", Prose: "SUPPLIED_PROSE", IntentID: "u1", Intent: "SUPPLIED_INTENT",
+		ReasoningJSON: `{"text":"SUPPLIED_REASONING"}`, ReasoningBytes: 30, CallsInOutput: 1,
+		Results: []briefing.ResultExcerpt{{Tool: "read", Outcome: "success", Content: "SUPPLIED_RESULT"}}}
+}
+
+func TestApprovalRationalePatchesOneSentenceFromLiveEvidence(t *testing.T) {
+	caps := newPatchCapture()
+	refs := make(chan briefing.ActionRef, 1)
+	generator := &scriptedGenerator{out: "Pushes the branch the user asked to ship. This advances the goal."}
+	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
+		Cause: memCause{read: cause(), refs: refs}, Workers: memWorkers{task: &api.WorkerTask{Brief: "SUPPLIED_BRIEF"}},
+		Progress: memProgress{content: "- [ ] SUPPLIED_STEP\n"}, Root: rootID{}, Generator: generator, Checkpoints: caps,
+	})
+	attacher.AttachAsync(context.Background(), attachRequest())
+	if got := caps.next(t).text; got != "Pushes the branch the user asked to ship." {
+		t.Fatalf("patched %q", got)
+	}
+	if ref := <-refs; ref != (briefing.ActionRef{SessionID: "s1", WorkerJobID: "job-1", ToolCallID: "tc1"}) {
+		t.Fatalf("read anchored on %+v", ref)
+	}
+	calls := generator.calls()
+	if len(calls) != 1 || !calls[0].Requested || calls[0].Purpose != toolhost.ApprovalProfileID {
+		t.Fatalf("invocations %+v", calls)
+	}
+	for _, supplied := range []string{"SUPPLIED_INTENT", "SUPPLIED_PROSE", "SUPPLIED_REASONING", "SUPPLIED_RESULT", "SUPPLIED_BRIEF", "SUPPLIED_STEP", "SUPPLIED_WHAT", "git push"} {
+		if !strings.Contains(calls[0].Prompt.User, supplied) {
+			t.Fatalf("prompt lost %s", supplied)
+		}
+	}
+}
+
+func TestApprovalRationaleClearsTheSlotWhenOutputIsUnusable(t *testing.T) {
+	caps := newPatchCapture()
+	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
+		Cause: memCause{read: cause()}, Generator: &scriptedGenerator{out: "  **  "}, Checkpoints: caps,
+	})
+	attacher.AttachAsync(context.Background(), attachRequest())
+	if event := caps.next(t); event.text != "" {
+		t.Fatalf("unusable output patched %q", event.text)
+	}
+}
+
+func TestApprovalRationaleDisabledTouchesNothing(t *testing.T) {
+	caps := newPatchCapture()
+	generator := &scriptedGenerator{out: "Unused."}
+	attacher := toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{
+		Cause: memCause{read: cause()}, Generator: generator, Checkpoints: caps, EnabledFn: func() bool { return false },
+	})
+	if attacher.Enabled() {
+		t.Fatal("Enabled ignored the setting")
+	}
+	attacher.AttachAsync(context.Background(), attachRequest())
+	select {
+	case event := <-caps.events:
+		t.Fatalf("disabled attacher touched the checkpoint: %+v", event)
+	default:
+	}
+	if len(generator.calls()) != 0 {
+		t.Fatal("disabled attacher called the model")
+	}
+}
+
+func TestApprovalRationaleNeedsAModel(t *testing.T) {
+	if toolhost.NewApprovalRationaleAttacher(toolhost.ApprovalRationaleDeps{Cause: memCause{}, Checkpoints: newPatchCapture()}) != nil {
+		t.Fatal("an attacher without a model reserves slots it cannot fill")
+	}
 }
