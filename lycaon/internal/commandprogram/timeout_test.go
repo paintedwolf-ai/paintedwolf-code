@@ -3,6 +3,7 @@ package commandprogram
 import (
 	"context"
 	"errors"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -235,6 +236,38 @@ func TestParseSignalAndDuration(t *testing.T) {
 	for _, word := range []string{"", "-1", "1e3", "inf", "nan", "+1", "1x", "s"} {
 		if got, ok := ParseDuration(word); ok {
 			t.Errorf("ParseDuration(%q) = %v; want refused", word, got)
+		}
+	}
+	if got, ok := ParseDuration("106751d"); !ok || got != 106751*24*time.Hour {
+		t.Errorf("ParseDuration(106751d) = %v, %v; want accepted", got, ok)
+	}
+	if got, ok := ParseDuration("106752d"); ok {
+		t.Errorf("ParseDuration(106752d) = %v; want refused", got)
+	}
+}
+
+func TestScaleDurationAcceptsEveryRepresentableValue(t *testing.T) {
+	largest := float64(math.MaxInt64 / int64(time.Second))
+	for _, tc := range []struct {
+		value float64
+		unit  time.Duration
+		want  time.Duration
+	}{
+		{0, time.Second, 0},
+		{0.3, time.Second, 300 * time.Millisecond},
+		{9.3, time.Second, 9300 * time.Millisecond},
+		{10, time.Second, 10 * time.Second},
+		{86400, time.Second, 24 * time.Hour},
+		{largest, time.Second, time.Duration(largest) * time.Second},
+		{1.5, time.Hour, 90 * time.Minute},
+	} {
+		if got, ok := ScaleDuration(tc.value, tc.unit); !ok || got != tc.want {
+			t.Errorf("ScaleDuration(%v, %v) = %v, %v; want %v", tc.value, tc.unit, got, ok, tc.want)
+		}
+	}
+	for _, value := range []float64{-1, math.Inf(1), math.Inf(-1), math.NaN(), 9223372037} {
+		if got, ok := ScaleDuration(value, time.Second); ok {
+			t.Errorf("ScaleDuration(%v) = %v; want refused", value, got)
 		}
 	}
 }
