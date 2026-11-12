@@ -116,3 +116,7 @@
 @utility den-walk-briefing-area {
   display: contents;
 }
+
+@utility den-briefing-summary__label {
+  font-weight: 600;
+}
