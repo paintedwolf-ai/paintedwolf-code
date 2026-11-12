@@ -61,8 +61,8 @@ func callArgs(raw string) map[string]any {
 	return args
 }
 
-// phaseScope names the steps a folded or coalesced card covers; a card that
-// is its whole invocation has none.
+// phaseScope names the steps a card covers when it is part of its program or
+// spans several calls; a card that is its whole invocation has none.
 func phaseScope(ev evidence) string {
 	var steps []string
 	for _, activity := range ev.facts.activities {
@@ -70,7 +70,8 @@ func phaseScope(ev evidence) string {
 			steps = append(steps, step.Command)
 		}
 	}
-	if len(steps) <= 1 && len(ev.target.ToolCallIds) <= 1 {
+	whole := !ev.partial && len(ev.target.ToolCallIds) <= 1
+	if whole || len(steps) == 0 {
 		return ""
 	}
 	return "steps: " + strings.Join(steps, "; ")

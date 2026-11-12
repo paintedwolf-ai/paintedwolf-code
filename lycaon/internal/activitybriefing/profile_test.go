@@ -24,11 +24,19 @@ func (s sessions) Get(context.Context, string) (*wire.Session, error) {
 	return &wire.Session{ProjectID: s.projectID}, nil
 }
 
-type programs struct{ activity wire.CommandActivity }
+// programs serves one activity; siblings are the program's other activities.
+type programs struct {
+	activity wire.CommandActivity
+	siblings int
+}
 
 func (p *programs) ReadProgramActivityPage(context.Context, string, string, string, string, int) (wire.CommandProgramReceiptPage, error) {
 	exit := 0
-	return wire.CommandProgramReceiptPage{Activities: []wire.CommandActivity{p.activity},
+	whole := []wire.CommandActivity{p.activity}
+	for range p.siblings {
+		whole = append(whole, wire.CommandActivity{ID: "sibling"})
+	}
+	return wire.CommandProgramReceiptPage{Program: wire.CommandProgramReceipt{Activities: whole}, Activities: []wire.CommandActivity{p.activity},
 		Executions: []wire.CommandExecutionReceipt{{Command: "go test ./...", State: p.activity.State, StatusCode: &exit,
 			Outputs: []wire.CommandExecutionOutput{{Stream: "stdout", Preview: "ok  pkg", TailPreview: "ok  pkg\nPASS"}}}}}, nil
 }
@@ -103,6 +111,30 @@ func TestGenerationPolicyMatrix(t *testing.T) {
 	testutil.FailErr(t, "resolve tool", err)
 	if calls, _ := generated(request); calls != 2 {
 		t.Fatalf("settled tool activity asked for %d sections", calls)
+	}
+}
+
+// Purpose is scoped to the card's steps exactly when the card is part of its
+// program; a card that is the whole call explains the call.
+func TestPurposeScopesPartOfAProgram(t *testing.T) {
+	read := briefing.CausalRead{Found: true, Call: briefing.CallExcerpt{Name: "command", Args: `{"command":"cat > a.go && go test ./..."}`}}
+	scope := func(siblings int, steps ...string) string {
+		t.Helper()
+		profile := New(sessions{projectID: project}, &programs{activity: activity("execute", "completed", steps...), siblings: siblings}, cause{read: read})
+		request, err := profile.Resolve(t.Context(), commandTarget())
+		testutil.FailErr(t, "resolve", err)
+		for _, item := range request.Sections[0].Manifest.Items {
+			if item.Key == "phase_scope" {
+				return item.Text
+			}
+		}
+		return ""
+	}
+	if got := scope(1, "completed"); got != "steps: step" {
+		t.Fatalf("one step of a two-activity program was not scoped: %q", got)
+	}
+	if got := scope(0, "completed", "completed"); got != "" {
+		t.Fatalf("a card that is its whole call was scoped: %q", got)
 	}
 }
 
