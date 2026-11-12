@@ -168,7 +168,10 @@ FROM worker_workspace_preparations WHERE worker_id = ? ORDER BY generation DESC 
 
 -- name: InsertWorkerDependency :exec
 INSERT INTO worker_dependencies (worker_id, dependency_key, producer_worker_id, base_result_id, operation_id, created_at)
-VALUES (?, COALESCE(sqlc.narg(producer_worker_id), 'base'), sqlc.narg(producer_worker_id), sqlc.narg(base_result_id), ?, ?);
+VALUES (
+    sqlc.arg(worker_id), COALESCE(sqlc.narg(producer_worker_id), 'base'), sqlc.narg(producer_worker_id),
+    sqlc.narg(base_result_id), sqlc.arg(operation_id), sqlc.arg(created_at)
+);
 
 -- name: ListWorkerDependencies :many
 SELECT worker_id, producer_worker_id, base_result_id, operation_id, created_at

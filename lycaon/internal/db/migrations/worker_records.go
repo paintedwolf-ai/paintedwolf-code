@@ -19,6 +19,8 @@ var workerRecordsSQL []byte
 //go:embed worker_records.go
 var workerRecordsSource []byte
 
+var workerRecordsNamespace = uuid.MustParse("6f1d7c5e-3b8a-4c2e-9a41-2d7e5b0c8f13")
+
 // WorkerRecords adds workers, rounds, messages, deliveries, result
 // dispositions, workspace preparations, prerequisites and operation receipts.
 // Each child session with jobs becomes one worker, and a job without a child
@@ -34,8 +36,8 @@ func WorkerRecords() Part {
 }
 
 type legacyWorkerJob struct {
-	id, projectID, childSessionID, agentType, scopeJSON, brief, status string
-	executionTarget, workflowRunID, workflowPhase, workflowWorkID          string
+	id, projectID, childSessionID, agentType, scopeJSON, brief, status    string
+	executionTarget, workflowRunID, workflowPhase, workflowWorkID         string
 	delegationID, legID, createdAt, completedAt, landedChangeID, landedAt string
 	resultID                                                              string
 }
@@ -159,7 +161,8 @@ func legacyWorkerName(agentType string, n int) string {
 
 func insertLegacyWorker(ctx context.Context, tx *sql.Tx, sessionID, name string, group []legacyWorkerJob, boundWork map[string]bool) error {
 	first, latest := group[0], group[len(group)-1]
-	workerID := uuid.Must(uuid.NewV7()).String()
+	// Derived from the first job so every migration route writes the same rows.
+	workerID := uuid.NewSHA1(workerRecordsNamespace, []byte(first.id)).String()
 	var child any
 	if first.childSessionID != "" {
 		child = first.childSessionID

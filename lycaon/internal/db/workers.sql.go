@@ -530,7 +530,10 @@ func (q *Queries) InsertWorker(ctx context.Context, arg InsertWorkerParams) erro
 
 const insertWorkerDependency = `-- name: InsertWorkerDependency :exec
 INSERT INTO worker_dependencies (worker_id, dependency_key, producer_worker_id, base_result_id, operation_id, created_at)
-VALUES (?, COALESCE(?4, 'base'), ?4, ?5, ?, ?)
+VALUES (
+    ?1, COALESCE(?2, 'base'), ?2,
+    ?3, ?4, ?5
+)
 `
 
 type InsertWorkerDependencyParams struct {
