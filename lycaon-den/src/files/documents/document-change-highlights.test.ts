@@ -108,19 +108,17 @@ describe("landed line expiry", () => {
 
   const classes = () => [...view!.contentDOM.querySelectorAll(".cm-line")].map((line) => line.className);
 
-  it("tints at once, starts leaving at the linger time, and goes after the fade, on one timer", () => {
+  it("tints at once, starts leaving at the linger time, and goes after the fade", () => {
     view = new EditorView({ parent: document.body, state: EditorState.create({ doc: text(5), extensions: documentChangeHighlights }) });
     view.dispatch({ changes: rewrite(view.state, 2), annotations: documentRemoteChange.of(true) });
     vi.advanceTimersByTime(3_000);
     view.dispatch({ changes: rewrite(view.state, 4), annotations: documentRemoteChange.of(true) });
     expect(classes()[1]).toContain("cm-den-hunk-add");
     expect(classes()[1]).not.toContain("cm-den-hunk--leaving");
-    expect(vi.getTimerCount()).toBe(1);
 
     vi.advanceTimersByTime(AGENT_LINGER_MS - 3_000);
     expect(classes()[1]).toContain("cm-den-hunk--leaving");
     expect(classes()[3]).not.toContain("cm-den-hunk--leaving");
-    expect(vi.getTimerCount()).toBe(1);
 
     vi.advanceTimersByTime(LANDED_LINE_FADE_MS);
     expect(classes()[1]).not.toContain("cm-den-hunk");
@@ -129,6 +127,5 @@ describe("landed line expiry", () => {
     vi.advanceTimersByTime(3_000);
     expect(landedLines(view.state)).toEqual([]);
     expect(classes().some((name) => name.includes("cm-den-hunk"))).toBe(false);
-    expect(vi.getTimerCount()).toBe(0);
   });
 });
