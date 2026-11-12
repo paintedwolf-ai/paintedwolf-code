@@ -16,7 +16,6 @@ import (
 	"github.com/lycaon/lycaon/config/configtest"
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/mcp"
 	"github.com/lycaon/lycaon/internal/programtest"
@@ -157,7 +156,7 @@ func TestSecretCanaryNeverEchoedByAnyReferenceTool(t *testing.T) {
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	executor.Approvals.SetCheckpointManager(t.Context(), review, authority)
-	t.Cleanup(func() { confine.SetEgressResolver(nil) })
+	t.Cleanup(func() { restoreResolver() })
 	executor.Secrets.SetSecretResolver(service)
 	matcher := testSecretMatcher(t)
 	executor.Secrets.SetSecretMatcher(matcher)

@@ -69,7 +69,7 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 			gate.ProducerLease | gate.ProducerRule | gate.ProducerDetection,
 		Containment: gate.Containment{FSJailed: true, Egress: gate.EgressProxy},
 		Destination: destinationFact(cmd, ep,
-			e.firstUseThisSession(action.Scope.ChatSession(), ep.Host), e.configuredBy(cmd.ProjectDir, ep.Host), e.publicRegistry(ep.Host)),
+			e.firstUseThisSession(cmd, action.Scope.ChatSession(), ep.Host), e.configuredBy(cmd.ProjectDir, ep.Host), e.publicRegistry(ep.Host)),
 		Leased:           e.egressLeaseCovers(ctx, action) || e.loopbackLeaseCovers(ctx, cmd, ep),
 		RequestConsented: cmd.ToolName == "http_request" && egressgate.RequestConsented(ctx, ep.Host, ep.Port),
 	}
@@ -124,7 +124,7 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 
 	verdict, decision := gate.Evaluate(facts, e.egressPosture(cmd))
 	if verdict != gate.Ask {
-		e.recordHostVisit(ctx, action.Scope.ChatSession(), ep.Host)
+		e.recordHostVisit(ctx, cmd, action.Scope.ChatSession(), ep.Host)
 		return true
 	}
 
@@ -144,20 +144,32 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 	return allowed
 }
 
-// firstUseThisSession treats a missing ledger as first use, preserving the approval requirement.
-func (e *Network) firstUseThisSession(chatSessionID, host string) bool {
+// firstUseThisSession is whether the chat has not reached host in this way: a
+// retrieval dial by any means, any other dial by its own. A retrieved source
+// never makes the agent's own send to that host familiar. A missing ledger is
+// first use, preserving the approval requirement.
+func (e *Network) firstUseThisSession(cmd confine.EgressCommand, chatSessionID, host string) bool {
 	if e == nil || e.hostLedger == nil {
 		return true
 	}
-	return !evidence.HostVisited(e.hostLedger.SessionVisitedHosts(chatSessionID), host)
+	contact := e.hostLedger.SessionContacts(chatSessionID)[strings.ToLower(strings.TrimSpace(host))]
+	if confine.RetrievalDial(cmd) {
+		return contact == evidence.ContactNone
+	}
+	return contact != evidence.ContactOwn
 }
 
-// recordHostVisit records only destinations whose dial was allowed.
-func (e *Network) recordHostVisit(ctx context.Context, chatSessionID, host string) {
+// recordHostVisit records only destinations whose dial was allowed, keeping a
+// retrieval capability's dial apart from the chat's own.
+func (e *Network) recordHostVisit(ctx context.Context, cmd confine.EgressCommand, chatSessionID, host string) {
 	if e == nil || e.hostLedger == nil {
 		return
 	}
-	_ = e.hostLedger.RecordHostVisit(ctx, chatSessionID, host)
+	contact := evidence.ContactOwn
+	if confine.RetrievalDial(cmd) {
+		contact = evidence.ContactRetrieval
+	}
+	_ = e.hostLedger.RecordContact(ctx, chatSessionID, host, contact)
 }
 
 // egressLeaseCovers is true only when a chat or durable grant covers the destination.
