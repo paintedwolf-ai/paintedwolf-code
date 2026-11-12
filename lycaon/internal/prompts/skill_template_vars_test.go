@@ -74,8 +74,7 @@ func TestSkillSurfaceTemplateVarsWorkerProfile(t *testing.T) {
 	}
 }
 
-func TestSkillSurfaceTemplateVarsCallerShapeSurvivesMerges(t *testing.T) {
-	for _, tc := range []struct {
+func TestSkillSurfaceTemplateVarsCallerShapeSurvivesMerges(t *testing.T) {	for _, tc := range []struct {
 		name  string
 		input SkillSurfaceVarsInput
 		shape map[string]any
