@@ -57,7 +57,7 @@ func endpointAskSubject(cmd confine.EgressCommand, ep egressproxy.Endpoint) egre
 		Contained: egressContained(cmd),
 		Explanation: &hitl.ApprovalExplanation{
 			What:    "Connect to " + host,
-			Who:     hitl.WhoAgentCommand,
+			Who:     egressActor(cmd),
 			IfWrong: "It could upload data to or fetch code from this host.",
 			// Reusable grants cover the registrable domain shown here.
 			AllowLine: hostscope.AllowLine(host),
@@ -74,6 +74,15 @@ func endpointAskSubject(cmd confine.EgressCommand, ep egressproxy.Endpoint) egre
 		s.Explanation.AllowLine = fmt.Sprintf("%s connections to %s on port %d", verb, host, ep.Port)
 	}
 	return s
+}
+
+// egressActor names a tool's own request as an action; only a dial with a
+// command line is a command.
+func egressActor(cmd confine.EgressCommand) string {
+	if strings.TrimSpace(cmd.CommandLine) == "" && strings.TrimSpace(cmd.Image) != "" {
+		return hitl.WhoAgentAction
+	}
+	return hitl.WhoAgentCommand
 }
 
 // egressTunnelTransport reports whether a transport hands the broker an opaque

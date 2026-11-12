@@ -174,6 +174,10 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		},
 	}
 
+	if sessions := r.deps.Storage.Sessions; sessions != nil {
+		deps.ObservedURL = sessions.SessionObservedURL
+	}
+
 	if matcher, err := r.deps.Security.LoadMatcher(ctx, r.deps.TestSecretMatcher); err != nil {
 		return err
 	} else {

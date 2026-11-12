@@ -47,6 +47,10 @@ type EgressCommand struct {
 	CommandLine string // exact command attributed to this execution
 	// DeclaredHosts is the host-derived destination set for this action.
 	DeclaredHosts []string
+	// AuthoredDestination marks a retrieval whose address the agent wrote
+	// rather than chose from addresses the chat observed. It holds for every
+	// redirect hop of that request.
+	AuthoredDestination bool
 	// ReducedPackageExecution restricts egress to reviewed registries.
 	ReducedPackageExecution bool
 	// UserRule is the matching ask-rule citation.

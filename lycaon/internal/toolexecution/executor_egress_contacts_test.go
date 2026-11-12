@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -144,5 +146,44 @@ func TestSessionHostLedgerSetterWiresTheLedger(t *testing.T) {
 	testutil.FailErr(t, "RecordContact", e.hostLedger.RecordContact(t.Context(), "chat", "example.com", evidence.ContactOwn))
 	if !slices.Equal(ledger.hosts, []string{"example.com"}) {
 		t.Fatalf("recorded hosts = %v", ledger.hosts)
+	}
+}
+
+// A source reader's request for an address the agent wrote is the chat's own
+// dial: only the chat's own contact makes its host familiar, it is recorded as
+// one, and the gate does not see a retrieval.
+func TestAuthoredRetrievalAddressIsTheChatsOwnDial(t *testing.T) {
+	authored := confine.EgressCommand{Image: ingestion.ToolFetchURL, AuthoredDestination: true}
+	observed := confine.EgressCommand{Image: ingestion.ToolFetchURL}
+	ep := egressproxy.Endpoint{Host: "example.com", Port: 443, Transport: egressproxy.TransportHTTPRequest}
+
+	ledger := &fakeHostLedger{contacts: map[string]evidence.Contact{"example.com": evidence.ContactRetrieval}}
+	e := &Network{}
+	e.SetSessionHostLedger(ledger)
+	if !e.firstUseThisSession(authored, "chat", "example.com") {
+		t.Fatal("a retrieved source must not make the agent's authored request familiar")
+	}
+	if e.firstUseThisSession(observed, "chat", "example.com") {
+		t.Fatal("a repeat retrieval of the same host must stay familiar")
+	}
+
+	e.recordHostVisit(t.Context(), authored, "chat", "example.com")
+	e.recordHostVisit(t.Context(), observed, "chat", "example.com")
+	if !slices.Equal(ledger.kinds, []evidence.Contact{evidence.ContactOwn, evidence.ContactRetrieval}) {
+		t.Fatalf("recorded contacts = %v", ledger.kinds)
+	}
+
+	if destinationFact(authored, ep, true, "", "").Retrieval {
+		t.Fatal("an authored address reached the gate as a retrieval")
+	}
+	if !destinationFact(observed, ep, true, "", "").Retrieval {
+		t.Fatal("an observed address lost its retrieval fact")
+	}
+	if got := endpointAskSubject(authored, ep).Explanation.Who; got != hitl.WhoAgentAction {
+		t.Fatalf("a tool's own request is an action, got %q", got)
+	}
+	command := confine.EgressCommand{ToolName: "command", CommandLine: "curl https://example.com/"}
+	if got := endpointAskSubject(command, ep).Explanation.Who; got != hitl.WhoAgentCommand {
+		t.Fatalf("a command line is a command, got %q", got)
 	}
 }

@@ -38,6 +38,7 @@ func TestFetchURLImageWithoutDest(t *testing.T) {
 	tempDir := t.TempDir()
 	reg := tools.NewDefaultRegistry()
 	deps := ToolDeps{
+		ObservedURL:  observedAlways,
 		VisualScreen: visualscreen.NewGate(visualscreen.NewScanner(nil), nil, nil),
 	}
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
@@ -107,7 +108,7 @@ func TestFetchURLTextModeImageKeepsRawBytes(t *testing.T) {
 	defer srv.Close()
 
 	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{}, nil))
+	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, ToolDeps{ObservedURL: observedAlways}, nil))
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "s1",
 			ToolCallID: "call1"},
@@ -152,7 +153,7 @@ func TestFetchURLNonImageBinaryUnsupported(t *testing.T) {
 
 	tempDir := t.TempDir()
 	reg := tools.NewDefaultRegistry()
-	deps := ToolDeps{}
+	deps := ToolDeps{ObservedURL: observedAlways}
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))
 
 	tctx := tools.ToolContext{
@@ -198,6 +199,7 @@ func TestFetchURLImageSecretScreeningWithheld(t *testing.T) {
 	})
 
 	deps := ToolDeps{
+		ObservedURL:  observedAlways,
 		VisualScreen: gate,
 	}
 	testutil.FailErr(t, "RegisterToolsWithFactory", RegisterToolsWithFactory(reg, deps, nil))

@@ -54,6 +54,9 @@ type ToolDeps struct {
 	SecretAsk secretmatch.AskFunc
 	// VisualScreen coordinates pre-perception credential screening.
 	VisualScreen *visualscreen.Gate
+	// ObservedURL reports whether a session's evidence recorded this exact
+	// address; nil means no address counts as observed.
+	ObservedURL func(sessionID, rawURL string) bool
 }
 
 const (
@@ -94,7 +97,7 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			}
 		}
 		contest, _ := args["unredact"].(string)
-		ctx = withToolEgressGate(ctx, deps, tctx, "web_search", DeclaredEndpointHosts(settings, deps.Registry), contest,
+		ctx = withToolEgressGate(ctx, deps, tctx, toolEgress{image: "web_search", declaredHosts: DeclaredEndpointHosts(settings, deps.Registry)}, contest,
 			webSearchDestination(settings, deps.Registry))
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		var discoverer DirectDiscoverer
@@ -173,8 +176,16 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 	return registerFetchTool(reg, deps)
 }
 
-// withToolEgressGate attaches declared destinations and secret fanout.
-func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolContext, image string, declaredHosts []string, contestToken string, fanout screenDestination) context.Context {
+// toolEgress is what one web tool invocation states about its dials.
+type toolEgress struct {
+	image         string
+	declaredHosts []string
+	// authored is true when the agent wrote the requested address.
+	authored bool
+}
+
+// withToolEgressGate attaches the invocation's dial facts and secret fanout.
+func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolContext, dial toolEgress, contestToken string, fanout screenDestination) context.Context {
 	attr := secretmatch.AskAttribution{
 		SessionID:     tctx.Identity.SessionID,
 		RootSessionID: tctx.ChatSessionID(),
@@ -184,13 +195,14 @@ func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolConte
 	}
 	ctx = secretmatch.WithAskAttribution(ctx, attr)
 	ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-		SessionID:     tctx.Identity.SessionID,
-		RootSessionID: tctx.ChatSessionID(),
-		ProjectID:     tctx.Identity.ProjectID,
-		ProjectDir:    tctx.ActiveRootPath(),
-		ToolCallID:    tctx.Identity.ToolCallID,
-		Image:         image,
-		DeclaredHosts: declaredHosts,
+		SessionID:           tctx.Identity.SessionID,
+		RootSessionID:       tctx.ChatSessionID(),
+		ProjectID:           tctx.Identity.ProjectID,
+		ProjectDir:          tctx.ActiveRootPath(),
+		ToolCallID:          tctx.Identity.ToolCallID,
+		Image:               dial.image,
+		DeclaredHosts:       dial.declaredHosts,
+		AuthoredDestination: dial.authored,
 	})
 	return withSecretScreen(ctx, deps.SecretMatcher, deps.SecretAsk, contestToken, fanout)
 }

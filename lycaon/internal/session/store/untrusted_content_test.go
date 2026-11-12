@@ -90,3 +90,56 @@ func TestContactRecordShape(t *testing.T) {
 		t.Fatal("empty host must be rejected")
 	}
 }
+
+// observedURLStore is the surface the observed-address test exercises on both stores.
+type observedURLStore interface {
+	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
+	UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error
+	RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error
+	SessionObservedURL(sessionID, rawURL string) bool
+}
+
+func TestSessionObservedURLMatchesRecordedAddressesExactly(t *testing.T) {
+	t.Run("memory", func(t *testing.T) {
+		testSessionObservedURL(t, NewMemory(), "proj-observed-memory")
+	})
+	t.Run("sql", func(t *testing.T) {
+		sqlDB := testdbfixture.Open(t, "observed.db")
+		testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
+		testSessionObservedURL(t, NewSQL(sqlDB), testdbseed.DefaultProjectID)
+	})
+}
+
+func testSessionObservedURL(t *testing.T, st observedURLStore, projectID string) {
+	t.Helper()
+	ctx := t.Context()
+	sess, err := st.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)
+	testutil.FailErr(t, "Create", err)
+	other, err := st.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)
+	testutil.FailErr(t, "Create other", err)
+
+	const recorded = "https://docs.example.org/guide?page=2"
+	testutil.FailErr(t, "UpsertEvidenceRecord", st.UpsertEvidenceRecord(ctx, sess.ID, evidence.Record{
+		Handle: "web#1", Kind: "web", Shape: evidence.ShapeURL, SourceTool: "web_search", URL: recorded,
+	}))
+	testutil.FailErr(t, "RecordContact", st.RecordContact(ctx, sess.ID, "dialed.example.net", evidence.ContactOwn))
+
+	for address, want := range map[string]bool{
+		recorded:                                true,
+		"  " + recorded + " ":                   true,
+		"https://docs.example.org/guide?page=3": false,
+		"https://docs.example.org/guide":        false,
+		"https://docs.example.org/":             false,
+		"":                                      false,
+	} {
+		if got := st.SessionObservedURL(sess.ID, address); got != want {
+			t.Errorf("SessionObservedURL(%q) = %v, want %v", address, got, want)
+		}
+	}
+	if st.SessionObservedURL(other.ID, recorded) {
+		t.Fatal("another session's evidence observed the address")
+	}
+	if st.SessionObservedURL("", recorded) || st.SessionObservedURL("missing-session", recorded) {
+		t.Fatal("an empty or missing session observed the address")
+	}
+}

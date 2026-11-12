@@ -4,7 +4,12 @@ import "github.com/lycaon/lycaon/internal/ingestion"
 
 // RetrievalDial reports a dial made by a declared retrieval capability, such
 // as web research or an MCP tool, whose contract covers reaching its sources.
+// An address the agent wrote is not one of its sources: that dial is the
+// agent's own.
 func RetrievalDial(cmd EgressCommand) bool {
+	if cmd.AuthoredDestination {
+		return false
+	}
 	return ingestion.IsRetrievalTool(cmd.ToolName) ||
 		ingestion.IsRetrievalTool(cmd.Image)
 }

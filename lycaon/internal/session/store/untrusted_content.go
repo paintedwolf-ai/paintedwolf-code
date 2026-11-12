@@ -140,6 +140,32 @@ func (ev *sqlEvidence) SessionContacts(sessionID string) map[string]evidence.Con
 	return evidence.ContactsFromLedger(ledger)
 }
 
+// SessionObservedURL reports whether the session's evidence recorded exactly
+// this address. An unreadable ledger observes nothing.
+func (ev *memoryEvidence) SessionObservedURL(sessionID, rawURL string) bool {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return false
+	}
+	ledger, err := loadLedgerMemory(context.Background(), ev.core, sessionID)
+	if err != nil {
+		return false
+	}
+	return evidence.VerifyURLObserved(ledger, rawURL)
+}
+
+func (ev *sqlEvidence) SessionObservedURL(sessionID, rawURL string) bool {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return false
+	}
+	ledger, err := loadLedger(context.Background(), ev.core, ev.core.queries, sessionID)
+	if err != nil {
+		return false
+	}
+	return evidence.VerifyURLObserved(ledger, rawURL)
+}
+
 // RecordContact adds an allowed dial to the chat's contacts. The record carries
 // no content tool, so it does not mark the session untrusted.
 func (ev *memoryEvidence) RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error {
