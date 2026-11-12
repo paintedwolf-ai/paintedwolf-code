@@ -90,7 +90,7 @@ describe("read gutter facts", () => {
     ];
     const input = { doc, marks, attribution: [], findings: [] };
     const tintLine2 = lineFactsTint(input, 2);
-    // Should be a single linear-gradient without commas separating stacked gradients
+    // Overlapping reads paint one gradient, not stacked ones.
     expect(tintLine2.startsWith("linear-gradient")).toBe(true);
     expect(tintLine2.includes("), linear-gradient")).toBe(false);
 

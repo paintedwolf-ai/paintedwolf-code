@@ -15,7 +15,7 @@ export type PaintedAgentMark = {
   bornAt: number;
   /** When the host stopped reporting the mark; null while reported. */
   leftAt: number | null;
-  /** When a search match stopped being its chat's current step while still reported; null otherwise. */
+  /** When a still-reported match stopped being its chat's current step. */
   supersededAt: number | null;
 };
 
@@ -80,7 +80,7 @@ function newerStep(a: AgentMark, b: AgentMark): boolean {
   return a.source.kind === "read" && b.source.kind === "read" && a.source.item.sequence > b.source.item.sequence;
 }
 
-/** Each chat's current operation: an approval-held change, another pending change or draft, else its newest read. */
+/** Each chat's current step: an approval-held change, then any pending change or draft, then its newest read. */
 function currentItems(marks: readonly AgentMark[]): Set<unknown> {
   const chosen = new Map<string, AgentMark>();
   for (const mark of marks) {
@@ -90,7 +90,7 @@ function currentItems(marks: readonly AgentMark[]): Set<unknown> {
   return new Set([...chosen.values()].map((mark) => mark.source.item));
 }
 
-/** Keeps fade timing across updates, supersedes matches their chat moved past, and keeps ended marks until gone. */
+/** Carries fade timing across updates; ended and superseded marks stay until gone. */
 export function nextAgentPaint(
   previous: readonly PaintedAgentMark[],
   reported: readonly ReportedAgentMark[],
