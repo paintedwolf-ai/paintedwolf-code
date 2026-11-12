@@ -210,9 +210,17 @@ func TestRecoverWaitLeasesRebuildsParkedState(t *testing.T) {
 	})
 	testutil.FailErr(t, "arm recoverable wait", err)
 
+	deps := busyWaitLoopDeps()
+	// The recovered process must still be running: an unknown handle makes the
+	// condition monitor resolve the lease as unavailable and break the park
+	// this test asserts.
+	deps.ProcessState = func(_, handle string) (bool, bool) { return handle == "command-1", true }
 	loop := NewLoopEngine()
-	loop.SetDeps(busyWaitLoopDeps())
-	if err := RecoverWaitLeases(context.Background(), loop.Subscriptions, store); err != nil {
+	loop.SetDeps(deps)
+	// The monitor keeps probing until its context ends, so tie it to the test.
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	if err := RecoverWaitLeases(ctx, loop.Subscriptions, store); err != nil {
 		t.Fatalf("recover wait leases: %v", err)
 	}
 	if !loop.Waits.IsSleeping(lease.SessionID) || !loop.Waits.SessionSleepingOnProcess(lease.SessionID, "command-1") {
