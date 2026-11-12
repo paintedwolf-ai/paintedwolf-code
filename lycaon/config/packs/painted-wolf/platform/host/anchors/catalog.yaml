@@ -679,6 +679,33 @@ anchors:
         source_history_offered: { type: "bool", required: false }
         citable: { type: "bool", required: false }
 
+  - id: inject.view_context
+    title: View context inject
+    description: >-
+      What a prompt's sender had in view across their visible windows: editor
+      files with each selection, diffs, the folder last opened in the file
+      tree, a search and selected security findings. Recorded on the prompt
+      when it differed from the last view the agent saw and placed directly
+      before that prompt.
+    trigger_class: assembly_inject
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        editors:
+          type: "object[]"
+          required: true
+          description: "Rows with path, unsaved (bool), selected (bool) and, when selected, start_line, end_line and cursor (bool)."
+        diffs: { type: "string[]", required: true }
+        folder: { type: "string", required: true }
+        search_query: { type: "string", required: true, description: "The quoted query, or empty." }
+        search_hit: { type: "string", required: true }
+        findings:
+          type: "object[]"
+          required: true
+          description: "Rows with rule_id, level and location (path:line or empty)."
+        read_offered: { type: "bool", required: true }
+
   - id: inject.synthesis_evidence
     title: Synthesis evidence inject
     description: Synthesis-surface evidence digest inject.

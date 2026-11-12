@@ -262,6 +262,7 @@ func (e *AssemblyEngine) BuildCompletionMessages(
 	}
 	if coordinator && !sess.IsWorkerChild() {
 		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
+		messages = contextAssembler.interleaveViewContexts(ctx, sess, frame, history, turn, messages)
 	}
 	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, messages)
 	if deps.ScanGuidance != nil {

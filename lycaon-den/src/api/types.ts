@@ -1558,6 +1558,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace what one of this person's windows shows of the project
+         * @description The host keeps each window's report briefly and tells a session's agent what the person had in view when they sent a prompt. Windows renew their report while it holds; a report that is not renewed expires.
+         */
+        put: operations["replaceProjectView"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/editor-documents/status": {
         parameters: {
             query?: never;
@@ -7506,27 +7526,93 @@ export interface components {
             /** Format: date-time */
             compacted_at: string;
         };
-        /** @description What the sender had open in the editor when this prompt opened a turn. Recorded only when it differs from the last context still in the agent's history; an empty list means everything had been closed. */
-        EditorContext: {
-            /** @description Files with a live editor first, most recently moved first; then root order and path. */
-            files: components["schemas"]["EditorContextFile"][];
-            /** @description Open files beyond those listed. */
-            more_files: number;
+        /** @description What the sender had in view when this prompt opened a turn, across their visible windows, most recently focused first. Recorded only when it differs from the last view still in the agent's history; empty lists and no folder or search mean nothing was in view. */
+        ViewContext: {
+            /** @description Files shown in a visible editor, with that editor's selection. */
+            editors: components["schemas"]["ViewEditor"][];
+            /** @description Files shown in a visible diff. */
+            diffs: components["schemas"]["ViewPath"][];
+            folder?: components["schemas"]["ViewPath"];
+            search?: components["schemas"]["ViewSearch"];
+            /** @description Security findings open or selected in a visible security view. */
+            findings: components["schemas"]["ViewFinding"][];
         };
-        EditorContextFile: {
+        ViewPath: {
             /** Format: uuid */
             root_id: string;
             /** @description Root-relative slash path. */
             path: string;
-            unsaved: boolean;
-            view?: components["schemas"]["EditorView"];
+            /** @description The path as the agent was shown it, @label-qualified off the primary root. */
+            display_path: string;
         };
-        /** @description The main selection of the sender's most recently moved editor of the file. */
-        EditorView: {
+        ViewLocation: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            display_path: string;
+            line?: number;
+        };
+        ViewEditor: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            display_path: string;
+            unsaved: boolean;
+            selection?: components["schemas"]["ViewSelection"];
+        };
+        /** @description The editor's main selection. */
+        ViewSelection: {
             start_line: number;
             end_line: number;
             /** @description No text is selected; start_line is the cursor's line. */
             cursor: boolean;
+        };
+        ViewSearch: {
+            query: string;
+            hit?: components["schemas"]["ViewLocation"];
+        };
+        ViewFinding: {
+            fingerprint: string;
+            rule_id: string;
+            level: components["schemas"]["FindingLevel"];
+            location?: components["schemas"]["ViewLocation"];
+        };
+        /** @description What one window of this person shows of the project right now. Send only surfaces that are visible; a window that shows none of them, or is hidden, sends none. Reports expire unless renewed. */
+        ReplaceProjectViewRequest: {
+            client_id: string;
+            /** @description The window has keyboard focus. */
+            focused: boolean;
+            editor?: components["schemas"]["ViewReportEditor"];
+            diff?: components["schemas"]["ViewReportPath"];
+            folder?: components["schemas"]["ViewReportPath"];
+            search?: components["schemas"]["ViewReportSearch"];
+            findings?: components["schemas"]["ViewReportFinding"][];
+        };
+        ViewReportPath: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+        };
+        ViewReportLocation: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            line?: number;
+        };
+        ViewReportSearch: {
+            query: string;
+            hit?: components["schemas"]["ViewReportLocation"];
+        };
+        ViewReportFinding: {
+            fingerprint: string;
+            rule_id: string;
+            level: components["schemas"]["FindingLevel"];
+            location?: components["schemas"]["ViewReportLocation"];
+        };
+        /** @description The document a visible editor shows; its selection is the window's editor presence. */
+        ViewReportEditor: {
+            /** Format: uuid */
+            document_id: string;
         };
         CreateSessionRequest: {
             /** Format: uuid */
@@ -7581,7 +7667,7 @@ export interface components {
             worker_summary?: components["schemas"]["WorkerSummaryMeta"];
             grounding?: components["schemas"]["CitationGrounding"];
             source_context?: components["schemas"]["SourceContext"];
-            editor_context?: components["schemas"]["EditorContext"];
+            view_context?: components["schemas"]["ViewContext"];
             /** @description Host-validated interaction targets mentioned by this message. Navigation references are independent of citation grounding and never support factual claims. */
             navigation_refs?: components["schemas"]["NavigationReference"][];
             compacted_chunk?: components["schemas"]["CompactedChunkMeta"];
@@ -20922,6 +21008,39 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    replaceProjectView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceProjectViewRequest"];
+            };
+        };
+        responses: {
+            /** @description The window's report was replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
     readEditorDocumentStatuses: {
         parameters: {
             query?: never;
@@ -30220,9 +30339,19 @@ export type CreateScannerRequest = components["schemas"]["CreateScannerRequest"]
 export type UpdateScannerRequest = components["schemas"]["UpdateScannerRequest"];
 export type UpdateProjectScannerRequest = components["schemas"]["UpdateProjectScannerRequest"];
 export type CompactedChunkMeta = components["schemas"]["CompactedChunkMeta"];
-export type EditorContext = components["schemas"]["EditorContext"];
-export type EditorContextFile = components["schemas"]["EditorContextFile"];
-export type EditorView = components["schemas"]["EditorView"];
+export type ViewContext = components["schemas"]["ViewContext"];
+export type ViewPath = components["schemas"]["ViewPath"];
+export type ViewLocation = components["schemas"]["ViewLocation"];
+export type ViewEditor = components["schemas"]["ViewEditor"];
+export type ViewSelection = components["schemas"]["ViewSelection"];
+export type ViewSearch = components["schemas"]["ViewSearch"];
+export type ViewFinding = components["schemas"]["ViewFinding"];
+export type ReplaceProjectViewRequest = components["schemas"]["ReplaceProjectViewRequest"];
+export type ViewReportPath = components["schemas"]["ViewReportPath"];
+export type ViewReportLocation = components["schemas"]["ViewReportLocation"];
+export type ViewReportSearch = components["schemas"]["ViewReportSearch"];
+export type ViewReportFinding = components["schemas"]["ViewReportFinding"];
+export type ViewReportEditor = components["schemas"]["ViewReportEditor"];
 export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"];
 export type Message = components["schemas"]["Message"];
 export type MessageKind = components["schemas"]["MessageKind"];

@@ -29,8 +29,6 @@ type Participant struct {
 	Ranges       []PresenceRange
 	Main         int
 	UpdatedAt    time.Time
-	// SelectedAt moves when the selection does; heartbeats leave it.
-	SelectedAt time.Time
 }
 
 func (p *PresenceService) joinParticipant(ctx context.Context, documentID, clientID, incarnation string) bool {
@@ -50,9 +48,6 @@ func (p *PresenceService) joinParticipant(ctx context.Context, documentID, clien
 		existed = false
 	}
 	participant.ClientID, participant.UpdatedAt = clientID, time.Now().UTC()
-	if !existed {
-		participant.SelectedAt = participant.UpdatedAt
-	}
 	if s.windowNumbers[clientID] == 0 {
 		s.windowNumbers[clientID] = len(s.windowNumbers) + 1
 	}
@@ -262,10 +257,6 @@ func (p *PresenceService) UpdatePresence(ctx context.Context, id, projectID stri
 	participant.Ranges = clonePresenceRanges(participant.Ranges)
 	participant.expiry = previous.expiry
 	participant.UpdatedAt = time.Now().UTC()
-	participant.SelectedAt = previous.SelectedAt
-	if changed {
-		participant.SelectedAt = participant.UpdatedAt
-	}
 	s.refreshParticipant(ctx, id, &participant)
 	s.participants[id][participant.ClientID] = participant
 	s.presenceMu.Unlock()

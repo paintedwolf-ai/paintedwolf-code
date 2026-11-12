@@ -242,6 +242,7 @@ func (s *Server) registerProjectRoutes(r chi.Router) {
 	s.registerV1Operation(r, operationGetSourceWorkspace, s.Sources.Workspace.HandleGetSourceWorkspace)
 	s.registerV1Operation(r, operationOpenEditorDocument, s.Sources.Editor.HandleOpenEditorDocument)
 	s.registerV1Operation(r, operationReplaceEditorDocumentRetention, s.Sources.Editor.HandleReplaceEditorDocumentRetention)
+	s.registerV1Operation(r, operationReplaceProjectView, s.Sources.Editor.HandleReplaceProjectView)
 	s.registerV1Operation(r, operationReadEditorDocumentStatuses, s.Sources.Editor.HandleReadEditorDocumentStatuses)
 	s.registerV1Operation(r, operationReplaceEditorDocument, s.Sources.Editor.HandleReplaceEditorDocument)
 	s.registerV1Operation(r, operationSyncEditorDocument, s.Sources.Editor.HandleSyncEditorDocument)

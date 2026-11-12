@@ -1129,7 +1129,7 @@ type Messages struct {
 	ReasoningJson           sql.NullString `json:"reasoning_json"`
 	CompletionReportJson    sql.NullString `json:"completion_report_json"`
 	SecretScreenGeneration  int64          `json:"secret_screen_generation"`
-	EditorContextJson       sql.NullString `json:"editor_context_json"`
+	ViewContextJson         sql.NullString `json:"view_context_json"`
 }
 
 type MessagesFts struct {

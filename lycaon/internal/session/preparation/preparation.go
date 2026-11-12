@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/sourcebrief"
 	"github.com/lycaon/lycaon/internal/session/toolcontext"
+	"github.com/lycaon/lycaon/internal/session/viewcontext"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -28,14 +29,15 @@ type Service struct {
 	Loading          *loading.Service
 	Profiles         *profiles.Service
 	SourceBriefs     *sourcebrief.Service
+	ViewContexts     *viewcontext.Service
 	ToolContext      *toolcontext.Service
 	Workspace        WorkerWorkspace
 	Workers          WorkerState
 	coordinatorFrame inject.CoordinatorTurnFrameSource
 }
 
-func New(history *history.Service, loading *loading.Service, profiles *profiles.Service, sourceBriefs *sourcebrief.Service, toolContext *toolcontext.Service, workspace WorkerWorkspace, workers WorkerState) *Service {
-	return &Service{History: history, Loading: loading, Profiles: profiles, SourceBriefs: sourceBriefs, ToolContext: toolContext, Workspace: workspace, Workers: workers}
+func New(history *history.Service, loading *loading.Service, profiles *profiles.Service, sourceBriefs *sourcebrief.Service, viewContexts *viewcontext.Service, toolContext *toolcontext.Service, workspace WorkerWorkspace, workers WorkerState) *Service {
+	return &Service{History: history, Loading: loading, Profiles: profiles, SourceBriefs: sourceBriefs, ViewContexts: viewContexts, ToolContext: toolContext, Workspace: workspace, Workers: workers}
 }
 func (m *Service) SetFrame(frame inject.CoordinatorTurnFrameSource) { m.coordinatorFrame = frame }
 
@@ -86,6 +88,7 @@ func (m *Service) Build(ctx context.Context, sess *api.Session, id string, in pr
 	// Preload rendering resolves coordinator surface vars from the live
 	// surface; the prompt loop sets this later for tool calls.
 	tctx.Turn.TurnSurfaceID = surfaceID
+	history = m.ViewContexts.Record(ctx, sess, viewcontext.Scope{Roots: tctx.Source.Roots, Branch: tctx.Source.ProjectSourceBranch}, openingMessageID, history)
 	m.Loading.Finish(ctx, sess, id, tctx, decision)
 	return Assembly{
 		History:   history,
