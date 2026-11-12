@@ -548,10 +548,20 @@ func TestCurlExchangeProvenanceReporting(t *testing.T) {
 		t.Fatalf("external --fail -v status=%d provenance=%+v", res.result.Status, obs)
 	}
 
-	// 5. External --fail -w '%{http_code}' on 500 reports WroteStdout=true.
-	res, obs = runObserved("-s", "--resolve", resolveArg, "--fail", "-w", "%{http_code}", extBase+"/fail")
-	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout {
-		t.Fatalf("external --fail -w status=%d provenance=%+v", res.result.Status, obs)
+	// 5. Write-out of transfer measurements is not response content: an
+	// external --fail -w '%{http_code} %{size_download}' reports WroteStdout=false.
+	res, obs = runObserved("-s", "--resolve", resolveArg, "--fail", "-w", "status %{http_code} %{size_download}", extBase+"/fail")
+	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || obs[0].WroteStdout {
+		t.Fatalf("external --fail -w measurement status=%d provenance=%+v", res.result.Status, obs)
+	}
+	if !strings.Contains(res.stdout, "status 500") {
+		t.Fatalf("write-out stdout = %q", res.stdout)
+	}
+
+	// 5b. A write-out variable the server's text fills does report WroteStdout=true.
+	_, obs = runObserved("-s", "-o", "typed.txt", "--resolve", resolveArg, "-w", "%{content_type}", extBase+"/data")
+	if len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout {
+		t.Fatalf("external -w content_type provenance = %+v", obs)
 	}
 
 	// 6. Pure loopback request reports External=false.

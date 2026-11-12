@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -34,17 +35,24 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 	}
 	defer done()
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0})
 	if out.err != nil {
 		return settleMutationError(out.err, certainty)
 	}
 	if len(diagnostics) > 0 {
 		_, _ = stderr.Write(diagnostics)
 	}
+	// A failed fetch or push may already have updated some refs here or on
+	// the remote; only a read-only command fails without effect.
+	failed := toolcontract.EffectUnknown
+	if certainty == toolcontract.NoEffect {
+		failed = toolcontract.NoEffect
+	}
 	if err != nil {
-		return settleGitError(err, stderr, toolcontract.NoEffect)
+		return settleGitError(err, stderr, failed)
 	}
 	if code != 0 {
-		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
+		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: failed}, nil
 	}
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: certainty}, nil
 }
@@ -65,17 +73,19 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	}
 	fetchArgs = append(fetchArgs, p.Argv.Operands().Values()...)
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, fetchArgs, out)
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0})
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}
 	if len(diagnostics) > 0 {
 		_, _ = stderr.Write(diagnostics)
 	}
+	// The fetch may have updated remote-tracking refs before it failed.
 	if err != nil {
-		return settleGitError(err, stderr, toolcontract.NoEffect)
+		return settleGitError(err, stderr, toolcontract.EffectUnknown)
 	}
 	if code != 0 {
-		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
+		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectUnknown}, nil
 	}
 	req := git.OperationRequest{Kind: "merge", Mode: "ff", Ref: "FETCH_HEAD"}
 	if has(p.Argv, "--rebase") {
@@ -85,7 +95,11 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	}
 	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, opErr := mut.Operate(ctx, tc, req)
-	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), opErr)
+	result, err := settleOperate(p, res, out, stderr, has(p.Argv, "-q"), opErr)
+	// The merge or rebase places fetched content in the files it changed, and
+	// its summary names them.
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, files: mergedPaths(repo.Root, res.Paths)})
+	return result, err
 }
 
 func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
@@ -139,6 +153,7 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	}
 	resolvedURL := resolveLocalCloneSource(dir, rawURL)
 	diagnostics, code, err := git.CloneCommand(ctx, resolvedURL, boundDest.Resolved.Abs, flags, out)
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0, trees: []string{boundDest.Resolved.Abs}})
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}
@@ -231,6 +246,54 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials}), done, nil
 }
 
+// remoteHelperURL is Git's <transport>::<address> form, which runs the
+// git-remote-<transport> program.
+var remoteHelperURL = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*::`)
+
+// admitLocalRepository binds a local remote through filesystem authority:
+// the path the remote names and every directory Git opens through it, its
+// git directory, common directory and object store, write for push, and the
+// alternate object stores it only reads.
+func admitLocalRepository(ctx context.Context, p Prepared, local string, push bool, admitted *admittedRemotes) error {
+	bound, err := p.paths.Bind(ctx, local, push)
+	if err != nil {
+		return err
+	}
+	admit := func(path string, write bool) {
+		if write {
+			admitted.writes = append(admitted.writes, path)
+		} else {
+			admitted.reads = append(admitted.reads, path)
+		}
+	}
+	admit(bound.Resolved.Abs, push)
+	own, shared, ok := gitrepo.RepositoryDirs(bound.Resolved.Abs)
+	if !ok {
+		return nil
+	}
+	for _, group := range []struct {
+		dirs  []string
+		write bool
+	}{{own, push}, {shared, false}} {
+		for _, path := range group.dirs {
+			if within(bound.Resolved.Abs, path) {
+				continue
+			}
+			reached, err := p.paths.Bind(ctx, path, group.write)
+			if err != nil {
+				return err
+			}
+			admit(reached.Resolved.Abs, group.write)
+		}
+	}
+	return nil
+}
+
+func within(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
 // authorizeRemote admits one remote: network hosts through the egress gate,
 // local repositories through filesystem authority, write for push.
 func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir, rawURL string, push bool, admitted *admittedRemotes, stderr io.Writer) error {
@@ -243,22 +306,21 @@ func authorizeRemote(ctx context.Context, p Prepared, tc tools.ToolContext, dir,
 		return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": p.command.spec.Name, "word": rawURL, "expected": "a safe remote URL", "reason": "The remote is not a URL or path Git can fetch from safely."}}
 
 	}
+	if remoteHelperURL.MatchString(rawURL) {
+		writeLine(stderr, fmt.Sprintf("fatal: %s: remote helper '%s' is not available [COMMAND_OPERAND_INVALID]", p.command.spec.Name, rawURL))
+		return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": p.command.spec.Name, "word": rawURL, "expected": "a remote over https, http, ssh or git, or a local repository", "reason": "A remote helper runs a local program the URL names."}}
+	}
 	host := remoteNetworkHost(rawURL)
 	if host == "" {
-		local := strings.TrimPrefix(rawURL, "file://")
+		local, ok := gitargv.LocalCloneSourcePath(rawURL)
+		if !ok {
+			writeLine(stderr, fmt.Sprintf("fatal: %s: invalid remote '%s' [COMMAND_OPERAND_INVALID]", p.command.spec.Name, rawURL))
+			return &toolrejection.ToolReject{Code: "COMMAND_OPERAND_INVALID", Data: map[string]any{"command": p.command.spec.Name, "word": rawURL, "expected": "a local repository path or file:// URL", "reason": "Git cannot name a local repository from the remote."}}
+		}
 		if !filepath.IsAbs(local) {
 			local = filepath.Join(dir, local)
 		}
-		bound, err := p.paths.Bind(ctx, local, push)
-		if err != nil {
-			return err
-		}
-		if push {
-			admitted.writes = append(admitted.writes, bound.Resolved.Abs)
-		} else {
-			admitted.reads = append(admitted.reads, bound.Resolved.Abs)
-		}
-		return nil
+		return admitLocalRepository(ctx, p, local, push, admitted)
 	}
 	if egressgate.From(ctx) == nil {
 		sessionID := tc.Identity.SessionID

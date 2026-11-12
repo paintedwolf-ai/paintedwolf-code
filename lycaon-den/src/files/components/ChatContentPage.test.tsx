@@ -184,9 +184,9 @@ describe("chat content Files pane", () => {
     fireEvent.click(prettyBtn);
     expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
     await waitFor(() =>
-      expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(3),
+      expect(view.container.querySelectorAll(".pw-pretty-break").length).toBe(3),
     );
-    expect(view.container.querySelectorAll(".pw-virtual-indent").length).toBe(2);
+    expect(view.container.querySelectorAll(".pw-pretty-line").length).toBe(2);
     expect(view.container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
     expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
     expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]");
@@ -252,7 +252,7 @@ describe("chat content Files pane", () => {
     await waitFor(() =>
       expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]"),
     );
-    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(3);
+    expect(view.container.querySelectorAll(".pw-pretty-break").length).toBe(3);
     expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"status":"ok","token":"[REDACTED]"}');
   });
 
@@ -295,7 +295,7 @@ describe("chat content Files pane", () => {
       view.getByTestId("chat-process-pretty-refresh"),
       "button",
     );
-    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(2);
+    expect(view.container.querySelectorAll(".pw-pretty-break").length).toBe(2);
     expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":1}');
 
     // Incoming process chunk does NOT reformat or overwrite the snapshot while Pretty is ON.
@@ -314,12 +314,12 @@ describe("chat content Files pane", () => {
     await waitFor(() =>
       expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":2}'),
     );
-    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(4);
+    expect(view.container.querySelectorAll(".pw-pretty-break").length).toBe(4);
 
     // Turning Pretty OFF returns to live output and removes Snapshot/Refresh indicators.
     fireEvent.click(prettyBtn);
     expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
-    expect(view.container.querySelectorAll(".pw-virtual-break").length).toBe(0);
+    expect(view.container.querySelectorAll(".pw-pretty-break").length).toBe(0);
     applyBackgroundProcessEvent({
       session_id: "session",
       process_id: "proc-1",

@@ -21,16 +21,24 @@ import (
 
 // Observe the real owner error without replacing the reader, refusal, or result.
 type resourceRefusalObserver struct {
-	owner   commandprogram.OperationDispatcher
+	prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.Dispatch, commandprogram.OperationRequest) (command.NativePrepared, error)
 	observe func(*toolrejection.ToolReject)
 }
 
-func (o resourceRefusalObserver) Invoke(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-	result, err := o.owner.Invoke(ctx, request, streams)
-	if reject := toolrejection.AsToolReject(err); reject != nil {
-		o.observe(reject)
+func (o resourceRefusalObserver) Prepare(ctx context.Context, paths *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+	prepared, err := o.prepare(ctx, paths, dispatch, request)
+	if err != nil {
+		return prepared, err
 	}
-	return result, err
+	invoke := prepared.Invoke
+	prepared.Invoke = func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		result, err := invoke(ctx, admitted, streams)
+		if reject := toolrejection.AsToolReject(err); reject != nil {
+			o.observe(reject)
+		}
+		return result, err
+	}
+	return prepared, nil
 }
 
 func TestCommandResourceRefusalPreservesFactsAndEarlierEffects(t *testing.T) {
@@ -52,13 +60,17 @@ func TestCommandResourceRefusalPreservesFactsAndEarlierEffects(t *testing.T) {
 		if err != nil {
 			return bound, err
 		}
-		install := bound.Builtins
-		bound.Builtins = func(ports command.BuiltinPorts) (map[string]commandprogram.OperationDispatcher, func(), error) {
-			builtins, release, err := install(ports)
-			if owner := builtins["cut"]; owner != nil {
-				builtins["cut"] = resourceRefusalObserver{owner: owner, observe: func(reject *toolrejection.ToolReject) { refusal = reject; observed++ }}
-			}
-			return builtins, release, err
+		native := bound.Natives["cut"]
+		if native.Prepare == nil {
+			t.Fatal("cut has no native owner to observe")
+		}
+		bound.Natives["cut"] = command.NativeOperation{
+			Tool:        native.Tool,
+			ClosedForms: native.ClosedForms,
+			Prepare: resourceRefusalObserver{prepare: native.Prepare, observe: func(reject *toolrejection.ToolReject) {
+				refusal = reject
+				observed++
+			}}.Prepare,
 		}
 		return bound, nil
 	}

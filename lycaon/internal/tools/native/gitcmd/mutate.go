@@ -40,7 +40,7 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 			return settle(status, err, spec.Name)
 		}
 	case "git init":
-		return runInit(ctx, p, out, stderr)
+		return runInit(ctx, p, tc, out, stderr)
 	case "git clone":
 		return runClone(ctx, p, tc, out, stderr)
 	case "git apply":
@@ -85,7 +85,7 @@ func invokeMutation(ctx context.Context, p Prepared, tc tools.ToolContext, strea
 	case "git clean":
 		return runClean(ctx, p, scopedTC, dir, repo, out, stderr)
 	case "git worktree":
-		return runWorktree(ctx, p, dir, repo, stderr)
+		return runWorktree(ctx, p, tc, dir, repo, stderr)
 	case "git fetch":
 		return runNetwork(ctx, p, scopedTC, dir, repo, out, stderr, toolcontract.EffectCompleted)
 	case "git push":
