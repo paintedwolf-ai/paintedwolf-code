@@ -158,6 +158,7 @@ func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprog
 	tracker := d.run.beginOpTracker()
 	ctx = withOpTracker(ctx, tracker)
 	ctx = evidence.WithExchangeProvenanceObserver(ctx, tracker.addExchange)
+	ctx = evidence.WithContentFlowObserver(ctx, func(flow evidence.ContentFlow) { d.run.observeContentFlow(ctx, tracker, flow) })
 	if request.StreamPreparation != nil {
 		var err error
 		streams, err = request.StreamPreparation.PrepareStreams(ctx)
