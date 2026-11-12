@@ -3,6 +3,7 @@ package webresearch
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -95,25 +96,27 @@ func TestFetchURLStatesHowTheChatCameByTheAddress(t *testing.T) {
 	worker := tools.ToolContext{Identity: tools.InvocationIdentity{
 		SessionID: "worker", RootSessionID: "chat", ToolCallID: "call",
 	}}
-	address := page.URL + "/doc"
 	const source, displayed, authored = confine.AddressSource, confine.AddressDisplayed, confine.AddressAuthored
 
-	for name, tc := range map[string]struct {
-		evidence known
+	// Each case fetches its own address, so none is served from the cache.
+	for i, tc := range []struct {
+		name     string
+		evidence func(address string) known
 		want     confine.AddressOrigin
 	}{
-		"source for the calling session": {evidence: known{"worker": {address: source}}, want: source},
-		"source for the chat":            {evidence: known{"chat": {address: source}}, want: source},
-		"displayed to the session":       {evidence: known{"worker": {address: displayed}}, want: displayed},
-		"displayed to the chat":          {evidence: known{"chat": {address: displayed}}, want: displayed},
-		"displayed here, source there":   {evidence: known{"worker": {address: displayed}, "chat": {address: source}}, want: source},
-		"known to another chat":          {evidence: known{"elsewhere": {address: source}}, want: authored},
-		"same host, different address":   {evidence: known{"chat": {page.URL + "/doc?d=extra": source}}, want: authored},
-		"nothing known":                  {want: authored},
+		{"source for the calling session", func(a string) known { return known{"worker": {a: source}} }, source},
+		{"source for the chat", func(a string) known { return known{"chat": {a: source}} }, source},
+		{"displayed to the session", func(a string) known { return known{"worker": {a: displayed}} }, displayed},
+		{"displayed to the chat", func(a string) known { return known{"chat": {a: displayed}} }, displayed},
+		{"displayed here, source there", func(a string) known { return known{"worker": {a: displayed}, "chat": {a: source}} }, source},
+		{"known to another chat", func(a string) known { return known{"elsewhere": {a: source}} }, authored},
+		{"same host, different address", func(a string) known { return known{"chat": {a + "?d=extra": source}} }, authored},
+		{"nothing known", func(string) known { return nil }, authored},
 	} {
-		t.Run(name, func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			gate := recordGate(t, true)
-			testutil.FailErr(t, "fetch_url", fetchKnowing(t, tc.evidence, worker, address))
+			address := fmt.Sprintf("%s/doc-%d", page.URL, i)
+			testutil.FailErr(t, "fetch_url", fetchKnowing(t, tc.evidence(address), worker, address))
 			dials := gate.reached()
 			if tc.want == source {
 				if len(dials) != 0 {
