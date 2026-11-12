@@ -2,9 +2,11 @@ package curl
 
 import (
 	"maps"
+	"net/url"
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
@@ -166,8 +168,68 @@ func (inv *invocation) passphrase() (string, error) {
 	}
 	tls, _ := inv.resolvedRecord()["tls"].(map[string]any)
 	value, _ := tls["passphrase"].(string)
+	if err := inv.reviewPassphrase(); err != nil {
+		return "", err
+	}
 	if err := inv.tc.Effects.Secrets.HandOff(inv.ctx, func(path string) bool { return path == passphrasePath }); err != nil {
 		return "", toolrejection.HeldHandOffReject("http_request", err)
 	}
 	return value, nil
+}
+
+const passphraseShape = "Client key passphrase"
+
+// reviewPassphrase asks before a referenced --pass opens the key the request
+// presents to its recipient: the review the http_request screen gives every
+// other reference the request sends, and the release a held value needs. A
+// passphrase written into the command is the model's own and is not asked.
+func (inv *invocation) reviewPassphrase() error {
+	resolution := inv.tc.Effects.Secrets
+	if resolution == nil || !resolution.Binds(passphrasePath) {
+		return nil
+	}
+	deps := inv.owners.HTTP
+	if deps.SecretAsk == nil || deps.SecretMatcher == nil {
+		return passphraseFault(secretmatch.FaultStageScreenUnwired)
+	}
+	matches, err := resolution.Matches(deps.SecretMatcher, func(path string) bool { return path == passphrasePath })
+	if err != nil || len(matches) == 0 {
+		return passphraseFault(secretmatch.FaultStageScreenUnwired)
+	}
+	target, err := url.Parse(inv.opts.url)
+	if err != nil {
+		return passphraseFault(secretmatch.FaultStageScreenUnwired)
+	}
+	id, label := secretmatch.HTTPDestination(target)
+	ctx := secretmatch.WithAskAttribution(inv.ctx, secretmatch.AskAttribution{
+		SessionID: inv.tc.Identity.SessionID, RootSessionID: inv.tc.ChatSessionID(), ProjectID: inv.tc.Identity.ProjectID,
+		ProjectDir: inv.tc.ActiveRootPath(), ToolCallID: inv.tc.Identity.ToolCallID,
+	})
+	decision, err := deps.SecretAsk(ctx, secretmatch.Alert{
+		Surface: secretmatch.SurfaceHTTPRequest, DestinationID: id, DestinationLabel: label,
+		SecretNames: secretmatch.ManagedNames(matches), RuleID: matches[0].RuleID, RuleTitle: passphraseShape,
+		GenericShape: passphraseShape, Occurrences: len(matches),
+		SourceKind: secretmatch.SourceToolArgument, SourceTool: "curl", SourcePath: "--pass",
+		OriginKind: secretmatch.OriginField, Fingerprints: secretmatch.Fingerprints(matches), Container: passphraseShape,
+	})
+	if err != nil {
+		stage := secretmatch.FaultStageRaise
+		if fault, ok := secretmatch.Faulted(err); ok {
+			stage = fault.Stage
+		}
+		return passphraseFault(stage)
+	}
+	if decision.Decision != secretmatch.SendUnchanged {
+		resolution.Withhold(inv.ctx)
+		reject := &toolrejection.ToolReject{Code: toolrejection.OutboundSecretDeniedCode, Data: map[string]any{
+			"surface": "http_request", "rule_id": matches[0].RuleID, "host": label, "shape": passphraseShape,
+		}}
+		toolrejection.AttachUserGuidance(reject, decision.Guidance)
+		return reject
+	}
+	return nil
+}
+
+func passphraseFault(stage string) error {
+	return &toolrejection.ToolReject{Code: toolrejection.OutboundSecretScreenFailedCode, Data: map[string]any{"surface": "http_request", "fault_stage": stage}}
 }
