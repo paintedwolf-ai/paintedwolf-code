@@ -176,7 +176,7 @@ func TestFetchURLScreenDeniesBeforeDial(t *testing.T) {
 	ctx := egressgate.WithAttribution(context.Background(), confine.EgressCommand{SessionID: "sess-secret-fetch"})
 	ctx = withSecretScreen(ctx, testSecretMatcher(t), ask, "", screenDestination{})
 
-	resp, _, err := guardedGet(ctx, u, "")
+	resp, _, err := guardedGet(ctx, u, "", fetchBodyByteLimit)
 	if resp != nil && resp.Body != nil {
 		_ = resp.Body.Close()
 	}
