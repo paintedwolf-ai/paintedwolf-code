@@ -88,7 +88,10 @@ func TestContactRecordShape(t *testing.T) {
 	if _, ok := contactRecord("bad host", evidence.ContactOwn); ok {
 		t.Fatal("host with a space must be rejected")
 	}
-	if _, ok := contactRecord("", evidence.ContactNone); ok {
+	if _, ok := contactRecord("example.com", evidence.ContactNone); ok {
+		t.Fatal("no contact must record nothing")
+	}
+	if _, ok := contactRecord("", evidence.ContactOwn); ok {
 		t.Fatal("empty host must be rejected")
 	}
 }
