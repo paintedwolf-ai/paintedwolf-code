@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/config"
+	"github.com/lycaon/lycaon/internal/decide"
 )
 
 // Turn kinds the kind question can answer.
@@ -25,7 +26,7 @@ const (
 )
 
 // Version is the decisions.yaml format this package reads.
-const Version = 3
+const Version = decide.CatalogVersion
 
 // StateSpec bounds the state every decision reads.
 type StateSpec struct {

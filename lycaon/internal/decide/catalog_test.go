@@ -29,7 +29,7 @@ func TestShippedCatalogDeclaresEverySite(t *testing.T) {
 
 func TestParseCatalogRejectsUnknownAndMissingSites(t *testing.T) {
 	t.Parallel()
-	_, err := decide.ParseCatalog([]byte("version: 2\nengine:\n  reference_ms: 1\nrerank:\n  nowhere:\n    enabled: true\n    deadline_ms: 1\n    max_candidates: 1\n    chunk: 1\n    weight: 1\n"))
+	_, err := decide.ParseCatalog([]byte("version: 3\nengine:\n  reference_ms: 1\nrerank:\n  nowhere:\n    enabled: true\n    deadline_ms: 1\n    max_candidates: 1\n    chunk: 1\n    weight: 1\n"))
 	if err == nil {
 		t.Fatal("unknown site must fail")
 	}
@@ -43,7 +43,7 @@ func TestParseCatalogRejectsUnknownAndMissingSites(t *testing.T) {
 
 func catalogWith(referenceMS, deadlineMS string) string {
 	var b strings.Builder
-	b.WriteString("version: 2\nengine:\n  reference_ms: " + referenceMS + "\nrerank:\n")
+	b.WriteString("version: 3\nengine:\n  reference_ms: " + referenceMS + "\nrerank:\n")
 	for _, site := range decide.Sites() {
 		b.WriteString("  " + string(site) + ":\n    enabled: true\n    deadline_ms: " + deadlineMS + "\n    max_candidates: 8\n    chunk: 4\n    weight: 0.5\n")
 	}
@@ -65,7 +65,7 @@ func TestParseCatalogValidatesBudgets(t *testing.T) {
 	if _, err := decide.ParseCatalog([]byte(bad)); err == nil || !strings.Contains(err.Error(), "chunk must be in (0, max_candidates]") {
 		t.Fatalf("oversized chunk accepted: %v", err)
 	}
-	if _, err := decide.ParseCatalog([]byte(strings.Replace(good, "version: 2", "version: 1", 1))); err == nil {
+	if _, err := decide.ParseCatalog([]byte(strings.Replace(good, "version: 3", "version: 2", 1))); err == nil {
 		t.Fatal("wrong version accepted")
 	}
 	if _, err := decide.ParseCatalog([]byte(good + "extra: 1\n")); err == nil {
