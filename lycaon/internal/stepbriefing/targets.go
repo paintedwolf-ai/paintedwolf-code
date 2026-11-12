@@ -55,7 +55,6 @@ func Targets(page wire.SourceWalkResponse) map[string]wire.SourceStepBriefingTar
 				continue
 			}
 		}
-		effect := effect
 		steps = append(steps, railStep{key: effect.ID, ordinal: effect.Ordinal, effect: &effect, target: wire.SourceStepBriefingTarget{
 			Kind: "effect", TargetKey: effect.ID, ScopeFingerprint: fingerprint(effect.ID, effect.AfterVersionID),
 			Scope: wire.SourceStepBriefingScope{Kind: "file", RootIds: []string{effect.RootID}, FileID: effect.FileID},

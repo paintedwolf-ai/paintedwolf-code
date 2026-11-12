@@ -2,9 +2,11 @@ package sourceapi
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"strconv"
 
+	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/stepbriefing"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -23,8 +25,12 @@ func (s *History) attachBriefings(ctx context.Context, projectID string, out *wi
 	}
 	out.BriefingEpoch = strconv.FormatInt(epoch, 10)
 	profile, err := s.Briefings.Registry.Profile(stepbriefing.ProfileID)
-	if err != nil {
+	// A host without step briefings serves Walk as it is.
+	if errors.Is(err, briefing.ErrUnknownProfile) {
 		return nil
+	}
+	if err != nil {
+		return err
 	}
 	keys := make([]string, 0, len(out.BriefingTargets))
 	for _, target := range out.BriefingTargets {
