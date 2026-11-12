@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/loopwake"
+	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -124,7 +125,7 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 		engine := &decidetest.Fake{Unavailable: unavailable}
 		mgr.Coordinator.Loading.SetDecider(engine)
 		mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
-		mgr.Coordinator.Loading.SetPolicy(func() toolpolicy.Engine { return loadablePolicy{tools: []string{"verify"}} })
+		mgr.Coordinator.Loading.SetPolicy(func() toolpolicy.Engine { return loadablePolicy{tools: noFolderLoadable(t)} })
 		decision := mgr.Coordinator.Loading.Begin(t.Context(), sess, sess.ID, promptinput.Input{Text: "inspect the logs"}, nil, "implement_investigate", "coordinator", "u1")
 		if decision == nil {
 			t.Fatal("ordinary turn skipped optimization without a workflow declaration")
@@ -143,6 +144,19 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 			t.Fatal("available engine was not consulted")
 		}
 	}
+}
+
+// noFolderLoadable lists the tools the investigate surface can load before a folder is
+// attached, which is where these sessions run.
+func noFolderLoadable(t *testing.T) []string {
+	t.Helper()
+	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_investigate"}, 0)
+	testutil.FailErr(t, "compile investigate surface", err)
+	names := plan.DeferredNames()
+	if len(names) == 0 {
+		t.Fatal("the investigate surface loads nothing without a folder")
+	}
+	return names
 }
 
 // loadablePolicy permits the named tools, each offered as a deferred schema.
