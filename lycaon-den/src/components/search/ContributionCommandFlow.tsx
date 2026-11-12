@@ -250,11 +250,8 @@ function InputField(props: { field: ContributionInputField; value: unknown; onVa
               value={String(props.value ?? "")}
               min={field().min}
               max={field().max}
-              onInput={(event) => {
-                // Clearing a number field removes its answer.
-                const parsed = event.currentTarget.valueAsNumber;
-                props.onValue(Number.isNaN(parsed) ? undefined : parsed);
-              }}
+              // Clearing a number field removes its answer.
+              onNumber={(n) => props.onValue(n ?? undefined)}
             />
           </Show>
         }>

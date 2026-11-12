@@ -51,6 +51,9 @@ func prepareRequest(in Request, method string) (preparedRequest, error) {
 	if limit <= 0 {
 		limit = DefaultBodyMax
 	}
+	if in.TruncateBody && (in.StreamBody != nil || in.DiscardBody) {
+		return preparedRequest{}, invalidRequest("truncate_body applies only to a buffered body")
+	}
 	redirectMode := in.Redirects
 	if redirectMode == "" {
 		redirectMode = RedirectNone

@@ -1,18 +1,18 @@
 import { completionStatus } from "@codemirror/autocomplete";
 import { insertNewlineAndIndent, selectGroupForward } from "@codemirror/commands";
-import { Compartment, Facet, Prec, type Extension } from "@codemirror/state";
+import { Compartment, Prec, type Extension } from "@codemirror/state";
+import { installedEditingStyle } from "./editor-editing-style-state.ts";
 import { EditorView, ViewPlugin, panels, type ViewUpdate } from "@codemirror/view";
 import { EmacsHandler } from "@replit/codemirror-emacs";
 import { CodeMirror, Vim, getCM, vim } from "@replit/codemirror-vim";
 import type { DenEditorKeymap } from "../../../../shared/app-state-types.ts";
 import { invokeCommand } from "../../../shortcuts/dispatcher.ts";
-import { defaultEditorKeymap, editorKeymapPref } from "../../../settings/editor/editor-prefs.ts";
+import { editorKeymapPref } from "../../../settings/editor/editor-prefs.ts";
 import { editorHistory, stepEditorHistory } from "./editor-history.ts";
 import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
 
 const editingStyle = new Compartment();
 const promptContainer = new Compartment();
-const installedStyle = Facet.define<DenEditorKeymap, DenEditorKeymap>({ combine: values => values[0] ?? defaultEditorKeymap() });
 const run = (command: string) => () => { invokeCommand(command); return true; };
 let configured = false;
 
@@ -113,9 +113,9 @@ function extensions(style: DenEditorKeymap): Extension {
   configureStyles();
   switch (style) {
     // The editor's stock keymap supplies the platform's text keys.
-    case "standard": return installedStyle.of(style);
-    case "emacs": return [installedStyle.of(style), Prec.high(emacsCommands)];
-    case "vim": return [installedStyle.of(style), Prec.high([vim(), modeStatus, EditorView.theme({
+    case "standard": return installedEditingStyle.of(style);
+    case "emacs": return [installedEditingStyle.of(style), Prec.high(emacsCommands)];
+    case "vim": return [installedEditingStyle.of(style), Prec.high([vim(), modeStatus, EditorView.theme({
       ".cm-vimMode .cm-cursorLayer:not(.cm-vimCursorLayer)": { display: "block" },
       ".cm-vimCursorLayer": { display: "none" },
     })])];
@@ -129,7 +129,7 @@ export function editorEditingStyle(): Extension {
 export function applyEditorEditingStyle(view: EditorView, style: DenEditorKeymap, tabMovesFocus: boolean): void {
   const installed = editingStyle.get(view.state);
   if (installed === undefined) return;
-  if (view.state.facet(installedStyle) !== style) view.dispatch({ effects: editingStyle.reconfigure(extensions(style)) });
+  if (view.state.facet(installedEditingStyle) !== style) view.dispatch({ effects: editingStyle.reconfigure(extensions(style)) });
   view.setTabFocusMode(tabMovesFocus);
 }
 

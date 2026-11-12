@@ -9,12 +9,7 @@ import {
   Text,
   Transaction,
 } from "@codemirror/state";
-import {
-  Decoration,
-  type DecorationSet,
-  EditorView,
-  WidgetType,
-} from "@codemirror/view";
+import { Decoration, type DecorationSet, EditorView } from "@codemirror/view";
 import {
   classifyDocumentFormat,
   determineDocumentLineEligibility,
@@ -45,6 +40,14 @@ import type {
   PrettyResourceCounters,
   PrettyResourceLimits,
 } from "./pretty-types.ts";
+import { keepPositionInView } from "../editor/editor-settled-scroll.ts";
+import {
+  prettyBreakDecoration,
+  prettyIndentDecoration,
+  prettyLayoutActive,
+  prettyLayoutDecorations,
+  prettyPresentation,
+} from "./pretty-view.ts";
 
 export {
   continuationEqualsLineStart,
@@ -53,88 +56,21 @@ export {
   scanLineLexicalBoundaries,
 } from "./pretty-line-scanners.ts";
 
-export class PrettyBreakWidget extends WidgetType {
-  override toDOM(): HTMLElement {
-    const el = document.createElement("div");
-    el.className = "pw-virtual-break";
-    el.setAttribute("aria-hidden", "true");
-    return el;
-  }
-
-  override get estimatedHeight(): number {
-    return 0;
-  }
-
-  override eq(other: WidgetType): boolean {
-    return other instanceof PrettyBreakWidget;
-  }
-}
-
-export class PrettyIndentWidget extends WidgetType {
-  readonly depth: number;
-  readonly indentWidthCh: number;
-
-  constructor(depth: number, indentWidthCh = 2) {
-    super();
-    this.depth = depth;
-    this.indentWidthCh = indentWidthCh;
-  }
-
-  override eq(other: WidgetType): boolean {
-    return (
-      other instanceof PrettyIndentWidget &&
-      other.depth === this.depth &&
-      other.indentWidthCh === this.indentWidthCh
-    );
-  }
-
-  override toDOM(): HTMLElement {
-    const el = document.createElement("span");
-    el.className = "pw-virtual-indent";
-    el.style.width = `${this.depth * this.indentWidthCh}ch`;
-    el.setAttribute("aria-hidden", "true");
-    return el;
-  }
-}
-
-const SHARED_BREAK_WIDGET = new PrettyBreakWidget();
-const SHARED_BREAK_DECORATION = Decoration.widget({
-  widget: SHARED_BREAK_WIDGET,
-  block: true,
-  side: -1,
-});
-
-const INDENT_DECORATION_CACHE = new Map<string, Decoration>();
-
-function getIndentDecoration(depth: number, indentWidthCh: number): Decoration {
-  const key = `${depth}:${indentWidthCh}`;
-  let cached = INDENT_DECORATION_CACHE.get(key);
-  if (!cached) {
-    cached = Decoration.widget({
-      widget: new PrettyIndentWidget(depth, indentWidthCh),
-      side: 2,
-    });
-    INDENT_DECORATION_CACHE.set(key, cached);
-  }
-  return cached;
-}
-
-const prettyNativeTheme = EditorView.baseTheme({
-  ".pw-virtual-break": { height: "0", margin: "0", padding: "0", overflow: "hidden" },
-  ".pw-virtual-indent": { display: "inline-block", height: "1em", pointerEvents: "none" },
-});
-
 function appendLineDecorations(
   target: Range<Decoration>[],
   lineState: PrettyLineLayoutState,
   lineFrom: number,
+  lineTo: number,
   indentWidthCh: number,
 ): void {
-  for (const b of lineState.relBoundaries) {
+  const boundaries = lineState.relBoundaries;
+  for (let i = 0; i < boundaries.length; i++) {
+    const b = boundaries[i]!;
     const pos = lineFrom + b.relPos;
-    target.push(SHARED_BREAK_DECORATION.range(pos));
-    if (b.depth > 0) {
-      target.push(getIndentDecoration(b.depth, indentWidthCh).range(pos));
+    target.push(prettyBreakDecoration.range(pos));
+    const end = i + 1 < boundaries.length ? lineFrom + boundaries[i + 1]!.relPos : lineTo;
+    if (b.depth > 0 && end > pos) {
+      target.push(prettyIndentDecoration(b.depth * indentWidthCh).range(pos, end));
     }
   }
 }
@@ -509,7 +445,10 @@ function buildFieldStateFromScratch(
   for (let lineNum = 1; lineNum <= res.lineStates.length; lineNum++) {
     const ls = res.lineStates[lineNum - 1]!;
     if (ls.relBoundaries.length > 0) {
-      appendLineDecorations(ranges, ls, doc.line(lineNum).from, indentWidthCh);
+      {
+        const line = doc.line(lineNum);
+        appendLineDecorations(ranges, ls, line.from, line.to, indentWidthCh);
+      }
     }
   }
   return {
@@ -765,6 +704,7 @@ export function updatePrettyNativeLayoutIncrementally(
       addedDecorations,
       scanned,
       line.from,
+      line.to,
       prev.indentWidthCh,
     );
   }
@@ -852,15 +792,28 @@ export const prettyNativeStateField = StateField.define<PrettyNativeFieldState>(
     }
     return prev;
   },
-  provide: (field) =>
+  provide: (field) => [
     EditorView.decorations.from(field, (state) => state.decorations),
+    prettyLayoutDecorations.from(field, (state) => state.decorations),
+    prettyLayoutActive.from(field, isPrettyLayoutActive),
+  ],
 });
+
+/** Layout is active when Pretty is on and the document has a layout rule within limits. */
+export function isPrettyLayoutActive(state: PrettyNativeFieldState): boolean {
+  return (
+    state.enabled &&
+    state.mode !== "code-passthrough" &&
+    state.outcome !== "limit-exceeded" &&
+    state.outcome !== "canceled"
+  );
+}
 
 export function createPrettyNativeDecorationsExtension(
   initialConfig: PrettyNativeExtensionConfig = { enabled: false },
 ): Extension {
   return [
-    prettyNativeTheme,
+    prettyPresentation,
     prettyNativeStateField.init((state) =>
       buildFieldStateFromScratch(state.doc, initialConfig, state),
     ),
@@ -882,8 +835,15 @@ export function applyPrettyNativeConfig(
   ) {
     return;
   }
+  const toggled = current !== undefined && current.enabled !== config.enabled;
+  const head = (state: EditorState) => state.selection.main.head;
   view.dispatch({
-    effects: setPrettyNativeConfigEffect.of(config),
+    effects: [
+      setPrettyNativeConfigEffect.of(config),
+      ...(toggled ? [EditorView.scrollIntoView(head(view.state), { y: "nearest" })] : []),
+    ],
     ...(annotations ? { annotations: [...annotations] } : {}),
   });
+  // The reflow moves the selection head; it stays in view.
+  if (toggled) keepPositionInView(view, head);
 }

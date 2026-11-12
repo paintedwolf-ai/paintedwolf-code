@@ -210,7 +210,7 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 	if err != nil {
 		return ctx, nil, err
 	}
-	grant, err := confine.ResolveSocketRequest(credentials.Socket())
+	service, releaseService, err := confine.ServeHostSocket(credentials.Socket())
 	if err != nil {
 		_ = credentials.Close()
 		return ctx, nil, err
@@ -218,17 +218,22 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 	launchTC := tc
 	launchTC.Files.SessionReadPaths = append(slices.Clone(tc.Files.SessionReadPaths), admitted.reads...)
 	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), admitted.writes...)
-	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), []confine.SocketGrant{grant})
+	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), []confine.HostService{service})
 	if err != nil {
+		releaseService()
 		_ = credentials.Close()
 		return ctx, nil, err
 	}
-	if agent := grantedSSHAgent(ctx, tc); agent != "" {
-		plan = plan.WithExtraEnv("SSH_AUTH_SOCK=" + agent)
+	if agent, ok := grantedSSHAgent(ctx, tc); ok {
+		// The launch dials the capability's endpoint, which differs from the
+		// agent's own path where confinement relays sockets.
+		reference, _ := confine.SocketEndpointReferences(agent.ApprovedPath)
+		plan = plan.WithExtraEnv("SSH_AUTH_SOCK=" + reference)
 	}
 	credentials.Admit(admitted.urls...)
 	done := func() {
 		release(context.WithoutCancel(ctx))
+		releaseService()
 		_ = credentials.Close()
 	}
 	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials}), done, nil
