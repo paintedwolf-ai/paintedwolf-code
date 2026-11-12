@@ -163,6 +163,12 @@ func TestHTTPReadinessDenialIsTerminalStructuredOutcome(t *testing.T) {
 }
 
 func TestConditionMonitorCannotResolveAfterDeadline(t *testing.T) {
+	// Every dial reaches the approval gate; this test is about the deadline,
+	// so its probe is approved.
+	confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
+		return true
+	})
+	t.Cleanup(func() { confine.SetEgressResolver(nil) })
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		time.Sleep(120 * time.Millisecond)
 		w.WriteHeader(http.StatusNoContent)
