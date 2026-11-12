@@ -91,12 +91,12 @@ func (d *ProgramDispatcher) InvokeEvaluator(ctx context.Context, request command
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
-	return d.invokeHost(ctx, request, streams, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	return d.invokeHost(ctx, request, streams, false, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		return body(ctx, streams)
 	})
 }
 
-func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, launches bool, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	spec, ok := d.run.commands[request.OperationID]
 	if !ok {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("evaluator operation is not catalogued")
@@ -112,6 +112,9 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 		return ownerFailure(err), err
 	}
 	arguments := map[string]any{"argv": request.Argv.Values(), "source_unit_id": request.Invocation.SourceUnitID, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte}
+	if launches {
+		arguments = d.run.nativeArguments(arguments, definition.ReadOnlyFacts().Contract, nil)
+	}
 	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, nil)
 	if err != nil {
 		return d.prepareChildFailure(streams, spec.Name, request, err)
