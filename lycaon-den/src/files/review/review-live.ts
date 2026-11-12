@@ -112,7 +112,7 @@ type ProjectLive = {
   landed: Map<string, Landing>;
   /** `null` while a landing's stats are not yet known. */
   stats: Map<string, ReviewChangeStats | null>;
-  /** Rows the linger shows, in the order they appeared; a past row is a landing's last match. */
+  /** Rows shown, in the order they appeared; a past row can still match a landing that arrives late. */
   shown: ReadonlyMap<string, Lingered<ReviewLiveRow>>;
   rows: readonly ShownLiveRow[];
   linger: Linger<ReviewLiveRow>;
