@@ -4,7 +4,7 @@ import { shouldShowNoFolderBanner } from "./nofolder-banner.ts";
 describe("shouldShowNoFolderBanner", () => {
   const ready = {
     isDraft: false,
-    rootCount: 0,
+    agentRootCount: 0,
     dismissed: false,
     chatReady: true,
   };
@@ -18,8 +18,8 @@ describe("shouldShowNoFolderBanner", () => {
   });
 
   it("hides when any folder is attached", () => {
-    expect(shouldShowNoFolderBanner({ ...ready, rootCount: 1 })).toBe(false);
-    expect(shouldShowNoFolderBanner({ ...ready, rootCount: 2 })).toBe(false);
+    expect(shouldShowNoFolderBanner({ ...ready, agentRootCount: 1 })).toBe(false);
+    expect(shouldShowNoFolderBanner({ ...ready, agentRootCount: 2 })).toBe(false);
   });
 
   it("hides after session-local dismiss for this project", () => {

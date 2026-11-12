@@ -1,12 +1,13 @@
 package confine
 
 import (
-	"github.com/lycaon/lycaon/internal/fspath"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync/atomic"
+
+	"github.com/lycaon/lycaon/internal/fspath"
 )
 
 // keyMaterialPathsSource supplies the catalogued key-material floor, installed
@@ -14,13 +15,17 @@ import (
 // stores are read together at every refusal, so both are pack data.
 var keyMaterialPathsSource atomic.Pointer[func() []string]
 
-// SetKeyMaterialPathsSource installs the pack-derived key-material floor.
-func SetKeyMaterialPathsSource(fn func() []string) {
-	if fn == nil {
-		keyMaterialPathsSource.Store(nil)
-		return
+// SetKeyMaterialPathsSource installs the pack-derived key-material floor and
+// returns the one it replaced.
+func SetKeyMaterialPathsSource(fn func() []string) (previous func() []string) {
+	var next *func() []string
+	if fn != nil {
+		next = &fn
 	}
-	keyMaterialPathsSource.Store(&fn)
+	if old := keyMaterialPathsSource.Swap(next); old != nil {
+		return *old
+	}
+	return nil
 }
 
 // KeyMaterialHomeRelPaths returns the floor with the catalogue's `~/` prefix and
@@ -53,13 +58,23 @@ func keyMaterialTreeRoots() []string {
 	return expandHomePaths(catalogedKeyMaterialPaths())
 }
 
+var keyMaterialPathsMemo sourceFloorMemo
+
+// keyMaterialPathsResolved canonicalizes the key-material floor once per
+// source and home directory.
+func keyMaterialPathsResolved() []string {
+	return keyMaterialPathsMemo.get(keyMaterialPathsSource.Load(), func() []string {
+		return resolveEach(keyMaterialTreeRoots())
+	})
+}
+
 // KeyMaterialWritePaths returns resolved protected key paths.
-func KeyMaterialWritePaths() []string { return resolveEach(keyMaterialTreeRoots()) }
+func KeyMaterialWritePaths() []string { return keyMaterialPathsResolved() }
 
 // KeyMaterialReadDenyPaths is the command-plane read floor: the same key trees,
 // denied for reads until a declared read_path or credential_store grant opens
 // an exception. CLI credential files outside this floor stay readable.
-func KeyMaterialReadDenyPaths() []string { return resolveEach(keyMaterialTreeRoots()) }
+func KeyMaterialReadDenyPaths() []string { return keyMaterialPathsResolved() }
 
 var osCredentialStoreRelDirs = []string{
 	filepath.Join("Library", "Keychains"),
@@ -104,14 +119,20 @@ func isOSCredentialStoreDenyPath(p string) bool {
 // access to the host OS credential store).
 var credentialStorePathsSource atomic.Pointer[func() []string]
 
-// SetCredentialStorePathsSource installs the pack-derived CLI credential-file write floor paths.
-func SetCredentialStorePathsSource(fn func() []string) {
-	if fn == nil {
-		credentialStorePathsSource.Store(nil)
-		return
+// SetCredentialStorePathsSource installs the pack-derived CLI credential-file
+// write floor paths and returns the ones it replaced.
+func SetCredentialStorePathsSource(fn func() []string) (previous func() []string) {
+	var next *func() []string
+	if fn != nil {
+		next = &fn
 	}
-	credentialStorePathsSource.Store(&fn)
+	if old := credentialStorePathsSource.Swap(next); old != nil {
+		return *old
+	}
+	return nil
 }
+
+var credentialStorePathsMemo sourceFloorMemo
 
 // CredentialStorePaths returns resolved catalogued CLI credential-file write floor paths.
 func CredentialStorePaths() []string {
@@ -119,7 +140,9 @@ func CredentialStorePaths() []string {
 	if fn == nil {
 		return nil
 	}
-	return resolveEach(expandHomePaths((*fn)()))
+	return credentialStorePathsMemo.get(fn, func() []string {
+		return resolveEach(expandHomePaths((*fn)()))
+	})
 }
 
 func expandHomePaths(paths []string) []string {
@@ -219,7 +242,7 @@ func linuxCredentialStoreReadRoots() []string {
 	if shareCanonical == "" {
 		shareCanonical = shareLexical
 	}
-	controlRoots := resolveEach(controlPlaneReadDenyRoots())
+	controlRoots := controlPlaneReadDenyRootsResolved()
 	seen := map[string]bool{}
 	var out []string
 	add := func(p string) {
@@ -274,4 +297,35 @@ func mergeSortedStrings(a, b []string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// sourceFloorMemo holds a pack-source floor resolved for one installed source
+// and home directory; a new source or home re-resolves. Config-dir floors are
+// never memoized: the config dir may be retargeted at runtime.
+type sourceFloorMemo struct {
+	current atomic.Pointer[sourceResolvedFloor]
+}
+
+type sourceResolvedFloor struct {
+	src   *func() []string
+	home  string
+	paths []string
+}
+
+func (m *sourceFloorMemo) get(src *func() []string, resolve func() []string) []string {
+	home := homeDir()
+	if c := m.current.Load(); c != nil && c.src == src && c.home == home {
+		return c.paths
+	}
+	paths := resolve()
+	m.current.Store(&sourceResolvedFloor{src: src, home: home, paths: paths})
+	return paths
+}
+
+func homeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
 }

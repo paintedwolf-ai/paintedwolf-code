@@ -9,7 +9,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/git"
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -61,11 +60,6 @@ type bisect struct {
 }
 
 func runBisect(ctx context.Context, p Prepared, tc tools.ToolContext, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
-	// The form decomposes the agent's one command into host-driven plumbing:
-	// state reads, lease-governed state writes, and checkouts whose argv the
-	// host constructs. The plumbing runs at host authority; the form's launch
-	// stays agent-bound and the run's check keeps its program confinement.
-	ctx = gitexec.WithHostPurpose(ctx, "bisect_plumbing")
 	b := &bisect{ctx: ctx, p: p, tc: tc, root: repo.Root, out: out, stderr: stderr}
 	var err error
 	if b.state, err = git.ReadBisect(ctx, b.root); err != nil {

@@ -90,6 +90,7 @@ import { selectionHistoryField } from "./selection-history.ts";
 import { shortcutPlatform } from "../../../shortcuts/platform.ts";
 import { cssFontFamilyForEditor } from "../../../settings/editor/editor-prefs.ts";
 import { REVEAL_FLASH_MS } from "../../../ui/reveal-flash.ts";
+import { keepPositionInView } from "./editor-settled-scroll.ts";
 
 const setArrivalFlash = StateEffect.define<{
   line: number;
@@ -699,6 +700,7 @@ export function emphasizeAndScrollToLine(
       EditorView.scrollIntoView(selection.anchor, { y: "center" }),
     ],
   });
+  keepPositionInView(view, (state) => state.selection.main.anchor, "center");
 }
 
 /** Leaves selection and scroll in place. */

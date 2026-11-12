@@ -219,6 +219,12 @@ func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJo
 		return err
 	}
 	if err := b.registerRecovery(bootrecovery.Entry{
+		Name: "editor-only-root-chats", Kind: bootrecovery.KindReconcile, Phase: bootrecovery.PhaseBuild,
+		After: []string{"project-promotions"}, Run: b.sessions.Manager.ProjectControl.ReassignSessionsOffEditorOnlyRoots,
+	}); err != nil {
+		return err
+	}
+	if err := b.registerRecovery(bootrecovery.Entry{
 		Name: "source-file-requests", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 		After: []string{"source-mutations", "editor-documents"}, Run: b.server.Server.Sources.Mutations.RecoverFileOperations,
 	}); err != nil {
@@ -445,11 +451,7 @@ func wireDestinationConfig(b *serveBuilder) error {
 			if b.storage.Projects != nil {
 				if list, err := b.storage.Projects.List(b.startup.ctx); err == nil {
 					if p := project.FindByRootPath(list, projectDir); p != nil {
-						for _, r := range p.Roots {
-							if r.Path != "" {
-								roots = append(roots, r.Path)
-							}
-						}
+						roots = append(roots, project.RootPaths(p)...)
 					}
 				}
 			}

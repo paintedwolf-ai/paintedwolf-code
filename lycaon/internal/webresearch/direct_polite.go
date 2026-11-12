@@ -226,7 +226,7 @@ func probeAllowedByRobots(ctx context.Context, pageURL string) bool {
 	return urlAllowedByRobots(body, pageURL)
 }
 
-func politeGuardedGet(ctx context.Context, u *url.URL, accept string, checkRobots bool) (*http.Response, string, error) {
+func politeGuardedGet(ctx context.Context, u *url.URL, accept string, limit int64, checkRobots bool) (*http.Response, string, error) {
 	beforeHop := func(ctx context.Context, hopURL *url.URL) (func(), error) {
 		if checkRobots && !probeAllowedByRobots(ctx, hopURL.String()) {
 			return nil, errRobotsBlocked
@@ -236,7 +236,7 @@ func politeGuardedGet(ctx context.Context, u *url.URL, accept string, checkRobot
 	recordHop := func(hopURL *url.URL, resp *http.Response) {
 		politeRecord(hopURL.Host, resp.StatusCode, resp.Header.Get("Retry-After"))
 	}
-	return guardedGetWithHopPolicy(ctx, u, accept, beforeHop, recordHop)
+	return guardedGetWithHopPolicy(ctx, u, accept, limit, beforeHop, recordHop)
 }
 
 // resetPoliteness clears gates and robots caches; tests shrink the pacing
