@@ -175,6 +175,8 @@ func TestDestinationFactCarriesTheAddressOrigin(t *testing.T) {
 		"source":         {cmd: confine.EgressCommand{Image: ingestion.ToolFetchURL}, retrieval: true},
 		"displayed link": {cmd: confine.EgressCommand{Image: ingestion.ToolFetchURL, Origin: confine.AddressDisplayed}, displayed: true},
 		"authored":       {cmd: authored},
+		"named host":     {cmd: confine.EgressCommand{Image: ingestion.ToolWebSearch, NamedHosts: []string{"example.com"}}},
+		"unnamed host":   {cmd: confine.EgressCommand{Image: ingestion.ToolWebSearch, NamedHosts: []string{"other.example"}}, retrieval: true},
 		"command":        {cmd: confine.EgressCommand{ToolName: "command", Origin: confine.AddressDisplayed}},
 	} {
 		fact := destinationFact(tc.cmd, ep, "", "")

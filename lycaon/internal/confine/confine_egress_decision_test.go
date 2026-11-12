@@ -142,3 +142,39 @@ func TestAgentAuthoredAddressesReachTheGate(t *testing.T) {
 		})
 	}
 }
+
+// A host the agent named in a retrieval request, or one beneath it, reaches
+// the gate; the request's other hosts stay its sources.
+func TestNamedHostsReachTheGate(t *testing.T) {
+	cmd := EgressCommand{SessionID: "s1", Image: "web_search", NamedHosts: []string{"named.example"}}
+	for host, authored := range map[string]bool{
+		"named.example":       true,
+		"Named.Example":       true,
+		"www.named.example":   true,
+		"notnamed.example":    false,
+		"example":             false,
+		"named.example.other": false,
+		"result.example":      false,
+	} {
+		t.Run(host, func(t *testing.T) {
+			if got := cmd.OriginOf(host) == AddressAuthored; got != authored {
+				t.Fatalf("authored = %v, want %v", got, authored)
+			}
+			b := newTestBroker()
+			reached := false
+			b.resolver = func(context.Context, EgressCommand, egressproxy.Endpoint, *EgressDetectionCitation) bool {
+				reached = true
+				return true
+			}
+			dial := cmd
+			dial.ToolCallID = "call-" + host
+			ep := egressproxy.Endpoint{Host: host, Transport: egressproxy.TransportHTTPRequest, Port: 443}
+			if !b.decideAttributedEndpoint(context.Background(), dial, ep) {
+				t.Fatal("the dial was refused")
+			}
+			if reached != authored {
+				t.Fatalf("reached the gate = %v, want %v", reached, authored)
+			}
+		})
+	}
+}

@@ -23,6 +23,7 @@ func sourceAlways(string, string) confine.AddressOrigin { return confine.Address
 type gateRecorder struct {
 	mu    sync.Mutex
 	dials []confine.EgressCommand
+	hosts []string
 	ports []uint16
 	allow bool
 }
@@ -34,6 +35,7 @@ func recordGate(t *testing.T, allow bool) *gateRecorder {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		rec.dials = append(rec.dials, cmd)
+		rec.hosts = append(rec.hosts, ep.Host)
 		rec.ports = append(rec.ports, ep.Port)
 		return rec.allow
 	})
@@ -124,7 +126,7 @@ func TestFetchURLStatesHowTheChatCameByTheAddress(t *testing.T) {
 				}
 				return
 			}
-			if len(dials) != 1 || dials[0].Origin != tc.want || confine.RetrievalDial(dials[0]) {
+			if len(dials) != 1 || dials[0].Origin != tc.want || confine.RetrievalDial(dials[0], "") {
 				t.Fatalf("want one dial at the gate with origin %d: %+v", tc.want, dials)
 			}
 		})
