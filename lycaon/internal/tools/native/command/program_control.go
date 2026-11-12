@@ -3,6 +3,7 @@ package command
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"io"
@@ -168,8 +169,16 @@ func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprog
 	}
 	outClass := classifyOutputStream(streams.Output)
 	errClass := classifyOutputStream(streams.Error)
-	streams, retain := d.run.childOutputs(request, streams)
-	defer func() { retain(ctx, result, err) }()
+	streams, retain, captureErr := d.run.childOutputs(ctx, request, streams)
+	if captureErr != nil {
+		d.run.finishOpTracker(ctx, tracker, outClass, false, errClass, false)
+		return ownerFailure(captureErr), captureErr
+	}
+	defer func() {
+		if retainErr := retain(ctx, result, err); retainErr != nil {
+			err = errors.Join(err, retainErr)
+		}
+	}()
 	streams, finishProvenance := d.run.wrapProducerStreams(ctx, tracker, outClass, errClass, streams)
 	defer finishProvenance()
 	return body(ctx, streams)

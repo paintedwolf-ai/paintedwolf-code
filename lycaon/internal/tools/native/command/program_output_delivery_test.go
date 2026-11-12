@@ -69,7 +69,7 @@ func TestWindowStreamOutputSnapsToLineBoundariesAndRendersNotice(t *testing.T) {
 
 func TestPublishOutputAndParseSource(t *testing.T) {
 	outputDir := t.TempDir()
-	testutil.FailErr(t, "publishOutputCopy", scratch.PublishCommandOutput(outputDir, "prog-42", "stdout", strings.NewReader("alpha\nbeta\n")))
+	testutil.FailErr(t, "publishOutputCopy", scratch.PublishCommandOutput(outputDir, scratch.CommandOutput{ProgramID: "prog-42", Stream: "stdout"}, strings.NewReader("alpha\nbeta\n")))
 	target := filepath.Join(outputDir, "prog-42.stdout")
 	info, err := os.Stat(target)
 	testutil.FailErr(t, "stat output copy", err)
