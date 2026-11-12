@@ -235,6 +235,26 @@ func (o *Owners) Prepare(ctx context.Context, request commandprogram.OperationRe
 	return prepared, nil
 }
 
+// SelectMode names the effect mode argv selects, as Prepare does, within
+// memory. A sed script read from a file is classified only once it is read,
+// so argv alone cannot say for it.
+func (o *Owners) SelectMode(ctx context.Context, memory *toolcontract.ProgramMemory, argv commandprogram.Fields) (string, bool) {
+	if len(argv) == 0 {
+		return "", false
+	}
+	owners := *o
+	owners.Revisions.Memory = memory
+	prepared, err := owners.Prepare(ctx, commandprogram.OperationRequest{OperationID: argv[0].Value, Argv: argv})
+	if err != nil {
+		return "", false
+	}
+	defer prepared.Close()
+	if prepared.Argv.Command == "sed" && argvFlag(prepared.Argv, "-f") && prepared.Mode != "-i" {
+		return "", false
+	}
+	return prepared.Mode, prepared.Mode != ""
+}
+
 // PrepareNative projects script-file effects before the child approval while
 // preserving the streaming invocation's source capture and execution pin.
 func (o *Owners) PrepareNative(ctx context.Context, frame *projectpaths.ProgramPaths, ports Ports, request commandprogram.OperationRequest) (Prepared, error) {

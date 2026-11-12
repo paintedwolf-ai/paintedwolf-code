@@ -21,9 +21,11 @@ import {
   type SourceEditorHandlers,
 } from "../../components/source/editor/codemirror-theme.ts";
 import {
-  applyPrettyNativeConfig,
-  createPrettyNativeDecorationsExtension,
-} from "../../components/source/pretty/pretty-native-layout.ts";
+  applyPrettyConfig,
+  createPrettyExtension,
+  prettyOutcomeListener,
+  prettyOutcomeOf,
+} from "../../components/source/pretty/pretty-layout.ts";
 import { applyBufferReveal, hasPendingReveal } from "./files-editor-reveal.ts";
 import { restoreEditorScrollTop } from "../../components/source/editor/editor-view-state.ts";
 import { lineGutterExtension } from "../../components/source/annotations/line-gutter.ts";
@@ -46,6 +48,7 @@ import {
   clearPrettyDisplayTab,
   isPrettyDisplayEnabled,
   registerPrettySurfaceCapability,
+  setPrettyLayoutOutcome,
   togglePrettyDisplayPref,
 } from "./pretty-display-state.ts";
 import { filesGutterContextExtension } from "./files-gutter-context.ts";
@@ -121,7 +124,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         const next = togglePrettyDisplayPref(projectId, key);
         const v = binding.view;
         if (v) {
-          applyPrettyNativeConfig(
+          applyPrettyConfig(
             v,
             { enabled: next, path: buffer().path },
             [documentSynchronization.of(true)],
@@ -183,12 +186,13 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       const replica = editorReplica(buffer().documentId);
       if (replica) rebindFilesCollaboration(reused, replica);
       applyEditable(reused, canEdit);
-      applyPrettyNativeConfig(
+      applyPrettyConfig(
         reused,
         { enabled: initialPrettyEnabled, path },
         [documentSynchronization.of(true)],
       );
       setSimplifiedDisplay(sourceUsesSimplifiedDisplay(reused.state));
+      setPrettyLayoutOutcome(projectId, key, prettyOutcomeOf(reused.state));
       if (plan.scrollTop > 0) {
         setEditorScrollTop(reused, plan.scrollTop);
         restoreEditorScrollTop(reused, plan.scrollTop);
@@ -201,10 +205,8 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       const replica = editorReplica(buffer().documentId);
       const hostExtensions = [
         filesCollaborationExtension(replica),
-        createPrettyNativeDecorationsExtension({
-          enabled: initialPrettyEnabled,
-          path,
-        }),
+        createPrettyExtension({ enabled: initialPrettyEnabled, path }),
+        prettyOutcomeListener((outcome) => setPrettyLayoutOutcome(projectId, key, outcome)),
         filesGutterContextExtension,
         hunkPlaybackExtension,
         lineGutterExtension,
@@ -254,6 +256,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         el,
       );
       bindView(created);
+      setPrettyLayoutOutcome(projectId, key, prettyOutcomeOf(created.state));
       // Reattachment applies the current editability.
       applyEditable(created, canEdit);
       completeFilesEditorAttach({
@@ -325,7 +328,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
     const v = editorView();
     if (!v) return;
     untrack(() => {
-      applyPrettyNativeConfig(
+      applyPrettyConfig(
         v,
         { enabled, path },
         [documentSynchronization.of(true)],

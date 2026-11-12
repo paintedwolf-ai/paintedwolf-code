@@ -49,6 +49,19 @@ func TestCatalogClientEnvIsOnlyALocalSocketClientVariable(t *testing.T) {
 			t.Errorf("%s client_env accepted", name)
 		}
 	}
+	data, err := os.ReadFile(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "host", "host-resources.yaml"))
+	testutil.FailErr(t, "read shipped catalog", err)
+	catalog, err := ParseCatalog(data, "built-in")
+	testutil.FailErr(t, "parse shipped catalog", err)
+	for _, resource := range catalog.Resources {
+		for _, realization := range resource.Realizations {
+			for _, connection := range realization.Connections {
+				if connection.Mode == ConnectionLocalService && connection.Transport == LocalServiceUnixSocket && connection.ClientEnv == "" {
+					t.Errorf("%s: a local socket without a client variable leaves its client on its own endpoint", resource.ID)
+				}
+			}
+		}
+	}
 }
 
 // A declared resource points its client at the socket the action reviews.

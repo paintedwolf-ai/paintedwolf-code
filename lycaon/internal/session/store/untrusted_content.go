@@ -160,8 +160,16 @@ func (ev *sqlEvidence) RecordContact(ctx context.Context, sessionID, host string
 }
 
 func contactRecord(host string, contact evidence.Contact) (evidence.Record, bool) {
-	if contact == evidence.ContactRetrieval {
+	switch contact {
+	case evidence.ContactNone:
+		// No contact: nothing was dialed, so there is no record.
+		return evidence.Record{}, false
+	case evidence.ContactRetrieval:
 		return evidence.RetrievedHostRecord(host)
+	case evidence.ContactAudited:
+		return evidence.AuditedHostRecord(host)
+	case evidence.ContactOwn:
+		return evidence.DialedHostRecord(host)
 	}
 	return evidence.DialedHostRecord(host)
 }
