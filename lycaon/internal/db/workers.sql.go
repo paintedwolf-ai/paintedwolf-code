@@ -529,8 +529,8 @@ func (q *Queries) InsertWorker(ctx context.Context, arg InsertWorkerParams) erro
 }
 
 const insertWorkerDependency = `-- name: InsertWorkerDependency :exec
-INSERT INTO worker_dependencies (worker_id, producer_worker_id, base_result_id, operation_id, created_at)
-VALUES (?, ?, ?, ?, ?)
+INSERT INTO worker_dependencies (worker_id, dependency_key, producer_worker_id, base_result_id, operation_id, created_at)
+VALUES (?, COALESCE(?4, 'base'), ?4, ?5, ?, ?)
 `
 
 type InsertWorkerDependencyParams struct {
@@ -767,18 +767,26 @@ func (q *Queries) ListWorkerConsumerIDs(ctx context.Context, producerWorkerID sq
 
 const listWorkerDependencies = `-- name: ListWorkerDependencies :many
 SELECT worker_id, producer_worker_id, base_result_id, operation_id, created_at
-FROM worker_dependencies WHERE worker_id = ? ORDER BY created_at, producer_worker_id
+FROM worker_dependencies WHERE worker_id = ? ORDER BY created_at, dependency_key
 `
 
-func (q *Queries) ListWorkerDependencies(ctx context.Context, workerID string) ([]WorkerDependencies, error) {
+type ListWorkerDependenciesRow struct {
+	WorkerID         string         `json:"worker_id"`
+	ProducerWorkerID sql.NullString `json:"producer_worker_id"`
+	BaseResultID     sql.NullString `json:"base_result_id"`
+	OperationID      string         `json:"operation_id"`
+	CreatedAt        string         `json:"created_at"`
+}
+
+func (q *Queries) ListWorkerDependencies(ctx context.Context, workerID string) ([]ListWorkerDependenciesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listWorkerDependencies, workerID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []WorkerDependencies
+	var items []ListWorkerDependenciesRow
 	for rows.Next() {
-		var i WorkerDependencies
+		var i ListWorkerDependenciesRow
 		if err := rows.Scan(
 			&i.WorkerID,
 			&i.ProducerWorkerID,

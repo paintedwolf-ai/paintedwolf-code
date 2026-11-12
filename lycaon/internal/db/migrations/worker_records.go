@@ -252,8 +252,8 @@ func legacyScopeMode(scopeJSON string) string {
 // migrateWorkerDependencies carries prerequisites of jobs still held on them
 // over to their workers. Settled jobs' prerequisites are history.
 func migrateWorkerDependencies(ctx context.Context, tx *sql.Tx) error {
-	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO worker_dependencies (worker_id, producer_worker_id, operation_id, created_at)
-		SELECT cr.worker_id, pr.worker_id, 'migration:prerequisite:' || p.worker_job_id || ':' || p.prerequisite_id, c.created_at
+	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO worker_dependencies (worker_id, dependency_key, producer_worker_id, operation_id, created_at)
+		SELECT cr.worker_id, pr.worker_id, pr.worker_id, 'migration:prerequisite:' || p.worker_job_id || ':' || p.prerequisite_id, c.created_at
 		FROM worker_prerequisites p
 		JOIN worker_jobs c ON c.id = p.worker_job_id AND c.status = 'held'
 		JOIN worker_rounds cr ON cr.job_id = p.worker_job_id

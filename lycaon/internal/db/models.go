@@ -2184,6 +2184,7 @@ type WorkerDecisions struct {
 
 type WorkerDependencies struct {
 	WorkerID         string         `json:"worker_id"`
+	DependencyKey    string         `json:"dependency_key"`
 	ProducerWorkerID sql.NullString `json:"producer_worker_id"`
 	BaseResultID     sql.NullString `json:"base_result_id"`
 	OperationID      string         `json:"operation_id"`

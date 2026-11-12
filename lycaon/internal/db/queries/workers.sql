@@ -167,12 +167,12 @@ SELECT worker_id, generation, source_result_id, promotion_ref, preparation_ref,
 FROM worker_workspace_preparations WHERE worker_id = ? ORDER BY generation DESC LIMIT 1;
 
 -- name: InsertWorkerDependency :exec
-INSERT INTO worker_dependencies (worker_id, producer_worker_id, base_result_id, operation_id, created_at)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO worker_dependencies (worker_id, dependency_key, producer_worker_id, base_result_id, operation_id, created_at)
+VALUES (?, COALESCE(sqlc.narg(producer_worker_id), 'base'), sqlc.narg(producer_worker_id), sqlc.narg(base_result_id), ?, ?);
 
 -- name: ListWorkerDependencies :many
 SELECT worker_id, producer_worker_id, base_result_id, operation_id, created_at
-FROM worker_dependencies WHERE worker_id = ? ORDER BY created_at, producer_worker_id;
+FROM worker_dependencies WHERE worker_id = ? ORDER BY created_at, dependency_key;
 
 -- name: ListWorkerProducerIDs :many
 SELECT producer_worker_id FROM worker_dependencies

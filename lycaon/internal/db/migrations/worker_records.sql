@@ -30,6 +30,7 @@ CREATE TABLE workers (
 CREATE UNIQUE INDEX idx_workers_workflow_work
     ON workers(workflow_run_id, workflow_phase, workflow_work_id)
     WHERE workflow_run_id IS NOT NULL AND workflow_work_id != '';
+CREATE INDEX idx_workers_workflow_run ON workers(workflow_run_id);
 CREATE INDEX idx_workers_project ON workers(project_id, created_at, id);
 
 -- A worker's child session is a child of its coordinator's session.
@@ -62,7 +63,7 @@ CREATE TABLE worker_rounds (
     PRIMARY KEY (worker_id, ordinal),
     CHECK ((instruction_first_seq IS NULL) = (instruction_last_seq IS NULL)),
     CHECK (instruction_first_seq IS NULL OR (instruction_first_seq > 0 AND instruction_last_seq >= instruction_first_seq))
-) STRICT;
+) STRICT, WITHOUT ROWID;
 
 CREATE UNIQUE INDEX idx_worker_rounds_one_unsettled ON worker_rounds(worker_id) WHERE settled_at IS NULL;
 
@@ -123,6 +124,8 @@ CREATE TABLE worker_message_deliveries (
     )
 ) STRICT, WITHOUT ROWID;
 
+CREATE INDEX idx_worker_message_deliveries_recipient ON worker_message_deliveries(recipient_session_id);
+
 -- How each result was handled. Accounting and the fate of its changes are
 -- separate: accounting lands nothing, and shelved changes may still land or
 -- be rejected. Landed and rejected are final.
@@ -144,6 +147,7 @@ CREATE TABLE worker_result_dispositions (
 ) STRICT;
 
 CREATE INDEX idx_worker_result_dispositions_worker ON worker_result_dispositions(worker_id);
+CREATE INDEX idx_worker_result_dispositions_landed ON worker_result_dispositions(landed_change_id);
 
 CREATE TRIGGER worker_result_dispositions_binding BEFORE INSERT ON worker_result_dispositions
 WHEN NOT EXISTS (
@@ -171,25 +175,27 @@ CREATE TABLE worker_workspace_preparations (
     operation_id TEXT NOT NULL CHECK (operation_id != ''),
     created_at TEXT NOT NULL,
     PRIMARY KEY (worker_id, generation)
-) STRICT;
+) STRICT, WITHOUT ROWID;
 
--- Prerequisites name a producer worker, or an exact result to start on.
+CREATE INDEX idx_worker_workspace_preparations_source ON worker_workspace_preparations(source_result_id);
+
+-- Prerequisites name a producer worker, or an exact result to start on. The
+-- key holds which: the producer's worker id, or 'base' for the one result.
 CREATE TABLE worker_dependencies (
     worker_id TEXT NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
+    dependency_key TEXT NOT NULL,
     producer_worker_id TEXT REFERENCES workers(id) ON DELETE CASCADE,
     base_result_id TEXT REFERENCES worker_results(id) ON DELETE CASCADE,
     operation_id TEXT NOT NULL CHECK (operation_id != ''),
     created_at TEXT NOT NULL,
+    PRIMARY KEY (worker_id, dependency_key),
     CHECK ((producer_worker_id IS NULL) != (base_result_id IS NULL)),
-    CHECK (producer_worker_id IS NULL OR producer_worker_id != worker_id)
-) STRICT;
+    CHECK (producer_worker_id IS NULL OR producer_worker_id != worker_id),
+    CHECK (dependency_key = COALESCE(producer_worker_id, 'base'))
+) STRICT, WITHOUT ROWID;
 
-CREATE UNIQUE INDEX idx_worker_dependencies_producer
-    ON worker_dependencies(worker_id, producer_worker_id) WHERE producer_worker_id IS NOT NULL;
-CREATE UNIQUE INDEX idx_worker_dependencies_base
-    ON worker_dependencies(worker_id) WHERE base_result_id IS NOT NULL;
-CREATE INDEX idx_worker_dependencies_upstream
-    ON worker_dependencies(producer_worker_id) WHERE producer_worker_id IS NOT NULL;
+CREATE INDEX idx_worker_dependencies_producer ON worker_dependencies(producer_worker_id);
+CREATE INDEX idx_worker_dependencies_base ON worker_dependencies(base_result_id);
 
 CREATE TRIGGER worker_dependencies_same_session BEFORE INSERT ON worker_dependencies
 WHEN NEW.producer_worker_id IS NOT NULL AND NOT EXISTS (
@@ -210,6 +216,8 @@ CREATE TABLE worker_operations (
     receipt_json TEXT NOT NULL CHECK (json_valid(receipt_json)),
     created_at TEXT NOT NULL
 ) STRICT;
+
+CREATE INDEX idx_worker_operations_session ON worker_operations(session_id);
 
 CREATE TRIGGER worker_operations_immutable BEFORE UPDATE ON worker_operations
 BEGIN SELECT RAISE(ABORT, 'operation receipts are immutable'); END;
