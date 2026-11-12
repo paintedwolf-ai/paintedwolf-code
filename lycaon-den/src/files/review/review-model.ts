@@ -476,10 +476,6 @@ const LIVE_VERB: Record<ReviewLiveState, string> = {
   reserved: "reserved",
 };
 
-function liveVerb(row: ShownLiveRow): string {
-  return row.phase === "past" ? `was ${LIVE_VERB[row.state]}` : LIVE_VERB[row.state];
-}
-
 /** Worker drafts open read-only until they land. */
 function liveSandbox(state: ReviewLiveState): boolean {
   return state === "sandbox" || state === "ready";
@@ -532,7 +528,7 @@ function liveOnlyRow(live: ShownLiveRow): ReviewListRow {
     presentationEffectId: null,
     presentationOrdinal: null,
     contributors: [],
-    liveVerb: liveVerb(live),
+    liveVerb: LIVE_VERB[live.state],
     livePhase: live.phase,
     sandbox: liveSandbox(live.state),
     added: null,
@@ -557,7 +553,7 @@ export function buildReviewRows(
     const stat = f.commit ? undefined : stats.get(key);
     const row: ReviewListRow = {
       ...f,
-      liveVerb: current ? liveVerb(current) : null,
+      liveVerb: current ? LIVE_VERB[current.state] : null,
       livePhase: current?.phase ?? null,
       sandbox: current ? liveSandbox(current.state) : false,
       added: stat?.added ?? null,

@@ -347,11 +347,13 @@ describe("buildReviewRows", () => {
     expect(a?.unpresentedAgentEffects).toBe(1);
   });
 
-  it("reads editing that ended without landing as past", () => {
-    const rows = buildReviewRows(files, [live("src/a.ts", "editing", { phase: "past" }), live("src/new.ts", "editing", { phase: "past" })]);
-    expect(rows.find((r) => r.path === "src/a.ts")).toMatchObject({ liveVerb: "was editing", livePhase: "past" });
-    expect(rows.find((r) => r.path === "src/new.ts")).toMatchObject({ liveVerb: "was editing", livePhase: "past" });
-    expect(buildReviewRows(files, [live("src/a.ts", "editing")]).find((r) => r.path === "src/a.ts")?.livePhase).toBe("live");
+  it("shows editing that ended without landing as it was shown live, marked past", () => {
+    for (const path of ["src/a.ts", "src/new.ts"]) {
+      const shownLive = buildReviewRows(files, [live(path, "editing")]).find((r) => r.path === path)!;
+      const shownPast = buildReviewRows(files, [live(path, "editing", { phase: "past" })]).find((r) => r.path === path)!;
+      expect(shownLive.livePhase).toBe("live");
+      expect(shownPast).toEqual({ ...shownLive, livePhase: "past" });
+    }
   });
 
   it("orders in-flight rows ahead of settled ones", () => {
