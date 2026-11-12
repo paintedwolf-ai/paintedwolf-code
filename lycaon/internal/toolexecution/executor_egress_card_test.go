@@ -142,7 +142,10 @@ func TestRepeatedHostsKeepBalancedTaskScope(t *testing.T) {
 
 func TestCheckpointOwnerReleaseKeepsCurrentBrokerApproval(t *testing.T) {
 	confine.SetEgressPosture(confine.PostureAsk)
-	t.Cleanup(func() { confine.SetEgressPosture(confine.PostureObserve) })
+	t.Cleanup(func() {
+		confine.SetEgressPosture(confine.PostureObserve)
+		confine.ForgetEgressSession("current-owner")
+	})
 	old, oldManager := gatherExecutor(t)
 	current, currentManager := gatherExecutor(t)
 	// Parsed HTTP is ingestion at Balanced; Strict reviews the first host.
