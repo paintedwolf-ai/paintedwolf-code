@@ -22,6 +22,8 @@ type Round struct {
 	SettledAt           string `json:"settled_at,omitempty"`
 	// CheckpointID is what the round published; a result handle resolves to it.
 	CheckpointID string `json:"checkpoint_id,omitempty"`
+	// ResultID is the round's immutable result once its job settled.
+	ResultID string `json:"result_id,omitempty"`
 }
 
 func roundFromRow(r db.WorkerRounds) Round {
@@ -159,7 +161,13 @@ func (s *Store) Rounds(ctx context.Context, actor Actor, workerID string) ([]Rou
 	}
 	out := make([]Round, 0, len(rows))
 	for _, r := range rows {
-		out = append(out, roundFromRow(r))
+		round := roundFromRow(db.WorkerRounds{
+			WorkerID: r.WorkerID, Ordinal: r.Ordinal, JobID: r.JobID, InstructionFirstSeq: r.InstructionFirstSeq,
+			InstructionLastSeq: r.InstructionLastSeq, ExecutionTarget: r.ExecutionTarget, ReviewSubjectJson: r.ReviewSubjectJson,
+			OperationID: r.OperationID, CreatedAt: r.CreatedAt, SettledAt: r.SettledAt, CheckpointID: r.CheckpointID,
+		})
+		round.ResultID = r.ResultID
+		out = append(out, round)
 	}
 	return out, nil
 }

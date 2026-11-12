@@ -61,9 +61,11 @@ SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
 FROM worker_rounds WHERE job_id = ?;
 
 -- name: ListWorkerRounds :many
-SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
-       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
-FROM worker_rounds WHERE worker_id = ? ORDER BY ordinal;
+SELECT r.worker_id, r.ordinal, r.job_id, r.instruction_first_seq, r.instruction_last_seq,
+       r.execution_target, r.review_subject_json, r.operation_id, r.created_at, r.settled_at, r.checkpoint_id,
+       COALESCE(res.id, '') AS result_id
+FROM worker_rounds r LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+WHERE r.worker_id = ? ORDER BY r.ordinal;
 
 -- name: SettleWorkerRound :execrows
 UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
