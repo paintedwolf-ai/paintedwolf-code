@@ -67,7 +67,6 @@ type CommandGuidanceSnapshotInput struct {
 	IsCoordinator         bool
 	OfferedTools          []string
 	DeferredTools         []string
-	OmittedUnits          map[string]bool
 	RootCount             int
 	ProjectDir            string
 	SessionScratchDir     string
@@ -126,13 +125,13 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if strings.TrimSpace(in.AgentType) == "implementer" {
 		templates = append(templates, "partials/sandbox-confinement.md")
 	}
-	if in.IsCoordinator && (cmdMutation || hasVerify || hasTerminal) && !in.OmittedUnits["coordinator-host-runner"] {
+	if in.IsCoordinator && (cmdMutation || hasVerify || hasTerminal) {
 		templates = append(templates, "units/coordinator-host-runner.md")
 	}
-	if (cmdMutation || hasTerminal) && (hasCommandOffered || hasTerminal) && !in.OmittedUnits["secure-by-default-run"] {
+	if (cmdMutation || hasTerminal) && (hasCommandOffered || hasTerminal) {
 		templates = append(templates, "units/secure-by-default-run.md")
 	}
-	if (cmdMutation || hasVerify || hasTerminal) && (hasCommandOffered || hasVerify || hasTerminal) && !in.OmittedUnits["runner-operating-procedure"] {
+	if (cmdMutation || hasVerify || hasTerminal) && (hasCommandOffered || hasVerify || hasTerminal) {
 		templates = append(templates, "units/runner-operating-procedure.md", "partials/capability-request-grammar.md")
 	}
 	return templates, ExtractCommandGuidanceFacts(vars)

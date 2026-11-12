@@ -80,7 +80,7 @@ func renderPersona(ctx context.Context, engine *FileTemplateEngine, agentID stri
 			return "", fmt.Errorf("agent tool profiles for %q: %w", id, err)
 		}
 		var visible []string
-		var loaded, omitted map[string]bool
+		var loaded map[string]bool
 		if extra != nil {
 			if raw, ok := extra["visible_tools"].([]string); ok {
 				visible = raw
@@ -88,25 +88,16 @@ func renderPersona(ctx context.Context, engine *FileTemplateEngine, agentID stri
 			if raw, ok := extra["loaded_tools"].(map[string]bool); ok {
 				loaded = raw
 			}
-			if raw, ok := extra["omitted_units"].(map[string]bool); ok {
-				omitted = raw
-			}
 		}
 		if err := MergeAgentToolSurfaceVars(toolProfile, visible, hints, SurfaceTurn{Loaded: loaded, Schemas: schemas}, data, profiles); err != nil {
 			return "", fmt.Errorf("agent tool surface for %q: %w", id, err)
 		}
 		offered, _ := data["agent_tool_names"].([]string)
-		floor := make([]string, 0, len(offered))
-		for _, name := range offered {
-			if !loaded[name] {
-				floor = append(floor, name)
-			}
-		}
 		unitCatalog, err := UnitCatalogFor(eff)
 		if err != nil {
 			return "", fmt.Errorf("unit catalog for %q: %w", id, err)
 		}
-		blocks, err := RenderUnitSlots(ctx, engine, unitCatalog, UnitSelectionVars(promptunit.HostWorker, "", floor, offered, omitted), data)
+		blocks, err := RenderUnitSlots(ctx, engine, unitCatalog, UnitSelectionVars(promptunit.HostWorker, "", offered), data)
 		if err != nil {
 			return "", fmt.Errorf("units for %q: %w", id, err)
 		}

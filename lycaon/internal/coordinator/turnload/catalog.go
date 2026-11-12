@@ -1,5 +1,5 @@
-// Package turnload selects additional tools and omittable instructions from model scores.
-// Engine failures preserve the surface floor and all instructions.
+// Package turnload selects additional tools and skills from model scores.
+// Engine failures preserve the surface floor.
 package turnload
 
 import (
@@ -25,7 +25,7 @@ const (
 )
 
 // Version is the decisions.yaml format this package reads.
-const Version = 2
+const Version = 3
 
 // StateSpec bounds the state every decision reads.
 type StateSpec struct {
@@ -38,9 +38,8 @@ type StateSpec struct {
 // ToolsSpec declares how loadable tool schemas are scored: one multi question
 // whose options are the loadable tools, each answered as its own yes/no.
 type ToolsSpec struct {
-	// Independent encodes every option of the turn's multi questions, tools
-	// and guides alike, on its own row, so a head's answer for one option
-	// never depends on the rest of the roster.
+	// Independent encodes every tool option on its own row, so a head's
+	// answer for one tool never depends on the rest of the roster.
 	Independent bool `yaml:"independent" json:"independent,omitempty"`
 	// Options are the release's validated preload vocabulary, separate from open retrieval.
 	Options map[string]string `yaml:"-" json:"options,omitempty"`
@@ -49,21 +48,6 @@ type ToolsSpec struct {
 	// OptionWords bounds each tool's option text after its name.
 	OptionWords int     `yaml:"option_words" json:"option_words"`
 	LoadAt      float64 `yaml:"load_at" json:"load_at"`
-}
-
-// GuidesSpec declares how instruction units are scored: one multi question
-// whose options are the units.
-type GuidesSpec struct {
-	// Omittable lists units whose removal was calibrated for the installed head.
-	// An empty list keeps every unit. Other scores remain diagnostic.
-	Omittable []string `yaml:"omittable" json:"omittable"`
-
-	Question    string `yaml:"question" json:"question"`
-	OptionWords int    `yaml:"option_words" json:"option_words"`
-	// OmitBelow is the P(true) under which a confident unit is omitted; 0 keeps
-	// every unit.
-	OmitBelow       float64 `yaml:"omit_below" json:"omit_below"`
-	ConfidenceFloor float64 `yaml:"confidence_floor" json:"confidence_floor"`
 }
 
 // KindSpec declares the turn-kind choice.
@@ -110,7 +94,6 @@ type TurnSpec struct {
 	DeadlineMS int              `yaml:"deadline_ms" json:"deadline_ms"`
 	Tools      ToolsSpec        `yaml:"tools" json:"tools"`
 	Skills     SkillPreloadSpec `yaml:"skills" json:"skills"`
-	Guides     GuidesSpec       `yaml:"guides" json:"guides"`
 	Kind       KindSpec         `yaml:"kind" json:"kind"`
 }
 
@@ -257,18 +240,6 @@ func (c Catalog) validate() error {
 	}
 	if c.Turn.Tools.Independent && c.Turn.Kind.VetoTools {
 		fault("independent heads answer no kind question, so the kind veto must be off")
-	}
-	if strings.TrimSpace(c.Turn.Guides.Question) == "" {
-		fault("turn.guides.question is required")
-	}
-	if c.Turn.Guides.OptionWords <= 0 {
-		fault("turn.guides.option_words must be positive")
-	}
-	if c.Turn.Guides.OmitBelow < 0 || c.Turn.Guides.OmitBelow > 1 {
-		fault("turn.guides.omit_below must be in [0,1]")
-	}
-	if !unit(c.Turn.Guides.ConfidenceFloor) {
-		fault("turn.guides.confidence_floor must be in (0,1]")
 	}
 	if strings.TrimSpace(c.Turn.Kind.Instructions) == "" {
 		fault("turn.kind.instructions is required")

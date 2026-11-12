@@ -159,10 +159,9 @@ func TestCompiledMachineRefreshesCatalogVisibility(t *testing.T) {
 }
 
 type selectionFixture struct {
-	loaded, omitted map[string]bool
-	full            bool
+	loaded map[string]bool
+	full   bool
 }
 
-func (s *selectionFixture) LoadedTools(string) map[string]bool  { return s.loaded }
-func (s *selectionFixture) OmittedUnits(string) map[string]bool { return s.omitted }
-func (s *selectionFixture) FullCatalog(string) bool             { return s.full }
+func (s *selectionFixture) LoadedTools(string) map[string]bool { return s.loaded }
+func (s *selectionFixture) FullCatalog(string) bool            { return s.full }

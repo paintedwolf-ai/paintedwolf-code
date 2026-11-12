@@ -113,7 +113,7 @@ func RenderPromptDump(
 	if err != nil {
 		return "", fmt.Errorf("unit catalog: %w", err)
 	}
-	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, current, floor, offered, nil)
+	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, current, offered)
 	blocks, err := prompts.RenderUnitSlots(ctx, prompts.UnitRendererFor(engine), unitCatalog, sel, base)
 	if err != nil {
 		return "", fmt.Errorf("render units: %w", err)

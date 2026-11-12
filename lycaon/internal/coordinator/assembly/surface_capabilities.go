@@ -54,7 +54,6 @@ func (e *promptSurface) mergeVisibleTools(ctx context.Context, sess *api.Session
 	vars["visible_tools"] = names
 	// A persona renders the units and loaded tools of its own session.
 	vars["loaded_tools"] = e.loadedTools(sess)
-	vars["omitted_units"] = e.omittedUnits(sess)
 }
 func (e *promptSurface) mergeEffectivePromptSurface(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, vars map[string]any) {
 	if e == nil || sess == nil || vars == nil {

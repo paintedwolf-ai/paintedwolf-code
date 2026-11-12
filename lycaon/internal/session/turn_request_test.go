@@ -134,8 +134,8 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 			t.Fatal("decision receipt missing")
 		}
 		if unavailable {
-			if !receipt.Abstained || len(engine.Decisions) != 0 || len(mgr.Coordinator.Loading.OmittedUnits(sess.ID)) != 0 {
-				t.Fatal("unavailable engine did not preserve guidance")
+			if !receipt.Abstained || len(engine.Decisions) != 0 {
+				t.Fatal("unavailable engine was consulted")
 			}
 		} else if len(engine.Decisions) == 0 {
 			t.Fatal("available engine was not consulted")
@@ -143,14 +143,14 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 	}
 }
 
-func TestTurnOptimizationFailureRestoresGuidance(t *testing.T) {
+func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 	st := store.NewMemory()
 	mgr := NewHost(st, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, nil)
 	sess, err := st.Create(t.Context(), api.CreateSessionRequest{}, "project-1")
 	testutil.FailErr(t, "create session", err)
 	mgr.Coordinator.Loading.SetDecider(&decidetest.Fake{Err: errors.New("engine failed")})
 	ledger := turnload.NewLedger()
-	ledger.Restore(sess.ID, turnload.Standing{Omitted: []string{"survey-first-pass"}, Skill: &turnload.SkillPreload{Name: "old", Body: "old"}}, nil)
+	ledger.Restore(sess.ID, turnload.Standing{Skill: &turnload.SkillPreload{Name: "old", Body: "old"}}, nil)
 	mgr.Coordinator.Loading.SetLedger(ledger)
 	mgr.Coordinator.Nudges.SetLedger(ledger)
 	decision := mgr.Coordinator.Loading.Begin(t.Context(), sess, sess.ID, promptinput.Input{Text: "inspect the logs"}, nil, "implement_investigate", "coordinator", "u1")
@@ -160,7 +160,7 @@ func TestTurnOptimizationFailureRestoresGuidance(t *testing.T) {
 	mgr.Coordinator.Loading.Finish(t.Context(), sess, sess.ID, tools.ToolContext{}, decision)
 	receipt, found, err := st.LatestTurnLoadReceipt(t.Context(), sess.ID)
 	testutil.FailErr(t, "read failed decision", err)
-	if !found || !receipt.Abstained || len(mgr.Coordinator.Loading.OmittedUnits(sess.ID)) != 0 || ledger.Preload(sess.ID) != nil {
+	if !found || !receipt.Abstained || ledger.Preload(sess.ID) != nil {
 		t.Fatalf("failed decision left stale prompt selection: %+v", decision)
 	}
 }

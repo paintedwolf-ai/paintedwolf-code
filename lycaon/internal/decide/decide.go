@@ -84,12 +84,9 @@ type Answers map[string]Answer
 type Head string
 
 const (
-	// HeadTurnLoad answers turn decisions: which units a request needs and
-	// the turn kind.
+	// HeadTurnLoad answers turn decisions: which loadable tools a request
+	// needs and the turn kind.
 	HeadTurnLoad Head = "turn-load"
-	// HeadGuideLoad answers the guides question when a release ships a
-	// separate head for it; otherwise the turn-load head answers.
-	HeadGuideLoad Head = "guide-load"
 	// HeadUnitRank ranks host unit cards against a request: skills for the
 	// roster and skills_read, loadable tool schemas for request_tools.
 	HeadUnitRank Head = "unit-rank"
@@ -102,7 +99,7 @@ const (
 )
 
 // heads is the catalog of heads a shared backbone can serve.
-var heads = []Head{HeadTurnLoad, HeadGuideLoad, HeadUnitRank, HeadCodeRank, HeadWebRank, HeadRetention}
+var heads = []Head{HeadTurnLoad, HeadUnitRank, HeadCodeRank, HeadWebRank, HeadRetention}
 
 // Heads lists every head a shared backbone can serve, in catalog order.
 func Heads() []Head { return append([]Head(nil), heads...) }
