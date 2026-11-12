@@ -28,6 +28,18 @@ func TestMain(m *testing.M) {
 	gittestsetup.Enable()
 	// Status cache tests count loads; a watcher event invalidates one mid-load.
 	repochange.DisableWatchersForTest()
+	// Detached auto-maintenance rewrites shared templates while tests clone them.
+	for key, value := range map[string]string{
+		"GIT_CONFIG_COUNT":   "2",
+		"GIT_CONFIG_KEY_0":   "maintenance.auto",
+		"GIT_CONFIG_VALUE_0": "false",
+		"GIT_CONFIG_KEY_1":   "gc.autoDetach",
+		"GIT_CONFIG_VALUE_1": "false",
+	} {
+		if err := os.Setenv(key, value); err != nil {
+			panic(err)
+		}
+	}
 	root, err := os.MkdirTemp("", "git-templates-*")
 	if err != nil {
 		panic(err)
