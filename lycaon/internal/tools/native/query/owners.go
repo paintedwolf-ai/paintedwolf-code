@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -119,19 +120,7 @@ type Prepared struct {
 
 // SelectMode names the effect mode argv selects, as Prepare does.
 func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
-	if len(argv) == 0 {
-		return "", false
-	}
-	spec, ok := o.specs[argv[0].Value]
-	if !ok {
-		return "", false
-	}
-	bound, err := commandprogram.CatalogBinder{}.Bind(spec, argv)
-	if err != nil {
-		return "", false
-	}
-	mode := queryMode(spec, bound)
-	return mode, mode != ""
+	return nativeutility.SelectMode(o.specs, argv, queryMode)
 }
 
 func queryMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
