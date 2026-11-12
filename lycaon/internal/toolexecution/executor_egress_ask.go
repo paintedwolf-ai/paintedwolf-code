@@ -42,8 +42,8 @@ func destinationFact(cmd confine.EgressCommand, ep egressproxy.Endpoint, configu
 		ConfiguredBy:   configured,
 		PublicRegistry: registry,
 		Opaque:         tunnelled,
-		Retrieval:      confine.RetrievalDial(cmd),
-		DisplayedLink:  confine.DisplayedLinkDial(cmd),
+		Retrieval:      confine.RetrievalDial(cmd, ep.Host),
+		DisplayedLink:  confine.DisplayedLinkDial(cmd, ep.Host),
 	}
 }
 

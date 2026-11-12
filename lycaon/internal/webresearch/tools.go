@@ -97,8 +97,12 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			}
 		}
 		contest, _ := args["unredact"].(string)
-		ctx = withToolEgressGate(ctx, deps, tctx, toolEgress{image: "web_search", declaredHosts: DeclaredEndpointHosts(settings, deps.Registry)}, contest,
-			webSearchDestination(settings, deps.Registry))
+		dial := toolEgress{
+			image:         "web_search",
+			declaredHosts: DeclaredEndpointHosts(settings, deps.Registry),
+			namedHosts:    queryNamedHosts(query),
+		}
+		ctx = withToolEgressGate(ctx, deps, tctx, dial, contest, webSearchDestination(settings, deps.Registry))
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		var discoverer DirectDiscoverer
 		if getFactory != nil {
@@ -181,6 +185,8 @@ type toolEgress struct {
 	image         string
 	declaredHosts []string
 	origin        confine.AddressOrigin
+	// namedHosts are hosts the agent wrote into the request.
+	namedHosts []string
 }
 
 // withToolEgressGate attaches the invocation's dial facts and secret fanout.
@@ -202,6 +208,7 @@ func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolConte
 		Image:         dial.image,
 		DeclaredHosts: dial.declaredHosts,
 		Origin:        dial.origin,
+		NamedHosts:    dial.namedHosts,
 	})
 	return withSecretScreen(ctx, deps.SecretMatcher, deps.SecretAsk, contestToken, fanout)
 }
