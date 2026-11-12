@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/sourcescope"
 	"github.com/lycaon/lycaon/internal/watchfd"
 )
 
@@ -148,6 +149,9 @@ func (r *WatcherRegistry) Ensure(ctx context.Context, projectDir string) {
 		return
 	}
 	if info, err := os.Stat(key); err != nil || !info.IsDir() {
+		return
+	}
+	if sourcescope.ObservedOnDemand(key) {
 		return
 	}
 	r.mu.Lock()

@@ -232,7 +232,7 @@ func validateCredentialStoreDBusSocket(candidate string, uid int) (string, bool)
 		}
 		checkPaths = append(checkPaths, filepath.Clean(linkTarget))
 	}
-	for _, root := range resolveEach(controlPlaneReadDenyRoots()) {
+	for _, root := range controlPlaneReadDenyRootsResolved() {
 		for _, p := range checkPaths {
 			if PathAtOrUnder(p, root) {
 				return "", false

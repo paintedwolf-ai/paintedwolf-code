@@ -1,6 +1,10 @@
 package hitl
 
-import "context"
+import (
+	"context"
+	"errors"
+	"time"
+)
 
 type stopCtxKey struct{}
 
@@ -18,4 +22,24 @@ func WaitContext(ctx context.Context) context.Context {
 		return stop
 	}
 	return ctx
+}
+
+// IOContext bounds network I/O by timeout on the stop context, so time spent
+// waiting for approval never consumes the caller's deadline. The caller's
+// explicit cancellation still ends the I/O; only its deadline is set aside.
+func IOContext(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	stop := WaitContext(ctx)
+	io, cancel := context.WithTimeout(stop, timeout)
+	if stop == ctx {
+		return io, cancel
+	}
+	detach := context.AfterFunc(ctx, func() {
+		if !errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			cancel()
+		}
+	})
+	return io, func() {
+		detach()
+		cancel()
+	}
 }

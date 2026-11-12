@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/api/requestscope"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/project"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -41,6 +42,7 @@ func (s *Handler) resolveWorktreeScope(w http.ResponseWriter, r *http.Request, s
 		s.responses.InternalError(w, r, err)
 		return worktreeScope{}, false
 	}
+	repos = reposInRoots(repos, roots)
 	return worktreeScope{
 		sess:     sess,
 		project:  p,
@@ -58,4 +60,23 @@ func (s *Handler) acquireIdleMutation(w http.ResponseWriter, sessionID string) (
 		return nil, false
 	}
 	return unlock, true
+}
+
+// reposInRoots keeps repositories that hold one of roots, so a chat binds
+// worktrees only where its agent works.
+func reposInRoots(repos []git.RepoRef, roots []projectroot.RootRef) []git.RepoRef {
+	ids := make(map[string]struct{}, len(roots))
+	for _, root := range roots {
+		ids[root.ID] = struct{}{}
+	}
+	out := make([]git.RepoRef, 0, len(repos))
+	for _, repo := range repos {
+		for _, id := range repo.RootIDs {
+			if _, ok := ids[id]; ok {
+				out = append(out, repo)
+				break
+			}
+		}
+	}
+	return out
 }
