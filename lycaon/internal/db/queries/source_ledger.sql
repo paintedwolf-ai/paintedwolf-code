@@ -984,6 +984,14 @@ SELECT version_id,document_id,epoch,spans_json,revision FROM source_version_text
 INSERT INTO source_effect_contributions (effect_id,contribution_id) VALUES (?,?)
 ON CONFLICT DO NOTHING;
 
+-- ListEffectsForContributions lists the effects that published each
+-- contribution, earliest first; callers bound the id list.
+-- name: ListEffectsForContributions :many
+SELECT ec.effect_id, ec.contribution_id
+FROM source_effect_contributions ec JOIN source_effects e ON e.id = ec.effect_id
+WHERE ec.contribution_id IN (sqlc.slice(contribution_ids))
+ORDER BY e.ordinal, ec.effect_id;
+
 -- name: ListSelectedTextContributions :many
 WITH selection_input AS (SELECT CAST(sqlc.arg(ranges_json) AS TEXT) AS ranges),
 selected AS (

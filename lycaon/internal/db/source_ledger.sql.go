@@ -1561,6 +1561,48 @@ func (q *Queries) LatestStructuralSourceCheckpoint(ctx context.Context, projectI
 	return i, err
 }
 
+const listEffectsForContributions = `-- name: ListEffectsForContributions :many
+SELECT ec.effect_id, ec.contribution_id
+FROM source_effect_contributions ec JOIN source_effects e ON e.id = ec.effect_id
+WHERE ec.contribution_id IN (/*SLICE:contribution_ids*/?)
+ORDER BY e.ordinal, ec.effect_id
+`
+
+// ListEffectsForContributions lists the effects that published each
+// contribution, earliest first; callers bound the id list.
+func (q *Queries) ListEffectsForContributions(ctx context.Context, contributionIds []string) ([]SourceEffectContributions, error) {
+	query := listEffectsForContributions
+	var queryParams []interface{}
+	if len(contributionIds) > 0 {
+		for _, v := range contributionIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:contribution_ids*/?", strings.Repeat(",?", len(contributionIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:contribution_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SourceEffectContributions
+	for rows.Next() {
+		var i SourceEffectContributions
+		if err := rows.Scan(&i.EffectID, &i.ContributionID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listJobChangedFiles = `-- name: ListJobChangedFiles :many
 SELECT e.file_id, e.root_id, e.path, e.op, MAX(e.ordinal) AS last_ordinal,
        MAX(e.created_ts) AS last_ts
