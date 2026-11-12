@@ -164,12 +164,13 @@ func sessionProcesses(ctx context.Context, jobs *SessionJobs, statuses []jobStat
 }
 
 type procCandidate struct {
-	id      string
-	pid     int
-	handle  string
-	comm    string
-	cmd     string
-	owned   bool
+	id     string
+	pid    int
+	handle string
+	comm   string
+	cmd    string
+	// job marks a session job; every other candidate descends from one.
+	job     bool
 	started uint64
 }
 
@@ -199,15 +200,20 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 	var matches []procCandidate
 	seenHandles := map[string]bool{}
 	selfPID := os.Getpid()
+	// Every visible process is the session's own: a job, or a process
+	// descending from one, which pkill signals by its kernel instance.
 	for _, proc := range visible {
 		if proc.PID == selfPID {
 			continue
 		}
-		job, owned := ownedByPID[proc.PID]
-		owned = owned && job.Process.Instance == proc.Instance
+		job, isJob := ownedByPID[proc.PID]
+		isJob = isJob && job.Process.Instance == proc.Instance
+		if !isJob {
+			job = jobStatus{}
+		}
 		cmdLine := proc.Command
 		comm := proc.Name
-		if owned {
+		if isJob {
 			seenHandles[job.Handle] = true
 			if job.CommandLine != "" {
 				cmdLine = job.CommandLine
@@ -225,7 +231,7 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 				handle:  job.Handle,
 				comm:    comm,
 				cmd:     cmdLine,
-				owned:   owned,
+				job:     isJob,
 				started: proc.StartOrder,
 			})
 		}
@@ -250,7 +256,7 @@ func matchProcessCandidates(ctx context.Context, jobs *SessionJobs, pattern stri
 				handle: job.Handle,
 				comm:   comm,
 				cmd:    job.CommandLine,
-				owned:  true,
+				job:    true,
 			})
 		}
 	}
@@ -292,13 +298,13 @@ func pgrepBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 		for _, m := range matches {
 			switch {
 			case listFull:
-				if m.owned {
+				if m.job {
 					fmt.Fprintf(&out, "%s %s [session job]\n", m.id, m.cmd)
 				} else {
 					fmt.Fprintf(&out, "%s %s\n", m.id, m.cmd)
 				}
 			case listName:
-				if m.owned {
+				if m.job {
 					fmt.Fprintf(&out, "%s %s [session job]\n", m.id, m.comm)
 				} else {
 					fmt.Fprintf(&out, "%s %s\n", m.id, m.comm)
@@ -341,28 +347,16 @@ func pkillBuiltin(jobs *SessionJobs, spec toolcontract.CommandSpecification) com
 			}
 			return refusedResult("COMMAND_OPERAND_INVALID"), toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"command": "pkill", "pattern": operands[0], "word": operands[0], "reason": err.Error()})
 		}
-		var owned, foreign []procCandidate
-		for _, m := range matches {
-			if m.owned {
-				owned = append(owned, m)
-			} else {
-				foreign = append(foreign, m)
-			}
-		}
-		if len(owned) == 0 {
-			if len(foreign) > 0 {
-				reject := processNotOwned("pkill", foreign[0].id)
-				return ownerFailure(reject), reject
-			}
+		if len(matches) == 0 {
 			return toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: false, EffectCertainty: toolcontract.NoEffect}, nil
 		}
 		if newest || oldest {
-			owned = selectProcessAge(owned, newest)
+			matches = selectProcessAge(matches, newest)
 		}
-		if len(owned) == 0 {
+		if len(matches) == 0 {
 			return readResult(1), nil
 		}
-		for _, m := range owned {
+		for _, m := range matches {
 			ref := m.handle
 			if ref == "" {
 				ref = m.id
