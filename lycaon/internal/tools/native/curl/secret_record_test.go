@@ -122,13 +122,13 @@ func replaceReference(value any, ref, with string) any {
 func TestCurlPathTargetsNameEveryFileItTouches(t *testing.T) {
 	h := newHarness(t)
 	prepared, _, err := h.prepare("--cacert", "ca.pem", "--capath", "cas", "-E", "client.pem", "--key", "client.key",
-		"-T", "upload.bin", "-b", "cookies.txt", "-o", "out.txt", "-D", "headers.txt", "-c", "jar.txt", "http://127.0.0.1:9/api")
+		"-T", "upload.bin", "-b", "cookies.txt", "-o", "out.txt", "-D", "headers.txt", "-c", "jar.txt", "--unix-socket", "daemon.sock", "http://127.0.0.1:9/api")
 	testutil.FailErr(t, "prepare", err)
 	got := map[string]bool{}
 	for _, target := range prepared.Review.PathTargets {
 		got[target.Path] = target.Write
 	}
-	reads := []string{"ca.pem", "cas", "client.pem", "client.key", "upload.bin", "cookies.txt"}
+	reads := []string{"ca.pem", "cas", "client.pem", "client.key", "upload.bin", "cookies.txt", "daemon.sock"}
 	for _, path := range reads {
 		if write, ok := got[path]; !ok || write {
 			t.Errorf("read target %s: present %v, write %v", path, ok, write)

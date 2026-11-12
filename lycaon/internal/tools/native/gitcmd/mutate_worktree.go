@@ -178,7 +178,9 @@ func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir stri
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}
-		ctx, done, err := bindTargetLaunch(ctx, p, tc, writeRoot(bound.Resolved.Abs))
+		// Removing the directory's own entry writes its parent, as creating
+		// it did.
+		ctx, done, err := bindTargetLaunch(ctx, p, tc, filepath.Dir(bound.Resolved.Abs))
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}

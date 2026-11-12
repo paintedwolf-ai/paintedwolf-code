@@ -46,6 +46,23 @@ func TestRepositoryDirsFollowALinkedWorktree(t *testing.T) {
 	}
 }
 
+// A .git symlink to a gitfile opens what the gitfile names, as Git follows it.
+func TestRepositoryDirsFollowASymlinkedGitfile(t *testing.T) {
+	root, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "root", err)
+	main := filepath.Join(root, "main", ".git")
+	linked := filepath.Join(main, "worktrees", "feature")
+	mkdirs(t, filepath.Join(main, "objects"), linked, filepath.Join(root, "feature"), filepath.Join(root, "pointers"))
+	writeText(t, filepath.Join(linked, "commondir"), "../..\n")
+	writeText(t, filepath.Join(root, "pointers", "feature.gitfile"), "gitdir: "+linked+"\n")
+	testutil.FailErr(t, "link .git", os.Symlink(filepath.Join(root, "pointers", "feature.gitfile"), filepath.Join(root, "feature", ".git")))
+
+	own, _, ok := RepositoryDirs(filepath.Join(root, "feature"))
+	if want := []string{linked, main, filepath.Join(main, "objects")}; !ok || !slices.Equal(own, want) {
+		t.Fatalf("own %v (ok %v), want %v", own, ok, want)
+	}
+}
+
 // A bare repository's alternates, relative, quoted and chained, are the
 // object stores it reads; a symlinked store resolves to its target.
 func TestRepositoryDirsFollowAlternatesAndSymlinks(t *testing.T) {
