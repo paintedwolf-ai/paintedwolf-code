@@ -32,8 +32,10 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	defer done()
+	failed := true
+	defer func() { done(failed) }()
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
+	failed = err != nil || code != 0 || out.err != nil
 	if out.err != nil {
 		return settleMutationError(out.err, certainty)
 	}
@@ -58,13 +60,15 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	defer done()
+	failed := true
+	defer func() { done(failed) }()
 	fetchArgs := []string{"fetch"}
 	if has(p.Argv, "-q") {
 		fetchArgs = append(fetchArgs, "-q")
 	}
 	fetchArgs = append(fetchArgs, p.Argv.Operands().Values()...)
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, fetchArgs, out)
+	failed = err != nil || code != 0 || out.err != nil
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}
@@ -120,7 +124,8 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	defer done()
+	failed := true
+	defer func() { done(failed) }()
 	var flags []string
 	if has(p.Argv, "-q") {
 		flags = append(flags, "-q")
@@ -139,6 +144,7 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 	}
 	resolvedURL := resolveLocalCloneSource(dir, rawURL)
 	diagnostics, code, err := git.CloneCommand(ctx, resolvedURL, boundDest.Resolved.Abs, flags, out)
+	failed = err != nil || code != 0 || out.err != nil
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}
@@ -194,11 +200,12 @@ func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext,
 }
 
 // bindNetworkLaunch binds the command's confined launch for what was
-// admitted: a credential service scoped to its HTTP recipients, the local
-// repositories it may read or write, and the user's SSH agent when the call
-// holds that socket capability.
-func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, admitted admittedRemotes) (context.Context, func(), error) {
-	credentials, err := gitexec.StartAgentCredentials(ctx)
+// admitted: a credential service scoped to its HTTP recipients, answering
+// once the call holds the credential-store grant, the local repositories it
+// may read or write, and the user's SSH agent when the call holds that socket
+// capability. done settles the launch with whether Git failed.
+func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, admitted admittedRemotes) (context.Context, func(failed bool), error) {
+	credentials, err := gitexec.StartAgentCredentials(ctx, tc.Execution.CredentialStore)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -216,19 +223,44 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 		_ = credentials.Close()
 		return ctx, nil, err
 	}
-	if agent, ok := grantedSSHAgent(ctx, tc); ok {
+	agent, hasAgent := grantedSSHAgent(ctx, tc)
+	if hasAgent {
 		// The launch dials the capability's endpoint, which differs from the
 		// agent's own path where confinement relays sockets.
 		reference, _ := confine.SocketEndpointReferences(agent.ApprovedPath)
 		plan = plan.WithExtraEnv("SSH_AUTH_SOCK=" + reference)
 	}
 	credentials.Admit(admitted.urls...)
-	done := func() {
-		release(context.WithoutCancel(ctx))
+	done := func(failed bool) {
+		outcome := tools.AgentLaunchOutcome{Failed: failed}
+		if failed {
+			outcome.Refusals = withheldAuthority(ctx, admitted.urls, credentials.Declined(), hasAgent)
+		}
+		release(context.WithoutCancel(ctx), outcome)
 		releaseService()
 		_ = credentials.Close()
 	}
 	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials}), done, nil
+}
+
+// withheldAuthority is what a failed network command lacked that a grant
+// would supply: saved credentials Git asked for without the credential-store
+// grant, and the user's SSH agent for an SSH remote without its socket
+// capability. Each reads as a refusal the matching capability opens.
+func withheldAuthority(ctx context.Context, urls, declined []string, hasAgent bool) []confine.SandboxRefusal {
+	var refusals []confine.SandboxRefusal
+	for _, recipient := range declined {
+		refusals = append(refusals, confine.SandboxRefusal{Operation: "credential-read", Target: recipient, Process: "git", Count: 1, Recovery: confine.RecoverCredentialStore})
+	}
+	if agent := gitexec.HostSSHAgentSocket(ctx); agent != "" && !hasAgent && slices.ContainsFunc(urls, isSSHRemote) {
+		refusals = append(refusals, confine.SandboxRefusal{Operation: "network-outbound", Target: agent, Process: "ssh", Count: 1, Recovery: confine.RecoverSocketPath, Grant: agent})
+	}
+	return refusals
+}
+
+func isSSHRemote(raw string) bool {
+	lower := strings.ToLower(strings.TrimSpace(raw))
+	return strings.HasPrefix(lower, "ssh://") || !strings.Contains(lower, "://") && remoteNetworkHost(raw) != ""
 }
 
 // authorizeRemote admits one remote: network hosts through the egress gate,

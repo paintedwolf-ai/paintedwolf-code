@@ -84,6 +84,43 @@ func TestPrimaryCommandLinePipeline(t *testing.T) {
 	}
 }
 
+func TestPrimaryCommandLineArgv(t *testing.T) {
+	stages := []exec.Stage{{Name: "go", Args: []string{"version"}}}
+	tests := []struct {
+		name string
+		args map[string]any
+		want string
+	}{
+		{
+			name: "string slice argv",
+			args: map[string]any{"argv": []string{"git", "status", "--short"}},
+			want: "git status --short",
+		},
+		{
+			name: "any slice argv",
+			args: map[string]any{"argv": []any{"npm", "test", "--", "--run"}},
+			want: "npm test -- --run",
+		},
+		{
+			name: "non-string word refuses the argv",
+			args: map[string]any{"argv": []any{"npm", 3}},
+			want: "go version",
+		},
+		{
+			name: "empty argv falls through",
+			args: map[string]any{"argv": []any{}},
+			want: "go version",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if line := commandsurface.PrimaryCommandLine(tt.args, stages); line != tt.want {
+				t.Fatalf("line = %q, want %q", line, tt.want)
+			}
+		})
+	}
+}
+
 func TestParsePlanExportFolding(t *testing.T) {
 	stages, err := stagesOf(map[string]any{
 		"command": "export FOO=bar && go test ./...",
