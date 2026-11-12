@@ -127,6 +127,25 @@ export const AGENT_FILE_STATE_TEXT: Record<AgentFileState, string> = {
   reserved: "reserved",
 };
 
+/** How long agent activity stays shown, as past, after it ends. */
+export const AGENT_LINGER_MS = 8_000;
+
+/** Activity that stays shown after it ends; other states ask for action or last on their own. */
+export type AgentRecentKind = "editing" | "reading";
+
+export const AGENT_RECENT_TEXT: Record<AgentRecentKind, string> = {
+  editing: "was editing",
+  reading: "was reading",
+};
+
+export function agentRecentKind(state: AgentFileState | null): AgentRecentKind | null {
+  return state === "editing" || state === "reading" ? state : null;
+}
+
+export function agentRecentLabel(chat: AgentChat, kind: AgentRecentKind): string {
+  return `${chat.title}: ${AGENT_RECENT_TEXT[kind]} a moment ago`;
+}
+
 export type AgentFilePresence = {
   state: AgentFileState | null;
   /** The chat whose state the chip shows. */
@@ -135,6 +154,8 @@ export type AgentFilePresence = {
   highlight: AgentChat | null;
   /** Every fact about the file, strongest first, for tooltips and accessible names. */
   labels: readonly string[];
+  /** The strongest activity that stays shown after it ends, and its chat. */
+  recent: { chat: AgentChat; kind: AgentRecentKind } | null;
 };
 
 const OPERATION_VERB: Record<AgentIntentOperation, string> = {
@@ -172,7 +193,7 @@ const DRAFT_STATE: Record<AgentWorkerDraft["state"], AgentFileState> = {
   landing: "landing",
 };
 
-type FileFact = { state: AgentFileState | null; label: string };
+type FileFact = { state: AgentFileState | null; label: string; recent: AgentRecentKind | null };
 
 /** Projects every file an agent is working in or has read this turn. */
 export function projectAgentFiles(
@@ -194,17 +215,15 @@ export function projectAgentFiles(
     const name = (fact: string) => `${chat.title}: ${fact}`;
     const intentKeys = new Set(presence.intents.map((intent) => agentFileKey(intent.root_id, intent.path)));
     for (const intent of presence.intents) {
-      add(intent.root_id, intent.path, chat, {
-        state: intent.state === "awaiting_approval" ? "waiting" : "editing",
-        label: name(intentFact(intent)),
-      });
+      const state = intent.state === "awaiting_approval" ? "waiting" : "editing";
+      add(intent.root_id, intent.path, chat, { state, label: name(intentFact(intent)), recent: agentRecentKind(state) });
     }
     for (const activity of presence.activities) {
       if (activity.kind === "editing" && intentKeys.has(agentFileKey(activity.root_id, activity.path))) continue;
-      add(activity.root_id, activity.path, chat, { state: activity.kind, label: name(activity.kind) });
+      add(activity.root_id, activity.path, chat, { state: activity.kind, label: name(activity.kind), recent: activity.kind });
     }
     for (const draft of presence.worker_drafts) {
-      add(draft.root_id, draft.path, chat, { state: DRAFT_STATE[draft.state], label: name(draftFact(draft)) });
+      add(draft.root_id, draft.path, chat, { state: DRAFT_STATE[draft.state], label: name(draftFact(draft)), recent: null });
     }
     const readFiles = new Map<string, { rootId: string; path: string; stale: boolean }>();
     for (const read of presence.reads) {
@@ -216,6 +235,7 @@ export function projectAgentFiles(
       add(read.rootId, read.path, chat, {
         state: null,
         label: name(read.stale ? "read this turn, changed since" : "read this turn"),
+        recent: "reading",
       });
     }
   }
@@ -226,11 +246,13 @@ export function projectAgentFiles(
       || a.order - b.order);
     const strongest = list[0]!.state ? list[0]! : null;
     const byOrder = [...list].sort((a, b) => a.order - b.order);
+    const recent = list.find((fact) => fact.recent === "editing") ?? list.find((fact) => fact.recent === "reading");
     files.set(key, {
       state: strongest?.state ?? null,
       stateChat: strongest?.chat ?? null,
       highlight: byOrder[0]!.chat,
       labels: list.map((fact) => fact.label),
+      recent: recent?.recent ? { chat: recent.chat, kind: recent.recent } : null,
     });
   }
   return files;

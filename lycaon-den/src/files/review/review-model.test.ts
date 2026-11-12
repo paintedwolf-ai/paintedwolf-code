@@ -21,6 +21,7 @@ import {
   unpresentedAgentFileCount,
   type LiveRowScope,
   type ReviewLiveRow,
+  type ShownLiveRow,
   type ReviewLiveState,
 } from "./review-model.ts";
 
@@ -324,10 +325,11 @@ describe("buildReviewRows", () => {
     },
   ]);
 
-  const live = (path: string, state: ReviewLiveState, overrides: Partial<ReviewLiveRow> = {}): ReviewLiveRow => ({
+  const live = (path: string, state: ReviewLiveState, overrides: Partial<ShownLiveRow> = {}): ShownLiveRow => ({
     rootId: "r1",
     path,
     state,
+    phase: "live",
     chatId: "s1",
     chatTitle: "Work",
     turn: 3,
@@ -343,6 +345,13 @@ describe("buildReviewRows", () => {
     expect(a?.liveVerb).toBe("editing");
     expect(a?.steps).toHaveLength(1);
     expect(a?.unpresentedAgentEffects).toBe(1);
+  });
+
+  it("reads editing that ended without landing as past", () => {
+    const rows = buildReviewRows(files, [live("src/a.ts", "editing", { phase: "past" }), live("src/new.ts", "editing", { phase: "past" })]);
+    expect(rows.find((r) => r.path === "src/a.ts")).toMatchObject({ liveVerb: "was editing", livePhase: "past" });
+    expect(rows.find((r) => r.path === "src/new.ts")).toMatchObject({ liveVerb: "was editing", livePhase: "past" });
+    expect(buildReviewRows(files, [live("src/a.ts", "editing")]).find((r) => r.path === "src/a.ts")?.livePhase).toBe("live");
   });
 
   it("orders in-flight rows ahead of settled ones", () => {
