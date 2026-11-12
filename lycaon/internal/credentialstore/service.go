@@ -28,7 +28,7 @@ const (
 	NamespaceGitCredentials    = "git-credentials"
 	NamespaceCredentialFiles   = "credential-file-evidence"
 	NamespaceHostIdentity      = "host-identity"
-)
+	NamespaceDaemonToken       = "daemon-token")
 
 // Slot declares one validated namespace inside the shared encrypted vault.
 type Slot struct {
