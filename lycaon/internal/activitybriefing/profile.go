@@ -56,7 +56,7 @@ func decodeTarget(raw json.RawMessage) (wire.ToolActivityBriefingTarget, error) 
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&target); err != nil {
-		return target, fmt.Errorf("%w: %v", briefing.ErrInvalidTarget, err)
+		return target, fmt.Errorf("%w: %w", briefing.ErrInvalidTarget, err)
 	}
 	if strings.TrimSpace(target.SessionID) == "" || len(target.ToolCallIds) == 0 {
 		return target, fmt.Errorf("%w: session_id and tool_call_ids are required", briefing.ErrInvalidTarget)

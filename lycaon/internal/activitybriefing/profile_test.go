@@ -69,6 +69,7 @@ func generated(request briefing.Request) (calls int, lookups int) {
 			calls++
 		case briefing.Lookup:
 			lookups++
+		case briefing.Deterministic:
 		}
 	}
 	return calls, lookups

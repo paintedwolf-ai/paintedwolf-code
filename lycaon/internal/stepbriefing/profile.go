@@ -44,7 +44,7 @@ func decodeTarget(raw json.RawMessage) (wire.SourceStepBriefingTarget, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&target); err != nil {
-		return target, fmt.Errorf("%w: %v", briefing.ErrInvalidTarget, err)
+		return target, fmt.Errorf("%w: %w", briefing.ErrInvalidTarget, err)
 	}
 	if strings.TrimSpace(target.TargetKey) == "" {
 		return target, fmt.Errorf("%w: target_key is required", briefing.ErrInvalidTarget)
@@ -148,7 +148,7 @@ func (p *Profile) read(ctx context.Context, projectID string, target wire.Source
 		out.effects, err = p.ledger.EffectsInGroup(ctx, projectID, "", id)
 	}
 	if errors.Is(err, sourceledger.ErrGroupTooLarge) {
-		return out, fmt.Errorf("%w: %v", briefing.ErrTargetUnavailable, err)
+		return out, fmt.Errorf("%w: %w", briefing.ErrTargetUnavailable, err)
 	}
 	if err != nil {
 		return out, err
