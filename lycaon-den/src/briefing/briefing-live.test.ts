@@ -174,6 +174,24 @@ describe("briefing live store", () => {
     expect(client.calls).toHaveLength(1);
   });
 
+  it("keeps a result that settles before the request's reply arrives", async () => {
+    const clock = new FakeClock();
+    setBriefingClockForTests(clock);
+    const done = snapshot({ target_key: "quick", revision: "2", status: "complete" });
+    setBriefingClient(() => ({
+      ...stubClient([]),
+      requestBriefing: async () => {
+        applyBriefingEvent("p", { kind: "snapshot", snapshot: done });
+        return snapshot({ target_key: "quick", revision: "1", status: "pending" });
+      },
+    }));
+    const { view, dispose } = watch("p", { profileId: "tool_activity", ref: { session_id: "s", tool_call_ids: ["quick"] } });
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await settle();
+    expect(view().snapshot?.status).toBe("complete");
+    dispose();
+  });
+
   it("delivers one host target's events to every request shape that names it", async () => {
     const clock = new FakeClock();
     setBriefingClockForTests(clock);

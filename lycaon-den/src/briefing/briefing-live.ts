@@ -30,6 +30,8 @@ const systemClock: BriefingClock = {
 export const BRIEFING_DEBOUNCE_MS = 250;
 /** Inactive targets kept for instant reopen. */
 export const BRIEFING_INACTIVE_LIMIT = 512;
+/** Snapshots held for a request whose reply has not named its target yet. */
+const UNCLAIMED_LIMIT = 64;
 
 type Entry = {
   projectId: string;
@@ -50,13 +52,15 @@ type Store = {
   entries: Map<string, Entry>;
   /** Entries by the host target they resolved to; requests of different shapes can name one target. */
   byTargetKey: Map<string, Set<string>>;
+  /** Events no entry claimed yet: a quick attempt can settle before its reply arrives. */
+  unclaimed: Map<string, BriefingSnapshot>;
   /** Lowest epoch still valid for each project and profile. */
   resets: Map<string, bigint>;
 };
 
 const noClient = () => null;
 
-const store: Store = { client: noClient, clock: systemClock, entries: new Map(), byTargetKey: new Map(), resets: new Map() };
+const store: Store = { client: noClient, clock: systemClock, entries: new Map(), byTargetKey: new Map(), unclaimed: new Map(), resets: new Map() };
 
 /** Names where requests go; the connection binds the current host client. */
 export function setBriefingClient(client: () => BriefingsClient | null): void {
@@ -75,6 +79,7 @@ export function resetBriefingLiveForTests(): void {
   for (const entry of store.entries.values()) clearTimers(entry);
   store.entries.clear();
   store.byTargetKey.clear();
+  store.unclaimed.clear();
   store.resets.clear();
   store.client = noClient;
   store.clock = systemClock;
@@ -164,6 +169,9 @@ function apply(entry: Entry, snapshot: BriefingSnapshot, fromReconcile: boolean)
     const keys = store.byTargetKey.get(index) ?? new Set<string>();
     keys.add(entryKey(entry.projectId, entry.target));
     store.byTargetKey.set(index, keys);
+    const early = store.unclaimed.get(index);
+    store.unclaimed.delete(index);
+    if (early && isNewer(early, snapshot)) snapshot = early;
   }
   if (entry.reconcile !== undefined) {
     store.clock.clearTimeout(entry.reconcile);
@@ -268,12 +276,23 @@ export function applyBriefingEvent(projectId: string, event: BriefingEvent): voi
         entry.setView({ snapshot: null, stalled: false });
       }
     }
+    for (const [index, held] of store.unclaimed) {
+      if (index.startsWith(`${projectId}\0`) && BigInt(held.cache_epoch) < epochFloor(projectId, held.profile_id)) store.unclaimed.delete(index);
+    }
     return;
   }
   const snapshot = event.snapshot;
   if (event.kind !== "snapshot" || !snapshot) return;
-  const keys = store.byTargetKey.get(targetKeyIndex(projectId, snapshot.profile_id, snapshot.target_key));
-  for (const key of [...(keys ?? [])]) {
+  const index = targetKeyIndex(projectId, snapshot.profile_id, snapshot.target_key);
+  const keys = store.byTargetKey.get(index);
+  if (!keys) {
+    const held = store.unclaimed.get(index);
+    store.unclaimed.delete(index);
+    store.unclaimed.set(index, held && !isNewer(snapshot, held) ? held : snapshot);
+    if (store.unclaimed.size > UNCLAIMED_LIMIT) store.unclaimed.delete(store.unclaimed.keys().next().value!);
+    return;
+  }
+  for (const key of [...keys]) {
     const entry = store.entries.get(key);
     if (entry) apply(entry, snapshot, false);
   }
