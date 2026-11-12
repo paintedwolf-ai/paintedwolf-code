@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -123,6 +124,7 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 		engine := &decidetest.Fake{Unavailable: unavailable}
 		mgr.Coordinator.Loading.SetDecider(engine)
 		mgr.Coordinator.Loading.SetLedger(turnload.NewLedger())
+		mgr.Coordinator.Loading.SetPolicy(func() toolpolicy.Engine { return loadablePolicy{tools: []string{"verify"}} })
 		decision := mgr.Coordinator.Loading.Begin(t.Context(), sess, sess.ID, promptinput.Input{Text: "inspect the logs"}, nil, "implement_investigate", "coordinator", "u1")
 		if decision == nil {
 			t.Fatal("ordinary turn skipped optimization without a workflow declaration")
@@ -142,6 +144,19 @@ func TestTurnOptimizationRunsWithoutWorkflowOptIn(t *testing.T) {
 		}
 	}
 }
+
+// loadablePolicy permits the named tools, each offered as a deferred schema.
+type loadablePolicy struct{ tools []string }
+
+func (p loadablePolicy) ListForPrompt(context.Context, *api.Session, string) []tools.ToolMeta {
+	out := make([]tools.ToolMeta, 0, len(p.tools))
+	for _, name := range p.tools {
+		out = append(out, tools.ToolMeta{Name: name, Description: name, Deferred: true})
+	}
+	return out
+}
+
+func (loadablePolicy) EvaluateInvoke(context.Context, *api.Session, string, map[string]any) error { return nil }
 
 func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 	st := store.NewMemory()
