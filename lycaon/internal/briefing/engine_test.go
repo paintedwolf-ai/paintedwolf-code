@@ -203,6 +203,22 @@ func TestLookupSectionsNeverAdmitWork(t *testing.T) {
 	}
 }
 
+func TestWithoutAModelOnlyFallbacksAdmitWork(t *testing.T) {
+	engine, store, log := newTestEngine(t, nil)
+	snap, err := engine.Request(t.Context(), request("none", false, purposeSection("run tests", Generated), outcomeSection("exit 0")))
+	testutil.FailErr(t, "request", err)
+	if snap.Status != StatusComplete || snap.Sections[0].Result != nil || len(store.attempts) != 0 {
+		t.Fatalf("a model-less engine admitted work: %+v", snap)
+	}
+	binary := purposeSection("change a binary", Generated)
+	binary.Fallback = "Modified a binary asset."
+	_, err = engine.Request(t.Context(), request("bin", false, binary))
+	testutil.FailErr(t, "fallback request", err)
+	if done := receive(t, log.seen); done.Status != StatusComplete || done.Sections[0].Result.Source != SourceFallback {
+		t.Fatalf("fallback did not fill: %+v", done)
+	}
+}
+
 func TestFallbackStandsInAndUpgradesAtTheSameHash(t *testing.T) {
 	generator := &countingGenerator{text: "**  **"}
 	engine, store, log := newTestEngine(t, generator)
