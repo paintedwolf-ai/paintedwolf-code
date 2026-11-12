@@ -224,18 +224,6 @@ func findProviderOverlayRow(cfg *UserMCPConfig, providerID string) (MCPProviderO
 	return MCPProviderOverlay{}, false
 }
 
-func findProviderOverlayRow(cfg *UserMCPConfig, providerID string) (MCPProviderOverlay, bool) {
-	if cfg == nil {
-		return MCPProviderOverlay{}, false
-	}
-	for _, s := range cfg.Providers {
-		if s.ID == providerID {
-			return cloneProviderOverlay(s), true
-		}
-	}
-	return MCPProviderOverlay{}, false
-}
-
 func upsertProviderOverlayRow(cfg *UserMCPConfig, ov MCPProviderOverlay) {
 	for i, s := range cfg.Providers {
 		if s.ID == ov.ID {
