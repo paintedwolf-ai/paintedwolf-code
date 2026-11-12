@@ -23,12 +23,17 @@ func TestProgramApprovalSurvivesTurnAndHonorsStop(t *testing.T) {
 		for _, stop := range []bool{false, true} {
 			t.Run(fmt.Sprintf("background=%t/stop=%t", background, stop), func(t *testing.T) {
 				approval := &programApprovalPoller{entered: make(chan context.Context, 1), answer: make(chan struct{})}
+				// The program runs past its foreground budget before it asks, so
+				// the approval is pending on a background job.
+				invoked, ask := make(chan struct{}), make(chan struct{})
 				f := programtest.New(t, programtest.Options{Natives: func(string) map[string]command.NativeOperation {
 					operation := firstLineOperation()
 					prepare := operation.Prepare
 					operation.Prepare = func(ctx context.Context, paths *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 						prepared, err := prepare(ctx, paths, dispatch, request)
 						prepared.Invoke = func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+							close(invoked)
+							<-ask
 							_, err := hitl.WaitForCheckpoint(ctx, approval, "approval")
 							return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, err
 						}
@@ -50,10 +55,12 @@ func TestProgramApprovalSurvivesTurnAndHonorsStop(t *testing.T) {
 					content, err := f.Call(t, caller, source)
 					done <- callResult{content, err}
 				}()
-				waitCtx := <-approval.entered
+				<-invoked
 				clock.Advance(command.ProgramInlineWait())
 				got := <-done
-				testutil.FailErr(t, "promote approval wait", got.err)
+				testutil.FailErr(t, "promote running program", got.err)
+				close(ask)
+				waitCtx := <-approval.entered
 				var running command.RunningProgramResult
 				testutil.FailErr(t, "decode continuation", json.Unmarshal([]byte(got.content), &running))
 				if running.Handle == "" {
@@ -113,5 +120,44 @@ func (p *programApprovalPoller) PollCheckpoint(ctx context.Context, _ string) (*
 		return &hitl.CheckpointResponse{Status: hitl.DecisionStatusApproved}, nil
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// A program waiting on an approval card is not running: however long the
+// card stays open, the call keeps the program in the foreground.
+func TestProgramForegroundBudgetExcludesApprovalWaits(t *testing.T) {
+	approval := &programApprovalPoller{entered: make(chan context.Context, 1), answer: make(chan struct{})}
+	f := programtest.New(t, programtest.Options{Natives: func(string) map[string]command.NativeOperation {
+		operation := firstLineOperation()
+		prepare := operation.Prepare
+		operation.Prepare = func(ctx context.Context, paths *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			prepared, err := prepare(ctx, paths, dispatch, request)
+			prepared.Invoke = func(ctx context.Context, _ tools.ToolContext, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+				_, err := hitl.WaitForCheckpoint(ctx, approval, "approval")
+				return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.NoEffect}, err
+			}
+			return prepared, err
+		}
+		return map[string]command.NativeOperation{"head": operation}
+	}})
+	clock := programtest.NewManualClock()
+	f.Runtime.Clock = clock
+	done := make(chan callResult, 1)
+	go func() {
+		content, err := f.Call(t, t.Context(), "head; echo continued")
+		done <- callResult{content, err}
+	}()
+	<-approval.entered
+	for _, due := range clock.TimersDue() {
+		if due <= command.ProgramInlineWait() {
+			t.Fatalf("foreground budget still running during the approval wait: %v", clock.TimersDue())
+		}
+	}
+	clock.Advance(10 * command.ProgramInlineWait())
+	close(approval.answer)
+	got := <-done
+	testutil.FailErr(t, "complete after approval", got.err)
+	if outcome := decodeOutcome(t, got.content); outcome.State != "completed" || outcome.Stdout != "continued\n" {
+		t.Fatalf("program left the foreground during approval: %s", got.content)
 	}
 }
