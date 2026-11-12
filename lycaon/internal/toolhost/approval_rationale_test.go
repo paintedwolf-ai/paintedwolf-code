@@ -103,7 +103,9 @@ func (p *patchCapture) ListPending(context.Context, string, *api.CheckpointKind)
 func (p *patchCapture) ListPendingForParent(context.Context, string, *api.CheckpointKind) ([]api.CheckpointEvent, error) {
 	return nil, nil
 }
-func (p *patchCapture) SessionApprovalDenied(context.Context, string) (bool, error) { return false, nil }
+func (p *patchCapture) SessionApprovalDenied(context.Context, string) (bool, error) {
+	return false, nil
+}
 func (p *patchCapture) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
