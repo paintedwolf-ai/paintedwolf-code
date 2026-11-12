@@ -11,7 +11,7 @@ Use this workflow when a connection fails on certificate verification. Several d
 
 ## Read the actual chain first
 
-`openssl s_client -connect host:443 -servername host` is the one command that answers most of this. {% if profile_has_command and root_count %}Run it as a `command` with `capability_request.direct_ip` `{"declared_destinations": ["tcp://host:443"]}`: `s_client` ignores proxy variables, and the direct route also shows the chain the peer actually serves.{% endif %} `-servername` matters: without SNI a shared host serves a default certificate and you will diagnose the wrong one. Print the local clock (`date -u`) in the same command, joined with `;`, so a skew shows beside `notAfter` on the first turn. Read three things from the output — the verify return code, the chain the server actually sent, and the subject/SAN and validity dates.
+`openssl s_client -connect host:443 -servername host` is the one command that answers most of this. Run it as a `command` with `capability_request.direct_ip` `{"declared_destinations": ["tcp://host:443"]}`: `s_client` ignores proxy variables, and the direct route also shows the chain the peer actually serves. `-servername` matters: without SNI a shared host serves a default certificate and you will diagnose the wrong one. Print the local clock (`date -u`) in the same command, joined with `;`, so a skew shows beside `notAfter` on the first turn. Read three things from the output — the verify return code, the chain the server actually sent, and the subject/SAN and validity dates.
 
 ## The causes, and how to tell them apart
 

@@ -7,7 +7,7 @@ metadata:
 
 # Inspect cloud services
 
-Every cloud workflow here is read-only. {% if profile_has_command and root_count %}Run the provider CLI in `command`, declaring its id (`aws-cli`, `azure-cli`, or `gcloud-cli`) in `capability_request.host_resources` on that call.{% endif %}
+Every cloud workflow here is read-only. Run the provider CLI in `command`, declaring its id (`aws-cli`, `azure-cli`, or `gcloud-cli`) in `capability_request.host_resources` on that call.
 
 ## Rules for every provider
 

@@ -7,7 +7,7 @@ metadata:
 
 # Upgrade dependencies
 
-{% if profile_has_command and root_count %}Run the project's own package manager in `command` and declare its id in `capability_request.host_resources` on that call.{% endif %}
+Run the project's own package manager in `command` and declare its id in `capability_request.host_resources` on that call.
 
 ## Rules for every ecosystem
 
