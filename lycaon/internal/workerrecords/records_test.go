@@ -153,6 +153,13 @@ func TestPreparationsAppendInOrder(t *testing.T) {
 	}
 	_, err = f.store.RecordPreparation(t.Context(), f.coord, op("prep-3"), w.WorkerID, workerrecords.Preparation{BindingGeneration: 1})
 	wantErr(t, "binding going back", err, workerrecords.ErrInvalidPreparation)
+	latest, ok, err := f.store.LatestPreparation(t.Context(), f.coord, w.WorkerID)
+	testutil.FailErr(t, "latest", err)
+	if !ok || latest.Generation != 2 || latest.PreparationRef != "prep-2" || latest.BindingGeneration != 3 {
+		t.Fatalf("latest = %+v ok=%v", latest, ok)
+	}
+	_, _, err = f.store.LatestPreparation(t.Context(), f.other, w.WorkerID)
+	wantErr(t, "another session", err, workerrecords.ErrWorkerNotFound)
 }
 
 func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
