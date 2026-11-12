@@ -40,7 +40,7 @@ func TestRedirectReplayRevalidatesTheRelease(t *testing.T) {
 		return true
 	})
 	args := map[string]any{
-		"url": server.URL + "/start", "method": "POST", "body": "payload",
+		"url": server.URL + "/start", "method": "POST", "body": "payload", "redirects": "safe",
 		"auth":               map[string]any{"scheme": "bearer", "token": meta.Reference},
 		"capability_request": loopbackCapability(t, server.URL),
 	}
