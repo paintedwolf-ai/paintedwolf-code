@@ -491,11 +491,12 @@ func (s *Service) ResolveAction(
 }
 
 // ResourcesForSockets names the available resources whose local Unix socket
-// is one of paths.
+// is one of paths and whose launch points a client at it (client_env).
 func (s *Service) ResourcesForSockets(ctx context.Context, project ProjectContext, paths []string) []string {
 	if s == nil || len(paths) == 0 {
 		return nil
 	}
+	byID := s.definitionsByID()
 	wanted := map[string]struct{}{}
 	for _, path := range paths {
 		wanted[path] = struct{}{}
@@ -504,6 +505,9 @@ func (s *Service) ResourcesForSockets(ctx context.Context, project ProjectContex
 	var ids []string
 	for _, state := range s.SnapshotFor(ctx, false, project, nil).Resources {
 		if state.Status != StatusAvailable || state.HostSupport != HostSupported || state.Access == AccessDeny {
+			continue
+		}
+		if !s.pointsSocketClient(byID[state.ID]) {
 			continue
 		}
 		for _, connection := range state.Connections {
@@ -519,6 +523,21 @@ func (s *Service) ResourcesForSockets(ctx context.Context, project ProjectContex
 		}
 	}
 	return uniqueSorted(ids)
+}
+
+// pointsSocketClient reports a resource whose local Unix socket names the
+// variable its client reads, on this platform.
+func (s *Service) pointsSocketClient(def Definition) bool {
+	realization := realizationForPlatform(def.Realizations, s.env.platform)
+	if realization == nil {
+		return false
+	}
+	for _, template := range realization.Connections {
+		if template.Mode == ConnectionLocalService && template.Transport == LocalServiceUnixSocket && template.ClientEnv != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // realizationClientEnv points each declared resource's client at the socket

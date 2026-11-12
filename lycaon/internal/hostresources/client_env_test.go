@@ -49,19 +49,6 @@ func TestCatalogClientEnvIsOnlyALocalSocketClientVariable(t *testing.T) {
 			t.Errorf("%s client_env accepted", name)
 		}
 	}
-	data, err := os.ReadFile(filepath.Join("..", "..", "config", "packs", "painted-wolf", "platform", "host", "host-resources.yaml"))
-	testutil.FailErr(t, "read shipped catalog", err)
-	catalog, err := ParseCatalog(data, "built-in")
-	testutil.FailErr(t, "parse shipped catalog", err)
-	for _, resource := range catalog.Resources {
-		for _, realization := range resource.Realizations {
-			for _, connection := range realization.Connections {
-				if connection.Mode == ConnectionLocalService && connection.Transport == LocalServiceUnixSocket && connection.ClientEnv == "" {
-					t.Errorf("%s: a local socket without a client variable leaves its client on its own endpoint", resource.ID)
-				}
-			}
-		}
-	}
 }
 
 // A declared resource points its client at the socket the action reviews.
@@ -125,5 +112,12 @@ func TestResourcesForSocketsNamesTheOwningResource(t *testing.T) {
 	}
 	if got := service.ResourcesForSockets(context.Background(), ProjectContext{}, []string{"/run/other.sock"}); len(got) != 0 {
 		t.Errorf("unrelated socket named %v", got)
+	}
+	// Without a client variable, declaring the resource would not point a
+	// client at the socket, so the refusal must not suggest it.
+	def.Realizations[0].Connections[0].ClientEnv = ""
+	service = serviceForPath(t, def, nil)
+	if got := service.ResourcesForSockets(context.Background(), ProjectContext{}, []string{socket}); len(got) != 0 {
+		t.Errorf("resource without a client variable named %v", got)
 	}
 }
