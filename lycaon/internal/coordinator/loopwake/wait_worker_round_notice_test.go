@@ -22,13 +22,14 @@ func TestWorkerRoundNoticeWakesEveryWorkerWait(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			in := waitMatchInput{Wake: anchor.WorkerRoundNotice}
+			in := waitMatchInput{Wake: anchor.WorkerRoundNotice, Subject: "job-1"}
 			if !waitEventMatches(tc.triggers, in) {
 				t.Fatalf("round notice must wake a %s wait", tc.name)
 			}
 			cond, ok := waitConditionForWake(tc.triggers, in)
-			if !ok || cond.Kind != string(tc.want) {
-				t.Fatalf("condition = %+v ok=%v want %s", cond, ok, tc.want)
+			// The worker is still running: the wait ends with a notice about it.
+			if !ok || cond.Kind != string(tc.want) || cond.Outcome != "notice" || len(cond.Handles) != 1 || cond.Handles[0] != "job-1" {
+				t.Fatalf("condition = %+v ok=%v want %s notice for job-1", cond, ok, tc.want)
 			}
 		})
 	}
@@ -43,11 +44,33 @@ func TestWorkerRoundNoticeWakesEveryWorkerWait(t *testing.T) {
 	}
 }
 
+// A wait on named workers wakes only for notices about them.
+func TestWorkerRoundNoticeRespectsWaitedHandles(t *testing.T) {
+	named := []WaitTrigger{WaitTriggerTimer, WaitTriggerNextWorkerDone}
+	if waitEventMatches(named, waitMatchInput{Wake: anchor.WorkerRoundNotice, Subject: "job-2", WorkerHandles: []string{"job-1"}}) {
+		t.Fatal("notice about another worker woke a wait on job-1")
+	}
+	if !waitEventMatches(named, waitMatchInput{Wake: anchor.WorkerRoundNotice, Subject: "job-1", WorkerHandles: []string{"job-1"}}) {
+		t.Fatal("notice about the waited worker did not wake its wait")
+	}
+	both := []WaitTrigger{WaitTriggerNextWorkerDone, WaitTriggerAllWorkersIdle}
+	cond, ok := waitConditionForWake(both, waitMatchInput{Wake: anchor.WorkerRoundNotice, Subject: "job-2", WorkerHandles: []string{"job-1"}})
+	if !ok || cond.Kind != string(WaitTriggerAllWorkersIdle) {
+		t.Fatalf("condition = %+v ok=%v want the all-workers wait", cond, ok)
+	}
+}
+
 func TestNudgeWorkerRoundNoticeBreaksWorkerSleepOnly(t *testing.T) {
 	loop := NewLoopEngine()
 	deps := loopDepsForTest()
 	deps.GetSession = func(_ context.Context, sessionID string) (*api.Session, error) {
 		return &api.Session{ID: sessionID, Status: api.SessionStatusIdle}, nil
+	}
+	queued := map[string]string{}
+	deps.QueueInform = func(_ context.Context, sessionID string, inform anchor.ID, env anchor.Envelope) {
+		if inform == anchor.WorkerRoundNotice {
+			queued[sessionID] = env.Subject
+		}
 	}
 	loop.SetDeps(deps)
 	deadline := time.Now().UTC().Add(10 * time.Minute)
@@ -62,5 +85,10 @@ func TestNudgeWorkerRoundNoticeBreaksWorkerSleepOnly(t *testing.T) {
 	}
 	if !loop.Waits.IsSleeping("process-waiter") {
 		t.Fatal("round notice must not break a sleep that awaits no worker")
+	}
+	// The wake that ends a wait carries no notice text, so the notice is queued
+	// for both sessions whether or not their wait consumed the wake.
+	if queued["worker-waiter"] != "job-1" || queued["process-waiter"] != "job-1" {
+		t.Fatalf("queued notices = %v, want job-1 for both sessions", queued)
 	}
 }

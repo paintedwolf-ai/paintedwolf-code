@@ -82,6 +82,14 @@ func (l *Nudges) nudgeNow(
 func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pendingLoopWake) {
 	wake, inform, legID, completingJobID, env := pending.wake, pending.inform, pending.legID, pending.completingJobID, pending.env
 	deps := l.loopDeps()
+	// A wait that a round notice resumes reports only that it ended, so the
+	// notice itself is queued before any route can consume the wake.
+	if wake == anchor.WorkerRoundNotice && !pending.informHandled && deps.QueueInform != nil {
+		noticeEnv := env
+		noticeEnv.Subject = legID
+		deps.QueueInform(ctx, sessionID, inform, noticeEnv)
+		pending.informHandled = true
+	}
 	if l.Subscriptions.resumePendingWait(ctx, sessionID, pending.wake) {
 		return
 	}
