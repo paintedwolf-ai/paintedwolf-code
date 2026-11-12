@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -248,17 +249,8 @@ func (r *Runtime) ProjectRootPaths(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	var out []string
-	for _, proj := range projects {
-		for _, root := range proj.Roots {
-			if root.IsPrimary {
-				out = append(out, root.Path)
-			}
-		}
-		for _, root := range proj.Roots {
-			if !root.IsPrimary {
-				out = append(out, root.Path)
-			}
-		}
+	for i := range projects {
+		out = append(out, project.RootPaths(&projects[i])...)
 	}
 	return out, nil
 }

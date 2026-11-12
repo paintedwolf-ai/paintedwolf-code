@@ -53,9 +53,11 @@ func (inv *invocation) clientTLS() (*outboundhttp.ClientTLS, error) {
 				return nil, err
 			}
 		}
-		passphrase := t.pass
-		if passphrase == "" {
-			passphrase = t.certPass
+		passphrase := t.certPass
+		if t.pass != "" {
+			if passphrase, err = inv.passphrase(); err != nil {
+				return nil, err
+			}
 		}
 		pair, err := outboundhttp.ClientCertificate(certPEM, keyPEM, passphrase)
 		if err != nil {

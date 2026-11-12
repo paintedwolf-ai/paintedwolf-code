@@ -209,6 +209,10 @@ type ArgvReview struct {
 	// PairSinks maps a name-value option to the named object that carries its
 	// pairs; the first definition of a name wins.
 	PairSinks map[string]string `json:"-"`
+	// Record is an owner's own argument record for the Represented options,
+	// which leave Options; its keys join the review arguments.
+	Record      map[string]any  `json:"-"`
+	Represented map[string]bool `json:"-"`
 }
 
 // PathTarget is a bound native file operand and its exact access direction.
@@ -240,6 +244,9 @@ func (r ArgvReview) Arguments() map[string]any {
 	sunk := make(map[string]any, len(r.ValueSinks))
 	for i := len(r.Options) - 1; i >= 0; i-- {
 		option := r.Options[i]
+		if r.Represented[option.Option] {
+			continue
+		}
 		if slot, ok := r.PairSinks[option.Option]; ok && len(option.Values) == 2 {
 			pairs, _ := sunk[slot].(map[string]any)
 			if pairs == nil {
@@ -264,6 +271,11 @@ func (r ArgvReview) Arguments() map[string]any {
 	result := map[string]any{"operation_id": r.OperationID, "command": r.Command, "options": options, "operands": operands}
 	for slot, value := range sunk {
 		result[slot] = value
+	}
+	for key, value := range r.Record {
+		if _, reserved := result[key]; !reserved {
+			result[key] = value
+		}
 	}
 	if r.PathTargets != nil {
 		// Grouped by direction, each target is one captured value, so a command

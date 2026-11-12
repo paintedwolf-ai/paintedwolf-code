@@ -5,6 +5,7 @@ package gitcredential
 import (
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"os"
 	"path/filepath"
@@ -15,33 +16,97 @@ import (
 	"github.com/lycaon/lycaon/internal/osprocess"
 )
 
+// writeIdentified sends the helper's first bytes with SCM_CREDENTIALS, which
+// the kernel checks against the sending process.
+func writeIdentified(conn *net.UnixConn, data []byte) error {
+	pid := os.Getpid()
+	if pid <= 0 || pid > math.MaxInt32 {
+		return errors.New("process id does not fit the credential message")
+	}
+	uid := os.Getuid()
+	if uid < 0 || uid > math.MaxUint32 {
+		return errors.New("process uid does not fit the credential message")
+	}
+	gid := os.Getgid()
+	if gid < 0 || gid > math.MaxUint32 {
+		return errors.New("process gid does not fit the credential message")
+	}
+	credentials := unix.UnixCredentials(&unix.Ucred{Pid: int32(pid), Uid: uint32(uid), Gid: uint32(gid)})
+	n, oobn, err := conn.WriteMsgUnix(data, credentials, nil)
+	if err == nil && (n != len(data) || oobn != len(credentials)) {
+		err = errors.New("short credential helper write")
+	}
+	return err
+}
+
 // verifyPeer admits a connection only from this executable, running as this
-// user, underneath the served invocation: a git process at or below the
-// started process the service is bound to. The kernel supplies every fact:
-// peer credentials, each process's executable, parent and start time.
-func verifyPeer(conn *net.UnixConn, helper, gitBinary string, served servedProcess) error {
+// user, underneath the served invocation. Identity comes from the helper's
+// SCM_CREDENTIALS rather than SO_PEERCRED: a confinement mediator may have
+// performed the connect, but only the helper itself sends. The peer's start
+// time is read before and after the checks, so a pid reused meanwhile
+// refuses. It returns the request bytes read with the credentials.
+func verifyPeer(conn *net.UnixConn, helper, gitBinary string, served servedProcess) ([]byte, error) {
 	raw, err := conn.SyscallConn()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	var credentials *unix.Ucred
-	var credentialErr error
+	var optErr error
 	if err := raw.Control(func(fd uintptr) {
-		credentials, credentialErr = unix.GetsockoptUcred(int(fd), unix.SOL_SOCKET, unix.SO_PEERCRED)
+		optErr = unix.SetsockoptInt(int(fd), unix.SOL_SOCKET, unix.SO_PASSCRED, 1)
 	}); err != nil {
-		return err
+		return nil, err
 	}
-	if credentialErr != nil {
-		return fmt.Errorf("read peer credentials: %w", credentialErr)
+	if optErr != nil {
+		return nil, fmt.Errorf("enable peer credentials: %w", optErr)
+	}
+	data := make([]byte, 512)
+	oob := make([]byte, unix.CmsgSpace(unix.SizeofUcred))
+	n, oobn, _, _, err := conn.ReadMsgUnix(data, oob)
+	if err != nil {
+		return nil, err
+	}
+	credentials, err := attestedCredentials(oob[:oobn])
+	if err != nil {
+		return nil, err
 	}
 	if int(credentials.Uid) != os.Getuid() {
-		return errors.New("credential helper peer runs as another user")
+		return nil, errors.New("credential helper peer runs as another user")
 	}
 	peer := int(credentials.Pid)
-	if exe, err := processExecutable(peer); err != nil || !sameFile(exe, helper) {
-		return errors.New("credential helper peer is not this executable")
+	started, ok := osprocess.StartTime(peer)
+	if !ok {
+		return nil, errors.New("credential helper peer is not running")
 	}
-	return descendsFromServedGit(peer, gitBinary, served)
+	if exe, err := processExecutable(peer); err != nil || !sameFile(exe, helper) {
+		return nil, errors.New("credential helper peer is not this executable")
+	}
+	if err := descendsFromServedGit(peer, gitBinary, served); err != nil {
+		return nil, err
+	}
+	if current, ok := osprocess.StartTime(peer); !ok || current != started {
+		return nil, errors.New("credential helper peer exited during verification")
+	}
+	return data[:n], nil
+}
+
+func attestedCredentials(oob []byte) (*unix.Ucred, error) {
+	messages, err := unix.ParseSocketControlMessage(oob)
+	if err != nil {
+		return nil, fmt.Errorf("read peer credentials: %w", err)
+	}
+	for _, message := range messages {
+		if message.Header.Level == unix.SOL_SOCKET && message.Header.Type == unix.SCM_CREDENTIALS {
+			credentials, err := unix.ParseUnixCredentials(&message)
+			if err != nil {
+				return nil, fmt.Errorf("read peer credentials: %w", err)
+			}
+			if credentials.Pid <= 0 {
+				break
+			}
+			return credentials, nil
+		}
+	}
+	return nil, errors.New("credential helper sent no credentials")
 }
 
 func processExecutable(pid int) (string, error) {

@@ -30,6 +30,9 @@ type NativeOperation struct {
 	// ClosedForms keeps unsupported owner forms as typed refusals instead of
 	// launching an installed program with different authority.
 	ClosedForms bool
+	// SecretSlots are the review argument slots where this command form
+	// carries managed-secret references to its owner; elsewhere they refuse.
+	SecretSlots []string
 	// Prepare binds a reached request in its directory frame; dispatch is that
 	// frame, through which owners such as find -exec run their children.
 	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.Dispatch, commandprogram.OperationRequest) (NativePrepared, error)
@@ -61,6 +64,9 @@ type NativePrepared struct {
 	// Release frees any admitted resources retained by the prepared invocation
 	// across start/approval refusals and owner completion.
 	Release func()
+	// LaunchesConfined marks a form whose owner starts a confined process; it
+	// is admitted with the call's launch capabilities, as an external launch is.
+	LaunchesConfined bool
 }
 
 // ProgramOwners is one program's host owner set. Publication and Input serve
@@ -383,7 +389,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	prepared, err := operation.Prepare(ctx, d.paths, d, prepareReq)
 	if err != nil {
-		if gap := unsupportedForm(spec, err); gap != nil && !operation.ClosedForms && (operation.Tool != "" || len(operation.Tools) > 0) && d.GapLaunchable(request) {
+		if gap := unsupportedForm(spec, err); gap != nil && (operation.Tool != "" || len(operation.Tools) > 0) && d.GapLaunchable(request) {
 			request.Gap = gap
 			return d.invokeExternal(ctx, request, streams)
 		}
@@ -417,7 +423,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	var operationDef toolcontract.OperationDefinition
 	if definition, ok := d.run.registry.Operation(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
-		operationDef = offeredProgramDefinition(tool, definition.Operation)
+		operationDef = offeredProgramDefinition(tool, definition.Operation, operation.SecretSlots)
 	} else if tool == spec.Name {
 		var err error
 		operationDef, err = d.catalogDefinition(spec)
@@ -571,7 +577,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	if prepared.Mode != "" {
 		request.EffectMode = prepared.Mode
 	}
-	return d.invokeHost(ctx, request, streams, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
 			return ownerFailure(err), err
 		}

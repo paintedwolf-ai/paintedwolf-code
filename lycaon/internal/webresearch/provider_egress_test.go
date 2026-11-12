@@ -1,9 +1,11 @@
 package webresearch
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -134,5 +136,42 @@ func TestSearxngCatalogAllowsPrivateEndpoint(t *testing.T) {
 	entry, ok = cat.Entry("brave")
 	if !ok || entry.AllowPrivateEndpoint {
 		t.Fatalf("brave must not allow private endpoints: %+v", entry)
+	}
+}
+
+// A provider redirect meets the endpoint policy its first hop did.
+func TestProviderHopsMeetTheEndpointPolicy(t *testing.T) {
+	hop := providerHop(false)
+	for _, raw := range []string{"http://api.example.test/next", "https://203.0.113.7/next"} {
+		u, err := url.Parse(raw)
+		testutil.FailErr(t, "parse", err)
+		if err := hop(context.Background(), u); err == nil {
+			t.Fatalf("hop to %s was allowed", raw)
+		}
+	}
+	u, err := url.Parse("https://api.example.test/next")
+	testutil.FailErr(t, "parse", err)
+	if err := hop(context.Background(), u); err != nil {
+		t.Fatalf("hop to an https hostname: %v", err)
+	}
+}
+
+// A provider body past the read bound is a prefix, as a bounded read was.
+func TestDoProviderHTTPReadsAPrefixOfALargeBody(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write(bytes.Repeat([]byte("x"), providerBodyMax+64))
+	}))
+	t.Cleanup(srv.Close)
+	allowLoopbackFetch(t)
+	prevRelax := providerEgressTestRelax
+	providerEgressTestRelax = true
+	t.Cleanup(func() { providerEgressTestRelax = prevRelax })
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, srv.URL, nil)
+	testutil.FailErr(t, "build request", err)
+	body, status, err := doProviderHTTP(context.Background(), req, 5, false)
+	testutil.FailErr(t, "doProviderHTTP", err)
+	if status != 200 || len(body) != providerBodyMax {
+		t.Fatalf("status %d, %d body bytes, want %d", status, len(body), providerBodyMax)
 	}
 }

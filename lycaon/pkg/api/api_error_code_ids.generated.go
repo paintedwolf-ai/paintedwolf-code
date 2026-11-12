@@ -233,18 +233,6 @@ const (
 	ApiErrorCodeInvalidJson ApiErrorCode = "invalid_json"
 	// ApiErrorCodeInvalidPath path traversal or unsafe path argument
 	ApiErrorCodeInvalidPath ApiErrorCode = "invalid_path"
-	// ApiErrorCodeWriteRootIsFilesystemRoot Retired refusal: filesystem root is
-	// now permitted; per-path protected floors still apply.
-	ApiErrorCodeWriteRootIsFilesystemRoot ApiErrorCode = "write_root_is_filesystem_root"
-	// ApiErrorCodeWriteRootIsHome Retired refusal: home directory is now
-	// permitted; per-path protected floors still apply.
-	ApiErrorCodeWriteRootIsHome ApiErrorCode = "write_root_is_home"
-	// ApiErrorCodeWriteRootNotAbsolute project root or write_root grant is not an
-	// absolute path
-	ApiErrorCodeWriteRootNotAbsolute ApiErrorCode = "write_root_not_absolute"
-	// ApiErrorCodeWriteRootUnderSecretStore project root or write_root grant
-	// intersects a credential store
-	ApiErrorCodeWriteRootUnderSecretStore ApiErrorCode = "write_root_under_secret_store"
 	// ApiErrorCodeBlueprintContentConflict blueprint bytes changed before approval
 	// committed
 	ApiErrorCodeBlueprintContentConflict ApiErrorCode = "blueprint_content_conflict"
@@ -1049,10 +1037,6 @@ var allApiErrorCodeValues = []ApiErrorCode{
 	ApiErrorCodeInternalError,
 	ApiErrorCodeInvalidJson,
 	ApiErrorCodeInvalidPath,
-	ApiErrorCodeWriteRootIsFilesystemRoot,
-	ApiErrorCodeWriteRootIsHome,
-	ApiErrorCodeWriteRootNotAbsolute,
-	ApiErrorCodeWriteRootUnderSecretStore,
 	ApiErrorCodeBlueprintContentConflict,
 	ApiErrorCodeIdempotencyConflict,
 	ApiErrorCodeInvalidArguments,
@@ -1337,10 +1321,6 @@ func (c ApiErrorCode) HTTPStatus() int {
 		ApiErrorCodeExportFormatInvalid,
 		ApiErrorCodeInvalidJson,
 		ApiErrorCodeInvalidPath,
-		ApiErrorCodeWriteRootIsFilesystemRoot,
-		ApiErrorCodeWriteRootIsHome,
-		ApiErrorCodeWriteRootNotAbsolute,
-		ApiErrorCodeWriteRootUnderSecretStore,
 		ApiErrorCodeInvalidArguments,
 		ApiErrorCodeInvalidQuery,
 		ApiErrorCodeInvalidRequest,

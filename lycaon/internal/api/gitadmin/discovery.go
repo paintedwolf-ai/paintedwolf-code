@@ -28,8 +28,7 @@ func (s *Handler) HandleGitRepos(w http.ResponseWriter, r *http.Request) {
 	}
 	sessionID := strings.TrimSpace(r.URL.Query().Get("session_id"))
 	activeRootID := s.activeRootIDFromSession(r.Context(), sessionID)
-	roots := project.RootRefsFrom(p)
-	repos, err := s.LoadOrderedRepos(r.Context(), p, roots, activeRootID, sessionID)
+	repos, err := s.LoadOrderedRepos(r.Context(), p, p.SourceRoots(), activeRootID, sessionID)
 	if err != nil {
 		s.WriteGitReposLoadError(w, r, err)
 		return
@@ -95,7 +94,7 @@ func (s *Handler) requireGitRepoQuery(w http.ResponseWriter, r *http.Request) (g
 		s.WriteGitReposLoadError(w, r, err)
 		return git.RepoRef{}, nil, false
 	}
-	repos, err := s.LoadOrderedRepos(r.Context(), p, scope.Roots, "", sessionID)
+	repos, err := s.LoadOrderedRepos(r.Context(), p, scope.Project.SourceRoots(), "", sessionID)
 	if err != nil {
 		s.responses.InternalError(w, r, err)
 		return git.RepoRef{}, nil, false
@@ -119,7 +118,7 @@ func (s *Handler) LoadOrderedRepos(ctx context.Context, p *project.Project, root
 		if err != nil {
 			return nil, err
 		}
-		roots = scope.Roots
+		roots = scope.Project.SourceRoots()
 		if scope.Binding != nil {
 			sessionSubstituted = true
 			bindingRepoID = scope.Binding.RepoID
@@ -131,9 +130,9 @@ func (s *Handler) LoadOrderedRepos(ctx context.Context, p *project.Project, root
 	// top level; the worktree is its own top level, so no discovery is needed.
 	var repos []git.RepoRef
 	if s.RepoSetCache != nil {
-		repos = s.RepoSetCache.GetOrLoad(ctx, p.ID, p.RootsGeneration, project.RootRefsFrom(p))
+		repos = s.RepoSetCache.GetOrLoad(ctx, p.ID, p.RootsGeneration, p.SourceRoots())
 	} else {
-		repos = git.DiscoverRepos(ctx, project.RootRefsFrom(p))
+		repos = git.DiscoverRepos(ctx, p.SourceRoots())
 	}
 	if sessionSubstituted {
 		repos = substituteWorktreeRepo(repos, bindingRepoID, bindingPath)
