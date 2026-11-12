@@ -363,13 +363,39 @@ func (b commandForegroundConfine) close(ctx context.Context) []confine.EgressHos
 // such as the bundled Git. services are sockets the host serves to that
 // program itself, so they need no user capability. release closes its action
 // lease.
-func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, commandLine string, services []confine.HostService) (exec.LaunchPlan, func(context.Context), error) {
+func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, commandLine string, services []confine.HostService) (exec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
 	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, services, commandLine, subject, true)
 	if err != nil {
 		return exec.LaunchPlan{}, nil, err
 	}
-	release := func(ctx context.Context) { bound.close(ctx) }
+	release := func(ctx context.Context, outcome tools.AgentLaunchOutcome) {
+		observeAgentLaunch(ctx, tctx, bound, commandLine, outcome)
+	}
 	return agentCommandLaunch(tctx, subject, bound.confinement, bound.lease, commandLine), release, nil
+}
+
+// observeAgentLaunch settles a native owner's confined launch into the
+// command's confinement facts, as an external stage's are: what the kernel
+// refused, what the host's own services declined, and whether it failed.
+func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, commandLine string, outcome tools.AgentLaunchOutcome) {
+	settleCtx := context.WithoutCancel(ctx)
+	refusals := bound.lease.SettledRefusals(settleCtx)
+	if len(outcome.Refusals) > 0 {
+		refusals = refusals.Merge(confine.SandboxRefusals{Refusals: outcome.Refusals})
+	}
+	network := bound.close(settleCtx)
+	boundary := confine.BoundaryOf(bound.confinement)
+	if !boundary.Applied || tctx.Effects.Out == nil {
+		return
+	}
+	var failed []string
+	if outcome.Failed {
+		failed = []string{commandLine}
+	}
+	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
+		MediatedNetwork: network, FailedStages: failed, Refusals: refusals,
+	})
+	tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 }
 
 func bindCommandForegroundConfine(

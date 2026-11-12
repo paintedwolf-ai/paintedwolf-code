@@ -5,6 +5,6 @@ triggers:
   topology_patterns: ["pipeline", "default-pipeline", "*"]
   phase_ids: ["research"]
 checklist:
-  - "Use read, find, and grep only per Leg tools"
+  - "Use read-only `command` programs (cat, find, grep) per Leg tools"
   - "Report findings with file paths and symbols for coordinator dispatch"
   - "Do not edit product source unless the leg brief explicitly allows writes"

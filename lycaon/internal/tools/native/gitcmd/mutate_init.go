@@ -30,7 +30,8 @@ func runInit(ctx context.Context, p Prepared, tc tools.ToolContext, out *metered
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	defer done()
+	failed := true
+	defer func() { done(failed) }()
 	options := []string{}
 	if has(p.Argv, "-q") {
 		options = append(options, "-q")
@@ -46,6 +47,7 @@ func runInit(ctx context.Context, p Prepared, tc tools.ToolContext, out *metered
 		gitTarget = bound.Resolved.Abs
 	}
 	diagnostics, code, err := p.owners.Git.InitCommand(ctx, dir, gitTarget, p.command.config, options, out)
+	failed = err != nil || code != 0 || out.err != nil
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}

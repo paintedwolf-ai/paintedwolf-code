@@ -2,6 +2,7 @@ package gitcredential
 
 import (
 	"errors"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -11,13 +12,20 @@ import (
 // admitted for. Nothing reaches the store.
 var ErrOutOfScope = errors.New("credential request is outside the invocation's admitted scope")
 
+// ErrUseNotGranted refuses a request for an admitted recipient when the
+// invocation holds no grant to use saved credentials.
+var ErrUseNotGranted = errors.New("the invocation may not use saved credentials")
+
 // Scope limits one service to the recipients its invocation was admitted to
-// contact. Recipient authority is not credential-store authority: a scoped
+// contact, and to answering at all only once the person granted credential
+// use. Recipient authority is not credential-store authority: a scoped
 // service answers get only, so an agent's Git cannot write or remove the
 // user's saved credentials.
 type Scope struct {
 	mu         sync.RWMutex
 	recipients []Recipient
+	granted    bool
+	declined   []Recipient
 }
 
 // Admit adds recipients once their contact is authorized. Each request is
@@ -28,19 +36,63 @@ func (s *Scope) Admit(recipients ...Recipient) {
 	s.recipients = append(s.recipients, recipients...)
 }
 
-// Recipient is a protocol and host as Git sends them; host keeps any port.
+// Grant lets the service answer admitted recipients from saved credentials.
+func (s *Scope) Grant() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.granted = true
+}
+
+// Declined lists the admitted recipients Git asked credentials for while no
+// grant covered them.
+func (s *Scope) Declined() []Recipient {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return slices.Clone(s.declined)
+}
+
+// Recipient is what an admitted URL names as Git sends it: protocol, host
+// with any port, and the user and repository path when the URL carries them.
 type Recipient struct {
 	Protocol string
 	Host     string
+	Username string
+	Path     string
 }
 
-func (s *Scope) admits(c Credential) bool {
+func (r Recipient) covers(c Credential) bool {
+	if !strings.EqualFold(r.Protocol, c.Protocol) || !strings.EqualFold(r.Host, c.Host) {
+		return false
+	}
+	if r.Username != "" && c.Username != "" && r.Username != c.Username {
+		return false
+	}
+	// Git sends a path only under credential.useHttpPath.
+	return r.Path == "" || c.Path == "" || cleanPath(r.Path) == cleanPath(c.Path)
+}
+
+func cleanPath(p string) string { return strings.Trim(path.Clean("/"+p), "/") }
+
+func (s *Scope) admitted(c Credential) (Recipient, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	want := Recipient{Protocol: strings.ToLower(c.Protocol), Host: strings.ToLower(c.Host)}
-	return want.Protocol != "" && want.Host != "" && slices.ContainsFunc(s.recipients, func(r Recipient) bool {
-		return strings.EqualFold(r.Protocol, want.Protocol) && strings.EqualFold(r.Host, want.Host)
-	})
+	if c.Protocol == "" || c.Host == "" {
+		return Recipient{}, false
+	}
+	for _, r := range s.recipients {
+		if r.covers(c) {
+			return r, true
+		}
+	}
+	return Recipient{}, false
+}
+
+func (s *Scope) decline(r Recipient) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !slices.Contains(s.declined, r) {
+		s.declined = append(s.declined, r)
+	}
 }
 
 type scopedBackend struct {
@@ -49,17 +101,25 @@ type scopedBackend struct {
 }
 
 func (b scopedBackend) Get(c Credential) (Credential, bool, error) {
-	if !b.scope.admits(c) {
+	recipient, ok := b.scope.admitted(c)
+	if !ok {
 		return Credential{}, false, ErrOutOfScope
+	}
+	b.scope.mu.RLock()
+	granted := b.scope.granted
+	b.scope.mu.RUnlock()
+	if !granted {
+		b.scope.decline(recipient)
+		return Credential{}, false, ErrUseNotGranted
+	}
+	if c.Username == "" {
+		c.Username = recipient.Username
 	}
 	return b.inner.Get(c)
 }
 
-func (scopedBackend) Store(Credential) error { return ErrOutOfScope }
+// Store and Erase answer without writing: Git reports a credential it used or
+// one the server rejected, and an agent's Git never changes the user's store.
+func (scopedBackend) Store(Credential) error { return nil }
 
-func (scopedBackend) Erase(Credential) error { return ErrOutOfScope }
-
-// PlatformBackend is the host's own credential store: the macOS Keychain, or
-// the vault elsewhere. A scoped service reads it on the helper's behalf, so the
-// helper process itself never holds store access.
-func PlatformBackend() Backend { return newBackend() }
+func (scopedBackend) Erase(Credential) error { return nil }

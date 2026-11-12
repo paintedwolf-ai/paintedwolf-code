@@ -1,0 +1,207 @@
+-- name: InsertWorker :exec
+INSERT INTO workers (
+    id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+    delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+    operation_id, created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetWorker :one
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE id = ?;
+
+-- name: GetWorkerByName :one
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE session_id = ? AND name = ?;
+
+-- name: ListSessionWorkers :many
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE session_id = ? ORDER BY created_at, id;
+
+-- name: CountSessionWorkersByAgent :one
+SELECT COUNT(*) FROM workers WHERE session_id = ? AND agent_type = ?;
+
+-- name: BindWorkerChildSession :execrows
+UPDATE workers SET child_session_id = sqlc.arg(child_session_id), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND child_session_id IS NULL;
+
+-- name: CloseWorker :execrows
+UPDATE workers SET closed_at = sqlc.arg(closed_at), closed_reason = sqlc.arg(closed_reason), updated_at = sqlc.arg(closed_at)
+WHERE id = sqlc.arg(id) AND closed_at IS NULL;
+
+-- name: AllocateWorkerRoundOrdinal :one
+UPDATE workers SET next_round_ordinal = next_round_ordinal + 1, updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+RETURNING next_round_ordinal - 1 AS ordinal;
+
+-- name: AllocateWorkerMessageSeq :one
+UPDATE workers SET next_message_seq = next_message_seq + 1, updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+RETURNING next_message_seq - 1 AS seq;
+
+-- name: InsertWorkerRound :exec
+INSERT INTO worker_rounds (
+    worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
+    execution_target, review_subject_json, operation_id, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetUnsettledWorkerRound :one
+SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
+       execution_target, review_subject_json, operation_id, created_at, settled_at
+FROM worker_rounds WHERE worker_id = ? AND settled_at IS NULL;
+
+-- name: GetWorkerRoundByJob :one
+SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
+       execution_target, review_subject_json, operation_id, created_at, settled_at
+FROM worker_rounds WHERE job_id = ?;
+
+-- name: ListWorkerRounds :many
+SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
+       execution_target, review_subject_json, operation_id, created_at, settled_at
+FROM worker_rounds WHERE worker_id = ? ORDER BY ordinal;
+
+-- name: SettleWorkerRound :execrows
+UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at)
+WHERE worker_id = sqlc.arg(worker_id) AND ordinal = sqlc.arg(ordinal) AND settled_at IS NULL;
+
+-- name: InsertWorkerMessage :exec
+INSERT INTO worker_messages (
+    id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
+    body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: ListWorkerMessagesAfter :many
+SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
+       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
+FROM worker_messages
+WHERE worker_id = sqlc.arg(worker_id) AND seq > sqlc.arg(after_seq) AND recipient_role = sqlc.arg(recipient_role)
+ORDER BY seq LIMIT sqlc.arg(page_limit);
+
+-- name: ListWorkerMessagesBefore :many
+SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
+       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
+FROM worker_messages
+WHERE worker_id = sqlc.arg(worker_id) AND seq < sqlc.arg(before_seq)
+ORDER BY seq DESC LIMIT sqlc.arg(page_limit);
+
+-- name: GetWorkerMessage :one
+SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
+       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
+FROM worker_messages WHERE worker_id = ? AND seq = ?;
+
+-- name: GetWorkerMessageDelivery :one
+SELECT worker_id, recipient_session_id, generation, delivered_through_seq,
+       page_id, page_first_seq, page_last_seq, updated_at
+FROM worker_message_deliveries
+WHERE worker_id = ? AND recipient_session_id = ? AND generation = ?;
+
+-- name: OpenWorkerMessagePage :execrows
+INSERT INTO worker_message_deliveries (
+    worker_id, recipient_session_id, generation, delivered_through_seq,
+    page_id, page_first_seq, page_last_seq, updated_at
+) VALUES (
+    sqlc.arg(worker_id), sqlc.arg(recipient_session_id), sqlc.arg(generation), 0,
+    sqlc.arg(page_id), sqlc.arg(page_first_seq), sqlc.arg(page_last_seq), sqlc.arg(updated_at)
+)
+ON CONFLICT (worker_id, recipient_session_id, generation) DO UPDATE SET
+    page_id = excluded.page_id, page_first_seq = excluded.page_first_seq,
+    page_last_seq = excluded.page_last_seq, updated_at = excluded.updated_at
+WHERE worker_message_deliveries.page_id = '';
+
+-- name: CommitWorkerMessagePage :execrows
+UPDATE worker_message_deliveries
+SET delivered_through_seq = page_last_seq, page_id = '', page_first_seq = NULL, page_last_seq = NULL,
+    updated_at = sqlc.arg(updated_at)
+WHERE worker_id = sqlc.arg(worker_id) AND recipient_session_id = sqlc.arg(recipient_session_id)
+  AND generation = sqlc.arg(generation) AND page_id = sqlc.arg(page_id);
+
+-- name: GetWorkerResultDisposition :one
+SELECT result_id, worker_id, accounted_operation_id, accounted_at, change_state,
+       change_operation_id, landed_change_id, shelve_reason, changed_at
+FROM worker_result_dispositions WHERE result_id = ?;
+
+-- name: ListWorkerResultDispositions :many
+SELECT result_id, worker_id, accounted_operation_id, accounted_at, change_state,
+       change_operation_id, landed_change_id, shelve_reason, changed_at
+FROM worker_result_dispositions WHERE worker_id = ? ORDER BY result_id;
+
+-- name: AccountWorkerResult :execrows
+INSERT INTO worker_result_dispositions (result_id, worker_id, accounted_operation_id, accounted_at)
+VALUES (sqlc.arg(result_id), sqlc.arg(worker_id), sqlc.arg(operation_id), sqlc.arg(accounted_at))
+ON CONFLICT (result_id) DO UPDATE SET
+    accounted_operation_id = excluded.accounted_operation_id, accounted_at = excluded.accounted_at
+WHERE worker_result_dispositions.accounted_at IS NULL;
+
+-- name: SetWorkerResultChangeState :execrows
+INSERT INTO worker_result_dispositions (
+    result_id, worker_id, change_state, change_operation_id, landed_change_id, shelve_reason, changed_at
+) VALUES (
+    sqlc.arg(result_id), sqlc.arg(worker_id), sqlc.arg(change_state), sqlc.arg(operation_id),
+    sqlc.arg(landed_change_id), sqlc.arg(shelve_reason), sqlc.arg(changed_at)
+)
+ON CONFLICT (result_id) DO UPDATE SET
+    change_state = excluded.change_state, change_operation_id = excluded.change_operation_id,
+    landed_change_id = excluded.landed_change_id, shelve_reason = excluded.shelve_reason,
+    changed_at = excluded.changed_at
+WHERE worker_result_dispositions.change_state IN ('', 'shelved');
+
+-- name: GetWorkerResultOwner :one
+SELECT r.worker_id, res.worker_job_id
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.id = ?;
+
+-- name: InsertWorkerWorkspacePreparation :exec
+INSERT INTO worker_workspace_preparations (
+    worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+    binding_generation, operation_id, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+-- name: GetLatestWorkerWorkspacePreparation :one
+SELECT worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+       binding_generation, operation_id, created_at
+FROM worker_workspace_preparations WHERE worker_id = ? ORDER BY generation DESC LIMIT 1;
+
+-- name: InsertWorkerDependency :exec
+INSERT INTO worker_dependencies (worker_id, dependency_key, producer_worker_id, base_result_id, operation_id, created_at)
+VALUES (
+    sqlc.arg(worker_id), COALESCE(sqlc.narg(producer_worker_id), 'base'), sqlc.narg(producer_worker_id),
+    sqlc.narg(base_result_id), sqlc.arg(operation_id), sqlc.arg(created_at)
+);
+
+-- name: ListWorkerDependencies :many
+SELECT worker_id, producer_worker_id, base_result_id, operation_id, created_at
+FROM worker_dependencies WHERE worker_id = ? ORDER BY created_at, dependency_key;
+
+-- name: ListWorkerProducerIDs :many
+SELECT producer_worker_id FROM worker_dependencies
+WHERE worker_id = ? AND producer_worker_id IS NOT NULL ORDER BY producer_worker_id;
+
+-- name: ListWorkerConsumerIDs :many
+SELECT worker_id FROM worker_dependencies
+WHERE producer_worker_id = ? ORDER BY worker_id;
+
+-- name: GetWorkerOperation :one
+SELECT operation_id, session_id, kind, request_digest, receipt_json, created_at
+FROM worker_operations WHERE operation_id = ?;
+
+-- name: InsertWorkerOperation :exec
+INSERT INTO worker_operations (operation_id, session_id, kind, request_digest, receipt_json, created_at)
+VALUES (?, ?, ?, ?, ?, ?);
+
+-- name: GetWorkerSessionBinding :one
+SELECT project_id, COALESCE(parent_session_id, '') AS parent_session_id FROM sessions WHERE id = ?;
+
+-- name: GetWorkflowRunSessionID :one
+SELECT session_id FROM workflow_runs WHERE id = ?;
+
+-- name: GetWorkerJobBinding :one
+SELECT COALESCE(parent_session_id, '') AS parent_session_id, COALESCE(child_session_id, '') AS child_session_id
+FROM worker_jobs WHERE id = ?;
+
+-- name: GetLandedChangeJobID :one
+SELECT worker_job_id FROM landed_changes WHERE id = ?;

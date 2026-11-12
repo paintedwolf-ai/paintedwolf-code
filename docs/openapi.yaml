@@ -29883,6 +29883,7 @@ components:
         - redacted
         - preview
         - preview_truncated
+        - tail_preview
       properties:
         stream:
           type: string
@@ -29906,6 +29907,15 @@ components:
           description: Leading screened bytes of the retained stream as UTF-8. Never the authoritative body.
         preview_truncated:
           type: boolean
+        tail_preview:
+          type: string
+          description: Last screened whole lines, at most six, when the preview does not reach the end; empty otherwise. Never the authoritative body.
+        line_count:
+          type: integer
+          format: int64
+          minimum: 0
+          x-go-pointer: true
+          description: Lines in the complete stream. Absent while capture is incomplete.
     CommandRevisionConflict:
       x-go-generate: true
       type: object

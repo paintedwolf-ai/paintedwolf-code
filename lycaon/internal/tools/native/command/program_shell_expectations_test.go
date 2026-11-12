@@ -63,14 +63,19 @@ func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	// Launch a session-owned external background job; $! must be its real OS PID
 	// and accepted by kill and wait, while ps aux, ps -ef and pgrep -f list it
 	// as the session's own job and omit the foreign process.
+	// The pipeline's own grep is a session member whose argv contains the
+	// pattern, and under load it can exec before the ps builtin snapshots the
+	// session. Bracketing the pattern's first digit keeps that self-row from
+	// matching, while a listing of the foreign process still matches through
+	// its PID column.
 	prog := fmt.Sprintf(
 		`external -- /bin/sleep 30 & bgpid=$!; `+
 			`external -- /bin/echo "bgpid=$bgpid"; `+
-			`ps aux | grep %s; `+
+			`ps aux | grep "[%c]%s"; `+
 			`ps -ef | grep "$bgpid"; `+
 			`pgrep -f -a "sleep 30"; `+
 			`kill "$bgpid"; wait "$bgpid"; external -- /bin/echo "waited=$?"`,
-		foreignPID,
+		foreignPID[0], foreignPID[1:],
 	)
 	out, err := f.call(t, t.Context(), prog)
 	testutil.FailErr(t, "run process inspection and $! lifecycle", err)

@@ -109,6 +109,68 @@ func TestCommandProgramCurlPreservesDataAndScreensModelDelivery(t *testing.T) {
 	}
 }
 
+// promptAnsweringCards submits one prompt and answers the approval cards it
+// raises, in order, with options ("decline" refuses). A card beyond them fails.
+func promptAnsweringCards(t *testing.T, s *commandProgramSession, prompt string, options ...string) []wire.CheckpointEvent {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() {
+		_, err := s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, prompt)
+		done <- err
+	}()
+	kind := wire.CheckpointKindToolApproval
+	var cards []wire.CheckpointEvent
+	answered := map[string]bool{}
+	var runErr error
+	testutil.WaitFor(t, func() bool {
+		select {
+		case runErr = <-done:
+			return true
+		default:
+		}
+		pending, err := s.h.Sessions.Checkpoints.ListPending(t.Context(), s.session, &kind)
+		if err != nil {
+			return false
+		}
+		for _, card := range pending {
+			if answered[card.ID] {
+				continue
+			}
+			answered[card.ID] = true
+			if len(cards) >= len(options) {
+				t.Fatalf("%s: unexpected card: %s", prompt, cardText(t, card))
+			}
+			cards = append(cards, card)
+			answerCard(t, s, card, options[len(cards)-1])
+		}
+		return false
+	})
+	testutil.FailErr(t, prompt, runErr)
+	if len(cards) != len(options) {
+		t.Fatalf("%s: %d cards, want %d", prompt, len(cards), len(options))
+	}
+	return cards
+}
+
+func answerCard(t *testing.T, s *commandProgramSession, card wire.CheckpointEvent, option string) {
+	t.Helper()
+	owner := s.h.OwnerCtx(t, t.Context())
+	if option == "decline" {
+		_, err := s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, card.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
+		testutil.FailErr(t, "decline card", err)
+		return
+	}
+	_, err := s.h.Sessions.Checkpoints.(*hitl.Checkpoints).Authority.ResolveApprovalOption(owner, s.session, card.ID, option)
+	testutil.FailErr(t, "answer card", err)
+}
+
+func cardText(t *testing.T, card wire.CheckpointEvent) string {
+	t.Helper()
+	encoded, err := json.Marshal(card)
+	testutil.FailErr(t, "marshal card", err)
+	return string(encoded)
+}
+
 func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 	body := "external-payload-line-1\nexternal-payload-line-2\n"
 	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -316,8 +378,8 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 	t.Run("downstream_egress_policy_contrast_after_curl_ingestion", func(t *testing.T) {
 		balancedRules := "  - category: tool\n    pattern: http_request\n    effect: allow\n"
 
-		// 1. Clean local session: echo local -> outbound curl to sink.external.example short-circuits under
-		// Balanced/Observe without calling the egress resolver.
+		// 1. Clean local session: the first contact with sink.external.example is
+		// audited, not asked, at Balanced.
 		cleanMock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 			{
 				Pattern:      "clean step 1",
@@ -335,26 +397,16 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		if !cleanSess.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(cleanSess.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 			t.Fatal("listener grant failed")
 		}
-		var cleanResolverHosts []string
-		releaseClean := confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
-			cleanResolverHosts = append(cleanResolverHosts, ep.Host)
-			return false
-		})
-		defer func() { _ = releaseClean(context.Background()) }()
-
-		_, err := cleanSess.h.Sessions.Manager.Submissions.Prompt(t.Context(), cleanSess.session, "clean step 1")
-		testutil.FailErr(t, "clean step 1", err)
-		_, err = cleanSess.h.Sessions.Manager.Submissions.Prompt(t.Context(), cleanSess.session, "clean step 2")
-		testutil.FailErr(t, "clean step 2", err)
+		promptAnsweringCards(t, cleanSess, "clean step 1")
+		if cards := promptAnsweringCards(t, cleanSess, "clean step 2"); len(cards) != 0 {
+			t.Fatalf("a clean Balanced chat asked about its first contact: %+v", cards[0].ToolApproval.Plan.Subject)
+		}
 		if out := cleanSess.outcome(t, "program-2"); out.Status != 0 || out.Refusal != nil {
-			t.Fatalf("expected clean Balanced session to allow outbound request without resolver intervention, got %+v (resolverHosts=%v)", out, cleanResolverHosts)
-		}
-		if len(cleanResolverHosts) != 0 {
-			t.Fatalf("clean Balanced session must not invoke egress resolver, got %v", cleanResolverHosts)
+			t.Fatalf("clean Balanced first contact = %+v", out)
 		}
 
-		// 2. Ingested session: curl external body -> outbound curl to sink.external.example stops short-circuiting
-		// and routes through the egress resolver (denied when rejected, allowed on recovery when approved).
+		// 2. Ingested session: after reading external content the same first
+		// contact asks; declining refuses it and approving recovers.
 		ingestedMock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
 			{
 				Pattern:      "ingested step 1",
@@ -377,32 +429,19 @@ func TestCommandProgramCurlResultIngestionAndFileCustody(t *testing.T) {
 		if !ingestedSess.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(ingestedSess.session, []uint16{uint16(port)}, "curl-proxy", "curl-fixture", nil) {
 			t.Fatal("listener grant failed")
 		}
-		allowSink := false
-		var ingestedResolverHosts []string
-		releaseIngested := confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
-			ingestedResolverHosts = append(ingestedResolverHosts, ep.Host)
-			if ep.Host == "sink.external.example" {
-				return allowSink
-			}
-			return true
-		})
-		defer func() { _ = releaseIngested(context.Background()) }()
-
-		_, err = ingestedSess.h.Sessions.Manager.Submissions.Prompt(t.Context(), ingestedSess.session, "ingested step 1")
-		testutil.FailErr(t, "ingested step 1", err)
-		_, err = ingestedSess.h.Sessions.Manager.Submissions.Prompt(t.Context(), ingestedSess.session, "ingested step 2 deny")
-		testutil.FailErr(t, "ingested step 2 deny", err)
+		if cards := promptAnsweringCards(t, ingestedSess, "ingested step 1"); len(cards) != 0 {
+			t.Fatalf("the clean chat's first fetch asked: %+v", cards[0].ToolApproval.Plan.Subject)
+		}
+		cards := promptAnsweringCards(t, ingestedSess, "ingested step 2 deny", "decline")
+		if !strings.Contains(cardText(t, cards[0]), "sink.external.example") {
+			t.Fatalf("ingested chat's card does not name the sink: %s", cardText(t, cards[0]))
+		}
 		if out := ingestedSess.outcome(t, "program-2"); out.Refusal == nil {
-			t.Fatalf("expected ingested Balanced session to refuse denied sink.external.example, got %+v", out)
-		}
-		if !slices.Contains(ingestedResolverHosts, "sink.external.example") {
-			t.Fatalf("expected ingested Balanced session to invoke egress resolver for sink.external.example, got %v", ingestedResolverHosts)
+			t.Fatalf("declined contact after ingestion was not refused: %+v", out)
 		}
 
-		// 3. Positive authorized outbound / recovery path: once authorized, retry to sink.external.example succeeds.
-		allowSink = true
-		_, err = ingestedSess.h.Sessions.Manager.Submissions.Prompt(t.Context(), ingestedSess.session, "ingested step 3 approve")
-		testutil.FailErr(t, "ingested step 3 approve", err)
+		// 3. Approving the contact recovers the request.
+		promptAnsweringCards(t, ingestedSess, "ingested step 3 approve", "approve_current_action")
 		if out := ingestedSess.outcome(t, "program-3"); out.Status != 0 || out.Refusal != nil || !strings.Contains(out.Stdout, "sink-ok") {
 			t.Fatalf("expected authorized recovery request to sink.external.example to succeed, got %+v", out)
 		}
@@ -707,6 +746,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		}()
 		kind := wire.CheckpointKindToolApproval
 		var card wire.CheckpointEvent
+		approved := map[string]bool{}
 		testutil.WaitFor(t, func() bool {
 			select {
 			case err := <-done:
@@ -715,11 +755,23 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 			default:
 			}
 			pending, err := s.h.Sessions.Checkpoints.ListPending(t.Context(), s.session, &kind)
-			if err != nil || len(pending) == 0 {
+			if err != nil {
 				return false
 			}
-			card = pending[0]
-			return true
+			for _, candidate := range pending {
+				// A first contact after the chat read the server's replies
+				// asks on its own; this test is about the cookie disclosure.
+				if candidate.ToolApproval.Plan.Subject.Kind != wire.ApprovalSubjectKindSecret {
+					if !approved[candidate.ID] {
+						approved[candidate.ID] = true
+						answerCard(t, s, candidate, "approve_current_action")
+					}
+					continue
+				}
+				card = candidate
+				return true
+			}
+			return false
 		})
 		return card, done
 	}

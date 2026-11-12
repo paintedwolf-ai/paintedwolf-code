@@ -24,6 +24,8 @@ import (
 	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitexec"
+	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
@@ -73,8 +75,10 @@ func authenticatedUploadPack(t *testing.T, repo string) (*httptest.Server, func(
 }
 
 // An agent's Git authenticates through the host credential service from
-// inside its real confinement: the confined helper reaches the service and
-// the service verifies it as the served Git's own helper.
+// inside its real confinement once the call holds the credential-store grant:
+// the confined helper reaches the service and the service verifies it as the
+// served Git's own helper. Without the grant nothing is released, and the
+// result names the capability that would.
 func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
 	confine.TestingSetAutoConfine(t)
@@ -89,15 +93,30 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	testutil.FailErr(t, "parse server", err)
 	port, err := strconv.ParseUint(parsed.Port(), 10, 16)
 	testutil.FailErr(t, "parse port", err)
-
-	s := newCommandProgramSession(t, "git ls-remote "+server.URL+"/repo.git", "")
-	gittest.InitCommit(t, s.dir, "work")
-	if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "git-fixture", "test-listener", nil) {
-		t.Fatal("loopback grant failed")
+	grantLoopback := func(s *commandProgramSession) {
+		gittest.InitCommit(t, s.dir, "work")
+		if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "git-fixture", "test-listener", nil) {
+			t.Fatal("loopback grant failed")
+		}
 	}
-	runCommandWithApprovals(t, s)
-	got := s.outcome(t, "program-1")
-	t.Logf("ls-remote stderr: %s", got.Stderr)
+	program := "git ls-remote " + server.URL + "/repo.git"
+
+	ungranted := newCommandProgramSession(t, program, "")
+	grantLoopback(ungranted)
+	runCommandWithApprovals(t, ungranted)
+	if got := ungranted.outcome(t, "program-1"); got.Status == 0 || authenticated() {
+		t.Fatalf("credentials released without the grant: %+v", got)
+	}
+	if !ungranted.resultNames(t, isolation.CodeTryCredentialStore) {
+		t.Fatalf("the result does not name the credential-store capability: %s", ungranted.result(t))
+	}
+
+	granted := newCommandProgramSessionWithArgs(t, map[string]any{
+		"command": program, "capability_request": map[string]any{"credential_store": true},
+	}, wire.CreateSessionRequest{}, "")
+	grantLoopback(granted)
+	runCommandWithApprovals(t, granted, "recommended")
+	got := granted.outcome(t, "program-1")
 	if got.Status != 0 || !strings.Contains(got.Stdout, head) {
 		t.Fatalf("ls-remote under confinement = %+v", got)
 	}
@@ -162,6 +181,9 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 	if got := ungranted.outcome(t, "program-1"); strings.Contains(got.Stderr, sshAgentAnswered) || requests() != 0 {
 		t.Fatalf("SSH agent reached Git without a capability: %d requests, stderr %q", requests(), got.Stderr)
 	}
+	if !ungranted.resultNames(t, isolation.CodeTrySocketPath) {
+		t.Fatalf("the result does not name the socket capability: %s", ungranted.result(t))
+	}
 
 	granted := newCommandProgramSessionWithArgs(t, map[string]any{
 		"command":            "git ls-remote " + remote,
@@ -181,4 +203,25 @@ func TestAgentGitReachesTheGrantedSSHAgentFromInsideItsConfinement(t *testing.T)
 	if !strings.Contains(got.Stderr, sshAgentAnswered) || requests() == 0 {
 		t.Fatalf("granted SSH agent unreachable from the confined Git: %d requests, stderr %q", requests(), got.Stderr)
 	}
+}
+
+// resultNames reports whether the command's result raises code, as feedback
+// or in its guidance.
+func (s *commandProgramSession) resultNames(t *testing.T, code string) bool {
+	t.Helper()
+	msgs, err := s.h.Store.GetMessages(t.Context(), s.session)
+	testutil.FailErr(t, "read transcript", err)
+	for _, raw := range msgs {
+		msg := messageview.RedactMessage(raw)
+		if msg.Role != wire.MessageRoleTool || msg.ToolResult == nil || msg.ToolResult.ToolCallID != "program-1" {
+			continue
+		}
+		for _, feedback := range msg.ToolResult.Feedback {
+			if feedback.Code == code {
+				return true
+			}
+		}
+		return strings.Contains(msg.Content, code)
+	}
+	return false
 }
