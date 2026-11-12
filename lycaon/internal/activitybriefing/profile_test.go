@@ -24,7 +24,8 @@ func (s sessions) Get(context.Context, string) (*wire.Session, error) {
 	return &wire.Session{ProjectID: s.projectID}, nil
 }
 
-// programs serves one activity; siblings are the program's other activities.
+// programs serves one activity's page; siblings are the program's other
+// activities, listed on the page as the recorder lists them.
 type programs struct {
 	activity wire.CommandActivity
 	siblings int
@@ -36,7 +37,7 @@ func (p *programs) ReadProgramActivityPage(context.Context, string, string, stri
 	for range p.siblings {
 		whole = append(whole, wire.CommandActivity{ID: "sibling"})
 	}
-	return wire.CommandProgramReceiptPage{Program: wire.CommandProgramReceipt{Activities: whole}, Activities: []wire.CommandActivity{p.activity},
+	return wire.CommandProgramReceiptPage{Activities: whole,
 		Executions: []wire.CommandExecutionReceipt{{Command: "go test ./...", State: p.activity.State, StatusCode: &exit,
 			Outputs: []wire.CommandExecutionOutput{{Stream: "stdout", Preview: "ok  pkg", TailPreview: "ok  pkg\nPASS"}}}}}, nil
 }
