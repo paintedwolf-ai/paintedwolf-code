@@ -1063,8 +1063,6 @@ host_facts:
    type: string
  - name: paintedwolf.requested
    type: string
- - name: paintedwolf.requested_max
-   type: string
  - name: paintedwolf.retryable
    type: bool
  - name: paintedwolf.rule_category
@@ -1104,8 +1102,6 @@ host_facts:
  - name: paintedwolf.status
    type: string
  - name: paintedwolf.step_fields
-   type: string
- - name: paintedwolf.suggested_resume_max
    type: string
  - name: paintedwolf.supplied
    type: string

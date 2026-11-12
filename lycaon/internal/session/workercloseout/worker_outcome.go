@@ -144,7 +144,9 @@ func FinalizeWorkerSummaryForCanceled(
 					return WorkerSummaryOutcome{}, fmt.Errorf("load canceled worker transcript: %w", err)
 				}
 				if accepted, _, ok := workercompletion.AcceptedWorkerReport(messages, opts.WorkerJobID); ok {
-					return canceledWorkerOutcome(acceptedWorkerOutcome(accepted), cancelReason), nil
+					outcome := acceptedWorkerOutcome(accepted)
+					outcome.Provenance = "cancel_complete_leg"
+					return canceledWorkerOutcome(outcome, cancelReason), nil
 				}
 			}
 		}

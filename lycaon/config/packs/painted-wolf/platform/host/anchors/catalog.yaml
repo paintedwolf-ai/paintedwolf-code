@@ -234,6 +234,7 @@ anchors:
         notice_kind: { type: string, required: true }
         model_calls: { type: int, required: true }
         tokens: { type: int, required: true }
+        spend_under_cent: { type: bool }
         estimated_spend_usd: { type: string }
         quiet_minutes: { type: int }
         in_flight: { type: string }

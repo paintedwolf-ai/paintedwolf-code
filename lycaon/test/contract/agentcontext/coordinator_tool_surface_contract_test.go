@@ -106,8 +106,6 @@ var implementInvestigateDeferredTools = []string{
 	"pack_board",
 	"worker_cancel",
 	"answer_decision",
-	"extend_worker_budget",
-	"decline_worker_budget",
 }
 
 func TestCoordinatorToolSurface_implementInvestigateMatchesSSOT(t *testing.T) {

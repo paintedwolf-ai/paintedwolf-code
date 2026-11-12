@@ -269,6 +269,8 @@ func WithWorkerRoundNotice(facts WorkerRoundNoticeFacts) KickOption {
 	}
 }
 
+const nanoUSDPerCent = 10_000_000
+
 // renderData projects round notice facts under the names the template reads.
 func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
 	data["job_id"] = f.JobID
@@ -276,7 +278,13 @@ func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
 	data["notice_kind"] = f.Kind
 	data["model_calls"] = f.ModelCalls
 	data["tokens"] = f.Tokens
-	if f.SpendPriced {
+	// A priced round that cost nothing has no spend to report; one under a
+	// cent would round to a misleading $0.00.
+	switch {
+	case !f.SpendPriced || f.SpendNanoUSD <= 0:
+	case f.SpendNanoUSD < nanoUSDPerCent:
+		data["spend_under_cent"] = true
+	default:
 		data["estimated_spend_usd"] = fmt.Sprintf("%.2f", float64(f.SpendNanoUSD)/1e9)
 	}
 	if f.Kind == RoundNoticeQuiet {

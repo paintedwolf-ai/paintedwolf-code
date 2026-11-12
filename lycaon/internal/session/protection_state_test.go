@@ -330,35 +330,39 @@ func (r failedFinalizationTranscript) GetWorkerJobMessages(context.Context, stri
 }
 
 func TestWorkerFinalizationStorageFailureDoesNotBecomeCompletion(t *testing.T) {
-	for _, failureAt := range []string{"ledger", "transcript"} {
-		for _, canceled := range []bool{false, true} {
-			t.Run(failureAt+map[bool]string{false: "/normal", true: "/canceled"}[canceled], func(t *testing.T) {
-				failure := errors.New("worker storage read failed")
-				base := &stubSummaryResolver{msgs: []api.Message{completeLegToolRow(map[string]any{
-					"leg_status": "complete", "brief": "The assignment is complete",
-				})}}
-				base.msgs[0].ToolResult.WorkerReport = nil
-				opts := finalizeOpts(base, "child", workercloseout.WorkerSummaryFinalizeOpts{})
-				var resolver workercloseout.WorkerSummaryResolver = base
-				if failureAt == "ledger" {
-					opts.Ledger = failedFinalizationLedger{err: failure}
-				} else {
-					resolver = failedFinalizationTranscript{stubSummaryResolver: base, err: failure}
-				}
-				var result workercloseout.WorkerSummaryOutcome
-				var err error
-				if canceled {
-					result, err = workercloseout.FinalizeWorkerSummaryForCanceled(t.Context(), resolver, base, "child", "canceled", opts)
-				} else {
-					result, err = workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, base, "child", "path-explorer", opts)
-				}
-				if !errors.Is(err, failure) {
-					t.Fatalf("finalization failure = %v, want original cause", err)
-				}
-				if result.Summary != "" || result.HintCode != "" {
-					t.Fatalf("storage failure produced deliverable completion: %+v", result)
-				}
-			})
-		}
+	// A stopped round without an accepted report never reads the ledger, so
+	// only its transcript read can fail.
+	for _, tc := range []struct {
+		failureAt string
+		canceled  bool
+	}{{"ledger", false}, {"transcript", false}, {"transcript", true}} {
+		failureAt, canceled := tc.failureAt, tc.canceled
+		t.Run(failureAt+map[bool]string{false: "/normal", true: "/canceled"}[canceled], func(t *testing.T) {
+			failure := errors.New("worker storage read failed")
+			base := &stubSummaryResolver{msgs: []api.Message{completeLegToolRow(map[string]any{
+				"leg_status": "complete", "brief": "The assignment is complete",
+			})}}
+			base.msgs[0].ToolResult.WorkerReport = nil
+			opts := finalizeOpts(base, "child", workercloseout.WorkerSummaryFinalizeOpts{})
+			var resolver workercloseout.WorkerSummaryResolver = base
+			if failureAt == "ledger" {
+				opts.Ledger = failedFinalizationLedger{err: failure}
+			} else {
+				resolver = failedFinalizationTranscript{stubSummaryResolver: base, err: failure}
+			}
+			var result workercloseout.WorkerSummaryOutcome
+			var err error
+			if canceled {
+				result, err = workercloseout.FinalizeWorkerSummaryForCanceled(t.Context(), resolver, base, "child", "canceled", opts)
+			} else {
+				result, err = workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, base, "child", "path-explorer", opts)
+			}
+			if !errors.Is(err, failure) {
+				t.Fatalf("finalization failure = %v, want original cause", err)
+			}
+			if result.Summary != "" || result.HintCode != "" {
+				t.Fatalf("storage failure produced deliverable completion: %+v", result)
+			}
+		})
 	}
 }
