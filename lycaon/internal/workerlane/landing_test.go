@@ -83,7 +83,7 @@ func (f *landingFixture) round(t *testing.T, jobID, resultID string, settle bool
 	}
 	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, resultID, jobID, now)
 	testutil.FailErr(t, "insert result", err)
-	_, err = f.records.SettleRound(t.Context(), f.actor, workerrecords.Op{ID: "settle-" + jobID}, f.workerID, jobID)
+	_, err = f.records.SettleRound(t.Context(), f.actor, workerrecords.Op{ID: "settle-" + jobID}, f.workerID, jobID, "cp-"+jobID)
 	testutil.FailErr(t, "settle round", err)
 }
 
@@ -163,7 +163,7 @@ func TestChangesRefusedWhileARoundRuns(t *testing.T) {
 		t.Fatal("a refused change reached promotion")
 	}
 	f.promoter.status = api.WorkerMergeStatusPending
-	_, err = f.records.SettleRound(t.Context(), f.actor, workerrecords.Op{ID: "settle-job-2"}, f.workerID, "job-2")
+	_, err = f.records.SettleRound(t.Context(), f.actor, workerrecords.Op{ID: "settle-job-2"}, f.workerID, "job-2", "")
 	testutil.FailErr(t, "settle", err)
 	_, err = f.lanes.Land(t.Context(), f.promoter, f.change("land-pending"), api.PromoteOverlayInput{})
 	if !errors.Is(err, workerlane.ErrNotLanded) {
