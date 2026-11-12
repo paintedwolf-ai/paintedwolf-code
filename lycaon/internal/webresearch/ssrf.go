@@ -18,9 +18,10 @@ import (
 	"github.com/lycaon/lycaon/internal/secretmatch"
 )
 
-// guardedGet validates and pins every redirect hop before dialing.
-func guardedGet(ctx context.Context, u *url.URL, accept string) (*http.Response, string, error) {
-	return guardedGetWithHopPolicy(ctx, u, accept, nil, nil)
+// guardedGet validates and pins every redirect hop before dialing; the body
+// is the first limit bytes of the response.
+func guardedGet(ctx context.Context, u *url.URL, accept string, limit int64) (*http.Response, string, error) {
+	return guardedGetWithHopPolicy(ctx, u, accept, limit, nil, nil)
 }
 
 type beforeGuardedGetHop func(context.Context, *url.URL) (func(), error)
@@ -30,6 +31,7 @@ func guardedGetWithHopPolicy(
 	ctx context.Context,
 	u *url.URL,
 	accept string,
+	limit int64,
 	beforeHop beforeGuardedGetHop,
 	recordHop recordGuardedGetHop,
 ) (*http.Response, string, error) {
@@ -67,12 +69,14 @@ func guardedGetWithHopPolicy(
 		// gates the dial, and RedirectNone hands the redirect decision back
 		// so every hop is revalidated here.
 		resp, err := outboundhttp.Do(ctx, outboundhttp.Request{
-			Class:        egressclass.WebResearchRequest,
-			Method:       http.MethodGet,
-			URL:          current.String(),
-			HopHeaders:   hopHeaders,
-			Timeout:      defaultFetchTimeout,
-			MaxBodyBytes: fetchBodyByteLimit,
+			Class:      egressclass.WebResearchRequest,
+			Method:     http.MethodGet,
+			URL:        current.String(),
+			HopHeaders: hopHeaders,
+			Timeout:    defaultFetchTimeout,
+			// Callers read a prefix, as a streamed body once let them stop.
+			MaxBodyBytes: limit,
+			TruncateBody: true,
 			AllowAddress: func(addr netip.Addr, _ uint16) bool { return ipAllowed(addr) },
 			BeforeHop: func(hopCtx context.Context, hopURL *url.URL) error {
 				// Redirect targets pass through the same host gate.

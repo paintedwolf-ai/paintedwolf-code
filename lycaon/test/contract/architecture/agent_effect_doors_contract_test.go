@@ -15,14 +15,16 @@ import (
 // HTTP owner, the program evaluator, tool execution and web research.
 var agentReachablePackages = append([]string{"internal/toolexecution/", "internal/webresearch/"}, agentAdapterPackages...)
 
-// agentForbiddenCalls bypass the launch and network doors: a host launch
-// carries no agent confinement, os/exec starts a process outside the launch
-// plan, and the default HTTP client dials without destination admission.
+// agentForbiddenCalls bypass the launch and network doors: a host launch or
+// host Git purpose carries no agent confinement, os/exec starts a process
+// outside the launch plan, and the default HTTP client dials without
+// destination admission.
 var agentForbiddenCalls = map[string]map[string]bool{
-	"github.com/lycaon/lycaon/internal/exec": {"HostLaunch": true},
-	"os/exec":                                {"Command": true, "CommandContext": true},
-	"net/http":                               {"Get": true, "Head": true, "Post": true, "PostForm": true, "NewRequest": true, "NewRequestWithContext": true, "DefaultClient": true, "DefaultTransport": true},
-	"net":                                    {"Dial": true, "DialTimeout": true, "DialTCP": true, "DialUDP": true, "DialUnix": true, "DialIP": true},
+	"github.com/lycaon/lycaon/internal/exec":    {"HostLaunch": true},
+	"github.com/lycaon/lycaon/internal/gitexec": {"WithHostPurpose": true},
+	"os/exec":  {"Command": true, "CommandContext": true},
+	"net/http": {"Get": true, "Head": true, "Post": true, "PostForm": true, "NewRequest": true, "NewRequestWithContext": true, "DefaultClient": true, "DefaultTransport": true},
+	"net":      {"Dial": true, "DialTimeout": true, "DialTCP": true, "DialUDP": true, "DialUnix": true, "DialIP": true},
 }
 
 // agentForbiddenTypes are clients and dialers that reach the network without
