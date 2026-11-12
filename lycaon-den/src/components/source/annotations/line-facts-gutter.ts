@@ -2,7 +2,7 @@
 import { StateEffect, StateField, type EditorState } from "@codemirror/state";
 import { EditorView, GutterMarker, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { agentMarkLines, lineFacts, type LineFactsInput } from "./line-facts.ts";
-import { agentWholeFile } from "../../../files/documents/document-agent-presence.ts";
+import { agentWholeFile } from "../../../files/documents/agent-paint-lifetime.ts";
 import { gutterControl, type LineGutterControl } from "./line-gutter-controls.ts";
 import { isScrollActive } from "../../../platform/scrolling/scroll-activity.ts";
 

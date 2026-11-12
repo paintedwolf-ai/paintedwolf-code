@@ -3,7 +3,7 @@ import { EditorState, StateEffect, StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { agentDocumentMarks } from "../../../files/components/agent-presence.ts";
-import type { PaintedAgentMark } from "../../../files/documents/document-agent-presence.ts";
+import type { PaintedAgentMark } from "../../../files/documents/agent-paint-lifetime.ts";
 import { lineFactsGutter, lineFactsMarker, lineFactsTint } from "./line-facts-gutter.ts";
 
 let view: EditorView;
@@ -17,7 +17,7 @@ function mount(withRead: boolean) {
     reads: [{ id: "read", sequence: 1, tool_call_id: "call", tool: "read", root_id: "root", path: "a.ts",
       extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false }],
   }]]), { reads: true, changes: true, fileNames: true }, "reader", "root", "a.ts").map(mark => ({
-    mark, from: doc.line(2).from, to: doc.line(4).from, bornAt: 0, leftAt: null, color: undefined,
+    mark, from: doc.line(2).from, to: doc.line(4).from, bornAt: 0, leftAt: null, supersededAt: null, color: undefined,
   })) : [];
   const setMarks = StateEffect.define<PaintedAgentMark[]>();
   const markField = StateField.define<PaintedAgentMark[]>({ create: () => marks,
@@ -78,14 +78,14 @@ describe("read gutter facts", () => {
         reads: [{ id: "read1", sequence: 1, tool_call_id: "call1", tool: "read", root_id: "root", path: "a.ts",
           extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false }],
       }]]), { reads: true, changes: true, fileNames: true }, "reader1", "root", "a.ts").map(mark => ({
-        mark, from: doc.line(2).from, to: doc.line(4).from, bornAt: 0, leftAt: null, color: undefined,
+        mark, from: doc.line(2).from, to: doc.line(4).from, bornAt: 0, leftAt: null, supersededAt: null, color: undefined,
       })),
       ...agentDocumentMarks(new Map([["reader2", {
         session_id: "reader2", title: "Read 2", turn: 1, activities: [], intents: [], worker_drafts: [],
         reads: [{ id: "read2", sequence: 2, tool_call_id: "call2", tool: "read", root_id: "root", path: "a.ts",
           extent: "range", ranges: [{ start_line: 2, end_line: 4 }], stale: false }],
       }]]), { reads: true, changes: true, fileNames: true }, "reader2", "root", "a.ts").map(mark => ({
-        mark, from: doc.line(2).from, to: doc.line(4).to, bornAt: 0, leftAt: null, color: undefined,
+        mark, from: doc.line(2).from, to: doc.line(4).to, bornAt: 0, leftAt: null, supersededAt: null, color: undefined,
       })),
     ];
     const input = { doc, marks, attribution: [], findings: [] };
@@ -109,7 +109,7 @@ describe("read gutter facts", () => {
           extent: "range", ranges: [{ start_line: 2, end_line: 3 }], stale: false },
       ],
     }]]), { reads: true, changes: true, fileNames: true }, "reader", "root", "a.ts").map(mark => ({
-      mark, from: 0, to: doc.length, bornAt: 0, leftAt: null, color: undefined,
+      mark, from: 0, to: doc.length, bornAt: 0, leftAt: null, supersededAt: null, color: undefined,
     }));
     const input = { doc, marks, attribution: [], findings: [] };
     expect(lineFactsTint(input, 2)).toBe("none");
