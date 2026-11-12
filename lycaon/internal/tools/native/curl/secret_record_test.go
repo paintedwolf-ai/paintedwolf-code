@@ -198,7 +198,7 @@ func TestCurlReviewsAReferencedPassphrase(t *testing.T) {
 			})
 			inv := newInvocation(t.Context(), prepared, tc, commandprogram.Streams{})
 			got, err := inv.passphrase()
-			if len(asked) != 1 || asked[0].DestinationLabel != "https://mtls.example.test" || len(asked[0].Fingerprints) != 1 {
+			if len(asked) != 1 || asked[0].DestinationLabel != "https://mtls.example.test:443" || len(asked[0].Fingerprints) != 1 {
 				t.Fatalf("passphrase review asked %+v", asked)
 			}
 			if decision == secretmatch.SendUnchanged {
