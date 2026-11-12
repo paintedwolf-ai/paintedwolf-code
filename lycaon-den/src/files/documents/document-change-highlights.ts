@@ -55,7 +55,7 @@ function newestFirst(lines: LandedLine[]): LandedLine[] {
   return lines.sort((a, b) => b.at - a.at || a.from - b.from).slice(0, LANDED_LINES_MAX);
 }
 
-/** Lines changes from elsewhere landed on, each kept for the agent linger time after its own last change. */
+/** Lines changed from elsewhere, each kept for the linger time after its last change. */
 export const landedLinesField = StateField.define<readonly LandedLine[]>({
   create: () => [],
   update(lines, transaction) {
