@@ -127,6 +127,7 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 	}
 	review := bound.Review(o.operation)
 	review.PathTargets = curlPathTargets(opts)
+	review.Record, review.Represented = requestRecord(opts)
 	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: review, LoopbackPorts: loopbackPorts(opts.url, opts.dial), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
 }
 
@@ -140,24 +141,49 @@ func curlPathTargets(opts options) []commandprogram.PathTarget {
 	for _, path := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
 		add(path, true)
 	}
+	for _, path := range []string{opts.upload, opts.tls.cacert, opts.tls.capath, opts.tls.cert, opts.tls.key} {
+		add(path, false)
+	}
 	for _, path := range opts.cookies {
 		if !strings.Contains(path, "=") {
 			add(path, false)
 		}
 	}
 	for _, part := range opts.data {
-		if part.kind != "raw" && strings.HasPrefix(part.value, "@") {
+		switch {
+		case part.kind == "urlencode":
+			add(urlencodedFile(part.value), false)
+		case part.kind != "raw" && strings.HasPrefix(part.value, "@"):
 			add(strings.TrimPrefix(part.value, "@"), false)
+		}
+	}
+	for _, value := range opts.json {
+		if path, ok := strings.CutPrefix(value, "@"); ok {
+			add(path, false)
 		}
 	}
 	for _, form := range opts.forms {
 		_, value, ok := strings.Cut(form, "=")
-		if ok && strings.HasPrefix(value, "@") {
+		switch {
+		case ok && strings.HasPrefix(value, "@"):
 			path, _, _ := strings.Cut(strings.TrimPrefix(value, "@"), ";")
 			add(path, false)
+		case ok && strings.HasPrefix(value, "<"):
+			add(strings.TrimPrefix(value, "<"), false)
 		}
 	}
 	return targets
+}
+
+// urlencodedFile is the file a --data-urlencode value reads: @file or
+// name@file, where @ comes before any =.
+func urlencodedFile(value string) string {
+	eq := strings.IndexByte(value, '=')
+	at := strings.IndexByte(value, '@')
+	if at >= 0 && (eq < 0 || at < eq) {
+		return value[at+1:]
+	}
+	return ""
 }
 
 func loopbackPorts(raw string, dial []outboundhttp.ResolveMapping) []uint16 {

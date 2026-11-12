@@ -647,9 +647,9 @@ export function ScannersSettingsPanel(props: Props) {
                   data-testid="scanners-custom-soft-limit"
                   min="1"
                   value={customRuntime().soft_limit_sec}
-                  onInput={(e) => setCustomDraft({
+                  onNumber={(n) => n !== null && setCustomDraft({
                     ...customDraft(),
-                    runtime: { ...customRuntime(), soft_limit_sec: Number(e.currentTarget.value) },
+                    runtime: { ...customRuntime(), soft_limit_sec: n },
                   })}
                 />
               </DenField>
@@ -659,9 +659,9 @@ export function ScannersSettingsPanel(props: Props) {
                   data-testid="scanners-custom-hard-limit"
                   min="0"
                   value={customRuntime().hard_limit_sec}
-                  onInput={(e) => setCustomDraft({
+                  onNumber={(n) => n !== null && setCustomDraft({
                     ...customDraft(),
-                    runtime: { ...customRuntime(), hard_limit_sec: Number(e.currentTarget.value) },
+                    runtime: { ...customRuntime(), hard_limit_sec: n },
                   })}
                 />
               </DenField>
@@ -672,9 +672,9 @@ export function ScannersSettingsPanel(props: Props) {
                   min="1"
                   max="8"
                   value={customRuntime().cpu_units}
-                  onInput={(e) => setCustomDraft({
+                  onNumber={(n) => n !== null && setCustomDraft({
                     ...customDraft(),
-                    runtime: { ...customRuntime(), cpu_units: Number(e.currentTarget.value) },
+                    runtime: { ...customRuntime(), cpu_units: n },
                   })}
                 />
               </DenField>
@@ -684,9 +684,9 @@ export function ScannersSettingsPanel(props: Props) {
                   min="1"
                   max="16"
                   value={customRuntime().parallelism}
-                  onInput={(e) => setCustomDraft({
+                  onNumber={(n) => n !== null && setCustomDraft({
                     ...customDraft(),
-                    runtime: { ...customRuntime(), parallelism: Number(e.currentTarget.value) },
+                    runtime: { ...customRuntime(), parallelism: n },
                   })}
                 />
               </DenField>

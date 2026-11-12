@@ -11,6 +11,14 @@ import (
 // agentCredentialStore is the host store an agent's credential service reads.
 var agentCredentialStore = gitcredential.PlatformBackend
 
+// TestingUseAgentCredentialStore makes agent credential services read store
+// until the returned restore runs.
+func TestingUseAgentCredentialStore(store gitcredential.Backend) (restore func()) {
+	previous := agentCredentialStore
+	agentCredentialStore = func() gitcredential.Backend { return store }
+	return func() { agentCredentialStore = previous }
+}
+
 // AgentCredentials is the credential service one agent network command's Git
 // asks. It answers get only, only for recipients admitted to it, from the
 // host's own store; the confined helper never reads the store itself.

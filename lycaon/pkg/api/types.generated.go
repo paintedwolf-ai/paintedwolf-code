@@ -5023,6 +5023,10 @@ type ProjectRoot struct {
 	AddedAt       time.Time `json:"added_at"`
 	// Engine-created draft workspace or user-attached folder.
 	Kind string `json:"kind"`
+	// Whether agents work in this folder. The host derives it from the standing write-root check on current facts. A folder that is not admitted stays attached for the editor only; agents, tools, subprocesses and project policy never see it.
+	Admitted bool `json:"admitted"`
+	// Why agents do not work in this folder; null when admitted. write_root_under_secret_store: the folder is inside the engine's state, key material or a credential store. write_root_contains_control_plane: the folder contains the engine's state.
+	AdmissionCode *string `json:"admission_code"`
 }
 
 // ProjectSourceEntryCreatedResponse Completed in-app creation. Only the normalized path comes back — a new
