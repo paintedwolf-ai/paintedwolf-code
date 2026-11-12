@@ -133,6 +133,11 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 		return Snapshot{}, err
 	}
 	attempt := started.ID
+	if started.Cooling != nil {
+		snap := r.snapshot(StatusFailed, attempt, "", started.Revision, stored)
+		snap.ErrorCode, snap.Error = started.Cooling.Code, started.Cooling.Message
+		return snap, nil
+	}
 	snap := r.snapshot(StatusPending, attempt, "", started.Revision, stored)
 	if request.Manual {
 		snap.Regenerate = Started

@@ -18,7 +18,9 @@ type memStore struct {
 	records  map[string][]SectionHash
 	attempts map[string]string
 	settled  map[string]string
-	nextID   int
+	// cooling is the failure automatic requests report instead of starting.
+	cooling *Failure
+	nextID  int
 }
 
 func newMemStore() *memStore {
@@ -54,6 +56,9 @@ func (m *memStore) StartAttempt(_ context.Context, request Request, _ int64, _ [
 	defer m.mu.Unlock()
 	if id, ok := m.attempts[request.TargetKey]; ok {
 		return Attempt{ID: id, Joined: true}, nil
+	}
+	if m.cooling != nil && !request.Manual {
+		return Attempt{ID: "failed", Cooling: m.cooling}, nil
 	}
 	m.nextID++
 	id := fmt.Sprint(m.nextID)
@@ -245,6 +250,25 @@ func TestFailedGenerationWithoutFallbackFailsTheAttempt(t *testing.T) {
 	}
 	if len(store.results) != 0 || len(store.records) != 0 || len(store.attempts) != 0 || len(store.settled) != 0 {
 		t.Fatalf("failure left state: %+v %+v %+v %+v", store.results, store.records, store.attempts, store.settled)
+	}
+}
+
+func TestCoolingFailureAnswersWithoutAModelCall(t *testing.T) {
+	generator := &countingGenerator{text: "Retried."}
+	engine, store, log := newTestEngine(t, generator)
+	store.cooling = &Failure{Code: CodeGenerationFailed, Message: "provider down"}
+	snap, err := engine.Request(t.Context(), request("x", false, purposeSection("anything", Generated)))
+	testutil.FailErr(t, "automatic", err)
+	if snap.Status != StatusFailed || snap.ErrorCode != CodeGenerationFailed || generator.calls.Load() != 0 {
+		t.Fatalf("cooling target asked the model: calls=%d %+v", generator.calls.Load(), snap)
+	}
+	retried, err := engine.Request(t.Context(), request("x", true, purposeSection("anything", Generated)))
+	testutil.FailErr(t, "manual", err)
+	if retried.Status != StatusPending {
+		t.Fatalf("manual retry waited: %+v", retried)
+	}
+	if done := receive(t, log.seen); done.Status != StatusComplete || generator.calls.Load() != 1 {
+		t.Fatalf("manual retry: calls=%d %+v", generator.calls.Load(), done)
 	}
 }
 
