@@ -83,6 +83,8 @@ type Request struct {
 	// review and launch does not change what was reviewed.
 	View         ViewBoundary `json:"-"`
 	SocketGrants []SocketGrant
+	// HostServices are sockets the host serves to this action.
+	HostServices []HostService
 	// ProtectedWriteGrants are exact protected-path write exceptions.
 	ProtectedWriteGrants []ProtectedPathGrant
 	// PolicyWriteGrants expire with this invocation and cover reviewed
@@ -123,6 +125,7 @@ type preparedRequest struct {
 	ReadDenyPaths         []string
 	View                  ViewBoundary
 	SocketGrants          []SocketGrant
+	HostServicePaths      []string
 	Dropped               []SocketGrantDrop
 	ProtectedWrites       []ProtectedPathGrant
 	PolicyWrites          []ProtectedPathGrant
@@ -148,7 +151,8 @@ func prepareRequest(req Request) (preparedRequest, error) {
 	}
 	readRoots := normalizePathList(append(append([]string(nil), req.ReadRoots...), req.SessionOutputRoot))
 	readDenyPaths := normalizePathList(req.ReadDenyPaths)
-	grants, err := normalizeSocketGrantList(req.SocketGrants)
+	serviceGrants, servicePaths := hostServiceAdmissions(req.HostServices)
+	grants, err := normalizeSocketGrantList(append(append([]SocketGrant(nil), req.SocketGrants...), serviceGrants...))
 	if err != nil {
 		return preparedRequest{}, err
 	}
@@ -189,6 +193,7 @@ func prepareRequest(req Request) (preparedRequest, error) {
 		ReadDenyPaths:         readDenyPaths,
 		View:                  req.View.normalized(),
 		SocketGrants:          applied,
+		HostServicePaths:      servicePaths,
 		Dropped:               dropped,
 		ProtectedWrites:       protected,
 		PolicyWrites:          policyWrites,

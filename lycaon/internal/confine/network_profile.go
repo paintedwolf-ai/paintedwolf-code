@@ -36,6 +36,9 @@ func writeNetworkRules(b *strings.Builder, c Confinement) error {
 		// Exact local socket grants are rendered below.
 	}
 	writeSocketGrantRules(b, c)
+	for _, path := range c.HostServicePaths {
+		b.WriteString("(allow network-outbound (literal " + sbplString(path) + "))\n")
+	}
 	return nil
 }
 

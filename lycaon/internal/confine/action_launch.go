@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"net/url"
+	"os"
 	"reflect"
 	"runtime"
 	"slices"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/socketref"
 )
 
@@ -43,6 +45,7 @@ func (l *ActionLease) captureLaunch(c *Confinement) {
 	frozen.View.ReopenedReadPaths = slices.Clone(c.View.ReopenedReadPaths)
 	frozen.View.DeniedLoopbackPorts = slices.Clone(c.View.DeniedLoopbackPorts)
 	frozen.SocketGrants = slices.Clone(c.SocketGrants)
+	frozen.HostServicePaths = slices.Clone(c.HostServicePaths)
 	frozen.socketEndpoints = maps.Clone(c.socketEndpoints)
 	frozen.DroppedSocketGrants = slices.Clone(c.DroppedSocketGrants)
 	frozen.ProtectedWriteGrants = slices.Clone(c.ProtectedWriteGrants)
@@ -99,6 +102,57 @@ func (l *ActionLease) bindSockets(c *Confinement) error {
 	}
 	c.socketEndpoints = endpoints
 	return nil
+}
+
+// HostService is a socket the host serves to one action, such as the
+// credential service an agent's Git asks. Unlike a user's socket grant it is
+// never relayed: the service must observe the confined client as its peer.
+type HostService struct {
+	// path is admitted by an exact kernel path rule.
+	path string
+	// grant is the retained object a connect mediator dials instead.
+	grant *SocketGrant
+}
+
+// ServeHostSocket admits path, a socket the host listens on inside a
+// socketref.ServiceDirectory, to one action; release ends the admission.
+// A kernel path rule is safe there because every write floor denies that
+// directory, so no action can repoint the path. A connect mediator instead
+// dials the retained socket, and the client's identity must reach the
+// service in band.
+func ServeHostSocket(path string) (HostService, func(), error) {
+	switch socketref.Platform().Service {
+	case socketref.KernelPathname:
+		canonical := fspath.CanonicalPath(path)
+		if canonical == "" || !socketref.IsServicePath(canonical) {
+			return HostService{}, nil, &SocketResolveError{Code: SocketResolveRefused, Path: path, Err: fmt.Errorf("not inside a host service directory")}
+		}
+		if info, err := os.Lstat(canonical); err != nil || info.Mode()&os.ModeSocket == 0 {
+			return HostService{}, nil, &SocketResolveError{Code: SocketResolveNotSocket, Path: path, Err: err}
+		}
+		return HostService{path: canonical}, func() {}, nil
+	case socketref.RetainedObject:
+		lease, err := socketref.Capture(path)
+		if err != nil {
+			return HostService{}, nil, &SocketResolveError{Code: SocketResolveRefused, Path: path, Err: err}
+		}
+		grant := SocketGrant{ApprovedPath: path, ResolvedPath: fspath.CanonicalPath(path), Binding: lease.Binding()}
+		return HostService{grant: &grant}, lease.Close, nil
+	default:
+		return HostService{}, nil, &SocketResolveError{Code: SocketResolveRefused, Path: path, Err: socketref.ErrUnsupported}
+	}
+}
+
+func hostServiceAdmissions(services []HostService) (grants []SocketGrant, paths []string) {
+	for _, service := range services {
+		switch {
+		case service.grant != nil:
+			grants = append(grants, *service.grant)
+		case service.path != "":
+			paths = append(paths, service.path)
+		}
+	}
+	return grants, paths
 }
 
 func (l *ActionLease) releaseSockets() {

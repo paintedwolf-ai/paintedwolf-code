@@ -270,7 +270,8 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 			if !registered(tool) {
 				tool = ""
 			}
-			return command.NativePrepared{Command: prepared.Command, Tool: tool, Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner}, nil
+			// Every agent Git form runs under its own confined launch.
+			return command.NativePrepared{Command: prepared.Command, Tool: tool, Mode: prepared.Mode, Review: prepared.Review, Invoke: prepared.InvokeOwner, LaunchesConfined: true}, nil
 		}}
 	}, nil
 }
