@@ -481,7 +481,7 @@ func (d *ProgramDispatcher) commandEffects(ctx context.Context, argv []string, d
 		return every
 	}
 	if mode, known := d.childMode(ctx, spec, argv); known {
-		effects = slices.DeleteFunc(slices.Clone(effects), func(effect toolcontract.CommandEffectRequirement) bool { return effect.Mode != mode })
+		effects = slices.DeleteFunc(slices.Clone(effects), func(effect toolcontract.EffectRequirement) bool { return effect.Mode != mode })
 		if len(effects) == 0 {
 			return every
 		}
