@@ -126,10 +126,13 @@ type evidence struct {
 	facts      facts
 	executions []wire.CommandExecutionReceipt
 	cause      briefing.CausalRead
+	// partial is a card covering less than its call's whole program.
+	partial bool
 }
 
 func (p *Profile) read(ctx context.Context, target wire.ToolActivityBriefingTarget) (evidence, error) {
 	out := evidence{target: target, facts: facts{command: len(target.Members) > 0}}
+	covered, programs := map[string]int{}, map[string]int{}
 	for _, member := range target.Members {
 		page, err := p.programs.ReadProgramActivityPage(ctx, target.SessionID, member.ProgramID, member.ActivityID, "", pageLimit)
 		if err != nil {
@@ -141,6 +144,11 @@ func (p *Profile) read(ctx context.Context, target wire.ToolActivityBriefingTarg
 		}
 		out.facts.activities = append(out.facts.activities, activity)
 		out.executions = append(out.executions, page.Executions...)
+		covered[member.ProgramID]++
+		programs[member.ProgramID] = len(page.Program.Activities)
+	}
+	for program, total := range programs {
+		out.partial = out.partial || covered[program] < total
 	}
 	read, err := p.cause.ReadActionCause(ctx, briefing.ActionRef{SessionID: target.SessionID, ToolCallID: target.ToolCallIds[0]})
 	if err != nil {
