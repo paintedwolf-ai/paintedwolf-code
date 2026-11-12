@@ -31,7 +31,9 @@ func (t programOwnerTools) httpOperation(mutations *mutation.Owners) (command.Na
 	if err != nil {
 		return command.NativeOperation{}, err
 	}
-	return command.NativeOperation{Tool: owner.Operation(), Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+	// curl's unsupported forms refuse rather than run an installed curl
+	// outside the http_request owner.
+	return command.NativeOperation{Tool: owner.Operation(), ClosedForms: true, SecretSlots: owner.SecretSlots(), Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 		prepared, err := owner.Prepare(mutation.Program{Paths: frame}, request)
 		if err != nil {
 			return command.NativePrepared{}, err

@@ -61,10 +61,9 @@ export function BudgetsEditor(props: Props) {
     autoSave.schedule();
   });
 
-  const patchNumber = (key: NumericLimitKey, raw: string) => {
-    const n = Number(raw);
-    if (!Number.isFinite(n)) return;
-    draftState.edit(key, n);
+  /** An emptied field keeps the last value; saving it would mean zero. */
+  const patchNumber = (key: NumericLimitKey, n: number | null) => {
+    if (n !== null) draftState.edit(key, n);
   };
 
   const patchBool = (key: "spend_ceiling_enabled" | "spend_soft_stop" | "coordinator_loop", checked: boolean) => {
@@ -125,9 +124,8 @@ export function BudgetsEditor(props: Props) {
                   step="0.01"
                   value={(limitsSnap().session_spend_ceiling_nano_usd ?? 0) / NANO_PER_USD}
                   data-testid="spend-ceiling-usd"
-                  onInput={(e) => {
-                    const val = Number(e.currentTarget.value);
-                    if (!Number.isFinite(val)) return;
+                  onNumber={(val) => {
+                    if (val === null) return;
                     draftState.edit("session_spend_ceiling_nano_usd", Math.round(val * NANO_PER_USD));
                   }}
                 />
@@ -142,9 +140,8 @@ export function BudgetsEditor(props: Props) {
                       100,
                   )}
                   data-testid="spend-warning-percent"
-                  onInput={(e) => {
-                    const percent = Number(e.currentTarget.value);
-                    if (!Number.isFinite(percent)) return;
+                  onNumber={(percent) => {
+                    if (percent === null) return;
                     draftState.edit("spend_warning_ratio", percent / 100);
                   }}
                 />
@@ -175,21 +172,14 @@ export function BudgetsEditor(props: Props) {
                   min={1}
                   data-testid="max-iterations"
                   value={limitsSnap().max_iterations ?? undefined}
-                  onInput={(e) =>
-                    patchNumber("max_iterations", e.currentTarget.value)
-                  }
+                  onNumber={(n) => patchNumber("max_iterations", n)}
                 />
               </DenField>
               <DenField label={settingLabel("overlay-promote-iterations")} {...settingAnchor("overlay-promote-iterations")}>
                 <DenNumberInput
                   min={1}
                   value={limitsSnap().overlay_promote_max_iterations ?? undefined}
-                  onInput={(e) =>
-                    patchNumber(
-                      "overlay_promote_max_iterations",
-                      e.currentTarget.value,
-                    )
-                  }
+                  onNumber={(n) => patchNumber("overlay_promote_max_iterations", n)}
                 />
               </DenField>
               <p class="den-settings-hint">
@@ -203,9 +193,7 @@ export function BudgetsEditor(props: Props) {
                 <DenNumberInput
                   min={1024}
                   value={limitsSnap().max_tool_result_bytes ?? undefined}
-                  onInput={(e) =>
-                    patchNumber("max_tool_result_bytes", e.currentTarget.value)
-                  }
+                  onNumber={(n) => patchNumber("max_tool_result_bytes", n)}
                 />
               </DenField>
             </section>
@@ -230,12 +218,7 @@ export function BudgetsEditor(props: Props) {
                   min={0}
                   value={limitsSnap().max_coordinator_loop_cycles ?? 0}
                   data-testid="coordinator-loop-cycles"
-                  onInput={(e) =>
-                    patchNumber(
-                      "max_coordinator_loop_cycles",
-                      e.currentTarget.value,
-                    )
-                  }
+                  onNumber={(n) => patchNumber("max_coordinator_loop_cycles", n)}
                 />
               </DenField>
               <p class="den-settings-hint">
@@ -251,27 +234,21 @@ export function BudgetsEditor(props: Props) {
                   min={limitsSnap().worker_tool_budget_min}
                   max={limitsSnap().worker_tool_budget_max}
                   value={limitsSnap().worker_tool_budget_default ?? undefined}
-                  onInput={(e) =>
-                    patchNumber("worker_tool_budget_default", e.currentTarget.value)
-                  }
+                  onNumber={(n) => patchNumber("worker_tool_budget_default", n)}
                 />
               </DenField>
               <DenField label={settingLabel("worker-budget-min")} {...settingAnchor("worker-budget-min")}>
                 <DenNumberInput
                   min={2}
                   value={limitsSnap().worker_tool_budget_min ?? undefined}
-                  onInput={(e) =>
-                    patchNumber("worker_tool_budget_min", e.currentTarget.value)
-                  }
+                  onNumber={(n) => patchNumber("worker_tool_budget_min", n)}
                 />
               </DenField>
               <DenField label={settingLabel("worker-budget-max")} {...settingAnchor("worker-budget-max")}>
                 <DenNumberInput
                   min={limitsSnap().worker_tool_budget_min}
                   value={limitsSnap().worker_tool_budget_max ?? undefined}
-                  onInput={(e) =>
-                    patchNumber("worker_tool_budget_max", e.currentTarget.value)
-                  }
+                  onNumber={(n) => patchNumber("worker_tool_budget_max", n)}
                 />
               </DenField>
               <p class="den-settings-hint">
@@ -291,9 +268,8 @@ export function BudgetsEditor(props: Props) {
                 <DenNumberInput
                   min={1}
                   value={Math.round((limitsSnap().llm_turn_timeout_ms ?? 0) / 1000)}
-                  onInput={(e) => {
-                    const val = Number(e.currentTarget.value);
-                    if (!Number.isFinite(val)) return;
+                  onNumber={(val) => {
+                    if (val === null) return;
                     draftState.edit("llm_turn_timeout_ms", Math.round(val * 1000));
                   }}
                 />
@@ -302,9 +278,8 @@ export function BudgetsEditor(props: Props) {
                 <DenNumberInput
                   min={1}
                   value={Math.round((limitsSnap().coordinator_host_turn_timeout_ms ?? 0) / 1000)}
-                  onInput={(e) => {
-                    const val = Number(e.currentTarget.value);
-                    if (!Number.isFinite(val)) return;
+                  onNumber={(val) => {
+                    if (val === null) return;
                     draftState.edit("coordinator_host_turn_timeout_ms", Math.round(val * 1000));
                   }}
                 />
@@ -313,9 +288,8 @@ export function BudgetsEditor(props: Props) {
                 <DenNumberInput
                   min={1}
                   value={Math.round((limitsSnap().coordinator_max_sleep_ms ?? 0) / 1000)}
-                  onInput={(e) => {
-                    const val = Number(e.currentTarget.value);
-                    if (!Number.isFinite(val)) return;
+                  onNumber={(val) => {
+                    if (val === null) return;
                     draftState.edit("coordinator_max_sleep_ms", Math.round(val * 1000));
                   }}
                 />
@@ -324,9 +298,8 @@ export function BudgetsEditor(props: Props) {
                 <DenNumberInput
                   min={1}
                   value={Math.round((limitsSnap().await_parent_workers_timeout_ms ?? 0) / 1000)}
-                  onInput={(e) => {
-                    const val = Number(e.currentTarget.value);
-                    if (!Number.isFinite(val)) return;
+                  onNumber={(val) => {
+                    if (val === null) return;
                     draftState.edit("await_parent_workers_timeout_ms", Math.round(val * 1000));
                   }}
                 />

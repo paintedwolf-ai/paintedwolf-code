@@ -57,6 +57,9 @@ func (s *Store) insertVersionWithCache(ctx context.Context, q *db.Queries, spec 
 		if spec.Size > MaxRevisionContentBytes {
 			captureReason = "content_too_large"
 		}
+		if s.contentWithheld(ctx, spec.ProjectID, spec.RootID, spec.Path) {
+			break
+		}
 		if spec.Object != nil {
 			if cache == nil || !cache.upsertedBlobs[spec.Object.Sha256] {
 				if err := q.UpsertSourceBlobObject(ctx, *spec.Object); err != nil {
