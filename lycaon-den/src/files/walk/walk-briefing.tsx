@@ -43,7 +43,7 @@ export function useWalkStepBriefing(
   const recordId = () => view().snapshot?.result?.evidence_ref.record_id ?? null;
   const reference = () => view().snapshot?.result?.evidence_ref;
   const sentenceElement = <BriefingSummary sections={sentence()} recordId={recordId()} data-testid="walk-step-briefing" />;
-  const evidenceElement = <BriefingEvidenceLink reference={reference()!} />;
+  const evidenceElement = <Show when={reference()}>{(ref) => <BriefingEvidenceLink reference={ref()} />}</Show>;
   return {
     get sentence() {
       return sentence().length ? sentenceElement : undefined;
