@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/keylock"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/workscope"
 )
@@ -76,6 +77,10 @@ func (c *credentialFiles) EnsureProject(ctx context.Context, projectID string) e
 	}
 	attached := map[string]bool{}
 	for _, row := range rows {
+		// Agents cannot write in an editor-only root, so it needs no index.
+		if admitted, _ := (project.Root{Path: row.Path}).Admission(); !admitted {
+			continue
+		}
 		key := row.ProjectID + "\x00" + row.ID
 		attached[key] = true
 		root := i.roots[key]

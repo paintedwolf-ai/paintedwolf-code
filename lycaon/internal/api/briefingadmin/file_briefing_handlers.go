@@ -113,11 +113,9 @@ func (s *Handler) HandleGetFileBriefing(w http.ResponseWriter, r *http.Request) 
 }
 
 func projectRootPath(p *project.Project, rootID string) string {
-	if p != nil {
-		for _, root := range p.Roots {
-			if root.ID == rootID {
-				return root.Path
-			}
+	for _, root := range project.AdmittedRoots(p) {
+		if root.ID == rootID {
+			return root.Path
 		}
 	}
 	return ""

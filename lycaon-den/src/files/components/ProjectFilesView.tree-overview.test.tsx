@@ -218,6 +218,8 @@ describe("ProjectFilesView stage chrome", () => {
         is_primary: false,
         added_at: "2026-02-01T00:00:00Z",
         kind: "attached",
+        admitted: true,
+        admission_code: null,
       },
     ];
     const base = getLycaonClient()!;
