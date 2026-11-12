@@ -191,7 +191,7 @@ Resolution is closed to outbound tools that screen after substitution. `secret_r
 |---|---|---|
 | `command` | `command`, `verify` | Executor, over process arguments and environment |
 | `terminal` | `terminal_open`, `terminal_send` | Executor, over process arguments and terminal input |
-| `http_request` | `http_request`; `curl` in a command program | HTTP request construction. `curl` declares its slots: header values and `Host`, `-u` credentials, a body or form value written inline, and `--pass`. A reference anywhere else in its argv (the URL, a file path, `-A`, `-b`, `-G` or URL-encoded data) refuses with `SECRET_REFERENCE_OUTSIDE_SINK` |
+| `http_request` | `http_request`; `curl` in a command program | HTTP request construction. `curl` declares its slots: header values and `Host`, `-u` credentials, a body or form value written inline, and `--pass`. A `--pass` reference opens the key the request presents, so it is reviewed toward the request's recipient before the key is opened, as the values the request sends are. A reference anywhere else in its argv (the URL, a file path, `-A`, `-b`, `-G` or URL-encoded data) refuses with `SECRET_REFERENCE_OUTSIDE_SINK` |
 | `mcp` | every admitted MCP tool | MCP call arguments |
 | `file` | `write`, `edit`, `replace_lines`, `jq_edit` | Screened file save; slot resolution (`content`, `old_string`/`new_string`, `new_content`, `vars`) |
 
