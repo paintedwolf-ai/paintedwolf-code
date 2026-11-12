@@ -122,3 +122,19 @@ func TestAgentCommandPlanStatesItsReducedEnvironment(t *testing.T) {
 		t.Fatalf("local MCP plan gained a reduced environment it builds itself: %q", plan.Environment)
 	}
 }
+
+// A service's client variable applies unless the program exported its own.
+func TestServiceEnvYieldsToTheProgramsExport(t *testing.T) {
+	opts := ExecOpts{Launch: LaunchPlan{}.WithReducedEnvironment(), ServiceEnv: []string{"ENGINE_HOST=unix:///reviewed.sock", "OTHER_HOST=unix:///other.sock"}}
+	env, err := FinalProcessEnvironment(opts, nil)
+	testutil.FailErr(t, "service environment", err)
+	if got := environmentOf(env); got["ENGINE_HOST"] != "unix:///reviewed.sock" || got["OTHER_HOST"] != "unix:///other.sock" {
+		t.Fatalf("service variables missing: %v", got)
+	}
+	opts.InlineEnv = map[string]string{"ENGINE_HOST": "unix:///chosen.sock"}
+	env, err = FinalProcessEnvironment(opts, nil)
+	testutil.FailErr(t, "exported environment", err)
+	if got := environmentOf(env); got["ENGINE_HOST"] != "unix:///chosen.sock" || got["OTHER_HOST"] != "unix:///other.sock" {
+		t.Fatalf("program export did not win: %v", got)
+	}
+}
