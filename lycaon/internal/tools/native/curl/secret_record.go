@@ -46,6 +46,11 @@ func requestRecord(o options) (record map[string]any, represented map[string]boo
 		record["auth"] = map[string]any{"scheme": "basic", "username": name, "password": password}
 		represented["-u"] = true
 	}
+	if o.unixSocket != "" {
+		// The executor reviews this argument as the request's local service socket.
+		record["unix_socket"] = o.unixSocket
+		represented["--unix-socket"] = true
+	}
 	if o.tls.pass != "" {
 		record["tls"] = map[string]any{"passphrase": o.tls.pass}
 		represented["--pass"] = true
