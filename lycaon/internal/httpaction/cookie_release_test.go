@@ -368,6 +368,9 @@ func testStandingGrantRevokedAcrossWaitAndRedirect(t *testing.T) {
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	executor.Approvals.SetCheckpointManager(t.Context(), review, authority)
 	t.Cleanup(func() { restoreResolver() })
+	// A chat that has read nothing external: its first contacts are audited,
+	// so the cards here are the cookie disclosures alone.
+	executor.Secrets.SetUntrustedIngestionSource(func(context.Context, string) (bool, error) { return false, nil })
 	matcher := testSecretMatcher(t)
 	executor.Secrets.SetSecretMatcher(matcher)
 
