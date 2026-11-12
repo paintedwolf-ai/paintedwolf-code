@@ -91,26 +91,26 @@ func TestContactRecordShape(t *testing.T) {
 	}
 }
 
-// observedURLStore is the surface the observed-address test exercises on both stores.
-type observedURLStore interface {
+// urlStandingStore is the surface the address-standing test exercises on both stores.
+type urlStandingStore interface {
 	Create(ctx context.Context, req api.CreateSessionRequest, projectID string) (*api.Session, error)
 	UpsertEvidenceRecord(ctx context.Context, sessionID string, rec evidence.Record) error
 	RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error
-	SessionObservedURL(sessionID, rawURL string) bool
+	SessionURLStanding(sessionID, rawURL string) evidence.URLStanding
 }
 
-func TestSessionObservedURLMatchesRecordedAddressesExactly(t *testing.T) {
+func TestSessionURLStandingMatchesRecordedAddressesExactly(t *testing.T) {
 	t.Run("memory", func(t *testing.T) {
-		testSessionObservedURL(t, NewMemory(), "proj-observed-memory")
+		testSessionURLStanding(t, NewMemory(), "proj-observed-memory")
 	})
 	t.Run("sql", func(t *testing.T) {
 		sqlDB := testdbfixture.Open(t, "observed.db")
 		testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, t.TempDir())
-		testSessionObservedURL(t, NewSQL(sqlDB), testdbseed.DefaultProjectID)
+		testSessionURLStanding(t, NewSQL(sqlDB), testdbseed.DefaultProjectID)
 	})
 }
 
-func testSessionObservedURL(t *testing.T, st observedURLStore, projectID string) {
+func testSessionURLStanding(t *testing.T, st urlStandingStore, projectID string) {
 	t.Helper()
 	ctx := t.Context()
 	sess, err := st.Create(ctx, api.CreateSessionRequest{ProjectID: projectID, Posture: api.SessionPostureBuild}, projectID)
@@ -125,29 +125,28 @@ func testSessionObservedURL(t *testing.T, st observedURLStore, projectID string)
 	testutil.FailErr(t, "RecordContact", st.RecordContact(ctx, sess.ID, "dialed.example.net", evidence.ContactOwn))
 	const displayed = "https://docs.example.org/next?page=3#top"
 	page := evidence.BuildEvidenceRecord("", "fetch_url", map[string]any{"url": "https://docs.example.org/read"},
-		`{"url":"https://docs.example.org/read","content":"continue at `+displayed+` for more"}`)
+		"# Read\n\ncontinue at "+displayed+" for more\n")
 	page.Handle = "web#2"
 	testutil.FailErr(t, "UpsertEvidenceRecord page", st.UpsertEvidenceRecord(ctx, sess.ID, page))
 
-	for address, want := range map[string]bool{
-		recorded:                                true,
-		displayed:                               true,
-		"https://docs.example.org/read":         true,
-		"https://docs.example.org/next?page=4":  false,
-		"  " + recorded + " ":                   true,
-		"https://docs.example.org/guide?page=3": false,
-		"https://docs.example.org/guide":        false,
-		"https://docs.example.org/":             false,
-		"":                                      false,
+	for address, want := range map[string]evidence.URLStanding{
+		recorded:                                evidence.URLSource,
+		"https://docs.example.org/read":         evidence.URLSource,
+		"  " + recorded + " ":                   evidence.URLSource,
+		displayed:                               evidence.URLDisplayed,
+		"https://docs.example.org/next?page=4":  evidence.URLUnknown,
+		"https://docs.example.org/guide?page=3": evidence.URLUnknown,
+		"https://docs.example.org/guide":        evidence.URLUnknown,
+		"https://docs.example.org/":             evidence.URLUnknown,
+		"":                                      evidence.URLUnknown,
 	} {
-		if got := st.SessionObservedURL(sess.ID, address); got != want {
-			t.Errorf("SessionObservedURL(%q) = %v, want %v", address, got, want)
+		if got := st.SessionURLStanding(sess.ID, address); got != want {
+			t.Errorf("SessionURLStanding(%q) = %d, want %d", address, got, want)
 		}
 	}
-	if st.SessionObservedURL(other.ID, recorded) {
-		t.Fatal("another session's evidence observed the address")
-	}
-	if st.SessionObservedURL("", recorded) || st.SessionObservedURL("missing-session", recorded) {
-		t.Fatal("an empty or missing session observed the address")
+	for name, sessionID := range map[string]string{"another session": other.ID, "no session": "", "a missing session": "missing-session"} {
+		if got := st.SessionURLStanding(sessionID, recorded); got != evidence.URLUnknown {
+			t.Errorf("%s knows the address: %d", name, got)
+		}
 	}
 }

@@ -116,10 +116,11 @@ func TestAgentAuthoredAddressesReachTheGate(t *testing.T) {
 		cmd         EgressCommand
 		reachesGate bool
 	}{
-		"source reader, observed address": {cmd: EgressCommand{Image: "fetch_url"}},
+		"source reader, source address":   {cmd: EgressCommand{Image: "fetch_url"}},
 		"web search":                      {cmd: EgressCommand{Image: "web_search"}},
 		"MCP tool":                        {cmd: EgressCommand{ToolName: "mcp_acme_ship"}},
-		"source reader, authored address": {cmd: EgressCommand{Image: "fetch_url", AuthoredDestination: true}, reachesGate: true},
+		"source reader, displayed link":   {cmd: EgressCommand{Image: "fetch_url", Origin: AddressDisplayed}, reachesGate: true},
+		"source reader, authored address": {cmd: EgressCommand{Image: "fetch_url", Origin: AddressAuthored}, reachesGate: true},
 		"request tool":                    {cmd: EgressCommand{Image: "http_request", ToolName: "http_request"}, reachesGate: true},
 		"command":                         {cmd: EgressCommand{ToolName: "command", CommandLine: "curl https://page.example/"}, reachesGate: true},
 	} {

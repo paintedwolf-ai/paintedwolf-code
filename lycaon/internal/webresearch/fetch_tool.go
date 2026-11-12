@@ -26,7 +26,7 @@ func registerFetchTool(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		limit := intArg(args, "limit")
 		// Each remote host requires its own egress decision.
 		contest, _ := args["unredact"].(string)
-		dial := toolEgress{image: "fetch_url", authored: !deps.observedByChat(tctx, rawURL)}
+		dial := toolEgress{image: "fetch_url", origin: deps.addressOrigin(tctx, rawURL)}
 		ctx = withToolEgressGate(ctx, deps, tctx, dial, contest, screenDestination{})
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		out, fetched, err := fetchURLTool(ctx, fetchURLToolArgs{
@@ -57,15 +57,19 @@ func registerFetchTool(reg *tools.DefaultRegistry, deps ToolDeps) error {
 	})
 }
 
-// observedByChat reports whether the calling session or its chat recorded
-// exactly this address, so requesting it adds nothing the agent wrote.
-func (d ToolDeps) observedByChat(tctx tools.ToolContext, rawURL string) bool {
+// addressOrigin reports how the calling session or its chat came by exactly
+// this address, taking the stronger of the two.
+func (d ToolDeps) addressOrigin(tctx tools.ToolContext, rawURL string) confine.AddressOrigin {
 	rawURL = strings.TrimSpace(rawURL)
-	if d.ObservedURL == nil || rawURL == "" {
-		return false
+	if d.AddressOrigin == nil || rawURL == "" {
+		return confine.AddressAuthored
 	}
 	session, chat := tctx.Identity.SessionID, tctx.ChatSessionID()
-	return d.ObservedURL(session, rawURL) || (chat != session && d.ObservedURL(chat, rawURL))
+	origin := d.AddressOrigin(session, rawURL)
+	if chat != session {
+		origin = min(origin, d.AddressOrigin(chat, rawURL))
+	}
+	return origin
 }
 
 type fetchURLToolArgs struct {

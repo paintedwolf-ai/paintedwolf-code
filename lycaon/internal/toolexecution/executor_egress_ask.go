@@ -29,21 +29,21 @@ type egressAskSubject struct {
 	ApprovalKey string
 }
 
-// destinationFact projects one observed endpoint onto the gate's view. Opaque is
-// a transport fact: CONNECT and SOCKS carry unreadable streams; HTTP is parsed here.
-func destinationFact(cmd confine.EgressCommand, ep egressproxy.Endpoint, firstUse bool, configured, registry string) *gate.Endpoint {
+// destinationFact projects one observed endpoint onto the gate's view, apart
+// from whether the chat has reached it before.
+func destinationFact(cmd confine.EgressCommand, ep egressproxy.Endpoint, configured, registry string) *gate.Endpoint {
 	tunnelled, _ := egressTunnelTransport(ep.Transport)
 	return &gate.Endpoint{
-		Host:                ep.Host,
-		Port:                ep.Port,
-		Transport:           string(ep.Transport),
-		Configured:          cmd.DeclaresHost(ep.Host) || configured != "",
-		Declared:            cmd.DeclaresHost(ep.Host),
-		ConfiguredBy:        configured,
-		PublicRegistry:      registry,
-		Opaque:              tunnelled,
-		FirstUseThisSession: firstUse,
-		Retrieval:           confine.RetrievalDial(cmd),
+		Host:           ep.Host,
+		Port:           ep.Port,
+		Transport:      string(ep.Transport),
+		Configured:     cmd.DeclaresHost(ep.Host) || configured != "",
+		Declared:       cmd.DeclaresHost(ep.Host),
+		ConfiguredBy:   configured,
+		PublicRegistry: registry,
+		Opaque:         tunnelled,
+		Retrieval:      confine.RetrievalDial(cmd),
+		DisplayedLink:  confine.DisplayedLinkDial(cmd),
 	}
 }
 

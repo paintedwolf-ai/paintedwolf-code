@@ -20,7 +20,9 @@ import (
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/httpaction"
@@ -175,7 +177,9 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 	}
 
 	if sessions := r.deps.Storage.Sessions; sessions != nil {
-		deps.ObservedURL = sessions.SessionObservedURL
+		deps.AddressOrigin = func(sessionID, rawURL string) confine.AddressOrigin {
+			return addressOrigin(sessions.SessionURLStanding(sessionID, rawURL))
+		}
 	}
 
 	if matcher, err := r.deps.Security.LoadMatcher(ctx, r.deps.TestSecretMatcher); err != nil {
@@ -261,4 +265,17 @@ func (r *Runtime) ProjectRootPaths(ctx context.Context) ([]string, error) {
 
 func (r *Runtime) rootSessionKey(ctx context.Context, sessionID string) string {
 	return sessiontree.RootID(ctx, r.deps.Storage.Sessions, sessionID)
+}
+
+// addressOrigin maps how evidence knows an address onto what a retrieval
+// tool may say about requesting it.
+func addressOrigin(standing evidence.URLStanding) confine.AddressOrigin {
+	switch standing {
+	case evidence.URLSource:
+		return confine.AddressSource
+	case evidence.URLDisplayed:
+		return confine.AddressDisplayed
+	default:
+		return confine.AddressAuthored
+	}
 }

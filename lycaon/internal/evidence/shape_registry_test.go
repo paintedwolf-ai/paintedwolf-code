@@ -176,36 +176,36 @@ func TestVerifyURLObservedIgnoresFetchBodyLinks(t *testing.T) {
 	}
 }
 
-// A read page's links are addresses the chat was shown, apart from the sources
-// it read, and they survive the store round trip.
-func TestURLShownCoversFetchBodyLinksOnly(t *testing.T) {
-	body := `{"url":"https://example.com/page","content":"see also https://example.com/other?p=2 and [x](https://third.example/x)"}`
+// A read page's links are known as displayed, apart from the sources the chat
+// read, and that standing survives the store round trip.
+func TestStandingOfURLSeparatesSourcesFromDisplayedLinks(t *testing.T) {
+	body := "# Page\n\nsee also https://example.com/other?p=2 and [x](https://third.example/x)\n"
 	rec := evidence.BuildEvidenceRecord("", "fetch_url", map[string]any{"url": "https://example.com/page"}, body)
 	rec.Handle = "web#1"
 	restored := evidence.Record{Handle: rec.Handle, Kind: rec.Kind, Shape: rec.Shape, URL: rec.URL}
 	evidence.ApplyRecordAux(&restored, evidence.CloneRecordForStore(rec))
-
-	for name, stored := range map[string]evidence.Record{"built": rec, "restored": restored} {
-		ev := evidence.Ledger{Handles: map[string]evidence.Record{stored.Handle: stored}}
-		for _, href := range []string{"https://example.com/other?p=2", "https://third.example/x"} {
-			if !evidence.URLShown(ev, href) {
-				t.Errorf("%s: %q was displayed by the page", name, href)
-			}
-			if evidence.VerifyURLObserved(ev, href) {
-				t.Errorf("%s: displayed address %q must not ground a citation", name, href)
-			}
-		}
-		for _, href := range []string{"https://example.com/other", "https://example.com/other?p=3", "https://third.example/", ""} {
-			if evidence.URLShown(ev, href) {
-				t.Errorf("%s: %q was never displayed", name, href)
-			}
-		}
-	}
-
 	search := evidence.BuildEvidenceRecord("", "web_search", map[string]any{"query": "q"}, `{"results":[{"url":"https://hit.example/a","title":"A"}]}`)
 	search.Handle = "web#2"
-	if evidence.URLShown(evidence.Ledger{Handles: map[string]evidence.Record{search.Handle: search}}, "https://hit.example/a") {
-		t.Fatal("a search result is a source, not a displayed address")
+
+	for name, page := range map[string]evidence.Record{"built": rec, "restored": restored} {
+		ev := evidence.Ledger{Handles: map[string]evidence.Record{page.Handle: page, search.Handle: search}}
+		for address, want := range map[string]evidence.URLStanding{
+			"https://example.com/page":      evidence.URLSource,
+			"https://hit.example/a":         evidence.URLSource,
+			"https://example.com/other?p=2": evidence.URLDisplayed,
+			"https://third.example/x":       evidence.URLDisplayed,
+			"https://example.com/other":     evidence.URLUnknown,
+			"https://example.com/other?p=3": evidence.URLUnknown,
+			"https://third.example/":        evidence.URLUnknown,
+			"":                              evidence.URLUnknown,
+		} {
+			if got := evidence.StandingOfURL(ev, address); got != want {
+				t.Errorf("%s: StandingOfURL(%q) = %d, want %d", name, address, got, want)
+			}
+			if cited := evidence.VerifyURLObserved(ev, address); cited != (want == evidence.URLSource) {
+				t.Errorf("%s: %q grounds a citation = %v", name, address, cited)
+			}
+		}
 	}
 }
 
