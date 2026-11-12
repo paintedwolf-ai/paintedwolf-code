@@ -141,7 +141,7 @@ func runClean(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), err)
 }
 
-func runWorktree(ctx context.Context, p Prepared, dir string, repo gitrepo.Repo, stderr io.Writer) (toolcontract.ProducerResult, error) {
+func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, stderr io.Writer) (toolcontract.ProducerResult, error) {
 	ops := p.Argv.Operands().Values()
 	switch ops[0] {
 	case "add":
@@ -154,6 +154,11 @@ func runWorktree(ctx context.Context, p Prepared, dir string, repo gitrepo.Repo,
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}
+		ctx, done, err := bindTargetLaunch(ctx, p, tc, writeRoot(bound.Resolved.Abs))
+		if err != nil {
+			return settleMutationError(err, toolcontract.NoEffect)
+		}
+		defer done()
 		baseRef := ""
 		if len(ops) == 3 {
 			baseRef = ops[2]
@@ -170,10 +175,20 @@ func runWorktree(ctx context.Context, p Prepared, dir string, repo gitrepo.Repo,
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}
+		ctx, done, err := bindTargetLaunch(ctx, p, tc, writeRoot(bound.Resolved.Abs))
+		if err != nil {
+			return settleMutationError(err, toolcontract.NoEffect)
+		}
+		defer done()
 		if err := p.owners.Git.RemoveWorktree(ctx, repo.Root, bound.Resolved.Abs); err != nil {
 			return settleGitError(err, stderr, toolcontract.NoEffect)
 		}
 	case "prune":
+		ctx, done, err := bindTargetLaunch(ctx, p, tc)
+		if err != nil {
+			return settleMutationError(err, toolcontract.NoEffect)
+		}
+		defer done()
 		if err := p.owners.Git.PruneWorktrees(ctx, repo.Root); err != nil {
 			return settleGitError(err, stderr, toolcontract.NoEffect)
 		}
