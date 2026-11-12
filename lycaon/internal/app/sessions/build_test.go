@@ -48,7 +48,6 @@ func gitRepoDir(t *testing.T) string {
 func TestSkillSurfaceVarsInputMapsReaderFacts(t *testing.T) {
 	gitDir := gitRepoDir(t)
 	plainDir := t.TempDir()
-	budget := spawn.WorkerToolBudget{Default: 9, Min: 2, Max: 21}
 	for _, tc := range []struct {
 		name string
 		tctx tools.ToolContext
@@ -70,13 +69,12 @@ func TestSkillSurfaceVarsInputMapsReaderFacts(t *testing.T) {
 				Turn: tools.InvocationTurn{TurnSurfaceID: " implement_routing ", TurnOfferedToolNames: []string{"recall", "task"}},
 			},
 			want: prompts.SkillSurfaceVarsInput{
-				ProfileID:        "coordinator",
-				SurfaceID:        "implement_routing",
-				Offered:          []string{"recall", "task"},
-				OnWorkerBranch:   true,
-				HasGit:           true,
-				RootCount:        2,
-				DelegationBudget: budget,
+				ProfileID:      "coordinator",
+				SurfaceID:      "implement_routing",
+				Offered:        []string{"recall", "task"},
+				OnWorkerBranch: true,
+				HasGit:         true,
+				RootCount:      2,
 			},
 		},
 		{
@@ -88,8 +86,7 @@ func TestSkillSurfaceVarsInputMapsReaderFacts(t *testing.T) {
 				},
 			},
 			want: prompts.SkillSurfaceVarsInput{
-				ProfileID:        "mystery-agent",
-				DelegationBudget: budget,
+				ProfileID: "mystery-agent",
 			},
 		},
 		{
@@ -102,15 +99,14 @@ func TestSkillSurfaceVarsInputMapsReaderFacts(t *testing.T) {
 				},
 			},
 			want: prompts.SkillSurfaceVarsInput{
-				ProfileID:        "implement",
-				HasGit:           true,
-				RootCount:        1,
-				DelegationBudget: budget,
+				ProfileID: "implement",
+				HasGit:    true,
+				RootCount: 1,
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := skillSurfaceVarsInput(tc.tctx, budget)
+			got := skillSurfaceVarsInput(tc.tctx)
 			want := tc.want
 			if got.ProfileID != want.ProfileID || got.SurfaceID != want.SurfaceID ||
 				got.OnWorkerBranch != want.OnWorkerBranch || got.HasGit != want.HasGit ||
@@ -319,7 +315,7 @@ func TestProfileIDForSurfaceMapsAgentToProfile(t *testing.T) {
 // device catalog so profile skill loads resolve shipped pack skills. It also
 // creates a root session, whose default coordinator agent gives the skill
 // selector its shipped all-skills policy.
-func newWiredSkillHost(t *testing.T, workerToolBudgetFor func(string) spawn.WorkerToolBudget) (*toolhost.Runtime, string) {
+func newWiredSkillHost(t *testing.T) (*toolhost.Runtime, string) {
 	t.Helper()
 	cat := extpackstest.StockCatalog(t)
 	rt, err := toolhost.NewRuntime(toolhost.RuntimeConfig{
@@ -336,7 +332,7 @@ func newWiredSkillHost(t *testing.T, workerToolBudgetFor func(string) spawn.Work
 	testutil.FailErr(t, "create probe session", err)
 	extpacks.SetActive(cat)
 	t.Cleanup(extpacks.ClearActive)
-	wireSessionToolSources(mgr, rt, nil, workerToolBudgetFor)
+	wireSessionToolSources(mgr, rt, nil)
 	return rt, sess.ID
 }
 
@@ -344,7 +340,7 @@ func newWiredSkillHost(t *testing.T, workerToolBudgetFor func(string) spawn.Work
 // the coordinator surface reader reads a skill whose tools the surface
 // addresses, while a reader holding only recall cannot reach it.
 func TestWiredSkillsCatalogFiltersStockSkillsByReaderReach(t *testing.T) {
-	rt, sessionID := newWiredSkillHost(t, nil)
+	rt, sessionID := newWiredSkillHost(t)
 	coordinator := tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: sessionID},
 		Source: tools.InvocationSource{
@@ -384,10 +380,10 @@ func TestWiredSkillsCatalogFiltersStockSkillsByReaderReach(t *testing.T) {
 }
 
 // The wired skill template vars render the caller shape (coordinator, worker
-// branch, git, root count) on coordinator surfaces and the delegation budget
-// from the host's worker tool budget source elsewhere.
-func TestWiredSkillTemplateVarsRenderCallerShapeAndBudget(t *testing.T) {
-	rt, sessionID := newWiredSkillHost(t, nil)
+// branch, git, root count) on coordinator surfaces and the host's spawn caps
+// elsewhere.
+func TestWiredSkillTemplateVarsRenderCallerShapeAndCaps(t *testing.T) {
+	rt, sessionID := newWiredSkillHost(t)
 	coordinator := tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "coordinator", SessionID: sessionID},
 		Source: tools.InvocationSource{
@@ -412,22 +408,11 @@ func TestWiredSkillTemplateVarsRenderCallerShapeAndBudget(t *testing.T) {
 	}
 
 	// An unregistered reader has no tool surface, so the vars fall back to the
-	// spawn policy vars carrying the host's default delegation budget.
+	// spawn policy caps.
 	unknown := tools.ToolContext{Identity: tools.InvocationIdentity{Agent: "mystery-agent", SessionID: sessionID}}
-	out, err = rt.Skills.RenderSkillBody(t.Context(), unknown, skills.Skill{Name: "budget-probe", Body: "budget:{{ worker_tool_budget_default }}"})
+	out, err = rt.Skills.RenderSkillBody(t.Context(), unknown, skills.Skill{Name: "caps-probe", Body: "in_flight:{{ max_in_flight }}"})
 	testutil.FailErr(t, "render fallback skill body", err)
-	if want := fmt.Sprintf("budget:%d", spawn.DefaultWorkerToolBudget().Default); out != want {
+	if want := fmt.Sprintf("in_flight:%d", spawn.MaxInFlightTaskWorkers); out != want {
 		t.Fatalf("fallback render = %q, want %q", out, want)
-	}
-
-	// A host-provided budget source replaces the default for readers without
-	// their own surface.
-	custom, _ := newWiredSkillHost(t, func(string) spawn.WorkerToolBudget {
-		return spawn.WorkerToolBudget{Default: 7, Min: 2, Max: 9}
-	})
-	out, err = custom.Skills.RenderSkillBody(t.Context(), unknown, skills.Skill{Name: "budget-probe", Body: "budget:{{ worker_tool_budget_default }}"})
-	testutil.FailErr(t, "render custom budget skill body", err)
-	if want := "budget:7"; out != want {
-		t.Fatalf("custom budget render = %q, want %q", out, want)
 	}
 }

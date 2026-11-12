@@ -12,13 +12,10 @@ import (
 	"time"
 )
 
-// budgetRequestEnvelope drives an asynchronous host turn for jobID.
-func budgetRequestEnvelope(jobID string) anchor.Envelope {
-	return anchor.Envelope{WorkerBudget: &kick.WorkerBudgetFacts{
-		JobID: jobID, Used: 16, Max: 20, HostMax: 120,
-		Request: &api.WorkerBudgetRequest{
-			Rounds: 12, RequestedMax: 32, RemainingWork: []string{"trace the remaining callers"}, ToolLoopsUsed: 16,
-		},
+// roundNoticeEnvelope drives an asynchronous host turn for jobID.
+func roundNoticeEnvelope(jobID string) anchor.Envelope {
+	return anchor.Envelope{WorkerRoundNotice: &kick.WorkerRoundNoticeFacts{
+		JobID: jobID, AgentType: "implementer", Kind: kick.RoundNoticeConsumption, ModelCalls: 40,
 	}}
 }
 
@@ -46,7 +43,7 @@ func TestWaitForAsyncTurnsForceCancelsAndBlocksUntilExit(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", roundNoticeEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -106,7 +103,7 @@ func TestForgetSessionCancelsAndDrainsInFlightAsyncTurn(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", roundNoticeEnvelope("job-1"))
 
 	select {
 	case <-started:
@@ -169,7 +166,7 @@ func TestSpawnAsyncTurnPanicDoesNotLeakRegistryOrWaitGroup(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", roundNoticeEnvelope("job-1"))
 
 	select {
 	case <-started:

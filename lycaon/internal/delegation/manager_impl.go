@@ -401,21 +401,8 @@ func (m *Manager) RecordOutcome(ctx context.Context, delegationID, legID, worker
 	leg.WorkerID = workerID
 	now := time.Now().UTC()
 	leg.Status = legStatusForOutcome(outcome)
-	if leg.Status == api.LegStatusRetryPending {
-		delegation, delegationErr := m.Store.Get(ctx, delegationID)
-		if delegationErr != nil {
-			return delegationErr
-		}
-		if strings.TrimSpace(delegation.WorkflowRunID) == "" {
-			leg.Status = api.LegStatusFailed
-		}
-	}
 	leg.Result = &outcome
-	if leg.Status == api.LegStatusRetryPending {
-		leg.CompletedAt = nil
-	} else {
-		leg.CompletedAt = &now
-	}
+	leg.CompletedAt = &now
 	if _, err := m.Store.RecordLegOutcome(ctx, *leg); err != nil {
 		return err
 	}

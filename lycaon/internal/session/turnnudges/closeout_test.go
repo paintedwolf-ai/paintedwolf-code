@@ -27,7 +27,7 @@ func (r *recordedKick) RenderKick(_ context.Context, name string, data map[strin
 func TestCloseoutPreservesCancellationAndIterationContext(t *testing.T) {
 	setupanchor.Install()
 	r := &recordedKick{}
-	s := New(turnload.NewLedger(), nil, nil)
+	s := New(turnload.NewLedger(), nil)
 	s.SetPrompts(r)
 	child := &api.Session{ID: "child", ParentSessionID: "parent"}
 	n := s.Closeout(t.Context(), child, "implementer", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutCanceled, CancelReason: "human stopped the job"})
@@ -55,7 +55,7 @@ func TestCloseoutPreservesCancellationAndIterationContext(t *testing.T) {
 func TestForcedFinalTurnKicksReadWhatCloseoutSends(t *testing.T) {
 	setupanchor.Install()
 	r := &recordedKick{}
-	s := New(turnload.NewLedger(), nil, nil)
+	s := New(turnload.NewLedger(), nil)
 	s.SetPrompts(r)
 	s.Closeout(t.Context(), &api.Session{ID: "parent"}, "coordinator", promptloop.TurnCloseoutCause{Reason: promptloop.TurnCloseoutLLMTimeout})
 	reference := regexp.MustCompile(`(?:\{\{\s*|\{%\s*if\s+)(\w+)`)

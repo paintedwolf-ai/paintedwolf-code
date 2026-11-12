@@ -65,9 +65,8 @@ func (s *SQLStore) AppendContext(ctx context.Context, c Context) (bool, error) {
 		sealed = time.Now().UTC()
 	}
 	ts := db.FormatTime(sealed)
-	if c.HashVersion == 0 {
-		c.HashVersion = HashVersion2
-	}
+	// Appends never write the ceiling columns, so they always seal version 2.
+	c.HashVersion = HashVersion2
 	hashVersion := c.HashVersion
 	payload := chainPayloadFromContext(c)
 	rowHash, err := ComputeRowHash(hashVersion, sessionID, seq, ts, payload, prevHash)

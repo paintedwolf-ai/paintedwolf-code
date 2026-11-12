@@ -327,7 +327,7 @@ Database triggers reject updates on both tables. A session is the chain's lifeti
 
 ### Sealed boundary
 
-The authorization context captures the effective blast radius before the model turn runs: tool profile, posture, effective `never_ask` state, allowed/denied surfaces, command and path policy, MCP generation, spawn roster, worker budget, project/session lineage, durable reusable grants, and chat grants. Turn-ephemeral presentation trims are excluded. A changed material configuration creates a new sealed context rather than rewriting the prior one.
+The authorization context captures the effective blast radius before the model turn runs: tool profile, posture, effective `never_ask` state, allowed/denied surfaces, command and path policy, MCP generation, spawn roster, project/session lineage, durable reusable grants, and chat grants. Turn-ephemeral presentation trims are excluded. A changed material configuration creates a new sealed context rather than rewriting the prior one.
 
 ### Fail-closed model
 

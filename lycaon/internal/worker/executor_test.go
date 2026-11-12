@@ -113,10 +113,6 @@ func (f *fakePromptRunner) WorkerSummaryFinalizeOpts(context.Context, *api.Sessi
 	return workercloseout.WorkerSummaryFinalizeOpts{}
 }
 
-func (f *fakePromptRunner) SetWorkerMaxToolLoops(context.Context, string, int) error {
-	return nil
-}
-
 func (f *fakePromptRunner) ProjectRoots(context.Context, string) []projectroot.RootRef {
 	return nil
 }
@@ -241,7 +237,6 @@ func TestExecuteResumeInjectsAssignmentPrompt(t *testing.T) {
 		Prompt:          "Continue the lycaon-den audit",
 		Brief:           "fixture",
 		AgentType:       "repo-researcher",
-		MaxToolLoops:    120,
 	}, WorkerRunContext{ProjectDir: "/p"})
 	testutil.FailErr(t, "exec.Execute failed", err)
 

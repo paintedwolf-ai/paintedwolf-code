@@ -19,13 +19,12 @@ func testPromptEngine(t *testing.T) *prompts.FileTemplateEngine {
 
 func TestCoordinationProtocolInWorkerTaskAssignment(t *testing.T) {
 	out, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
-		SessionID:    "sess-inject-test",
-		ProjectDir:   t.TempDir(),
-		Charter:      testWorkerCharter("Add auth middleware"),
-		AgentType:    "implementer",
-		WorkerJobID:  "job-login-7",
-		Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"auth.go"}},
-		MaxToolLoops: 12,
+		SessionID:   "sess-inject-test",
+		ProjectDir:  t.TempDir(),
+		Charter:     testWorkerCharter("Add auth middleware"),
+		AgentType:   "implementer",
+		WorkerJobID: "job-login-7",
+		Scope:       api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"auth.go"}},
 	})
 	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
 	for _, want := range []string{

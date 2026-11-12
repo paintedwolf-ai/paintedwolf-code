@@ -14,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/skills"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
 )
@@ -121,12 +120,11 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 				}
 				t.Run(fmt.Sprintf("coordinator/%s/%d-roots/%s", id, rootCount, sk.Name), func(t *testing.T) {
 					vars, err := prompts.SkillSurfaceTemplateVars(prompts.SkillSurfaceVarsInput{
-						ProfileID:        prompts.CoordinatorProfileID,
-						SurfaceID:        id,
-						Offered:          reachable,
-						HasGit:           rootCount > 0,
-						RootCount:        rootCount,
-						DelegationBudget: spawn.DefaultWorkerToolBudget(),
+						ProfileID: prompts.CoordinatorProfileID,
+						SurfaceID: id,
+						Offered:   reachable,
+						HasGit:    rootCount > 0,
+						RootCount: rootCount,
 					})
 					contractcheck.FailErr(t, "build skill vars", err)
 					check(t, sk, fmt.Sprintf("surface %s at %d roots", id, rootCount), reachable, vars, renderSkillParts(t, sk, vars))
@@ -167,12 +165,11 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 					}
 					t.Run(fmt.Sprintf("worker/%s/on-branch=%t/has-git=%t/%s", agent.ToolProfile, onBranch, hasGit, sk.Name), func(t *testing.T) {
 						vars, err := prompts.SkillSurfaceTemplateVars(prompts.SkillSurfaceVarsInput{
-							ProfileID:        agent.ToolProfile,
-							Offered:          reachable,
-							OnWorkerBranch:   onBranch,
-							HasGit:           hasGit,
-							RootCount:        1,
-							DelegationBudget: spawn.DefaultWorkerToolBudget(),
+							ProfileID:      agent.ToolProfile,
+							Offered:        reachable,
+							OnWorkerBranch: onBranch,
+							HasGit:         hasGit,
+							RootCount:      1,
 						})
 						contractcheck.FailErr(t, "build skill vars", err)
 						check(t, sk, fmt.Sprintf("profile %s (on branch: %t, git: %t)", agent.ToolProfile, onBranch, hasGit), reachable, vars, renderSkillParts(t, sk, vars))

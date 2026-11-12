@@ -13,7 +13,6 @@ func TestFromTaskSeedsLifetimeCountersOnly(t *testing.T) {
 	usage := &api.WorkerContextUsage{PromptTokens: 1234}
 	seed := workerprogress.FromTask(&api.WorkerTask{
 		ToolLoopsUsed: 12,
-		MaxToolLoops:  40,
 		ToolCallsUsed: 96,
 		// A batch cannot survive the run that opened it; a resumed worker starts
 		// between rounds, so these must not come back from the row.
@@ -23,7 +22,6 @@ func TestFromTaskSeedsLifetimeCountersOnly(t *testing.T) {
 	})
 	want := workerprogress.Snapshot{
 		ToolLoopsUsed: 12,
-		MaxToolLoops:  40,
 		ToolCallsUsed: 96,
 		ContextUsage:  usage,
 	}
@@ -39,9 +37,9 @@ func TestTrackerRoundAndBatchEdges(t *testing.T) {
 	t.Parallel()
 	tracker := workerprogress.NewTracker(workerprogress.Snapshot{ToolLoopsUsed: 3, ToolCallsUsed: 10})
 
-	round := tracker.CompleteRound(4, 40, &api.WorkerContextUsage{PromptTokens: 500})
-	if round.ToolLoopsUsed != 4 || round.MaxToolLoops != 40 {
-		t.Fatalf("round edge = %+v want used 4 max 40", round)
+	round := tracker.CompleteRound(4, &api.WorkerContextUsage{PromptTokens: 500})
+	if round.ToolLoopsUsed != 4 {
+		t.Fatalf("round edge = %+v want used 4", round)
 	}
 	if round.TurnToolCalls != 0 || round.TurnToolsDone != 0 {
 		t.Fatalf("round edge kept a batch: %+v", round)
@@ -85,7 +83,7 @@ func TestTrackerBatchGrowsToFitExtraSettledCalls(t *testing.T) {
 func TestTrackerRoundCountNeverRegresses(t *testing.T) {
 	t.Parallel()
 	tracker := workerprogress.NewTracker(workerprogress.Snapshot{ToolLoopsUsed: 9})
-	if got := tracker.CompleteRound(4, 40, nil); got.ToolLoopsUsed != 9 {
+	if got := tracker.CompleteRound(4, nil); got.ToolLoopsUsed != 9 {
 		t.Fatalf("used = %d want the seeded 9 to hold", got.ToolLoopsUsed)
 	}
 }
@@ -117,7 +115,6 @@ func TestNilTrackerIsInert(t *testing.T) {
 	if got := tracker.ToolLoopsUsed(); got != 0 {
 		t.Fatalf("nil used = %d want 0", got)
 	}
-	tracker.SetMaxToolLoops(40)
 	if got := tracker.Current(); got != (workerprogress.Snapshot{}) {
 		t.Fatalf("nil current = %+v want zero", got)
 	}
@@ -125,30 +122,26 @@ func TestNilTrackerIsInert(t *testing.T) {
 
 func TestApplyKeepsLifetimeCountersMonotonic(t *testing.T) {
 	t.Parallel()
-	task := &api.WorkerTask{ToolLoopsUsed: 12, ToolCallsUsed: 96, MaxToolLoops: 40}
+	task := &api.WorkerTask{ToolLoopsUsed: 12, ToolCallsUsed: 96}
 	workerprogress.Apply(task, workerprogress.Snapshot{
 		ToolLoopsUsed: 3,
 		ToolCallsUsed: 40,
-		MaxToolLoops:  0,
 		TurnToolCalls: 6,
 		TurnToolsDone: 2,
 	})
 	if task.ToolLoopsUsed != 12 || task.ToolCallsUsed != 96 {
 		t.Fatalf("task = %+v want lifetime counters held", task)
 	}
-	if task.MaxToolLoops != 40 {
-		t.Fatalf("unset ceiling overwrote the row: %d", task.MaxToolLoops)
-	}
 	// The batch is one moment, not an accumulation — it replaces, both ways.
 	if task.TurnToolCalls != 6 || task.TurnToolsDone != 2 {
 		t.Fatalf("task = %+v want batch 2 of 6", task)
 	}
-	workerprogress.Apply(task, workerprogress.Snapshot{ToolLoopsUsed: 13, MaxToolLoops: 60})
+	workerprogress.Apply(task, workerprogress.Snapshot{ToolLoopsUsed: 13})
 	if task.TurnToolCalls != 0 || task.TurnToolsDone != 0 {
 		t.Fatalf("task = %+v want the batch cleared", task)
 	}
-	if task.ToolLoopsUsed != 13 || task.MaxToolLoops != 60 {
-		t.Fatalf("task = %+v want used 13 max 60", task)
+	if task.ToolLoopsUsed != 13 {
+		t.Fatalf("task = %+v want used 13", task)
 	}
 }
 

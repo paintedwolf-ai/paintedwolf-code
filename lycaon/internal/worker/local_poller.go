@@ -45,14 +45,14 @@ type LocalWorkerPoller struct {
 	InstanceID          string
 	MaintenanceInterval time.Duration
 	// Quiet raises notices for working rounds without recent progress.
-	Quiet *QuietRounds
-	sem                 chan struct{}
-	capacityWake        chan struct{}
-	inflight            sync.WaitGroup
-	outcomeLocks        promptstate.MutexRegistry
-	cancelMu            sync.Mutex
-	cancels             map[string]*pollerExecution
-	abortReasons        map[string]bgprocess.TerminationReason
+	Quiet        *QuietRounds
+	sem          chan struct{}
+	capacityWake chan struct{}
+	inflight     sync.WaitGroup
+	outcomeLocks promptstate.MutexRegistry
+	cancelMu     sync.Mutex
+	cancels      map[string]*pollerExecution
+	abortReasons map[string]bgprocess.TerminationReason
 }
 
 type pollerExecution struct {
