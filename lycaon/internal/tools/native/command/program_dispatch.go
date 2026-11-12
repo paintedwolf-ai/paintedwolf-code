@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -334,7 +335,11 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 			}
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage, window: d.run.window}.Launch(ctx, execution, streams)
+					observe := func(stage tools.ToolContext, stamped confine.StampedRefusal, hosts []confine.EgressHost, directIPApplied bool) {
+						d.recordExternalStage(stage, stamped, hosts, directIPApplied)
+						opTrackerFromContext(ctx).addNetworkRead(reachedNetworkURLs(hosts))
+					}
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: observe, window: d.run.window}.Launch(ctx, execution, streams)
 				})
 			}}, nil
 		},

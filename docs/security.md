@@ -524,7 +524,7 @@ Database files in a project follow ordinary path authority, including Git stagin
 
 Path comparison inside the engine folds case where the filesystem does. Seatbelt already folds on a case-insensitive volume, but the classifiers that decide grants, cards, and refusals run in-process and never meet that boundary, and a byte-exact compare there lets `~/.SSH` walk past a deny list naming `~/.ssh`. Whether to fold is asked of the filesystem itself rather than assumed from the operating system, because a case-sensitive volume can be mounted on a case-insensitive host and the reverse.
 
-Git operations use the bundled hermetic git boundary: hooks, ambient configuration, credential helpers, external filters, and arbitrary drivers do not gain execution through repository configuration. An agent's `git` runs under the agent's own confined launch, not the host's: every remote it will contact is resolved as Git resolves it and admitted before contact, local remotes cross filesystem authority, credentials come from a service that answers only the admitted recipients, only under the person's credential-store grant, and never writes the store, and the user's SSH agent reaches it only through a socket capability. A person's Git actions and host bookkeeping keep host launches. See [Agent Git](git.md#agent-git).
+Git operations use the bundled hermetic git boundary: hooks, ambient configuration, credential helpers, external filters, LFS transfer agents and extensions, and arbitrary drivers do not gain execution through repository configuration or its includes. An agent's `git` runs under the agent's own confined launch, not the host's: every remote it will contact is resolved as Git resolves it and admitted before contact, local remotes cross filesystem authority, credentials come from a service that answers only the admitted recipients, only under the person's credential-store grant, and never writes the store, and the user's SSH agent reaches it only through a socket capability. A person's Git actions and host bookkeeping keep host launches. See [Agent Git](git.md#agent-git).
 
 ### Files the window reads and writes
 
@@ -559,6 +559,8 @@ The complete outbound inventory and user controls are in [Privacy](privacy.md).
 ## Untrusted content (inbound)
 
 Fetched pages, search results, tool output, MCP results, project prose, and model output are data unless their structured origin grants instruction authority.
+
+A chat has read network content when text from beyond this machine reaches its transcript: a response body, headers or a write-out variable the server filled, a Git transfer's ref names and remote messages, or the output of a program whose processes connected to a remote destination. Measurements of a transfer (status, sizes, timings, addresses) are not content. Content a read places in the workspace (a saved response, files a pull changed, a cloned directory) is held in external custody instead, and marks the chat only when the chat reads it; custody follows a file until a later whole-file write replaces it, and a worker's custody is recorded for its chat too.
 
 ### Rule of two
 

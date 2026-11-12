@@ -55,7 +55,10 @@ type Record struct {
 // monotonic sequence number for whole-file custody replacement records.
 type FileCustody struct {
 	External bool // true when this record placed or read external content in a workspace path
-	Seq      int  // positive monotonic per-session sequence when ReplacesWholeFileCustody is true
+	// Tree marks the record's paths as directories: every file below one holds
+	// this custody until a later whole-file record on that file replaces it.
+	Tree bool
+	Seq  int // positive monotonic per-session sequence when ReplacesWholeFileCustody is true
 }
 
 // ShowedLineNumbers reports whether the output behind this record let its reader

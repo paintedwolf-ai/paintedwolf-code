@@ -9,6 +9,7 @@ type RecordAux struct {
 	PathTiers        map[string]string
 	UntrustedContent bool
 	ExternalCustody  bool
+	CustodyTree      bool
 	CustodySeq       int
 }
 
@@ -21,6 +22,7 @@ func CloneRecordForStore(rec Record) RecordAux {
 		URLTitles:        cloned.urlTitles,
 		UntrustedContent: cloned.UntrustedContent,
 		ExternalCustody:  cloned.Custody.External,
+		CustodyTree:      cloned.Custody.Tree,
 		CustodySeq:       cloned.Custody.Seq,
 	}
 	if cloned.grepLines != nil {
@@ -74,6 +76,9 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 	}
 	if aux.ExternalCustody {
 		rec.Custody.External = true
+	}
+	if aux.CustodyTree {
+		rec.Custody.Tree = true
 	}
 	if aux.CustodySeq > 0 {
 		rec.Custody.Seq = aux.CustodySeq
