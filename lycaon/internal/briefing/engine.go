@@ -54,7 +54,11 @@ func (e *Engine) resolve(ctx context.Context, request Request) (resolved, error)
 				return out, fmt.Errorf("briefing section %q has no prompt", section.ID)
 			}
 			lookup = append(lookup, hash)
-			out.missing = append(out.missing, i)
+			// Without a model only a fallback can fill the section, so no
+			// attempt waits on text that cannot arrive.
+			if e.generator != nil || section.Fallback != "" {
+				out.missing = append(out.missing, i)
+			}
 		default:
 			lookup = append(lookup, hash)
 		}
