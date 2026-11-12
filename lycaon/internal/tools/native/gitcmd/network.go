@@ -37,7 +37,12 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 	defer func() { done(failed) }()
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
 	failed = err != nil || code != 0 || out.err != nil
-	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0})
+	read := networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0}
+	if p.command.spec.Name == "git fetch" {
+		// Fetched objects arrive in the object store, which later reads open.
+		read.trees = []string{repo.CommonDir}
+	}
+	reportNetworkRead(ctx, admitted, read)
 	if out.err != nil {
 		return settleMutationError(out.err, certainty)
 	}
@@ -77,7 +82,7 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	fetchArgs = append(fetchArgs, p.Argv.Operands().Values()...)
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, fetchArgs, out)
 	failed = err != nil || code != 0 || out.err != nil
-	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0})
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0, trees: []string{repo.CommonDir}})
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}
@@ -99,7 +104,7 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	}
 	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
 	res, opErr := mut.Operate(ctx, tc, req)
-	result, err := settleOperate(p, res, out, stderr, has(p.Argv, "-q"), opErr)
+	result, err := settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), opErr)
 	// The merge or rebase places fetched content in the files it changed, and
 	// its summary names them.
 	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, files: mergedPaths(repo.Root, res.Paths)})

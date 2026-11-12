@@ -13,8 +13,8 @@ import (
 func TestHTTPActionVarsFollowOfferedTools(t *testing.T) {
 	t.Parallel()
 	vars := map[string]any{}
-	prompts.MergeHTTPActionVars([]string{"read", "wait", "http_request"}, vars)
-	want := map[string]any{"profile_has_http_request": true, "profile_has_fetch_url": false, "profile_has_wait": true}
+	prompts.MergeHTTPActionVars([]string{"read", "wait"}, vars)
+	want := map[string]any{"profile_has_fetch_url": false, "profile_has_wait": true}
 	if !reflect.DeepEqual(vars, want) {
 		t.Fatalf("vars = %#v want %#v", vars, want)
 	}
@@ -26,7 +26,7 @@ func TestHTTPActionVarsFollowOfferedTools(t *testing.T) {
 	}
 	absent := map[string]any{}
 	prompts.MergeHTTPActionVars([]string{"read"}, absent)
-	if absent["profile_has_http_request"] != false {
+	if absent["profile_has_fetch_url"] != false {
 		t.Fatalf("absent tool advertised: %#v", absent)
 	}
 }
@@ -69,7 +69,7 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 		t.Fatalf("implement must have command: %#v", vars["profile_has_command"])
 	}
 	// Loadable tools are untaught until they load; the profile says more can load.
-	if vars["profile_has_http_request"] != false || vars["profile_has_fetch_url"] != false || vars["more_tools_loadable"] != true {
+	if vars["profile_has_fetch_url"] != false || vars["more_tools_loadable"] != true {
 		t.Fatalf("implement must leave loadable HTTP tools untaught until loaded: %#v", vars)
 	}
 	if vars["profile_has_managed_secrets"] != false {
@@ -113,9 +113,15 @@ func TestToolProfileCapabilityVarsImplement(t *testing.T) {
 	if vars["visual_show_available"] != true || vars["visual_show_terminal"] != true || vars["visual_show_page"] != false {
 		t.Fatalf("implement must expose terminals and leave page capture untaught until loaded: %#v", vars)
 	}
-	if vars["profile_has_capture_page"] != false || vars["profile_has_page_open"] != false || vars["profile_has_terminal_snapshot"] != true {
-		t.Fatalf("implement teaches eager terminal capture, not unloaded page tools: capture=%#v page_open=%#v terminal_snapshot=%#v",
+	// Terminal driving and page tools load on demand; the terminal lifecycle
+	// stays eager beside the command leg's sealed one-shot capture.
+	if vars["profile_has_capture_page"] != false || vars["profile_has_page_open"] != false || vars["profile_has_terminal_snapshot"] != false {
+		t.Fatalf("implement defers terminal driving and page tools until they load: capture=%#v page_open=%#v terminal_snapshot=%#v",
 			vars["profile_has_capture_page"], vars["profile_has_page_open"], vars["profile_has_terminal_snapshot"])
+	}
+	if vars["profile_has_terminal_open"] != true || vars["visual_show_terminal_needs_request"] != false {
+		t.Fatalf("implement keeps the terminal lifecycle eager: open=%#v needs_request=%#v",
+			vars["profile_has_terminal_open"], vars["visual_show_terminal_needs_request"])
 	}
 	if vars["profile_has_terminal_capture"] != true {
 		t.Fatal("implement command surface must advertise sealed terminal capture")
@@ -148,7 +154,7 @@ func TestToolProfileCapabilityVarsExploreReadonly(t *testing.T) {
 	if vars["profile_has_command"] != true {
 		t.Fatalf("explore_readonly must offer read-only command")
 	}
-	if vars["profile_has_http_request"] != false || vars["profile_has_fetch_url"] != false || vars["profile_has_wait"] != true {
+	if vars["profile_has_fetch_url"] != false || vars["profile_has_wait"] != true {
 		t.Fatalf("explore_readonly HTTP capability flags are wrong: %#v", vars)
 	}
 	if vars["profile_has_managed_secrets"] != false {
