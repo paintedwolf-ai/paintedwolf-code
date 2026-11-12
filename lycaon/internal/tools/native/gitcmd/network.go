@@ -290,9 +290,12 @@ func attributeRemotes(ctx context.Context, p Prepared, tc tools.ToolContext, dir
 		ProjectID:     tc.Identity.ProjectID,
 		ProjectDir:    dir,
 		ToolCallID:    tc.Identity.ToolCallID,
-		Image:         "git",
-		ToolName:      p.command.spec.Name,
-		ActionID:      actionID,
+		// The same identity the confined launch's own dials carry, so its card
+		// names the command and offers its network for the chat.
+		Image:       "git",
+		ToolName:    "git",
+		CommandLine: p.commandLine(),
+		ActionID:    actionID,
 	})
 	return ctx, func() { confine.ForgetEgressAction(sessionID, actionID) }
 }

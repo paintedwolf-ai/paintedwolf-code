@@ -145,9 +145,18 @@ func TestNetworkCommandsOverSmartHTTPAndEgressGate(t *testing.T) {
 		confine.SetEgressPosture(confine.PostureObserve)
 		confine.SetEgressResolver(nil)
 	})
-	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+	var asked []confine.EgressCommand
+	confine.SetEgressResolver(func(_ context.Context, cmd confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		asked = append(asked, cmd)
 		return false
 	})
+
+	// The preflight carries the identity the confined launch's dials do, so
+	// its card names the command and offers that command's network.
+	h.exec("git", "fetch", "origin").refused(t, "denied preflight", "GIT_REMOTE_HOST_DENIED")
+	if len(asked) == 0 || asked[0].ToolName != "git" || asked[0].CommandLine != "git fetch origin" {
+		t.Fatalf("preflight attribution = %+v", asked)
+	}
 
 	for _, argv := range [][]string{
 		{"git", "fetch", "origin"},
