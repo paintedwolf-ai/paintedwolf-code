@@ -67,7 +67,8 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 		Stage: gate.StagePreDial,
 		Ran: gate.ProducerContainment | gate.ProducerDestination |
 			gate.ProducerLease | gate.ProducerRule | gate.ProducerDetection,
-		Containment:      gate.Containment{FSJailed: true, Egress: gate.EgressProxy},
+		Containment: gate.Containment{FSJailed: true, Egress: gate.EgressProxy},
+		// First use waits on the chat's exposure and ingestion, read below.
 		Destination:      destinationFact(cmd, ep, e.configuredBy(cmd.ProjectDir, ep.Host), e.publicRegistry(ep.Host)),
 		Leased:           e.egressLeaseCovers(ctx, action) || e.loopbackLeaseCovers(ctx, cmd, ep),
 		RequestConsented: cmd.ToolName == "http_request" && egressgate.RequestConsented(ctx, ep.Host, ep.Port),
@@ -100,10 +101,6 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 			facts.UntrustedIngested = ingested
 		}
 	}
-	// Whether a retrieval contract covers the dial depends on exposure, and
-	// decides which earlier contacts make the host familiar.
-	covered := facts.RetrievalCovers()
-	facts.Destination.FirstUseThisSession = e.firstUseThisSession(covered, action.Scope.ChatSession(), ep.Host)
 	var det *hitl.DetectionMatch
 	if detection != nil {
 		det = &hitl.DetectionMatch{
@@ -125,9 +122,18 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 		}
 	}
 
+	// Whether a retrieval contract covers the dial depends on exposure, and
+	// decides which earlier contacts make the host familiar.
+	covered := facts.RetrievalCovers()
+	clean := facts.Ran.Has(gate.ProducerIngestion) && !facts.UntrustedIngested
+	facts.Destination.FirstUseThisSession = e.firstUseThisSession(covered, action.Scope.ChatSession(), ep.Host, clean)
 	verdict, decision := gate.Evaluate(facts, e.egressPosture(cmd))
 	if verdict != gate.Ask {
-		e.recordHostVisit(ctx, covered, action.Scope.ChatSession(), ep.Host)
+		if clean {
+			e.recordAuditedVisit(ctx, covered, action.Scope.ChatSession(), ep.Host)
+		} else {
+			e.recordHostVisit(ctx, covered, action.Scope.ChatSession(), ep.Host)
+		}
 		return true
 	}
 
@@ -149,26 +155,39 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 
 // firstUseThisSession is whether the chat has not reached host in this way: a
 // dial its retrieval contract covers by any means, any other dial by its own.
-// A retrieved source never makes the agent's own send to that host familiar.
-// A missing ledger is first use.
-func (e *Network) firstUseThisSession(retrievalCovered bool, chatSessionID, host string) bool {
+// A retrieved source never makes the agent's own send to that host familiar,
+// and a dial allowed only because the chat was clean vouches for its host
+// only while it still is. A missing ledger is first use.
+func (e *Network) firstUseThisSession(retrievalCovered bool, chatSessionID, host string, clean bool) bool {
 	if e == nil || e.hostLedger == nil {
 		return true
 	}
 	contact := e.hostLedger.SessionContacts(chatSessionID)[strings.ToLower(strings.TrimSpace(host))]
-	if retrievalCovered {
+	switch {
+	case retrievalCovered:
 		return contact == evidence.ContactNone
+	case clean:
+		return contact < evidence.ContactAudited
 	}
 	return contact != evidence.ContactOwn
 }
 
-// recordHostVisit records an allowed dial, keeping one a retrieval contract
-// covers apart from the chat's own.
+// recordHostVisit records a reviewed allowed dial, keeping one a retrieval
+// contract covers apart from the chat's own.
 func (e *Network) recordHostVisit(ctx context.Context, retrievalCovered bool, chatSessionID, host string) {
+	e.recordContact(ctx, retrievalCovered, chatSessionID, host, evidence.ContactOwn)
+}
+
+// recordAuditedVisit records a dial allowed while the chat had read nothing
+// untrusted.
+func (e *Network) recordAuditedVisit(ctx context.Context, retrievalCovered bool, chatSessionID, host string) {
+	e.recordContact(ctx, retrievalCovered, chatSessionID, host, evidence.ContactAudited)
+}
+
+func (e *Network) recordContact(ctx context.Context, retrievalCovered bool, chatSessionID, host string, contact evidence.Contact) {
 	if e == nil || e.hostLedger == nil {
 		return
 	}
-	contact := evidence.ContactOwn
 	if retrievalCovered {
 		contact = evidence.ContactRetrieval
 	}

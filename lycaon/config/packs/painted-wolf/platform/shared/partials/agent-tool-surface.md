@@ -17,8 +17,6 @@ Schemas define arguments, capabilities and limits.
 
 {% include "partials/requestable-tools.md" %}{% set skills_heading = "###" %}{% include "partials/agent-skills.md" %}{% if agent_host_resources %}{% include "partials/host-resources.md" %}{% endif %}{% include "partials/tool-outcomes.md" %}
 
-Identical repeated calls → heed `DOOM_LOOP_REPEAT*` and change approach.
-
 {% if write_globs %}
 ### Allowed write paths
 

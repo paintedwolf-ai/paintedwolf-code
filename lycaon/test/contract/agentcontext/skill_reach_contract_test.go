@@ -294,6 +294,9 @@ func checkRenderedProseStructure(t *testing.T, skill string, part renderedText, 
 			t.Errorf("%s: renders a blanked table cell: %q", where, trimmed)
 		}
 	}
+	for _, drift := range prompts.RenderedProseStructureDrift(part.text) {
+		t.Errorf("skill %q %s as read by %s: %s", skill, part.label, reader, drift)
+	}
 }
 
 // blankedTableCells reports whether a split table row carries a whitespace-only
@@ -316,4 +319,26 @@ func blankedTableCells(cells []string) bool {
 		}
 	}
 	return false
+}
+
+// TestSurveyRepoAliasAdmittedAtRenderLevel pins the PC09 alias end to end
+// through the render-level reach gate: rendered copy may spell the repo-map
+// form as `survey-repo`, the gate resolves it through the survey_repo form
+// tool, and the alias stays gated on command and on survey_repo exactly like
+// the canonical spelling.
+func TestSurveyRepoAliasAdmittedAtRenderLevel(t *testing.T) {
+	catalog, _ := promptNameCatalog(t)
+	corpus := "Map the tree with `survey-repo` before reading files.\n"
+	held := map[string]bool{"command": true, "survey_repo": true}
+	if names := toolvocab.UnreachableNames(catalog, corpus, held); len(names) > 0 {
+		t.Fatalf("survey-repo alias flagged unreachable for a command+survey_repo reader: %v", names)
+	}
+	for _, incomplete := range []map[string]bool{
+		{"command": true},
+		{"survey_repo": true},
+	} {
+		if names := toolvocab.UnreachableNames(catalog, corpus, incomplete); !slices.Contains(names, "survey-repo") {
+			t.Fatalf("survey-repo must stay gated on command and survey_repo; held %v admitted it (unreachable = %v)", incomplete, names)
+		}
+	}
 }
