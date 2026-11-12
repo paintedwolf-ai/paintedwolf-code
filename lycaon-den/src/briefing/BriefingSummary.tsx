@@ -50,7 +50,7 @@ function Mark(props: { disclaimer: string }) {
 function Inline(props: { text: string }) {
   return (
     <For each={splitBriefingInline(props.text)}>
-      {(part) => (part.kind === "code" ? <code class="den-briefing-summary__code">{part.text}</code> : part.text)}
+      {(part) => <Show when={part.kind === "code"} fallback={part.text}><code class="den-briefing-summary__code">{part.text}</code></Show>}
     </For>
   );
 }
