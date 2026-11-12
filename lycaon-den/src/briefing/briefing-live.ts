@@ -48,7 +48,8 @@ type Store = {
   client: () => BriefingsClient | null;
   clock: BriefingClock;
   entries: Map<string, Entry>;
-  byTargetKey: Map<string, string>;
+  /** Entries by the host target they resolved to; requests of different shapes can name one target. */
+  byTargetKey: Map<string, Set<string>>;
   /** Lowest epoch still valid for each project and profile. */
   resets: Map<string, bigint>;
 };
@@ -139,9 +140,17 @@ function evictInactive(): void {
     if (entry.users > 0) continue;
     clearTimers(entry);
     store.entries.delete(key);
-    if (entry.targetKey) store.byTargetKey.delete(targetKeyIndex(entry.projectId, entry.target.profileId, entry.targetKey));
+    unindex(entry);
     inactive--;
   }
+}
+
+function unindex(entry: Entry): void {
+  if (!entry.targetKey) return;
+  const index = targetKeyIndex(entry.projectId, entry.target.profileId, entry.targetKey);
+  const keys = store.byTargetKey.get(index);
+  keys?.delete(entryKey(entry.projectId, entry.target));
+  if (keys?.size === 0) store.byTargetKey.delete(index);
 }
 
 function apply(entry: Entry, snapshot: BriefingSnapshot, fromReconcile: boolean): void {
@@ -149,8 +158,12 @@ function apply(entry: Entry, snapshot: BriefingSnapshot, fromReconcile: boolean)
   const current = entry.view();
   if (!isNewer(snapshot, current.snapshot)) return;
   if (entry.targetKey !== snapshot.target_key) {
+    unindex(entry);
     entry.targetKey = snapshot.target_key;
-    store.byTargetKey.set(targetKeyIndex(entry.projectId, snapshot.profile_id, snapshot.target_key), entryKey(entry.projectId, entry.target));
+    const index = targetKeyIndex(entry.projectId, snapshot.profile_id, snapshot.target_key);
+    const keys = store.byTargetKey.get(index) ?? new Set<string>();
+    keys.add(entryKey(entry.projectId, entry.target));
+    store.byTargetKey.set(index, keys);
   }
   if (entry.reconcile !== undefined) {
     store.clock.clearTimeout(entry.reconcile);
@@ -259,9 +272,11 @@ export function applyBriefingEvent(projectId: string, event: BriefingEvent): voi
   }
   const snapshot = event.snapshot;
   if (event.kind !== "snapshot" || !snapshot) return;
-  const key = store.byTargetKey.get(targetKeyIndex(projectId, snapshot.profile_id, snapshot.target_key));
-  const entry = key ? store.entries.get(key) : undefined;
-  if (entry) apply(entry, snapshot, false);
+  const keys = store.byTargetKey.get(targetKeyIndex(projectId, snapshot.profile_id, snapshot.target_key));
+  for (const key of [...(keys ?? [])]) {
+    const entry = store.entries.get(key);
+    if (entry) apply(entry, snapshot, false);
+  }
 }
 
 /** Re-asks every watched target after the event stream reopens. */
