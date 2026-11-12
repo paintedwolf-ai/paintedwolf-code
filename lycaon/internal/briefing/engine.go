@@ -165,9 +165,8 @@ func (e *Engine) Request(ctx context.Context, request Request) (Snapshot, error)
 		Expired: func(ctx context.Context) {
 			e.fail(ctx, r, attempt, Failure{Code: CodeQueueExpired, Message: ErrQueueExpired.Error()})
 		},
-		Values: ctx,
 	}
-	if _, err := e.scheduler.Submit(job); err != nil {
+	if _, err := e.scheduler.Submit(ctx, job); err != nil {
 		e.fail(context.WithoutCancel(ctx), r, attempt, Failure{Code: CodeAdmissionRefused, Message: err.Error()})
 		return Snapshot{}, err
 	}
