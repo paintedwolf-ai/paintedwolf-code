@@ -74,14 +74,14 @@ func TestQueuedWorkRespectsActiveSlotsAndQueueBound(t *testing.T) {
 	s := testScheduler(t)
 	g := newGate()
 	for _, key := range []string{"a", "b", "c", "d", "e"} {
-		if _, err := s.Submit(g.job(key, "p", false, testPolicy())); err != nil {
+		if _, err := s.Submit(t.Context(), g.job(key, "p", false, testPolicy())); err != nil {
 			t.Fatalf("submit %s: %v", key, err)
 		}
 	}
-	if _, err := s.Submit(g.job("f", "p", false, testPolicy())); !errors.Is(err, ErrBusy) {
+	if _, err := s.Submit(t.Context(), g.job("f", "p", false, testPolicy())); !errors.Is(err, ErrBusy) {
 		t.Fatalf("queue past its bound admitted: %v", err)
 	}
-	if _, err := s.Submit(g.job("other", "q", false, testPolicy())); err != nil {
+	if _, err := s.Submit(t.Context(), g.job("other", "q", false, testPolicy())); err != nil {
 		t.Fatalf("another project's queue was shared: %v", err)
 	}
 	started := map[string]bool{g.next(t): true, g.next(t): true, g.next(t): true}
@@ -99,11 +99,11 @@ func TestManualWorkStartsAheadOfAutomaticAndJoinsByKey(t *testing.T) {
 	g := newGate()
 	policy := testPolicy()
 	policy.Active = 1
-	_, _ = s.Submit(g.job("running", "p", false, policy))
+	_, _ = s.Submit(t.Context(), g.job("running", "p", false, policy))
 	g.next(t)
-	_, _ = s.Submit(g.job("auto-1", "p", false, policy))
-	_, _ = s.Submit(g.job("auto-2", "p", false, policy))
-	if joined, _ := s.Submit(g.job("auto-2", "p", true, policy)); !joined {
+	_, _ = s.Submit(t.Context(), g.job("auto-1", "p", false, policy))
+	_, _ = s.Submit(t.Context(), g.job("auto-2", "p", false, policy))
+	if joined, _ := s.Submit(t.Context(), g.job("auto-2", "p", true, policy)); !joined {
 		t.Fatal("equal key did not join")
 	}
 	g.open("running")
@@ -119,16 +119,16 @@ func TestQueuedWorkExpiresByInjectedClock(t *testing.T) {
 	g := newGate()
 	policy := testPolicy()
 	policy.Active = 1
-	_, _ = s.Submit(g.job("running", "p", false, policy))
+	_, _ = s.Submit(t.Context(), g.job("running", "p", false, policy))
 	g.next(t)
 	expired := make(chan struct{})
 	waiting := g.job("waiting", "p", false, policy)
 	waiting.Expired = func(context.Context) { close(expired) }
-	_, _ = s.Submit(waiting)
+	_, _ = s.Submit(t.Context(), waiting)
 	clock = clock.Add(policy.QueueWait + time.Second)
 	s.ExpireQueued("p")
 	receive(t, expired)
-	if joined, err := s.Submit(g.job("waiting", "p", false, policy)); joined || err != nil {
+	if joined, err := s.Submit(t.Context(), g.job("waiting", "p", false, policy)); joined || err != nil {
 		t.Fatalf("expired key still held: joined=%v err=%v", joined, err)
 	}
 }
@@ -144,11 +144,11 @@ func TestSupersedingCancelsEarlierAutomaticWorkInItsGroup(t *testing.T) {
 			cancelled <- key
 		}}
 	}
-	_, _ = s.Submit(job("first", false))
+	_, _ = s.Submit(t.Context(), job("first", false))
 	receive(t, started)
-	_, _ = s.Submit(job("manual", true))
+	_, _ = s.Submit(t.Context(), job("manual", true))
 	receive(t, started)
-	_, _ = s.Submit(job("second", false))
+	_, _ = s.Submit(t.Context(), job("second", false))
 	receive(t, started)
 	if got := receive(t, cancelled); got != "first" {
 		t.Fatalf("supersession cancelled %s", got)
@@ -160,11 +160,11 @@ func TestSupersedingCancelsEarlierAutomaticWorkInItsGroup(t *testing.T) {
 func TestStopCancelsRunningWorkAndClosesAdmission(t *testing.T) {
 	s := NewScheduler(context.Background())
 	g := newGate()
-	_, _ = s.Submit(g.job("a", "p", false, testPolicy()))
+	_, _ = s.Submit(t.Context(), g.job("a", "p", false, testPolicy()))
 	g.next(t)
 	s.Stop()
 	s.Wait(context.Background())
-	if _, err := s.Submit(g.job("b", "p", false, testPolicy())); !errors.Is(err, ErrStopped) {
+	if _, err := s.Submit(t.Context(), g.job("b", "p", false, testPolicy())); !errors.Is(err, ErrStopped) {
 		t.Fatalf("admission after stop: %v", err)
 	}
 	if len(g.started) != 1 {

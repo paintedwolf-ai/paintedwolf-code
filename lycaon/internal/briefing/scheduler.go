@@ -58,9 +58,6 @@ type Job struct {
 	Run    func(context.Context)
 	// Expired runs instead of Run when queued work exceeds its wait.
 	Expired func(context.Context)
-	// Values carries request-scoped values into the run without its
-	// cancellation.
-	Values context.Context
 }
 
 // Scheduler runs jobs to completion independent of the requests that admit
@@ -95,8 +92,9 @@ func NewScheduler(ctx context.Context) *Scheduler {
 }
 
 // Submit admits a job or joins the run already holding its key. A manual job
-// joining queued work promotes it ahead of automatic work.
-func (s *Scheduler) Submit(job Job) (joined bool, err error) {
+// joining queued work promotes it ahead of automatic work. The run keeps
+// ctx's values but not its cancellation.
+func (s *Scheduler) Submit(ctx context.Context, job Job) (joined bool, err error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stopped {
@@ -109,8 +107,8 @@ func (s *Scheduler) Submit(job Job) (joined bool, err error) {
 		}
 		return true, nil
 	}
-	ctx, cancel := s.runContext(job)
-	r := &run{job: job, ctx: ctx, cancel: cancel, queuedAt: s.now()}
+	runCtx, cancel := s.runContext(ctx)
+	r := &run{job: job, ctx: runCtx, cancel: cancel, queuedAt: s.now()}
 	switch job.Policy.Admission {
 	case Queued:
 		lane := s.lane(job.Project)
@@ -139,11 +137,8 @@ func (s *Scheduler) Submit(job Job) (joined bool, err error) {
 }
 
 // runContext ends with the scheduler but never with the admitting request.
-func (s *Scheduler) runContext(job Job) (context.Context, context.CancelFunc) {
-	if job.Values == nil {
-		return context.WithCancel(s.ctx)
-	}
-	ctx, cancel := context.WithCancel(context.WithoutCancel(job.Values))
+func (s *Scheduler) runContext(values context.Context) (context.Context, context.CancelFunc) {
+	ctx, cancel := context.WithCancel(context.WithoutCancel(values))
 	stop := context.AfterFunc(s.ctx, cancel)
 	return ctx, func() { stop(); cancel() }
 }
