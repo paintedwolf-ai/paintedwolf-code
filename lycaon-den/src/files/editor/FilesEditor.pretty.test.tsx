@@ -133,8 +133,8 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     expect(view.state.doc.toString()).toBe(rawJsonl);
     expect(getFilesEditorViewDoc(PROJECT, buf.key)).toBe(rawJsonl);
     expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
-    expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBeGreaterThan(4);
-    expect(view.dom.querySelectorAll(".pw-virtual-indent").length).toBeGreaterThan(3);
+    expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(4);
+    expect(view.dom.querySelectorAll(".pw-pretty-line").length).toBeGreaterThan(3);
     expect(projectFilesState(PROJECT).byKey[buf.key]!.dirty).toBe(false);
     expect(view.dom.querySelectorAll(".cm-panels")).toHaveLength(0);
     expect(
@@ -149,7 +149,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       expect(toggleBtn.getAttribute("aria-pressed")).toBe("false");
     });
     expect(view.state.doc.toString()).toBe(rawJsonl);
-    expect(view.dom.querySelectorAll(".pw-virtual-break")).toHaveLength(0);
+    expect(view.dom.querySelectorAll(".pw-pretty-break")).toHaveLength(0);
     expect(projectFilesState(PROJECT).byKey[buf.key]!.dirty).toBe(false);
   });
 
@@ -274,7 +274,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       expect(view.state.doc.toString()).toBe(remoteJson);
     });
     expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
-    expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBeGreaterThan(3);
+    expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(3);
   });
 
   it("preserves raw source coordinates for Go to line, buffer reveal, SecretScreen spans, Copy contents, and tab disposal (FMT-AC-13, FMT-AC-15, FMT-AC-18)", async () => {
@@ -309,7 +309,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     // Enable Pretty
     invokePrettyToggleForTab(PROJECT, buf.key);
     expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(true);
-    expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBeGreaterThan(3);
+    expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(3);
 
     // 1. Go to line 2, column 5 lands on raw line 2, column 5:
     openGotoLine(view);
