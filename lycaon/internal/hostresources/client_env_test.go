@@ -95,3 +95,35 @@ func TestResolutionPointsTheClientAtTheReviewedSocket(t *testing.T) {
 		t.Fatalf("client variable and reviewed socket differ: %v %+v", resolution.ClientEnv, resolution.Connections)
 	}
 }
+
+// A refused socket maps to the available resource whose service it is, by
+// any spelling that resolves to the same socket.
+func TestResourcesForSocketsNamesTheOwningResource(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "pw-engine-") //nolint:usetesting // Unix socket addresses have a kernel byte limit.
+	testutil.FailErr(t, "socket dir", err)
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	socket := filepath.Join(dir, "engine.sock")
+	listener, err := net.Listen("unix", socket)
+	testutil.FailErr(t, "listen", err)
+	t.Cleanup(func() { _ = listener.Close() })
+	link := filepath.Join(dir, "linked.sock")
+	testutil.FailErr(t, "link socket", os.Symlink(socket, link))
+	def := Definition{
+		ID: "engine", Family: "containers.local", Label: "Engine", Category: "Containers", Description: "Engine.",
+		Surfaces: []ExecutionSurface{SurfaceProcessExec},
+		Realizations: []Realization{{
+			Discover:    Expression{Path: &PathProbe{Kind: "socket", Paths: []string{socket}, Capture: "daemon_socket"}},
+			Connections: []ConnectionTemplate{{Mode: ConnectionLocalService, Transport: LocalServiceUnixSocket, TargetFrom: "daemon_socket", ClientEnv: "ENGINE_HOST"}},
+		}},
+		origin: "test",
+	}
+	service := serviceForPath(t, def, nil)
+	for _, path := range []string{socket, link} {
+		if got := service.ResourcesForSockets(context.Background(), ProjectContext{}, []string{"/run/other.sock", path}); !slices.Equal(got, []string{"engine"}) {
+			t.Errorf("%s: resources = %v", path, got)
+		}
+	}
+	if got := service.ResourcesForSockets(context.Background(), ProjectContext{}, []string{"/run/other.sock"}); len(got) != 0 {
+		t.Errorf("unrelated socket named %v", got)
+	}
+}
