@@ -349,32 +349,116 @@
   color: var(--den-text-muted);
   font-variant-numeric: tabular-nums;
 }
-.den-command-activity-details,
-.den-command-activity-source {
+/* Opened activities use two text styles: interface hint text and monospace. */
+.den-activity-detail {
+  display: grid;
+  gap: 8px;
   min-width: 0;
   max-width: 100%;
-  overflow-wrap: anywhere;
-}
-.den-command-activity-step {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 2px 12px;
-  min-width: 0;
-  padding: 4px 0;
-}
-.den-command-activity-step code {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.den-command-activity-step span {
-  color: var(--den-text-muted);
   font-size: var(--text-den-hint);
 }
-.den-command-activity-details .den-tool-part-card-facts dd {
-  flex: 1 1 0;
+.den-activity-detail code,
+.den-activity-output__text {
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+}
+.den-activity-command {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.den-activity-command code,
+.den-activity-row code {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-activity-command__more,
+.den-activity-purpose,
+.den-activity-note,
+.den-activity-output__note,
+.den-activity-row span {
+  color: var(--den-text-muted);
+}
+.den-activity-command__more {
+  flex: none;
+  white-space: nowrap;
+}
+.den-activity-command__copy {
+  flex: none;
+  color: var(--den-text-muted);
+}
+.den-activity-purpose,
+.den-activity-result,
+.den-activity-note {
+  margin: 0;
   overflow-wrap: anywhere;
-  margin-left: auto;
+}
+.den-activity-output {
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background-color: var(--den-surface-inset);
+}
+.den-activity-output__text {
+  margin: 0;
+  overflow: hidden;
+  white-space: pre;
+  text-overflow: ellipsis;
+  color: var(--den-text-muted);
+}
+.den-activity-output__note {
+  margin: 4px 0 0;
+}
+.den-activity-rows {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.den-activity-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+}
+.den-activity-row span {
+  flex: none;
+  white-space: nowrap;
+}
+.den-activity-row[data-state="failed"] code,
+.den-activity-row[data-state="failed"] span {
+  color: var(--den-danger-text);
+}
+.den-activity-row__links,
+.den-activity-footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.den-activity-exceptions {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 2px 12px;
+  margin: 0;
+}
+.den-activity-exceptions div {
+  display: contents;
+}
+.den-activity-exceptions dt {
+  color: var(--den-text-muted);
+}
+.den-activity-exceptions dd {
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.den-activity-footer {
+  padding-top: 8px;
+  border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
 }
 
 .den-tool-part[data-command-activity] .den-tool-part-name {
@@ -384,10 +468,4 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.den-command-activity-details .den-tool-part-card-facts dd {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  overflow: hidden;
 }

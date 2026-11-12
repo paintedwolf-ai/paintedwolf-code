@@ -17,6 +17,7 @@ import (
 )
 
 func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t *testing.T) {
+	approveDials(t)
 	secrets, _ := testSecrets(t)
 	const count = 4
 	arrived, release := make(chan struct{}, count), make(chan struct{})
@@ -90,6 +91,7 @@ func TestParallelHTTPRequestWorkersShareOneCookieJarWithoutSerializingNetwork(t 
 }
 
 func TestCookieJarSavesCookiesReceivedBeforeBodyCancellation(t *testing.T) {
+	approveDials(t)
 	secrets, _ := testSecrets(t)
 	received := make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

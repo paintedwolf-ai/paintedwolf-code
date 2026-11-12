@@ -20,11 +20,11 @@ type launchRecorder struct {
 	reads, writes []string
 }
 
-type launchFunc[S any] func(context.Context, tools.ToolContext, string, string, S) (lycexec.LaunchPlan, func(context.Context), error)
+type launchFunc[S any] func(context.Context, tools.ToolContext, string, string, S) (lycexec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error)
 
 // record wraps next, whatever host sockets or services its launch takes.
-func record[S any](r *launchRecorder, next launchFunc[S]) func(context.Context, tools.ToolContext, string, string, S) (lycexec.LaunchPlan, func(context.Context), error) {
-	return func(ctx context.Context, tc tools.ToolContext, subject, line string, host S) (lycexec.LaunchPlan, func(context.Context), error) {
+func record[S any](r *launchRecorder, next launchFunc[S]) func(context.Context, tools.ToolContext, string, string, S) (lycexec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
+	return func(ctx context.Context, tc tools.ToolContext, subject, line string, host S) (lycexec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
 		r.mu.Lock()
 		r.reads = append(r.reads, tc.Files.SessionReadPaths...)
 		r.writes = append(r.writes, tc.Files.GrantedWriteRoots...)
