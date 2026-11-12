@@ -159,12 +159,12 @@ func (rec *Record) touchURL(rawURL string) {
 	if rec.URL == "" {
 		rec.URL = url
 	}
-	for _, existing := range rec.urlsTouched {
+	for _, existing := range rec.urls.touched {
 		if existing == url {
 			return
 		}
 	}
-	rec.urlsTouched = append(rec.urlsTouched, url)
+	rec.urls.touched = append(rec.urls.touched, url)
 }
 
 // showURL remembers an address a read page displayed. It is not a source the
@@ -174,10 +174,10 @@ func (rec *Record) showURL(rawURL string) {
 		return
 	}
 	url := strings.TrimSpace(rawURL)
-	if url == "" || slices.Contains(rec.urlsShown, url) {
+	if url == "" || slices.Contains(rec.urls.shown, url) {
 		return
 	}
-	rec.urlsShown = append(rec.urlsShown, url)
+	rec.urls.shown = append(rec.urls.shown, url)
 }
 
 // URLShown reports whether a read page displayed exactly this address.
@@ -187,7 +187,7 @@ func URLShown(ev Ledger, rawURL string) bool {
 		return false
 	}
 	for _, rec := range ev.Handles {
-		if slices.Contains(rec.urlsShown, url) {
+		if slices.Contains(rec.urls.shown, url) {
 			return true
 		}
 	}
@@ -210,7 +210,7 @@ func ObservedURLsForRecord(rec Record) []string {
 		out = append(out, u)
 	}
 	add(rec.URL)
-	for _, u := range rec.urlsTouched {
+	for _, u := range rec.urls.touched {
 		add(u)
 	}
 	return out
@@ -225,19 +225,19 @@ func (rec *Record) touchURLTitle(rawURL, title string) {
 	if rawURL == "" || title == "" {
 		return
 	}
-	if rec.urlTitles == nil {
-		rec.urlTitles = make(map[string]string)
+	if rec.urls.titles == nil {
+		rec.urls.titles = make(map[string]string)
 	}
-	rec.urlTitles[rawURL] = title
+	rec.urls.titles[rawURL] = title
 }
 
 // URLTitles returns the page titles this record observed, keyed by URL.
 func (rec Record) URLTitles() map[string]string {
-	if len(rec.urlTitles) == 0 {
+	if len(rec.urls.titles) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(rec.urlTitles))
-	for u, t := range rec.urlTitles {
+	out := make(map[string]string, len(rec.urls.titles))
+	for u, t := range rec.urls.titles {
 		out[u] = t
 	}
 	return out
