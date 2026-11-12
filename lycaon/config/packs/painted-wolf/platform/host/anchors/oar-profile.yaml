@@ -117,8 +117,6 @@ host_facts:
    type: string
  - name: paintedwolf.missing_required_arguments
    type: string
- - name: paintedwolf.worker_budget_at_max
-   type: bool
  - name: paintedwolf.search_provider_statuses
    type: list<string>
  - name: paintedwolf.period_max_year
@@ -954,8 +952,6 @@ host_facts:
  - name: paintedwolf.max_path_bytes
    type: string
  - name: paintedwolf.max_paths
-   type: string
- - name: paintedwolf.max_tool_loops
    type: string
  - name: paintedwolf.max_uncompressed_bytes
    type: string

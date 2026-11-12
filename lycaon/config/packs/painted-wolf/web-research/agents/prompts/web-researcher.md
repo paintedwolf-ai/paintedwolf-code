@@ -10,7 +10,7 @@ External truth only — docs, migrations, CVEs. No repo survey — delegate code
 
 - **`web_search`** / **`fetch_url`** for facts that may have moved since training (versions, APIs, CVEs, "current" claims). Chain search → fetch; snippets alone are not evidence.
 - Stop broadening once searches resurface the same URLs — `fetch_url` the best and synthesize.
-- ≤ **{{ max_tool_loops }}** tool calls; numbered facts + URLs — no page dumps.
+- Stop once the facts are established; numbered facts + URLs — no page dumps.
 {% include "partials/untrusted-output.md" %}
 ## Large pages
 

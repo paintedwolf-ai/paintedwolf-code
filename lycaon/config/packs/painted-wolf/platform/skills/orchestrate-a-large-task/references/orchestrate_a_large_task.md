@@ -15,8 +15,7 @@ The dispatch steps below are coordinator-only: a worker leg applies the matching
 7. Set the remaining fields deliberately:
    - `files` — likely starting points only, not a reading list.
    - `scope.paths` — optional focus hints for any worker; they do not limit access or promotion.
-   - `max_tool_loops` — omit unless the shape table names a number; the host funds a productive leg on its own.
-   - `child_session_id` — only to continue the same leg with new facts or budget.
+   - `child_session_id` — only to continue the same leg with new facts.
    - `scope.base_overlay_id` — only for an intentional dependency on a pending write overlay.
    - `after_workers` — sibling producer job ids the host must finish and promote before this leg starts; unusable producer output cancels the wait. Do not combine it with `child_session_id` or `scope.base_overlay_id`.
    - `shared_context` — up to 8192 bytes of interface agreements copied to each collaborating leg; give collaborators the same text.
@@ -26,24 +25,24 @@ The dispatch steps below are coordinator-only: a worker leg applies the matching
 
 ## Sizing by shape
 
-Host in-flight cap **{{ max_in_flight }}**; worker default **{{ worker_tool_budget_default }}**, range **{{ worker_tool_budget_min }}**–**{{ worker_tool_budget_max }}**.
+Host in-flight cap **{{ max_in_flight }}**. A leg runs as long as its work takes; you hear when a round runs long or goes quiet.
 
 Use these shapes to identify useful assignments. Group small related outputs when separate workers would add little value.
 
-| Shape | Count | `max_tool_loops` |
-|---|---|---|
-| Responsibility fan-out — a stable interface with several components behind it | one leg per component with assigned output paths | omit; host default |
-| Independent fix set — findings partitioned by root cause | one leg per root cause, non-overlapping paths | omit; host default |
-| Configuration matrix — the same change across independent groups | one leg per group | omit; host default |
-| Hunt / breadth — unknown layout across distinct areas | one bounded read leg per area; **~{{ hunt_wave_workers }}** in a wave is ordinary when scopes do not duplicate | omit; host default |
-| Role set — one deliverable needing complementary roles | one leg per role, same wave{% if profile_has_record_finding %}, briefed to share via `record_finding`{% endif %} | omit; host default |
-| Competing approaches — one decision, several candidate designs | one leg per approach, judged against one frozen rubric | omit; host default |
-| Deep single thread — sequential diagnosis or one assigned deep edit path that materially benefits from isolation, worker-only capability, or extra context/tool budget | 1 | ~**{{ deep_tool_loops_hint }}** |
-| Throwaway / bounded — smoke, verify, single-path check | 1 per check | **{{ throwaway_tool_loops_min }}–{{ throwaway_tool_loops_max }}** |
+| Shape | Count |
+|---|---|
+| Responsibility fan-out — a stable interface with several components behind it | one leg per component with assigned output paths |
+| Independent fix set — findings partitioned by root cause | one leg per root cause, non-overlapping paths |
+| Configuration matrix — the same change across independent groups | one leg per group |
+| Hunt / breadth — unknown layout across distinct areas | one bounded read leg per area; **~{{ hunt_wave_workers }}** in a wave is ordinary when scopes do not duplicate |
+| Role set — one deliverable needing complementary roles | one leg per role, same wave{% if profile_has_record_finding %}, briefed to share via `record_finding`{% endif %} |
+| Competing approaches — one decision, several candidate designs | one leg per approach, judged against one frozen rubric |
+| Deep single thread — sequential diagnosis or one assigned deep edit path that materially benefits from isolation, a worker-only capability, or extra context | 1 |
+| Throwaway / bounded — smoke, verify, single-path check | 1 per check |
 
 Useful independent legs can overlap within the host cap; duration and shared resources still determine latency. The host wakes you per envelope. Start independent outcomes together; sequence legs for dependencies you can name. Use one worker when one bounded assignment is useful.
 
-`max_tool_loops` bounds a leg; it does not buy quality. {% if profile_has_extend_worker_budget or profile_has_decline_worker_budget %}A worker that needs more rounds asks for them, naming the work the rounds cover; answer promptly with `extend_worker_budget` or `decline_worker_budget`, because the worker's final round waits for the answer. Without a grant it returns partial results and unknowns at the bound and can be resumed on the same child, so leaving the field out is the normal choice.{% elif profile_has_request_budget %}When you need more rounds than the bound allows, ask with `request_budget` and name the work the rounds cover, then wait for the coordinator's decision; without a grant, return partial results and unknowns at the bound.{% else %}Stay within the bound: return partial results and unknowns at the bound rather than overrunning it.{% endif %}
+A long round is not a failed one. A worker that cannot finish reports what remains in its result; resume it on the same child, or re-scope the leg.
 
 ## Stopping rule
 

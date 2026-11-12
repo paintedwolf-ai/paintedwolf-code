@@ -26059,7 +26059,7 @@ components:
         - prompt_failed
         - turn_closeout_tool_call
         - host_fault
-        - worker_closeout_exhausted
+        - worker_model_timeout
         - worker_execute_failed
         - worker_workspace_disk_full
         - worker_owner_unsettled

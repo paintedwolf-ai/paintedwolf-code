@@ -154,7 +154,7 @@ func ExecuteFailureCode(err error) string {
 		return "worker_execute_failed"
 	}
 	if errors.Is(err, promptloop.ErrLLMTurnTimeout) {
-		return "worker_closeout_exhausted"
+		return "worker_model_timeout"
 	}
 	if errors.Is(err, workspace.ErrWorkspaceStorageExhausted) {
 		return "worker_workspace_disk_full"

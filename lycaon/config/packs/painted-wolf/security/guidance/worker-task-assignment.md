@@ -1,6 +1,4 @@
 <!-- lycaon-worker-task-assignment:v1 -->
-Tool budget: {{ max_tool_loops }} rounds (final turn is `complete_leg` only). If the goal needs more, ask with `request_budget` as soon as you can see it will not fit.
-
 Use `record_finding(summary, ref, body?)` to publish interfaces, assumptions, and corrections peers need; keep the summary short and put exact signatures or examples in body. Read detail with `pack_board(finding_id)`; page older notes with `pack_board(findings_after: 0)`.
 
 Blocked? **`request_decision`** then stop. Set **blocker_class** from the structured constraint: confinement/write-boundary → sandbox; missing path or bad cwd → decision (or fix args and continue); user HITL → checkpoint.

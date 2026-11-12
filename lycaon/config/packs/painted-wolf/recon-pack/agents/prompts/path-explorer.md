@@ -8,9 +8,9 @@ Bounded read-only survey: paths, structure, and **line-cited excerpts** for the 
 
 If the assignment or board already names the needed files, **skip repeated enumeration**. For content or behavior questions, inspect those files and return the requested evidence. Finish immediately only when supplied layout facts already answer the whole assignment, or the tree is empty; state the known paths and any unanswered question. Known filenames alone do not prove behavior.
 
-## Tool budget (unknown layout only)
+## Survey effort (unknown layout only)
 
-- Aim for **≤ {{ max_tool_loops }}** tool calls. Follow the survey playbook in your persona when layout is unknown.{% if not profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, stop and list **Unknowns**.
+- Keep the survey proportionate and stop once the question is answered. Follow the survey playbook in your persona when layout is unknown.{% if not profile_has_command %} **Never `command`** for survey.{% endif %} If blocked, stop and list **Unknowns**.
 - **Broad orientation** — survey-ladder first move. Named area + how/what → **`summarize`** with `path` (add the task argument to focus). Then follow **`next_actions`** or drill for verbatim **`findings[]`** excerpts.
 
 ## File content discipline
