@@ -61,6 +61,9 @@ type NativePrepared struct {
 	// Release frees any admitted resources retained by the prepared invocation
 	// across start/approval refusals and owner completion.
 	Release func()
+	// LaunchesConfined marks a form whose owner starts a confined process; it
+	// is admitted with the call's launch capabilities, as an external launch is.
+	LaunchesConfined bool
 }
 
 // ProgramOwners is one program's host owner set. Publication and Input serve
@@ -571,7 +574,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	if prepared.Mode != "" {
 		request.EffectMode = prepared.Mode
 	}
-	return d.invokeHost(ctx, request, streams, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
 			return ownerFailure(err), err
 		}
