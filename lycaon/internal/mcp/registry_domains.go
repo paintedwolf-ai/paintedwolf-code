@@ -39,7 +39,7 @@ type ProviderAdministration struct {
 	Credentials           *ProviderCredentials
 	Tools                 *ToolDiscovery
 	onSettings            func()
-	openStaticCredentials func(dir string) (*StaticCredentialStore, error)
+	OpenStaticCredentials func(dir string) (*StaticCredentialStore, error)
 	beforeConfigWrite     func(op, providerID string) error
 	crashHook             func(stage, op, providerID string) error
 }
