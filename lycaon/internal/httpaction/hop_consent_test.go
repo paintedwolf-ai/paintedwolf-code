@@ -22,7 +22,7 @@ import (
 // withholding the cookie consents to nothing.
 func TestCookieApprovalConsentsToItsConnection(t *testing.T) {
 	confine.SetEgressPosture(confine.PostureAsk)
-	t.Cleanup(func() { confine.SetEgressPosture(confine.PostureObserve); confine.SetEgressResolver(nil) })
+	t.Cleanup(func() { confine.SetEgressPosture(confine.PostureObserve); restoreResolver() })
 	target, err := url.Parse("https://issuer.example/api")
 	testutil.FailErr(t, "parse target", err)
 	spec := requestSpec{target: target, method: http.MethodGet, hostHeader: "other.example"}
