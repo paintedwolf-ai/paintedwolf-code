@@ -193,7 +193,7 @@ func (q *Queries) GetLatestWorkerWorkspacePreparation(ctx context.Context, worke
 
 const getUnsettledWorkerRound = `-- name: GetUnsettledWorkerRound :one
 SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
-       execution_target, review_subject_json, operation_id, created_at, settled_at
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
 FROM worker_rounds WHERE worker_id = ? AND settled_at IS NULL
 `
 
@@ -211,6 +211,7 @@ func (q *Queries) GetUnsettledWorkerRound(ctx context.Context, workerID string) 
 		&i.OperationID,
 		&i.CreatedAt,
 		&i.SettledAt,
+		&i.CheckpointID,
 	)
 	return i, err
 }
@@ -430,7 +431,7 @@ func (q *Queries) GetWorkerResultOwner(ctx context.Context, id string) (GetWorke
 
 const getWorkerRoundByJob = `-- name: GetWorkerRoundByJob :one
 SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
-       execution_target, review_subject_json, operation_id, created_at, settled_at
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
 FROM worker_rounds WHERE job_id = ?
 `
 
@@ -448,6 +449,7 @@ func (q *Queries) GetWorkerRoundByJob(ctx context.Context, jobID string) (Worker
 		&i.OperationID,
 		&i.CreatedAt,
 		&i.SettledAt,
+		&i.CheckpointID,
 	)
 	return i, err
 }
@@ -987,7 +989,7 @@ func (q *Queries) ListWorkerResultDispositions(ctx context.Context, workerID str
 
 const listWorkerRounds = `-- name: ListWorkerRounds :many
 SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
-       execution_target, review_subject_json, operation_id, created_at, settled_at
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
 FROM worker_rounds WHERE worker_id = ? ORDER BY ordinal
 `
 
@@ -1011,6 +1013,7 @@ func (q *Queries) ListWorkerRounds(ctx context.Context, workerID string) ([]Work
 			&i.OperationID,
 			&i.CreatedAt,
 			&i.SettledAt,
+			&i.CheckpointID,
 		); err != nil {
 			return nil, err
 		}
@@ -1106,18 +1109,24 @@ func (q *Queries) SetWorkerResultChangeState(ctx context.Context, arg SetWorkerR
 }
 
 const settleWorkerRound = `-- name: SettleWorkerRound :execrows
-UPDATE worker_rounds SET settled_at = ?1
-WHERE worker_id = ?2 AND ordinal = ?3 AND settled_at IS NULL
+UPDATE worker_rounds SET settled_at = ?1, checkpoint_id = ?2
+WHERE worker_id = ?3 AND ordinal = ?4 AND settled_at IS NULL
 `
 
 type SettleWorkerRoundParams struct {
-	SettledAt sql.NullString `json:"settled_at"`
-	WorkerID  string         `json:"worker_id"`
-	Ordinal   int64          `json:"ordinal"`
+	SettledAt    sql.NullString `json:"settled_at"`
+	CheckpointID string         `json:"checkpoint_id"`
+	WorkerID     string         `json:"worker_id"`
+	Ordinal      int64          `json:"ordinal"`
 }
 
 func (q *Queries) SettleWorkerRound(ctx context.Context, arg SettleWorkerRoundParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, settleWorkerRound, arg.SettledAt, arg.WorkerID, arg.Ordinal)
+	result, err := q.db.ExecContext(ctx, settleWorkerRound,
+		arg.SettledAt,
+		arg.CheckpointID,
+		arg.WorkerID,
+		arg.Ordinal,
+	)
 	if err != nil {
 		return 0, err
 	}

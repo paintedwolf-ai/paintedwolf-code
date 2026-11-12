@@ -160,9 +160,14 @@ func TestRoundsAdmitOneUnsettledRound(t *testing.T) {
 	_, err = f.store.Close(t.Context(), f.coord, op("close-early"), w.WorkerID, "withdrawn")
 	wantErr(t, "close while working", err, workerrecords.ErrRoundUnsettled)
 
-	settled, err := f.store.SettleRound(t.Context(), f.coord, op("settle-1"), w.WorkerID, "job-1")
+	settled, err := f.store.SettleRound(t.Context(), f.coord, op("settle-1"), w.WorkerID, "job-1", "cp-1")
 	testutil.FailErr(t, "settle", err)
-	again, err := f.store.SettleRound(t.Context(), f.coord, op("settle-1b"), w.WorkerID, "job-1")
+	rounds, err := f.store.Rounds(t.Context(), f.coord, w.WorkerID)
+	testutil.FailErr(t, "rounds", err)
+	if rounds[0].CheckpointID != "cp-1" || settled.CheckpointID != "cp-1" {
+		t.Fatalf("settled round = %+v, receipt %+v", rounds[0], settled)
+	}
+	again, err := f.store.SettleRound(t.Context(), f.coord, op("settle-1b"), w.WorkerID, "job-1", "")
 	testutil.FailErr(t, "settle again", err)
 	if again != settled {
 		t.Fatalf("second settlement = %+v, want %+v", again, settled)
@@ -173,7 +178,7 @@ func TestRoundsAdmitOneUnsettledRound(t *testing.T) {
 		t.Fatalf("ordinal = %d want 2", r2.Ordinal)
 	}
 
-	_, err = f.store.SettleRound(t.Context(), f.coord, op("settle-2"), w.WorkerID, "job-2")
+	_, err = f.store.SettleRound(t.Context(), f.coord, op("settle-2"), w.WorkerID, "job-2", "")
 	testutil.FailErr(t, "settle 2", err)
 	_, err = f.store.AdmitRound(t.Context(), f.coord, op("admit-2-again"), w.WorkerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
 	wantErr(t, "a job in two rounds", err, workerrecords.ErrJobBinding)
