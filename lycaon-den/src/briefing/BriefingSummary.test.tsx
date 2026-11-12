@@ -46,6 +46,19 @@ describe("BriefingSummary", () => {
     ));
     expect(container.querySelector(".den-briefing-mark")?.getAttribute("data-tip")).toBe("Decision help");
   });
+
+  it("keeps a label in the same flow as its text, waiting or written", () => {
+    const { container } = render(() => (
+      <BriefingSummary recordId="r" sections={[
+        { id: "done", label: "Contribution", text: "Listed the packages.", source: "summarizer" },
+        { id: "next", label: "Remaining" },
+      ]} />
+    ));
+    for (const [id, label] of [["done", "Contribution:"], ["next", "Remaining:"]]) {
+      const text = container.querySelector(`[data-section="${id}"] .den-briefing-summary__text`);
+      expect(text?.querySelector(".den-briefing-summary__label")?.textContent).toBe(label);
+    }
+  });
 });
 
 describe("snapshotSections", () => {
