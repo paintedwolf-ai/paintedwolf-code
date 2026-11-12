@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -487,6 +488,37 @@ func (s *Service) ResolveAction(
 	resolution.WriteRoots = s.realizationWriteRoots(ids, resolved)
 	resolution.ClientEnv = s.realizationClientEnv(ids, resolved)
 	return resolution, unmet
+}
+
+// ResourcesForSockets names the available resources whose local Unix socket
+// is one of paths.
+func (s *Service) ResourcesForSockets(ctx context.Context, project ProjectContext, paths []string) []string {
+	if s == nil || len(paths) == 0 {
+		return nil
+	}
+	wanted := map[string]struct{}{}
+	for _, path := range paths {
+		wanted[path] = struct{}{}
+		wanted[filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(path)))] = struct{}{}
+	}
+	var ids []string
+	for _, state := range s.SnapshotFor(ctx, false, project, nil).Resources {
+		if state.Status != StatusAvailable || state.HostSupport != HostSupported || state.Access == AccessDeny {
+			continue
+		}
+		for _, connection := range state.Connections {
+			if connection.Mode != ConnectionLocalService || connection.Transport != LocalServiceUnixSocket {
+				continue
+			}
+			_, direct := wanted[connection.Target]
+			_, canonical := wanted[filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(connection.Target)))]
+			if direct || canonical {
+				ids = append(ids, state.ID)
+				break
+			}
+		}
+	}
+	return uniqueSorted(ids)
 }
 
 // realizationClientEnv points each declared resource's client at the socket
