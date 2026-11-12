@@ -47,6 +47,15 @@ describe("BriefingSummary", () => {
     expect(container.querySelector(".den-briefing-mark")?.getAttribute("data-tip")).toBe("Decision help");
   });
 
+  it("shows code spans as code once settled text has revealed", async () => {
+    const { container } = render(() => (
+      <BriefingSummary recordId="r" sections={[{ id: "change", text: "Reads `FIXTURE_LISTEN_ADDR` first.", source: "summarizer" }]} />
+    ));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(container.querySelector(".den-briefing-summary__code")?.textContent).toBe("FIXTURE_LISTEN_ADDR");
+    expect(container.textContent).not.toContain("`");
+  });
+
   it("keeps a label in the same flow as its text, waiting or written", () => {
     const { container } = render(() => (
       <BriefingSummary recordId="r" sections={[

@@ -1,9 +1,10 @@
-import { For, Show, createEffect, on, type JSX } from "solid-js";
+import { For, Show, createEffect, createSignal, on, type JSX } from "solid-js";
 import type { BriefingEvidenceRef, BriefingSnapshot, BriefingSummarySection } from "../api/types.ts";
 import { RandomLetterReveal, markLetterRevealOnceKey } from "../components/primitives/RandomLetterReveal.tsx";
 import { announce } from "../platform/interaction/announcer.tsx";
 import { briefingCopy } from "./briefing-copy.ts";
 import { openBriefingEvidence, type BriefingReturnAnchor } from "./briefing-evidence.ts";
+import { briefingRevealText, splitBriefingInline } from "./briefing-inline.ts";
 
 /** One section as a surface shows it; no text means it is still being written. */
 export type SummarySection = {
@@ -46,6 +47,25 @@ function Mark(props: { disclaimer: string }) {
   );
 }
 
+function Inline(props: { text: string }) {
+  return (
+    <For each={splitBriefingInline(props.text)}>
+      {(part) => (part.kind === "code" ? <code class="den-briefing-summary__code">{part.text}</code> : part.text)}
+    </For>
+  );
+}
+
+// The reveal animates plain characters; code spans take their style once it ends.
+function RevealedText(props: { text: string; onceKey: string }) {
+  const [revealed, setRevealed] = createSignal(false);
+  createEffect(on(() => props.text, () => setRevealed(false), { defer: true }));
+  return (
+    <Show when={revealed()} fallback={<RandomLetterReveal text={briefingRevealText(props.text)} onceKey={props.onceKey} onRevealed={() => setRevealed(true)} />}>
+      <Inline text={props.text} />
+    </Show>
+  );
+}
+
 // The label flows with its text so a narrow pane wraps the sentence, not the label.
 function Labelled(props: { label?: string; children: JSX.Element }) {
   return (
@@ -85,13 +105,13 @@ export function BriefingSummary(props: Props) {
             })()}
           >
             <p class="den-briefing-summary__section" data-section={section.id} data-source={section.source}>
-              <Show when={section.source === "summarizer"} fallback={<Labelled label={section.label}>{section.text}</Labelled>}>
+              <Show when={section.source === "summarizer"} fallback={<Labelled label={section.label}><Inline text={section.text ?? ""} /></Labelled>}>
                 <Mark disclaimer={disclaimer()} />
                 <Labelled label={section.label}>
                   {(() => {
                     // Text already settled when this view opened shows at once.
                     if (!watched.has(section.id)) markLetterRevealOnceKey(onceKey(section.id));
-                    return <RandomLetterReveal text={section.text ?? ""} onceKey={onceKey(section.id)} />;
+                    return <RevealedText text={section.text ?? ""} onceKey={onceKey(section.id)} />;
                   })()}
                 </Labelled>
               </Show>
