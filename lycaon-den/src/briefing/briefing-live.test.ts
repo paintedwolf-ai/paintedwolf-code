@@ -174,6 +174,22 @@ describe("briefing live store", () => {
     expect(client.calls).toHaveLength(1);
   });
 
+  it("delivers one host target's events to every request shape that names it", async () => {
+    const clock = new FakeClock();
+    setBriefingClockForTests(clock);
+    const pending = snapshot({ profile_id: "source_step", target_key: "effect", status: "pending" });
+    setBriefingClient(() => stubClient([pending, pending]));
+    const step = watch("p", { profileId: "source_step", ref: { kind: "effect", target_key: "effect", scope: { kind: "file", file_id: "f" } } });
+    const line = watch("p", { profileId: "source_step", ref: { kind: "effect", target_key: "effect" } });
+    clock.advance(BRIEFING_DEBOUNCE_MS);
+    await settle();
+    applyBriefingEvent("p", { kind: "snapshot", snapshot: snapshot({ profile_id: "source_step", target_key: "effect", revision: "2", status: "complete" }) });
+    expect(step.view().snapshot?.status).toBe("complete");
+    expect(line.view().snapshot?.status).toBe("complete");
+    step.dispose();
+    line.dispose();
+  });
+
   it("asks nothing for a view that closes before the debounce", async () => {
     const clock = new FakeClock();
     setBriefingClockForTests(clock);
