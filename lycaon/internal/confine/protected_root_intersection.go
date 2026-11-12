@@ -56,7 +56,7 @@ func defaultRootAbovePlacementOnly(path string) bool {
 
 // writeRootContainsStateTree prevents an ancestor rename from moving host state.
 func writeRootContainsStateTree(path string) bool {
-	for _, state := range resolveEach(controlPlaneReadDenyRoots()) {
+	for _, state := range controlPlaneReadDenyRootsResolved() {
 		if PathAtOrUnder(state, path) {
 			return true
 		}

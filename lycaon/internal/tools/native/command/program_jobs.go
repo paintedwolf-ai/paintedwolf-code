@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/hostprocess"
+	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -446,24 +447,35 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *comm
 	return outcome.result, outcome.err
 }
 
-// Signal accepts the catalog's TERM/INT/KILL; every one requests the owned
-// job's stop. Acknowledgement is not proof of exit.
-func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error {
-	var status int
+// jobSignal maps the catalog's TERM/INT/KILL, by name or number, to the
+// status a stopped job settles with and the signal's name.
+func jobSignal(signal string) (status int, name string, err error) {
 	switch signal {
 	case "TERM", "15":
-		status = 143
+		return 143, "TERM", nil
 	case "INT", "2":
-		status = 130
+		return 130, "INT", nil
 	case "KILL", "9":
-		status = 137
-	default:
-		return toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"signal": signal, "expected": "TERM, INT or KILL"})
+		return 137, "KILL", nil
+	}
+	return 0, "", toolrejection.RejectInvalidArguments("COMMAND_OPERAND_INVALID", map[string]any{"signal": signal, "expected": "TERM, INT or KILL"})
+}
+
+// Signal accepts the catalog's TERM/INT/KILL. A job's signal requests the
+// job's stop; a process descended from a job is signaled itself, by its
+// kernel instance. Acknowledgement is not proof of exit.
+func (j *SessionJobs) Signal(ctx context.Context, reference, signal string) error {
+	status, name, err := jobSignal(signal)
+	if err != nil {
+		return err
 	}
 	handle, err := j.Resolve(reference)
 	if err != nil {
 		if pid, convErr := strconv.Atoi(reference); convErr == nil && pid > 0 && (pid == os.Getpid() || hostprocess.ProcessExists(pid)) {
-			return processNotOwned("kill", reference)
+			if err := j.signalDescendant(ctx, pid, name); !errors.Is(err, errDescendantGone) {
+				return err
+			}
+			return unknownJob(reference)
 		}
 		return err
 	}
@@ -477,6 +489,35 @@ func (j *SessionJobs) Signal(_ context.Context, reference, signal string) error 
 		return jobLookupError(err, handle)
 	}
 	return nil
+}
+
+// errDescendantGone is a descendant that exited before its signal arrived.
+var errDescendantGone = errors.New("the process exited before it was signaled")
+
+// signalDescendant signals a process this session's launches started; any
+// other process is not the session's to signal.
+func (j *SessionJobs) signalDescendant(ctx context.Context, pid int, signal string) error {
+	members, err := lineage.SessionMembers(j.SessionID)
+	if err != nil {
+		return err
+	}
+	reference := strconv.Itoa(pid)
+	if _, ok := members[pid]; !ok || pid == os.Getpid() {
+		return processNotOwned("kill", reference)
+	}
+	process, err := hostprocess.Observe(pid)
+	if err == nil {
+		err = hostprocess.SignalOwned(ctx, j.SessionID, process, signal)
+	}
+	switch {
+	case err == nil:
+		return nil
+	case !hostprocess.ProcessExists(pid):
+		return errDescendantGone
+	case errors.Is(err, hostprocess.ErrNotOwned), errors.Is(err, hostprocess.ErrStale):
+		return processNotOwned("kill", reference)
+	}
+	return err
 }
 
 // List reports this session's live jobs, never host-global processes.
@@ -523,6 +564,6 @@ func processNotOwned(command, target string) error {
 		"command": command,
 		"job":     target,
 		"word":    target,
-		"reason":  "process is not owned by this session; signal only background jobs started in this session",
+		"reason":  "process is not owned by this session; signal only jobs and processes this session started",
 	})
 }

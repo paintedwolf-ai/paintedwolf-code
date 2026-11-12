@@ -162,7 +162,6 @@ func newRealServerWithSession(t *testing.T, root string) (*api.Server, string) {
 	if err != nil {
 		t.Fatalf("load mock config: %v", err)
 	}
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	mgr := session.NewHost(store, session.Models{Client: llm.NewMockProvider(mockCfg), Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	srv := api.NewServer(apitest.Dependencies(t, api.Dependencies{Core: api.CoreDependencies{Store: store, Projects: project.NewMemoryRegistry(), Sessions: mgr}}), nil, api.TestAPIToken)
 

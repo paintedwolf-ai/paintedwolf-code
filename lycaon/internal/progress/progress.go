@@ -96,17 +96,8 @@ func ProgressMissing(content string) bool {
 // (done + n/a — both terminal) against a snapshot to detect a coordinator doing work without
 // closing the steps it finishes.
 func CloseCounts(content string) (done, pending, na int) {
-	for _, item := range parseChecklist(content) {
-		switch item.State {
-		case ProgressStateDone:
-			done++
-		case ProgressStatePending:
-			pending++
-		case ProgressStateNA:
-			na++
-		}
-	}
-	return done, pending, na
+	summary := Summarize(content)
+	return summary.Completed, summary.Pending, summary.NotPursued
 }
 
 // HasOpenSteps reports whether the plan has blocking `- [ ]` rows. Missing plans and
@@ -124,16 +115,7 @@ func OpenStepCount(content string) int {
 // AllTerminal reports whether a checklist has at least one step and none pending.
 // Done, n/a, and optional all count as terminal.
 func AllTerminal(content string) bool {
-	items := parseChecklist(content)
-	if len(items) == 0 {
-		return false
-	}
-	for _, item := range items {
-		if item.State == ProgressStatePending {
-			return false
-		}
-	}
-	return true
+	return Summarize(content).AllRequiredItemsTerminal
 }
 
 func parseChecklist(content string) []api.ProgressStep {

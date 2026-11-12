@@ -10,7 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/pagecursor"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -60,7 +59,7 @@ func (s *Handler) HandleGitChanges(w http.ResponseWriter, r *http.Request) {
 		}
 		expectedRevision, offset = cursorRevision, cursorOffset
 	}
-	page, status, err := s.gitChangesPage(r.Context(), repo, project.RootRefsFrom(p), offset, limit, expectedRevision)
+	page, status, err := s.gitChangesPage(r.Context(), repo, p.SourceRoots(), offset, limit, expectedRevision)
 	if errors.Is(err, pagecursor.ErrExpired) {
 		s.responses.PageCursorError(w, r, "cursor", pagecursor.ErrExpired)
 		return

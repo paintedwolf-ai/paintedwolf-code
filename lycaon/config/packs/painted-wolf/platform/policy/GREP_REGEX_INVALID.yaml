@@ -12,14 +12,15 @@ requires:
     - paintedwolf.operation
     - paintedwolf.rejection_code
     - paintedwolf.detail
+    - paintedwolf.native_operation
 when: paintedwolf.rejection_code == "GREP_REGEX_INVALID"
 effect: block
 copy:
   what: 'grep received an invalid regex pattern: {{ paintedwolf.detail }}.'
-  cause: Use RE2 syntax (Go regexp). For literal dots or brackets, escape them or set regex false for substring search.
-  why: Use RE2 syntax (Go regexp). For literal dots or brackets, escape them or set regex false for substring search.
-  fix: Fix the pattern and retry grep with regex true, or use regex false for a plain substring search.
-  instead: Branch on Code; fix pattern or disable regex
+  cause: Use RE2 syntax (Go regexp). For literal dots or brackets, escape them{% if paintedwolf.native_operation %}, or pass -F for a literal substring search{% else %}, or set regex false for substring search{% endif %}.
+  why: An unmatched metacharacter makes the whole pattern unparseable, so no search can run until the pattern is repaired.
+  fix: '{% if paintedwolf.native_operation %}Fix the pattern and retry grep; pass -F for a plain substring search.{% else %}Fix the pattern and retry grep with regex true, or use regex false for a plain substring search.{% endif %}'
+  instead: Branch on Code; fix pattern or search literally
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grep
 x-paintedwolf-message: grep regex pattern is invalid
@@ -30,3 +31,12 @@ x-paintedwolf-scenarios:
       path: src/main.go
       profile: coordinator
       tool: grep
+  - id: command-leg
+    vars:
+      detail: bad args
+      native_operation: grep
+      path: src/main.go
+      profile: coordinator
+      tool: command
+    expect_contains:
+      - '-F'

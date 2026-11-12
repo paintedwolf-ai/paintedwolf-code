@@ -54,7 +54,7 @@ When the repo carries a screenshot (for example under `docs/`), you may pair it 
 </div>
 ```
 
-Use `capture_page` when the current state matters. For a decision between full variants, keep one artifact per option instead ([comparing options](references/compare-options.md)).
+{% if profile_has_capture_page %}Use `capture_page` when the current state matters. {% endif %}For a decision between full variants, keep one artifact per option instead ([comparing options](references/compare-options.md)).
 
 ## Confirm what was served
 

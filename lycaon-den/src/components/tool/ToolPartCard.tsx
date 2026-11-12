@@ -1,3 +1,4 @@
+import { Show } from "solid-js";
 import { CommandActivityCard } from "./CommandActivityCard.tsx";
 import type { WorkerTask } from "../../api/types.ts";
 import type { LycaonClient } from "../../api/client.ts";
@@ -13,6 +14,7 @@ import { commandActivityPart } from "../../chat/tool/command-activity-model.ts";
 import { SkillCard } from "../skill/SkillCard.tsx";
 import { TaskCard } from "../TaskCard.tsx";
 import { VerdictCard } from "../verdict/VerdictCard.tsx";
+import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";
 
 type Props = {
   part: ToolPartView;
@@ -25,11 +27,22 @@ type Props = {
   taskContext?: () => TaskActivityContext | undefined;
   onOpenWorker?: () => void;
   onOpenWorkerEvidence?: () => void;
+  slots?: ToolBriefingSlots;
 };
 
 /** Route tool parts to specialized or generic cards. */
 export function ToolPartCard(props: Props) {
-  if (props.part.commandActivity || props.part.commandProgram) return <CommandActivityCard {...props} part={commandActivityPart(props.part)} />;
+  return (
+    <Show
+      when={Boolean(props.part.commandActivity || props.part.commandProgram)}
+      fallback={<NonCommandToolPartCard {...props} />}
+    >
+      <CommandActivityCard {...props} part={commandActivityPart(props.part)} />
+    </Show>
+  );
+}
+
+function NonCommandToolPartCard(props: Props) {
   if (isTaskToolPart(props.part)) {
     return (
       <TaskCard
@@ -49,6 +62,7 @@ export function ToolPartCard(props: Props) {
     return (
       <SkillCard
         part={props.part}
+        slots={props.slots}
         layout={props.layout}
         sessionId={props.sessionId}
         projectId={props.projectId}
@@ -60,6 +74,7 @@ export function ToolPartCard(props: Props) {
     return (
       <VerdictCard
         part={props.part}
+        slots={props.slots}
         layout={props.layout}
         sessionId={props.sessionId}
         projectId={props.projectId}
@@ -70,6 +85,7 @@ export function ToolPartCard(props: Props) {
   return (
     <GenericToolCard
       part={props.part}
+      slots={props.slots}
       layout={props.layout}
       sessionId={props.sessionId}
       projectId={props.projectId}

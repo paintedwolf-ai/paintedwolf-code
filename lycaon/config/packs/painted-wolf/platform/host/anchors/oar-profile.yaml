@@ -88,6 +88,13 @@ host_facts:
    type: string
  - name: paintedwolf.operation
    type: string
+ - name: paintedwolf.syntax_override_commands
+   type: string
+   observation: Catalog command forms accepting a scoped syntax override reason.
+ - name: paintedwolf.command_surface
+   type: bool
+ - name: paintedwolf.command_form
+   type: string
  - name: paintedwolf.native_command
    type: string
  - name: paintedwolf.json_unescaped_newline
@@ -597,6 +604,12 @@ host_facts:
  - name: paintedwolf.refused_terminal_write_paths
    type: list<string>
    observation: Kernel-observed write paths whose floor no approval opens.
+ - name: paintedwolf.socket_path_references
+   type: string
+   observation: Bound endpoint reference syntax for the observed socket paths.
+ - name: paintedwolf.socket_url_references
+   type: string
+   observation: Unix URL reference syntax for the observed socket paths.
  - name: paintedwolf.refused_socket_paths
    type: list<string>
    observation: Unix socket paths the kernel refused the invocation's processes a connection to; empty when none.
@@ -678,6 +691,8 @@ host_facts:
    type: list<string>
  - name: paintedwolf.missing_summary_job_ids
    type: list<string>
+ - name: paintedwolf.missing_capability_host_resources
+   type: bool
  - name: paintedwolf.missing_capability_socket_paths
    type: bool
  - name: paintedwolf.missing_capability_process_control
@@ -685,6 +700,8 @@ host_facts:
  - name: paintedwolf.missing_capability_credential_store
    type: bool
  - name: paintedwolf.missing_capability_host_execution
+   type: bool
+ - name: paintedwolf.missing_capability_direct_ip
    type: bool
  - name: paintedwolf.missing_capability_local_listen
    type: bool

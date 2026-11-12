@@ -179,6 +179,7 @@ func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 		{name: "snapshot only", tools: []string{"terminal_snapshot"}, terminal: true, snapshot: true},
 		{name: "held terminal", tools: []string{"terminal_open", "terminal_read", "terminal_send", "terminal_snapshot"}, terminal: true, open: true, read: true, send: true, snapshot: true},
 		{name: "partial terminal", tools: []string{"terminal_open", "terminal_snapshot"}, terminal: true, open: true, snapshot: true},
+		{name: "command and terminal_open", tools: []string{"command", "terminal_open"}, terminal: true, open: true, capture: true},
 		{name: "all routes", tools: []string{"command", "capture_page", "terminal_open", "terminal_read", "terminal_send", "terminal_snapshot"}, page: true, terminal: true, open: true, read: true, send: true, snapshot: true, capture: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -197,6 +198,12 @@ func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 			}
 			rendered, err := engine.Render(t.Context(), "units/visual-show-the-design.md", vars)
 			contractcheck.FailErr(t, "render offered visual routes", err)
+			if strings.Contains(rendered, "write any script in a prior step") {
+				t.Fatalf("visual-show-the-design must not instruct writing wrapper scripts: %s", rendered)
+			}
+			if tc.name == "command and terminal_open" && !strings.Contains(rendered, "start the program with `terminal_open` instead of writing a driver script") {
+				t.Fatalf("command + terminal_open must guide opening the terminal session before session tools attach: %s", rendered)
+			}
 			t.Logf("VISUAL_ROUTE_SAMPLE [%s]\n%s", tc.name, rendered)
 		})
 	}

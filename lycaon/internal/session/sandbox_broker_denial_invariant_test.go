@@ -179,7 +179,7 @@ func denialInvariantOutsideWriteRoot(t *testing.T, projectDir string) string {
 	testutil.FailErr(t, "admit write roots", err)
 	for _, base := range []string{"/opt", "/srv", "/usr/local", "/Users/Shared"} {
 		candidate := filepath.Join(base, "paintedwolf-denial-invariant-probe")
-		if !confine.PathWithinWriteRoots(candidate, roots) {
+		if !confine.PathWithinRoots(candidate, roots) {
 			return candidate
 		}
 	}

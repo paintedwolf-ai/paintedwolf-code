@@ -79,7 +79,7 @@ func (p Plan) RetainedCopyScratch(ctx context.Context, database DBTX) (uint64, e
 // receives a later bulk index: its empty indexes are maintained in main pages.
 func retainedRouteSortBytes(trees map[string]retainedTree, pageBytes uint64) (uint64, error) {
 	var indexRows, indexBytes, indexRecord uint64
-	for _, name := range []string{"vault_unlocks", "evidence_records", "source_files", "source_versions", "source_head_entries", "source_effects"} {
+	for _, name := range []string{"vault_unlocks", "turn_load_receipts", "evidence_records", "source_files", "source_versions", "source_head_entries", "source_effects"} {
 		tree := trees[name]
 		var err error
 		indexRows, err = storageSum(indexRows, tree.cells)

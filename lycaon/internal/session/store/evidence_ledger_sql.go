@@ -27,27 +27,33 @@ type storedLineRangesPayload struct {
 	PathTiers      map[string]string         `json:"path_tiers,omitempty"`
 	// PathRoots maps a stored path key to its owning root ID (payload v2).
 	// Empty values mark legacy keys that resolve under no attached root.
-	PathRoots  map[string]string `json:"path_roots,omitempty"`
-	Surface    string            `json:"surface,omitempty"`
-	ArtifactID string            `json:"artifact_id,omitempty"`
-	FrameIndex int               `json:"frame_index,omitempty"`
+	PathRoots        map[string]string `json:"path_roots,omitempty"`
+	Surface          string            `json:"surface,omitempty"`
+	ArtifactID       string            `json:"artifact_id,omitempty"`
+	FrameIndex       int               `json:"frame_index,omitempty"`
+	UntrustedContent bool              `json:"untrusted_content,omitempty"`
+	ExternalCustody  bool              `json:"external_custody,omitempty"`
+	CustodySeq       int               `json:"custody_seq,omitempty"`
 }
 
 func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 	aux := evidence.CloneRecordForStore(rec)
 	payload := storedLineRangesPayload{
-		Version:        2,
-		SourceDelivery: rec.SourceDelivery,
-		Ranges:         rec.LineRanges,
-		PathsTouched:   aux.PathsTouched,
-		URLsTouched:    aux.URLsTouched,
-		URLTitles:      aux.URLTitles,
-		GrepLines:      aux.GrepLines,
-		PathTiers:      aux.PathTiers,
-		PathRoots:      aux.PathRoots,
-		Surface:        rec.Surface,
-		ArtifactID:     rec.ArtifactID,
-		FrameIndex:     rec.FrameIndex,
+		Version:          2,
+		SourceDelivery:   rec.SourceDelivery,
+		Ranges:           rec.LineRanges,
+		PathsTouched:     aux.PathsTouched,
+		URLsTouched:      aux.URLsTouched,
+		URLTitles:        aux.URLTitles,
+		GrepLines:        aux.GrepLines,
+		PathTiers:        aux.PathTiers,
+		PathRoots:        aux.PathRoots,
+		Surface:          rec.Surface,
+		ArtifactID:       rec.ArtifactID,
+		FrameIndex:       rec.FrameIndex,
+		UntrustedContent: aux.UntrustedContent,
+		ExternalCustody:  aux.ExternalCustody,
+		CustodySeq:       aux.CustodySeq,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
@@ -72,12 +78,15 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 	rec.LineRanges = payload.Ranges
 	rec.SourceDelivery = payload.SourceDelivery
 	evidence.ApplyRecordAux(rec, evidence.RecordAux{
-		PathsTouched: payload.PathsTouched,
-		URLsTouched:  payload.URLsTouched,
-		URLTitles:    payload.URLTitles,
-		GrepLines:    payload.GrepLines,
-		PathTiers:    payload.PathTiers,
-		PathRoots:    payload.PathRoots,
+		PathsTouched:     payload.PathsTouched,
+		URLsTouched:      payload.URLsTouched,
+		URLTitles:        payload.URLTitles,
+		GrepLines:        payload.GrepLines,
+		PathTiers:        payload.PathTiers,
+		PathRoots:        payload.PathRoots,
+		UntrustedContent: payload.UntrustedContent,
+		ExternalCustody:  payload.ExternalCustody,
+		CustodySeq:       payload.CustodySeq,
 	})
 	rec.Surface = payload.Surface
 	rec.ArtifactID = payload.ArtifactID
@@ -164,6 +173,8 @@ func (ev *sqlEvidence) UpsertEvidenceRecord(ctx context.Context, sessionID strin
 }
 
 func upsertEvidenceRecordSQL(ctx context.Context, s *sqlCore, sessionID string, rec evidence.Record) error {
+	unlock := s.lockMutation(sessionID)
+	defer unlock()
 	release := bloblifecycle.AcquirePublication(s.dataDir)
 	defer release()
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -175,6 +186,13 @@ func upsertEvidenceRecordSQL(ctx context.Context, s *sqlCore, sessionID string, 
 	projectID, err := qtx.GetSessionProjectID(ctx, sessionID)
 	if err != nil {
 		return fmt.Errorf("resolve evidence record project: %w", err)
+	}
+	if evidence.ReplacesWholeFileCustody(rec) && rec.CustodySeq() == 0 {
+		seq, err := nextCustodySeq(ctx, qtx, sessionID)
+		if err != nil {
+			return err
+		}
+		rec.SetCustodySeq(seq)
 	}
 	inserted, err := writeEvidenceRecord(ctx, qtx, s.dataDir, sessionID, projectID, rec)
 	if err != nil {

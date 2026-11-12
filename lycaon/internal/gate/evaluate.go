@@ -673,18 +673,30 @@ func fileFacts(t FileTarget) []Fact {
 	return facts
 }
 
-// agentChosenOutbound reviews first-use sends or tunnels to unconfigured destinations. Plain fetches are ingestion.
+// agentChosenOutbound reviews the first contact with a destination nobody
+// configured once the chat has read content this app did not author, or
+// cannot say whether it has: until then the broker's record of the contact is
+// the audit, and after it the agent's choice may not be its own. Readable HTTP
+// follows the same authority as a tunnel, since a method is an execution
+// fact, not proof that a request only retrieves. A declared retrieval
+// capability already covers reaching its sources.
 func agentChosenOutbound(f Facts, p Posture) (bool, []Fact, string) {
-	if f.Destination == nil || f.Leased || f.RequestConsented || f.Destination.Configured {
+	if f.Destination == nil || f.Leased || f.RequestConsented || f.Destination.Configured || f.Destination.Retrieval {
 		return false, nil, ""
 	}
-	if !f.Destination.Opaque || !f.Destination.FirstUseThisSession {
+	if !f.Destination.FirstUseThisSession {
+		return false, nil, ""
+	}
+	if f.Ran.Has(ProducerIngestion) && !f.UntrustedIngested {
 		return false, nil, ""
 	}
 	if p.QuietsPublicRegistry(f) {
 		return false, nil, ""
 	}
-	const reason = "opens an opaque tunnel to a destination you did not configure"
+	reason := "sends a request to a destination you did not configure"
+	if f.Destination.Opaque {
+		reason = "opens an opaque tunnel to a destination you did not configure"
+	}
 	cited := []Fact{
 		fact("destination.host", endpointLabel(*f.Destination), "egress_broker"),
 		fact("destination.origin", "chosen by the agent, not configured", "egress_broker"),
@@ -704,13 +716,12 @@ func agentChosenOutbound(f Facts, p Posture) (bool, []Fact, string) {
 	return true, cited, f.Destination.Host
 }
 
-// secretExposedOutbound reviews sends after credential-class content enters the chat.
+// secretExposedOutbound reviews sends after credential-class content enters
+// the chat. Recognized-secret screening of a readable request is not a
+// confidentiality proof, so readable requests ask too; a retrieval capability's
+// payloads keep their own screening.
 func secretExposedOutbound(f Facts) (bool, []Fact, string) {
-	if f.Destination == nil || f.Leased || f.RequestConsented || !f.SecretExposed {
-		return false, nil, ""
-	}
-	if !f.Destination.Opaque {
-		// A readable request the payload lens already screened carries nothing new.
+	if f.Destination == nil || f.Leased || f.RequestConsented || !f.SecretExposed || f.Destination.Retrieval {
 		return false, nil, ""
 	}
 	return true, []Fact{
@@ -720,8 +731,10 @@ func secretExposedOutbound(f Facts) (bool, []Fact, string) {
 	}, f.Destination.Host
 }
 
+// firstHost confirms each first contact at Strict, retrieval included, except
+// an endpoint the capability declared before it ran.
 func firstHost(f Facts) (bool, []Fact, string) {
-	if f.Destination == nil || f.Leased || f.RequestConsented || !f.Destination.FirstUseThisSession {
+	if f.Destination == nil || f.Leased || f.RequestConsented || !f.Destination.FirstUseThisSession || f.Destination.Declared {
 		return false, nil, ""
 	}
 	return true, []Fact{

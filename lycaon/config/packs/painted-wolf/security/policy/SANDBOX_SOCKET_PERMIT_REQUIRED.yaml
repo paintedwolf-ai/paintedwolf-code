@@ -1,0 +1,22 @@
+oar: '1.0'
+id: SANDBOX_SOCKET_PERMIT_REQUIRED
+kind: policy
+anchor: tool.rejected
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.socket_path_references, paintedwolf.socket_url_references]
+  profiles: [tool]
+when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PERMIT_REQUIRED"
+effect: block
+copy:
+  what: This invocation has no usable permit for the selected socket.
+  cause: Each invocation must declare its socket access, even when an earlier approval remains valid.
+  why: Approval reuse does not bind a new operation to its intended service.
+  fix: >-
+    Declare the socket in `capability_request.socket_paths` on the next call. External endpoint values: `{{ paintedwolf.socket_path_references }}`or, for Unix URLs, `{{ paintedwolf.socket_url_references }}`. Native socket arguments use the path. Existing approval is reused when applicable. Preserve completed effects and retry only the unresolved operation.
+  instead: Declare and bind the socket on the current call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_socket
+x-paintedwolf-message: current-call socket permit required
+x-paintedwolf-scenarios:
+- id: default
+  vars: {}

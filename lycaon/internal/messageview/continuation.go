@@ -1,7 +1,7 @@
 package messageview
 
 // ContinuationFormat identifies a rebuildable history projection.
-const ContinuationFormat = 1
+const ContinuationFormat = 2
 
 // MaxCompactionRevisionLag bounds source validation before a projection is rebuilt.
 const MaxCompactionRevisionLag int64 = 4096
@@ -34,12 +34,13 @@ type ContinuationSummary struct {
 
 // ContinuationSource records the disposition of one removed observation.
 type ContinuationSource struct {
-	MessageID   string   `json:"message_id"`
-	Ord         int64    `json:"ord"`
-	Tool        string   `json:"tool,omitempty"`
-	Handles     []string `json:"handles,omitempty"`
-	Disposition string   `json:"disposition"`
-	Tokens      int      `json:"tokens"`
+	MessageID   string                 `json:"message_id"`
+	Ord         int64                  `json:"ord"`
+	Tool        string                 `json:"tool,omitempty"`
+	Handles     []string               `json:"handles,omitempty"`
+	Disposition string                 `json:"disposition"`
+	Tokens      int                    `json:"tokens"`
+	Execution   *ContinuationExecution `json:"execution,omitempty"`
 }
 
 // CloneContinuation separates an accepted projection from mutable consumers.
@@ -56,6 +57,44 @@ func CloneContinuation(record *Continuation) *Continuation {
 	copy.Sources = append([]ContinuationSource(nil), record.Sources...)
 	for i := range copy.Sources {
 		copy.Sources[i].Handles = append([]string(nil), record.Sources[i].Handles...)
+		if record.Sources[i].Execution != nil {
+			execution := *record.Sources[i].Execution
+			if execution.ExitCode != nil {
+				code := *execution.ExitCode
+				execution.ExitCode = &code
+			}
+			execution.BackgroundHandles = append([]string(nil), execution.BackgroundHandles...)
+			if execution.Effects != nil {
+				effects := *execution.Effects
+				execution.Effects = &effects
+			}
+			copy.Sources[i].Execution = &execution
+		}
 	}
 	return &copy
+}
+
+// ContinuationEffects retains the program owner’s recorded effect counts.
+type ContinuationEffects struct {
+	Completed int `json:"completed"`
+	Uncertain int `json:"uncertain"`
+}
+
+// ContinuationExecution preserves recorded outcomes independently of summary prose.
+type ContinuationExecution struct {
+	Effects           *ContinuationEffects `json:"effects,omitempty"`
+	BackgroundHandles []string             `json:"background_handles,omitempty"`
+	CallID            string               `json:"call_id"`
+	ReceiptID         string               `json:"receipt_id,omitempty"`
+	Outcome           string               `json:"outcome,omitempty"`
+	Status            string               `json:"status,omitempty"`
+	Invoked           bool                 `json:"invoked"`
+	SourceRevision    string               `json:"source_revision,omitempty"`
+	SourceVerdict     string               `json:"source_verdict,omitempty"`
+	ProcessHandle     string               `json:"process_handle,omitempty"`
+	ProgramID         string               `json:"program_id,omitempty"`
+	ProgramSource     string               `json:"program_source,omitempty"`
+	ProgramState      string               `json:"program_state,omitempty"`
+	ExitCode          *int                 `json:"exit_code,omitempty"`
+	StopCode          string               `json:"stop_code,omitempty"`
 }

@@ -380,7 +380,7 @@ A local model bundle contains `manifest.json` and explicitly named payload files
 
 The model release-key registry is a co-versioned application resource, separate from downloaded model bundles and mutable device state. Format 1 contains `format: 1` and a `keys` array of `{id, public_key}` entries, where each public key is a base64-encoded Ed25519 key. The decoder bounds the registry to 16 KiB and 16 distinct keys and refuses unknown fields, formats and trailing content. Key rotation ships through the trusted application distribution.
 
-The host identity key (`host-identity.pem`) is device configuration too. A store reset keeps it, and backups neither carry nor restore it: a backup restored on another machine becomes a new host with the same people. An unreadable key stops startup rather than silently minting a new identity. The people who author durable facts live in `store.db` and travel with it.
+The host identity key (in the `host-identity` namespace of `credential-vault.age`, migrated from legacy `host-identity.pem`) is device configuration too. A store reset keeps it, and backups neither carry nor restore it: a backup restored on another machine becomes a new host with the same people. An unreadable key stops startup rather than silently minting a new identity. The people who author durable facts live in `store.db` and travel with it.
 
 Native update preferences are device configuration too. The unversioned `{checks_enabled, channel, rollout_bucket}` record that 1.0.x clients wrote has one explicit migration to `updates/preferences.json` format 2: `checks_enabled` becomes `automatic_updates_enabled`, which governs discovery, background download, and lifecycle installation, so an existing opt-out remains off; channel and bucket are unchanged. Unknown versions and malformed records are refused without overwriting them. Per-installation operational records live under `updates/installations/<path-sha256>/`, keyed by the canonical application path, and the device-wide `updates/feed-state.json` records the newest signed pointer timestamp accepted per feed. Unknown ephemeral records (`ready.json`, `rejected.json`, `feed-state.json`) are quarantined unchanged and rebuilt; an unreadable preference file disables automatic updating for that run without being rewritten. Update archives are ephemeral, but an unresolved activation journal is recovery-critical operational state and cannot be cleared as a cache. An `update-state.json` journal written by a 1.0.x client is reconciled against the running product version: it completes only when its target or a newer version runs, and it never manufactures staged bytes or missing artifacts.
 
@@ -500,3 +500,11 @@ Internal packages that do not leak into a sticky surface can be reshaped directl
 - Rebuildable cache identity may outlive its evictable bytes; durable history keeps the bytes it names.
 - Version fields keep distinct meanings.
 - Breaking evolution is explicit, attributable, and recoverable.
+
+### Progress result summary
+
+The agent-public `deliverable_closed` result field is retired. New results use
+`closed_item_ids` for the changed rows and a computed snapshot `summary` for
+current state. Completed and explicitly not-pursued work remain distinct.
+Retained transcript results keep their original bytes; this does not change
+persisted checklist documents or their revisions.

@@ -16,7 +16,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func Platform() Adapter { return Adapter{Command: RetainedObject, Native: RetainedObject} }
+func Platform() Adapter {
+	return Adapter{Command: RetainedObject, Native: RetainedObject, Service: KernelPathname}
+}
 
 func implicitBindingMode() Enforcement { return KernelPathname }
 

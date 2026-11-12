@@ -148,14 +148,14 @@ func captureIdentity(file CaptureFile) (rootID, scopeRel, display string) {
 }
 
 type captureItem struct {
-	rootID  string
+	rootID   string
 	scopeRel string
-	display string
-	file    File
-	blob    *sourceblob.Capture
-	size    int64
-	deleted bool
-	err     error
+	display  string
+	file     File
+	blob     *sourceblob.Capture
+	size     int64
+	deleted  bool
+	err      error
 }
 
 func (s *Store) captureOneFile(ctx context.Context, roots []projectroot.RootRef, branch, rootID, scopeRel, display string) captureItem {

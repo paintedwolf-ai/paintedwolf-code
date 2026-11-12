@@ -35,4 +35,4 @@ Output quiescence is the settle boundary. A fixed delay neither proves idle nor 
 
 The virtual screen can establish rendered cells, cursor location, dimensions, and tool-reported busy state. It cannot establish native menus or dialogs outside the PTY, assistive-technology behavior, real terminal-emulator quirks, clipboard state, or pixels beyond the rendered-grid artifact. Report those as manual follow-up.
 
-Never send known plaintext passwords, tokens, signing material, or other secrets with `terminal_send`. If an interactive prompt is the only supported input, use an opaque `{{paintedwolf-secret:…}}` reference; otherwise stop and ask for a safer non-agent entry path.
+Never send known plaintext passwords, tokens, signing material, or other secrets with `terminal_send`. If an interactive prompt is the only supported input, use an opaque {% verbatim %}`{{paintedwolf-secret:…}}`{% endverbatim %} reference; otherwise stop and ask for a safer non-agent entry path.

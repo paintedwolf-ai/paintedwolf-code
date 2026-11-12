@@ -27,7 +27,6 @@ import (
 )
 
 func TestSSEEndToEnd(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	hub := events.NewMemoryHub()
 	reg := project.NewMemoryRegistry()
 	ctx := context.Background()
@@ -211,7 +210,6 @@ func TestSSEReplayErrorCarriesRecoveryBoundary(t *testing.T) {
 }
 
 func TestSSEHeartbeat(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	restore := events.SetHeartbeatIntervalForTests(50 * time.Millisecond)
 	defer restore()
 

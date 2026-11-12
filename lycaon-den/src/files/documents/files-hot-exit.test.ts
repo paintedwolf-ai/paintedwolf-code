@@ -25,6 +25,8 @@ const roots = [{
   is_primary: true,
   added_at: "2026-01-01T00:00:00Z",
   kind: "attached" as const,
+  admitted: true,
+  admission_code: null,
 }];
 
 describe("Files hot exit", () => {

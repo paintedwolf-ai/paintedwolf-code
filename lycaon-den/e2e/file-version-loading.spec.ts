@@ -21,7 +21,7 @@ modelIndependentWebE2e("version history uses quiet loading and retains edits whe
       created_at: "2026-09-13T10:00:00Z" }] } satisfies EditorDocumentChanges });
   });
   await page.getByTestId("file-version-trigger").click();
-  const menu = page.getByRole("menu", { name: "Version history" });
+  const menu = page.getByRole("menu", { name: "File history" });
   const loader = menu.getByRole("status").filter({ hasText: "Loading edits" });
   await expect(loader).toBeVisible();
   const style = await loader.evaluate(node => ({
@@ -101,7 +101,7 @@ modelIndependentWebE2e("historical selections retain painted content through row
     try {
       const outgoing = await stage.locator(".cm-content").filter({ visible: true }).elementHandle();
       await page.getByTestId("file-version-trigger").click();
-      const versions = page.getByRole("menu", { name: "Version history" }).getByRole("menuitemradio");
+      const versions = page.getByRole("menu", { name: "File history" }).getByRole("menuitemradio");
       await expect.poll(() => versions.count()).toBeGreaterThan(2);
       await versions.nth(await versions.count() - fromEnd).click();
       await expect.poll(() => requested).toBe(true);

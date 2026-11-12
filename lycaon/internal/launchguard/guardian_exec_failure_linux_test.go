@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strconv"
 	"syscall"
 	"testing"
@@ -22,17 +21,17 @@ import (
 )
 
 const fixtureFaultHOME = "PW_GUARDIAN_FAULT_HOME"
+const guardianFaultFixture = "guardian-exec-failure"
 
 func TestGuardianActualExecFailureSettlesUnadmittedLineage(t *testing.T) {
 	fixture := installLaunchFixture(t)
 	probe := buildGuardianCProbe(t)
-	testutil.FailErr(t, "exercise fixed syscall fault through real bootstrap", sudoFixture(t, "guardian-exec-failure", fixture.dir,
+	testutil.FailErr(t, "exercise fixed syscall fault through real bootstrap", sudoFixture(t, guardianFaultFixture, fixture.dir,
 		fixtureGuardianProbe+"="+probe, fixtureUIDEnv+"="+strconv.Itoa(os.Getuid()), fixtureGIDEnv+"="+strconv.Itoa(os.Getgid()),
 		fixtureFaultHOME+"="+t.TempDir(), fixtureHash+"="+fixture.digest))
 }
 
 func checkGuardianExecFailure(directory, probePath, uidText, gidText, home, digest string) (result error) {
-	runtime.LockOSThread()
 	if err := initialUserNamespace(); err != nil {
 		return err
 	}

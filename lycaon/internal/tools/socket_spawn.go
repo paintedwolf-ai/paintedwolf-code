@@ -1,18 +1,16 @@
 package tools
 
 import (
-	"github.com/lycaon/lycaon/internal/capabilitygrants"
-
-	"github.com/lycaon/lycaon/internal/capabilityrequest"
-
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 
+	"github.com/lycaon/lycaon/internal/capabilitygrants"
+	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/isolation"
 	"github.com/lycaon/lycaon/internal/socketref"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // FinalizeSocketGrantsForSpawn consumes validated current-call permits.
@@ -39,20 +37,20 @@ func FinalizeSocketGrantsForSpawn(ctx context.Context, tctx ToolContext) ([]conf
 		}
 		if _, overlay := overlayByPair[capabilitygrants.SocketGrantPairKey(g)]; !overlay {
 			if rt == nil {
-				return nil, &toolrejection.ToolReject{Code: isolation.CodeSocketPathChanged, Data: map[string]any{
+				return nil, &toolrejection.ToolReject{Code: isolation.CodeSocketPermitRequired, Data: map[string]any{
 					"path":   g.ApprovedPath,
 					"reason": "missing current-call socket permit",
 				}}
 			}
 			ok, err := rt.ConsumePermit(tctx.PermitIdentity(), tctx.Socket.SocketActionDigest, g)
 			if err != nil {
-				return nil, &toolrejection.ToolReject{Code: isolation.CodeSocketPathChanged, Data: map[string]any{
+				return nil, &toolrejection.ToolReject{Code: isolation.CodeSocketPermitRequired, Data: map[string]any{
 					"path":   g.ApprovedPath,
 					"reason": err.Error(),
 				}}
 			}
 			if !ok {
-				return nil, &toolrejection.ToolReject{Code: isolation.CodeSocketPathChanged, Data: map[string]any{
+				return nil, &toolrejection.ToolReject{Code: isolation.CodeSocketPermitRequired, Data: map[string]any{
 					"path":   g.ApprovedPath,
 					"reason": "missing current-call socket permit",
 				}}
@@ -82,7 +80,7 @@ func ClaimDeclaredSocket(ctx context.Context, tctx ToolContext, raw string) (con
 			return g, nil
 		}
 	}
-	return confine.SocketGrant{}, &toolrejection.ToolReject{Code: isolation.CodeSocketPathChanged, Data: map[string]any{
+	return confine.SocketGrant{}, &toolrejection.ToolReject{Code: isolation.CodeSocketPermitRequired, Data: map[string]any{
 		"path":   requested,
 		"reason": "no reviewed socket authority for this call",
 	}}
@@ -90,7 +88,9 @@ func ClaimDeclaredSocket(ctx context.Context, tctx ToolContext, raw string) (con
 
 // ConfineRequestForSpawn finalizes the gate-reviewed confinement.
 func ConfineRequestForSpawn(ctx context.Context, tctx ToolContext, overlayWriteRoots []string) (confine.Request, *toolrejection.ToolReject) {
-	req := hitl.ActionConfineRequest(ActionConfineInputsForContext(tctx, overlayWriteRoots))
+	// Admission freezes reusable grants; extra roots belong to host-managed outputs.
+	roots := append(append([]string(nil), tctx.Files.GrantedWriteRoots...), overlayWriteRoots...)
+	req := hitl.ActionConfineRequest(ActionConfineInputsForContext(tctx, UniqueRoots(roots)))
 	if reject := ValidateAttachedRootsForAction(req.Roots); reject != nil {
 		return confine.Request{}, reject
 	}

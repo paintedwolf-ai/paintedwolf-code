@@ -25,11 +25,11 @@ func TestDiscoveryPaginationAndScope(t *testing.T) {
 	cursor := ""
 	count := 0
 	for {
-		page, err := Discover("tools/session", "inspect", cursor, "catalog", "", entries)
+		page, err := Discover("tools/session", "inspect", cursor, "catalog", "", entries, discoveryFixture)
 		testutil.FailErr(t, "page catalog", err)
 		encoded, err := json.Marshal(page)
 		testutil.FailErr(t, "encode page", err)
-		if len(encoded) > DiscoveryPageBytes || len(page.Entries) > DiscoveryPageSize || page.Total != len(entries) {
+		if len(encoded) > DiscoveryPageBytes || page.Total != len(entries) {
 			t.Fatalf("page = %+v", page)
 		}
 		for _, entry := range page.Entries {
@@ -57,11 +57,11 @@ func TestDiscoveryPaginationAndScope(t *testing.T) {
 		{"tools/session", "inspect", strings.Repeat("x", 65537), entries},
 		{"tools/session", "inspect", cursor, entries[1:]},
 	} {
-		if _, err := Discover(tc.scope, tc.need, tc.cursor, "catalog", "", tc.entries); err == nil {
+		if _, err := Discover(tc.scope, tc.need, tc.cursor, "catalog", "", tc.entries, discoveryFixture); err == nil {
 			t.Fatalf("accepted invalid cursor for %+v", tc)
 		}
 	}
-	empty, err := Discover("tools", "inspect", "", "catalog", "", nil)
+	empty, err := Discover("tools", "inspect", "", "catalog", "", nil, discoveryFixture)
 	testutil.FailErr(t, "empty catalog", err)
 	if empty.Entries == nil || len(empty.Entries) != 0 || empty.NextNeed != "" {
 		t.Fatalf("empty page = %+v", empty)
@@ -146,32 +146,61 @@ func TestDiscoveryNeedParsing(t *testing.T) {
 }
 
 func TestDiscoveryRejectsAnUnpageableContinuation(t *testing.T) {
-	entries := make([]DiscoveryEntry, DiscoveryPageSize+1)
+	entries := make([]DiscoveryEntry, 53)
 	for i := range entries {
-		entries[i].Name = fmt.Sprintf("tool_%02d", i)
+		entries[i] = DiscoveryEntry{Name: fmt.Sprintf("tool_%02d", i), Description: strings.Repeat("界", CardMaxRunes)}
 	}
-	_, err := Discover("tools/session", strings.Repeat("x", DiscoveryPageBytes), "", "no_match", "", entries)
+	_, err := Discover("tools/session", strings.Repeat("x", DiscoveryPageBytes), "", "no_match", "", entries, discoveryFixture)
 	if err == nil || !strings.Contains(err.Error(), "cannot fit") {
 		t.Fatalf("unbounded discovery accepted: %v", err)
 	}
 }
 
 func TestDiscoveryPreservesRankedOrderAcrossPages(t *testing.T) {
-	entries := make([]DiscoveryEntry, 25)
+	entries := make([]DiscoveryEntry, 20)
 	for i := range entries {
-		entries[i] = DiscoveryEntry{Name: fmt.Sprintf("tool_%02d", i), Description: fmt.Sprintf("Tool %d", i)}
+		entries[i] = DiscoveryEntry{Name: fmt.Sprintf("tool_%02d", i), Description: strings.Repeat("界", CardMaxRunes)}
 	}
-	order := []string{"tool_24", "tool_24", "tool_22"}
-	page1, err := Discover("tools/session", "create files", "", "no_match", "", entries, order...)
+	order := []string{"tool_19", "tool_19", "tool_17"}
+	page1, err := Discover("tools/session", "create files", "", "no_match", "", entries, discoveryFixture, order...)
 	testutil.FailErr(t, "page 1", err)
-	if len(page1.Entries) != DiscoveryPageSize || page1.Entries[0].Name != "tool_24" || page1.Entries[1].Name != "tool_22" || page1.Entries[2].Name != "tool_00" {
+	if page1.NextNeed == "" || page1.Entries[0].Name != "tool_19" || page1.Entries[1].Name != "tool_17" || page1.Entries[2].Name != "tool_00" {
 		t.Fatalf("page 1 did not place ranked entries first: %+v", page1.Entries[:3])
 	}
 	need, cursor, err := ParseDiscoveryNeed(page1.NextNeed)
 	testutil.FailErr(t, "parse cursor", err)
-	page2, err := Discover("tools/session", need, cursor, "catalog", "", entries)
+	page2, err := Discover("tools/session", need, cursor, "catalog", "", entries, discoveryFixture)
 	testutil.FailErr(t, "page 2", err)
-	if len(page2.Entries) != 5 || page2.Entries[len(page2.Entries)-1].Name != "tool_23" {
+	if len(page1.Entries)+len(page2.Entries) != len(entries) || page2.NextNeed != "" || page2.Entries[len(page2.Entries)-1].Name != "tool_18" {
 		t.Fatalf("page 2 lost rank order: %+v", page2.Entries)
+	}
+}
+
+var discoveryFixture = DiscoveryInstructions{Empty: "empty", More: "more", Final: "final"}
+
+func TestDiscoveryBudgetsRenderedInstructions(t *testing.T) {
+	entries := []DiscoveryEntry{{Name: "a"}, {Name: "b"}}
+	copy := DiscoveryInstructions{More: "continue", Final: strings.Repeat("x", DiscoveryPageBytes)}
+	page, err := Discover("tools", "inspect", "", "catalog", "", entries, copy)
+	testutil.FailErr(t, "budget rendered page", err)
+	if len(page.Entries) != 1 || page.NextNeed == "" || page.Instruction != copy.More {
+		t.Fatalf("rendered guidance was not included in page budget: %+v", page)
+	}
+	_, cursor, err := ParseDiscoveryNeed(page.NextNeed)
+	testutil.FailErr(t, "parse continuation", err)
+	if _, err := Discover("tools", "inspect", cursor, "catalog", "", entries, copy); err == nil {
+		t.Fatal("accepted oversized final guidance")
+	}
+}
+
+func TestDiscoveryReturnsCompleteCatalogWhenItFits(t *testing.T) {
+	entries := make([]DiscoveryEntry, 54)
+	for i := range entries {
+		entries[i] = DiscoveryEntry{Name: fmt.Sprintf("skill_%02d", i), Description: strings.Repeat("procedure ", 12)}
+	}
+	page, err := Discover("skills/session", "review", "", "ranking_unavailable", RankingDisabled, entries, discoveryFixture)
+	testutil.FailErr(t, "discover complete catalog", err)
+	if len(page.Entries) != len(entries) || page.NextNeed != "" || page.Instruction != discoveryFixture.Final {
+		t.Fatalf("catalog was split despite fitting: entries=%d continuation=%q", len(page.Entries), page.NextNeed)
 	}
 }

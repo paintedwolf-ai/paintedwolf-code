@@ -20,7 +20,6 @@ import (
 
 func NewDelegationTestFixture(t *testing.T) (*hostapi.Server, project.Registry, func()) {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())

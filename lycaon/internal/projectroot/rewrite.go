@@ -19,7 +19,10 @@ func RewriteAttachedRootPaths(roots []RootRef, activeRootID, s string) string {
 	if len(prefixes) == 0 {
 		return s
 	}
-	type rewriteSpan struct{ start, end int; replacement string }
+	type rewriteSpan struct {
+		start, end  int
+		replacement string
+	}
 	var spans []rewriteSpan
 	for _, prefix := range prefixes {
 		from := 0

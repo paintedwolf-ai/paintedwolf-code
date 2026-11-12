@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	execpkg "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -214,6 +215,8 @@ func TestUnsafeRepoConfigRefused(t *testing.T) {
 		{"filter name differing only in case", "\n[filter \"LFS\"]\n\tclean = /payload/clean\n", "filter.LFS"},
 		{"merge driver", "\n[merge \"crypt\"]\n\tdriver = /payload/merge %O %A %B\n", "merge.crypt"},
 		{"merge driver with a dotted name", "\n[merge \"a.b\"]\n\tdriver = /payload/merge\n", "merge.a.b"},
+		{"lfs custom transfer", "\n[lfs \"customtransfer.agent\"]\n\tpath = /payload/agent\n", "lfs.customtransfer.agent"},
+		{"lfs extension", "\n[lfs \"extension.ext\"]\n\tsmudge = /payload/ext\n", "lfs.extension.ext"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -532,5 +535,44 @@ func TestShellQuote(t *testing.T) {
 		if got := shellQuote(in); got != want {
 			t.Fatalf("shellQuote(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// The audit follows include directives, as every Git invocation does.
+func TestUnsafeRepoConfigRefusedThroughAnInclude(t *testing.T) {
+	useBundledGit(t)
+	dir := t.TempDir()
+	initRepo(t, dir)
+	included := filepath.Join(t.TempDir(), "included.config")
+	testutil.FailErr(t, "write include", os.WriteFile(included, []byte("[filter \"crypt\"]\n\tsmudge = /payload/smudge\n"), 0o600))
+	appendRepoConfig(t, dir, "\n[include]\n\tpath = "+included+"\n")
+
+	_, _, err := Run(t.Context(), dir, []string{"status", "--porcelain"}, Opts{})
+	var unsafeCfg *UnsafeRepoConfigError
+	if !errors.As(err, &unsafeCfg) || !strings.Contains(unsafeCfg.KeyList(), "filter.crypt") {
+		t.Fatalf("err = %v, want the included filter refused", err)
+	}
+}
+
+// An agent's Git reaches only Git's own transports, and host bookkeeping in
+// an agent's call only the local one; a person's Git keeps every transport.
+func TestTransportsFollowTheLaunchAuthority(t *testing.T) {
+	useBundledGit(t)
+	dir := t.TempDir()
+	initRepo(t, dir)
+	refused := func(ctx context.Context, url string) bool {
+		out, code, err := Run(ctx, dir, []string{"ls-remote", url}, Opts{})
+		return err == nil && code != 0 && strings.Contains(string(out), "not allowed")
+	}
+	agent := WithAgentLaunch(AgentEntry(t.Context()), AgentLaunch{Plan: execpkg.HostLaunch("git")})
+	if !refused(agent, "testhelper::anything") {
+		t.Fatal("an agent's Git reached a remote helper")
+	}
+	host := WithHostPurpose(AgentEntry(t.Context()), "test")
+	if !refused(host, "https://example.test/repo.git") {
+		t.Fatal("host bookkeeping in an agent's call reached the network")
+	}
+	if refused(t.Context(), "https://example.invalid/repo.git") {
+		t.Fatal("a person's Git lost the https transport")
 	}
 }

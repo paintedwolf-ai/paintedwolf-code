@@ -17,14 +17,14 @@ requires:
 when: paintedwolf.rejection_code == "EDIT_OLD_STRING_AMBIGUOUS"
 effect: block
 copy:
-  what: edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for old_string — a single-occurrence
+  what: edit on {{ paintedwolf.path }} found {{ paintedwolf.occurrences }} matches for the searched text — a single-occurrence
     edit needs a unique target.
   cause: edit replaces a single exact substring by default; multiple matches make the target ambiguous.
-  why: Silent first-match replacement would edit the wrong site — either widen old_string with surrounding
+  why: Silent first-match replacement would edit the wrong site — either widen the searched text with surrounding
     context until it is unique, or set replace_all to change every occurrence.
-  fix: For a single edit, copy a longer unique old_string with neighboring context. Set replace_all true only
+  fix: For a single edit, include more neighboring context so the searched text is unique. Set replace_all true only
     when changing every matching occurrence is intended.
-  instead: Branch on Code; set replace_all true for all sites, else widen old_string until unique
+  instead: Branch on Code; set replace_all true for all sites, else widen the searched text until unique
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:edit
 x-paintedwolf-message: edit old_string matches more than once

@@ -2,11 +2,13 @@
 
 **Entry check:** name one implementation decision you cannot make yet and the fact that would settle it. If you cannot name the decision, the research has no stopping condition and will wander.
 
+The dispatch steps below are coordinator-only: a worker leg applies the matching research guidance within its own assignment and reports dispatch needs to the parent.
+
 ## Workflow
 
 1. List the open decisions as questions with an assignee. Separate current external claims ("what does this API return in v3?") from repository questions ("where is this validated today?") — they need different researchers.
 2. Mark each question **blocking** or **supplemental**. Blocking means a dependent builder cannot start; supplemental means the builder has a safe default and can proceed while the answer arrives.
-3. Dispatch the narrowest matching researcher, choosing `agent_type` from the spawn roster in your prompt. Recommend `research-current-information` for external questions and `summarize --path PATH` and bounded search and line-inspection programs in `command` for repository questions. When substantial blocking research informs a substantial build, use a researcher leg followed by a builder leg; the dependency makes them sequential, not one worker plus coordinator-only research.
+3. Dispatch the narrowest matching researcher, choosing `agent_type` from the spawn roster in your prompt. Recommend `research-current-information` for external questions and {% if profile_has_summarize %}`summarize` or {% endif %}bounded search and line-inspection programs{% if profile_has_command and root_count %} in `command`{% endif %} for repository questions. When substantial blocking research informs a substantial build, use a researcher leg followed by a builder leg; the dependency makes them sequential, not one worker plus coordinator-only research.
 4. Require each researcher to return facts with evidence handles or URLs, scope limits, conflicts found, and remaining uncertainty — not an implementation plan outside its assignment.
 5. Synthesize the answers into a decision packet, which is the artifact this skill exists to produce:
 
@@ -35,4 +37,4 @@ Research ends when every blocking question is answered or explicitly escalated. 
 
 The decision packet, which questions were blocking, what remains open, and the verification evidence against the researched constraints.
 
-Run research and implementation in parallel only when the builder has a safe default and the research cannot invalidate work already underway. When both should run together, dispatch a role set and brief them to share via `record_finding` — see the sizing table in `references/orchestrate_a_large_task.md`.
+Run research and implementation in parallel only when the builder has a safe default and the research cannot invalidate work already underway. When both should run together, dispatch a role set and brief them to share{% if profile_has_record_finding %} via `record_finding`{% endif %} — see the sizing table in `references/orchestrate_a_large_task.md`.

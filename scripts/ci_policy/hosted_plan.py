@@ -208,7 +208,7 @@ def matrix(profile, suite="all", scope=None, platform=False, timings=None):
                            "linux_launch": any(runs_protected_launch(target) for target in lane["targets"]),
                            "repository_tools": REPOSITORY_TOOLS_TARGET in lane["targets"]
                            or "scripts:coverage:changes" in lane["targets"]
-                           or (name == "ready" and runs_script_coverage(scope)),
+                           or (name == "ready" and (scope is None or runs_script_coverage(scope))),
                            "nix": any(target.startswith("nix:") for target in lane["targets"])
                            or "nix" in lane.get("arguments", []),
                            "analysis": analysis_set(lane["targets"]),

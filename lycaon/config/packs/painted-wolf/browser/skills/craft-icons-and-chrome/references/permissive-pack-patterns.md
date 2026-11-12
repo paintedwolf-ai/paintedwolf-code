@@ -99,4 +99,3 @@ In addition to standalone icon packs, modern web applications compose icons with
 | **shadcn/ui** | **MIT** | `shadcn-ui/ui` | Segmented tabs, floating command palettes, badge variants, and semantic token bindings. |
 | **Radix UI Primitives** | **MIT** | `radix-ui/primitives` | Accessible tablist/tab semantics, dialog overlays, status regions, and keyboard focus states. |
 | **Shoelace** | **MIT** | `shoelace-style/shoelace` | Pill badge geometries, indicator status dots, and container elevation tokens. |
-

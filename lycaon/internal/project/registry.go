@@ -24,8 +24,6 @@ var (
 	ErrDraftRootImmutable = errors.New("draft workspace root is immutable")
 	ErrRootBusy           = errors.New("project root has active dependents")
 	ErrProjectBusy        = errors.New("project has active work")
-	// ErrRootRefused marks paths that cannot become write roots.
-	ErrRootRefused = errors.New("project root refused")
 )
 
 // RootKind distinguishes the engine-managed draft workspace from attached folders.
@@ -168,7 +166,9 @@ type Registry interface {
 
 func (*MemoryRegistry) MutationEventsOutboxed() bool { return false }
 
-func PrimaryRootPath(p *Project) string {
+// AttachedPrimaryPath returns the primary root path as the person attached it,
+// whether or not agents work there.
+func AttachedPrimaryPath(p *Project) string {
 	if p == nil {
 		return ""
 	}
@@ -176,6 +176,14 @@ func PrimaryRootPath(p *Project) string {
 		if r.IsPrimary {
 			return r.Path
 		}
+	}
+	return ""
+}
+
+// PrimaryRootPath returns the agents' primary root path.
+func PrimaryRootPath(p *Project) string {
+	if roots := AdmittedRoots(p); len(roots) > 0 && roots[0].IsPrimary {
+		return roots[0].Path
 	}
 	return ""
 }
@@ -524,9 +532,6 @@ func (r *MemoryRegistry) SetTrustEnabled(ctx context.Context, id string, updates
 func (r *MemoryRegistry) attachRootLocked(ctx context.Context, p *Project, params AttachRootParams, kind RootKind) (Root, error) {
 	abs, err := ResolveExistingDir(params.Path)
 	if err != nil {
-		return Root{}, err
-	}
-	if err := defaultOpenPolicy.ValidateOpenPath(abs); err != nil {
 		return Root{}, err
 	}
 	for _, existing := range p.Roots {

@@ -10,4 +10,6 @@ Only attached folders have indexing, history and undo.{% if profile_command_muta
 
 {% if command_output_files %}For long output, read the saved copy named in the result.{% endif %}
 
+One `command` call can chain orientation ({% if profile_has_survey_repo %}`repo-map`, {% endif %}`outline --path`,{% if profile_has_summarize %} `summarize`,{% endif %} `rg -n`, `find`, `git status`, `git diff`), bounded slices (`sed -n 'A,Bp'`, `cat -n`), and multi-edit sequences (`edit`, `replace-lines`,{% if profile_has_code_rewrite %} `code-rewrite`,{% endif %} `jq-edit`, heredocs).
+
 `&` starts a session job; `$!`/`jobs` return its handle. Join with `wait %1`/`wait $!`; stop with `kill %1`/`kill $!`.{% if profile_has_command_output %} Across calls, page `command_output` by cursor; follow `next_cursor`.{% endif %}{% if profile_has_command_stop %} Stop with `command_stop`.{% endif %}{% if profile_has_wait %} Across turns, use offered `wait` conditions.{% endif %} `ps`/`pgrep` inspect session processes; `kill` signals them.{% else %}On this read-only surface, `command` runs read-only native utilities and pipelines only; file writes, output redirects to files, and external programs are refused.{% endif %}

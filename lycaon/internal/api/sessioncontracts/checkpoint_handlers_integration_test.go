@@ -32,7 +32,6 @@ import (
 )
 
 func TestCheckpointHandlersListAndResolve(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "chk-api.db")
 
 	reg := project.NewSQLRegistry(sqlDB)
@@ -223,7 +222,6 @@ func TestCheckpointHandlersResolveExactReplay(t *testing.T) {
 }
 
 func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	tmp := t.TempDir()
 	t.Setenv(configdir.EnvConfigDir, tmp)
 	svc, err := settings.NewService()
@@ -321,7 +319,6 @@ func TestCheckpointGrantOfferCreatesProjectLease(t *testing.T) {
 }
 
 func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	tmp := t.TempDir()
 	t.Setenv(configdir.EnvConfigDir, tmp)
 	svc, err := settings.NewService()
@@ -471,7 +468,6 @@ func TestWriteRootPlanAtomicallyCreatesTaskAndDeviceAuthority(t *testing.T) {
 }
 
 func TestCheckpointRejectsClientAuthoredGrantPredicate(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	srv, chkMgr, sess := contractfixture.NewCheckpointHandlerFixture(t)
 	dec, err := contractfixture.RequestExplicitAPIApprovalCheckpoint(t, chkMgr, hitl.CheckpointRequest{
 		SessionID:  sess.ID,

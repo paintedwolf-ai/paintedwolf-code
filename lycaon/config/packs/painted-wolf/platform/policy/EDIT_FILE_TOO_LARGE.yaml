@@ -24,12 +24,12 @@ requires:
 when: paintedwolf.rejection_code == "EDIT_FILE_TOO_LARGE"
 effect: block
 copy:
-  what: '{{ tool }} did not change {{ paintedwolf.path }}: the file or its new content exceeds the {{ paintedwolf.max_file_bytes }}-byte native edit limit.{% if paintedwolf.size %} Measured size is at least {{ paintedwolf.size }} bytes.{% endif %}'
-  cause: Native edits replace whole-file states, and every replaced state must fit this limit.
-  why: Version history and pre-turn checkpoints retain complete file states up to this limit, so a native edit above it could not be reviewed, restored, or rewound.
+  what: '{{ tool }} did not change {{ paintedwolf.path }}: the file or its new content exceeds the {{ paintedwolf.max_file_bytes }}-byte whole-file mutation limit.{% if paintedwolf.size %} Measured size is at least {{ paintedwolf.size }} bytes.{% endif %}'
+  cause: Whole-file mutations replace complete file states, and every replaced state must fit this limit.
+  why: Version history and pre-turn checkpoints retain complete file states up to this limit, so a whole-file mutation above it could not be reviewed, restored, or rewound.
   fix: >-
-    {% if paintedwolf.can_command %}Use command with a streaming tool such as sed, awk, python, or jq to inspect or change bounded parts of the file.{% else %}Split the file into smaller files, or reduce its size, before editing it natively.{% endif %}
-    Preserve the original file and any completed work; repeating a native edit does not change the limit.
+    {% if paintedwolf.can_command %}Use command with a streaming tool such as sed, awk, python, or jq to inspect or change bounded parts of the file.{% else %}Split the file into smaller files, or reduce its size, before retrying the whole-file mutation.{% endif %}
+    Preserve the original file and any completed work; repeating the mutation does not change the limit.
   instead: >-
     {% if paintedwolf.can_command %}Change the file with command, or split it into smaller files{% else %}Report the size dependency, or split the file into smaller files{% endif %}
 x-paintedwolf-category: recoverable

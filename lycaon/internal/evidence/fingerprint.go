@@ -2,10 +2,14 @@ package evidence
 
 import (
 	"encoding/json"
+	"net"
+	"net/netip"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/ingestion"
 )
@@ -145,6 +149,7 @@ func buildEvidenceRecord(roots CitationRoots, toolName string, args map[string]a
 		populateFetchTitle(&rec, stringArg(args, "url"), content)
 		if dest := stringArg(args, "dest"); dest != "" {
 			addRecordPath(roots, &rec, dest, FidelityStructured)
+			rec.Custody.External = true
 		}
 	case "diff":
 		// Diff evidence binds both inputs to the captured body.
@@ -187,11 +192,7 @@ func buildEvidenceRecord(roots CitationRoots, toolName string, args map[string]a
 		populateURLFromPayload(&rec, content)
 		captureRecordBody(&rec, content)
 	case "http_request":
-		rec.Fidelity = FidelityStructured
-		rec.Surface = SurfaceHTTP
-		rec.touchURL(stringArg(args, "url"))
-		populateURLFromPayload(&rec, content)
-		captureRecordBody(&rec, content)
+		populateHTTPRequestRecord(roots, &rec, args, content)
 	case "terminal_snapshot", "terminal_open", "terminal_send", "terminal_read", "terminal_close":
 		rec.Fidelity = FidelityStructured
 		rec.Surface = SurfaceTUI
@@ -322,4 +323,177 @@ func deleteResultPaths(content string) []string {
 		return nil
 	}
 	return resp.Deleted
+}
+
+func populateHTTPRequestRecord(roots CitationRoots, rec *Record, args map[string]any, content string) {
+	if rec == nil {
+		return
+	}
+	rec.Fidelity = FidelityStructured
+	rec.Surface = SurfaceHTTP
+	obj, hasJSON := jsonToolPayload(content)
+	unixSocket := stringArg(args, "unix_socket")
+	if unixSocket == "" && hasJSON {
+		if s, ok := obj["unix_socket"].(string); ok {
+			unixSocket = strings.TrimSpace(s)
+		}
+	}
+	rawResolve := any(nil)
+	if args != nil {
+		rawResolve = args["resolve"]
+	}
+	var candidateURLs []string
+	if reqURL := stringArg(args, "url"); reqURL != "" {
+		candidateURLs = append(candidateURLs, reqURL)
+	}
+	if hasJSON {
+		if redirects, ok := obj["redirects"].([]any); ok {
+			for _, item := range redirects {
+				if m, ok := item.(map[string]any); ok {
+					if u, ok := m["url"].(string); ok && strings.TrimSpace(u) != "" {
+						candidateURLs = append(candidateURLs, strings.TrimSpace(u))
+					}
+				}
+			}
+		}
+		if finalURL, ok := obj["final_url"].(string); ok && strings.TrimSpace(finalURL) != "" {
+			candidateURLs = append(candidateURLs, strings.TrimSpace(finalURL))
+		}
+		if u, ok := obj["url"].(string); ok && strings.TrimSpace(u) != "" {
+			candidateURLs = append(candidateURLs, strings.TrimSpace(u))
+		}
+	}
+	external := false
+	for _, rawURL := range candidateURLs {
+		if unixSocket != "" {
+			if isSyntacticLoopbackURL(rawURL) {
+				rec.touchURL(rawURL)
+			}
+			continue
+		}
+		rec.touchURL(rawURL)
+		local, mappedExternalURL := isLocalHTTPURLWithResolve(rawURL, rawResolve)
+		if !local {
+			external = true
+		}
+		if mappedExternalURL != "" {
+			rec.touchURL(mappedExternalURL)
+		}
+	}
+	_, hasStatus := obj["status"]
+	if hasJSON && hasStatus && unixSocket == "" && external {
+		responsePath := stringArg(args, "response_path")
+		if responsePath == "" {
+			if p, ok := obj["response_path"].(string); ok {
+				responsePath = strings.TrimSpace(p)
+			}
+		}
+		responseBodyMode := strings.ToLower(stringArg(args, "response_body"))
+		bodyUnavailable, _ := obj["body_unavailable"].(bool)
+		if responsePath != "" {
+			if written, ok := obj["written"].(bool); !ok || written {
+				addRecordPath(roots, rec, responsePath, FidelityStructured)
+				rec.Custody.External = true
+			}
+		} else if responseBodyMode != "discard" && !bodyUnavailable {
+			rec.UntrustedContent = true
+			if spillPath, ok := obj["body_spill_path"].(string); ok && strings.TrimSpace(spillPath) != "" {
+				addRecordPath(roots, rec, strings.TrimSpace(spillPath), FidelityStructured)
+			}
+		}
+		// Header values, redirect targets and cookie names are the server's
+		// text, delivered whatever happened to the body.
+		if carriesServerText(obj) {
+			rec.UntrustedContent = true
+		}
+	}
+	captureRecordBody(rec, content)
+}
+
+func carriesServerText(obj map[string]any) bool {
+	for _, key := range []string{"headers", "redirects", "cookies"} {
+		switch v := obj[key].(type) {
+		case []any:
+			if len(v) > 0 {
+				return true
+			}
+		case map[string]any:
+			if len(v) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func isSyntacticLoopbackURL(rawURL string) bool {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u.Hostname() == "" {
+		return false
+	}
+	return egress.SyntacticLoopback(u.Hostname())
+}
+
+func isLocalHTTPURLWithResolve(rawURL string, rawResolve any) (bool, string) {
+	u, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil || u.Hostname() == "" {
+		return true, ""
+	}
+	host := u.Hostname()
+	if !egress.SyntacticLoopback(host) {
+		return false, ""
+	}
+	items, ok := rawResolve.([]any)
+	if !ok || len(items) == 0 {
+		return true, ""
+	}
+	reqPort := defaultURLPort(u)
+	for _, item := range items {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		mHost, _ := m["host"].(string)
+		if !strings.EqualFold(strings.TrimSpace(mHost), host) {
+			continue
+		}
+		mPort := intArg(m, "port", 0)
+		if mPort > 0 && reqPort > 0 && mPort != reqPort {
+			continue
+		}
+		ipStr, _ := m["ip"].(string)
+		if !egress.LoopbackLiteral(ipStr) {
+			addr, err := netip.ParseAddr(strings.TrimSpace(ipStr))
+			if err != nil {
+				continue
+			}
+			addr = addr.Unmap()
+			mapped := *u
+			if reqPort > 0 {
+				mapped.Host = net.JoinHostPort(addr.String(), strconv.Itoa(reqPort))
+			} else {
+				mapped.Host = addr.String()
+			}
+			return false, mapped.String()
+		}
+	}
+	return true, ""
+}
+
+func defaultURLPort(u *url.URL) int {
+	if u == nil {
+		return 0
+	}
+	if p := u.Port(); p != "" {
+		n, _ := strconv.Atoi(p)
+		return n
+	}
+	switch strings.ToLower(u.Scheme) {
+	case "http":
+		return 80
+	case "https":
+		return 443
+	default:
+		return 0
+	}
 }

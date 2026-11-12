@@ -32,7 +32,7 @@ func DisplayName(p *Project) string {
 	if name := strings.TrimSpace(p.Name); name != "" {
 		return name
 	}
-	return NameFromFolderPath(PrimaryRootPath(p))
+	return NameFromFolderPath(AttachedPrimaryPath(p))
 }
 
 // DefaultNameForCreate selects the initial project name.

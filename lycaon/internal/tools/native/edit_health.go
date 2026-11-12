@@ -35,10 +35,5 @@ func syntaxRejectData(tool, path string, change syntaxhealth.Change) map[string]
 	data := change.FeedbackFacts("candidate")
 	data["tool"], data["path"] = tool, path
 
-	diag, ok := syntaxhealth.NearestDiagnostic(change.After, 0, 0)
-	if ok {
-		data["parse_error"] = diag.Description()
-		data["syntax_diagnostic"] = diag
-	}
 	return data
 }

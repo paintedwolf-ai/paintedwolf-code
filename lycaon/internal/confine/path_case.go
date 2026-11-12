@@ -10,10 +10,29 @@ import (
 // pathFoldCache memoizes case behavior by directory.
 var pathFoldCache sync.Map // string -> bool
 
+// nearestDirCache memoizes the deepest existing ancestor per input path. The
+// fold answer is a volume property, so a cached ancestor answers identically;
+// paths with no existing ancestor stay uncached so later creation re-walks.
+var nearestDirCache sync.Map // string -> string
+
 // FoldsCase reports whether path's filesystem folds filename case.
 // Unknown behavior is treated as folded for protected paths.
 func FoldsCase(path string) bool {
-	dir := nearestExistingDir(path)
+	p := filepath.Clean(strings.TrimSpace(path))
+	if p == "" || p == "." {
+		return true
+	}
+	if dir, ok := nearestDirCache.Load(p); ok {
+		return foldsForDir(dir.(string))
+	}
+	dir := nearestExistingDir(p)
+	if dir != "" {
+		nearestDirCache.Store(p, dir)
+	}
+	return foldsForDir(dir)
+}
+
+func foldsForDir(dir string) bool {
 	if dir == "" {
 		return true
 	}

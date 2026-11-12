@@ -358,6 +358,7 @@ describe("FilesEditor", () => {
         .getByTestId("files-editor-indent-chip")
         .classList.contains("den-files-editor__status-indent"),
     ).toBe(true);
+    expect(status.querySelector("[data-tip]")).toBeNull();
     expect(screen.queryByTestId("files-editor-lines-toggle")).toBeNull();
     expect(screen.getByTestId("files-editor-wrap-toggle").getAttribute("aria-pressed")).toBe("false");
   });

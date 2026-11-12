@@ -346,7 +346,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -452,7 +452,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -1818,7 +1818,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -1893,7 +1893,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -1968,7 +1968,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],
@@ -2424,7 +2424,7 @@
       "effects": [
         {
           "mode": "inspect",
-          "requires": []
+          "requires": ["pure"]
         },
         {
           "mode": "dispatch",
@@ -4796,7 +4796,7 @@
       },
       "effects": [
         {
-          "requires": [],
+          "requires": ["pure"],
           "mode": "always"
         }
       ],

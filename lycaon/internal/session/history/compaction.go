@@ -252,6 +252,7 @@ func (m *Service) sessionInfo(ctx context.Context, sess *api.Session, originals 
 		ParentSessionID:      sess.ParentSessionID,
 		ProjectID:            sess.ProjectID,
 		ProjectDir:           projectDir,
+		SettingsRoots:        m.Workspace.SettingsRoots(ctx, sess),
 		HostDataDir:          project.HostDataDir(m.dataDir, sess.ProjectID),
 		MaxToolSpillBytes:    m.Limits.Effective(ctx, sess).MaxToolSpillBytes,
 		Posture:              sess.Posture,

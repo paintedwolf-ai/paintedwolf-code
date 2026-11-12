@@ -22,7 +22,6 @@ import (
 )
 
 func TestEnqueueRootsChangedKickExtendsPendingNoticeBeforeNextTurn(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	reg := project.NewMemoryRegistry()
 	apiDir, webDir, docsDir := t.TempDir(), t.TempDir(), t.TempDir()
@@ -203,7 +202,6 @@ func TestEnqueuePostureChangedKickCoalescesAndDropsNoOp(t *testing.T) {
 }
 
 func TestRepositoryApprovalsOverlayTighteningChangesPromptAndEnqueuesNotice(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	reg := project.NewMemoryRegistry()
 	projectDir := t.TempDir()
@@ -336,7 +334,6 @@ func newRootsKickHarness(t *testing.T, projectID, rootID string) (*Service, *kic
 // WR04: a host path move under an unchanged id and label records history but
 // notifies nothing, because the model-visible (id, label) set is unchanged.
 func TestEnqueueRootsChangedKickSkipsPathOnlyMove(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	reg := project.NewMemoryRegistry()
 	apiDir, webDir := t.TempDir(), t.TempDir()
@@ -369,7 +366,6 @@ func TestEnqueueRootsChangedKickSkipsPathOnlyMove(t *testing.T) {
 // WR04: renaming the session's active root kicks with the rename row and the
 // session folder change, both label-only.
 func TestEnqueueRootsChangedKickNamesSessionFolderRename(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	reg := project.NewMemoryRegistry()
 	apiDir, webDir := t.TempDir(), t.TempDir()
@@ -410,7 +406,6 @@ func TestEnqueueRootsChangedKickNamesSessionFolderRename(t *testing.T) {
 // WR04: detaching the session's active root kicks with the removal and the
 // primary fallback as the session folder.
 func TestEnqueueRootsChangedKickSessionFolderFallsBackAfterDetach(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	reg := project.NewMemoryRegistry()
 	apiDir, webDir := t.TempDir(), t.TempDir()
@@ -445,7 +440,6 @@ func TestEnqueueRootsChangedKickSessionFolderFallsBackAfterDetach(t *testing.T) 
 // and kicks sessions through the registry observer wired by SetProjects.
 func TestPromotionCommitEnqueuesRootsChangedKick(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	ctx := t.Context()
 	reg := project.NewMemoryRegistry()
 	created, err := reg.Create(ctx, project.CreateParams{Draft: true})

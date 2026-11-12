@@ -301,3 +301,13 @@ it("leads with the command and retains its exact handle in the disclosure", asyn
   fireEvent.click(summary);
   expect(await findByText(handle)).toBeTruthy();
 });
+
+it("places a briefing around the body only when the card is open", () => {
+  const slots = { purpose: <span>supplied purpose</span>, result: <span>supplied result</span>, evidence: <button type="button">supplied evidence</button> };
+  const { container } = render(() => <GenericToolCard layout="chat" part={readPart()} slots={slots} />);
+  expect(container.querySelector('[data-testid="activity-purpose"]')).toBeNull();
+  fireEvent.click(disclosureToggle(container.querySelector('[data-testid="tool-part-card"]')));
+  const body = container.querySelector('[data-testid="tool-part-body"]')!;
+  const order = [...body.querySelectorAll('[data-testid="activity-purpose"], [data-testid="activity-result"], nav')].map(node => node.textContent);
+  expect(order).toEqual(["supplied purpose", "supplied result", "supplied evidence"]);
+});

@@ -1,0 +1,14 @@
+{
+  "category": "test_directories",
+  "artifact": "lycaon/internal/coordinator/assembly",
+  "kind": "test_suite",
+  "workstream": "web-research-flow",
+  "disposition": "retain",
+  "reason": "Retain 35 test files beside coordinator prompt assembly. Research guidance is tested through the assembled prompt so tool offering and settings remain observable together. Assembly remains the consumer of catalog and runtime-plan facts.",
+  "reviewed_commit": "1d376aca3c412ea12b86fb1078107cc2c1b47e39",
+  "ceiling": 35,
+  "boundaries": {
+    "lycaon/internal/coordinator/assembly/research_guidance_test.go": "4916f229bfc69acd2a9bf0cab3008c13599e8d31e75488ef29a421890d74e2b6"
+  },
+  "reviewed_shape": "3b96a4062a99069f7c68c74ba35e548c2fb33a7d321e0f8aeec8a4a0981d3900"
+}

@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 	"strings"
 	"testing"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	"github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/contract/internal/catalogfixture"
@@ -35,37 +33,20 @@ func promptNameCatalog(t *testing.T) (*toolvocab.Catalog, []sandbox.ToolProfile)
 	return catalog, profiles
 }
 
-func unreachableNames(t *testing.T, catalog *toolvocab.Catalog, corpus string, reachable []string) []string {
+func unreachableNames(t *testing.T, catalog *toolvocab.Catalog, corpus string, reachable []string, scopeID ...string) []string {
 	t.Helper()
-	language, err := toolcontract.ReadOnlyLanguageV1()
-	contractcheck.FailErr(t, "load command language", err)
-	formTool := make(map[string]string)
-	for _, disp := range language.Tools {
-		if !toolcontract.CommandFormTool(disp.Tool) {
-			continue
-		}
-		for _, form := range disp.CommandForms {
-			formTool[form] = disp.Tool
-		}
+	held := make(map[string]bool, len(reachable)+1)
+	for _, name := range reachable {
+		held[name] = true
 	}
-	program := func(name string) bool {
-		if !slices.Contains(reachable, "command") {
-			return false
-		}
-		if tool := formTool[name]; tool != "" && !slices.Contains(reachable, tool) {
-			return false
-		}
-		return slices.ContainsFunc(language.Commands, func(spec toolcontract.CommandSpecification) bool { return spec.Name == name })
+	scope := ""
+	if len(scopeID) > 0 {
+		scope = scopeID[0]
 	}
-	var out []string
-	for _, name := range toolvocab.ToolsIn(catalog, corpus) {
-		if slices.Contains(reachable, name) || program(name) {
-			continue
-		}
-		out = append(out, name)
+	if held["command"] && prompts.ScopeAllowsCommandMutation(scope) {
+		held[toolvocab.ReachCommandMutation] = true
 	}
-	sort.Strings(out)
-	return out
+	return toolvocab.UnreachableNames(catalog, corpus, held)
 }
 
 func linesNaming(corpus string, names []string) string {

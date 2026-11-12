@@ -11,7 +11,7 @@ when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_CHANGED"
 effect: block
 copy:
   what: A host-approved socket grant is no longer usable for this invocation.
-  cause: The approved enforcement mode, live socket binding, pathname or current-call permit is no longer available.
+  cause: The approved enforcement mode, live socket binding, or pathname is no longer available.
     A retained binding cannot be reconstructed from its saved pathname.
   why: The operation must use the authority and local-service recipient that the person approved.
   fix: Request the socket again with a fresh `capability_request` or the same socket argument after confirming

@@ -116,8 +116,9 @@ func holdsAny(c *Catalog, id string, tools []string) bool {
 }
 
 // namedTool matches backticked names — how copy tells a reader to call
-// something, as opposed to a word that collides with a tool name.
-var namedTool = regexp.MustCompile("`([a-z][a-z0-9_]*)(?:`|[ \t]*\\()")
+// something, as opposed to a word that collides with a tool name. A span that
+// continues with a --flag is a command-language invocation of the same tool.
+var namedTool = regexp.MustCompile("`([a-z][a-z0-9_]*)(?:`|[ \t]*\\(|[ \t]+--)")
 
 // guardedRegion strips {% if %} blocks: a tool named inside one is already
 // gated on a declared fact, and that fact is the audience filter.

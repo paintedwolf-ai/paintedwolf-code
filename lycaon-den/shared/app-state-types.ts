@@ -403,6 +403,9 @@ export type CachedProject = {
     label: string;
     added_at: string;
     kind: "draft" | "attached";
+    /** Absent in caches written before roots could be editor-only, when every root was admitted. */
+    admitted?: boolean;
+    admission_code?: "write_root_under_secret_store" | "write_root_contains_control_plane" | null;
   }>;
   roots_generation: number;
   session_count: number;
