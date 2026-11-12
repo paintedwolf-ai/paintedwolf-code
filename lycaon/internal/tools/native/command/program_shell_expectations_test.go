@@ -131,7 +131,7 @@ func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 
 	// A process a job started is the session's too: pkill signals that child
 	// alone, by its kernel instance, and the job carries on.
-	childOut, err := f.call(t, t.Context(), `external -- /bin/sh -c '/bin/sleep 31; echo after=$?' & job=$!; for i in $(seq 1 100); do pgrep -f -x '/bin/sleep 31' >/dev/null && break; external -- /bin/sleep 0.1; done; pkill -f -x '/bin/sleep 31'; external -- /bin/echo "pkill=$?"; wait "$job"; external -- /bin/echo "job=$?"`)
+	childOut, err := f.call(t, t.Context(), `external -- /bin/sh -c '/bin/sleep 31; echo after=$?' & job=$!; i=0; until pgrep -f -x '/bin/sleep 31' >/dev/null || [ "$i" -ge 100 ]; do i=$((i+1)); external -- /bin/sleep 0.1; done; pkill -f -x '/bin/sleep 31'; external -- /bin/echo "pkill=$?"; wait "$job"; external -- /bin/echo "job=$?"`)
 	testutil.FailErr(t, "pkill a job's child", err)
 	child := decodeOutcome(t, childOut)
 	if child.Refusal != nil || !strings.Contains(child.Stdout, "pkill=0") || !strings.Contains(child.Stdout, "after=143") || !strings.Contains(child.Stdout, "job=0") {
