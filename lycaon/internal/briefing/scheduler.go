@@ -129,7 +129,7 @@ func (s *Scheduler) Submit(ctx context.Context, job Job) (joined bool, err error
 		s.running[job.Key] = r
 		lane.queue = append(lane.queue, r)
 		s.promote(r)
-		s.drain(job.Project)
+		s.drain(job.Project) //nolint:contextcheck // Admitted work outlives the admitting request.
 	case Superseding:
 		if job.Group != "" && !job.Manual {
 			if prior, ok := s.groups[job.Group]; ok {
@@ -138,10 +138,10 @@ func (s *Scheduler) Submit(ctx context.Context, job Job) (joined bool, err error
 			s.groups[job.Group] = r
 		}
 		s.running[job.Key] = r
-		s.start(r)
+		s.start(r) //nolint:contextcheck // Admitted work outlives the admitting request.
 	default:
 		s.running[job.Key] = r
-		s.start(r)
+		s.start(r) //nolint:contextcheck // Admitted work outlives the admitting request.
 	}
 	return false, nil
 }
