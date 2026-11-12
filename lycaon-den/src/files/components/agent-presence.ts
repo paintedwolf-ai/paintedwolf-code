@@ -130,7 +130,7 @@ export const AGENT_FILE_STATE_TEXT: Record<AgentFileState, string> = {
 /** How long agent activity stays shown, as past, after it ends. */
 export const AGENT_LINGER_MS = 8_000;
 
-/** Editing and reading stay shown after they end; other states ask for action or last on their own. */
+/** Only editing and reading linger; other states ask for action or last as long as their work. */
 export function agentStateLingers(state: AgentFileState | null): boolean {
   return state === "editing" || state === "reading";
 }

@@ -431,7 +431,7 @@ export function unpresentedAgentFileCount(
 export type ReviewListRow = ReviewFileRow & {
   /** In-flight verb, or null when idle. */
   liveVerb: string | null;
-  /** Past once the in-flight work has ended without landing. */
+  /** Past once the work ended without landing. */
   livePhase: LingerPhase | null;
   /** Opens read-only when drafted in a worker overlay. */
   sandbox: boolean;

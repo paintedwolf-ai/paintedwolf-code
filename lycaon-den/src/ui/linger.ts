@@ -75,7 +75,7 @@ export class Linger<V> {
     if (changed) this.publish();
   }
 
-  /** Drops everything shown, as when the presented scope changes. */
+  /** Drops everything shown without lingering. */
   clear(): void {
     if (this.disposed) return;
     this.clearTimer();

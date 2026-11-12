@@ -16,7 +16,7 @@ import {
 } from "./agent-presence.ts";
 import { agentPresenceFor } from "./agent-presence-store.ts";
 
-/** Highest-priority activity and its owning chat; past once that activity has ended. */
+/** The file's highest-priority activity and its chat. */
 export type FilesAgentChip = {
   state: AgentFileState;
   phase: LingerPhase;
@@ -102,7 +102,7 @@ export function agentNameStyle(chat: AgentChat): Record<string, string> {
   return agentColorStyle(agentPalette()?.(chat.slot));
 }
 
-/** Shows file activity as it is reported; editing and reading stay shown, eased back, after they end. */
+/** Editing and reading stay shown, as past, after they end. */
 export function createFilesAgentPresence(options: {
   projectId: () => string;
   openSessionId: () => string | undefined;
