@@ -613,6 +613,9 @@ host_facts:
  - name: paintedwolf.refused_socket_paths
    type: list<string>
    observation: Unix socket paths the kernel refused the invocation's processes a connection to; empty when none.
+ - name: paintedwolf.refused_socket_host_resources
+   type: list<string>
+   observation: Available host resource ids whose local service is one of the refused sockets and whose launch points a client at it; empty when none.
  - name: paintedwolf.refused_connect_ports
    type: list<string>
    observation: Ports of TCP or UDP connections the kernel refused the invocation's processes; the kernel does not name the peer address. Empty when none.

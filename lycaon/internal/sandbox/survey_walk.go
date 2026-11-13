@@ -135,6 +135,12 @@ func SurveyWalk(ctx context.Context, root string, opts SurveyOptions, visit func
 	if _, err := os.Lstat(root); err != nil {
 		return err
 	}
+	if lazyScope, ok := opts.Scope.(SurveyLazyTier); ok {
+		if detail, lazy := lazyScope.LazyDir(".", root); lazy {
+			w.boundary(".", BoundaryLazy, detail, 0)
+			return nil
+		}
+	}
 	err := w.walkDir(".", root, 0)
 	if errors.Is(err, errSurveyStop) || errors.Is(err, errSurveyBudgetSpent) {
 		return nil

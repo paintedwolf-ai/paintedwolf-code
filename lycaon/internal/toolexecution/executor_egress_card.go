@@ -26,7 +26,7 @@ type egressRaise struct {
 // settleEgressDecision records the outcome of one endpoint's card.
 func (e *Network) settleEgressDecision(ctx context.Context, raise egressRaise, allowed bool, final *hitl.CheckpointResponse) {
 	if allowed {
-		e.recordHostVisit(ctx, raise.cmd, raise.action.ChatSession(), raise.ep.Host)
+		e.recordHostVisit(ctx, raise.facts.RetrievalCovers(), raise.action.ChatSession(), raise.ep.Host)
 		return
 	}
 	e.Rejections.rememberCapabilityDenial(raise.cmd.SessionID, raise.cmd.ToolCallID, raise.cmd.EffectActionID(), final)

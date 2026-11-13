@@ -70,13 +70,16 @@ func TestValidateRefArg(t *testing.T) {
 // costs the ordering the lease exists for.
 func TestLocalCloneSourcePathFollowsGitsOwnReadingOfTheString(t *testing.T) {
 	local := map[string]string{
-		"file:///srv/packs/acme":  "/srv/packs/acme",
-		"FILE:///srv/packs/acme":  "/srv/packs/acme",
-		"/srv/packs/acme":         "/srv/packs/acme",
-		"./packs/acme":            "./packs/acme",
-		"packs/acme":              "packs/acme",
-		"  /srv/packs/acme  ":     "/srv/packs/acme",
-		"/srv/packs/acme:archive": "/srv/packs/acme:archive",
+		"file:///srv/packs/acme":          "/srv/packs/acme",
+		"FILE:///srv/packs/acme":          "/srv/packs/acme",
+		"file://localhost/srv/packs/acme": "/srv/packs/acme",
+		"file://elsewhere/srv/packs/acme": "/srv/packs/acme",
+		"file:///srv/packs/two%20words":   "/srv/packs/two words",
+		"/srv/packs/acme":                 "/srv/packs/acme",
+		"./packs/acme":                    "./packs/acme",
+		"packs/acme":                      "packs/acme",
+		"  /srv/packs/acme  ":             "/srv/packs/acme",
+		"/srv/packs/acme:archive":         "/srv/packs/acme:archive",
 	}
 	for source, want := range local {
 		got, ok := gitargv.LocalCloneSourcePath(source)
@@ -97,6 +100,8 @@ func TestLocalCloneSourcePathFollowsGitsOwnReadingOfTheString(t *testing.T) {
 		"   ",
 		"--upload-pack=whoami",
 		"file://",
+		"file://localhost",
+		"file:///bad%zz",
 	}
 	for _, source := range remote {
 		if got, ok := gitargv.LocalCloneSourcePath(source); ok {

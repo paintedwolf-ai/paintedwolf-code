@@ -82,7 +82,7 @@ func TestBodyTransferPreservesExactClaimAndLeasesAfterDurableAttachment(t *testi
 	token, err := out.TransferBody(ctx, func(_ context.Context, ref RetainedStreamReference) error { persisted = ref; cancel(); return nil })
 	testutil.FailErr(t, "complete committed transfer despite cancellation", err)
 	defer token.Close()
-	if persisted.RetentionClaimID != out.RetentionClaimID() || token.Reference() != persisted || q.disk != 1 || q.state != 1 || out.Preview != nil {
+	if persisted.RetentionClaimID != out.RetentionClaimID() || token.Reference() != persisted || q.disk != 1 || q.state != 1 || out.Display.Preview != nil {
 		t.Fatalf("transfer changed claim/leases %+v %+v", persisted, q)
 	}
 	persisted.RetentionClaimID = "changed local value"

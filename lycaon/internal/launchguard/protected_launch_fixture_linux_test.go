@@ -56,6 +56,9 @@ func TestProtectedLaunchFixture(t *testing.T) {
 	case "seal-entry-child":
 		err = runSealEntryChild(dir)
 	case "remove":
+		if target, linkErr := os.Readlink("/run/painted-wolf-code/vault-identity.sock"); linkErr == nil && strings.HasPrefix(target, dir+"/") {
+			_ = os.Remove("/run/painted-wolf-code/vault-identity.sock")
+		}
 		err = os.RemoveAll(dir)
 	case "lock-free":
 		err = lockFree(filepath.Join(dir, "locks", os.Getenv(fixtureHash)+".lock"))
@@ -259,6 +262,16 @@ func runVaultServer(dir, vaultBin, uidStr, gidStr string) error {
 	if err := os.WriteFile(filepath.Join(dir, "vault.pid"), []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
 		return err
 	}
+	if err := os.MkdirAll("/run/painted-wolf-code", 0o755); err != nil {
+		return err
+	}
+	if err := os.Chmod("/run/painted-wolf-code", 0o755); err != nil {
+		return err
+	}
+	_ = os.Remove("/run/painted-wolf-code/vault-identity.sock")
+	if err := os.Symlink(filepath.Join(runDir, "vault.sock"), "/run/painted-wolf-code/vault-identity.sock"); err != nil {
+		return err
+	}
 	runtime.LockOSThread()
 	if err := unix.Prctl(unix.PR_SET_KEEPCAPS, 1, 0, 0, 0); err != nil {
 		return err
@@ -356,7 +369,7 @@ var sharedLaunchHelpers = sync.OnceValues(func() (string, error) {
 	if err := buildBinary(filepath.Join(dir, "pw-launch-entry"), "github.com/lycaon/lycaon/cmd/pw-launch-entry", ""); err != nil {
 		return "", err
 	}
-	if err := buildBinary(filepath.Join(dir, "painted-wolf-code"), "./testdata/protecteddesktop", ""); err != nil {
+	if err := buildBinary(filepath.Join(dir, "painted-wolf-code"), "./testdata/protecteddesktop", "", "-tags=paintedwolf_release"); err != nil {
 		return "", err
 	}
 	if err := buildBinary(filepath.Join(dir, "bwrap"), "./testdata/bwrapshim", ""); err != nil {
@@ -394,7 +407,7 @@ func installLaunchFixture(t *testing.T, modes ...launchFixtureBuild) launchFixtu
 	goBuild(t, binaries[0], "github.com/lycaon/lycaon/cmd/pw-launch", layout, options...)
 	if measured {
 		goBuild(t, binaries[1], "github.com/lycaon/lycaon/cmd/pw-launch-entry", entryFlags, options...)
-		goBuild(t, binaries[2], "./testdata/protecteddesktop", "")
+		goBuild(t, binaries[2], "./testdata/protecteddesktop", "", "-tags=paintedwolf_release")
 		buildMountTransition(t, binaries[3])
 		goBuild(t, binaries[4], "./testdata/bwrapshim", "")
 	} else {

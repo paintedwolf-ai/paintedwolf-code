@@ -780,6 +780,8 @@ type InvocationProgramOutputs struct {
 	MappingsJson      string         `json:"mappings_json"`
 	Preview           string         `json:"preview"`
 	PreviewTruncated  int64          `json:"preview_truncated"`
+	TailPreview       string         `json:"tail_preview"`
+	LineCount         sql.NullInt64  `json:"line_count"`
 	CreatedAt         string         `json:"created_at"`
 	InlineDigest      string         `json:"inline_digest"`
 	InlineBody        []byte         `json:"inline_body"`

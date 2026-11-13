@@ -11,7 +11,7 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { stepEditorHistory } from "../../components/source/editor/editor-history.ts";
-import { prettyNativeStateField } from "../../components/source/pretty/pretty-native-layout.ts";
+import { prettyOutcomeOf } from "../../components/source/pretty/pretty-layout.ts";
 import { setSecretScreen } from "../../components/source/secrets/secret-span-decorations.ts";
 import {
   gotoLineController,
@@ -132,9 +132,9 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     // Raw document text and line count are completely untouched; layout is supplied by native decorations.
     expect(view.state.doc.toString()).toBe(rawJsonl);
     expect(getFilesEditorViewDoc(PROJECT, buf.key)).toBe(rawJsonl);
-    expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
-    expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBeGreaterThan(4);
-    expect(view.dom.querySelectorAll(".pw-virtual-indent").length).toBeGreaterThan(3);
+    expect(prettyOutcomeOf(view.state).kind).toBe("active");
+    expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(4);
+    expect(view.dom.querySelectorAll(".pw-pretty-line").length).toBeGreaterThan(3);
     expect(projectFilesState(PROJECT).byKey[buf.key]!.dirty).toBe(false);
     expect(view.dom.querySelectorAll(".cm-panels")).toHaveLength(0);
     expect(
@@ -149,7 +149,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       expect(toggleBtn.getAttribute("aria-pressed")).toBe("false");
     });
     expect(view.state.doc.toString()).toBe(rawJsonl);
-    expect(view.dom.querySelectorAll(".pw-virtual-break")).toHaveLength(0);
+    expect(view.dom.querySelectorAll(".pw-pretty-break")).toHaveLength(0);
     expect(projectFilesState(PROJECT).byKey[buf.key]!.dirty).toBe(false);
   });
 
@@ -183,8 +183,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       '{"service":"gateway""enabled":true,"ports":[8080,8443]}',
     );
     expect(replica.currentText).toBe(view.state.doc.toString());
-    expect(view.state.field(prettyNativeStateField).enabled).toBe(true);
-    expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
+        expect(prettyOutcomeOf(view.state).kind).toBe("active");
     expect(screen.queryByTestId("pretty-recovery-dialog")).toBeNull();
 
     // 2. Undo restores the deleted comma via replica.stepHistory:
@@ -273,8 +272,8 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     await waitFor(() => {
       expect(view.state.doc.toString()).toBe(remoteJson);
     });
-    expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
-    expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBeGreaterThan(3);
+    expect(prettyOutcomeOf(view.state).kind).toBe("active");
+    expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(3);
   });
 
   it("preserves raw source coordinates for Go to line, buffer reveal, SecretScreen spans, Copy contents, and tab disposal (FMT-AC-13, FMT-AC-15, FMT-AC-18)", async () => {
@@ -309,7 +308,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     // Enable Pretty
     invokePrettyToggleForTab(PROJECT, buf.key);
     expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(true);
-    expect(view.dom.querySelectorAll(".pw-virtual-break").length).toBeGreaterThan(3);
+    expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(3);
 
     // 1. Go to line 2, column 5 lands on raw line 2, column 5:
     openGotoLine(view);

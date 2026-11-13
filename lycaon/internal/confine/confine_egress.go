@@ -47,6 +47,12 @@ type EgressCommand struct {
 	CommandLine string // exact command attributed to this execution
 	// DeclaredHosts is the host-derived destination set for this action.
 	DeclaredHosts []string
+	// Origin is how a retrieval tool came by the requested address. It holds
+	// for every redirect hop of that request.
+	Origin AddressOrigin
+	// NamedHosts are hosts the agent wrote into a request whose other
+	// destinations are the tool's sources, such as a search's site operator.
+	NamedHosts []string
 	// ReducedPackageExecution restricts egress to reviewed registries.
 	ReducedPackageExecution bool
 	// UserRule is the matching ask-rule citation.
@@ -626,7 +632,7 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 	}
 	// Below Strict the gate leaves a retrieval capability's dial to its own
 	// contract, so without a rule asking it is decided here as there.
-	if rule == nil && RetrievalDial(cmd) && EffectivePosture(cmd) != PostureAsk {
+	if rule == nil && RetrievalDial(cmd, ep.Host) && EffectivePosture(cmd) != PostureAsk {
 		return true, true, nil, nil
 	}
 	return false, false, rule, nil
