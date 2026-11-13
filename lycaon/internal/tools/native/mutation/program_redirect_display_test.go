@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // Each redirect's receipt names the file as the model wrote it, never the
@@ -44,18 +43,24 @@ func TestRedirectReceiptsNameTheWorkspacePath(t *testing.T) {
 	}
 }
 
-// File writes are named by the files they wrote; the producer feeding a
-// redirect is a step, never the row's subject.
-func TestRedirectedWritesNameTheirFiles(t *testing.T) {
+// Every row a redirect anchors is named by the file it wrote, never by the
+// producer feeding it or a host path.
+func TestRedirectRowsNameTheirFiles(t *testing.T) {
 	f := mutationProgramFixture(t)
 	testutil.FailErr(t, "record checklist", f.SetProgress("- [ ] Write the files"))
-	editing := func(t *testing.T, source string) api.CommandActivity {
-		t.Helper()
-		raw, err := f.Call(t, t.Context(), source)
+	for _, tc := range []struct {
+		source string
+		paths  []string
+	}{
+		{"printf 'x\\n' > one.txt", []string{"one.txt"}},
+		{"printf 'a\\n' > first.txt && printf 'b\\n' > second.txt", []string{"first.txt", "second.txt"}},
+		{"cat <<'EOF' > a.txt\na\nEOF\ncat <<'EOF' > b.txt\nb\nEOF", []string{"a.txt", "b.txt"}},
+	} {
+		raw, err := f.Call(t, t.Context(), tc.source)
 		testutil.FailErr(t, "run writes", err)
 		outcome := decodeMutationOutcome(t, raw)
 		if outcome.Refusal != nil || outcome.Status != 0 {
-			t.Fatalf("writes refused: %+v", outcome)
+			t.Fatalf("%q refused: %+v", tc.source, outcome)
 		}
 		page, err := f.Recorder.ReadProgramPage(t.Context(), f.Session, outcome.ProgramID, "", 100)
 		testutil.FailErr(t, "read receipt", err)
@@ -63,21 +68,14 @@ func TestRedirectedWritesNameTheirFiles(t *testing.T) {
 		for _, execution := range page.Executions {
 			publications[execution.ID] = execution.EffectMode == "publication"
 		}
-		if len(page.Activities) != 1 || !publications[page.Activities[0].ID] {
-			t.Fatalf("writes did not fold under a redirect: %+v", page.Activities)
+		var named []string
+		for _, activity := range page.Activities {
+			if publications[activity.ID] {
+				named = append(named, activity.Subject)
+			}
 		}
-		return page.Activities[0]
-	}
-
-	if got := editing(t, "printf 'x\\n' > one.txt"); got.Subject != "one.txt" {
-		t.Fatalf("single write subject = %q", got.Subject)
-	}
-	multi := editing(t, "printf 'a\\n' > index.html && printf 'b\\n' > style.css")
-	if !strings.HasPrefix(multi.Subject, "index.html") || multi.Subject == "index.html" {
-		t.Fatalf("multi-file subject = %q, want the first file and a summary of the rest", multi.Subject)
-	}
-	heredocs := editing(t, "cat <<'EOF' > a.html\na\nEOF\ncat <<'EOF' > b.css\nb\nEOF\ncat <<'EOF' > c.js\nc\nEOF")
-	if !strings.HasPrefix(heredocs.Subject, "a.html") || heredocs.Subject == "a.html" || len(heredocs.Steps) < 6 {
-		t.Fatalf("heredoc writes = subject %q, %d steps", heredocs.Subject, len(heredocs.Steps))
+		if strings.Join(named, "|") != strings.Join(tc.paths, "|") {
+			t.Fatalf("%q redirect rows = %v, want %v", tc.source, named, tc.paths)
+		}
 	}
 }

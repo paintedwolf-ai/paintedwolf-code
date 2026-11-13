@@ -52,6 +52,7 @@ func (r *SQLRecorder) readProgramPage(ctx context.Context, sessionID, programID,
 			return out, err
 		}
 	}
+	display := r.pathDisplay(ctx, sessionID)
 	tx, err := r.beginProgramRead(ctx)
 	if err != nil {
 		return out, err
@@ -65,7 +66,7 @@ func (r *SQLRecorder) readProgramPage(ctx context.Context, sessionID, programID,
 	if err != nil {
 		return out, err
 	}
-	out.Activities, err = readProgramActivities(ctx, tx, out.Program)
+	out.Activities, err = readProgramActivities(ctx, tx, out.Program, display)
 	if err != nil {
 		return out, err
 	}

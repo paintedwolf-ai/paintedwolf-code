@@ -10,7 +10,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func readActivityInput(ctx context.Context, tx *sql.Tx, receipt api.CommandExecutionReceipt) (activityInput, error) {
+// readActivityInput decodes an execution's presentation fields. display, when
+// set, renders recorded host paths as workspace paths.
+func readActivityInput(ctx context.Context, tx *sql.Tx, receipt api.CommandExecutionReceipt, display func(string) string) (activityInput, error) {
 	input := activityInput{receipt: receipt}
 	var body []byte
 	var digest string
@@ -40,7 +42,33 @@ func readActivityInput(ctx context.Context, tx *sql.Tx, receipt api.CommandExecu
 		}
 		input.arguments["path_targets"] = map[string]any{"read": []any{}, "write": []any{boundedActivityText(path)}}
 	}
+	if display != nil && input.arguments != nil {
+		displayActivityPaths(input.arguments, display)
+	}
 	return input, err
+}
+
+// displayActivityPaths rewrites the path fields subjects read. Reviewed inputs
+// keep resolved host paths; activities show workspace paths.
+func displayActivityPaths(arguments map[string]any, display func(string) string) {
+	if path, ok := arguments["path"].(string); ok {
+		arguments["path"] = display(path)
+	}
+	targets, _ := arguments["path_targets"].(map[string]any)
+	for _, role := range []string{"read", "write"} {
+		paths, _ := targets[role].([]any)
+		for i, path := range paths {
+			if value, ok := path.(string); ok {
+				paths[i] = display(value)
+			}
+		}
+	}
+}
+
+// activityRedirect reports whether an execution is an output redirect.
+func activityRedirect(input activityInput) bool {
+	_, ok := redirectDisplayPath(input.receipt)
+	return ok
 }
 
 // redirectDisplayPath is the workspace path an output redirect wrote. Its
