@@ -2,6 +2,7 @@ package oar
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"io"
@@ -55,7 +56,7 @@ func TestPortablePackIsPortable(t *testing.T) {
 			t.Errorf("%s is not portable: host_anchor=%q host_facts=%v", r.Qualified(), rep.HostAnchor, rep.HostFacts)
 		}
 	}
-	outcomes, err := RunCorpusDir(filepath.Join(dir, "fixtures"))
+	outcomes, err := RunCorpusDir(context.Background(), filepath.Join(dir, "fixtures"))
 	testutil.FailErr(t, "run pack fixtures", err)
 	if len(outcomes) == 0 {
 		t.Fatal("portable pack carries no fixtures")

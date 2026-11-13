@@ -41,29 +41,6 @@ func (h *evalHolder) setCurrentRule(r *Rule) {
 	}
 }
 
-// counterOf reads kind for ruleID in the evaluating session. An absent store or
-// session yields 0, the same value an unfired rule has.
-func (h *evalHolder) counterOf(ruleID string, kind CounterKind) int64 {
-	if h == nil {
-		return 0
-	}
-	gc := h.get()
-	store := h.counters
-	if gc == nil || store == nil || gc.Session.SessionID == "" {
-		return 0
-	}
-	ns := ""
-	if current := h.currentRule; current != nil {
-		ns = current.Namespace
-	}
-	target := resolveCounterTarget(h.rules, ruleID, ns)
-	key := ruleID
-	if target != nil {
-		key = counterKeyFor(target, gc)
-	}
-	return h.getCounter(gc.Session.SessionID, key, kind)
-}
-
 func (h *evalHolder) beginOccurrence(store *CounterStore, sessionID string) {
 	if h == nil {
 		return
@@ -86,22 +63,6 @@ func (h *evalHolder) getCounter(sessionID, key string, kind CounterKind) int64 {
 		return 0
 	}
 	return store.Get(sessionID, key, kind)
-}
-
-func resolveCounterTarget(rs *RuleSet, ref, namespace string) *Rule {
-	if rs == nil {
-		return nil
-	}
-	qualified := ref
-	if !strings.Contains(ref, "/") && namespace != "" {
-		qualified = namespace + "/" + ref
-	}
-	for _, r := range rs.All() {
-		if r.Qualified() == qualified {
-			return r
-		}
-	}
-	return nil
 }
 
 // counterKeyFor keys a rule's counters by its identity; the store adds the
@@ -139,19 +100,6 @@ func (h *evalHolder) scopedCounterKey(r *Rule) (string, error) {
 	}
 	scope, _ := value.(string)
 	return r.Qualified() + "#" + scope, nil
-}
-
-func (h *evalHolder) readCounter(ref string, kind CounterKind) (any, error) {
-	namespace := ""
-	if h.currentRule != nil {
-		namespace = h.currentRule.Namespace
-	}
-	target := resolveCounterTarget(h.rules, ref, namespace)
-	key, err := h.counterScope(target)
-	if err != nil {
-		return nil, err
-	}
-	return h.getCounter(h.gc.Session.SessionID, key, kind), nil
 }
 
 func specObservationFuncs(holder *evalHolder) map[string]func(any) (any, error) {

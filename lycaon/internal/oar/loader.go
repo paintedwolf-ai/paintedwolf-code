@@ -419,15 +419,6 @@ func (l *Loader) validateSchema(code string, raw map[string]any) error {
 	return nil
 }
 
-func firstNonEmpty(vals ...string) string {
-	for _, v := range vals {
-		if strings.TrimSpace(v) != "" {
-			return strings.TrimSpace(v)
-		}
-	}
-	return ""
-}
-
 // ValidateDocument validates a raw JSON rule document against oar.schema.json.
 // This is the closed-world check: any key the schema does not declare, and that
 // is not an x- extension, is rejected here.

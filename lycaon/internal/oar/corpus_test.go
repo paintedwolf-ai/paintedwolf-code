@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"context"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"path/filepath"
 	"testing"
@@ -10,7 +11,7 @@ import (
 func TestProductionEngineAgainstPublishedCorpus(t *testing.T) {
 	ensureCatalog(t)
 	dir := filepath.Join(testutil.CheckoutRoot(t), "schemas", "oar", "conformance")
-	outcomes, err := RunCorpusDir(dir)
+	outcomes, err := RunCorpusDir(context.Background(), dir)
 	testutil.FailErr(t, "run production corpus", err)
 	if len(outcomes) == 0 {
 		t.Fatal("corpus produced no outcomes")

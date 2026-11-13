@@ -430,31 +430,3 @@ func describe(n *node) string {
 		return "the operand"
 	}
 }
-
-func describeKind(k nodeKind) string {
-	switch k {
-	case nodeBool:
-		return "bool"
-	case nodeInt:
-		return "int"
-	case nodeDouble:
-		return "double"
-	case nodeString:
-		return "string"
-	case nodeList:
-		return "list"
-	case nodeIdent:
-		return "ident"
-	case nodeCall:
-		return "call"
-	case nodeIndex:
-		return "index"
-	case nodeUnary:
-		return "unary"
-	case nodeBinary:
-		return "binary"
-	case nodeTernary:
-		return "ternary"
-	}
-	return "unknown"
-}

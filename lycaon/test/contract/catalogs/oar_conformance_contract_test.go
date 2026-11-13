@@ -35,7 +35,7 @@ func TestOARConformanceSeededFromWhenRules(t *testing.T) {
 		t.Fatalf("expected %d fixtures, got %d", len(codes), len(fxs))
 	}
 	for _, fx := range fxs {
-		if err := cr.RunFixture(fx); err != nil {
+		if err := cr.RunFixture(context.Background(), fx); err != nil {
 			t.Errorf("%s: %v", fx.ID, err)
 		}
 	}
