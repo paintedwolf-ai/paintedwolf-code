@@ -133,7 +133,11 @@ func (r *SQLRecorder) SettleProgram(ctx context.Context, programID string, in to
 	if err := oneProgramTransition(transition); err != nil {
 		return err
 	}
-	return tx.Commit()
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	notifySettled(ctx, programID)
+	return nil
 }
 
 func oneProgramTransition(result sql.Result) error {

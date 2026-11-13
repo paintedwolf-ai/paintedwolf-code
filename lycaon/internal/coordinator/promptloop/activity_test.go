@@ -110,3 +110,41 @@ func TestCommandActivityEdgesBypassCounterCoalescing(t *testing.T) {
 		t.Fatal("missing progress created an edge")
 	}
 }
+
+func TestFinishedActivityLeaseCarriesCommandProgramEdges(t *testing.T) {
+	var updates []api.ActivityEvent
+	lease := &activityLease{
+		event:   api.ActivityEvent{ActivityID: "command-1", Status: api.ActivityStatusActive},
+		publish: func(event api.ActivityEvent) { updates = append(updates, event) },
+	}
+	running := api.ToolProgress{Phase: "executing", CommandProgram: &api.CommandProgramReceipt{ID: "program", State: "running", Activities: []api.CommandActivity{{ID: "server", State: "running"}}}}
+	lease.report(running)
+	lease.finish()
+	lease.report(api.ToolProgress{Phase: "searching", FilesSearched: 4})
+	unchanged := running
+	lease.report(unchanged)
+	failed := api.ToolProgress{Phase: "executing", CommandProgram: &api.CommandProgramReceipt{ID: "program", State: "running", Activities: []api.CommandActivity{{ID: "server", State: "failed", FailedCount: 1}}}}
+	lease.report(failed)
+	settled := api.ToolProgress{Phase: "executing", CommandProgram: &api.CommandProgramReceipt{ID: "program", State: "completed", Activities: failed.CommandProgram.Activities}}
+	lease.report(settled)
+	if len(updates) != 4 {
+		t.Fatalf("updates = %d want running, done, failed child, settled program: %+v", len(updates), updates)
+	}
+	for _, update := range updates[1:] {
+		if update.Status != api.ActivityStatusDone || update.ActivityID != "command-1" {
+			t.Fatalf("finished lease reopened: %+v", update)
+		}
+	}
+	if updates[2].Progress.CommandProgram != failed.CommandProgram || updates[3].Progress.CommandProgram != settled.CommandProgram {
+		t.Fatalf("late command programs: %+v", updates)
+	}
+}
+
+func TestCommandProgramStateIsAnEdge(t *testing.T) {
+	activities := []api.CommandActivity{{ID: "server", State: "failed"}}
+	before := &api.ToolProgress{CommandProgram: &api.CommandProgramReceipt{ID: "program", State: "running", Activities: activities}}
+	after := &api.ToolProgress{CommandProgram: &api.CommandProgramReceipt{ID: "program", State: "completed", Activities: activities}}
+	if !commandActivityEdge(before, after) {
+		t.Fatal("program settlement was coalesced")
+	}
+}
