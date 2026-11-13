@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,9 +18,7 @@ import (
 // subject and step label.
 func TestEveryCommandPresentsWorkspacePaths(t *testing.T) {
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read the command catalog", err)
 	primary, docs := t.TempDir(), t.TempDir()
 	roots := []projectroot.RootRef{{ID: "primary", Path: primary, IsPrimary: true}, {ID: "docs", Label: "docs", Path: docs}}
 	display := func(path string) string { return projectroot.DisplayAbsolute(roots, path) }

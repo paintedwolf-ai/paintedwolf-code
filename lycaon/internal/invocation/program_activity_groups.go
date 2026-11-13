@@ -223,20 +223,21 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	positions := map[int]int{}
 	// written collects the write targets of each row's folded primaries.
 	written := map[int][]string{}
-	active := -1
+	// The row sequential primaries fold into, and the group that opened it.
+	activeRow, activeGroup := -1, activityGroup{}
 	for i, g := range groups {
 		if !primary[i] {
 			continue
 		}
-		if active >= 0 && activityFolds(groups[active], g) {
-			positions[i] = positions[active]
-			written[positions[i]] = append(written[positions[i]], activityPaths(g.input.arguments, "write")...)
+		if activeRow >= 0 && activityFolds(activeGroup, g) {
+			positions[i] = activeRow
+			written[activeRow] = append(written[activeRow], activityPaths(g.input.arguments, "write")...)
 			continue
 		}
 		positions[i] = len(result)
 		written[len(result)] = activityPaths(g.input.arguments, "write")
 		result = append(result, groupActivity(g))
-		active = i
+		activeRow, activeGroup = positions[i], g
 	}
 	for row, paths := range written {
 		// Folded writes name every file they wrote, not only the first.
