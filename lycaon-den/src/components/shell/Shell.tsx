@@ -1,5 +1,3 @@
-import { setStageShown, startViewReporter } from "../../shell/view-report.ts";
-import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 import { registerShellCommands, createShellFocusRequest } from "./shell-commands.ts";
 import { registerShellDismissCommand } from "./shell-dismiss-command.ts";
 import { createShellWorkspaceContext } from "./shell-workspace-context.ts";
@@ -319,9 +317,6 @@ export function Shell(props: ShellProps) {
   createEffect(() => {
     setSplitProjectId(props.shell.state.activeProjectId);
   });
-
-  createEffect(() => setStageShown(showStageColumn() && !contextHidden()));
-  onCleanup(startViewReporter(() => getLycaonClient() ?? null));
 
   const publishedChatWidthPx = () => effectiveChatWidthPx(splitHostWidthPx());
 

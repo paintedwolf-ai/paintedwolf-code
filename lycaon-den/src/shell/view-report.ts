@@ -1,6 +1,7 @@
 import { createEffect, createRoot, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { LycaonClient } from "../api/client.ts";
 import type { ReplaceProjectViewRequest } from "../api/types.ts";
+import { getLycaonClient } from "../platform/connection/app-connection.ts";
 import { clientIdentity } from "../platform/connection/client-identity.ts";
 import { useResidentPresence } from "../ui/resident-presence-context.tsx";
 
@@ -69,7 +70,7 @@ function windowVisibility(): { visible: Accessor<boolean>; focused: Accessor<boo
  * Reports what this window shows of each project, renewing while it holds and
  * withdrawing a project once nothing of it is in view. Returns a stop function.
  */
-export function startViewReporter(client: Accessor<LycaonClient | null>): () => void {
+export function startViewReporter(client: Accessor<LycaonClient | null> = () => getLycaonClient() ?? null): () => void {
   return createRoot((dispose) => {
     const { visible, focused } = windowVisibility();
     const sent = new Map<string, string>();
