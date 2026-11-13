@@ -2,6 +2,7 @@ package invocation
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -505,5 +506,54 @@ func TestLaunchWithoutRecordedJobWorkReportsItsStart(t *testing.T) {
 	values := composeActivityGroups(groups, false)
 	if len(values) != 1 || values[0].Outcome == activityStateOutcome("completed") {
 		t.Fatalf("unstarted job reported finished: %+v", values)
+	}
+}
+
+func redirectFixture(id, operator, path string, start int) activityInput {
+	write := activityFixture(id, "root", "write", "", start)
+	write.receipt.EffectMode, write.receipt.NativeCommand, write.receipt.Command = "publication", operator, operator+" "+path
+	write.receipt.EffectClasses = []string{"mutation"}
+	write.arguments["path_targets"] = map[string]any{"read": []any{}, "write": []any{path}}
+	return write
+}
+
+func producerFixture(id string, start int) activityInput {
+	producer := activityFixture(id, "root", "printf", "printf", start)
+	producer.receipt.EffectClasses = []string{"mutation"}
+	return producer
+}
+
+func TestRedirectDisplayPathComesFromTheBoundOperator(t *testing.T) {
+	for _, tc := range []struct {
+		receipt api.CommandExecutionReceipt
+		want    string
+	}{
+		{api.CommandExecutionReceipt{EffectMode: "publication", NativeCommand: ">>", Command: ">> notes/log 1.txt"}, "notes/log 1.txt"},
+		{api.CommandExecutionReceipt{EffectMode: "publication", NativeCommand: "write", Command: "write a.txt"}, ""},
+		{api.CommandExecutionReceipt{EffectMode: "native", NativeCommand: ">", Command: "> a.txt"}, ""},
+		{api.CommandExecutionReceipt{EffectMode: "publication", NativeCommand: ">", Command: ">"}, ""},
+	} {
+		if got, _ := redirectDisplayPath(tc.receipt); got != tc.want {
+			t.Fatalf("%+v = %q, want %q", tc.receipt, got, tc.want)
+		}
+	}
+}
+
+func TestFoldedWritesNameEveryFile(t *testing.T) {
+	paths := []string{"index.html", "style.css", "script.js"}
+	var inputs []activityInput
+	for i, path := range paths {
+		inputs = append(inputs, producerFixture(fmt.Sprintf("producer-%d", i), i*20), redirectFixture(fmt.Sprintf("write-%d", i), ">", path, i*20+10))
+	}
+	values := composeActivityGroups(activityGroups(inputs...), true)
+	if len(values) != 1 || values[0].ID != "write-0" || values[0].Subject != pathSummary(paths) {
+		t.Fatalf("folded writes = %+v", values)
+	}
+	single := composeActivityGroups(activityGroups(producerFixture("producer", 0), redirectFixture("write", ">", paths[0], 10)), true)
+	if len(single) != 1 || single[0].Subject != paths[0] {
+		t.Fatalf("single write = %+v", single)
+	}
+	if rule := activityPresentation(producerFixture("producer", 0)); rule.role != "support" {
+		t.Fatalf("redirected producer role = %q", rule.role)
 	}
 }

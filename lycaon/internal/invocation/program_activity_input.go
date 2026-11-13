@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -33,7 +34,24 @@ func readActivityInput(ctx context.Context, tx *sql.Tx, receipt api.CommandExecu
 		}
 		input.arguments = arguments
 	}
+	if path, ok := redirectDisplayPath(receipt); ok {
+		if input.arguments == nil {
+			input.arguments = map[string]any{}
+		}
+		input.arguments["path_targets"] = map[string]any{"read": []any{}, "write": []any{boundedActivityText(path)}}
+	}
 	return input, err
+}
+
+// redirectDisplayPath is the workspace path an output redirect wrote. Its
+// reviewed inputs hold the resolved path; the host records its command as the
+// bound operator and the operator followed by the display path.
+func redirectDisplayPath(receipt api.CommandExecutionReceipt) (string, bool) {
+	if receipt.EffectMode != "publication" || !toolcontract.OutputRedirectOperator(receipt.NativeCommand) {
+		return "", false
+	}
+	path, ok := strings.CutPrefix(receipt.Command, receipt.NativeCommand+" ")
+	return path, ok && path != ""
 }
 
 type activityReadBudget struct{ used int64 }
