@@ -314,3 +314,18 @@ func (s *Store) Close(ctx context.Context, actor Actor, op Op, workerID, reason 
 		return CloseReceipt{WorkerID: w.ID, ClosedAt: now}, nil
 	})
 }
+
+// Self returns the worker whose child session the actor runs in.
+func (s *Store) Self(ctx context.Context, actor Actor) (Worker, error) {
+	if err := actor.check(); err != nil {
+		return Worker{}, err
+	}
+	w, err := s.q.GetWorkerByChildSession(ctx, nullString(actor.SessionID))
+	if db.IsNoRows(err) {
+		return Worker{}, ErrWorkerNotFound
+	}
+	if err != nil {
+		return Worker{}, err
+	}
+	return workerFromRow(w), nil
+}
