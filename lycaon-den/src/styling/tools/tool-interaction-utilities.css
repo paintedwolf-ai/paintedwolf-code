@@ -324,31 +324,6 @@
 }
 
 
-/* Activity headers reserve outcome and disclosure space at every width. */
-.den-tool-part[data-command-activity] .den-tool-part-chicklet-main {
-  flex-wrap: nowrap;
-  overflow: hidden;
-}
-.den-tool-part[data-command-activity] .den-tool-part-title,
-.den-tool-part[data-expanded="true"][data-command-activity] .den-tool-part-title {
-  min-width: 0;
-  flex: 1 1 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.den-command-activity-outcome {
-  flex: 0 1 auto;
-  min-width: 0;
-  max-width: 45%;
-  margin-left: auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: var(--text-den-hint);
-  color: var(--den-text-muted);
-  font-variant-numeric: tabular-nums;
-}
 /* Opened activities use two text styles: interface hint text and monospace. */
 .den-activity-detail {
   display: grid;
@@ -474,13 +449,4 @@
 .den-activity-footer {
   padding-top: 8px;
   border-top: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
-}
-
-.den-tool-part[data-command-activity] .den-tool-part-name {
-  min-width: 0;
-  max-width: 45%;
-  flex: 0 1 auto;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

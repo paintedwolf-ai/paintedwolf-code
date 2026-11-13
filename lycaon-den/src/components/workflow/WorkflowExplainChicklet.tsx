@@ -115,10 +115,10 @@ export function WorkflowExplainChicklet(props: Props) {
       >
         <span class="den-tool-part-status-dot" data-status={status()} aria-hidden="true" />
         <span class="den-tool-part-name">{WORKFLOW_EXPLAIN_NAME}</span>
-        <span class="den-tool-part-title">{props.meta.summary}</span>
+        <span class="den-workflow-explain-summary">{props.meta.summary}</span>
         <Show when={progressState()}>
           {(state) => (
-            <span class="den-tool-part-title den-tool-part-progress-state" data-testid="workflow-explain-state">
+            <span class="den-workflow-explain-state den-tool-part-progress-state" data-testid="workflow-explain-state">
               {state()}
             </span>
           )}

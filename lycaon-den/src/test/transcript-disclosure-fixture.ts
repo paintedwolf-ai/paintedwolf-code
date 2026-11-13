@@ -7,6 +7,16 @@ export function disclosureToggle(card: Element | null | undefined): HTMLButtonEl
   return toggle;
 }
 
+/** The accessible name of a card's row toggle. */
+export function rowSpokenLabel(card: Element | null | undefined): string {
+  return disclosureToggle(card).getAttribute("aria-label") ?? "";
+}
+
+/** The text a card's row shows. */
+export function rowVisibleText(card: Element | null | undefined): string {
+  return disclosureToggle(card).textContent ?? "";
+}
+
 export function isDisclosureOpen(card: Element | null | undefined): boolean {
   return card?.getAttribute("data-expanded") === "true";
 }

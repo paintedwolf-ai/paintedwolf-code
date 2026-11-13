@@ -1,4 +1,4 @@
-import { isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
+import { isDisclosureOpen, rowSpokenLabel, rowVisibleText } from "../../test/transcript-disclosure-fixture.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
 import { SkillCard } from "./SkillCard.tsx";
@@ -58,9 +58,15 @@ describe("SkillCard chicklet", () => {
     expect(
       container.querySelector(".den-tool-part-name")?.textContent,
     ).toBe("Skill");
-    expect(
-      container.querySelector(".den-tool-part-title")?.textContent,
-    ).toBe("verify-a-change");
+    expect(rowSpokenLabel(container.querySelector("[data-transcript-disclosure]"))).toContain("verify-a-change");
+    expect(rowVisibleText(container.querySelector("[data-transcript-disclosure]"))).not.toContain("verify-a-change");
+  });
+
+  it("states the skill in its body rather than a leading target", () => {
+    const { container, getByTestId } = render(() => <SkillCard part={part()} layout="chat" sessionId="s1" />);
+    fireEvent.click(container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
+    expect(getByTestId("skill-card-name").textContent).toContain("verify-a-change");
+    expect(container.querySelector('[data-testid="activity-target"]')).toBeNull();
   });
 
   it("titles from the host projection when the args snapshot disagrees", () => {
@@ -71,9 +77,8 @@ describe("SkillCard chicklet", () => {
         sessionId="s1"
       />
     ));
-    expect(
-      container.querySelector(".den-tool-part-title")?.textContent,
-    ).toBe("verify-a-change");
+    expect(rowSpokenLabel(container.querySelector("[data-transcript-disclosure]"))).toContain("verify-a-change");
+    expect(rowVisibleText(container.querySelector("[data-transcript-disclosure]"))).not.toContain("verify-a-change");
   });
 
   it("distinguishes a procedure read from its skill overview", () => {
@@ -84,9 +89,8 @@ describe("SkillCard chicklet", () => {
         sessionId="s1"
       />
     ));
-    expect(container.querySelector(".den-tool-part-title")?.textContent).toBe(
-      "verify-a-change · build a container image",
-    );
+    expect(rowSpokenLabel(container.querySelector("[data-transcript-disclosure]"))).toContain("verify-a-change · build a container image");
+    expect(rowVisibleText(container.querySelector("[data-transcript-disclosure]"))).not.toContain("verify-a-change · build a container image");
     fireEvent.click(container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!);
     expect(getByTestId("skill-card-resource").textContent).toBe(
       "references/build_a_container_image.md",
@@ -181,9 +185,8 @@ describe("SkillCard body", () => {
         sessionId="s1"
       />
     ));
-    expect(container.querySelector(".den-tool-part-title")?.textContent).toBe(
-      "verify-a-change · build a container image",
-    );
+    expect(rowSpokenLabel(container.querySelector("[data-transcript-disclosure]"))).toContain("verify-a-change · build a container image");
+    expect(rowVisibleText(container.querySelector("[data-transcript-disclosure]"))).not.toContain("verify-a-change · build a container image");
   });
 
   it("falls back to the generic body when no skill resolved", () => {
