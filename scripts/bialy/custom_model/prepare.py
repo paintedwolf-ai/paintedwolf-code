@@ -25,7 +25,7 @@ def prepare(paths, out, tokenizer, max_length, model_identity, checkpoint_matche
             destination = Path(out) / (name + ".jsonl")
             with destination.open("x", encoding="utf-8") as stream:
                 for row in values:
-                    keys = ("target",) if row["schema"] == "pw-custom-sft/1" else ("chosen", "rejected")
+                    keys = ("target",) if row["schema"] == "pw-training-row/1" else ("chosen", "rejected")
                     try:
                         tokens = max(len(encode(tokenizer, row, row[key], max_length)["input_ids"]) for key in keys)
                     except EncodingExclusion as exc:

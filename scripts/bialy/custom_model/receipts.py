@@ -1,13 +1,11 @@
-"""Read-only admission of captured turns against one host episode bundle.
+"""Training candidates built from captured turns and one host episode bundle.
 
-This establishes execution acceptance, not semantic quality. It cannot certify
-counterfactual execution or turn a later recovery into a same-state preference.
-
-The training input is the request the host rendered for the student's configured
-serving provider, decoded into the chat-template input that provider's server
-builds. The teacher's exact dispatch is kept as provenance by digest. Every
-host fact comes from the bundle's normalized records; nothing here names a
-host tool or reads host storage.
+A candidate states facts and makes no admission decision: the student request decoded
+into the chat-template input its serving provider builds, the response, and for each
+call the operations the host recorded. The factory's training-row admission decides
+eligibility from these facts. The teacher's exact dispatch is kept as provenance by
+digest. Every host fact comes from the bundle; nothing here names a host tool or reads
+host storage.
 """
 import hashlib
 import json
@@ -73,35 +71,41 @@ def args_digest(arguments):
     return hashlib.sha256(encoded.encode()).hexdigest()
 
 
-def admitted_operation(bundle, record, call, digest_):
-    """The settled, successful operation for one call, with every child it ran."""
+def call_facts(bundle, record, call, offered):
+    """What the host recorded for one call: its operation and every child it ran."""
+    digest_ = args_digest(call["arguments"])
     operation = bundle.calls.get((record["session_id"], call["id"]))
-    if (operation is None or operation.get("message_id") != record["message_id"] or operation.get("tool") != call["name"]
-            or operation.get("args_sha256") != digest_ or not operation["invoked"]):
-        raise ValueError("missing exact invocation operation")
+    matched = (operation is not None and operation.get("message_id") == record["message_id"]
+               and operation.get("tool") == call["name"] and operation.get("args_sha256") == digest_)
+    facts = {"call_id": call["id"], "tool": call["name"], "offered": call["name"] in offered, "recorded": matched}
+    if not matched:
+        return facts
     family = [operation, *bundle.children.get(operation["id"], [])]
-    if any(item["settlement"] != "settled" for item in family):
-        raise ValueError("operation did not settle")
-    if any(item["effect_state"] == "unknown" for item in family):
-        raise ValueError("operation left unknown effects")
-    if any(item["semantic_outcome"] != "success" for item in family):
-        raise ValueError("operation did not succeed")
-    for prior in bundle.earlier(operation):
-        if (prior.get("tool") == operation["tool"] and prior.get("args_sha256") == digest_
-                and any(item["effect_state"] == "unknown" for item in [prior, *bundle.children.get(prior["id"], [])])):
-            raise ValueError("replay after unknown effects")
-    return [item["id"] for item in family]
+    prior_unknown = any(prior.get("tool") == operation["tool"] and prior.get("args_sha256") == digest_
+                        and any(item["effect_state"] == "unknown" for item in [prior, *bundle.children.get(prior["id"], [])])
+                        for prior in bundle.earlier(operation))
+    facts.update(operation_ids=[item["id"] for item in family], invoked=operation["invoked"],
+                 settlement="settled" if all(item["settlement"] == "settled" for item in family) else "unsettled",
+                 semantic_outcome=operation["semantic_outcome"],
+                 effect_state="unknown" if any(item["effect_state"] == "unknown" for item in family) else
+                              "known" if any(item["effect_state"] == "known" for item in family) else "none",
+                 failure_code=operation.get("failure_code", ""), source_verdict=operation.get("source_verdict", ""),
+                 source_revision=operation.get("source_revision", ""), replays_unknown_effects=prior_unknown,
+                 started_at=operation["started_at"])
+    return facts
 
 
-def accepted_row(record, bundle, identity, catalog_sha256):
-    """Admit one capture line of a bundle as a host-accepted SFT row."""
+def candidate(record, bundle, identity, catalog_sha256):
+    """One capture line as a training candidate. A capture the host already excluded becomes
+    a stub carrying the host's reason; a capture no candidate can be built from raises."""
     if record.get("schema") != "pw-training-turn/1":
         raise ValueError("unsupported capture schema")
+    stub = {"schema": "pw-training-candidate/1", "session": record["session_id"], "message_id": record["message_id"],
+            "call_id": record.get("call_id", "")}
     if record.get("exclusion_reason"):
-        # The host's reason (student_cannot_be_served, ambiguous_dispatch, ...) is the count key.
-        raise ValueError("host capture excluded: " + str(record["exclusion_reason"]))
+        return dict(stub, host_exclusion=record["exclusion_reason"])
     if record.get("dispatches") != 1 or not record.get("settled"):
-        raise ValueError("excluded host capture")
+        return dict(stub, host_exclusion="unsettled_or_ambiguous_dispatch")
     if record["epoch"] != identity["epoch"]:
         raise ValueError("foreign collection epoch")
     if bundle.contract_sha256 != identity["contract_sha256"]:
@@ -121,11 +125,7 @@ def accepted_row(record, bundle, identity, catalog_sha256):
             or output["scripted"] or not output["settled_at"]):
         raise ValueError("missing settled model output")
     target = response(raw)
-    operation_ids = []
-    for call in target["tool_calls"]:
-        operation_ids.extend(admitted_operation(bundle, record, call, args_digest(call["arguments"])))
-    if not target["tool_calls"] and bundle.commits.get((record["session_id"], record["message_id"])) != output["id"]:
-        raise ValueError("tool-free reply the host did not commit")
+    offered = {tool["function"]["name"] for tool in tools}
     capture = {"schema": "pw-model-request-capture/3", "request_id": record["call_id"],
                "session_id": record["session_id"], "message_id": record["message_id"],
                "host_revision": identity["host_commit"], "epoch": identity["epoch"],
@@ -135,11 +135,8 @@ def accepted_row(record, bundle, identity, catalog_sha256):
                "state_sha256": digest({"request": student_request, "turn_attempt_id": output["turn_attempt_id"], "output_id": output["id"]}),
                "messages": messages, "tools": tools, "controls": controls}
     capture["sha256"] = digest(capture)
-    report = {k: capture[k] for k in ("state_sha256", "host_revision", "epoch", "contract_sha256", "catalog_sha256")}
-    report.update(schema="pw-training-validation/1", validator="paintedwolf-host-training-validation/1",
-                  receipt_id=output["id"], operation_ids=operation_ids,
-                  request_sha256=capture["sha256"], response_sha256=digest(target), kind="accepted_response",
-                  response_origin="model", outcome="accepted",
-                  acceptance="turn_committed" if not target["tool_calls"] else "operations")
-    return {"schema": "pw-custom-sft/1", "session": record["session_id"], "message_id": record["message_id"],
-            "prompt": capture["messages"], "target": target, "request_capture": capture, "validation": report}
+    execution = {"receipt_id": output["id"], "settled_at": output["settled_at"],
+                 "calls": [call_facts(bundle, record, call, offered) for call in target["tool_calls"]],
+                 "committed": not target["tool_calls"] and bundle.commits.get((record["session_id"], record["message_id"])) == output["id"]}
+    return dict(stub, prompt=capture["messages"], target=target, request_capture=capture, execution=execution,
+                response_sha256=digest(target), prompt_surface=record.get("prompt_surface"))

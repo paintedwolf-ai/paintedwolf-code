@@ -8,7 +8,7 @@ from bundle import Bundle
 from common import digest
 from contracts import check
 from data import encode, assert_disjoint, check_row
-from receipts import accepted_row
+from receipts import candidate
 from test_bundle import operation, write_bundle
 
 
@@ -55,134 +55,129 @@ class Contracts(unittest.TestCase):
         self.decisions = []
         self.written = 0
 
-    def row(self):
+    def build(self):
         self.written += 1
         bundle = Bundle(write_bundle(Path(self.temporary.name) / str(self.written), [self.record], self.operations,
                                      self.completions, self.decisions))
         if self.identity["contract_sha256"] is None:
             self.identity["contract_sha256"] = bundle.contract_sha256
-        return accepted_row(bundle.captures[0], bundle, self.identity, "c" * 64)
+        return candidate(bundle.captures[0], bundle, self.identity, "c" * 64)
+
+    def row(self, candidate_row=None, **admission):
+        built = candidate_row or self.build()
+        quality = {"verdict": "pass", "method": "deterministic", "evidence_ids": ["receipt"],
+                   "request_sha256": built["request_capture"]["sha256"], "response_sha256": digest(built["target"])}
+        return {**built, "schema": "pw-training-row/1", "split_group": "family",
+                "source": {"bundle_sha256": "d" * 64, "capture_sha256": "e" * 64}, "quality": quality,
+                "admission": {"eligibility": "eligible", "category": "ordinary", "semantic_outcome": "success", **admission}}
 
     def test_student_thinking_must_be_explicitly_disabled(self):
         for effort in (None, "minimal", "low", "high"):
             with self.subTest(effort=effort):
                 self.record["student_request"]["reasoning_effort"] = effort
                 with self.assertRaisesRegex(ValueError, "request control"):
-                    self.row()
+                    self.build()
 
-    def test_an_operation_is_necessary_and_quality_is_separate(self):
-        row = self.row()
-        check("sft-row", dict(row, source={"bundle_sha256": "d" * 64, "capture_sha256": "e" * 64}))
-        with self.assertRaisesRegex(ValueError, "quality"):
-            check_row(row)
-        self.operations[0]["semantic_outcome"] = "failure"
-        with self.assertRaisesRegex(ValueError, "did not succeed"):
-            self.row()
-        self.operations.clear()
-        with self.assertRaisesRegex(ValueError, "missing exact invocation operation"):
-            self.row()
+    def test_a_candidate_states_each_calls_operation_facts_without_judging_them(self):
+        facts = self.build()["execution"]["calls"][0]
+        self.assertEqual((facts["recorded"], facts["offered"], facts["semantic_outcome"], facts["effect_state"]),
+                         (True, True, "success", "known"))
+        self.assertEqual(facts["operation_ids"], ["receipt"])
+        self.operations[0].update(semantic_outcome="failure", failure_code="EXIT_STATUS")
+        facts = self.build()["execution"]["calls"][0]
+        self.assertEqual((facts["semantic_outcome"], facts["failure_code"]), ("failure", "EXIT_STATUS"))
+        self.operations.append(operation("receipt-op0", parent="receipt", tool="cat", effects="unknown", settlement="unsettled"))
+        facts = self.build()["execution"]["calls"][0]
+        self.assertEqual((facts["settlement"], facts["effect_state"], facts["operation_ids"]), ("unsettled", "unknown", ["receipt", "receipt-op0"]))
 
-    def test_model_review_does_not_require_a_different_family(self):
-        row = self.row()
-        row['validation']['quality'] = {
-            'method': 'model_judge', 'verdict': 'pass', 'judge_model': 'reviewer', 'judge_revision': 'pinned',
-            'judge_family': 'gemma', 'teacher_family': 'gemma', 'evidence_ids': ['receipt'],
-            'request_sha256': row['request_capture']['sha256'], 'response_sha256': digest(row['target']),
-        }
-        check_row(row)
-        del row['validation']['quality']['judge_revision']
-        with self.assertRaisesRegex(ValueError, 'judge identity missing'):
-            check_row(row)
-
-    def test_arguments_tool_and_message_must_match(self):
+    def test_an_unrecorded_or_mismatched_call_is_a_fact_not_an_error(self):
         for field, value in (("args_sha256", digest({"path": "different"})), ("tool", "write"), ("message_id", "other")):
             with self.subTest(field=field):
                 original = self.operations[0][field]
                 self.operations[0][field] = value
-                with self.assertRaisesRegex(ValueError, "missing exact invocation operation"):
-                    self.row()
+                self.assertFalse(self.build()["execution"]["calls"][0]["recorded"])
                 self.operations[0][field] = original
+        self.record["response"]["tool_calls"][0]["name"] = "write"
+        facts = self.build()["execution"]["calls"][0]
+        self.assertEqual((facts["offered"], facts["recorded"]), (False, False))
 
-    def test_training_input_is_the_student_render_decoded_as_its_server_does(self):
-        row = self.row()
-        earlier = row["prompt"][2]
-        self.assertEqual(earlier["content"], "")
-        self.assertEqual(earlier["tool_calls"][0]["function"]["arguments"], {"path": "README.md"})
-        self.assertEqual(row["prompt"][3], {"role": "tool", "content": "# readme", "tool_call_id": "earlier"})
-        self.assertEqual(row["request_capture"]["dispatch_sha256"], digest({"teacher": "dispatch"}))
-        self.assertEqual(row["request_capture"]["tools"], TOOLS)
-        self.assertEqual(row["validation"]["operation_ids"], ["receipt"])
-
-    def test_serving_kind_student_and_contract_identity_fail_closed(self):
-        self.record["student_model"] = "other"
-        with self.assertRaisesRegex(ValueError, "another student"):
-            self.row()
-        self.record["student_model"] = "student-e4b"
-        self.record["student_kind"] = self.identity["student_kind"] = "ollama"
-        with self.assertRaisesRegex(ValueError, "template parity"):
-            self.row()
-        self.identity["contract_sha256"] = "f" * 64
-        with self.assertRaisesRegex(ValueError, "another host contract"):
-            self.row()
-
-    def test_epoch_unsupported_wire_and_missing_bodies_fail_closed(self):
-        self.record["epoch"] = "fixture-2"
-        with self.assertRaisesRegex(ValueError, "epoch"):
-            self.row()
-        self.record["epoch"] = "fixture-1"
-        self.record["student_request"]["images"] = []
-        with self.assertRaisesRegex(ValueError, "student request shape"):
-            self.row()
-        del self.record["student_request"]
-        with self.assertRaisesRegex(ValueError, "missing captured request"):
-            self.row()
-
-    def test_host_exclusion_reason_and_disabled_tools_are_reported(self):
-        self.record["exclusion_reason"] = "student_cannot_be_served"
-        with self.assertRaisesRegex(ValueError, "excluded: student_cannot_be_served"):
-            self.row()
-        del self.record["exclusion_reason"]
-        self.record["student_request"]["tool_choice"] = "none"
-        with self.assertRaisesRegex(ValueError, "request control"):
-            self.row()
-
-    def test_a_tool_free_reply_needs_the_hosts_commit_of_that_output(self):
-        self.record["response"] = {"content": "The file says hello.", "tool_calls": []}
-        with self.assertRaisesRegex(ValueError, "did not commit"):
-            self.row()
-        commit = {"kind": "turn_committed", "session_id": "session", "message_id": "message", "decided_at": "2026-10-22T10:00:01Z"}
-        self.decisions.append(dict(commit, output_id="output"))
-        row = self.row()
-        self.assertEqual(row["validation"]["acceptance"], "turn_committed")
-        self.decisions[0] = dict(commit, output_id="retry")
-        with self.assertRaisesRegex(ValueError, "did not commit"):
-            self.row()
-
-    def test_a_scripted_or_unsettled_output_is_not_a_target(self):
-        self.completions[0]["scripted"] = True
-        with self.assertRaisesRegex(ValueError, "settled model output"):
-            self.row()
-
-    def test_every_child_must_settle_succeed_and_leave_known_effects(self):
-        self.operations.append(operation("receipt-op0", parent="receipt", tool="cat"))
-        self.assertEqual(self.row()["validation"]["operation_ids"], ["receipt", "receipt-op0"])
-        for field, value, reason in (("settlement", "unsettled", "did not settle"), ("effect_state", "unknown", "unknown effects"),
-                                     ("semantic_outcome", "failure", "did not succeed")):
-            with self.subTest(field=field):
-                self.operations[1][field] = value
-                with self.assertRaisesRegex(ValueError, reason):
-                    self.row()
-                self.operations[1] = operation("receipt-op0", parent="receipt", tool="cat")
-
-    def test_a_replay_after_unknown_effects_is_excluded(self):
+    def test_a_replay_after_unknown_effects_is_flagged(self):
         self.operations[0]["started_at"] = "2026-10-22T10:00:01Z"
         self.operations.append(operation("earlier", call="call0", args_sha256=digest(self.args), outcome="failure",
                                          started="2026-10-22T10:00:00.5Z"))
         self.operations.append(operation("earlier-op0", parent="earlier", tool="cat", effects="unknown"))
-        with self.assertRaisesRegex(ValueError, "replay after unknown effects"):
-            self.row()
+        self.assertTrue(self.build()["execution"]["calls"][0]["replays_unknown_effects"])
         self.operations[2]["effect_state"] = "known"
-        self.row()
+        self.assertFalse(self.build()["execution"]["calls"][0]["replays_unknown_effects"])
+
+    def test_training_input_is_the_student_render_decoded_as_its_server_does(self):
+        built = self.build()
+        earlier = built["prompt"][2]
+        self.assertEqual(earlier["content"], "")
+        self.assertEqual(earlier["tool_calls"][0]["function"]["arguments"], {"path": "README.md"})
+        self.assertEqual(built["prompt"][3], {"role": "tool", "content": "# readme", "tool_call_id": "earlier"})
+        self.assertEqual(built["request_capture"]["dispatch_sha256"], digest({"teacher": "dispatch"}))
+        self.assertEqual(built["request_capture"]["tools"], TOOLS)
+
+    def test_identity_and_unbuildable_captures_raise(self):
+        self.record["student_model"] = "other"
+        with self.assertRaisesRegex(ValueError, "another student"):
+            self.build()
+        self.record["student_model"] = "student-e4b"
+        self.record["student_kind"] = self.identity["student_kind"] = "ollama"
+        with self.assertRaisesRegex(ValueError, "template parity"):
+            self.build()
+        self.record["student_kind"] = self.identity["student_kind"] = "openai-compatible"
+        self.identity["contract_sha256"] = "f" * 64
+        with self.assertRaisesRegex(ValueError, "another host contract"):
+            self.build()
+
+    def test_epoch_unsupported_wire_missing_bodies_and_scripted_output_raise(self):
+        self.record["epoch"] = "fixture-2"
+        with self.assertRaisesRegex(ValueError, "epoch"):
+            self.build()
+        self.record["epoch"] = "fixture-1"
+        self.completions[0]["scripted"] = True
+        with self.assertRaisesRegex(ValueError, "settled model output"):
+            self.build()
+        self.completions[0]["scripted"] = False
+        self.record["student_request"]["images"] = []
+        with self.assertRaisesRegex(ValueError, "student request shape"):
+            self.build()
+        del self.record["student_request"]
+        with self.assertRaisesRegex(ValueError, "missing captured request"):
+            self.build()
+
+    def test_a_host_excluded_capture_becomes_a_stub_with_its_reason(self):
+        self.record["exclusion_reason"] = "host_modified_response"
+        self.assertEqual(self.build(), {"schema": "pw-training-candidate/1", "session": "session", "message_id": "message",
+                                        "call_id": "request", "host_exclusion": "host_modified_response"})
+        del self.record["exclusion_reason"]
+        self.record["dispatches"] = 2
+        self.assertEqual(self.build()["host_exclusion"], "unsettled_or_ambiguous_dispatch")
+
+    def test_a_tool_free_reply_is_committed_only_when_the_host_committed_that_output(self):
+        self.record["response"] = {"content": "The file says hello.", "tool_calls": []}
+        self.assertFalse(self.build()["execution"]["committed"])
+        commit = {"kind": "turn_committed", "session_id": "session", "message_id": "message", "decided_at": "2026-10-22T10:00:01Z"}
+        self.decisions.append(dict(commit, output_id="output"))
+        self.assertTrue(self.build()["execution"]["committed"])
+        self.decisions[0] = dict(commit, output_id="retry")
+        self.assertFalse(self.build()["execution"]["committed"])
+
+    def test_training_admits_only_eligible_reviewed_rows(self):
+        row = self.row()
+        check_row(row)
+        check("training-candidate", {**self.build(), "source": row["source"]})
+        for broken in ({"admission": dict(row["admission"], eligibility="excluded")},
+                       {"quality": dict(row["quality"], verdict="fail")},
+                       {"quality": dict(row["quality"], response_sha256="0" * 64)},
+                       {"response_sha256": "0" * 64}):
+            with self.subTest(broken=broken):
+                with self.assertRaises(ValueError):
+                    check_row({**row, **broken})
+        with self.assertRaisesRegex(ValueError, "unknown training schema"):
+            check_row({**row, "schema": "pw-custom-sft/1"})
 
     def test_masks_prompt_and_preserves_tool_arguments(self):
         row = self.row()
@@ -196,11 +191,10 @@ class Contracts(unittest.TestCase):
 
     def test_split_leakage_across_epochs(self):
         row = self.row()
-        row["split_group"] = "family"
         with self.assertRaisesRegex(ValueError, "leakage"):
             assert_disjoint([row], [dict(row)])
         with self.assertRaisesRegex(ValueError, "lineage"):
-            assert_disjoint([self.row()], [])
+            assert_disjoint([dict(row, split_group="")], [])
 
 
 if __name__ == "__main__":
