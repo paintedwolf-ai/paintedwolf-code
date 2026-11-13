@@ -2,12 +2,13 @@ import type { Accessor } from "solid-js";
 import type { SecurityFinding } from "../../api/types.ts";
 import { offerViewFacet, type ViewFacet } from "../../shell/view-report.ts";
 
-/** The host refuses longer identities, which would withdraw the whole window's report. */
-const MAX_IDENTITY = { rule: 128, fingerprint: 256 };
+/** The host refuses other identities, which would reject the whole window's report. */
+const RULE_ID = /^[a-zA-Z0-9_.:\/-]{1,128}$/;
+const MAX_FINGERPRINT = 256;
 
 /** The finding a security pane shows, located in its scanned folder when the location is relative. */
 export function securityViewFacet(rootId: string | undefined, finding: SecurityFinding | null | undefined): ViewFacet {
-  if (!finding || finding.rule_id.length > MAX_IDENTITY.rule || finding.fingerprints.primary.length > MAX_IDENTITY.fingerprint) return {};
+  if (!finding || !RULE_ID.test(finding.rule_id) || finding.fingerprints.primary.length > MAX_FINGERPRINT) return {};
   const location = finding.locations[0];
   const relative = location && rootId && !/^[a-z][a-z0-9+.-]*:/i.test(location.uri) && !location.uri.startsWith("/");
   return {

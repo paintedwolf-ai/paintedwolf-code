@@ -52,7 +52,7 @@ describe("startViewReporter", () => {
     dispose();
     await vi.advanceTimersByTimeAsync(200);
     expect(calls.at(-1)?.[0]).toBe("p");
-    expect(calls.at(-1)?.[1].folder).toBeUndefined();
+    expect(calls.at(-1)?.[1].folder).toBeNull();
     const withdrawn = calls.length;
     await vi.advanceTimersByTimeAsync(VIEW_RENEW_MS);
     expect(calls.length).toBe(withdrawn);

@@ -82,7 +82,11 @@ export function startViewReporter(client: Accessor<LycaonClient | null> = () => 
       const views = visible() && !closing ? composeViews(offers()) : new Map<string, ViewFacet>();
       for (const projectId of new Set([...sent.keys(), ...views.keys()])) {
         const view = views.get(projectId) ?? {};
-        const report: ReplaceProjectViewRequest = { client_id: clientIdentity(), focused: focused(), ...view };
+        const report: ReplaceProjectViewRequest = {
+          client_id: clientIdentity(), focused: focused(),
+          editor: view.editor ?? null, diff: view.diff ?? null, folder: view.folder ?? null,
+          search: view.search ?? null, findings: view.findings ?? [],
+        };
         const signature = JSON.stringify(report);
         if (Object.keys(view).length === 0) {
           if (!sent.has(projectId)) continue;

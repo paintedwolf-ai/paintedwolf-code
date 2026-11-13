@@ -47,5 +47,6 @@ describe("securityViewFacet", () => {
     expect(securityViewFacet("r", finding("file:///etc/passwd")).findings?.[0]?.location).toBeUndefined();
     expect(securityViewFacet("r", null)).toEqual({});
     expect(securityViewFacet("r", { ...finding("src/db.go"), rule_id: "r".repeat(129) })).toEqual({});
+    expect(securityViewFacet("r", { ...finding("src/db.go"), rule_id: "rule with spaces" })).toEqual({});
   });
 });
