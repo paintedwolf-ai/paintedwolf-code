@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"strings"
-	"unicode/utf16"
 
 	"github.com/lycaon/lycaon/internal/documentcore"
 	"github.com/lycaon/lycaon/internal/sourcebranch"
@@ -119,27 +118,34 @@ func (s *Service) locateSelection(ctx context.Context, d *Document, selection Pr
 
 // utf16Line is the 1-based line holding a UTF-16 offset of text.
 func utf16Line(text string, offset uint32) int {
-	line, units := 1, uint32(0)
+	line, units := 1, uint64(0)
 	for _, r := range text {
-		if units >= offset {
+		if units >= uint64(offset) {
 			break
 		}
 		if r == '\n' {
 			line++
 		}
-		units += uint32(utf16.RuneLen(r))
+		units += utf16Units(r)
 	}
 	return line
 }
 
 func endsAtLineStart(text string, offset uint32) bool {
-	units, previous := uint32(0), rune(0)
+	units, previous := uint64(0), rune(0)
 	for _, r := range text {
-		if units >= offset {
+		if units >= uint64(offset) {
 			break
 		}
 		previous = r
-		units += uint32(utf16.RuneLen(r))
+		units += utf16Units(r)
 	}
 	return previous == '\n'
+}
+
+func utf16Units(r rune) uint64 {
+	if r > 0xFFFF {
+		return 2
+	}
+	return 1
 }
