@@ -286,7 +286,7 @@ func (s mergeEngine) releaseMergeClaim(ctx context.Context, claim *mergeApplyCla
 }
 
 func (s mergeEngine) teardownBranch(ctx context.Context, task *api.WorkerTask) error {
-	if s.MergeService == nil || s.Workspace == nil || task == nil {
+	if s.MergeService == nil || s.Workspace == nil || task == nil || s.Lanes.Holds(ctx, task) {
 		return nil
 	}
 	cleanupCtx, cancel := promoteCleanupContext(ctx)

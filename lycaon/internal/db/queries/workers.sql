@@ -283,3 +283,13 @@ ON CONFLICT (result_id) DO UPDATE SET
     accounted_at = excluded.accounted_at
 WHERE worker_result_dispositions.accounted_at IS NULL;
 
+-- name: ListShelvedWorkerJobs :many
+-- Jobs whose round results the coordinator shelved: their changes stay
+-- unlanded on purpose and ask for no promotion.
+SELECT r.job_id
+FROM worker_result_dispositions d
+JOIN worker_results res ON res.id = d.result_id
+JOIN worker_rounds r ON r.job_id = res.worker_job_id
+JOIN workers w ON w.id = r.worker_id
+WHERE w.session_id = sqlc.arg(session_id) AND d.change_state = 'shelved';
+

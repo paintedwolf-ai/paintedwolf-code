@@ -117,6 +117,12 @@ type MergeService struct {
 	SourceHistory sourceledger.JobHistory
 	Documents     OverlayDocumentSynchronizer
 	DataDir       string
+	// Accounted hears of the result a rejection accounted for, so the
+	// checklist latch can release it.
+	Accounted func(sessionID string, jobIDs []string)
+	// Lanes keeps a worker's lane through landing and rejection; its next
+	// round refreshes or resets it.
+	Lanes *WorkerLanes
 }
 
 // PreviewForSession assesses one overlay without changing state.

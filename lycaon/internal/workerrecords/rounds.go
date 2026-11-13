@@ -284,3 +284,16 @@ func (s *Store) StartRound(ctx context.Context, actor Actor, op Op, workerID str
 		return RoundStartReceipt{RoundReceipt: RoundReceipt{WorkerID: w.ID, Ordinal: ordinal, JobID: start.JobID}, InstructionSeq: seq}, nil
 	})
 }
+
+// RoundByJob finds the round a job runs, for the host paths that run and
+// settle jobs. ok is false for a job that runs no worker round.
+func (s *Store) RoundByJob(ctx context.Context, jobID string) (Round, bool, error) {
+	r, err := s.q.GetWorkerRoundByJob(ctx, strings.TrimSpace(jobID))
+	if db.IsNoRows(err) {
+		return Round{}, false, nil
+	}
+	if err != nil {
+		return Round{}, false, err
+	}
+	return roundFromRow(r), true, nil
+}

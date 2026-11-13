@@ -3,12 +3,15 @@ package worker
 import (
 	"encoding/json"
 	"errors"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
+	"github.com/lycaon/lycaon/internal/testbaseline"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -27,6 +30,7 @@ type workerToolsFixture struct {
 	reg       *tools.DefaultRegistry
 	coord     workerrecords.Actor
 	workerID  string
+	root      string
 }
 
 func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
@@ -41,6 +45,7 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 		db: database, queue: NewSQLQueue(database, 1), records: workerrecords.New(database),
 		decisions: sessiondecisions.NewSQL(database), reg: tools.NewDefaultRegistry(),
 		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"},
+		root:  t.TempDir(),
 	}
 	w, err := f.records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{
 		Name: "surveyor", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child",
@@ -89,6 +94,7 @@ func (f *workerToolsFixture) run(t *testing.T, tool, call string, args map[strin
 	t.Helper()
 	return f.reg.Run(t.Context(), tool, args, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "coord", ProjectID: testdbseed.DefaultProjectID, ToolCallID: call},
+		Source:   tools.InvocationSource{ActiveRootID: "root-id", Roots: []projectroot.RootRef{{ID: "root-id", Path: f.root, IsPrimary: true}}},
 	})
 }
 
@@ -245,5 +251,83 @@ func TestRejectionDisposesTheResult(t *testing.T) {
 	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &page))
 	if page.State != "idle" {
 		t.Fatalf("after rejection: %s", out)
+	}
+}
+
+// Shelved changes ask for no promotion: they leave the pending list that
+// gates closing the batch and selects the promotion surface.
+func TestShelvedChangesLeavePendingPromotion(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	testutil.FailErr(t, "insert job", f.queue.store.InsertTask(t.Context(), api.WorkerTask{
+		ID: "job-1", ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "coord", ChildSessionID: "child",
+		AgentType: "implementer", Status: api.WorkerStatusRunning, ExecutionTarget: api.ExecutionTargetLocal,
+		Prompt: "fix", Brief: "fix", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite}, OverlayID: "job-1",
+	}))
+	root := filepath.Join(testbaseline.DataDir(t, f.db), "worker-branches", "job-1")
+	bound, err := f.queue.store.SetWorkerWorkspace(t.Context(), "job-1", root, testbaseline.Durable(t, f.db, "job-1", t.TempDir()))
+	if err != nil || !bound {
+		t.Fatalf("bind workspace: bound=%v err=%v", bound, err)
+	}
+	_, err = f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit"}, f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	now := db.FormatTime(time.Now().UTC())
+	report, _ := json.Marshal(api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status = 'complete', merge_status = 'pending', result_json = ?, completed_at = ? WHERE id = 'job-1'`, string(report), now)
+	testutil.FailErr(t, "complete", err)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES ('result-job-1', 'job-1', 'complete', ?)`, now)
+	testutil.FailErr(t, "result", err)
+	_, err = f.records.SettleRound(t.Context(), f.coord, workerrecords.Op{ID: "settle"}, f.workerID, "job-1", "checkpoint-1")
+	testutil.FailErr(t, "settle", err)
+
+	pending, err := f.queue.ListPendingOverlayPromote(t.Context(), "coord")
+	testutil.FailErr(t, "pending before", err)
+	if len(pending) != 1 {
+		t.Fatalf("pending before shelving = %d", len(pending))
+	}
+	_, err = f.run(t, ShelveOverlayTool, "call-1", map[string]any{"overlay_id": "result-job-1", "reason": "waits for the API freeze"})
+	testutil.FailErr(t, "shelve", err)
+	pending, err = f.queue.ListPendingOverlayPromote(t.Context(), "coord")
+	testutil.FailErr(t, "pending after", err)
+	if len(pending) != 0 {
+		t.Fatalf("shelved changes still pending: %+v", pending)
+	}
+}
+
+// A consumer waits on its producer worker's latest round: sending the
+// producer back holds the consumer until the new round delivers.
+func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	f.deliver(t, "job-1")
+	testutil.FailErr(t, "insert consumer", f.queue.store.InsertTask(t.Context(), api.WorkerTask{
+		ID: "job-c", ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "coord",
+		AgentType: "repo-researcher", Status: api.WorkerStatusPending, ExecutionTarget: api.ExecutionTargetLocal,
+		Prompt: "use the survey", Brief: "use the survey", AfterWorkers: []string{"job-1"},
+	}))
+	next := func() string {
+		t.Helper()
+		row, err := db.New(f.db).NextPendingWorkerJob(t.Context(), db.NextPendingWorkerJobParams{ExecutionTarget: "local", ProjectID: ""})
+		if db.IsNoRows(err) {
+			return ""
+		}
+		testutil.FailErr(t, "next pending", err)
+		return row.ID
+	}
+	if got := next(); got != "job-c" {
+		t.Fatalf("consumer of a delivered producer not runnable: next = %q", got)
+	}
+	_, err := f.run(t, InstructWorkerTool, "call-1", map[string]any{"worker": "surveyor", "instructions": "recheck the encoder"})
+	testutil.FailErr(t, "send back", err)
+	round2 := latestJob(t, f.db)
+	if got := next(); got != round2 {
+		t.Fatalf("consumer ran while its producer works: next = %q", got)
+	}
+	claimed, err := f.queue.ClaimNext(t.Context(), ClaimRequest{ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
+	testutil.FailErr(t, "claim producer", err)
+	won, err := f.queue.Complete(t.Context(), claimed, api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+	if err != nil || !won {
+		t.Fatalf("complete producer: won=%v err=%v", won, err)
+	}
+	if got := next(); got != "job-c" {
+		t.Fatalf("consumer still held after its producer delivered again: next = %q", got)
 	}
 }

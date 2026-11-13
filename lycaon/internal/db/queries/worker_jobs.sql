@@ -51,7 +51,10 @@ SELECT id, parent_session_id FROM worker_jobs
 WHERE status = 'pending' AND cancel_requested_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM worker_prerequisites dependency
-    JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+    -- A long-lived producer is ready on its latest round, not the one named.
+    JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+        JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+        WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
     WHERE dependency.worker_job_id = worker_jobs.id
       AND (upstream.status != 'complete'
         OR COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open')
@@ -70,7 +73,10 @@ SET status = 'running', started_at = sqlc.arg(started_at), claimed_by = sqlc.arg
 WHERE worker_jobs.id = sqlc.arg(id) AND status = 'pending' AND cancel_requested_at IS NULL
   AND NOT EXISTS (
     SELECT 1 FROM worker_prerequisites dependency
-    JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+    -- A long-lived producer is ready on its latest round, not the one named.
+    JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+        JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+        WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
     WHERE dependency.worker_job_id = worker_jobs.id
       AND (upstream.status != 'complete'
         OR COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open')
@@ -468,20 +474,38 @@ WHERE dependency.prerequisite_id = ? AND consumer.status = 'pending'
 ORDER BY dependency.worker_job_id;
 
 -- name: ListBlockedWorkerPrerequisites :many
+-- A job-only producer that failed, or whose changes are gone, can never be
+-- met. A long-lived producer can be instructed again, so only closing it, or
+-- a rejection of its latest round's changes with no round after, ends it.
 SELECT DISTINCT consumer.id FROM worker_prerequisites dependency
 JOIN worker_jobs consumer ON consumer.id = dependency.worker_job_id
 JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
+LEFT JOIN worker_rounds origin ON origin.job_id = dependency.prerequisite_id
+LEFT JOIN workers producer ON producer.id = origin.worker_id
 WHERE consumer.status = 'pending' AND (
-  upstream.status IN ('failed', 'canceled') OR
-  (upstream.status = 'complete' AND (
-    COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open') OR
-    (json_extract(upstream.scope_json, '$.mode') = 'write' AND upstream.merge_status IN ('rejected', 'aborted', 'orphaned'))
+  (origin.job_id IS NULL AND (
+    upstream.status IN ('failed', 'canceled') OR
+    (upstream.status = 'complete' AND (
+      COALESCE(json_extract(upstream.result_json, '$.status'), '') NOT IN ('complete', 'open') OR
+      (json_extract(upstream.scope_json, '$.mode') = 'write' AND upstream.merge_status IN ('rejected', 'aborted', 'orphaned'))
+    ))
+  )) OR
+  (origin.job_id IS NOT NULL AND (
+    producer.closed_at IS NOT NULL OR
+    EXISTS (
+      SELECT 1 FROM worker_rounds latest JOIN worker_jobs latest_job ON latest_job.id = latest.job_id
+      WHERE latest.worker_id = origin.worker_id AND latest.settled_at IS NOT NULL
+        AND latest.ordinal = (SELECT MAX(ordinal) FROM worker_rounds WHERE worker_id = origin.worker_id)
+        AND latest_job.merge_status IN ('rejected', 'orphaned')
+    )
   ))
 )
 ORDER BY consumer.id;
 
 -- name: WorkerPrerequisiteStates :many
-SELECT upstream.id, upstream.status, upstream.scope_json, upstream.result_json, upstream.merge_status
+SELECT dependency.prerequisite_id AS id, upstream.status, upstream.scope_json, upstream.result_json, upstream.merge_status
 FROM worker_prerequisites dependency
-JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
-WHERE dependency.worker_job_id = ? ORDER BY upstream.id;
+JOIN worker_jobs upstream ON upstream.id = COALESCE((SELECT latest.job_id FROM worker_rounds origin
+    JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+    WHERE origin.job_id = dependency.prerequisite_id ORDER BY latest.ordinal DESC LIMIT 1), dependency.prerequisite_id)
+WHERE dependency.worker_job_id = ? ORDER BY dependency.prerequisite_id;

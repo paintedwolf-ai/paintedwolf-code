@@ -291,3 +291,10 @@ type sessionRootResolver struct {
 func (s sessionRootResolver) RootSessionID(ctx context.Context, sessionID string) string {
 	return sessiontree.RootID(ctx, s.store, sessionID)
 }
+
+// ReleaseAccounted lets the checklist latch release worker finishes whose
+// results an operation accounted for.
+func (r *Runtime) ReleaseAccounted(sessionID string, jobIDs []string) {
+	ctx := context.Background()
+	r.deps.Sessions.Manager.Coordinator.ProgressClosure.Release(r.rootSessionKey(ctx, sessionID), jobIDs)
+}

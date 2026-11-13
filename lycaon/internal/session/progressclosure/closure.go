@@ -74,6 +74,40 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	m.baselines.Store(rootID, baseline)
 }
 
+// Release removes finishes from the latch once an operation accounted for
+// their results on the record: an instruction to the worker that delivered
+// it, a rejection or a shelving. The latch clears with its last finish.
+func (m *Service) Release(rootID string, jobIDs []string) {
+	if m == nil {
+		return
+	}
+	rootID = strings.TrimSpace(rootID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	baseline, armed := m.baselines.Load(rootID)
+	if !armed {
+		return
+	}
+	kept := make([]string, 0, len(baseline.JobIDs))
+	for _, id := range baseline.JobIDs {
+		if !slices.Contains(jobIDs, id) {
+			kept = append(kept, id)
+		}
+	}
+	if len(kept) == 0 {
+		m.baselines.Delete(rootID)
+		return
+	}
+	settled := make([]string, 0, len(baseline.Settled))
+	for _, entry := range baseline.Settled {
+		if !slices.ContainsFunc(jobIDs, func(id string) bool { return entry == m.settledWorkEntry(id) }) {
+			settled = append(settled, entry)
+		}
+	}
+	baseline.JobIDs, baseline.Settled = kept, settled
+	m.baselines.Store(rootID, baseline)
+}
+
 // settledWorkEntry names a finished job for the reconciliation reject.
 func (m *Service) settledWorkEntry(jobID string) string {
 	jobID = strings.TrimSpace(jobID)

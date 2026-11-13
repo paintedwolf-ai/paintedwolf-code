@@ -954,6 +954,40 @@ func (q *Queries) ListSessionWorkers(ctx context.Context, sessionID string) ([]W
 	return items, nil
 }
 
+const listShelvedWorkerJobs = `-- name: ListShelvedWorkerJobs :many
+SELECT r.job_id
+FROM worker_result_dispositions d
+JOIN worker_results res ON res.id = d.result_id
+JOIN worker_rounds r ON r.job_id = res.worker_job_id
+JOIN workers w ON w.id = r.worker_id
+WHERE w.session_id = ?1 AND d.change_state = 'shelved'
+`
+
+// Jobs whose round results the coordinator shelved: their changes stay
+// unlanded on purpose and ask for no promotion.
+func (q *Queries) ListShelvedWorkerJobs(ctx context.Context, sessionID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listShelvedWorkerJobs, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var job_id string
+		if err := rows.Scan(&job_id); err != nil {
+			return nil, err
+		}
+		items = append(items, job_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkerConsumerIDs = `-- name: ListWorkerConsumerIDs :many
 SELECT worker_id FROM worker_dependencies
 WHERE producer_worker_id = ? ORDER BY worker_id
