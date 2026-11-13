@@ -1,27 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: VERIFY_DECLARED_COMMAND_OVERRIDE
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - verify
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.declared, paintedwolf.requested, paintedwolf.next_steps]
+  tools:
+    - verify
+requires_facts: [paintedwolf.declared, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.requested]
 when: paintedwolf.rejection_code == "VERIFY_DECLARED_COMMAND_OVERRIDE"
 effect: block
-copy:
-  what: This project declares `{{ paintedwolf.declared }}`, but this invocation requested `{{ paintedwolf.requested }}`.
-  cause: The requested check does not match the declared project check; it was refused before execution.
-  why: ''
-  fix: 'Omit the `command` argument and the `pipeline` argument to run `{{ paintedwolf.declared }}`. {{ paintedwolf.next_steps }}'
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: verify runs the declared command, not a substitute
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    declared: ./task check
-    requested: go test ./internal/foo/...
+category: recoverable
+emit: guard:command_composition_redirect
+message: verify runs the declared command, not a substitute
+what: This project declares `{{ paintedwolf.declared }}`, but this invocation requested `{{ paintedwolf.requested }}`.
+cause: The requested check does not match the declared project check; it was refused before execution.
+why: ''
+fix: 'Omit the `command` argument and the `pipeline` argument to run `{{ paintedwolf.declared }}`. {{ paintedwolf.next_steps }}'
+instead: ''
+scenarios:
+  - id: default
+    vars:
+      declared: ./task check
+      requested: go test ./internal/foo/...

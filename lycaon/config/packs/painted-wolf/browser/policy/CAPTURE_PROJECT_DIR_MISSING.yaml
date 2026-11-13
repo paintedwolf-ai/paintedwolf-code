@@ -1,31 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: CAPTURE_PROJECT_DIR_MISSING
 kind: schema
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.missing
-  - paintedwolf.path
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.missing, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CAPTURE_PROJECT_DIR_MISSING"
 effect: block
-copy:
-  what: The host could not access a directory for project_dir {{ paintedwolf.path }}.
-  cause: No attached folder or accessible directory was available at the requested path.
-  why: Static serve requires a real directory tree in an attached folder.
-  fix: Use an existing directory in the session folder or another attached folder (@label/path) containing the page
-    to open. If no folder is attached, the user must attach one; do not create a substitute tree merely to clear
-    this refusal.
-  instead: Branch on Code CAPTURE_PROJECT_DIR_MISSING; fix project_dir
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:visual_capture
-x-paintedwolf-message: capture_page project_dir is missing or not a directory
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: capture_page
+category: recoverable
+emit: guard:visual_capture
+message: capture_page project_dir is missing or not a directory
+what: The host could not access a directory for project_dir {{ paintedwolf.path }}.
+cause: No attached folder or accessible directory was available at the requested path.
+why: Static serve requires a real directory tree in an attached folder.
+fix: Use an existing directory in the session folder or another attached folder (@label/path) containing the page to open. If no folder is attached, the user must attach one; do not create a substitute tree merely to clear this refusal.
+instead: Branch on Code CAPTURE_PROJECT_DIR_MISSING; fix project_dir
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: capture_page

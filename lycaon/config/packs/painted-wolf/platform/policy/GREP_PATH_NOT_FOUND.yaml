@@ -1,30 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: GREP_PATH_NOT_FOUND
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - grep
-requires:
-  profiles:
-    - filesystem
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.path
+  ledger:
+    paintedwolf.operation:
+      - grep
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "GREP_PATH_NOT_FOUND"
 effect: block
-copy:
-  what: grep search root {{ paintedwolf.path }} does not exist.
-  cause: The path argument must name an existing file or directory in the attached folders; `.` or no path searches every attached folder.
-  why: Structured rejects let agents branch without parsing free-form stat errors.
-  fix: Inspect the intended parent with an offered listing or metadata capability, then retry with an observed search root.
-  instead: Branch on Code; pick an existing path before retrying grep
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:grep
-x-paintedwolf-message: grep search root does not exist
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:grep
+message: grep search root does not exist
+what: grep search root {{ paintedwolf.path }} does not exist.
+cause: The path argument must name an existing file or directory in the attached folders; `.` or no path searches every attached folder.
+why: Structured rejects let agents branch without parsing free-form stat errors.
+fix: Inspect the intended parent with an offered listing or metadata capability, then retry with an observed search root.
+instead: Branch on Code; pick an existing path before retrying grep
+scenarios:
   - id: default
     vars:
       path: missing/file.go

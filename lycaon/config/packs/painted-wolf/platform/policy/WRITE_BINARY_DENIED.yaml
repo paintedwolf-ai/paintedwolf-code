@@ -1,34 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WRITE_BINARY_DENIED
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.bytes
-  - paintedwolf.path
-  - paintedwolf.binary_denied
-  - paintedwolf.rejection_reason
-  - paintedwolf.max_file_bytes
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.binary_denied, paintedwolf.bytes, paintedwolf.max_file_bytes, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "WRITE_BINARY_DENIED"
 effect: block
-copy:
-  what: '{{ tool }} refused the proposed text for {{ paintedwolf.path }} ({{ paintedwolf.bytes }} bytes).'
-  cause: '{{ paintedwolf.rejection_reason }}. The encoded file limit is {{ paintedwolf.max_file_bytes }} bytes.'
-  why: The text gateway must be able to reopen the complete result within its encoding and size bounds.
-  fix: Preserve the intended data. Correct its representation only when that preserves its meaning; do not remove
-    bytes or truncate content just to pass validation. If the intended result exceeds the text gateway bounds or
-    is binary, report that limitation.
-  instead: Preserve data and address the reported text constraint
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:write
-x-paintedwolf-message: write refused binary file content
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    bytes: 128
-    path: entities.py
-    profile: implement
-    tool: write
+category: recoverable
+emit: guard:write
+message: write refused binary file content
+what: '{{ tool }} refused the proposed text for {{ paintedwolf.path }} ({{ paintedwolf.bytes }} bytes).'
+cause: '{{ paintedwolf.rejection_reason }}. The encoded file limit is {{ paintedwolf.max_file_bytes }} bytes.'
+why: The text gateway must be able to reopen the complete result within its encoding and size bounds.
+fix: Preserve the intended data. Correct its representation only when that preserves its meaning; do not remove bytes or truncate content just to pass validation. If the intended result exceeds the text gateway bounds or is binary, report that limitation.
+instead: Preserve data and address the reported text constraint
+scenarios:
+  - id: default
+    vars:
+      bytes: 128
+      path: entities.py
+      profile: implement
+      tool: write

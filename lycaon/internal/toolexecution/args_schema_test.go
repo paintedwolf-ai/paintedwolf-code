@@ -337,7 +337,7 @@ func TestValidateToolArgsEnforcesAdditionalProperties(t *testing.T) {
 func TestInvalidHostSchemaDoesNotBlameArguments(t *testing.T) {
 	reject := tools.ValidateCallArguments("fixture", map[string]any{}, map[string]any{"type": "not-a-json-schema-type"}, tools.ToolContext{})
 	if reject == nil || reject.Code != toolrejection.ToolOwnerFailedCode || reject.ArgumentValidation {
-		t.Fatalf("[OAR-PROF-3] invalid host schema was classified as an argument failure: %#v", reject)
+		t.Fatalf("[OAR-FACT-10] invalid host schema was classified as an argument failure: %#v", reject)
 	}
 }
 

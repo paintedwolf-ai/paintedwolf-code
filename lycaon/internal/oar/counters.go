@@ -36,7 +36,7 @@ func counterKey(sessionID, code string) string {
 }
 
 // CloneSession copies every counter key touched in session, for the
-// occurrence-scoped snapshot [OAR-FIRE-6] requires.
+// occurrence-scoped snapshot [OAR-FIRE-5] requires.
 func (s *CounterStore) CloneSession(sessionID string) map[string]map[CounterKind]int64 {
 	out := map[string]map[CounterKind]int64{}
 	if s == nil {
@@ -110,7 +110,7 @@ func (s *CounterStore) Reset(sessionID, code string, kind CounterKind) {
 }
 
 // Report returns fire_count / breaker_count for every key touched in session,
-// in the fixture shape ([OAR-CONF-21], [OAR-CONF-33]).
+// in the fixture shape ([OAR-CONF-15]).
 func (s *CounterStore) Report(sessionID string) map[string]map[string]int {
 	out := map[string]map[string]int{}
 	if s == nil {

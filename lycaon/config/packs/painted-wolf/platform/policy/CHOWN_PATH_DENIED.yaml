@@ -1,34 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: CHOWN_PATH_DENIED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - chown
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.operation
-  - paintedwolf.path
-  profiles:
-  - filesystem
-  - tool
+  ledger:
+    paintedwolf.operation:
+      - chown
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CHOWN_PATH_DENIED"
 effect: block
-copy:
-  cause: The target crosses a host write-protection boundary.
-  why: Ownership changes cannot override protected-path authority.
-  fix: Leave the protected target unchanged. Do not substitute a different tool or identity to bypass this
-    boundary.
-  instead: Branch on Code CHOWN_PATH_DENIED; preserve the protected target
-  what: Ownership changes are denied for {{ paintedwolf.path }}.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:chown
-x-paintedwolf-message: chown:chown path matches deny glob
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: scripts/run.sh
-    profile: implement
-    tool: chown
+category: recoverable
+emit: guard:chown
+message: chown:chown path matches deny glob
+what: Ownership changes are denied for {{ paintedwolf.path }}.
+cause: The target crosses a host write-protection boundary.
+why: Ownership changes cannot override protected-path authority.
+fix: Leave the protected target unchanged. Do not substitute a different tool or identity to bypass this boundary.
+instead: Branch on Code CHOWN_PATH_DENIED; preserve the protected target
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: scripts/run.sh
+      profile: implement
+      tool: chown

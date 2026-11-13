@@ -1,28 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_BUDGET_EXTEND_NOT_RUNNING
 kind: schema
-anchor: tool.rejected
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.job_id, paintedwolf.not_running, paintedwolf.child_session_id, paintedwolf.next_steps]
-  profiles:
-  - tool
+on: tool.rejected
+selector:
+  tools:
+    - extend_worker_budget
+requires_facts: [paintedwolf.child_session_id, paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.not_running, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKER_BUDGET_EXTEND_NOT_RUNNING"
 effect: block
-copy:
-  what: '`extend_worker_budget(job_id, max_tool_loops)` only applies while a worker job is pending or
-    running'
-  cause: Job {{ paintedwolf.job_id }} is terminal, unknown, or has no child session yet
-  why: 'Raising max_tool_loops mid-flight hot-reloads the child session; finished jobs need a resume instead'
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code; extend only running/pending jobs or resume on child_session_id
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:extend_worker_budget
-x-paintedwolf-message: Worker job {{ paintedwolf.job_id }} is not running — extend_worker_budget only
-  applies to pending or running jobs
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    job_id: job-done
-selector:
-  tool:
-  - extend_worker_budget
+category: recoverable
+emit: guard:extend_worker_budget
+message: Worker job {{ paintedwolf.job_id }} is not running — extend_worker_budget only applies to pending or running jobs
+what: '`extend_worker_budget(job_id, max_tool_loops)` only applies while a worker job is pending or running'
+cause: Job {{ paintedwolf.job_id }} is terminal, unknown, or has no child session yet
+why: 'Raising max_tool_loops mid-flight hot-reloads the child session; finished jobs need a resume instead'
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code; extend only running/pending jobs or resume on child_session_id
+scenarios:
+  - id: default
+    vars:
+      job_id: job-done

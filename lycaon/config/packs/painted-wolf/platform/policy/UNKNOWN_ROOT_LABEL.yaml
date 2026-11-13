@@ -1,31 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: UNKNOWN_ROOT_LABEL
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.profile_surveys_project_tree
-  - paintedwolf.attached_folders
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.attached_folders, paintedwolf.profile_surveys_project_tree, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "UNKNOWN_ROOT_LABEL"
 effect: block
-copy:
-  what: The @label/ prefix names a folder label that is not attached to this project.
-  cause: The supplied label does not resolve in the currently attached root set; the host does not infer a
-    replacement label.
-  why: Paths must resolve to an attached folder — unknown labels are never guessed.
-  fix: 'Use a folder attached now: {{ paintedwolf.attached_folders }}. A bare relative path addresses the
-    session folder; an @label/ prefix selects any attached folder. Do not choose an unrelated label merely to
-    make the path resolve.'
-  instead: Use a bare relative path for the session folder, or @<label>/ for any attached folder
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:path
-x-paintedwolf-message: unknown root label in path
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    path: '@missing/src/main.go'
-    attached_folders: ['@api (session folder)']
-    tool: read
+category: recoverable
+emit: guard:path
+message: unknown root label in path
+what: The @label/ prefix names a folder label that is not attached to this project.
+cause: The supplied label does not resolve in the currently attached root set; the host does not infer a replacement label.
+why: Paths must resolve to an attached folder — unknown labels are never guessed.
+fix: 'Use a folder attached now: {{ paintedwolf.attached_folders }}. A bare relative path addresses the session folder; an @label/ prefix selects any attached folder. Do not choose an unrelated label merely to make the path resolve.'
+instead: Use a bare relative path for the session folder, or @<label>/ for any attached folder
+scenarios:
+  - id: default
+    vars:
+      path: '@missing/src/main.go'
+      attached_folders: ['@api (session folder)']
+      tool: read

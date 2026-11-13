@@ -23,7 +23,7 @@ func TestProf10HandlerRulePreventsActualToolExecution(t *testing.T) {
 		t.Fatalf("install anchor catalogue: %v", err)
 	}
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "arbitrary-file.yaml"), []byte("oar: '1.0'\nid: STOP\nkind: policy\nanchor: tool.handler\nrequires:\n  profiles: [session, tool]\nwhen: principal == \"owner\" && session_posture == \"build\" && permission_profile == \"implement\"\neffect: block\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "arbitrary-file.yaml"), []byte("spec_version: '1.0'\nid: STOP\nkind: policy\non: tool.handler\nselector: {}\nrequires_facts: [paintedwolf.principal]\nwhen: paintedwolf.principal == \"owner\" && session_posture == \"build\" && profile == \"implement\"\neffect: block\n"), 0o600); err != nil {
 		t.Fatalf("write policy fixture: %v", err)
 	}
 	loader, err := oar.NewLoader("")
@@ -53,6 +53,6 @@ func TestProf10HandlerRulePreventsActualToolExecution(t *testing.T) {
 			Agent: "implement"},
 	})
 	if err == nil || output != "" || calls != 0 {
-		t.Fatalf("[OAR-PROF-10] output=%q err=%v calls=%d", output, err, calls)
+		t.Fatalf("output=%q err=%v calls=%d", output, err, calls)
 	}
 }

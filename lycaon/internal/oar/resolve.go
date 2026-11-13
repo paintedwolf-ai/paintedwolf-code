@@ -1,8 +1,8 @@
 package oar
 
 // resolve picks the winning effect. Nudge and warn collect every live
-// contribution of that effect in evaluation order ([OAR-EVAL-6],
-// [OAR-EVAL-19], [OAR-EVAL-20]). Block, transform, and none have an empty
+// contribution of that effect in evaluation order ([OAR-EVAL-4],
+// ). Block, transform, and none have an empty
 // advisory list.
 func resolve(blocks, transforms, nudges, warns []Decision) *Decision {
 	if len(blocks) > 0 {

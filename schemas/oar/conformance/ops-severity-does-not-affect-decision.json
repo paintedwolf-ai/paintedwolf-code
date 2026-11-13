@@ -1,0 +1,28 @@
+{
+  "id": "ops-severity-does-not-affect-decision",
+  "title": "Severity is telemetry only: an info-severity rule still produces its declared effect",
+  "covers": [
+    "OAR-DOC-7"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "INFO_SEVERITY_BLOCKS",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "tool == \"read\"",
+    "severity": "info"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "INFO_SEVERITY_BLOCKS"
+  }
+}

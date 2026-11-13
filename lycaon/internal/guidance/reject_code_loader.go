@@ -3,6 +3,7 @@ package guidance
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -80,9 +81,6 @@ func HintCodeUILabel(code string) string {
 	}
 	if ent.Evidence != nil && strings.TrimSpace(ent.Evidence.UILabel) != "" {
 		return strings.TrimSpace(ent.Evidence.UILabel)
-	}
-	if ent.XEvidence != nil && strings.TrimSpace(ent.XEvidence.UILabel) != "" {
-		return strings.TrimSpace(ent.XEvidence.UILabel)
 	}
 	return code
 }
@@ -169,23 +167,22 @@ func ValidateHintConfig(cfg *HintConfig) error {
 	return nil
 }
 
+var hintCodeRE = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
+
 func validateHintSuccessors(code string, entry HintEntry, codes map[string]HintEntry) error {
-	found := strings.TrimSpace(entry.Successor) != ""
-	for _, relation := range entry.Related {
-		if strings.TrimSpace(relation.Type) != "obsolete" {
-			continue
-		}
-		successor := strings.TrimSpace(relation.ID)
+	successor := strings.TrimSpace(entry.Successor)
+	// A successor names either the replacing code or the boundary that now
+	// owns the behaviour; a code must be one this registry knows.
+	if hintCodeRE.MatchString(successor) {
 		if successor == code {
 			return fmt.Errorf("%s: successor must not reference itself", code)
 		}
 		if _, ok := codes[successor]; !ok {
 			return fmt.Errorf("%s: successor %q is not a known hint code", code, successor)
 		}
-		found = true
 	}
-	if strings.TrimSpace(entry.Status) == "deprecated" && !found {
-		return fmt.Errorf("%s: deprecated hint requires an obsolete rule relation or x-paintedwolf-successor naming the replacement boundary", code)
+	if strings.TrimSpace(entry.Status) == "deprecated" && successor == "" {
+		return fmt.Errorf("%s: deprecated hint requires x-paintedwolf-successor naming the replacement", code)
 	}
 	return nil
 }
@@ -219,7 +216,8 @@ func CopyOnlyEmit(emit string) bool {
 func validateHintEntry(code string, entry HintEntry) error {
 	copyOnly := CopyOnlyEmit(entry.Emit)
 	view := NormalizeRejectCodeView(code, entry)
-	if len(scenarioRows(entry)) == 0 && !copyOnly && entry.Severity != "warning" {
+	// A hint is never evaluated, so it has no scenarios to rehearse.
+	if len(scenarioRows(entry)) == 0 && !copyOnly && entry.Kind != "hint" && entry.Severity != "warning" {
 		return fmt.Errorf("%s: scenarios required (>=1)", code)
 	}
 	for _, sc := range scenarioRows(entry) {

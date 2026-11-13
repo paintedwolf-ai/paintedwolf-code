@@ -1,0 +1,31 @@
+{
+  "id": "ops-on-error-fail-open",
+  "title": "A rule that cannot be evaluated contributes nothing under fail_open",
+  "covers": [
+    "OAR-OPS-3",
+    "OAR-CONF-18"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "DETECTOR_OPTIONAL",
+    "kind": "detector",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "prompt_injection_score > 0.8",
+    "on_error": "fail_open",
+    "detector": {
+      "ref": "detector://error"
+    }
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

@@ -29,19 +29,19 @@ func TestDetectorApplyFindingsAndWhen(t *testing.T) {
 	l, err := NewLoader("")
 	testutil.FailErr(t, "loader", err)
 	rule := &Rule{
-		OAR:      SupportedSpecVersion,
-		ID:       "DETECTOR_ECHO_THRESHOLD",
-		Kind:     KindDetector,
-		Anchor:   AnchorToolPreInvoke,
-		Effect:   EffectBlock,
-		Emit:     "guard:detector",
-		When:     "prompt_injection_score > 0.8",
-		Detector: &DetectorRef{Ref: "detector://echo"},
-		OnError:  "fail_closed",
+		SpecVersion: SupportedSpecVersion,
+		ID:          "DETECTOR_ECHO_THRESHOLD",
+		Kind:        KindDetector,
+		Anchor:      AnchorToolPreInvoke,
+		Effect:      EffectBlock,
+		Emit:        "guard:detector",
+		When:        "prompt_injection_score > 0.8",
+		Detector:    &DetectorRef{Ref: "detector://echo"},
+		OnError:     "fail_closed",
 	}
 	reg := NewDetectorRegistry()
 	reg.Register(EchoDetector{Score: 0.91})
-	rule = loadDetectorTestRule(t, l, reg, rule, "prompt-injection")
+	rule = loadDetectorTestRule(t, l, reg, rule, "prompt_injection_score")
 	p := NewGuardPipeline(NewRuleSet([]*Rule{rule}), l, NewCounterStore())
 	p.SetDetectors(reg)
 
@@ -65,19 +65,19 @@ func TestDetectorOnErrorFailClosed(t *testing.T) {
 	l, err := NewLoader("")
 	testutil.FailErr(t, "loader", err)
 	rule := &Rule{
-		OAR:      SupportedSpecVersion,
-		ID:       "DETECTOR_FAIL",
-		Kind:     KindDetector,
-		Anchor:   AnchorToolPreInvoke,
-		Effect:   EffectBlock,
-		Emit:     "guard:detector",
-		When:     "prompt_injection_score > 0.8",
-		Detector: &DetectorRef{Ref: "detector://always-fail"},
-		OnError:  "fail_closed",
+		SpecVersion: SupportedSpecVersion,
+		ID:          "DETECTOR_FAIL",
+		Kind:        KindDetector,
+		Anchor:      AnchorToolPreInvoke,
+		Effect:      EffectBlock,
+		Emit:        "guard:detector",
+		When:        "prompt_injection_score > 0.8",
+		Detector:    &DetectorRef{Ref: "detector://always-fail"},
+		OnError:     "fail_closed",
 	}
 	reg := NewDetectorRegistry()
 	reg.Register(ErrDetectorAlwaysFail{})
-	rule = loadDetectorTestRule(t, l, reg, rule, "prompt-injection")
+	rule = loadDetectorTestRule(t, l, reg, rule, "prompt_injection_score")
 	p := NewGuardPipeline(NewRuleSet([]*Rule{rule}), l, NewCounterStore())
 	p.SetDetectors(reg)
 	res, err := p.Evaluate(context.Background(), StagePreInvoke, NewGuardContext())
@@ -87,7 +87,7 @@ func TestDetectorOnErrorFailClosed(t *testing.T) {
 	}
 }
 
-// [OAR-DOC-9] Provenance never permits replacing the same qualified rule.
+// [OAR-DOC-22] Provenance never permits replacing the same qualified rule.
 func TestMergeTieredRejectsEveryDuplicateIdentity(t *testing.T) {
 	for _, tier := range []Tier{TierBuiltin, TierPack} {
 		first := NewRuleSet([]*Rule{{ID: "R1", Kind: KindPolicy, Anchor: "a", Effect: EffectBlock, Tier: TierBuiltin, Source: "builtin", Mandatory: true}})
@@ -106,7 +106,7 @@ func TestDoc9LoadTiersRejectsPackReplacingBuiltin(t *testing.T) {
 	writeHint := func(dir, code, effect string) {
 		t.Helper()
 		testutil.FailErr(t, "mkdir", os.MkdirAll(dir, 0o700))
-		body := "oar: '1.0'\nid: " + code + "\nkind: policy\nanchor: tool.pre_invoke\neffect: " + effect + "\nwhen: 'true'\ncopy:\n  what: test\n"
+		body := "spec_version: '1.0'\nid: " + code + "\nkind: policy\non: tool.pre_invoke\nselector: {}\neffect: " + effect + "\nwhen: 'true'\nwhat: test\n"
 
 		testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, code+".yaml"), []byte(body), 0o600))
 	}
@@ -117,26 +117,8 @@ func TestDoc9LoadTiersRejectsPackReplacingBuiltin(t *testing.T) {
 	writeHint(pack, "DEMO_RULE", "warn")
 
 	_, err = l.LoadTiers(TierLoad{BuiltinDir: extpacks.OnDisk(builtin), Packs: []PackSource{{Name: "fixture", Dir: pack}}})
-	if err == nil || !strings.Contains(err.Error(), "[OAR-DOC-9]") {
+	if err == nil || !strings.Contains(err.Error(), "[OAR-DOC-22]") {
 		t.Fatalf("load duplicate identity: %v", err)
-	}
-}
-
-// [OAR-EVAL-13] References resolve against the complete rule set, across packs.
-func TestEval13LoadTiersLinksCrossPackOverrides(t *testing.T) {
-	l := testLoader(t)
-	builtin, pack := t.TempDir(), t.TempDir()
-	base := "oar: '1.0'\nnamespace: example.base\nid: BASE\nkind: policy\nanchor: tool.pre_invoke\neffect: block\n"
-	exception := "oar: '1.0'\nnamespace: example.extension\nid: EXCEPTION\nkind: policy\nanchor: tool.pre_invoke\neffect: allow\noverrides: [example.base/BASE]\n"
-	testutil.FailErr(t, "write base", os.WriteFile(filepath.Join(builtin, "arbitrary.yaml"), []byte(base), 0o600))
-	testutil.FailErr(t, "write exception", os.WriteFile(filepath.Join(pack, "another-name.yaml"), []byte(exception), 0o600))
-	rules, err := l.LoadTiers(TierLoad{BuiltinDir: extpacks.OnDisk(builtin), Packs: []PackSource{{Name: "extension", Dir: pack}}})
-	testutil.FailErr(t, "link cross-pack override", err)
-	pipeline := NewGuardPipeline(rules, l, NewCounterStore())
-	result, err := pipeline.Evaluate(context.Background(), StagePreInvoke, NewGuardContext())
-	testutil.FailErr(t, "evaluate linked rules", err)
-	if result.Decision != nil || len(result.Trace.Entries) != 2 || result.Trace.Entries[1].Rule != "example.base/BASE" || result.Trace.Entries[1].Outcome != TraceSuppressed {
-		t.Fatalf("cross-pack exception did not suppress base: decision=%#v trace=%#v", result.Decision, result.Trace)
 	}
 }
 
@@ -170,26 +152,34 @@ func (d ErrDetectorAlwaysFail) Inspect(_ *GuardContext) ([]Finding, error) {
 	return nil, fmt.Errorf("detector always_fail")
 }
 
-// Detector tests load the capability and document through the production path.
-func loadDetectorTestRule(t *testing.T, loader *Loader, registry *DetectorRegistry, rule *Rule, profile string) *Rule {
+// Detector tests load the declaration and document through the production
+// path. The installed declaration already claims content-safety.
+func loadDetectorTestRule(t *testing.T, loader *Loader, registry *DetectorRegistry, rule *Rule, requires ...string) *Rule {
 	t.Helper()
-	cap := *InstalledCapabilityDocument()
-	cap.Profiles = append(append([]string{}, cap.Profiles...), profile)
+	cap := *InstalledEngineDeclaration()
 	cap.Detectors = append(append([]string{}, cap.Detectors...), rule.Detector.Ref)
-	loader.SetCapability(&cap)
+	loader.SetDeclaration(&cap)
 	loader.SetDetectors(registry)
 	anchor := rule.Anchor
-	for core, local := range cap.Anchors.Core {
+	for core, local := range cap.ProfileMap.Core {
 		if local == anchor {
 			anchor = core
 			break
 		}
 	}
 	loaded, _, err := loader.parseRule(rule.ID, map[string]any{
-		"oar": "1.0", "id": rule.ID, "kind": "detector", "anchor": anchor,
+		"spec_version": "1.0", "id": rule.ID, "kind": "detector", "on": anchor, "selector": map[string]any{},
 		"effect": string(rule.Effect), "when": rule.When, "detector": map[string]any{"ref": rule.Detector.Ref},
-		"requires": map[string]any{"profiles": []any{profile}},
+		"requires_facts": anySlice(requires),
 	})
 	testutil.FailErr(t, "load detector document", err)
 	return loaded
+}
+
+func anySlice(values []string) []any {
+	out := make([]any, len(values))
+	for i, v := range values {
+		out[i] = v
+	}
+	return out
 }
