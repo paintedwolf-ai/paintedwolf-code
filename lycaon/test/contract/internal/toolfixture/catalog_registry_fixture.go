@@ -93,6 +93,9 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecordFindingTool failed", err)
 	}
+	if err := native.RegisterMessageCoordinatorTool(reg, workertools.MessageCoordinatorDeps{}); err != nil {
+		contractcheck.FailErr(t, "native.RegisterMessageCoordinatorTool failed", err)
+	}
 	if err := native.RegisterUpdateProgressTool(reg, progress.NewMemoryStore(), func(_ context.Context, id string) string {
 		return id
 	}, nil); err != nil {
