@@ -215,6 +215,8 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	}
 	var result []api.CommandActivity
 	positions := map[int]int{}
+	// written collects the write targets of each row's folded primaries.
+	written := map[int][]string{}
 	active := -1
 	for i, g := range groups {
 		if !primary[i] {
@@ -222,11 +224,19 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 		}
 		if active >= 0 && activityFolds(groups[active], g) {
 			positions[i] = positions[active]
+			written[positions[i]] = append(written[positions[i]], activityPaths(g.input.arguments, "write")...)
 			continue
 		}
 		positions[i] = len(result)
+		written[len(result)] = activityPaths(g.input.arguments, "write")
 		result = append(result, groupActivity(g))
 		active = i
+	}
+	for row, paths := range written {
+		// Folded writes name every file they wrote, not only the first.
+		if distinct := uniqueInOrder(paths); len(distinct) > 1 {
+			result[row].Subject = boundedActivityText(pathSummary(distinct))
+		}
 	}
 	for i, g := range groups {
 		if owner, ok := assignments[i]; ok {
@@ -275,4 +285,16 @@ func groupDescendsFrom(g activityGroup, parent activityKey, groups []activityGro
 		g = groups[p]
 	}
 	return false
+}
+
+func uniqueInOrder(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	out := values[:0:0]
+	for _, value := range values {
+		if !seen[value] {
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	return out
 }

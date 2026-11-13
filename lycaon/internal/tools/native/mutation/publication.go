@@ -51,7 +51,11 @@ func (p *Publication) Open(ctx context.Context, destination commandprogram.Outpu
 	if p.Admission == nil {
 		return nil, errors.New("redirect publication admission required")
 	}
-	admission, err := p.Admission(ctx, destination, bound.Resolved.Abs)
+	display := bound.Resolved.DisplayPath
+	if display == "" {
+		display = destination.Target.Value
+	}
+	admission, err := p.Admission(ctx, destination, bound.Resolved.Abs, display)
 	if err != nil {
 		return nil, err
 	}

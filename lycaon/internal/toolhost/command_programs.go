@@ -45,7 +45,7 @@ type programOwnerTools struct {
 }
 
 func directProgramOutputAdmission(current *tools.ToolContext) tools.CommandOutputAdmission {
-	return func(_ context.Context, _ commandprogram.OutputDestination, _ string) (tools.CommandOutputWrite, error) {
+	return func(context.Context, commandprogram.OutputDestination, string, string) (tools.CommandOutputWrite, error) {
 		return tools.CommandOutputWrite{
 			Publish: func(ctx context.Context, apply func(context.Context, tools.ToolContext) (commandprogram.OutputPublished, error)) (commandprogram.OutputPublished, error) {
 				return apply(ctx, *current)
