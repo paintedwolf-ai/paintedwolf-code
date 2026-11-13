@@ -12,15 +12,15 @@ requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, painted
 when: >-
   paintedwolf.confine_applied && (size(paintedwolf.refused_connect_ports) > 0 || size(paintedwolf.refused_listen_ports) > 0) && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
 effect: warn
-category: recoverable
-emit: guard:sandbox
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
 message: the sandbox refused a listener or direct connection this invocation needed
 what: In `{{ tool }}`, the sandbox refused{% if paintedwolf.refused_listen_ports %} a listener on port {{ paintedwolf.refused_listen_ports }}{% if paintedwolf.refused_connect_ports %} and{% endif %}{% endif %}{% if paintedwolf.refused_connect_ports %} a direct connection to port {{ paintedwolf.refused_connect_ports }}{% endif %}.
 cause: Listening and direct connections are separate capabilities. The kernel names a refused connection by port only, not by address.
 why: ''
 fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_local_listen %}{% if paintedwolf.refused_listen_ports %}For a still-needed listener, submit only remaining work with `capability_request.local_listen` declaring the exact port from {{ paintedwolf.refused_listen_ports }}. Preserve completed effects.{% endif %}{% endif %}'
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: database_client
     vars:
       tool: command

@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: GIT_RESTORE_PATH_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - git_restore
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "GIT_RESTORE_PATH_DENIED"
+when: paintedwolf.operation == "git_restore" && paintedwolf.rejection_code == "GIT_RESTORE_PATH_DENIED"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: git_restore path denied
 what: git_restore refused path {{ paintedwolf.path }}.
 cause: The path is outside restore scope or not a tracked file the host allows.
 why: Structured rejects let agents branch without parsing free-form errors.
 fix: Inspect the intended restore path and source. Correct an erroneous path only within existing restore authority; do not change tools or broaden targets to bypass the refusal.
 instead: Branch on Code; fix args and retry once
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: src/main.go

@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: Scoped preview for {{ paintedwolf.path }} — {{ paintedwolf.hunk_count }} inline hunks on overlay {{
   paintedwolf.overlay_id }}

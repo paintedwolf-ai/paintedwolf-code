@@ -2,23 +2,19 @@ spec_version: "1.0"
 id: JQ_FORMAT_INVALID
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - jq
-      - jq_edit
+selector: {}
 requires_facts: [paintedwolf.allowed, paintedwolf.format, paintedwolf.operation, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "JQ_FORMAT_INVALID"
+when: paintedwolf.operation in ["jq", "jq_edit"] && paintedwolf.rejection_code == "JQ_FORMAT_INVALID"
 effect: block
-category: recoverable
-emit: guard:jq
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
 message: jq format argument is invalid
 what: jq format {{ paintedwolf.format }} is not supported — allowed {{ paintedwolf.allowed }}.
 cause: The format parameter must be auto, json, yaml, or toml.
 why: Structured rejects let agents branch without parsing free-form decode errors.
 fix: Retry with format auto or an explicit json, yaml, or toml value.
 instead: Branch on Code; use a supported format value
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       allowed: '[auto json yaml toml]'

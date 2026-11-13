@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: DELETE_BULK_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - delete
+selector: {}
 requires_facts: [paintedwolf.bulk_denied, paintedwolf.max_paths, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.requested]
-when: paintedwolf.rejection_code == "DELETE_BULK_DENIED"
+when: paintedwolf.operation == "delete" && paintedwolf.rejection_code == "DELETE_BULK_DENIED"
 effect: block
-category: recoverable
-emit: guard:delete
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:delete
 message: delete requested too many paths in one call
 what: delete requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.
 cause: The explicit target count exceeds the per-call bound.
 why: Deletion targets must remain bounded and reviewable.
 fix: Keep each batch at or below {{ paintedwolf.max_paths }} and include only intended deletion targets. Preserve child-before-parent ordering when the task actually requires both.
 instead: Branch on Code; reduce paths[] length
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

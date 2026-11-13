@@ -2,14 +2,12 @@ spec_version: "1.0"
 id: MUTATION_PARSE_FAILED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation: [write, edit, replace_lines, code_rewrite]
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.parse_canceled, paintedwolf.parse_config, paintedwolf.parse_elapsed_ms, paintedwolf.parse_errors, paintedwolf.parse_failure, paintedwolf.parse_language, paintedwolf.parse_phase, paintedwolf.parse_reached_bytes, paintedwolf.parse_reason, paintedwolf.parse_source_bytes, paintedwolf.parse_timed_out, paintedwolf.parse_timeout_ms, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "MUTATION_PARSE_FAILED"
+when: paintedwolf.operation in ["write", "edit", "replace_lines", "code_rewrite"] && paintedwolf.rejection_code == "MUTATION_PARSE_FAILED"
 effect: block
-category: recoverable
-emit: guard:edit
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:edit
 message: source parser did not provide a syntax verdict
 what: '{{ tool }} did not change {{ paintedwolf.path }}: {{ paintedwolf.parse_language }} syntax validation failed inside the host.'
 cause: >-
@@ -19,7 +17,7 @@ why: >-
 fix: >-
   {% if paintedwolf.parse_errors %}Repair the reported candidate diagnostics while preserving unrelated content. A clean candidate can be accepted without parsing the original file.{% else %}{% if paintedwolf.parse_timed_out %}Report this host parser timeout with the path and measured limits. The host owner can adjust validation_timeout_ms in {{ paintedwolf.parse_config }} or repair the parser. Retry after that change; preserve the proposed work and continue independent work.{% else %}{% if paintedwolf.parse_canceled %}The request was canceled or its enclosing deadline expired. Preserve the proposed work and resume only under an active request. Raising the parser timeout does not clear cancellation.{% else %}Report the exact parser failure and path to the coordinator or user. A parser resource limit, internal error, or invalid host configuration needs a host-side correction. Preserve the proposed work until the host can validate it.{% endif %}{% endif %}{% endif %}
 instead: '{% if paintedwolf.parse_errors %}Repair the candidate diagnostics and retry{% else %}Preserve the work and report the host failure with these diagnostics{% endif %}'
-scenarios:
+x-paintedwolf-scenarios:
   - id: panic
     vars:
       path: Sources/Game/Level.swift

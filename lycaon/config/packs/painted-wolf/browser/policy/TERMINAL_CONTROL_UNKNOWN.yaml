@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.unknown_target]
 when: paintedwolf.rejection_code == "TERMINAL_CONTROL_UNKNOWN"
 effect: block
-category: recoverable
-emit: guard:terminal_session
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:terminal_session
 message: unknown or malformed control token in terminal_send input
 what: input contained an unknown {Token} or an unterminated control marker.
 cause: '{{ paintedwolf.rejection_reason }}'
 why: Control markers are parsed before any bytes are sent; malformed input has not reached the terminal.
 fix: Use a named control such as {Enter} or {Ctrl-C}. For literal text containing braces, encode each opening brace as {LeftBrace}; {RightBrace} also emits a literal closing brace. Preserve the intended text.
 instead: Branch on Code TERMINAL_CONTROL_UNKNOWN; use a locked control token
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: implement

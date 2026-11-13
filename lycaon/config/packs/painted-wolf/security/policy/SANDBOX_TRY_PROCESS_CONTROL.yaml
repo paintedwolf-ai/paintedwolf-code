@@ -12,15 +12,15 @@ requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, painted
 when: >-
   paintedwolf.confine_applied && size(paintedwolf.refused_signals) > 0 && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
 effect: warn
-category: recoverable
-emit: guard:sandbox
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
 message: the sandbox refused a signal to a process outside the boundary
 what: 'In `{{ tool }}`, the sandbox refused signals to processes outside the command''s boundary: {{ paintedwolf.refused_signals }}.'
 cause: '{% if paintedwolf.missing_capability_process_control %}This invocation did not declare process-control access.{% endif %}'
 why: ''
 fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_process_control %}{% if paintedwolf.refused_signals %}If the operation is still needed, submit only the remaining work. Request `capability_request.process_control` for the refused process operation. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: stop_server
     vars:
       tool: command

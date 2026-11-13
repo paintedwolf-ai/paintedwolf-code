@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.can_recall, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.review_expected_call, paintedwolf.review_observed_handles, paintedwolf.review_ungrounded_sample]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_CITATION_UNGROUNDED"
 effect: block
-category: recoverable
-emit: guard:workflow
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
 message: One or more verdict citations were not observed in the session evidence ledger.
 what: "Some submitted citations do not resolve to the active review evidence union."
 cause: "Unresolved sample: {{ paintedwolf.review_ungrounded_sample }}."
 why: "A terminal verdict must resolve to observed coordinator and reviewer evidence for this review."
 fix: 'Correct the unresolved references using existing reviewer envelopes and the observed sample {{ paintedwolf.review_observed_handles }}. Preserve valid citations. {{ paintedwolf.next_steps }} Current call shape: {{ paintedwolf.review_expected_call }}.'
 instead: "Report an evidence gap if no observed citation supports the claim; never invent a handle or rerun a completed review just to change a citation."
-scenarios:
+x-paintedwolf-scenarios:
   - id: recall_callable
     vars:
       can_recall: true

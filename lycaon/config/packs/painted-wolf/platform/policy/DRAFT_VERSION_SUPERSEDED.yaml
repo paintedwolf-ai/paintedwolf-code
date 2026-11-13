@@ -1,5 +1,5 @@
-emit: ui:draft_version
-category: informational
+x-paintedwolf-emit: ui:draft_version
+x-paintedwolf-category: informational
 severity: info
 message: Superseded
 what: Prior draft attempt replaced by a newer version.
@@ -7,7 +7,7 @@ cause: The coordinator regenerated prose for this turn.
 why: Review the current draft or expand version history.
 fix: Review the current draft or expand version history.
 instead: Continue from the latest draft body.
-scenarios:
+x-paintedwolf-scenarios:
 - id: default
   vars:
     detail: bad args

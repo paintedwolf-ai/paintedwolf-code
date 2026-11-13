@@ -1,6 +1,6 @@
 id: SCAN_LIST_EMPTY
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: No scans matched this list request.
 cause: This result page contains no stored scan rows; it does not establish that the whole project has no scans or that a scan is running.

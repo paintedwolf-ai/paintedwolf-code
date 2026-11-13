@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SCAN_COMPARE_NEW_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:scan_compare
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_compare
 message: New scan id not found
 what: scan_compare could not resolve the requested new scan in this project.
 cause: The requested record was not found; this does not mean it is merely still running.
 why: Compare diffs persisted ingest findings — the new row must exist and be complete.
 fix: Check the assigned new scan ID and its project. Preserve a bound comparison ID and report the missing record; only an unbound comparison may choose another intended recorded scan.
 instead: Resolve the intended new scan without inventing a running status
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.detail, paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SOURCE_VERSION_NO_PREDECESSOR"
 effect: block
-category: recoverable
-emit: guard:restore_version
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:restore_version
 message: no earlier version recorded for this file
 what: No predecessor version for {{ paintedwolf.path }} — {{ paintedwolf.detail }}.
 cause: The file has no earlier recorded version in this project's source ledger.
 why: Omitted version_id defaults to the immediate predecessor, which requires at least two recorded states.
 fix: '{{ paintedwolf.next_steps }} Otherwise pass an explicit version_id.'
 instead: 'Branch on Code.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: file has only one recorded version

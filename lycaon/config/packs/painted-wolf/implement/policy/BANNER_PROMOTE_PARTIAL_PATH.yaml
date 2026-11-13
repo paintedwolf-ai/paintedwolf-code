@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: Overlay {{ paintedwolf.overlay_id }} has clean and conflict paths — once its evidence obligations
   pass, promote clean paths without rejecting the whole overlay
@@ -13,7 +13,7 @@ fix: After worker completion and passing current-revision evidence, `preview_ove
   only when spill_path is provided.
 instead: clean_paths plus conflict paths on an eligible overlay → partial promote. leg_status partial or open
   test/risk → preserve and resume the overlay, never reject or land it before the obligation passes
-scenarios:
+x-paintedwolf-scenarios:
 - id: preview_mixed
   vars:
     clean_paths:

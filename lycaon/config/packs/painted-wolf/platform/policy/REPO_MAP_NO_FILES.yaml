@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: >-
   This view contains no included entries at the requested path and depth. Check scope and filters before concluding that the repository is empty.

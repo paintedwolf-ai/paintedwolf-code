@@ -12,15 +12,15 @@ requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, painted
 when: >-
   paintedwolf.confine_applied && size(paintedwolf.refused_write_grants) > 0 && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
 effect: warn
-category: recoverable
-emit: guard:sandbox
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
 message: the sandbox refused a write this invocation needed
 what: In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}.
 cause: The requestable write grants are {{ paintedwolf.refused_write_grants }}; other refused paths may remain unavailable. A refused write can still leave a stage's exit status at 0, and command output cannot widen the boundary.
 why: ''
 fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_write_root %}{% if paintedwolf.refused_write_grants %}If the operation is still needed, submit only the remaining work. Set `capability_request.write_root` to the exact matching entry of {{ paintedwolf.refused_write_grants }} as one string. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: instruction_file
     vars:
       tool: command

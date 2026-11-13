@@ -1,5 +1,5 @@
-emit: banner
-category: worker_dispatch
+x-paintedwolf-emit: banner
+x-paintedwolf-category: worker_dispatch
 severity: info
 message: Overlap on these paths — sibling overlays still hold edits to the same files
 what: Parallel same-file overlays may show overlap_job_ids on clean previews — promote
@@ -9,7 +9,7 @@ cause: Parallel same-file workers; promoting this overlay alone leaves sibling o
 why: Overlap identifies work that needs review, not a requirement to accept every sibling edit or invent conflicts.
 fix: Preview the sibling overlays, choose eligible changes, and promote sequentially. Re-preview after each landing; supply resolutions only for actual conflicts using the actions available for each path.
 instead: Preserve existing worker results and resolve the observed overlaps before dispatching any genuinely missing work.
-context_schema:
+x-paintedwolf-context-schema:
   required:
   - paths
   - overlap_job_ids

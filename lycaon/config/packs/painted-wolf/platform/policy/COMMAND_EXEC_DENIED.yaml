@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_EXEC_DENIED"
 effect: block
-category: recoverable
-emit: guard:command_composition_redirect
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
 message: The kernel refused the resolved executable
 what: '{% if paintedwolf.path %}Executable `{{ paintedwolf.path }}` could not be started.{% else %}The executable could not be started.{% endif %}'
 cause: The launch was refused. This observation does not distinguish file permissions, operating-system policy or confinement.
 why: ''
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: ./ntp_check.py

@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.job_id, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKER_CANCEL_SESSION_MISMATCH"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Worker job {{ paintedwolf.job_id }} does not belong to this coordinator session
 what: worker_cancel may only stop jobs spawned from the active session
 cause: The job_id belongs to another session or project
 why: The job_id belongs to another session or project
 fix: 'Cancel only jobs you spawned in this session.'
 instead: 'Use job_id from this session''s enqueue result or pulse roster.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       job_id: job-other

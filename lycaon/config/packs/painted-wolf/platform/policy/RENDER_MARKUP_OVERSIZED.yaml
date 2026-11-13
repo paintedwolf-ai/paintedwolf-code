@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.max_bytes, paintedwolf.max_height, paintedwolf.max_width, paintedwolf.rejection_code, paintedwolf.render_viewport_exceeded]
 when: paintedwolf.rejection_code == "RENDER_MARKUP_OVERSIZED"
 effect: block
-category: recoverable
-emit: guard:visual_render
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
 message: Authored markup or viewport exceeds raster bounds
 what: '{% if paintedwolf.render_viewport_exceeded %}The viewport exceeds current bounds of {{ paintedwolf.max_width }} by {{ paintedwolf.max_height }}.{% else %}Markup exceeds the {{ paintedwolf.max_bytes }}-byte input cap.{% endif %}'
 cause: Markup or viewport is larger than the offline raster sandbox allows.
 why: Bounded rasterization protects memory and perceive transport limits.
 fix: Reduce the dimension or markup input identified above while preserving required content. If partitioning the design or selecting a partial viewport, retain and report coverage.
 instead: Branch on Code RENDER_MARKUP_OVERSIZED; simplify the mockup or shrink viewport
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

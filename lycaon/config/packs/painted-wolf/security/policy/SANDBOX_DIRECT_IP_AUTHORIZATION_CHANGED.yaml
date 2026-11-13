@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SANDBOX_DIRECT_IP_AUTHORIZATION_CHANGED"
 effect: block
-category: recoverable
-emit: guard:sandbox_direct_ip
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_direct_ip
 message: direct network authorization changed before spawn
 what: A run-once direct network authorization was no longer valid at spawn.
 cause: The current-call permit was missing, already consumed, or did not match the approved action and confinement boundary. Changing `declared_destinations` changes that boundary, because the approved transports are part of what was authorized.
 why: Direct network authority must remain bound to the exact action through the moment of spawn.
 fix: Re-request direct network access for the current action.
 instead: Branch on Code; re-request direct network access for this action
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {}

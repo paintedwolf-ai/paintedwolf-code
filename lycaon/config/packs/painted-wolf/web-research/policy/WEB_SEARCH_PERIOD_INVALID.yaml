@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.period, paintedwolf.period_max_year, paintedwolf.period_min_year, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WEB_SEARCH_PERIOD_INVALID"
 effect: block
-category: recoverable
-emit: guard:web_search
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:web_search
 message: web_search period must be current, a year, or a year range
 what: web_search period {{ paintedwolf.period }} is not a window this search can run.
 cause: period accepts current, a four-digit year, or an ascending year range with endpoints between {{ paintedwolf.period_min_year }} and {{ paintedwolf.period_max_year }}.
 why: The window decides whether ranking prefers recent pages or the years you named, so an unreadable value would silently fall back to the wrong question.
 fix: Omit period only when current information is intended; otherwise pass the requested year or ascending range within the supported bounds.
 instead: Branch on Code WEB_SEARCH_PERIOD_INVALID; pass current, a year, or a year range
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       period: last year

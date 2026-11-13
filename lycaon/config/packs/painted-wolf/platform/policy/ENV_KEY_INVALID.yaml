@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "ENV_KEY_INVALID"
 effect: block
-category: recoverable
-emit: guard:command_env_input
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_env_input
 message: Invalid or blocked inline env key
 what: 'An environment variable name was refused{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}.'
 cause: Environment names must match [A-Za-z_][A-Za-z0-9_]*. Scrub-critical names and prefixes remain blocked case-insensitively.
 why: ''
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: blocked_git
     vars:
       profile: implement

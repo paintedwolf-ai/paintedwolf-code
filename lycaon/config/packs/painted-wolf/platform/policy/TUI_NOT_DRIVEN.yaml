@@ -1,5 +1,5 @@
-emit: banner
-category: advisory
+x-paintedwolf-emit: banner
+x-paintedwolf-category: advisory
 severity: info
 selector:
   tool:
@@ -11,7 +11,7 @@ cause: ''
 why: ''
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
 - id: alt_screen_from_command
   vars:
     tool: command

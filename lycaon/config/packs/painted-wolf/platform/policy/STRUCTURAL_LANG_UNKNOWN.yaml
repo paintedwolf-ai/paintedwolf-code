@@ -2,23 +2,19 @@ spec_version: "1.0"
 id: STRUCTURAL_LANG_UNKNOWN
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - grep
-      - code_rewrite
+selector: {}
 requires_facts: [paintedwolf.detail, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.structural_languages, paintedwolf.unknown_target]
-when: paintedwolf.rejection_code == "STRUCTURAL_LANG_UNKNOWN"
+when: paintedwolf.operation in ["grep", "code_rewrite"] && paintedwolf.rejection_code == "STRUCTURAL_LANG_UNKNOWN"
 effect: block
-category: recoverable
-emit: guard:structural
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:structural
 message: structural lang is not a known grammar
 what: "structural matching on {{ paintedwolf.path }} could not resolve language — {{ paintedwolf.detail }}."
 cause: The explicit lang you passed is not a registered tree-sitter grammar name.
 why: Structural matching needs a grammar to parse both the pattern and the file.
 fix: 'Supported editor grammars include: {{ paintedwolf.structural_languages }}. Omit lang only when extension inference identifies the actual language. Do not rename a file to disguise unsupported syntax.'
 instead: Branch on Code; fix the lang name (or omit it) and retry
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: unknown grammar "xyz"

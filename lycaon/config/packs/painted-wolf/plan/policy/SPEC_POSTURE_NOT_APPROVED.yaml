@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_NOT_APPROVED"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: The current plan is awaiting approval.
 what: The current plan is awaiting approval.
 cause: The current plan is awaiting approval.
 why: Wait for the user to resolve the active plan approval card; dispatch and handoff remain closed while that gate is open.
 fix: Wait for the user to resolve the active plan approval card; dispatch and handoff remain closed while that gate is open.
 instead: Preserve the completed plan and wait for the approval decision
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

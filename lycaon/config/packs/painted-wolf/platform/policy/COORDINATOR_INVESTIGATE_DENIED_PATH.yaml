@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.escape, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COORDINATOR_INVESTIGATE_DENIED_PATH"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Coordinator write denied on investigate surface
 what: Coordinator {{ tool }} on {{ paintedwolf.path }} is outside investigate write scope.
 cause: Path is in a denied class — VCS metadata or dependency trees.
 why: Investigate opens product writes on the project tree, but some path classes need a different tool or workflow.
 fix: '{{ paintedwolf.escape }}'
 instead: Use the named escape for this path class — do not retry the same write
-scenarios:
+x-paintedwolf-scenarios:
   - id: vcs
     vars:
       escape: Use command for git commands

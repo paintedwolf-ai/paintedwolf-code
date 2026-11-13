@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: Overlay merge plan — {{ paintedwolf.pending_count }} pending; promote in listed order
 what: pack_board reports session-level overlay overlap graph and suggested promote sequence

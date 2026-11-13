@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_BREAKING_REQUIRED"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: Breaking-change policy required before research or critic Tasks
 what: Breaking-change policy required before research or critic Tasks
 cause: Breaking-change policy required before research or critic Tasks
 why: 'Add ## Plan breaking changes or frontmatter breaking policy'
 fix: 'Add ## Plan breaking changes or frontmatter breaking policy'
 instead: Capture breaking policy in Phase 0
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

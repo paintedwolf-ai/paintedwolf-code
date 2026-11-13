@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.format, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "IMAGE_CORRUPTED"
 effect: block
-category: recoverable
-emit: guard:view_image
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
 message: view_image decoded corrupted file
 what: '{{ tool }} could not decode {{ paintedwolf.path }} as a valid {{ paintedwolf.format }} image.'
 cause: 'The image decoder reported: {{ paintedwolf.rejection_reason }}.'
 why: The file contents are corrupted, truncated, or not a valid image stream.
 fix: Verify how the image was generated or downloaded, and re-generate or re-fetch it.
 instead: Branch on Code IMAGE_CORRUPTED; re-author or re-fetch the image file
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       format: png

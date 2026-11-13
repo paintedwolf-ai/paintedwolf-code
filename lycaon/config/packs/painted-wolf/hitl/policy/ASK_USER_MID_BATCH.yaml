@@ -1,5 +1,5 @@
-emit: banner
-category: advisory
+x-paintedwolf-emit: banner
+x-paintedwolf-category: advisory
 severity: info
 selector:
   tool:
@@ -13,7 +13,7 @@ fix: Host parks the turn after ask_user — read the answered tool result when t
   wakes; prefer pre-dispatch clarify next time.
 instead: Prefer pre-dispatch clarify asks; use mid-batch ask_user only for blocking
   forks
-scenarios:
+x-paintedwolf-scenarios:
 - id: default
   vars:
     detail: stub

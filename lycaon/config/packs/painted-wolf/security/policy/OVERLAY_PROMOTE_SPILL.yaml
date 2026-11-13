@@ -1,6 +1,6 @@
 id: OVERLAY_PROMOTE_SPILL
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: 'Overlay {{ paintedwolf.job_id }} assessment was shortened inline.'
 what: 'Overlay {{ paintedwolf.job_id }} assessment was shortened inline.{% if paintedwolf.spill_path %} Retained JSON is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes).{% else %} No spill file is available.{% endif %}'

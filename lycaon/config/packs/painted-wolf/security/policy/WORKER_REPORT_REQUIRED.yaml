@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.reject_observation]
 when: paintedwolf.reject_observation == "worker_report_required"
 effect: block
-category: recoverable
-emit: guard:worker_summary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
 message: Worker report required
 what: 'This worker job has no accepted completion report.'
 cause: 'A prose response does not submit a structured report.'
 why: 'The assignment remains active within its existing tool budget.'
 fix: 'Continue any unfinished work. {{ paintedwolf.next_steps }}'
 instead: 'Reuse completed work and its evidence.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: tools_available
     vars:
       session_role: worker

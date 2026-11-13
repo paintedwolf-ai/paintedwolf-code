@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: CHOWN_USER_UNKNOWN
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - chown
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.ownership_field, paintedwolf.ownership_gid, paintedwolf.ownership_target, paintedwolf.ownership_uid, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "CHOWN_USER_UNKNOWN"
+when: paintedwolf.operation == "chown" && paintedwolf.rejection_code == "CHOWN_USER_UNKNOWN"
 effect: block
-category: recoverable
-emit: guard:chown
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chown
 message: chown:chown owner username not found
 what: The requested owner {{ paintedwolf.ownership_target }} is unavailable for chown.
 cause: Host account lookup could not resolve this owner.
 why: This host permits only its current user ID {{ paintedwolf.ownership_uid }} and group ID {{ paintedwolf.ownership_gid }}.
 fix: Use current or the exact permitted identity only when that matches the requested ownership change. Otherwise report the limitation; do not guess another account, elevate the host, or switch tools to bypass it.
 instead: Branch on Code CHOWN_USER_UNKNOWN; retain the current-identity boundary
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: SURVEY_BUNDLE_UNKNOWN
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - survey_repo
+selector: {}
 requires_facts: [paintedwolf.available, paintedwolf.bundle, paintedwolf.command_form, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.unknown_target]
-when: paintedwolf.rejection_code == "SURVEY_BUNDLE_UNKNOWN"
+when: paintedwolf.operation == "survey_repo" && paintedwolf.rejection_code == "SURVEY_BUNDLE_UNKNOWN"
 effect: block
-category: recoverable
-emit: guard:survey
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:survey
 message: survey_repo bundle not in catalog
 what: '{% if paintedwolf.command_form %}{{ paintedwolf.command_form }} bundle {{ paintedwolf.bundle }} is not in the catalog.{% else %}survey_repo bundle {{ paintedwolf.bundle }} is not in the catalog.{% endif %}'
 cause: 'The merged host/project catalog offers: {{ paintedwolf.available }}.'
 why: Bundle ids are catalog-defined probe patterns; unknown ids cannot run.
 fix: '{% if paintedwolf.command_form %}Retry `{{ paintedwolf.command_form }} --bundle` with a catalog bundle id from the reject list.{% else %}Retry survey_repo with a catalog bundle id from the reject list or tool schema.{% endif %}'
 instead: Choose an intended listed bundle, or an offered scoped search tool for an ad-hoc query
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       available:

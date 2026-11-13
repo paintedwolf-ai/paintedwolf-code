@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: Overlay {{ paintedwolf.overlay_id }} retains pending worker changes; compare the scoped preview before
   resolving or discarding them.
@@ -13,7 +13,7 @@ fix: First confirm leg completion and passing current-revision evidence obligati
   keep_both requires merged content or hunks for overlapping edits.
 instead: Preserve and resume partial work. Reject the whole overlay only when the approach is wrong, superseded,
   duplicated, or no longer wanted; a primary read failure alone does not justify discarding it.
-scenarios:
+x-paintedwolf-scenarios:
 - id: default
   vars:
     conflict_paths:

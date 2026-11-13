@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: >-
   This view extracted no symbols. Inspect its file counts, filters and skip_reasons before choosing another scope or an available filename/text search.

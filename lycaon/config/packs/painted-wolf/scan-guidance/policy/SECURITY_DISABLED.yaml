@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.detail, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SECURITY_DISABLED"
 effect: block
-category: recoverable
-emit: guard:security
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:security
 message: Security scanners is off
 what: Security scanners are disabled for this device.
 cause: '{{ paintedwolf.detail }}'
 why: '{{ paintedwolf.detail }}'
 fix: The user can enable Security scanners in Settings when scanning is intended. Report the disabled capability and any unmet assessment; do not present a disabled scan as a clean result.
 instead: Branch on Code; enable Security scanners in Settings before retrying scan tools
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: Security scanners is off — turn it on in Settings → Security scanners

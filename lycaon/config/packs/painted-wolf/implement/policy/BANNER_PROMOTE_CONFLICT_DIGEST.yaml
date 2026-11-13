@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: Conflict hunks for overlay {{ paintedwolf.overlay_id }} — line ranges inline; read spill_path for
   full bodies

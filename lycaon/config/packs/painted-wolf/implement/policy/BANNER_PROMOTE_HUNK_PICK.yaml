@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: Overlay {{ paintedwolf.overlay_id }} — {{ paintedwolf.hunk_count }} overlapping hunks on {{ paintedwolf.conflict_paths
   }}
@@ -12,7 +12,7 @@ fix: '`promote_overlay(job_id="{{ paintedwolf.overlay_id }}", resolutions=[{path
   start_line first). Content must reflect the intended merge of both versions.'
 instead: One resolutions entry per path; never mix hunks and content on the same path. A small path-level conflict
   does not require discarding the whole overlay.
-scenarios:
+x-paintedwolf-scenarios:
 - id: default
   vars:
     conflict_paths:

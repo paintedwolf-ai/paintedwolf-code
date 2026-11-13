@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:sandbox_socket
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox_socket
 message: structured socket path not found
 what: The host could not find the requested socket at {{ paintedwolf.path }}.
 cause: No socket exists at that path right now (or a symlink target is missing).
 why: Socket grants require a live local socket identity before use.
 fix: Check the intended service and its documented absolute socket path. Request it again only once the socket should exist; do not create a placeholder or guess a different service socket.
 instead: Branch on Code; fix structured path — never parse stderr
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {}

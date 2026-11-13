@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.id, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TERMINAL_NOT_RUNNING"
 effect: block
-category: recoverable
-emit: guard:terminal_session
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:terminal_session
 message: terminal process is not running
 what: Pty handle {{ paintedwolf.id }} has already exited.
 cause: The process finished or was killed before input could be sent.
 why: Writing to an exited pty cannot continue the session.
 fix: '{{ paintedwolf.next_steps }}'
 instead: Preserve the exited process outcome before deciding whether another process is needed
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       id: dead-id

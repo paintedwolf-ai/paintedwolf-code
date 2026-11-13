@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.handle, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "RENDER_HANDLE_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:render_view
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:render_view
 message: render handle not found in session
 what: '{{ tool }} could not find render handle "{{ paintedwolf.handle }}".'
 cause: 'No visual handle named "{{ paintedwolf.handle }}" exists in this session.'
 why: Handles are session-scoped and must be initialized with markup before patching or inspecting.
 fix: Call render_view with handle and markup to initialize the handle first.
 instead: Branch on Code RENDER_HANDLE_NOT_FOUND; create the handle with markup or check the handle name
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       handle: mockup-1

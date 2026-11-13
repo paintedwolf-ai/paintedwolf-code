@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "FETCH_URL_DEST_DENIED"
 effect: block
-category: recoverable
-emit: guard:fetch_url
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
 message: recorded fetch_url destination was not writable
 what: fetch_url could not write dest {{ paintedwolf.path }} under project write scope.
 cause: The requested destination failed the ingest write boundary after the response was fetched.
 why: The recorded write refusal remains binding; switching tools does not grant access.
 fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
 instead: Follow the current schema and access boundaries.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: .git/objects/pack

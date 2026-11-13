@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "FILE_CHANGE_APPROVAL_UNAVAILABLE"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: file change approval is unavailable
 what: This call cannot review the change to {{ paintedwolf.path }}.
 cause: File change approvals are unavailable.
 fix: Ask the person to enable approvals or make this change.
 instead: Do not retry the file change through another command while approval is unavailable.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: .paintedwolf/rules.md

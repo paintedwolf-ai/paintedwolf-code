@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_SCOPE_REQUIRED"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: Plan scope section required before research or critic Tasks
 what: Plan scope section required before research or critic Tasks
 cause: Plan scope section required before research or critic Tasks
 why: 'Add ## Plan implementation scope with **Size:** or ## Scope'
 fix: 'Add ## Plan implementation scope with **Size:** or ## Scope'
 instead: Capture scope in Phase 0 before spawning agents
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

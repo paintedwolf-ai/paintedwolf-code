@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: warn
 message: Overlay {{ paintedwolf.overlay_id }} has {{ paintedwolf.hunk_count }} hunks on {{ paintedwolf.conflict_paths
   }} — use full-file resolutions
@@ -15,7 +15,7 @@ fix: Use current preview_overlay ready_resolutions and conflict_digest branch_de
   pass.
 instead: Do not `task(implementer)` while overlays still pending; full-file merge is valid when you want one
   atomic landing
-scenarios:
+x-paintedwolf-scenarios:
 - id: default
   vars:
     conflict_paths:

@@ -16,15 +16,15 @@ requires_facts: [paintedwolf.confine_applied, paintedwolf.confine_signals, paint
 when: >-
   paintedwolf.confine_applied && "boundary_refused" in paintedwolf.confine_signals && !("remote_package_destination_denied" in paintedwolf.confine_signals)
 effect: warn
-category: recoverable
-emit: guard:sandbox
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:sandbox
 message: egress broker refused an observed destination
 what: The egress broker refused a connection from `{{ tool }}`{% if paintedwolf.destination %} to `{{ paintedwolf.destination }}`{% endif %}.
 cause: The observed destination was not allowed by the invocation's egress policy.
 why: This refusal identifies a connection; it does not determine the outcome of the entire command.
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: command_broker_denial
     vars:
       tool: command

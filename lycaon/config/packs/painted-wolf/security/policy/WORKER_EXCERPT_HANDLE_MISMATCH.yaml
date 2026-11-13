@@ -1,5 +1,5 @@
-emit: banner
-category: informational
+x-paintedwolf-emit: banner
+x-paintedwolf-category: informational
 severity: info
 message: Worker finding excerpt traced to evidence — reviewer confirm
 what: Worker cited {{ paintedwolf.offender_count }} finding excerpt(s) that did not verbatim-match
@@ -13,10 +13,10 @@ fix: 'Re-read the cited content and prefer verbatim file excerpts in findings; p
   counts/sizes/negative results in brief, never as a finding excerpt{% if paintedwolf.observed_paths_sample %} (seen: {{ paintedwolf.observed_paths_sample }}){% endif %}.'
 instead: Traced findings complete the leg; prefer verbatim excerpts to reduce reviewer-confirm
   noise
-evidence:
+x-paintedwolf-evidence:
   ui_label: Finding excerpts
   ui_check_id: finding_excerpts
-scenarios:
+x-paintedwolf-scenarios:
 - id: line_out_of_range
   vars:
     offender_count: 1

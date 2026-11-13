@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_RESEARCH_REQUIRED"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: Research still open — finish it before critics
 what: Critic tasks are blocked until research is satisfied and you have left research.
 cause: Research still open — finish it before critics
 why: Critic tasks are blocked while research is still open.
 fix: '{{ paintedwolf.next_steps }} On research, leave per Phase exit (host stamps research_satisfied). Continue expand, then approve, on the default path (optional critique returns when that path is available).'
 instead: Finish research → leave research → expand
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

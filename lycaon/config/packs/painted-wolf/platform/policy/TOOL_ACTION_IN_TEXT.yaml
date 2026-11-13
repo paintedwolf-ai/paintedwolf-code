@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.offenders_sample, paintedwolf.reject_observation]
 when: paintedwolf.reject_observation == "text_action_envelope"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: A reserved text action envelope did not invoke a tool
 what: 'No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}.'
 cause: An action envelope in assistant text is not a native tool call.
 why: The host does not execute this reserved text format or treat it as task completion.
 fix: Resubmit the intended action through the native tool channel using an offered tool and its schema. Do not repeat the JSON in assistant text.
 instead: If explaining tool syntax or logs, use a fenced code example with an explanation.
-scenarios:
+x-paintedwolf-scenarios:
   - id: offered_read
     vars:
       offenders_sample: read
