@@ -1,22 +1,59 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import YAML from "yaml";
 import { stubClient } from "../../test/client-fixture.ts";
 import { readCommandReceiptDocument } from "./command-receipt-document.ts";
 import type { CommandReceiptContent } from "../../chat/transcript/content/chat-content-document.ts";
 
-const content: CommandReceiptContent = { kind: "command_receipts", programs: [{ id: "program", activityId: "activity" }], context: '{"facts":[]}' };
+const content: CommandReceiptContent = {
+  kind: "command_receipts",
+  programs: [{ id: "program", activityId: "activity" }],
+  context: '{"facts":[]}',
+};
+
+function openAPIReceiptLimitBounds(): { minimum: number; maximum: number } {
+  const specPath = join(
+    dirname(fileURLToPath(import.meta.url)),
+    "../../../../docs/openapi/paths/sessions/activity.yaml",
+  );
+  const spec = YAML.parse(readFileSync(specPath, "utf8")) as {
+    paths: Record<
+      string,
+      { get: { parameters: { name?: string; schema?: { minimum?: number; maximum?: number } }[] } }
+    >;
+  };
+  const params = spec.paths["/v1/sessions/{id}/program-receipts/{program_id}"]?.get.parameters ?? [];
+  const limit = params.find((param) => param.name === "limit")?.schema;
+  if (typeof limit?.minimum !== "number" || typeof limit.maximum !== "number") {
+    throw new Error("OpenAPI limit bounds missing for getCommandProgramReceipt");
+  }
+  return { minimum: limit.minimum, maximum: limit.maximum };
+}
 
 describe("execution records document", () => {
-  it("reads every record in bounded requests and retains activity scope", async () => {
-    const get = vi.fn(async (_session: string, _program: string, opts?: { cursor?: string }) => {
+  it("reads every record within OpenAPI limit bounds and retains activity scope", async () => {
+    const bounds = openAPIReceiptLimitBounds();
+    const get = vi.fn(async (_session: string, _program: string, opts?: { limit?: number; cursor?: string }) => {
+      if (opts?.limit !== undefined && (opts.limit < bounds.minimum || opts.limit > bounds.maximum)) {
+        throw new Error(`limit ${opts.limit} outside [${bounds.minimum}, ${bounds.maximum}]`);
+      }
+      const pageSize = opts?.limit ?? 20;
       const start = Number(opts?.cursor ?? 0);
-      return { program: { id: "program" }, executions: Array.from({ length: 200 }, (_, index) => ({ id: start + index })), executions_omitted: 10000 - start - 200, next_cursor: String(start + 200) };
+      return {
+        program: { id: "program" },
+        executions: Array.from({ length: pageSize }, (_, index) => ({ id: start + index })),
+        executions_omitted: 10000 - start - pageSize,
+        next_cursor: String(start + pageSize),
+      };
     });
     const signal = new AbortController().signal;
     const text = await readCommandReceiptDocument(stubClient({ getCommandProgramReceipt: get }), "session", content, signal);
     expect(text.split("\n")).toHaveLength(10002);
     expect(text).toContain('"id":9999');
-    expect(get).toHaveBeenCalledTimes(50);
-    expect(get).toHaveBeenLastCalledWith("session", "program", { limit: 200, cursor: "9800", activity_id: "activity", signal });
+    expect(get).toHaveBeenCalledTimes(100);
+    expect(get).toHaveBeenLastCalledWith("session", "program", { limit: 100, cursor: "9900", activity_id: "activity", signal });
   });
 
   it("finishes at the count observed when the document opened", async () => {
