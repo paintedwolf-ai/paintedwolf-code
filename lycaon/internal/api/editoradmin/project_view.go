@@ -63,11 +63,11 @@ func invalidProjectView(req wire.ReplaceProjectViewRequest) (field, reason strin
 		return "search.query", "is required and at most 1024 bytes"
 	case req.Search != nil && req.Search.Hit != nil && !location(req.Search.Hit.RootID, req.Search.Hit.Path, req.Search.Hit.Line):
 		return "search.hit", "must name a root, a relative path and a line"
-	case len(req.Findings) > 12:
-		return "findings", "holds at most 12 findings"
+	case len(req.Findings) > 8:
+		return "findings", "holds at most 8 findings"
 	}
 	for _, f := range req.Findings {
-		if f.Fingerprint == "" || len(f.Fingerprint) > 256 || f.RuleID == "" || len(f.RuleID) > 256 || !slices.Contains(wire.AllFindingLevelValues(), f.Level) {
+		if f.Fingerprint == "" || len(f.Fingerprint) > 256 || f.RuleID == "" || len(f.RuleID) > 128 || !slices.Contains(wire.AllFindingLevelValues(), f.Level) {
 			return "findings", "each needs a fingerprint, a rule and a level"
 		}
 		if f.Location != nil && !location(f.Location.RootID, f.Location.Path, f.Location.Line) {

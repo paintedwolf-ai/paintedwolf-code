@@ -7667,7 +7667,6 @@ export interface components {
             worker_summary?: components["schemas"]["WorkerSummaryMeta"];
             grounding?: components["schemas"]["CitationGrounding"];
             source_context?: components["schemas"]["SourceContext"];
-            view_context?: components["schemas"]["ViewContext"];
             /** @description Host-validated interaction targets mentioned by this message. Navigation references are independent of citation grounding and never support factual claims. */
             navigation_refs?: components["schemas"]["NavigationReference"][];
             compacted_chunk?: components["schemas"]["CompactedChunkMeta"];
@@ -11286,10 +11285,11 @@ export interface components {
             /** Format: uuid */
             worker_id?: string;
         };
-        /** @description Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory. */
+        /** @description Host-recorded source context supplied with this message; independent of evidence and filesystem inventory. */
         SourceContext: {
             locations: components["schemas"]["NavigationTarget"][];
             truncated: boolean;
+            view?: components["schemas"]["ViewContext"];
         };
         /** @enum {string} */
         NavigationStatus: "pending" | "resolved" | "ambiguous" | "missing" | "unavailable";

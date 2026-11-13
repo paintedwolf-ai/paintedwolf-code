@@ -31,7 +31,7 @@ components:
           $ref: '#/components/schemas/ViewReportSearch'
         findings:
           type: array
-          maxItems: 12
+          maxItems: 8
           items:
             $ref: '#/components/schemas/ViewReportFinding'
     ViewReportEditor:
@@ -76,7 +76,7 @@ components:
       required: [fingerprint, rule_id, level]
       properties:
         fingerprint: {type: string, minLength: 1, maxLength: 256}
-        rule_id: {type: string, minLength: 1, maxLength: 256}
+        rule_id: {type: string, minLength: 1, maxLength: 128}
         level:
           $ref: ../scan/findings.yaml#/components/schemas/FindingLevel
         location:

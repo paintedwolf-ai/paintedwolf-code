@@ -19728,13 +19728,13 @@ components:
       properties:
         editors:
           type: array
-          maxItems: 12
+          maxItems: 8
           description: Files shown in a visible editor, with that editor's selection.
           items:
             $ref: '#/components/schemas/ViewEditor'
         diffs:
           type: array
-          maxItems: 12
+          maxItems: 8
           description: Files shown in a visible diff.
           items:
             $ref: '#/components/schemas/ViewPath'
@@ -19746,7 +19746,7 @@ components:
           $ref: '#/components/schemas/ViewSearch'
         findings:
           type: array
-          maxItems: 12
+          maxItems: 8
           description: Security findings open or selected in a visible security view.
           items:
             $ref: '#/components/schemas/ViewFinding'
@@ -19864,7 +19864,7 @@ components:
         rule_id:
           type: string
           minLength: 1
-          maxLength: 256
+          maxLength: 128
         level:
           $ref: '#/components/schemas/FindingLevel'
         location:
@@ -19900,7 +19900,7 @@ components:
           $ref: '#/components/schemas/ViewReportSearch'
         findings:
           type: array
-          maxItems: 12
+          maxItems: 8
           items:
             $ref: '#/components/schemas/ViewReportFinding'
     ViewReportPath:
@@ -19966,7 +19966,7 @@ components:
         rule_id:
           type: string
           minLength: 1
-          maxLength: 256
+          maxLength: 128
         level:
           $ref: '#/components/schemas/FindingLevel'
         location:
@@ -20091,8 +20091,6 @@ components:
           $ref: '#/components/schemas/CitationGrounding'
         source_context:
           $ref: '#/components/schemas/SourceContext'
-        view_context:
-          $ref: '#/components/schemas/ViewContext'
         navigation_refs:
           type: array
           maxItems: 128
@@ -29046,7 +29044,7 @@ components:
       required:
         - locations
         - truncated
-      description: Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory.
+      description: Host-recorded source context supplied with this message; independent of evidence and filesystem inventory.
       properties:
         locations:
           type: array
@@ -29055,6 +29053,9 @@ components:
             $ref: '#/components/schemas/NavigationTarget'
         truncated:
           type: boolean
+        view:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewContext'
     NavigationStatus:
       type: string
       enum:

@@ -58,11 +58,11 @@ func (e *turnContextAssembler) interleaveViewContexts(ctx context.Context, sess 
 	readOffered, checked := false, false
 	out := make([]api.Message, 0, len(messages))
 	for _, m := range messages {
-		if m.ViewContext != nil && m.Role == api.MessageRoleUser {
+		if m.SourceContext != nil && m.SourceContext.View != nil && m.Role == api.MessageRoleUser {
 			if !checked {
 				readOffered, checked = e.surface.toolAddressable(ctx, sess, frame, history, turn, "read"), true
 			}
-			if block := inject.RenderViewContextBlock(ctx, e.deps.Injects, sess.ID, *m.ViewContext, readOffered); block != "" {
+			if block := inject.RenderViewContextBlock(ctx, e.deps.Injects, sess.ID, *m.SourceContext.View, readOffered); block != "" {
 				out = append(out, api.Message{
 					ID:   hostmarker.ViewContextBlockPrefix + m.ID,
 					Role: api.MessageRoleSystem, Content: block,

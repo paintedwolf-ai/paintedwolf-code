@@ -6,11 +6,26 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/sourceref"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// PatchMessageViewContext records a prompt's view context once; a message
-// that already carries one keeps it.
+// withView returns the message's source context carrying view.
+func withView(msg api.Message, view api.ViewContext) *api.SourceContext {
+	source := api.SourceContext{Locations: []api.NavigationTarget{}}
+	if msg.SourceContext != nil {
+		source = *msg.SourceContext
+	}
+	source.View = &view
+	return &source
+}
+
+func hasView(msg api.Message) bool {
+	return msg.SourceContext != nil && msg.SourceContext.View != nil
+}
+
+// PatchMessageViewContext records a prompt's view once; a message that already
+// carries one keeps it.
 func (s *sqlTranscript) PatchMessageViewContext(ctx context.Context, sessionID, messageID string, view api.ViewContext) (api.Message, error) {
 	core := s.core
 	unlock := core.lockMutation(sessionID)
@@ -19,11 +34,11 @@ func (s *sqlTranscript) PatchMessageViewContext(ctx context.Context, sessionID, 
 	if err != nil {
 		return api.Message{}, err
 	}
-	if msg.ViewContext != nil {
+	if hasView(msg) {
 		return msg, nil
 	}
-	msg.ViewContext = &view
-	encoded, err := db.MarshalJSON(msg.ViewContext)
+	msg.SourceContext = withView(msg, view)
+	encoded, err := sourceref.EncodeMetadata(msg.NavigationRefs, msg.SourceContext)
 	if err != nil {
 		return api.Message{}, err
 	}
@@ -40,8 +55,8 @@ func (s *sqlTranscript) PatchMessageViewContext(ctx context.Context, sessionID, 
 	if msg.Seq, err = nextTranscriptSeq(ctx, qtx, sessionID); err != nil {
 		return api.Message{}, err
 	}
-	if err := qtx.PatchMessageViewContext(ctx, db.PatchMessageViewContextParams{
-		ViewContextJson: encoded, Seq: msg.Seq, SessionID: sessionID, ID: messageID,
+	if err := qtx.PatchMessageNavigation(ctx, db.PatchMessageNavigationParams{
+		NavigationRefsJson: encoded, Seq: msg.Seq, SessionID: sessionID, ID: messageID,
 	}); err != nil {
 		return api.Message{}, err
 	}
@@ -70,10 +85,10 @@ func (s *memoryTranscript) PatchMessageViewContext(ctx context.Context, sessionI
 		if msg.ID != messageID {
 			continue
 		}
-		if msg.ViewContext != nil {
+		if hasView(msg) {
 			return msg, nil
 		}
-		msg.ViewContext = &view
+		msg.SourceContext = withView(msg, view)
 		msg.Seq = nextSeqLocked(core, sessionID)
 		core.messages[sessionID][i] = msg
 		return msg, nil

@@ -143,7 +143,7 @@ func measureCoordinatorInjectBlock(
 			view.Editors = append(view.Editors, api.ViewEditor{DisplayPath: long("editor", i), Unsaved: true,
 				Selection: &api.ViewSelection{StartLine: 10000 + i, EndLine: 20000 + i}})
 			view.Diffs = append(view.Diffs, api.ViewPath{DisplayPath: long("diff", i)})
-			view.Findings = append(view.Findings, api.ViewFinding{RuleID: strings.Repeat("r", 256), Level: api.FindingLevelCritical,
+			view.Findings = append(view.Findings, api.ViewFinding{RuleID: strings.Repeat("r", 128), Level: api.FindingLevelCritical,
 				Location: &api.ViewLocation{DisplayPath: long("finding", i), Line: 99999}})
 		}
 		return inject.RenderViewContextBlock(ctx, renderer, "sess-inject-test", view, true)

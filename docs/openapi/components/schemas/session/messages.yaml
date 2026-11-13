@@ -48,13 +48,13 @@ components:
       properties:
         editors:
           type: array
-          maxItems: 12
+          maxItems: 8
           description: Files shown in a visible editor, with that editor's selection.
           items:
             $ref: "#/components/schemas/ViewEditor"
         diffs:
           type: array
-          maxItems: 12
+          maxItems: 8
           description: Files shown in a visible diff.
           items:
             $ref: "#/components/schemas/ViewPath"
@@ -66,7 +66,7 @@ components:
           $ref: "#/components/schemas/ViewSearch"
         findings:
           type: array
-          maxItems: 12
+          maxItems: 8
           description: Security findings open or selected in a visible security view.
           items:
             $ref: "#/components/schemas/ViewFinding"
@@ -184,7 +184,7 @@ components:
         rule_id:
           type: string
           minLength: 1
-          maxLength: 256
+          maxLength: 128
         level:
           $ref: ../scan/findings.yaml#/components/schemas/FindingLevel
         location:
@@ -271,8 +271,6 @@ components:
           $ref: worker-reports.yaml#/components/schemas/CitationGrounding
         source_context:
           $ref: navigation.yaml#/components/schemas/SourceContext
-        view_context:
-          $ref: "#/components/schemas/ViewContext"
         navigation_refs:
           type: array
           maxItems: 128

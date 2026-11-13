@@ -5,7 +5,7 @@ components:
       type: object
       additionalProperties: false
       required: [locations, truncated]
-      description: Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory.
+      description: Host-recorded source context supplied with this message; independent of evidence and filesystem inventory.
       properties:
         locations:
           type: array
@@ -14,6 +14,9 @@ components:
             $ref: "#/components/schemas/NavigationTarget"
         truncated:
           type: boolean
+        view:
+          x-go-pointer: true
+          $ref: messages.yaml#/components/schemas/ViewContext
     NavigationStatus:
       type: string
       enum: [pending, resolved, ambiguous, missing, unavailable]

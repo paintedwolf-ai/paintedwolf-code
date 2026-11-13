@@ -652,13 +652,13 @@ func TestRedactMessageForStorageCoversWorkflowAndCheckpointProjections(t *testin
 				Guidance: "retry with " + secret, Subject: secret, CausingCommand: "send " + secret,
 			},
 		},
-		WorkerSummary:  &api.WorkerSummaryMeta{Envelope: "result " + secret, SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "p", RootID: "r", Path: "worker-" + secret, EntryKind: api.NavigationEntryKindFile}}}},
-		SourceContext:  &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "p", RootID: "r", Path: "source-" + secret, EntryKind: api.NavigationEntryKindFile}}},
+		WorkerSummary: &api.WorkerSummaryMeta{Envelope: "result " + secret, SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "p", RootID: "r", Path: "worker-" + secret, EntryKind: api.NavigationEntryKindFile}}}},
+		SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{{ProjectID: "p", RootID: "r", Path: "source-" + secret, EntryKind: api.NavigationEntryKindFile}},
+			View: &api.ViewContext{
+				Editors: []api.ViewEditor{{RootID: "r", Path: "open-" + secret, DisplayPath: "open-" + secret}},
+				Search:  &api.ViewSearch{Query: "find " + secret},
+			}},
 		NavigationRefs: []api.NavigationReference{{Mention: "mention " + secret, Path: "path-" + secret}},
-		ViewContext: &api.ViewContext{
-			Editors: []api.ViewEditor{{RootID: "r", Path: "open-" + secret, DisplayPath: "open-" + secret}},
-			Search:  &api.ViewSearch{Query: "find " + secret},
-		},
 	}
 	stored, changed := RedactMessageForStorage(context.Background(), modelScreenMatcher(t), original)
 	if !changed {

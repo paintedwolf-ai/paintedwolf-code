@@ -31,7 +31,7 @@ func TestViewContextSitsDirectlyBeforeItsPrompt(t *testing.T) {
 	history := []api.Message{
 		{ID: "u1", Role: api.MessageRoleUser, Content: "Count the apples."},
 		{ID: "a1", Role: api.MessageRoleAssistant, Content: "There are 3."},
-		{ID: "u2", Role: api.MessageRoleUser, Content: "Update these lines.", ViewContext: view},
+		{ID: "u2", Role: api.MessageRoleUser, Content: "Update these lines.", SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{}, View: view}},
 	}
 	var previous []api.Message
 	for _, observation := range []string{"Read apples.txt.", "Edited apples.txt."} {
