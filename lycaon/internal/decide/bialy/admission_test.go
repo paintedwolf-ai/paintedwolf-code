@@ -117,7 +117,7 @@ func TestHoldPriorityKeepsGenerationOffTheDeviceUntilReleased(t *testing.T) {
 			runtime.Gosched()
 		}
 	}
-	if _, _, err := client.Rank(t.Context(), decide.HeadCodeRank, "task", []string{"a"}); err != nil {
+	if _, _, err := client.Rank(t.Context(), decide.HeadCodeRank, "task", []string{"a", "b"}); err != nil {
 		t.Fatalf("rank under hold: %v", err)
 	}
 	if snapshot := device.Snapshot(); snapshot.Active != nil || snapshot.Queued != 1 {
