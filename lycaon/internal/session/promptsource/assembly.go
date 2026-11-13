@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/coordinator"
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
@@ -101,7 +102,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		SkillPointer:            m.Loading.SkillPointer,
 		WorkspaceRoots:          m.Workspace.PromptRootRows,
 		ProjectOverlayRootPaths: m.Workspace.PromptRoots,
-		SessionView:             m.Catalog.ViewForSession,
+		SessionView:             m.sessionView,
 		AgentsMDIndex:           m.PolicyIndex.Index,
 		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
 			delivery, err := m.PolicyIndex.ResolveCurrent(ctx, sess, history)
@@ -148,4 +149,14 @@ func (m *Assembly) PromptTools(ctx context.Context, sess *api.Session, profileID
 
 func (m *Assembly) WebSearchEnabled() bool {
 	return m.WebResearch == nil || m.WebResearch.SearchEnabled()
+}
+
+// sessionView is the session's catalog with each tool profile's command
+// effects narrowed by the session posture, as the sandbox admits them.
+func (m *Assembly) sessionView(ctx context.Context, sess *api.Session) *catalogview.View {
+	view := m.Catalog.ViewForSession(ctx, sess)
+	if view == nil || sess == nil {
+		return view
+	}
+	return view.WithToolProfiles(m.Profiles.ConstrainCommandProfiles(ctx, sess.ID, view.ToolProfiles))
 }

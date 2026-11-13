@@ -64,8 +64,8 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
 		WorkerToolBudget: e.workerToolBudget(ctx, sess),
-		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
+	in = in.withCatalogView(e.sessionCatalogView(ctx, sess))
 	stableKey, err := in.cacheKey()
 	if err != nil {
 		return "", err
@@ -147,8 +147,8 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
 		WorkerToolBudget: e.workerToolBudget(ctx, sess),
-		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
+	in = in.withCatalogView(e.sessionCatalogView(ctx, sess))
 	rendered, err := renderStandingPrompt(ctx, pe, in)
 	if err != nil {
 		return "", profile, transition, err
