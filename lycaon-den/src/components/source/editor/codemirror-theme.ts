@@ -90,7 +90,7 @@ import { selectionHistoryField } from "./selection-history.ts";
 import { shortcutPlatform } from "../../../shortcuts/platform.ts";
 import { cssFontFamilyForEditor } from "../../../settings/editor/editor-prefs.ts";
 import { REVEAL_FLASH_MS } from "../../../ui/reveal-flash.ts";
-import { keepPositionInView } from "./editor-settled-scroll.ts";
+import { keepPositionInView, preserveScrollAnchor } from "./editor-settled-scroll.ts";
 
 const setArrivalFlash = StateEffect.define<{
   line: number;
@@ -464,9 +464,11 @@ export function applyEditorDisplayPrefs(
 ): void {
   const effects = sourceDisplayEffects(view.state, prefs);
   if (effects.length === 0) return;
-  view.dispatch({ effects });
-  // Typography changes invalidate line measurements.
-  view.requestMeasure();
+  preserveScrollAnchor(view, () => {
+    view.dispatch({ effects });
+    // Typography changes invalidate line measurements.
+    view.requestMeasure();
+  });
 }
 
 /** Paged documents apply display limits in the transaction that introduces text. */
