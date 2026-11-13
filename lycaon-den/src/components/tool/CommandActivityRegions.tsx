@@ -7,6 +7,7 @@ import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import type { ChatContentDocument, CommandReceiptContent } from "../../chat/transcript/content/chat-content-document.ts";
 import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
+import { ShowLatest } from "../primitives/ShowLatest.tsx";
 import { ActivityTarget } from "./ActivityTarget.tsx";
 import { ToolContentLink } from "./ToolContentLink.tsx";
 
@@ -16,9 +17,9 @@ type ActivityProps = { activity: CommandActivityView; projectId?: string };
 
 export function ActivityCommand(props: ActivityProps) {
   const targets = createMemo(() => activityTargetCommands(props.activity));
-  return <Show when={targets()[0]}>
+  return <ShowLatest when={targets()[0]}>
     {first => <ActivityTarget target={first()} extraCount={targets().length - 1} noun="command" />}
-  </Show>;
+  </ShowLatest>;
 }
 
 /** Briefing text replaces the deterministic line; neither renders when empty. */
