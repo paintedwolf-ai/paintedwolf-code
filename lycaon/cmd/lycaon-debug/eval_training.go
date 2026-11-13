@@ -1,14 +1,15 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"flag"
 	"os"
-	"path/filepath"
 
 	"github.com/lycaon/lycaon/internal/eval/episode"
+	"github.com/lycaon/lycaon/internal/fseffect"
 )
 
 func runEvalTrainingContract(args []string) error {
@@ -27,7 +28,10 @@ func runEvalTrainingContract(args []string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(*out, "contract.json"), append(raw, '\n'), 0o600)
+	if _, err := fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.Location{Root: *out, Rel: "contract.json"}, Source: bytes.NewReader(append(raw, '\n')), Mode: 0o600}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func runEvalTrainingBundle(args []string) error {
