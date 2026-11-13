@@ -17,7 +17,7 @@ schema:
       type: object
       additionalProperties: false
       minProperties: 1
-      description: Extra access this terminal needs; a server binding a named port needs local_listen. Network destinations run under command.
+      description: Extra access this terminal needs; omit for ordinary programs. A server binding a named port needs local_listen; network destinations run under command.
       properties:
         host_resources: {type: array, minItems: 1, maxItems: 16, description: Service IDs., items: {type: string}}
         socket_paths: {type: array, minItems: 1, maxItems: 8, items: {type: string}, description: "Exact service path. External argv or env values use a whole `{{paintedwolf-socket:/absolute/path}}` reference. Clients needing a Unix URL use `{{paintedwolf-socket:unix-url:/absolute/path}}`. macOS datagrams use `{{paintedwolf-socket:unixgram:/absolute/path}}`; Linux confinement refuses Unix datagrams. Native socket arguments use the path."}
