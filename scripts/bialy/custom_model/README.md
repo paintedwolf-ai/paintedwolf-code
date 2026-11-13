@@ -181,7 +181,8 @@ Its unsigned manifest contains `model`, `revision`, `device`, one primary
 `name`, lowercase SHA-256 `digest`, `format`, and exact `bytes`. Include the
 weights, tokenizer, template, generation settings, architecture/quantization
 configuration and conversion provenance that the runtime reads. The model
-identity is `gemma4-e4b-paintedwolf`; revision names identify immutable exports.
+identities are `gemma4-e4b-paintedwolf`, `gemma4-12b-paintedwolf` and
+`gemma4-26b-paintedwolf`; revision names identify immutable exports.
 Keep the export manifest separate from the bundle's signed `manifest.json`.
 
 Use `model-bundle prepare` to compute exact sizes and hashes for explicitly named
@@ -224,10 +225,15 @@ must reverify the copied payloads with that authority. A signature establishes
 artifact identity and release authority; the trained model and precision recipe
 still require separate behavioral and hardware qualification.
 
+`scripts/generation/publish_bundle.py` verifies a signed bundle against the
+authority, then uploads its payloads under `models/<model>/<device>/<revision>/`
+with `manifest.json` last. The bucket accepts identical bytes and refuses
+different ones, so a published revision is never replaced.
+
 ## Offline contracts
 
-E4B preparation and training select `gemma4-code-v1` for the 42-layer,
-2,560-wide architecture with 18 shared KV layers. The template lives in
+Preparation and training select `gemma4-code-v1` for every Gemma 4 student
+tier, the format the host serves them in. The template lives in
 `lycaon/internal/generation/templates/`; its identity is recorded in the
 training inputs and saved tokenizer. Merge and export preserve that tokenizer.
 The native runner verifies the named template byte for byte before using it.
