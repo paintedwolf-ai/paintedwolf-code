@@ -44,5 +44,5 @@ func TestFixtureShapeIsClosed(t *testing.T) {
 	testutil.FailErr(t, "decode hints-only fixture", err)
 	runner, err := NewConformanceRunner("")
 	testutil.FailErr(t, "runner", err)
-	testutil.FailErr(t, "run hints-only fixture", runner.RunFixture(fx))
+	testutil.FailErr(t, "run hints-only fixture", runner.RunFixture(t.Context(), fx))
 }
