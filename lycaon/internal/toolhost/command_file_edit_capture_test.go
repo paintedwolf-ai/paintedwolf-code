@@ -156,15 +156,15 @@ func numberedLines(count int, needles ...int) string {
 	return b.String()
 }
 
-// A program's reads are the lines that reached the model, not the lines a
-// stage scanned on the way.
+// A program's reads are the lines that reached the model from the stage that
+// read the file, not the lines a stage scanned on the way.
 func TestCommandReadsRecordDeliveredLinesOnly(t *testing.T) {
 	for name, tc := range map[string]struct {
 		source string
 		want   []agentpresence.Span
 	}{
-		"a pipeline keeps its first lines": {
-			source: `cat notes.txt | head -n 5`,
+		"the first lines of a file": {
+			source: `head -n 5 notes.txt`,
 			want:   []agentpresence.Span{{StartLine: 1, EndLine: 5}},
 		},
 		"a search delivers its matching lines": {
@@ -196,5 +196,15 @@ func TestCommandReadsRecordDeliveredLinesOnly(t *testing.T) {
 				t.Fatalf("source context %+v, want the delivered file", out.SourceContext)
 			}
 		})
+	}
+}
+
+// Text that reaches the model through a later stage carries no source lines,
+// so it is stated as no read rather than as the whole file.
+func TestCommandReadsThroughAnotherStageRecordNoRead(t *testing.T) {
+	f := newCaptureFixture(t)
+	f.seed(t, f.Dir, "notes.txt", numberedLines(20))
+	if out := f.run(t, `cat notes.txt | head -n 5`); len(out.SourceReads) != 0 || out.SourceContext != nil {
+		t.Fatalf("recorded reads %+v and context %+v for piped text", out.SourceReads, out.SourceContext)
 	}
 }
