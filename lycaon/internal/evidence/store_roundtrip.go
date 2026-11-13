@@ -5,10 +5,12 @@ type RecordAux struct {
 	PathsTouched     []string
 	URLsTouched      []string
 	URLTitles        map[string]string
+	URLsShown        []string
 	GrepLines        map[string]map[int]string
 	PathTiers        map[string]string
 	UntrustedContent bool
 	ExternalCustody  bool
+	CustodyTree      bool
 	CustodySeq       int
 }
 
@@ -17,10 +19,12 @@ func CloneRecordForStore(rec Record) RecordAux {
 	cloned := cloneRecord(rec)
 	out := RecordAux{
 		PathsTouched:     append([]string(nil), cloned.pathsTouched...),
-		URLsTouched:      append([]string(nil), cloned.urlsTouched...),
-		URLTitles:        cloned.urlTitles,
+		URLsTouched:      append([]string(nil), cloned.urls.touched...),
+		URLTitles:        cloned.urls.titles,
+		URLsShown:        append([]string(nil), cloned.urls.shown...),
 		UntrustedContent: cloned.UntrustedContent,
 		ExternalCustody:  cloned.Custody.External,
+		CustodyTree:      cloned.Custody.Tree,
 		CustodySeq:       cloned.Custody.Seq,
 	}
 	if cloned.grepLines != nil {
@@ -48,8 +52,9 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		return
 	}
 	rec.pathsTouched = append([]string(nil), aux.PathsTouched...)
-	rec.urlsTouched = append([]string(nil), aux.URLsTouched...)
-	rec.urlTitles = nil
+	rec.urls.touched = append([]string(nil), aux.URLsTouched...)
+	rec.urls.shown = append([]string(nil), aux.URLsShown...)
+	rec.urls.titles = nil
 	for u, t := range aux.URLTitles {
 		rec.touchURLTitle(u, t)
 	}
@@ -74,6 +79,9 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 	}
 	if aux.ExternalCustody {
 		rec.Custody.External = true
+	}
+	if aux.CustodyTree {
+		rec.Custody.Tree = true
 	}
 	if aux.CustodySeq > 0 {
 		rec.Custody.Seq = aux.CustodySeq

@@ -3,6 +3,7 @@ package sourcetree
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -19,17 +20,35 @@ func TestRecursiveDisclosureKeepsGitAndIgnoredEntries(t *testing.T) {
 	address := Address{Root: root.ID, Path: "."}
 	testutil.FailErr(t, "expand all", view.Disclose(t.Context(), nil, IntentEntry{Address: address, Disclosure: Disclosure{Open: true, Recursive: true}}))
 	testutil.FailErr(t, "await shared inventory", view.catalog.Directories.AwaitNavigation(t.Context(), view.scope.Project, root))
+	// Restating the disclosure derives the boundaries inline: the inventory
+	// has settled, so the derivation is ready and installs synchronously.
+	// Boundaries are not intent, so the restated disclosure stands. A nested
+	// checkout collapses at its repository root, not at its .git directory.
+	testutil.FailErr(t, "restate disclosure to derive boundaries", view.Disclose(t.Context(), nil, IntentEntry{Address: address, Disclosure: Disclosure{Open: true, Recursive: true}}))
+	derived := func() []string {
+		view.mu.Lock()
+		defer view.mu.Unlock()
+		out := []string{}
+		for _, address := range view.rules.Derived() {
+			out = append(out, address.Path)
+		}
+		slices.Sort(out)
+		return out
+	}
+	if got, want := derived(), []string{".git", ".task", "ignored", "nested"}; !slices.Equal(got, want) {
+		t.Fatalf("derived boundaries = %v, want %v", got, want)
+	}
 	<-view.Prepare()
 	presentation := captureForTest(t, view)
-	for _, rel := range []string{".git/objects/ab/entry", "nested/.git/HEAD"} {
+	for _, rel := range paths {
 		location, _, err := presentation.Locate(t.Context(), Address{Root: root.ID, Path: rel})
-		testutil.FailErr(t, "locate lazy descendant", err)
+		testutil.FailErr(t, "locate closed boundary descendant", err)
 		if location.Visible {
-			t.Fatalf("root disclosure entered lazy subtree %q", rel)
+			t.Fatalf("root disclosure entered closed subtree %q", rel)
 		}
 	}
-	for _, dir := range []string{".git", "nested", "nested/.git"} {
-		testutil.FailErr(t, "explicitly disclose lazy subtree", view.Disclose(t.Context(), nil,
+	for _, dir := range []string{".git", ".task", "ignored", "nested", "nested/.git"} {
+		testutil.FailErr(t, "explicitly disclose closed subtree", view.Disclose(t.Context(), nil,
 			IntentEntry{Address: Address{Root: root.ID, Path: dir}, Disclosure: Disclosure{Open: true, Recursive: true}}))
 	}
 	presentation = captureForTest(t, view)

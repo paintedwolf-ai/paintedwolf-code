@@ -11,8 +11,7 @@ import {
 } from "../components/project-files-model.ts";
 import { captureBufferViewState } from "./editor-session-fidelity.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
-import { clearPrettyDisplayTab, invokePrettyToggleForTab, resetPrettyDisplayStateForTests } from "./pretty-display-state.ts";
-export { invokePrettyToggleForTab };
+import { clearPrettyDisplayTab, resetPrettyDisplayStateForTests } from "./pretty-display-state.ts";
 
 type LiveEntry = {
   view: EditorView;

@@ -4,7 +4,9 @@ package socketref
 
 import "os"
 
-func Platform() Adapter { return Adapter{Command: NoRealization, Native: NoRealization} }
+func Platform() Adapter {
+	return Adapter{Command: NoRealization, Native: NoRealization, Service: NoRealization}
+}
 
 func implicitBindingMode() Enforcement { return NoRealization }
 

@@ -248,6 +248,7 @@ func buildArgv(ctx context.Context, cwd string, opts Opts, args []string) ([]str
 	}
 	// Override order is security-sensitive.
 	out := append([]string{}, prefix...)
+	out = append(out, transportArgs(ctx)...)
 	out = append(out, lfsFilterArgs()...)
 	for _, kv := range opts.ExtraConfig {
 		kv = strings.TrimSpace(kv)

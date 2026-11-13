@@ -24,13 +24,13 @@ func TestOfferedProgramDefinitionKeepsTheWriteDoor(t *testing.T) {
 		return definition
 	}
 	write := compile("write")
-	offered := offeredProgramDefinition("write", write)
+	offered := offeredProgramDefinition("write", write, nil)
 	if offered.Digest() != write.Digest() || offered.Facts().ProgressGate != write.Facts().ProgressGate {
 		t.Fatalf("write offered as %+v, want its own definition", offered.Facts())
 	}
 	read := compile("read")
-	program := offeredProgramDefinition("read", read)
-	if program.Digest() != programOperationDefinition(read).Digest() || program.Digest() == read.Digest() {
+	program := offeredProgramDefinition("read", read, nil)
+	if program.Digest() != programOperationDefinition(read, nil).Digest() || program.Digest() == read.Digest() {
 		t.Fatal("registry tool not offered with the program definition")
 	}
 	if program.Facts().Contract.Capabilities&toolcontract.CapabilityWriteRoot == 0 {
@@ -54,13 +54,13 @@ func TestProgramSurfaceDefinitionsCompileOncePerDeclaration(t *testing.T) {
 		t.Fatalf("read catalog: %v", err)
 	}
 	spec := catalog.Commands[0]
-	first := programOperationDefinition(read)
+	first := programOperationDefinition(read, nil)
 	compiled, err := catalogOperationDefinition(spec, catalog.Language.Limits)
 	if err != nil {
 		t.Fatalf("compile catalog definition: %v", err)
 	}
 	if allocations := testing.AllocsPerRun(20, func() {
-		if programOperationDefinition(read).Digest() != first.Digest() {
+		if programOperationDefinition(read, nil).Digest() != first.Digest() {
 			t.Fatal("program definition changed between derivations")
 		}
 		again, err := catalogOperationDefinition(spec, catalog.Language.Limits)

@@ -94,6 +94,29 @@ func (p Prepared) Transfer() Transfer {
 	return *p.transfer
 }
 
+// SelectMode names the effect mode argv selects, as Prepare does.
+func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
+	bound, err := commandprogram.CatalogBinder{}.Bind(o.spec, argv)
+	if err != nil {
+		return "", false
+	}
+	opts, err := parseOptions(bound)
+	if err != nil {
+		return "", false
+	}
+	return transferMode(opts), true
+}
+
+// transferMode writes files when an output, header dump or cookie jar names one.
+func transferMode(opts options) string {
+	for _, destination := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
+		if destination != "" && destination != "-" && destination != "/dev/null" {
+			return "-o--D--c-to-file"
+		}
+	}
+	return "request"
+}
+
 // Prepare binds argv through the catalog grammar and validates every form
 // before anything is read, sent or written.
 func (o *Owners) Prepare(program mutation.Program, request commandprogram.OperationRequest) (Prepared, error) {
@@ -119,14 +142,10 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 	if err != nil {
 		return Prepared{}, err
 	}
-	mode := "request"
-	for _, destination := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
-		if destination != "" && destination != "-" && destination != "/dev/null" {
-			mode = "-o--D--c-to-file"
-		}
-	}
+	mode := transferMode(opts)
 	review := bound.Review(o.operation)
 	review.PathTargets = curlPathTargets(opts)
+	review.Record, review.Represented = requestRecord(opts)
 	return Prepared{Mode: mode, Operation: o.operation, Argv: bound, Review: review, LoopbackPorts: loopbackPorts(opts.url, opts.dial), owners: o, program: program, request: request, options: opts, transfer: &Transfer{}}, nil
 }
 
@@ -140,24 +159,49 @@ func curlPathTargets(opts options) []commandprogram.PathTarget {
 	for _, path := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
 		add(path, true)
 	}
+	for _, path := range []string{opts.upload, opts.tls.cacert, opts.tls.capath, opts.tls.cert, opts.tls.key} {
+		add(path, false)
+	}
 	for _, path := range opts.cookies {
 		if !strings.Contains(path, "=") {
 			add(path, false)
 		}
 	}
 	for _, part := range opts.data {
-		if part.kind != "raw" && strings.HasPrefix(part.value, "@") {
+		switch {
+		case part.kind == "urlencode":
+			add(urlencodedFile(part.value), false)
+		case part.kind != "raw" && strings.HasPrefix(part.value, "@"):
 			add(strings.TrimPrefix(part.value, "@"), false)
+		}
+	}
+	for _, value := range opts.json {
+		if path, ok := strings.CutPrefix(value, "@"); ok {
+			add(path, false)
 		}
 	}
 	for _, form := range opts.forms {
 		_, value, ok := strings.Cut(form, "=")
-		if ok && strings.HasPrefix(value, "@") {
+		switch {
+		case ok && strings.HasPrefix(value, "@"):
 			path, _, _ := strings.Cut(strings.TrimPrefix(value, "@"), ";")
 			add(path, false)
+		case ok && strings.HasPrefix(value, "<"):
+			add(strings.TrimPrefix(value, "<"), false)
 		}
 	}
 	return targets
+}
+
+// urlencodedFile is the file a --data-urlencode value reads: @file or
+// name@file, where @ comes before any =.
+func urlencodedFile(value string) string {
+	eq := strings.IndexByte(value, '=')
+	at := strings.IndexByte(value, '@')
+	if at >= 0 && (eq < 0 || at < eq) {
+		return value[at+1:]
+	}
+	return ""
 }
 
 func loopbackPorts(raw string, dial []outboundhttp.ResolveMapping) []uint16 {

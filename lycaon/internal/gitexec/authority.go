@@ -41,9 +41,14 @@ func WithAgentLaunch(ctx context.Context, launch AgentLaunch) context.Context {
 }
 
 // WithHostPurpose runs Git under ctx as host bookkeeping the agent did not
-// choose. Inside an agent tool call each purpose is a reviewed exception.
+// choose. Inside an agent tool call each purpose is a reviewed exception. It
+// never replaces an admitted agent launch: Git started for an agent's command
+// stays under that launch.
 func WithHostPurpose(ctx context.Context, purpose string) context.Context {
 	current, _ := ctx.Value(authorityKey{}).(authority)
+	if current.agent != nil {
+		return ctx
+	}
 	return context.WithValue(ctx, authorityKey{}, authority{agentEntry: current.agentEntry, hostReason: strings.TrimSpace(purpose)})
 }
 
@@ -76,4 +81,11 @@ func launchPlan(ctx context.Context, subject string) (exec.LaunchPlan, error) {
 func agentLaunched(ctx context.Context) bool {
 	_, ok := AgentLaunchFrom(ctx)
 	return ok
+}
+
+// hostPurposeInAgentEntry reports host bookkeeping inside an agent's tool
+// call; every such purpose is local.
+func hostPurposeInAgentEntry(ctx context.Context) bool {
+	a, _ := ctx.Value(authorityKey{}).(authority)
+	return a.agent == nil && a.agentEntry && a.hostReason != ""
 }

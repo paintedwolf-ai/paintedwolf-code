@@ -833,11 +833,38 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 1 originHits=%d cookie=%q, want 1 with session secret", originHits.Load(), lastOriginCookie.Load())
 	}
 
-	// 2. Quiet repeat to the same covered origin + dial override succeeds without raising a new checkpoint.
+	// 2. A repeat to the same covered origin + dial override needs no new
+	// cookie decision. Step 1 reached the origin while the chat was clean and
+	// then read its reply, so the agent's next send there is a first contact
+	// and asks once on its own.
 	originHits.Store(0)
 	lastOriginCookie.Store("")
-	_, err = s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 2 quiet repeat origin cookie")
-	testutil.FailErr(t, "step 2 quiet repeat", err)
+	done2 := make(chan error, 1)
+	go func() {
+		_, err := s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, "step 2 quiet repeat origin cookie")
+		done2 <- err
+	}()
+	kind := wire.CheckpointKindToolApproval
+	answered := map[string]bool{}
+	testutil.WaitFor(t, func() bool {
+		select {
+		case err := <-done2:
+			testutil.FailErr(t, "step 2 quiet repeat", err)
+			return true
+		default:
+		}
+		pending, _ := s.h.Sessions.Checkpoints.ListPending(t.Context(), s.session, &kind)
+		for _, candidate := range pending {
+			if candidate.ToolApproval.Plan.Subject.Kind == wire.ApprovalSubjectKindSecret {
+				t.Fatalf("step 2 asked about the covered cookie again: %+v", candidate.ToolApproval.Plan)
+			}
+			if !answered[candidate.ID] {
+				answered[candidate.ID] = true
+				answerCard(t, s, candidate, "approve_current_action")
+			}
+		}
+		return false
+	})
 	out2 := s.outcome(t, "program-2")
 	if out2.State != "completed" || out2.Status != 0 || strings.TrimSpace(out2.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || !strings.Contains(lastOriginCookie.Load().(string), "session="+cookieSecret) {
 		t.Fatalf("step 2 quiet repeat outcome = %+v originHits=%d cookie=%q", out2, originHits.Load(), lastOriginCookie.Load())
