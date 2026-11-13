@@ -3,16 +3,10 @@
 package destconfig
 
 import (
-	"bufio"
-	"context"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
-
-	"github.com/lycaon/lycaon/internal/gitexec"
 )
 
 // Source resolves user-configured hosts for a project or the whole device.
@@ -105,113 +99,6 @@ func (r *Registry) hostsFor(projectDir string) map[string]string {
 	r.cache[projectDir] = cacheEntry{hosts: hosts, at: r.now()}
 	r.mu.Unlock()
 	return hosts
-}
-
-// GitRemoteHostsForRoots reads git remotes from each repository root and returns host → "git:<remote>".
-func GitRemoteHostsForRoots(roots ...string) map[string]string {
-	remotes := make(map[string]string)
-	seenRoots := make(map[string]bool)
-	for _, root := range roots {
-		root = strings.TrimSpace(root)
-		if root == "" || seenRoots[root] {
-			continue
-		}
-		seenRoots[root] = true
-		list, ok := gitexec.ListRemotes(context.Background(), root)
-		if ok {
-			for _, r := range list {
-				host := parseGitRemoteHost(r.URL)
-				if host != "" {
-					if _, taken := remotes[host]; !taken {
-						remotes[host] = "git:" + r.Name
-					}
-				}
-			}
-			continue
-		}
-		for h, src := range fallbackGitConfigRemotes(root) {
-			if _, taken := remotes[h]; !taken {
-				remotes[h] = src
-			}
-		}
-	}
-	return remotes
-}
-
-func fallbackGitConfigRemotes(projectDir string) map[string]string {
-	if projectDir == "" {
-		return nil
-	}
-	gitDir := filepath.Join(projectDir, ".git")
-	fi, err := os.Stat(gitDir)
-	if err != nil {
-		return nil
-	}
-	configPath := filepath.Join(gitDir, "config")
-	if !fi.IsDir() {
-		data, err := os.ReadFile(gitDir) // #nosec G304
-		if err != nil {
-			return nil
-		}
-		line := strings.TrimSpace(string(data))
-		if strings.HasPrefix(line, "gitdir:") {
-			target := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
-			if !filepath.IsAbs(target) {
-				target = filepath.Join(projectDir, target)
-			}
-			configPath = filepath.Join(target, "config")
-		}
-	}
-	data, err := os.ReadFile(configPath) // #nosec G304 G703 -- the config the repository's own .git entry names, resolved as git resolves it
-	if err != nil {
-		return nil
-	}
-	return parseGitConfigRemotes(string(data))
-}
-
-func parseGitConfigRemotes(configText string) map[string]string {
-	remotes := make(map[string]string)
-	currentRemote := ""
-	scanner := bufio.NewScanner(strings.NewReader(configText))
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "[remote \"") && strings.HasSuffix(line, "\"]") {
-			currentRemote = strings.TrimSuffix(strings.TrimPrefix(line, "[remote \""), "\"]")
-			continue
-		}
-		if strings.HasPrefix(line, "[") {
-			currentRemote = ""
-			continue
-		}
-		if currentRemote != "" && strings.HasPrefix(line, "url") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 && strings.TrimSpace(parts[0]) == "url" {
-				rawURL := strings.TrimSpace(parts[1])
-				host := parseGitRemoteHost(rawURL)
-				if host != "" {
-					remotes[host] = "git:" + currentRemote
-				}
-			}
-		}
-	}
-	return remotes
-}
-
-func parseGitRemoteHost(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	// SCP-like syntax: [user@]host:path
-	if strings.Contains(raw, "@") && strings.Contains(raw, ":") && !strings.Contains(raw, "://") {
-		at := strings.Index(raw, "@")
-		colon := strings.Index(raw, ":")
-		if colon > at {
-			host := strings.TrimSpace(raw[at+1 : colon])
-			return strings.ToLower(host)
-		}
-	}
-	return Normalize(raw)
 }
 
 // Normalize reduces an endpoint to the hostname the egress broker observes. It

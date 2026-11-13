@@ -10,6 +10,7 @@ import {
 import { CitationEvidenceSection } from "../citation/CitationEvidenceSection.tsx";
 import { StructuredToolBody } from "../tool/StructuredToolBody.tsx";
 import { ToolPartShell } from "../tool/ToolPartShell.tsx";
+import type { ToolBriefingSlots } from "../tool/tool-briefing-slots.ts";
 
 type Props = {
   part: ToolPartView;
@@ -17,6 +18,7 @@ type Props = {
   sessionId?: string;
   projectId?: string;
   rootRefs?: readonly ResolveProjectRoot[];
+  slots?: ToolBriefingSlots;
 };
 
 /**
@@ -27,7 +29,7 @@ type Props = {
 export function VerdictCard(props: Props) {
   const outcome = () => verdictOutcomeFromPart(props.part);
   return (
-    <ToolPartShell
+    <ToolPartShell slots={props.slots}
       part={props.part}
       layout={props.layout}
       projectId={props.projectId}

@@ -24,9 +24,6 @@ func CommandGuidanceFactKeys() []string {
 		"profile_has_command",
 		"profile_has_command_output",
 		"profile_has_command_stop",
-		"profile_has_http_request",
-		"profile_has_process_list",
-		"profile_has_process_signal",
 		"profile_has_terminal_open",
 		"profile_has_terminal_send",
 		"profile_has_verify",
@@ -118,7 +115,6 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	cmdMutation, _ := vars["profile_command_mutation"].(bool)
 	hasVerify, _ := vars["profile_has_verify"].(bool)
 	hasTerminal, _ := vars["profile_has_terminal_open"].(bool)
-	hasHTTP, _ := vars["profile_has_http_request"].(bool)
 
 	var templates []string
 	if hasCommandOffered {
@@ -133,7 +129,7 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if in.IsCoordinator && (cmdMutation || hasVerify || hasTerminal) && !in.OmittedUnits["coordinator-host-runner"] {
 		templates = append(templates, "units/coordinator-host-runner.md")
 	}
-	if (cmdMutation || hasTerminal || hasHTTP) && (hasCommandOffered || hasTerminal || hasHTTP) && !in.OmittedUnits["secure-by-default-run"] {
+	if (cmdMutation || hasTerminal) && (hasCommandOffered || hasTerminal) && !in.OmittedUnits["secure-by-default-run"] {
 		templates = append(templates, "units/secure-by-default-run.md")
 	}
 	if (cmdMutation || hasVerify || hasTerminal) && (hasCommandOffered || hasVerify || hasTerminal) && !in.OmittedUnits["runner-operating-procedure"] {
