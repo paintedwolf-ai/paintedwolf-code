@@ -1,4 +1,4 @@
-description: Escalate an ambiguity you can't resolve in scope — question + 2+ options, the accepted call suspends your run. The coordinator answers and you resume with the same workspace. Do not also call complete_leg.
+description: Ask your coordinator a question you cannot proceed without — offer two or more concrete options when they are natural, or none for an open question. The accepted call suspends your run; the coordinator answers and you resume with the same workspace. To tell your coordinator something without stopping, send a message instead. Do not also call complete_leg.
 schema:
   type: object
   properties:
@@ -9,7 +9,7 @@ schema:
       type: array
       items:
         type: string
-      description: 2+ concrete, mutually-exclusive options.
+      description: Optional; 2+ concrete, mutually-exclusive options when the choice has them.
     blocker_class:
       type: string
       enum: [decision, checkpoint, sandbox]
@@ -31,5 +31,5 @@ schema:
         type: string
         format: uuid
       description: Optional 2–4 image ids when asking which variant to prefer (A/B…).
-  required: [question, options]
+  required: [question]
   additionalProperties: false

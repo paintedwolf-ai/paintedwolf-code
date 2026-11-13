@@ -58,6 +58,20 @@ func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
 	}
 }
 
+// SetWorkerNames sets how a job is traced to the worker whose round it runs,
+// for waits and coordinator notices that address workers by name.
+func (m *Host) SetWorkerNames(names func(ctx context.Context, jobID string) (string, bool, error)) {
+	if m == nil {
+		return
+	}
+	if m.Coordinator.Loop != nil {
+		m.Coordinator.Loop.WorkerNames = names
+	}
+	if m.Workers.Results != nil {
+		m.Workers.Results.SetWorkerNames(names)
+	}
+}
+
 // SetWorkerMessages sets how messages between a coordinator and its workers
 // reach their requests.
 func (m *Host) SetWorkerMessages(delivery assembly.MessageDeliveryRecorder) {

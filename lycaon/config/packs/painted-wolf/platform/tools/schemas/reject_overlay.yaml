@@ -1,12 +1,12 @@
 description: >-
-  Abort overlay without landing. overlay_id == job_id. Wrong/superseded only — not landable conflicts.
-  Example: {"overlay_id":"<job_id>","reason":"Superseded by corrected dispatch"}.
+  Discard a result's changes without landing them, together with that worker's later changes. Wrong/superseded only — not landable conflicts.
+  Example: {"overlay_id":"<result handle>","reason":"Superseded by corrected dispatch"}.
 schema:
   type: object
   properties:
     overlay_id:
       type: string
-      description: Worker job_id from task() or pack_board
+      description: The result handle from the worker's result notice or the roster.
     reason:
       type: string
       description: Reject rationale (optional)

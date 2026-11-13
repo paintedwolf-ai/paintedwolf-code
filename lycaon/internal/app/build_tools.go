@@ -96,17 +96,19 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	if err := worker.RegisterTaskTool(b.execution.Host.Registry, taskDeps); err != nil {
 		return fmt.Errorf("task tool: %w", err)
 	}
+	workerOps := &workerops.Service{
+		Reader:    workerops.Reader{Records: b.boards.WorkerRecords, Jobs: b.delegations.Queue, Decisions: b.sessions.Decisions},
+		Agents:    prompts.AgentMutationCapable,
+		Accounted: b.boards.ReleaseAccounted,
+	}
 	if err := worker.RegisterAnswerDecisionTool(b.execution.Host.Registry, worker.AnswerDecisionToolDeps{
-		Answer: b.boards.AnswerDecision,
+		Answer:  b.boards.AnswerDecision,
+		Workers: workerOps,
 	}); err != nil {
 		return fmt.Errorf("answer_decision tool: %w", err)
 	}
 	if err := worker.RegisterWorkerTools(b.execution.Host.Registry, worker.WorkerToolDeps{
-		Ops: &workerops.Service{
-			Reader:    workerops.Reader{Records: b.boards.WorkerRecords, Jobs: b.delegations.Queue, Decisions: b.sessions.Decisions},
-			Agents:    prompts.AgentMutationCapable,
-			Accounted: b.boards.ReleaseAccounted,
-		},
+		Ops:     workerOps,
 		Queue:   b.delegations.Queue,
 		Workers: b.worker.cfg,
 	}); err != nil {
@@ -161,13 +163,15 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		return err
 	}
 	if err := worker.RegisterWorkerCancelTool(b.execution.Host.Registry, worker.CancelToolDeps{
-		Cancel: b.delegations.Cancel,
+		Cancel:  b.delegations.Cancel,
+		Workers: workerOps,
 	}); err != nil {
 		return fmt.Errorf("worker_cancel tool: %w", err)
 	}
 	b.sessions.Manager.ProjectControl.SetOverlayPromoter(workerMergeSvc)
 	if err := worker.RegisterOverlayTools(b.execution.Host.Registry, worker.OverlayToolDeps{
-		Merge: workerMergeSvc,
+		Merge:   workerMergeSvc,
+		Results: workerOps,
 	}); err != nil {
 		return fmt.Errorf("overlay tools: %w", err)
 	}

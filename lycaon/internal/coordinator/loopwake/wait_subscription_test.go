@@ -151,7 +151,7 @@ func TestLoopNeedsDecisionWakesThroughAllWorkersIdleWait(t *testing.T) {
 		Question:       "Which scan path?",
 		Options:        []string{"retry scan_list", "manual audit"},
 		BlockerClass:   api.WorkerBlockerDecision,
-	})
+	}, "fixer")
 	loop.Nudges.NudgeAfterWorkerJobTerminal(
 		context.Background(),
 		"s1",

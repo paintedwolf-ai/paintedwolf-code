@@ -20,6 +20,7 @@ type WaitSubscriptionsDeps struct {
 	ProcessSubject            func(sessionID, handle string) string
 	ScanCycleOpen             func(ctx context.Context, sessionID string) bool
 	WorkerCycleIdle           WorkerCycleIdle
+	WorkerName                func(ctx context.Context, jobID string) string
 }
 type WaitSubscriptions struct {
 	Policy *HostWakePolicy
@@ -85,6 +86,7 @@ func (l *WaitSubscriptions) settleDurableWaitWake(
 	triggers, processHandles := triggersFromConditions(lease.Conditions)
 	condition, matched := waitConditionForWake(triggers, waitMatchInput{
 		Wake: wake, CompletingJobID: completingJobID, Subject: legID,
+		Worker:            l.workerName(ctx, completingJobID, legID),
 		ProcessHandles:    processHandles,
 		WorkerHandles:     workerHandlesFromConditions(lease.Conditions),
 		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID),
@@ -201,6 +203,23 @@ func (l *WaitSubscriptions) processCycleOpen(sessionID string, handles []string)
 	}
 	return deps.ProcessRunning(sessionID, handles)
 }
+
+// workerName names the worker a wake's job belongs to.
+func (l *WaitSubscriptions) workerName(ctx context.Context, completingJobID, subject string) string {
+	deps := l.loopDeps()
+	if deps.WorkerName == nil {
+		return ""
+	}
+	job := strings.TrimSpace(completingJobID)
+	if job == "" {
+		job = strings.TrimSpace(subject)
+	}
+	if job == "" {
+		return ""
+	}
+	return deps.WorkerName(ctx, job)
+}
+
 func (l *WaitSubscriptions) overlayPromoteDue(ctx context.Context, sessionID string, env anchor.Envelope) bool {
 	if env.HasPendingOverlayPromote() {
 		return true
@@ -230,6 +249,7 @@ func (l *WaitSubscriptions) waitWakeAccepted(
 		Wake:              wake,
 		CompletingJobID:   completingJobID,
 		Subject:           legID,
+		Worker:            l.workerName(ctx, completingJobID, legID),
 		ProcessHandles:    l.Waits.ActiveProcessHandles(sessionID),
 		WorkerHandles:     l.Waits.activeWorkerHandles(sessionID),
 		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID),
@@ -244,6 +264,7 @@ func (l *WaitSubscriptions) matchesActiveWait(ctx context.Context, sessionID str
 	}
 	_, matched := waitConditionForWake(l.Waits.Triggers(sessionID), waitMatchInput{
 		Wake: pending.wake, CompletingJobID: pending.completingJobID, Subject: pending.legID,
+		Worker:         l.workerName(ctx, pending.completingJobID, pending.legID),
 		ProcessHandles: l.Waits.ActiveProcessHandles(sessionID), WorkerHandles: l.Waits.activeWorkerHandles(sessionID),
 		CycleIdle:         l.Cycles.workerCycleIdle(ctx, sessionID, pending.completingJobID),
 		OverlayPromoteDue: l.overlayPromoteDue(ctx, sessionID, pending.env), NeedsDecision: pending.env.HasWorkerDecision(),

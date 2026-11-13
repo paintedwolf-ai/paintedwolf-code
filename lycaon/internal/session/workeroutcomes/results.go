@@ -43,6 +43,7 @@ type Results struct {
 	digests        *Digests
 	sessions       SessionReader
 	limits         SessionLimits
+	workerNames    func(ctx context.Context, jobID string) (string, bool, error)
 }
 
 type ResultPorts struct {
@@ -65,6 +66,11 @@ func (m *Results) SetWorkers(tasks TaskReader)              { m.tasks = tasks }
 func (m *Results) SetProofs(proofs TerminalProofs)          { m.proofs = proofs }
 func (m *Results) SetDecisions(decisions WorkerDecisions)   { m.decisions = decisions }
 func (m *Results) SetWorkflowSource(source ActiveWorkflow)  { m.workflowSource = source }
+
+// SetWorkerNames names the worker a job's round belongs to in its facts.
+func (m *Results) SetWorkerNames(names func(ctx context.Context, jobID string) (string, bool, error)) {
+	m.workerNames = names
+}
 
 // ValidateWorkflow rejects incomplete worker-to-workflow composition.
 func (m *Results) ValidateWorkflow() error {
@@ -129,7 +135,7 @@ func (m *Results) EnvelopeForTerminal(ctx context.Context, sessionID, completing
 		if err != nil {
 			slog.WarnContext(ctx, "load worker decision for coordinator envelope", "job_id", jobID, "error", err)
 		} else if ok {
-			env.WithWorkerDecision(req)
+			env.WithWorkerDecision(req, m.workerName(ctx, jobID))
 		}
 	}
 	return env
@@ -233,3 +239,18 @@ func (m *Results) RoundRunning(jobID string) bool {
 	}
 	return task.Status == api.WorkerStatusPending || task.Status == api.WorkerStatusRunning
 }
+
+func (m *Results) workerName(ctx context.Context, jobID string) string {
+	if m.workerNames == nil {
+		return ""
+	}
+	name, ok, err := m.workerNames(ctx, jobID)
+	if err != nil {
+		slog.WarnContext(ctx, "name worker for coordinator envelope", "job_id", jobID, "error", err)
+	}
+	if !ok {
+		return ""
+	}
+	return name
+}
+

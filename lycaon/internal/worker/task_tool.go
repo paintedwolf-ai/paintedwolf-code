@@ -103,6 +103,9 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		}
 		normalizedScope := identity.Scope
 		scopePtr := &normalizedScope
+		if after, err = resolveTaskAddresses(ctx, deps, tctx, after, scopePtr); err != nil {
+			return "", err
+		}
 		jobID := uuid.NewString()
 		name, err := workerNameArg(args)
 		if err != nil {
@@ -223,7 +226,6 @@ func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task 
 		"job_id":             jobID,
 		"status":             "enqueued",
 		"scope_mode":         task.EffectiveScope().Mode,
-		"after_workers":      task.AfterWorkers,
 		"sibling_files_live": false,
 	}
 	if task.EffectiveScope().IsWrite() {

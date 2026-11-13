@@ -170,7 +170,7 @@ var titleFallbacks = map[string]string{
 }
 
 var titleKeys = map[string][]string{
-	"answer_decision":                {"option"},
+	"answer_decision":                {"answer"},
 	"ask_user":                       {"prompt"},
 	"capture_page":                   {"caption", "url", "project_dir"},
 	"chmod":                          {"paths", "mode"},

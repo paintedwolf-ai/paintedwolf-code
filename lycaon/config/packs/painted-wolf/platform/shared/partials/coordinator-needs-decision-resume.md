@@ -4,4 +4,4 @@ When a worker envelope or roster line shows **`needs_decision`**, read the struc
 
 {% include "partials/coordinator-boundary-escalation.md" %}
 
-When the coordinator is responsible for the choice: answer on the **same turn** with `answer_decision(job_id=<exact job_id from the envelope>, option=<number or exact option text>)`, then continue any independent coordination. Use **`wait(resume=true)`** when the next action needs that worker’s result; keep dependent work blocked until it completes.
+When the coordinator is responsible for the choice: answer on the **same turn**{% if profile_has_answer_decision %} with `answer_decision(worker=<the asking worker's name>, answer=<an option's number or text, or your own words when it offered none>)`{% endif %}, then continue any independent coordination.{% if profile_has_wait %} Use **`wait(resume=true)`** when the next action needs that worker's result; keep dependent work blocked until it delivers.{% endif %}

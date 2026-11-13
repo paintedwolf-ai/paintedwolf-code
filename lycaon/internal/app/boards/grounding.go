@@ -93,6 +93,7 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
 	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetAccounts(r.WorkerRecords)
+	r.deps.Sessions.Manager.SetWorkerNames(r.WorkerRecords.NameByJob)
 	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{
 		Records:    r.WorkerRecords,
 		NeedsReply: r.deps.Sessions.Manager.Coordinator.Workers.MessageNeedsReply,

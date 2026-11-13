@@ -90,3 +90,44 @@ func startWorkerRound(ctx context.Context, deps TaskToolDeps, tctx tools.ToolCon
 	}
 	return w.Name, nil
 }
+
+// resolveTaskAddresses turns the worker names in after_workers into the jobs
+// of those workers' latest rounds, and a result handle in base_overlay_id
+// into its job. A prerequisite follows its producer's later rounds on its
+// own, so the latest round is where it starts.
+func resolveTaskAddresses(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, after []string, scope *api.TaskScope) ([]string, error) {
+	if deps.WorkerRecords == nil {
+		return after, nil
+	}
+	actor := taskActor(tctx)
+	jobs := make([]string, 0, len(after))
+	for _, name := range after {
+		w, err := deps.WorkerRecords.Resolve(ctx, actor, name)
+		if errors.Is(err, workerrecords.ErrWorkerNotFound) {
+			return nil, &toolrejection.ToolReject{Code: "WORKER_NAME_UNKNOWN", Data: map[string]any{"tool": "task", "worker": name}}
+		}
+		if err != nil {
+			return nil, err
+		}
+		rounds, err := deps.WorkerRecords.Rounds(ctx, actor, w.ID)
+		if err != nil {
+			return nil, err
+		}
+		if len(rounds) == 0 {
+			return nil, &toolrejection.ToolReject{Code: "WORKER_NAME_UNKNOWN", Data: map[string]any{"tool": "task", "worker": name}}
+		}
+		jobs = append(jobs, rounds[len(rounds)-1].JobID)
+	}
+	if scope != nil && strings.TrimSpace(scope.BaseOverlayID) != "" {
+		handle := strings.TrimSpace(scope.BaseOverlayID)
+		ref, err := deps.WorkerRecords.Result(ctx, actor, handle)
+		if errors.Is(err, workerrecords.ErrResultNotFound) {
+			return nil, &toolrejection.ToolReject{Code: "RESULT_HANDLE_UNKNOWN", Data: map[string]any{"tool": "task", "overlay_id": handle}}
+		}
+		if err != nil {
+			return nil, err
+		}
+		scope.BaseOverlayID = ref.JobID
+	}
+	return jobs, nil
+}

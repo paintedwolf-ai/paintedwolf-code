@@ -50,7 +50,10 @@ type LoopWakeSignalDeps struct {
 	HasQueuedKick             func(sessionID, kickID string) bool
 	WorkflowObligationsOpen   func(ctx context.Context, sessionID string) bool
 	HostWakeOverlayPromoteDue func(ctx context.Context, sessionID string) bool
-	ScanCycleOpen             func(ctx context.Context, sessionID string) bool
+	// WorkerName names the worker whose round a job runs, which is how
+	// waits address workers.
+	WorkerName    func(ctx context.Context, jobID string) string
+	ScanCycleOpen func(ctx context.Context, sessionID string) bool
 }
 
 type LoopProcessDeps struct {

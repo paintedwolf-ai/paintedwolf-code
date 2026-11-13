@@ -261,8 +261,13 @@ func workerToolReject(tool, worker, agent string, err error, handle ...string) e
 		if refusal.View.Reason != workerstate.ReasonNone {
 			data["reason"] = string(refusal.View.Reason)
 		}
-		if tool == ShelveOverlayTool {
-			return &toolrejection.ToolReject{Code: "SHELVE_OVERLAY_NOT_ADMITTED", Data: data}
+		switch refusal.Op {
+		case workerstate.OpCancel:
+			return &toolrejection.ToolReject{Code: "WORKER_CANCEL_NOT_RUNNING", Data: data}
+		case workerstate.OpAnswer:
+			return &toolrejection.ToolReject{Code: DecisionNotFoundCode, Data: data}
+		case workerstate.OpPreview, workerstate.OpPromote, workerstate.OpReject, workerstate.OpShelve:
+			return &toolrejection.ToolReject{Code: "RESULT_CHANGES_NOT_ADMITTED", Data: data}
 		}
 		if code, ok := agentChangeCodes[refusal.AgentChange]; ok {
 			return &toolrejection.ToolReject{Code: code, Data: data}

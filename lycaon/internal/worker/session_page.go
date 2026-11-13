@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/pagecursor"
 	"github.com/lycaon/lycaon/internal/worker/jobstate"
@@ -243,22 +242,22 @@ func parseAfterWorkers(args map[string]any) ([]string, error) {
 		for _, v := range values {
 			s, ok := v.(string)
 			if !ok {
-				return nil, invalidTaskCharter("after_workers", "expected_job_ids")
+				return nil, invalidTaskCharter("after_workers", "expected_worker_names")
 			}
-			ids = append(ids, s)
+			ids = append(ids, strings.TrimSpace(s))
 		}
 	case []string:
 		ids = append(ids, values...)
 	default:
-		return nil, invalidTaskCharter("after_workers", "expected_job_ids")
+		return nil, invalidTaskCharter("after_workers", "expected_worker_names")
 	}
 	if len(ids) > MaxWorkerPrerequisites {
 		return nil, invalidTaskCharter("after_workers", "too_many_prerequisites")
 	}
 	seen := make(map[string]bool, len(ids))
 	for _, id := range ids {
-		if _, err := uuid.Parse(id); err != nil || seen[id] {
-			return nil, invalidTaskCharter("after_workers", "invalid_or_repeated_job_id")
+		if id == "" || seen[id] {
+			return nil, invalidTaskCharter("after_workers", "empty_or_repeated_worker_name")
 		}
 		seen[id] = true
 	}

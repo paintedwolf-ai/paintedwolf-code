@@ -300,3 +300,6 @@ UPDATE workers SET child_session_id = sqlc.arg(child_session_id), updated_at = s
 WHERE id = (SELECT worker_id FROM worker_rounds WHERE job_id = sqlc.arg(job_id))
   AND child_session_id IS NULL;
 
+-- name: GetWorkerNameByJob :one
+SELECT w.name FROM worker_rounds r JOIN workers w ON w.id = r.worker_id WHERE r.job_id = ?;
+

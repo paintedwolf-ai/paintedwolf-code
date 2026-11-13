@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -32,6 +33,7 @@ type workerToolsFixture struct {
 	coord     workerrecords.Actor
 	workerID  string
 	root      string
+	ops       *workerops.Service
 }
 
 func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
@@ -54,13 +56,11 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 	})
 	testutil.FailErr(t, "create worker", err)
 	f.workerID = w.WorkerID
-	testutil.FailErr(t, "register", RegisterWorkerTools(f.reg, WorkerToolDeps{
-		Ops: &workerops.Service{
-			Reader: workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
-			Agents: prompts.AgentMutationCapable,
-		},
-		Queue: f.queue,
-	}))
+	f.ops = &workerops.Service{
+		Reader: workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
+		Agents: prompts.AgentMutationCapable,
+	}
+	testutil.FailErr(t, "register", RegisterWorkerTools(f.reg, WorkerToolDeps{Ops: f.ops, Queue: f.queue}))
 	return f
 }
 
@@ -388,4 +388,36 @@ func TestTaskStartsANamedWorker(t *testing.T) {
 	if countJobs(t, f.db) != 1 {
 		t.Fatal("a refused name enqueued a job")
 	}
+}
+
+// A question is answered by naming the asking worker, in free text when it
+// offered no options; a worker that is not asking has nothing to answer.
+func TestAnswerDecisionByWorkerName(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	resolver := &answerStubResolver{decisions: f.decisions}
+	answers := &AnswerDecisionService{Queue: f.queue, Decisions: f.decisions, Resolver: resolver}
+	testutil.FailErr(t, "register", RegisterAnswerDecisionTool(f.reg, AnswerDecisionToolDeps{Answer: answers, Workers: f.ops}))
+	f.deliver(t, "job-1")
+	_, err := f.run(t, "answer_decision", "call-0", map[string]any{"worker": "surveyor", "answer": "utf-8"})
+	wantReject(t, err, DecisionNotFoundCode)
+
+	_, err = f.run(t, InstructWorkerTool, "call-1", map[string]any{"worker": "surveyor", "instructions": "check the encoder"})
+	testutil.FailErr(t, "instruct", err)
+	job := latestJob(t, f.db)
+	testutil.FailErr(t, "ask", f.decisions.Put(t.Context(), api.WorkerDecisionRequest{ChildSessionID: "child", WorkerID: job, Question: "Which encoding does the caller expect?"}))
+	out, err := f.run(t, "answer_decision", "call-2", map[string]any{"worker": "surveyor", "answer": "UTF-8 without a byte-order mark"})
+	testutil.FailErr(t, "answer", err)
+	if !strings.Contains(out, `"worker":"surveyor"`) || len(resolver.appended) != 1 || !strings.Contains(resolver.appended[0].Content, "UTF-8 without a byte-order mark") {
+		t.Fatalf("answer = %s, appended = %+v", out, resolver.appended)
+	}
+}
+
+// Stopping names the worker: a working round is stopped, and a worker with
+// nothing running is refused.
+func TestWorkerCancelByName(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	testutil.FailErr(t, "register", RegisterWorkerCancelTool(f.reg, CancelToolDeps{Cancel: &CancelService{Queue: f.queue}, Workers: f.ops}))
+	f.deliver(t, "job-1")
+	_, err := f.run(t, "worker_cancel", "call-0", map[string]any{"worker": "surveyor"})
+	wantReject(t, err, "WORKER_CANCEL_NOT_RUNNING")
 }

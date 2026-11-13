@@ -844,31 +844,19 @@
       "branch_instruction": "Inspect the current worker state before retrying.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "The pending decision for worker {{ paintedwolf.job_id }} changed."
-    },
-    "DECISION_JOB_ID_MISMATCH": {
-      "branch_instruction": "Use the envelope job_id, the host resumes the worker automatically — do not dispatch new work until the worker is terminal",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "answer_decision was called with a job_id that does not match the pending needs_decision for that worker"
+      "summary": "The pending decision for worker {{ paintedwolf.worker }} changed."
     },
     "DECISION_NOT_FOUND": {
-      "branch_instruction": "Do not guess job ids or answer before the worker asks.",
+      "branch_instruction": "Answer only a worker the roster shows as asking.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Worker {{ paintedwolf.job_id }} has no pending decision to answer."
+      "summary": "Worker {{ paintedwolf.worker }} has no pending decision to answer."
     },
     "DECISION_NOT_SUSPENDED": {
       "branch_instruction": "Inspect the current worker state before retrying.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Worker {{ paintedwolf.job_id }} is {{ paintedwolf.status }} and cannot resume from a decision."
-    },
-    "DECISION_SESSION_MISMATCH": {
-      "branch_instruction": "Leave another session's worker to that session.",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "Worker {{ paintedwolf.job_id }} was not dispatched from this session."
+      "summary": "Worker {{ paintedwolf.worker }} is {{ paintedwolf.status }} and cannot resume from a decision."
     },
     "DELEGATE_DISPATCH_LEG_NOT_PENDING": {
       "branch_instruction": "Branch on leg status; dispatch only legs whose status is pending",
@@ -2368,6 +2356,12 @@
       "emit": "guard:request_decision",
       "summary": "Artifact {{ paintedwolf.artifact_id }} has MIME {{ paintedwolf.mime }}, which the decision card cannot preview."
     },
+    "RESULT_CHANGES_NOT_ADMITTED": {
+      "branch_instruction": "Branch on Code RESULT_CHANGES_NOT_ADMITTED; do not retry until the worker's state changes",
+      "category": "recoverable",
+      "emit": "guard:promote_overlay",
+      "summary": "The worker that holds these changes is {{ paintedwolf.state }}, which does not admit this now."
+    },
     "RESULT_HANDLE_UNKNOWN": {
       "branch_instruction": "Branch on Code RESULT_HANDLE_UNKNOWN; do not retry the same call",
       "category": "recoverable",
@@ -2813,12 +2807,6 @@
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "Session scratch is unavailable in this chat, so {{ paintedwolf.path }} has no folder to resolve against."
-    },
-    "SHELVE_OVERLAY_NOT_ADMITTED": {
-      "branch_instruction": "Branch on Code SHELVE_OVERLAY_NOT_ADMITTED; do not retry the same call",
-      "category": "recoverable",
-      "emit": "guard:shelve_overlay",
-      "summary": "The worker's state does not admit shelving now."
     },
     "SHELVE_OVERLAY_NO_CHANGES": {
       "branch_instruction": "Branch on Code SHELVE_OVERLAY_NO_CHANGES; do not retry the same call",
@@ -3539,6 +3527,12 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "worker_cancel job_id must match a job spawned from this session"
+    },
+    "WORKER_CANCEL_NOT_RUNNING": {
+      "branch_instruction": "Branch on Code WORKER_CANCEL_NOT_RUNNING; do not retry",
+      "category": "recoverable",
+      "emit": "guard:worker_cancel",
+      "summary": "The worker is {{ paintedwolf.state }}, so there is nothing to stop."
     },
     "WORKER_CANCEL_SESSION_MISMATCH": {
       "branch_instruction": "Use job_id from this session's enqueue result or pulse roster.",

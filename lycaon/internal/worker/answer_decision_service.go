@@ -14,9 +14,7 @@ import (
 )
 
 const (
-	DecisionJobIDMismatchCode   = "DECISION_JOB_ID_MISMATCH"
-	DecisionNotFoundCode        = "DECISION_NOT_FOUND"
-	DecisionSessionMismatchCode = "DECISION_SESSION_MISMATCH"
+	DecisionNotFoundCode = "DECISION_NOT_FOUND"
 )
 
 // AnswerDecisionService resolves worker decisions.
@@ -34,8 +32,9 @@ type AnswerDecisionResult struct {
 	ResolvedBy string
 }
 
-// AnswerJob resolves a pending worker decision.
-func (s *AnswerDecisionService) AnswerJob(ctx context.Context, sessionID, jobID, option, resolvedBy string) (AnswerDecisionResult, error) {
+// AnswerJob resolves the pending decision of a worker's round on jobID.
+// Rejections name the worker; the coordinator addresses workers by name.
+func (s *AnswerDecisionService) AnswerJob(ctx context.Context, sessionID, worker, jobID, option, resolvedBy string) (AnswerDecisionResult, error) {
 	sessionID = strings.TrimSpace(sessionID)
 	jobID = strings.TrimSpace(jobID)
 	option = strings.TrimSpace(option)
@@ -52,17 +51,17 @@ func (s *AnswerDecisionService) AnswerJob(ctx context.Context, sessionID, jobID,
 		return AnswerDecisionResult{}, fmt.Errorf("answer decision not configured")
 	}
 	if jobID == "" {
-		return AnswerDecisionResult{}, fmt.Errorf("job_id is required")
+		return AnswerDecisionResult{}, s.reject(DecisionNotFoundCode, map[string]any{"worker": worker})
 	}
 	if option == "" {
-		return AnswerDecisionResult{}, fmt.Errorf("option is required")
+		return AnswerDecisionResult{}, fmt.Errorf("answer is required")
 	}
 	task, ok := s.Queue.Get(jobID)
 	if !ok || task == nil {
-		return AnswerDecisionResult{}, s.reject(DecisionNotFoundCode, map[string]any{"job_id": jobID})
+		return AnswerDecisionResult{}, s.reject(DecisionNotFoundCode, map[string]any{"worker": worker})
 	}
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
-		return AnswerDecisionResult{}, s.reject(DecisionSessionMismatchCode, map[string]any{"job_id": jobID})
+		return AnswerDecisionResult{}, fmt.Errorf("job %q belongs to another session", jobID)
 	}
 	child := strings.TrimSpace(task.ChildSessionID)
 	if child == "" {
@@ -72,14 +71,8 @@ func (s *AnswerDecisionService) AnswerJob(ctx context.Context, sessionID, jobID,
 	if err != nil {
 		return AnswerDecisionResult{}, fmt.Errorf("load decision: %w", err)
 	}
-	if !ok {
-		return AnswerDecisionResult{}, s.reject(DecisionNotFoundCode, map[string]any{"job_id": jobID})
-	}
-	if dec.WorkerID != jobID {
-		return AnswerDecisionResult{}, s.reject(DecisionJobIDMismatchCode, map[string]any{
-			"job_id":          jobID,
-			"expected_job_id": dec.WorkerID,
-		})
+	if !ok || dec.WorkerID != jobID {
+		return AnswerDecisionResult{}, s.reject(DecisionNotFoundCode, map[string]any{"worker": worker})
 	}
 	// An open question takes the answer as written.
 	chosen := option
@@ -91,18 +84,15 @@ func (s *AnswerDecisionService) AnswerJob(ctx context.Context, sessionID, jobID,
 	}
 	err = s.Resolver.Resolve(ctx, dec, DecisionAnswerMessage(chosen, resolvedBy))
 	if err != nil {
-		if errors.Is(err, errDecisionMissing) {
-			return AnswerDecisionResult{}, s.reject(DecisionNotFoundCode, map[string]any{"job_id": jobID})
-		}
-		if errors.Is(err, errDecisionJobMismatch) {
-			return AnswerDecisionResult{}, s.reject(DecisionJobIDMismatchCode, map[string]any{"job_id": jobID})
+		if errors.Is(err, errDecisionMissing) || errors.Is(err, errDecisionJobMismatch) {
+			return AnswerDecisionResult{}, s.reject(DecisionNotFoundCode, map[string]any{"worker": worker})
 		}
 		if errors.Is(err, errDecisionChanged) {
-			return AnswerDecisionResult{}, s.reject("DECISION_CHANGED", map[string]any{"job_id": jobID})
+			return AnswerDecisionResult{}, s.reject("DECISION_CHANGED", map[string]any{"worker": worker})
 		}
 		var stateErr *DecisionStateError
 		if errors.As(err, &stateErr) {
-			return AnswerDecisionResult{}, s.reject("DECISION_NOT_SUSPENDED", map[string]any{"job_id": jobID, "status": stateErr.Status})
+			return AnswerDecisionResult{}, s.reject("DECISION_NOT_SUSPENDED", map[string]any{"worker": worker, "status": stateErr.Status})
 		}
 		return AnswerDecisionResult{}, err
 	}

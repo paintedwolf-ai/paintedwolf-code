@@ -297,3 +297,14 @@ func (s *Store) RoundByJob(ctx context.Context, jobID string) (Round, bool, erro
 	}
 	return roundFromRow(r), true, nil
 }
+
+// NameByJob names the worker whose round a job runs, for host copy that
+// reports on jobs. ok is false for a job that runs no worker round.
+func (s *Store) NameByJob(ctx context.Context, jobID string) (string, bool, error) {
+	name, err := s.q.GetWorkerNameByJob(ctx, strings.TrimSpace(jobID))
+	if db.IsNoRows(err) {
+		return "", false, nil
+	}
+	return name, err == nil, err
+}
+

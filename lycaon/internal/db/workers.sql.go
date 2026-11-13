@@ -521,6 +521,17 @@ func (q *Queries) GetWorkerMessageDelivery(ctx context.Context, arg GetWorkerMes
 	return i, err
 }
 
+const getWorkerNameByJob = `-- name: GetWorkerNameByJob :one
+SELECT w.name FROM worker_rounds r JOIN workers w ON w.id = r.worker_id WHERE r.job_id = ?
+`
+
+func (q *Queries) GetWorkerNameByJob(ctx context.Context, jobID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerNameByJob, jobID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const getWorkerOperation = `-- name: GetWorkerOperation :one
 SELECT operation_id, session_id, kind, request_digest, receipt_json, created_at
 FROM worker_operations WHERE operation_id = ?

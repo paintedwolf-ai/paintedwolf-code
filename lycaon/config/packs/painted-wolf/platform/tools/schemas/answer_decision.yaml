@@ -1,16 +1,16 @@
 tags: [workers]
-description: "Answer a worker's needs_decision: pick one of its offered options; the worker resumes on its same session with your choice."
+description: "Answer a worker's pending question. Choose one of its options, by number or text, or answer in your own words when it offered none or none fits. The worker resumes in the same conversation with your answer."
 schema:
   type: object
   properties:
-    job_id:
+    worker:
       type: string
-      description: Worker job id from the needs_decision envelope
-    option:
+      description: The asking worker's name
+    answer:
       type: string
-      description: The chosen option — its number or exact text
+      description: Your answer — an offered option's number or text, or free text when the question offered no options
     resolved_by:
       type: string
       enum: [coordinator, user]
       description: coordinator (default) or user (ask_user relay)
-  required: [job_id, option]
+  required: [worker, answer]

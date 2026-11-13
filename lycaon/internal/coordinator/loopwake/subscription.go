@@ -193,7 +193,10 @@ type waitMatchInput struct {
 	Wake            anchor.ID
 	CompletingJobID string
 	// Subject is the wake's handle: a process handle, or the running job a worker wake is about.
-	Subject        string
+	Subject string
+	// Worker names the worker whose job the wake is about; waits on workers
+	// match it, so a wait follows a worker into its later rounds.
+	Worker         string
 	ProcessHandles []string
 	// WorkerHandles narrows next_worker_done to the named task ids.
 	WorkerHandles     []string
@@ -216,7 +219,7 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 		_, ok := set[WaitTriggerProcessDone]
 		return ok && handleMatches(in.ProcessHandles, in.Subject)
 	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived:
-		_, ok := runningWorkerCondition(set, in.WorkerHandles, in.Subject)
+		_, ok := runningWorkerCondition(set, in.WorkerHandles, in.workerHandle(in.Subject))
 		return ok
 	case anchor.WorkerTaskFinished, anchor.LegFinished:
 		if in.OverlayPromoteDue {
@@ -228,7 +231,7 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 		if in.NeedsDecision {
 			return true
 		}
-		if strings.TrimSpace(in.CompletingJobID) != "" && handleMatches(in.WorkerHandles, in.CompletingJobID) {
+		if strings.TrimSpace(in.CompletingJobID) != "" && handleMatches(in.WorkerHandles, in.workerHandle(in.CompletingJobID)) {
 			if _, ok := set[WaitTriggerNextWorkerDone]; ok {
 				return true
 			}
@@ -277,17 +280,18 @@ func waitConditionForWake(triggers []WaitTrigger, in waitMatchInput) (awaitstore
 		if in.Wake == anchor.WorkerMessageReceived {
 			outcome = "message"
 		}
-		trigger, ok := runningWorkerCondition(set, in.WorkerHandles, in.Subject)
-		return awaitstore.Condition{Kind: string(trigger), Handles: []string{strings.TrimSpace(in.Subject)}, Outcome: outcome}, ok
+		handle := in.workerHandle(in.Subject)
+		trigger, ok := runningWorkerCondition(set, in.WorkerHandles, handle)
+		return awaitstore.Condition{Kind: string(trigger), Handles: []string{handle}, Outcome: outcome}, ok
 	case anchor.WorkerTaskFinished, anchor.LegFinished:
 		if in.OverlayPromoteDue {
 			if _, ok := set[WaitTriggerOverlayPromote]; ok {
 				return awaitstore.Condition{Kind: string(WaitTriggerOverlayPromote)}, true
 			}
 		}
-		if strings.TrimSpace(in.CompletingJobID) != "" && handleMatches(in.WorkerHandles, in.CompletingJobID) {
+		if strings.TrimSpace(in.CompletingJobID) != "" && handleMatches(in.WorkerHandles, in.workerHandle(in.CompletingJobID)) {
 			if _, ok := set[WaitTriggerNextWorkerDone]; ok {
-				return awaitstore.Condition{Kind: string(WaitTriggerNextWorkerDone), Handles: []string{strings.TrimSpace(in.CompletingJobID)}}, true
+				return awaitstore.Condition{Kind: string(WaitTriggerNextWorkerDone), Handles: []string{in.workerHandle(in.CompletingJobID)}}, true
 			}
 		}
 		if in.CycleIdle {
@@ -318,6 +322,15 @@ func normalizeProcessHandles(handles []string) []string {
 }
 
 // handleMatches reports whether completed is selected; no handles select all.
+// workerHandle is how a wait names the worker running job: its name, or the
+// job itself for a job that runs no worker round.
+func (in waitMatchInput) workerHandle(job string) string {
+	if name := strings.TrimSpace(in.Worker); name != "" {
+		return name
+	}
+	return strings.TrimSpace(job)
+}
+
 func handleMatches(wanted []string, completed string) bool {
 	if len(wanted) == 0 {
 		return true

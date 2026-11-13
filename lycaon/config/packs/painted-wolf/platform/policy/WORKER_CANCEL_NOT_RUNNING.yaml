@@ -1,0 +1,28 @@
+oar: '1.0'
+id: WORKER_CANCEL_NOT_RUNNING
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - worker_cancel
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.state]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "WORKER_CANCEL_NOT_RUNNING"
+effect: block
+copy:
+  what: The worker is {{ paintedwolf.state }}, so there is nothing to stop.
+  cause: Only a working, asking, waiting or planned worker has a round to stop or a start to withdraw.
+  why: A worker between rounds holds no model slot and starts nothing on its own.
+  fix: Leave it. A worker between rounds starts again only when instructed, and a closed one never does.
+  instead: Branch on Code WORKER_CANCEL_NOT_RUNNING; do not retry
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_cancel
+x-paintedwolf-message: The worker has nothing to stop.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: worker_cancel
+      state: idle

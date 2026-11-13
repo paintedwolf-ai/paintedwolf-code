@@ -110,7 +110,7 @@ func WithWorkerDigest(digest string) KickOption {
 }
 
 // WithWorkerDecisionRequest passes a structured worker request_decision into coordinator kicks.
-func WithWorkerDecisionRequest(req api.WorkerDecisionRequest) KickOption {
+func WithWorkerDecisionRequest(req api.WorkerDecisionRequest, worker string) KickOption {
 	return func(m *kickMeta) {
 		question := strings.TrimSpace(req.Question)
 		if question == "" {
@@ -127,6 +127,7 @@ func WithWorkerDecisionRequest(req api.WorkerDecisionRequest) KickOption {
 			class = string(api.WorkerBlockerDecision)
 		}
 		m.workerDecisionRequest = map[string]any{
+			"worker":           strings.TrimSpace(worker),
 			"job_id":           strings.TrimSpace(req.WorkerID),
 			"child_session_id": strings.TrimSpace(req.ChildSessionID),
 			"question":         question,
