@@ -1,11 +1,15 @@
 """Offline fixture contracts; no models, providers, or external services."""
 import json
-import sqlite3
+from pathlib import Path
+import tempfile
 import unittest
 
+from bundle import Bundle
 from common import digest
+from contracts import check
 from data import encode, assert_disjoint, check_row
 from receipts import accepted_row
+from test_bundle import operation, write_bundle
 
 
 class Tokenizer:
@@ -30,35 +34,34 @@ TOOLS = [{"type": "function", "function": {"name": "read", "parameters": {"type"
 
 class Contracts(unittest.TestCase):
     def setUp(self):
-        self.db = sqlite3.connect(":memory:")
-        self.db.row_factory = sqlite3.Row
-        self.db.executescript("""
-        CREATE TABLE model_outputs(id,session_id,message_id,scripted,settled_at,turn_attempt_id);
-        INSERT INTO model_outputs VALUES('output','session','message',0,'2026-10-22T10:00:00.123456789Z','attempt');
-        CREATE TABLE invocation_receipts(id,session_id,assistant_message_id,tool_call_id,tool_name,status,invoked,settled_at,args_digest,started_at,source_verdict);
-        """)
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
         self.args = {"path": "file.txt"}
-        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                        ('receipt', 'session', 'message', 'call', 'read', 'completed', 1, 'now', digest(self.args), '2', 'passed'))
         student = {"model": "student-e4b", "reasoning_effort": "none", "stream": True, "tools": TOOLS, "messages": [
             {"role": "system", "content": "Be precise"},
             {"role": "user", "content": "Read file"},
             {"role": "assistant", "content": None, "tool_calls": [{"id": "earlier", "type": "function", "function": {"name": "read", "arguments": "{\"path\":\"README.md\"}"}}]},
             {"role": "tool", "tool_call_id": "earlier", "content": "# readme"}]}
-        self.record = {"schema": "pw-training-turn/1", "epoch": "legacy-1", "dispatches": 1, "settled": True,
+        self.record = {"schema": "pw-training-turn/1", "epoch": "fixture-1", "dispatches": 1, "settled": True,
                        "output_id": "output", "session_id": "session", "message_id": "message", "call_id": "request",
                        "student_provider": "student", "student_kind": "openai-compatible", "student_model": "student-e4b",
                        "request": {"teacher": "dispatch"}, "student_request": student,
                        "response": {"content": "", "tool_calls": [{"id": "call", "name": "read", "args": self.args}]}}
-        self.identity = {"epoch": "legacy-1", "host_commit": "a" * 40, "tool_surface": "legacy",
+        self.identity = {"epoch": "fixture-1", "host_commit": "a" * 40, "contract_sha256": None,
                          "student_provider": "student", "student_kind": "openai-compatible", "student_model": "student-e4b"}
-        self.commits = {}
-
-    def tearDown(self):
-        self.db.close()
+        self.operations = [operation("receipt", call="call", args_sha256=digest(self.args))]
+        self.completions = [{"id": "output", "session_id": "session", "message_id": "message", "turn_attempt_id": "attempt",
+                             "scripted": False, "settled_at": "2026-10-22T10:00:00.123456789Z"}]
+        self.decisions = []
+        self.written = 0
 
     def row(self):
-        return accepted_row(self.record, self.db, self.identity, "c" * 64, self.commits)
+        self.written += 1
+        bundle = Bundle(write_bundle(Path(self.temporary.name) / str(self.written), [self.record], self.operations,
+                                     self.completions, self.decisions))
+        if self.identity["contract_sha256"] is None:
+            self.identity["contract_sha256"] = bundle.contract_sha256
+        return accepted_row(bundle.captures[0], bundle, self.identity, "c" * 64)
 
     def test_student_thinking_must_be_explicitly_disabled(self):
         for effort in (None, "minimal", "low", "high"):
@@ -67,12 +70,16 @@ class Contracts(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "request control"):
                     self.row()
 
-    def test_receipt_is_necessary_and_quality_is_separate(self):
+    def test_an_operation_is_necessary_and_quality_is_separate(self):
         row = self.row()
+        check("sft-row", dict(row, source={"bundle_sha256": "d" * 64, "capture_sha256": "e" * 64}))
         with self.assertRaisesRegex(ValueError, "quality"):
             check_row(row)
-        self.db.execute("UPDATE invocation_receipts SET status='rejected'")
-        with self.assertRaisesRegex(ValueError, "successful invocation"):
+        self.operations[0]["semantic_outcome"] = "failure"
+        with self.assertRaisesRegex(ValueError, "did not succeed"):
+            self.row()
+        self.operations.clear()
+        with self.assertRaisesRegex(ValueError, "missing exact invocation operation"):
             self.row()
 
     def test_model_review_does_not_require_a_different_family(self):
@@ -87,10 +94,14 @@ class Contracts(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'judge identity missing'):
             check_row(row)
 
-    def test_arguments_and_call_identity_must_match(self):
-        self.args["path"] = "different"
-        with self.assertRaisesRegex(ValueError, "successful invocation"):
-            self.row()
+    def test_arguments_tool_and_message_must_match(self):
+        for field, value in (("args_sha256", digest({"path": "different"})), ("tool", "write"), ("message_id", "other")):
+            with self.subTest(field=field):
+                original = self.operations[0][field]
+                self.operations[0][field] = value
+                with self.assertRaisesRegex(ValueError, "missing exact invocation operation"):
+                    self.row()
+                self.operations[0][field] = original
 
     def test_training_input_is_the_student_render_decoded_as_its_server_does(self):
         row = self.row()
@@ -100,8 +111,9 @@ class Contracts(unittest.TestCase):
         self.assertEqual(row["prompt"][3], {"role": "tool", "content": "# readme", "tool_call_id": "earlier"})
         self.assertEqual(row["request_capture"]["dispatch_sha256"], digest({"teacher": "dispatch"}))
         self.assertEqual(row["request_capture"]["tools"], TOOLS)
+        self.assertEqual(row["validation"]["operation_ids"], ["receipt"])
 
-    def test_serving_kind_and_student_identity_fail_closed(self):
+    def test_serving_kind_student_and_contract_identity_fail_closed(self):
         self.record["student_model"] = "other"
         with self.assertRaisesRegex(ValueError, "another student"):
             self.row()
@@ -109,14 +121,20 @@ class Contracts(unittest.TestCase):
         self.record["student_kind"] = self.identity["student_kind"] = "ollama"
         with self.assertRaisesRegex(ValueError, "template parity"):
             self.row()
+        self.identity["contract_sha256"] = "f" * 64
+        with self.assertRaisesRegex(ValueError, "another host contract"):
+            self.row()
 
-    def test_epoch_and_unsupported_wire_fail_closed(self):
-        self.record["epoch"] = "command-1"
+    def test_epoch_unsupported_wire_and_missing_bodies_fail_closed(self):
+        self.record["epoch"] = "fixture-2"
         with self.assertRaisesRegex(ValueError, "epoch"):
             self.row()
-        self.record["epoch"] = "legacy-1"
+        self.record["epoch"] = "fixture-1"
         self.record["student_request"]["images"] = []
         with self.assertRaisesRegex(ValueError, "student request shape"):
+            self.row()
+        del self.record["student_request"]
+        with self.assertRaisesRegex(ValueError, "missing captured request"):
             self.row()
 
     def test_host_exclusion_reason_and_disabled_tools_are_reported(self):
@@ -132,73 +150,39 @@ class Contracts(unittest.TestCase):
         self.record["response"] = {"content": "The file says hello.", "tool_calls": []}
         with self.assertRaisesRegex(ValueError, "did not commit"):
             self.row()
-        self.commits[("session", "message")] = "2026-10-22T10:00:01Z"
+        commit = {"kind": "turn_committed", "session_id": "session", "message_id": "message", "decided_at": "2026-10-22T10:00:01Z"}
+        self.decisions.append(dict(commit, output_id="output"))
         row = self.row()
         self.assertEqual(row["validation"]["acceptance"], "turn_committed")
-        self.db.execute("INSERT INTO model_outputs VALUES('retry','session','message',0,'2026-10-22T10:00:00.9Z','attempt')")
-        with self.assertRaisesRegex(ValueError, "another output"):
+        self.decisions[0] = dict(commit, output_id="retry")
+        with self.assertRaisesRegex(ValueError, "did not commit"):
             self.row()
 
-    def command_call(self, surface):
-        self.identity["tool_surface"] = surface
-        self.args.clear()
-        self.args["program"] = "go test ./..."
-        self.record["response"]["tool_calls"][0]["name"] = "command"
-        self.db.execute("UPDATE invocation_receipts SET tool_name='command', args_digest=?", (digest(self.args),))
-
-    def children(self, receipt_id, *effects):
-        self.db.executescript("""
-            CREATE TABLE IF NOT EXISTS invocation_programs(id PRIMARY KEY, parent_receipt_id UNIQUE, state, status_code,
-              progress_state, source_exact, syntax_validated, settled_at);
-            CREATE TABLE IF NOT EXISTS invocation_program_executions(id PRIMARY KEY, program_id, ordinal, state,
-              status_code, effect_certainty, settled_at);
-        """)
-        self.db.execute("INSERT OR IGNORE INTO invocation_programs VALUES(?,?,'completed',0,'unchanged',1,1,'now')", (receipt_id, receipt_id))
-        offset = self.db.execute("SELECT count(*) FROM invocation_program_executions WHERE program_id=?", (receipt_id,)).fetchone()[0]
-        for index, effect in enumerate(effects, offset):
-            self.db.execute("INSERT INTO invocation_program_executions VALUES(?,?,?,'completed',0,?,'now')",
-                            ("%s-op%d" % (receipt_id, index), receipt_id, index+1, effect))
-
-    def test_command_surface_requires_settled_child_effects(self):
-        self.command_call("command-v1")
-        with self.assertRaisesRegex(ValueError, "child receipts unavailable"):
-            self.row()
-        self.children("receipt")
-        with self.assertRaisesRegex(ValueError, "no child operation receipts"):
-            self.row()
-        self.children("receipt", "completed", "none")
-        self.assertEqual(self.row()["validation"]["invocation_receipt_ids"], ["receipt", "receipt-op0", "receipt-op1"])
-        self.children("receipt", "unknown")
-        with self.assertRaisesRegex(ValueError, "partial or unknown effects"):
+    def test_a_scripted_or_unsettled_output_is_not_a_target(self):
+        self.completions[0]["scripted"] = True
+        with self.assertRaisesRegex(ValueError, "settled model output"):
             self.row()
 
-    def test_nonzero_exit_is_not_successful_invocation(self):
-        self.command_call("command-v1")
-        self.children("receipt", "none")
-        self.db.execute("UPDATE invocation_program_executions SET status_code=127")
-        with self.assertRaisesRegex(ValueError, "did not succeed"):
-            self.row()
-
-    def test_whole_program_replay_after_partial_effects_is_excluded(self):
-        self.command_call("command-v1")
-        self.children("receipt", "completed")
-        self.db.execute("INSERT INTO invocation_receipts VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                        ('earlier', 'session', 'message', 'call0', 'command', 'error', 1, 'then', digest(self.args), '1', 'failed'))
-        self.children("earlier", "completed", "attempted")
-        with self.assertRaisesRegex(ValueError, "whole-program replay"):
-            self.row()
-
-    def test_legacy_surface_admits_command_receipts_without_child_facts(self):
-        self.command_call("legacy")
-        self.assertEqual(self.row()["validation"]["invocation_receipt_ids"], ["receipt"])
-
-    def test_legacy_command_requires_a_passed_terminal_verdict(self):
-        self.command_call('legacy')
-        for verdict in (None, '', 'failed', 'unverifiable'):
-            with self.subTest(verdict=verdict):
-                self.db.execute('UPDATE invocation_receipts SET source_verdict=?', (verdict,))
-                with self.assertRaisesRegex(ValueError, 'successful terminal verdict'):
+    def test_every_child_must_settle_succeed_and_leave_known_effects(self):
+        self.operations.append(operation("receipt-op0", parent="receipt", tool="cat"))
+        self.assertEqual(self.row()["validation"]["operation_ids"], ["receipt", "receipt-op0"])
+        for field, value, reason in (("settlement", "unsettled", "did not settle"), ("effect_state", "unknown", "unknown effects"),
+                                     ("semantic_outcome", "failure", "did not succeed")):
+            with self.subTest(field=field):
+                self.operations[1][field] = value
+                with self.assertRaisesRegex(ValueError, reason):
                     self.row()
+                self.operations[1] = operation("receipt-op0", parent="receipt", tool="cat")
+
+    def test_a_replay_after_unknown_effects_is_excluded(self):
+        self.operations[0]["started_at"] = "2026-10-22T10:00:01Z"
+        self.operations.append(operation("earlier", call="call0", args_sha256=digest(self.args), outcome="failure",
+                                         started="2026-10-22T10:00:00.5Z"))
+        self.operations.append(operation("earlier-op0", parent="earlier", tool="cat", effects="unknown"))
+        with self.assertRaisesRegex(ValueError, "replay after unknown effects"):
+            self.row()
+        self.operations[2]["effect_state"] = "known"
+        self.row()
 
     def test_masks_prompt_and_preserves_tool_arguments(self):
         row = self.row()

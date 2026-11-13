@@ -21,12 +21,7 @@ func RenderToolProceduresBlock(
 	vars["offered_tools"] = names
 	prompts.RestrictCommandEffects(prompts.ScopeCommandEffects(profileID), names, nil, vars)
 	prompts.MergeProfileRequestableVars(profileID, names, vars)
-	surface := "worker"
-	host := promptunit.HostWorker
-	if profileID == prompts.CoordinatorProfileID || prompts.IsCoordinatorSurfaceID(profileID) {
-		surface = "coordinator"
-		host = promptunit.HostCoordinator
-	}
+	surface, host := procedureHost(profileID)
 	catalog, err := renderer.UnitCatalog()
 	if err != nil {
 		return "", err
@@ -39,4 +34,27 @@ func RenderToolProceduresBlock(
 	block, err := anchor.RenderInform(ctx, anchor.InjectToolProcedures,
 		anchor.MatchContext{Surface: surface, Profile: profileID, SessionID: sessionID}, renderer, vars)
 	return strings.TrimSpace(block), err
+}
+
+func procedureHost(profileID string) (string, promptunit.Host) {
+	if profileID == prompts.CoordinatorProfileID || prompts.IsCoordinatorSurfaceID(profileID) {
+		return "coordinator", promptunit.HostCoordinator
+	}
+	return "worker", promptunit.HostWorker
+}
+
+// ToolProcedureUnits lists the units RenderToolProceduresBlock renders for the
+// offered set, in render order.
+func ToolProcedureUnits(renderer *prompts.InjectRenderer, profileID string, offered []string) ([]promptunit.Unit, error) {
+	catalog, err := renderer.UnitCatalog()
+	if err != nil {
+		return nil, err
+	}
+	_, host := procedureHost(profileID)
+	rendered := catalog.Rendered(prompts.UnitSelectionVars(host, "", offered))
+	var out []promptunit.Unit
+	for _, slot := range promptunit.Slots() {
+		out = append(out, rendered[slot]...)
+	}
+	return out, nil
 }

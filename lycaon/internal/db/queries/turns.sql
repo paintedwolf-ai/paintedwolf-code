@@ -80,6 +80,13 @@ ON CONFLICT(id) DO NOTHING;
 SELECT * FROM model_outputs
 WHERE id = ?;
 
+-- name: ListSessionModelOutputs :many
+SELECT id, turn_attempt_id, session_id, project_id, iteration, scripted, message_id, provider_id,
+       model, content_blob_sha256, finish_reason, created_at, settled_at
+FROM model_outputs
+WHERE session_id = ?
+ORDER BY settled_at, id;
+
 -- name: MaxSettledModelOutputIteration :one
 SELECT CAST(COALESCE(MAX(iteration), 0) AS INTEGER) AS max_iteration
 FROM model_outputs

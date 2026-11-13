@@ -18,6 +18,12 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
+// Schema and FactSchema name the capture records this package writes.
+const (
+	Schema     = "pw-training-turn/1"
+	FactSchema = "pw-training-fact/1"
+)
+
 type contextKey struct{}
 
 // Policy is what the host supplies to a collection turn.
@@ -28,6 +34,47 @@ type Policy struct {
 	// Render serializes a request as the configured provider would dispatch it
 	// to model, returning the provider's kind.
 	Render func(ctx context.Context, provider, model string, req modelcall.CompletionRequest) (string, []byte, error)
+	// Surface reports the host facts that shaped a request offering these tools.
+	Surface func(ctx context.Context, offered []string) (PromptSurface, error)
+}
+
+// PromptSurface is what selected one request's surface, from host state alone:
+// each offered tool and why it is offered, the procedure units those offers
+// attached, the skill the turn read, and the turn-load decision in effect.
+type PromptSurface struct {
+	Tools []OfferedTool  `json:"tools"`
+	Units []RenderedUnit `json:"units"`
+	Skill *SkillRead     `json:"skill,omitempty"`
+	// TurnLoadReceiptID is the latest turn-load decision of the session; zero
+	// when the session has made none.
+	TurnLoadReceiptID int64 `json:"turn_load_receipt_id,omitempty"`
+	// Engine labels the decision model and head that answered it.
+	Engine string `json:"engine,omitempty"`
+	// CatalogRevision identifies the unit descriptions the engine scored.
+	CatalogRevision string `json:"catalog_revision,omitempty"`
+}
+
+// OfferedTool is one tool on the request. Source is standing for the floor,
+// otherwise the turn-load source: predicted, requested, fallback or companion.
+type OfferedTool struct {
+	Tool   string `json:"tool"`
+	Source string `json:"source"`
+	// With names the family member a companion load came with.
+	With string `json:"with,omitempty"`
+}
+
+// RenderedUnit is a procedure unit on the request. AttachedBy lists the offered
+// tools that attached it; it is empty for a unit every request of its host renders.
+type RenderedUnit struct {
+	ID         string   `json:"id"`
+	AttachedBy []string `json:"attached_by,omitempty"`
+}
+
+// SkillRead is the skill the turn preloaded. Tool names the loadable tool whose
+// first call selected it; empty when the turn's opening decision did.
+type SkillRead struct {
+	Name string `json:"name"`
+	Tool string `json:"tool,omitempty"`
 }
 
 type Turn struct {
@@ -66,6 +113,7 @@ type Record struct {
 	ModifiedFields []string `json:"modified_fields,omitempty"`
 	// PolicyLocation is the request message the durable transcript policy would change.
 	PolicyLocation  string          `json:"policy_location,omitempty"`
+	PromptSurface   *PromptSurface  `json:"prompt_surface,omitempty"`
 	StudentProvider string          `json:"student_provider"`
 	StudentKind     string          `json:"student_kind,omitempty"`
 	StudentModel    string          `json:"student_model"`
@@ -105,7 +153,7 @@ func Begin(ctx context.Context, session, message, output string) (context.Contex
 		return ctx, nil
 	}
 	t := &Turn{root: root, students: s, wire: &modelcall.WireCapture{}, record: Record{
-		Schema: "pw-training-turn/1", Epoch: epoch, SessionID: session,
+		Schema: Schema, Epoch: epoch, SessionID: session,
 		MessageID: message, OutputID: output,
 	}}
 	return context.WithValue(ctx, contextKey{}, t), t
@@ -118,6 +166,20 @@ func Prepare(ctx context.Context, req modelcall.CompletionRequest, policy Policy
 	}
 	t.record.CallID, t.record.Surface = req.Debug.CallID, req.Debug.Surface
 	t.policy = policy
+	if policy.Surface == nil {
+		t.record.Reason = "collection_policy_unavailable"
+	} else {
+		offered := make([]string, 0, len(req.Tools))
+		for _, meta := range req.Tools {
+			offered = append(offered, meta.Name)
+		}
+		surface, err := policy.Surface(ctx, offered)
+		if err != nil {
+			t.record.Reason = "prompt_surface_unavailable"
+		} else {
+			t.record.PromptSurface = &surface
+		}
+	}
 	req.ControlCapture = &modelcall.RequestControlCapture{Wire: t.wire}
 	return req
 }

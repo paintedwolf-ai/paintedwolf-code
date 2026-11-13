@@ -1,4 +1,4 @@
-"""Collection snapshots distinguish SQLite bookkeeping from source changes."""
+"""Collection reads verified bundles and writes contract-checked rows once per call."""
 import json
 from pathlib import Path
 import subprocess
@@ -7,135 +7,119 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from collect import FACT_SCHEMA, collect
+from bundle import Bundle
+from collect import collect
 from common import digest, file_digest, read_rows
+from test_bundle import write_bundle
+
+ROW = {"schema": "pw-custom-sft/1", "session": "s1", "message_id": "m1",
+       "prompt": [{"role": "system", "content": "Be precise"}],
+       "target": {"role": "assistant", "text": "Done.", "tool_calls": []},
+       "request_capture": {"schema": "pw-model-request-capture/3", "request_id": "call-1", "session_id": "s1",
+                           "message_id": "m1", "host_revision": "a" * 40, "epoch": "fixture", "contract_sha256": "d" * 64,
+                           "catalog_sha256": "c" * 64, "student_provider": "student-e4b", "student_kind": "openai-compatible",
+                           "student_model": "e4b", "dispatch_sha256": "e" * 64, "state_sha256": "f" * 64,
+                           "messages": [{"role": "system", "content": "Be precise"}], "tools": [], "controls": {},
+                           "sha256": "1" * 64},
+       "validation": {"schema": "pw-training-validation/1", "validator": "paintedwolf-host-training-validation/1",
+                      "receipt_id": "o1", "operation_ids": [], "request_sha256": "req", "response_sha256": "res",
+                      "kind": "accepted_response", "outcome": "accepted", "acceptance": "turn_committed",
+                      "contract_sha256": "d" * 64}}
 
 
-class CollectionSnapshots(unittest.TestCase):
-    def collect_with_reader_wal(self, wal_bytes):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            shard = root / "fleet/shards/one"
-            captures = shard / "training-captures"
-            captures.mkdir(parents=True)
-            (shard / "store.db").write_bytes(b"store")
-            (captures / "capture.json").write_text(json.dumps({"schema": "pw-training-turn/1"}))
-
-            def open_reader(path):
-                path.with_name(path.name + "-wal").write_bytes(wal_bytes)
-                raise ValueError("fixture exclusion")
-
-            with patch("collect.open_store", side_effect=open_reader):
-                return collect([root / "fleet"], {"epoch": "fixture"}, "catalog", root / "out")
-
-    def test_empty_reader_wal_does_not_change_collection(self):
-        counts = self.collect_with_reader_wal(b"")
-        self.assertEqual(counts["excluded:fixture exclusion"], 1)
-
-    def test_nonempty_reader_wal_invalidates_collection(self):
-        with self.assertRaisesRegex(ValueError, "collection changed"):
-            self.collect_with_reader_wal(b"new frames")
-
-    def test_declared_peer_capture_is_not_a_failed_candidate(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            shard = root / 'fleet/shards/one'
-            captures = shard / 'training-captures'
-            captures.mkdir(parents=True)
-            (shard / 'store.db').write_bytes(b'store')
-            peer = {'provider': 'student-12b', 'kind': 'openai-compatible', 'model': '12b'}
-            record = {'schema': 'pw-training-turn/1', **{'student_' + key: value for key, value in peer.items()}}
-            (captures / 'peer.json').write_text(json.dumps(record))
-            identity = {'epoch': 'fixture', 'student_provider': 'student-e4b',
-                        'student_kind': 'openai-compatible', 'student_model': 'e4b', 'students': {'12b': peer}}
-            with patch('collect.open_store') as opened:
-                counts = collect([root / 'fleet'], identity, 'catalog', root / 'out')
-            self.assertEqual(counts['other_student'], 1)
-            opened.assert_not_called()
-
-
-class StoreStub:
-    """Stands in for the read-only SQLite handle that accepted_row consults."""
-
-    def execute(self, *_arguments):
-        return None
-
-    def close(self):
-        return None
+def capture(**fields):
+    return {"schema": "pw-training-turn/1", "epoch": "fixture", "session_id": "session", "message_id": "message",
+            "output_id": "output", "call_id": "call", "dispatches": 1, "settled": True, "student_provider": "student-e4b",
+            "student_kind": "openai-compatible", "student_model": "e4b", **fields}
 
 
 class AcceptedCandidateExport(unittest.TestCase):
     identity = {"epoch": "fixture", "student_provider": "student-e4b",
                 "student_kind": "openai-compatible", "student_model": "e4b"}
 
-    def fleet(self, root, files):
-        shard = root / "fleet/shards/one"
-        captures = shard / "training-captures"
-        captures.mkdir(parents=True)
-        (shard / "store.db").write_bytes(b"store")
-        for name, value in files.items():
-            (captures / name).write_text(json.dumps(value))
-        return root / "fleet", shard
+    def setUp(self):
+        self.temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary.cleanup)
+        self.root = Path(self.temporary.name)
 
-    def test_accepted_rows_bind_sources_quality_and_commits_once_per_call(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            record = {"schema": "pw-training-turn/1"}
-            committed = {"schema": FACT_SCHEMA, "epoch": "fixture", "kind": "turn_committed",
-                         "session_id": "s1", "message_id": "m1", "decided_at": "2026-10-28T00:00:00Z"}
-            foreign = dict(committed, epoch="other")
-            fleet, shard = self.fleet(root, {"a.json": record, "b.json": record,
-                                             "committed.json": committed, "foreign.json": foreign})
-            quality = [{"request_sha256": "req", "response_sha256": "res", "score": 1}]
-            commits_seen = []
+    def test_accepted_rows_bind_their_bundle_quality_and_capture_once_per_call(self):
+        bundle = write_bundle(self.root / "one", captures=[capture(call_id="a"), capture(call_id="b")])
+        quality = [{"request_sha256": "req", "response_sha256": "res", "score": 1}]
+        seen = []
 
-            def accepted(_record, _db, _identity, _catalog, commits):
-                commits_seen.append(dict(commits))
-                return {"session": "s1", "request_capture": {"request_id": "call-1"},
-                        "validation": {"request_sha256": "req", "response_sha256": "res",
-                                       "acceptance": "turn_committed"}}
+        def accepted(record, item, identity, catalog):
+            seen.append((record["call_id"], item.manifest_sha256, catalog))
+            return json.loads(json.dumps(ROW))
 
-            with patch("collect.open_store", return_value=StoreStub()), \
-                    patch("collect.accepted_row", side_effect=accepted):
-                counts = collect([fleet], self.identity, "catalog", root / "out", quality)
-            self.assertEqual(counts, {"turn_commits": 1, "accepted_candidates": 1,
-                                      "accepted_by:turn_committed": 1,
-                                      "excluded:duplicate captured call": 1})
-            self.assertEqual(commits_seen, [{("s1", "m1"): "2026-10-28T00:00:00Z"}] * 2)
-            rows = read_rows(root / "out/sft.receipts.jsonl")
-            self.assertEqual(len(rows), 1)
-            self.assertEqual(rows[0]["validation"]["quality"], quality[0])
-            self.assertEqual(rows[0]["source"], {
-                "capture_sha256": file_digest(shard / "training-captures/a.json"),
-                "store_sha256": file_digest(shard / "store.db")})
-            manifest = json.loads((root / "out/manifest.json").read_text())
-            self.assertEqual(manifest["counts"], counts)
-            self.assertEqual(manifest["quality_sha256"], digest(quality))
-            self.assertEqual(manifest["rows_sha256"], file_digest(root / "out/sft.receipts.jsonl"))
+        with patch("collect.accepted_row", side_effect=accepted):
+            counts = collect([bundle], self.identity, "catalog", self.root / "out", quality)
+        self.assertEqual(counts, {"bundles": 1, "accepted_candidates": 1, "accepted_by:turn_committed": 1,
+                                  "excluded:duplicate captured call": 1})
+        manifest_sha256 = Bundle(bundle).manifest_sha256
+        self.assertEqual(seen, [("a", manifest_sha256, "catalog"), ("b", manifest_sha256, "catalog")])
+        rows = read_rows(self.root / "out/sft.receipts.jsonl")
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["validation"]["quality"], quality[0])
+        self.assertEqual(rows[0]["source"], {"bundle_sha256": manifest_sha256,
+                                             "capture_sha256": digest(Bundle(bundle).captures[0])})
+        manifest = json.loads((self.root / "out/manifest.json").read_text())
+        self.assertEqual(manifest["counts"], counts)
+        self.assertEqual(manifest["bundles"], {str(bundle): manifest_sha256})
+        self.assertEqual(manifest["rows_sha256"], file_digest(self.root / "out/sft.receipts.jsonl"))
 
-    def test_duplicate_quality_binding_is_refused_before_any_capture_is_read(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            binding = {"request_sha256": "req", "response_sha256": "res"}
-            with patch("collect.open_store") as opened:
-                with self.assertRaisesRegex(ValueError, "duplicate quality binding"):
-                    collect([], self.identity, "catalog", root / "out", [binding, dict(binding)])
-            opened.assert_not_called()
+    def test_a_row_that_breaks_the_sft_contract_is_excluded(self):
+        bundle = write_bundle(self.root / "one", captures=[capture()])
+        broken = json.loads(json.dumps(ROW))
+        del broken["validation"]["contract_sha256"]
+        with patch("collect.accepted_row", return_value=broken):
+            counts = collect([bundle], self.identity, "catalog", self.root / "out")
+        self.assertEqual(counts, {"bundles": 1, "excluded:sft-row contract violated": 1})
+
+    def test_declared_peer_capture_is_not_a_failed_candidate(self):
+        peer = {"provider": "student-12b", "kind": "openai-compatible", "model": "12b"}
+        bundle = write_bundle(self.root / "one", captures=[capture(student_provider="student-12b", student_model="12b")])
+        identity = dict(self.identity, students={"12b": peer})
+        with patch("collect.accepted_row") as accepted:
+            counts = collect([bundle], identity, "catalog", self.root / "out")
+        self.assertEqual(counts["other_student"], 1)
+        accepted.assert_not_called()
+
+    def test_a_bundle_changed_during_collection_invalidates_it(self):
+        bundle = write_bundle(self.root / "one", captures=[capture()])
+
+        def change(*_arguments):
+            manifest = json.loads((bundle / "manifest.json").read_text())
+            manifest["store_sha256"] = "9" * 64
+            (bundle / "manifest.json").write_text(json.dumps(manifest))
+            raise ValueError("fixture exclusion")
+
+        with patch("collect.accepted_row", side_effect=change):
+            with self.assertRaisesRegex(ValueError, "a bundle changed"):
+                collect([bundle], self.identity, "catalog", self.root / "out")
+
+    def test_duplicate_quality_binding_is_refused_before_any_bundle_is_read(self):
+        binding = {"request_sha256": "req", "response_sha256": "res"}
+        with patch("collect.Bundle") as opened:
+            with self.assertRaisesRegex(ValueError, "duplicate quality binding"):
+                collect([self.root / "missing"], self.identity, "catalog", self.root / "out", [binding, dict(binding)])
+        opened.assert_not_called()
 
     def test_command_line_prints_the_collection_counts(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            fleet, _shard = self.fleet(root, {})
-            binding = root / "binding.json"
-            binding.write_text(json.dumps(self.identity))
-            quality = root / "quality.jsonl"
-            quality.write_text(json.dumps({"request_sha256": "req", "response_sha256": "res"}) + "\n")
-            script = Path(__file__).with_name("collect.py")
-            completed = subprocess.run(
-                [sys.executable, str(script), "--fleet", str(fleet), "--binding", str(binding),
-                 "--catalog-sha256", "catalog", "--out", str(root / "out"), "--quality", str(quality)],
-                check=True, capture_output=True, text=True, cwd=script.parent)
-            self.assertEqual(json.loads(completed.stdout), {"turn_commits": 0})
-            manifest = json.loads((root / "out/manifest.json").read_text())
-            self.assertEqual(manifest["identity"], self.identity)
-            self.assertEqual(manifest["quality_sha256"], digest([{"request_sha256": "req", "response_sha256": "res"}]))
+        bundle = write_bundle(self.root / "one")
+        binding = self.root / "binding.json"
+        binding.write_text(json.dumps(self.identity))
+        quality = self.root / "quality.jsonl"
+        quality.write_text(json.dumps({"request_sha256": "req", "response_sha256": "res"}) + "\n")
+        script = Path(__file__).with_name("collect.py")
+        completed = subprocess.run(
+            [sys.executable, str(script), "--bundle", str(bundle), "--binding", str(binding),
+             "--catalog-sha256", "catalog", "--out", str(self.root / "out"), "--quality", str(quality)],
+            check=True, capture_output=True, text=True, cwd=script.parent)
+        self.assertEqual(json.loads(completed.stdout), {"bundles": 1})
+        manifest = json.loads((self.root / "out/manifest.json").read_text())
+        self.assertEqual(manifest["identity"], self.identity)
+        self.assertEqual(manifest["quality_sha256"], digest([{"request_sha256": "req", "response_sha256": "res"}]))
+
+
+if __name__ == "__main__":
+    unittest.main()
