@@ -194,20 +194,8 @@ func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 		BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask,
 		WorkflowWork:     b.workflows.Manager.Fanout.WorkflowWork,
 		TaskReceipt:      b.delegations.Queue.TaskReceipt,
-		PendingDecision: func(ctx context.Context, childSessionID string) (string, bool, error) {
-			if b.sessions.Manager == nil || b.sessions.Manager.Decisions == nil {
-				return "", false, nil
-			}
-			dec, ok, err := b.sessions.Manager.Decisions.Get(ctx, childSessionID)
-			if err != nil {
-				return "", false, err
-			}
-			if !ok {
-				return "", false, nil
-			}
-			return dec.WorkerID, true, nil
-		},
-		ComposePrompt: b.composeWorkerAssignment,
+		WorkerRecords:    b.boards.WorkerRecords,
+		ComposePrompt:    b.composeWorkerAssignment,
 		WebSearchEnabled: func() bool {
 			if b.boards == nil || b.boards.WebRuntime.Config == nil {
 				return true

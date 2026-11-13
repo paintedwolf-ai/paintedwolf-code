@@ -11,7 +11,6 @@ Route verify, re-dispatch, or user reply from `report_json` (`leg_status`, `file
 **Worker decision request** (structured — branch on `blocker_class`, not stderr prose):
 - `blocker_class`: `{{ last_worker_decision_request.blocker_class }}`
 - `job_id`: `{{ last_worker_decision_request.job_id }}`
-- `child_session_id`: `{{ last_worker_decision_request.child_session_id }}`
 - question: {{ last_worker_decision_request.question }}
 {% if last_worker_decision_request.options %}- options:{% for o in last_worker_decision_request.options %} `{{ o }}`{% if not forloop.Last %},{% endif %}{% endfor %}{% else %}- options: none; answer in your own words{% endif %}
 

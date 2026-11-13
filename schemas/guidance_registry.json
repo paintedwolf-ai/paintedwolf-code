@@ -3210,12 +3210,6 @@
       "emit": "guard:coordinator_synthesis",
       "summary": "Synthesis cited {{ paintedwolf.offender_count }} URL(s) absent from the coordinator and worker evidence available to this report."
     },
-    "TASK_DECISION_PENDING": {
-      "branch_instruction": "Branch on Code; answer the pending decision before any child_session_id resume.",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "Child session `{{ paintedwolf.child_session_id }}` still has an unanswered `needs_decision` from job `{{ paintedwolf.job_id }}`."
-    },
     "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED": {
       "branch_instruction": "Start a new reviewer with the registered work ID; retain earlier reviews as evidence.",
       "category": "recoverable",
@@ -3239,6 +3233,12 @@
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "**{{ paintedwolf.agent_type }}** uses a mutation-capable tool profile and must dispatch with **`scope.mode: write`** so changes land in an isolated overlay."
+    },
+    "TASK_WORKER_NAME_TAKEN": {
+      "branch_instruction": "Branch on Code TASK_WORKER_NAME_TAKEN; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:task",
+      "summary": "Another worker in this session already has that name."
     },
     "TERMINAL_CAP_REACHED": {
       "branch_instruction": "Retry the requested start only after capacity is available; this refused start created no process",
@@ -3588,24 +3588,6 @@
       "category": "recoverable",
       "emit": "guard:worker_summary",
       "summary": "This worker job has no accepted completion report."
-    },
-    "WORKER_RESUME_CHILD_UNKNOWN": {
-      "branch_instruction": "Use a recorded child_session_id, or start a new task",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "No worker job has run in child session {{ paintedwolf.child_session_id }}."
-    },
-    "WORKER_RESUME_MISMATCH": {
-      "branch_instruction": "Resume without restating {{ paintedwolf.resume_field }}, or start a new task",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "The resume names {{ paintedwolf.resume_field }} `{{ paintedwolf.resume_requested }}`, but child {{ paintedwolf.child_session_id }} runs as `{{ paintedwolf.resume_recorded }}`."
-    },
-    "WORKER_RESUME_OVERLAY_DISCARDED": {
-      "branch_instruction": "Branch on Code; dispatch a fresh worker leg without child_session_id rather than resuming a discarded overlay",
-      "category": "recoverable",
-      "emit": "guard:coordinator",
-      "summary": "This child session's most recent write leg ({{ paintedwolf.prior_job_id }}) is {{ paintedwolf.merge_status }}; rejecting or aborting an overlay tears down its sandbox, so resuming reuses an empty overlay and lands no work."
     },
     "WORKER_SCOUT_NO_SURVEY_EVIDENCE": {
       "branch_instruction": "Do not mark the leg complete without its required survey evidence; preserve any existing work and report the unresolved scope.",

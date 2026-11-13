@@ -29,7 +29,7 @@ Deliver the requested result. {% if execution_mode == "orchestrate" %}Coordinate
 {{ units.evidence }}
 {% include "partials/external-facts-verify.md" %}
 
-{% if execution_mode == "orchestrate" %}A worker runs until it delivers, asks a blocking question or is stopped. A round notice tells you when a round runs long or goes quiet{% if profile_has_worker_cancel %}; stop it with **`worker_cancel`** only when it is no longer worth continuing{% endif %}.{% if profile_has_task %} A worker whose round ended without finishing resumes with **`task(child_session_id=…)`**.{% endif %}{% endif %}
+{% if execution_mode == "orchestrate" %}A worker runs until it delivers, asks a blocking question or is stopped. A round notice tells you when a round runs long or goes quiet{% if profile_has_worker_cancel %}; stop it with **`worker_cancel`** only when it is no longer worth continuing{% endif %}.{% if profile_has_instruct_worker %} A worker that delivered, finished or failed keeps its conversation: send it corrections or the rest of the work with **`instruct_worker`**, and send related follow-up work to the worker that already knows the area.{% endif %}{% endif %}
 
 {% if can_orient or has_file_tools %}
 ## Board and scans

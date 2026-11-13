@@ -2,7 +2,7 @@ description: >-
   Start background workers for parallel execution across concurrent legs
   and return control immediately. Dispatch ready legs together in the same turn
   or launch companion legs while work runs. For single-thread, localized changes,
-  execute inline directly. Write workers execute inside a private view with no remote or publish capability; sibling workers' changes do not appear until they land. Version-control inspection, committing, and any publication steps belong to the coordinator on the host workspace after promotion. Use after_workers when a worker needs completed producer files. Match the worker profile and scope to the assignment.
+  execute inline directly. Write workers execute inside a private view with no remote or publish capability; sibling workers' changes do not appear until they land. Version-control inspection, committing, and any publication steps belong to the coordinator on the host workspace after promotion. Use after_workers when a worker needs completed producer files. Match the worker profile and scope to the assignment. Returns the worker's name; follow-up work that builds on what a worker learned goes back to that worker instead of a new one.
 schema:
   type: object
   additionalProperties: false
@@ -14,15 +14,15 @@ schema:
       items:
         type: string
         format: uuid
-      description: Existing sibling job IDs whose outputs this fresh worker needs. The host waits for successful completion and promotion of writes before starting. Unusable producer output cancels waiting consumers. Cannot combine with child_session_id or base_overlay_id.
+      description: Existing sibling job IDs whose outputs this fresh worker needs. The host starts this worker once each producer has delivered a complete result and its writes have landed; a producer sent back for corrections holds it until it delivers again. Cannot combine with base_overlay_id.
     shared_context:
       type: string
       description: Shared interface agreements and assumptions for this worker, up to 8192 UTF-8 bytes. Copy the same relevant contracts to collaborating assignments; workers do not inherit the parent conversation or sibling files.
     workflow_work_id:
       type: string
-      description: Host-issued work id for a planned leg or registered review question. Planned legs supply omitted agent_type and scope; questions require an explicit agent and read scope. A resume retains its child's work id.
+      description: Host-issued work id for a planned leg or registered review question. Planned legs supply omitted agent_type and scope; questions require an explicit agent and read scope.
     agent_type:
-      description: "Worker agent id. Omit when resuming a child or dispatching a planned leg; either one supplies it."
+      description: "Worker agent id. Omit when dispatching a planned leg, which supplies it."
       type: string
     brief:
       description: >-
@@ -71,12 +71,11 @@ schema:
             minLength: 1
             maxLength: 240
       required: [goal, done_when]
-    child_session_id:
+    name:
       type: string
-      description: >-
-        Resume an existing worker child session instead of spawning a new one.
-        The resume keeps the child's agent_type, scope mode, and planned leg;
-        restating a different agent_type or scope mode is rejected.
+      minLength: 1
+      maxLength: 64
+      description: Optional worker name, unique in this session; the host names the worker after its agent when omitted.
     files:
       description: "Optional repo-relative files to emphasize for the worker."
       type: array

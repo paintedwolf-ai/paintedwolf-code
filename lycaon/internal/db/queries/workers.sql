@@ -293,3 +293,10 @@ JOIN worker_rounds r ON r.job_id = res.worker_job_id
 JOIN workers w ON w.id = r.worker_id
 WHERE w.session_id = sqlc.arg(session_id) AND d.change_state = 'shelved';
 
+-- name: BindWorkerChildByJob :execrows
+-- A worker's first round spawns its child session; the worker keeps that
+-- session for every later round.
+UPDATE workers SET child_session_id = sqlc.arg(child_session_id), updated_at = sqlc.arg(updated_at)
+WHERE id = (SELECT worker_id FROM worker_rounds WHERE job_id = sqlc.arg(job_id))
+  AND child_session_id IS NULL;
+

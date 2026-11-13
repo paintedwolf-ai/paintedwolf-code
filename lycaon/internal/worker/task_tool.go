@@ -19,6 +19,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -29,30 +30,20 @@ type TaskToolDeps struct {
 	Workers          WorkersConfig
 	ComposePrompt    func(ctx context.Context, tctx tools.ToolContext, agentType string, brief api.WorkerTaskCharter, task *api.WorkerTask) (string, error)
 	WebSearchEnabled func() bool
-	// PendingDecision returns a child's open decision.
-	PendingDecision  func(context.Context, string) (jobID string, ok bool, err error)
 	BindWorkflowTask func(context.Context, tools.ToolContext, string, *api.WorkerTask) error
 	// WorkflowWork resolves dispatch constraints for an active workflow work id.
 	WorkflowWork func(context.Context, string, string) (spawn.WorkflowWork, bool, error)
 	TaskReceipt  func(context.Context, string, string) (*api.WorkerTask, error)
+	// WorkerRecords records the worker each task starts and its first round.
+	WorkerRecords *workerrecords.Store
 }
 
-// IdentityResolver supplies the same child and plan sources to task admission and execution.
+// IdentityResolver supplies the same plan source to task admission and execution.
 func (d TaskToolDeps) IdentityResolver() workeradmission.TaskIdentityResolver {
-	return workeradmission.TaskIdentityResolver{Children: d.Queue, WorkflowWork: d.WorkflowWork}
+	return workeradmission.TaskIdentityResolver{WorkflowWork: d.WorkflowWork}
 }
 
 var taskToolLog = observability.LazyComponent("task_tool")
-
-// overlayDiscarded reports whether a write overlay was removed.
-func overlayDiscarded(status api.WorkerMergeStatus) bool {
-	switch status {
-	case api.WorkerMergeStatusRejected, api.WorkerMergeStatusAborted:
-		return true
-	default:
-		return false
-	}
-}
 
 // RegisterTaskTool registers task(agent_type, brief, files?) for coordinator spawns.
 func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
@@ -75,7 +66,11 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 					return "", err
 				}
 				scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
-				return taskEnqueueOutput(tctx, scope, *prior)
+				name, err := startWorkerRound(ctx, deps, tctx, *prior)
+				if err != nil {
+					return "", err
+				}
+				return taskEnqueueOutput(tctx, scope, *prior, name)
 			}
 		}
 		identity, err := identityResolver.Resolve(ctx, tctx.Identity.SessionID, args)
@@ -106,35 +101,12 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				}
 			}
 		}
-		childSessionID, _ := args["child_session_id"].(string)
-		childSessionID = strings.TrimSpace(childSessionID)
-		if childSessionID != "" && deps.PendingDecision != nil {
-			pendingJobID, ok, err := deps.PendingDecision(ctx, childSessionID)
-			if err != nil {
-				return "", fmt.Errorf("load pending decision: %w", err)
-			}
-			if ok {
-				return "", &toolrejection.ToolReject{
-					Code: "TASK_DECISION_PENDING",
-					Data: map[string]any{
-						"child_session_id": childSessionID,
-						"job_id":           pendingJobID,
-					},
-				}
-			}
-		}
 		normalizedScope := identity.Scope
 		scopePtr := &normalizedScope
 		jobID := uuid.NewString()
-		if prior := identity.Prior; prior != nil && overlayDiscarded(prior.MergeStatus) {
-			return "", &toolrejection.ToolReject{
-				Code: "WORKER_RESUME_OVERLAY_DISCARDED",
-				Data: map[string]any{
-					"child_session_id": childSessionID,
-					"prior_job_id":     prior.ID,
-					"merge_status":     string(prior.MergeStatus),
-				},
-			}
+		name, err := workerNameArg(args)
+		if err != nil {
+			return "", err
 		}
 
 		projScope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
@@ -154,7 +126,6 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			ID:              jobID,
 			AfterWorkers:    after,
 			ParentSessionID: tctx.Identity.SessionID,
-			ChildSessionID:  childSessionID,
 			AgentType:       agentType,
 			Prompt:          prompt,
 			Brief:           brief.Goal,
@@ -187,6 +158,10 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		}
 
 		task.SourceArgsDigest = sourceDigest
+		// The worker exists before its job, so a refused name enqueues nothing.
+		if _, err := createTaskWorker(ctx, deps, tctx, task, name, brief.Goal); err != nil {
+			return "", err
+		}
 		enqueuedID, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {
 			var active *ReviewAssignmentActiveError
@@ -196,7 +171,11 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			return "", err
 		}
 		task.ID = enqueuedID
-		return taskEnqueueOutput(tctx, projScope, task)
+		workerName, err := startWorkerRound(ctx, deps, tctx, task)
+		if err != nil {
+			return "", err
+		}
+		return taskEnqueueOutput(tctx, projScope, task, workerName)
 	})
 }
 
@@ -222,7 +201,7 @@ func taskIncludesLinkedCheckout(tctx tools.ToolContext, scope project.ProjectSco
 	return false
 }
 
-func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task api.WorkerTask) (string, error) {
+func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task api.WorkerTask, worker string) (string, error) {
 	jobID, childSessionID, agentType := task.ID, task.ChildSessionID, task.AgentType
 	if tctx.Effects.Out != nil {
 		tctx.Effects.Out.OwnerRef = jobID
@@ -239,6 +218,7 @@ func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task 
 	)
 
 	out := map[string]any{
+		"worker":             worker,
 		"agent_type":         agentType,
 		"job_id":             jobID,
 		"status":             "enqueued",
@@ -255,9 +235,6 @@ func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task 
 		}
 	} else {
 		out["workspace_kind"] = "primary"
-	}
-	if childSessionID != "" {
-		out["child_session_id"] = childSessionID
 	}
 	raw, err := json.Marshal(out)
 	if err != nil {

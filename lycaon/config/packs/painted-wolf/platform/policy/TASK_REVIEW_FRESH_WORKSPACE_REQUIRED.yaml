@@ -10,7 +10,7 @@ effect: block
 copy:
   what: A question reassessment requires a fresh worker workspace.
   cause: Investigation outputs must be propagated before the reviewer starts.
-  fix: Dispatch the same workflow_work_id without child_session_id or scope.base_overlay_id. Preserve any after_workers prerequisites.
+  fix: Dispatch the same workflow_work_id without scope.base_overlay_id. Preserve any after_workers prerequisites.
   instead: Start a new reviewer with the registered work ID; retain earlier reviews as evidence.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:workflow

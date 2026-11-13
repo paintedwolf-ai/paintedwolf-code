@@ -101,6 +101,28 @@ func (q *Queries) AllocateWorkerRoundOrdinal(ctx context.Context, arg AllocateWo
 	return column_1, err
 }
 
+const bindWorkerChildByJob = `-- name: BindWorkerChildByJob :execrows
+UPDATE workers SET child_session_id = ?1, updated_at = ?2
+WHERE id = (SELECT worker_id FROM worker_rounds WHERE job_id = ?3)
+  AND child_session_id IS NULL
+`
+
+type BindWorkerChildByJobParams struct {
+	ChildSessionID sql.NullString `json:"child_session_id"`
+	UpdatedAt      string         `json:"updated_at"`
+	JobID          string         `json:"job_id"`
+}
+
+// A worker's first round spawns its child session; the worker keeps that
+// session for every later round.
+func (q *Queries) BindWorkerChildByJob(ctx context.Context, arg BindWorkerChildByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, bindWorkerChildByJob, arg.ChildSessionID, arg.UpdatedAt, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const bindWorkerChildSession = `-- name: BindWorkerChildSession :execrows
 UPDATE workers SET child_session_id = ?1, updated_at = ?2
 WHERE id = ?3 AND child_session_id IS NULL

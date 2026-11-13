@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/prompts"
 	sessiondecisions "github.com/lycaon/lycaon/internal/session/decisions"
@@ -335,5 +336,56 @@ func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
 	}
 	if got := next(); got != "job-c" {
 		t.Fatalf("consumer still held after its producer delivered again: next = %q", got)
+	}
+}
+
+// task starts a worker: a named record with the job as its first round,
+// bound to the child session the job spawns. A replay starts nothing new and
+// a name in use is refused before anything is enqueued.
+func TestTaskStartsANamedWorker(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
+		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(), WorkerRecords: f.records,
+	}))
+	args := map[string]any{"agent_type": "repo-researcher", "name": "scout", "scope": map[string]any{"mode": "read"},
+		"brief": map[string]any{"goal": "Map the parser", "done_when": []any{"Entry points listed"}}}
+	out, err := f.run(t, "task", "call-1", args)
+	testutil.FailErr(t, "task", err)
+	var started struct {
+		Worker string `json:"worker"`
+		JobID  string `json:"job_id"`
+	}
+	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &started))
+	if started.Worker != "scout" || started.JobID == "" {
+		t.Fatalf("task output = %s", out)
+	}
+	again, err := f.run(t, "task", "call-1", args)
+	testutil.FailErr(t, "replay", err)
+	if again != out || countJobs(t, f.db) != 1 {
+		t.Fatalf("replay = %s (jobs %d)", again, countJobs(t, f.db))
+	}
+	w, err := f.records.Resolve(t.Context(), f.coord, "scout")
+	testutil.FailErr(t, "resolve", err)
+	rounds, err := f.records.Rounds(t.Context(), f.coord, w.ID)
+	testutil.FailErr(t, "rounds", err)
+	if len(rounds) != 1 || rounds[0].JobID != started.JobID || w.Brief != "Map the parser" || w.ScopeMode != "read" {
+		t.Fatalf("worker = %+v rounds = %+v", w, rounds)
+	}
+
+	now := db.FormatTime(time.Now().UTC())
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('scout-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	testutil.FailErr(t, "insert child", err)
+	testutil.FailErr(t, "spawn child", f.queue.store.SetChildSessionID(t.Context(), started.JobID, "scout-child"))
+	w, err = f.records.Resolve(t.Context(), f.coord, "scout")
+	testutil.FailErr(t, "resolve again", err)
+	if w.ChildSessionID != "scout-child" {
+		t.Fatalf("worker child = %q", w.ChildSessionID)
+	}
+
+	_, err = f.run(t, "task", "call-2", args)
+	wantReject(t, err, TaskWorkerNameTakenCode)
+	if countJobs(t, f.db) != 1 {
+		t.Fatal("a refused name enqueued a job")
 	}
 }
