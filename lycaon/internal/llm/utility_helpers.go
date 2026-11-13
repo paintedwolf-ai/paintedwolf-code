@@ -63,6 +63,8 @@ func (c UtilityClass) urgency() modelcall.RequestUrgency {
 	switch c {
 	case UtilityClassBackground, UtilityClassGift, UtilityClassOverlay:
 		return modelcall.UrgencyBackground
+	case UtilityClassQuality, UtilityClassRequested:
+		return modelcall.UrgencyInteractive
 	}
 	return modelcall.UrgencyInteractive
 }
