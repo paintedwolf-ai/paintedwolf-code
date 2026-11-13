@@ -11867,6 +11867,13 @@ export interface components {
             /** @description Leading screened bytes of the retained stream as UTF-8. Never the authoritative body. */
             preview: string;
             preview_truncated: boolean;
+            /** @description Last screened whole lines, at most six, when the preview does not reach the end; empty otherwise. Never the authoritative body. */
+            tail_preview: string;
+            /**
+             * Format: int64
+             * @description Lines in the complete stream. Absent while capture is incomplete.
+             */
+            line_count?: number;
         };
         /** @description Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed. */
         CommandRevisionConflict: {

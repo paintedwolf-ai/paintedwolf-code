@@ -121,6 +121,21 @@ func (r *RegistrySummarizer) degradeSummarize(ctx context.Context, systemPrompt,
 	return fail()
 }
 
+// answerTokens keeps maxTokens for the answer on a model that cannot turn
+// reasoning off: its cap also covers reasoning, which runs at least at low
+// effort, so that allowance is added.
+func (r *RegistrySummarizer) answerTokens(ctx context.Context, p modelcall.Provider, model string, maxTokens int) int {
+	if maxTokens <= 0 || r.Registry == nil {
+		return maxTokens
+	}
+	entry, _ := r.Registry.thinkingModelEntry(ctx, p.ID(), model)
+	if !modelcall.ResolveModelThinking(p.Profile(), entry, model).AlwaysOn {
+		return maxTokens
+	}
+	allowance, _ := modelcall.ThinkLow.AnthropicBudget()
+	return maxTokens + allowance
+}
+
 func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Provider, model, systemPrompt, userPrompt string, maxTokens int) (string, error) {
 	today, err := guidance.RenderTodayLine(ctx, time.Now(), ResolveModelCutoff(model))
 	if err != nil {
@@ -136,8 +151,9 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 		Debug:    modelcall.RequestDebug{Purpose: r.Purpose},
 		// Short utility outputs use the configured no-reasoning mode.
 		Think:     modelcall.ThinkOff,
-		MaxTokens: maxTokens,
+		MaxTokens: r.answerTokens(ctx, p, model, maxTokens),
 	}
+	maxTokens = req.MaxTokens
 	if compaction.SummaryFormatRequested(ctx) {
 		req.ResponseFormat = compaction.CompactionSummaryResponseFormat()
 	}

@@ -241,6 +241,7 @@ func runCommandBackground(
 		Stages:     stages,
 		IOParams:   ioParams,
 		PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
+		ServiceEnv: append([]string(nil), tctx.Host.HostResourceEnv...),
 	}
 	spawnFacts := confine.SpawnFacts{Report: CommandConfinementReport(
 		confine.BoundaryOf(confinement), commandNetworkPosture(tctx, toolName, commandLine),
