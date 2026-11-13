@@ -174,3 +174,20 @@ func TestMintedKindsCountOperationsOnlyThroughCommand(t *testing.T) {
 		t.Fatalf("with command: held %t sealed %t read %t", withCommand[held], withCommand[sealed], withCommand[readKind])
 	}
 }
+
+func TestFormToolDoorMintsItsProgramsKinds(t *testing.T) {
+	b, err := evidence.LoadBinding()
+	testutil.FailErr(t, "load binding", err)
+	receipt := b.ReceiptKind("summarize")
+	if receipt != b.ToolKind("command") {
+		t.Fatalf("summarize runs as its command form; receipt kind = %q", receipt)
+	}
+	minted, err := b.MintedKinds(map[string]bool{"summarize": true})
+	testutil.FailErr(t, "minted", err)
+	if !minted[receipt] || !minted[evidence.SourceDeliveryKind] {
+		t.Fatalf("summarize alone mints receipt %t, source windows %t", minted[receipt], minted[evidence.SourceDeliveryKind])
+	}
+	if b.ReceiptKind("terminal_open") != b.ToolKind("terminal_open") {
+		t.Fatal("a tool without a command form keeps its own kind")
+	}
+}

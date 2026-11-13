@@ -1,6 +1,7 @@
 package prompts
 
 import (
+	"github.com/lycaon/lycaon/internal/evidence"
 	"runtime"
 	"slices"
 	"sort"
@@ -256,6 +257,7 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	}
 	out := map[string]any{
 		"mints":                           evidenceMints(reachHeld),
+		"receipt_kind":                    evidence.ActiveBinding().ReceiptKinds(),
 		"profile_has_write_tools":         len(writeTools) > 0 || commandMutates,
 		"profile_has_read_tools":          len(readTools) > 0,
 		"profile_mutation_capable":        mutationCapable,

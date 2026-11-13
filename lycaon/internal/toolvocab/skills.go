@@ -204,6 +204,7 @@ func (c *Catalog) skillRenderVars(held map[string]bool, coordinator bool) map[st
 	vars["has_git"] = true
 	vars["root_count"] = 1
 	vars["mints"] = c.mintFacts(held)
+	vars["receipt_kind"] = c.evidence.ReceiptKinds()
 	return vars
 }
 

@@ -8,4 +8,4 @@ attaches: [summarize]
 hosts: [coordinator, worker]
 ---
 - `summarize` explains a named file or area, or inline `content` with no filesystem access; start from `path` and the task argument (omit the task for an overview).{% if profile_has_command %} Use `outline --path FILE` in `command` for file structure.{% endif %}
-- A briefing orients. Its source windows print read handles you can cite, and its `summarize#` handle proves only that it ran. Read with `cat -n` or `grep -n` to quote or edit. Follow up only where the evidence leaves the task unresolved.
+- A briefing orients. Its source windows print read handles you can cite, and its `{{ receipt_kind.summarize }}#` handle proves only that it ran. Read with `cat -n` or `grep -n` to quote or edit. Follow up only where the evidence leaves the task unresolved.
