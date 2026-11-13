@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -62,7 +61,6 @@ func releaseForeignTokens(
 		toolrejection.AttachUserGuidance(reject, resolution.Guidance)
 		return secretmatch.Resolution{}, reject
 	}
-	egressgate.ApproveRecipient(ctx, destinationID)
 	return resolution, nil
 }
 

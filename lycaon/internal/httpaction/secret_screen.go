@@ -156,8 +156,6 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		toolrejection.AttachUserGuidance(reject, resolution.Guidance)
 		return outboundRequest{}, reject
 	}
-	// The card named the recipient; sending to it, whole or redacted, was the person's choice.
-	egressgate.ApproveRecipient(ctx, destinationID)
 	if resolution.Decision != secretmatch.SendRedacted {
 		return sending, nil
 	}
@@ -179,4 +177,21 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 	tc.Effects.Secrets.Redacted(spec.outgoing)
 	rewritten.redacted, rewritten.receipt = true, resolution.ReceiptToken
 	return rewritten, nil
+}
+
+// recordReviewedRecipient makes every release review in one exchange record
+// its recipient: a card names the recipient, and sending to it, whole or
+// redacted, is the person's choice, so the connection to it needs no card of
+// its own.
+func recordReviewedRecipient(ask secretmatch.AskFunc) secretmatch.AskFunc {
+	if ask == nil {
+		return nil
+	}
+	return func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
+		resolution, err := ask(ctx, alert)
+		if err == nil && !resolution.Decision.Blocks() {
+			egressgate.ApproveRecipient(ctx, alert.DestinationID)
+		}
+		return resolution, err
+	}
 }

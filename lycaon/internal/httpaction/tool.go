@@ -300,6 +300,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		defer tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
 	}
 	ctx = egressgate.WithReviewedRecipients(ctx)
+	deps.SecretAsk = recordReviewedRecipient(deps.SecretAsk)
 	ctx = secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
 		SessionID: tctx.Identity.SessionID, RootSessionID: tctx.ChatSessionID(), ProjectID: tctx.Identity.ProjectID,
 		ProjectDir: tctx.ActiveRootPath(), ToolCallID: tctx.Identity.ToolCallID,

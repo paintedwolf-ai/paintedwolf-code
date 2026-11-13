@@ -32,9 +32,10 @@ func TestCookieApprovalConsentsToItsConnection(t *testing.T) {
 		store := httpcookies.New(nil)
 		store.SetCookies(target, []*http.Cookie{{Name: "session", Value: "private-cookie-4411", Path: "/"}})
 		jar := &secretcap.CookieJar{Name: "jar", Reference: "secret://cookie-jar", Store: store}
-		deps := Deps{SecretMatcher: testSecretMatcher(t), SecretAsk: func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
+		// The exchange records each allowed review's recipient at the ask.
+		deps := Deps{SecretMatcher: testSecretMatcher(t), SecretAsk: recordReviewedRecipient(func(context.Context, secretmatch.Alert) (secretmatch.Resolution, error) {
 			return secretmatch.Resolution{Decision: decision}, nil
-		}}
+		})}
 		ctx := hitl.WithStopContext(egressgate.WithReviewedRecipients(t.Context()), t.Context())
 		beforeHop, err := prepareCookieDelivery(ctx, deps, spec, jar)
 		testutil.FailErr(t, "prepare cookies", err)
