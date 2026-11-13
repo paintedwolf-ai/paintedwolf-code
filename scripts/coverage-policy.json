@@ -48,6 +48,10 @@
         "start": "scripts/bialy/custom_model",
         "pattern": "test_*.py",
         "requirements": "scripts/bialy/custom_model/requirements-test.txt"
+      },
+      "code-rank partitions": {
+        "start": "scripts/bialy/rerank",
+        "pattern": "test_*.py"
       }
     }
   }

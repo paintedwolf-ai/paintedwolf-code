@@ -100,6 +100,11 @@ scripts/bialy/rerank/train_rerank.py --dump $D/dump-definitions-lycaon.jsonl --d
 scripts/bialy/headfile.py show .task/decide/heads/code-rank.safetensors
 ```
 
+A campaign trains on the dumps of its training partition and validates on its
+validation partition: pass those as `--val-dump`, used whole, and add
+`--metrics PATH` for the saved epoch's validation measures. Without
+`--val-dump`, a seeded `--val-fraction` of the training dumps is held out.
+
 Labels are the site's own structure on the engine's 0..4 rubric: the target
 4, another unit in its file 2, a lexical neighbour from another file 1, a
 random candidate 0; synthetic site rows carry explicit levels. The rubric

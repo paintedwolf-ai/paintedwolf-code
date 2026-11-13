@@ -41,6 +41,7 @@ from laya.common import QTYPES, build_sequence, collate_items
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import headfile  # noqa: E402
+import partition  # noqa: E402
 
 # The rubric the engine serves (scripts/bialy/rank-rubric.json, compiled into bialy).
 with open(Path(__file__).resolve().parents[1] / "rank-rubric.json", encoding="utf-8") as _fh:
@@ -173,6 +174,7 @@ def main():
     ap.add_argument("--val-fraction", type=float, default=0.1)
     ap.add_argument("--max-rows", type=int, default=0)
     ap.add_argument("--seed", type=int, default=7)
+    partition.arguments(ap)
     args = ap.parse_args()
 
     if not args.dump:
@@ -181,16 +183,7 @@ def main():
     lock = headfile.claim(out)  # noqa: F841 - held until the process exits, before any expensive work
     rng = random.Random(args.seed)
     torch.manual_seed(args.seed)
-    rows = []
-    for path in args.dump:
-        rows.extend(read_jsonl(path))
-    rng.shuffle(rows)
-    if args.max_rows:
-        rows = rows[: args.max_rows]
-    split = int(len(rows) * (1 - args.val_fraction))
-    train_ex = labelled_examples(rows[:split], rng)
-    val_ex = labelled_examples(rows[split:], rng)
-    print(f"rows {len(rows)}: {len(train_ex)} train examples, {len(val_ex)} validation examples", file=sys.stderr)
+    train_ex, val_ex = partition.examples(args, rng, read_jsonl, labelled_examples)
 
     device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
     agent = laya.load(args.model, device=device)
@@ -225,9 +218,8 @@ def main():
         print(f"epoch {epoch}: val loss {loss:.4f} acc {acc:.3f} mae {mae:.3f} ({time.time() - t0:.0f}s)", file=sys.stderr)
         if loss < best:
             best = loss
-            headfile.save(out, model, args.label, args.model, {
-                "max_len": max_len, "val_loss": loss, "val_acc": acc, "val_mae": mae, "train_examples": len(train_ex),
-            })
+            headfile.save(out, model, args.label, args.model, partition.measures(
+                args.metrics, epoch, max_len, loss, acc, mae, len(train_ex), len(val_ex)))
             print(f"  saved {out}", file=sys.stderr)
 
 
