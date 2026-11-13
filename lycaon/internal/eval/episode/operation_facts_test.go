@@ -192,7 +192,7 @@ func TestTheContractListsEverySourceAndClosedVocabulary(t *testing.T) {
 	if !slices.Equal(contract.Sources, []SourceIdentity{{"command-program", "pw-operation-program/1"}, {"invocation-receipt", "pw-operation-receipt/1"}}) {
 		t.Fatalf("sources = %+v", contract.Sources)
 	}
-	if !slices.Equal(contract.Files, BundleFiles) || len(contract.Settlement) != 2 || len(contract.SemanticOutcome) != 3 || len(contract.EffectState) != 3 {
+	if !slices.Equal(contract.Files, BundleFiles()) || len(contract.Settlement) != 2 || len(contract.SemanticOutcome) != 3 || len(contract.EffectState) != 3 {
 		t.Fatalf("vocabulary = %+v", contract)
 	}
 	if !slices.Contains(contract.OfferSources, "standing") || !slices.Contains(contract.OfferSources, "companion") {
