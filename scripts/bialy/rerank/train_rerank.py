@@ -41,7 +41,7 @@ from laya.common import QTYPES, build_sequence, collate_items
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import headfile  # noqa: E402
-from partition import partition  # noqa: E402
+import partition  # noqa: E402
 
 # The rubric the engine serves (scripts/bialy/rank-rubric.json, compiled into bialy).
 with open(Path(__file__).resolve().parents[1] / "rank-rubric.json", encoding="utf-8") as _fh:
@@ -171,11 +171,10 @@ def main():
     ap.add_argument("--epochs", type=int, default=6)
     ap.add_argument("--batch-size", type=int, default=32)
     ap.add_argument("--lr", type=float, default=3e-4)
-    ap.add_argument("--val-dump", action="append", default=[], help="validation candidate dump JSONL from its own partition; repeatable")
-    ap.add_argument("--val-fraction", type=float, default=0.1, help="share of --dump rows held out when no --val-dump is given")
-    ap.add_argument("--metrics", help="write the saved epoch's validation measures here as JSON")
+    ap.add_argument("--val-fraction", type=float, default=0.1)
     ap.add_argument("--max-rows", type=int, default=0)
     ap.add_argument("--seed", type=int, default=7)
+    partition.arguments(ap)
     args = ap.parse_args()
 
     if not args.dump:
@@ -184,12 +183,7 @@ def main():
     lock = headfile.claim(out)  # noqa: F841 - held until the process exits, before any expensive work
     rng = random.Random(args.seed)
     torch.manual_seed(args.seed)
-    rows = [row for path in args.dump for row in read_jsonl(path)]
-    validation = [row for path in args.val_dump for row in read_jsonl(path)]
-    train_rows, val_rows = partition(rows, validation, args.val_fraction, rng, args.max_rows)
-    train_ex = labelled_examples(train_rows, rng)
-    val_ex = labelled_examples(val_rows, rng)
-    print(f"rows {len(train_rows) + len(val_rows)}: {len(train_ex)} train examples, {len(val_ex)} validation examples", file=sys.stderr)
+    train_ex, val_ex = partition.examples(args, rng, read_jsonl, labelled_examples)
 
     device = "mps" if torch.backends.mps.is_available() else ("cuda" if torch.cuda.is_available() else "cpu")
     agent = laya.load(args.model, device=device)
@@ -224,11 +218,8 @@ def main():
         print(f"epoch {epoch}: val loss {loss:.4f} acc {acc:.3f} mae {mae:.3f} ({time.time() - t0:.0f}s)", file=sys.stderr)
         if loss < best:
             best = loss
-            measures = {"max_len": max_len, "val_loss": loss, "val_acc": acc, "val_mae": mae, "train_examples": len(train_ex),
-                        "val_examples": len(val_ex), "epoch": epoch}
-            headfile.save(out, model, args.label, args.model, measures)
-            if args.metrics:
-                Path(args.metrics).write_text(json.dumps(measures, indent=2) + "\n")
+            headfile.save(out, model, args.label, args.model, partition.measures(
+                args.metrics, epoch, max_len, loss, acc, mae, len(train_ex), len(val_ex)))
             print(f"  saved {out}", file=sys.stderr)
 
 
