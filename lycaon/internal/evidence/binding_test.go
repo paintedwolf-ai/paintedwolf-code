@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -138,5 +139,20 @@ func TestBindingCustomToolGrounds(t *testing.T) {
 	rec, ok := evidence.ResolveHandle(ev, "custom#1")
 	if !ok || rec.Shape != evidence.ShapeOpaque {
 		t.Fatalf("rec = %+v ok=%v", rec, ok)
+	}
+}
+
+func TestProducibleKindsIncludeArgumentVariants(t *testing.T) {
+	b, err := evidence.LoadBinding()
+	testutil.FailErr(t, "load binding", err)
+	command := b.ProducibleKinds("command")
+	if len(command) < 2 || command[0] != b.ToolKind("command") {
+		t.Fatalf("command kinds = %v", command)
+	}
+	if got := b.ToolKindForArgs("command", map[string]any{"terminal_capture": map[string]any{}}); !slices.Contains(command, got) {
+		t.Fatalf("variant kind %q missing from %v", got, command)
+	}
+	if got := b.ProducibleKinds("not_a_tool"); len(got) != 0 {
+		t.Fatalf("undeclared tool kinds = %v", got)
 	}
 }
