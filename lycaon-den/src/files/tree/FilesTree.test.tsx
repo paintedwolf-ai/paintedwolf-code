@@ -462,9 +462,9 @@ describe("Files interactions with host rows", () => {
 
   it("marks agent activity that has ended as past", async () => {
     const chat = { sessionId: "session", title: "Fix login", slot: 0 };
-    const labels = ["Fix login: was editing a moment ago"];
+    const labels = ["Fix login: editing"];
     mount(treeViewFixture(), { agentPresenceForPath: (_root, path) => path === "README.md" ? {
-      chip: { state: "editing", phase: "past", text: "was editing", description: labels[0]!, sessionId: "session" },
+      chip: { state: "editing", phase: "past", text: "editing", description: labels[0]!, sessionId: "session" },
       name: { chat, phase: "past", labels }, labels,
     } : null });
     await findFileRow("README.md");

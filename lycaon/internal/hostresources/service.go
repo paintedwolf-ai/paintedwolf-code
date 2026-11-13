@@ -16,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -484,7 +485,46 @@ func (s *Service) ResolveAction(
 	// of the same name, the one the caller asked for first is the one they meant.
 	resolution.PathExtra = s.execPathExtra(ids, resolved)
 	resolution.WriteRoots = s.realizationWriteRoots(ids, resolved)
+	resolution.ClientEnv = s.realizationClientEnv(ids, resolved)
 	return resolution, unmet
+}
+
+// realizationClientEnv points each declared resource's client at the socket
+// the action reviews, as a whole socket reference the launch resolves.
+func (s *Service) realizationClientEnv(ids []string, resolved map[string]State) []string {
+	byID := s.definitionsByID()
+	var env []string
+	seen := map[string]struct{}{}
+	for _, id := range ids {
+		state, ok := resolved[id]
+		def, known := byID[id]
+		if !ok || !known {
+			continue
+		}
+		realization := realizationForPlatform(def.Realizations, s.env.platform)
+		if realization == nil {
+			continue
+		}
+		for _, template := range realization.Connections {
+			if template.ClientEnv == "" {
+				continue
+			}
+			if _, duplicate := seen[template.ClientEnv]; duplicate {
+				continue
+			}
+			for _, connection := range state.Connections {
+				if connection.Mode != template.Mode || connection.Transport != template.Transport || connection.Target == "" {
+					continue
+				}
+				if _, reference := confine.SocketEndpointReferences(connection.Target); reference != "" {
+					seen[template.ClientEnv] = struct{}{}
+					env = append(env, template.ClientEnv+"="+reference)
+				}
+				break
+			}
+		}
+	}
+	return env
 }
 
 func (s *Service) realizationWriteRoots(ids []string, resolved map[string]State) []string {

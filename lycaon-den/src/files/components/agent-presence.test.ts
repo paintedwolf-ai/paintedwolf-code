@@ -62,16 +62,15 @@ describe("agent files", () => {
     ]);
   });
 
-  it("names the strongest activity that stays shown after it ends", () => {
+  it("lingers a file that was read or edited, never one only waiting on a draft", () => {
     const editing = { tool_call_id: "c", tool: "edit", root_id: "r1", path: "a.go", kind: "editing" as const };
     const key = agentFileKey("r1", "a.go");
-    const both = projectAgentFiles(sessions(chat("a", { title: "Reader", reads: [read("r", 1)] }), chat("b", { title: "Editor", activities: [editing] })), ALL, "a");
-    expect(both.get(key)?.recent).toEqual({ chat: expect.objectContaining({ title: "Editor" }), kind: "editing" });
-    expect(projectAgentFiles(sessions(chat("a", { reads: [read("r", 1)] })), ALL, undefined).get(key)?.recent?.kind).toBe("reading");
+    expect(projectAgentFiles(sessions(chat("a", { activities: [editing] })), ALL, undefined).get(key)?.lingers).toBe(true);
+    expect(projectAgentFiles(sessions(chat("a", { reads: [read("r", 1)] })), ALL, undefined).get(key)?.lingers).toBe(true);
     const draftOnly = projectAgentFiles(sessions(chat("a", {
       worker_drafts: [{ worker_id: "j", state: "ready", root_id: "r1", path: "a.go", extent: "range", ranges: [] }],
     })), ALL, undefined);
-    expect(draftOnly.get(key)?.recent).toBeNull();
+    expect(draftOnly.get(key)?.lingers).toBe(false);
   });
 
   it("follows the kinds setting and prefers the open chat for the name highlight", () => {
