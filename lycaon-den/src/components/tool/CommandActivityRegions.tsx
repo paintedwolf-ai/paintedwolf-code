@@ -16,8 +16,8 @@ type ActivityProps = { activity: CommandActivityView; projectId?: string };
 
 export function ActivityCommand(props: ActivityProps) {
   const targets = createMemo(() => activityTargetCommands(props.activity));
-  return <Show when={targets()[0]} keyed>
-    {first => <ActivityTarget target={first} extraCount={targets().length - 1} noun="command" />}
+  return <Show when={targets()[0]}>
+    {first => <ActivityTarget target={first()} extraCount={targets().length - 1} noun="command" />}
   </Show>;
 }
 
