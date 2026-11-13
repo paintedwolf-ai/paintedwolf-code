@@ -38,6 +38,33 @@ func (q *Queries) AccountWorkerResult(ctx context.Context, arg AccountWorkerResu
 	return result.RowsAffected()
 }
 
+const accountWorkerResultsByJob = `-- name: AccountWorkerResultsByJob :execrows
+INSERT INTO worker_result_dispositions (result_id, worker_id, accounted_operation_id, accounted_at)
+SELECT res.id, r.worker_id, ?1, ?2
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.worker_job_id = ?3
+ON CONFLICT (result_id) DO UPDATE SET
+    accounted_operation_id = excluded.accounted_operation_id,
+    accounted_at = excluded.accounted_at
+WHERE worker_result_dispositions.accounted_at IS NULL
+`
+
+type AccountWorkerResultsByJobParams struct {
+	OperationID string         `json:"operation_id"`
+	AccountedAt sql.NullString `json:"accounted_at"`
+	JobID       string         `json:"job_id"`
+}
+
+// Records that the coordinator accounted for a worker round's result, from
+// a checklist acknowledgement that named its job.
+func (q *Queries) AccountWorkerResultsByJob(ctx context.Context, arg AccountWorkerResultsByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, accountWorkerResultsByJob, arg.OperationID, arg.AccountedAt, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const allocateWorkerMessageSeq = `-- name: AllocateWorkerMessageSeq :one
 UPDATE workers SET next_message_seq = next_message_seq + 1, updated_at = ?1
 WHERE id = ?2
@@ -156,6 +183,56 @@ func (q *Queries) CountSessionWorkersByAgent(ctx context.Context, arg CountSessi
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const disposeWorkerResultsByJob = `-- name: DisposeWorkerResultsByJob :execrows
+INSERT INTO worker_result_dispositions (
+    result_id, worker_id, accounted_operation_id, accounted_at,
+    change_state, change_operation_id, landed_change_id, changed_at
+)
+SELECT res.id, r.worker_id,
+       CASE WHEN ?1 IS NOT NULL THEN ?2 ELSE '' END,
+       ?1,
+       ?3, ?2, ?4, ?5
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.worker_job_id = ?6
+ON CONFLICT (result_id) DO UPDATE SET
+    change_state = excluded.change_state,
+    change_operation_id = excluded.change_operation_id,
+    landed_change_id = excluded.landed_change_id,
+    shelve_reason = '',
+    changed_at = excluded.changed_at,
+    accounted_operation_id = CASE WHEN worker_result_dispositions.accounted_at IS NULL
+        THEN excluded.accounted_operation_id ELSE worker_result_dispositions.accounted_operation_id END,
+    accounted_at = COALESCE(worker_result_dispositions.accounted_at, excluded.accounted_at)
+WHERE worker_result_dispositions.change_state IN ('', 'shelved')
+`
+
+type DisposeWorkerResultsByJobParams struct {
+	AccountedAt    sql.NullString `json:"accounted_at"`
+	OperationID    string         `json:"operation_id"`
+	ChangeState    string         `json:"change_state"`
+	LandedChangeID sql.NullString `json:"landed_change_id"`
+	ChangedAt      sql.NullString `json:"changed_at"`
+	JobID          string         `json:"job_id"`
+}
+
+// Records how a landing or rejection resolved a worker round's changes, in
+// the transaction that resolved them. Landed and rejected are final; a
+// rejection may also account for the result it concerns.
+func (q *Queries) DisposeWorkerResultsByJob(ctx context.Context, arg DisposeWorkerResultsByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, disposeWorkerResultsByJob,
+		arg.AccountedAt,
+		arg.OperationID,
+		arg.ChangeState,
+		arg.LandedChangeID,
+		arg.ChangedAt,
+		arg.JobID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getLandedChangeJobID = `-- name: GetLandedChangeJobID :one
@@ -1283,6 +1360,25 @@ func (q *Queries) SettleWorkerRound(ctx context.Context, arg SettleWorkerRoundPa
 		arg.WorkerID,
 		arg.Ordinal,
 	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const settleWorkerRoundByJob = `-- name: SettleWorkerRoundByJob :execrows
+UPDATE worker_rounds SET settled_at = ?1, checkpoint_id = ?2
+WHERE job_id = ?3 AND settled_at IS NULL
+`
+
+type SettleWorkerRoundByJobParams struct {
+	SettledAt    sql.NullString `json:"settled_at"`
+	CheckpointID string         `json:"checkpoint_id"`
+	JobID        string         `json:"job_id"`
+}
+
+func (q *Queries) SettleWorkerRoundByJob(ctx context.Context, arg SettleWorkerRoundByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, settleWorkerRoundByJob, arg.SettledAt, arg.CheckpointID, arg.JobID)
 	if err != nil {
 		return 0, err
 	}

@@ -72,6 +72,10 @@ SELECT r.worker_id, r.ordinal, r.job_id, r.instruction_first_seq, r.instruction_
 FROM worker_rounds r LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
 WHERE r.worker_id = ? ORDER BY r.ordinal;
 
+-- name: SettleWorkerRoundByJob :execrows
+UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
+WHERE job_id = sqlc.arg(job_id) AND settled_at IS NULL;
+
 -- name: SettleWorkerRound :execrows
 UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
 WHERE worker_id = sqlc.arg(worker_id) AND ordinal = sqlc.arg(ordinal) AND settled_at IS NULL;
@@ -241,3 +245,41 @@ SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_se
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE child_session_id = ?;
+
+-- name: DisposeWorkerResultsByJob :execrows
+-- Records how a landing or rejection resolved a worker round's changes, in
+-- the transaction that resolved them. Landed and rejected are final; a
+-- rejection may also account for the result it concerns.
+INSERT INTO worker_result_dispositions (
+    result_id, worker_id, accounted_operation_id, accounted_at,
+    change_state, change_operation_id, landed_change_id, changed_at
+)
+SELECT res.id, r.worker_id,
+       CASE WHEN sqlc.narg(accounted_at) IS NOT NULL THEN sqlc.arg(operation_id) ELSE '' END,
+       sqlc.narg(accounted_at),
+       sqlc.arg(change_state), sqlc.arg(operation_id), sqlc.narg(landed_change_id), sqlc.arg(changed_at)
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.worker_job_id = sqlc.arg(job_id)
+ON CONFLICT (result_id) DO UPDATE SET
+    change_state = excluded.change_state,
+    change_operation_id = excluded.change_operation_id,
+    landed_change_id = excluded.landed_change_id,
+    shelve_reason = '',
+    changed_at = excluded.changed_at,
+    accounted_operation_id = CASE WHEN worker_result_dispositions.accounted_at IS NULL
+        THEN excluded.accounted_operation_id ELSE worker_result_dispositions.accounted_operation_id END,
+    accounted_at = COALESCE(worker_result_dispositions.accounted_at, excluded.accounted_at)
+WHERE worker_result_dispositions.change_state IN ('', 'shelved');
+
+-- name: AccountWorkerResultsByJob :execrows
+-- Records that the coordinator accounted for a worker round's result, from
+-- a checklist acknowledgement that named its job.
+INSERT INTO worker_result_dispositions (result_id, worker_id, accounted_operation_id, accounted_at)
+SELECT res.id, r.worker_id, sqlc.arg(operation_id), sqlc.arg(accounted_at)
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.worker_job_id = sqlc.arg(job_id)
+ON CONFLICT (result_id) DO UPDATE SET
+    accounted_operation_id = excluded.accounted_operation_id,
+    accounted_at = excluded.accounted_at
+WHERE worker_result_dispositions.accounted_at IS NULL;
+

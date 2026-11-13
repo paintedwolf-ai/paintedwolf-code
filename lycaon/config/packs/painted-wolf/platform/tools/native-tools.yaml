@@ -111,6 +111,9 @@ multi_root:
     - reject_overlay
     - preview_overlay
     - answer_decision
+    - instruct_worker
+    - shelve_overlay
+    - worker_history
     - scan_list
     - scan_summary
     - scan_query
@@ -380,6 +383,7 @@ approval_reversibility:
   handoff_release: reversible
   handoff_release_all: reversible
   handoff_reserve: reversible
+  instruct_worker: recoverable
   measure_page: recoverable
   pack_board: reversible
   parse_decomposition: reversible
@@ -410,6 +414,7 @@ approval_reversibility:
   scan_pack: reversible
   scan_query: reversible
   scan_summary: reversible
+  shelve_overlay: reversible
   state_close: reversible
   state_query: reversible
   state_start: reversible
@@ -430,6 +435,7 @@ approval_reversibility:
   wait: reversible
   web_search: recoverable
   worker_cancel: reversible
+  worker_history: reversible
   workflow_advance: reversible
   workflow_catalog_summaries: reversible
   workflow_compose: reversible
@@ -463,6 +469,7 @@ owner:
   handoff_release: handoff
   handoff_release_all: handoff
   handoff_reserve: handoff
+  instruct_worker: workers
   measure_page: browser
   pack_board: board
   page_act: browser
@@ -493,6 +500,7 @@ owner:
   scan_pack: scans
   scan_query: scans
   scan_summary: scans
+  shelve_overlay: worker_merge
   skills_read: skills
   source_history: source_ledger
   state_close: workflow_state
@@ -513,6 +521,7 @@ owner:
   wait: loop_wake
   web_search: web_research
   worker_cancel: workers
+  worker_history: workers
   workflow_advance: workflows
   workflow_catalog_summaries: workflows
   workflow_compose: workflows
@@ -546,6 +555,7 @@ batch_policy:
   handoff_release: serial
   handoff_release_all: serial
   handoff_reserve: serial
+  instruct_worker: serial
   measure_page: serial
   pack_board: serial
   parse_decomposition: shared
@@ -576,6 +586,7 @@ batch_policy:
   scan_pack: serial
   scan_query: shared
   scan_summary: shared
+  shelve_overlay: serial
   state_close: serial
   state_query: shared
   state_start: serial
@@ -596,6 +607,7 @@ batch_policy:
   wait: serial
   web_search: same_tool
   worker_cancel: serial
+  worker_history: shared
   workflow_advance: serial
   workflow_catalog_summaries: shared
   workflow_compose: serial
@@ -651,6 +663,7 @@ lifecycle:
   handoff_release: db_transaction
   handoff_release_all: db_transaction
   handoff_reserve: db_transaction
+  instruct_worker: durable_job
   measure_page: effect_attempt
   pack_board: read_only
   parse_decomposition: read_only
@@ -681,6 +694,7 @@ lifecycle:
   scan_pack: durable_job
   scan_query: read_only
   scan_summary: read_only
+  shelve_overlay: db_transaction
   state_close: db_transaction
   state_query: read_only
   state_start: db_transaction
@@ -701,6 +715,7 @@ lifecycle:
   wait: db_transaction
   web_search: effect_attempt
   worker_cancel: effect_attempt
+  worker_history: read_only
   workflow_advance: db_transaction
   workflow_catalog_summaries: read_only
   workflow_compose: db_transaction

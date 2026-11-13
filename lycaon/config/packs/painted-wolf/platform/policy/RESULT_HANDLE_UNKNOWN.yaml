@@ -1,0 +1,27 @@
+oar: '1.0'
+id: RESULT_HANDLE_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - shelve_overlay
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "RESULT_HANDLE_UNKNOWN"
+effect: block
+copy:
+  what: 'That result handle names no result of this session''s workers.'
+  cause: The handle is not one the host issued for a worker result in this session.
+  why: A result handle names one worker result exactly, so it cannot be guessed or reused across sessions.
+  fix: 'Use the result handle from the worker''s result notice or the roster.'
+  instead: Branch on Code RESULT_HANDLE_UNKNOWN; do not retry the same call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:shelve_overlay
+x-paintedwolf-message: 'That result handle names no result of this session''s workers.'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: shelve_overlay

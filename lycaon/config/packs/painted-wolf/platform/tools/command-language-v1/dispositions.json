@@ -1070,6 +1070,23 @@
       ]
     },
     {
+      "tool": "instruct_worker",
+      "owner": "workers",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "durable_job",
+      "reuse": "Native registration over worker operations; queues an instruction for a running round or starts the next round.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/instruct_worker.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
+      "existing_semantic_difference": "Host-held worker records; see current description",
+      "implementing_issues": [],
+      "existing_rejection_code": "",
+      "command_forms": []
+    },
+    {
       "tool": "jq",
       "owner": "filesystem",
       "disposition": "replace-routine-schema",
@@ -1993,6 +2010,23 @@
       "command_forms": []
     },
     {
+      "tool": "shelve_overlay",
+      "owner": "worker_merge",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "db_transaction",
+      "reuse": "Native registration over worker operations; records a result's changes as shelved with a reason.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/shelve_overlay.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
+      "existing_semantic_difference": "Host-held worker records; see current description",
+      "implementing_issues": [],
+      "existing_rejection_code": "",
+      "command_forms": []
+    },
+    {
       "tool": "skills_read",
       "owner": "skills",
       "disposition": "retain-domain-structured",
@@ -2551,6 +2585,23 @@
         "P32",
         "P33"
       ],
+      "existing_rejection_code": "",
+      "command_forms": []
+    },
+    {
+      "tool": "worker_history",
+      "owner": "workers",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "read_only",
+      "reuse": "Native registration over worker records; pages one worker's rounds and messages.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/worker_history.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
+      "existing_semantic_difference": "Host-held worker records; see current description",
+      "implementing_issues": [],
       "existing_rejection_code": "",
       "command_forms": []
     },

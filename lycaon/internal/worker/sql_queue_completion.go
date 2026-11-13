@@ -29,13 +29,16 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 	}
 	task, mergeStatus, teardown := q.resolveWriteCompletionTarget(ctx, claimed, result)
 	jobID := claimed.ID
-	overlayPath := ""
+	overlayPath, checkpointID := "", ""
 	// A view publishes its checkpoint; an earlier-format branch seals an overlay against its baseline.
 	// A budget-exceeded overlay stays unsealed for review.
 	if mergeStatus == api.WorkerMergeStatusPending && strings.TrimSpace(task.WorkspaceOverlayPath) == "" {
 		published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
 		if err != nil {
 			return false, fmt.Errorf("worker %s: publish checkpoint: %w", task.ID, err)
+		}
+		if published {
+			_, checkpointID, _ = workspace.BranchCheckpoint(task.WorkspaceRoot)
 		}
 		if !published && strings.TrimSpace(task.WorkspaceBaselinePath) != "" {
 			captured, err := q.captureOverlay(ctx, task)
@@ -51,7 +54,7 @@ func (q *sqlQueueClaims) completeAdmitted(ctx context.Context, claimed *api.Work
 			}
 		}
 	}
-	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath)
+	completion, err := q.store.CompleteJob(ctx, jobID, result, claimed.ClaimToken, mergeStatus, teardown, overlayPath, checkpointID)
 	if err != nil || !completion.Committed || completion.Suspended {
 		q.discardOverlay(ctx, overlayPath)
 	}

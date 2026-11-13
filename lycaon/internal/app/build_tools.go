@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
@@ -25,6 +26,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -97,6 +99,16 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		Answer: b.boards.AnswerDecision,
 	}); err != nil {
 		return fmt.Errorf("answer_decision tool: %w", err)
+	}
+	if err := worker.RegisterWorkerTools(b.execution.Host.Registry, worker.WorkerToolDeps{
+		Ops: &workerops.Service{
+			Reader: workerops.Reader{Records: b.boards.WorkerRecords, Jobs: b.delegations.Queue, Decisions: b.sessions.Decisions},
+			Agents: prompts.AgentMutationCapable,
+		},
+		Queue:   b.delegations.Queue,
+		Workers: b.worker.cfg,
+	}); err != nil {
+		return fmt.Errorf("worker tools: %w", err)
 	}
 	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.sessions.Manager.Promotion)
 	workerMergeSvc := &worker.MergeService{

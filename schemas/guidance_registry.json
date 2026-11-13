@@ -1415,6 +1415,54 @@
       "emit": "guard:view_image",
       "summary": "{{ tool }} did not send {{ paintedwolf.path }} to the model."
     },
+    "INSTRUCT_WORKER_AGENT_BETWEEN_ROUNDS": {
+      "branch_instruction": "Branch on Code INSTRUCT_WORKER_AGENT_BETWEEN_ROUNDS; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "A worker changes agent only between rounds."
+    },
+    "INSTRUCT_WORKER_AGENT_CHANGES_OPEN": {
+      "branch_instruction": "Branch on Code INSTRUCT_WORKER_AGENT_CHANGES_OPEN; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "The worker still has changes that are not landed or rejected."
+    },
+    "INSTRUCT_WORKER_AGENT_SEALED": {
+      "branch_instruction": "Branch on Code INSTRUCT_WORKER_AGENT_SEALED; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "This worker's agent cannot change."
+    },
+    "INSTRUCT_WORKER_ASKING": {
+      "branch_instruction": "Branch on Code INSTRUCT_WORKER_ASKING; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "The worker is waiting on its question."
+    },
+    "INSTRUCT_WORKER_CLOSED": {
+      "branch_instruction": "Branch on Code INSTRUCT_WORKER_CLOSED; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "The worker is closed."
+    },
+    "INSTRUCT_WORKER_PLANNED": {
+      "branch_instruction": "Branch on Code INSTRUCT_WORKER_PLANNED; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "The worker is a planned leg that has not started."
+    },
+    "INSTRUCT_WORKER_RECOVERING": {
+      "branch_instruction": "Branch on Code INSTRUCT_WORKER_RECOVERING; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "The worker's workspace needs recovery first."
+    },
+    "INSTRUCT_WORKER_WAITING": {
+      "branch_instruction": "Branch on Code INSTRUCT_WORKER_WAITING; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "The worker has not started; it is waiting on a prerequisite."
+    },
     "INVEST_CITATIONS_REQUIRED": {
       "branch_instruction": "The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.",
       "category": "recoverable",
@@ -2320,6 +2368,12 @@
       "emit": "guard:request_decision",
       "summary": "Artifact {{ paintedwolf.artifact_id }} has MIME {{ paintedwolf.mime }}, which the decision card cannot preview."
     },
+    "RESULT_HANDLE_UNKNOWN": {
+      "branch_instruction": "Branch on Code RESULT_HANDLE_UNKNOWN; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:shelve_overlay",
+      "summary": "That result handle names no result of this session's workers."
+    },
     "REVIEW_VERDICT_MISSING_BEFORE_CLOSEOUT": {
       "branch_instruction": "If the required review cannot be completed, report the specific blocker through the available decision channel rather than fabricating a terminal verdict.",
       "category": "recoverable",
@@ -2759,6 +2813,18 @@
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "Session scratch is unavailable in this chat, so {{ paintedwolf.path }} has no folder to resolve against."
+    },
+    "SHELVE_OVERLAY_NOT_ADMITTED": {
+      "branch_instruction": "Branch on Code SHELVE_OVERLAY_NOT_ADMITTED; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:shelve_overlay",
+      "summary": "The worker's state does not admit shelving now."
+    },
+    "SHELVE_OVERLAY_NO_CHANGES": {
+      "branch_instruction": "Branch on Code SHELVE_OVERLAY_NO_CHANGES; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:shelve_overlay",
+      "summary": "That result changed nothing, so there is nothing to shelve."
     },
     "SKILL_RESOURCE_UNKNOWN": {
       "branch_instruction": "{% if paintedwolf.available %}Branch on Code SKILL_RESOURCE_UNKNOWN; choose a listed skill resource{% else %}Branch on Code SKILL_RESOURCE_UNKNOWN; do not request a supporting resource for {{ paintedwolf.name }}{% endif %}",
@@ -3510,6 +3576,12 @@
       "category": "recoverable",
       "emit": "guard:worker",
       "summary": "An attempted file mutation has no confirmed artifact in this worker's completion evidence."
+    },
+    "WORKER_NAME_UNKNOWN": {
+      "branch_instruction": "Branch on Code WORKER_NAME_UNKNOWN; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:instruct_worker",
+      "summary": "No worker in this session has that name."
     },
     "WORKER_REPORT_REQUIRED": {
       "branch_instruction": "Reuse completed work and its evidence.",

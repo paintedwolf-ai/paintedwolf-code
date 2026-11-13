@@ -1,0 +1,4 @@
+steps:
+  - tool: "answer_decision"
+    say: "Answer the worker's pending question with {{ call }}; it resumes on its own."
+    otherwise: "Answer the worker's pending question; it resumes on its own."

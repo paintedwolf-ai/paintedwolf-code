@@ -92,6 +92,7 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.deps.Sessions.Manager.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
 	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
+	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetAccounts(r.WorkerRecords)
 	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{
 		Records:    r.WorkerRecords,
 		NeedsReply: r.deps.Sessions.Manager.Coordinator.Workers.MessageNeedsReply,
