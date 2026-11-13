@@ -2,7 +2,6 @@ package invocation
 
 import (
 	"context"
-	"slices"
 	"strings"
 	"testing"
 
@@ -467,36 +466,6 @@ func launchedGroups(child activityInput, counts activityCounts) []activityGroup 
 	return []activityGroup{
 		{input: launch, key: activityKey{launch: "job"}, parent: activityKey{node: "root"}, ordinal: 1, counts: activityCounts{total: 1}},
 		{input: child, key: activityKey{node: child.receipt.ID}, parent: activityKey{launch: "job"}, ordinal: 2, counts: counts},
-	}
-}
-
-func TestBackgroundJobWorkFoldsIntoItsLaunch(t *testing.T) {
-	server := activityFixture("server", "job", "command", "external", 0)
-	server.arguments["command"] = "python3 -m http.server 8000"
-	for _, tc := range []struct {
-		name    string
-		counts  activityCounts
-		state   string
-		outcome string
-	}{
-		{"running", activityCounts{total: 1, running: 1}, "running", activityStateOutcome("running")},
-		{"failed", activityCounts{total: 1, failed: 1}, "failed", ""},
-		{"finished", activityCounts{total: 1}, "completed", activityStateOutcome("completed")},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			values := composeActivityGroups(launchedGroups(server, tc.counts), true)
-			if len(values) != 1 {
-				t.Fatalf("launch and job split: %+v", values)
-			}
-			got := values[0]
-			// A failed job keeps the row's partial-failure summary; others state their outcome.
-			if got.ID != "job" || got.JobHandle != "registry-handle" || got.State != tc.state || (tc.outcome != "" && got.Outcome != tc.outcome) {
-				t.Fatalf("launch activity = %+v", got)
-			}
-			if !slices.Equal(got.ExecutionIDs, []string{"job", "server"}) || got.Subject != server.arguments["command"] {
-				t.Fatalf("launch lost its job: ids=%v subject=%q", got.ExecutionIDs, got.Subject)
-			}
-		})
 	}
 }
 

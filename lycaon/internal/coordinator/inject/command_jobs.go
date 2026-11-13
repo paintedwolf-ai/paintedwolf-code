@@ -66,11 +66,11 @@ func RenderCommandJobsBlock(
 }
 
 // commandLedgerLine keeps each ledger row on one line: a multiline statement's
-// lines are joined by single spaces before clamping.
+// lines are joined by single spaces, then fit within the row bound.
 func commandLedgerLine(command string) string {
 	lines := strings.FieldsFunc(strings.ToValidUTF8(command, "�"), func(r rune) bool { return r == '\n' || r == '\r' })
 	for i := range lines {
 		lines[i] = strings.TrimSpace(lines[i])
 	}
-	return runeclamp.Clamp(strings.Join(slices.DeleteFunc(lines, func(line string) bool { return line == "" }), " "), maxCommandLedgerLineRunes)
+	return runeclamp.Fit(strings.Join(slices.DeleteFunc(lines, func(line string) bool { return line == "" }), " "), maxCommandLedgerLineRunes)
 }

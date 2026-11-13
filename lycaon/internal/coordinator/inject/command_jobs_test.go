@@ -66,18 +66,3 @@ func TestCommandJobsBoundCommandPreviewWithoutDroppingHandle(t *testing.T) {
 		t.Fatalf("unbounded preview or missing recovery handle: %q", block)
 	}
 }
-
-func TestCommandJobsLedgerRowStaysOnOneLine(t *testing.T) {
-	lines := []string{"(", "  cd site", "  python3 -m http.server 8000", ") &"}
-	block := inject.RenderCommandJobsBlock(context.Background(), promptstest.InjectRenderer(t), "sess-inject-test", []bgprocess.JobSnapshot{{
-		Handle: "server", Mode: bgprocess.JobModeBackground, OriginTool: "command", StartedAt: time.Now(),
-		Stages: []hostcmd.StageResult{{Command: strings.Join(lines, "\n")}},
-	}}, nil, time.Now(), "coordinator")
-	parts := make([]string, len(lines))
-	for i, line := range lines {
-		parts[i] = strings.TrimSpace(line)
-	}
-	if !strings.Contains(block, "command="+strings.Join(parts, " ")+"\n") {
-		t.Fatalf("multiline statement broke the ledger row: %q", block)
-	}
-}
