@@ -151,6 +151,16 @@ func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *test
 	}
 }
 
+// Copy that displays next steps needs steps to display.
+func TestHostRuleSetRejectsABoundFactWithoutSteps(t *testing.T) {
+	rule := &Rule{ID: "R", Requires: Requires{Facts: []string{NextStepsFact}}, Copy: Copy{Fix: "{{ paintedwolf.next_steps }}"}}
+	if err := ValidateHostRuleSet(NewRuleSet([]*Rule{rule})); err == nil {
+		t.Fatal("accepted a rule that displays next steps it does not have")
+	}
+	rule.NextSteps = &NextSteps{Steps: []NextStep{{Tool: "recall", Say: "Use {{ call }}."}}}
+	testutil.FailErr(t, "rule with steps", ValidateHostRuleSet(NewRuleSet([]*Rule{rule})))
+}
+
 func schemaTestConfig() *toolschema.Config {
 	return &toolschema.Config{Tools: map[string]toolschema.Entry{
 		"recall":  {Schema: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}}}},
