@@ -98,7 +98,7 @@ type commandOutputResult struct {
 func observeBackgroundOutput(
 	tctx tools.ToolContext,
 	out commandOutput,
-	confinement bgprocess.Confinement,
+	confinement bgprocess.JobConfinement,
 	terminationReason bgprocess.TerminationReason,
 ) commandOutputResult {
 	report := confinement.Report

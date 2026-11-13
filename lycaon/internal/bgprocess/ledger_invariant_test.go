@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"gopkg.in/yaml.v3"
 )
 
@@ -13,9 +14,7 @@ import (
 func wireTerminationReasons(t *testing.T) []TerminationReason {
 	t.Helper()
 	raw, err := os.ReadFile(filepath.Join("..", "..", "..", "docs", "openapi.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "read the wire contract", err)
 	var spec struct {
 		Components struct {
 			Schemas map[string]struct {
@@ -23,9 +22,7 @@ func wireTerminationReasons(t *testing.T) []TerminationReason {
 			} `yaml:"schemas"`
 		} `yaml:"components"`
 	}
-	if err := yaml.Unmarshal(raw, &spec); err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "parse the wire contract", yaml.Unmarshal(raw, &spec))
 	var reasons []TerminationReason
 	for _, reason := range spec.Components.Schemas["BackgroundProcessTerminationReason"].Enum {
 		reasons = append(reasons, TerminationReason(reason))

@@ -22,9 +22,9 @@ type programStages struct {
 	network []confine.EgressHost
 }
 
-// Confinement is a job's confinement facts captured at one moment. A pipeline
+// JobConfinement is a job's confinement facts captured at one moment. A pipeline
 // job reads its own spawn; a program job reads the stages it launched.
-type Confinement struct {
+type JobConfinement struct {
 	Boundary confine.Boundary
 	Report   confine.Report
 	spawn    confine.SpawnFacts
@@ -32,12 +32,12 @@ type Confinement struct {
 }
 
 // SpawnConfinement is the confinement of a job that spawned its own processes.
-func SpawnConfinement(boundary confine.Boundary, facts confine.SpawnFacts) Confinement {
-	return Confinement{Boundary: boundary, Report: facts.Report, spawn: facts}
+func SpawnConfinement(boundary confine.Boundary, facts confine.SpawnFacts) JobConfinement {
+	return JobConfinement{Boundary: boundary, Report: facts.Report, spawn: facts}
 }
 
 // Refusals is what the kernel has refused the job so far.
-func (c Confinement) Refusals() confine.SandboxRefusals {
+func (c JobConfinement) Refusals() confine.SandboxRefusals {
 	if c.stages == nil {
 		return c.spawn.Refusals()
 	}
@@ -46,7 +46,7 @@ func (c Confinement) Refusals() confine.SandboxRefusals {
 
 // SettledRefusals waits for an ended pipeline's last reports; program stages
 // settle before their job ends.
-func (c Confinement) SettledRefusals(ctx context.Context) confine.SandboxRefusals {
+func (c JobConfinement) SettledRefusals(ctx context.Context) confine.SandboxRefusals {
 	if c.stages == nil {
 		return c.spawn.SettledRefusals(ctx)
 	}
@@ -54,7 +54,7 @@ func (c Confinement) SettledRefusals(ctx context.Context) confine.SandboxRefusal
 }
 
 // Network is every mediated destination the job's processes reached.
-func (c Confinement) Network() []confine.EgressHost {
+func (c JobConfinement) Network() []confine.EgressHost {
 	if c.stages == nil {
 		return c.spawn.MediatedNetwork()
 	}
@@ -62,7 +62,7 @@ func (c Confinement) Network() []confine.EgressHost {
 }
 
 // confinementLocked captures proc's confinement. Callers hold the table lock.
-func (proc *Process) confinementLocked() Confinement {
+func (proc *Process) confinementLocked() JobConfinement {
 	if proc.kind != processKindProgram {
 		return SpawnConfinement(proc.boundary, proc.facts)
 	}
@@ -70,7 +70,7 @@ func (proc *Process) confinementLocked() Confinement {
 	for _, lease := range proc.program.live {
 		stages.settled = stages.settled.Merge(lease.Refusals())
 	}
-	return Confinement{Boundary: proc.boundary, Report: proc.facts.Report, stages: stages}
+	return JobConfinement{Boundary: proc.boundary, Report: proc.facts.Report, stages: stages}
 }
 
 // AttachProgramStage counts an external stage's refusals toward the program

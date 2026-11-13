@@ -170,7 +170,7 @@ type RawOutput struct {
 type OutputSnapshot struct {
 	TerminationReason TerminationReason
 	Output            RawOutput
-	Confinement       Confinement
+	Confinement       JobConfinement
 	// Failure is the run error the exit status does not carry.
 	Failure *hostcmd.ExecFailure
 }
