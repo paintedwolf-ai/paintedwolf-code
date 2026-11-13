@@ -47,7 +47,7 @@ func NewRenderer(reject RejectFormatter, nudge NudgeFormatter) *Renderer {
 }
 
 // Render maps a resolved decision onto channels. Nudge and warn walk
-// Advisories ([OAR-EVAL-20]). post_turn blocks use grounding_nudge;
+// Advisories. post_turn blocks use grounding_nudge;
 // pre_invoke/tool_handler/finalize use tool_reject.
 func (r *Renderer) Render(ctx context.Context, stage Stage, decision *Decision) ([]RenderedDecision, error) {
 	if decision == nil {

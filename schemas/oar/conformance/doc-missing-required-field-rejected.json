@@ -1,43 +1,23 @@
 {
   "id": "doc-missing-required-field-rejected",
-  "title": "A document without effect is rejected, naming the field",
+  "title": "A document missing a required field is rejected at load",
   "covers": [
-    "OAR-DOC-2",
-    "OAR-CONF-1",
-    "OAR-CONF-21"
+    "OAR-DOC-2"
   ],
-  "rules": [
-    {
-      "oar": "1.0",
-      "id": "NO_EFFECT",
-      "kind": "policy",
-      "anchor": "tool.pre_invoke"
-    }
-  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "NO_EFFECT",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "emit": "rule:conformance",
+    "when": "true"
+  },
   "input": {
-    "capability": {
-      "oar_capability_version": "1.0",
-      "host": "oar.testhost",
-      "anchors": {
-        "core": {
-          "tool.pre_invoke": "tool.pre_invoke",
-          "tool.handler": "tool.handler",
-          "tool.post_invoke": "tool.post_invoke",
-          "agent.post_turn": "agent.post_turn",
-          "agent.finalize": "agent.finalize",
-          "model.input": "model.input",
-          "model.output": "model.output",
-          "model.tool_result": "model.tool_result"
-        },
-        "unsupported": []
-      },
-      "profiles": [],
-      "activity_window": 0,
-      "detectors": [],
-      "expression_nodes_max": 1024,
-      "supports_transform": false
-    },
-    "anchor": "tool.pre_invoke"
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
   },
   "expected": {
     "error": "effect"

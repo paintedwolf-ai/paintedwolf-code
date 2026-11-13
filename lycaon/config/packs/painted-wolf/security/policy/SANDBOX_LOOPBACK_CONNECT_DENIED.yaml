@@ -1,26 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_LOOPBACK_CONNECT_DENIED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.user_guidance
-  profiles:
-  - tool
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code, paintedwolf.user_guidance]
 when: paintedwolf.rejection_code == "SANDBOX_LOOPBACK_CONNECT_DENIED"
 effect: block
-copy:
-  what: '{{ tool }} was not granted the requested connection to the local service.'
-  cause: The person declined this connection to the local service.
-  why: Retrying loopback_connect loops on the same refusal.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
-    before requesting approval for a corrected action.{% else %}Continue without that local service and report unmet verification.
-    Wait for new user direction before requesting approval again.{% endif %}'
-  instead: Respect this rejection; fresh user direction permits a new approval request
-x-paintedwolf-category: user-decision
-x-paintedwolf-emit: guard:sandbox_loopback_connect
-x-paintedwolf-message: local service connection authority declined
-x-paintedwolf-scenarios:
-- id: default
-  vars: {}
+category: user-decision
+emit: guard:sandbox_loopback_connect
+message: local service connection authority declined
+what: '{{ tool }} was not granted the requested connection to the local service.'
+cause: The person declined this connection to the local service.
+why: Retrying loopback_connect loops on the same refusal.
+fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction before requesting approval for a corrected action.{% else %}Continue without that local service and report unmet verification. Wait for new user direction before requesting approval again.{% endif %}'
+instead: Respect this rejection; fresh user direction permits a new approval request
+scenarios:
+  - id: default
+    vars: {}

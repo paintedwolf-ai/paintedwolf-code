@@ -153,11 +153,11 @@ func TestRecoveryCatalogueUsesOnlyOfferedRemedies(t *testing.T) {
 	checked := 0
 	for _, code := range slices.Sorted(maps.Keys(cfg.HintCodes)) {
 		entry := cfg.HintCodes[code]
-		if entry.Anchor != oar.AnchorToolRejected || entry.Requires == nil || !slices.Contains(entry.Requires.Facts, "paintedwolf.rejection_code") {
+		if entry.Anchor != oar.AnchorToolRejected || !slices.Contains(entry.RequiresFacts, "paintedwolf.rejection_code") {
 			continue
 		}
 		var names, states []string
-		for _, fact := range entry.Requires.Facts {
+		for _, fact := range entry.RequiresFacts {
 			if name, ok := strings.CutPrefix(fact, "paintedwolf.can_"); ok {
 				names = append(names, name)
 			} else if boolFacts[fact] {
@@ -285,7 +285,7 @@ func TestRecoveryAvailabilityFactsMatchFrozenSchemas(t *testing.T) {
 
 func recoveryHostFacts(t *testing.T) []oar.HostFactDecl {
 	t.Helper()
-	doc, err := oar.LoadCapabilityDocument(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/host/anchors/oar-profile.yaml"))
+	doc, err := oar.LoadEngineDeclaration(filepath.Join(testutil.CheckoutRoot(t), "lycaon/config/packs/painted-wolf/platform/host/anchors/oar-profile.yaml"))
 	testutil.FailErr(t, "load published recovery facts", err)
 	return doc.HostFacts
 }

@@ -380,3 +380,30 @@ func TestVerifyGateRejectsIncompleteSourceEvidence(t *testing.T) {
 		})
 	}
 }
+
+func TestProgramVerificationEvidenceRetainsVerdictScope(t *testing.T) {
+	for _, program := range []string{"", "019af176-8bc7-7000-8000-000000000001"} {
+		t.Run(program, func(t *testing.T) {
+			mgr, sess, _ := verifyGateHarness(t, "")
+			evidenceStore := inspector.NewJSONLStore(inspector.DefaultEvidenceDir)
+			mgr.Verification.SetEvidenceStore(evidenceStore)
+			run := statedRun("false; printf reported", 0)
+			run.ProgramID = program
+			mgr.Verification.RecordSourceRunEvidence(t.Context(), sess.ID, sess, verification.ProducerCommand, run)
+			records, err := evidenceStore.ReadAll(t.Context(), mgr.Workspace.HostDataDir(sess.ProjectID), sess.ID, verification.VerifySlot, evidence.GateTypeVerify)
+			testutil.FailErr(t, "read scoped verdict", err)
+			if len(records) != 1 || records[0].TypedGateVerdict() != evidence.GateVerdictPassed {
+				t.Fatalf("verification records = %+v", records)
+			}
+			id, idPresent := records[0].Artifacts["program_id"]
+			scope, scopePresent := records[0].Artifacts["verdict_scope"]
+			if program == "" {
+				if idPresent || scopePresent {
+					t.Fatal("non-program evidence acquired program scope")
+				}
+			} else if id != program || scope != "program" {
+				t.Fatalf("program binding = %v scope = %v", id, scope)
+			}
+		})
+	}
+}

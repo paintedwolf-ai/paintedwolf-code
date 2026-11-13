@@ -1,30 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: JQ_PATH_NOT_FOUND
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - jq
-requires:
-  profiles:
-    - filesystem
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.path
+  ledger:
+    paintedwolf.operation:
+      - jq
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "JQ_PATH_NOT_FOUND"
 effect: block
-copy:
-  what: jq document {{ paintedwolf.path }} does not exist.
-  cause: The path argument must name an existing structured document under the attached project roots.
-  why: Structured rejects let agents branch without parsing free-form stat errors.
-  fix: Locate the input with an offered listing or search capability, then retry the query with its observed path.
-  instead: Branch on Code; pick an existing path before retrying jq
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:jq
-x-paintedwolf-message: jq document does not exist
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:jq
+message: jq document does not exist
+what: jq document {{ paintedwolf.path }} does not exist.
+cause: The path argument must name an existing structured document under the attached project roots.
+why: Structured rejects let agents branch without parsing free-form stat errors.
+fix: Locate the input with an offered listing or search capability, then retry the query with its observed path.
+instead: Branch on Code; pick an existing path before retrying jq
+scenarios:
   - id: default
     vars:
       path: config/missing.json

@@ -1,24 +1,20 @@
-oar: '1.0'
+spec_version: "1.0"
 id: PROGRESS_MISSING
 kind: policy
-anchor: coordinator.pre_invoke
-requires:
-  profiles:
-    - tool
-    - session
-  facts: [paintedwolf.progress_gated_tool, paintedwolf.progress_missing, paintedwolf.review_loop_active, paintedwolf.next_steps]
+on: coordinator.pre_invoke
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.progress_gated_tool, paintedwolf.progress_missing, paintedwolf.review_loop_active]
 when: paintedwolf.progress_gated_tool && paintedwolf.progress_missing && !paintedwolf.review_loop_active && session_posture != "spec"
 effect: block
-copy:
-  what: '**`{{ tool }}`** did not run: the current request has no progress checklist.'
-  cause: 'Edits and delegated work start only after the deliverables are recorded in the progress checklist. A checklist completed for an earlier request does not cover a new request.'
-  why: A checklist update does not run the rejected call.
-  fix: '{{ paintedwolf.next_steps }} Replace the row text with the requested deliverables; use **`- [>]`** for optional report-only rows. When a checklist already exists, include its current snapshot revision as `expected_revision`; first creation may omit it. After it succeeds, retry the rejected **`{{ tool }}`** call with its original arguments. A different edit or dispatch tool has the same prerequisite.'
-  instead: 'Record the checklist, then retry the same rejected call.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Progress-gated tools require a progress checklist first
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:coordinator
+message: Progress-gated tools require a progress checklist first
+what: '**`{{ tool }}`** did not run: the current request has no progress checklist.'
+cause: 'Edits and delegated work start only after the deliverables are recorded in the progress checklist. A checklist completed for an earlier request does not cover a new request.'
+why: A checklist update does not run the rejected call.
+fix: '{{ paintedwolf.next_steps }} Replace the row text with the requested deliverables; use **`- [>]`** for optional report-only rows. When a checklist already exists, include its current snapshot revision as `expected_revision`; first creation may omit it. After it succeeds, retry the rejected **`{{ tool }}`** call with its original arguments. A different edit or dispatch tool has the same prerequisite.'
+instead: 'Record the checklist, then retry the same rejected call.'
+scenarios:
   - id: missing_checklist_task
     vars:
       session_posture: build

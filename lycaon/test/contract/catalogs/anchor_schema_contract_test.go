@@ -41,17 +41,22 @@ func compileSchemaBundle(t *testing.T, names ...string) *jsonschema.Schema {
 // ./task oar:vendor:check proves it has not been.
 func compileVendoredOARSchema(t *testing.T) *jsonschema.Schema {
 	t.Helper()
-	path := filepath.Join(contractcheck.RepoRoot(t), "schemas", "oar", "oar.schema.json")
-	raw, err := os.ReadFile(path)
-	contractcheck.FailErr(t, "read vendored oar.schema.json", err)
-	var doc any
-	contractcheck.FailErr(t, "parse vendored oar.schema.json", json.Unmarshal(raw, &doc))
 	compiler := jsonschema.NewCompiler()
-	contractcheck.FailErr(t, "add vendored schema", compiler.AddResource("oar.schema.json", doc))
-	sch, err := compiler.Compile("oar.schema.json")
+	for _, name := range []string{"oar.schema.json", "selector.schema.json"} {
+		path := filepath.Join(contractcheck.RepoRoot(t), "schemas", "oar", name)
+		raw, err := os.ReadFile(path)
+		contractcheck.FailErr(t, "read vendored "+name, err)
+		var doc any
+		contractcheck.FailErr(t, "parse vendored "+name, json.Unmarshal(raw, &doc))
+		contractcheck.FailErr(t, "add vendored "+name, compiler.AddResource(oarSchemaBase+name, doc))
+	}
+	sch, err := compiler.Compile(oarSchemaBase + "oar.schema.json")
 	contractcheck.FailErr(t, "compile vendored oar.schema.json", err)
 	return sch
 }
+
+// oarSchemaBase is the $id base of the vendored standard's schemas.
+const oarSchemaBase = "https://openagentrules.org/spec/1.0/"
 
 // hostSchemaBase is the $id base lycaon's own host schemas carry. It is
 // not the openagentrules.org base: this repository does not
@@ -73,8 +78,7 @@ func TestAnchorCatalogSchemaValidatesFixturesAndCatalog(t *testing.T) {
 	root := contractcheck.RepoRoot(t)
 	anchorsSch := compileSchemaBundle(t, "anchors.schema.json")
 	bindingSch := compileSchemaBundle(t, "selector.schema.json", "anchor-binding.schema.json")
-	// The rule schema is vendored from the standard and is self-contained: the
-	// 1.0 selector is named by facts, so there is no selector schema to $ref.
+	// The rule schema is vendored from the standard with its selector schema.
 	oarSch := compileVendoredOARSchema(t)
 
 	fixtures := []struct {

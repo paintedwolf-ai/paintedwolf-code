@@ -27,9 +27,19 @@ func ParseDuration(word string) (time.Duration, bool) {
 		word, unit = strings.TrimSuffix(word, "d"), 24*time.Hour
 	}
 	value, err := strconv.ParseFloat(word, 64)
-	if err != nil || value < 0 || math.IsInf(value, 0) || math.IsNaN(value) || strings.ContainsAny(word, "eEnN+") {
+	if err != nil || strings.ContainsAny(word, "eEnN+") {
 		return 0, false
 	}
+	return ScaleDuration(value, unit)
+}
+
+// ScaleDuration converts a count of unit to a Duration, refusing negative,
+// non-finite and unrepresentable values.
+func ScaleDuration(value float64, unit time.Duration) (time.Duration, bool) {
+	if value < 0 || math.IsInf(value, 0) || math.IsNaN(value) {
+		return 0, false
+	}
+	// float64(math.MaxInt64) rounds up to 2^63, the first value a Duration cannot hold.
 	scaled := value * float64(unit)
 	if scaled >= float64(math.MaxInt64) {
 		return 0, false

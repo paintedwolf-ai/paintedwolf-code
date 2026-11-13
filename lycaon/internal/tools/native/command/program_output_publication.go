@@ -40,6 +40,8 @@ func (d *ProgramDispatcher) beginOutput(ctx context.Context, destination command
 			result := toolcontract.ProducerResult{Status: 1, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}
 			if cause != nil {
 				result = ownerFailure(cause)
+			} else {
+				result.Evidence = toolcontract.OperationEvidence{Owner: operation.Facts().Contract.Owner, Kind: toolcontract.OutputWithheld}
 			}
 			finalErr = d.settleWith(ctx, child, toolcontract.ProgramChildSettlement{Result: result, HostStopCode: result.StopCode, Conflict: revisionConflict(cause)})
 			return

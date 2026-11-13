@@ -1,31 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: JQ_EDIT_STREAM_CAP
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - jq_edit
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.path
-    - paintedwolf.cap
-    - paintedwolf.resource_limit
+  ledger:
+    paintedwolf.operation:
+      - jq_edit
+requires_facts: [paintedwolf.cap, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit]
 when: paintedwolf.rejection_code == "JQ_EDIT_STREAM_CAP"
 effect: block
-copy:
-  what: The jq program produced more than {{ paintedwolf.cap }} documents for {{ paintedwolf.path }}; nothing was written.
-  cause: The result stream exceeded the host's result cap.
-  why: Writing only the documents that fit would silently drop the rest of the file.
-  fix: Make the change with a tool that streams the whole file, or ask the owner for a smaller document.
-  instead: Branch on Code; do not retry the same program on this file
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:jq_edit
-x-paintedwolf-message: jq_edit result stream exceeded the cap
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:jq_edit
+message: jq_edit result stream exceeded the cap
+what: The jq program produced more than {{ paintedwolf.cap }} documents for {{ paintedwolf.path }}; nothing was written.
+cause: The result stream exceeded the host's result cap.
+why: Writing only the documents that fit would silently drop the rest of the file.
+fix: Make the change with a tool that streams the whole file, or ask the owner for a smaller document.
+instead: Branch on Code; do not retry the same program on this file
+scenarios:
   - id: default
     vars:
       cap: '20000'

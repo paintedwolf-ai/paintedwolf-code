@@ -124,8 +124,11 @@ func CommandCompletionDigest(completion bgprocess.Completion) string {
 		"handle=%s tool=%s mode=%s termination=%s exit_code=%d elapsed=%s finished_at=%s",
 		completion.Handle, completion.OriginTool, completion.Mode,
 		completion.TerminationReason, completion.ExitCode,
-		completion.Elapsed().Round(time.Millisecond), finishedAt,
+		completion.RunTime().Round(time.Millisecond), finishedAt,
 	)
+	if completion.PersonWait > 0 {
+		digest += " awaited_approval=" + completion.PersonWait.Round(time.Millisecond).String()
+	}
 	if len(completion.Stages) > 0 {
 		digest += "\ncommand=" + truncateUTF8Head(hostcmd.CommandLine(completion.Stages), maxCommandBytes)
 	}

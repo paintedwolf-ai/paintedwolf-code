@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 )
 
-// CanonicalDouble is the finite binary64 rendering defined by [OAR-COPY-10].
+// CanonicalDouble is the finite binary64 rendering defined by [OAR-COPY-9].
 func CanonicalDouble(v float64) string {
 	if v == 0 {
 		return "0.0"
@@ -24,7 +24,7 @@ func CanonicalDouble(v float64) string {
 	return text
 }
 
-// ToolFingerprint binds both tool identity and arguments ([OAR-FACT-28]).
+// ToolFingerprint binds both tool identity and arguments ([OAR-FACT-20]).
 func ToolFingerprint(name string, arguments map[string]any) (string, error) {
 	var out strings.Builder
 	out.WriteString("oar-tool-1.0\x00")
@@ -43,7 +43,7 @@ func canonicalJSON(out *strings.Builder, raw any) error {
 		out.WriteString(strconv.FormatBool(v))
 	case string:
 		if !utf8.ValidString(v) {
-			return fmt.Errorf("[OAR-FACT-28] invalid Unicode string")
+			return fmt.Errorf("[OAR-FACT-20] invalid Unicode string")
 		}
 		out.WriteByte('"')
 		for _, r := range v {
@@ -60,7 +60,7 @@ func canonicalJSON(out *strings.Builder, raw any) error {
 		out.WriteByte('"')
 	case float64:
 		if math.IsNaN(v) || math.IsInf(v, 0) {
-			return fmt.Errorf("[OAR-FACT-28] non-finite number")
+			return fmt.Errorf("[OAR-FACT-20] non-finite number")
 		}
 		out.WriteString(CanonicalDouble(v))
 	case int:
@@ -68,7 +68,7 @@ func canonicalJSON(out *strings.Builder, raw any) error {
 	case int64:
 		f := float64(v)
 		if f >= 9223372036854775808.0 || int64(f) != v {
-			return fmt.Errorf("[OAR-FACT-28] integer loses precision")
+			return fmt.Errorf("[OAR-FACT-20] integer loses precision")
 		}
 		return canonicalJSON(out, f)
 	case json.Number:
@@ -77,7 +77,7 @@ func canonicalJSON(out *strings.Builder, raw any) error {
 		}
 		f, err := v.Float64()
 		if err != nil {
-			return fmt.Errorf("[OAR-FACT-28] invalid number")
+			return fmt.Errorf("[OAR-FACT-20] invalid number")
 		}
 		return canonicalJSON(out, f)
 	case []string:
@@ -124,7 +124,7 @@ func canonicalJSON(out *strings.Builder, raw any) error {
 		}
 		out.WriteByte('}')
 	default:
-		return fmt.Errorf("[OAR-FACT-28] unsupported JSON value %T", raw)
+		return fmt.Errorf("[OAR-FACT-20] unsupported JSON value %T", raw)
 	}
 	return nil
 }

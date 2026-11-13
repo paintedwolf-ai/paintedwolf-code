@@ -8,6 +8,7 @@ import (
 
 	"github.com/Masterminds/semver/v3"
 	"github.com/lycaon/lycaon/internal/extpacks"
+	"github.com/lycaon/lycaon/internal/oarcopy"
 	"gopkg.in/yaml.v3"
 )
 
@@ -141,15 +142,13 @@ func checkPackFactFloor(release, current releaseSource, pack string, manifest ex
 			return err
 		}
 		var rule struct {
-			Requires struct {
-				Facts []string `yaml:"facts"`
-			} `yaml:"requires"`
+			RequiresFacts []string `yaml:"requires_facts"`
 		}
 		if err := yaml.Unmarshal(raw, &rule); err != nil {
 			return err
 		}
-		for _, fact := range rule.Requires.Facts {
-			if _, ok := beforeFacts[fact]; ok {
+		for _, fact := range rule.RequiresFacts {
+			if _, ok := beforeFacts[fact]; ok || oarcopy.IsPortableFact(fact) {
 				continue
 			}
 			if after.Major() == before.Major() && after.Minor() == before.Minor() {

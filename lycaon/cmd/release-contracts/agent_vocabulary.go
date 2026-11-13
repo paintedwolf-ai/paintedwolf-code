@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/lycaon/lycaon/internal/oarcopy"
 	"gopkg.in/yaml.v3"
 )
 
@@ -59,7 +60,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	if err != nil {
 		return err
 	}
-	if err := checkVocabulary("host fact", before, after, retired.Vocabularies["host_facts"]); err != nil {
+	if err := checkVocabulary("host fact", before, after, retired.Vocabularies["host_facts"], oarcopy.IsPortableFact); err != nil {
 		return err
 	}
 	oldCodes, err := codeVocabulary(release)
@@ -70,7 +71,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 	if err != nil {
 		return err
 	}
-	if err := checkVocabulary("rejection code", oldCodes, newCodes, retired.Vocabularies["rejection_codes"]); err != nil {
+	if err := checkVocabulary("rejection code", oldCodes, newCodes, retired.Vocabularies["rejection_codes"], nil); err != nil {
 		return err
 	}
 	beforePublic, err := publicVocabularies(release)
@@ -85,7 +86,7 @@ func checkAgentVocabulary(release releaseSource, current releaseSource) error {
 		return err
 	}
 	for _, kind := range []string{"tools", "workflow_terms", "anchors", "themes"} {
-		if err := checkVocabulary(kind, beforePublic[kind], afterPublic[kind], retired.Vocabularies[kind]); err != nil {
+		if err := checkVocabulary(kind, beforePublic[kind], afterPublic[kind], retired.Vocabularies[kind], nil); err != nil {
 			return err
 		}
 	}
@@ -130,7 +131,10 @@ func codeVocabulary(source releaseSource) (map[string]codeSignature, error) {
 	return document.Codes, nil
 }
 
-func checkVocabulary[T any](kind string, before, after map[string]T, retired map[string]retirementSuccessors) error {
+// checkVocabulary refuses removals without a named successor. A successor is
+// available when it is still active or, for host facts, part of the portable
+// vocabulary the capability document does not list.
+func checkVocabulary[T any](kind string, before, after map[string]T, retired map[string]retirementSuccessors, external func(string) bool) error {
 	for name, successors := range retired {
 		if len(successors.Names) == 0 && successors.Contract == nil {
 			return fmt.Errorf("retired %s %s has no named successor", kind, name)
@@ -139,7 +143,7 @@ func checkVocabulary[T any](kind string, before, after map[string]T, retired map
 			return fmt.Errorf("retired %s %s was reused", kind, name)
 		}
 		for _, successor := range successors.Names {
-			if _, ok := after[successor]; !ok {
+			if _, ok := after[successor]; !ok && (external == nil || !external(successor)) {
 				return fmt.Errorf("retired %s %s names unavailable successor %s", kind, name, successor)
 			}
 		}
