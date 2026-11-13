@@ -377,11 +377,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		return completion, nil, truncErr
 	}
 
-	var deferred []string
-	if st != nil {
-		deferred = st.turnToolPlan.DeferredNames()
-	}
-	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, deferred, completion, providerID, model)
+	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, st.deferredToolNames(), completion, providerID, model)
 	if err != nil {
 		l.recordAbandonedTurnUsage(ctx, sess, llmCallID, providerID, model, req, delivered)
 		return nil, nil, err
