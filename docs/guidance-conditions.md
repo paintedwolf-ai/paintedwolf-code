@@ -83,9 +83,9 @@ Rules and anchor bindings (`platform/host/bindings/*.yaml`, [`anchor-binding.sch
 
 ### Flat copy units
 
-Some units under the pack `policy/` dirs are not OAR documents: they carry no `spec_version`, and hold `x-paintedwolf-emit`, `message`, `what`/`cause`/`why`/`fix`/`instead` flat at the top level. They are informational copy for a code the host raises itself, and `x-paintedwolf-emit` names where that copy is drawn:
+Some units under the pack `policy/` dirs are not OAR documents: they carry no `spec_version`, and hold `emit`, `message`, `what`/`cause`/`why`/`fix`/`instead` flat at the top level. They are informational copy for a code the host raises itself, and `emit` names where that copy is drawn:
 
-| `x-paintedwolf-emit` | Drawn |
+| `emit` | Drawn |
 |--------|-------|
 | `banner` | Appended to the tool result whose feedback raised the code |
 | `ui:<target>` | By Den on the named surface |
@@ -93,7 +93,7 @@ Some units under the pack `policy/` dirs are not OAR documents: they carry no `s
 
 None are conditions; nothing evaluates a `when` for them, and they need no rejection fields or scenarios ([`guidance.CopyOnlyEmit`](../lycaon/internal/guidance/reject_code_loader.go)). A rejection a tool returns is an OAR rule on `tool.rejected`, even when the same code also lists in an inject. Author a new conditional hint as an OAR rule document.
 
-Their copy binds host data the raising code path supplies, which an OAR hint's static copy cannot carry. `x-paintedwolf-context-schema` lists the template keys a flat unit requires; the same field is informational on a rule.
+Their copy binds host data the raising code path supplies, which an OAR hint's static copy cannot carry. `context_schema` lists the template keys a flat unit requires. Flat units are this host's format, so their metadata keeps plain names; an OAR document carries the same metadata under `x-paintedwolf-` names because the standard closes its field set.
 
 ---
 
