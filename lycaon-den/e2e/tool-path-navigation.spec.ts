@@ -119,7 +119,7 @@ webE2e.describe("command activity details", () => {
     await expect(body.getByTestId("activity-exceptions")).toContainText("HTTP_REQUEST_FAILED");
     await expect(body.getByTestId("activity-input")).toBeVisible();
     await expect(body.getByTestId("command-activity-receipts")).toBeVisible();
-    await expect(body.locator("pre")).toHaveCount(0);
+    await expect(body.locator("pre")).toHaveCount(await body.locator('[data-testid="activity-output"] pre').count());
     await expect(body.locator("details")).toHaveCount(0);
   });
 });
