@@ -324,8 +324,11 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"can_spawn_web_research":                       true,
 	"can_spawn_workers":                            true,
 	"web_search_enabled":                           true,
-	"partial_worker_jobs":                          true,
-	"pending_overlay_jobs":                         true,
+	// Kick counts of results awaiting landing and of partial workers.
+	"pending_overlays": true,
+	"partial_workers":  true,
+	// The worker name a notice reports, empty for a round with no worker.
+	"worker": true,
 	// The settled round's notice, built from worker records and the job's report.
 	"worker_result":                  true,
 	"leg_id":                         true,
