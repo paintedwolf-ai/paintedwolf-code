@@ -356,3 +356,51 @@ retired:
     kind: hint_code
     summary: A resume built on a rejected overlay; rejection now resets the worker lane, and landing a disposed result is refused with OVERLAY_PROMOTE_NOT_PENDING.
     date: 2026-11-13
+  - id: BANNER_TASK_QUEUED
+    kind: hint_code
+    summary: Enqueue banner that nothing rendered; task returns the worker name and the roster shows it.
+    date: 2026-11-13
+  - id: BANNER_WORKER_INFLIGHT_ROSTER
+    kind: hint_code
+    summary: Job-id roster appended after batched dispatch; every coordinator request now carries the worker roster by name.
+    date: 2026-11-13
+  - id: BANNER_TAKE_BRANCH_OVERLAP
+    kind: hint_code
+    summary: Promote banner that nothing rendered; overlapping results come back as overlap_overlay_ids on preview and promote.
+    date: 2026-11-13
+  - id: BANNER_PROMOTE_PARTIAL_PATH
+    kind: hint_code
+    summary: Promote banner that nothing rendered; preview path_status carries clean and conflicting paths.
+    date: 2026-11-13
+  - id: BANNER_PROMOTE_CONFLICT_DIGEST
+    kind: hint_code
+    summary: Promote banner that nothing rendered; conflict_digest on preview and promote carries the hunks.
+    date: 2026-11-13
+  - id: BANNER_PROMOTE_HIGH_CONFLICT
+    kind: hint_code
+    summary: Promote banner that nothing rendered; conflict tiers ride on preview path_status.
+    date: 2026-11-13
+  - id: BANNER_PROMOTE_HUNK_PICK
+    kind: hint_code
+    summary: Promote banner that nothing rendered; resolutions are taught by the promote_overlay schema.
+    date: 2026-11-13
+  - id: BANNER_PROMOTE_OVERLAY_BODY
+    kind: hint_code
+    summary: Promote banner that nothing rendered; the task-finished notice names the result and its changed paths.
+    date: 2026-11-13
+  - id: BANNER_PROMOTE_SPILL_FIRST
+    kind: hint_code
+    summary: Promote banner that nothing rendered; ready_resolutions ride on preview.
+    date: 2026-11-13
+  - id: BANNER_PROMOTE_SCOPED_HUNKS
+    kind: hint_code
+    summary: Promote banner that nothing rendered; preview_overlay path filters scope the hunks.
+    date: 2026-11-13
+  - id: BANNER_OVERLAY_MERGE_PLAN
+    kind: hint_code
+    summary: Merge-plan banner that nothing rendered; pack_board carries overlay_merge_plan.
+    date: 2026-11-13
+  - id: BANNER_PROMOTE_ORDER
+    kind: hint_code
+    summary: Promote banner that nothing rendered; promote_order rides on preview and promote.
+    date: 2026-11-13

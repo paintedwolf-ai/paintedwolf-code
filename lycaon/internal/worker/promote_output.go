@@ -119,14 +119,14 @@ func allOverlapJobIDs(assessment PromoteAssessment) []string {
 func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, reason string) (api.OverlayRejectOutcome, error) {
 	overlayID = strings.TrimSpace(overlayID)
 	if overlayID == "" {
-		return api.OverlayRejectOutcome{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	if s == nil || s.Queue == nil {
 		return api.OverlayRejectOutcome{}, fmt.Errorf("merge service not configured")
 	}
 	task, ok := s.Queue.Get(overlayID)
 	if !ok || task == nil {
-		return api.OverlayRejectOutcome{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	lock, err := acquirePromoteFileLock(ctx, s.hostDataDirFor(task))
 	if err != nil {
@@ -135,13 +135,13 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 	defer lock.release()
 	task, ok = s.Queue.Get(overlayID)
 	if !ok || task == nil {
-		return api.OverlayRejectOutcome{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
-		return api.OverlayRejectOutcome{}, s.reject(OverlayPromoteSessionMismatchCode, map[string]any{"job_id": overlayID})
+		return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayPromoteSessionMismatchCode, map[string]any{"job_id": overlayID})
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending && task.MergeStatus != api.WorkerMergeStatusRebasing {
-		return api.OverlayRejectOutcome{}, s.reject(OverlayPromoteNotPendingCode, map[string]any{
+		return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
 			"overlay_id": overlayID, "merge_status": string(task.MergeStatus),
 		})
 	}
@@ -198,7 +198,7 @@ func (s *MergeService) RebaseChildren(ctx context.Context, sessionID, parentOver
 	}
 	parent, ok := s.Queue.Get(parentOverlayID)
 	if !ok || parent == nil {
-		return nil, s.reject(OverlayPromoteNotFoundCode, map[string]any{"overlay_id": parentOverlayID})
+		return nil, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"overlay_id": parentOverlayID})
 	}
 	lock, err := acquirePromoteFileLock(ctx, s.hostDataDirFor(parent))
 	if err != nil {
@@ -207,10 +207,10 @@ func (s *MergeService) RebaseChildren(ctx context.Context, sessionID, parentOver
 	defer lock.release()
 	parent, ok = s.Queue.Get(parentOverlayID)
 	if !ok || parent == nil {
-		return nil, s.reject(OverlayPromoteNotFoundCode, map[string]any{"overlay_id": parentOverlayID})
+		return nil, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"overlay_id": parentOverlayID})
 	}
 	if strings.TrimSpace(parent.ParentSessionID) != strings.TrimSpace(sessionID) {
-		return nil, s.reject(OverlayPromoteSessionMismatchCode, map[string]any{"overlay_id": parentOverlayID})
+		return nil, s.reject(ctx, OverlayPromoteSessionMismatchCode, map[string]any{"overlay_id": parentOverlayID})
 	}
 	outs, updates, err := s.engine().assessChildRebases(ctx, sessionID, parentOverlayID)
 	if err != nil || len(updates) == 0 || s.Store == nil {

@@ -36,8 +36,9 @@ type SiblingNote struct {
 
 // ReservedPath is one path held by a sibling worker via handoff_reserve.
 type ReservedPath struct {
-	Path     string
-	JobID    string
+	Path string
+	// Worker names the sibling holding the path.
+	Worker   string
 	LegLabel string
 }
 

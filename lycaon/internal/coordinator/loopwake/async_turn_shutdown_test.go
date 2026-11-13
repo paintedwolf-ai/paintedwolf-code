@@ -15,7 +15,7 @@ import (
 // roundNoticeEnvelope drives an asynchronous host turn for jobID.
 func roundNoticeEnvelope(jobID string) anchor.Envelope {
 	return anchor.Envelope{WorkerRoundNotice: &kick.WorkerRoundNoticeFacts{
-		JobID: jobID, AgentType: "implementer", Kind: kick.RoundNoticeConsumption, ModelCalls: 40,
+		JobID: jobID, Worker: "worker-" + jobID, AgentType: "implementer", Kind: kick.RoundNoticeConsumption, ModelCalls: 40,
 	}}
 }
 

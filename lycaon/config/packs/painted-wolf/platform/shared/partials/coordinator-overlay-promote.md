@@ -1,6 +1,6 @@
 ## Landing overlays (`promote_overlay` / `reject_overlay` / `preview_overlay`)
 
-Each finished write leg is a **revision-bound changeset** (`overlay_id` == `job_id`). Preserve wanted overlays as repair boundaries; land them one at a time in `pack_board` → `overlay_merge_plan.promote_sequence` order.
+Each finished write round is a **revision-bound changeset** addressed by its result handle (`overlay_id`), which the roster shows. Preserve wanted overlays as repair boundaries; land them one at a time in `pack_board` → `overlay_merge_plan.promote_sequence` order.
 
 1. Inspect the envelope and current `source_evidence`. Validate the delivered behavior with appropriate inspection or checks. Stale receipts do not prove the current revision. Send the worker back for incomplete delivery, concrete defects, or useful missing checks{% if profile_has_instruct_worker %} with `instruct_worker`{% endif %}; do not repeat blocked or unrelated failures merely to obtain a receipt.
 2. Promote coherent, wanted work once reviewed, recording validation limits. Validation evidence is advisory for promotion; explicit workflow checks still require passing evidence on integrated source. Roughness alone is not a reason to reject.

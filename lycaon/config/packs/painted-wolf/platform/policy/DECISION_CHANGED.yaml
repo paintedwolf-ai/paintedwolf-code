@@ -19,5 +19,5 @@ instead: Inspect the current worker state before retrying.
 scenarios:
   - id: default
     vars:
-      job_id: worker-1
+      worker: parser-fix
       status: complete

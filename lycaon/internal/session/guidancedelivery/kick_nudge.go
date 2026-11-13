@@ -188,10 +188,10 @@ func (m *Service) renderContext(ctx context.Context, sessionID string) kick.Coor
 	state := m.state.ForSession(ctx, sess)
 	rc.BatchPhase = state.BatchPhase
 	rc.BatchSeq = state.BatchSeq
-	rc.PendingOverlayJobs = append([]string(nil), state.PendingOverlayIDs...)
+	rc.PendingOverlays = len(state.PendingOverlayIDs)
 	msgs, msgErr := m.store.GetMessages(ctx, sessionID)
 	if msgErr == nil {
-		rc.PartialWorkerJobs = surface.PartialWorkerSummaryJobIDs(msgs)
+		rc.PartialWorkers = len(surface.PartialWorkerSummaryJobIDs(msgs))
 	}
 	if !sess.IsWorkerChild() {
 		paths := workeroutcomes.ParentSessionMergedWriteChangedPaths(ctx, m.workers, sess.ProjectID, sess.ID)

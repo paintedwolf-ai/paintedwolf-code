@@ -11,7 +11,7 @@ func TestCompactChunkRoutesOverlayPromoteByToolIdentity(t *testing.T) {
 	cc := NewChunkCompactor(CompactionConfig{ChunkTargetTokens: 400, ChunkTokenThreshold: 10}, nil)
 
 	// summarize output that echoes promote sentinels out of the repo.
-	echo := `{"task":"what is this repo","brief":["the OVERLAY_PROMOTE_SPILL hint and BANNER_PROMOTE_CONFLICT_DIGEST live here"],"anchors":[{"path":"x.go","line":1,"excerpt":"OVERLAY_PROMOTE_SPILL"}]}`
+	echo := `{"task":"what is this repo","brief":["the OVERLAY_PROMOTE_SPILL hint lives here"],"anchors":[{"path":"x.go","line":1,"excerpt":"OVERLAY_PROMOTE_SPILL"}]}`
 	out, meta, err := cc.CompactChunk(context.Background(), ContentChunk{Class: testChunkDiet("summarize", ""), Kind: ChunkKindToolResult, ToolName: "summarize"}, echo)
 	if err != nil {
 		t.Fatalf("compact summarize: %v", err)

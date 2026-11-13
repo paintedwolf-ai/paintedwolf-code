@@ -79,12 +79,11 @@ func TestExecuteToolCallsInTurnRunsFullSerialTaskBatch(t *testing.T) {
 	)
 	history = batchResult.history
 	turnTools := batchResult.turnTools
-	anyTask := batchResult.anyTaskEnqueued
 	taskCount := batchResult.taskEnqueuedThisTurn
 	breakLoop := batchResult.breakToolLoop
 	testutil.FailErr(t, "executeToolCallsInTurn", err)
-	if !anyTask || taskCount != 3 {
-		t.Fatalf("anyTask=%v taskCount=%d want true, 3", anyTask, taskCount)
+	if taskCount != 3 {
+		t.Fatalf("taskCount=%d want 3", taskCount)
 	}
 	if !breakLoop {
 		t.Fatal("expected wait() to end tool batch")

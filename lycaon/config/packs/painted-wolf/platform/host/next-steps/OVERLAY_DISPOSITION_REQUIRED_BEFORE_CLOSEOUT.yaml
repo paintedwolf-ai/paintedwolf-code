@@ -1,15 +1,19 @@
 steps:
   - tool: "preview_overlay"
     args:
-      overlay_id: "{{ paintedwolf.job_id }}"
+      overlay_id: "{{ paintedwolf.overlay_id }}"
     complete: true
     say: "Use {{ call }} to inspect the changes if needed."
   - tool: "promote_overlay"
     args:
-      overlay_id: "{{ paintedwolf.job_id }}"
+      overlay_id: "{{ paintedwolf.overlay_id }}"
     complete: true
     say: "Call {{ call }} to land accepted work."
   - tool: "reject_overlay"
     args:
-      overlay_id: "{{ paintedwolf.job_id }}"
+      overlay_id: "{{ paintedwolf.overlay_id }}"
     say: "Call {{ call }} with a reason if the work should be discarded."
+  - tool: "shelve_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.overlay_id }}"
+    say: "Call {{ call }} with a reason to keep the changes unlanded for later."

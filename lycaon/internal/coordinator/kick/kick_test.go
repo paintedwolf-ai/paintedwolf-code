@@ -118,8 +118,6 @@ func TestKickOptionsPopulateMeta(t *testing.T) {
 		WithLegCompletedAt(completed),
 		WithTopologyOutput("  topo out  "),
 		WithWorkerDigest("  digest  "),
-		WithPendingOverlayPromote([]string{"job-a", "job-b"}),
-		WithPartialWorkerJobs([]string{"job-partial"}),
 		WithScanFinished("  scan-1  ", "  complete  ", "  sast  ", 7),
 		WithPromotedPaths([]string{" x.go ", "", "  ", "y.go"}),
 	}
@@ -138,12 +136,6 @@ func TestKickOptionsPopulateMeta(t *testing.T) {
 	}
 	if m.workerDigest != "digest" {
 		t.Errorf("workerDigest = %q want trimmed", m.workerDigest)
-	}
-	if len(m.pendingOverlayPromoteJobs) != 2 {
-		t.Errorf("pendingOverlayPromoteJobs = %v", m.pendingOverlayPromoteJobs)
-	}
-	if len(m.partialWorkerJobs) != 1 || m.partialWorkerJobs[0] != "job-partial" {
-		t.Errorf("partialWorkerJobs = %v", m.partialWorkerJobs)
 	}
 	if m.scanID != "scan-1" || m.scanStatus != "complete" || m.scanCategories != "sast" || m.scanFindingsCount != 7 {
 		t.Errorf("scan meta = %+v", m)
@@ -174,16 +166,6 @@ func TestBuildKickRenderDataPreservesCapturedPromotedPaths(t *testing.T) {
 	paths, ok := data["promoted_paths"].([]string)
 	if !ok || len(paths) != 1 || paths[0] != "captured.go" {
 		t.Fatalf("promoted paths = %#v, want captured event paths", data["promoted_paths"])
-	}
-}
-
-func TestWithPendingOverlayPromoteCopiesSlice(t *testing.T) {
-	src := []string{"job-a"}
-	var m kickMeta
-	WithPendingOverlayPromote(src)(&m)
-	src[0] = "mutated"
-	if m.pendingOverlayPromoteJobs[0] != "job-a" {
-		t.Errorf("option retained alias to caller slice: %v", m.pendingOverlayPromoteJobs)
 	}
 }
 
@@ -297,8 +279,6 @@ func TestQueueCoordinatorKickRendersAtTake(t *testing.T) {
 		WithLegCompletedAt(completed),
 		WithWorkerDigest("digest"),
 		WithTopologyOutput("topo"),
-		WithPendingOverlayPromote([]string{"stale-job"}),
-		WithPartialWorkerJobs([]string{"stale-partial"}),
 		WithPromotedPaths([]string{"stale.go"}),
 		WithScanFinished("scan-1", "complete", "sast", 3),
 		nil,
@@ -311,9 +291,9 @@ func TestQueueCoordinatorKickRendersAtTake(t *testing.T) {
 		t.Fatalf("TakePendingKickID = %q want %s", id, "coordinator-scan-finished")
 	}
 	live := CoordinatorKickRenderContext{
-		PendingOverlayJobs: []string{"job-a"},
-		PartialWorkerJobs:  []string{"job-p"},
-		PromotedPaths:      []string{"x.go"},
+		PendingOverlays: 1,
+		PartialWorkers:  2,
+		PromotedPaths:   []string{"x.go"},
 	}
 	n, _, ok, _ := k.RenderPendingNudge(t.Context(), "s1", live)
 	if !ok || n != "rendered:coordinator-scan-finished" {
@@ -322,13 +302,13 @@ func TestQueueCoordinatorKickRendersAtTake(t *testing.T) {
 	if eng.lastName != "coordinator-scan-finished" {
 		t.Errorf("RenderKick name = %q want coordinator-scan-finished", eng.lastName)
 	}
-	for _, key := range []string{"completed_ago", "worker_digest", "topology_output", "pending_overlay_jobs", "partial_worker_jobs", "promoted_paths", "scan_id", "scan_status", "scan_categories", "scan_findings_count"} {
+	for _, key := range []string{"completed_ago", "worker_digest", "topology_output", "pending_overlays", "partial_workers", "promoted_paths", "scan_id", "scan_status", "scan_categories", "scan_findings_count"} {
 		if _, ok := eng.lastData[key]; !ok {
 			t.Errorf("render data missing %q: %+v", key, eng.lastData)
 		}
 	}
-	if got, _ := eng.lastData["pending_overlay_jobs"].([]string); len(got) != 1 || got[0] != "job-a" {
-		t.Errorf("pending_overlay_jobs = %v want live job-a not queued stale-job", eng.lastData["pending_overlay_jobs"])
+	if eng.lastData["pending_overlays"] != 1 || eng.lastData["partial_workers"] != 2 {
+		t.Errorf("counts = %v, %v want the live 1 and 2", eng.lastData["pending_overlays"], eng.lastData["partial_workers"])
 	}
 }
 

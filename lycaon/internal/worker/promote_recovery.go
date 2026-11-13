@@ -22,7 +22,7 @@ func (s *MergeService) recoverInterruptedPromote(ctx context.Context, task *api.
 		return err
 	}
 	if !reclaimed {
-		return s.reject(OverlayPromoteNotPendingCode, map[string]any{
+		return s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
 			"job_id": jobID,
 			"reason": "another promote is applying this overlay",
 		})

@@ -9680,7 +9680,7 @@ export interface components {
             clean_paths?: string[];
             applied?: string[];
             path_status?: components["schemas"]["WorkerPromotePathStatus"][];
-            overlap_job_ids?: string[];
+            overlap_overlay_ids?: string[];
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
             promote_after?: string[];
             blocked_by?: string[];

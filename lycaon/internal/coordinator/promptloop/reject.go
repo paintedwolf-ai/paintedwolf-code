@@ -253,42 +253,6 @@ func (l *toolInvocations) toolResultMessage(toolName, toolCallID, assistantMessa
 	}
 }
 
-func (l *toolInvocations) appendInFlightWorkerRosterNote(
-	ctx context.Context,
-	sessionID string,
-	sess *api.Session,
-	history []api.Message,
-	taskEnqueuedThisTurn int,
-	lastTaskMessageID string,
-) error {
-	if taskEnqueuedThisTurn < 2 || lastTaskMessageID == "" || l.Deps.InFlightWorkerRosterNote == nil {
-		return nil
-	}
-	roster := strings.TrimSpace(l.Deps.InFlightWorkerRosterNote(ctx, sess))
-	if roster == "" {
-		return nil
-	}
-	for i := range history {
-		if history[i].ID != lastTaskMessageID {
-			continue
-		}
-		history[i].Content += roster
-		if history[i].ToolResult != nil {
-			result := *history[i].ToolResult
-			result.Content += roster
-			facts := guidance.ToolResultFacts{Codes: result.Codes, Feedback: result.Feedback}.
-				WithCode("BANNER_WORKER_INFLIGHT_ROSTER")
-			result.Codes, result.Feedback = facts.Codes, facts.Feedback
-			history[i].ToolResult = &result
-		}
-		if l.Projection.Deps.UpdateMessage != nil {
-			return l.Projection.Deps.UpdateMessage(ctx, sessionID, lastTaskMessageID, history[i])
-		}
-		break
-	}
-	return nil
-}
-
 func isTaskToolName(tool string) bool {
 	return strings.TrimSpace(strings.ToLower(tool)) == "task"
 }

@@ -42,6 +42,7 @@ import (
 // WireGroundingAndFindings wires grounding coordinators, progress, visual, and decision tools.
 func (r *Runtime) WireGroundingAndFindings(ctx context.Context) error {
 	r.deps.Sessions.Manager.Coordinator.Guards.SetRules(r.deps.Workflows.Rules)
+	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
 	if err := r.wireGroundingCoordinators(); err != nil {
 		return err
 	}
@@ -75,6 +76,7 @@ func (r *Runtime) wireGroundingCoordinators() error {
 	ambientCoord := delegation.NewAmbientGroundingCoordinator(r.deps.Delegations.Store, r.deps.Delegations.Queue, ambientGate, groundingCfg, ambientState, r.deps.Sessions.Manager)
 	ambientCoord.Events = r.deps.Events.Publisher
 	ambientCoord.Pipeline = r.deps.Sessions.Manager.ToolPolicy.Pipeline
+	ambientCoord.Names = r.WorkerRecords.NameByJob
 	r.deps.Sessions.Manager.SetGroundingHook(&delegation.ChainedGroundingCoordinator{
 		Delegation: r.deps.Delegations.Manager.Grounding,
 		Ambient:    ambientCoord,
@@ -93,10 +95,13 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.Findings = findings.NewSQLStore(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.Workers.Notes.SetFindings(r.Findings)
 	r.deps.Sessions.Manager.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
-	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
+	if r.deps.Delegations.Cancel != nil {
+		r.deps.Delegations.Cancel.Names = r.WorkerRecords
+	}
 	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
 	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetAccounts(r.WorkerRecords)
 	r.deps.Sessions.Manager.SetWorkerNames(r.WorkerRecords.NameByJob)
+	r.deps.Sessions.Manager.SetJobNames(r.WorkerRecords)
 	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{
 		Records:    r.WorkerRecords,
 		NeedsReply: r.deps.Sessions.Manager.Coordinator.Workers.MessageNeedsReply,

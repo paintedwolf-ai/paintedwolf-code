@@ -13,18 +13,25 @@ import (
 )
 
 // PromoteOverlay implements session.OverlayPromoter for the worker merge service.
+// PromoteOverlay lands an overlay's changes.
 func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
+	out, err := s.promoteOverlay(ctx, sessionID, overlayID, in)
+	s.nameOverlaps(ctx, &out)
+	return out, err
+}
+
+func (s *MergeService) promoteOverlay(ctx context.Context, sessionID, overlayID string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
 	overlayID = strings.TrimSpace(overlayID)
 	sessionID = strings.TrimSpace(sessionID)
 	if s == nil || s.Queue == nil {
 		return api.WorkerMergeResult{}, fmt.Errorf("overlay promote service not configured")
 	}
 	if overlayID == "" {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	lockTask, ok := s.Queue.Get(overlayID)
 	if !ok || lockTask == nil {
-		return api.WorkerMergeResult{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	lock, err := acquirePromoteFileLock(ctx, s.hostDataDirFor(lockTask))
 	if err != nil {
@@ -53,7 +60,7 @@ func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID 
 			return api.WorkerMergeResult{}, err
 		}
 		if len(changed) > 0 {
-			return api.WorkerMergeResult{}, s.reject(OverlayPromoteNoPathsCode, map[string]any{"job_id": overlayID, "remaining_overlay_paths": changed})
+			return api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteNoPathsCode, map[string]any{"job_id": overlayID, "remaining_overlay_paths": changed})
 		}
 		return eng.finalizeEmptyPromote(ctx, sessionID, work.task, overlayID, in.Detail)
 	}
@@ -100,7 +107,7 @@ func (s mergeEngine) preparePromoteOverlayPlans(
 		s.attachPromoteSpill(s.hostDataDirFor(work.task), work.overlayID, &out, assessment)
 		s.registerReconcilePaths(work.sessionID, assessment)
 		s.recordPromoteOutput(work.sessionID, work.overlayID, &out)
-		return promotePlans{}, nil, out, s.rejectConflict(work.overlayID, assessment)
+		return promotePlans{}, nil, out, s.rejectConflict(ctx, work.overlayID, assessment)
 	}
 	return s.buildValidatedPromotePlans(ctx, work, assessment, resolutions, resolutionByPath)
 }
@@ -141,7 +148,7 @@ func (s mergeEngine) buildValidatedPromotePlans(
 	}
 	resolutionPlans, err := preparePromoteResolutions(work.task, work.roots, validated, resolutionByPath)
 	if err != nil {
-		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(OverlayPromoteResolutionsRequiredCode, map[string]any{
+		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteResolutionsRequiredCode, map[string]any{
 			"job_id": work.overlayID,
 			"reason": err.Error(),
 		})
@@ -152,7 +159,7 @@ func (s mergeEngine) buildValidatedPromotePlans(
 	}
 	plans := append(append([]promoteMutation(nil), mergePlans...), resolutionPlans...)
 	if issue := validatePromoteSyntax(ctx, plans); issue != nil {
-		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(OverlayPromoteSyntaxUnhealthyCode, issue.rejectData(work.overlayID))
+		return promotePlans{}, nil, api.WorkerMergeResult{}, s.reject(ctx, OverlayPromoteSyntaxUnhealthyCode, issue.rejectData(work.overlayID))
 	}
 	out := promotePlans{all: plans, direct: plans, resolved: validated}
 	if assessment.checkpointID != "" {
@@ -225,10 +232,10 @@ type promoteWork struct {
 func (s mergeEngine) resolvePromoteWork(ctx context.Context, sessionID, overlayID string) (promoteWork, error) {
 	task, ok := s.Queue.Get(overlayID)
 	if !ok || task == nil {
-		return promoteWork{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
+		return promoteWork{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
 	}
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
-		return promoteWork{}, s.reject(OverlayPromoteSessionMismatchCode, map[string]any{"job_id": overlayID})
+		return promoteWork{}, s.reject(ctx, OverlayPromoteSessionMismatchCode, map[string]any{"job_id": overlayID})
 	}
 	if task.MergeStatus == api.WorkerMergeStatusApplying {
 		if err := s.recoverInterruptedPromote(ctx, task, overlayID); err != nil {
@@ -237,7 +244,7 @@ func (s mergeEngine) resolvePromoteWork(ctx context.Context, sessionID, overlayI
 		task.MergeStatus = api.WorkerMergeStatusPending
 	}
 	if task.MergeStatus != api.WorkerMergeStatusPending {
-		return promoteWork{}, s.reject(OverlayPromoteNotPendingCode, map[string]any{
+		return promoteWork{}, s.reject(ctx, OverlayPromoteNotPendingCode, map[string]any{
 			"overlay_id": overlayID, "merge_status": string(task.MergeStatus),
 		})
 	}

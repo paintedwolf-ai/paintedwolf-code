@@ -131,7 +131,7 @@ func (m *Service) enqueueRootDetachCanceledKick(ctx context.Context, projectID, 
 	workers := make([]map[string]any, 0, len(dependents.Workers))
 	for _, w := range dependents.Workers {
 		workers = append(workers, map[string]any{
-			"job_id":     w.JobID,
+			"worker":     m.names.Name(ctx, w.JobID),
 			"session_id": w.SessionID,
 			"agent_type": w.AgentType,
 			"reason":     rootDetachCancelReason,
@@ -140,8 +140,7 @@ func (m *Service) enqueueRootDetachCanceledKick(ctx context.Context, projectID, 
 	overlays := make([]map[string]any, 0, len(dependents.Overlays))
 	for _, o := range dependents.Overlays {
 		overlays = append(overlays, map[string]any{
-			"overlay_id": o.OverlayID,
-			"job_id":     o.JobID,
+			"worker":     m.names.Name(ctx, o.JobID),
 			"session_id": o.SessionID,
 		})
 	}

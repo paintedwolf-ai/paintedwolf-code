@@ -3,6 +3,7 @@ package turnguards
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -29,7 +30,7 @@ func (m *Service) PendingOverlays(ctx context.Context, sess *api.Session, invoke
 	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Workers.PendingOverlayPromote = true
 		gc.Rejection.RejectObservation = "closeout_pending_overlays"
-		gc.PutRejectData(overlayDispositionRequiredCode, map[string]any{"job_id": pending[0]})
+		gc.PutRejectData(overlayDispositionRequiredCode, m.pendingResultData(ctx, pending[0]))
 		return nil
 	})
 	if blocked && !invokeAllowed {
@@ -88,4 +89,24 @@ func (m *Service) AssertCompletion(ctx context.Context, sess *api.Session) error
 		return nil
 	}
 	return m.workflows.Policy.AssertSessionCompletion(ctx, sess.ID)
+}
+
+// pendingResultData names a pending job by its worker and result handle.
+func (m *Service) pendingResultData(ctx context.Context, jobID string) map[string]any {
+	data := map[string]any{"job_id": jobID}
+	if m.jobNames == nil {
+		return data
+	}
+	names, ok, err := m.jobNames.NamesByJob(ctx, jobID)
+	if err != nil {
+		slog.WarnContext(ctx, "name a pending result for closeout", "job_id", jobID, "error", err)
+		return data
+	}
+	if ok {
+		data["worker"] = names.Worker
+		if names.Handle != "" {
+			data["overlay_id"] = names.Handle
+		}
+	}
+	return data
 }

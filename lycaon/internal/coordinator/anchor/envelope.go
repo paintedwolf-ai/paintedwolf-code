@@ -20,7 +20,6 @@ type Envelope struct {
 	CommandRefusalDigest      string
 	TopologyOutput            string
 	PendingOverlayPromoteJobs []string
-	PartialWorkerJobs         []string
 	PromotedPaths             []string
 	ScanID                    string
 	ScanStatus                string
@@ -71,12 +70,6 @@ func (e Envelope) KickOptions() []kick.KickOption {
 	}
 	if e.MaxFanoutLegs > 0 {
 		opts = append(opts, kick.WithMaxFanoutLegs(e.MaxFanoutLegs))
-	}
-	if len(e.PendingOverlayPromoteJobs) > 0 {
-		opts = append(opts, kick.WithPendingOverlayPromote(e.PendingOverlayPromoteJobs))
-	}
-	if len(e.PartialWorkerJobs) > 0 {
-		opts = append(opts, kick.WithPartialWorkerJobs(e.PartialWorkerJobs))
 	}
 	if len(e.PromotedPaths) > 0 {
 		opts = append(opts, kick.WithPromotedPaths(e.PromotedPaths))

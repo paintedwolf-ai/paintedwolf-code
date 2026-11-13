@@ -9,6 +9,7 @@ import (
 // Doc is the XML document marshaled into parent tool-result content.
 type Doc struct {
 	XMLName             xml.Name `xml:"task"`
+	Worker              string   `xml:"worker,attr,omitempty"`
 	JobID               string   `xml:"job_id,attr"`
 	ChildSessionID      string   `xml:"child_session_id,attr,omitempty"`
 	AgentType           string   `xml:"agent_type,attr,omitempty"`

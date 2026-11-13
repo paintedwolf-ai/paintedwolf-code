@@ -127,6 +127,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		Store:         b.delegations.Queue,
 		Workspace:     b.delegations.Workspace,
 		Reject:        b.execution.Rejections,
+		Names:         b.boards.WorkerRecords,
 		Sessions:      b.delegations.Queue,
 		Reconcile:     b.sessions.Manager.Promotion,
 		Captures:      b.sessions.Manager.Chats.Captures,

@@ -11,7 +11,7 @@
       "branch_instruction": "Keep working from observed evidence; this post-turn feedback does not retract the delivered turn.",
       "category": "recoverable",
       "emit": "guard:ambient_grounding",
-      "summary": "{% if paintedwolf.missing_summary_job_ids %}Completed jobs lack a parent-session summary: {{ paintedwolf.missing_summary_job_ids }}.{% else %}The last citation audit did not trace every cited reference to observed evidence.{% endif %}"
+      "summary": "{% if paintedwolf.missing_summary_count %}Finished worker rounds without a summary on this session: {{ paintedwolf.missing_summary_count }}{% if paintedwolf.missing_summary_workers %} ({{ paintedwolf.missing_summary_workers }}){% endif %}.{% else %}The last citation audit did not trace every cited reference to observed evidence.{% endif %}"
     },
     "APPROVAL_RULE_DENIED": {
       "branch_instruction": "Branch on Code APPROVAL_RULE_DENIED. Say what was denied and which rule denied it, then continue with the part of the task that does not need this action.",
@@ -168,90 +168,6 @@
       "category": "recoverable",
       "emit": "guard:tool",
       "summary": "{{ tool }} requires a handle."
-    },
-    "BANNER_OVERLAY_MERGE_PLAN": {
-      "branch_instruction": "Use overlay_merge_plan.promote_sequence before blind promote — independent overlays first, overlapping ones last",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "pack_board reports session-level overlay overlap graph and suggested promote sequence"
-    },
-    "BANNER_PROMOTE_CONFLICT_DIGEST": {
-      "branch_instruction": "Read each path’s branch_delta before any available spill; preserve partial overlays and re-preview after sibling promotions.",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "conflict_digest lists branch_delta, conflict_tier, and hunk summaries inline — overlay_intent carries worker goal"
-    },
-    "BANNER_PROMOTE_HIGH_CONFLICT": {
-      "branch_instruction": "Do not `task(implementer)` while overlays still pending; full-file merge is valid when you want one atomic landing",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "warn",
-      "summary": "Paths {{ paintedwolf.conflict_paths }} exceed the {{ paintedwolf.threshold }}-hunk picking threshold (up to {{ paintedwolf.hunk_count }} hunks)."
-    },
-    "BANNER_PROMOTE_HUNK_PICK": {
-      "branch_instruction": "One resolutions entry per path; never mix hunks and content on the same path. A small path-level conflict does not require discarding the whole overlay.",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "Low hunk_count with distinct primary vs branch bodies — cherry-pick per hunk instead of rejecting the whole overlay"
-    },
-    "BANNER_PROMOTE_ORDER": {
-      "branch_instruction": "Follow promote_order and path_status.promote_after / blocked_by before blind promote",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "Preview reports whether this overlay is order-independent, sequential, clean-if-first, or clean-after siblings"
-    },
-    "BANNER_PROMOTE_OVERLAY_BODY": {
-      "branch_instruction": "Preserve and resume partial work. Reject the whole overlay only when the approach is wrong, superseded, duplicated, or no longer wanted; a primary read failure alone does not justify discarding it.",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "A primary read returns the primary version, which may exist already. The unpromoted worker version remains in the overlay."
-    },
-    "BANNER_PROMOTE_PARTIAL_PATH": {
-      "branch_instruction": "clean_paths plus conflict paths on an eligible overlay → partial promote. leg_status partial or open test/risk → preserve and resume the overlay, never reject or land it before the obligation passes",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "Preview shows both clean_paths and conflict paths — for an otherwise complete, evidence-satisfied overlay, partial promote lands clean work and keeps the overlay pending on conflicts only"
-    },
-    "BANNER_PROMOTE_SCOPED_HUNKS": {
-      "branch_instruction": "Do not read primary in a loop when inline hunks or spill_path are available",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "Scoped preview for {{ paintedwolf.path }} exposes {{ paintedwolf.hunk_count }} inline hunks (inline limit {{ paintedwolf.inline_threshold }})."
-    },
-    "BANNER_PROMOTE_SPILL_FIRST": {
-      "branch_instruction": "Never repeatedly read the primary tree for merge reconstruction when spill_path is present",
-      "category": "informational",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "The current assessment identifies line_shift on one or more paths; inspect each path’s tier rather than treating every conflict as offset drift."
-    },
-    "BANNER_TAKE_BRANCH_OVERLAP": {
-      "branch_instruction": "Preserve existing worker results and resolve the observed overlaps before dispatching any genuinely missing work.",
-      "category": "worker_dispatch",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "Parallel same-file overlays may show overlap_job_ids on clean previews — promote sequentially and re-preview siblings after each landing"
-    },
-    "BANNER_TASK_QUEUED": {
-      "branch_instruction": "Read the completion envelope before claiming that leg is done.",
-      "category": "worker_dispatch",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "Worker queued"
-    },
-    "BANNER_WORKER_INFLIGHT_ROSTER": {
-      "branch_instruction": "Do not poll workers — wait for completion envelope(s) and pulse roster",
-      "category": "worker_dispatch",
-      "emit": "banner",
-      "severity": "info",
-      "summary": "In-flight workers (batch dispatch)"
     },
     "BOARD_EMPTY_SKIP_TO_VERIFY": {
       "branch_instruction": "Use the existing task state to choose the next action",
@@ -759,7 +675,7 @@
       "summary": "{{ tool }} is not offered on the current synthesis report turn."
     },
     "COORDINATOR_TASK_ENVELOPE_ECHO": {
-      "branch_instruction": "Synthesize worker output — never echo \u003ctask job_id=…\u003e blocks to the user",
+      "branch_instruction": "Synthesize worker output — never echo \u003ctask …\u003e blocks to the user",
       "category": "recoverable",
       "emit": "guard:coordinator",
       "summary": "Assistant prose repeated the structured \u003ctask …\u003e completion block"
@@ -1843,10 +1759,10 @@
       "summary": "Dispatch base_overlay_id {{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }}, so it cannot stack on it{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}"
     },
     "OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT": {
-      "branch_instruction": "Use native tool calls for the overlay decision. Do not repeat the completion claim, mark pending delivery done, or dispatch replacement work merely to close out. If a human decision is required, ask once through the channel this request offers.",
+      "branch_instruction": "Use native tool calls for the decision. Do not repeat the completion claim, mark pending delivery done, or dispatch replacement work merely to close out. If a human decision is required, ask once through the channel this request offers.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Worker `{{ paintedwolf.job_id }}` finished, but its changes still await an overlay decision."
+      "summary": "{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}A worker{% endif %} finished, but its changes{% if paintedwolf.overlay_id %} (result `{{ paintedwolf.overlay_id }}`){% endif %} still await a decision."
     },
     "OVERLAY_PARENT_REJECTED": {
       "branch_instruction": "Account for the orphaned child and re-dispatch only work still required",
@@ -1859,44 +1775,44 @@
       "branch_instruction": "Reconcile current conflict paths explicitly and preserve already accepted work",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Overlay {{ paintedwolf.job_id }} has {{ paintedwolf.conflict_count }} unresolved path conflict(s): {{ paintedwolf.paths }}."
+      "summary": "{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} has {{ paintedwolf.conflict_count }} unresolved path conflict(s): {{ paintedwolf.paths }}."
     },
     "OVERLAY_PROMOTE_NOT_FOUND": {
-      "branch_instruction": "Branch on Code; verify overlay_id against the live pulse roster",
+      "branch_instruction": "Branch on Code; check the handle against the roster",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "No overlay {{ paintedwolf.job_id }} on this session — promote/reject targets must match the live pulse roster"
+      "summary": "{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %} has no changes in this session to act on."
     },
     "OVERLAY_PROMOTE_NOT_PENDING": {
-      "branch_instruction": "Branch on Code; verify merge_status against the live roster before retrying",
+      "branch_instruction": "Branch on Code; check the result's disposition before retrying",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Overlay {{ paintedwolf.job_id }} is not pending{% if paintedwolf.merge_status %} (merge_status={{ paintedwolf.merge_status }}){% endif %}{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}"
+      "summary": "{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} has no pending changes{% if paintedwolf.merge_status %} (merge_status={{ paintedwolf.merge_status }}){% endif %}{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}"
     },
     "OVERLAY_PROMOTE_NO_PATHS": {
       "branch_instruction": "Do not repeat the unchanged promotion or discard remaining work merely to clear the error.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Overlay {{ paintedwolf.job_id }} has no applicable paths for this operation."
+      "summary": "{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} has no applicable paths for this operation."
     },
     "OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED": {
       "branch_instruction": "Preview first, then give tier-appropriate resolutions for every conflict path, then promote.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Overlay {{ paintedwolf.job_id }} needs resolutions{% if paintedwolf.path %} for `{{ paintedwolf.path }}`{% endif %}"
+      "summary": "{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} needs resolutions{% if paintedwolf.path %} for `{{ paintedwolf.path }}`{% endif %}"
     },
     "OVERLAY_PROMOTE_SESSION_MISMATCH": {
-      "branch_instruction": "Branch on Code; only act on overlay_ids from this session's own pulse roster",
+      "branch_instruction": "Branch on Code; use handles from this session's roster",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Overlay {{ paintedwolf.job_id }} belongs to a different parent session and cannot be promoted from here"
+      "summary": "{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} belongs to another coordinator session and cannot be acted on from here."
     },
     "OVERLAY_PROMOTE_SPILL": {
       "branch_instruction": "Inspect retained evidence or current state without repeating promotion",
       "category": "informational",
       "emit": "banner",
       "severity": "info",
-      "summary": "Overlay {{ paintedwolf.job_id }} assessment was shortened inline.{% if paintedwolf.spill_path %} Retained JSON is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes).{% else %} No spill file is available.{% endif %}"
+      "summary": "{% if paintedwolf.overlay_id %}The assessment of result `{{ paintedwolf.overlay_id }}`{% else %}This assessment{% endif %} was shortened inline.{% if paintedwolf.spill_path %} Retained JSON is at {{ paintedwolf.spill_path }} ({{ paintedwolf.spill_bytes }} bytes).{% else %} No spill file is available.{% endif %}"
     },
     "OVERLAY_PROMOTE_SYNTAX_UNHEALTHY": {
       "branch_instruction": "Preserve accepted work and resolve the reported validation failure before promotion",
@@ -3214,7 +3130,7 @@
       "branch_instruction": "Preserve read scope and report the required write work",
       "category": "recoverable",
       "emit": "guard:worker_write",
-      "summary": "Read-scoped worker **{{ paintedwolf.agent_type }}** (job **{{ paintedwolf.job_id }}**) cannot call file mutation tools on **{{ paintedwolf.path }}**."
+      "summary": "Read-scoped worker **{{ paintedwolf.agent_type }}** cannot call file mutation tools on **{{ paintedwolf.path }}**."
     },
     "TASK_SCOPE_WRITE_REQUIRED": {
       "branch_instruction": "Branch on Code: read-only profiles for survey; mutation-capable profiles only with write overlays.",
@@ -3523,10 +3439,10 @@
       "summary": "Isolating tool **{{ tool }}** could not claim the worker's private view."
     },
     "WORKER_CANCEL_NOT_FOUND": {
-      "branch_instruction": "Pass a valid job_id from an enqueue result or the pulse roster.",
+      "branch_instruction": "Cancel only a worker the roster shows working, waiting or asking.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "worker_cancel job_id must match a job spawned from this session"
+      "summary": "{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} has no job in this session to cancel."
     },
     "WORKER_CANCEL_NOT_RUNNING": {
       "branch_instruction": "Branch on Code WORKER_CANCEL_NOT_RUNNING; do not retry",
@@ -3535,16 +3451,16 @@
       "summary": "The worker is {{ paintedwolf.state }}, so there is nothing to stop."
     },
     "WORKER_CANCEL_SESSION_MISMATCH": {
-      "branch_instruction": "Use job_id from this session's enqueue result or pulse roster.",
+      "branch_instruction": "Act only on workers from this session's roster.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "worker_cancel may only stop jobs spawned from the active session"
+      "summary": "{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} belongs to another coordinator session and cannot be cancelled from here."
     },
     "WORKER_CANCEL_TERMINAL": {
-      "branch_instruction": "Use the existing envelope on the transcript — do not cancel terminal jobs",
+      "branch_instruction": "Use the existing notice; do not cancel a round that has ended.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "worker_cancel only applies to pending, running, or held jobs"
+      "summary": "{% if paintedwolf.worker %}The round of worker `{{ paintedwolf.worker }}`{% else %}This round{% endif %} already ended ({{ paintedwolf.status }})."
     },
     "WORKER_COMPLETION_REPORT_MISSING": {
       "branch_instruction": "State which report or evidence is missing. Do not rerun completed work merely to obtain a report.",

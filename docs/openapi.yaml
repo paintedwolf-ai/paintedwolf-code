@@ -24798,7 +24798,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/WorkerPromotePathStatus'
-        overlap_job_ids:
+        overlap_overlay_ids:
           type: array
           items:
             type: string

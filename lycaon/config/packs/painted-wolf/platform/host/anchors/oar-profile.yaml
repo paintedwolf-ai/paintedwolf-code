@@ -828,7 +828,9 @@ host_facts:
    type: bool
  - name: paintedwolf.supports_local_listen
    type: bool
- - name: paintedwolf.missing_summary_job_ids
+ - name: paintedwolf.missing_summary_count
+   type: int
+ - name: paintedwolf.missing_summary_workers
    type: list<string>
  - name: paintedwolf.supports_loopback_connect
    type: bool
@@ -1062,7 +1064,7 @@ host_facts:
    type: string
  - name: paintedwolf.original_bytes
    type: string
- - name: paintedwolf.overlap_job_ids
+ - name: paintedwolf.overlap_overlay_ids
    type: list<string>
  - name: paintedwolf.overlay_id
    type: string

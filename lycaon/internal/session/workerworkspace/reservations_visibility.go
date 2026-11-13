@@ -78,7 +78,7 @@ func (m *Service) PeerReservations(ctx context.Context, childSessionID string) [
 		}
 		out = append(out, inject.ReservedPath{
 			Path:     path,
-			JobID:    jobID,
+			Worker:   m.names.Name(ctx, jobID),
 			LegLabel: m.legLabel(jobID),
 		})
 	}

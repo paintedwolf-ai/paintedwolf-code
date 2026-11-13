@@ -12,6 +12,8 @@ import (
 )
 
 type WorkerCompletionEnvelope struct {
+	// Worker is the name the coordinator addresses the worker by.
+	Worker          string
 	JobID           string
 	ChildSessionID  string
 	AgentType       string
@@ -42,6 +44,7 @@ func FormatWorkerCompletionEnvelope(env WorkerCompletionEnvelope) string {
 	}
 	decisionJSON := marshalEnvelopeJSON(env.DecisionRequest)
 	doc := workercompletionxml.Doc{
+		Worker:              strings.TrimSpace(env.Worker),
 		JobID:               strings.TrimSpace(env.JobID),
 		ChildSessionID:      strings.TrimSpace(env.ChildSessionID),
 		AgentType:           strings.TrimSpace(env.AgentType),
@@ -103,6 +106,7 @@ func ParseWorkerCompletionEnvelope(content string) (WorkerCompletionEnvelope, bo
 		return WorkerCompletionEnvelope{}, false
 	}
 	env := WorkerCompletionEnvelope{
+		Worker:         strings.TrimSpace(doc.Worker),
 		JobID:          strings.TrimSpace(doc.JobID),
 		ChildSessionID: strings.TrimSpace(doc.ChildSessionID),
 		AgentType:      strings.TrimSpace(doc.AgentType),

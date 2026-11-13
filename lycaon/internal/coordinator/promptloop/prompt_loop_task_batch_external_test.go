@@ -3,16 +3,13 @@ package promptloop_test
 import (
 	"context"
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
-	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
-	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -114,18 +111,7 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 		_, err := store.UpdateMessage(ctx, sess.ID, messageID, msg)
 		return err
 	}
-	deps.Tools.InFlightWorkerRosterNote = func(ctx context.Context, _ *api.Session) string {
-		guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
-		note, err := guidance.RenderWorkerInFlightRoster(ctx, guidance.BuildWorkerRosterLines([]api.WorkerTask{
-			{ID: "job-1", AgentType: "repo-researcher", Status: api.WorkerStatusPending},
-			{ID: "job-2", AgentType: "path-explorer", Status: api.WorkerStatusPending},
-			{ID: "job-3", AgentType: "implementer", Status: api.WorkerStatusPending},
-		}))
-		if err != nil {
-			t.Fatalf("RenderWorkerInFlightRoster: %v", err)
-		}
-		return note
-	}
+
 	loop := promptloop.NewPromptLoopForTest(deps)
 	result, err := loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
@@ -152,22 +138,6 @@ func TestLoopBatchThreeTaskOneTurn(t *testing.T) {
 	}
 	if toolMsgCount != 3 {
 		t.Fatalf("tool messages = %d want 3", toolMsgCount)
-	}
-	var lastTaskContent string
-	var lastTaskResult *api.ToolResult
-	for i := len(msgs) - 1; i >= 0; i-- {
-		if msgs[i].Role == api.MessageRoleTool && strings.Contains(msgs[i].Content, "job-3") {
-			lastTaskContent = msgs[i].Content
-			lastTaskResult = msgs[i].ToolResult
-			break
-		}
-	}
-	if !strings.Contains(lastTaskContent, "batch dispatch") {
-		t.Fatalf("expected roster on last task, got %q", lastTaskContent)
-	}
-	if lastTaskResult == nil || !strings.Contains(lastTaskResult.Content, "batch dispatch") ||
-		!slices.Contains(lastTaskResult.Codes, "BANNER_WORKER_INFLIGHT_ROSTER") {
-		t.Fatalf("structured tool result lost roster content or feedback: %+v", lastTaskResult)
 	}
 }
 

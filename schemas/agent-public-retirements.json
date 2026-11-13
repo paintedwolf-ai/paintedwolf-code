@@ -487,7 +487,13 @@
       "paintedwolf.suggested_resume_max": {
         "content_contract": "paintedwolf.worker_round_without_ceiling",
         "version": 1
-      }
+      },
+      "paintedwolf.missing_summary_job_ids": [
+        "paintedwolf.missing_summary_workers"
+      ],
+      "paintedwolf.overlap_job_ids": [
+        "paintedwolf.overlap_overlay_ids"
+      ]
     },
     "rejection_codes": {
       "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [

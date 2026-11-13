@@ -57,7 +57,11 @@ type Summaries struct {
 	inspectChanges func(context.Context, *api.WorkerTask, []projectroot.RootRef) ([]string, error)
 	overlayStatus  func(context.Context, api.WorkerSummaryStatus, *api.WorkerTask) api.WorkerSummaryStatus
 	overlayPending func(context.Context, *api.WorkerTask) bool
+	names          workercompletion.WorkerNames
 }
+
+// SetWorkerNames names the worker a summarized job's round belongs to.
+func (m *Summaries) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 type SummaryPorts struct {
 	Sessions       SummaryStore

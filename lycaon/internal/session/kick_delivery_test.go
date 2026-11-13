@@ -66,7 +66,7 @@ func TestTurnDeliversEveryQueuedKickAndDropsNoticesForFinishedRounds(t *testing.
 	testutil.FailErr(t, "create session", err)
 	mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.ComposeDone, anchor.Envelope{})
 	for _, job := range []string{"job-finished", "job-running"} {
-		facts := kick.WorkerRoundNoticeFacts{JobID: job, AgentType: "implementer", Kind: kick.RoundNoticeConsumption, ModelCalls: 40}
+		facts := kick.WorkerRoundNoticeFacts{JobID: job, Worker: job, AgentType: "implementer", Kind: kick.RoundNoticeConsumption, ModelCalls: 40}
 		mgr.Coordinator.Guidance.Emit(ctx, sess.ID, anchor.WorkerRoundNotice, anchor.Envelope{Subject: job, WorkerRoundNotice: &facts})
 	}
 	if _, err := mgr.Submissions.Prompt(ctx, sess.ID, "continue"); err != nil {

@@ -43,7 +43,7 @@ type Results struct {
 	digests        *Digests
 	sessions       SessionReader
 	limits         SessionLimits
-	workerNames    func(ctx context.Context, jobID string) (string, bool, error)
+	workerNames    workercompletion.WorkerNames
 	resultNotices  ResultNotices
 }
 
@@ -73,7 +73,7 @@ func (m *Results) SetDecisions(decisions WorkerDecisions)   { m.decisions = deci
 func (m *Results) SetWorkflowSource(source ActiveWorkflow)  { m.workflowSource = source }
 
 // SetWorkerNames names the worker a job's round belongs to in its facts.
-func (m *Results) SetWorkerNames(names func(ctx context.Context, jobID string) (string, bool, error)) {
+func (m *Results) SetWorkerNames(names workercompletion.WorkerNames) {
 	m.workerNames = names
 }
 

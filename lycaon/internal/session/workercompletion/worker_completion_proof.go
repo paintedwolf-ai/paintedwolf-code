@@ -242,15 +242,15 @@ func countSurveyReceipts(msgs []api.Message) int {
 	return n
 }
 
-func FormatWorkerDigest(agentType, jobID, status, summary string, proof WorkerCompletionProof, report WorkerCompletionReport) string {
+func FormatWorkerDigest(agentType, worker, status, summary string, proof WorkerCompletionProof, report WorkerCompletionReport) string {
 	var b strings.Builder
 	agent := strings.TrimSpace(agentType)
 	if agent == "" {
 		agent = "worker"
 	}
 	fmt.Fprintf(&b, "Host worker digest — agent=%s status=%s", agent, strings.TrimSpace(status))
-	if id := strings.TrimSpace(jobID); id != "" {
-		fmt.Fprintf(&b, " job=%s", id)
+	if name := strings.TrimSpace(worker); name != "" {
+		fmt.Fprintf(&b, " worker=%s", name)
 	}
 	b.WriteString("\n")
 	report.Normalize()

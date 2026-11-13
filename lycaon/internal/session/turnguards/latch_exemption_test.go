@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/guard"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -41,5 +42,35 @@ func TestLatchExemptsOnlyTheLatchedWorker(t *testing.T) {
 		if got != tc.exempt {
 			t.Fatalf("%s to %s: exempt=%v, want %v", tc.tool, tc.worker, got, tc.exempt)
 		}
+	}
+}
+
+type jobNames map[string]workerrecords.JobNames
+
+func (n jobNames) NamesByJob(_ context.Context, jobID string) (workerrecords.JobNames, bool, error) {
+	if jobID == "broken" {
+		return workerrecords.JobNames{}, false, errors.New("store closed")
+	}
+	names, ok := n[jobID]
+	return names, ok, nil
+}
+
+// The closeout refusal names the pending result by worker and handle; without
+// names it keeps only the job.
+func TestPendingResultIsNamed(t *testing.T) {
+	m := &Service{}
+	if got := m.pendingResultData(t.Context(), "job-1"); len(got) != 1 {
+		t.Fatalf("without names = %v", got)
+	}
+	m.SetJobNames(jobNames{"job-1": {Worker: "parser-fix", Handle: "result-1"}, "job-2": {Worker: "docs"}})
+	got := m.pendingResultData(t.Context(), "job-1")
+	if got["worker"] != "parser-fix" || got["overlay_id"] != "result-1" {
+		t.Fatalf("named = %v", got)
+	}
+	if got := m.pendingResultData(t.Context(), "job-2"); got["worker"] != "docs" || got["overlay_id"] != nil {
+		t.Fatalf("unsettled = %v", got)
+	}
+	if got := m.pendingResultData(t.Context(), "broken"); len(got) != 1 {
+		t.Fatalf("failed lookup = %v", got)
 	}
 }

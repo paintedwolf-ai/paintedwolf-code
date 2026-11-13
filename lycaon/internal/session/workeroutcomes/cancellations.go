@@ -35,7 +35,11 @@ type Cancellations struct {
 	graceful  GracefulFinish
 	cards     ParentCards
 	grounding GroundingReset
+	names     workercompletion.WorkerNames
 }
+
+// SetWorkerNames names the worker a cancelled job's round belongs to.
+func (m *Cancellations) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 type CancellationPorts struct {
 	Sessions  CancellationSessions
@@ -128,6 +132,7 @@ func (m *Cancellations) Append(ctx context.Context, parentID string, in Cancella
 		summary = strings.TrimSpace(summary + "\n\n" + rendered)
 	}
 	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{
+		Worker:         m.names.Name(ctx, in.JobID),
 		JobID:          in.JobID,
 		ChildSessionID: in.ChildSessionID,
 		AgentType:      in.AgentType,

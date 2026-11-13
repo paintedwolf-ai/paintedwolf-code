@@ -3,19 +3,19 @@ id: WORKER_CANCEL_TERMINAL
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.job_id, paintedwolf.rejection_code, paintedwolf.status]
+requires_facts: [paintedwolf.rejection_code, paintedwolf.status, paintedwolf.worker]
 when: paintedwolf.rejection_code == "WORKER_CANCEL_TERMINAL"
 effect: block
 category: recoverable
 emit: guard:coordinator
-message: Worker job {{ paintedwolf.job_id }} is already {{ paintedwolf.status }} and cannot be canceled
-what: worker_cancel only applies to pending, running, or held jobs
-cause: The job already finished or was canceled
-why: The job already finished or was canceled
-fix: 'Read the completion or cancellation envelope on the transcript instead of cancelling it again.'
-instead: Use the existing envelope on the transcript — do not cancel terminal jobs
+message: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} is already {{ paintedwolf.status }} and cannot be cancelled'
+what: '{% if paintedwolf.worker %}The round of worker `{{ paintedwolf.worker }}`{% else %}This round{% endif %} already ended ({{ paintedwolf.status }}).'
+cause: 'The round already finished or was cancelled.'
+why: 'There is no running round to stop.'
+fix: 'Read the round''s completion or cancellation notice instead of cancelling again.'
+instead: 'Use the existing notice; do not cancel a round that has ended.'
 scenarios:
   - id: default
     vars:
-      job_id: job-done
+      worker: parser-fix
       status: complete

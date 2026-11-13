@@ -303,6 +303,15 @@ WHERE id = (SELECT worker_id FROM worker_rounds WHERE job_id = sqlc.arg(job_id))
 -- name: GetWorkerNameByJob :one
 SELECT w.name FROM worker_rounds r JOIN workers w ON w.id = r.worker_id WHERE r.job_id = ?;
 
+-- name: GetWorkerJobNames :one
+-- A job's worker name and, once its round settles, the result handle.
+SELECT w.name,
+       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id
+FROM worker_rounds r
+JOIN workers w ON w.id = r.worker_id
+LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+WHERE r.job_id = ?;
+
 -- name: LatestRoundJobForJob :one
 -- The job of the latest round of the worker that ran this job, or the job
 -- itself when it ran no worker round.

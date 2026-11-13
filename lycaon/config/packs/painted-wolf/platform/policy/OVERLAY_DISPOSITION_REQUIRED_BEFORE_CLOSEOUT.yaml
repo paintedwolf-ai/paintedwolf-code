@@ -3,18 +3,19 @@ id: OVERLAY_DISPOSITION_REQUIRED_BEFORE_CLOSEOUT
 kind: invariant
 on: coordinator.closeout_check
 selector: {}
-requires_facts: [paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.pending_overlay_promote, paintedwolf.reject_observation]
+requires_facts: [paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.pending_overlay_promote, paintedwolf.reject_observation, paintedwolf.worker]
 when: paintedwolf.pending_overlay_promote && paintedwolf.reject_observation == "closeout_pending_overlays"
 effect: block
 category: recoverable
 emit: guard:coordinator
-message: Worker overlay requires a decision before closeout
-what: 'Worker `{{ paintedwolf.job_id }}` finished, but its changes still await an overlay decision.'
+message: 'A worker result requires a decision before closeout'
+what: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}A worker{% endif %} finished, but its changes{% if paintedwolf.overlay_id %} (result `{{ paintedwolf.overlay_id }}`){% endif %} still await a decision.'
 cause: Worker completion does not apply its changes to the primary tree.
-why: A completion report cannot settle an unpromoted overlay.
+why: A completion report cannot settle changes that were never landed.
 fix: '{{ paintedwolf.next_steps }} Resolve any promotion conflicts, then reconcile progress against the actual result.'
-instead: 'Use native tool calls for the overlay decision. Do not repeat the completion claim, mark pending delivery done, or dispatch replacement work merely to close out. If a human decision is required, ask once through the channel this request offers.'
+instead: 'Use native tool calls for the decision. Do not repeat the completion claim, mark pending delivery done, or dispatch replacement work merely to close out. If a human decision is required, ask once through the channel this request offers.'
 scenarios:
   - id: pending_overlay
     vars:
-      job_id: pending-worker
+      worker: parser-fix
+      overlay_id: result-pending

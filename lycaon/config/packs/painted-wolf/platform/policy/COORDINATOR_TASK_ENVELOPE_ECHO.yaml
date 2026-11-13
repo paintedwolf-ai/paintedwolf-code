@@ -13,7 +13,7 @@ what: Assistant prose repeated the structured <task …> completion block
 cause: Loop-wake turns must synthesize for the user — not paste worker XML/HTML envelopes
 why: Envelopes are host context; user-facing chat stays brief synthesis
 fix: 'Write a user-facing answer from the existing worker evidence, with its citations inline. Omit the host task envelope itself. Do not dispatch or wait merely to repair report formatting.'
-instead: Synthesize worker output — never echo <task job_id=…> blocks to the user
+instead: Synthesize worker output — never echo <task …> blocks to the user
 scenarios:
   - id: default
     vars:

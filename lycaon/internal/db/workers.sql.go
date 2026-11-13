@@ -460,6 +460,28 @@ func (q *Queries) GetWorkerJobBinding(ctx context.Context, id string) (GetWorker
 	return i, err
 }
 
+const getWorkerJobNames = `-- name: GetWorkerJobNames :one
+SELECT w.name,
+       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id
+FROM worker_rounds r
+JOIN workers w ON w.id = r.worker_id
+LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+WHERE r.job_id = ?
+`
+
+type GetWorkerJobNamesRow struct {
+	Name     string `json:"name"`
+	ResultID string `json:"result_id"`
+}
+
+// A job's worker name and, once its round settles, the result handle.
+func (q *Queries) GetWorkerJobNames(ctx context.Context, jobID string) (GetWorkerJobNamesRow, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerJobNames, jobID)
+	var i GetWorkerJobNamesRow
+	err := row.Scan(&i.Name, &i.ResultID)
+	return i, err
+}
+
 const getWorkerMessage = `-- name: GetWorkerMessage :one
 SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at

@@ -298,6 +298,26 @@ func (s *Store) RoundByJob(ctx context.Context, jobID string) (Round, bool, erro
 	return roundFromRow(r), true, nil
 }
 
+// JobNames are what a coordinator calls a job: its worker and, once its round
+// settles, the result handle that addresses its changes.
+type JobNames struct {
+	Worker string
+	Handle string
+}
+
+// NamesByJob finds the worker and result a job belongs to, for refusals about
+// that job. ok is false for a job that runs no worker round.
+func (s *Store) NamesByJob(ctx context.Context, jobID string) (JobNames, bool, error) {
+	row, err := s.q.GetWorkerJobNames(ctx, strings.TrimSpace(jobID))
+	if db.IsNoRows(err) {
+		return JobNames{}, false, nil
+	}
+	if err != nil {
+		return JobNames{}, false, err
+	}
+	return JobNames{Worker: row.Name, Handle: row.ResultID}, true, nil
+}
+
 // NameByJob names the worker whose round a job runs, for host copy that
 // reports on jobs. ok is false for a job that runs no worker round.
 func (s *Store) NameByJob(ctx context.Context, jobID string) (string, bool, error) {

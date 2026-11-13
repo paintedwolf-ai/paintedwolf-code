@@ -6,6 +6,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -61,7 +62,7 @@ func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
 
 // SetWorkerNames sets how a job is traced to the worker whose round it runs,
 // for waits and coordinator notices that address workers by name.
-func (m *Host) SetWorkerNames(names func(ctx context.Context, jobID string) (string, bool, error)) {
+func (m *Host) SetWorkerNames(names workercompletion.WorkerNames) {
 	if m == nil {
 		return
 	}
@@ -70,6 +71,24 @@ func (m *Host) SetWorkerNames(names func(ctx context.Context, jobID string) (str
 	}
 	if m.Workers.Results != nil {
 		m.Workers.Results.SetWorkerNames(names)
+	}
+	if m.Workers.Summaries != nil {
+		m.Workers.Summaries.SetWorkerNames(names)
+	}
+	if m.Workers.Cancellations != nil {
+		m.Workers.Cancellations.SetWorkerNames(names)
+	}
+	if m.Workers.Cards != nil {
+		m.Workers.Cards.SetWorkerNames(names)
+	}
+	if m.Coordinator.Workers != nil {
+		m.Coordinator.Workers.Names = names
+	}
+	if m.ProjectControl != nil {
+		m.ProjectControl.SetWorkerNames(names)
+	}
+	if m.Workers.Workspaces != nil {
+		m.Workers.Workspaces.SetWorkerNames(names)
 	}
 }
 
@@ -80,6 +99,13 @@ func (m *Host) SetWorkerResultNotices(notices workeroutcomes.ResultNotices) {
 		return
 	}
 	m.Workers.Results.SetResultNotices(notices)
+}
+
+// SetJobNames sets how closeout refusals name a pending job's worker and result.
+func (m *Host) SetJobNames(names turnguards.JobNames) {
+	if m != nil && m.Coordinator.Guards != nil {
+		m.Coordinator.Guards.SetJobNames(names)
+	}
 }
 
 // SetWorkerResults sets how a worker name resolves to its latest result for

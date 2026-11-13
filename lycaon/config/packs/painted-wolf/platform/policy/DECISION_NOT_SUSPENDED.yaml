@@ -12,12 +12,12 @@ category: recoverable
 emit: guard:coordinator
 message: Worker {{ paintedwolf.worker }} is {{ paintedwolf.status }} and cannot resume from a decision.
 what: Worker {{ paintedwolf.worker }} is {{ paintedwolf.status }} and cannot resume from a decision.
-cause: The decision is unchanged, but the job has not entered the suspended state.
+cause: The decision is unchanged, but the worker has not stopped to wait for the answer yet.
 why: A decision answer must resume the same suspended worker and answer the current question.
 fix: '{{ paintedwolf.next_steps }} Answer only after the worker asks; do not answer the same question repeatedly.'
 instead: Inspect the current worker state before retrying.
 scenarios:
   - id: default
     vars:
-      job_id: worker-1
+      worker: parser-fix
       status: complete

@@ -5,18 +5,18 @@ on: tool.rejected
 selector:
   tools:
     - worker_cancel
-requires_facts: [paintedwolf.job_id, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "WORKER_CANCEL_NOT_FOUND"
 effect: block
 category: recoverable
 emit: guard:coordinator
-message: No worker job {{ paintedwolf.job_id }} exists for worker_cancel
-what: worker_cancel job_id must match a job spawned from this session
-cause: The job id is missing or stale
-why: The job id is missing or stale
-fix: 'Use job_id from a worker enqueue result or the pulse roster for an in-flight job.'
-instead: 'Pass a valid job_id from an enqueue result or the pulse roster.'
+message: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} has no job to cancel'
+what: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} has no job in this session to cancel.'
+cause: 'The worker''s job no longer exists.'
+why: 'There is nothing to stop.'
+fix: 'Check the worker on the roster before cancelling.'
+instead: 'Cancel only a worker the roster shows working, waiting or asking.'
 scenarios:
   - id: default
     vars:
-      job_id: job-missing
+      worker: parser-fix

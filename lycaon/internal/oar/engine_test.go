@@ -233,7 +233,6 @@ func TestSyncRegistryFromStockIncludesNonPlatformPack(t *testing.T) {
 	// Non-platform packs must land; a platform-only DefaultDir sync drops these.
 	for _, code := range []string{
 		"ASK_USER_ALREADY_PENDING",      // hitl
-		"BANNER_PROMOTE_HIGH_CONFLICT",  // implement
 		"BROWSER_UNAVAILABLE",           // browser
 		"SECURITY_DISABLED",             // scan-guidance
 		"POLICY_WRITE_REQUIRES_COMMAND", // platform

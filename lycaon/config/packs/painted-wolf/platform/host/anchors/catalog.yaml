@@ -46,8 +46,8 @@ anchors:
         worker_digest: { type: string }
         evidence_digest: { type: string }
         batch_phase: { type: string }
-        pending_overlay_jobs: { type: "string[]" }
-        partial_worker_jobs: { type: "string[]" }
+        pending_overlays: { type: int }
+        partial_workers: { type: int }
     dedup:
       key: leg_finished
       omit_inform_when: [board_reinjected]
@@ -230,7 +230,7 @@ anchors:
     planes: [inform]
     envelope:
       vars:
-        job_id: { type: string, required: true }
+        worker: { type: string }
         agent_type: { type: string, required: true }
         notice_kind: { type: string, required: true }
         model_calls: { type: int, required: true }
@@ -603,8 +603,8 @@ anchors:
         progress_missing: { type: bool }
         profile_has_update_progress: { type: bool }
         verify_required: { type: bool }
-        pending_overlay_jobs: { type: "string[]" }
-        partial_worker_jobs: { type: "string[]" }
+        pending_overlays: { type: int }
+        partial_workers: { type: int }
 
   - id: inject.command_jobs
     title: Live handles inject
