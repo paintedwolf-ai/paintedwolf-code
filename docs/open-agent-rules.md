@@ -116,7 +116,7 @@ Selectors use the closed vocabulary of `selector.schema.json`. `tools` and `sess
 | `worker.report_check` | on a provisional worker report | can request repair before final delivery; not the portable finalization boundary |
 | `content.input` / `content.output` / `content.tool_result` | content-safety boundaries | core `model.input` / `model.output` / `model.tool_result` |
 
-Model response prose is buffered until `content.output` resolves. The shared response classifier supplies non-executable text-action observations at this same boundary; `TOOL_ACTION_IN_TEXT` uses the existing bounded rejected-draft repair lifecycle for coordinators and workers. Live progress contains metadata; the final policy result controls transcript persistence, replay, and returned prose.
+Model response prose is buffered until `content.output` resolves. The shared response classifier supplies non-executable text-action observations at this same boundary, and the occurrence carries the frozen request, so `paintedwolf.text_action_callable_tools`, `paintedwolf.text_action_loadable_tools`, and `paintedwolf.text_action_command_forms` sort each named tool by the route that request leaves for it; `TOOL_ACTION_IN_TEXT` uses the existing bounded rejected-draft repair lifecycle for coordinators and workers. Live progress contains metadata; the final policy result controls transcript persistence, replay, and returned prose.
 
 Non-blocking advisories queue the engine's frozen copy and structured identity; they do not require the rule to exist in the stock presentation registry.
 
