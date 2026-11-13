@@ -162,10 +162,8 @@ func TestRoundsAdmitOneUnsettledRound(t *testing.T) {
 
 	settled, err := f.store.SettleRound(t.Context(), f.coord, op("settle-1"), w.WorkerID, "job-1", "cp-1")
 	testutil.FailErr(t, "settle", err)
-	rounds, err := f.store.Rounds(t.Context(), f.coord, w.WorkerID)
-	testutil.FailErr(t, "rounds", err)
 	f.insertResult(t, "result-1", "job-1")
-	rounds, err = f.store.Rounds(t.Context(), f.coord, w.WorkerID)
+	rounds, err := f.store.Rounds(t.Context(), f.coord, w.WorkerID)
 	testutil.FailErr(t, "rounds with result", err)
 	if rounds[0].CheckpointID != "cp-1" || settled.CheckpointID != "cp-1" || rounds[0].ResultID != "result-1" {
 		t.Fatalf("settled round = %+v, receipt %+v", rounds[0], settled)
