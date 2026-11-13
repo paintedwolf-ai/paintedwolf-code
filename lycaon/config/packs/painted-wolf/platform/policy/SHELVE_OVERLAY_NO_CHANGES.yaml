@@ -6,7 +6,7 @@ selector:
   tool:
     - shelve_overlay
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "SHELVE_OVERLAY_NO_CHANGES"
@@ -15,7 +15,7 @@ copy:
   what: That result changed nothing, so there is nothing to shelve.
   cause: 'The result''s round published no changes.'
   why: Shelving records why changes wait unlanded.
-  fix: Account for the result on the checklist instead.
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code SHELVE_OVERLAY_NO_CHANGES; do not retry the same call
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:shelve_overlay

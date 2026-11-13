@@ -1,0 +1,8 @@
+steps:
+  - when: "paintedwolf.workflow_work_id != ''"
+    tool: "task"
+    args:
+      workflow_work_id: "{{ paintedwolf.workflow_work_id }}"
+    complete: true
+    say: "Start the planned leg with {{ call }}."
+    otherwise: "It starts when its planned leg is started."

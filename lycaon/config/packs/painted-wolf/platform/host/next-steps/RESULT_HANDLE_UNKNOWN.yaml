@@ -1,0 +1,5 @@
+steps:
+  - tool: "pack_board"
+    complete: true
+    say: "Find the result handle on the roster with {{ call }}."
+    otherwise: "Use the result handle from the worker's result notice."

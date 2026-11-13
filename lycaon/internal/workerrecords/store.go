@@ -258,3 +258,23 @@ func nullString(s string) sql.NullString {
 }
 
 func nullInt(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: v > 0} }
+
+// Operation returns the receipt an operation identity already recorded for
+// this session, so a caller composing several operations can replay its
+// first outcome. ok is false for an identity not used yet.
+func (s *Store) Operation(ctx context.Context, actor Actor, opID string) (kind string, receipt json.RawMessage, ok bool, err error) {
+	if err := actor.check(); err != nil {
+		return "", nil, false, err
+	}
+	prior, err := s.q.GetWorkerOperation(ctx, strings.TrimSpace(opID))
+	if db.IsNoRows(err) {
+		return "", nil, false, nil
+	}
+	if err != nil {
+		return "", nil, false, err
+	}
+	if prior.SessionID != actor.SessionID {
+		return "", nil, false, ErrOperationConflict
+	}
+	return prior.Kind, json.RawMessage(prior.ReceiptJson), true, nil
+}

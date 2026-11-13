@@ -289,3 +289,25 @@ func TestHistoryPagesWithoutResolving(t *testing.T) {
 		t.Fatalf("older = %+v", older)
 	}
 }
+
+// A replayed instruction returns what it did the first time, though the
+// worker is now working on the round it started.
+func TestInstructReplaysItsFirstReceipt(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	in := workerops.Instruction{Worker: "surveyor", Instructions: "look again"}
+	first, err := f.svc.Instruct(t.Context(), f.coord, op("instruct"), in, f.enqueue("job-2"))
+	testutil.FailErr(t, "instruct", err)
+	again, err := f.svc.Instruct(t.Context(), f.coord, op("instruct"), in, f.enqueue("job-3"))
+	testutil.FailErr(t, "replay", err)
+	if again != first || len(f.enqueued) != 1 {
+		t.Fatalf("replay = %+v, first = %+v, enqueued %d", again, first, len(f.enqueued))
+	}
+	queued, err := f.svc.Instruct(t.Context(), f.coord, op("queue"), workerops.Instruction{Worker: "surveyor", Instructions: "and the caller"}, f.enqueue("unused"))
+	testutil.FailErr(t, "queue", err)
+	replayed, err := f.svc.Instruct(t.Context(), f.coord, op("queue"), workerops.Instruction{Worker: "surveyor", Instructions: "and the caller"}, f.enqueue("unused"))
+	testutil.FailErr(t, "replay queued", err)
+	if replayed != queued || queued.JobID != "job-2" {
+		t.Fatalf("queued = %+v, replayed = %+v", queued, replayed)
+	}
+}

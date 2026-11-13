@@ -1,0 +1,14 @@
+steps:
+  - when: "paintedwolf.overlay_id != ''"
+    tool: "promote_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.overlay_id }}"
+    complete: true
+    say: "Land its changes with {{ call }} first."
+    otherwise: "Keep a write agent until its changes are landed or rejected."
+  - when: "paintedwolf.overlay_id != ''"
+    tool: "reject_overlay"
+    args:
+      overlay_id: "{{ paintedwolf.overlay_id }}"
+    complete: true
+    say: "Or discard them with {{ call }}."

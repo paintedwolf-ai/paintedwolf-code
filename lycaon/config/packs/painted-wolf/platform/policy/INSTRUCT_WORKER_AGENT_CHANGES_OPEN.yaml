@@ -6,7 +6,7 @@ selector:
   tool:
     - instruct_worker
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps, paintedwolf.overlay_id]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_AGENT_CHANGES_OPEN"
@@ -15,7 +15,7 @@ copy:
   what: The worker still has changes that are not landed or rejected.
   cause: Moving a write worker to a read agent would leave its changes without a workspace.
   why: 'Shelved changes count: they can still be landed or rejected.'
-  fix: Land or reject its changes first, or keep a write agent.
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code INSTRUCT_WORKER_AGENT_CHANGES_OPEN; do not retry the same call
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:instruct_worker

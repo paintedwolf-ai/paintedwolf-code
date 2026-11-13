@@ -256,7 +256,8 @@ func workerToolReject(tool, worker, agent string, err error, handle ...string) e
 	case errors.Is(err, workerops.ErrNoChanges):
 		return &toolrejection.ToolReject{Code: "SHELVE_OVERLAY_NO_CHANGES", Data: map[string]any{"overlay_id": firstOf(handle)}}
 	case errors.As(err, &refusal):
-		data := map[string]any{"tool": tool, "worker": refusal.Worker, "state": string(refusal.View.State), "admitted": admittedOps(refusal.View)}
+		data := map[string]any{"tool": tool, "worker": refusal.Worker, "state": string(refusal.View.State), "admitted": admittedOps(refusal.View),
+			"job_id": refusal.JobID, "overlay_id": refusal.ChangedJobID, "workflow_work_id": refusal.WorkflowWorkID}
 		if refusal.View.Reason != workerstate.ReasonNone {
 			data["reason"] = string(refusal.View.Reason)
 		}

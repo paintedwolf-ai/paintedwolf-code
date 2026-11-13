@@ -6,7 +6,7 @@ selector:
   tool:
     - instruct_worker
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps, paintedwolf.workflow_work_id]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_PLANNED"
@@ -15,7 +15,7 @@ copy:
   what: The worker is a planned leg that has not started.
   cause: Planned legs start with task and their work identity.
   why: 'A planned leg''s agent, scope and brief come from the plan.'
-  fix: Start it with task and its work identity.
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code INSTRUCT_WORKER_PLANNED; do not retry the same call
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:instruct_worker

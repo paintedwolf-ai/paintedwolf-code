@@ -6,7 +6,7 @@ selector:
   tool:
     - shelve_overlay
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "RESULT_HANDLE_UNKNOWN"
@@ -15,7 +15,7 @@ copy:
   what: 'That result handle names no result of this session''s workers.'
   cause: The handle is not one the host issued for a worker result in this session.
   why: A result handle names one worker result exactly, so it cannot be guessed or reused across sessions.
-  fix: 'Use the result handle from the worker''s result notice or the roster.'
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code RESULT_HANDLE_UNKNOWN; do not retry the same call
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:shelve_overlay

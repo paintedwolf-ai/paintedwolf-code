@@ -6,7 +6,7 @@ selector:
   tool:
     - instruct_worker
 requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps, paintedwolf.job_id]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_WAITING"

@@ -1127,9 +1127,13 @@ host_facts:
    type: string
  - name: paintedwolf.window
    type: string
+ - name: paintedwolf.worker
+   type: string
  - name: paintedwolf.worker_leg
    type: bool
  - name: paintedwolf.workflow_id
+   type: string
+ - name: paintedwolf.workflow_work_id
    type: string
  - name: paintedwolf.code
    type: string
