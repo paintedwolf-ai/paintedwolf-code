@@ -1,6 +1,6 @@
 ## command{% if is_coordinator %} (coordinator){% endif %}
 
-{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}`cd`, variables and `$!` last one program; job handles span calls.{% if profile_has_terminal_open and profile_has_terminal_send %} For live input, use `terminal_open` and `terminal_send`.{% endif %}
+{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}`cd`, variables and `$!` last one program; job handles span calls.{% if profile_has_terminal_open and profile_has_terminal_send %} For live input, use `terminal_open` and `terminal_send`.{% elif profile_has_terminal_open %} For live input, open with `terminal_open`.{% endif %}
 
 {% if workspace_roots %}Programs start in {{ project_dir }}; `pwd`, `$PWD` and `$OLDPWD` are absolute.{% if root_count > 1 %} `cd` moves between folders by absolute path or `@label`.{% endif %} Unquoted `@label/...` and `@scratch/...` expand in arguments and redirects; quote to keep them literal:
 {% for r in workspace_roots %}- `@{{ r.label }}` → {{ r.path }}{% if r.is_primary %} (primary){% endif %}

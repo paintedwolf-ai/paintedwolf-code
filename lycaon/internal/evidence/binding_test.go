@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -138,5 +139,55 @@ func TestBindingCustomToolGrounds(t *testing.T) {
 	rec, ok := evidence.ResolveHandle(ev, "custom#1")
 	if !ok || rec.Shape != evidence.ShapeOpaque {
 		t.Fatalf("rec = %+v ok=%v", rec, ok)
+	}
+}
+
+func TestProducibleKindsIncludeArgumentVariants(t *testing.T) {
+	b, err := evidence.LoadBinding()
+	testutil.FailErr(t, "load binding", err)
+	command := b.ProducibleKinds("command")
+	if len(command) < 2 || command[0] != b.ToolKind("command") {
+		t.Fatalf("command kinds = %v", command)
+	}
+	if got := b.ToolKindForArgs("command", map[string]any{"terminal_capture": map[string]any{}}); !slices.Contains(command, got) {
+		t.Fatalf("variant kind %q missing from %v", got, command)
+	}
+	if got := b.ProducibleKinds("not_a_tool"); len(got) != 0 {
+		t.Fatalf("undeclared tool kinds = %v", got)
+	}
+}
+
+func TestMintedKindsCountOperationsOnlyThroughCommand(t *testing.T) {
+	b, err := evidence.LoadBinding()
+	testutil.FailErr(t, "load binding", err)
+	readKind := b.ToolKind("read")
+	sealed := b.ToolKindForArgs("command", map[string]any{"terminal_capture": map[string]any{}})
+	held := b.ToolKind("terminal_snapshot")
+	alone, err := b.MintedKinds(map[string]bool{"terminal_snapshot": true})
+	testutil.FailErr(t, "minted alone", err)
+	if !alone[held] || alone[sealed] || alone[readKind] {
+		t.Fatalf("terminal_snapshot alone: held %t sealed %t read %t", alone[held], alone[sealed], alone[readKind])
+	}
+	withCommand, err := b.MintedKinds(map[string]bool{"terminal_snapshot": true, "command": true})
+	testutil.FailErr(t, "minted with command", err)
+	if !withCommand[held] || !withCommand[sealed] || !withCommand[readKind] {
+		t.Fatalf("with command: held %t sealed %t read %t", withCommand[held], withCommand[sealed], withCommand[readKind])
+	}
+}
+
+func TestFormToolDoorMintsItsProgramsKinds(t *testing.T) {
+	b, err := evidence.LoadBinding()
+	testutil.FailErr(t, "load binding", err)
+	receipt := b.ReceiptKind("summarize")
+	if receipt != b.ToolKind("command") {
+		t.Fatalf("summarize runs as its command form; receipt kind = %q", receipt)
+	}
+	minted, err := b.MintedKinds(map[string]bool{"summarize": true})
+	testutil.FailErr(t, "minted", err)
+	if !minted[receipt] || !minted[evidence.SourceDeliveryKind] {
+		t.Fatalf("summarize alone mints receipt %t, source windows %t", minted[receipt], minted[evidence.SourceDeliveryKind])
+	}
+	if b.ReceiptKind("terminal_open") != b.ToolKind("terminal_open") {
+		t.Fatal("a tool without a command form keeps its own kind")
 	}
 }
