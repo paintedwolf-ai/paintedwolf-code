@@ -1,0 +1,6 @@
+{
+  "category": "ts_local_dependencies",
+  "artifact": "lycaon-den/src/components/shell/Shell.tsx",
+  "cap": 46,
+  "reason": "Shell is the den's root composition component and wires each workspace surface by name; the presentation-trace hook adds one direct import, and routing it through a barrel would conceal the same coupling."
+}

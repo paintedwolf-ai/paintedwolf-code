@@ -1,12 +1,10 @@
-// Package workercloseout resolves worker reports, bounded closeout prompts, and evidence-grounding retries.
+// Package workercloseout resolves accepted reports and interrupted worker exits.
 package workercloseout
 
 import (
 	"context"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/toolreach"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/lycaon/lycaon/internal/coordinator/anchor"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -17,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workercontext"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,17 +24,16 @@ const WorkerSummaryTooLongCode = "WORKER_SUMMARY_TOO_LONG"
 type WorkerSummaryFinalizeOpts struct {
 	hostTurns HostTurnRunner
 	// WorkerJobID scopes every transcript read.
-	WorkerJobID         string
-	MaxChars            int
-	MaxGroundingRetries int
-	WorkflowHints       *guidance.HintConfig
-	RenderWorkerKick    WorkerKickRenderer
-	ProjectDir          string
-	ProjectRoots        []projectroot.RootRef
-	ActiveRootID        string
-	AgentType           string
-	WorkspaceCheck      workercompletion.WorkspaceChangeChecker
-	Ledger              guidance.EvidenceLedgerReader
+	WorkerJobID      string
+	MaxChars         int
+	WorkflowHints    *guidance.HintConfig
+	RenderWorkerKick WorkerKickRenderer
+	ProjectDir       string
+	ProjectRoots     []projectroot.RootRef
+	ActiveRootID     string
+	AgentType        string
+	WorkspaceCheck   workercompletion.WorkspaceChangeChecker
+	Ledger           guidance.EvidenceLedgerReader
 	// Pipeline is required for blocking worker.report_check Decisions.
 	Pipeline        *oar.GuardPipeline
 	DecisionPending func(ctx context.Context, childSessionID string) bool
@@ -101,30 +99,6 @@ func FinalizeWorkerSummaryForChild(
 		}, nil
 	}
 
-	if report, ok, err := extractCompleteLegReport(ctx, resolver, childSessionID); err != nil {
-		return WorkerSummaryOutcome{}, err
-	} else if ok {
-		return finalizeBoundedReport(ctx, resolver, childSessionID, agentType, "complete_leg", report, opts)
-	}
-
-	if resolver != nil {
-		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), nil)
-		if closeout != "" {
-			if result, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, closeout); err == nil {
-				opts.Reach = result.RequestReach()
-				if opts.decisionPending(ctx, childSessionID) {
-					return WorkerSummaryOutcome{Status: string(api.WorkerSummaryStatusNeedsDecision), Provenance: "decision_pending"}, nil
-				}
-				if report, ok, err := extractCompleteLegReport(ctx, resolver, childSessionID); err != nil {
-					return WorkerSummaryOutcome{}, err
-				} else if ok {
-					return finalizeBoundedReport(ctx, resolver, childSessionID, agentType, "closeout_complete_leg", report, opts)
-				}
-
-			}
-		}
-	}
-
 	var msgs []api.Message
 	if resolver != nil {
 		loaded, err := loadChildMessages(ctx, resolver, childSessionID)
@@ -132,6 +106,9 @@ func FinalizeWorkerSummaryForChild(
 			return WorkerSummaryOutcome{}, fmt.Errorf("load worker finalization transcript: %w", err)
 		}
 		msgs = loaded
+	}
+	if accepted, _, ok := workercompletion.AcceptedWorkerReport(msgs, opts.WorkerJobID); ok {
+		return acceptedWorkerOutcome(accepted), nil
 	}
 	if report, ok := workercompletion.SynthesizeCompletionReport(msgs, agentType, workercompletion.WorkerCompletionProof{}); ok {
 		return finalizeBoundedReport(ctx, resolver, childSessionID, agentType, "synthesized", report, opts)
@@ -155,6 +132,16 @@ func FinalizeWorkerSummaryForCanceled(
 	opts = scopeWorkerFinalizeLedger(resolver, opts)
 
 	if resolver != nil {
+		messages, err := loadChildMessages(ctx, resolver, childSessionID)
+		if err != nil {
+			return WorkerSummaryOutcome{}, fmt.Errorf("load canceled worker transcript: %w", err)
+		}
+		if accepted, _, ok := workercompletion.AcceptedWorkerReport(messages, opts.WorkerJobID); ok {
+			return canceledWorkerOutcome(acceptedWorkerOutcome(accepted), cancelReason), nil
+		}
+	}
+
+	if resolver != nil {
 		kickData := map[string]any{"cancel_reason": cancelReason}
 		closeout := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerCancelCloseout, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
 		if closeout != "" {
@@ -164,17 +151,7 @@ func FinalizeWorkerSummaryForCanceled(
 					return WorkerSummaryOutcome{}, err
 				} else if ok {
 					outcome, err := finalizeBoundedReport(ctx, resolver, childSessionID, agentType, "cancel_complete_leg", report, opts)
-					outcome.Status = "partial"
-					if outcome.Report.DeclaredLegStatus == "" {
-						outcome.Report.DeclaredLegStatus = outcome.Report.LegStatus
-					}
-					if outcome.Report.LegStatus == "" || outcome.Report.LegStatus == "complete" {
-						outcome.Report.LegStatus = "partial"
-					}
-					if cancelReason != "" {
-						outcome.Report.RemainingRisk = AppendRemainingRisk(outcome.Report.RemainingRisk, cancelReason)
-					}
-					return outcome, err
+					return canceledWorkerOutcome(outcome, cancelReason), err
 				}
 
 			}
@@ -191,14 +168,22 @@ func FinalizeWorkerSummaryForCanceled(
 	}
 	if report, ok := workercompletion.SynthesizeCompletionReport(msgs, agentType, workercompletion.WorkerCompletionProof{}); ok {
 		out, err := finalizeBoundedReport(ctx, resolver, childSessionID, agentType, "cancel_synthesized", report, opts)
-		out.Status = "partial"
-		if cancelReason != "" {
-			out.Report.RemainingRisk = AppendRemainingRisk(out.Report.RemainingRisk, cancelReason)
-		}
-		return out, err
+		return canceledWorkerOutcome(out, cancelReason), err
 	}
 
 	return missingWorkerReportOutcome(ctx, childSessionID, agentType, "cancel_none", msgs, opts)
+}
+
+func canceledWorkerOutcome(outcome WorkerSummaryOutcome, reason string) WorkerSummaryOutcome {
+	outcome.Status = "partial"
+	if outcome.Report.DeclaredLegStatus == "" {
+		outcome.Report.DeclaredLegStatus = outcome.Report.LegStatus
+	}
+	if outcome.Report.LegStatus == "" || outcome.Report.LegStatus == "complete" {
+		outcome.Report.LegStatus = "partial"
+	}
+	outcome.Report.RemainingRisk = AppendRemainingRisk(outcome.Report.RemainingRisk, reason)
+	return outcome
 }
 
 func scopeWorkerFinalizeLedger(resolver WorkerSummaryResolver, opts WorkerSummaryFinalizeOpts) WorkerSummaryFinalizeOpts {
@@ -244,21 +229,31 @@ func finalizeBoundedReport(
 	if strings.TrimSpace(opts.AgentType) != "" {
 		agentType = strings.TrimSpace(opts.AgentType)
 	}
-	report, extraProv, feedback, err := boundWorkerCompletionReport(ctx, resolver, childSessionID, agentType, report, opts)
+	messages, err := loadChildMessages(ctx, resolver, childSessionID)
 	if err != nil {
 		return WorkerSummaryOutcome{}, err
 	}
-	if opts.decisionPending(ctx, childSessionID) {
-		return WorkerSummaryOutcome{Status: string(api.WorkerSummaryStatusNeedsDecision), Provenance: "decision_pending"}, nil
+	if accepted, _, ok := workercompletion.AcceptedWorkerReport(messages, opts.WorkerJobID); ok {
+		outcome := acceptedWorkerOutcome(accepted)
+		outcome.Provenance = baseProvenance
+		return outcome, nil
 	}
-	if feedback != nil {
-		return evaluatedWorkerOutcome(report, *feedback, joinProvenance(baseProvenance, extraProv), false), nil
-	}
-	report, groundingProv, evaluation, err := boundCitationGroundingReport(ctx, resolver, childSessionID, agentType, report, opts)
+	report.LegStatus = "partial"
+	evaluation, err := workercompletion.EvaluateWorkerSummary(ctx, workerReportEvalInput(childSessionID, agentType, report, messages, opts))
 	if err != nil {
 		return WorkerSummaryOutcome{}, err
 	}
-	return evaluatedWorkerOutcome(report, evaluation, joinProvenance(baseProvenance, joinProvenance(extraProv, groundingProv)), groundingProv == workerGroundingHostAssembledProvenance), nil
+	report, provenance, evaluation, err := hostAssembleWorkerExit(ctx, evaluation.Report, opts, childSessionID, evaluation)
+	if err != nil {
+		return WorkerSummaryOutcome{}, err
+	}
+	return evaluatedWorkerOutcome(report, evaluation, joinProvenance(baseProvenance, provenance), evaluation.Grounding.HostAssembled), nil
+}
+
+func acceptedWorkerOutcome(accepted *api.WorkerReportAcceptance) WorkerSummaryOutcome {
+	report := workercompletion.ReportFromWire(accepted.Report)
+	report.DeclaredLegStatus = report.LegStatus
+	return WorkerSummaryOutcome{Status: StateFromLegStatus(report.LegStatus), Summary: report.Brief, Report: report, Grounding: accepted.Grounding, Provenance: "complete_leg"}
 }
 
 func evaluatedWorkerOutcome(report workercompletion.WorkerCompletionReport, evaluation workercompletion.WorkerSummaryEvalResult, provenance string, hostAssembled bool) WorkerSummaryOutcome {
@@ -293,83 +288,6 @@ func workerSummaryMaxChars(opts WorkerSummaryFinalizeOpts) int {
 		return opts.MaxChars
 	}
 	return limits.DefaultWorkerSummaryMaxChars
-}
-
-func boundWorkerCompletionReport(
-	ctx context.Context,
-	resolver WorkerSummaryResolver,
-	childSessionID, agentType string,
-	report workercompletion.WorkerCompletionReport,
-	opts WorkerSummaryFinalizeOpts,
-) (workercompletion.WorkerCompletionReport, string, *workercompletion.WorkerSummaryEvalResult, error) {
-	max := workerSummaryMaxChars(opts)
-	brief := strings.TrimSpace(report.Brief)
-	if max <= 0 || utf8.RuneCountInString(brief) <= max {
-		return report, "", nil, nil
-	}
-	messages, err := loadChildMessages(ctx, resolver, childSessionID)
-	if err != nil {
-		return report, "", nil, err
-	}
-	evaluated, err := workercompletion.EvaluateWorkerSummary(ctx, workerReportEvalInput(childSessionID, agentType, report, messages, opts))
-	if err != nil {
-		return report, "", nil, err
-	}
-	feedback := &evaluated
-	if evaluated.HintCode != WorkerSummaryTooLongCode {
-		return report, "over_budget", feedback, nil
-	}
-	reject, err := evaluated.FormatFeedback(ctx, opts.WorkflowHints)
-	if err != nil {
-		return report, "", nil, err
-	}
-	if reject == "" || resolver == nil {
-		return report, "over_budget", feedback, nil
-	}
-	kickData := map[string]any{"max_chars": max, "actual_chars": utf8.RuneCountInString(brief)}
-	header := RenderWorkerKick(ctx, opts.RenderWorkerKick, anchor.InformRenderFor(ctx, anchor.WorkerSummaryTrim, anchor.MatchContext{Surface: "worker", SessionID: childSessionID}), kickData)
-	if header == "" {
-		return report, "over_budget", feedback, nil
-	}
-	prompt := header + "\n\n" + reject
-	msgs, err := loadChildMessages(ctx, resolver, childSessionID)
-	if err != nil {
-		return report, "", nil, fmt.Errorf("load worker trim transcript: %w", err)
-	}
-	retryStart := len(msgs)
-	if _, err := opts.hostTurns.PromptHostTurn(ctx, childSessionID, store.PromptSubmissionOriginWorkerCloseout, prompt); err != nil {
-		return report, "", feedback, fmt.Errorf("retry worker summary trim: %w", err)
-	}
-	if trimmed, ok, err := trimRetryReport(ctx, resolver, childSessionID, retryStart); err != nil {
-		return report, "", nil, err
-	} else if ok {
-		trimmed.Normalize()
-		if utf8.RuneCountInString(strings.TrimSpace(trimmed.Brief)) <= max {
-			return trimmed, "trimmed", nil, nil
-		}
-		return trimmed, "over_budget_after_trim", nil, nil
-	}
-	return report, "over_budget", feedback, nil
-}
-
-// Trimming reads only the retry's answer, excluding earlier reports.
-func trimRetryReport(
-	ctx context.Context,
-	resolver WorkerSummaryResolver,
-	childSessionID string,
-	retryStart int,
-) (workercompletion.WorkerCompletionReport, bool, error) {
-	msgs, err := loadChildMessages(ctx, resolver, childSessionID)
-	if err != nil {
-		return workercompletion.WorkerCompletionReport{}, false, fmt.Errorf("load worker trim result: %w", err)
-	}
-	if retryStart <= len(msgs) {
-		if trimmed, _, ok := workercompletion.LastCompleteLegReport(msgs[retryStart:]); ok {
-			return trimmed, true, nil
-		}
-	}
-
-	return workercompletion.WorkerCompletionReport{}, false, nil
 }
 
 func workerReportEvalInput(childSessionID, agentType string, report workercompletion.WorkerCompletionReport, messages []api.Message, opts WorkerSummaryFinalizeOpts) workercompletion.WorkerSummaryEvalInput {

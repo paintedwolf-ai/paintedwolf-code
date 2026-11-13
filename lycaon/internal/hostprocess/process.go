@@ -250,6 +250,13 @@ func sameInstance(a, b Process) bool {
 	return a.PID == b.PID && a.Instance == b.Instance && a.UID == b.UID && a.Executable == b.Executable
 }
 
+// SignalOwned signals a process descended from the session's own launches,
+// with Signal's instance and ownership checks; no review is needed for a
+// process the session started.
+func SignalOwned(ctx context.Context, session string, process Process, signal string) error {
+	return (&Service{members: lineage.SessionMembers}).Signal(ctx, session, process, signal)
+}
+
 // Signal revalidates review evidence and session ownership, then uses an
 // atomic instance-targeted kernel call.
 func (s *Service) Signal(ctx context.Context, session string, process Process, signal string) error {

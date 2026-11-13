@@ -9,6 +9,7 @@ import {
 import { ContextMenu, type ContextMenuAnchor } from "./ContextMenu.tsx";
 import { InlineRenameInput } from "./inline-rename/InlineRenameInput.tsx";
 import { projectPathMenuItems } from "./project-path-menu-items.ts";
+import { EDITOR_ONLY_LABEL, editorOnlyReason } from "../project/root-admission.ts";
 import { DenButton } from "./primitives/DenButton.tsx";
 import { Scrollport } from "./primitives/Scrollport.tsx";
 import { chromeProps } from "../styling/ui-chrome.ts";
@@ -173,6 +174,19 @@ export function WorkspaceFoldersPanel(props: WorkspaceFoldersPanelProps) {
                     <span class="workspace-folders-panel__full">{root.path}</span>
                     <Show when={root.is_primary}>
                       <span class="workspace-folders-panel__badge">Main folder</span>
+                    </Show>
+                    <Show when={editorOnlyReason(root)}>
+                      {(reason) => (
+                        <>
+                          <span
+                            class="workspace-folders-panel__badge"
+                            data-testid={`workspace-folder-editor-only-${root.id}`}
+                          >
+                            {EDITOR_ONLY_LABEL}
+                          </span>
+                          <span class="workspace-folders-panel__note">{reason()}</span>
+                        </>
+                      )}
                     </Show>
                   </div>
                   <div class="workspace-folders-panel__actions">

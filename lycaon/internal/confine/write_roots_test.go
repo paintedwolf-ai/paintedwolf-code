@@ -26,21 +26,21 @@ func TestWriteRootsForBoundaryMatchesBuildSeatbeltProfile(t *testing.T) {
 	assertBlockCoversPath(t, allowWrite, "/opt/customcache-1451", "LYCAON_SANDBOX_WRITE_ROOTS extra")
 }
 
-func TestPathWithinWriteRootsSymlinkParity(t *testing.T) {
+func TestPathWithinRootsSymlinkParity(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", "/opt/paintedwolf-fixture-state")
 	proj := t.TempDir()
 	roots, err := confine.WriteRootsForBoundary("", []string{proj}, nil, "")
 	testutil.FailErr(t, "admit write roots", err)
 	tmpProbe := filepath.Join(os.TempDir(), "lycaon-1451-probe")
-	if !confine.PathWithinWriteRoots(tmpProbe, roots) {
+	if !confine.PathWithinRoots(tmpProbe, roots) {
 		t.Fatalf("os.TempDir child must be inside write roots: path=%q roots=%v", tmpProbe, roots)
 	}
 	if runtime.GOOS == "darwin" {
-		if !confine.PathWithinWriteRoots("/tmp/lycaon-1451-probe", roots) {
+		if !confine.PathWithinRoots("/tmp/lycaon-1451-probe", roots) {
 			t.Fatalf("darwin /tmp must resolve into write roots (seatbelt parity): roots=%v", roots)
 		}
 	}
-	if confine.PathWithinWriteRoots("/etc/hosts", roots) {
+	if confine.PathWithinRoots("/etc/hosts", roots) {
 		t.Fatal("/etc/hosts must not be inside default write roots")
 	}
 }

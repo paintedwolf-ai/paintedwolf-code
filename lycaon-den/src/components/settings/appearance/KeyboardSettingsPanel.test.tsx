@@ -395,7 +395,7 @@ describe("KeyboardSettingsPanel", () => {
       await waitFor(() =>
         expect(screen.getByTestId(`keyboard-panel-${scope}`)).toBeTruthy(),
       );
-      for (const entry of shortcutDisplayEntries(contributionFrame()).filter(
+      for (const entry of shortcutDisplayEntries(contributionFrame(), "macos").filter(
         (candidate) => candidate.scope === scope,
       )) {
         expect(

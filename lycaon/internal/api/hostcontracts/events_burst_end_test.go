@@ -22,7 +22,6 @@ import (
 
 // A reader that holds a read's tail until more bytes arrive gets an event without waiting for the heartbeat.
 func TestEventStreamEndsBurstWithComment(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	restore := events.SetHeartbeatIntervalForTests(time.Hour)
 	defer restore()
 	hub := events.NewMemoryHub()

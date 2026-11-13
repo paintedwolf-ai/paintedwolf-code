@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/go-git/go-git/v5/plumbing/format/gitignore"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/scopedstore"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
@@ -33,6 +34,10 @@ type Scope struct {
 	collapsed  []gitignore.Pattern
 	boundaries []string
 	identity   string
+	// editorOnly marks a root agents do not use; it is observed on demand.
+	editorOnly bool
+	// controlPlane is set when the root meets the engine's own state.
+	controlPlane *confine.ControlPlane
 
 	mu   sync.Mutex
 	own  *scopedstore.LRU[[]gitignore.Pattern]
@@ -68,6 +73,7 @@ func New(root string, opts Options) *Scope {
 	s.deferred = patternsAtAnyDepth(opts.Plane.DeferredDirectories)
 	s.collapsed = patternsAtAnyDepth(opts.Plane.CollapsedDirectories)
 	s.boundaries = append([]string(nil), opts.Plane.BoundaryDirectories...)
+	s.editorOnly, s.controlPlane = observationFacts(root)
 	for _, p := range opts.Declared.Include {
 		s.include = append(s.include, gitignore.ParsePattern(p, nil))
 	}

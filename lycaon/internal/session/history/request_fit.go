@@ -21,7 +21,14 @@ type RequestBudgets interface {
 // FitRequest reserves the live frame before allocating history and output, and
 // reports where fitted history starts so prefix reuse can be attributed.
 func (m *Service) FitRequest(ctx context.Context, sess *api.Session, history []api.Message, req modelcall.CompletionRequest, budgets RequestBudgets, policies RequestPolicies) (modelcall.CompletionRequest, error) {
+	history, req, err := prepareRequestHistory(ctx, m, sess, history, req)
+	if err != nil {
+		return req, err
+	}
 	fitted, err := m.fitRequest(ctx, sess, history, req, budgets, policies)
+	if err == nil {
+		err = validateRequestIntent(history, fitted.Messages)
+	}
 	if err == nil && m != nil && sess != nil {
 		fitted.Debug.HistoryCut = m.cutoffs.takeFacts(sess.ID)
 	}
@@ -41,7 +48,7 @@ func (m *Service) fitRequest(ctx context.Context, sess *api.Session, history []a
 		model = req.Model
 	}
 	projection := projectRequest(req.Messages, history)
-	projected := m.ApplyView(ctx, sess, projection.history)
+	projected := messageview.PreserveRequestIntent(m.ApplyView(ctx, sess, projection.history), projection.history)
 	view := m.requestView(ctx, sess)
 	key := m.cutoffKey(ctx, sess, cfg, view)
 	note := func(rows []api.Message) {

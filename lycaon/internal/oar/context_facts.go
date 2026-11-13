@@ -148,10 +148,12 @@ type RefusalsFacts struct {
 	RefusedTerminalReadPaths    []string
 	RefusedTerminalWritePaths   []string
 	RefusedSocketPaths          []string
-	RefusedConnectPorts         []string
-	RefusedListenPorts          []string
-	RefusedSignals              []string
-	UnsandboxedRefusals         []string
+	// RefusedSocketHostResources are available resources whose local service a refused socket is.
+	RefusedSocketHostResources []string
+	RefusedConnectPorts        []string
+	RefusedListenPorts         []string
+	RefusedSignals             []string
+	UnsandboxedRefusals        []string
 }
 
 type SourceFacts struct {

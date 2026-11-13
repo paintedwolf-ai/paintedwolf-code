@@ -102,6 +102,12 @@ func awaitEndpoint(ctx context.Context, host, endpoint, method, path string) err
 	if confine.DecideAttributedHTTPRequest(reviewCtx, state.Command, endpoint, method, path) {
 		return nil
 	}
+	if err := reviewCtx.Err(); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	state.denied.Store(host)
 	return &HostDeniedError{Host: host}
 }
@@ -110,11 +116,7 @@ func IOContext(ctx context.Context, timeout time.Duration) (context.Context, con
 	if timeout <= 0 {
 		timeout = 30 * time.Second
 	}
-	stop := hitl.WaitContext(ctx)
-	if stop.Err() != nil {
-		return stop, func() {}
-	}
-	return context.WithTimeout(stop, timeout)
+	return hitl.IOContext(ctx, timeout)
 }
 
 func Denied(ctx context.Context) (string, bool) {

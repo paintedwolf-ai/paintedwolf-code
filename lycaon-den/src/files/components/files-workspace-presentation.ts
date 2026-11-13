@@ -55,17 +55,20 @@ export function createFilesWorkspacePresentation(options: WorkspacePresentation)
     workspaceSettled() && treeSettled();
   // The tree reads its workspace from input handlers too, outside any reactive owner.
   const treeWorkspaceId = createMemo(() => workspaceSettled() ? filesWorkspaceId() : "");
-  const stageSettled = () => {
+  const stagePending = (): string[] => {
     const buffer = activeBuffer();
     // A buffer showing a past version has content without a source read.
-    return workspacePresentationSettled() && (
-      !buffer ||
-      !buffer.loading ||
-      selectedFileVersion(projectId, buffer.key) != null
-    );
+    const documentLoading = buffer != null && buffer.loading &&
+      selectedFileVersion(projectId, buffer.key) == null;
+    return [
+      ...(workspaceSettled() ? [] : ["workspace"]),
+      ...(treeSettled() ? [] : ["tree"]),
+      ...(documentLoading ? ["document"] : []),
+    ];
   };
   const { ready: stageReady } = useSurfaceReveal({
-    ready: stageSettled,
+    ready: () => stagePending().length === 0,
+    pending: stagePending,
     name: "files-stage",
     faulted: () => workspaceFault() != null,
     notice: holdNotice,

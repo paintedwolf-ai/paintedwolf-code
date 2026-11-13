@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
+	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -59,6 +60,7 @@ func (l *modelTurn) recoverFromContextOverflow(
 			}
 		}
 	}
+	compacted = messageview.PreserveRequestIntent(compacted, history)
 	compacted = l.compactHistoryToWindow(ctx, sess, sessionID, compacted, reportedWindow)
 	if st != nil {
 		st.history = compacted
@@ -92,6 +94,7 @@ func (l *modelTurn) compactHistoryToWindow(
 	if reportedWindow > 0 && (targetTokens <= 0 || targetTokens >= reportedWindow) {
 		targetTokens = max(128, reportedWindow*35/100)
 	}
+	history = messageview.PreserveRequestIntent(history, history)
 	ctxMsgs := compaction.ContextMessagesFromAPI(history)
 	beforeTokens := compaction.EstimateMessagesTokens(ctxMsgs)
 	if reportedWindow <= 0 {

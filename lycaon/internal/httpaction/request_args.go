@@ -5,13 +5,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"io"
 	"mime/multipart"
 	"net/netip"
 	"net/textproto"
 	"net/url"
-	"os"
 	"path"
 	"strings"
 	"time"
@@ -288,24 +287,13 @@ func readProjectFile(ctx context.Context, boundary *sandbox.Boundary, tctx tools
 	if err != nil {
 		return nil, "", err
 	}
-	info, err := os.Stat(resolved.Abs)
-	if err != nil {
-		return nil, "", err
-	}
-	if info.Size() > maxRequestBody {
+	data, err := resolved.ReadBounded(maxRequestBody)
+	var tooLarge *projectpaths.FileTooLargeError
+	if errors.As(err, &tooLarge) {
 		return nil, "", fmt.Errorf("request body exceeds %d bytes", maxRequestBody)
 	}
-	file, err := os.Open(resolved.Abs)
 	if err != nil {
 		return nil, "", err
-	}
-	defer func() { _ = file.Close() }()
-	data, err := io.ReadAll(io.LimitReader(file, maxRequestBody+1))
-	if err != nil {
-		return nil, "", err
-	}
-	if len(data) > maxRequestBody {
-		return nil, "", fmt.Errorf("request body exceeds %d bytes", maxRequestBody)
 	}
 	if files != nil {
 		files[p] = requestFile{bytes: data, display: resolved.DisplayPath}

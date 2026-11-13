@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -320,7 +321,7 @@ func TestCurlLoopbackAndEgressAuthority(t *testing.T) {
 		t.Fatalf("owned loopback origin failed: %+v %v", r.result, r.err)
 	}
 	r = h.curl(t.Context(), "-s", "-L", origin.URL)
-	if reject := toolrejection.AsToolReject(r.err); r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "SANDBOX_TRY_LOOPBACK_CONNECT" || targetHits.Load() != 0 || reject == nil || reject.Data["port"] != targetPort {
+	if reject := toolrejection.AsToolReject(r.err); r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "SANDBOX_TRY_LOOPBACK_CONNECT" || r.result.EffectCertainty != toolcontract.EffectCompleted || targetHits.Load() != 0 || reject == nil || reject.Data["port"] != targetPort {
 		t.Fatalf("redirect to ungranted loopback port: %+v %v hits=%d", r.result, r.err, targetHits.Load())
 	}
 	h.tc.Local.OwnedLoopbackPorts = nil
@@ -345,8 +346,8 @@ func TestCurlLoopbackAndEgressAuthority(t *testing.T) {
 	targetHost := strings.TrimPrefix(target.URL, "http://")
 	allow[originHost] = true
 	r = h.curl(t.Context(), "-s", "-L", "-H", "Authorization: Bearer origin-only", origin.URL)
-	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || targetHits.Load() != 0 {
-		t.Fatalf("redirect reached a denied host: %+v hits=%d", r.result, targetHits.Load())
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || r.result.EffectCertainty != toolcontract.EffectCompleted || targetHits.Load() != 0 {
+		t.Fatalf("redirect reached a denied host or hid completed initial hop: %+v hits=%d", r.result, targetHits.Load())
 	}
 	mu.Lock()
 	if len(asked) != 2 || asked[0] != originHost || asked[1] != targetHost {
@@ -533,10 +534,20 @@ func TestCurlExchangeProvenanceReporting(t *testing.T) {
 		t.Fatalf("external --fail -v status=%d provenance=%+v", res.result.Status, obs)
 	}
 
-	// 5. External --fail -w '%{http_code}' on 500 reports WroteStdout=true.
-	res, obs = runObserved("-s", "--resolve", resolveArg, "--fail", "-w", "%{http_code}", extBase+"/fail")
-	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout {
-		t.Fatalf("external --fail -w status=%d provenance=%+v", res.result.Status, obs)
+	// 5. Write-out of transfer measurements is not response content: an
+	// external --fail -w '%{http_code} %{size_download}' reports WroteStdout=false.
+	res, obs = runObserved("-s", "--resolve", resolveArg, "--fail", "-w", "status %{http_code} %{size_download}", extBase+"/fail")
+	if res.result.Status != 22 || len(obs) != 1 || !obs[0].External || obs[0].WroteStdout {
+		t.Fatalf("external --fail -w measurement status=%d provenance=%+v", res.result.Status, obs)
+	}
+	if !strings.Contains(res.stdout, "status 500") {
+		t.Fatalf("write-out stdout = %q", res.stdout)
+	}
+
+	// 5b. A write-out variable the server's text fills does report WroteStdout=true.
+	_, obs = runObserved("-s", "-o", "typed.txt", "--resolve", resolveArg, "-w", "%{content_type}", extBase+"/data")
+	if len(obs) != 1 || !obs[0].External || !obs[0].WroteStdout {
+		t.Fatalf("external -w content_type provenance = %+v", obs)
 	}
 
 	// 6. Pure loopback request reports External=false.
@@ -546,3 +557,506 @@ func TestCurlExchangeProvenanceReporting(t *testing.T) {
 	}
 }
 
+// curlRedirectFixture holds the redirect servers and observation counters shared by the
+// redirect admission scenarios.
+type curlRedirectFixture struct {
+	origin          *httptest.Server
+	target          *httptest.Server
+	originHits      atomic.Int32
+	originBytes     atomic.Int32
+	targetHits      atomic.Int32
+	targetBytes     atomic.Int32
+	dropHop1        atomic.Bool
+	hostSeenMu      sync.Mutex
+	originHostsSeen []string
+	targetHostsSeen []string
+}
+
+func newCurlRedirectFixture(t *testing.T) *curlRedirectFixture {
+	f := &curlRedirectFixture{}
+	f.target = fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		f.targetHits.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		f.targetBytes.Add(int32(len(body)))
+		f.hostSeenMu.Lock()
+		f.targetHostsSeen = append(f.targetHostsSeen, r.Host)
+		f.hostSeenMu.Unlock()
+		if f.dropHop1.Load() {
+			hj, ok := w.(http.Hijacker)
+			if !ok {
+				t.Error("target response writer does not support hijacking")
+				return
+			}
+			conn, _, err := hj.Hijack()
+			if err == nil {
+				_ = conn.Close()
+			}
+			return
+		}
+		stamp(w, "text/plain")
+		_, _ = io.WriteString(w, "landed\n")
+	})
+	f.origin = fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		f.originHits.Add(1)
+		body, _ := io.ReadAll(r.Body)
+		f.originBytes.Add(int32(len(body)))
+		f.hostSeenMu.Lock()
+		f.originHostsSeen = append(f.originHostsSeen, r.Host)
+		f.hostSeenMu.Unlock()
+		switch r.URL.Path {
+		case "/to-mapped":
+			http.Redirect(w, r, "http://redirected.example.com/landed", http.StatusFound)
+		case "/same-then-cross":
+			http.Redirect(w, r, "/same-origin", http.StatusFound)
+		case "/same-origin":
+			http.Redirect(w, r, f.target.URL+"/landed", http.StatusFound)
+		default:
+			http.Redirect(w, r, f.target.URL+"/landed", http.StatusFound)
+		}
+	})
+	return f
+}
+
+// askResolverState backs the Ask-posture egress resolver shared by the cancellation and
+// Host override scenarios.
+type askResolverState struct {
+	mu           sync.Mutex
+	allow        map[string]bool
+	cancelTarget string
+	cancelFn     context.CancelFunc
+}
+
+func (f *curlRedirectFixture) installAskResolver(t *testing.T) *askResolverState {
+	state := &askResolverState{allow: map[string]bool{}}
+	confine.SetEgressPosture(confine.PostureAsk)
+	release := confine.SetEgressResolver(func(ctx context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		endpoint := net.JoinHostPort(ep.Host, fmt.Sprint(ep.Port))
+		state.mu.Lock()
+		shouldCancel := state.cancelTarget == endpoint
+		ok := state.allow[endpoint]
+		fn := state.cancelFn
+		state.mu.Unlock()
+		if shouldCancel && fn != nil {
+			fn()
+			<-ctx.Done()
+			return false
+		}
+		return ok
+	})
+	t.Cleanup(func() {
+		confine.SetEgressPosture(confine.PostureObserve)
+		_ = release(context.Background())
+	})
+	return state
+}
+
+func TestCurlRedirectAdmissionRouteChangeCancellationAndUnknownHop(t *testing.T) {
+	f := newCurlRedirectFixture(t)
+	originPort := serverPort(t, f.origin.URL)
+	targetPort := serverPort(t, f.target.URL)
+	h := newHarness(t)
+
+	// 1. Explicit --connect-to on Hop 1 to an ungranted loopback port is NOT pre-granted by Hop 0's
+	// loopbackPorts extraction, receives zero connections on Hop 1, preserves Hop 0's completed effect
+	// without fabricating sent-body evidence from attempt counters, and succeeds once targetPort is covered.
+	h.tc.Local.LoopbackConnectGranted = false
+	h.tc.Local.OwnedLoopbackPorts = []uint16{originPort}
+	connectToArg := fmt.Sprintf("redirected.example.com:80:127.0.0.1:%d", targetPort)
+	r := h.curl(t.Context(), "-s", "-L", "--connect-to", connectToArg, "-d", "payload", f.origin.URL+"/to-mapped")
+	reject := toolrejection.AsToolReject(r.err)
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "SANDBOX_TRY_LOOPBACK_CONNECT" ||
+		r.result.EffectCertainty != toolcontract.EffectCompleted || reject == nil || reject.Data["port"] != targetPort ||
+		f.originHits.Load() != 1 || f.originBytes.Load() != int32(len("payload")) || f.targetHits.Load() != 0 {
+		t.Fatalf("redirect via --connect-to to ungranted loopback port: result=%+v reject=%+v originHits=%d targetHits=%d",
+			r.result, reject, f.originHits.Load(), f.targetHits.Load())
+	}
+	if r.evidence.EvidenceRef != "" {
+		t.Fatalf("failed exchange fabricated sent-body evidence from attempt counters: %q", r.evidence.EvidenceRef)
+	}
+	// Covered follow-up with targetPort granted succeeds and records completed sent-body evidence.
+	h.tc.Local.OwnedLoopbackPorts = []uint16{originPort, targetPort}
+	r = h.curl(t.Context(), "-s", "-L", "--connect-to", connectToArg, "-d", "payload", f.origin.URL+"/to-mapped")
+	wantSentRef := "sent:sha256:" + sha256Hex("payload")
+	if r.err != nil || r.stdout != "landed\n" || f.originHits.Load() != 2 || f.targetHits.Load() != 1 || !strings.Contains(r.evidence.EvidenceRef, wantSentRef) {
+		t.Fatalf("covered --connect-to redirect follow-up: err=%v stdout=%q originHits=%d targetHits=%d evidence=%q",
+			r.err, r.stdout, f.originHits.Load(), f.targetHits.Load(), r.evidence.EvidenceRef)
+	}
+
+	// 2. Cancellation, real denial, and authorized recovery in the SAME session under Ask posture.
+	h.tc.Local.OwnedLoopbackPorts = nil
+	h.tc.Local.LoopbackConnectGranted = true
+	f.originHits.Store(0)
+	f.originBytes.Store(0)
+	f.targetHits.Store(0)
+	state := f.installAskResolver(t)
+	h.tc.Identity.SessionID = "curl-cancel-and-recovery-session"
+	f.cancelAndRecoverySameSession(t, h, state)
+
+	// 3. Explicit -H "Host: vhost.example.com" across same-origin and cross-origin redirects:
+	// same-origin hops preserve the explicit Host header, cross-origin hop uses the target authority
+	// and still requires target host egress admission.
+	f.hostOverrideAcrossRedirects(t, h, state)
+
+	// 4. Unknown post-send outcome on Hop 1 after Hop 0 completed settles as EffectUnknown without replaying
+	// Hop 0 or Hop 1.
+	f.unknownHopOutcome(t, h)
+}
+
+// cancelAndRecoverySameSession drives cancellation at Hop 0 and Hop 1, the un-canceled denials in
+// between, and the authorized recovery, all within one session.
+func (f *curlRedirectFixture) cancelAndRecoverySameSession(t *testing.T, h *harness, state *askResolverState) {
+	originHost := strings.TrimPrefix(f.origin.URL, "http://")
+	targetHost := strings.TrimPrefix(f.target.URL, "http://")
+
+	// 2a. Canceled while awaiting Hop 0 approval: NoEffect, Status 130, zero requests sent.
+	ctx0, cancel0 := context.WithCancel(t.Context())
+	state.mu.Lock()
+	state.cancelTarget = originHost
+	state.cancelFn = cancel0
+	state.mu.Unlock()
+	r := h.curl(ctx0, "-s", "-L", f.origin.URL)
+	if r.result.Status != 130 || r.result.Terminal != toolcontract.ProducerInterrupted || r.result.EffectCertainty != toolcontract.NoEffect || f.originHits.Load() != 0 || f.targetHits.Load() != 0 {
+		t.Fatalf("canceled awaiting Hop 0: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+
+	// 2b. Un-canceled retry in the SAME session while Hop 0 is still denied: real denial (no false quiet grant).
+	state.mu.Lock()
+	state.cancelTarget = ""
+	state.cancelFn = nil
+	state.mu.Unlock()
+	r = h.curl(t.Context(), "-s", "-L", f.origin.URL)
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || r.result.EffectCertainty != toolcontract.NoEffect || f.originHits.Load() != 0 {
+		t.Fatalf("post-cancel Hop 0 denial: result=%+v err=%v originHits=%d", r.result, r.err, f.originHits.Load())
+	}
+
+	// 2c. Canceled while awaiting Hop 1 approval (after Hop 0 302 completed): EffectCompleted, Status 130, Hop 1 unsent.
+	ctx1, cancel1 := context.WithCancel(t.Context())
+	state.mu.Lock()
+	state.allow[originHost] = true
+	state.cancelTarget = targetHost
+	state.cancelFn = cancel1
+	state.mu.Unlock()
+	r = h.curl(ctx1, "-s", "-L", f.origin.URL)
+	if r.result.Status != 130 || r.result.Terminal != toolcontract.ProducerInterrupted || r.result.EffectCertainty != toolcontract.EffectCompleted || f.originHits.Load() != 1 || f.targetHits.Load() != 0 {
+		t.Fatalf("canceled awaiting Hop 1: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+
+	// 2d. Un-canceled retry in the SAME session while Hop 1 is still denied: real denial with EffectCompleted.
+	state.mu.Lock()
+	state.cancelTarget = ""
+	state.cancelFn = nil
+	state.mu.Unlock()
+	r = h.curl(t.Context(), "-s", "-L", f.origin.URL)
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || r.result.EffectCertainty != toolcontract.EffectCompleted || f.originHits.Load() != 2 || f.targetHits.Load() != 0 {
+		t.Fatalf("post-cancel Hop 1 denial: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+
+	// 2e. Authorizing Hop 1 in the SAME session succeeds without cached cancellation or denial poisoning.
+	state.mu.Lock()
+	state.allow[targetHost] = true
+	state.mu.Unlock()
+	r = h.curl(t.Context(), "-s", "-L", f.origin.URL)
+	if r.err != nil || r.stdout != "landed\n" || f.originHits.Load() != 3 || f.targetHits.Load() != 1 {
+		t.Fatalf("authorized Hop 1 recovery in same session: err=%v stdout=%q originHits=%d targetHits=%d", r.err, r.stdout, f.originHits.Load(), f.targetHits.Load())
+	}
+}
+
+// hostOverrideAcrossRedirects verifies an explicit Host header survives same-origin redirect hops
+// while the cross-origin hop switches to the target authority and still needs its admission.
+func (f *curlRedirectFixture) hostOverrideAcrossRedirects(t *testing.T, h *harness, state *askResolverState) {
+	targetHost := strings.TrimPrefix(f.target.URL, "http://")
+	f.originHits.Store(0)
+	f.targetHits.Store(0)
+	f.hostSeenMu.Lock()
+	f.originHostsSeen = nil
+	f.targetHostsSeen = nil
+	f.hostSeenMu.Unlock()
+	state.mu.Lock()
+	state.allow[targetHost] = false
+	state.mu.Unlock()
+	r := h.curl(t.Context(), "-s", "-L", "-H", "Host: vhost.example.com", f.origin.URL+"/same-then-cross")
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != "HTTP_REQUEST_HOST_DENIED" || r.result.EffectCertainty != toolcontract.EffectCompleted || f.originHits.Load() != 2 || f.targetHits.Load() != 0 {
+		t.Fatalf("unapproved cross-origin target with Host override: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+	f.originHits.Store(0)
+	f.hostSeenMu.Lock()
+	f.originHostsSeen = nil
+	f.targetHostsSeen = nil
+	f.hostSeenMu.Unlock()
+	state.mu.Lock()
+	state.allow[targetHost] = true
+	state.mu.Unlock()
+	r = h.curl(t.Context(), "-s", "-L", "-H", "Host: vhost.example.com", f.origin.URL+"/same-then-cross")
+	if r.err != nil || r.stdout != "landed\n" || f.originHits.Load() != 2 || f.targetHits.Load() != 1 {
+		t.Fatalf("approved Host override across same-origin then cross-origin redirect: err=%v stdout=%q originHits=%d targetHits=%d",
+			r.err, r.stdout, f.originHits.Load(), f.targetHits.Load())
+	}
+	f.hostSeenMu.Lock()
+	gotOriginHosts := append([]string(nil), f.originHostsSeen...)
+	gotTargetHosts := append([]string(nil), f.targetHostsSeen...)
+	f.hostSeenMu.Unlock()
+	if len(gotOriginHosts) != 2 || gotOriginHosts[0] != "vhost.example.com" || gotOriginHosts[1] != "vhost.example.com" {
+		t.Fatalf("same-origin hops Host headers = %v, want [vhost.example.com vhost.example.com]", gotOriginHosts)
+	}
+	if len(gotTargetHosts) != 1 || gotTargetHosts[0] != targetHost {
+		t.Fatalf("cross-origin hop Host header = %v, want [%s]", gotTargetHosts, targetHost)
+	}
+}
+
+// unknownHopOutcome drops the connection after Hop 1's request is sent and verifies the exchange
+// settles as EffectUnknown with the Hop 0 redirect record preserved.
+func (f *curlRedirectFixture) unknownHopOutcome(t *testing.T, h *harness) {
+	f.originHits.Store(0)
+	f.targetHits.Store(0)
+	f.dropHop1.Store(true)
+	r := h.curl(t.Context(), "-s", "-L", f.origin.URL)
+	if r.result.Terminal != toolcontract.ProducerFailed || r.result.EffectCertainty != toolcontract.EffectUnknown || f.originHits.Load() != 1 || f.targetHits.Load() != 1 {
+		t.Fatalf("unknown post-send outcome on Hop 1: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, f.originHits.Load(), f.targetHits.Load())
+	}
+	reject := toolrejection.AsToolReject(r.err)
+	if reject == nil || reject.Data["http_requests_started"] != 2 || reject.Data["http_responses_received"] != 1 {
+		t.Fatalf("unknown Hop 1 exchange progress = %+v", reject)
+	}
+	redirects, ok := reject.Data["redirects"].([]any)
+	if !ok || len(redirects) != 1 {
+		t.Fatalf("unknown Hop 1 lost Hop 0 redirect record: %#v", reject.Data["redirects"])
+	}
+}
+
+func sha256Hex(s string) string {
+	sum := sha256.Sum256([]byte(s))
+	return hex.EncodeToString(sum[:])
+}
+
+func TestCurlCookieJarNetworkValidationAndImportSemantics(t *testing.T) {
+	var seenCookies []string
+	var mu sync.Mutex
+	server := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seenCookies = append(seenCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		stamp(w, "text/plain")
+		switch r.URL.Path {
+		case "/set-mixed":
+			// Valid host-only IP cookies.
+			http.SetCookie(w, &http.Cookie{Name: "session", Value: "valid-ip-host", Path: "/", HttpOnly: true})
+			http.SetCookie(w, &http.Cookie{Name: "temp", Value: "to-be-deleted", Path: "/"})
+			// Invalid network Set-Cookie headers that RFC 6265 must ignore.
+			w.Header().Add("Set-Cookie", "psl=bad; Domain=com; Path=/")
+			w.Header().Add("Set-Cookie", "foreign=bad; Domain=other.example; Path=/")
+			w.Header().Add("Set-Cookie", "ip_domain=bad; Domain=127.0.0.1; Path=/")
+			w.Header().Add("Set-Cookie", "__Host-insecure=bad; Path=/")
+			http.Redirect(w, r, "/delete-temp", http.StatusFound)
+		case "/delete-temp":
+			http.SetCookie(w, &http.Cookie{Name: "temp", Value: "", Path: "/", MaxAge: -1})
+			http.Redirect(w, r, "/final", http.StatusFound)
+		case "/final":
+			_, _ = io.WriteString(w, "done\n")
+		case "/echo-cookie":
+			_, _ = io.WriteString(w, r.Header.Get("Cookie")+"\n")
+		}
+	})
+
+	h := newHarness(t)
+	r := h.curl(t.Context(), "-s", "-L", "-c", "jar.txt", server.URL+"/set-mixed")
+	if r.err != nil || r.stdout != "done\n" {
+		t.Fatalf("set-mixed failed: %v %q", r.err, r.stdout)
+	}
+	jar := h.read("jar.txt")
+	if !contains(jar, "#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\tvalid-ip-host") {
+		t.Fatalf("jar missing valid host-only IP cookie: %q", jar)
+	}
+	for _, forbidden := range []string{"psl", "foreign", "ip_domain", "__Host-insecure", "temp"} {
+		if contains(jar, forbidden) {
+			t.Fatalf("jar persisted rejected or deleted cookie %q: %q", forbidden, jar)
+		}
+	}
+	mu.Lock()
+	gotCookies := append([]string(nil), seenCookies...)
+	mu.Unlock()
+	if len(gotCookies) != 3 || gotCookies[1] != "session=valid-ip-host; temp=to-be-deleted" || gotCookies[2] != "session=valid-ip-host" {
+		t.Fatalf("per-hop cookies across Set-Cookie and Max-Age=-1 deletion = %v", gotCookies)
+	}
+
+	// User-supplied Netscape jar import preserves host-only IP cookies, path/Secure scoping,
+	// and expired-line deletion, while ignoring public-suffix wildcard domain lines.
+	importedJar := strings.Join([]string{
+		"# Netscape HTTP Cookie File",
+		"#HttpOnly_127.0.0.1\tFALSE\t/\tFALSE\t0\tsession\timported-ip",
+		"127.0.0.1\tFALSE\t/\tFALSE\t2000000000\tstale\told-val",
+		"127.0.0.1\tFALSE\t/\tFALSE\t1\tstale\texpired-val",
+		"127.0.0.1\tFALSE\t/admin\tFALSE\t0\tadmin_only\tsecret-admin",
+		"127.0.0.1\tFALSE\t/\tTRUE\t0\tsecure_only\thttps-only",
+		".com\tTRUE\t/\tFALSE\t0\tsupercookie\tpublic-suffix",
+		"",
+	}, "\n")
+	h.write("imported.txt", importedJar)
+	r = h.curl(t.Context(), "-s", "-b", "imported.txt", server.URL+"/echo-cookie")
+	if r.err != nil || r.stdout != "session=imported-ip\n" {
+		t.Fatalf("imported jar sent %q (err=%v), want %q", r.stdout, r.err, "session=imported-ip\n")
+	}
+}
+
+func TestCurlCookieJarSelectedSecretAuthorityAndRedirectDenial(t *testing.T) {
+	const (
+		hop0Secret       = "protected-cookie-hop0-secret-7711"
+		unselectedSecret = "protected-cookie-unselected-8822"
+		targetSecret     = "protected-cookie-target-9933"
+	)
+	var originCookies, targetCookies []string
+	var originHits, targetHits atomic.Int32
+	var mu sync.Mutex
+
+	target := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		targetHits.Add(1)
+		mu.Lock()
+		targetCookies = append(targetCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		stamp(w, "text/plain")
+		_, _ = io.WriteString(w, "target-ok\n")
+	})
+	origin := fixedServer(t, func(w http.ResponseWriter, r *http.Request) {
+		originHits.Add(1)
+		mu.Lock()
+		originCookies = append(originCookies, r.Header.Get("Cookie"))
+		mu.Unlock()
+		stamp(w, "text/plain")
+		if r.URL.Path == "/redirect" {
+			http.Redirect(w, r, target.URL+"/land", http.StatusFound)
+			return
+		}
+		_, _ = io.WriteString(w, "origin-ok\n")
+	})
+
+	h := newHarness(t)
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	testutil.FailErr(t, "build matcher", err)
+	fp, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("c", 32)))
+	testutil.FailErr(t, "build fingerprinter", err)
+	matcher.SetFingerprinter(fp)
+	matcher.SetHarvestSource(func(context.Context) []secretmatch.HarvestedValue {
+		return []secretmatch.HarvestedValue{
+			{Name: "HOP0_COOKIE", Secret: hop0Secret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true},
+			{Name: "UNSELECTED_COOKIE", Secret: unselectedSecret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true},
+			{Name: "TARGET_COOKIE", Secret: targetSecret, RuleID: secretmatch.ManagedRuleID, Title: secretmatch.ManagedRuleTitle, Source: secretmatch.SourceRememberedMatch, NonDisclosable: true},
+		}
+	})
+	h.owners.HTTP.SecretMatcher = matcher
+
+	var askedAlerts []secretmatch.Alert
+	allowDest := map[string]bool{}
+	faultDest := map[string]bool{}
+	askFn := func(_ context.Context, a secretmatch.Alert) (secretmatch.Resolution, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		askedAlerts = append(askedAlerts, a)
+		if faultDest[a.DestinationLabel] {
+			return secretmatch.Resolution{}, secretmatch.NewAskFault(secretmatch.FaultStageRaise, nil)
+		}
+		if allowDest[a.DestinationLabel] {
+			return secretmatch.Resolution{Decision: secretmatch.SendUnchanged}, nil
+		}
+		return secretmatch.Resolution{Decision: secretmatch.Withhold}, nil
+	}
+
+	originLabel := "http://" + strings.TrimPrefix(origin.URL, "http://")
+	targetLabel := "http://" + strings.TrimPrefix(target.URL, "http://")
+
+	// Jar contains a benign cookie (theme=light), a selected secret cookie for /public (hop0Secret),
+	// an unselected path cookie (/admin -> unselectedSecret), and a path cookie for /land on target (targetSecret).
+	h.write("cookies.txt", strings.Join([]string{
+		"# Netscape HTTP Cookie File",
+		"127.0.0.1\tFALSE\t/\tFALSE\t0\ttheme\tlight",
+		"127.0.0.1\tFALSE\t/public\tFALSE\t0\tsid\t" + hop0Secret,
+		"127.0.0.1\tFALSE\t/admin\tFALSE\t0\tadmin_sid\t" + unselectedSecret,
+		"127.0.0.1\tFALSE\t/land\tFALSE\t0\ttarget_sid\t" + targetSecret,
+		"",
+	}, "\n"))
+
+	// 1. Unwired SecretAsk on Hop 0 stops before dialing origin.
+	h.owners.HTTP.SecretAsk = nil
+	r := h.curl(t.Context(), "-s", "-b", "cookies.txt", origin.URL+"/public")
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != toolrejection.OutboundSecretScreenFailedCode || r.result.EffectCertainty != toolcontract.NoEffect || originHits.Load() != 0 {
+		t.Fatalf("unwired Hop 0 cookie reached server: result=%+v err=%v hits=%d", r.result, r.err, originHits.Load())
+	}
+	h.owners.HTTP.SecretAsk = askFn
+
+	// 2. Withhold on Hop 0 withholds only the secret cookie (sid) while preserving the benign cookie
+	// (theme=light) and continuing HTTP.
+	r = h.curl(t.Context(), "-s", "-b", "cookies.txt", origin.URL+"/public")
+	if r.err != nil || r.stdout != "origin-ok\n" || originHits.Load() != 1 {
+		t.Fatalf("withheld Hop 0 should continue without secret cookie: result=%+v err=%v stdout=%q", r.result, r.err, r.stdout)
+	}
+	mu.Lock()
+	if len(askedAlerts) != 1 || askedAlerts[0].DestinationLabel != originLabel || strings.Join(askedAlerts[0].SecretNames, ",") != "HOP0_COOKIE" {
+		t.Fatalf("Hop 0 alerts = %+v, want only selected HOP0_COOKIE for %s", askedAlerts, originLabel)
+	}
+	if len(originCookies) != 1 || originCookies[0] != "theme=light" {
+		t.Fatalf("withheld Hop 0 cookies = %v, want only benign [theme=light]", originCookies)
+	}
+	askedAlerts = nil
+	originCookies = nil
+	allowDest[originLabel] = true
+	mu.Unlock()
+
+	// 3. Approved on Hop 0 delivers the selected secret cookie alongside the benign cookie.
+	originHits.Store(0)
+	r = h.curl(t.Context(), "-s", "-b", "cookies.txt", origin.URL+"/public")
+	if r.err != nil || r.stdout != "origin-ok\n" || originHits.Load() != 1 {
+		t.Fatalf("approved Hop 0 failed: result=%+v err=%v stdout=%q", r.result, r.err, r.stdout)
+	}
+	mu.Lock()
+	if len(originCookies) != 1 || originCookies[0] != "sid="+hop0Secret+"; theme=light" {
+		t.Fatalf("origin received cookies %v, want [sid=%s; theme=light]", originCookies, hop0Secret)
+	}
+	askedAlerts = nil
+	originCookies = nil
+	mu.Unlock()
+
+	// 4. Redirect from origin (/redirect) to target (/land) when target is Withhold:
+	// Hop 0 completes and Hop 1 proceeds with target_sid withheld (sending only theme=light).
+	originHits.Store(0)
+	targetHits.Store(0)
+	r = h.curl(t.Context(), "-s", "-L", "-b", "cookies.txt", origin.URL+"/redirect")
+	if r.err != nil || r.stdout != "target-ok\n" || originHits.Load() != 1 || targetHits.Load() != 1 {
+		t.Fatalf("redirect with withheld cookie failed: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, originHits.Load(), targetHits.Load())
+	}
+	mu.Lock()
+	if len(askedAlerts) != 1 || askedAlerts[0].DestinationLabel != targetLabel || strings.Join(askedAlerts[0].SecretNames, ",") != "TARGET_COOKIE" {
+		t.Fatalf("redirect alerts = %+v, want TARGET_COOKIE for %s", askedAlerts, targetLabel)
+	}
+	if len(targetCookies) != 1 || targetCookies[0] != "theme=light" {
+		t.Fatalf("target received cookies %v on Withhold, want only [theme=light]", targetCookies)
+	}
+	askedAlerts = nil
+	targetCookies = nil
+	faultDest[targetLabel] = true
+	mu.Unlock()
+
+	// 5. Screen fault on Hop 1 after Hop 0 completed stops before dialing target and settles with EffectCompleted.
+	originHits.Store(0)
+	targetHits.Store(0)
+	r = h.curl(t.Context(), "-s", "-L", "-b", "cookies.txt", origin.URL+"/redirect")
+	if r.result.Terminal != toolcontract.ProducerRefused || r.result.StopCode != toolrejection.OutboundSecretScreenFailedCode || r.result.EffectCertainty != toolcontract.EffectCompleted || originHits.Load() != 1 || targetHits.Load() != 0 {
+		t.Fatalf("redirect screen fault on Hop 1: result=%+v err=%v originHits=%d targetHits=%d", r.result, r.err, originHits.Load(), targetHits.Load())
+	}
+	mu.Lock()
+	delete(faultDest, targetLabel)
+	allowDest[targetLabel] = true
+	askedAlerts = nil
+	targetCookies = nil
+	mu.Unlock()
+
+	// 6. Approving target allows the redirect hop to deliver target_sid.
+	originHits.Store(0)
+	targetHits.Store(0)
+	r = h.curl(t.Context(), "-s", "-L", "-b", "cookies.txt", origin.URL+"/redirect")
+	if r.err != nil || r.stdout != "target-ok\n" || targetHits.Load() != 1 {
+		t.Fatalf("approved redirect failed: result=%+v err=%v stdout=%q", r.result, r.err, r.stdout)
+	}
+	mu.Lock()
+	if len(targetCookies) != 1 || targetCookies[0] != "target_sid="+targetSecret+"; theme=light" {
+		t.Fatalf("target received cookies %v, want [target_sid=%s; theme=light]", targetCookies, targetSecret)
+	}
+	mu.Unlock()
+}

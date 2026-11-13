@@ -25,7 +25,7 @@ type Record struct {
 	Body         []string // result lines for excerpt verification
 	URL          string   // primary observed URL
 
-	Surface          string      // dom | tui | http
+	Surface          string // dom | tui | http
 	ArtifactID       string
 	FrameIndex       int         // positive values identify temporal frames
 	UntrustedContent bool        // true when this record delivered untrusted external content to the model
@@ -34,8 +34,7 @@ type Record struct {
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
 	pathTiers    map[string]string         // normalized path → trust tier at capture
-	urlsTouched  []string                  // every URL named by the result
-	urlTitles    map[string]string         // URL → page title the tool reported
+	urls         recordURLs                // addresses beyond the primary URL
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`
@@ -51,11 +50,21 @@ type Record struct {
 	RecordedAt     string         `json:"at,omitempty"` // RFC3339 in gate JSONL
 }
 
+// recordURLs is the addresses a result carried beyond its primary URL.
+type recordURLs struct {
+	touched []string          // every URL named by the result
+	titles  map[string]string // URL → page title the tool reported
+	shown   []string          // addresses a read page displayed; not sources
+}
+
 // FileCustody tracks workspace file custody provenance and the per-session
 // monotonic sequence number for whole-file custody replacement records.
 type FileCustody struct {
 	External bool // true when this record placed or read external content in a workspace path
-	Seq      int  // positive monotonic per-session sequence when ReplacesWholeFileCustody is true
+	// Tree marks the record's paths as directories: every file below one holds
+	// this custody until a later whole-file record on that file replaces it.
+	Tree bool
+	Seq  int // positive monotonic per-session sequence when ReplacesWholeFileCustody is true
 }
 
 // ShowedLineNumbers reports whether the output behind this record let its reader

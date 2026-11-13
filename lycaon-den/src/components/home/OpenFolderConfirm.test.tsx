@@ -15,6 +15,8 @@ function attachedRoot(path: string, isPrimary = true): ProjectRoot {
     is_primary: isPrimary,
     added_at: "2026-10-31T00:00:00Z",
     kind: "attached",
+    admitted: true,
+    admission_code: null,
   };
 }
 

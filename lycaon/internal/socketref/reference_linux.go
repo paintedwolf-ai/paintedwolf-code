@@ -10,7 +10,9 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-func Platform() Adapter { return Adapter{Command: RetainedObject, Native: RetainedObject} }
+func Platform() Adapter {
+	return Adapter{Command: RetainedObject, Native: RetainedObject, Service: RetainedObject}
+}
 
 func implicitBindingMode() Enforcement { return RetainedObject }
 

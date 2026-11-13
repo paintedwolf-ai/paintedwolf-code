@@ -313,7 +313,7 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 		return exchanged{}, invalid(err)
 	}
 	cookieSpec.hostHeader = screened.hostHeader
-	screened.beforeCookieHop, err = prepareCookieDelivery(ctx, deps, cookieSpec, jar)
+	screened.beforeCookieHop, err = prepareRequestCookieDelivery(ctx, deps, cookieSpec, tctx, jar, jarReq, opts.Jar, hasCookieReference(screened))
 	if err != nil {
 		return exchanged{}, err
 	}
@@ -346,6 +346,11 @@ func exchange(ctx context.Context, deps Deps, args map[string]any, tctx tools.To
 	if err != nil {
 		if spec.socket != "" && (errors.Is(err, socketref.ErrUnbound) || errors.Is(err, syscall.ECONNREFUSED)) {
 			return exchanged{}, capabilityrequest.SocketResolveReject(&confine.SocketResolveError{Code: confine.SocketResolveChanged, Path: spec.unixSocket, Err: err})
+		}
+		var exErr *outboundhttp.ExchangeError
+		if reject := toolrejection.AsToolReject(err); reject != nil && (!errors.As(err, &exErr) || (exErr.RequestsStarted == 0 && exErr.ResponsesReceived == 0)) &&
+			(reject.Code == CookieJarFailedCode || reject.Code == toolrejection.OutboundSecretDeniedCode || reject.Code == toolrejection.OutboundSecretScreenFailedCode) {
+			return exchanged{}, reject
 		}
 		return exchanged{}, &TransportFailure{Reject: sendReject(ctx, deps, jarReq, jar, tokenJarReq, tokenJar, err), Cause: err}
 	}
@@ -472,12 +477,17 @@ func send(
 	}
 	// A socket request reaches only the reviewed socket; its URL host names
 	// no network destination for the egress gate to judge.
-	req.BeforeHop = func(hopCtx context.Context, hopURL *url.URL) error {
+	req.BeforeHopRequest = func(hopCtx context.Context, hop outboundhttp.HopRequest) error {
 		if spec.socket == "" {
-			if reject := checkHopLoopbackAuthority(hopURL, spec.resolve, allowAddress); reject != nil {
+			if reject := checkHopLoopbackAuthority(hop.URL, spec.resolve, allowAddress); reject != nil {
 				return reject
 			}
-			if err := admitHopRoute(hopCtx, hopURL, spec.method, spec.resolve); err != nil {
+			if err := admitHopRoute(hopCtx, hop.URL, hop.Method, spec.resolve); err != nil {
+				return err
+			}
+		}
+		if outbound.beforeCookieHop != nil {
+			if err := outbound.beforeCookieHop(hopCtx, hop); err != nil {
 				return err
 			}
 		}
@@ -485,13 +495,10 @@ func send(
 			firstHopSeen = true
 			loopbackObs.beforeFirstHop(hopCtx, tctx, spec)
 		}
-		if outbound.beforeCookieHop != nil {
-			return outbound.beforeCookieHop(hopCtx, hopURL)
-		}
 		return nil
 	}
 	if jar != nil {
-		req.Jar = jar.Store
+		req.Jar = &managedJarAdapter{jar: jar}
 	}
 	if opts.Jar != nil {
 		req.Jar = opts.Jar
@@ -556,6 +563,9 @@ func sendReject(
 			reject.Data["http_requests_started"] = exchange.RequestsStarted
 			reject.Data["http_responses_received"] = exchange.ResponsesReceived
 			reject.Data["http_last_status"] = exchange.LastStatus
+			if len(exchange.Redirects) > 0 && reject.Data["redirects"] == nil {
+				reject.Data["redirects"] = redirectFacts(exchange.Redirects)
+			}
 		}
 		if cookies != nil {
 			if reject.Data == nil {
@@ -601,7 +611,7 @@ func sendReject(
 	data := map[string]any{"reason": err.Error(), "retryable": retryable}
 	var redirect *outboundhttp.RedirectError
 	if errors.As(err, &redirect) && len(redirect.Hops) > 0 {
-		data["redirects"] = redirect.Hops
+		data["redirects"] = redirectFacts(redirect.Hops)
 	}
 	var oversized *outboundhttp.BodyTooLargeError
 	if errors.As(err, &oversized) {
@@ -614,6 +624,25 @@ func sendReject(
 		Code: "HTTP_REQUEST_FAILED", FailureClass: api.FailureClassOwnerError,
 		Retryable: retryable, Data: data,
 	})
+}
+
+func redirectFacts(hops []outboundhttp.Hop) []any {
+	if len(hops) == 0 {
+		return nil
+	}
+	out := make([]any, 0, len(hops))
+	for _, h := range hops {
+		item := map[string]any{
+			"status":   h.Status,
+			"url":      h.URL,
+			"location": h.Location,
+		}
+		if h.Method != "" {
+			item["method"] = h.Method
+		}
+		out = append(out, item)
+	}
+	return out
 }
 
 // retrievedFrom labels where response content came from.

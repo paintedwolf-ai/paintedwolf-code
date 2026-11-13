@@ -53,6 +53,18 @@ func parseQueryOperators(query string) queryOps {
 	return ops
 }
 
+// queryNamedHosts returns the hosts a query's site operators name. The agent
+// wrote them, so crawling one is its own request.
+func queryNamedHosts(query string) []string {
+	var hosts []string
+	for _, base := range parseQueryOperators(query).siteBases {
+		if host := strings.ToLower(urlHost(base)); host != "" {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
+}
+
 var quotedPhraseRe = regexp.MustCompile(`"([^"]{2,120})"`)
 
 // quotedPhrases extracts explicit multi-word phrases from a query. The scorer
@@ -238,6 +250,9 @@ func fetchTextURL(ctx context.Context, rawURL string) (string, error) {
 	return body, nil
 }
 
+// indexBodyByteLimit is the index or robots page prefix discovery reads.
+const indexBodyByteLimit = 1 << 20
+
 func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int, err error) {
 	u, err := normalizeFetchURL(rawURL)
 	if err != nil {
@@ -267,13 +282,13 @@ func fetchIndexBody(ctx context.Context, rawURL string) (body string, status int
 			FetchMs:  elapsed.Milliseconds(),
 		})
 	}()
-	resp, _, err := politeGuardedGet(ctx, u, acceptHeaderForMode("text"), false)
+	resp, _, err := politeGuardedGet(ctx, u, researchAcceptHeader, indexBodyByteLimit, false)
 	if err != nil {
 		return "", 0, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	status = resp.StatusCode
-	raw, readErr := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	raw, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
 		return "", resp.StatusCode, readErr
 	}

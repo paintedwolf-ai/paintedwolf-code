@@ -61,7 +61,7 @@ func newPlatformWatcher(root string) (platformWatcher, error) {
 		events: make(chan fsnotify.Event), resync: make(chan struct{}), errors: make(chan error, 1),
 		done: make(chan struct{}), wake: make(chan struct{}, 1), watched: make(map[string]struct{}),
 	}
-	stream, err := startFSEventStream(resolved)
+	stream, err := startFSEventStream(resolved, (*fsevents.EventStream).Start)
 	if err != nil {
 		return nil, fmt.Errorf("start FSEvents stream: %w", err)
 	}
@@ -73,26 +73,19 @@ func newPlatformWatcher(root string) (platformWatcher, error) {
 	return w, nil
 }
 
-func startFSEventStream(path string) (*fsevents.EventStream, error) {
+func startFSEventStream(path string, start func(*fsevents.EventStream) error) (*fsevents.EventStream, error) {
 	stream := &fsevents.EventStream{
 		Paths: []string{path}, Events: make(chan []fsevents.Event, 128),
 		Flags:   fsevents.FileEvents | fsevents.NoDefer | fsevents.WatchRoot,
 		Latency: fseventsLatency, Resume: true, EventID: fsevents.LatestEventID(),
 	}
-	if err := stream.Start(); err != nil {
+	if err := start(stream); err != nil {
 		return nil, err
 	}
-	// Flush registration-time journal events before exposing the stream.
-	time.Sleep(fseventsLatency)
-	stream.Flush(true)
-	for {
-		select {
-		case <-stream.Events:
-			continue
-		default:
-			return stream, nil
-		}
-	}
+	// The pump must consume registration events, including real writes and
+	// resync flags. A synchronous flush here can wait on a full callback channel
+	// before that pump exists; draining it here would instead lose changes.
+	return stream, nil
 }
 
 func (w *fseventsPlatformWatcher) Add(path string) error {
@@ -120,7 +113,7 @@ func (w *fseventsPlatformWatcher) Add(path string) error {
 	}
 	w.mu.Unlock()
 
-	stream, err := startFSEventStream(resolved)
+	stream, err := startFSEventStream(resolved, (*fsevents.EventStream).Start)
 	if err != nil {
 		return fmt.Errorf("extend FSEvents stream: %w", err)
 	}

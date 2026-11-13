@@ -2,16 +2,18 @@ package toolexecution
 
 import (
 	"context"
+
+	"github.com/lycaon/lycaon/internal/evidence"
 )
 
 // SetRejectFormatter renders rejects outside an OAR Decision.
 
 // renderReject is the single exit for a structured reject leaving Invoke.
 
-// SessionHostLedger records hosts observed across page and command egress.
+// SessionHostLedger records how a chat's allowed dials reached each host.
 type SessionHostLedger interface {
-	SessionVisitedHosts(chatSessionID string) map[string]struct{}
-	RecordHostVisit(ctx context.Context, chatSessionID, host string) error
+	SessionContacts(chatSessionID string) map[string]evidence.Contact
+	RecordContact(ctx context.Context, chatSessionID, host string, contact evidence.Contact) error
 }
 
 // SetSessionHostLedger wires the visited-host record for the pre-dial gate.

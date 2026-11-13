@@ -20,8 +20,8 @@ func promptBudgetSkillRosterVarsForSet(
 		return nil
 	}
 	loaded = selector.Select(loaded)
-	// Include every available skill so budget fixtures exercise skill availability.
-	surface := prompts.AgentPromptSurface{}
+	// Measure the complete applicable catalog exposed without selection.
+	surface := prompts.AgentPromptSurface{FullCatalog: true}
 	for _, sk := range loaded {
 		surface.Skills = append(surface.Skills, prompts.AgentSkillView{
 			Name:        sk.Name,
@@ -43,6 +43,7 @@ func mergePromptBudgetSkillRosterForSet(
 	roster := promptBudgetSkillRosterVarsForSet(t, selector)
 	if list, ok := roster["agent_skills"].([]map[string]any); ok && len(list) > 0 {
 		vars["agent_skills"] = list
+		vars["full_skill_catalog"] = true
 	}
 }
 
@@ -65,6 +66,9 @@ func TestPromptBudgetFixtureIncludesBundledSkillAvailability(t *testing.T) {
 	vars := map[string]any{}
 	mergePromptBudgetSkillRoster(t, vars)
 
+	if vars["full_skill_catalog"] != true {
+		t.Fatal("budget fixture omitted full catalog visibility")
+	}
 	list, ok := vars["agent_skills"].([]map[string]any)
 	if !ok || len(list) == 0 {
 		t.Fatalf("budget fixtures must carry bundled skill availability, got %#v", vars["agent_skills"])

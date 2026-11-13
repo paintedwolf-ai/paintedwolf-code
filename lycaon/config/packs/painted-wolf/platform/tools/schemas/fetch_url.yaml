@@ -1,26 +1,16 @@
+# Retired mode and dest arguments: use command with portable curl for transfers.
 tags: [web, network, research]
 description: >-
-  Read a web page, documentation site, or other online resource. mode=text
-  (default) extracts readable page text (HTML→markdown); large bodies return a
-  head + symbol map — page with offset+limit (cached). mode=raw returns the
-  verbatim resource: textual MIME (HTML/CSS/JS/JSON/SVG/…) as text with the same
-  paging; image MIME types without dest automatically ingest into the session
-  visual store and emit visual captures with OCR text for direct perception;
-  non-image binary assets require dest and write into the project (JSON receipt
-  only — never base64 in context).
+  Read web sources as extracted markdown with cached line paging and source
+  provenance. Large pages return a head and section map; use offset and limit
+  to read supporting passages. Images are screened before perception; extracted text
+  is included when available. This tool does not write files or return raw bytes.
 schema:
   type: object
   properties:
     url:
       type: string
       description: HTTP or HTTPS URL
-    mode:
-      type: string
-      enum: [text, raw]
-      description: text = research extract (default); raw = verbatim resource / asset ingest
-    dest:
-      type: string
-      description: Destination file location within workspace to save downloaded payload.
     offset:
       type: integer
       minimum: 1
@@ -34,8 +24,7 @@ schema:
       default: false
       description: >-
         Run concurrently with sibling fetch_url calls in this assistant
-        response. Set true only for already-known independent URLs without dest
-        (max 4). Destination-writing fetches always remain serial. Omit to
+        response. Set true only for already-known independent URLs (max 4). Omit to
         preserve serial execution.
     unredact:
       type: string
