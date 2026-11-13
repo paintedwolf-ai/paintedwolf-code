@@ -85,5 +85,6 @@ func failRecoveredTask(ctx context.Context, queue WorkerQueue, task *api.WorkerT
 		_, err := queue.Fail(ctx, task, failure)
 		return err
 	}
-	return queue.Cancel(ctx, task.ID, &api.WorkerResult{Summary: failure.Error(), HintCode: string(failure.Reason), HostAssembled: true})
+	// The typed reason is the record; the host writes no report for the worker.
+	return queue.Cancel(ctx, task.ID, &api.WorkerResult{HintCode: string(failure.Reason)})
 }
