@@ -14,6 +14,7 @@ import { commandActivityPart } from "../../chat/tool/command-activity-model.ts";
 import { SkillCard } from "../skill/SkillCard.tsx";
 import { TaskCard } from "../TaskCard.tsx";
 import { VerdictCard } from "../verdict/VerdictCard.tsx";
+import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";
 
 type Props = {
   part: ToolPartView;
@@ -26,6 +27,7 @@ type Props = {
   taskContext?: () => TaskActivityContext | undefined;
   onOpenWorker?: () => void;
   onOpenWorkerEvidence?: () => void;
+  slots?: ToolBriefingSlots;
 };
 
 /** Route tool parts to specialized or generic cards. */
@@ -60,6 +62,7 @@ function NonCommandToolPartCard(props: Props) {
     return (
       <SkillCard
         part={props.part}
+        slots={props.slots}
         layout={props.layout}
         sessionId={props.sessionId}
         projectId={props.projectId}
@@ -71,6 +74,7 @@ function NonCommandToolPartCard(props: Props) {
     return (
       <VerdictCard
         part={props.part}
+        slots={props.slots}
         layout={props.layout}
         sessionId={props.sessionId}
         projectId={props.projectId}
@@ -81,6 +85,7 @@ function NonCommandToolPartCard(props: Props) {
   return (
     <GenericToolCard
       part={props.part}
+      slots={props.slots}
       layout={props.layout}
       sessionId={props.sessionId}
       projectId={props.projectId}

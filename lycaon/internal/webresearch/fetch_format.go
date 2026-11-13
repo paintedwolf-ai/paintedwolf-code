@@ -2,34 +2,29 @@ package webresearch
 
 import (
 	"fmt"
-	"github.com/lycaon/lycaon/internal/fileoutline"
-	"github.com/lycaon/lycaon/internal/tooloutput"
 	"net/url"
 	"path"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/fileoutline"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 )
 
 const (
-	// inlineFullMaxBytes is the body size at or below which the whole page is
-	// returned inline. It sits under the compaction chunk threshold so small
-	// fetches never spill and never get compacted.
+	// Small pages stay below the compaction chunk threshold.
 	inlineFullMaxBytes = 8000
 	// headLines is how many leading lines are shown verbatim alongside the map.
 	headLines = 60
 	// maxMapEntries caps the symbol map so orientation stays compact.
 	maxMapEntries = 50
-	// fetchThinTextMaxBytes marks an HTML page whose extracted text is so
-	// short it is almost certainly a JS-rendered shell (footer-only pages run
-	// ~250 bytes). The note stops agents from re-fetching to find more.
+	// Sparse HTML may need client-side rendering.
 	fetchThinTextMaxBytes = 300
 )
 
 // fetchThinNote is appended when an HTML page yields effectively no text.
 const fetchThinNote = "note: page yielded almost no readable text — likely rendered client-side by JavaScript; re-fetching will not return more."
 
-// FormatFetchResult renders the orientation view of a fetched page: small bodies
-// inline, large bodies as a head plus a structural outline. The full body is
-// cached for fetch_url offset/limit ranges.
+// FormatFetchResult shows small pages in full and maps larger cached pages.
 func FormatFetchResult(res FetchURLResult, outline fileoutline.Result, cacheHit bool) string {
 	var b strings.Builder
 	if res.Title != "" {
@@ -68,9 +63,7 @@ func FormatFetchResult(res FetchURLResult, outline fileoutline.Result, cacheHit 
 	return b.String()
 }
 
-// writeOutlineMap renders the structural map: a log digest line for log-shaped
-// bodies, otherwise the symbol outline (kind + name + line) so the model knows
-// what ranges to page.
+// writeOutlineMap locates sections for cached line paging.
 func writeOutlineMap(b *strings.Builder, outline fileoutline.Result) {
 	if outline.LogDigest != nil {
 		fmt.Fprintf(b, "\nlog digest (format %s, %d/%d records parsed) — page clusters with fetch_url offset/limit\n",
@@ -145,16 +138,6 @@ func fetchResultCacheEntry(res FetchURLResult, ext string) tooloutput.FetchCache
 	}
 }
 
-func rawResultCacheEntry(res FetchRawResult, body string) tooloutput.FetchCacheEntry {
-	return tooloutput.FetchCacheEntry{
-		URL:         res.URL,
-		Status:      res.Status,
-		ContentType: res.ContentType,
-		Body:        body,
-		Ext:         fetchRawCacheExt(res),
-	}
-}
-
 func fetchResultFromCache(entry tooloutput.FetchCacheEntry) FetchURLResult {
 	return FetchURLResult{
 		URL:         entry.URL,
@@ -178,30 +161,6 @@ func fetchCacheExt(res FetchURLResult) string {
 		if e := path.Ext(u.Path); len(e) > 1 {
 			return e[1:]
 		}
-	}
-	return "txt"
-}
-
-func fetchRawCacheExt(res FetchRawResult) string {
-	if u, err := url.Parse(res.URL); err == nil {
-		if e := path.Ext(u.Path); len(e) > 1 {
-			return e[1:]
-		}
-	}
-	ct := mediaTypeOnly(res.ContentType)
-	switch {
-	case strings.Contains(ct, "javascript"):
-		return "js"
-	case strings.Contains(ct, "json"):
-		return "json"
-	case strings.Contains(ct, "css"):
-		return "css"
-	case strings.Contains(ct, "svg"):
-		return "svg"
-	case strings.Contains(ct, "html"):
-		return "html"
-	case strings.Contains(ct, "xml"):
-		return "xml"
 	}
 	return "txt"
 }

@@ -24,6 +24,9 @@ type providerFaultCase struct {
 	classified func(error) bool
 	// recovers marks a fault the turn absorbs instead of reporting.
 	recovers bool
+	// faultOnce marks a fault that fires a single time: recovery re-fits the
+	// prompt, and a real provider accepts the retried request.
+	faultOnce bool
 }
 
 func providerFaultCases() []providerFaultCase {
@@ -56,7 +59,8 @@ func providerFaultCases() []providerFaultCase {
 			fault: &failure.ProviderContextTooSmallError{
 				ProviderID: "mock", Model: "mock-1", PromptTokens: 200_000, MaxContext: 8_192,
 			},
-			recovers: true,
+			recovers:  true,
+			faultOnce: true,
 			classified: func(err error) bool {
 				_, ok := failure.AsProviderContextTooSmall(err)
 				return ok
@@ -91,13 +95,17 @@ func TestProviderFailureMidRunIsRecoverable(t *testing.T) {
 	for _, tc := range providerFaultCases() {
 		t.Run(tc.name, func(t *testing.T) {
 			// Distinct markers select the failing prompt and its recovery independently.
+			fault := errStep(tc.fault)
+			if tc.faultOnce {
+				fault = errOnce(tc.fault)
+			}
 			script := newScriptedLLM().
 				on(tc.marker,
 					toolStep("Reading the tree.",
 						call("f1", "update_progress", map[string]any{
 							"content": "## Progress\n- [>] mid-run fault rehearsal\n",
 						})),
-					errStep(tc.fault),
+					fault,
 				).
 				on(tc.marker+"_after", textStep("Recovered and finished."))
 

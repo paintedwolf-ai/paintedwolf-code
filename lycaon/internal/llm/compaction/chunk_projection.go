@@ -17,7 +17,7 @@ func (c *SimpleCompactor) chunkRevision(ctx context.Context, info SessionInfo, m
 	if err != nil {
 		return ""
 	}
-	model, err := c.summaryRevision()
+	model, err := c.summaryRevision(ctx)
 	if err != nil {
 		return ""
 	}

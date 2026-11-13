@@ -14,14 +14,14 @@ func TestDestinationOpacityComesFromTransport(t *testing.T) {
 	cmd := confine.EgressCommand{}
 	http := destinationFact(cmd, egressproxy.Endpoint{
 		Host: "127.0.0.1", Port: 8872, Transport: egressproxy.TransportHTTPRequest,
-	}, true, "", "")
+	}, "", "")
 	if http.Opaque {
 		t.Fatal("parsed HTTP request reported as opaque")
 	}
 	for _, transport := range []egressproxy.Transport{
 		egressproxy.TransportHTTPConnect, egressproxy.TransportSocksTCP,
 	} {
-		fact := destinationFact(cmd, egressproxy.Endpoint{Host: "example.com", Port: 443, Transport: transport}, true, "", "")
+		fact := destinationFact(cmd, egressproxy.Endpoint{Host: "example.com", Port: 443, Transport: transport}, "", "")
 		if !fact.Opaque {
 			t.Fatalf("%s tunnel reported as inspectable", transport)
 		}

@@ -1,8 +1,6 @@
 package gitexec
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"strings"
 	"time"
@@ -124,40 +122,4 @@ func runRemoteQuery(ctx context.Context, repoDir string, args []string) ([]byte,
 		return nil, false
 	}
 	return out, true
-}
-
-// RemoteEntry describes a configured git remote.
-type RemoteEntry struct {
-	Name string
-	URL  string
-}
-
-// ListRemotes queries git for configured remotes in repoDir.
-func ListRemotes(ctx context.Context, repoDir string) ([]RemoteEntry, bool) {
-	out, ok := runRemoteQuery(ctx, repoDir, []string{"remote", "-v"})
-	if !ok {
-		return nil, false
-	}
-	var remotes []RemoteEntry
-	seen := make(map[string]bool)
-	scanner := bufio.NewScanner(bytes.NewReader(out))
-	for scanner.Scan() {
-		fields := strings.Fields(scanner.Text())
-		if len(fields) >= 2 {
-			name := fields[0]
-			rawURL := fields[1]
-			key := name + "\x00" + rawURL
-			if !seen[key] {
-				seen[key] = true
-				remotes = append(remotes, RemoteEntry{Name: name, URL: rawURL})
-			}
-		}
-	}
-	return remotes, true
-}
-
-// RemoteURLFor names the remote a network argv contacts: an explicit URL,
-// the named remote's URL, or the current branch's upstream remote.
-func RemoteURLFor(ctx context.Context, repoDir string, args []string) string {
-	return remoteURLFor(ctx, repoDir, args)
 }

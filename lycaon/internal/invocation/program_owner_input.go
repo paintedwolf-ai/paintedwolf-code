@@ -31,7 +31,7 @@ func (p ProgramInputCapture) startReviewedOwner(ctx context.Context, recorder *S
 					childID = ""
 				}
 				output := RetainedOutput{ExecutionID: childID, Stream: "arguments", Reference: reference, Complete: true, Redacted: redacted}
-				return insertProgramOutput(ctx, tx, start.programID, output, body, "[]", nil)
+				return insertProgramOutput(ctx, tx, start.programID, output, body, "[]", capturedText{})
 			})
 		})
 	}, func(reference string, body []byte, redacted bool) error {

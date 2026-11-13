@@ -62,7 +62,6 @@ type reachFixture struct {
 
 func newReachFixture(t *testing.T, rootPath string) *reachFixture {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	mem := store.NewMemory()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
@@ -281,7 +280,6 @@ func TestWorktreeReach_rootBelowToplevel(t *testing.T) {
 	testutil.FailErr(t, "mkdir web", os.MkdirAll(web, 0o755))
 	testutil.FailErr(t, "write pkg", os.WriteFile(filepath.Join(web, "app.js"), []byte("1\n"), 0o644))
 
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	mem := store.NewMemory()
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{Pattern: ".", Text: "ok"}}})
 	mgr := NewHost(mem, Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
@@ -376,7 +374,6 @@ func (s *getFailStore) GetWorktreeBinding(ctx context.Context, sessionID string)
 }
 
 func TestWorktreeReach_getFailureRefuses(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	repoDir := initReachRepo(t)
 	mem := store.NewMemory()
 	failing := &getFailStore{Store: mem, failGet: true}

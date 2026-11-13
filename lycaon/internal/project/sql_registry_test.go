@@ -3,15 +3,16 @@ package project
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSQLRegistryPersistence(t *testing.T) {
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	dir := t.TempDir()
 	dbPath := filepath.Join(t.TempDir(), "store.db")
 
@@ -32,7 +33,6 @@ func TestSQLRegistryPersistence(t *testing.T) {
 
 func TestSQLRegistryPatchAppliesMetadataSet(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	ctx := t.Context()
 	sqlDB := testdbfixture.Open(t, "store.db")
 	reg := NewSQLRegistry(sqlDB)
@@ -52,7 +52,6 @@ func TestSQLRegistryPatchAppliesMetadataSet(t *testing.T) {
 
 func TestSQLRegistryTrustSeenPersists(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	reg := NewSQLRegistry(sqlDB)
 	p, err := CreateWithRoot(t.Context(), reg, t.TempDir())
@@ -73,7 +72,6 @@ func TestSQLRegistryTrustSeenPersists(t *testing.T) {
 // Seen records preserve the reported state across root changes.
 func TestSQLRegistryTrustSeenSurvivesRootChange(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	reg := NewSQLRegistry(sqlDB)
 	p, err := CreateWithRoot(t.Context(), reg, t.TempDir())
@@ -93,7 +91,6 @@ func TestSQLRegistryTrustSeenSurvivesRootChange(t *testing.T) {
 
 func TestSQLRegistryTrustEnabledPersists(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	sqlDB := testdbfixture.Open(t, "store.db")
 	reg := NewSQLRegistry(sqlDB)
 	p, err := CreateWithRoot(t.Context(), reg, t.TempDir())
@@ -111,7 +108,6 @@ func TestSQLRegistryTrustEnabledPersists(t *testing.T) {
 
 func TestSQLTrustBaselineBytesStayOutOfProjectRows(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
-	SetDefaultOpenPolicy(TestOpenPolicy())
 	database := testdbfixture.Open(t, "store.db")
 	registry := NewSQLRegistry(database)
 	p, err := CreateWithRoot(t.Context(), registry, t.TempDir())
@@ -136,5 +132,80 @@ func TestSQLTrustBaselineBytesStayOutOfProjectRows(t *testing.T) {
 	testutil.FailErr(t, "read baseline after conflict", err)
 	if after["agents_md"].Files[0].Content != "retained text" {
 		t.Fatal("conflict replaced retained bytes")
+	}
+}
+
+func TestRegistriesAllowAnyExistingDirectoryAndPreserveStructuralChecks(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".config", "paintedwolf")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("LYCAON_CONFIG_DIR", cfgDir)
+
+	cfgRoot, err := configdir.Root()
+	testutil.FailErr(t, "resolve configdir root", err)
+
+	dirs := []string{
+		home,
+		filepath.Join(home, ".config"),
+		filepath.Join(home, ".ssh"),
+		filepath.Join(home, "Library", "Keychains"),
+		cfgRoot,
+		filepath.Join(home, "ordinary-project"),
+	}
+	for _, dir := range dirs {
+		testutil.FailErr(t, "mkdir fixture", os.MkdirAll(dir, 0o700))
+	}
+
+	for _, tc := range []struct {
+		name string
+		open func(*testing.T) Registry
+	}{
+		{
+			name: "memory",
+			open: func(*testing.T) Registry { return NewMemoryRegistry() },
+		},
+		{
+			name: "sql",
+			open: func(t *testing.T) Registry { return NewSQLRegistry(testdbfixture.Open(t, "store.db")) },
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx := t.Context()
+			reg := tc.open(t)
+
+			p, err := CreateWithRoot(ctx, reg, home)
+			if err != nil {
+				t.Fatalf("CreateWithRoot($HOME): %v", err)
+			}
+			for _, extra := range dirs[1:] {
+				if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: extra}); err != nil {
+					t.Fatalf("AttachRoot(%q): %v", extra, err)
+				}
+			}
+
+			// Read-only registration check for filesystem root ("/").
+			if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: string(filepath.Separator), Label: "fs-root"}); err != nil {
+				t.Fatalf("AttachRoot(filesystem root): %v", err)
+			}
+
+			// Duplicate root is still rejected.
+			if _, err := reg.AttachRoot(ctx, p.ID, AttachRootParams{Path: home}); !errors.Is(err, ErrDuplicateRoot) {
+				t.Fatalf("duplicate AttachRoot($HOME) err = %v, want ErrDuplicateRoot", err)
+			}
+
+			// Empty, missing, and file paths are still rejected.
+			if _, err := CreateWithRoot(ctx, reg, ""); !errors.Is(err, ErrInvalidPath) {
+				t.Fatalf("empty CreateWithRoot err = %v, want ErrInvalidPath", err)
+			}
+			if _, err := CreateWithRoot(ctx, reg, filepath.Join(home, "missing")); !errors.Is(err, ErrPathNotFound) {
+				t.Fatalf("missing CreateWithRoot err = %v, want ErrPathNotFound", err)
+			}
+			filePath := filepath.Join(home, "regular-file.txt")
+			testutil.FailErr(t, "write file", os.WriteFile(filePath, []byte("hello"), 0o600))
+			if _, err := CreateWithRoot(ctx, reg, filePath); !errors.Is(err, ErrNotDirectory) {
+				t.Fatalf("file CreateWithRoot err = %v, want ErrNotDirectory", err)
+			}
+		})
 	}
 }

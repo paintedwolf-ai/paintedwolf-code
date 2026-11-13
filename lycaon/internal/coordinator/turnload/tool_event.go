@@ -61,6 +61,7 @@ func RankToolEvent(ctx context.Context, d decide.Decider, spec ToolEventSpec, re
 		return out
 	}
 	ranking := RankSkills(ctx, d, spec.Deadline(), out.Need, roster)
+	out.Ranking = ranking
 	if ranking.Skipped != "" {
 		out.Abstained, out.Reason = true, ranking.Skipped
 		return out

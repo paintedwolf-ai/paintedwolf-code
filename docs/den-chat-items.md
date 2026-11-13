@@ -135,20 +135,27 @@ external program's purpose succeeded.
 Den fixes each row's key, label, subject and initial position when it appears.
 Repetitions update counts and outcomes in place. Group titles retain their first
 activity's description. Decision-engine receipts belong in host-decision details,
-not in the count of actions performed. Expanded details show whole-activity
-results and at most three structural steps. Files links expose all steps,
-execution receipts, diagnostics, output and exact input. Execution records load
-on demand in Files; activity details contain no record paging controls.
-Receipt-page changes do not redefine the activity's result. Retained transcripts
-resolve host activity summaries before mounting rows when their stored snapshot
-has no structural steps. Failed detail reads preserve the recorded command.
+not in the count of actions performed. Receipt-page changes do not redefine the
+activity's result. Retained transcripts resolve host activity summaries before
+mounting rows when their stored snapshot has no structural steps. Failed detail
+reads preserve the recorded command.
 
 Den keeps the existing group, single-line activity and expanded-detail structure.
-Activity grouping does not add a disclosure level.
-Rows show the action, target and outcome. Expanded cards prioritize the outcome
-and a bounded step summary. Commands and output open in Files through the
-existing recorded-content view. Paths and identifiers wrap inside details;
-row targets ellipsize without displacing status or disclosure controls.
+Activity grouping does not add a disclosure level. Rows show the action, target
+and outcome; row targets ellipsize without displacing status or disclosure
+controls.
+
+An expanded activity uses one fixed order, omitting any part with nothing to
+show: the command; a purpose sentence when a briefing supplies one; a result
+line carrying only facts the row does not (exit status, lines of output, a host
+stop, an interruption); up to six lines of output, the tail for failures and
+refusals and the head otherwise; steps only when their settled states differ;
+one row per call for coalesced activities; facts that differ from a clean
+success; and one line of links to input, output, process output, receipts and
+host decisions in Files. The result line and output come from typed receipt
+facts, never from command text or output prose. Details use two text styles:
+interface text for sentences and labels, monospace for commands and output.
+Records load on demand in Files; details contain no record paging controls.
 
 ## The two clocks
 

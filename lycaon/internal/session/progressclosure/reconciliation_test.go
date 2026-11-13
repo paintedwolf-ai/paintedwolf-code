@@ -96,12 +96,13 @@ func TestDocumentTransitionAndWorkerAcknowledgementRemainDistinct(t *testing.T) 
 	body, err := handler(t.Context(), map[string]any{"content": "- [x] Deliver\n- [ ] Verify", "expected_revision": before.Revision, "item_ids": before.ItemIDs, "reconciliation_token": view.Token}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "session"}})
 	testutil.FailErr(t, "record terminal deliverable and finish", err)
 	var result struct {
-		Status string `json:"status"`
-		Closed bool   `json:"deliverable_closed"`
-		Ack    string `json:"reconciliation_status"`
+		Status        string                   `json:"status"`
+		ClosedItemIDs []string                 `json:"closed_item_ids"`
+		Ack           string                   `json:"reconciliation_status"`
+		Snapshot      progress.RequestSnapshot `json:"snapshot"`
 	}
 	testutil.FailErr(t, "decode distinct outcomes", json.Unmarshal([]byte(body), &result))
-	if result.Status != "updated" || !result.Closed || result.Ack != "acknowledged" || closure.Reconciliation("session") != nil {
+	if result.Status != "updated" || len(result.ClosedItemIDs) != 1 || result.ClosedItemIDs[0] != before.ItemIDs[0] || result.Snapshot.Summary.Pending != 1 || result.Snapshot.Summary.AllRequiredItemsTerminal || result.Ack != "acknowledged" || closure.Reconciliation("session") != nil {
 		t.Fatalf("transition acknowledgement: %s", body)
 	}
 }

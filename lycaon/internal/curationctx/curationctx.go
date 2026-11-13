@@ -12,7 +12,7 @@ type taskHintKey struct{}
 type sessionKey struct{}
 type laneKey struct{}
 
-// Session holds invocation metadata for curator debug capture and cost attribution.
+// Session identifies utility routing, debug capture, and cost attribution.
 type Session struct {
 	SessionID       string
 	OwnerPersonID   string
@@ -22,6 +22,7 @@ type Session struct {
 	ParentSessionID string
 	ToolCallID      string
 	ProjectDir      string
+	SettingsRoots   []string
 }
 
 // WithTaskHint attaches the active turn task for curator orientation.
@@ -42,7 +43,7 @@ func TaskHint(ctx context.Context) string {
 	return strings.TrimSpace(v)
 }
 
-// WithSession attaches session identity for curator debug capture.
+// WithSession attaches host-resolved utility invocation scope.
 func WithSession(ctx context.Context, sess Session) context.Context {
 	if strings.TrimSpace(sess.SessionID) == "" &&
 		strings.TrimSpace(sess.OwnerPersonID) == "" &&
@@ -51,7 +52,7 @@ func WithSession(ctx context.Context, sess Session) context.Context {
 		strings.TrimSpace(sess.Agent) == "" &&
 		strings.TrimSpace(sess.ParentSessionID) == "" &&
 		strings.TrimSpace(sess.ToolCallID) == "" &&
-		strings.TrimSpace(sess.ProjectDir) == "" {
+		strings.TrimSpace(sess.ProjectDir) == "" && len(sess.SettingsRoots) == 0 {
 		return ctx
 	}
 	return context.WithValue(ctx, sessionKey{}, sess)

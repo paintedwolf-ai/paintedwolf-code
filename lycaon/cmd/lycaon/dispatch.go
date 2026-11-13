@@ -11,7 +11,7 @@ import (
 // a bare path, --new, or project name) is treated as open argv.
 func isCLIVerb(name string) bool {
 	switch name {
-	case "serve", "open", "ls", "logs", "completion", "diagnostics", "credentials", "placements",
+	case "serve", "open", "ls", "logs", "completion", "diagnostics", "credentials", "token", "placements",
 		"scan", "workflow", "extensions", "rules", "prompts", "browser", "decide", "git-credential-osxkeychain",
 		"git-credential-vault", "internal-scan-worker", "internal-system-proxy":
 		return true

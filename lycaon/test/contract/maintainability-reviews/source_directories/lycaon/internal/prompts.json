@@ -1,0 +1,15 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/prompts",
+  "kind": "module",
+  "workstream": "web-research-flow",
+  "disposition": "retain",
+  "reason": "Retain 36 source files for prompt composition and capability projection. Surface availability is a pure intersection with the compiled execution plan; templates cannot grant operations. Shared capability variables serve standing prompts and runtime skills, with closed-plan and disabled-research contracts.",
+  "reviewed_commit": "1d376aca3c412ea12b86fb1078107cc2c1b47e39",
+  "ceiling": 36,
+  "boundaries": {
+    "lycaon/internal/prompts/skill_runtime_surface_test.go": "b39d20dc6ba2bc5c5873fa2b94082ffb67cf892269e8be1e1de6a8433966f982",
+    "lycaon/internal/prompts/research_surface_test.go": "3c0882a880c861985f1df0bd1393a9b00e8fd12b0ea625f72961a694530edf65"
+  },
+  "reviewed_shape": "aa0a1d5a927812057d3e54a32d925683978ec5daee00a6fecd031b4d90b43996"
+}

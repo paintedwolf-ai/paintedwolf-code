@@ -117,7 +117,6 @@ func MustGitOutput(t *testing.T, dir string, args ...string) []byte {
 
 func NewWorktreeTestServer(t *testing.T, opts ...TestDeps) (*hostapi.Server, *session.Host, string) {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := InitCommittedRepoDir(t)
 	// Sessions and projects share the database the source ledger records in.
 	database := testdbfixture.Open(t, "worktree.db")

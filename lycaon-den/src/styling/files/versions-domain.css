@@ -314,3 +314,34 @@
 }
 
 
+
+.den-file-version__edits {
+  margin-inline: 28px 8px;
+  padding-inline-start: 8px;
+  border-inline-start: 1px solid var(--den-line);
+}
+
+.den-file-version__edits > summary {
+  cursor: pointer;
+  list-style: none;
+  border-radius: var(--den-radius-sm);
+}
+
+.den-file-version__edits > summary .den-disclosure-caret {
+  margin-inline: 2px;
+}
+
+.den-file-version__edits > summary:hover {
+  background: var(--den-tint-2);
+}
+
+.den-file-version__edit-items {
+  padding-inline-start: 15px;
+  container-type: inline-size;
+  container-name: den-file-version-edit-items;
+}
+
+.den-file-version__edit-item + .den-file-version__edit-item {
+  border-top: 1px solid var(--den-line-quiet);
+}
+

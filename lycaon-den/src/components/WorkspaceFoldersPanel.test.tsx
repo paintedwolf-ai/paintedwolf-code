@@ -11,6 +11,8 @@ const roots: ProjectRoot[] = [
     is_primary: true,
     added_at: "2025-01-01T00:00:00Z",
     kind: "attached",
+    admitted: true,
+    admission_code: null,
   },
   {
     id: "root-b",
@@ -19,10 +21,43 @@ const roots: ProjectRoot[] = [
     is_primary: false,
     added_at: "2025-01-01T00:00:00Z",
     kind: "attached",
+    admitted: true,
+    admission_code: null,
   },
 ];
 
 describe("WorkspaceFoldersPanel", () => {
+  it("marks only the roots the host reports as editor-only", () => {
+    const withHome: ProjectRoot[] = [
+      ...roots,
+      {
+        id: "root-home",
+        path: "/home/person",
+        label: "person",
+        is_primary: false,
+        added_at: "2025-01-01T00:00:00Z",
+        kind: "attached",
+        admitted: false,
+        admission_code: "write_root_contains_control_plane",
+      },
+    ];
+    const { queryByTestId } = render(() => (
+      <WorkspaceFoldersPanel
+        open
+        projectId="proj-1"
+        roots={withHome}
+        onClose={() => undefined}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+        onSetPrimary={vi.fn()}
+        onRenameLabel={vi.fn()}
+      />
+    ));
+    expect(queryByTestId("workspace-folder-editor-only-root-home")).not.toBeNull();
+    expect(queryByTestId("workspace-folder-editor-only-root-a")).toBeNull();
+    expect(queryByTestId("workspace-folder-editor-only-root-b")).toBeNull();
+  });
+
   it("calls detachProjectRoot after remove confirm", async () => {
     const onDetach = vi.fn().mockResolvedValue(undefined);
     const { getByTestId } = render(() => (

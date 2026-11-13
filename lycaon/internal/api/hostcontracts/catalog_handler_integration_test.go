@@ -22,7 +22,6 @@ import (
 )
 
 func TestListWorkflowsFromCatalogOnly(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
@@ -53,7 +52,6 @@ func TestListWorkflowsFromCatalogOnly(t *testing.T) {
 }
 
 func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)
@@ -104,7 +102,6 @@ func TestListWorkflowsCatalogAndOverlay(t *testing.T) {
 }
 
 func TestListWorkflowsExcludesInvalidOverlayAndReportsDiagnostics(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	reg := project.NewMemoryRegistry()
 	opened, err := project.CreateWithRoot(t.Context(), reg, t.TempDir())
 	testutil.FailErr(t, "reg.Open failed", err)

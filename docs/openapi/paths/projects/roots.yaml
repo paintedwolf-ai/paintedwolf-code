@@ -22,10 +22,7 @@ paths:
               schema:
                 $ref: ../../components/schemas/project/identity.yaml#/components/schemas/Project
         '400':
-          description: >
-            Root path refused as a write jail (write_root_is_filesystem_root,
-            write_root_is_home, write_root_not_absolute, write_root_under_secret_store)
-            or otherwise invalid.
+          description: The path is not an existing folder (invalid_path, path_not_found).
           content:
             application/json:
               schema:

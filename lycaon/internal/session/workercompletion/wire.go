@@ -1,6 +1,9 @@
 package workercompletion
 
-import "github.com/lycaon/lycaon/pkg/api"
+import (
+	"github.com/lycaon/lycaon/internal/verification"
+	"github.com/lycaon/lycaon/pkg/api"
+)
 
 // ReportWire copies the internal validated report into its durable/wire shape.
 func ReportWire(in WorkerCompletionReport) *api.WorkerCompletionReport {
@@ -14,10 +17,13 @@ func ReportWire(in WorkerCompletionReport) *api.WorkerCompletionReport {
 		SuggestedNextTask: in.SuggestedNextTask, Brief: in.Brief,
 		CitedURLs: append([]string(nil), in.CitedURLs...),
 	}
+	if in.Verification != nil {
+		out.Verification = &api.CitationVerification{Method: in.Verification.Method, Reason: in.Verification.Reason}
+	}
 	for _, finding := range in.Findings {
 		out.Findings = append(out.Findings, api.WorkerCompletionFinding{
 			Path: finding.Path, Evidence: finding.Evidence, Line: finding.Line,
-			Excerpt: finding.Excerpt, Note: finding.Note, Claim: finding.Claim,
+			Excerpt: finding.Excerpt, Note: finding.Note, Claim: finding.Claim, Cite: finding.Cite,
 			Adversary: finding.Adversary, Precondition: finding.Precondition, Severity: finding.Severity,
 		})
 	}
@@ -45,10 +51,13 @@ func ReportFromWire(in *api.WorkerCompletionReport) WorkerCompletionReport {
 		SuggestedNextTask: in.SuggestedNextTask, Brief: in.Brief,
 		CitedURLs: append([]string(nil), in.CitedURLs...),
 	}
+	if in.Verification != nil {
+		out.Verification = &verification.Assessment{Method: in.Verification.Method, Reason: in.Verification.Reason}
+	}
 	for _, finding := range in.Findings {
 		out.Findings = append(out.Findings, WorkerFinding{
 			Path: finding.Path, Evidence: finding.Evidence, Line: finding.Line,
-			Excerpt: finding.Excerpt, Note: finding.Note, Claim: finding.Claim,
+			Excerpt: finding.Excerpt, Note: finding.Note, Claim: finding.Claim, Cite: finding.Cite,
 			Adversary: finding.Adversary, Precondition: finding.Precondition, Severity: finding.Severity,
 		})
 	}

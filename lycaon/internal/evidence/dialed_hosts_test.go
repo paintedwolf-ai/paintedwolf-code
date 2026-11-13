@@ -2,24 +2,25 @@ package evidence
 
 import "testing"
 
-func TestDialedHostJoinsTheVisitedSet(t *testing.T) {
+func TestDialedHostJoinsTheContactedSet(t *testing.T) {
 	rec, ok := DialedHostRecord("Registry.Example.com")
 	if !ok {
 		t.Fatal("a plain host must produce a record")
 	}
 	ledger := Ledger{Handles: map[string]Record{rec.Handle: rec}}
-	if !HostVisited(VisitedHostsFromLedger(ledger), "registry.example.com") {
-		t.Fatal("a dialed host must be visited")
+	if ContactsFromLedger(ledger)["registry.example.com"] != ContactOwn {
+		t.Fatal("a dialed host must be contacted")
 	}
-	if HostVisited(VisitedHostsFromLedger(ledger), "other.example") {
-		t.Fatal("an undialed host must not be visited")
+	if ContactsFromLedger(ledger)["other.example"] != ContactNone {
+		t.Fatal("an undialed host must not be contacted")
 	}
 }
 
-func TestDialedHostDoesNotMarkUntrusted(t *testing.T) {
-	rec, _ := DialedHostRecord("registry.example.com")
-	if RecordMarksUntrustedContent(rec) {
-		t.Fatal("a dial record must not mark the session untrusted")
+func TestContactRecordsDoNotMarkUntrusted(t *testing.T) {
+	dialed, _ := DialedHostRecord("registry.example.com")
+	retrieved, _ := RetrievedHostRecord("registry.example.com")
+	if RecordMarksUntrustedContent(dialed) || RecordMarksUntrustedContent(retrieved) {
+		t.Fatal("a contact record must not mark the session untrusted")
 	}
 }
 
