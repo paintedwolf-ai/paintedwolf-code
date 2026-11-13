@@ -53,8 +53,8 @@ func TestRedirectRowsNameTheirFiles(t *testing.T) {
 		paths  []string
 	}{
 		{"printf 'x\\n' > one.txt", []string{"one.txt"}},
-		{"printf 'a\\n' > index.html && printf 'b\\n' > style.css", []string{"index.html", "style.css"}},
-		{"cat <<'EOF' > a.html\na\nEOF\ncat <<'EOF' > b.css\nb\nEOF", []string{"a.html", "b.css"}},
+		{"printf 'a\\n' > first.txt && printf 'b\\n' > second.txt", []string{"first.txt", "second.txt"}},
+		{"cat <<'EOF' > a.txt\na\nEOF\ncat <<'EOF' > b.txt\nb\nEOF", []string{"a.txt", "b.txt"}},
 	} {
 		raw, err := f.Call(t, t.Context(), tc.source)
 		testutil.FailErr(t, "run writes", err)
