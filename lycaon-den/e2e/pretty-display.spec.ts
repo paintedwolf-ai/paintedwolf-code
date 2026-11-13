@@ -399,6 +399,11 @@ modelIndependentWebE2e("marks tabs in indentation while laid out", async ({ page
 
 modelIndependentWebE2e("keeps the text at the top of the view across toggles when the caret is off screen", async ({ page, request }) => {
   const { scroller } = await openPretty(page, request, ITEMS_1_MB);
+  // With Pretty off the text wraps, so the one-line document still scrolls vertically.
+  await page.evaluate(async () => {
+    const prefs = await import(/* @vite-ignore */ String("/src/settings/editor/editor-prefs.ts")) as typeof import("../src/settings/editor/editor-prefs.ts");
+    await prefs.saveEditorWordWrap(true);
+  });
   await page.evaluate(() => window.__pretty.view().dispatch({ selection: { anchor: 0 } }));
   await scroller.evaluate((element) => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
   await settle(page);
