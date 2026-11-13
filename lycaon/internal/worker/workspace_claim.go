@@ -84,7 +84,13 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 		return nil, ErrWorkerBranchClaimFailed
 	}
 	for _, id := range task.AfterWorkers {
-		upstream, ok := q.Get(id) //nolint:contextcheck // bounded Get
+		// A long-lived producer is ready on its latest round, as the claim
+		// query decides.
+		latest, err := q.store.queries.LatestRoundJobForJob(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		upstream, ok := q.Get(latest) //nolint:contextcheck // bounded Get
 		if !ok || !api.WorkerOutputReady(upstream) {
 			return nil, ErrWorkerPrerequisitesPending
 		}
