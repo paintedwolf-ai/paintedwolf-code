@@ -61,7 +61,7 @@ func newBundleFixture(t *testing.T) bundleFixture {
 	recorder := invocation.NewSQLRecorder(database)
 	receipt, err := recorder.Begin(t.Context(), invocation.Start{ProjectID: project, SessionID: "root", ToolCallID: "c1", ToolName: "read", Args: map[string]any{"path": "a.go"}, Contract: read})
 	testutil.FailErr(t, "begin receipt", err)
-	_, err = recorder.Settle(t.Context(), receipt.ID, invocation.Settlement{Status: api.InvocationStatusCompleted, Invoked: true})
+	_, err = recorder.Settle(t.Context(), receipt.ID, invocation.Settlement{Status: api.InvocationStatusCompleted, Invoked: true, EvidenceKind: "result"})
 	testutil.FailErr(t, "settle receipt", err)
 	_, err = database.ExecContext(t.Context(), `PRAGMA wal_checkpoint(TRUNCATE)`)
 	testutil.FailErr(t, "checkpoint capture", err)

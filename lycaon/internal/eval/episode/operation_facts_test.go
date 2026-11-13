@@ -138,7 +138,8 @@ func TestProgramSuccessNeedsSettledSucceedingChildrenAndKnownProgress(t *testing
 	if ops := programOperations(t, unknownProgress, child("e1", "completed", code(0), "none")); ops[0].SemanticOutcome == OutcomeSuccess || ops[0].EffectState != EffectsUnknown {
 		t.Fatalf("unknown progress = %+v", ops[0])
 	}
-	if ops := programOperations(t, done, child("e1", "completed", code(0), "attempted")); ops[0].SemanticOutcome == OutcomeSuccess || ops[0].EffectState != EffectsUnknown || ops[1].EffectState != EffectsUnknown {
+	// Outcome and effects are separate facts: the work succeeded, its effect is uncertain.
+	if ops := programOperations(t, done, child("e1", "completed", code(0), "attempted")); ops[0].SemanticOutcome != OutcomeSuccess || ops[0].EffectState != EffectsUnknown || ops[1].EffectState != EffectsUnknown {
 		t.Fatalf("attempted effect = %+v", ops)
 	}
 	if ops := programOperations(t, done, child("e1", "running", nil, "none")); ops[0].Settlement != Unsettled || ops[0].SemanticOutcome == OutcomeSuccess || ops[1].Settlement != Unsettled {
