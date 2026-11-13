@@ -72,7 +72,7 @@ func (l *HostTurns) runPromptSync(ctx context.Context, sessionID string, pending
 	if !allow {
 		return true
 	}
-	if pending.completingJobID == "" && wake != anchor.WorkerRoundNotice && !pending.env.HasWorkerDecision() && !l.Cycles.workerCycleIdle(ctx, sessionID, "") {
+	if pending.completingJobID == "" && !anchor.AboutRunningWorker(wake) && !pending.env.HasWorkerDecision() && !l.Cycles.workerCycleIdle(ctx, sessionID, "") {
 		l.Nudges.deferNudge(ctx, sessionID, pending)
 		return true
 	}

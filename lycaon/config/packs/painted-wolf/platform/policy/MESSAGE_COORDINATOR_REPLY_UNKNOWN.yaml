@@ -1,0 +1,27 @@
+oar: '1.0'
+id: MESSAGE_COORDINATOR_REPLY_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - message_coordinator
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "MESSAGE_COORDINATOR_REPLY_UNKNOWN"
+effect: block
+copy:
+  what: reply_to names no message in your history with the coordinator.
+  cause: The number does not match a message you received.
+  why: A reply links to an earlier message so the coordinator can follow the thread.
+  fix: '{{ paintedwolf.next_steps }}'
+  instead: Branch on Code MESSAGE_COORDINATOR_REPLY_UNKNOWN; use the number shown beside the coordinator message, or omit reply_to
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:message_coordinator
+x-paintedwolf-message: reply_to names no message in your history with the coordinator.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: explore
+      tool: message_coordinator

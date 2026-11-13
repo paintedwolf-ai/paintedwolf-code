@@ -1,0 +1,27 @@
+oar: '1.0'
+id: MESSAGE_COORDINATOR_NO_WORKER
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - message_coordinator
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "MESSAGE_COORDINATOR_NO_WORKER"
+effect: block
+copy:
+  what: This leg is not a worker, so it has no message history with the coordinator.
+  cause: message_coordinator ran in a spawned leg that was not started as a worker.
+  why: Messages belong to a worker and are delivered to the coordinator through that worker's history.
+  fix: '{{ paintedwolf.next_steps }}'
+  instead: Branch on Code MESSAGE_COORDINATOR_NO_WORKER; put what you wanted to say in your leg report, or ask for a decision if you cannot proceed
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:message_coordinator
+x-paintedwolf-message: This leg is not a worker, so it has no message history with the coordinator.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: explore
+      tool: message_coordinator

@@ -1614,6 +1614,24 @@
       "emit": "guard:visual_capture",
       "summary": "querySelectorAll rejected selector {{ paintedwolf.measure_selector }}."
     },
+    "MESSAGE_COORDINATOR_ADDRESSED_SESSION": {
+      "branch_instruction": "Branch on Code MESSAGE_COORDINATOR_ADDRESSED_SESSION; tell the user directly, do not retry here",
+      "category": "recoverable",
+      "emit": "guard:message_coordinator",
+      "summary": "There is no coordinator above this session to message."
+    },
+    "MESSAGE_COORDINATOR_NO_WORKER": {
+      "branch_instruction": "Branch on Code MESSAGE_COORDINATOR_NO_WORKER; put what you wanted to say in your leg report, or ask for a decision if you cannot proceed",
+      "category": "recoverable",
+      "emit": "guard:message_coordinator",
+      "summary": "This leg is not a worker, so it has no message history with the coordinator."
+    },
+    "MESSAGE_COORDINATOR_REPLY_UNKNOWN": {
+      "branch_instruction": "Branch on Code MESSAGE_COORDINATOR_REPLY_UNKNOWN; use the number shown beside the coordinator message, or omit reply_to",
+      "category": "recoverable",
+      "emit": "guard:message_coordinator",
+      "summary": "reply_to names no message in your history with the coordinator."
+    },
     "MID_TURN_NOTE_ARTIFACT_UNKNOWN": {
       "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; continue from the tool results above and use an observed artifact id or omit the directive",
       "category": "recoverable",

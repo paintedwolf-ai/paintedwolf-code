@@ -46,10 +46,11 @@ type ContextDeps struct {
 }
 
 type ContextSurfaceDeps struct {
-	ObservePrompt       func(sessionID string) func(inject.CoordinatorTurnFrame)
-	CommitWorkerContext func(context.Context, string, string) error
-	PrepareAgentPolicy  func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
-	ToolProcedures      func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
+	ObservePrompt func(sessionID string) func(inject.CoordinatorTurnFrame)
+	// CommitTurnContext advances delivered findings and messages after a successful response.
+	CommitTurnContext  func(context.Context, string, string) error
+	PrepareAgentPolicy func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
+	ToolProcedures     func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
 	// PromptSurface reports the host facts that selected a request's tools and units.
 	PromptSurface                   func(ctx context.Context, sess *api.Session, profileID string, offered []string) (trainingcapture.PromptSurface, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string

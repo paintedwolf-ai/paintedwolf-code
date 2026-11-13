@@ -71,7 +71,7 @@ func (r *Runtime) refreshDepsLocked() {
 	if r.loopDeps != nil {
 		deps := r.loopDeps()
 		deps.Context.ObservePrompt = r.coordLoop.Observations.ObservePrompt
-		deps.Context.CommitWorkerContext = r.assemblyEngineLocked().CommitWorkerContext
+		deps.Context.CommitTurnContext = r.assemblyEngineLocked().CommitTurnContext
 		r.loop = promptloop.NewPromptLoop(deps)
 	}
 	if r.assemblyDepsFn != nil {

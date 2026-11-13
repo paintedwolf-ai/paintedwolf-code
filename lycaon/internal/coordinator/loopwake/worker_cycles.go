@@ -57,7 +57,7 @@ func (l *WorkerCycles) workerCycleIdle(ctx context.Context, sessionID, completin
 	return idle
 }
 func (l *WorkerCycles) OnWorkerCycleTerminal(ctx context.Context, sessionID, completingJobID string) {
-	l.Nudges.dropDeferredRoundNoticesForJob(sessionID, completingJobID)
+	l.Nudges.dropDeferredRunningWorkerWakes(sessionID, completingJobID)
 	l.Subscriptions.resolveSubscribedWorkerWait(ctx, sessionID, completingJobID)
 	l.Nudges.flushDeferredWhenWorkerCycleIdle(ctx, sessionID, completingJobID)
 	if !l.workerCycleIdle(ctx, sessionID, completingJobID) {
