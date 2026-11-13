@@ -163,16 +163,17 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	}
 	// A background job's work belongs to the activity that launched it.
 	launched := make(map[int]int)
-	subjects := make(map[int][]string)
+	subjects := make(map[int]string)
 	for i, g := range groups {
 		launch, ok := launchOf(g, groups, byKey)
 		if !ok || activityPresentation(g.input).role == "container" {
 			continue
 		}
 		launched[i] = launch
-		if primary[i] {
+		// The job is named by the first process it runs.
+		if _, named := subjects[launch]; !named && primary[i] && activityPresentation(g.input).phase == "execute" {
 			if subject := activitySubject(g.input); subject != "" {
-				subjects[launch] = append(subjects[launch], subject)
+				subjects[launch] = subject
 			}
 		}
 		delete(primary, i)
@@ -246,9 +247,8 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 		}
 		positions[i] = len(result)
 		activity := groupActivity(g)
-		// The launch takes its job's subject when the job runs one command.
-		if names := subjects[i]; len(names) == 1 && activity.Subject == "" {
-			activity.Subject = names[0]
+		if activity.Subject == "" {
+			activity.Subject = subjects[i]
 		}
 		result = append(result, activity)
 		active = i

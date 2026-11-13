@@ -507,3 +507,17 @@ func TestLaunchWithoutRecordedJobWorkReportsItsStart(t *testing.T) {
 		t.Fatalf("unstarted job reported finished: %+v", values)
 	}
 }
+
+func TestLaunchIsNamedByItsJobsFirstProcess(t *testing.T) {
+	server := activityFixture("server", "job", "command", "external", 0)
+	server.arguments["command"] = "python3 -m http.server 8000"
+	log := activityFixture("log", "job", "write", "write", 10)
+	log.receipt.EffectClasses = []string{"mutation"}
+	log.arguments["path_targets"] = map[string]any{"read": []any{}, "write": []any{"server.log"}}
+	groups := launchedGroups(server, activityCounts{total: 1, running: 1})
+	groups = append(groups, activityGroup{input: log, key: activityKey{node: "log"}, parent: activityKey{launch: "job"}, ordinal: 3, counts: activityCounts{total: 1}})
+	values := composeActivityGroups(groups, false)
+	if len(values) != 1 || values[0].Subject != server.arguments["command"] {
+		t.Fatalf("launch = %+v", values)
+	}
+}
