@@ -66,23 +66,32 @@ func IsCoreAnchor(name string) bool {
 // coreFacts is the core tier ([OAR-FACT-12], section 5.2): what every
 // conforming engine provides at every anchor.
 var coreFacts = map[string]FactType{
-	"tool":                  TypeString,
-	"tool_args":             TypeMap,
-	"session_posture":       TypeString,
-	"profile":               TypeString,
-	"arg_validation_errors": TypeListString,
-	"tool_args_fingerprint": TypeString,
-	"breaker_count":         TypeInt,
-	"same_code_reject_run":  TypeInt,
-	"is_directory":          TypeBool,
-	"not_found":             TypeBool,
-	"path_denied":           TypeBool,
-	"policy_denied":         TypeBool,
+	"tool":                 TypeString,
+	"tool_args":            TypeMap,
+	"fire_count":           TypeInt,
+	"breaker_count":        TypeInt,
+	"same_code_reject_run": TypeInt,
+	"same_call_run":        TypeInt,
 }
 
-// coreFunctions are the core observation functions (section 5.3).
+// EngineMaintained are the core facts the engine computes per session itself;
+// no fact provider supplies them ([OAR-FIRE-10]).
+var EngineMaintained = []string{"fire_count", "breaker_count", "same_code_reject_run", "same_call_run"}
+
+// IsEngineMaintained reports whether name is a fact the engine maintains.
+func IsEngineMaintained(name string) bool { return contains(EngineMaintained, name) }
+
+// coreFunctions are the core observation functions (section 5.3). Each reads
+// another rule's counter, named by a string literal ([OAR-FIRE-6]).
 var coreFunctions = map[string]FunctionSig{
-	"path_outside_scope": {Arg: TypeString, Ret: TypeBool},
+	"fire_count_of":    {Arg: TypeString, Ret: TypeInt},
+	"breaker_count_of": {Arg: TypeString, Ret: TypeInt},
+}
+
+// counterReaders maps each core counter reader to the counter it reads.
+var counterReaders = map[string]string{
+	"fire_count_of":    "fire_count",
+	"breaker_count_of": "breaker_count",
 }
 
 // reservedWords are the three words that are never an identifier.
@@ -101,6 +110,13 @@ func isReservedWord(name string) bool {
 
 // stringBuiltins are the three (string, string) -> bool built-ins.
 var stringBuiltins = []string{"starts_with", "ends_with", "contains"}
+
+// builtins are the four built-ins of Appendix C; no fact or function may take
+// one of their names ([OAR-EXPR-17]).
+var builtins = []string{"size", "starts_with", "ends_with", "contains"}
+
+// IsReservedName reports whether a fact or function may not use name.
+func IsReservedName(name string) bool { return isReservedWord(name) || contains(builtins, name) }
 
 func isStringBuiltin(name string) bool {
 	for _, b := range stringBuiltins {
@@ -121,6 +137,14 @@ type ProfileDef struct {
 // profiles is the standard profile vocabulary of section 5.4. A profile is
 // provided whole or not at all ([OAR-FACT-13]).
 var profiles = map[string]ProfileDef{
+	"filesystem": {
+		Facts: map[string]FactType{
+			"is_directory":       TypeBool,
+			"not_found":          TypeBool,
+			"path_outside_scope": TypeBool,
+		},
+		Functions: map[string]FunctionSig{},
+	},
 	"content-safety": {
 		Facts: map[string]FactType{
 			"prompt_injection_score": TypeDouble,
@@ -132,24 +156,23 @@ var profiles = map[string]ProfileDef{
 	},
 	"mcp": {
 		Facts: map[string]FactType{
-			"mcp_server_id":         TypeString,
-			"mcp_tool_name":         TypeString,
-			"mcp_qualified_tool":    TypeString,
-			"mcp_server_configured": TypeBool,
-			"mcp_server_enabled":    TypeBool,
-			"mcp_call_ok":           TypeBool,
-			"mcp_error_code":        TypeString,
-			"mcp_schema_matched":    TypeBool,
+			"mcp_server_id":          TypeString,
+			"mcp_tool_name":          TypeString,
+			"mcp_qualified_tool":     TypeString,
+			"mcp_server_configured":  TypeBool,
+			"mcp_server_enabled":     TypeBool,
+			"mcp_configured_servers": TypeListString,
+			"mcp_enabled_servers":    TypeListString,
+			"mcp_call_ok":            TypeBool,
+			"mcp_error_code":         TypeString,
+			"mcp_schema_matched":     TypeBool,
+			"mcp_result":             TypeMap,
 		},
-		// The parameterized forms carry the _for suffix because a fact and a
-		// function may not share a name ([OAR-FACT-19]).
+		// The accessors reach the members of mcp_result that selection cannot
+		// type; a string member is read by selection.
 		Functions: map[string]FunctionSig{
-			"mcp_server_configured_for": {Arg: TypeString, Ret: TypeBool},
-			"mcp_server_enabled_for":    {Arg: TypeString, Ret: TypeBool},
-			"mcp_has_field":             {Arg: TypeString, Ret: TypeBool},
-			"mcp_field_bool":            {Arg: TypeString, Ret: TypeBool},
-			"mcp_field_string":          {Arg: TypeString, Ret: TypeString},
-			"mcp_field_int":             {Arg: TypeString, Ret: TypeInt},
+			"mcp_field_bool": {Arg: TypeString, Ret: TypeBool},
+			"mcp_field_int":  {Arg: TypeString, Ret: TypeInt},
 		},
 	},
 }
@@ -166,8 +189,8 @@ var onFireActions = []string{
 // onFireWrites binds each counter action to exactly one core fact
 // ([OAR-FIRE-3]). publish_event writes no fact.
 var onFireWrites = map[string]string{
-	"increment_counter": "",
-	"reset_counter":     "",
+	"increment_counter": "fire_count",
+	"reset_counter":     "fire_count",
 	"increment_breaker": "breaker_count",
 	"reset_breaker":     "breaker_count",
 	"publish_event":     "",
@@ -184,7 +207,7 @@ var reservedDetectors = []string{
 var kinds = []string{"schema", "policy", "invariant", "detector"}
 
 var (
-	effects      = []string{"block", "warn", "nudge", "allow", "transform"}
+	effects      = []string{"block", "warn", "nudge", "allow"}
 	enforcements = []string{"enforce", "monitor"}
 )
 
