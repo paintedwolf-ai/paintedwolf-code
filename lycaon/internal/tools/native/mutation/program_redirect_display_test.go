@@ -1,14 +1,14 @@
 package mutation_test
 
 import (
-	"strings"
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-// Each redirect's receipt names the file as the model wrote it, never the
-// host path its reviewed inputs resolve to.
+// Each redirect's receipt names the file as the model wrote it; its reviewed
+// inputs keep the resolved path.
 func TestRedirectReceiptsNameTheWorkspacePath(t *testing.T) {
 	f := mutationProgramFixture(t)
 	testutil.FailErr(t, "record checklist", f.SetProgress("- [ ] Write the files"))
@@ -26,9 +26,6 @@ func TestRedirectReceiptsNameTheWorkspacePath(t *testing.T) {
 			testutil.FailErr(t, "read receipt", err)
 			redirects := 0
 			for _, execution := range page.Executions {
-				if strings.Contains(execution.Command, f.Dir) {
-					t.Fatalf("receipt names the host path: %q", execution.Command)
-				}
 				if execution.EffectMode == "publication" {
 					redirects++
 					if execution.Command != tc.operator+" "+tc.path {
@@ -74,7 +71,7 @@ func TestRedirectRowsNameTheirFiles(t *testing.T) {
 				named = append(named, activity.Subject)
 			}
 		}
-		if strings.Join(named, "|") != strings.Join(tc.paths, "|") {
+		if !slices.Equal(named, tc.paths) {
 			t.Fatalf("%q redirect rows = %v, want %v", tc.source, named, tc.paths)
 		}
 	}

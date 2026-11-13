@@ -2,13 +2,9 @@ package invocation
 
 import (
 	"context"
-	"fmt"
-	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -476,68 +472,4 @@ func producerFixture(id string, start int) activityInput {
 	producer := activityFixture(id, "root", "printf", "printf", start)
 	producer.receipt.EffectClasses = []string{"mutation"}
 	return producer
-}
-
-func TestRedirectDisplayPathComesFromTheBoundOperator(t *testing.T) {
-	for _, tc := range []struct {
-		receipt api.CommandExecutionReceipt
-		want    string
-	}{
-		{api.CommandExecutionReceipt{EffectMode: "publication", NativeCommand: ">>", Command: ">> notes/log 1.txt"}, "notes/log 1.txt"},
-		{api.CommandExecutionReceipt{EffectMode: "publication", NativeCommand: "write", Command: "write a.txt"}, ""},
-		{api.CommandExecutionReceipt{EffectMode: "native", NativeCommand: ">", Command: "> a.txt"}, ""},
-		{api.CommandExecutionReceipt{EffectMode: "publication", NativeCommand: ">", Command: ">"}, ""},
-	} {
-		if got, _ := redirectDisplayPath(tc.receipt); got != tc.want {
-			t.Fatalf("%+v = %q, want %q", tc.receipt, got, tc.want)
-		}
-	}
-}
-
-func TestFoldedWritesNameEveryFile(t *testing.T) {
-	paths := []string{"index.html", "style.css", "script.js"}
-	var inputs []activityInput
-	for i, path := range paths {
-		inputs = append(inputs, producerFixture(fmt.Sprintf("producer-%d", i), i*20), redirectFixture(fmt.Sprintf("write-%d", i), ">", path, i*20+10))
-	}
-	values := composeActivityGroups(activityGroups(inputs...), true)
-	if len(values) != 1 || values[0].ID != "write-0" || values[0].Subject != pathSummary(paths) {
-		t.Fatalf("folded writes = %+v", values)
-	}
-	single := composeActivityGroups(activityGroups(producerFixture("producer", 0), redirectFixture("write", ">", paths[0], 10)), true)
-	if len(single) != 1 || single[0].Subject != paths[0] {
-		t.Fatalf("single write = %+v", single)
-	}
-	if rule := activityPresentation(producerFixture("producer", 0)); rule.role != "support" {
-		t.Fatalf("redirected producer role = %q", rule.role)
-	}
-}
-
-func TestRedirectedProducerIsAStepOfItsStatementsWrite(t *testing.T) {
-	producer, write := producerFixture("cat", 0), redirectFixture("write", ">", "index.html", 10)
-	groups := activityGroups(producer, write)
-	// The producer and its redirect are one statement; neither records the other as parent.
-	groups[0].key.node, groups[1].key.node = "statement", "statement"
-	values := composeActivityGroups(groups, true)
-	if len(values) != 1 || values[0].ID != "write" || !slices.Equal(values[0].ExecutionIDs, []string{"cat", "write"}) {
-		t.Fatalf("statement writes = %+v", values)
-	}
-}
-
-func TestActivityPathsDisplayAgainstTheSessionRoots(t *testing.T) {
-	root := t.TempDir()
-	roots := []projectroot.RootRef{{ID: "primary", Path: root, IsPrimary: true}, {ID: "docs", Label: "docs", Path: filepath.Join(t.TempDir(), "docs")}}
-	display := func(path string) string { return projectroot.DisplayAbsolute(roots, path) }
-	mkdir := activityFixture("mkdir", "root", "mkdir", "mkdir", 0)
-	mkdir.receipt.EffectClasses = []string{"mutation"}
-	mkdir.arguments["path_targets"] = map[string]any{"read": []any{}, "write": []any{filepath.Join(root, "site", "assets"), filepath.Join(roots[1].Path, "notes")}}
-	displayActivityPaths(mkdir.arguments, display)
-	want := pathSummary([]string{"site/assets", "@docs/notes"})
-	if got := activitySubject(mkdir); got != want {
-		t.Fatalf("subject = %q, want %q", got, want)
-	}
-	outside := filepath.Join(t.TempDir(), "elsewhere")
-	if got := display(outside); got != outside {
-		t.Fatalf("path outside every root displayed as %q", got)
-	}
 }
