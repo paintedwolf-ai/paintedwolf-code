@@ -21,7 +21,7 @@ func initGitRepo(t *testing.T, dir string) {
 			cmd := exec.Command("git", args...)
 			cmd.Dir = seed
 			// Clear inherited Git variables so fixture commands target the scratch repository.
-			cmd.Env = lyexec.LocalGitEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
+			cmd.Env = git.SeedGitEnv("GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@t",
 				"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@t")
 			out, err := cmd.CombinedOutput()
 			if err != nil {

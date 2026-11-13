@@ -94,15 +94,19 @@ func (s *Handler) EditorScreenProjection(ctx context.Context, d *editordoc.Docum
 	}
 	if s.editorScreens.begin(d.ID, d.ProjectID, digest) {
 		document := *d
+		spans := s.SecretSpans
 		s.background.Go(ctx, func(ctx context.Context) {
-			s.finishEditorScreen(ctx, document, digest)
+			s.finishEditorScreen(ctx, spans, document, digest)
 		})
 	}
 	return wire.SecretScreenPending, nil
 }
 
-func (s *Handler) finishEditorScreen(ctx context.Context, d editordoc.Document, digest string) {
-	screen := secretview.ScreenText(s.SecretSpans, ctx, d.Draft)
+// finishEditorScreen keeps working after the screen lands in the memo, so it
+// takes the screener captured at dispatch instead of reading the handler field
+// that callers may have swapped in the meantime.
+func (s *Handler) finishEditorScreen(ctx context.Context, spans *secretspan.Screener, d editordoc.Document, digest string) {
+	screen := secretview.ScreenText(spans, ctx, d.Draft)
 	if screen == nil {
 		s.editorScreens.invalidate(d.ID)
 		return
@@ -117,7 +121,7 @@ func (s *Handler) finishEditorScreen(ctx context.Context, d editordoc.Document, 
 	}
 	sum := sha256.Sum256([]byte(current.Draft))
 	_, evidence, err := secretview.ProjectContext(s.ManagedSecrets, ctx, current.ProjectID)
-	if err != nil || hex.EncodeToString(sum[:])+evidence+s.SecretSpans.ClassificationRevision(ctx) != digest || s.Events == nil {
+	if err != nil || hex.EncodeToString(sum[:])+evidence+spans.ClassificationRevision(ctx) != digest || s.Events == nil {
 		return
 	}
 	_ = s.Events.Publish(ctx, wire.EventTopicEditorDocument,

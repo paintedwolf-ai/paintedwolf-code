@@ -105,6 +105,7 @@ export function ReviewFileRow(props: Props) {
               : "changes-row-file"
           }
           data-files-ctx="changed-file"
+          data-live-phase={props.row.livePhase ?? undefined}
           data-root-id={props.row.rootId}
           data-path={props.row.path}
           draggable={props.chatRef ? true : undefined}
@@ -124,7 +125,7 @@ export function ReviewFileRow(props: Props) {
               when={props.row.liveVerb}
               fallback={opGlyph(props.row.op)}
             >
-              <span class="den-review-row__pulse" />
+              <span class="den-review-row__pulse" data-live-phase={props.row.livePhase ?? undefined} />
             </Show>
           </span>
           <span class="den-review-row__identity">

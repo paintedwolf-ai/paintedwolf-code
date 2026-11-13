@@ -397,6 +397,9 @@ func (s *Store) prepareWithCache(ctx context.Context, inputs []RecordInput, shar
 	for _, raw := range inputs {
 		in := preparedRecord{RecordInput: normalizedInput(raw)}
 		in.Before, in.After = bytes.Clone(in.Before), bytes.Clone(in.After)
+		if s.contentWithheld(ctx, in.ProjectID, in.RootID, in.Path) || s.contentWithheld(ctx, in.ProjectID, in.FromRootID, in.FromPath) {
+			in.Before, in.After = nil, nil
+		}
 		in.TextBefore, in.TextAfter = cloneTextState(in.TextBefore), cloneTextState(in.TextAfter)
 		in.objects = make(map[string]*db.UpsertSourceBlobObjectParams, 2)
 		for _, content := range []struct {

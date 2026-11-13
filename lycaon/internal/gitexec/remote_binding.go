@@ -113,15 +113,16 @@ func defaultRemote(ctx context.Context, repoDir string, push bool) string {
 // matching prefix as Git does. Git names only repository-configured remotes,
 // so a URL operand cannot be resolved by asking it.
 func rewriteURL(ctx context.Context, repoDir, raw string, push bool) string {
-	out, ok := runRemoteQuery(ctx, repoDir, []string{"config", "--get-regexp", `^url\..*\.(insteadof|pushinsteadof)$`})
+	// -z keeps a base or prefix containing spaces or newlines intact.
+	out, ok := runRemoteQuery(ctx, repoDir, []string{"config", "-z", "--get-regexp", `^url\..*\.(insteadof|pushinsteadof)$`})
 	if !ok {
 		// No rule is configured; Git exits non-zero for an empty match.
 		return raw
 	}
 	type rule struct{ base, prefix string }
 	var fetchRules, pushRules []rule
-	for line := range strings.SplitSeq(string(out), "\n") {
-		key, prefix, found := strings.Cut(strings.TrimSpace(line), " ")
+	for entry := range strings.SplitSeq(string(out), "\x00") {
+		key, prefix, found := strings.Cut(entry, "\n")
 		if !found {
 			continue
 		}
