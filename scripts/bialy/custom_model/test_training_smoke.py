@@ -14,8 +14,10 @@ from export import export
 
 def fixture(group, mode):
     prompt = [{"role":"system","content":"Be precise"},{"role":"user","content":group}]
-    capture = {"schema":"pw-model-request-capture/3","messages":prompt,"tools":[],"controls":{"reasoning_effort":"none"},
-               "host_revision":"a"*40,"epoch":"fixture","contract_sha256":"d"*64,"state_sha256":"b"*64,"catalog_sha256":"c"*64}
+    capture = {"schema":"pw-model-request-capture/3","request_id":"r-"+group,"session_id":"s-"+group,"message_id":"m-"+group,
+               "messages":prompt,"tools":[],"controls":{"reasoning_effort":"none"},
+               "host_revision":"a"*40,"epoch":"fixture","contract_sha256":"d"*64,"state_sha256":"b"*64,"catalog_sha256":"c"*64,
+               "student_provider":"student","student_kind":"openai-compatible","student_model":"student-e4b","dispatch_sha256":"e"*64}
     capture["sha256"] = digest(capture)
     target = {"role":"assistant","text":"answer","tool_calls":[]}
     quality = {"method":"deterministic","verdict":"pass","evidence_ids":["fixture"],
