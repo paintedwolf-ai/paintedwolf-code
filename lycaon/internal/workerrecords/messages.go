@@ -69,17 +69,22 @@ func (s *Store) AppendMessage(ctx context.Context, actor Actor, op Op, workerID 
 		if w.ClosedAt.Valid {
 			return MessageReceipt{}, ErrWorkerClosed
 		}
+		// Every message belongs to the round it was sent during. A coordinator
+		// instructs a running round here; a stopped worker starts one with
+		// StartRound instead.
 		recipient := RoleWorker
 		var round sql.NullInt64
+		r, err := q.GetUnsettledWorkerRound(ctx, w.ID)
+		switch {
+		case err == nil:
+			round = sql.NullInt64{Int64: r.Ordinal, Valid: true}
+		case !db.IsNoRows(err):
+			return MessageReceipt{}, err
+		case sd == sideCoordinator:
+			return MessageReceipt{}, ErrNoRunningRound
+		}
 		if sd == sideWorker {
 			recipient = RoleCoordinator
-			r, err := q.GetUnsettledWorkerRound(ctx, w.ID)
-			if err != nil && !db.IsNoRows(err) {
-				return MessageReceipt{}, err
-			}
-			if err == nil {
-				round = sql.NullInt64{Int64: r.Ordinal, Valid: true}
-			}
 		}
 		if spec.ReplyToSeq != 0 {
 			if spec.ReplyToSeq < 0 || spec.ReplyToSeq >= w.NextMessageSeq {
@@ -137,20 +142,35 @@ func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, gene
 	if sd == sideCoordinator {
 		recipient = RoleCoordinator
 	}
+	// A worker reads only its running round's instructions after those the
+	// round started with, which reached it in the round's prompt. One that
+	// missed its round stays undelivered and is reported as not applied.
+	var round sql.NullInt64
+	after := int64(0)
+	if recipient == RoleWorker {
+		r, err := q.GetUnsettledWorkerRound(ctx, w.ID)
+		if db.IsNoRows(err) {
+			return Page{}, nil
+		}
+		if err != nil {
+			return Page{}, err
+		}
+		round, after = sql.NullInt64{Int64: r.Ordinal, Valid: true}, r.InstructionLastSeq.Int64
+	}
 	key := db.GetWorkerMessageDeliveryParams{WorkerID: w.ID, RecipientSessionID: actor.SessionID, Generation: generation}
 	state, err := q.GetWorkerMessageDelivery(ctx, key)
 	if err != nil && !db.IsNoRows(err) {
 		return Page{}, err
 	}
 	if err == nil && state.PageID != "" {
-		msgs, err := pageMessages(ctx, q, w.ID, recipient, state.PageFirstSeq.Int64-1, state.PageLastSeq.Int64)
+		msgs, err := pageMessages(ctx, q, w.ID, recipient, round, state.PageFirstSeq.Int64-1, state.PageLastSeq.Int64)
 		if err != nil {
 			return Page{}, err
 		}
 		return Page{ID: state.PageID, Messages: msgs}, tx.Commit()
 	}
 	rows, err := q.ListWorkerMessagesAfter(ctx, db.ListWorkerMessagesAfterParams{
-		WorkerID: w.ID, AfterSeq: state.DeliveredThroughSeq, RecipientRole: string(recipient), PageLimit: MaxPageMessages,
+		WorkerID: w.ID, AfterSeq: max(state.DeliveredThroughSeq, after), RecipientRole: string(recipient), RoundOrdinal: round, PageLimit: MaxPageMessages,
 	})
 	if err != nil {
 		return Page{}, err
@@ -171,9 +191,9 @@ func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, gene
 	return page, tx.Commit()
 }
 
-func pageMessages(ctx context.Context, q *db.Queries, workerID string, recipient Role, after, last int64) ([]Message, error) {
+func pageMessages(ctx context.Context, q *db.Queries, workerID string, recipient Role, round sql.NullInt64, after, last int64) ([]Message, error) {
 	rows, err := q.ListWorkerMessagesAfter(ctx, db.ListWorkerMessagesAfterParams{
-		WorkerID: workerID, AfterSeq: after, RecipientRole: string(recipient), PageLimit: MaxPageMessages,
+		WorkerID: workerID, AfterSeq: after, RecipientRole: string(recipient), RoundOrdinal: round, PageLimit: MaxPageMessages,
 	})
 	if err != nil {
 		return nil, err
@@ -240,6 +260,46 @@ func (s *Store) History(ctx context.Context, actor Actor, workerID string, befor
 		beforeSeq = w.NextMessageSeq
 	}
 	rows, err := s.q.ListWorkerMessagesBefore(ctx, db.ListWorkerMessagesBeforeParams{WorkerID: w.ID, BeforeSeq: beforeSeq, PageLimit: int64(limit)})
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Message, 0, len(rows))
+	for _, m := range rows {
+		out = append(out, messageFromRow(m))
+	}
+	return out, nil
+}
+
+// NotApplied lists the instructions queued for a round that its worker never
+// received before the round ended. They start nothing; the coordinator sees
+// them with the round's result and decides whether to send them again.
+func (s *Store) NotApplied(ctx context.Context, actor Actor, workerID string, ordinal int64) ([]Message, error) {
+	if err := actor.check(); err != nil {
+		return nil, err
+	}
+	w, err := coordinatorWorkerAnyState(ctx, s.q, actor, workerID)
+	if err != nil {
+		return nil, err
+	}
+	r, err := s.q.GetWorkerRound(ctx, db.GetWorkerRoundParams{WorkerID: w.ID, Ordinal: ordinal})
+	if db.IsNoRows(err) {
+		return nil, ErrRoundNotFound
+	}
+	if err != nil {
+		return nil, err
+	}
+	if !r.SettledAt.Valid {
+		return nil, nil
+	}
+	delivered := int64(0)
+	if w.ChildSessionID.Valid {
+		if delivered, err = s.q.GetWorkerDeliveredThrough(ctx, db.GetWorkerDeliveredThroughParams{WorkerID: w.ID, RecipientSessionID: w.ChildSessionID.String}); err != nil {
+			return nil, err
+		}
+	}
+	rows, err := s.q.ListRoundInstructionsAfter(ctx, db.ListRoundInstructionsAfterParams{
+		WorkerID: w.ID, RoundOrdinal: sql.NullInt64{Int64: ordinal, Valid: true}, AfterSeq: max(delivered, r.InstructionLastSeq.Int64),
+	})
 	if err != nil {
 		return nil, err
 	}
