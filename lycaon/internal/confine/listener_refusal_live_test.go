@@ -38,3 +38,14 @@ Server(address, h.SimpleHTTPRequestHandler).server_close()`
 		t.Fatalf("the refused listener did not reach the action: %+v", refusals.Refusals)
 	}
 }
+
+func TestKernelRefusalOfAnAllInterfacesBind(t *testing.T) {
+	self := requireLiveBoundary(t)
+	requireRefusalWatch(t)
+	for _, python := range []string{"/opt/homebrew/bin/python3", "/usr/bin/python3"} {
+		for _, address := range []string{"0.0.0.0", "127.0.0.1"} {
+			refusals, out := refusalsOf(t, self, liveBoundaryRoots(t.TempDir()), python, "-c", "import socket; s=socket.socket(); s.bind(('"+address+"', 18791))")
+			t.Logf("%s %s: %+v\n%s", python, address, refusals.Refusals, out)
+		}
+	}
+}
