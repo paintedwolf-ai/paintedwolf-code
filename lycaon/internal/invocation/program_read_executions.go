@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"strings"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -53,14 +52,16 @@ func readExecutionOutputs(ctx context.Context, tx *sql.Tx, program string, execu
 		return nil
 	}
 	index := make(map[string]int, len(executions))
-	args := make([]any, 0, len(executions)+1)
-	args = append(args, program)
+	ids := make([]string, len(executions))
 	for i := range executions {
 		index[executions[i].ID] = i
-		args = append(args, executions[i].ID)
+		ids[i] = executions[i].ID
 	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(executions)), ",")
-	rows, err := tx.QueryContext(ctx, `SELECT o.execution_id,o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated,o.tail_preview,o.line_count FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id IN (`+placeholders+`) AND `+latestExecutionOutput+` ORDER BY o.execution_id,o.stream`, args...)
+	encoded, err := json.Marshal(ids)
+	if err != nil {
+		return err
+	}
+	rows, err := tx.QueryContext(ctx, `SELECT o.execution_id,o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated,o.tail_preview,o.line_count FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id IN (SELECT value FROM json_each(?)) AND `+latestExecutionOutput+` ORDER BY o.execution_id,o.stream`, program, string(encoded))
 	if err != nil {
 		return err
 	}
