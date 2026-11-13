@@ -107,6 +107,8 @@ var implementInvestigateDeferredTools = []string{
 	"pack_board",
 	"worker_cancel",
 	"answer_decision",
+	"instruct_worker",
+	"worker_history",
 }
 
 func TestCoordinatorToolSurface_implementInvestigateMatchesSSOT(t *testing.T) {

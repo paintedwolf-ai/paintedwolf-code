@@ -264,6 +264,10 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	}
 	r.deps.Sessions.Manager.SetWorkerRoster(roster.Template)
 	r.deps.Sessions.Manager.SetWorkerResultNotices(roster.ResultNotice)
+	r.deps.Sessions.Manager.SetWorkerResults(func(ctx context.Context, sessionID, name string) (string, bool, error) {
+		actor := workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
+		return roster.Reader.LatestResultJob(ctx, actor, name)
+	})
 	r.ParentWaiter = worker.NewParentWorkerWaiter()
 
 	if err := call.RegisterHandoffTools(r.deps.Execution.Host.Registry, call.HandoffToolDeps{Calls: r.Calls, Sessions: callLookup}); err != nil {

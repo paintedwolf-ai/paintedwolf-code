@@ -601,6 +601,24 @@
       ],
       "WORKER_BUDGET_REQUEST_OPEN": [
         "WORKER_COMPLETION_REPORT_MISSING"
+      ],
+      "DECISION_JOB_ID_MISMATCH": [
+        "DECISION_CHANGED"
+      ],
+      "DECISION_SESSION_MISMATCH": [
+        "WORKER_NAME_UNKNOWN"
+      ],
+      "TASK_DECISION_PENDING": [
+        "INSTRUCT_WORKER_ASKING"
+      ],
+      "WORKER_RESUME_CHILD_UNKNOWN": [
+        "WORKER_NAME_UNKNOWN"
+      ],
+      "WORKER_RESUME_MISMATCH": [
+        "INSTRUCT_WORKER_AGENT_CHANGES_OPEN"
+      ],
+      "WORKER_RESUME_OVERLAY_DISCARDED": [
+        "OVERLAY_PROMOTE_NOT_PENDING"
       ]
     },
     "tools": {

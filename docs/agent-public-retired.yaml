@@ -332,3 +332,27 @@ retired:
     kind: tool_name
     summary: Retired with the worker round ceiling; there is no request to decline, and worker_cancel stops a round that is no longer worth continuing.
     date: 2026-11-12
+  - id: DECISION_JOB_ID_MISMATCH
+    kind: hint_code
+    summary: answer_decision addressed a decision by job id; it now names the worker and a changed decision is refused with DECISION_CHANGED.
+    date: 2026-11-13
+  - id: DECISION_SESSION_MISMATCH
+    kind: hint_code
+    summary: answer_decision named a worker job from another session; worker names resolve only in their coordinator session (WORKER_NAME_UNKNOWN).
+    date: 2026-11-13
+  - id: TASK_DECISION_PENDING
+    kind: hint_code
+    summary: A resume reached a child waiting on its decision; an instruction to an asking worker is refused with INSTRUCT_WORKER_ASKING.
+    date: 2026-11-13
+  - id: WORKER_RESUME_CHILD_UNKNOWN
+    kind: hint_code
+    summary: A resume named an unknown child session; workers are addressed by name (WORKER_NAME_UNKNOWN).
+    date: 2026-11-13
+  - id: WORKER_RESUME_MISMATCH
+    kind: hint_code
+    summary: A resume changed the child agent or scope; instruct_worker changes the agent between rounds, refused while changes are open (INSTRUCT_WORKER_AGENT_CHANGES_OPEN).
+    date: 2026-11-13
+  - id: WORKER_RESUME_OVERLAY_DISCARDED
+    kind: hint_code
+    summary: A resume built on a rejected overlay; rejection now resets the worker lane, and landing a disposed result is refused with OVERLAY_PROMOTE_NOT_PENDING.
+    date: 2026-11-13

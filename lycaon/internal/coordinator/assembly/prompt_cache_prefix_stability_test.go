@@ -288,7 +288,7 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 			ProgressMissing:   missingProgress,
 		}
 	}
-	deps.WorkerRoster = func(context.Context, string) ([]map[string]any, int, error) { return roster, 0, nil }
+	deps.Workers.Roster = func(context.Context, string) ([]map[string]any, int, error) { return roster, 0, nil }
 	deps.CoordinatorFrame = prefixStabilityMutableCoordCtx{
 		base:          deps.CoordinatorFrame,
 		evidenceGates: &evidenceGates,

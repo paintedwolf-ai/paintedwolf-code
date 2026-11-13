@@ -54,11 +54,24 @@ func measureCoordinatorInjectBlock(
 	switch spec.ID {
 	case "turn_state":
 		block, err := inject.RenderTurnStateBlock(ctx, renderer, "sess-inject-test", inject.TurnStateInjectInput{
-			ProgressMissing:          true,
-			ProfileHasUpdateProgress: true,
-			VerifyRequired:           true,
-			PendingOverlayJobs:       []string{"job-overlay-1", "job-overlay-2"},
-			PartialWorkerJobs:        []string{"job-partial-1"},
+			ProgressMissing: true,
+			VerifyRequired:  true,
+			Workers: []map[string]any{
+				{"name": "parser-fix", "agent": "implementer", "scope_mode": "write", "state": "delivered",
+					"about": "Fix the empty-input crash in the parser and add coverage", "result_handle": "result-1",
+					"result_disposition": "open", "changed": []string{"src/parser.go", "src/parser_test.go"},
+					"read": []string{"src/parser.go", "src/lexer.go", "docs/grammar.md"}},
+				{"name": "api-survey", "agent": "explore", "scope_mode": "read", "state": "asking",
+					"about": "Survey the public API for breaking changes", "question": "Is the v1 client still supported?"},
+				{"name": "docs", "agent": "implementer", "scope_mode": "write", "state": "working",
+					"about": "Update the changelog for the parser fix"},
+			},
+			ToolVars: map[string]any{
+				"profile_has_update_progress": true, "profile_has_answer_decision": true,
+				"profile_has_preview_overlay": true, "profile_has_promote_overlay": true,
+				"profile_has_reject_overlay": true, "profile_has_shelve_overlay": true,
+				"profile_has_instruct_worker": true,
+			},
 		})
 		contractcheck.FailErr(t, "RenderTurnStateBlock", err)
 		return block

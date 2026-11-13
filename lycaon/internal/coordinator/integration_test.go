@@ -272,10 +272,10 @@ func TestBuildCompletionMessagesWorkerLeg(t *testing.T) {
 	root := kickTestRoot(t)
 	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: root})
 	deps := assembly.AssemblyDeps{
-		Prompts:       pe,
-		Injects:       prompts.NewInjectRenderer(pe),
-		Limits:        func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		WorkerContext: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}},
+		Prompts: pe,
+		Injects: prompts.NewInjectRenderer(pe),
+		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		Workers: assembly.Workers{Leg: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", Checklist: []string{"step"}}}},
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
 	msgs, err := rt.BuildCompletionMessages(context.Background(), &api.Session{
@@ -506,11 +506,11 @@ func TestAssemblyWorkerLegInjectUsesRenderer(t *testing.T) {
 	boardEng := assembly.NewBoardEngine(stubBoardBuilder{hash: "abc"}, stubBoardFormatter{}, nil)
 	boardEng.SetInjectRenderer(prompts.NewInjectRenderer(pe))
 	deps := assembly.AssemblyDeps{
-		Prompts:       pe,
-		Injects:       prompts.NewInjectRenderer(pe),
-		Limits:        func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
-		WorkerContext: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", PhaseID: "implement", Checklist: []string{"step"}}},
-		Board:         boardEng,
+		Prompts: pe,
+		Injects: prompts.NewInjectRenderer(pe),
+		Limits:  func(context.Context, *api.Session) settings.SessionLimits { return settings.DefaultSessionLimits() },
+		Workers: assembly.Workers{Leg: stubWorkerCtx{leg: inject.WorkerLegContext{LegID: "leg-1", PhaseID: "implement", Checklist: []string{"step"}}}},
+		Board:   boardEng,
 	}
 	rt := coordinator.NewRuntime(coordinator.RuntimeDeps{AssemblyDeps: func() assembly.AssemblyDeps { return deps }})
 	dir := t.TempDir()

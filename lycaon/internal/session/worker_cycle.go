@@ -5,6 +5,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
+	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -79,6 +80,14 @@ func (m *Host) SetWorkerResultNotices(notices workeroutcomes.ResultNotices) {
 		return
 	}
 	m.Workers.Results.SetResultNotices(notices)
+}
+
+// SetWorkerResults sets how a worker name resolves to its latest result for
+// the checklist latch.
+func (m *Host) SetWorkerResults(results turnguards.LatestResultJobs) {
+	if m != nil && m.Coordinator.Guards != nil {
+		m.Coordinator.Guards.SetWorkerResults(results)
+	}
 }
 
 // SetWorkerRoster sets how a coordinator's request lists its workers.

@@ -240,8 +240,8 @@ func (e *turnContextAssembler) turnStateInject(
 		VerifyRequired:   frame.RequiresEvidence("verify"),
 		ToolVars:         prompts.CoordinatorPolicyTemplateVars(offered, nil),
 	}
-	if e.deps.WorkerRoster != nil {
-		workers, omitted, err := e.deps.WorkerRoster(ctx, sess.ID)
+	if e.deps.Workers.Roster != nil {
+		workers, omitted, err := e.deps.Workers.Roster(ctx, sess.ID)
 		if err != nil {
 			slog.WarnContext(ctx, "worker roster for turn state", "session_id", sess.ID, "error", err)
 		}

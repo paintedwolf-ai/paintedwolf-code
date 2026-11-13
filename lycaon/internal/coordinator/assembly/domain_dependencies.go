@@ -51,8 +51,7 @@ type turnContextDeps struct {
 	SkillPreload      func(sessionID string) *turnload.SkillPreload
 	SynthesisEvidence SynthesisEvidenceSource
 	TurnSourceBriefs  func(ctx context.Context, sess *api.Session) map[string]inject.SourceChangeBrief
-	WorkerContext     WorkerContextBuilder
-	WorkerRoster      WorkerRosterSource
+	Workers           Workers
 	WorkflowHints     *guidance.HintConfig
 	WorkflowArchive   func(context.Context, string) string
 	PromptConfigured  bool
@@ -120,8 +119,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		SkillPreload:      snapshot.SkillPreload,
 		SynthesisEvidence: snapshot.SynthesisEvidence,
 		TurnSourceBriefs:  snapshot.TurnSourceBriefs,
-		WorkerContext:     snapshot.WorkerContext,
-		WorkerRoster:      snapshot.WorkerRoster,
+		Workers:           snapshot.Workers,
 		WorkflowHints:     snapshot.WorkflowHints,
 		WorkflowArchive:   surfaceDeps.WorkflowArchive,
 		PromptConfigured:  snapshot.Prompts != nil,

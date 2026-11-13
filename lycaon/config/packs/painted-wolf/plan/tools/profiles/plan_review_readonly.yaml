@@ -11,6 +11,7 @@ tools:
   record_finding: sticky
   pack_board: sticky
   request_decision: sticky
+  message_coordinator: sticky
   source_history: sticky
   skills_read: sticky
   wait: sticky
