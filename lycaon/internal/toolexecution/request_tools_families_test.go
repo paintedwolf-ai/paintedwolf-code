@@ -20,8 +20,9 @@ func TestRequestToolsLoadsPermittedFamilies(t *testing.T) {
 		{"search exact", "web_search", "", []string{"web_search", "fetch_url"}, []string{"fetch_url", "web_search"}},
 		{"fetch exact", "fetch_url", "", []string{"web_search", "fetch_url"}, []string{"fetch_url", "web_search"}},
 		{"ranked", "research the project", "web_search", []string{"web_search", "fetch_url"}, []string{"fetch_url", "web_search"}},
-		{"terminal", "terminal_open", "", []string{"terminal_open", "terminal_read"}, []string{"terminal_open", "terminal_read"}},
-		{"page", "page_open", "", []string{"page_open", "page_snapshot"}, []string{"page_open", "page_snapshot"}},
+		{"terminal launcher", "terminal_open", "", []string{"terminal_open", "terminal_read"}, []string{"terminal_open"}},
+		{"terminal controls", "terminal_read", "", []string{"terminal_open", "terminal_read"}, []string{"terminal_read"}},
+		{"page launcher", "page_open", "", []string{"page_open", "page_snapshot"}, []string{"page_open"}},
 		{"restricted", "web_search", "", []string{"web_search"}, []string{"web_search"}},
 	}
 	for _, tc := range cases {

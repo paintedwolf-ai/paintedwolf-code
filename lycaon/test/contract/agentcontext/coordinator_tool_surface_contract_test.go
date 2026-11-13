@@ -15,7 +15,7 @@ import (
 
 var implementInvestigateSurfaceTools = []string{
 	"summarize",
-	"command", "source_history", "skills_read",
+	"command", "terminal_open", "source_history", "skills_read",
 	"update_progress", "ask_user", "request_tools",
 	"recall",
 }
@@ -79,7 +79,6 @@ var implementInvestigateDeferredTools = []string{
 	"restore_version",
 	"verify",
 	"wait",
-	"terminal_open",
 	"terminal_send",
 	"terminal_read",
 	"terminal_snapshot",
