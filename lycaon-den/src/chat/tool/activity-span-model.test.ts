@@ -257,10 +257,40 @@ describe("activity span membership", () => {
     ]);
     expect(projected[0]).toMatchObject({ key: "w1" });
     expect(projected[1]).toMatchObject({
-      key: "file-edit:w1",
+      key: "file-edit:w1:0",
       folds: [{ path: "a.go" }],
     });
     expect(projected[2]).toMatchObject({ key: "c1" });
+  });
+
+  it("anchors every file one command edited to a single diff row below its span", () => {
+    const projected = projectActivitySpans([
+      tool(
+        part("c1", "command", "edit two files", {
+          kind: "command",
+          fileEdits: [
+            fileEditPreviewFixture({ path: "a.go", before: "old", after: "new" }),
+            fileEditPreviewFixture({ path: "b.go", before: "", after: "new file" }),
+          ],
+        }),
+      ),
+      tool(
+        part("c2", "command", "edit one again", {
+          kind: "command",
+          fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "new", after: "newer" })],
+        }),
+      ),
+    ]);
+    const rows = projected.filter((item) => item.kind === "file_edit");
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      key: "file-edit:c1:0",
+      anchorMessageId: "result-c1",
+      folds: [
+        { key: "c1:0", path: "a.go", steps: [{ key: "c1:0" }, { key: "c2:0" }] },
+        { key: "c1:1", path: "b.go", steps: [{ key: "c1:1" }] },
+      ],
+    });
   });
 
   it("folds consecutive writes into one span with one diff row per path", () => {
@@ -326,14 +356,14 @@ describe("activity span membership", () => {
       "activity_span",
     ]);
     expect(projected[1]).toMatchObject({
-      key: "file-edit:w1",
+      key: "file-edit:w1:0",
       folds: [
         {
           path: "a.go",
           net: { before_sha256: sourceTextHash("old"), after_sha256: sourceTextHash("v2") },
           steps: [
-            { key: "w1", toolCallId: "w1", messageId: "result-w1" },
-            { key: "w2", toolCallId: "w2", messageId: "result-w2" },
+            { key: "w1:0", toolCallId: "w1", messageId: "result-w1" },
+            { key: "w2:0", toolCallId: "w2", messageId: "result-w2" },
           ],
         },
       ],
