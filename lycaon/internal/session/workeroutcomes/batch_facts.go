@@ -9,16 +9,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-var coordinatorMutationTools = map[string]struct{}{
-	"write":         {},
-	"edit":          {},
-	"replace_lines": {},
-	"code_rewrite":  {},
-	"jq_edit":       {},
-	"chmod":         {},
-	"delete":        {},
-}
-
 // BatchReadyForSynthesis checks every host wrapup gate.
 func BatchReadyForSynthesis(state surface.ImplementSessionState, history []api.Message, progressContent string, verifyRequired, verifyOK bool) bool {
 	if !batchReadyIgnoringProgress(state, history, verifyRequired, verifyOK) {
@@ -72,31 +62,6 @@ func OpenRepairSinceUserIntent(history []api.Message, verifyRepair bool) bool {
 		}
 	}
 	return verifyRepair
-}
-
-// ImplementationWorkSinceBoundary reports mutations after a transcript boundary.
-func ImplementationWorkSinceBoundary(history []api.Message, sinceIdx int) bool {
-	for i := sinceIdx; i < len(history); i++ {
-		msg := history[i]
-		if msg.Role != api.MessageRoleTool || msg.ToolResult == nil {
-			continue
-		}
-		if msg.ToolResult.Outcome != api.ToolResultOutcomeCompleted {
-			continue
-		}
-		if msg.ToolResult.FileEdit != nil {
-			return true
-		}
-		if _, ok := coordinatorMutationTools[strings.TrimSpace(msg.ToolResult.Tool)]; ok {
-			return true
-		}
-	}
-	for _, env := range TerminalWorkerEnvelopesSince(history, sinceIdx) {
-		if len(env.Report.FilesModified) > 0 {
-			return true
-		}
-	}
-	return false
 }
 
 // Only resumable states keep a worker envelope open.
