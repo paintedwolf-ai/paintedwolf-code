@@ -39,6 +39,17 @@ describe("open-files-surface", () => {
     expect(getSidebarScope("p1")).toEqual({ kind: "commit" });
   });
 
+  it("gives each evidence record its own tab and reuses it", () => {
+    const open = (recordId: string) => applyOpenFilesSurfaceRequest({ kind: "briefing-evidence", projectId: "p1", recordId }, roots);
+    open("record-a");
+    const first = projectFilesState("p1").activeKey!;
+    expect(projectFilesState("p1").byKey[first]).toMatchObject({ kind: "briefing", briefingRecordId: "record-a", name: "Summary evidence" });
+    open("record-b");
+    open("record-a");
+    expect(projectFilesState("p1").order).toHaveLength(2);
+    expect(projectFilesState("p1").activeKey).toBe(first);
+  });
+
   it("reuses a tool tab and keeps different calls and panes separate", () => {
     const document = { kind: "tool" as const, sessionId: "session", messageId: "message", toolCallId: "call", pane: "output", title: "Read output",
       content: { kind: "inline" as const, text: "Recorded output" } };

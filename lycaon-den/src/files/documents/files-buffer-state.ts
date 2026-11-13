@@ -123,6 +123,8 @@ export type FileBuffer = {
   diffs?: DiffsAddress;
   walkGitSelection?: GitReviewSelection;
   chatContent?: ChatContentDocument;
+  /** The evidence record a briefing page reads. */
+  briefingRecordId?: string;
 };
 
 /** Explicit navigation takes precedence over background presentation changes. */
