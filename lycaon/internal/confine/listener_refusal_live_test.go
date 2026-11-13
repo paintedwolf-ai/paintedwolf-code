@@ -89,3 +89,8 @@ func TestKernelReportsRepeatedBinds(t *testing.T) {
 		t.Logf("attempt %d port %s: %d refusals %+v", i, port, len(refusals.Refusals), refusals.Refusals)
 	}
 }
+
+func TestProcessSandboxState(t *testing.T) {
+	out, err := exec.Command("/usr/bin/python3", "-c", "import ctypes, os; lib = ctypes.CDLL(None); print('sandboxed', lib.sandbox_check(os.getpid(), None, 0), 'parent', lib.sandbox_check(os.getppid(), None, 0))").CombinedOutput()
+	t.Logf("%s err=%v", out, err)
+}

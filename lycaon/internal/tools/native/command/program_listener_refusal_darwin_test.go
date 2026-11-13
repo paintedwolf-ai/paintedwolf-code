@@ -158,3 +158,8 @@ func TestProgramListenerBareLaunchInThisProcess(t *testing.T) {
 		t.Logf("helper %s: refusals %+v output %s", filepath.Base(helper), refusals.Refusals, out)
 	}
 }
+
+func TestProcessSandboxState(t *testing.T) {
+	out, err := exec.Command("/usr/bin/python3", "-c", "import ctypes, os; lib = ctypes.CDLL(None); print('sandboxed', lib.sandbox_check(os.getpid(), None, 0), 'parent', lib.sandbox_check(os.getppid(), None, 0))").CombinedOutput()
+	t.Logf("%s err=%v", out, err)
+}
