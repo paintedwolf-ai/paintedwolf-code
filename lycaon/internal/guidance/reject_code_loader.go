@@ -216,7 +216,8 @@ func CopyOnlyEmit(emit string) bool {
 func validateHintEntry(code string, entry HintEntry) error {
 	copyOnly := CopyOnlyEmit(entry.Emit)
 	view := NormalizeRejectCodeView(code, entry)
-	if len(scenarioRows(entry)) == 0 && !copyOnly && entry.Severity != "warning" {
+	// A hint is never evaluated, so it has no scenarios to rehearse.
+	if len(scenarioRows(entry)) == 0 && !copyOnly && entry.Kind != "hint" && entry.Severity != "warning" {
 		return fmt.Errorf("%s: scenarios required (>=1)", code)
 	}
 	for _, sc := range scenarioRows(entry) {

@@ -8,15 +8,23 @@ import (
 )
 
 func TestProf10HostRefusesUndeliverableTransform(t *testing.T) {
+	rewrite := func(anchor string) *Rule {
+		return &Rule{ID: "REWRITE", Anchor: anchor, Effect: EffectTransform, Transform: &TransformSpec{Action: "redact", Target: "content"}}
+	}
 	for _, anchor := range []string{AnchorToolPreInvoke, AnchorToolHandler, AnchorContentInput, AnchorCoordinatorPostTurn, AnchorCoordinatorCloseoutCheck, AnchorWorkerFinalize, AnchorWorkerReportCheck} {
-		if err := ValidateHostRuleSet(NewRuleSet([]*Rule{{ID: "REWRITE", Anchor: anchor, Effect: EffectTransform}})); err == nil {
+		if err := ValidateHostRuleSet(NewRuleSet([]*Rule{rewrite(anchor)})); err == nil {
 			t.Errorf("accepted transform at %s", anchor)
 		}
 	}
 	for _, anchor := range []string{AnchorToolPost, AnchorContentOutput, AnchorContentToolResult, AnchorCredentialAssignment} {
-		if err := ValidateHostRuleSet(NewRuleSet([]*Rule{{ID: "REWRITE", Anchor: anchor, Effect: EffectTransform}})); err != nil {
+		if err := ValidateHostRuleSet(NewRuleSet([]*Rule{rewrite(anchor)})); err != nil {
 			t.Errorf("validate transform boundary %s: %v", anchor, err)
 		}
+	}
+	unspecified := rewrite(AnchorContentOutput)
+	unspecified.Transform = nil
+	if err := ValidateHostRuleSet(NewRuleSet([]*Rule{unspecified})); err == nil {
+		t.Error("accepted a host transform that names nothing to replace")
 	}
 }
 

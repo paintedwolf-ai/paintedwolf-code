@@ -126,7 +126,9 @@ func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 	if e.Category == "" {
 		e.Category = e.XCategory
 	}
-	e.Tools = stringList(e.Selector["tools"])
+	if tools := stringList(e.Selector["tools"]); len(tools) > 0 {
+		e.Tools = tools
+	}
 	return nil
 }
 
