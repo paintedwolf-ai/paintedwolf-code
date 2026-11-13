@@ -207,3 +207,9 @@ FROM worker_jobs WHERE id = ?;
 
 -- name: GetLandedChangeJobID :one
 SELECT worker_job_id FROM landed_changes WHERE id = ?;
+
+-- name: GetWorkerByChildSession :one
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE child_session_id = ?;

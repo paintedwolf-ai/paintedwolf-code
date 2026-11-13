@@ -135,6 +135,14 @@ func TestCrossSessionDenial(t *testing.T) {
 	_, err = f.store.History(t.Context(), f.other, w.WorkerID, 0, 10)
 	wantErr(t, "history", err, workerrecords.ErrWorkerNotFound)
 
+	self, err := f.store.Self(t.Context(), child)
+	testutil.FailErr(t, "self", err)
+	if self.ID != w.WorkerID {
+		t.Fatalf("self = %+v", self)
+	}
+	_, err = f.store.Self(t.Context(), f.coord)
+	wantErr(t, "coordinator is no worker", err, workerrecords.ErrWorkerNotFound)
+
 	// The worker's own session may message its coordinator but not act for it.
 	_, err = f.store.AppendMessage(t.Context(), child, op("c-msg"), w.WorkerID, workerrecords.MessageSpec{Body: "note"})
 	testutil.FailErr(t, "worker message", err)
