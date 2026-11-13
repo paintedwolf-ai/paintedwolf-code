@@ -363,11 +363,11 @@ func TestSeveralRequestableRefusalsShareOneCapabilityRequest(t *testing.T) {
 		{Operation: "file-read-data", Target: "/requestable/key", Grant: "/requestable/key", Layer: confine.FloorReadKeyMaterial, Recovery: confine.RecoverReadPath},
 		{Operation: "file-write-data", Target: "/requestable/out", Grant: "/requestable/out", Layer: confine.FloorOutsideWriteRoots, Recovery: confine.RecoverWriteRoot},
 	}}}
-	text, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: t.Name()}, "command", nil, "{}", 1, guidance.ToolResultFacts{Confine: obs})
+	text, facts := mgr.ToolPolicy.AfterTool(t.Context(), &api.Session{ID: t.Name()}, "command", map[string]any{"command": "make install"}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
 	if !facts.HasCode("SANDBOX_TRY_CAPABILITIES") || facts.HasCode("SANDBOX_TRY_READ_PATH") || facts.HasCode("SANDBOX_TRY_WRITE_ROOT") {
 		t.Fatalf("two requestable refusals did not resolve to one combined request: %s", text)
 	}
-	for _, want := range []string{"`read_path`", "/requestable/key", "`write_root`", "/requestable/out"} {
+	for _, want := range []string{"`capability_request.read_path`", "/requestable/key", "`capability_request.write_root`", "/requestable/out"} {
 		if !strings.Contains(text, want) {
 			t.Errorf("combined request missing %q: %s", want, text)
 		}
