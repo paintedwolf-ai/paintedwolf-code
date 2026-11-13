@@ -19,7 +19,7 @@ When building, changing, or showing an interface, run its real entry point, exer
 {% endif %}{% if profile_has_terminal_open and profile_has_terminal_send and profile_has_terminal_read and profile_has_terminal_snapshot %}- Interactive program or several-step demonstration: drive the entry point with `terminal_open`, `terminal_send`, `terminal_read`, and `terminal_snapshot` at meaningful states for `[artifact:<uuid>]` stills.
 {% elif profile_has_terminal_open %}- Interactive program or several-step demonstration: start the entry point with `terminal_open`, which returns its first `[artifact:<uuid>]` screen; session input, read, and snapshot tools attach while the terminal is open.
 {% elif visual_show_terminal_needs_request %}- Interactive program or several-step demonstration: load the interactive terminal session tools with `request_tools` (such as "open the program in a terminal and snapshot it"), then drive and snapshot each state.
-{% endif %}- Never demonstrate with mocked or scripted stdin, a stubbed interface, a driver script, or replayed output. Flat stdout is not `tui#` terminal screen evidence.
+{% endif %}- Never demonstrate with mocked or scripted stdin, a stubbed interface, a driver script, or replayed output. Flat stdout is not terminal screen evidence.
 {% endif %}{% if profile_has_view_image %}- Image assets: inspect authored SVGs, raster graphics, or handles with `view_image`.
 {% endif %}{% if profile_has_view_video %}- Recordings: see the moments a user's screen recording shows with `view_video`.
 {% endif %}
