@@ -159,7 +159,7 @@ func curlPathTargets(opts options) []commandprogram.PathTarget {
 	for _, path := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
 		add(path, true)
 	}
-	for _, path := range []string{opts.upload, opts.tls.cacert, opts.tls.capath, opts.tls.cert, opts.tls.key} {
+	for _, path := range []string{opts.upload, opts.tls.cacert, opts.tls.capath, opts.tls.cert, opts.tls.key, opts.unixSocket} {
 		add(path, false)
 	}
 	for _, path := range opts.cookies {
