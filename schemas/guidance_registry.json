@@ -2474,6 +2474,11 @@
       "emit": "guard:sandbox",
       "summary": "The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}."
     },
+    "SANDBOX_TRY_CAPABILITIES": {
+      "category": "recoverable",
+      "emit": "guard:sandbox",
+      "summary": "In `{{ tool }}`, the sandbox refused more than one capability{% if paintedwolf.process_running %} while the job runs{% endif %}."
+    },
     "SANDBOX_TRY_CREDENTIAL_STORE": {
       "category": "recoverable",
       "emit": "guard:sandbox",

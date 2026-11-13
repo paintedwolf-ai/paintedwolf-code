@@ -4,9 +4,9 @@ kind: policy
 on: tool.post_invoke
 selector:
   tools: [command, verify, command_output]
-requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.next_steps, paintedwolf.process_running, paintedwolf.refused_read_grants, paintedwolf.refused_terminal_read_paths, paintedwolf.refused_terminal_write_paths, paintedwolf.refused_write_grants]
+requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.next_steps, paintedwolf.process_running, paintedwolf.refused_connect_ports, paintedwolf.refused_credential_store_paths, paintedwolf.refused_listen_ports, paintedwolf.refused_read_grants, paintedwolf.refused_signals, paintedwolf.refused_socket_paths, paintedwolf.refused_terminal_read_paths, paintedwolf.refused_terminal_write_paths, paintedwolf.refused_write_grants, paintedwolf.unsandboxed_refusals]
 when: >-
-  paintedwolf.confine_applied && (size(paintedwolf.refused_terminal_read_paths) > 0 || size(paintedwolf.refused_terminal_write_paths) > 0) && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running) && size(paintedwolf.refused_read_grants) == 0 && size(paintedwolf.refused_write_grants) == 0
+  paintedwolf.confine_applied && (size(paintedwolf.refused_terminal_read_paths) > 0 || size(paintedwolf.refused_terminal_write_paths) > 0) && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running) && !((size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running) && tool in ["command", "verify"] && (size(paintedwolf.refused_read_grants) > 0 || size(paintedwolf.refused_write_grants) > 0 || size(paintedwolf.refused_credential_store_paths) > 0 || size(paintedwolf.unsandboxed_refusals) > 0 || size(paintedwolf.refused_listen_ports) > 0 || size(paintedwolf.refused_connect_ports) > 0 || size(paintedwolf.refused_signals) > 0 || size(paintedwolf.refused_socket_paths) > 0))
 effect: warn
 x-paintedwolf-category: control-plane
 x-paintedwolf-emit: guard:sandbox
