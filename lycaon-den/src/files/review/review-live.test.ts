@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentSessionPresence, SourceChange, SourceWalkResponse } from "../../api/types.ts";
 import { stubClient } from "../../test/client-fixture.ts";
-import { MIN_VISIBLE_MS } from "../../ui/min-visible-hold.ts";
+import { AGENT_LINGER_MS } from "../components/agent-presence.ts";
 import {
   noteReviewChangeStats,
   noteReviewLanding,
@@ -36,7 +36,7 @@ function landing(path: string, over: Partial<SourceChange> = {}): SourceChange {
 }
 
 function paths(): string[] {
-  return reviewLiveSnapshot(PROJECT).rows.map((row) => `${row.path}:${row.state}`);
+  return reviewLiveSnapshot(PROJECT).rows.map((row) => `${row.path}:${row.state}${row.phase === "past" ? ":past" : ""}`);
 }
 
 /** One comparison answer; its claim is newer than every landing noted before it started. */
@@ -114,14 +114,14 @@ describe("review live rows", () => {
     const inFlight = answer();
     noteReviewLanding(PROJECT, landing("a.ts", { session_id: "s1", tool_call_id: "c1" }));
     syncReviewPresence(PROJECT, sessions());
-    vi.advanceTimersByTime(MIN_VISIBLE_MS * 4);
+    vi.advanceTimersByTime(AGENT_LINGER_MS * 4);
     expect(paths()).toEqual(["a.ts:landing"]);
 
     await inFlight.land();
     expect(paths()).toEqual(["a.ts:landing"]);
 
     await answer().land();
-    vi.advanceTimersByTime(MIN_VISIBLE_MS);
+    vi.advanceTimersByTime(AGENT_LINGER_MS);
     expect(paths()).toEqual([]);
   });
 
@@ -129,19 +129,39 @@ describe("review live rows", () => {
     syncReviewPresence(PROJECT, sessions(editing("s1", "a.ts", "c1")));
     syncReviewPresence(PROJECT, sessions());
     noteReviewLanding(PROJECT, landing("a.ts", { session_id: "s1", tool_call_id: "c1" }));
-    vi.advanceTimersByTime(MIN_VISIBLE_MS * 4);
+    vi.advanceTimersByTime(AGENT_LINGER_MS * 4);
     expect(paths()).toEqual(["a.ts:landing"]);
     await answer().land();
-    vi.advanceTimersByTime(MIN_VISIBLE_MS);
+    vi.advanceTimersByTime(AGENT_LINGER_MS);
     expect(paths()).toEqual([]);
   });
 
-  it("shows work that never landed for the minimum readable time, then drops it", () => {
+  it("shows editing that never landed as past for the linger time, then drops it", () => {
     syncReviewPresence(PROJECT, sessions(editing("s1", "a.ts", "c1")));
+    vi.advanceTimersByTime(60_000);
     syncReviewPresence(PROJECT, sessions());
-    vi.advanceTimersByTime(MIN_VISIBLE_MS - 1);
-    expect(paths()).toEqual(["a.ts:editing"]);
+    expect(paths()).toEqual(["a.ts:editing:past"]);
+    vi.advanceTimersByTime(AGENT_LINGER_MS - 1);
+    expect(paths()).toEqual(["a.ts:editing:past"]);
     vi.advanceTimersByTime(1);
+    expect(paths()).toEqual([]);
+  });
+
+  it("drops a state that asks for action as soon as it ends", () => {
+    syncReviewPresence(PROJECT, sessions(chat("s1", {
+      intents: [{ id: "i", tool_call_id: "c1", tool: "edit", operation: "edit", state: "awaiting_approval",
+        root_id: "r1", path: "a.ts", extent: "range", ranges: [] }],
+    })));
+    syncReviewPresence(PROJECT, sessions());
+    expect(paths()).toEqual([]);
+  });
+
+  it("never shows a released landing as past", async () => {
+    syncReviewPresence(PROJECT, sessions(editing("s1", "a.ts", "c1")));
+    noteReviewLanding(PROJECT, landing("a.ts", { session_id: "s1", tool_call_id: "c1" }));
+    syncReviewPresence(PROJECT, sessions());
+    expect(paths()).toEqual(["a.ts:landing"]);
+    await answer().land();
     expect(paths()).toEqual([]);
   });
 
@@ -151,18 +171,19 @@ describe("review live rows", () => {
     })));
     noteReviewLanding(PROJECT, landing("w.ts", { session_id: "s1", worker_id: "j1", tool_call_id: "promote-1" }));
     syncReviewPresence(PROJECT, sessions());
-    vi.advanceTimersByTime(MIN_VISIBLE_MS * 4);
+    vi.advanceTimersByTime(AGENT_LINGER_MS * 4);
     expect(paths()).toEqual(["w.ts:landing"]);
     await answer().land();
-    vi.advanceTimersByTime(MIN_VISIBLE_MS);
+    vi.advanceTimersByTime(AGENT_LINGER_MS);
     expect(paths()).toEqual([]);
   });
 
-  it("does not hold a row for someone else's write to the same file", () => {
+  it("does not take someone else's write to the same file as the row's landing", () => {
     syncReviewPresence(PROJECT, sessions(editing("s1", "a.ts", "c1")));
     noteReviewLanding(PROJECT, landing("a.ts", { origin: "user", session_id: "s1" }));
     syncReviewPresence(PROJECT, sessions());
-    vi.advanceTimersByTime(MIN_VISIBLE_MS);
+    expect(paths()).toEqual(["a.ts:editing:past"]);
+    vi.advanceTimersByTime(AGENT_LINGER_MS);
     expect(paths()).toEqual([]);
   });
 

@@ -47,6 +47,10 @@ func buildEnv(ctx context.Context, bin string, opts Opts) ([]string, error) {
 		return nil, err
 	}
 	extras = append(extras, trust...)
+	// Host bookkeeping in an agent's call never fetches LFS content.
+	if hostPurposeInAgentEntry(ctx) {
+		extras = append(extras, "GIT_LFS_SKIP_SMUDGE=1")
+	}
 	if opts.Profile == ProfileNetwork && !agentLaunched(ctx) {
 		if socket := agentSocketResolver(ctx); socket != "" {
 			extras = append(extras, "SSH_AUTH_SOCK="+socket)

@@ -185,20 +185,25 @@ func stringLitIs(expr ast.Expr, want string) bool {
 }
 
 // completeConfigReadArgv recognizes fixed reads with no dynamic option tail.
+// Following include directives changes what is read, never what is written.
 func completeConfigReadArgv(lit *ast.CompositeLit) bool {
-	if len(lit.Elts) != 3 && len(lit.Elts) != 5 {
+	elts := lit.Elts
+	if len(elts) > 2 && stringLitIs(elts[2], "--includes") {
+		elts = append(append([]ast.Expr(nil), elts[:2]...), elts[3:]...)
+	}
+	if len(elts) != 3 && len(elts) != 5 {
 		return false
 	}
-	if !stringLitIs(lit.Elts[0], "config") || !stringLitIs(lit.Elts[1], "--local") {
+	if !stringLitIs(elts[0], "config") || !stringLitIs(elts[1], "--local") {
 		return false
 	}
-	if len(lit.Elts) == 3 {
-		return stringLitIs(lit.Elts[2], "--list") || stringLitIs(lit.Elts[2], "-l")
+	if len(elts) == 3 {
+		return stringLitIs(elts[2], "--list") || stringLitIs(elts[2], "-l")
 	}
-	if stringLitIs(lit.Elts[2], "--list") && stringLitIs(lit.Elts[3], "--name-only") && stringLitIs(lit.Elts[4], "--null") {
+	if stringLitIs(elts[2], "--list") && stringLitIs(elts[3], "--name-only") && stringLitIs(elts[4], "--null") {
 		return true
 	}
-	return (stringLitIs(lit.Elts[2], "--get") || stringLitIs(lit.Elts[2], "--get-regexp")) && stringLitIs(lit.Elts[3], "--")
+	return (stringLitIs(elts[2], "--get") || stringLitIs(elts[2], "--get-regexp")) && stringLitIs(elts[3], "--")
 }
 
 func isNilIdent(expr ast.Expr) bool {

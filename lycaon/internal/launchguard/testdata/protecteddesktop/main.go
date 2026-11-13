@@ -67,8 +67,10 @@ type Facts struct {
 }
 
 type vaultCommand struct {
-	Socket  string                `json:"socket"`
-	Request vaultidentity.Request `json:"request"`
+	Socket      string                `json:"socket"`
+	Request     vaultidentity.Request `json:"request"`
+	WorkflowOp  string                `json:"workflow_op,omitempty"`
+	WorkflowDir string                `json:"workflow_dir,omitempty"`
 }
 
 // desktopBroker owns descriptor 6 for the lifetime of the protected desktop so
@@ -210,6 +212,10 @@ func runEngineVault(raw string) {
 	var cmd vaultCommand
 	if err := json.Unmarshal([]byte(raw), &cmd); err != nil {
 		_ = json.NewEncoder(os.Stdout).Encode(vaultidentity.Response{Status: vaultidentity.StatusUnavailable, Message: err.Error()})
+		return
+	}
+	if cmd.WorkflowOp != "" {
+		runSecretWorkflow(cmd)
 		return
 	}
 	client := vaultidentity.NewClient(cmd.Socket)

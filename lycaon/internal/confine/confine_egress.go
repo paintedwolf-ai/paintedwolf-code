@@ -47,6 +47,12 @@ type EgressCommand struct {
 	CommandLine string // exact command attributed to this execution
 	// DeclaredHosts is the host-derived destination set for this action.
 	DeclaredHosts []string
+	// Origin is how a retrieval tool came by the requested address. It holds
+	// for every redirect hop of that request.
+	Origin AddressOrigin
+	// NamedHosts are hosts the agent wrote into a request whose other
+	// destinations are the tool's sources, such as a search's site operator.
+	NamedHosts []string
 	// ReducedPackageExecution restricts egress to reviewed registries.
 	ReducedPackageExecution bool
 	// UserRule is the matching ask-rule citation.
@@ -562,7 +568,10 @@ func (b *egressBrokerT) decideVerdictEndpoint(ctx context.Context, token string,
 	return b.askOrCache(ctx, cmd, attributed, token, ep, det)
 }
 
-// ruleOrPosture applies host-rule enforcement and prompt posture.
+// ruleOrPosture applies what decides a dial before any review: authored deny
+// rules, package-execution scope, disabled approvals and escalating
+// detections. Every other dial is the approval gate's, which weighs grants,
+// configuration, first contact, exposure and ingestion under the posture.
 func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep egressproxy.Endpoint, origin string) (allow, decided bool, rule *EgressUserRule, detection *EgressDetectionCitation) {
 	// Authored denials take precedence over reusable approvals.
 	if eval := currentRuleEval(); eval != nil {
@@ -577,7 +586,6 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 			}
 		}
 	}
-	posture := EffectivePosture(cmd)
 	// Package execution denies undeclared destinations.
 	if cmd.ReducedPackageExecution {
 		return cmd.DeclaresHost(ep.Host), true, nil, nil
@@ -598,15 +606,12 @@ func (b *egressBrokerT) ruleOrPosture(ctx context.Context, cmd EgressCommand, ep
 			return false, false, rule, &cit
 		}
 	}
-	// Undeclared destinations from untrusted content become gate inputs.
-	if !retrievalDial(cmd) && !cmd.DeclaresHost(ep.Host) && sessionIngestedUntrusted(ctx, cmd) {
-		return false, false, rule, nil
+	// Below Strict the gate leaves a retrieval capability's dial to its own
+	// contract, so without a rule asking it is decided here as there.
+	if rule == nil && RetrievalDial(cmd, ep.Host) && EffectivePosture(cmd) != PostureAsk {
+		return true, true, nil, nil
 	}
-	// Explicit rules and Ask posture feed the gate after enforcement checks.
-	if rule != nil || (posture == PostureAsk && !cmd.DeclaresHost(ep.Host)) {
-		return false, false, rule, nil
-	}
-	return true, true, nil, nil
+	return false, false, rule, nil
 }
 
 // askOrCache coalesces and caches a verdict within one action.
