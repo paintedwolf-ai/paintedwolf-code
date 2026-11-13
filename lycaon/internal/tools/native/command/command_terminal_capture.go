@@ -91,7 +91,8 @@ func runCommandTerminalCapture(
 	request := hostcmd.Request{
 		Launch:     agentCommandLaunch(tctx, toolName, bound.confinement, bound.lease, commandLine),
 		ProjectDir: cwd, ProfileID: tctx.ProfileID(), Stages: stages, IOParams: ioParams,
-		PathExtra: append([]string(nil), tctx.Host.HostResourcePathExtra...),
+		PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
+		ServiceEnv: append([]string(nil), tctx.Host.HostResourceEnv...),
 	}
 	facts := confine.SpawnFacts{
 		Report: confine.ReportOf(confine.BoundaryOf(bound.confinement)).

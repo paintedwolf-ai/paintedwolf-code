@@ -21,6 +21,7 @@ function listRow(overrides: Partial<ReviewListRow> = {}): ReviewListRow {
     presentationOrdinal: null,
     contributors: [{ kind: "agent", sessionId: "", personId: "", label: "" }],
     liveVerb: null,
+    livePhase: null,
     sandbox: false,
     added: null,
     removed: 12,
