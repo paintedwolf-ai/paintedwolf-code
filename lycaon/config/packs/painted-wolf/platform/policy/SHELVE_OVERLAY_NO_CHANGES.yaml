@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SHELVE_OVERLAY_NO_CHANGES
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - shelve_overlay
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SHELVE_OVERLAY_NO_CHANGES"
 effect: block
-copy:
-  what: That result changed nothing, so there is nothing to shelve.
-  cause: 'The result''s round published no changes.'
-  why: Shelving records why changes wait unlanded.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code SHELVE_OVERLAY_NO_CHANGES; do not retry the same call
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:shelve_overlay
-x-paintedwolf-message: That result changed nothing, so there is nothing to shelve.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:shelve_overlay
+message: That result changed nothing, so there is nothing to shelve.
+what: That result changed nothing, so there is nothing to shelve.
+cause: 'The result''s round published no changes.'
+why: Shelving records why changes wait unlanded.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code SHELVE_OVERLAY_NO_CHANGES; do not retry the same call
+scenarios:
   - id: default
     vars:
       profile: coordinator

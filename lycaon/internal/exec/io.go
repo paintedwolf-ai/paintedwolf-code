@@ -83,14 +83,7 @@ func ValidateInlineEnv(env map[string]string) error {
 		if !inlineEnvKeyPattern.MatchString(key) {
 			return fmt.Errorf("%w: %q", ErrInvalidEnvKey, key)
 		}
-		upper := strings.ToUpper(key)
-		if _, blocked := blockedEnvKeys[upper]; blocked {
-			return fmt.Errorf("%w: %s", ErrBlockedEnvKey, key)
-		}
-		if _, blocked := inlineBlockedEnvKeys[upper]; blocked {
-			return fmt.Errorf("%w: %s", ErrBlockedEnvKey, key)
-		}
-		if hasBlockedPrefix(upper) {
+		if reservedEnvKey(strings.ToUpper(key)) {
 			return fmt.Errorf("%w: %s", ErrBlockedEnvKey, key)
 		}
 	}

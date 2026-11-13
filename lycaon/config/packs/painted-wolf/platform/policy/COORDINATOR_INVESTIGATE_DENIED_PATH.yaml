@@ -1,36 +1,29 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COORDINATOR_INVESTIGATE_DENIED_PATH
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.escape
-  - paintedwolf.path
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.escape, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COORDINATOR_INVESTIGATE_DENIED_PATH"
 effect: block
-copy:
-  what: Coordinator {{ tool }} on {{ paintedwolf.path }} is outside investigate write scope.
-  cause: Path is in a denied class — VCS metadata or dependency trees.
-  why: Investigate opens product writes on the project tree, but some path classes need a different tool or
-    workflow.
-  fix: '{{ paintedwolf.escape }}'
-  instead: Use the named escape for this path class — do not retry the same write
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Coordinator write denied on investigate surface
-x-paintedwolf-scenarios:
-- id: vcs
-  vars:
-    escape: Use command for git commands
-    path: .git/HEAD
-    path_class: vcs
-    tool: write
-- id: dependencies
-  vars:
-    escape: Run the package manager via command
-    path: node_modules/foo/index.js
-    path_class: dependencies
-    tool: write
+category: recoverable
+emit: guard:coordinator
+message: Coordinator write denied on investigate surface
+what: Coordinator {{ tool }} on {{ paintedwolf.path }} is outside investigate write scope.
+cause: Path is in a denied class — VCS metadata or dependency trees.
+why: Investigate opens product writes on the project tree, but some path classes need a different tool or workflow.
+fix: '{{ paintedwolf.escape }}'
+instead: Use the named escape for this path class — do not retry the same write
+scenarios:
+  - id: vcs
+    vars:
+      escape: Use command for git commands
+      path: .git/HEAD
+      path_class: vcs
+      tool: write
+  - id: dependencies
+    vars:
+      escape: Run the package manager via command
+      path: node_modules/foo/index.js
+      path_class: dependencies
+      tool: write

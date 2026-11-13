@@ -65,7 +65,8 @@ func TestRecoverableHintCodesRenderFullRejectBlock(t *testing.T) {
 	f := guidance.NewStaticRejectFormatter(cfg)
 
 	for code, entry := range cfg.HintCodes {
-		if guidance.CopyOnlyEmit(entry.Emit) {
+		// OAR hints are never evaluated and carry no scenarios.
+		if guidance.CopyOnlyEmit(entry.Emit) || entry.Kind == "hint" {
 			continue
 		}
 		if entry.Severity == "info" && !strings.HasPrefix(entry.Emit, "guard:") && !strings.HasPrefix(entry.Emit, "rule:") {
@@ -237,13 +238,13 @@ func codesWithOARAnchor() (map[string]bool, error) {
 		if err := yaml.Unmarshal(ent.Body, &probe); err != nil {
 			return nil, err
 		}
-		if anchor, ok := probe["anchor"].(string); ok && strings.TrimSpace(anchor) != "" {
+		if anchor, ok := probe["on"].(string); ok && strings.TrimSpace(anchor) != "" {
 			out[ent.Code] = true
 			continue
 		}
 		if hc, ok := probe["hint_codes"].(map[string]any); ok {
 			if body, ok := hc[ent.Code].(map[string]any); ok {
-				if anchor, ok := body["anchor"].(string); ok && strings.TrimSpace(anchor) != "" {
+				if anchor, ok := body["on"].(string); ok && strings.TrimSpace(anchor) != "" {
 					out[ent.Code] = true
 				}
 			}

@@ -1,0 +1,37 @@
+{
+  "id": "flow-sequence-matches",
+  "title": "A flow matches an ordered, not necessarily contiguous, subsequence",
+  "covers": [
+    "OAR-FACT-10",
+    "OAR-DOC-10"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "READ_THEN_WRITE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "true",
+    "flow": [
+      "read",
+      "write"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "write"
+    },
+    "recent_tools": [
+      "read",
+      "grep",
+      "write"
+    ]
+  },
+  "expected": {
+    "decision": "block",
+    "code": "READ_THEN_WRITE"
+  }
+}

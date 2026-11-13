@@ -1,29 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: RESULT_CHANGES_NOT_ADMITTED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - preview_overlay
     - promote_overlay
     - reject_overlay
     - shelve_overlay
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps, paintedwolf.state, paintedwolf.worker]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.state, paintedwolf.worker]
 when: paintedwolf.rejection_code == "RESULT_CHANGES_NOT_ADMITTED"
 effect: block
-copy:
-  what: The worker that holds these changes is {{ paintedwolf.state }}, which does not admit this now.
-  cause: Changes are resolved only while their worker is between rounds and they are still open.
-  why: A worker's changes move only between its rounds, while they are still open; landed and rejected changes are final.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code RESULT_CHANGES_NOT_ADMITTED; do not retry until the worker's state changes
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:promote_overlay
-x-paintedwolf-message: The worker that holds these changes does not admit this now.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:promote_overlay
+message: The worker that holds these changes does not admit this now.
+what: The worker that holds these changes is {{ paintedwolf.state }}, which does not admit this now.
+cause: Changes are resolved only while their worker is between rounds and they are still open.
+why: A worker's changes move only between its rounds, while they are still open; landed and rejected changes are final.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code RESULT_CHANGES_NOT_ADMITTED; do not retry until the worker's state changes
+scenarios:
   - id: default
     vars:
       profile: coordinator

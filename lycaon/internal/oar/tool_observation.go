@@ -14,7 +14,7 @@ func (gc *GuardContext) ObserveToolCall(name string, arguments map[string]any) {
 		if _, explicit := gc.Published["tool_args_fingerprint"]; explicit {
 			return nil
 		}
-		// [OAR-FACT-6] A non-tool occurrence has no call fingerprint.
+		// A non-tool occurrence has no call fingerprint.
 		if gc.Invocation.Tool == "" {
 			gc.Invocation.ToolArgsFingerprint = ""
 			return nil
@@ -28,7 +28,7 @@ func (gc *GuardContext) ObserveToolCall(name string, arguments map[string]any) {
 	})
 }
 
-// RecordAdmittedTool retains admitted tool names in occurrence order ([OAR-PROF-9]).
+// RecordAdmittedTool retains admitted tool names in occurrence order ([OAR-FACT-10]).
 func RecordAdmittedTool(history []string, name string, window int) []string {
 	if window <= 0 {
 		return nil
@@ -40,15 +40,15 @@ func RecordAdmittedTool(history []string, name string, window int) []string {
 	return history
 }
 
-// AdmitTool records a successful pre-invocation decision before dispatch ([OAR-PROF-9]).
+// AdmitTool records a successful pre-invocation decision before dispatch ([OAR-FACT-10]).
 func (p *GuardPipeline) AdmitTool(sessionID, tool string) {
-	if p == nil || p.counters == nil || p.capability() == nil {
+	if p == nil || p.counters == nil || p.declaration() == nil {
 		return
 	}
 	store := p.counters
 	store.mu.Lock()
 	defer store.mu.Unlock()
-	store.history[sessionID] = RecordAdmittedTool(store.history[sessionID], tool, p.capability().Window)
+	store.history[sessionID] = RecordAdmittedTool(store.history[sessionID], tool, p.declaration().Window)
 }
 
 func (p *GuardPipeline) observeActivity(gc *GuardContext) {

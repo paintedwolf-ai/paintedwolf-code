@@ -1,23 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_EXECUTION_CAPABILITY_DENIED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.user_guidance]
-  profiles: [tool]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code, paintedwolf.user_guidance]
 when: paintedwolf.rejection_code == "SANDBOX_EXECUTION_CAPABILITY_DENIED"
 effect: block
-copy:
-  what: The person did not approve this execution capability.
-  cause: The requested process control or host execution was denied, canceled, or expired.
-  why: Execution authority must remain bound to the exact action through the moment of spawn.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
-    before requesting approval for a corrected action.{% else %}Continue without this authority.
-    A rejected action needs new user direction before another approval request; an expired request may be retried.{% endif %}'
-  instead: Fresh user direction permits a new review; it does not grant execution authority
-x-paintedwolf-category: user-decision
-x-paintedwolf-emit: guard:execution_capability
-x-paintedwolf-message: The person did not approve this execution capability.
-x-paintedwolf-scenarios:
-- id: default
-  vars: {}
+category: user-decision
+emit: guard:execution_capability
+message: The person did not approve this execution capability.
+what: The person did not approve this execution capability.
+cause: The requested process control or host execution was denied, canceled, or expired.
+why: Execution authority must remain bound to the exact action through the moment of spawn.
+fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction before requesting approval for a corrected action.{% else %}Continue without this authority. A rejected action needs new user direction before another approval request; an expired request may be retried.{% endif %}'
+instead: Fresh user direction permits a new review; it does not grant execution authority
+scenarios:
+  - id: default
+    vars: {}

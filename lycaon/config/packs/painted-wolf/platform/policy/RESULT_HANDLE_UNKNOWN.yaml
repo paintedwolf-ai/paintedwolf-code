@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: RESULT_HANDLE_UNKNOWN
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - shelve_overlay
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "RESULT_HANDLE_UNKNOWN"
 effect: block
-copy:
-  what: 'That result handle names no result of this session''s workers.'
-  cause: The handle is not one the host issued for a worker result in this session.
-  why: A result handle names one worker result exactly, so it cannot be guessed or reused across sessions.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code RESULT_HANDLE_UNKNOWN; do not retry the same call
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:shelve_overlay
-x-paintedwolf-message: 'That result handle names no result of this session''s workers.'
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:shelve_overlay
+message: 'That result handle names no result of this session''s workers.'
+what: 'That result handle names no result of this session''s workers.'
+cause: The handle is not one the host issued for a worker result in this session.
+why: A result handle names one worker result exactly, so it cannot be guessed or reused across sessions.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code RESULT_HANDLE_UNKNOWN; do not retry the same call
+scenarios:
   - id: default
     vars:
       profile: coordinator

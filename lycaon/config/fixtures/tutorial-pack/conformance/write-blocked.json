@@ -1,21 +1,55 @@
 {
-  "name": "triage-lite-write-blocked",
+  "id": "write-blocked",
+  "title": "Triage Lite refuses a write in spec posture",
+  "covers": [
+    "OAR-SEL-2",
+    "OAR-EVAL-3"
+  ],
   "rule": {
-    "oar": "1.0",
+    "spec_version": "1.0",
     "id": "TRIAGE_LITE_WRITE_FORBIDDEN",
+    "title": "Triage Lite is read-only",
     "kind": "policy",
-    "anchor": "tool.pre_invoke",
-    "selector": { "tool": ["write", "edit"] },
-    "requires": { "profiles": ["session", "tool"] },
+    "on": "tool.pre_invoke",
+    "selector": {
+      "ledger": {
+        "paintedwolf.operation": [
+          "write",
+          "edit"
+        ]
+      }
+    },
+    "requires_facts": [
+      "paintedwolf.operation"
+    ],
     "when": "session_posture == \"spec\"",
     "effect": "block",
     "enforcement": "enforce",
     "on_error": "fail_closed",
-    "x-paintedwolf-emit": "rule:triage_lite"
+    "emit": "rule:triage_lite",
+    "message": "Triage Lite is a read-only workflow.",
+    "what": "A write tool was called during triage.",
+    "cause": "The triage-lite workflow reports findings; it does not change files.",
+    "why": "Triage runs in the spec posture, where the project tree stays untouched.",
+    "fix": "Record the finding in your write-up, then leave triage before editing.",
+    "instead": "Branch on Code TRIAGE_LITE_WRITE_FORBIDDEN and report instead of writing"
   },
   "input": {
     "anchor": "tool.pre_invoke",
-    "facts": { "tool": "write", "session_posture": "spec" }
+    "facts": {
+      "tool": "write",
+      "session_posture": "spec",
+      "paintedwolf.operation": "write"
+    },
+    "host_facts": {
+      "paintedwolf.operation": "string"
+    }
   },
-  "expected": { "decision": "block", "code": "TRIAGE_LITE_WRITE_FORBIDDEN" }
+  "expected": {
+    "decision": "block",
+    "code": "TRIAGE_LITE_WRITE_FORBIDDEN",
+    "applied": [
+      "TRIAGE_LITE_WRITE_FORBIDDEN:fired"
+    ]
+  }
 }

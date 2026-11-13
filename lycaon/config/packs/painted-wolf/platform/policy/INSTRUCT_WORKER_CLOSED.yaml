@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: INSTRUCT_WORKER_CLOSED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - instruct_worker
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps, paintedwolf.overlay_id]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_CLOSED"
 effect: block
-copy:
-  what: The worker is closed.
-  cause: It was withdrawn, or its session can no longer be used.
-  why: A closed worker keeps its history but starts no new rounds.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code INSTRUCT_WORKER_CLOSED; do not retry the same call
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:instruct_worker
-x-paintedwolf-message: The worker is closed.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:instruct_worker
+message: The worker is closed.
+what: The worker is closed.
+cause: It was withdrawn, or its session can no longer be used.
+why: A closed worker keeps its history but starts no new rounds.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code INSTRUCT_WORKER_CLOSED; do not retry the same call
+scenarios:
   - id: default
     vars:
       profile: coordinator

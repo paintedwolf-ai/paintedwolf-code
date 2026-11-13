@@ -20,7 +20,7 @@ func TestFactCatalogueMatchesConditionEnvironment(t *testing.T) {
 			expr = PublishedFactName(f.Name) + " >= 0.0"
 		case "list<string>":
 			expr = "size(" + PublishedFactName(f.Name) + ") >= 0"
-		case "map", "map<string,string>", "list<map>":
+		case "map<string, dyn>", "list<map<string, dyn>>":
 			expr = "size(" + PublishedFactName(f.Name) + ") >= 0"
 		default:
 			t.Fatalf("fact %q has unhandled docs type %q", f.Name, f.Type)
@@ -75,8 +75,8 @@ func TestFactCatalogue_TypesRendered(t *testing.T) {
 	want := map[string]string{
 		"tool":           "string",
 		"workers_idle":   "bool",
-		"secret_matches": "list<map>",
-		"tool_args":      "map",
+		"secret_matches": "list<map<string, dyn>>",
+		"tool_args":      "map<string, dyn>",
 	}
 	for _, f := range FactCatalogue() {
 		if w, ok := want[f.Name]; ok && f.Type != w {

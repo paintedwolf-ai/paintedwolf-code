@@ -8,16 +8,16 @@ import (
 	"strings"
 )
 
-// RedactionPlaceholder is the omitted redaction value ([OAR-OPS-13]).
+// RedactionPlaceholder is the omitted redaction value ([OAR-OPS-8]).
 const RedactionPlaceholder = "[REDACTED]"
 
-// Span is a half-open range of Unicode code point offsets ([OAR-OPS-19]).
+// Span is a half-open range of Unicode code point offsets.
 type Span struct {
 	Start int
 	End   int
 }
 
-// readSpans validates half-open transform spans ([OAR-OPS-19]).
+// readSpans validates half-open transform spans.
 func readSpans(value any, length int) ([]Span, error) {
 	var members []any
 	switch t := value.(type) {
@@ -31,7 +31,7 @@ func readSpans(value any, length int) ([]Span, error) {
 	case []any:
 		members = t
 	default:
-		return nil, raise("[OAR-FACT-26] transform target must be list<map>")
+		return nil, raise("[OAR-FACT-18] transform target must be list<map>")
 	}
 	out := make([]Span, 0, len(members))
 	for _, member := range members {
@@ -41,7 +41,7 @@ func readSpans(value any, length int) ([]Span, error) {
 		}
 		start, okStart := asNonNegInt(m["start"])
 		end, okEnd := asNonNegInt(m["end"])
-		// Span bounds are non-negative and ordered ([OAR-OPS-19]).
+		// Span bounds are non-negative and ordered.
 		if !okStart {
 			return nil, raise("a transform span carries no non-negative integer \"start\"")
 		}
@@ -51,7 +51,7 @@ func readSpans(value any, length int) ([]Span, error) {
 		if start > end {
 			return nil, raise("a transform span has a start beyond its end")
 		}
-		// [OAR-OPS-19] A span whose range falls outside the content is ignored.
+		// A span whose range falls outside the content is ignored.
 		if end > length {
 			continue
 		}
@@ -82,7 +82,7 @@ func asNonNegInt(v any) (int, bool) {
 	}
 }
 
-// mergeSpans merges overlaps without merging adjacent spans ([OAR-OPS-20]).
+// mergeSpans merges overlaps without merging adjacent spans.
 func mergeSpans(spans []Span) []Span {
 	var points, ranges []Span
 	for _, span := range spans {
@@ -123,7 +123,7 @@ type piece struct {
 	start  int
 	end    int
 	text   *string // nil means "take from original[start:end]"
-	insert bool    // [OAR-OPS-21] true for text an annotate inserted
+	insert bool    // true for text an annotate inserted
 }
 
 func pieceText(p piece, original []rune) string {
@@ -184,8 +184,20 @@ func rewrite(pieces *[]piece, span Span, replacement func(string) string, origin
 	*pieces = out
 }
 
+// TransformSpec is the host's content mutation for a transform rule. The
+// document model names only the effect ([OAR-OPS-8]); how the content is
+// replaced is the host's, keyed by the rule.
+type TransformSpec struct {
+	Action      string
+	Target      string
+	Replacement string
+	// HasReplacement distinguishes an absent replacement from an empty one:
+	// redact may omit it, and the host then substitutes its own placeholder.
+	HasReplacement bool
+}
+
 func replacementFor(spec *TransformSpec) func(string) string {
-	// Redact uses the standard placeholder by default ([OAR-OPS-21]).
+	// Redact uses the standard placeholder by default.
 	if spec.Action == "redact" {
 		replacement := RedactionPlaceholder
 		if spec.HasReplacement {
@@ -197,7 +209,7 @@ func replacementFor(spec *TransformSpec) func(string) string {
 	return func(string) string { return replacement }
 }
 
-// insertAt inserts after an original-content offset ([OAR-OPS-21]).
+// insertAt inserts after an original-content offset.
 func insertAt(pieces *[]piece, at int, text string) {
 	splitAt(pieces, at)
 	ps := *pieces
@@ -222,16 +234,16 @@ type SkippedTransform struct {
 	Reason string `json:"reason"`
 }
 
-// ApplyTransforms applies occurrence-ordered transforms ([OAR-OPS-16]).
+// ApplyTransforms applies occurrence-ordered transforms.
 func ApplyTransforms(content string, transforms []*TransformSpec, targetFacts []any, ruleIDs []string) (string, []SkippedTransform) {
 	skipped := make([]SkippedTransform, 0)
 	original := []rune(content)
 	pieces := []piece{{start: 0, end: len(original), text: nil}}
-	// Offsets retain original-content coordinates ([OAR-OPS-16]).
+	// Offsets retain original-content coordinates.
 	var rewritten []Span
 
 	for index, spec := range transforms {
-		// Targets resolve to content or reported spans ([OAR-OPS-14]).
+		// Targets resolve to content or reported spans.
 		var spans []Span
 		if spec.Target == "content" {
 			spans = []Span{{Start: 0, End: len(original)}}
@@ -250,7 +262,7 @@ func ApplyTransforms(content string, transforms []*TransformSpec, targetFacts []
 		annotating := spec.Action == "annotate"
 		make := replacementFor(spec)
 		var applied []Span
-		// Spans apply from highest start offset ([OAR-OPS-20]).
+		// Spans apply from highest start offset.
 		ordered := append([]Span(nil), spans...)
 		for i := 0; i < len(ordered); i++ {
 			for j := i + 1; j < len(ordered); j++ {
@@ -285,7 +297,7 @@ func ApplyTransforms(content string, transforms []*TransformSpec, targetFacts []
 			}
 			applied = append(applied, span)
 		}
-		// Annotations record zero-width rewrites ([OAR-OPS-21]).
+		// Annotations record zero-width rewrites.
 		if annotating {
 			for _, span := range applied {
 				rewritten = append(rewritten, Span{Start: span.End, End: span.End})
@@ -300,17 +312,4 @@ func ApplyTransforms(content string, transforms []*TransformSpec, targetFacts []
 		out += pieceText(p, original)
 	}
 	return out, skipped
-}
-
-// ReportTransform projects a TransformSpec into the shape fixtures assert
-// ([OAR-CONF-21]): action and target always, replacement only when present.
-func ReportTransform(spec *TransformSpec) map[string]any {
-	out := map[string]any{
-		"action": spec.Action,
-		"target": spec.Target,
-	}
-	if spec.HasReplacement {
-		out["replacement"] = spec.Replacement
-	}
-	return out
 }

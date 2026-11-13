@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: INSTRUCT_WORKER_AGENT_BETWEEN_ROUNDS
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - instruct_worker
-requires:
-  facts: [paintedwolf.rejection_code]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_AGENT_BETWEEN_ROUNDS"
 effect: block
-copy:
-  what: A worker changes agent only between rounds.
-  cause: The worker is working or asking now.
-  why: A running round keeps the agent, tools and confinement it started with.
-  fix: Send the instruction without agent_type now, or change the agent after the round delivers.
-  instead: Branch on Code INSTRUCT_WORKER_AGENT_BETWEEN_ROUNDS; do not retry the same call
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:instruct_worker
-x-paintedwolf-message: A worker changes agent only between rounds.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:instruct_worker
+message: A worker changes agent only between rounds.
+what: A worker changes agent only between rounds.
+cause: The worker is working or asking now.
+why: A running round keeps the agent, tools and confinement it started with.
+fix: Send the instruction without agent_type now, or change the agent after the round delivers.
+instead: Branch on Code INSTRUCT_WORKER_AGENT_BETWEEN_ROUNDS; do not retry the same call
+scenarios:
   - id: default
     vars:
       profile: coordinator

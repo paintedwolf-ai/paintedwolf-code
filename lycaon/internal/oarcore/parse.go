@@ -2,7 +2,7 @@ package oarcore
 
 // Appendix A, section A.1: the frozen grammar of the condition language.
 //
-// The parser accepts exactly what the EBNF derives ([OAR-EXPR-1]).
+// The parser accepts exactly what the EBNF derives.
 
 import (
 	"fmt"
@@ -12,7 +12,7 @@ import (
 )
 
 // SyntaxError is a condition the grammar cannot derive. It names the offending
-// construct and its offset in the source, as [OAR-EXPR-1] requires.
+// construct and its offset in the source, as requires.
 type SyntaxError struct {
 	Message string
 	Offset  int
@@ -43,7 +43,7 @@ const (
 	nodeTernary
 )
 
-// node is one parse-tree node: a flat union over the kinds [OAR-EXPR-20]
+// node is one parse-tree node: a flat union over the kinds
 // enumerates for counting.
 type node struct {
 	minimumInteger bool
@@ -63,8 +63,8 @@ type node struct {
 	third *node   // ternary else
 }
 
-// countNodes counts the parse tree for the [OAR-EXPR-17] limit, exactly as
-// [OAR-EXPR-20] defines a node: a literal, an identifier, a call, an index, a
+// countNodes counts the parse tree for the limit, exactly as
+// defines a node: a literal, an identifier, a call, an index, a
 // unary, a binary, or a ternary. A call's arguments, an index's operand and
 // subscript, and a list literal's members each count separately, and the list
 // literal itself counts as one. Parentheses are not nodes, because they do not
@@ -146,17 +146,17 @@ func tokenize(src string) ([]token, error) {
 	for i < len(runes) {
 		c := runes[i]
 		if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
-			// [OAR-EXPR-24] Whitespace between tokens is not significant and is
+			// Whitespace between tokens is not significant and is
 			// not otherwise part of the language.
 			i++
 			continue
 		}
-		// [OAR-EXPR-6] A comment is not part of the language.
+		// A comment is not part of the language.
 		if c == '/' && (at(i+1) == '/' || at(i+1) == '*') {
-			return nil, syntaxErr(i, "[OAR-EXPR-6] a comment is not part of the condition language")
+			return nil, syntaxErr(i, "a comment is not part of the condition language")
 		}
 		if c == '#' {
-			return nil, syntaxErr(i, "[OAR-EXPR-6] a comment is not part of the condition language")
+			return nil, syntaxErr(i, "a comment is not part of the condition language")
 		}
 		if c == '"' || c == '\'' {
 			tok, next, err := lexString(runes, i)
@@ -178,10 +178,10 @@ func tokenize(src string) ([]token, error) {
 		}
 		if isLetter(c) || c == '_' {
 			// identifier = name { "." name } — a dotted identifier is a single
-			// name ([OAR-EXPR-2]). A name is lexed greedily, the longest run of
+			// name. A name is lexed greedily, the longest run of
 			// letter, digit, and `_` beginning at that position, so
 			// `international` is one identifier and not `in` followed by
-			// `ternational` ([OAR-EXPR-24]).
+			// `ternational`.
 			start := i
 			for {
 				for i < len(runes) && (isLetter(runes[i]) || isDigit(runes[i]) || runes[i] == '_') {
@@ -200,10 +200,10 @@ func tokenize(src string) ([]token, error) {
 			continue
 		}
 		if c == '{' || c == '}' {
-			return nil, syntaxErr(i, "[OAR-EXPR-1] a map literal is not part of the condition language")
+			return nil, syntaxErr(i, "a map literal is not part of the condition language")
 		}
 		if c == '.' {
-			return nil, syntaxErr(i, "[OAR-EXPR-2] there is no field-selection operator; index a map<string,string> or call a typed accessor")
+			return nil, syntaxErr(i, "there is no field-selection operator; index a map<string,string> or call a typed accessor")
 		}
 		if i+1 < len(runes) {
 			two := string(runes[i : i+2])
@@ -222,7 +222,7 @@ func tokenize(src string) ([]token, error) {
 			return nil, syntaxErr(i, "bitwise %q is not part of the condition language", string(c))
 		}
 		if c == '=' {
-			return nil, syntaxErr(i, "[OAR-EXPR-1] assignment is not part of the condition language")
+			return nil, syntaxErr(i, "assignment is not part of the condition language")
 		}
 		return nil, syntaxErr(i, "unexpected character %q", string(c))
 	}
@@ -230,7 +230,7 @@ func tokenize(src string) ([]token, error) {
 	return out, nil
 }
 
-// lexString reads a quoted literal. The escape set is closed ([OAR-EXPR-3]):
+// lexString reads a quoted literal. The escape set is closed:
 // anything outside it is rejected, never passed through.
 func lexString(runes []rune, start int) (token, int, error) {
 	quote := runes[start]
@@ -242,7 +242,7 @@ func lexString(runes []rune, start int) (token, int, error) {
 		}
 		ch := runes[i]
 		if ch == '\n' || ch == '\r' {
-			return token{}, 0, syntaxErr(i, "[OAR-EXPR-1] literal newline in string")
+			return token{}, 0, syntaxErr(i, "literal newline in string")
 		}
 		if ch == quote {
 			i++
@@ -250,7 +250,7 @@ func lexString(runes []rune, start int) (token, int, error) {
 		}
 		if ch == '\\' {
 			if i+1 >= len(runes) {
-				return token{}, 0, syntaxErr(i, "[OAR-EXPR-3] unsupported string escape \\")
+				return token{}, 0, syntaxErr(i, "unsupported string escape \\")
 			}
 			esc := runes[i+1]
 			switch esc {
@@ -269,23 +269,23 @@ func lexString(runes []rune, start int) (token, int, error) {
 			case 'u':
 				// \u is followed by exactly four hexadecimal digits.
 				if i+5 >= len(runes) {
-					return token{}, 0, syntaxErr(i, "[OAR-EXPR-3] \\u must be followed by exactly four hexadecimal digits")
+					return token{}, 0, syntaxErr(i, "\\u must be followed by exactly four hexadecimal digits")
 				}
 				hex := runes[i+2 : i+6]
 				for _, h := range hex {
 					if !isHex(h) {
-						return token{}, 0, syntaxErr(i, "[OAR-EXPR-3] \\u must be followed by exactly four hexadecimal digits")
+						return token{}, 0, syntaxErr(i, "\\u must be followed by exactly four hexadecimal digits")
 					}
 				}
 				code, err := strconv.ParseUint(string(hex), 16, 32)
 				if err != nil {
-					return token{}, 0, syntaxErr(i, "[OAR-EXPR-3] \\u must be followed by exactly four hexadecimal digits")
+					return token{}, 0, syntaxErr(i, "\\u must be followed by exactly four hexadecimal digits")
 				}
 				b.WriteRune(rune(code)) // #nosec G115 -- \\uXXXX is at most 0xFFFF
 				i += 6
 				continue
 			default:
-				return token{}, 0, syntaxErr(i, "[OAR-EXPR-3] unsupported string escape \\%s", string(esc))
+				return token{}, 0, syntaxErr(i, "unsupported string escape \\%s", string(esc))
 			}
 			i += 2
 			continue
@@ -318,7 +318,7 @@ func lexNumber(runes []rune, start int) (token, int, error) {
 			return token{}, 0, syntaxErr(start, "malformed number literal")
 		}
 		if at(i) == 'e' || at(i) == 'E' {
-			return token{}, 0, syntaxErr(i, "[OAR-EXPR-1] exponent notation is not part of the condition language")
+			return token{}, 0, syntaxErr(i, "exponent notation is not part of the condition language")
 		}
 		return token{kind: tokDouble, text: string(runes[start:i]), at: start}, i, nil
 	}
@@ -326,10 +326,10 @@ func lexNumber(runes []rune, start int) (token, int, error) {
 		return token{}, 0, syntaxErr(start, "malformed number literal")
 	}
 	if at(i) == 'e' || at(i) == 'E' {
-		return token{}, 0, syntaxErr(i, "[OAR-EXPR-1] exponent notation is not part of the condition language")
+		return token{}, 0, syntaxErr(i, "exponent notation is not part of the condition language")
 	}
 	if at(i) == 'u' || at(i) == 'U' {
-		return token{}, 0, syntaxErr(i, "[OAR-EXPR-1] an unsigned literal is not part of the condition language")
+		return token{}, 0, syntaxErr(i, "an unsigned literal is not part of the condition language")
 	}
 	if r := at(i); r != 0 && (isLetter(r) || r == '_') {
 		return token{}, 0, syntaxErr(start, "malformed number literal")
@@ -366,7 +366,7 @@ func (p *parser) expect(text string) error {
 }
 
 // parseCondition parses a condition, or names the offending construct and its
-// offset ([OAR-EXPR-1]).
+// offset.
 func parseCondition(src string) (*node, error) {
 	toks, err := tokenize(src)
 	if err != nil {
@@ -450,7 +450,7 @@ func isRelop(t token) bool {
 
 // relation = addition [ relop addition ]. The grammar admits at most one
 // relational operator, so `a < b < c` is not derivable and is rejected rather
-// than grouped by the precedence table ([OAR-EXPR-4]).
+// than grouped by the precedence table.
 func (p *parser) relation() (*node, error) {
 	left, err := p.addition()
 	if err != nil {
@@ -467,7 +467,7 @@ func (p *parser) relation() (*node, error) {
 		return nil, err
 	}
 	if after := p.peek(); isRelop(after) {
-		return nil, syntaxErr(after.at, "[OAR-EXPR-4] a relation admits at most one relational operator")
+		return nil, syntaxErr(after.at, "a relation admits at most one relational operator")
 	}
 	return &node{kind: nodeBinary, op: op, offset: at, left: left, right: right}, nil
 }
@@ -518,9 +518,9 @@ func (p *parser) unary() (*node, error) {
 		at := p.next().at
 		after := p.peek()
 		if after.kind == tokPunct && (after.text == "!" || after.text == "-") {
-			return nil, syntaxErr(after.at, "[OAR-EXPR-4] a unary operator may not be repeated")
+			return nil, syntaxErr(after.at, "a unary operator may not be repeated")
 		}
-		// [OAR-EXPR-21] The magnitude 9223372036854775808 is admitted as the
+		// The magnitude 9223372036854775808 is admitted as the
 		// immediate operand of unary minus, without which the least value of the
 		// int type could not be written at all.
 		if t.text == "-" && after.kind == tokInt && after.text == "9223372036854775808" {
@@ -590,25 +590,25 @@ func (p *parser) primary() (*node, error) {
 	}
 	switch t.kind {
 	case tokInt:
-		// [OAR-EXPR-21] An integer literal that does not fit 64 bits is rejected
+		// An integer literal that does not fit 64 bits is rejected
 		// at load rather than silently losing precision.
 		value, err := strconv.ParseInt(t.text, 10, 64)
 		if err != nil {
-			return nil, syntaxErr(t.at, "[OAR-EXPR-21] integer literal %s does not fit int", t.text)
+			return nil, syntaxErr(t.at, "integer literal %s does not fit int", t.text)
 		}
 		return &node{kind: nodeInt, offset: t.at, intValue: value}, nil
 	case tokDouble:
-		// [OAR-EXPR-21] A double literal whose nearest binary64 value is not
+		// A double literal whose nearest binary64 value is not
 		// finite is rejected at load.
 		value, err := strconv.ParseFloat(t.text, 64)
 		if err != nil || math.IsInf(value, 0) || math.IsNaN(value) {
-			return nil, syntaxErr(t.at, "[OAR-EXPR-21] double literal %s has no finite binary64 value", t.text)
+			return nil, syntaxErr(t.at, "double literal %s has no finite binary64 value", t.text)
 		}
 		return &node{kind: nodeDouble, offset: t.at, doubleValue: value}, nil
 	case tokString:
 		return &node{kind: nodeString, offset: t.at, strValue: t.str}, nil
 	case tokName:
-		// [OAR-EXPR-24] A reserved word is lexed as itself and never as an
+		// A reserved word is lexed as itself and never as an
 		// identifier.
 		if t.text == "true" || t.text == "false" {
 			return &node{kind: nodeBool, offset: t.at, boolValue: t.text == "true"}, nil

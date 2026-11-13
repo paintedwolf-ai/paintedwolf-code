@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: TASK_WORKER_NAME_TAKEN
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - task
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps, paintedwolf.worker]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "TASK_WORKER_NAME_TAKEN"
 effect: block
-copy:
-  what: Another worker in this session already has that name.
-  cause: Worker names are unique in their session and never change.
-  why: A name addresses exactly one worker, so it cannot start a second.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code TASK_WORKER_NAME_TAKEN; do not retry the same call
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:task
-x-paintedwolf-message: Another worker in this session already has that name.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:task
+message: Another worker in this session already has that name.
+what: Another worker in this session already has that name.
+cause: Worker names are unique in their session and never change.
+why: A name addresses exactly one worker, so it cannot start a second.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code TASK_WORKER_NAME_TAKEN; do not retry the same call
+scenarios:
   - id: default
     vars:
       profile: coordinator

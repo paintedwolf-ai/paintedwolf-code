@@ -40,7 +40,7 @@ func CheckIntegrity(hintsDir extpacks.Source, registryPath string, rules *RuleSe
 		rep.RuleCount = rules.Len()
 		for _, r := range rules.All() {
 			if r.When != "" {
-				if err := checkWhenAgainstSpec(r.When, InstalledCapabilityDocument()); err != nil {
+				if err := checkWhenAgainstSpec(r.When, InstalledEngineDeclaration()); err != nil {
 					return nil, fmt.Errorf("rule %s: when %q: %w", r.ID, r.When, err)
 				}
 				if err := ValidateConditionFactValues(r.When, hintCodes); err != nil {
@@ -48,7 +48,7 @@ func CheckIntegrity(hintsDir extpacks.Source, registryPath string, rules *RuleSe
 				}
 				rep.ConditionsValidated++
 			}
-			if r.OAR != SupportedSpecVersion {
+			if r.SpecVersion != SupportedSpecVersion {
 				rep.UnknownSpecVersions = append(rep.UnknownSpecVersions, r.ID)
 			}
 		}

@@ -33,5 +33,5 @@ func (p *ProfilePolicyEngine) evaluateNativeOperation(ctx context.Context, profi
 		}
 		code = "COMMAND_EFFECT_NOT_ALLOWED"
 	}
-	return &platform.PolicyDecision{Blocked: true, RejectCode: code, RejectData: map[string]any{"tool": facts.Identity, "owner_ref": facts.Contract.Owner, "permission_profile": profileID, "expected_form": "", "source_start_byte": invocation.Span.StartByte, "source_end_byte": invocation.Span.EndByte, "source_line": invocation.Span.Line, "source_column": invocation.Span.Column, "source_unit_id": invocation.SourceUnitID}}, nil
+	return &platform.PolicyDecision{Blocked: true, RejectCode: code, RejectData: map[string]any{"tool": facts.Identity, "owner_ref": facts.Contract.Owner, "profile": profileID, "expected_form": "", "source_start_byte": invocation.Span.StartByte, "source_end_byte": invocation.Span.EndByte, "source_line": invocation.Span.Line, "source_column": invocation.Span.Column, "source_unit_id": invocation.SourceUnitID}}, nil
 }

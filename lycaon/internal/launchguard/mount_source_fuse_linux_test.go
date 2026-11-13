@@ -72,9 +72,23 @@ func startSourceFUSE(t *testing.T, volume string, module []byte) func() {
 					t.Errorf("FUSE fixture protocol: %v", err)
 				}
 			case <-time.After(testutil.Timeout(time.Minute)):
+				// A lazy unmount detaches the mount immediately, but the
+				// kernel keeps the connection alive while another process
+				// still holds the detached superblock: a concurrent protected
+				// launch can retain mount references in its intake and watcher
+				// roles after the launch command exits. The daemon is the
+				// fixture's own resource, so stop it; the mount itself must
+				// still be gone from the namespace.
+				attached, err := ownFUSEMountAttached(volume)
+				if err != nil {
+					t.Errorf("inspect own FUSE mount after unmount: %v", err)
+				} else if attached {
+					t.Error("own FUSE mount still attached after unmount")
+				} else {
+					t.Logf("own FUSE server stopped after settle deadline; detached superblock still referenced by another process")
+				}
 				_ = server.Process.Kill()
 				<-done
-				t.Error("own FUSE server did not settle after unmount")
 			}
 		})
 	}
@@ -181,6 +195,31 @@ func TestSourceFUSEServerProcess(t *testing.T) {
 func fuseConnectionEnded(err error) bool {
 	return errors.Is(err, unix.ENODEV) || errors.Is(err, unix.ECONNABORTED) ||
 		errors.Is(err, unix.EBADF) || errors.Is(err, io.EOF)
+}
+
+// ownFUSEMountAttached reports whether the volume still carries a mount in
+// this namespace. A lazy-unmounted mount leaves the namespace view at once
+// even while its superblock survives open references held elsewhere.
+func ownFUSEMountAttached(volume string) (bool, error) {
+	info, err := os.Open("/proc/thread-self/mountinfo")
+	if err != nil {
+		return false, err
+	}
+	defer func() { _ = info.Close() }()
+	raw, err := readMountInfo(int(info.Fd()), nil)
+	if err != nil {
+		return false, err
+	}
+	entries, err := parseMountTopology(raw)
+	if err != nil {
+		return false, err
+	}
+	for _, entry := range entries {
+		if entry.mountPoint == volume {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func serveSourceFUSE(device io.ReadWriter, uid, gid uint32, module []byte) error {

@@ -46,7 +46,7 @@ func TestStreamProgressBuffersContentUntilSettle(t *testing.T) {
 	if result.LastAssistantContent != "Hello world" {
 		t.Fatalf("content = %q want Hello world", result.LastAssistantContent)
 	}
-	// [OAR-OPS-8] No unreviewed chunk crosses the live projection boundary.
+	// [OAR-OPS-6] No unreviewed chunk crosses the live projection boundary.
 	if live != 0 {
 		t.Fatalf("unreviewed content was projected %d times", live)
 	}
@@ -97,7 +97,7 @@ func TestStreamProgressBuffersAllToolCalls(t *testing.T) {
 	})
 	testutil.FailErr(t, "loop.Run", err)
 	if sawCommand {
-		t.Fatal("[OAR-OPS-8] incomplete tool call escaped the policy buffer")
+		t.Fatal("[OAR-OPS-6] incomplete tool call escaped the policy buffer")
 	}
 }
 

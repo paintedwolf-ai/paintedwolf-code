@@ -521,7 +521,7 @@
       "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
       "category": "recoverable",
       "emit": "guard:command_effect_admission",
-      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if permission_profile %}profile **{{ permission_profile }}**{% else %}the active permission profile{% endif %}."
+      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if profile %}profile **{{ profile }}**{% else %}the active permission profile{% endif %}."
     },
     "COMMAND_EXEC_DENIED": {
       "category": "recoverable",
@@ -584,7 +584,7 @@
       "branch_instruction": "Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.",
       "category": "recoverable",
       "emit": "guard:command_operation_admission",
-      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if permission_profile %}profile **{{ permission_profile }}**{% else %}the active permission profile{% endif %}."
+      "summary": "This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if profile %}profile **{{ profile }}**{% else %}the active permission profile{% endif %}."
     },
     "COMMAND_OPTION_UNSUPPORTED": {
       "category": "recoverable",
@@ -2014,10 +2014,10 @@
       "summary": "The checklist exceeds its document size budget."
     },
     "PROGRESS_ITEM_NOT_CLOSED": {
-      "branch_instruction": "Record the completed work, then retry `{{ tool }}` on the next call; never resubmit the identical checklist.",
+      "branch_instruction": "Record the completed work, then retry on the next call.",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "Worker output completed while {{ paintedwolf.pending }} progress step(s) were open, and you called **`{{ tool }}`** before recording it{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}."
+      "summary": "Worker output completed while progress steps were open, and a progress-gated tool was called before the checklist recorded it."
     },
     "PROGRESS_MISSING": {
       "branch_instruction": "Record the checklist, then retry the same rejected call.",
@@ -3370,7 +3370,7 @@
       "branch_instruction": "{% if paintedwolf.tool_discovery_status %}Choose an exact tool from the catalog{% if paintedwolf.tool_discovery_has_more %}, or continue browsing with next_need{% endif %}; do not repeat the unchanged description. {% else %}Do not repeat the same request unchanged. If the missing capability blocks the task, explain that limit rather than claiming completion{% endif %}",
       "category": "recoverable",
       "emit": "guard:request_tools",
-      "summary": "No schema loaded for the request \"{{ paintedwolf.need }}\" in profile {{ paintedwolf.profile }}"
+      "summary": "No schema loaded for the request \"{{ paintedwolf.need }}\" in profile {{ profile }}"
     },
     "TOOL_RESULT_TOO_LARGE": {
       "branch_instruction": "Preserve completed work; recover observations without replaying side effects",
@@ -3458,7 +3458,7 @@
       "branch_instruction": "Do not poll through an unrelated tool",
       "category": "recoverable",
       "emit": "guard:wait",
-      "summary": "Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ paintedwolf.profile }}."
+      "summary": "Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ profile }}."
     },
     "WAIT_HIDDEN_TEXT": {
       "branch_instruction": "{% if paintedwolf.mid_turn_evidence_unreadable %}Do not rewrite citations to clear this{% else %}Empty text does not clear this. Keep the same wait conditions and add the cited update.{% endif %}",
@@ -3766,7 +3766,7 @@
       "branch_instruction": "Preserve the intended destination and respect the active write scope",
       "category": "recoverable",
       "emit": "guard:write_scope",
-      "summary": "{{ tool }} path {{ paintedwolf.path }} is outside profile {{ paintedwolf.profile }} write scope."
+      "summary": "{{ tool }} path {{ paintedwolf.path }} is outside profile {{ profile }} write scope."
     }
   },
   "registry_version": "1",

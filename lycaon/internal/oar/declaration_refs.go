@@ -28,7 +28,7 @@ var declarationPlumbing = map[string]bool{
 	"lycaon/internal/oar/occurrence_facts.go":                                 true,
 	"lycaon/internal/oar/fact_projection.go":                                  true,
 	"lycaon/internal/oar/facts.go":                                            true,
-	"lycaon/internal/oar/conformance.go":                                      true,
+	"lycaon/internal/oar/fixture_facts.go":                                    true,
 	"lycaon/internal/oar/context_facts.go":                                    true,
 	"lycaon/internal/oar/context.go":                                          true,
 	"lycaon/internal/oar/env.go":                                              true,
@@ -59,7 +59,7 @@ var (
 func UnreferencedDeclaredFacts(moduleRoot string) ([]string, error) {
 	profilePath := filepath.Join(moduleRoot, "config", "packs", "painted-wolf",
 		"platform", "host", "anchors", "oar-profile.yaml")
-	profile, err := LoadCapabilityDocument(profilePath)
+	profile, err := LoadEngineDeclaration(profilePath)
 	if err != nil {
 		return nil, err
 	}
