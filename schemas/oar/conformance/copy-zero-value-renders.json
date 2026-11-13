@@ -1,0 +1,41 @@
+{
+  "title": "A fact at its zero value renders, it does not vanish",
+  "covers": [
+    "OAR-FACT-25",
+    "OAR-COPY-4",
+    "OAR-FACT-24"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "ZEROES",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"\"",
+    "what": "n={{ paintedwolf.attempts }} errors={{ arg_validation_errors }} dir={{ is_directory }}.",
+    "requires_facts": [
+      "paintedwolf.attempts"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "",
+      "paintedwolf.attempts": 0,
+      "arg_validation_errors": [],
+      "is_directory": false
+    },
+    "host_facts": {
+      "paintedwolf.attempts": "int"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "ZEROES",
+    "copy": {
+      "what": "n=0 errors= dir=false."
+    }
+  },
+  "id": "copy-zero-value-renders"
+}

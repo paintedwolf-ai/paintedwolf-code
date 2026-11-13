@@ -1,7 +1,7 @@
 import { EditorState, type StateEffect } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { keepPositionInView, SETTLED_SCROLL_REPEATS } from "./editor-settled-scroll.ts";
+import { keepPositionInView, preserveScrollAnchor, SETTLED_SCROLL_REPEATS } from "./editor-settled-scroll.ts";
 
 type Measure = { read: (view: EditorView) => number | null; write: (value: number | null, view: EditorView) => void };
 
@@ -119,6 +119,51 @@ describe("keeping a position in view", () => {
     keepPositionInView(fake.view, () => 0);
     settle(fake);
     expect(fake.measures).toHaveLength(0);
+    expect(fake.scrollDOM.scrollTop).toBe(0);
+  });
+});
+
+/** A view whose position `p` sits at `layout.height * p` in document coordinates. */
+function reflowingView(head: number, scrollTop: number) {
+  const layout = { height: 20 };
+  const fake = fakeView(() => null);
+  fake.scrollDOM.scrollTop = scrollTop;
+  const view = fake.view as unknown as Record<string, unknown>;
+  view.state = EditorState.create({ doc: "x".repeat(100), selection: { anchor: head } });
+  view.contentDOM = { getBoundingClientRect: () => ({ left: 40 }) };
+  view.coordsAtPos = (pos: number) => {
+    const top = layout.height * pos - fake.scrollDOM.scrollTop;
+    return { top, bottom: top + layout.height, left: 40, right: 50 };
+  };
+  view.posAtCoords = ({ y }: { y: number }) => Math.floor((y + fake.scrollDOM.scrollTop) / layout.height);
+  const at = (pos: number) => layout.height * pos - fake.scrollDOM.scrollTop;
+  return { ...fake, layout, at };
+}
+
+describe("preserving the reader's place across a reflow", () => {
+  it("keeps the text at the top edge when the selection head is off screen", () => {
+    // The head is on the first line, far above the window.
+    const fake = reflowingView(0, 910);
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    settle(fake);
+    expect(fake.at(45)).toBeLessThanOrEqual(0);
+    expect(fake.at(45)).toBeGreaterThan(-40);
+    expect(fake.at(46)).toBeGreaterThan(0);
+  });
+
+  it("keeps a visible selection head at the same distance from the top", () => {
+    const fake = reflowingView(50, 900);
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    settle(fake);
+    expect(Math.abs(fake.at(50) - 100)).toBeLessThan(1);
+  });
+
+  it("leaves a view at the top where it is", () => {
+    const fake = reflowingView(50, 0);
+    let applied = false;
+    preserveScrollAnchor(fake.view, () => { applied = true; fake.layout.height = 40; });
+    expect(applied).toBe(true);
+    expect(frames).toHaveLength(0);
     expect(fake.scrollDOM.scrollTop).toBe(0);
   });
 });

@@ -35,7 +35,7 @@ func TestPublicVocabularyUsesCatalogIdentities(t *testing.T) {
 			after[name] = signature
 		}
 		delete(after, names[0])
-		if err := checkVocabulary(kind, vocabulary[kind], after, map[string]retirementSuccessors{}); err == nil {
+		if err := checkVocabulary(kind, vocabulary[kind], after, map[string]retirementSuccessors{}, nil); err == nil {
 			t.Errorf("%s removal passed", kind)
 		}
 	}

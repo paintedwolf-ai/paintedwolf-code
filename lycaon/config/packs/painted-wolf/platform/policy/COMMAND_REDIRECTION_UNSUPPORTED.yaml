@@ -1,58 +1,44 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_REDIRECTION_UNSUPPORTED
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - command
-  - verify
-  - terminal_open
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.redirection_issue
-  - paintedwolf.redirection_conflict
-  - paintedwolf.redirection_pipe
-  - paintedwolf.redirection_terminal
-  - paintedwolf.operator
-  - paintedwolf.can_command
+  tools:
+    - command
+    - verify
+    - terminal_open
+requires_facts: [paintedwolf.can_command, paintedwolf.operator, paintedwolf.redirection_conflict, paintedwolf.redirection_issue, paintedwolf.redirection_pipe, paintedwolf.redirection_terminal, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_REDIRECTION_UNSUPPORTED"
 effect: block
-copy:
-  what: 'A stream redirection was refused{% if paintedwolf.operator %}: `{{ paintedwolf.operator }}`{% endif %}{% if paintedwolf.redirection_issue %} ({{ paintedwolf.redirection_issue
-    }}){% endif %}.'
-  cause: '{% if paintedwolf.redirection_terminal %}This terminal surface owns stdin, stdout and stderr.{% else %}{% if paintedwolf.redirection_conflict %}The same
-    stream was assigned both an inline redirection and a structured destination.{% else %}{% if paintedwolf.redirection_pipe %}This argv surface does not combine
-    a pipe endpoint and file redirection on the same stream.{% endif %}{% endif %}{% endif %}'
-  why: ''
-  fix: '{% if paintedwolf.redirection_conflict %}Specify one destination for this stream, using either the inline form or this tool''s structured field.{% endif %}'
-  instead: '{% if paintedwolf.can_command %}The offered command tool accepts Bash redirections in program text without capture.{% endif %}'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: redirection cannot run as written
-x-paintedwolf-scenarios:
-- id: descriptor
-  vars:
-    tool: command
-    redirection_issue: descriptor_unsupported
-    operator: 3>
-- id: pipe_stdout
-  vars:
-    tool: command
-    redirection_issue: pipe_stage_stdout
-    redirection_pipe: true
-    operator: go test ./... > out.log
-- id: field_conflict
-  vars:
-    tool: command
-    redirection_issue: stdout_to_conflict
-    redirection_conflict: true
-    operator: go test ./... > out.log
-- id: terminal
-  vars:
-    tool: terminal_open
-    redirection_issue: surface_unsupported
-    redirection_terminal: true
-    operator: '> dev.log'
+category: recoverable
+emit: guard:command_composition_redirect
+message: redirection cannot run as written
+what: 'A stream redirection was refused{% if paintedwolf.operator %}: `{{ paintedwolf.operator }}`{% endif %}{% if paintedwolf.redirection_issue %} ({{ paintedwolf.redirection_issue }}){% endif %}.'
+cause: '{% if paintedwolf.redirection_terminal %}This terminal surface owns stdin, stdout and stderr.{% else %}{% if paintedwolf.redirection_conflict %}The same stream was assigned both an inline redirection and a structured destination.{% else %}{% if paintedwolf.redirection_pipe %}This argv surface does not combine a pipe endpoint and file redirection on the same stream.{% endif %}{% endif %}{% endif %}'
+why: ''
+fix: '{% if paintedwolf.redirection_conflict %}Specify one destination for this stream, using either the inline form or this tool''s structured field.{% endif %}'
+instead: '{% if paintedwolf.can_command %}The offered command tool accepts Bash redirections in program text without capture.{% endif %}'
+scenarios:
+  - id: descriptor
+    vars:
+      tool: command
+      redirection_issue: descriptor_unsupported
+      operator: 3>
+  - id: pipe_stdout
+    vars:
+      tool: command
+      redirection_issue: pipe_stage_stdout
+      redirection_pipe: true
+      operator: go test ./... > out.log
+  - id: field_conflict
+    vars:
+      tool: command
+      redirection_issue: stdout_to_conflict
+      redirection_conflict: true
+      operator: go test ./... > out.log
+  - id: terminal
+    vars:
+      tool: terminal_open
+      redirection_issue: surface_unsupported
+      redirection_terminal: true
+      operator: '> dev.log'

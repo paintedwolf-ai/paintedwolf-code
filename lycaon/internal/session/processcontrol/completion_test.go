@@ -276,3 +276,17 @@ func TestCompletionDeliveryRespectsTerminationReasonRouting(t *testing.T) {
 		t.Fatalf("live session completions emitted = %d, want 4", len(f.emitted))
 	}
 }
+
+// The digest's elapsed is run time; time awaiting approval is reported apart.
+func TestCommandCompletionDigestSeparatesApprovalWaitFromRunTime(t *testing.T) {
+	started := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	completion := bgprocess.Completion{Handle: "bg-1", OriginTool: "command", StartedAt: started, FinishedAt: started.Add(21750 * time.Millisecond), PersonWait: 13290 * time.Millisecond}
+	digest := CommandCompletionDigest(completion)
+	if !strings.Contains(digest, " elapsed=8.46s ") || !strings.Contains(digest, " awaited_approval=13.29s") {
+		t.Fatalf("digest = %q", digest)
+	}
+	completion.PersonWait = 0
+	if digest := CommandCompletionDigest(completion); !strings.Contains(digest, " elapsed=21.75s ") || strings.Contains(digest, "awaited_approval") {
+		t.Fatalf("digest without a wait = %q", digest)
+	}
+}

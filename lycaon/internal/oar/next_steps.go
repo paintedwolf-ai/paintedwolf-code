@@ -77,7 +77,7 @@ func bindsNextSteps(r *Rule) bool {
 }
 
 // validateNextSteps rejects a catalog entry that could not render, and any rule
-// that lets the fact reach a decision ([OAR-DOC-26] holds for the same reason).
+// that lets the fact reach a decision ([OAR-DOC-20] holds for the same reason).
 func (l *Loader) validateNextSteps(r *Rule) error {
 	if err := rejectDecisionNextSteps(r.ID, "when", r.When); err != nil {
 		return err
@@ -86,9 +86,6 @@ func (l *Loader) validateNextSteps(r *Rule) error {
 		if err := rejectDecisionNextSteps(r.ID, "flow", expr); err != nil {
 			return err
 		}
-	}
-	if strings.TrimSpace(r.CounterScope) == NextStepsFact {
-		return fmt.Errorf("rule %s: counter_scope reads %s, which only copy may bind", r.ID, NextStepsFact)
 	}
 	if r.NextSteps == nil {
 		return nil
@@ -145,7 +142,7 @@ func (l *Loader) validateNextStep(step NextStep, known map[string]bool, selector
 		return fmt.Errorf("%s: %w", where, err)
 	}
 	for _, name := range names {
-		// A fact the rule does not reference is never assembled for it ([OAR-FACT-11]).
+		// A fact the rule does not reference is never assembled for it ([OAR-FACT-9]).
 		if !known[name] {
 			return fmt.Errorf("%s: names %s, which the rule does not reference", where, name)
 		}
@@ -288,7 +285,7 @@ func nextStepRefs(step NextStep) ([]string, error) {
 // ruleFactRefs lists the facts a rule causes the engine to assemble.
 func ruleFactRefs(r *Rule) map[string]bool {
 	out := map[string]bool{"tool": true}
-	for _, name := range r.Requires.Facts {
+	for _, name := range r.RequiresFacts {
 		out[name] = true
 	}
 	if names, err := oarcore.ConditionReferences(r.When); err == nil {

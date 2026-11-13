@@ -11,15 +11,8 @@ import { stubClient } from "../../test/client-fixture.ts";
 import { resetEditorPrefsForTests } from "../../settings/editor/editor-prefs.ts";
 import { getOverviewAgentMarks } from "../../components/source/annotations/overview-agent-marks.ts";
 import type { AgentMark } from "../components/agent-presence.ts";
-import {
-  AGENT_FADE_OUT_MS,
-  agentWholeFile,
-  agentPaintField,
-  documentAgentPresence,
-  nextAgentPaint,
-  resolveAgentMark,
-  type PaintedAgentMark,
-} from "./document-agent-presence.ts";
+import { AGENT_FADE_OUT_MS, agentWholeFile, nextAgentPaint, type PaintedAgentMark } from "./agent-paint-lifetime.ts";
+import { agentPaintField, documentAgentPresence, resolveAgentMark } from "./document-agent-presence.ts";
 import { encodeUpdate } from "./document-outbox.ts";
 import { DocumentReplica } from "./document-replica.ts";
 
@@ -90,7 +83,7 @@ describe("agent presence in a document", () => {
   it("keeps pending whole-file changes out of the read tint", () => {
     const chatRef = { sessionId: "s1", title: "Fix login", slot: 0 };
     const item = (key: string, kind: AgentMark["kind"], bornAt: number, leftAt: number | null = null): PaintedAgentMark => ({
-      mark: { source: { kind: "read", item: readItem({ sequence: bornAt }) }, key, chat: chatRef, kind, stale: false, caret: false }, from: 0, to: 0, color: undefined, bornAt, leftAt,
+      mark: { source: { kind: "read", item: readItem({ sequence: bornAt }) }, key, chat: chatRef, kind, stale: false, caret: false }, from: 0, to: 0, color: undefined, bornAt, leftAt, supersededAt: null,
     });
     expect(agentWholeFile([item("old", "whole", 1), item("new", "whole", 2)])?.mark.key).toBe("new");
     expect(agentWholeFile([item("read", "whole", 3), item("pending", "whole-pending", 1)])?.mark.key).toBe("read");

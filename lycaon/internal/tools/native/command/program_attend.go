@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
@@ -46,6 +47,7 @@ type ParkedProgramResult struct {
 // programEvaluation is one bound program handed from its call to evaluation.
 type programEvaluation struct {
 	ctx            context.Context
+	waits          *programWaits
 	run            *programRun
 	call           *programCall
 	park           *programPark
@@ -80,9 +82,11 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	lifetime := &programLifetime{release: e.release}
 	e.release = lifetime.settled
 	defer lifetime.callerDone()
-	expired := make(chan struct{})
-	stop := r.clock().AfterFunc(ProgramInlineWait(), func() { close(expired) })
-	defer stop()
+	budget := newForegroundBudget(r.clock(), ProgramInlineWait())
+	defer budget.Close()
+	expired := budget.Expired()
+	e.waits = &programWaits{budget: budget}
+	e.ctx = hitl.WithHumanWaitObserver(e.ctx, e.waits)
 	//nolint:contextcheck // Detached evaluation outlives a parked call.
 	go func() {
 		ending.result, ending.err = r.finish(e)
@@ -306,6 +310,7 @@ func (r *ProgramRuntime) finish(e *programEvaluation) (string, error) {
 		stampProgramRun(run.tc, run.source, e.paths.Cwd(), outcome, e.verification)
 		if run.tc.Execution.VerificationCheck && run.tc.Effects.Out.SourceRun != nil {
 			outcome.Outcome = run.tc.Effects.Out.SourceRun.Verdict
+			outcome.Verification = &ProgramVerification{Scope: "program", ProgramID: outcome.ProgramID, SourceRef: "output:program-source:" + outcome.ProgramID, Verdict: outcome.Outcome}
 		}
 	}
 	if run.tool == "verify" {
@@ -360,7 +365,7 @@ func stampProgramRun(tc tools.ToolContext, source string, cwd projectpaths.Resol
 	case outcome.Status != 0:
 		verdict = api.SourceVerdictFailed
 	}
-	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
+	run := &tools.SourceRunCapture{CheckID: tc.Identity.ToolCallID, ProgramID: outcome.ProgramID, IsCheck: tc.Execution.VerificationCheck, Command: source, ExitCode: outcome.Status, Verdict: verdict, Cwd: cwd.DisplayPath}
 	if tc.Execution.VerificationCheck && verification != nil {
 		identity := verification()
 		run.SourceRevision, run.SourceRootDigest = identity.Revision, identity.Root

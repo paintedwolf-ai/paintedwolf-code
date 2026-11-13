@@ -1,0 +1,28 @@
+{
+  "id": "doc-profile-field-is-informational",
+  "title": "The profile field records intent and derives no behaviour",
+  "covers": [
+    "OAR-DOC-24"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "SELF_DESCRIBED",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "tool == \"read\"",
+    "profile": "portable"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "SELF_DESCRIBED"
+  }
+}

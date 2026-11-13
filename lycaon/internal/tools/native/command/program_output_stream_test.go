@@ -64,6 +64,28 @@ func TestProgramStreamHardLimitRetainsExactPrefix(t *testing.T) {
 	}
 }
 
+func TestProgramStreamMarksTruncatedWhenContextCanceledMidProgram(t *testing.T) {
+	account := &outputSpillAccount{}
+	ctx, cancel := context.WithCancel(t.Context())
+	stream := newProgramStream(ctx, 8, account, nil)
+	defer stream.Close()
+	_, err := stream.Write([]byte("prefix\n"))
+	testutil.FailErr(t, "write prefix", err)
+	cancel()
+	n, err := stream.Write([]byte("after cancel\n"))
+	if n != 0 || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled write=(%d,%v)", n, err)
+	}
+	if !stream.truncated {
+		t.Fatal("canceled capture left unmarked")
+	}
+	got, err := io.ReadAll(stream.snapshot(t))
+	testutil.FailErr(t, "read retained prefix", err)
+	if string(got) != "prefix\n" {
+		t.Fatalf("retained prefix=%q", got)
+	}
+}
+
 func TestOutputWindowDoesNotSplitLongLinesAndNamesIncompleteCopy(t *testing.T) {
 	data := strings.Repeat("x", 20000) + "\nsummary\n"
 	sample, err := sampleOutput(strings.NewReader(data), 12<<10)
@@ -258,5 +280,63 @@ func TestNestedEqualBytesUseTheirActualWriteCoordinates(t *testing.T) {
 	testutil.FailErr(t, "nested output", err)
 	if string(bytes) != "samesamesame" {
 		t.Fatalf("nested bytes=%q", bytes)
+	}
+}
+
+func TestChildOutputsRetainFailedStreamsWithinAdmission(t *testing.T) {
+	for _, status := range []int{0, 7} {
+		t.Run(string(rune('0'+status)), func(t *testing.T) {
+			memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
+			testutil.FailErr(t, "create memory account", err)
+			retained := map[string]string{}
+			complete := map[string]bool{}
+			run := &programRun{memory: memory, retainOutput: func(_ context.Context, execution, stream string, data []byte, full bool) error {
+				if execution != "child" {
+					t.Fatalf("execution = %q", execution)
+				}
+				retained[stream], complete[stream] = string(data), full
+				return nil
+			}}
+			var stdout, stderr bytes.Buffer
+			request := commandprogram.OperationRequest{Invocation: toolcontract.OperationInvocation{Identity: toolcontract.ExecutionIdentity{ExecutionID: "child"}}}
+			streams, finish, err := run.childOutputs(t.Context(), request, commandprogram.Streams{Output: &stdout, Error: &stderr})
+			testutil.FailErr(t, "admit child capture", err)
+			body := strings.Repeat("x", childOutputBytes+20)
+			_, err = io.WriteString(streams.Output, body)
+			testutil.FailErr(t, "write stdout", err)
+			_, err = io.WriteString(streams.Error, "diagnostic")
+			testutil.FailErr(t, "write stderr", err)
+			testutil.FailErr(t, "finish capture", finish(t.Context(), toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted, Complete: true}, nil))
+			if stdout.String() != body || stderr.String() != "diagnostic" || memory.InUse().Working != 0 {
+				t.Fatal("capture changed delivered bytes or leaked admission")
+			}
+			if status == 0 {
+				if len(retained) != 0 {
+					t.Fatal("successful stream acquired failure retention")
+				}
+			} else if len(retained["stdout"]) != childOutputBytes || complete["stdout"] || retained["stderr"] != "diagnostic" || !complete["stderr"] {
+				t.Fatalf("retained lengths stdout=%d stderr=%d completeness=%v", len(retained["stdout"]), len(retained["stderr"]), complete)
+			}
+		})
+	}
+}
+
+func TestChildOutputCaptureRejectsCapacityAndReturnsRetentionFailure(t *testing.T) {
+	memory, err := toolcontract.NewProgramMemory(toolcontract.ProgramMemoryLimits{Working: 1 << 20, State: 1 << 20})
+	testutil.FailErr(t, "create memory account", err)
+	failed := errors.New("retention unavailable")
+	run := &programRun{memory: memory, retainOutput: func(context.Context, string, string, []byte, bool) error { return failed }}
+	release, err := memory.Reserve(t.Context(), 1<<20)
+	testutil.FailErr(t, "occupy memory", err)
+	if _, finish, err := run.childOutputs(t.Context(), commandprogram.OperationRequest{}, commandprogram.Streams{}); err == nil || finish != nil {
+		t.Fatal("capture allocated beyond admission")
+	}
+	release()
+	streams, finish, err := run.childOutputs(t.Context(), commandprogram.OperationRequest{}, commandprogram.Streams{})
+	testutil.FailErr(t, "admit capture", err)
+	_, err = io.WriteString(streams.Output, "observed")
+	testutil.FailErr(t, "write capture", err)
+	if err := finish(t.Context(), toolcontract.ProducerResult{Status: 1}, nil); !errors.Is(err, failed) || memory.InUse().Working != 0 {
+		t.Fatalf("retention failure=%v memory=%+v", err, memory.InUse())
 	}
 }

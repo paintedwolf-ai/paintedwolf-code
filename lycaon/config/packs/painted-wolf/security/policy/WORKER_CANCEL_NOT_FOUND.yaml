@@ -1,28 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_CANCEL_NOT_FOUND
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.job_id
+on: tool.rejected
+selector:
+  tools:
+    - worker_cancel
+requires_facts: [paintedwolf.job_id, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKER_CANCEL_NOT_FOUND"
 effect: block
-copy:
-  what: worker_cancel job_id must match a job spawned from this session
-  cause: The job id is missing or stale
-  why: The job id is missing or stale
-  fix: 'Use job_id from a worker enqueue result or the pulse roster for an in-flight job.'
-  instead: 'Pass a valid job_id from an enqueue result or the pulse roster.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: No worker job {{ paintedwolf.job_id }} exists for worker_cancel
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    job_id: job-missing
-selector:
-  tool:
-  - worker_cancel
+category: recoverable
+emit: guard:coordinator
+message: No worker job {{ paintedwolf.job_id }} exists for worker_cancel
+what: worker_cancel job_id must match a job spawned from this session
+cause: The job id is missing or stale
+why: The job id is missing or stale
+fix: 'Use job_id from a worker enqueue result or the pulse roster for an in-flight job.'
+instead: 'Pass a valid job_id from an enqueue result or the pulse roster.'
+scenarios:
+  - id: default
+    vars:
+      job_id: job-missing

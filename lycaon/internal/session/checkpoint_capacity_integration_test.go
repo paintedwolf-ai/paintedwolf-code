@@ -157,7 +157,7 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 		for _, effect := range []oar.Effect{oar.EffectWarn, oar.EffectNudge} {
 			t.Run(anchor+"/"+string(effect), func(t *testing.T) {
 				mgr := advisoryTestManager(t)
-				rule := &oar.Rule{OAR: "1.0", ID: "PROBE", Kind: oar.KindPolicy, Anchor: anchor, Effect: effect, Enforcement: "enforce", OnError: "fail_closed", Copy: oar.Copy{What: "Frozen boundary observation"}}
+				rule := &oar.Rule{SpecVersion: "1.0", ID: "PROBE", Kind: oar.KindPolicy, Anchor: anchor, Effect: effect, Enforcement: "enforce", OnError: "fail_closed", Copy: oar.Copy{What: "Frozen boundary observation"}}
 				pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, oar.NewCounterStore())
 				pipeline.EnableAnchor(anchor)
 				mgr.SetOARPipeline(pipeline, mgr.Coordinator.Feedback.Renderer())

@@ -13,7 +13,8 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
-// Operator configuration controls rule enforcement ([OAR-CFG-1]–[OAR-CFG-8]).
+// Operator configuration disables rules or sets their enforcement. A mandatory
+// rule is never disabled or downgraded ([OAR-OPS-5]).
 
 var (
 	configIDRE           = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
@@ -24,6 +25,9 @@ var (
 const (
 	configMajor = 1
 	configMinor = 0
+	// configDisabled turns a rule off in operator configuration; a rule
+	// document's own enforcement is only enforce or monitor.
+	configDisabled = "off"
 )
 
 // ProjectOperatorConfigBasename names project rule overrides.
@@ -65,7 +69,7 @@ func (rs *RuleSet) lookupConfigRef(ref string) (*Rule, error) {
 		for _, r := range matches {
 			ids = append(ids, r.Qualified())
 		}
-		return nil, configErr("[OAR-CFG-8] configuration names %s, which is ambiguous across namespaces: %v", ref, ids)
+		return nil, configErr("configuration names %s, which is ambiguous across namespaces: %v", ref, ids)
 	}
 	return nil, nil
 }
@@ -76,7 +80,11 @@ func (rs *RuleSet) applyEnforcement(effective map[string]string) {
 	}
 	for _, r := range rs.All() {
 		if v, ok := effective[r.Qualified()]; ok {
-			r.Enforcement = v
+			if v == configDisabled {
+				r.Disabled = true
+			} else {
+				r.Enforcement = v
+			}
 		}
 	}
 }
@@ -95,12 +103,7 @@ func cloneRuleSet(rs *RuleSet) (*RuleSet, error) {
 		rules = append(rules, &clone)
 	}
 	cloned := NewRuleSet(rules)
-	if err := ResolveOverrides(cloned); err != nil {
-		return nil, err
-	}
-	if err := RejectUnknownErrorSubstitutes(cloned); err != nil {
-		return nil, err
-	}
+	ResolveErrorSubstitutes(cloned)
 	return cloned, nil
 }
 
@@ -130,7 +133,7 @@ func resolveOperatorConfigs(docs []any, rs *RuleSet) (map[string]string, error) 
 		}
 		for key := range obj {
 			if key != "oar_config" && key != "disable" && key != "enforcement" {
-				return nil, configErr("[OAR-CFG-6] configuration document carries undefined field %q", key)
+				return nil, configErr("configuration document carries undefined field %q", key)
 			}
 		}
 		version, ok := obj["oar_config"].(string)
@@ -141,10 +144,10 @@ func resolveOperatorConfigs(docs []any, rs *RuleSet) (map[string]string, error) 
 		major, _ := strconv.Atoi(parts[0])
 		minor, _ := strconv.Atoi(parts[1])
 		if major != configMajor {
-			return nil, configErr("[OAR-CFG-1] configuration field \"oar_config\" %s names a major version this engine does not implement (%d.%d)", version, configMajor, configMinor)
+			return nil, configErr("configuration field \"oar_config\" %s names a major version this engine does not implement (%d.%d)", version, configMajor, configMinor)
 		}
 		if minor > configMinor {
-			return nil, configErr("[OAR-CFG-1] configuration field \"oar_config\" %s names a minor version above this engine's own (%d.%d)", version, configMajor, configMinor)
+			return nil, configErr("configuration field \"oar_config\" %s names a minor version above this engine's own (%d.%d)", version, configMajor, configMinor)
 		}
 
 		disableRaw := obj["disable"]
@@ -165,12 +168,12 @@ func resolveOperatorConfigs(docs []any, rs *RuleSet) (map[string]string, error) 
 				return nil, err
 			}
 			if target == nil {
-				return nil, configErr("[OAR-CFG-4] configuration disables %s, which is not loaded", ref)
+				return nil, configErr("configuration disables %s, which is not loaded", ref)
 			}
 			if target.Mandatory {
-				return nil, configErr("[OAR-CFG-5] configuration disables %s, whose mandatory is true", target.Qualified())
+				return nil, configErr("configuration disables %s, whose mandatory is true", target.Qualified())
 			}
-			effective[target.Qualified()] = "off"
+			effective[target.Qualified()] = configDisabled
 		}
 
 		enforcementRaw := obj["enforcement"]
@@ -186,7 +189,7 @@ func resolveOperatorConfigs(docs []any, rs *RuleSet) (map[string]string, error) 
 				return nil, configErr("configuration field \"enforcement\" holds malformed rule reference %q", raw)
 			}
 			s, ok := value.(string)
-			if !ok || (s != "enforce" && s != "monitor" && s != "off") {
+			if !ok || (s != "enforce" && s != "monitor" && s != configDisabled) {
 				return nil, configErr("configuration sets %s to %v, which is not an enforcement value", raw, value)
 			}
 			target, err := rs.lookupConfigRef(raw)
@@ -194,10 +197,10 @@ func resolveOperatorConfigs(docs []any, rs *RuleSet) (map[string]string, error) 
 				return nil, err
 			}
 			if target == nil {
-				return nil, configErr("[OAR-CFG-4] configuration sets enforcement for %s, which is not loaded", raw)
+				return nil, configErr("configuration sets enforcement for %s, which is not loaded", raw)
 			}
 			if target.Mandatory && s != "enforce" {
-				return nil, configErr("[OAR-CFG-5] configuration downgrades %s to %s, whose mandatory is true", target.Qualified(), s)
+				return nil, configErr("configuration downgrades %s to %s, whose mandatory is true", target.Qualified(), s)
 			}
 			effective[target.Qualified()] = s
 		}

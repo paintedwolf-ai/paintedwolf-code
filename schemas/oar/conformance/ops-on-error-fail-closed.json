@@ -1,0 +1,33 @@
+{
+  "id": "ops-on-error-fail-closed",
+  "title": "A rule that cannot be evaluated blocks under the default on_error, fail_closed",
+  "covers": [
+    "OAR-DOC-13",
+    "OAR-OPS-2",
+    "OAR-CONF-7",
+    "OAR-CONF-18"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "DETECTOR_UNAVAILABLE",
+    "kind": "detector",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "prompt_injection_score > 0.8",
+    "detector": {
+      "ref": "detector://error"
+    }
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "DETECTOR_UNAVAILABLE"
+  }
+}

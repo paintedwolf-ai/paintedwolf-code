@@ -1,33 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: JQ_QUERY_INVALID
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - jq
-  - jq_edit
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.detail
+  ledger:
+    paintedwolf.operation:
+      - jq
+      - jq_edit
+requires_facts: [paintedwolf.detail, paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "JQ_QUERY_INVALID"
 effect: block
-copy:
-  what: 'jq could not compile the program: {{ paintedwolf.detail }}.'
-  cause: The query must be a valid jq program.
-  why: Structured rejects let agents branch without parsing free-form compile errors.
-  fix: Correct the jq program. For jq, omitting query selects the identity program, but the host may return
-    a bounded structural view rather than the entire document; inspect coverage before relying on the result.
-  instead: Branch on Code; fix the jq program before retrying
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:jq
-x-paintedwolf-message: jq program is invalid
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: unexpected token "["
-    profile: explore_readonly
-    tool: jq
+category: recoverable
+emit: guard:jq
+message: jq program is invalid
+what: 'jq could not compile the program: {{ paintedwolf.detail }}.'
+cause: The query must be a valid jq program.
+why: Structured rejects let agents branch without parsing free-form compile errors.
+fix: Correct the jq program. For jq, omitting query selects the identity program, but the host may return a bounded structural view rather than the entire document; inspect coverage before relying on the result.
+instead: Branch on Code; fix the jq program before retrying
+scenarios:
+  - id: default
+    vars:
+      detail: unexpected token "["
+      profile: explore_readonly
+      tool: jq

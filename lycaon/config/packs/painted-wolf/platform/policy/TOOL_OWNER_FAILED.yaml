@@ -1,35 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: TOOL_OWNER_FAILED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.extraction_started
-  - paintedwolf.dest
-  - paintedwolf.extracted_entries
-  - paintedwolf.extracted_bytes
-  - paintedwolf.extracted_paths_sample
-  - paintedwolf.extracted_paths_omitted
-  - paintedwolf.rejection_reason
-  profiles:
-  - tool
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.dest, paintedwolf.extracted_bytes, paintedwolf.extracted_entries, paintedwolf.extracted_paths_omitted, paintedwolf.extracted_paths_sample, paintedwolf.extraction_started, paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "TOOL_OWNER_FAILED"
 effect: block
-copy:
-  what: The operation failed.
-  cause: '{{ paintedwolf.rejection_reason }}'
-  why: ''
-  fix: '{% if paintedwolf.extraction_started %}Extraction stopped in {{ paintedwolf.dest }} after committing {{ paintedwolf.extracted_entries }} entries ({{ paintedwolf.extracted_bytes
-    }} bytes).{% if paintedwolf.extracted_paths_sample %} Completed path sample: {{ paintedwolf.extracted_paths_sample }}.{% endif %}{% if paintedwolf.extracted_paths_omitted
-    %} Additional completed paths: {{ paintedwolf.extracted_paths_omitted }}.{% endif %} Preserve these changes and any created directories.{% endif %}'
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool_owner
-x-paintedwolf-message: Subsystem owner failed to settle the action
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    profile: implement
-    reason: subsystem owner unavailable
-    tool: write
+category: recoverable
+emit: guard:tool_owner
+message: Subsystem owner failed to settle the action
+what: The operation failed.
+cause: '{{ paintedwolf.rejection_reason }}'
+why: ''
+fix: '{% if paintedwolf.extraction_started %}Extraction stopped in {{ paintedwolf.dest }} after committing {{ paintedwolf.extracted_entries }} entries ({{ paintedwolf.extracted_bytes }} bytes).{% if paintedwolf.extracted_paths_sample %} Completed path sample: {{ paintedwolf.extracted_paths_sample }}.{% endif %}{% if paintedwolf.extracted_paths_omitted %} Additional completed paths: {{ paintedwolf.extracted_paths_omitted }}.{% endif %} Preserve these changes and any created directories.{% endif %}'
+instead: ''
+scenarios:
+  - id: default
+    vars:
+      profile: implement
+      reason: subsystem owner unavailable
+      tool: write

@@ -15,10 +15,10 @@ func TestUnreferencedDeclaredFactsFlagsOrphans(t *testing.T) {
 	if err := os.MkdirAll(anchors, 0o755); err != nil {
 		testutil.FailErr(t, "create directory", err)
 	}
-	profile := `oar_capability_version: "1.0"
-host: paintedwolf
+	profile := `host: paintedwolf
 profiles: []
-anchors:
+profile_map:
+  oar_profile_version: "1.0"
   core:
     tool.pre_invoke: tool.pre_invoke
     tool.handler: tool.handler

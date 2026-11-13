@@ -1,0 +1,39 @@
+{
+  "id": "eval-allow-does-not-override",
+  "title": "An explicit allow contributes no decision and does not override a warn",
+  "covers": [
+    "OAR-EVAL-5"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "A_ALLOWS",
+      "kind": "schema",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "allow",
+      "emit": "rule:conformance",
+      "when": "tool == \"read\""
+    },
+    {
+      "spec_version": "1.0",
+      "id": "B_WARNS",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "emit": "rule:conformance",
+      "when": "tool == \"read\""
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "B_WARNS"
+  }
+}

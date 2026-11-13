@@ -351,7 +351,7 @@ func unreachableRemedies(c *Catalog, rule *oar.Rule, audience []string) (own, ot
 	for _, field := range []struct {
 		name string
 		text string
-	}{{"fix", rule.Fix}, {"instead", rule.Copy.Instead}} {
+	}{{"fix", rule.Copy.Fix}, {"instead", rule.Copy.Instead}} {
 		for _, tool := range NamedTools(c, field.text) {
 			// The rejected call is the subject of the rule, not a remedy.
 			if selected[tool] {

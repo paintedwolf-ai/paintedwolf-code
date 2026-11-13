@@ -15,8 +15,8 @@ func ensureCatalog(t *testing.T) {
 	path := filepath.Join(testutil.CheckoutRoot(t), "lycaon", "config", "packs", "painted-wolf", "platform", "host", "anchors", "catalog.yaml")
 	testutil.FailErr(t, "install catalog", anchorcatalog.InstallFile(path))
 	// A core anchor only resolves through the host's capability document
-	// ([OAR-PROF-4]), so a test that loads rules needs it installed too.
+	// ([OAR-PROF-3]), so a test that loads rules needs it installed too.
 	profile := filepath.Join(testutil.CheckoutRoot(t), "lycaon", "config", "packs", "painted-wolf",
 		"platform", "host", "anchors", "oar-profile.yaml")
-	testutil.FailErr(t, "install capability document", InstallCapabilityDocumentFile(profile))
+	testutil.FailErr(t, "install capability document", InstallEngineDeclarationFile(profile))
 }

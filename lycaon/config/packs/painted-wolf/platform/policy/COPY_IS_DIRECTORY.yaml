@@ -1,34 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COPY_IS_DIRECTORY
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - copy
-requires:
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.path
-  profiles:
-  - filesystem
-  - tool
+  ledger:
+    paintedwolf.operation:
+      - copy
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COPY_IS_DIRECTORY"
 effect: block
-copy:
-  cause: copy accepts regular files as sources.
-  why: A directory copy would introduce recursive selection that this request does not express.
-  fix: Discover the intended files and supply explicit source–destination pairs only if that matches the task.
-    Do not replace this request with recursive command copying.
-  instead: Identify the intended regular-file sources
-  what: The copy source {{ paintedwolf.path }} is a directory.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:copy
-x-paintedwolf-message: copy:copy source is a directory
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: implement
-    tool: copy
+category: recoverable
+emit: guard:copy
+message: copy:copy source is a directory
+what: The copy source {{ paintedwolf.path }} is a directory.
+cause: copy accepts regular files as sources.
+why: A directory copy would introduce recursive selection that this request does not express.
+fix: Discover the intended files and supply explicit source–destination pairs only if that matches the task. Do not replace this request with recursive command copying.
+instead: Identify the intended regular-file sources
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: implement
+      tool: copy

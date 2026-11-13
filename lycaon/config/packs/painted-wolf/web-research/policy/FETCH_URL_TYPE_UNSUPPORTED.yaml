@@ -1,33 +1,24 @@
-oar: '1.0'
+spec_version: "1.0"
 id: FETCH_URL_TYPE_UNSUPPORTED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - fetch_url
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.next_steps
-  - paintedwolf.rejection_code
-  - paintedwolf.content_type
-  - paintedwolf.unsupported
-  - paintedwolf.rejection_reason
+  tools:
+    - fetch_url
+requires_facts: [paintedwolf.content_type, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.unsupported]
 when: paintedwolf.rejection_code == "FETCH_URL_TYPE_UNSUPPORTED"
 effect: block
-copy:
-  what: fetch_url cannot read Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }}).
-  cause: The source is neither readable text nor a supported image.
-  why: Fetch produces research evidence without writing project files.
-  fix: 'Choose a readable source for the claim, or report the format limitation. {{ paintedwolf.next_steps }}'
-  instead: Use supported evidence or report the gap.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: fetch_url cannot read this content type
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    content_type: application/zip
-    reason: archive
-    tool: fetch_url
+category: recoverable
+emit: guard:fetch_url
+message: fetch_url cannot read this content type
+what: fetch_url cannot read Content-Type {{ paintedwolf.content_type }} ({{ paintedwolf.rejection_reason }}).
+cause: The source is neither readable text nor a supported image.
+why: Fetch produces research evidence without writing project files.
+fix: 'Choose a readable source for the claim, or report the format limitation. {{ paintedwolf.next_steps }}'
+instead: Use supported evidence or report the gap.
+scenarios:
+  - id: default
+    vars:
+      content_type: application/zip
+      reason: archive
+      tool: fetch_url

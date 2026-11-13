@@ -401,6 +401,47 @@ modelIndependentWebE2e("marks tabs in indentation while laid out", async ({ page
   for (const dot of dots) expect(dot).toContain("radial-gradient");
 });
 
+modelIndependentWebE2e("keeps the text at the top of the view across line layout changes when the caret is off screen", async ({ page, request }) => {
+  // One long object per line: every layout, Off included, scrolls vertically.
+  const rows = Array.from({ length: 3_000 }, (_, i) =>
+    `{"id":${i},"name":"row ${i} ${"lorem ipsum ".repeat(20)}","tags":["a","b","c"],"nested":{"x":${i},"y":[1,2,3]}}`);
+  const { scroller } = await openPretty(page, request, { name: "rows.json", text: `[\n${rows.join(",\n")}\n]\n` });
+  await page.evaluate(() => window.__pretty.view().dispatch({ selection: { anchor: 0 } }));
+  await scroller.evaluate((element) => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
+  await settle(page);
+  await settle(page);
+  // The document position drawn at the top edge, and how far below the edge it sits.
+  const topText = () => page.evaluate(() => {
+    const view = window.__pretty.view();
+    const port = view.scrollDOM.getBoundingClientRect();
+    const content = view.contentDOM.getBoundingClientRect();
+    const pos = view.posAtCoords({ x: content.left + 4, y: port.top + 4 }, false);
+    return { pos, line: view.defaultLineHeight };
+  });
+  const offsetOf = (pos: number) => page.evaluate((pos) => {
+    const view = window.__pretty.view();
+    const rect = view.coordsAtPos(pos, 1);
+    return rect ? rect.top - view.scrollDOM.getBoundingClientRect().top : null;
+  }, pos);
+  // Off, Pretty, Wrap and Off again: every change between line layouts.
+  for (const [i, layout] of ["off", "pretty", "wrap", "off"].entries()) {
+    const before = await topText();
+    const offsetBefore = (await offsetOf(before.pos))!;
+    expect(await page.evaluate(() => {
+      const view = window.__pretty.view();
+      const rect = view.coordsAtPos(0);
+      return Boolean(rect && rect.bottom > view.scrollDOM.getBoundingClientRect().top);
+    })).toBe(false);
+    await page.getByTestId(`files-editor-layout-${layout}`).click();
+    await expect(page.getByTestId(`files-editor-layout-${layout}`)).toHaveAttribute("aria-pressed", "true");
+    await expect.poll(async () => {
+      const offset = await offsetOf(before.pos);
+      return offset !== null && Math.abs(offset - offsetBefore) < 2 * before.line;
+    }, { message: `switch ${i} to ${layout}`, timeout: 5_000 }).toBe(true);
+    await settle(page);
+  }
+});
+
 modelIndependentWebE2e("stays in Pretty and wraps a file it cannot lay out", async ({ page, request }) => {
   const line = `exec ./server ${"--flag value ".repeat(40)}`;
   await openProjectFilesFixture(page, request, {

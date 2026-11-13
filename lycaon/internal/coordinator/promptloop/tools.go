@@ -92,7 +92,7 @@ type toolInvocation struct {
 	sourceRootDigest string
 }
 
-// [OAR-OPS-8] Parallel captures cannot deliver content withheld by policy.
+// [OAR-OPS-6] Parallel captures cannot deliver content withheld by policy.
 func (t *toolInvocation) replaceContent(content string) {
 	t.content = content
 	t.facts.ContentReplaced = true
@@ -343,7 +343,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 		if run.toolCtx.Effects.Out != nil {
 			result.facts = result.facts.Merge(run.toolCtx.Effects.Out.Facts)
 		}
-		// [OAR-PROF-10] Every returned result, including failures, crosses policy before logging or delivery.
+		// Every returned result, including failures, crosses policy before logging or delivery.
 		if ownerInvoked || run.runErr == nil {
 			if l.Deps.EnrichToolOutput != nil {
 				content, facts := l.Deps.EnrichToolOutput(ctx, sess, run.call.Name, run.call.Args,

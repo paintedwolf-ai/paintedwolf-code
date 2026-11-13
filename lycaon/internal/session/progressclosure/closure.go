@@ -47,13 +47,13 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 		return
 	}
 	content := snapshot.Content
-	done, pending, na := progress.CloseCounts(content)
+	_, pending, _ := progress.CloseCounts(content)
 	baseline, armed := m.baselines.Load(rootID)
 	if pending == 0 && !armed {
 		return
 	}
 	if !armed {
-		baseline = guard.ProgressClosureBaseline{Closed: done + na, Content: content, Revision: snapshot.Revision}
+		baseline = guard.ProgressClosureBaseline{Revision: snapshot.Revision}
 	}
 	if entry := m.settledWorkEntry(jobID); entry != "" && !slices.Contains(baseline.Settled, entry) {
 		baseline.Settled = append(slices.Clone(baseline.Settled), entry)
