@@ -1,6 +1,7 @@
 package contract
 
 import (
+	"fmt"
 	"maps"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/prompts"
+	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolvocab"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -18,9 +20,10 @@ import (
 
 // Units render from tool facts, so every branch must be true for any tool set,
 // not only for the stock surfaces, where command's sealed capture can mask a
-// handle a held tool does not mint. Each stock unit renders with full host facts
-// for every tool alone, every coordinator surface, every tool profile and all
-// tools together, and may name only tools and evidence handles that set reaches.
+// handle a held tool does not mint. The production selector picks the units for
+// every tool alone and all tools together (each host and mode family), every
+// coordinator surface and every tool profile; each renders with full host facts
+// and may name only tools and evidence handles that set reaches.
 func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 	catalog, _ := promptNameCatalog(t)
 	binding, err := evidence.LoadBinding()
@@ -29,10 +32,11 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 	units, err := prompts.UnitCatalogForEngine(engine)
 	contractcheck.FailErr(t, "unit catalog", err)
 	base := mergeCoordinatorTemplateVars(t)
-	for _, state := range toolFactStates(t, binding) {
+	for _, state := range toolFactStates(t, binding, units) {
 		vars := maps.Clone(base)
 		maps.Copy(vars, prompts.VisibleToolsNativePartialVars(state.offered))
 		prompts.MergeVisualShowVars(state.offered, state.requestable, vars)
+		vars["is_coordinator"] = state.host == promptunit.HostCoordinator
 		held := map[string]bool{}
 		for _, tool := range slices.Concat(state.offered, state.requestable) {
 			held[tool] = true
@@ -40,15 +44,21 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 		if held["command"] && vars["profile_command_mutation"] != false {
 			held[toolvocab.ReachCommandMutation] = true
 		}
-		for _, unit := range units.Units() {
-			// A unit with attaches renders only while one of them is offered.
-			if !unit.Stock || len(unit.Attaches) > 0 && !slices.ContainsFunc(unit.Attaches, func(tool string) bool { return slices.Contains(state.offered, tool) }) {
-				continue
-			}
-			rendered, err := engine.RenderUnit(t.Context(), unit.Ref, maps.Clone(vars))
-			contractcheck.FailErr(t, "render unit "+unit.ID+" for "+state.name, err)
-			if names := toolvocab.UnreachableNames(catalog, rendered, held); len(names) > 0 {
-				t.Errorf("unit %s [%s] names %v, which that tool set cannot reach or mint:\n%s", unit.ID, state.name, names, linesNaming(rendered, names))
+		offered := map[string]bool{}
+		for _, tool := range state.offered {
+			offered[tool] = true
+		}
+		selection := promptunit.Selection{Host: state.host, Mode: state.mode, Offered: offered}
+		for _, slot := range units.Rendered(selection) {
+			for _, unit := range slot {
+				if !unit.Stock {
+					continue
+				}
+				rendered, err := engine.RenderUnit(t.Context(), unit.Ref, maps.Clone(vars))
+				contractcheck.FailErr(t, "render unit "+unit.ID+" for "+state.name, err)
+				if names := toolvocab.UnreachableNames(catalog, rendered, held); len(names) > 0 {
+					t.Errorf("unit %s [%s] names %v, which that tool set cannot reach or mint:\n%s", unit.ID, state.name, names, linesNaming(rendered, names))
+				}
 			}
 		}
 	}
@@ -56,20 +66,40 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 
 type toolFactState struct {
 	name                 string
+	host                 promptunit.Host
+	mode                 string
 	offered, requestable []string
 }
 
-func toolFactStates(t *testing.T, binding *evidence.Binding) []toolFactState {
+func toolFactStates(t *testing.T, binding *evidence.Binding, units promptunit.Catalog) []toolFactState {
 	t.Helper()
+	modes := []string{""}
+	for _, unit := range units.Units() {
+		for _, mode := range unit.Modes {
+			if !slices.Contains(modes, mode) {
+				modes = append(modes, mode)
+			}
+		}
+	}
 	all := binding.DeclaredToolNames()
-	states := []toolFactState{{name: "no tools"}, {name: "all tools", offered: all}}
+	synthetic := []toolFactState{{name: "no tools"}, {name: "all tools", offered: all}}
 	for _, tool := range all {
-		states = append(states, toolFactState{name: tool + " alone", offered: []string{tool}})
+		synthetic = append(synthetic, toolFactState{name: tool + " alone", offered: []string{tool}})
+	}
+	var states []toolFactState
+	for _, state := range synthetic {
+		for _, host := range []promptunit.Host{promptunit.HostCoordinator, promptunit.HostWorker} {
+			for _, mode := range modes {
+				states = append(states, toolFactState{name: fmt.Sprintf("%s, %s, mode %q", state.name, host, mode),
+					host: host, mode: mode, offered: state.offered})
+			}
+		}
 	}
 	plans, err := surface.CompileToolPlans(1)
 	contractcheck.FailErr(t, "compile coordinator surfaces", err)
 	for _, id := range slices.Sorted(maps.Keys(plans)) {
-		states = append(states, toolFactState{name: "surface " + id, offered: plans[id].ImmediateNames(), requestable: plans[id].DeferredNames()})
+		states = append(states, toolFactState{name: "surface " + id, host: promptunit.HostCoordinator, mode: surface.ExecutionModeFamily(id),
+			offered: plans[id].ImmediateNames(), requestable: plans[id].DeferredNames()})
 	}
 	profiles, err := sandbox.LoadToolProfiles()
 	contractcheck.FailErr(t, "load tool profiles", err)
@@ -84,7 +114,11 @@ func toolFactStates(t *testing.T, binding *evidence.Binding) []toolFactState {
 				offered = append(offered, tool)
 			}
 		}
-		states = append(states, toolFactState{name: "profile " + profile.ID, offered: offered, requestable: requestable})
+		host := promptunit.HostWorker
+		if profile.ID == "coordinator" {
+			host = promptunit.HostCoordinator
+		}
+		states = append(states, toolFactState{name: "profile " + profile.ID, host: host, offered: offered, requestable: requestable})
 	}
 	return states
 }
