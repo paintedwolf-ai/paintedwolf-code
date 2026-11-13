@@ -80,11 +80,13 @@ func TestProgramRefusedListenerVariants(t *testing.T) {
 		`external -- python3 -c "import socket; s=socket.socket(); s.bind(('0.0.0.0', 18797))"`,
 		`external -- /usr/bin/nc -l 18796`,
 		`external -- /bin/sh -c "python3 -m http.server 18795 --bind 0.0.0.0; sleep 1"`,
-		`external -- /usr/bin/touch /var/root/pw-denied`,
+		`external -- /usr/bin/python3 -c "import socket; s=socket.socket(); s.bind(('0.0.0.0', 18794))"`,
+		`external -- /usr/bin/env`,
 	} {
 		out, err := f.call(t, t.Context(), source)
 		testutil.FailErr(t, "run variant", err)
-		t.Logf("%s => status %d witness=%s", source, decodeOutcome(t, out).Status, effects.Facts.Confine.Refusals.Witness)
+		outcome := decodeOutcome(t, out)
+		t.Logf("%s => status %d witness=%s stderr=%q", source, outcome.Status, effects.Facts.Confine.Refusals.Witness, outcome.Stderr)
 		for _, refusal := range effects.Facts.Confine.Refusals.Refusals {
 			t.Logf("   refusal %s %q recovery=%s process=%s", refusal.Operation, refusal.Target, refusal.Recovery, refusal.Process)
 		}
