@@ -23,6 +23,8 @@ import (
 
 	dockerclient "github.com/moby/moby/client"
 
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/hostresources"
 	"github.com/lycaon/lycaon/internal/session/approvalstate"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -83,6 +85,30 @@ func TestProgramSocketURLReferenceSupportsDockerClientConfiguration(t *testing.T
 	testutil.FailErr(t, "launch a real Docker protocol client with the bound URL", err)
 	if result := decodeOutcome(t, out); result.Status != 0 || count.Load() != 1 {
 		t.Fatalf("bound Docker client failed or changed its request count: requests=%d outcome=%s", count.Load(), out)
+	}
+}
+
+// A declared container engine resource points the Docker client at the socket
+// the action reviewed; the program names no endpoint itself.
+func TestProgramHostResourceGivesItsClientTheReviewedEndpoint(t *testing.T) {
+	response := fmt.Sprintf(`{"Version":"fixture-daemon","ApiVersion":%q}`, dockerclient.MaxAPIVersion)
+	f, path, count := socketProgramFixture(t, response)
+	f.Runtime.Executor.Network.SetHostResourceConnectionSource(func(context.Context, []string, hostresources.ProjectContext, []hostresources.ExecutionSurface) (hostresources.ActionResolution, []string) {
+		_, reference := confine.SocketEndpointReferences(path)
+		return hostresources.ActionResolution{
+			States:      map[string]hostresources.State{"docker": {ID: "docker", Family: "containers.local"}},
+			Families:    []string{"containers.local"},
+			Connections: hostresources.ConnectionRequest{LocalServices: []hostresources.LocalServiceEndpoint{{Transport: hostresources.LocalServiceUnixSocket, Target: path}}},
+			ClientEnv:   []string{"DOCKER_HOST=" + reference},
+		}, nil
+	})
+	self, err := os.Executable()
+	testutil.FailErr(t, "locate the isolated Docker protocol client", err)
+	program := "PW_SOCKET_DOCKER_FIXTURE=1 external -- " + strconv.Quote(self) + " -test.run=^TestProgramDockerSocketURLFixture$"
+	out, err := f.CallArgs(t, t.Context(), map[string]any{"command": program, "capability_request": map[string]any{"host_resources": []any{"docker"}}})
+	testutil.FailErr(t, "launch the Docker protocol client for a declared resource", err)
+	if result := decodeOutcome(t, out); result.Status != 0 || count.Load() != 1 {
+		t.Fatalf("declared resource did not reach its daemon: requests=%d outcome=%s", count.Load(), out)
 	}
 }
 

@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/ingestion"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -34,8 +36,7 @@ func (f *fakeHostLedger) RecordContact(_ context.Context, _, host string, contac
 }
 
 func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
-	retrievalDial := confine.EgressCommand{ToolName: ingestion.ToolFetchURL}
-	ownDial := confine.EgressCommand{ToolName: "curl"}
+	const retrievalDial, ownDial = true, false
 
 	t.Run("missing ledger is first use", func(t *testing.T) {
 		var nilNetwork *Network
@@ -104,8 +105,7 @@ func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
 }
 
 func TestRecordHostVisitSeparatesDialKinds(t *testing.T) {
-	retrievalDial := confine.EgressCommand{ToolName: ingestion.ToolWebSearch}
-	ownDial := confine.EgressCommand{ToolName: "curl"}
+	const retrievalDial, ownDial = true, false
 
 	t.Run("own dial records the chat's own contact", func(t *testing.T) {
 		ledger := &fakeHostLedger{}
@@ -160,5 +160,35 @@ func TestSessionHostLedgerSetterWiresTheLedger(t *testing.T) {
 	testutil.FailErr(t, "RecordContact", e.hostLedger.RecordContact(t.Context(), "chat", "example.com", evidence.ContactOwn))
 	if !slices.Equal(ledger.hosts, []string{"example.com"}) {
 		t.Fatalf("recorded hosts = %v", ledger.hosts)
+	}
+}
+
+// The gate hears a retrieval tool's dial as a source, a displayed link or
+// neither, by how the tool came by the address.
+func TestDestinationFactCarriesTheAddressOrigin(t *testing.T) {
+	ep := egressproxy.Endpoint{Host: "example.com", Port: 443, Transport: egressproxy.TransportHTTPRequest}
+	authored := confine.EgressCommand{Image: ingestion.ToolFetchURL, Origin: confine.AddressAuthored}
+	for name, tc := range map[string]struct {
+		cmd                  confine.EgressCommand
+		retrieval, displayed bool
+	}{
+		"source":         {cmd: confine.EgressCommand{Image: ingestion.ToolFetchURL}, retrieval: true},
+		"displayed link": {cmd: confine.EgressCommand{Image: ingestion.ToolFetchURL, Origin: confine.AddressDisplayed}, displayed: true},
+		"authored":       {cmd: authored},
+		"named host":     {cmd: confine.EgressCommand{Image: ingestion.ToolWebSearch, NamedHosts: []string{"example.com"}}},
+		"unnamed host":   {cmd: confine.EgressCommand{Image: ingestion.ToolWebSearch, NamedHosts: []string{"other.example"}}, retrieval: true},
+		"command":        {cmd: confine.EgressCommand{ToolName: "command", Origin: confine.AddressDisplayed}},
+	} {
+		fact := destinationFact(tc.cmd, ep, "", "")
+		if fact.Retrieval != tc.retrieval || fact.DisplayedLink != tc.displayed {
+			t.Errorf("%s: retrieval = %v, displayed link = %v", name, fact.Retrieval, fact.DisplayedLink)
+		}
+	}
+	if got := endpointAskSubject(authored, ep).Explanation.Who; got != hitl.WhoAgentAction {
+		t.Fatalf("a tool's own request is an action, got %q", got)
+	}
+	command := confine.EgressCommand{ToolName: "command", CommandLine: "curl https://example.com/"}
+	if got := endpointAskSubject(command, ep).Explanation.Who; got != hitl.WhoAgentCommand {
+		t.Fatalf("a command line is a command, got %q", got)
 	}
 }

@@ -1,7 +1,8 @@
 /**
  * Review's live rows: files an agent is changing now. A row that landed is held
  * until the comparison has read past its landing, so the file moves from the
- * live row into the landed list without leaving it.
+ * live row into the landed list without leaving it. Editing that ends without
+ * landing stays shown, as past, for the agent linger time.
  */
 
 import type {
@@ -9,12 +10,14 @@ import type {
   AgentWorkerDraftState,
   SourceChange,
 } from "../../api/types.ts";
-import { MinVisibleHold } from "../../ui/min-visible-hold.ts";
+import { Linger, type Lingered } from "../../ui/linger.ts";
+import { AGENT_LINGER_MS } from "../components/agent-presence.ts";
 import {
   reviewRowKey,
   type ReviewChangeStats,
   type ReviewLiveRow,
   type ReviewLiveState,
+  type ShownLiveRow,
 } from "./review-model.ts";
 import {
   scopeClaimedEpoch,
@@ -106,23 +109,19 @@ type Landing = {
 
 type ProjectLive = {
   live: Map<string, ReviewLiveRow>;
-  /** Presence rows plus landings the comparison has not read yet. */
-  active: Map<string, ReviewLiveRow>;
-  /** The newest value of every row still shown, for a landing that arrives after its presence ended. */
-  lastSeen: Map<string, ReviewLiveRow>;
   landed: Map<string, Landing>;
   /** `null` while a landing's stats are not yet known. */
   stats: Map<string, ReviewChangeStats | null>;
-  /** Keys the hold shows, in the order they appeared. */
-  shown: readonly string[];
-  rows: readonly ReviewLiveRow[];
-  hold: MinVisibleHold<true>;
-  /** Set while publish drives the hold, which renders once afterward. */
+  /** In order of appearance; a past row can still match a late landing. */
+  shown: ReadonlyMap<string, Lingered<ReviewLiveRow>>;
+  rows: readonly ShownLiveRow[];
+  linger: Linger<ReviewLiveRow>;
+  /** Linger callbacks skip rendering while set; publish renders once after. */
   publishing: boolean;
 };
 
 export type ReviewLiveSnapshot = {
-  rows: readonly ReviewLiveRow[];
+  rows: readonly ShownLiveRow[];
   stats: ReadonlyMap<string, ReviewChangeStats>;
 };
 
@@ -133,12 +132,8 @@ function notify(projectId: string): void {
   for (const fn of listeners) fn(projectId);
 }
 
-/** Rows read their newest value; a row past its presence reads the last one it had. */
 function render(projectId: string, state: ProjectLive): void {
-  state.rows = state.shown.flatMap((key) => {
-    const row = state.active.get(key) ?? state.lastSeen.get(key);
-    return row ? [row] : [];
-  });
+  state.rows = [...state.shown.values()].map(({ value, phase }) => ({ ...value, phase }));
   notify(projectId);
 }
 
@@ -147,21 +142,16 @@ function ensure(projectId: string): ProjectLive {
   if (!state) {
     const created: ProjectLive = {
       live: new Map(),
-      active: new Map(),
-      lastSeen: new Map(),
       landed: new Map(),
       stats: new Map(),
-      shown: [],
+      shown: new Map(),
       rows: [],
       publishing: false,
-      // The hold decides which files show; it publishes when that set changes.
-      hold: new MinVisibleHold<true>((visible) => {
-        created.shown = [...visible.keys()];
-        for (const key of created.lastSeen.keys()) {
-          if (!visible.has(key)) created.lastSeen.delete(key);
-        }
+      // Only editing lingers; a released landing is in the landed list by then.
+      linger: new Linger<ReviewLiveRow>((shown) => {
+        created.shown = shown;
         if (!created.publishing) render(projectId, created);
-      }),
+      }, { lingerMs: AGENT_LINGER_MS, lingers: (row) => row.state === "editing" }),
     };
     state = created;
     byProject.set(projectId, state);
@@ -174,11 +164,9 @@ function publish(projectId: string, state: ProjectLive): void {
   for (const [key, landing] of state.landed) {
     if (!active.has(key)) active.set(key, { ...landing.row, state: "landing" });
   }
-  state.active = active;
-  for (const [key, row] of active) state.lastSeen.set(key, row);
   state.publishing = true;
   try {
-    state.hold.update(new Map([...active.keys()].map((key) => [key, true as const])));
+    state.linger.update(active);
   } finally {
     state.publishing = false;
   }
@@ -214,7 +202,7 @@ export function noteReviewLanding(projectId: string, change: SourceChange): void
     if (oldest === undefined) break;
     state.stats.delete(oldest);
   }
-  const row = state.live.get(key) ?? state.lastSeen.get(key);
+  const row = state.live.get(key) ?? state.shown.get(key)?.value;
   if (row && landingOf(row, change)) {
     state.landed.set(key, { epoch: scopeClaimedEpoch(id), row });
     publish(id, state);
@@ -288,6 +276,6 @@ export function subscribeReviewLive(projectId: string, fn: () => void): () => vo
 }
 
 export function resetReviewLiveForTests(): void {
-  for (const state of byProject.values()) state.hold.dispose();
+  for (const state of byProject.values()) state.linger.dispose();
   byProject.clear();
 }
