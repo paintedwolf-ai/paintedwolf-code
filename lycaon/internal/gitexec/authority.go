@@ -82,3 +82,10 @@ func agentLaunched(ctx context.Context) bool {
 	_, ok := AgentLaunchFrom(ctx)
 	return ok
 }
+
+// hostPurposeInAgentEntry reports host bookkeeping inside an agent's tool
+// call; every such purpose is local.
+func hostPurposeInAgentEntry(ctx context.Context) bool {
+	a, _ := ctx.Value(authorityKey{}).(authority)
+	return a.agent == nil && a.agentEntry && a.hostReason != ""
+}

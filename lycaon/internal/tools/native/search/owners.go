@@ -146,6 +146,22 @@ func (o *Owners) spec(word string) (toolcontract.CommandSpecification, bool) {
 	return toolcontract.CommandSpecification{}, false
 }
 
+// SelectMode names the effect mode argv selects, as Prepare's binding does.
+func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
+	if len(argv) == 0 {
+		return "", false
+	}
+	spec, ok := o.spec(argv[0].Value)
+	if !ok {
+		return "", false
+	}
+	bound, err := bindSearchArgv(spec, argv)
+	if err != nil {
+		return "", false
+	}
+	return EffectMode(bound), true
+}
+
 // EffectMode names the catalog effect mode a bound form selects, for the
 // dispatcher's per-operation admission: find -delete needs write and recovery,
 // find -exec needs its bound child effect set, every other form reads.

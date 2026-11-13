@@ -32,6 +32,11 @@ func Load(delivered string) (Credentials, error) {
 	if err != nil {
 		return Credentials{}, fmt.Errorf("host identity: %w", err)
 	}
+	if credentials.Generated {
+		if _, err := api.WriteAPIToken(credentials.Token); err != nil {
+			return Credentials{}, fmt.Errorf("persist api token: %w", err)
+		}
+	}
 	return credentials, nil
 }
 

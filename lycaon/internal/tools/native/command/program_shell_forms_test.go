@@ -1,8 +1,6 @@
 package command_test
 
 import (
-	"fmt"
-	"os"
 	"strings"
 	"testing"
 
@@ -21,7 +19,7 @@ func TestProgramEntryEvalUsesCurrentShellAndAdmission(t *testing.T) {
 
 func TestProgramEntryPsReportsObservedColumns(t *testing.T) {
 	f := newProgramFixture(t)
-	out, err := f.call(t, t.Context(), fmt.Sprintf("ps -p %d -o pcpu,pmem,vsz,rss,tty,stat,start,time", os.Getpid()))
+	out, err := f.call(t, t.Context(), `external -- /bin/sleep 30 & p=$!; ps -p "$p" -o pcpu,pmem,vsz,rss,tty,stat,start,time; s=$?; kill "$p"; wait "$p"; exit $s`)
 	testutil.FailErr(t, "inspect process columns", err)
 	got := decodeOutcome(t, out)
 	if got.Status != 0 {

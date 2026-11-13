@@ -65,6 +65,12 @@
   animation: den-review-pulse 1.4s ease-in-out infinite;
 }
 
+/* Ended work holds still at the pulse's resting strength. */
+.den-review-row__pulse[data-live-phase="past"] {
+  animation: none;
+  opacity: 0.35;
+}
+
 @keyframes den-review-pulse {
   0%,
   100% {

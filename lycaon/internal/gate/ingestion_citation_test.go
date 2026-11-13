@@ -62,12 +62,19 @@ func TestIngestionRespectsAnExistingLease(t *testing.T) {
 	}
 }
 
-// A chat that has read nothing external gets the card without the extra claim.
+// A chat that has read nothing external is audited rather than asked at
+// Balanced, and Strict's first-contact card makes no session claim for it.
 func TestUningestedChatCardMakesNoSessionClaim(t *testing.T) {
 	t.Parallel()
 	f := ingestedPreDial(true)
 	f.UntrustedIngested = false
-	_, decision := Evaluate(f, PostureBalanced)
+	if verdict, decision := Evaluate(f, PostureBalanced); verdict != Silent {
+		t.Fatalf("a clean chat's first contact asked at Balanced: %v", decision.Gates())
+	}
+	_, decision := Evaluate(f, PostureStrict)
+	if decision == nil {
+		t.Fatal("Strict did not confirm a first contact")
+	}
 	for _, c := range decision.Cited {
 		if c.Key == "session.state" {
 			t.Fatalf("card claims %q for a chat that ingested nothing", c.Value)

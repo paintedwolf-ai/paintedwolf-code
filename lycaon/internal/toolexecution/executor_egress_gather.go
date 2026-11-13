@@ -139,7 +139,7 @@ func (e *Network) gatherEgress(ctx context.Context, raise egressRaise) (allowed,
 // settleEgressMember records the outcome for one endpoint of a decided card.
 func (e *Network) settleEgressMember(ctx context.Context, raise egressRaise, allowed bool, final *hitl.CheckpointResponse) {
 	if allowed {
-		e.recordHostVisit(ctx, raise.action.ChatSession(), raise.ep.Host)
+		e.recordHostVisit(ctx, raise.facts.RetrievalCovers(), raise.action.ChatSession(), raise.ep.Host)
 		return
 	}
 	e.Rejections.rememberCapabilityDenial(raise.cmd.SessionID, raise.cmd.ToolCallID, raise.cmd.EffectActionID(), final)
