@@ -106,11 +106,6 @@ func ObservedURLsSorted(ev Ledger) []string {
 	return out
 }
 
-// NormalizeEvidencePath keys token relative to projectDir for custody indexing.
-func NormalizeEvidencePath(projectDir, token string) string {
-	return ResolvePathIdentity(CitationRoots{ProjectDir: projectDir}, token).ScopeRel
-}
-
 // touchPath records a path token the tool result observed, resolved to its
 // durable (root, scope-relative) identity. The first observed path becomes
 // the record's primary Path/RootID; paths rooted elsewhere are recorded in
@@ -274,13 +269,15 @@ func IndexedPathsForRecord(rec Record) []string {
 	return out
 }
 
-// ContentPathsForRecord returns normalized paths whose file contents were
-// exposed in rec (as opposed to directory listings or zero-match searches).
+// ContentPathsForRecord returns the ledger keys of paths whose file contents
+// were exposed in rec (as opposed to directory listings or zero-match
+// searches): session-folder display keys on stamped records, so the same
+// relative path in two folders stays two paths.
 func ContentPathsForRecord(rec Record) []string {
 	switch rec.Kind {
 	case "read":
 		if len(rec.Body) > 0 || len(rec.LineRanges) > 0 || rec.SourceDelivery != nil {
-			return IndexedPathsForRecord(rec)
+			return DisplayPathsForRecord(rec)
 		}
 		return nil
 	case "grep", "summary":
@@ -290,7 +287,7 @@ func ContentPathsForRecord(rec Record) []string {
 			if len(byLine) == 0 {
 				continue
 			}
-			p = NormalizeLedgerPath(p)
+			p = NormalizeLedgerPath(recordDisplayKey(rec, NormalizeLedgerPath(p)))
 			if p == "" {
 				continue
 			}

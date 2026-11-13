@@ -44,6 +44,20 @@ func ResolvePathIdentity(roots CitationRoots, token string) PathIdentity {
 	return PathIdentity{}
 }
 
+// CustodyKey maps a path token to the ledger key custody is indexed under:
+// the session-folder display key for a path in an attached root, else the
+// legacy normalized token.
+func CustodyKey(roots CitationRoots, token string) string {
+	id := ResolvePathIdentity(roots, token)
+	if id.RootID != "" {
+		return NormalizeLedgerPath(projectroot.DisplayPath(roots.Roots, roots.ActiveRootID, id.RootID, id.ScopeRel))
+	}
+	if id.ScopeRel != "" {
+		return id.ScopeRel
+	}
+	return NormalizeLedgerPath(token)
+}
+
 // resolveScopeRel maps a token to its durable ledger key: the root-relative
 // path when it resolves under an attached root, else the legacy normalized
 // token. The second result reports whether the token is a ledger key at all.

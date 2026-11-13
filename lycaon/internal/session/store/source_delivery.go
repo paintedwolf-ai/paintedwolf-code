@@ -60,6 +60,7 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 		rec.Path = id.ScopeRel
 		rec.RootID = id.RootID
 	}
+	evidence.StampDisplayKeys(roots, &rec)
 	live, metaLedger, nextSeq, err := loadCommitLedgers(ctx, q, sessionID, roots, rec, rec.Path != "")
 	if err != nil {
 		return "", err
@@ -68,7 +69,7 @@ func (s *SQL) CommitDeliveredSource(ctx context.Context, sessionID string, obser
 		rec.SetCustodySeq(nextSeq)
 	}
 	if rec.Path != "" {
-		if urls := evidence.ExternalCustodyURLs(metaLedger, []string{rec.Path}); len(urls) > 0 {
+		if urls := evidence.ExternalCustodyURLs(metaLedger, evidence.DisplayPathsForRecord(rec)); len(urls) > 0 {
 			evidence.ApplyExternalCustody(&rec, urls)
 		}
 	}

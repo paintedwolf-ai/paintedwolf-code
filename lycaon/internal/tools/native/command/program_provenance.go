@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 type programHTTPProvenanceStore interface {
@@ -114,8 +115,9 @@ func (r *programRun) normalizeProvenancePath(root, path string) string {
 			}
 		}
 	}
-	if norm := evidence.NormalizeEvidencePath(r.projectDir(), display); norm != "" {
-		return norm
+	roots := r.tc.Source.Roots
+	if abs, ref, err := projectroot.ResolveAbs(roots, r.tc.Source.ActiveRootID, display); err == nil && !ref.External {
+		return projectroot.Qualify(roots, r.tc.Source.ActiveRootID, ref, abs)
 	}
 	return filepath.ToSlash(filepath.Clean(path))
 }
