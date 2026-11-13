@@ -34,8 +34,7 @@ type Record struct {
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
 	pathTiers    map[string]string         // normalized path → trust tier at capture
-	urlsTouched  []string                  // every URL named by the result
-	urlTitles    map[string]string         // URL → page title the tool reported
+	urls         recordURLs                // addresses beyond the primary URL
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`
@@ -49,6 +48,13 @@ type Record struct {
 	Attempt        int            `json:"attempt,omitempty"`
 	HeadSHA        string         `json:"head_sha,omitempty"`
 	RecordedAt     string         `json:"at,omitempty"` // RFC3339 in gate JSONL
+}
+
+// recordURLs is the addresses a result carried beyond its primary URL.
+type recordURLs struct {
+	touched []string          // every URL named by the result
+	titles  map[string]string // URL → page title the tool reported
+	shown   []string          // addresses a read page displayed; not sources
 }
 
 // FileCustody tracks workspace file custody provenance and the per-session
