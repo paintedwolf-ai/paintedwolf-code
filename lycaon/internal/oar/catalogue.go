@@ -147,7 +147,7 @@ var factDecls = []factDecl{
 	{"worker_artifact_measured", oarcore.TypeBool, FactTierHost, ""},
 	{"repeat_count", oarcore.TypeInt, FactTierHost, ""},
 	{"fruitless_search_run", oarcore.TypeInt, FactTierHost, ""},
-	{"repeated_reject_code", oarcore.TypeString, FactTierHost, ""},
+	{"repeated_rejection_code", oarcore.TypeString, FactTierHost, ""},
 	{"code_reject_responses", oarcore.TypeInt, FactTierHost, ""},
 	{"deferred_unactivated", oarcore.TypeInt, FactTierHost, ""},
 	{"worker_attempted_mutation", oarcore.TypeBool, FactTierHost, ""},

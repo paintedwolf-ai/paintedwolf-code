@@ -3,8 +3,8 @@ id: DOOM_LOOP_REPEAT
 kind: invariant
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.code, paintedwolf.count, paintedwolf.deferred_unactivated, paintedwolf.handle, paintedwolf.next_steps, paintedwolf.repeat_count, paintedwolf.repeated_reject_code, paintedwolf.worker_leg]
-when: paintedwolf.repeat_count >= 8 || paintedwolf.repeated_reject_code != ""
+requires_facts: [paintedwolf.code, paintedwolf.count, paintedwolf.deferred_unactivated, paintedwolf.handle, paintedwolf.next_steps, paintedwolf.repeat_count, paintedwolf.repeated_rejection_code, paintedwolf.worker_leg]
+when: paintedwolf.repeat_count >= 8 || paintedwolf.repeated_rejection_code != ""
 effect: block
 on_fire:
   - increment_counter

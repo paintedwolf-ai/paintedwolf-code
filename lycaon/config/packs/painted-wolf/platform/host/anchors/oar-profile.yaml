@@ -81,7 +81,7 @@ host_facts:
  - name: paintedwolf.policy_denied
    type: bool
    observation: Whether host policy refused the call before it ran.
- - name: paintedwolf.repeated_reject_code
+ - name: paintedwolf.repeated_rejection_code
    type: string
    observation: The rejection code the loop guard saw repeat across the session's recent calls; empty when none repeats.
  - name: paintedwolf.credential_decisions
