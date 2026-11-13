@@ -1789,8 +1789,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Project'
         '400':
-          description: |
-            Root path refused as a write jail (write_root_is_filesystem_root, write_root_is_home, write_root_not_absolute, write_root_under_secret_store) or otherwise invalid.
+          description: The path is not an existing folder (invalid_path, path_not_found).
           content:
             application/json:
               schema:
@@ -2857,8 +2856,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Project'
         '400':
-          description: |
-            Root path refused as a write jail (write_root_is_filesystem_root, write_root_is_home, write_root_not_absolute, write_root_under_secret_store) or otherwise invalid.
+          description: The path is not an existing folder (invalid_path, path_not_found).
           content:
             application/json:
               schema:
@@ -17375,6 +17373,8 @@ components:
         - is_primary
         - added_at
         - kind
+        - admitted
+        - admission_code
       additionalProperties: false
       properties:
         id:
@@ -17402,6 +17402,18 @@ components:
             - draft
             - attached
           description: Engine-created draft workspace or user-attached folder.
+        admitted:
+          type: boolean
+          description: Whether agents work in this folder. The host derives it from the standing write-root check on current facts. A folder that is not admitted stays attached for the editor only; agents, tools, subprocesses and project policy never see it.
+        admission_code:
+          type:
+            - string
+            - 'null'
+          enum:
+            - write_root_under_secret_store
+            - write_root_contains_control_plane
+            - null
+          description: 'Why agents do not work in this folder; null when admitted. write_root_under_secret_store: the folder is inside the engine''s state, key material or a credential store. write_root_contains_control_plane: the folder contains the engine''s state.'
     CreateProjectRootInput:
       x-go-generate: true
       type: object
@@ -25946,10 +25958,6 @@ components:
         - internal_error
         - invalid_json
         - invalid_path
-        - write_root_is_filesystem_root
-        - write_root_is_home
-        - write_root_not_absolute
-        - write_root_under_secret_store
         - blueprint_content_conflict
         - idempotency_conflict
         - invalid_arguments
@@ -29880,6 +29888,7 @@ components:
         - redacted
         - preview
         - preview_truncated
+        - tail_preview
       properties:
         stream:
           type: string
@@ -29903,6 +29912,15 @@ components:
           description: Leading screened bytes of the retained stream as UTF-8. Never the authoritative body.
         preview_truncated:
           type: boolean
+        tail_preview:
+          type: string
+          description: Last screened whole lines, at most six, when the preview does not reach the end; empty otherwise. Never the authoritative body.
+        line_count:
+          type: integer
+          format: int64
+          minimum: 0
+          x-go-pointer: true
+          description: Lines in the complete stream. Absent while capture is incomplete.
     CommandRevisionConflict:
       x-go-generate: true
       type: object

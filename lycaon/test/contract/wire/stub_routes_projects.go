@@ -13,7 +13,7 @@ func registerStubProjectRoutes(mux *http.ServeMux, now time.Time, writeJSON stub
 	fixtureProject := api.Project{
 		ID:              fixtureProjectID,
 		Name:            &fixtureName,
-		Roots:           []api.ProjectRoot{{ID: fixtureRootID, Path: fixtureProjectDir, Label: "fixture", IsPrimary: true, AddedAt: now, Kind: "attached"}},
+		Roots:           []api.ProjectRoot{{ID: fixtureRootID, Path: fixtureProjectDir, Label: "fixture", IsPrimary: true, AddedAt: now, Kind: "attached", Admitted: true}},
 		RootsGeneration: 0,
 		SessionCount:    0,
 		LastOpenedAt:    now,

@@ -58,3 +58,33 @@ func TestBundleMatcherFailureWithholdsText(t *testing.T) {
 		t.Fatalf("text = %q", got)
 	}
 }
+
+func TestBundleExcludesSecretAndLegacyFiles(t *testing.T) {
+	entries, _ := buildTestBundle(t)
+	configDir := t.TempDir()
+	for _, rel := range []string{"credential-vault.age", "credential-vault-identity.age", "api.token", "host-identity.pem", "mcp.yaml", "settings.yaml"} {
+		testutil.FailErr(t, "write "+rel, os.WriteFile(filepath.Join(configDir, rel), []byte("fixture-secret-value\n"), 0o600))
+	}
+	redactor, err := NewRedactor()
+	testutil.FailErr(t, "build redactor", err)
+	raw, err := Build(t.Context(), Input{
+		ConfigDir:   configDir,
+		GeneratedAt: fixedTime(),
+		Redactor:    redactor,
+	})
+	testutil.FailErr(t, "build bundle", err)
+	zr, err := zip.NewReader(bytes.NewReader(raw), int64(len(raw)))
+	testutil.FailErr(t, "open zip", err)
+	got := make(map[string]bool, len(zr.File))
+	for _, f := range zr.File {
+		got[f.Name] = true
+	}
+	for _, forbidden := range []string{"config/credential-vault.age", "config/credential-vault-identity.age", "config/api.token", "config/host-identity.pem", "config/mcp.yaml"} {
+		if got[forbidden] || entries[forbidden] != "" {
+			t.Fatalf("bundle must not include excluded secret/legacy file %s", forbidden)
+		}
+	}
+	if !got["config/settings.yaml"] {
+		t.Fatal("bundle missing config/settings.yaml")
+	}
+}

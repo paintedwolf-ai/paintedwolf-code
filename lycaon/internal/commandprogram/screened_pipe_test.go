@@ -87,7 +87,7 @@ func TestScreenedPipeNativeAndProcessOutputRetainExactCompleteBytes(t *testing.T
 			testutil.FailErr(t, "read complete output", err)
 			testutil.FailErr(t, "close output reader", reader.Close())
 			rawHash, emittedHash := sha256.Sum256(raw), sha256.Sum256(expected)
-			if !bytes.Equal(got, expected) || !spill.Complete || !metadata.Complete || !metadata.Redacted || len(spill.Preview) != 8 || metadata.RawSHA256 != hex.EncodeToString(rawHash[:]) || metadata.EmittedSHA256 != hex.EncodeToString(emittedHash[:]) || spill.EmittedSHA256 != metadata.EmittedSHA256 {
+			if !bytes.Equal(got, expected) || !spill.Complete || !metadata.Complete || !metadata.Redacted || len(spill.Display.Preview) != 8 || metadata.RawSHA256 != hex.EncodeToString(rawHash[:]) || metadata.EmittedSHA256 != hex.EncodeToString(emittedHash[:]) || spill.EmittedSHA256 != metadata.EmittedSHA256 {
 				t.Fatalf("screen/stream/spill diverged: screen=%+v stored=%d", metadata, len(got))
 			}
 			testutil.FailErr(t, "collect unreferenced output", spill.Close())

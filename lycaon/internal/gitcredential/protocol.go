@@ -4,6 +4,7 @@ package gitcredential
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -147,3 +148,19 @@ func keychainProtocol(protocol string) (string, error) {
 		return "", errors.New("credential protocol must be http or https")
 	}
 }
+
+// Request is a credential request in Git's helper protocol, for a host-side
+// git credential fill.
+func Request(c Credential) []byte {
+	var b strings.Builder
+	for _, pair := range [][2]string{{"protocol", c.Protocol}, {"host", c.Host}, {"path", c.Path}, {"username", c.Username}} {
+		if pair[1] != "" {
+			b.WriteString(pair[0] + "=" + pair[1] + "\n")
+		}
+	}
+	b.WriteString("\n")
+	return []byte(b.String())
+}
+
+// Parse reads a credential Git's helper protocol describes.
+func Parse(raw []byte) (Credential, error) { return parse(bytes.NewReader(raw)) }

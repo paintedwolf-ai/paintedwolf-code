@@ -36,7 +36,7 @@ func TestSettledStreamChargesActualPreviewBytes(t *testing.T) {
 		RetainedState: state, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil }),
 	})
 	testutil.FailErr(t, "retain empty output", err)
-	if len(out.Preview) != 0 || state.current > 2048 || state.peak < 4096 {
+	if len(out.Display.Preview) != 0 || state.current > 2048 || state.peak < 4096 {
 		t.Fatalf("empty settled output retained its maximum preview: current=%d peak=%d", state.current, state.peak)
 	}
 	testutil.FailErr(t, "release empty output", out.Close())
@@ -66,7 +66,7 @@ func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T)
 	got, err := io.ReadAll(reader)
 	testutil.FailErr(t, "read full retained stream", err)
 	sum := sha256.Sum256(want)
-	if !bytes.Equal(got, want) || !out.Complete || out.Failure != nil || !bytes.Equal(out.Preview, want[:3]) || cap(out.Preview) > 3 || out.EmittedSHA256 != hex.EncodeToString(sum[:]) {
+	if !bytes.Equal(got, want) || !out.Complete || out.Failure != nil || !bytes.Equal(out.Display.Preview, want[:3]) || cap(out.Display.Preview) > 3 || out.EmittedSHA256 != hex.EncodeToString(sum[:]) {
 		t.Fatalf("spill confused preview and content: %+v bytes=%d", out, len(got))
 	}
 	if len(reservations) < 2 || reservations[len(reservations)-1] != out.Blob.Size+RetainedFrameBytes || held != out.Blob.Size+RetainedFrameBytes || peak < 3*int64(len(want))+(1<<20) {

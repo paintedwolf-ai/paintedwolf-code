@@ -54,6 +54,10 @@ func gitPathTargets(argv commandprogram.BoundArgv, parsed *command, mode, cwd st
 		if len(operands) > 1 && (operands[0] == "add" || operands[0] == "remove") {
 			addOperand(operands[1], true)
 		}
+	case "git init":
+		if len(operands) == 1 {
+			addOperand(operands[0], true)
+		}
 	case "git clone":
 		if len(operands) > 0 {
 			if source, local := gitargv.LocalCloneSourcePath(operands[0]); local {

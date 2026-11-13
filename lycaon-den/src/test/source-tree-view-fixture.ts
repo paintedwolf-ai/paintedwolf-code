@@ -3,7 +3,7 @@ import type { ProjectRoot, SourceTreeCommand, SourceTreeRow, SourceTreeView, Sou
 import { receiveSourceViewEvent } from "../ui/paged-view/source-view-session.ts";
 
 export const TREE_ROOTS: ProjectRoot[] = [{ id: "r1", path: "/repo", label: "repo", is_primary: true,
-  kind: "attached", added_at: "2026-01-01T00:00:00Z" }];
+  kind: "attached", admitted: true, admission_code: null, added_at: "2026-01-01T00:00:00Z" }];
 export function treeRow(path: string, kind: "file" | "directory" = "file", expanded = false): SourceTreeRow {
   return { address: { root_id: "r1", path }, name: path === "." ? "repo" : path.split("/").at(-1) ?? path,
     depth: path === "." ? 0 : path.split("/").length, kind, expanded };

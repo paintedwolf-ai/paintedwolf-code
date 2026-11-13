@@ -1,0 +1,22 @@
+name: Set up APT packages
+description: Install Ubuntu packages, moving to Canonical's archive when the runner's origin is unreachable
+inputs:
+  packages:
+    description: Space-separated Debian package names; empty only refreshes the package indexes
+    default: ''
+  recommends:
+    description: Install recommended packages
+    default: 'true'
+runs:
+  using: composite
+  steps:
+    - name: Install APT packages
+      shell: bash
+      env:
+        PACKAGES: ${{ inputs.packages }}
+        RECOMMENDS: ${{ inputs.recommends }}
+      run: |
+        read -ra packages <<< "$PACKAGES"
+        flags=()
+        [[ "$RECOMMENDS" == true ]] || flags+=(--no-recommends)
+        python3 "$GITHUB_ACTION_PATH/../../../scripts/ci_policy/apt_origins.py" install "${flags[@]}" -- "${packages[@]}"

@@ -42,6 +42,7 @@ func (e *Executor) applyPreInvokeBoundary(
 		tc.Host.HostResourceFamilies = append([]string(nil), hostResourceResolution.Families...)
 		tc.Host.HostResourceAsk = append([]string(nil), hostResourceResolution.Ask...)
 		tc.Host.HostResourcePathExtra = append([]string(nil), hostResourceResolution.PathExtra...)
+		tc.Host.HostResourceEnv = append([]string(nil), hostResourceResolution.ClientEnv...)
 		tc.Host.RealizationWriteRoots = append([]string(nil), hostResourceResolution.WriteRoots...)
 		tc.Host.RealizationSockets = realizationSocketTargets(hostResourceResolution)
 	}

@@ -35,4 +35,6 @@ The vars describe the caller:
 
 Guard an optional tool mention with {% verbatim %}{% if profile_has_<tool> %}…{% endif %}{% endverbatim %}, so a reader whose surface lacks the tool never sees an unreachable call. Preview a render with `pw prompts render --skill <name> [--resource <path>] [--agent ID] [--surface ID] --check`.
 
+The renderer has no whitespace-trim markers, so guard discipline is structural: a fully guarded line renders empty when its guard is false, and a standalone {% verbatim %}{% if %}{% endverbatim %} / {% verbatim %}{% else %}{% endverbatim %} / {% verbatim %}{% endif %}{% endverbatim %} line always renders one blank line. Put the guard inline on the line it guards, keep every branch's lines non-empty, and never place a blank source line next to a standalone tag line. The rendered-prose checks flag numbering gaps, runs of blank lines, and blank lines after table separators, so `--check` catches a broken branch.
+
 Escape literal {% verbatim %}{{{% endverbatim %} / {% verbatim %}{%{% endverbatim %} sequences with a `verbatim` … `endverbatim` block. Other references are returned as written.

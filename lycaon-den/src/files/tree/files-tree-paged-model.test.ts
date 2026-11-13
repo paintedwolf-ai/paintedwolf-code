@@ -9,7 +9,7 @@ it("requires complete viewport coverage across adjacent and overlapping frames",
   expect(treeFramesCover(spans([0, 200], [201, 400]), 190, 212)).toBe(false);
   expect(treeFramesCover(spans([0, 200]), 190, 201)).toBe(false);
 });
-const roots: ProjectRoot[] = [{ id: "root", label: "repo", path: "/repo", kind: "attached", is_primary: true, added_at: "2026-09-15T00:00:00Z" }];
+const roots: ProjectRoot[] = [{ id: "root", label: "repo", path: "/repo", kind: "attached", admitted: true, admission_code: null, is_primary: true, added_at: "2026-09-15T00:00:00Z" }];
 const row = (path: string, depth: number, kind: SourceTreeRow["kind"] = "directory"): SourceTreeRow => ({
   address: { root_id: "root", path }, name: path.split("/").at(-1)!, depth, kind, expanded: kind === "directory",
 });
