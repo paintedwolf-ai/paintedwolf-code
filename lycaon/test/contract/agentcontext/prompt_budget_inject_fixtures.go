@@ -67,6 +67,13 @@ var PromptBudgetInjectMatrix = []PromptBudgetInjectSpec{
 		Advice:   "Change-brief growth — keep rows single-line and the itemized set capped.",
 	},
 	{
+		ID:       "view_context",
+		Hosts:    coordinatorTurns,
+		Template: "guidance/view-context.md",
+		Fixture:  "RenderViewContextBlock with every list at its cap",
+		Advice:   "View-context growth — keep rows single-line and each list capped.",
+	},
+	{
 		ID:       "implement_spawn",
 		Hosts:    coordinatorTurns,
 		Template: "inject/implement-spawn.md",

@@ -62,6 +62,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/turnnudges"
 	"github.com/lycaon/lycaon/internal/session/turnsettlement"
 	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
+	"github.com/lycaon/lycaon/internal/session/viewcontext"
 	"github.com/lycaon/lycaon/internal/session/workerexecution"
 	"github.com/lycaon/lycaon/internal/session/workerharness"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -91,6 +92,7 @@ type Host struct {
 	Chats              *chats.Service
 	Limits             *sessionlimits.Service
 	SourceBriefs       *sourcebrief.Service
+	ViewContexts       *viewcontext.Service
 	Workspace          *sessionscope.Service
 	Catalog            sessioncatalog.Service
 	Observations       *sessionobservation.Service
@@ -177,6 +179,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	}
 	m.Coordinator.PolicyIndex = policyindex.New(store, m.Workspace)
 	m.SourceBriefs = sourcebrief.New(store, m.Workspace)
+	m.ViewContexts = viewcontext.New(store)
 	m.Limits = sessionlimits.New(cfg, m.Workspace)
 	turnSpend := spendguard.New(store, m.Limits, tracker)
 	var router *llm.StaticModelRouter
@@ -230,7 +233,7 @@ func NewHost(store Store, modelSources Models, registry tools.ToolRegistry) *Hos
 	m.Coordinator.Guidance = guidancedelivery.New(store, turnTranscript, workerState, workerResults, m.Coordinator.ProgressClosure)
 	m.Processes = processcontrol.New(store, m.Verification, m.ToolPolicy, m.Coordinator.Guidance)
 	m.Workers = workerexecution.New(store, m.Workspace, gate, m.Coordinator.Guidance, m.Limits, router, workerexecution.PeerServices{Cancel: workerCancel, Cards: workerCards, Cancellations: workerCancellations, Delivery: workerDelivery, Summaries: workerSummaries, Results: workerResults, Digests: workerDigests, State: workerState, Notes: workerNotes, Workspaces: workerworkspace.New(store, m.Workspace, newBranchWorkspace)})
-	turnPreparation := preparation.New(turnHistory, m.Coordinator.Loading, m.Profiles, m.SourceBriefs, m.ToolContext, m.Workers.Workspaces, m.Workers.State)
+	turnPreparation := preparation.New(turnHistory, m.Coordinator.Loading, m.Profiles, m.SourceBriefs, m.ViewContexts, m.ToolContext, m.Workers.Workspaces, m.Workers.State)
 	turnPostTurn := postturn.New(store, m.Coordinator.Guidance)
 	m.Coordinator.Batch = batchcontrol.New(store, workerState, m.Verification, m.Coordinator.Guidance)
 	turnSettlement := turnsettlement.New(store, gate, &turnExecution.Prompt, turnStatus, m.Workspace, m.Coordinator.Batch)
