@@ -6870,6 +6870,8 @@ type SourceAttributionInterval struct {
 	Turn       int       `json:"turn"`
 	ToolCallID *string   `json:"tool_call_id,omitempty"`
 	RecordedAt time.Time `json:"recorded_at"`
+	// The change that wrote this text; its Walk step explains it.
+	EffectID *string `json:"effect_id,omitempty"`
 }
 
 // SourceAttributionResponse Line provenance for one file. head_sha256 is the tip after hash the
@@ -9282,8 +9284,8 @@ type WorkerResult struct {
 
 // WorkerResultBriefingTarget
 type WorkerResultBriefingTarget struct {
-	JobID          string `json:"job_id"`
-	AttemptID      string `json:"attempt_id"`
+	JobID string `json:"job_id"`
+	// The worker's completion time; a rerun is a new revision.
 	ResultRevision string `json:"result_revision"`
 }
 

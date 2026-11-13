@@ -17,6 +17,8 @@ const (
 	UtilityRationaleUserRef        = "utility/rationale-user"
 	UtilityActivityChangeSystemRef = "utility/activity-change-system"
 	UtilityActivityChangeUserRef   = "utility/activity-change-user"
+	UtilityWorkerResultSystemRef   = "utility/worker-result-system"
+	UtilityWorkerResultUserRef     = "utility/worker-result-user"
 	UtilityStepChangeSystemRef     = "utility/step-change-system"
 	UtilityStepChangeUserRef       = "utility/step-change-user"
 	UtilityVerifyDetectSystemRef   = "utility/verify-detect-system"

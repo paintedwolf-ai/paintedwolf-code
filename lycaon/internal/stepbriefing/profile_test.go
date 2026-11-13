@@ -110,3 +110,24 @@ func TestStepRefusals(t *testing.T) {
 		}
 	}
 }
+
+// The gutter names a change by its effect alone and lands on Walk's target.
+func TestEffectNamedByIDMatchesTheWalkTarget(t *testing.T) {
+	ledger := fakeLedger{effects: map[string]sourceledger.Effect{"e1": agentEffect("e1")}}
+	profile := New(ledger, fakeCause{})
+	fromGutter, err := profile.Resolve(t.Context(), target(wire.SourceStepBriefingTarget{Kind: "effect", TargetKey: "e1"}))
+	testutil.FailErr(t, "resolve by id", err)
+	fromWalk, err := profile.Resolve(t.Context(), target(wire.SourceStepBriefingTarget{Kind: "effect", TargetKey: "e1", ScopeFingerprint: fingerprint("e1", "v-e1"),
+		Scope: wire.SourceStepBriefingScope{Kind: "file", RootIds: []string{""}, FileID: "f-e1"}}))
+	testutil.FailErr(t, "resolve from walk", err)
+	if fromGutter.TargetKey != fromWalk.TargetKey || fromGutter.ScopeFingerprint != fromWalk.ScopeFingerprint {
+		t.Fatalf("gutter %s/%s, walk %s/%s", fromGutter.TargetKey, fromGutter.ScopeFingerprint, fromWalk.TargetKey, fromWalk.ScopeFingerprint)
+	}
+	for i := range fromGutter.Sections {
+		a, _ := fromGutter.Sections[i].Manifest.Hash()
+		b, _ := fromWalk.Sections[i].Manifest.Hash()
+		if a != b {
+			t.Fatalf("section %s hashes differ", fromGutter.Sections[i].ID)
+		}
+	}
+}

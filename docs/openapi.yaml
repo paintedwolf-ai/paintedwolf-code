@@ -18034,17 +18034,15 @@ components:
       type: object
       required:
         - job_id
-        - attempt_id
         - result_revision
       additionalProperties: false
       properties:
         job_id:
           type: string
           format: uuid
-        attempt_id:
-          type: string
         result_revision:
           type: string
+          description: The worker's completion time; a rerun is a new revision.
     BriefingRequest:
       x-go-generate: true
       type: object
@@ -36922,6 +36920,10 @@ components:
           x-go-name: RecordedAt
           type: string
           format: date-time
+        effect_id:
+          x-go-pointer: true
+          type: string
+          description: The change that wrote this text; its Walk step explains it.
     SourceAttributionResponse:
       x-go-generate: true
       type: object

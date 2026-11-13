@@ -16,6 +16,8 @@ export type LineFactRow = {
   tool?: string;
   color?: string;
   waiting?: boolean;
+  /** For a changed row, the change its briefing explains. */
+  effectId?: string;
   target: LineFactTarget;
 };
 export type LineFacts = { now: LineFactRow[]; changed: LineFactRow[]; findings: LineFactRow[]; count: number };
@@ -90,6 +92,7 @@ export function lineFacts(line: number, input: LineFactsInput): LineFacts {
       fact: `Edited ${span(attr!.startLine, attr!.endLine)} · turn ${author.turn}${relativeTimeLabel(author.ts) ? ` · ${relativeTimeLabel(author.ts)}` : ""}`,
       color: chat?.color ?? present?.color?.caret,
       target: { kind: "chat", sessionId: author.sessionId, toolCallId: author.toolCallId },
+      ...(author.effectId ? { effectId: author.effectId } : {}),
     });
   }
   for (const finding of (input.findings.find(mark => mark.line === line)?.findings ?? []).slice()

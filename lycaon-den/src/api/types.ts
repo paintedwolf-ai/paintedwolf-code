@@ -6853,7 +6853,7 @@ export interface components {
         WorkerResultBriefingTarget: {
             /** Format: uuid */
             job_id: string;
-            attempt_id: string;
+            /** @description The worker's completion time; a rerun is a new revision. */
             result_revision: string;
         };
         BriefingRequest: {
@@ -14790,6 +14790,8 @@ export interface components {
             tool_call_id?: string;
             /** Format: date-time */
             recorded_at: string;
+            /** @description The change that wrote this text; its Walk step explains it. */
+            effect_id?: string;
         };
         /**
          * @description Line provenance for one file. head_sha256 is the tip after hash the

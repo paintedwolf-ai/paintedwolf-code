@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/stepbriefing"
+	"github.com/lycaon/lycaon/internal/workerbriefing"
 )
 
 // wireFileBriefings applies the briefing retention policy and builds the service.
@@ -43,6 +44,11 @@ func registerBriefingProfiles(b *serveBuilder) error {
 	cause := briefingstore.NewCausal(b.storage.Database)
 	if err := b.providers.Briefings.Registry.Register(activitybriefing.New(b.storage.Sessions, programs, cause)); err != nil {
 		return err
+	}
+	if b.delegations != nil && b.delegations.Queue != nil {
+		if err := b.providers.Briefings.Registry.Register(workerbriefing.New(b.delegations.Queue)); err != nil {
+			return err
+		}
 	}
 	if b.storage.SourceLedger == nil {
 		return nil
