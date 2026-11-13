@@ -1,18 +1,16 @@
-"""Versioned conversation formatting shared by E4B training and export."""
+"""Versioned conversation formatting shared by student training and export."""
 import json
 from pathlib import Path
 
 
 TEMPLATE = Path(__file__).resolve().parents[3] / "lycaon/internal/generation/templates/gemma4-code-v1.jinja"
+# Text model types of every Gemma 4 student tier; the host serves them all in gemma4-code-v1.
+GEMMA4_TEXT = {"gemma4_text", "gemma4_unified_text"}
 
 
 def configure_training_renderer(tokenizer, model):
     config = json.loads((Path(model) / "config.json").read_text())
-    text = config.get("text_config", config)
-    if (text.get("model_type") == "gemma4_text"
-            and text.get("hidden_size") == 2560
-            and text.get("num_hidden_layers") == 42
-            and text.get("num_kv_shared_layers") == 18):
+    if config.get("text_config", config).get("model_type") in GEMMA4_TEXT:
         tokenizer.chat_template = TEMPLATE.read_text()
         tokenizer.init_kwargs["paintedwolf_conversation_format"] = "gemma4-code-v1"
         return "gemma4-code-v1"
