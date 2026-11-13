@@ -81,7 +81,6 @@ type AgentsMDPoliciesInjector func(ctx context.Context, sess *api.Session, histo
 // SelectionSource exposes the session ledger's current prompt selection.
 type SelectionSource interface {
 	LoadedTools(string) map[string]bool
-	OmittedUnits(string) map[string]bool
 	FullCatalog(string) bool
 }
 

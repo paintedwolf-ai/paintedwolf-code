@@ -3,13 +3,13 @@
 The why and the map are in [`docs/decision-engine.md`](../../docs/decision-engine.md); this is the training loop.
 
 At every visible user turn, and at the start of every worker leg, the host
-asks a local decision model which units the request needs: which loadable
-tool schemas join the call and which instruction units stay out of the prompt.
-Skills are ranked when the coordinator requests one through free text. The questions live in
+asks a local decision model which loadable tool schemas join the call and
+which skill, if any, to read. Instruction units are not decided: each renders
+from host facts and the tools the call offers. Skills and tools are also ranked
+when the model asks for one through free text. The questions live in
 `lycaon/config/packs/painted-wolf/platform/host/decisions.yaml`; the host
-side is `lycaon/internal/decide` (engine client), `lycaon/internal/promptunit`
-(the unit catalog), and `lycaon/internal/coordinator/turnload` (the decision
-and the ledger). This directory holds the engine daemon and the offline
+side is `lycaon/internal/decide` (engine client) and
+`lycaon/internal/coordinator/turnload` (the decision and the ledger). This directory holds the engine daemon and the offline
 tooling that trains and scores it. Live training and collection are bespoke experiments outside the verification
 queue and never run during automated tests. Offline fixtures use no providers
 or pretrained downloads. The [custom coordinator pipeline](custom_model/README.md)
@@ -20,7 +20,6 @@ adds exact-request capture, receipt admission, recoverable SFT/DPO, and export.
 | Unit | Decision | Without an answer |
 |---|---|---|
 | Loadable tool schema | one logical `multi` question, with each released tool option encoded independently; a tool loads when its P reaches `turn.tools.load_at` | only the floor is offered; `request_tools` loads the rest |
-| Instruction unit (`shared/units/*.md`) | one `multi` question per turn, every unit an option; a unit is omitted when its P is below `omit_below` and its certainty reaches `confidence_floor` | every unit renders |
 | Turn kind | one `choice` question; a confident `answer_only` vetoes tool loading | no veto |
 | `skills_read` text | loaded skills ranked against the text; the best relevant skill is read | word overlap |
 | `request_tools` text | loadable schemas ranked against the text | exact names and word overlap |
@@ -34,18 +33,18 @@ exported into the corpus so training reads exactly what the host asks. `state.he
 engine's budget for the options; the request text gets what remains.
 
 Each kind defaults to the behaviour the surface has without a model, and the
-engine only moves it toward the failure the model can recover from: a
-missing tool costs a `request_tools` round trip, an extra instruction costs
-bytes. A unit attached to loadable tools follows them and is never scored.
+engine only moves it toward the failure the model can recover from: a missing
+tool costs a `request_tools` round trip and a missing skill costs a
+`skills_read`. Nothing the engine decides removes instructions, because the
+model cannot ask for guidance it does not know is missing.
 
 Switched off (`LYCAON_DECIDE_DISABLED=1`), without a binary or checkpoint, or
 past its deadline, the engine abstains and every site keeps the surface's own
 default: the floor is offered, every loadable tool stays requestable behind
-the capability map, every instruction unit renders, every skill lists, and
-nothing is pre-read. That
-is the only difference between off and on: on, the head adds likely tools to
-the call and omits guides it is confident about; it never removes a tool the
-floor offers, and the kind veto ships off (`kind.veto_tools`).
+the capability map, every skill lists, and nothing is pre-read. That is the
+only difference between off and on: on, the head adds likely tools to the call
+and reads a confident skill; it never removes a tool the floor offers, and the
+kind veto ships off (`kind.veto_tools`).
 
 ## Engine
 
@@ -58,7 +57,7 @@ forward path:
 
 | Head | Trained by | Serves |
 |---|---|---|
-| `turn-load` | `scripts/bialy/train.py` | tool and unit decisions, turn kind |
+| `turn-load` | `scripts/bialy/train.py` | tool preload, turn kind |
 | `unit-rank` | `scripts/bialy/train.py --families skills` | skill roster, `skills_read`, and `request_tools` ranking |
 | `code-rank` | `scripts/bialy/rerank/train_rerank.py` | summarize, repomap, and project-search reranking |
 | `web-rank` | web-page pairs | verified web pages and search snippets |
@@ -161,19 +160,19 @@ training target.
 Keep recorded observations intact. Corpus admission must reject incompatible
 candidate vocabularies explicitly rather than relabel old calls as command or
 silently score them as unused tools. New collection uses the current callable
-roster for preload, request ranking, and instruction labels. Exported option
+roster for preload and request ranking. Exported option
 texts for a new training run come from that roster; an installed release keeps
 its evaluated vocabulary until a newly trained and evaluated release replaces
 it.
 
-The export contract is `pw-decide-corpus/2`: tool options come from the current
-callable schemas, including worker tools. Unversioned exports used the installed
-release's preload options and cannot be consumed as this contract. Re-export
-with the current host; retain old corpora with the artifacts they qualified.
-Training, calibration, replay, skill discovery and parity checks reject offered
-candidates or scored labels absent from the selected corpus before model work.
-Unknown names in requests remain observations, not invented candidate labels.
-`pw-decide-row/1` and retention rows keep their existing meanings and versions.
+The export contract is `pw-decide-corpus/3`: tool options come from the current
+callable schemas, including worker tools, and the corpus is identified by the
+effective catalog revision the turn receipts record. Re-export with the current
+host; retain old corpora with the artifacts they qualified. Training,
+calibration, replay, skill discovery and parity checks reject offered
+candidates or scored labels absent from the selected corpus, and rows of
+another schema, before model work. Unknown names in requests remain
+observations, not invented candidate labels.
 
 ## Corpus
 
@@ -188,17 +187,17 @@ BUILD_ONLY=true ./task eval:tool-usage   # builds lycaon-debug; or LYCAON_DEBUG_
 scripts/bialy/corpus.py --out "$DECIDE/corpus.json"
 ```
 
-`corpus.json` carries every coordinator surface's floor, loadable tools, and
-scored units; every tool's option text and request card; every unit and
-skill card; the question templates; and the catalog revision that receipts
-record. Third-party packs contribute units through the same catalog, so the
-corpus is whatever the effective catalog resolves to.
+`corpus.json` carries every coordinator surface's floor and loadable tools;
+every tool's option text and request card; every skill card; the question
+templates; and the catalog revision that receipts record. Third-party packs
+contribute tools and skills through the same catalog, so the corpus is
+whatever the effective catalog resolves to.
 
 ## Data
 
 Every decided turn leaves a receipt, including a turn whose engine was off or
 abstained, and `lycaon-debug decide export` is the one reader that turns
-receipts into training rows (`pw-decide-row/1`, described by
+receipts into training rows (`pw-decide-row/2`, described by
 [`row.schema.json`](row.schema.json) and loaded through `rows.py`). A row is
 the state the engine read, verbatim; the candidates the turn offered
 (`offered`); what the engine answered (`engine`); and what the session then
@@ -214,10 +213,7 @@ Labels are always the host's own vocabulary and come from what the session
 actually did: the offered loadable tools it called, the ones it asked for by
 name, each `request_tools` need with the names it spelled out and the tools
 it went on to call, the skills it read, and the kind those calls imply
-(`turnload.ObservedKind`). A scored instruction unit attached to tools is
-needed exactly when one of them was called; an unattached unit has no
-behavioural label (`turnload.GuideLabels`). A turn that did not complete
-keeps only its needs.
+(`turnload.ObservedKind`). A turn that did not complete keeps only its needs.
 
 A tool a session called is weak evidence that the request needed it: driving
 models call tools out of habit, and a head trained on calls learns which
@@ -258,19 +254,16 @@ For example, `{"id":"review","prompt":"Review this change","workflow":"implement
 
 ## Train, calibrate, evaluate
 
-Hold out whole packs and whole repositories: units from `--holdout-pack` stay
-out of the guide labels so the eval measures generalization to units the
-head never saw (what lets extensions ship their own units without
-retraining), and the factory holds out every row of its held-out
-repositories. The rest splits by prompt group, so the validation set is
+Hold out whole repositories: the factory holds out every row of its held-out
+repositories, and the rest splits by prompt group, so the validation set is
 prompts the head never trained on.
 
 ```bash
 # turn-load answers the turn questions; unit-rank ranks skill and tool cards.
 # The rank pairs are kept out of turn-load because they outnumber its rows and
 # pull the shared weights. On a GPU host, set LYCAON_DECIDE_DEVICE=cuda.
-scripts/bialy/train.py --corpus corpus.json --train train.jsonl --val val.jsonl --holdout-pack painted-wolf/browser \
-  --families tools,guides,kind --tool-weight sqrt-inverse --seed 11 --out heads/turn-load.safetensors
+scripts/bialy/train.py --corpus corpus.json --train train.jsonl --val val.jsonl \
+  --families tools,kind --tool-weight sqrt-inverse --seed 11 --out heads/turn-load.safetensors
 scripts/bialy/train.py --corpus corpus.json --train train.jsonl --val val.jsonl \
   --families skills,requests --skill-scored 4 --skill-zeros 3 --out heads/unit-rank.safetensors
 
@@ -278,7 +271,7 @@ scripts/bialy/train.py --corpus corpus.json --train train.jsonl --val val.jsonl 
 # The launcher execs: bialy serve --model <checkpoint dir> --model-id <id> --device mlx
 #   --head-max-len <state.head_tokens> --head turn-load=<head> --head unit-rank=<head>
 export LYCAON_DECIDE_ENGINE=<launcher>
-scripts/bialy/replay_eval.py --corpus corpus.json --examples holdout.jsonl --holdout-pack painted-wolf/browser --json replay-holdout.json
+scripts/bialy/replay_eval.py --corpus corpus.json --examples holdout.jsonl --json replay-holdout.json
 scripts/bialy/calibrate.py --corpus corpus.json --examples val.jsonl
 scripts/bialy/bench_latency.py --corpus corpus.json
 ```
@@ -289,13 +282,12 @@ head against the trainer's own forward.
 
 `train.py` precomputes the frozen backbone's features once and trains the
 head for up to sixty epochs, stopping after twelve without a better
-selection loss: the validation loss of tools and guides, the families that
-change what a turn carries. Kind is trained and reported but does not pick
-the checkpoint; its loss swings enough to stop a run before the tools head
-has learned anything. The trainer reports precision and recall per family,
-and per host for coordinator turns and worker legs, rather than one pooled
-number, because the guide rows carry many always-true units that would hide
-an unlearned tools head. Option sets come from each row's `offered`
+selection loss: the validation loss of tools, the family that changes what a
+turn carries. Kind is trained and reported but does not pick the checkpoint;
+its loss swings enough to stop a run before the tools head has learned
+anything. The trainer reports precision and recall per family, and per host
+for coordinator turns and worker legs, rather than one pooled number. Option
+sets come from each row's `offered`
 candidates and option texts from the corpus, choice labels index options in
 the engine's order (sorted by name), and skill pairs use the corpus's cards,
 so the head sees at training exactly what it answers at the turn.
@@ -305,26 +297,22 @@ the head. Check a new head with the trainer's own forward before blaming the
 engine: `bialy` matches it to the fourth decimal.
 
 `replay_eval.py` reports tool load precision and recall (micro, and macro
-over tools), loads per turn, guide omission precision and recall, kind
-accuracy, skill top-1 and the share of turns whose first-read skill the
+over tools), loads per turn, kind accuracy, skill top-1 and the share of turns whose first-read skill the
 pruned roster listed, against judged skill scores the preload precision and
 the share of turns whose roster lists a relevant skill, need ranking, bytes
-saved per turn, the share of requests cut at `user_text_chars`, and engine
-latency; overall and by host, surface, language, project, and the model that
-drove the session, and for the held-out packs.
+the share of requests cut at `user_text_chars`, and engine latency; overall
+and by host, surface, language, project, and the model that drove the
+session.
 `calibrate.py` also reports the tool threshold each host would choose alone.
 `bench_latency.py` measures the full turn question set on this machine,
 which is the number the `deadline_ms` budget must respect.
 
 A head ships when it beats the engine-off default on the held-out sets and
 is at least as good as the shipped head on every set both can be scored on.
-Off, no loadable tool is preloaded and every guide renders, so any tool
-recall saves round trips, while a wrongly omitted guide costs the turn;
-guide omission therefore turns on only when its precision on the held-out
-repositories reaches 0.97. The rest are targets the shipped head reports
-against: tool recall ≥ 0.9 (a missed tool costs a `request_tools` round
-trip, so recall outranks precision), skill top-1 ≥ 0.7, first-read skill
-listed ≥ 0.95, bytes saved ≥ 30% on investigate turns. On the generated
+Off, no loadable tool is preloaded, so any tool recall saves round trips.
+The targets the shipped head reports against: tool recall ≥ 0.9 (a missed
+tool costs a `request_tools` round trip, so recall outranks precision), skill
+top-1 ≥ 0.7, first-read skill listed ≥ 0.95. On the generated
 sessions a turn averages 11.8 coordinator calls of 7.5 s and 0.46
 `request_tools` round trips, so the engine pays for itself once it avoids
 about a quarter of them. The latency budget is the catalog's `deadline_ms`,
@@ -336,15 +324,13 @@ of it, so accuracy is the binding bar, not the engine's wall time.
 
 `lycaon-debug decide probe --request "..." --surface implement_investigate`
 runs the turn decision through the engine resolved from the environment and
-prints what it would load and omit, so a pack author can see whether their
-unit's description loads for the requests they intend.
+prints what it would load, so a pack author can see whether their tool's
+description loads for the requests they intend.
 
-## Shipped heads: B5 tools, B7G guides, E4 skills, open1 code
+## Shipped heads: B5 tools, E4 skills, open1 code
 
-The release manifest pins four heads over the open1 dataset: B5 `turn-load`
-for tools, B7G `guide-load` for guides, E4-dense1 `unit-rank` for skills and
-needs, and open1 `code-rank`. The host asks the guides question of the guide
-head when the release ships one and of `turn-load` otherwise.
+The release manifest pins three heads over the open1 dataset: B5 `turn-load`
+for tools, E4-dense1 `unit-rank` for skills and needs, and open1 `code-rank`.
 
 B5 encodes each tool independently: consensus labels, 24 inverse-weighted
 sampled negatives per turn, no rare-tool weighting or augmentation, learning
@@ -366,42 +352,6 @@ in 122 of 123 cases; common-skill visibility is 87.9%, rare-skill 80.4%.
 Stage the head set with `BIALY_HEADS_DIR` when building a checkout; the
 build verifies it against the committed release manifest.
 The committed release manifest binds its exact weights and option texts.
-
-## Guide omission: B7
-
-B7 trains the B5 recipe with `--families tools,guides`: every tool and every
-guide option on its own row. Guide labels are relabelled from tool calls
-before training: a unit was needed when its turn called a tool it `attaches`
-to or one it is `needed_with`. `claim-evidence` and `survey-first-pass` carry
-labels for the first time; earlier releases left them unknown, so no audit
-could certify them.
-
-The host only omits ids listed in `turn.guides.omittable`; an empty list
-retains every guide. `train-host/guide_audit.py` certifies a unit at 97%
-omission precision and 98% needed-guide retention on validation and on the
-held-out repositories, and never from an unknown label. Keep that report with
-the installed head and thresholds; replays enforce the same list.
-
-Guides-only control (B7G, `--families guides`, 21 epochs, patience stop),
-scored with `train-host/turn_probe.py` on the relabelled rows. Omission
-precision (share of omitted turns that did not call the unit's tool) and the
-share of turns omitted, on the held-out repositories, by `omit_below`:
-
-| Unit | 0.15 | 0.20 | 0.25 | 0.30 |
-|---|---|---|---|---|
-| native-recall-tool | 98% / 94% | 98% / 96% | 98% / 97% | 98% / 98% |
-| native-summarize-tool | 100% / 6% | 96% / 25% | 96% / 36% | 95% / 44% |
-| native-find-tool | 100% / 0% | 97% / 5% | 94% / 9% | 94% / 14% |
-| claim-evidence | 98% / 13% | 97% / 30% | 96% / 40% | 96% / 49% |
-| native-list-dir-tool | 100% / 0% | 89% / 1% | 86% / 3% | 84% / 5% |
-
-The other labelled units are never omitted below 0.30. The 97% bar certifies
-only summarize and find at 0.15, where they are almost never omitted. The
-shipped policy is 0.30 with those four units: every one holds 94% or better,
-and a wrong omission ends at the next decision, since the host never omits a
-unit once the chat has called or requested a tool it is needed by. Labels are observational: a unit whose tool is rarely called has
-few positives, so retention swings on a handful of turns. `native-list-dir-tool`
-stays out of the list; its 282 characters are not worth 86%.
 
 ## Tuning the shipped policy
 
@@ -430,14 +380,6 @@ recall for 35% more wrong loads. Do not put editing tools on a posture floor to
 make up for recall: with write on the first call the model designs the whole
 program before it answers, and first turns went from 14 to 100 seconds.
 
-**Guide omission, `turn.guides.omittable` and `omit_below`.** Score the
-head's held-out rows with `train-host/turn_probe.py`, then tabulate omission
-precision and share of turns omitted per unit at 0.15 to 0.30. List a unit
-when it holds 94% or better and its omissions are worth the characters; a unit
-without a behavioural label (no `attaches` or `needed_with`) never qualifies.
-The host keeps a unit once the chat has called or requested a tool it is
-needed by, so a wrong omission ends at the next decision. B7G ships at 0.30.
-
 **Skill reads, `turn.skills.preload_at`, `lookup.read_at`,
 `tool_event.read_at`, `pointer_at`, `margin`.** One read bar for all three
 moments, one pointer bar, one margin. The margin is the precision guard: a
@@ -465,8 +407,8 @@ seconds at low effort is a prompt problem, not a model one.
 
 **Prompt weight.** The system prompt of a first build turn is the number to
 watch, split by section: the capability map replaced an 18K-character tool
-listing, the guide head removes about 2K more on an orientation prompt, and
-the floor schemas are the rest. A retrain that improves preload recall is what
+listing, and the floor schemas and the units their tools attach are the
+rest. A retrain that improves preload recall is what
 shrinks the request round trips; nothing in the catalog does.
 
 ## Compaction observation contract

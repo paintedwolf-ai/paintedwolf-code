@@ -13,13 +13,11 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/db"
-	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // rowSchema names the training row shape scripts/bialy/row.schema.json describes.
-const rowSchema = "pw-decide-row/1"
+const rowSchema = "pw-decide-row/2"
 
 // decideRow is one turn decision as a training example: the state the engine
 // read, the candidates the turn offered, what the engine answered, and what
@@ -50,13 +48,11 @@ type rowEngine struct {
 	State     string   `json:"state"`
 	Reason    string   `json:"reason"`
 	Preloaded []string `json:"preloaded"`
-	Omitted   []string `json:"omitted"`
 }
 
 type rowOffered struct {
 	Floor    []string `json:"floor"`
 	Loadable []string `json:"loadable"`
-	Guides   []string `json:"guides"`
 }
 
 // rowRequest is one request_tools call with a free-text need: the loadable
@@ -75,8 +71,7 @@ type rowLabels struct {
 	RequestedGroups []string     `json:"requested_groups"`
 	Skills          []string     `json:"skills"`
 	// Kind is nil for a turn that did not complete: what it would have done is unknown.
-	Kind   *string          `json:"kind"`
-	Guides map[string]*bool `json:"guides"`
+	Kind *string `json:"kind"`
 }
 
 type receiptDecisions struct {
@@ -84,7 +79,6 @@ type receiptDecisions struct {
 	Floor      []string           `json:"floor"`
 	Candidates *struct {
 		Loadable []string `json:"loadable"`
-		Guides   []string `json:"guides"`
 	} `json:"candidates"`
 }
 
@@ -104,10 +98,6 @@ func runDecideExport(args []string) error {
 	if err != nil {
 		return exitCodeError{code: 2, err: err}
 	}
-	units, err := loadUnitCatalog()
-	if err != nil {
-		return err
-	}
 	ctx := context.Background()
 	queries, closeDB, err := openReceiptStore(ctx, *dbPath)
 	if err != nil {
@@ -123,7 +113,7 @@ func runDecideExport(args []string) error {
 		defer func() { _ = f.Close() }()
 		out = f
 	}
-	exporter := rowExporter{queries: queries, units: units, roots: roots, messages: map[string][]db.ListSessionMessagesRow{}, enc: json.NewEncoder(out)}
+	exporter := rowExporter{queries: queries, roots: roots, messages: map[string][]db.ListSessionMessagesRow{}, enc: json.NewEncoder(out)}
 	var closers []io.Closer
 	defer func() {
 		for _, c := range closers {
@@ -171,25 +161,8 @@ func readRoots(path string) (map[string]bool, error) {
 	return roots, scanner.Err()
 }
 
-func loadUnitCatalog() (map[string]promptunit.Unit, error) {
-	eff, err := extpacks.CatalogForConsumers()
-	if err != nil {
-		return nil, fmt.Errorf("effective catalog: %w", err)
-	}
-	catalog, err := promptunit.Load(eff)
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]promptunit.Unit{}
-	for _, u := range catalog.Units() {
-		out[u.ID] = u
-	}
-	return out, nil
-}
-
 type rowExporter struct {
 	queries   *db.Queries
-	units     map[string]promptunit.Unit
 	roots     map[string]bool
 	messages  map[string][]db.ListSessionMessagesRow
 	enc       *json.Encoder
@@ -248,7 +221,7 @@ func (e *rowExporter) export(ctx context.Context, r db.ListTurnReceiptContextsRo
 	if err != nil {
 		return err
 	}
-	offered := rowOffered{Floor: orEmpty(decisions.Floor), Loadable: orEmpty(decisions.Candidates.Loadable), Guides: orEmpty(decisions.Candidates.Guides)}
+	offered := rowOffered{Floor: orEmpty(decisions.Floor), Loadable: orEmpty(decisions.Candidates.Loadable)}
 	labels, found := observedLabels(msgs, r.OpeningMessageID.String, offered.Loadable)
 	if !found {
 		e.noOpening++
@@ -262,7 +235,6 @@ func (e *rowExporter) export(ctx context.Context, r db.ListTurnReceiptContextsRo
 		Partial: r.TurnStatus != "complete", Lang: guessLang(state.User),
 		Engine: receiptEngine(r, decisions.Turn), Offered: offered, State: json.RawMessage(r.StateJson),
 	}
-	labels.Guides = e.guideLabels(offered.Guides, labels.Tools)
 	// Only loadable tools are decisions; floor tools are always offered.
 	loadable := nameSet(offered.Loadable)
 	kept := labels.Tools[:0]
@@ -279,7 +251,7 @@ func (e *rowExporter) export(ctx context.Context, r db.ListTurnReceiptContextsRo
 		if len(labels.Requests) == 0 {
 			return nil
 		}
-		row.Labels = rowLabels{Tools: []string{}, Requests: labels.Requests, RequestedNames: []string{}, RequestedGroups: []string{}, Skills: []string{}, Guides: map[string]*bool{}}
+		row.Labels = rowLabels{Tools: []string{}, Requests: labels.Requests, RequestedNames: []string{}, RequestedGroups: []string{}, Skills: []string{}}
 		e.partial++
 	}
 	e.exported++
@@ -298,24 +270,13 @@ func (e *rowExporter) sessionMessages(ctx context.Context, sessionID string) ([]
 	return msgs, nil
 }
 
-func (e *rowExporter) guideLabels(offered, used []string) map[string]*bool {
-	scored := make([]promptunit.Unit, 0, len(offered))
-	for _, id := range offered {
-		if u, ok := e.units[id]; ok {
-			scored = append(scored, u)
-		}
-	}
-	return turnload.GuideLabels(scored, used)
-}
-
 func receiptEngine(r db.ListTurnReceiptContextsRow, turn *turnload.Decision) rowEngine {
-	out := rowEngine{State: "answered", Reason: r.Reason, Preloaded: []string{}, Omitted: []string{}}
+	out := rowEngine{State: "answered", Reason: r.Reason, Preloaded: []string{}}
 	if r.Abstained == 1 {
 		out.State = "abstained"
 	}
 	if turn != nil {
 		out.Preloaded = turn.ToolIDs()
-		out.Omitted = turn.OmittedIDs()
 	}
 	return out
 }

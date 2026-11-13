@@ -10,11 +10,10 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 )
 
-// RenderToolProceduresBlock renders procedure units for the offered schema set,
-// excluding units named in omitted.
+// RenderToolProceduresBlock renders procedure units for the offered schema set.
 func RenderToolProceduresBlock(
 	ctx context.Context, renderer *prompts.InjectRenderer,
-	sessionID, profileID string, offered []string, omitted map[string]bool,
+	sessionID, profileID string, offered []string,
 ) (string, error) {
 	names := append([]string(nil), offered...)
 	sort.Strings(names)
@@ -32,7 +31,7 @@ func RenderToolProceduresBlock(
 	if err != nil {
 		return "", err
 	}
-	blocks, err := prompts.RenderUnitSlots(ctx, renderer, catalog, prompts.UnitSelectionVars(host, "", nil, names, omitted), vars)
+	blocks, err := prompts.RenderUnitSlots(ctx, renderer, catalog, prompts.UnitSelectionVars(host, "", names), vars)
 	if err != nil {
 		return "", err
 	}

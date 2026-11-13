@@ -47,9 +47,8 @@ type Standing struct {
 	Pointer *SkillRank `json:"pointer,omitempty"`
 	// ToolEvent is the loadable tool whose first call already asked for a
 	// skill this turn; a turn asks once.
-	ToolEvent string   `json:"tool_event,omitempty"`
-	Tools     []Load   `json:"tools"`
-	Omitted   []string `json:"omitted,omitempty"`
+	ToolEvent string `json:"tool_event,omitempty"`
+	Tools     []Load `json:"tools"`
 	// HistoryEpoch identifies the compaction view the turn's history read.
 	HistoryEpoch string `json:"history_epoch,omitempty"`
 }
@@ -66,8 +65,6 @@ type sessionLoads struct {
 	loadable  map[string]bool
 	// standing is the tool set every call of the chat offers beyond the floor.
 	standing map[string]Load
-	// omitted are the instruction units the standing prompt leaves out.
-	omitted map[string]bool
 	// requested and used are what the chat has shown it needs; the engine
 	// reads them as state.
 	requested map[string]string
@@ -82,7 +79,7 @@ type sessionLoads struct {
 
 // Ledger holds every session's standing surface: the schema activation store
 // request_tools writes and the prompt loop reads. The surface is part of the
-// cached prefix, so tools leave and omissions widen only at a cold boundary.
+// cached prefix, so tools leave only at a cold boundary.
 type Ledger struct {
 	mu       sync.RWMutex
 	sessions map[string]*sessionLoads
@@ -97,7 +94,7 @@ func (l *Ledger) session(id string) *sessionLoads {
 	id = strings.TrimSpace(id)
 	s := l.sessions[id]
 	if s == nil {
-		s = &sessionLoads{loadable: map[string]bool{}, standing: map[string]Load{}, omitted: map[string]bool{}, requested: map[string]string{}, used: map[string]bool{}}
+		s = &sessionLoads{loadable: map[string]bool{}, standing: map[string]Load{}, requested: map[string]string{}, used: map[string]bool{}}
 		l.sessions[id] = s
 	}
 	return s
@@ -206,9 +203,8 @@ func (s *sessionLoads) open(opening TurnOpening) {
 
 // BeginTurn applies a turn decision to the standing surface. Tools the chat
 // requested stay while the turn can load them. Cold, the decision replaces
-// predicted tools and omissions. Warm, its predictions join the standing tools
-// and an omission holds only while every turn since the last cold boundary
-// agreed with it. Abstained, the tools stay and every unit renders.
+// predicted tools. Warm, its predictions join the standing tools. Abstained,
+// the tools stay.
 func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decision) {
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return
@@ -237,15 +233,6 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 	}
 	completeFamilies(standing, s.loadable, s.openingMessageID)
 	s.standing = standing
-	omitted := make(map[string]bool, len(decision.Omitted))
-	if !decision.Abstained {
-		for id := range decision.Omitted {
-			if cold || s.omitted[id] {
-				omitted[id] = true
-			}
-		}
-	}
-	s.omitted = omitted
 	s.kind = decision.Kind
 	if decision.Failure.RequiresFullCatalog() || s.fullCatalog {
 		s.exposeCatalog()
@@ -254,7 +241,7 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 
 // BeginUndecidedTurn opens a turn whose workflow takes no turn decisions. The
 // tools the chat requested stay while the turn can load them; predicted tools
-// leave only at cold boundaries, and every instruction unit renders.
+// leave only at cold boundaries.
 func (l *Ledger) BeginUndecidedTurn(sessionID string, opening TurnOpening) {
 	if l == nil || strings.TrimSpace(sessionID) == "" {
 		return
@@ -271,7 +258,6 @@ func (l *Ledger) BeginUndecidedTurn(sessionID string, opening TurnOpening) {
 	}
 	completeFamilies(standing, s.loadable, s.openingMessageID)
 	s.standing = standing
-	s.omitted = map[string]bool{}
 	s.kind = ""
 	if s.fullCatalog {
 		s.exposeCatalog()
@@ -367,24 +353,6 @@ func (l *Ledger) Loadable(sessionID, tool string) bool {
 	return s != nil && s.loadable[strings.TrimSpace(tool)]
 }
 
-// Omitted returns the instruction units the standing prompt leaves out.
-func (l *Ledger) Omitted(sessionID string) map[string]bool {
-	if l == nil {
-		return nil
-	}
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	s := l.sessions[strings.TrimSpace(sessionID)]
-	if s == nil || len(s.omitted) == 0 {
-		return nil
-	}
-	out := make(map[string]bool, len(s.omitted))
-	for id := range s.omitted {
-		out[id] = true
-	}
-	return out
-}
-
 // Standing returns the session's standing surface.
 func (l *Ledger) Standing(sessionID string) Standing {
 	if l == nil {
@@ -405,7 +373,7 @@ func (s *sessionLoads) standingRecord() Standing {
 		tools = append(tools, load)
 	}
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Tool < tools[j].Tool })
-	return Standing{FullCatalog: s.fullCatalog, Tools: tools, Omitted: sortedKeys(s.omitted), HistoryEpoch: s.epoch, Skill: clonePreload(s.preload), Pointer: clonePointer(s.pointer), ToolEvent: s.toolEvent}
+	return Standing{FullCatalog: s.fullCatalog, Tools: tools, HistoryEpoch: s.epoch, Skill: clonePreload(s.preload), Pointer: clonePointer(s.pointer), ToolEvent: s.toolEvent}
 }
 
 func sortedKeys[V any](set map[string]V) []string {
@@ -452,18 +420,11 @@ func (l *Ledger) Restore(sessionID string, recorded Standing, history []api.Mess
 			}
 		}
 	}
-	omitted := make(map[string]bool, len(recorded.Omitted))
-	for _, id := range recorded.Omitted {
-		if id = strings.TrimSpace(id); id != "" {
-			omitted[id] = true
-		}
-	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	s := l.session(sessionID)
 	s.standing = standing
 	s.fullCatalog = recorded.FullCatalog
-	s.omitted = omitted
 	s.epoch = recorded.HistoryEpoch
 	s.preload = clonePreload(recorded.Skill)
 	s.pointer = clonePointer(recorded.Pointer)

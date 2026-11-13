@@ -25,17 +25,15 @@ def fixture():
     data = {
         "schema": corpus_module.SCHEMA, "catalog_revision": "fixture",
         "questions": {"tools": {"question": "tools?", "independent": True,
-                                 "options": {"command": "Run", "capture_page": "Capture"}},
-                      "guides": {"question": "guides?"}},
-        "surfaces": [{"id": "worker", "floor": ["command"], "loadable": ["capture_page"], "guides": ["evidence"]}],
+                                 "options": {"command": "Run", "capture_page": "Capture"}}},
+        "surfaces": [{"id": "worker", "floor": ["command"], "loadable": ["capture_page"]}],
         "tools": [{"name": n, "description": n, "card": n} for n in ["command", "capture_page"]],
-        "units": [{"id": "evidence", "option": "Evidence"}],
         "skills": [{"name": "verify", "card": "Verify"}],
     }
     row = {
         "schema": rows.SCHEMA,
-        "offered": {"floor": ["command"], "loadable": ["capture_page"], "guides": ["evidence"]},
-        "labels": {"tools": ["capture_page"], "guides": {"evidence": True}, "skills": ["verify"],
+        "offered": {"floor": ["command"], "loadable": ["capture_page"]},
+        "labels": {"tools": ["capture_page"], "skills": ["verify"],
                    "tool_scores": {"capture_page": 4}, "skill_scores": {"verify": 3},
                    "requested_names": ["typo", "capture_page"],
                    "requests": [{"need": "preview", "exact": ["typo"], "after": ["capture_page"], "scores": {"capture_page": 4}}],
@@ -55,12 +53,12 @@ class BialyCorpusAdmissionTests(unittest.TestCase):
         self.corpus.validate_row(self.row)
         questions = self.corpus.row_questions(self.row)
         self.assertEqual(questions["tools"]["options"], {"capture_page": "Capture"})
-        self.assertEqual(questions["guides"]["options"], {"evidence": "Evidence"})
+        self.assertEqual(set(questions), {"tools"})
         self.assertEqual(rows.tool_targets(self.row), {"capture_page": 1})
         self.assertEqual(self.row, original)
 
     def test_unversioned_old_and_unknown_corpora_are_refused(self):
-        for version in [None, "pw-decide-corpus/1", "pw-decide-corpus/3"]:
+        for version in [None, "pw-decide-corpus/2", "pw-decide-corpus/4"]:
             with self.subTest(version=version):
                 self.data["schema"] = version
                 with self.assertRaisesRegex(ValueError, "corpus schema"):
@@ -72,14 +70,13 @@ class BialyCorpusAdmissionTests(unittest.TestCase):
             corpus_module.Corpus(self.data)
 
     def test_unknown_candidates_are_never_silently_dropped(self):
-        for kind, candidate in [("tool", "edit"), ("guide", "retired-guide")]:
-            with self.subTest(kind=kind), self.assertRaisesRegex(ValueError, candidate):
-                self.corpus.multi_question(kind, [candidate])
+        with self.assertRaisesRegex(ValueError, "edit"):
+            self.corpus.tools_question(["edit"])
 
     def test_offered_and_label_vocabularies_are_checked(self):
         cases = [
-            ("offered", "floor"), ("offered", "loadable"), ("offered", "guides"),
-            ("labels", "tools"), ("labels", "tool_scores"), ("labels", "guides"),
+            ("offered", "floor"), ("offered", "loadable"),
+            ("labels", "tools"), ("labels", "tool_scores"),
             ("labels", "skills"), ("labels", "skill_scores"),
             ("labels", "second_scores", "tools"), ("labels", "second_scores", "skills"),
             ("labels", "requests", 0, "after"), ("labels", "requests", 0, "scores"),
@@ -93,6 +90,14 @@ class BialyCorpusAdmissionTests(unittest.TestCase):
             parent[path[-1]] = {"retired": 1} if isinstance(parent[path[-1]], dict) else ["retired"]
             with self.subTest(path=path), self.assertRaisesRegex(ValueError, "retired"):
                 self.corpus.validate_row(row)
+
+    def test_rows_of_the_earlier_schema_are_refused(self):
+        self.row["schema"] = "pw-decide-row/1"
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "rows.jsonl"
+            path.write_text(json.dumps(self.row) + "\n")
+            with self.assertRaisesRegex(ValueError, "pw-decide-row/2"):
+                rows.load(path, corpus=self.corpus)
 
     def test_row_file_reports_line_and_preserves_historical_bytes(self):
         self.row["offered"]["loadable"] = ["edit"]
@@ -109,7 +114,7 @@ class BialyCorpusAdmissionTests(unittest.TestCase):
         self.row["labels"]["requests"] = []
         self.row["labels"]["requested_names"] = []
         self.row["labels"]["second_scores"]["requests"] = []
-        self.row["engine"] = {"state": "abstained", "preloaded": [], "omitted": []}
+        self.row["engine"] = {"state": "abstained", "preloaded": []}
         self.corpus.validate_row(self.row)
         self.assertFalse(rows.engine_answered(self.row))
         self.assertEqual(rows.tool_targets(self.row), {"capture_page": 1})

@@ -29,31 +29,20 @@ func TestRenderSystemPromptUnknownAgentFallsBack(t *testing.T) {
 	}
 }
 
-func TestReviewEvidenceUnitsUseCapabilitiesAndRespectOmissions(t *testing.T) {
-	for _, omitted := range []bool{false, true} {
-		name := "retained"
-		if omitted {
-			name = "omitted"
-		}
-		t.Run(name, func(t *testing.T) {
-			pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})
-			engine := &AssemblyEngine{}
-			engine.SetDeps(AssemblyDeps{
-				Prompts:   pe,
-				Selection: &selectionFixture{omitted: map[string]bool{"claim-evidence": omitted, "native-recall-tool": true}},
-			})
-			sess := &api.Session{ID: "review", AgentType: "coordinator", Posture: api.SessionPostureVet, WorkspacePath: t.TempDir()}
-			frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{
-				PhaseCoordinatorSurface: "review_adjudicate",
-				AllowedAgents:           []string{"skeptic", "web-researcher"},
-			}}
-			_, profile, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
-				map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
-			testutil.FailErr(t, "render review evidence units", err)
-			if profile.SurfaceID != "review_adjudicate" {
-				t.Fatalf("surface = %q, want review_adjudicate", profile.SurfaceID)
-			}
-		})
+func TestReviewEvidenceUnitsRenderOnTheReviewSurface(t *testing.T) {
+	pe := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{ModuleRoot: kickTestRoot(t)})
+	engine := &AssemblyEngine{}
+	engine.SetDeps(AssemblyDeps{Prompts: pe, Selection: &selectionFixture{}})
+	sess := &api.Session{ID: "review", AgentType: "coordinator", Posture: api.SessionPostureVet, WorkspacePath: t.TempDir()}
+	frame := inject.CoordinatorTurnFrame{RunContext: api.CoordinatorRunContext{
+		PhaseCoordinatorSurface: "review_adjudicate",
+		AllowedAgents:           []string{"skeptic", "web-researcher"},
+	}}
+	_, profile, _, err := testPromptSurface(engine).renderTripartiteCoordinatorPrompt(t.Context(), pe, sess, frame, nil, "", nil,
+		map[string]any{"root_count": 1, "project_dir": sess.WorkspacePath})
+	testutil.FailErr(t, "render review evidence units", err)
+	if profile.SurfaceID != "review_adjudicate" {
+		t.Fatalf("surface = %q, want review_adjudicate", profile.SurfaceID)
 	}
 }
 

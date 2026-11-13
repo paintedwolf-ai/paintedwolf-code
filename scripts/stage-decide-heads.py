@@ -10,7 +10,7 @@ import struct
 import tempfile
 
 REQUIRED = {"turn-load", "unit-rank", "code-rank"}
-ALLOWED = REQUIRED | {"guide-load", "web-rank"}
+ALLOWED = REQUIRED | {"web-rank"}
 COMMIT = re.compile(r"[0-9a-f]{40}")
 
 
@@ -42,7 +42,7 @@ def stage(manifest_path, source, destination):
     manifest = json.loads(manifest_path.read_text())
     heads = manifest.get("heads", {})
     if manifest.get("version") != 1 or not REQUIRED <= heads.keys() <= ALLOWED:
-        raise ValueError("manifest must pin turn-load, unit-rank and code-rank; guide-load and web-rank are optional")
+        raise ValueError("manifest must pin turn-load, unit-rank and code-rank; web-rank is optional")
     if not manifest.get("release") or not manifest.get("backbone", {}).get("model"):
         raise ValueError("manifest must identify the release and backbone model")
     errors = source_errors(manifest.get("source"))

@@ -75,10 +75,9 @@ func measureCoordinatorInjectBlock(
 		for _, unit := range catalog.Units() {
 			if unit.Slot == promptunit.SlotProcedures && unit.HostsFor(host) {
 				offered = append(offered, unit.Attaches...)
-				offered = append(offered, unit.NeededWith...)
 			}
 		}
-		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered, nil)
+		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered)
 		contractcheck.FailErr(t, "render tool procedures", err)
 		return block
 	case "command_jobs", "worker_command_jobs":
