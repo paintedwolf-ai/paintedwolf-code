@@ -35,7 +35,7 @@ func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 	counts := map[string]int{}
 	for _, rule := range rs.All() {
 		var named []string
-		for _, tool := range rule.Selector["tool"] {
+		for _, tool := range rule.Tools() {
 			if native[tool] {
 				named = append(named, tool)
 			}
@@ -50,8 +50,8 @@ func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 		switch {
 		case len(named) > 0:
 			t.Errorf("%s selects native operations %v by structured tool only; translate it to the paintedwolf.operation selector", rule.ID, named)
-		case len(rule.Selector["paintedwolf.operation"]) > 0:
-			for _, op := range rule.Selector["paintedwolf.operation"] {
+		case len(rule.Operations()) > 0:
+			for _, op := range rule.Operations() {
 				if _, known := toolcontract.Lookup(op); !known {
 					t.Errorf("%s operation selector names unknown operation %q", rule.ID, op)
 				}
@@ -104,7 +104,7 @@ func TestOperationSelectorsReachBoundNativeOperations(t *testing.T) {
 	}
 	translated := 0
 	for _, rule := range loadStockRules(t).All() {
-		selected := rule.Selector["paintedwolf.operation"]
+		selected := rule.Operations()
 		if len(selected) == 0 {
 			continue
 		}

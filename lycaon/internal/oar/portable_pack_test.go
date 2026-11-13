@@ -23,7 +23,7 @@ func TestPortablePackIsPortable(t *testing.T) {
 	var profileMap AnchorProfileMap
 	testutil.FailErr(t, "decode profile map", yaml.Unmarshal(profileRaw, &profileMap))
 	decl := &EngineDeclaration{
-		Host: "example", ProfileMap: profileMap, Profiles: []string{ProfileContentSafety, ProfileMCP},
+		Host: "example", ProfileMap: profileMap, Profiles: []string{ProfileFilesystem, ProfileContentSafety, ProfileMCP},
 		Window: 16, ExpressionNodesMax: 256,
 		Detectors: []string{"detector://noop", "detector://error", "detector://fixture"},
 	}
