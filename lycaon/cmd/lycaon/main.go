@@ -98,6 +98,8 @@ func run(ctx context.Context, args []string) error {
 		return runDiagnostics(ctx, rest)
 	case "credentials":
 		return runCredentials(rest)
+	case "token":
+		return runToken(rest, os.Stdout)
 	case "placements":
 		return runPlacements(ctx, rest, os.Stdout)
 	case "git-credential-osxkeychain":

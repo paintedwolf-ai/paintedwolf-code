@@ -6,6 +6,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
@@ -15,6 +16,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/policyfeedback"
 	"github.com/lycaon/lycaon/internal/session/processcontrol"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
+	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	sessionverification "github.com/lycaon/lycaon/internal/session/verification"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
@@ -27,6 +29,7 @@ type ToolsRepository interface {
 	CommitProgramObservation(ctx context.Context, sessionID, tool string, receipt *api.CommandProgramReceipt, content string) (string, error)
 	CommitEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) (handle string, patchedContent string, err error)
 	CommitVisualEvidenceToolResult(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content, artifactID string) (handle string, patchedContent string, err error)
+	CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error)
 	Get(ctx context.Context, id string) (*api.Session, error)
 }
 type Tools struct {
@@ -97,7 +100,11 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 		if artifactID != "" {
 			return m.Sessions.CommitVisualEvidenceToolResult(ctx, sessionID, projectDir, toolName, args, content, artifactID)
 		}
-		return m.Sessions.CommitEvidenceToolResult(ctx, sessionID, projectDir, toolName, args, content)
+		handle, patched, err := m.Sessions.CommitEvidenceToolResult(ctx, sessionID, projectDir, toolName, args, content)
+		if err == nil && handle != "" {
+			err = m.shareCustodyWithChat(ctx, sessionID, projectDir, toolName, args, content)
+		}
+		return handle, patched, err
 	}
 	deps.RecordSourceRunEvidence = m.Verification.RecordSourceRunEvidence
 	deps.InFlightWorkerRosterNote = func(ctx context.Context, sess *api.Session) string {
@@ -134,4 +141,25 @@ func (m *Tools) Build() promptloop.ToolsDeps {
 	}
 
 	return deps
+}
+
+// shareCustodyWithChat records in the chat's ledger the external custody a
+// worker's tool result placed on workspace paths, so the chat reading those
+// files later knows where their content came from. The chat did not read the
+// content itself, so this is custody, not ingestion.
+func (m *Tools) shareCustodyWithChat(ctx context.Context, sessionID, projectDir, toolName string, args map[string]any, content string) error {
+	chatID := sessiontree.RootID(ctx, m.Sessions, sessionID)
+	if chatID == "" || chatID == sessionID {
+		return nil
+	}
+	rec := evidence.BuildEvidenceRecord(projectDir, toolName, args, content)
+	paths := evidence.IndexedPathsForRecord(rec)
+	if !rec.Custody.External || len(paths) == 0 {
+		return nil
+	}
+	_, err := m.Sessions.CommitProgramHTTPProvenance(ctx, chatID, projectDir, evidence.ProgramHTTPProvenance{
+		ObservedURLs: evidence.ObservedURLsForRecord(rec),
+		CustodyPaths: paths,
+	})
+	return err
 }

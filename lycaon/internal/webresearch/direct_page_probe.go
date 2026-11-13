@@ -20,6 +20,7 @@ func fetchPageProbe(ctx context.Context, rawURL string) pageProbe {
 	if err != nil {
 		return pageProbe{}
 	}
+	// The deadline bounds the probe's I/O, not any approval wait before it.
 	fetchCtx, cancel := context.WithTimeout(ctx, verifyFetchTimeout)
 	defer cancel()
 	resp, finalURL, err := politeGuardedGet(fetchCtx, u, researchAcceptHeader, verifyBodyByteLimit, true)
