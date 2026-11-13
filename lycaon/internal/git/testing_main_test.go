@@ -1,12 +1,15 @@
 package git
 
 import (
+	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"testing"
 
+	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/repochange"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
@@ -76,9 +79,16 @@ func CloneFixtureInto(t *testing.T, name, dst string, seed func(dir string)) {
 		testutil.FailErr(t, "mkdir fixture template", os.MkdirAll(tmpl.dir, 0o755))
 		seed(tmpl.dir)
 	})
+	// A seed's detached git maintenance can remove files (e.g.
+	// objects/maintenance.lock) while this walk is in flight, so an entry that
+	// vanishes between readdir and its stat is skipped. A missing template
+	// root and every other error stay fatal.
 	err := filepath.WalkDir(tmpl.dir, func(path string, d os.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			if path == tmpl.dir || !errors.Is(walkErr, fs.ErrNotExist) {
+				return walkErr
+			}
+			return nil
 		}
 		rel, err := filepath.Rel(tmpl.dir, path)
 		if err != nil || rel == "." {
@@ -87,6 +97,9 @@ func CloneFixtureInto(t *testing.T, name, dst string, seed func(dir string)) {
 		target := filepath.Join(dst, rel)
 		info, err := d.Info()
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			return err
 		}
 		switch mode := info.Mode(); {
@@ -95,6 +108,9 @@ func CloneFixtureInto(t *testing.T, name, dst string, seed func(dir string)) {
 		case mode&os.ModeSymlink != 0:
 			link, err := os.Readlink(path)
 			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					return nil
+				}
 				return err
 			}
 			return os.Symlink(link, target)
@@ -107,10 +123,26 @@ func CloneFixtureInto(t *testing.T, name, dst string, seed func(dir string)) {
 			}
 			data, err := os.ReadFile(path)
 			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					return nil
+				}
 				return err
 			}
 			return os.WriteFile(target, data, mode.Perm())
 		}
 	})
 	testutil.FailErr(t, "clone fixture tree", err)
+}
+
+// SeedGitEnv builds the environment for git commands seeding fixture
+// templates. Their commits spawn detached auto-maintenance, which takes
+// objects/maintenance.lock and races the template walk, so it is disabled per
+// command; LocalGitEnv strips inherited GIT_* variables, so the override must
+// ride as an extra.
+func SeedGitEnv(extra ...string) []string {
+	return lyexec.LocalGitEnv(append([]string{
+		"GIT_CONFIG_COUNT=1",
+		"GIT_CONFIG_KEY_0=maintenance.auto",
+		"GIT_CONFIG_VALUE_0=false",
+	}, extra...)...)
 }

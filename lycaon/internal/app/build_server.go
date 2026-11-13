@@ -445,19 +445,6 @@ func wireDestinationConfig(b *serveBuilder) error {
 			},
 		})
 	}
-	reg.Add(destconfig.Source{
-		HostSources: func(projectDir string) map[string]string {
-			roots := []string{projectDir}
-			if b.storage.Projects != nil {
-				if list, err := b.storage.Projects.List(b.startup.ctx); err == nil {
-					if p := project.FindByRootPath(list, projectDir); p != nil {
-						roots = append(roots, project.RootPaths(p)...)
-					}
-				}
-			}
-			return destconfig.GitRemoteHostsForRoots(roots...)
-		},
-	})
 	b.execution.Host.Executor.Network.SetDestinationConfig(reg)
 	return nil
 }

@@ -61,6 +61,12 @@ var executableSubsectionFamilies = []executableSubsectionFamily{
 		Section:   "merge",
 		Variables: []string{"driver"},
 	},
+	{
+		// git-lfs runs custom transfer agents and extension programs during
+		// the host's own LFS filter.
+		Section:   "lfs",
+		Variables: []string{"path", "clean", "smudge"},
+	},
 }
 
 // auditRepoConfig rejects executable settings from the discovered repository.
@@ -140,6 +146,8 @@ func mayContainUnsafeRepoConfig(raw []byte) bool {
 	return strings.Contains(lower, "gitproxy") ||
 		strings.Contains(lower, "filter") ||
 		(strings.Contains(lower, "merge") && strings.Contains(lower, "driver")) ||
+		strings.Contains(lower, "customtransfer") ||
+		strings.Contains(lower, "extension") ||
 		strings.Contains(lower, "include")
 }
 
@@ -176,9 +184,10 @@ func unsafeRepoConfigKeys(ctx context.Context, dir string) ([]string, error) {
 	return classifyRepoConfigKeys(out), nil
 }
 
-// repoConfigAuditArgv constructs the local configuration query.
+// repoConfigAuditArgv constructs the local configuration query. Every Git
+// invocation follows include directives, so the audit does too.
 func repoConfigAuditArgv() []string {
-	return []string{"config", "--local", "--list", "--name-only", "--null"}
+	return []string{"config", "--local", "--includes", "--list", "--name-only", "--null"}
 }
 
 func classifyRepoConfigKeys(out []byte) []string {

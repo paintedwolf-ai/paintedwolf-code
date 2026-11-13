@@ -177,10 +177,10 @@ func (a *ServeApp) Run(ctx context.Context) error {
 		slog.WarnContext(ctx, "LYCAON_DEV_CORS ignored outside a development channel")
 	}
 	if a.TokenGenerated {
-		if path, err := api.WriteAPITokenFile(a.APIToken); err != nil {
-			slog.WarnContext(ctx, "could not write api.token", "err", err)
+		if path, err := api.WriteAPIToken(a.APIToken); err != nil {
+			slog.WarnContext(ctx, "could not persist daemon api token in credential vault", "err", err)
 		} else if configdir.IsDevelopmentChannel() {
-			fmt.Fprintf(os.Stderr, "Painted Wolf Code: API token written to %s (also set LYCAON_API_TOKEN to reuse)\n", path)
+			fmt.Fprintf(os.Stderr, "Painted Wolf Code: API token stored in %s (use 'pw token print' or set LYCAON_API_TOKEN to reuse)\n", path)
 		}
 	}
 

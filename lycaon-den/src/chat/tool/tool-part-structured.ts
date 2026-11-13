@@ -291,8 +291,9 @@ function buildStructuredToolPresentationFresh(
     if (!fileEdit) {
       // Recover content from truncated compaction residue.
       const recovered = compactionBanner ? extractReadableToolBody(null, body) : null;
+      const source = part.kind === "read" && pathHint ? { path: pathHint } : undefined;
       if (recovered) {
-        sections.push(contentSection(recovered));
+        sections.push(contentSection(recovered, source));
         prependCompactionSection(
           sections,
           compactionBanner,
@@ -304,7 +305,7 @@ function buildStructuredToolPresentationFresh(
           rawOutputAvailable: true,
         });
       }
-      sections.push(contentSection(body));
+      sections.push(contentSection(body, source));
     }
     prependCompactionSection(sections, compactionBanner, undefined);
     return emptyView({

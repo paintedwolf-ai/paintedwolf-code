@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os/exec"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -14,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egress"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -79,6 +84,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "bash: %s: command not found\n", argv[0])
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
+	opts.ServiceEnv = append([]string(nil), tctx.Host.HostResourceEnv...)
 	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
 	opts.Child = confine.ProcessAttributes{Limits: childLimits(request.Process.Limits), IgnoreHangup: request.Process.IgnoreHangup}
 	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
@@ -352,4 +358,34 @@ func (d *ProgramDispatcher) recordExternalStage(admitted tools.ToolContext, stam
 	childTC := admitted
 	childTC.Effects.Out = d.run.tc.Effects.Out
 	tools.CaptureExternalAccess(childTC, hosts, directIPApplied)
+}
+
+// reachedNetworkURLs names the destinations beyond this machine a stage's
+// processes connected to, in the URL form the evidence ledger keys hosts by.
+func reachedNetworkURLs(hosts []confine.EgressHost) []string {
+	var urls []string
+	for _, h := range hosts {
+		if !h.Allowed || h.Attempts == 0 || h.Host == "" || egress.SyntacticLoopback(h.Host) {
+			continue
+		}
+		var scheme string
+		switch egressproxy.Transport(h.Transport) {
+		case egressproxy.TransportHTTPConnect:
+			scheme = "https"
+		case egressproxy.TransportHTTPRequest:
+			scheme = "http"
+		default:
+			// SOCKS tunnels and unknown transports carry a raw TCP stream.
+			scheme = "tcp"
+		}
+		u := url.URL{Scheme: scheme, Host: h.Host}
+		if h.Port != 0 {
+			u.Host = net.JoinHostPort(h.Host, strconv.Itoa(int(h.Port)))
+		}
+		if scheme == "http" {
+			u.Path = h.RequestPath
+		}
+		urls = appendUniqueProvenanceStrings(urls, u.String())
+	}
+	return urls
 }

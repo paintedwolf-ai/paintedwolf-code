@@ -2,7 +2,10 @@ package oar
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/confine"
 
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -61,5 +64,26 @@ func TestCommandFormFollowsCanonicalNativeOperation(t *testing.T) {
 	spoofFacts := activation(spoof)
 	if _, present := spoofFacts["paintedwolf.command_form"]; present {
 		t.Fatal("diagnostic data invented a command form")
+	}
+}
+
+// A post-invoke sandbox refusal states each refused socket's endpoint
+// references, which the socket recovery copy hands the model.
+func TestSocketReferencesFollowTheRefusedSockets(t *testing.T) {
+	gc := NewGuardContext()
+	gc.ObserveToolCall("command", map[string]any{"command": "docker build ."})
+	paths := []string{"/Users/person/.colima/default/docker.sock", "/run/a b.sock"}
+	gc.Refusals.RefusedSocketPaths = paths
+	facts := activation(gc)
+	var refs, urls []string
+	for _, path := range paths {
+		ref, url := confine.SocketEndpointReferences(path)
+		refs, urls = append(refs, ref), append(urls, url)
+	}
+	if got, want := facts["paintedwolf.socket_path_references"], strings.Join(refs, "`, `"); got != want {
+		t.Errorf("socket_path_references = %#v, want %q", got, want)
+	}
+	if got, want := facts["paintedwolf.socket_url_references"], strings.Join(urls, "`, `"); got != want {
+		t.Errorf("socket_url_references = %#v, want %q", got, want)
 	}
 }
