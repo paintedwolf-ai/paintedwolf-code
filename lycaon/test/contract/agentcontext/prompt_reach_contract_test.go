@@ -53,7 +53,8 @@ func linesNaming(corpus string, names []string) string {
 	var out []string
 	for _, line := range strings.Split(corpus, "\n") {
 		for _, name := range names {
-			if strings.Contains(line, "`"+name+"`") || strings.Contains(line, "`"+name+"(") {
+			handle := strings.HasSuffix(name, "#") && strings.Contains(line, name)
+			if handle || strings.Contains(line, "`"+name+"`") || strings.Contains(line, "`"+name+"(") {
 				out = append(out, line)
 				break
 			}
