@@ -72,7 +72,7 @@ func resolveScopeRel(roots CitationRoots, token string) (string, bool) {
 // pathRootID returns the owning root of a stored path key on rec: the
 // per-path override when present, else the record's primary root.
 func (rec Record) pathRootID(key string) string {
-	if id, ok := rec.pathRoots[key]; ok {
+	if id, ok := rec.rooted.owners[key]; ok {
 		return id
 	}
 	return rec.RootID
@@ -91,10 +91,10 @@ func StampDisplayKeys(roots CitationRoots, rec *Record) {
 		if display == "" || display == key {
 			continue
 		}
-		if rec.pathDisplay == nil {
-			rec.pathDisplay = make(map[string]string)
+		if rec.rooted.display == nil {
+			rec.rooted.display = make(map[string]string)
 		}
-		rec.pathDisplay[key] = display
+		rec.rooted.display[key] = display
 	}
 }
 
@@ -121,7 +121,7 @@ func DisplayPathsForRecord(rec Record) []string {
 			return
 		}
 		display := stored
-		if keyed, ok := rec.pathDisplay[stored]; ok && keyed != "" {
+		if keyed, ok := rec.rooted.display[stored]; ok && keyed != "" {
 			display = keyed
 		}
 		display = NormalizeLedgerPath(display)

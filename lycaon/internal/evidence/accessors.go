@@ -110,7 +110,7 @@ func ObservedURLsSorted(ev Ledger) []string {
 // touchPath records a path token the tool result observed, resolved to its
 // durable (root, scope-relative) identity. The first observed path becomes
 // the record's primary Path/RootID; paths rooted elsewhere are recorded in
-// pathRoots so assembly can key them independently of the primary.
+// rooted.owners so assembly can key them independently of the primary.
 func (rec *Record) touchPath(roots CitationRoots, token, tier string) {
 	if rec == nil {
 		return
@@ -136,10 +136,10 @@ func (rec *Record) touchPath(roots CitationRoots, token, tier string) {
 	}
 	rec.pathTiers[id.ScopeRel] = mergePathFidelity(rec.pathTiers[id.ScopeRel], tier)
 	if id.RootID != rec.RootID {
-		if rec.pathRoots == nil {
-			rec.pathRoots = make(map[string]string)
+		if rec.rooted.owners == nil {
+			rec.rooted.owners = make(map[string]string)
 		}
-		rec.pathRoots[id.ScopeRel] = id.RootID
+		rec.rooted.owners[id.ScopeRel] = id.RootID
 	}
 	for _, existing := range rec.pathsTouched {
 		if existing == id.ScopeRel {

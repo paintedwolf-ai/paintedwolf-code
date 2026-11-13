@@ -30,7 +30,7 @@ func CloneRecordForStore(rec Record) RecordAux {
 		ExternalCustody:  cloned.Custody.External,
 		CustodyTree:      cloned.Custody.Tree,
 		CustodySeq:       cloned.Custody.Seq,
-		PathRoots:        cloned.pathRoots,
+		PathRoots:        cloned.rooted.owners,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -80,9 +80,9 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		}
 	}
 	if aux.PathRoots != nil {
-		rec.pathRoots = make(map[string]string, len(aux.PathRoots))
+		rec.rooted.owners = make(map[string]string, len(aux.PathRoots))
 		for path, rootID := range aux.PathRoots {
-			rec.pathRoots[NormalizeLedgerPath(path)] = rootID
+			rec.rooted.owners[NormalizeLedgerPath(path)] = rootID
 		}
 	}
 	if aux.UntrustedContent {

@@ -54,7 +54,7 @@ func indexRecordPaths(ev *Ledger, handle string, rec Record) {
 // recordDisplayKey renders a stored path key in the session folder via the
 // record's display stamp, falling back to the stored key.
 func recordDisplayKey(rec Record, stored string) string {
-	if display, ok := rec.pathDisplay[stored]; ok && display != "" {
+	if display, ok := rec.rooted.display[stored]; ok && display != "" {
 		return display
 	}
 	return stored
