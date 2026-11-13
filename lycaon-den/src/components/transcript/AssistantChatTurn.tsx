@@ -103,7 +103,6 @@ export function AssistantChatTurn(props: Props) {
   return (
     <article
       class="assistant-turn"
-      classList={{ "assistant-turn--note": isAgentNote() }}
       aria-label="Assistant"
       aria-busy={streaming() ? true : undefined}
       data-testid="transcript-article-assistant"
@@ -117,15 +116,6 @@ export function AssistantChatTurn(props: Props) {
           live={false}
           client={props.client}
         />
-      </Show>
-      <Show when={isAgentNote()}>
-        <span
-          class="assistant-turn__note-badge den-status-mark"
-          aria-label="Note"
-          data-testid="agent-note-badge"
-        >
-          Note
-        </span>
       </Show>
       <div class="bubble bubble--assistant">
         <Show when={props.onCopy}>

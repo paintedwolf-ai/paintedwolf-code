@@ -317,10 +317,6 @@ color: var(--den-text-muted);
 }
 
 
-.assistant-turn__note-badge {
-  letter-spacing: 0.02em;
-}
-
 .assistant-turn:has(> .den-citation-evidence-chicklet) {
   align-self: stretch;
   width: 100%;
