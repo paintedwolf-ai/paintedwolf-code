@@ -20,10 +20,13 @@ import (
 	"github.com/lycaon/lycaon/internal/app/workflows"
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/httpaction"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -165,7 +168,6 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		Registry: webReg,
 		Index:    r.deps.Storage.WebIndex,
 		Rerank:   r.deps.Decisions.Rerank,
-		Boundary: r.deps.Execution.Host.Boundary,
 		SearchWarmHook: func(ctx context.Context, sessionID, toolCallID, query, projectDir string, hitURLs, residualURLs []string, strongHits, maxResults int, directParticipated bool) {
 			r.deps.Sessions.Manager.Chats.Research.Search(ctx, sessionID, toolCallID, query, projectDir, hitURLs, residualURLs, strongHits, maxResults, directParticipated)
 		},
@@ -174,12 +176,17 @@ func (r *Runtime) WireBoardAndResearch(ctx context.Context) error {
 		},
 	}
 
+	if sessions := r.deps.Storage.Sessions; sessions != nil {
+		deps.AddressOrigin = func(sessionID, rawURL string) confine.AddressOrigin {
+			return addressOrigin(sessions.SessionURLStanding(sessionID, rawURL))
+		}
+	}
+
 	if matcher, err := r.deps.Security.LoadMatcher(ctx, r.deps.TestSecretMatcher); err != nil {
 		return err
 	} else {
 		deps.SecretMatcher = matcher
 		deps.SecretAsk = r.deps.Security.Ask(r.deps.Execution.Host.Executor.Secrets, r.deps.Execution.Host.Authority.ApprovalsDisabled)
-		deps.VisualStore = r.Visual
 		deps.VisualScreen = visualscreen.NewGate(visualscreen.NewScanner(nil).WithRenderedReferences(browser.RenderLoadsReference), matcher, deps.SecretAsk)
 		if r.deps.EnsureSecretCapabilities != nil {
 			if err := r.deps.EnsureSecretCapabilities(); err != nil {
@@ -250,21 +257,25 @@ func (r *Runtime) ProjectRootPaths(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	var out []string
-	for _, proj := range projects {
-		for _, root := range proj.Roots {
-			if root.IsPrimary {
-				out = append(out, root.Path)
-			}
-		}
-		for _, root := range proj.Roots {
-			if !root.IsPrimary {
-				out = append(out, root.Path)
-			}
-		}
+	for i := range projects {
+		out = append(out, project.RootPaths(&projects[i])...)
 	}
 	return out, nil
 }
 
 func (r *Runtime) rootSessionKey(ctx context.Context, sessionID string) string {
 	return sessiontree.RootID(ctx, r.deps.Storage.Sessions, sessionID)
+}
+
+// addressOrigin maps how evidence knows an address onto what a retrieval
+// tool may say about requesting it.
+func addressOrigin(standing evidence.URLStanding) confine.AddressOrigin {
+	switch standing {
+	case evidence.URLSource:
+		return confine.AddressSource
+	case evidence.URLDisplayed:
+		return confine.AddressDisplayed
+	default:
+		return confine.AddressAuthored
+	}
 }

@@ -9,9 +9,11 @@ import shlex
 import subprocess
 import sys
 import time
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT.parents[2] / "scripts" / "ci_policy"))
+import apt_origins
 DOWNLOAD_SECONDS = 240
 TRANSFER_SECONDS = 30
 
@@ -50,7 +52,7 @@ def archives(plan):
                 or not re.fullmatch(r"[A-Za-z0-9.+~%:_-]+\.deb", fields[1])):
             raise ValueError("APT archive plan must contain safe filenames, sizes and SHA256 digests")
         if fields[0].startswith("mirror+file:/etc/apt/apt-mirrors.txt/pool/"):
-            fields[0] = "https://archive.ubuntu.com/ubuntu/pool/" + fields[0].split("/pool/", 1)[1]
+            fields[0] = apt_origins.fallback_uris(fields[0])[0]
         uri = urlsplit(fields[0])
         if uri.scheme not in {"http", "https"} or not uri.hostname or uri.username or uri.password:
             raise ValueError("APT archive plan requires an HTTP package origin without credentials")
@@ -66,18 +68,6 @@ def archive_identity(plan, names, environment):
                 "archives": sorted([row["name"], str(row["size"]), "SHA256:" + row["sha256"]] for row in rows),
                 "image": runner_image(environment)}
     return "linux-native-v1-" + hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()
-
-
-def origins(uri):
-    parsed = urlsplit(uri)
-    result = [uri]
-    if parsed.hostname in {"azure.archive.ubuntu.com", "archive.ubuntu.com", "security.ubuntu.com"} and parsed.path.startswith("/ubuntu/pool/"):
-        fallback = urlunsplit(("https", "archive.ubuntu.com", parsed.path, "", ""))
-        if fallback != uri:
-            result.append(fallback)
-    elif parsed.hostname == "ports.ubuntu.com" and parsed.scheme == "http" and parsed.path.startswith("/ubuntu-ports/pool/"):
-        result.append(urlunsplit(("https", parsed.netloc, parsed.path, "", "")))
-    return result
 
 
 def verified(path, row):
@@ -112,7 +102,7 @@ def fetch(row, directory, deadline):
         return "cached"
     temporary = directory / "partial" / row["name"]
     failures = []
-    for uri in origins(row["uri"]) * 2:
+    for uri in apt_origins.fallback_uris(row["uri"]) * 2:
         try:
             transfer(uri, temporary, row, min(deadline, time.monotonic() + TRANSFER_SECONDS))
             temporary.replace(destination)
@@ -145,7 +135,7 @@ def main(mode):
     (directory / "partial").mkdir(parents=True, exist_ok=True)
     manifest = directory / "plan.json"
     if mode == "plan":
-        apt("update")
+        apt_origins.update()
         plan = apt("-o", "Acquire::ForceHash=SHA256", "--print-uris", "--yes", "--download-only", "--no-install-recommends", "install", *names, capture=True)
         key = archive_identity(plan, names, os.environ)
         manifest.write_text(json.dumps({"plan": plan, "packages": names, "image": image, "key": key}, indent=2) + "\n")

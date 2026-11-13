@@ -14,7 +14,7 @@ copy:
   what: 'Parser validation was explicitly overridden for {{ paintedwolf.paths }}.'
   cause: 'Recorded reason: {{ paintedwolf.syntax_override_reason }}.'
   why: 'This mutation has no host parser verdict; the other mutation checks still apply.'
-  fix: 'Verify the changed code with the project checks.'
+  fix: 'Verify the intended result; report expected check failures.'
   instead: Retain the recorded override when reviewing this change
 x-paintedwolf-category: informational
 x-paintedwolf-emit: guard:syntax_override

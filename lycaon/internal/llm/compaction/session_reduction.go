@@ -210,7 +210,7 @@ func RenderContinuation(ctx context.Context, record *messageview.Continuation, r
 		for i := len(record.Sources) - 1; i >= 0 && len(sources) < limit; i-- {
 			source := record.Sources[i]
 			if !seen[source.MessageID] {
-				sources = append(sources, CompactedSource{Handles: source.Handles[:min(4, len(source.Handles))], Tool: source.Tool, MessageID: source.MessageID})
+				sources = append(sources, CompactedSource{Handles: source.Handles[:min(4, len(source.Handles))], Tool: source.Tool, MessageID: source.MessageID, Execution: source.Execution})
 				seen[source.MessageID] = true
 			}
 		}
@@ -252,7 +252,7 @@ func recoverySources(rows []messageview.ContinuationSource, limit int) []Compact
 						continue
 					}
 					seen[row.MessageID] = true
-					out = append(out, CompactedSource{Handles: row.Handles[:min(2, len(row.Handles))], Tool: sourceTool(row), MessageID: row.MessageID})
+					out = append(out, CompactedSource{Handles: row.Handles[:min(2, len(row.Handles))], Tool: sourceTool(row), MessageID: row.MessageID, Execution: row.Execution})
 					if len(out) >= limit {
 						return out
 					}

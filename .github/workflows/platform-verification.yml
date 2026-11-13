@@ -58,6 +58,13 @@ jobs:
           name: confinement-linux-launch-amd64-${{ github.run_attempt }}
           status: ${{ steps.launch.outcome }}
 
+      # The sidecar build stages the engine, whose native generation build needs
+      # the pinned llama.cpp source and the Linux Vulkan tools; setup-verification
+      # provisions the same inputs only for shell lanes.
+      - name: Provision generation runtime inputs
+        timeout-minutes: 30
+        run: ./task generation:prepare -- --backend native --install-build-tools
+
       - name: Build sidecar
         id: build
         if: ${{ !cancelled() }}

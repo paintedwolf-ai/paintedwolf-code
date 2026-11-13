@@ -116,6 +116,10 @@ var driverFactories = catalogruntime.NewFactorySet(
 			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
 				WithProfile(providerprofile.Mistral()), nil
 		},
+		"doubleword": func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
+			return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models).
+				WithProfile(providerprofile.Doubleword()), nil
+		},
 	},
 	func(_ context.Context, build providerBuild) (modelcall.Provider, error) {
 		return openaicompat.New(build.entry.ID, build.entry.BaseURL, build.apiKey, build.entry.Models), nil

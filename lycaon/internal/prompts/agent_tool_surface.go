@@ -56,8 +56,9 @@ type AgentHostResourceView struct {
 
 // AgentPromptSurface holds skill availability and host resources for prompts.
 type AgentPromptSurface struct {
-	// Skills supply availability and named reference checks; they are not listed.
+	// Skills are the applicable catalog; bodies remain on demand.
 	Skills                []AgentSkillView
+	FullCatalog           bool
 	HostResources         []AgentHostResourceView
 	HostResourcesOmitted  int // rows the ambient budget dropped
 	Fingerprint           string
@@ -96,6 +97,7 @@ func AgentPromptSurfaceTemplateVars(surface AgentPromptSurface) map[string]any {
 	}
 	return map[string]any{
 		"agent_skills":                 skills,
+		"full_skill_catalog":           surface.FullCatalog,
 		"agent_host_resources":         groupHostResources(surface.HostResources),
 		"agent_host_resources_omitted": surface.HostResourcesOmitted,
 		"prompt_surface_fingerprint":   surface.Fingerprint,
@@ -160,7 +162,7 @@ func LoadAgentToolSurface(toolProfileID string, visibleTools []string, hintCodes
 		return AgentToolSurfaceData{}, fmt.Errorf("tool profile %q not found", profileID)
 	}
 
-	toolNames := visibleToolNames(profile, visibleTools)
+	toolNames := turn.available(visibleToolNames(profile, visibleTools))
 	toolViews := make([]AgentToolArgView, 0, len(toolNames))
 	var requestable []string
 	for _, name := range toolNames {

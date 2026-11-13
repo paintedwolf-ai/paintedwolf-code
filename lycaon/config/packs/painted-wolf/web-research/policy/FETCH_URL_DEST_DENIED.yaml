@@ -1,3 +1,4 @@
+# Deprecated rejection identity; raw transfers use portable curl.
 oar: '1.0'
 id: FETCH_URL_DEST_DENIED
 kind: schema
@@ -9,6 +10,7 @@ requires:
   profiles:
   - tool
   facts:
+  - paintedwolf.next_steps
   - paintedwolf.rejection_code
   - paintedwolf.path
 when: paintedwolf.rejection_code == "FETCH_URL_DEST_DENIED"
@@ -16,14 +18,12 @@ effect: block
 copy:
   what: fetch_url could not write dest {{ paintedwolf.path }} under project write scope.
   cause: The requested destination failed the ingest write boundary after the response was fetched.
-  why: Asset ingest must stay inside the attached folders — same jail as write and copy.
-  fix: Inspect the refused path and intended write authority before any new network request. Use another destination
-    only if it is the intended, permitted target; do not bypass a protected-path refusal. The fetched body
-    was not published as the requested file.
-  instead: Resolve destination authority before repeating network work
+  why: The recorded write refusal remains binding; switching tools does not grant access.
+  fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
+  instead: Follow the current schema and access boundaries.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: fetch_url dest path is not writable
+x-paintedwolf-message: recorded fetch_url destination was not writable
 x-paintedwolf-scenarios:
 - id: default
   vars:

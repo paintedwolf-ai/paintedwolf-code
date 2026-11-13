@@ -104,8 +104,6 @@ func (r *Runtime) WireCheckpoints(ctx context.Context, deps CheckpointDependenci
 	deps.Execution.Host.Executor.Secrets.SetUntrustedIngestionSource(func(c context.Context, chatSessionID string) (bool, error) {
 		return deps.Sessions.SessionUntrustedContentResult(c, chatSessionID)
 	})
-	releaseIngestion := confine.SetUntrustedIngestionSource(untrustedIngestionStore{store: deps.Sessions})
-	deps.Resources.Track("untrusted-ingestion-source", 22, func(context.Context) error { releaseIngestion(); return nil })
 	deps.Execution.Host.Executor.Network.SetSessionHostLedger(deps.Sessions)
 
 	sensitiveDests, err := approvals.LoadMergedConsequenceBandPaths(deps.Directory)
@@ -307,18 +305,6 @@ func durableGrantedPaths(leases []hitl.ApprovalGrant, projectID string) []grante
 		})
 	}
 	return out
-}
-
-type untrustedIngestionStore struct {
-	store session.Store
-}
-
-func (u untrustedIngestionStore) SessionIngestedUntrusted(ctx context.Context, chatSessionID string) bool {
-	if u.store == nil {
-		return false
-	}
-	ingested, err := u.store.SessionUntrustedContentResult(ctx, chatSessionID)
-	return err == nil && ingested
 }
 
 type checkpointConsequenceDeriver struct {

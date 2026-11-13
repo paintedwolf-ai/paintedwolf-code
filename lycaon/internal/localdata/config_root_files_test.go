@@ -175,6 +175,33 @@ func TestSecretCanaryExclusion(t *testing.T) {
 	}
 }
 
+func TestActiveManagedSecretWritesRemainVaultOnlyWhileLegacyFilesStayExcluded(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"credential-vault.age", ".credential-vault-development-identity", "api.token", "host-identity.pem", "mcp.yaml"} {
+		entry, ok := LookupConfigRootEntry(name)
+		if !ok {
+			t.Fatalf("missing configRootRegistry entry for %q", name)
+		}
+		if entry.Class != ClassArchiveExcluded || !entry.IsSecret {
+			t.Fatalf("%q classification = (%q, IsSecret=%v), want (%q, true)", name, entry.Class, entry.IsSecret, ClassArchiveExcluded)
+		}
+		if entry.IncludeInBackup || entry.IncludeInDiagnostics || IsDiagnosticsAllowed(name) || IsCredentialRel(name) != true {
+			t.Fatalf("%q must remain excluded from backup and diagnostics and classified as a credential path", name)
+		}
+	}
+	for _, legacy := range []string{"api.token", "host-identity.pem", "mcp.yaml"} {
+		entry, _ := LookupConfigRootEntry(legacy)
+		if !strings.Contains(entry.Reason, "credential-vault.age") {
+			t.Fatalf("%q reason %q does not document migration/storage in credential-vault.age", legacy, entry.Reason)
+		}
+	}
+	daemonEntry, ok := LookupConfigRootEntry("daemon.json")
+	if !ok || daemonEntry.Class != ClassArchiveExcluded || daemonEntry.IsSecret || daemonEntry.IncludeInBackup || daemonEntry.IncludeInDiagnostics {
+		t.Fatalf("daemon.json entry = %+v, want non-secret archive-excluded supervisor metadata", daemonEntry)
+	}
+}
+
 func TestLocalDataBucketsMatchRegistry(t *testing.T) {
 	t.Parallel()
 	claimed := map[string]bool{}

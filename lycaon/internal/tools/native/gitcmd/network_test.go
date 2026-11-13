@@ -11,7 +11,9 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/google/uuid"
@@ -19,9 +21,11 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 func serveSmartHTTP(bin, repoDir string) http.Handler {
@@ -193,6 +197,65 @@ func TestNetworkCommandsOverSmartHTTPAndEgressGate(t *testing.T) {
 	h.exec("git", "clone", "ext::sh -c echo", "bad").refused(t, "ext transport", "COMMAND_OPERAND_INVALID")
 }
 
+// Admission covers every URL Git will contact, as Git resolves it: each push
+// URL and rewritten URL is authorized before any of them is reached.
+// Serial: mutates process-wide egress posture and resolver.
+func TestNetworkCommandsAdmitEveryResolvedRemoteBeforeContact(t *testing.T) {
+	h := newHarness(t)
+	bareParent, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "eval bare parent", err)
+	bareDir := filepath.Join(bareParent, "remote.git")
+	if out, errOut, code := h.direct(bareParent, "init", "--bare", "-q", "-b", "main", bareDir); code != 0 {
+		t.Fatalf("init bare: %d %s %s", code, out, errOut)
+	}
+	if out, errOut, code := h.direct(bareDir, "config", "http.receivepack", "true"); code != 0 {
+		t.Fatalf("config http.receivepack: %d %s %s", code, out, errOut)
+	}
+	var contacts atomic.Int32
+	smart := serveSmartHTTP(h.bin, bareDir)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		contacts.Add(1)
+		smart.ServeHTTP(w, r)
+	}))
+	defer server.Close()
+	remoteURL := server.URL + "/remote.git"
+	h.git("remote", "add", "origin", remoteURL)
+	h.git("config", "--add", "remote.origin.pushurl", remoteURL)
+	h.git("config", "--add", "remote.origin.pushurl", "http://push-mirror.example.test/remote.git")
+	h.git("config", "url.http://rewritten.example.test/.insteadOf", "short:")
+
+	confine.SetEgressPosture(confine.PostureAsk)
+	t.Cleanup(func() {
+		confine.SetEgressPosture(confine.PostureObserve)
+		confine.SetEgressResolver(nil)
+	})
+	var asked []string
+	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+		asked = append(asked, ep.Host)
+		return ep.Host == "127.0.0.1"
+	})
+
+	push := h.exec("git", "push", "origin", "main")
+	push.refused(t, "push with an unauthorized pushurl", "GIT_REMOTE_HOST_DENIED")
+	if !strings.Contains(push.stderr, "push-mirror.example.test") || contacts.Load() != 0 {
+		t.Fatalf("push stderr %q, server contacts %d", push.stderr, contacts.Load())
+	}
+	fetch := h.exec("git", "fetch", "short:remote.git")
+	fetch.refused(t, "fetch through a rewrite", "GIT_REMOTE_HOST_DENIED")
+	if !strings.Contains(fetch.stderr, "rewritten.example.test") || contacts.Load() != 0 {
+		t.Fatalf("fetch stderr %q, server contacts %d", fetch.stderr, contacts.Load())
+	}
+	if !slices.Contains(asked, "push-mirror.example.test") || !slices.Contains(asked, "rewritten.example.test") {
+		t.Fatalf("hosts asked = %v", asked)
+	}
+
+	// The fetch URL alone is authorized, so fetch works while push stays refused.
+	if fetch := h.exec("git", "fetch", "origin"); fetch.err != nil || fetch.result.Status != 0 {
+		t.Fatalf("fetch from the authorized remote: %+v %v %s", fetch.result, fetch.err, fetch.stderr)
+	}
+	h.exec("git", "fetch", "--", "-c").refused(t, "option-shaped remote", "COMMAND_OPERAND_INVALID")
+}
+
 type sshTestHostConfig struct {
 	sshCmd string
 }
@@ -227,12 +290,12 @@ func (h *harness) execWithEnv(env []string, words ...string) run {
 	return run{stdout: stdout.String(), stderr: stderr.String(), result: result, err: err}
 }
 
-func configureSSHTransport(t *testing.T, h *harness, bareParent, bareDir string) (sockPath, argvLog, envLog string) {
+func configureSSHTransport(t *testing.T, h *harness, bareParent, bareDir string) (argvLog, envLog string) {
 	t.Helper()
 	sockDir, err := os.MkdirTemp(os.TempDir(), "pws-") //nolint:usetesting // SSH_AUTH_SOCK needs a short path; registered cleanup removes this owned directory.
 	testutil.FailErr(t, "mkdir socket dir", err)
 	t.Cleanup(func() { _ = os.RemoveAll(sockDir) })
-	sockPath = filepath.Join(sockDir, "agent.sock")
+	sockPath := filepath.Join(sockDir, "agent.sock")
 	ln, err := net.Listen("unix", sockPath)
 	testutil.FailErr(t, "listen unix socket", err)
 	t.Cleanup(func() { _ = ln.Close() })
@@ -263,10 +326,18 @@ esac
 `, argvLog, envLog, h.bin, bareDir, h.bin, bareDir)
 	testutil.FailErr(t, "write ssh shim", os.WriteFile(sshShim, []byte(shimBody), 0o755))
 
-	gitexec.SetHostConfig(sshTestHostConfig{sshCmd: sshShim})
+	// Confinement supplies an agent launch's SSH transport; an ssh shim first
+	// on the launch's PATH stands in for it, and the host's own SSH command
+	// must not apply.
+	gitexec.SetHostConfig(sshTestHostConfig{sshCmd: "/bin/false"})
 	t.Cleanup(func() { gitexec.SetHostConfig(nil) })
-
-	return sockPath, argvLog, envLog
+	h.owners.Launch = func(ctx context.Context, tc tools.ToolContext, subject, line string, services []confine.HostService) (lycexec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
+		plan, release, err := UnconfinedLaunch(ctx, tc, subject, line, services)
+		return plan.WithReducedEnvironment().WithExtraEnv("PATH=" + bareParent + string(os.PathListSeparator) + os.Getenv("PATH")), release, err
+	}
+	// Without a socket capability the user's SSH agent never reaches agent
+	// Git; the wiring suite covers the granted agent under real confinement.
+	return argvLog, envLog
 }
 
 // Serial: mutates process-wide SSH environment, host config, and egress gate.
@@ -282,7 +353,7 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 		t.Fatalf("init bare: %d %s %s", code, out, errOut)
 	}
 
-	sockPath, argvLog, envLog := configureSSHTransport(t, h, bareParent, bareDir)
+	argvLog, envLog := configureSSHTransport(t, h, bareParent, bareDir)
 
 	scpRemote := "git@ssh.example.test:org/remote.git"
 	urlRemote := "ssh://git@ssh-alt.example.test:2222/org/remote.git"
@@ -393,7 +464,7 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 	testutil.FailErr(t, "read ssh env log", err)
 	envText := string(envBytes)
 	for _, want := range []string{
-		"SSH_AUTH_SOCK=" + sockPath,
+		"SSH_AUTH_SOCK=",
 		"SSH_ASKPASS=",
 		"GIT_TERMINAL_PROMPT=0",
 		"GIT_SSH_COMMAND=",
@@ -409,5 +480,32 @@ func TestNetworkCommandsOverSSHRemotesAndEgressGate(t *testing.T) {
 		if !strings.Contains(argvText, want) {
 			t.Fatalf("ssh transport argv missing %q:\n%s", want, argvText)
 		}
+	}
+}
+
+// With the agent's socket capability, Git receives the capability's endpoint
+// reference, which only a confinement resolves; a launch without one never
+// sees the agent's own path.
+func TestSSHAgentReachesGitOnlyThroughItsCapabilityEndpoint(t *testing.T) {
+	h := newHarness(t)
+	h.git("reset", "--hard", "HEAD")
+	h.git("clean", "-fd")
+	bareParent, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "eval bare parent", err)
+	bareDir := filepath.Join(bareParent, "remote.git")
+	if out, errOut, code := h.direct(bareParent, "init", "--bare", "-q", "-b", "main", bareDir); code != 0 {
+		t.Fatalf("init bare: %d %s %s", code, out, errOut)
+	}
+	_, envLog := configureSSHTransport(t, h, bareParent, bareDir)
+	agent := os.Getenv("SSH_AUTH_SOCK")
+	grant, err := confine.ResolveSocketRequest(agent)
+	testutil.FailErr(t, "resolve agent socket grant", err)
+	h.tc.Socket.SocketGrants = []confine.SocketGrant{grant}
+
+	if fetch := h.exec("git", "fetch", "origin"); fetch.err == nil && fetch.result.Status == 0 {
+		t.Fatalf("an unconfined launch resolved the agent's socket reference: %+v", fetch.result)
+	}
+	if env, err := os.ReadFile(envLog); err == nil && strings.Contains(string(env), "SSH_AUTH_SOCK="+agent) {
+		t.Fatalf("Git received the agent's own path:\n%s", env)
 	}
 }

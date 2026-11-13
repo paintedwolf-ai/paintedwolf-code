@@ -67,9 +67,7 @@ func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 	t.Logf("bundled unit dispositions: %v", counts)
 }
 
-// Translated selection reaches the bound native operation beneath the real
-// command call, keeps structured calls selected, and refuses other operations,
-// unbound command calls and diagnostic data that names an operation.
+// Operation selection uses bound identity and explicit selector alternatives.
 func TestOperationSelectorsReachBoundNativeOperations(t *testing.T) {
 	native := nativeOperationIdentities(t)
 	operations := make([]string, 0, len(native))
@@ -137,7 +135,7 @@ func TestOperationSelectorsReachBoundNativeOperations(t *testing.T) {
 			}
 			spoof := observe(t, "command", "")
 			spoof.PutRejectData("FIXTURE", map[string]any{"native_operation": op, "operation": op})
-			if matches(spoof) {
+			if matches(spoof) != slices.Contains(selected, "command") {
 				t.Errorf("%s selected an unbound command from diagnostic data", rule.ID)
 			}
 			if other != "" && matches(observe(t, "command", other)) {

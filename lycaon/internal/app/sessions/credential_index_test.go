@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/app/security"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -21,6 +22,35 @@ func attachCredentialRoot(t *testing.T, files *credentialFiles) string {
 	root := t.TempDir()
 	testutil.FailErr(t, "attach fixture root", files.queries.CreateProjectRoot(t.Context(), db.CreateProjectRootParams{ID: "r1", ProjectID: "proj-1", Path: root, Label: "root", IsPrimary: 1, AddedAt: "2026-01-01T00:00:00Z", Kind: "attached"}))
 	return root
+}
+
+func TestCredentialStartupDefersDiscoveryUntilProviderAdmission(t *testing.T) {
+	files := credentialFilesFixture(t)
+	root := attachCredentialRoot(t, files)
+	path := filepath.Join(root, ".env")
+	testutil.FailErr(t, "write startup credential", os.WriteFile(path, []byte("TOKEN=before-admission-4411"), 0600))
+	files.startCredentialIndex()
+	t.Cleanup(func() { testutil.FailErr(t, "close index", files.closeCredentialIndex(context.Background())) })
+	if len(files.index.roots) != 0 || len(files.harvest.FileValues("proj-1")) != 0 || repochange.Coverage(root).Watching {
+		t.Fatal("startup discovered project files or registered a filesystem watcher")
+	}
+	// A change before admission must be captured even without an active watcher.
+	testutil.FailErr(t, "change credential before admission", os.WriteFile(path, []byte("TOKEN=at-admission-5522"), 0600))
+	runtime := &security.Runtime{CredentialFiles: files}
+	_, err := runtime.ModelScreeningValues(t.Context(), "proj-1", "chat")
+	testutil.FailErr(t, "admit provider evidence", err)
+	values := files.harvest.FileValues("proj-1")
+	if len(values) != 1 || values[0].Secret() != "at-admission-5522" {
+		t.Fatal("provider admission did not capture current credential evidence")
+	}
+	testutil.FailErr(t, "rotate admitted credential", os.WriteFile(path, []byte("TOKEN=after-admission-6633"), 0600))
+	repochange.Notify(t.Context(), repochange.Event{ProjectDir: root, Kind: repochange.WorktreeChanged, Paths: []string{".env"}})
+	for _, value := range files.harvest.FileValues("proj-1") {
+		if value.Secret() == "after-admission-6633" && !value.Retired {
+			return
+		}
+	}
+	t.Fatal("startup subscription did not refresh the admitted project's evidence")
 }
 
 func TestCredentialIndexPrecedesAnyDelivery(t *testing.T) {
@@ -90,9 +120,10 @@ func TestCredentialIndexFailureCannotAdmitPartialCapture(t *testing.T) {
 	testutil.FailErr(t, "create oversize fixture", err)
 	testutil.FailErr(t, "size fixture", file.Truncate(credentialFileBytes+1))
 	testutil.FailErr(t, "close fixture", file.Close())
-	testutil.FailErr(t, "start index without blocking the host's human editing surfaces", files.startCredentialIndex(t.Context()))
+	files.startCredentialIndex()
 	t.Cleanup(func() { testutil.FailErr(t, "close index", files.closeCredentialIndex(context.Background())) })
-	if err := files.EnsureProject(t.Context(), "proj-1"); err == nil {
+	runtime := &security.Runtime{CredentialFiles: files}
+	if _, err := runtime.ModelScreeningValues(t.Context(), "proj-1", "chat"); err == nil {
 		t.Fatal("oversize credential capture was admitted")
 	}
 	ctx, cancel := context.WithCancel(t.Context())

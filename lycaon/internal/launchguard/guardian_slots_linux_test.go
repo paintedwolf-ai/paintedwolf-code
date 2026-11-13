@@ -4,6 +4,7 @@ package launchguard
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
@@ -16,14 +17,21 @@ import (
 const guardianSlotFixture = "PW_GUARDIAN_SLOT_FIXTURE"
 
 func init() {
-	// The reservation contract requires the original process leader. Go runs
-	// initialization on that thread; retain it only in the owned fixture child.
-	if os.Getenv(guardianSlotFixture) != "" {
+	// Retain the process leader for fixtures that require it.
+	if os.Getenv(guardianSlotFixture) != "" || os.Getenv(fixtureModeEnv) == guardianFaultFixture {
 		runtime.LockOSThread()
 	}
 }
 
 func TestMain(m *testing.M) {
+	if os.Getenv(fixtureModeEnv) == guardianFaultFixture {
+		err := checkGuardianExecFailure(os.Getenv(fixtureDirEnv), os.Getenv(fixtureGuardianProbe), os.Getenv(fixtureUIDEnv), os.Getenv(fixtureGIDEnv), os.Getenv(fixtureFaultHOME), os.Getenv(fixtureHash))
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	if mode := os.Getenv(guardianSlotFixture); mode != "" {
 		if runGuardianSlotFixture(mode) != nil {
 			os.Exit(1)

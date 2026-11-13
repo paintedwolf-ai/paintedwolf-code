@@ -21,7 +21,6 @@ import (
 )
 
 func TestServerEndToEnd(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	dir := t.TempDir()
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(contractfixture.TestMockConfig(t))

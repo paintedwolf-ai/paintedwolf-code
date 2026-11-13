@@ -12,6 +12,7 @@ import {
 import { ToolContentLink } from "../tool/ToolContentLink.tsx";
 import { StructuredToolBody } from "../tool/StructuredToolBody.tsx";
 import { ToolPartShell } from "../tool/ToolPartShell.tsx";
+import type { ToolBriefingSlots } from "../tool/tool-briefing-slots.ts";
 import { TurnLoadFootLine } from "../tool/TurnLoadFootLine.tsx";
 import { ToolResolutionFacts } from "../tool/ToolResolutionFacts.tsx";
 
@@ -21,6 +22,7 @@ type Props = {
   sessionId?: string;
   projectId?: string;
   rootRefs?: readonly ResolveProjectRoot[];
+  slots?: ToolBriefingSlots;
 };
 
 /** Discovery, pending, and rejected reads use the generic tool body. */
@@ -28,7 +30,7 @@ export function SkillCard(props: Props) {
   const skill = () => skillActivationFromPart(props.part);
   const resource = () => skillReadResource(props.part);
   return (
-    <ToolPartShell
+    <ToolPartShell slots={props.slots}
       part={props.part}
       layout={props.layout}
       projectId={props.projectId}
@@ -144,7 +146,7 @@ export function SkillCard(props: Props) {
                 <div class="den-tool-part-card-section">
                   <p class="den-tool-part-card-section-label">{resource() ? "Resource content" : "Instructions"}</p>
                   <ToolContentLink pane="skill-instructions" label={resource() ? "Resource content" : "Instructions"} projectId={props.projectId}
-                    content={{ kind: "inline", text: instructions }} />
+                    language={resource() ? undefined : "markdown"} content={{ kind: "inline", text: instructions }} />
                 </div>
               )}
             </Show>

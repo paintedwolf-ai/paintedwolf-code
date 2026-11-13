@@ -48,12 +48,15 @@ func historyNeedsRecall(history []api.Message, historyEpoch string) bool {
 func (m *Service) ResolveToolRequest(ctx context.Context, tctx tools.ToolContext, need string, cards []turnload.ToolCard) turnload.RequestOutcome {
 	catalog, err := turnload.LoadCatalog()
 	if err != nil {
-		return turnload.RequestOutcome{Need: need, Exact: turnload.ExactNames(need, cards), Abstained: true, Reason: "decision catalog unavailable", Failure: turnload.RankingUnavailable}
+		m.Ledger.ExposeCatalog(tctx.Identity.SessionID, turnload.RankingUnavailable)
+		return turnload.RequestOutcome{Need: need, Exact: turnload.ExactNames(need, cards), Abstained: true, Reason: "decision catalog unavailable", Failure: turnload.RankingUnavailable, FullCatalog: m.Ledger.FullCatalog(tctx.Identity.SessionID)}
 	}
 	sess := m.toolSession(ctx, tctx)
 	finishDeciding := m.beginDeciding(ctx, sess, tctx.Identity.SessionID, api.TurnLoadTriggerRequest, tctx.Identity.ToolCallID)
 	outcome := turnload.ResolveRequest(ctx, m.Decider(), catalog.Request, need, cards)
 	finishDeciding()
+	m.Ledger.ExposeCatalog(tctx.Identity.SessionID, outcome.Failure)
+	outcome.FullCatalog = m.Ledger.FullCatalog(tctx.Identity.SessionID)
 	return outcome
 }
 
@@ -96,6 +99,7 @@ func (m *Service) RecordToolRequest(ctx context.Context, tctx tools.ToolContext,
 func (m *Service) LookupSkills(ctx context.Context, tctx tools.ToolContext, need string, roster []skills.Skill) turnload.LookupOutcome {
 	catalog, err := turnload.LoadCatalog()
 	if err != nil {
+		m.Ledger.ExposeCatalog(tctx.Identity.SessionID, turnload.RankingUnavailable)
 		return turnload.LookupSkills(ctx, nil, turnload.LookupSpec{}, need, roster)
 	}
 	sess := m.toolSession(ctx, tctx)
@@ -103,6 +107,7 @@ func (m *Service) LookupSkills(ctx context.Context, tctx tools.ToolContext, need
 	finishDeciding := m.beginDeciding(ctx, sess, tctx.Identity.SessionID, api.TurnLoadTriggerLookup, tctx.Identity.ToolCallID)
 	outcome := turnload.LookupSkills(ctx, m.Decider(), catalog.Lookup, need, roster)
 	finishDeciding()
+	m.Ledger.ExposeCatalog(tctx.Identity.SessionID, outcome.Failure)
 	if sess == nil {
 		return outcome
 	}

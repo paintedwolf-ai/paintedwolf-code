@@ -78,7 +78,7 @@ func assertRetainedStorageFallback(t *testing.T, plan Plan) {
 }
 
 func retainedStorageContractPlan() Plan {
-	target := Baseline{Revision: 5, Shape: "71741e5f8d9a6ead298d061e3726d0b045b32ca62570409144eb52a2740151f5"}
+	target := Baseline{Revision: 5, Shape: "4572ca290ba86b424ecbb400f5ad28c5a44d2cb793cbfaf8d75c11585879b303"}
 	step := Revision5(target)
 	return Plan{Source: step.From, Target: target, steps: []Step{step}}
 }
@@ -149,5 +149,20 @@ func TestRetainedSorterBudgetRejectsMergeAndFinalSumOverflow(t *testing.T) {
 				t.Fatal("accepted an overflowing scratch reservation")
 			}
 		})
+	}
+}
+
+func TestRetainedStorageIncludesReceiptIndexRebuilds(t *testing.T) {
+	if !retainedRouteTree("turn_load_receipts") {
+		t.Fatal("receipt tree omitted from retained inventory")
+	}
+	empty, err := retainedRouteSortBytes(map[string]retainedTree{}, 4096)
+	testutil.FailErr(t, "measure empty route", err)
+	populated, err := retainedRouteSortBytes(map[string]retainedTree{
+		"turn_load_receipts": {cells: 1000000, bytes: 128 << 20, record: 1024},
+	}, 4096)
+	testutil.FailErr(t, "measure receipt index rebuilds", err)
+	if populated <= empty {
+		t.Fatalf("receipt rows did not increase sort reservation: %d <= %d", populated, empty)
 	}
 }

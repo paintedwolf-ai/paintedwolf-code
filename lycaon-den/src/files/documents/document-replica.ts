@@ -904,6 +904,18 @@ export class DocumentReplica {
     return transition;
   }
 
+  /**
+   * Leaves at once as the page unloads, since the host otherwise waits for its
+   * stream to close or its presence to expire.
+   */
+  departOnUnload(): void {
+    const client = this.client();
+    if (!client || this.stopped) return;
+    void client.leaveEditorDocument(this.accepted.project_id, this.accepted.id, {
+      client_id: this.clientId, incarnation: this.incarnation,
+    }).catch(() => undefined);
+  }
+
   private async closePreserved(current = () => true): Promise<boolean> {
     await this.commandDelivery?.catch(() => undefined);
     for (;;) {

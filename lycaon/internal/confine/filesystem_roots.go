@@ -27,3 +27,21 @@ func FilesystemRootForPath(projectID string, roots, granted []string, sessionScr
 	}
 	return best, nil
 }
+
+// PathWithinRoots matches existing and not-yet-created paths.
+func PathWithinRoots(path string, roots []string) bool {
+	p := fspath.CanonicalPath(path)
+	if p == "" {
+		return false
+	}
+	for _, root := range roots {
+		r := fspath.CanonicalPath(root)
+		if r == "" {
+			continue
+		}
+		if PathAtOrUnder(p, r) {
+			return true
+		}
+	}
+	return false
+}

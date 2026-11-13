@@ -63,6 +63,7 @@ func TestProgramEntryRunsGitReadFormsThroughTheUmbrella(t *testing.T) {
 
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
+	owners.Launch = gitcmd.UnconfinedLaunch
 	natives := map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 		prepared, err := owners.PrepareGit(frame, nil, nestedCommand(dispatch), request)
 		if err != nil {
@@ -112,6 +113,7 @@ func TestProgramEntryInitializesRepositoryAndCommits(t *testing.T) {
 	testutil.FailErr(t, "seed", os.WriteFile(filepath.Join(f.dir, "a"), []byte("a\n"), 0o644))
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
+	owners.Launch = gitcmd.UnconfinedLaunch
 	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 			prepared, err := owners.PrepareGit(frame, nil, nestedCommand(dispatch), request)
@@ -146,6 +148,7 @@ func TestProgramEntryRunsGlobalConfigOverridesNatively(t *testing.T) {
 	testutil.FailErr(t, "fresh", os.Mkdir(filepath.Join(f.dir, "fresh"), 0o755))
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
+	owners.Launch = gitcmd.UnconfinedLaunch
 	f.runtime.Owners = func(tools.ToolContext, *projectpaths.ProgramPaths, *toolcontract.ProgramMemory, tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		return command.ProgramOwners{Natives: map[string]command.NativeOperation{"git": {Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 			prepared, err := owners.PrepareGit(frame, nil, nestedCommand(dispatch), request)
@@ -316,6 +319,7 @@ func (f *programFixture) bindMutationOwners(t *testing.T) {
 	testutil.FailErr(t, "mutation owners", err)
 	owners, err := gitcmd.NewOwners(git.NewManager())
 	testutil.FailErr(t, "git owners", err)
+	owners.Launch = gitcmd.UnconfinedLaunch
 	f.runtime.Owners = func(_ tools.ToolContext, _ *projectpaths.ProgramPaths, memory *toolcontract.ProgramMemory, _ tooloutput.SpillAdmission) (command.ProgramOwners, error) {
 		program := *mutations
 		program.Revisions.Memory = memory
@@ -436,5 +440,17 @@ func TestProgramEntryBisectRunDispatchesItsCheck(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(f.dir, ".git", "BISECT_START")); err != nil {
 		t.Fatal("bisect session ended before git bisect reset")
+	}
+
+	// The check is admitted as its own child: one that writes outside the
+	// project is refused like the same command run directly.
+	outside := filepath.Join(t.TempDir(), "copied")
+	out, err = f.call(t, t.Context(), "git bisect reset -q; git bisect start HEAD HEAD~11 && git bisect run cp state "+outside)
+	testutil.FailErr(t, "bisect program with an outside check", err)
+	if _, err := os.Stat(outside); !os.IsNotExist(err) {
+		t.Fatalf("bisect run's check wrote outside the project: %v (%s)", err, out)
+	}
+	if executions := f.executions(t); strings.HasPrefix(executions["copy"], "completed;") {
+		t.Fatalf("outside copy completed: %v", executions)
 	}
 }

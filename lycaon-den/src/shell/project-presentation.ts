@@ -52,6 +52,12 @@ export function isHomePresentation(presentation: ProjectPresentation): boolean {
   return presentation.projectId === null && !presentation.opening;
 }
 
+/** The stage scope has landed on this project with a chat or none to open. */
+export function projectScopeSettled(projectId: string, scope: StageScope): boolean {
+  return scope.project_id === projectId &&
+    (scope.phase === "ready" || scope.phase === "project-empty");
+}
+
 export function deriveProjectPresentation(
   facts: ProjectPresentationFacts,
 ): ProjectPresentation {
@@ -62,9 +68,7 @@ export function deriveProjectPresentation(
       : HOME_PRESENTATION;
   }
 
-  const scopeSettled =
-    facts.scope.project_id === projectId &&
-    (facts.scope.phase === "ready" || facts.scope.phase === "project-empty");
+  const scopeSettled = projectScopeSettled(projectId, facts.scope);
   const mounted =
     facts.contributionsReady && facts.recentsLoaded && scopeSettled;
 

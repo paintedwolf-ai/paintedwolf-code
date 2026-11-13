@@ -38,9 +38,11 @@ type Transfer struct {
 // invocation is one curl run: its options, streams, captured destinations
 // and the outcome reported as curl's exit status.
 type invocation struct {
-	ctx        context.Context
-	owners     *Owners
-	tc         tools.ToolContext
+	ctx    context.Context
+	owners *Owners
+	tc     tools.ToolContext
+	// record is the admitted request record before resolution.
+	record     map[string]any
 	program    mutation.Program
 	request    commandprogram.OperationRequest
 	opts       options
@@ -57,7 +59,7 @@ type invocation struct {
 }
 
 func newInvocation(ctx context.Context, p Prepared, tc tools.ToolContext, streams commandprogram.Streams) *invocation {
-	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, program: p.program, request: p.request, opts: p.options, stdin: streams.Input, stdout: streams.Output, stderr: streams.Error}
+	inv := &invocation{ctx: ctx, owners: p.owners, tc: tc, program: p.program, request: p.request, opts: p.options, record: p.Review.Record, stdin: streams.Input, stdout: streams.Output, stderr: streams.Error}
 	if inv.stdin == nil {
 		inv.stdin = strings.NewReader("")
 	}

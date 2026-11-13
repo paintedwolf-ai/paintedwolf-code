@@ -41,7 +41,6 @@ func ExtensionsScopeServer(t *testing.T) (*hostapi.Server, project.Registry) {
 	t.Helper()
 	cfg := t.TempDir()
 	t.Setenv("LYCAON_CONFIG_DIR", cfg)
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 
 	svc, err := settings.NewService()
 	testutil.FailErr(t, "settings.NewService", err)

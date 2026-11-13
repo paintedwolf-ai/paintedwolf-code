@@ -19,7 +19,9 @@ import (
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/egressproxy"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/testutil/rootfacts"
 	wire "github.com/lycaon/lycaon/pkg/api"
 	"github.com/lycaon/lycaon/test/wiring"
 )
@@ -263,19 +265,23 @@ func TestConfinementIntegrityForeignTemporaryTreeWriteDenied(t *testing.T) {
 
 func TestConfinementIntegrityProjectRootStateAncestorRefused(t *testing.T) {
 	srv := wiring.BuildForTest(t).Server
-	body := `{"roots":[{"path":"/"}]}`
+	ancestor := rootfacts.Install(t).ContainsState
+	body := `{"roots":[{"path":` + jsonQuote(ancestor) + `}]}`
 	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/v1/projects", strings.NewReader(body))
 	req.Header.Set("Authorization", api.TestAuthHeader())
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("state ancestor root was admitted: status=%d body=%s", w.Code, w.Body.String())
+	if w.Code != http.StatusCreated {
+		t.Fatalf("state ancestor project registration failed: status=%d body=%s", w.Code, w.Body.String())
 	}
-	var refusal map[string]any
-	testutil.FailErr(t, "decode root refusal", json.Unmarshal(w.Body.Bytes(), &refusal))
-	if refusal["code"] != "invalid_path" {
-		t.Fatalf("root refusal lost typed code: %v", refusal)
+	var created wire.Project
+	testutil.FailErr(t, "decode project", json.Unmarshal(w.Body.Bytes(), &created))
+	if len(created.Roots) != 1 || created.Roots[0].Admitted || created.Roots[0].AdmissionCode == nil || *created.Roots[0].AdmissionCode != confine.WriteRootCodeContainsState {
+		t.Fatalf("state ancestor root = %+v, want editor-only with %q", created.Roots, confine.WriteRootCodeContainsState)
+	}
+	if err := confine.ValidateAttachedWriteRoots([]string{ancestor}); err == nil || err.Code != confine.WriteRootCodeContainsState {
+		t.Fatalf("execution boundary admitted state ancestor root: %v", err)
 	}
 
 	okDir := t.TempDir()
@@ -314,13 +320,11 @@ func TestConfinementIntegrityCompositeChain(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 		srv.ServeHTTP(w, req)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("composite (b): status=%d want 400", w.Code)
+		if w.Code != http.StatusCreated {
+			t.Fatalf("composite (b): project registration status=%d want 201", w.Code)
 		}
-		var errResp wire.ErrorResponse
-		testutil.FailErr(t, "decode", json.Unmarshal(w.Body.Bytes(), &errResp))
-		if errResp.Code != confine.WriteRootCodeSecretStore {
-			t.Fatalf("composite (b): code=%q want %q", errResp.Code, confine.WriteRootCodeSecretStore)
+		if err := confine.ValidateAttachedWriteRoots([]string{cfg}); err == nil || err.Code != confine.WriteRootCodeSecretStore {
+			t.Fatalf("composite (b): execution boundary err=%v want code %q", err, confine.WriteRootCodeSecretStore)
 		}
 	})
 }
@@ -335,4 +339,29 @@ func newTestBrokerFor(decide egressproxy.EndpointDecider, resolve egressproxy.Pe
 	b := egressproxy.New(decide)
 	b.SetPeerResolver(resolve)
 	return b
+}
+
+// A confined program gets the agent root reading, so it writes in
+// the admitted root and the boundary refuses a write into an attached
+// editor-only root of each class.
+func TestConfinedLaunchStaysOutOfEditorOnlyRoots(t *testing.T) {
+	self := requireLiveBoundary(t)
+	facts := rootfacts.Install(t)
+	params := project.CreateParams{Roots: []project.AttachRootParams{{Path: facts.Work}}}
+	for _, root := range facts.EditorOnly() {
+		params.Roots = append(params.Roots, project.AttachRootParams{Path: root.Path})
+	}
+	p, err := project.NewMemoryRegistry().Create(t.Context(), params)
+	testutil.FailErr(t, "create project", err)
+	c := confine.Confinement{Roots: project.RootPaths(p)}
+	assertInProjectWriteOK(t, self, c, facts.Work)
+	for _, root := range facts.EditorOnly() {
+		target := filepath.Join(root.Path, "agent-write.txt")
+		if code := confinedEscapeExit(t, self, c, "/usr/bin/touch", target); code == 0 {
+			t.Errorf("%s: a confined program wrote into an editor-only root", root.Name)
+		}
+		if _, err := os.Stat(target); !os.IsNotExist(err) {
+			t.Errorf("%s: %s exists after the refused write (err %v)", root.Name, target, err)
+		}
+	}
 }

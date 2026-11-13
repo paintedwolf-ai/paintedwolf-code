@@ -9,14 +9,21 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"io"
+	"os"
+	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -29,7 +36,6 @@ type Backend interface {
 	git.GitManager
 	InitCommand(ctx context.Context, dir, target string, config, options []string, stdout io.Writer) ([]byte, int, error)
 	NetworkCommand(ctx context.Context, dir string, args []string, stdout io.Writer) ([]byte, int, error)
-	RemoteURL(ctx context.Context, dir string, args []string) string
 	AddWorktree(ctx context.Context, toplevel, path, branch, baseRef string) error
 	RemoveWorktree(ctx context.Context, toplevel, path string) error
 	PruneWorktrees(ctx context.Context, toplevel string) error
@@ -49,6 +55,13 @@ var readForms = map[string]operandRule{
 type Owners struct {
 	Git      Backend
 	Boundary *sandbox.Boundary
+	// Launch admits the confined launch every Git process of one command runs
+	// under. Without it no Git command runs.
+	Launch AgentLaunch
+	// SecretAsk and SecretMatcher review each saved credential before it
+	// leaves for its recipient. Without them no saved credential is used.
+	SecretAsk     secretmatch.AskFunc
+	SecretMatcher *secretmatch.Matcher
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -58,6 +71,62 @@ type Owners struct {
 
 	mu     sync.Mutex
 	staged map[string]map[string]bool
+}
+
+// networkForms contact remotes; their Git gets a credential service scoped to
+// the recipients the command is admitted to contact.
+var networkForms = map[string]bool{"git fetch": true, "git push": true, "git pull": true, "git clone": true, "git ls-remote": true}
+
+// targetForms create or remove a directory that may lie outside the attached
+// roots.
+var targetForms = map[string]bool{"git init": true, "git worktree": true}
+
+// bindTargetLaunch binds the command's confined launch once written, the
+// bound directories it creates or removes, may be written. done settles the
+// launch with whether Git failed.
+func bindTargetLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, written ...string) (context.Context, func(failed bool), error) {
+	launchTC := tc
+	launchTC.Files.GrantedWriteRoots = append(slices.Clone(tc.Files.GrantedWriteRoots), written...)
+	plan, release, err := p.owners.Launch(ctx, launchTC, "git", p.commandLine(), nil)
+	if err != nil {
+		return ctx, nil, err
+	}
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan}), func(failed bool) {
+		release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: failed})
+	}, nil
+}
+
+// writeRoot is the directory a launch must write to create or replace path:
+// path itself once it exists, otherwise the directory that will hold it.
+func writeRoot(path string) string {
+	if _, err := os.Lstat(path); err == nil {
+		return path
+	}
+	return filepath.Dir(path)
+}
+
+// AgentLaunch admits one agent Git command's confined launch; release closes
+// its action lease.
+type AgentLaunch func(ctx context.Context, tc tools.ToolContext, subject, commandLine string, services []confine.HostService) (plan exec.LaunchPlan, release func(context.Context, tools.AgentLaunchOutcome), err error)
+
+func (p Prepared) commandLine() string {
+	return strings.Join(append([]string{"git"}, p.command.args...), " ")
+}
+
+// grantedSSHAgent is this call's socket capability for the user's SSH agent,
+// which the call requests like any socket; its launch already carries it.
+func grantedSSHAgent(ctx context.Context, tc tools.ToolContext) (confine.SocketGrant, bool) {
+	agent := gitexec.HostSSHAgentSocket(ctx)
+	if agent == "" {
+		return confine.SocketGrant{}, false
+	}
+	resolved := fspath.CanonicalPath(agent)
+	for _, grant := range tc.Socket.SocketGrants {
+		if grant.ResolvedPath == resolved {
+			return grant, true
+		}
+	}
+	return confine.SocketGrant{}, false
 }
 
 // NewOwners binds the frozen catalog's Git command specifications. A command
@@ -196,13 +265,30 @@ func (o *Owners) Prepare(paths *projectpaths.ProgramPaths, filesystem *mutation.
 }
 
 // InvokeOwner runs the bound command once and settles Git's status.
-func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (result toolcontract.ProducerResult, err error) {
 	if p.command == nil {
 		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, errors.New("git command is not prepared")
 	}
 	if streams.Input != nil {
 		defer func() { _ = streams.Input.Close() }()
 	}
+	if p.owners.Launch == nil {
+		return toolcontract.ProducerResult{Status: 2, Terminal: toolcontract.ProducerFailed, EffectCertainty: toolcontract.NoEffect}, gitexec.ErrLaunchAuthorityRequired
+	}
+	// Network forms bind their launch once their remotes are admitted, and
+	// target forms once the path they create is bound, so the confinement
+	// carries exactly those recipients and paths.
+	if !networkForms[p.command.spec.Name] && !targetForms[p.command.spec.Name] {
+		plan, release, launchErr := p.owners.Launch(ctx, tc, "git", p.commandLine(), nil)
+		if launchErr != nil {
+			return settle(0, launchErr, p.command.spec.Name)
+		}
+		defer func() {
+			release(context.WithoutCancel(ctx), tools.AgentLaunchOutcome{Failed: err != nil || result.Status != 0})
+		}()
+		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
+	}
+	ctx = reportRepositoryRead(ctx, p.commandDir())
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)
 	}
@@ -210,11 +296,11 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 	if p.command.spec.Name == "git grep" {
 		run = p.grep
 	}
-	status, err := run(ctx, tc, streams)
-	if err == nil {
-		err = ctx.Err()
+	status, runErr := run(ctx, tc, streams)
+	if runErr == nil {
+		runErr = ctx.Err()
 	}
-	return settle(status, err, p.command.spec.Name)
+	return settle(status, runErr, p.command.spec.Name)
 }
 
 // settle projects Git's exit onto the producer contract. Read commands have

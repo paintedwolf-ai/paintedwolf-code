@@ -23,7 +23,7 @@ var capabilityLabels = []struct{ role, label string }{
 	{"process", "processes"},
 	{"interface_test", "browser pages and screenshots"},
 	{"inspection", "viewing images, video, and rendered views"},
-	{"research", "web search and page fetch"},
+	{"research", "web research"},
 	{"endpoint", "HTTP requests"},
 	{"security_scan", "security scans"},
 	{"automated_test", "automated verification"},
@@ -65,6 +65,8 @@ func RequestableCapabilities(rows []RequestableToolView) []string {
 
 // SurfaceTurn holds session-loaded tools and tool schemas for a turn.
 type SurfaceTurn struct {
+	// Plan bounds catalog availability when a runtime snapshot is present.
+	Plan    toolsurface.Plan
 	Loaded  map[string]bool
 	Schemas *toolschema.Config
 }

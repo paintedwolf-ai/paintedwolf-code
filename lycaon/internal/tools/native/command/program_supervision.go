@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
@@ -77,7 +78,9 @@ func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontrac
 	if jobs == nil {
 		return "", ErrProgramStopped
 	}
-	return jobs.start(ctx, "background job "+invocation.Identity.ExecutionID, run)
+	return jobs.start(ctx, "background job "+invocation.Identity.ExecutionID, func(jobCtx context.Context, handle string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		return run(hitl.WithStopContext(jobCtx, jobCtx), handle, streams)
+	})
 }
 
 type supervisedProgram struct {
@@ -130,7 +133,9 @@ func (s *ProgramSupervisor) RunProgram(ctx context.Context, root toolcontract.Op
 	s.programs[root.Identity.ProgramID] = program
 	s.mu.Unlock()
 	defer s.foregroundDone(root.Identity.ProgramID)
-	result, err := run(context.WithValue(ctx, supervisedKey{}, root.Identity.ProgramID))
+	ctx = context.WithValue(ctx, supervisedKey{}, root.Identity.ProgramID)
+	// Approval waits follow supervision, including after the initiating turn ends.
+	result, err := run(hitl.WithStopContext(ctx, ctx))
 	switch cause := context.Cause(ctx); {
 	case errors.Is(cause, ErrProgramStopped), errors.Is(cause, errSupervisorLost), errors.Is(cause, ErrProgramInterrupted):
 		stopped := toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted, StopCode: toolrejection.ToolOwnerInterruptedCode, EffectCertainty: result.EffectCertainty}

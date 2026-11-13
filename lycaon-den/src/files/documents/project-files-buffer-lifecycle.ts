@@ -52,6 +52,7 @@ import {
   setFilesStoreRaw,
 } from "./files-buffer-state.ts";
 import { discardFilesBufferDraft } from "./project-files-buffer-io.ts";
+import { clearPrettyDisplayTab } from "../editor/pretty-display-state.ts";
 
 function clearOtherPreviews(state: ProjectFilesState, exceptKey: FileBufferKey | null): void {
   for (const key of state.order) {
@@ -356,6 +357,7 @@ export function closeFilesBuffer(
   const index = state.order.indexOf(key);
   const snapshot: FileBuffer = { ...unwrap(buffer), closeError: null };
   setFilesStore(projectId, produce((current) => detachBuffer(current, key)));
+  clearPrettyDisplayTab(projectId, key);
 
   const closing = closingBuffers.get(projectId) ?? new Set<ClosingBuffer>();
   closingBuffers.set(projectId, closing);

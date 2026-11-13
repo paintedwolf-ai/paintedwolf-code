@@ -230,7 +230,7 @@ func mapSourceComparisonSide(side sourceledger.ComparisonSide) wire.SourceCompar
 // commitLens binds attached roots to known repository tops.
 func (s *Comparisons) CommitLens(ctx context.Context, p *project.Project) sourceledger.CommitLens {
 	mgr := s.Git.Manager()
-	roots := project.RootRefsFrom(p)
+	roots := p.SourceRoots()
 	repos, err := s.Git.LoadOrderedRepos(ctx, p, roots, "", "")
 	if err != nil {
 		return sourceledger.CommitLens{}

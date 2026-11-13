@@ -127,6 +127,14 @@ export const AGENT_FILE_STATE_TEXT: Record<AgentFileState, string> = {
   reserved: "reserved",
 };
 
+/** How long agent activity stays shown, as past, after it ends. */
+export const AGENT_LINGER_MS = 8_000;
+
+/** Only editing and reading linger; other states ask for action or last as long as their work. */
+export function agentStateLingers(state: AgentFileState | null): boolean {
+  return state === "editing" || state === "reading";
+}
+
 export type AgentFilePresence = {
   state: AgentFileState | null;
   /** The chat whose state the chip shows. */
@@ -135,6 +143,8 @@ export type AgentFilePresence = {
   highlight: AgentChat | null;
   /** Every fact about the file, strongest first, for tooltips and accessible names. */
   labels: readonly string[];
+  /** Some fact about the file stays shown after it ends. */
+  lingers: boolean;
 };
 
 const OPERATION_VERB: Record<AgentIntentOperation, string> = {
@@ -172,7 +182,7 @@ const DRAFT_STATE: Record<AgentWorkerDraft["state"], AgentFileState> = {
   landing: "landing",
 };
 
-type FileFact = { state: AgentFileState | null; label: string };
+type FileFact = { state: AgentFileState | null; label: string; lingers: boolean };
 
 /** Projects every file an agent is working in or has read this turn. */
 export function projectAgentFiles(
@@ -194,17 +204,15 @@ export function projectAgentFiles(
     const name = (fact: string) => `${chat.title}: ${fact}`;
     const intentKeys = new Set(presence.intents.map((intent) => agentFileKey(intent.root_id, intent.path)));
     for (const intent of presence.intents) {
-      add(intent.root_id, intent.path, chat, {
-        state: intent.state === "awaiting_approval" ? "waiting" : "editing",
-        label: name(intentFact(intent)),
-      });
+      const state = intent.state === "awaiting_approval" ? "waiting" : "editing";
+      add(intent.root_id, intent.path, chat, { state, label: name(intentFact(intent)), lingers: agentStateLingers(state) });
     }
     for (const activity of presence.activities) {
       if (activity.kind === "editing" && intentKeys.has(agentFileKey(activity.root_id, activity.path))) continue;
-      add(activity.root_id, activity.path, chat, { state: activity.kind, label: name(activity.kind) });
+      add(activity.root_id, activity.path, chat, { state: activity.kind, label: name(activity.kind), lingers: true });
     }
     for (const draft of presence.worker_drafts) {
-      add(draft.root_id, draft.path, chat, { state: DRAFT_STATE[draft.state], label: name(draftFact(draft)) });
+      add(draft.root_id, draft.path, chat, { state: DRAFT_STATE[draft.state], label: name(draftFact(draft)), lingers: false });
     }
     const readFiles = new Map<string, { rootId: string; path: string; stale: boolean }>();
     for (const read of presence.reads) {
@@ -216,6 +224,7 @@ export function projectAgentFiles(
       add(read.rootId, read.path, chat, {
         state: null,
         label: name(read.stale ? "read this turn, changed since" : "read this turn"),
+        lingers: true,
       });
     }
   }
@@ -231,6 +240,7 @@ export function projectAgentFiles(
       stateChat: strongest?.chat ?? null,
       highlight: byOrder[0]!.chat,
       labels: list.map((fact) => fact.label),
+      lingers: list.some((fact) => fact.lingers),
     });
   }
   return files;

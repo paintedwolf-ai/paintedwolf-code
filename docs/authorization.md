@@ -193,6 +193,8 @@ Advanced Off disables eligible prompted asks and allows the effect when enforcem
 
 Approving access does not edit the person's project definition. Native tools do not extend past attached project folders without an explicit path grant. Filesystem resolution checks attached roots, explicit grants, and the shared default temporary, cache, and tool data boundary. Ordinary scratch access needs no additional outside-folders grant, except that Strict reviews a native write there. Sensitive-location and protected-path rules still apply.
 
+Applied read-only confinement roots, including the current session’s command output, satisfy read scope without granting writes. Other sessions and paths reached through escaping symlinks remain outside that authority.
+
 Reaching a folder outside the attached folders always has a route to a card, at every posture; only the control plane is refused without one. The `outside_roots_read` and `outside_roots_write` gates are live at Light, Balanced, and Strict, and the path resolver admits an outside path only through an approved grant, so a posture that left the crossing silent would strand the call. The grant shapes are:
 
 | Crossing | Card subject |
