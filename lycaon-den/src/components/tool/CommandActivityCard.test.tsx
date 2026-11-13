@@ -117,6 +117,16 @@ describe("activity detail layout", () => {
     await waitFor(() => expect(view.getByRole("status").textContent).not.toBe(""));
   });
 
+  it("announces a failed copy without claiming success", async () => {
+    vi.mocked(writeClipboardText).mockRejectedValueOnce(new Error("denied"));
+    const { view } = await opened(part());
+    const copy = view.getByTestId("activity-target-copy");
+    const label = copy.getAttribute("aria-label");
+    fireEvent.click(copy);
+    await waitFor(() => expect(view.getByRole("status").textContent).not.toBe(""));
+    expect(copy.getAttribute("aria-label")).toBe(label);
+  });
+
   it("keeps the recorded row when detail loading fails", async () => {
     const { view } = await opened(part(), vi.fn().mockRejectedValue(new Error("offline")));
     await waitFor(() => expect(view.container.querySelector(".den-activity-note")).toBeTruthy());
