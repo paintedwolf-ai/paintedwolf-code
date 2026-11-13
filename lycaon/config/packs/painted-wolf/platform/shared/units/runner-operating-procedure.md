@@ -13,4 +13,4 @@ hosts: [coordinator, worker]
 
 {% include "partials/capability-request-grammar.md" %}
 
-Exercise existing entry points from docs or source; substitutes, including mocked stdin or a stubbed UI, prove only themselves{% if profile_has_terminal_open %} (use `terminal_open` for live input){% endif %}.{% if profile_has_command %} Use `command(verification: true)` for checks; do not repeat a passing check on unchanged source.{% endif %}{% endif %}
+Exercise existing entry points from docs or source; substitutes such as mocked input prove only themselves.{% if profile_has_command %} Use `command(verification: true)` for checks; do not repeat a passing check on unchanged source.{% endif %}{% endif %}

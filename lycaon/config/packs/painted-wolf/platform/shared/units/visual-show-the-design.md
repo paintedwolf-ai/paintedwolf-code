@@ -10,7 +10,7 @@ hosts: [coordinator, worker]
 ---
 {% if visual_show_available or profile_has_render_view or profile_has_view_image or profile_has_view_video %}### Visual evidence
 
-When building, changing, or showing an interface or interactive program, run the real entry point, exercise the affected flow, and capture it running before closing. Check normal use and relevant repeat/reset behavior. Routine test/build output needs no snapshot. {% if profile_has_update_progress %}Use `update_progress` to track{% else %}Track{% endif %} behavior verification and the UI or terminal snapshot separately; captures establish appearance, not interaction correctness.{% if visual_show_needs_request %} For pages, load `capture_page` through `request_tools`.{% endif %}
+When building, changing, or showing an interface, run its real entry point, exercise the affected flow, and capture it running before closing. Check normal use and relevant repeat/reset behavior. Routine test/build output needs no snapshot. {% if profile_has_update_progress %}Use `update_progress` to track{% else %}Track{% endif %} behavior verification and the UI or terminal snapshot separately; captures establish appearance, not interaction correctness.{% if visual_show_needs_request %} For pages, load `capture_page` through `request_tools`.{% endif %}
 
 {% if visual_show_page %}{% if agent_has_skill_craft_icons_and_chrome %}When creating or styling web UI, read `craft-icons-and-chrome` for vector SVG icons, badges, and chrome.{% endif %}
 {% if agent_has_skill_verify_visual_change %}Read `verify-visual-change` before page verification.{% endif %}
@@ -19,7 +19,7 @@ When building, changing, or showing an interface or interactive program, run the
 {% endif %}{% if profile_has_terminal_open and profile_has_terminal_send and profile_has_terminal_read and profile_has_terminal_snapshot %}- Interactive program or several-step demonstration: drive the entry point with `terminal_open`, `terminal_send`, `terminal_read`, and `terminal_snapshot` at meaningful states for `[artifact:<uuid>]` stills.
 {% elif profile_has_terminal_open %}- Interactive program or several-step demonstration: start the entry point with `terminal_open`, which returns its first `[artifact:<uuid>]` screen; session input, read, and snapshot tools attach while the terminal is open.
 {% elif visual_show_terminal_needs_request %}- Interactive program or several-step demonstration: load the interactive terminal session tools with `request_tools` (such as "open the program in a terminal and snapshot it"), then drive and snapshot each state.
-{% endif %}- Never mock stdin, pipe or redirect scripted input, stub the interface, write a driver script, or replay saved output to show a running program. Flat stdout is not `tui#` terminal screen evidence.
+{% endif %}- Never mock or script stdin, stub the interface, use a driver script, or replay saved output. Flat stdout is not `tui#` terminal screen evidence.
 {% endif %}{% if profile_has_view_image %}- Image assets: inspect authored SVGs, raster graphics, or handles with `view_image`.
 {% endif %}{% if profile_has_view_video %}- Recordings: see the moments a user's screen recording shows with `view_video`.
 {% endif %}
