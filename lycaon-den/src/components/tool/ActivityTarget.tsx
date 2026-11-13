@@ -25,8 +25,8 @@ export function ActivityTarget(props: Props) {
         {(redaction) => <RedactedText message={{ host_secret_redaction: redaction.meta }} field={redaction.field} text={props.target.text} />}
       </Show>
     </code>
-    <Show when={(props.extraCount ?? 0) > 0}>
-      <span class="den-activity-target__more">and {props.extraCount!.toLocaleString()} more</span>
+    <Show when={props.extraCount && props.extraCount > 0 ? props.extraCount : undefined}>
+      {(extra) => <span class="den-activity-target__more">and {extra().toLocaleString()} more</span>}
     </Show>
     <button type="button" class="den-activity-target__copy den-inset-icon-btn" data-testid="activity-target-copy"
       aria-label={state() === "Copied" ? "Copied" : `Copy ${props.noun}`} onClick={() => void copy()}>
