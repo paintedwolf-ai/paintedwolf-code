@@ -1,0 +1,30 @@
+{
+  "id": "prof-requires-facts-met-loads",
+  "title": "A rule requiring facts the host provides loads and fires normally",
+  "covers": [
+    "OAR-PROF-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "NEEDS_CORE_FACTS",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "requires_facts": [
+      "tool",
+      "not_found"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "NEEDS_CORE_FACTS"
+  }
+}

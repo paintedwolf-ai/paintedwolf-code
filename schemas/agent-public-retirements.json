@@ -459,6 +459,19 @@
         "content_contract": "paintedwolf.tool_turn_has_text",
         "version": 1
       },
+      "paintedwolf.profile": [
+        "paintedwolf.tool_profile",
+        "paintedwolf.session_role"
+      ],
+      "paintedwolf.same_code_reject_run": [
+        "same_code_reject_run"
+      ],
+      "paintedwolf.progress_closed_beyond_baseline": [
+        "paintedwolf.progress_closure_armed"
+      ],
+      "paintedwolf.progress_reconciled_since_arm": [
+        "paintedwolf.progress_closure_armed"
+      ],
       "paintedwolf.max_tool_loops": {
         "content_contract": "paintedwolf.worker_round_without_ceiling",
         "version": 1

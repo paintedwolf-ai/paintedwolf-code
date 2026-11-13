@@ -1,0 +1,25 @@
+{
+  "id": "sel-unknown-anchor-rejected",
+  "title": "A document naming an anchor the host cannot resolve is rejected, naming the value",
+  "covers": [
+    "OAR-SEL-1"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "UNKNOWN_ANCHOR",
+    "kind": "policy",
+    "on": "not.an.anchor",
+    "selector": {},
+    "effect": "block",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "not.an.anchor"
+  }
+}

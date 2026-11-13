@@ -123,7 +123,7 @@ func TestEmptyRecoveryUsesFrozenRequestEligibility(t *testing.T) {
 			sess.ParentSessionID = "parent"
 		}
 		calls := 0
-		turn := &modelTurn{Closeout: &turnCloseout{Deps: CloseoutDeps{EvaluateContentAnchor: func(_ context.Context, s *api.Session, anchor string, obs oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool, string, bool) {
+		turn := &modelTurn{Closeout: &turnCloseout{Deps: CloseoutDeps{EvaluateContentAnchor: func(_ context.Context, s *api.Session, anchor string, obs oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool) {
 			calls++
 			if s != sess || anchor != oar.AnchorContentOutput || obs.EmptyResponse == nil || obs.EmptyResponse.ToolsCallable != req.ToolsCallable() || obs.EmptyResponse.StructuredOutput != (req.ResponseFormat != nil) {
 				t.Fatalf("mask%d: observation=%+v", mask, obs)
@@ -131,7 +131,7 @@ func TestEmptyRecoveryUsesFrozenRequestEligibility(t *testing.T) {
 			if len(obs.Segments) != 0 || len(obs.TextActionTools) != 0 {
 				t.Fatal("provider text entered recovery observation")
 			}
-			return guidance.NewRefusal("MODEL_RESPONSE_EMPTY", "host recovery"), true, "", false
+			return guidance.NewRefusal("MODEL_RESPONSE_EMPTY", "host recovery"), true
 		}}}}
 		render := turn.emptyResponseRecovery(sess, req)
 		body, err := render(t.Context())
@@ -256,6 +256,6 @@ func TestOARContentSegmentsPreserveDeveloperRoleAndAuthority(t *testing.T) {
 func TestOps8ContentBufferRetainsWhitespace(t *testing.T) {
 	segments := oarContentSegments([]api.Message{{Role: api.MessageRoleUser, Content: " \n\t "}})
 	if len(segments) != 1 || segments[0].Content != " \n\t " {
-		t.Fatalf("[OAR-OPS-8] whitespace content omitted from the occurrence: %#v", segments)
+		t.Fatalf("[OAR-OPS-6] whitespace content omitted from the occurrence: %#v", segments)
 	}
 }

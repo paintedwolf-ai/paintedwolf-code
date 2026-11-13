@@ -17,7 +17,9 @@ You are a worker for this procedure: apply decomposition, dependency, and verifi
 3. **Write the progress checklist**{% if profile_has_task %} before the first dispatch{% endif %}, one row per deliverable. Rows track outcomes, not worker counts.
 4. **Choose the topology from the shape of the work**, not from available capacity. The host runs at most **{{ max_in_flight }}** legs at once.{% if profile_has_task %}
 5. **Pick `agent_type` from the spawn roster in your prompt**, matching the leg's effect (read, product edit, test edit, review, run). An id not on the roster is rejected.
-6. **Give each `task()` one focus and a self-contained `brief`**: goal, material facts, decided constraints, concrete `done_when`. Workers cannot read this conversation or each other's files.{% endif %}
+6. **Give each `task()` one focus and a self-contained `brief`**: goal, material facts, decided constraints, concrete `done_when`. Workers cannot read this conversation or each other's files.{% else %}
+5. **Verify your own assignment against its `done_when` before reporting.**
+6. **Hand back evidence, not prose**: integrated overlays, explicit rejections, or a named blocker.{% endif %}
 7. **Keep dependent stages sequential.**{% if profile_has_record_finding %} `record_finding` shares short grounded findings; it is not a prerequisite channel.{% endif %}
 8. **Wait for every leg, inspect complete envelopes, integrate write overlays explicitly, and verify the combined result.**
 
@@ -25,7 +27,7 @@ Stop when every checklist row is closed by an integrated overlay, an explicit re
 
 ## Procedures
 
-{% if profile_has_task %}Read the full orchestration procedure before the first dispatch; it holds the sizing table, the `task()` fields, and the dispatch shape.{% endif %}
+{% if profile_has_task %}Read the full orchestration procedure before the first dispatch; it holds the sizing table, the `task()` fields, and the dispatch shape.
 
 - [Orchestrate a large task](references/orchestrate_a_large_task.md): briefing, width, and integration mechanics. Topology choices: [briefs and topologies](references/orchestrate_a_large_task-briefs-and-topologies.md).
 - [Research then implement](references/research_then_implement.md): versions, APIs, standards, or unfamiliar architecture could change the build.
@@ -33,7 +35,8 @@ Stop when every checklist row is closed by an integrated overlay, an explicit re
 - [Parallelize a configuration matrix](references/parallelize_a_configuration_matrix.md): one acceptance contract across platforms, versions, providers, or flags.
 - [Parallelize independent fixes](references/parallelize_independent_fixes.md): separable failures or findings partitioned by root cause without overlapping paths.
 - [Sweep a policy class](references/sweep_a_policy_class.md): one rule applied everywhere in scope, with a guard so it cannot return.
-
+{% else %}The orchestration procedure and its references are held by the coordinating parent; request specifics through your report if a leg needs one.
+{% endif %}
 ## Report
 
 The topology and why; each leg's outcome (integrated, repaired, rejected, open); the combined verification evidence; and any deliverable no leg claimed.

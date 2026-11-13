@@ -22,7 +22,6 @@ var implementInvestigateSurfaceTools = []string{
 
 func TestCoordinatorToolSurfaceSecretsRemainRequestableWithOutboundExecution(t *testing.T) {
 	t.Parallel()
-	surfaces := loadImplementSurfaces(t)
 	plan, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: toolcontract.SurfaceImplementInvestigate}, 1)
 	contractcheck.FailErr(t, "CompileToolPlan", err)
 	deferred := plan.DeferredNames()
@@ -40,12 +39,14 @@ func TestCoordinatorToolSurfaceSecretsRemainRequestableWithOutboundExecution(t *
 		}
 	}
 
+	promoteDeferred, err := surface.CompileToolPlan(surface.TurnProfile{SurfaceID: "implement_overlay_promote"}, 1)
+	contractcheck.FailErr(t, "CompileToolPlan", err)
 	for _, name := range []string{"secret_generate", "secret_list", "secret_revoke"} {
 		if !contractcheck.ContainsString(deferred, name) {
 			t.Fatalf("implement_investigate missing deferred outbound capability %q", name)
 		}
-		if !contractcheck.ContainsString(surfaces["implement_overlay_promote"], name) {
-			t.Fatalf("implement_overlay_promote missing sticky outbound capability %q", name)
+		if !contractcheck.ContainsString(promoteDeferred.DeferredNames(), name) {
+			t.Fatalf("implement_overlay_promote missing deferred outbound capability %q", name)
 		}
 	}
 }

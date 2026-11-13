@@ -1,26 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_SOCKET_PATH_DENIED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.user_guidance
-  profiles:
-  - tool
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code, paintedwolf.user_guidance]
 when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_DENIED"
 effect: block
-copy:
-  what: Local-service socket authority was declined for this action.
-  cause: The person answered the host approval request without granting the requested socket paths.
-  why: Retrying the same request would disregard that decision.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
-    before requesting approval for a corrected action.{% else %}Continue without those local services.
-    Wait for new user direction before requesting approval again.{% endif %}'
-  instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-category: user-decision
 x-paintedwolf-emit: guard:sandbox_socket
-x-paintedwolf-message: local-service socket authority declined
+message: local-service socket authority declined
+what: Local-service socket authority was declined for this action.
+cause: The person answered the host approval request without granting the requested socket paths.
+why: Retrying the same request would disregard that decision.
+fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction before requesting approval for a corrected action.{% else %}Continue without those local services. Wait for new user direction before requesting approval again.{% endif %}'
+instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-scenarios:
-- id: default
-  vars: {}
+  - id: default
+    vars: {}

@@ -98,6 +98,8 @@ func run(ctx context.Context, args []string) error {
 		return runDiagnostics(ctx, rest)
 	case "credentials":
 		return runCredentials(rest)
+	case "token":
+		return runToken(rest, os.Stdout)
 	case "placements":
 		return runPlacements(ctx, rest, os.Stdout)
 	case "git-credential-osxkeychain":
@@ -129,7 +131,7 @@ func run(ctx context.Context, args []string) error {
 		return runExtensions(ctx, rest)
 	case "rules":
 		installAuthorCatalog(ctx)
-		return runRules(rest)
+		return runRules(ctx, rest)
 	case "prompts":
 		installAuthorCatalog(ctx)
 		return runPrompts(ctx, rest)

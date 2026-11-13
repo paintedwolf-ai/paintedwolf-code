@@ -25,7 +25,7 @@ func TestSessionOutputHasIndependentStorageAndOneCleanupLifetime(t *testing.T) {
 	if !info.IsDir() || info.Mode().Perm() != 0700 {
 		t.Fatalf("output directory mode=%v", info.Mode())
 	}
-	testutil.FailErr(t, "publish output", scratch.PublishCommandOutput(dirs.Output, "program", "stdout", strings.NewReader("saved\n")))
+	testutil.FailErr(t, "publish output", scratch.PublishCommandOutput(dirs.Output, scratch.CommandOutput{ProgramID: "program", Stream: "stdout"}, strings.NewReader("saved\n")))
 	bytes, err := os.ReadFile(filepath.Join(dirs.Output, "program.stdout"))
 	testutil.FailErr(t, "read published copy", err)
 	if string(bytes) != "saved\n" {

@@ -1,27 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_REPORT_REQUIRED
 kind: invariant
-anchor: worker.report_check
-requires:
-  facts: [paintedwolf.reject_observation, paintedwolf.next_steps]
+on: worker.report_check
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.reject_observation]
 when: paintedwolf.reject_observation == "worker_report_required"
 effect: block
-copy:
-  what: 'This worker job has no accepted completion report.'
-  cause: 'A prose response does not submit a structured report.'
-  why: 'The round continues with your tools. Repeated responses without a tool call end it as failed, keeping your work.'
-  fix: 'Continue any unfinished work. {{ paintedwolf.next_steps }}'
-  instead: 'Reuse completed work and its evidence.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
-x-paintedwolf-message: Worker report required
+message: Worker report required
+what: 'This worker job has no accepted completion report.'
+cause: 'A prose response does not submit a structured report.'
+why: 'The round continues with your tools. Repeated responses without a tool call end it as failed, keeping your work.'
+fix: 'Continue any unfinished work. {{ paintedwolf.next_steps }}'
+instead: 'Reuse completed work and its evidence.'
 x-paintedwolf-scenarios:
   - id: tools_available
     vars:
-      profile: worker
+      session_role: worker
       tool: complete_leg
       can_complete_leg: true
   - id: tools_unavailable
     vars:
-      profile: worker
+      session_role: worker
       can_complete_leg: false

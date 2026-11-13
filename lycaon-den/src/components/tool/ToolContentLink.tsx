@@ -15,6 +15,8 @@ export function ToolContentLink(props: {
   toolCallId?: string;
   revealOffset?: number;
   testId?: string;
+  path?: string;
+  language?: string;
   short?: boolean;
 }) {
   const tool = useToolContent();
@@ -33,6 +35,8 @@ export function ToolContentLink(props: {
       title: `${props.label} · ${identity.title ?? "Tool"}`,
       content: props.content,
       revealOffset: props.revealOffset,
+      ...(props.path ? { path: props.path } : {}),
+      ...(props.language ? { language: props.language } : {}),
     };
   };
   const open = () => {

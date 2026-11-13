@@ -33,8 +33,8 @@ func TestMidTurnNotePoliciesWarnOnce(t *testing.T) {
 			if res.Decision == nil || res.Decision.Effect != oar.EffectWarn {
 				t.Fatalf("decision = %+v", res.Decision)
 			}
-			if len(res.Decision.Advisories) != 1 || res.Decision.Advisories[0].Code != code {
-				t.Fatalf("advisories = %+v", res.Decision.Advisories)
+			if res.Decision.Code != code {
+				t.Fatalf("decision code = %q, want %q", res.Decision.Code, code)
 			}
 		})
 	}

@@ -5,7 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-27]).
+// Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-11]).
 var occurrenceFactDecls = buildOccurrenceFactDecls()
 
 func buildOccurrenceFactDecls() []factDecl {

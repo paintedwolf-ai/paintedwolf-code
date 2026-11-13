@@ -172,6 +172,9 @@ func TestRefusedEngineCannotOpenTheVaultOnAnyPath(t *testing.T) {
 	if p.Describe() == "" {
 		t.Fatal("refused provider has no description")
 	}
+	if key := p.custodyKey(); key.mode != CustodyRefused || key.canShare() {
+		t.Fatalf("refused custody key = %+v, shareable", key)
+	}
 }
 
 func TestCredentialProtectionProbeRefusesIsolatedProvider(t *testing.T) {

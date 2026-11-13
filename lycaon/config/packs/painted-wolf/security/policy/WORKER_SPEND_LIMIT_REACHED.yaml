@@ -1,25 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_SPEND_LIMIT_REACHED
 kind: invariant
-anchor: worker.report_check
-requires:
-  facts:
-    - paintedwolf.resource_limit
+on: worker.report_check
+selector: {}
+requires_facts: [paintedwolf.resource_limit]
 when: paintedwolf.resource_limit
 effect: block
-copy:
-  what: 'The worker stopped at the armed spend limit before it reported.'
-  cause: 'The session reached the spend limit a person armed, so the round made no further model call.'
-  why: 'The limit ended the round, not the work. What the worker changed is kept with its job.'
-  fix: 'Preview what it changed and decide whether to land it. Starting or resuming workers waits until the person raises the limit.'
-  instead: 'Report what the worker kept and what remains; do not present the round as complete.'
 x-paintedwolf-audience:
   - coordinator
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
-x-paintedwolf-message: 'Worker stopped at the spend limit'
+message: 'Worker stopped at the spend limit'
+what: 'The worker stopped at the armed spend limit before it reported.'
+cause: 'The session reached the spend limit a person armed, so the round made no further model call.'
+why: 'The limit ended the round, not the work. What the worker changed is kept with its job.'
+fix: 'Preview what it changed and decide whether to land it. Starting or resuming workers waits until the person raises the limit.'
+instead: 'Report what the worker kept and what remains; do not present the round as complete.'
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
       tool: task

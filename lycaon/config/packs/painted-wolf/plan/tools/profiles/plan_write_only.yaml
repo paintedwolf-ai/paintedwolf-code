@@ -15,9 +15,9 @@ tools:
   render_view: sticky
   wait: sticky
   skills_read: sticky
-  secret_generate: sticky
-  secret_list: sticky
-  secret_revoke: sticky
+  secret_generate: true
+  secret_list: true
+  secret_revoke: true
 deny_tools:
   - delegate_*
   - state_*

@@ -1,25 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SPEC_POSTURE_STATE_FORBIDDEN
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.rejection_code]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SPEC_POSTURE_STATE_FORBIDDEN"
 effect: block
-copy:
-  cause: State tracking tools are forbidden in spec posture
-  why: Use command redirects or scoped patches on the blueprint file only; state tracking is build-only
-  fix: Use command redirects or scoped patches on the blueprint file only; state tracking is build-only
-  instead: Use command redirects or scoped patches on the blueprint file; state tracking tools are build-only
-  what: State tracking tools are forbidden in spec posture
+x-paintedwolf-audience:
+  - coordinator
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: rule:spec
-x-paintedwolf-message: State tracking tools are forbidden in spec posture
+message: State tracking tools are forbidden in spec posture
+what: State tracking tools are forbidden in spec posture
+cause: State tracking tools are forbidden in spec posture
+why: Use command redirects or scoped patches on the blueprint file only; state tracking is build-only
+fix: Use command redirects or scoped patches on the blueprint file only; state tracking is build-only
+instead: Use command redirects or scoped patches on the blueprint file; state tracking tools are build-only
 x-paintedwolf-scenarios:
-- id: spec_posture_state_smoke
-  tool: state_start
-  vars:
+  - id: spec_posture_state_smoke
     tool: state_start
-x-paintedwolf-audience:
-- coordinator
+    vars:
+      tool: state_start

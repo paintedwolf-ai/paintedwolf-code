@@ -53,6 +53,18 @@ func parseQueryOperators(query string) queryOps {
 	return ops
 }
 
+// queryNamedHosts returns the hosts a query's site operators name. The agent
+// wrote them, so crawling one is its own request.
+func queryNamedHosts(query string) []string {
+	var hosts []string
+	for _, base := range parseQueryOperators(query).siteBases {
+		if host := strings.ToLower(urlHost(base)); host != "" {
+			hosts = append(hosts, host)
+		}
+	}
+	return hosts
+}
+
 var quotedPhraseRe = regexp.MustCompile(`"([^"]{2,120})"`)
 
 // quotedPhrases extracts explicit multi-word phrases from a query. The scorer

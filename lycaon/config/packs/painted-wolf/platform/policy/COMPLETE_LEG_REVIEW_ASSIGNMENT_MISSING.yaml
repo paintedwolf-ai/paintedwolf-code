@@ -1,21 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING
 kind: policy
-anchor: tool.rejected
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
-  profiles: [tool]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING"
 effect: block
-copy:
-  what: This review has no recorded assignment subject.
-  cause: The host cannot establish which inputs this worker was assigned.
-  why: A completion payload cannot reconstruct missing dispatch context.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Preserve the evidence already gathered and report this dependency; do not invent a revision.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: A recorded review assignment is required.
+message: A recorded review assignment is required.
+what: This review has no recorded assignment subject.
+cause: The host cannot establish which inputs this worker was assigned.
+why: A completion payload cannot reconstruct missing dispatch context.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Preserve the evidence already gathered and report this dependency; do not invent a revision.
 x-paintedwolf-scenarios:
-- id: missing
-  vars: {}
+  - id: missing
+    vars: {}

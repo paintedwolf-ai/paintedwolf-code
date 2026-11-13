@@ -53,6 +53,7 @@ type VisualCapture struct {
 
 // SourceRunCapture is a settled source run.
 type SourceRunCapture struct {
+	ProgramID        string
 	CheckID          string
 	IsCheck          bool
 	Command          string
@@ -261,6 +262,8 @@ type InvocationHost struct {
 	HostResourceAsk []string
 	// HostResourcePathExtra appends helper directories to the child PATH.
 	HostResourcePathExtra []string
+	// HostResourceEnv points a declared resource's client at its reviewed endpoint.
+	HostResourceEnv []string
 	// ExecutableAlternates names the resolvable catalog equivalents of an executable.
 	ExecutableAlternates func(name string) []string
 	// RealizationWriteRoots extend this spawn's confinement overlay.

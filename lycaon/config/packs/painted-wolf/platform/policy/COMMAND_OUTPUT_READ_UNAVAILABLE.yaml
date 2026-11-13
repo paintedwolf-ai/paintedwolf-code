@@ -1,21 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_OUTPUT_READ_UNAVAILABLE
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.path]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_OUTPUT_READ_UNAVAILABLE"
 effect: block
-copy:
-  what: 'The host could not complete a verified output read for {{ paintedwolf.path }} in this chat.'
-  cause: The host could not complete this read from retained output.
-  why: A saved file is a convenience view; it cannot replace the retained output's byte identity.
-  fix: Keep the existing results and receipts. Retry this read when output storage is available. Do not rerun a program just to recover its output.
-  instead: Preserve earlier results and retry the output read
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: Verified command output is unavailable for this read
+message: Verified command output is unavailable for this read
+what: 'The host could not complete a verified output read for {{ paintedwolf.path }} in this chat.'
+cause: The host could not complete this read from retained output.
+why: A saved file is a convenience view; it cannot replace the retained output's byte identity.
+fix: Keep the existing results and receipts. Retry this read when output storage is available. Do not rerun a program just to recover its output.
+instead: Preserve earlier results and retry the output read
 x-paintedwolf-scenarios:
   - id: unavailable
     vars:

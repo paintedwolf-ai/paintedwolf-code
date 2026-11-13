@@ -66,6 +66,7 @@ type commandOutput struct {
 	NextCursor        string                      `json:"next_cursor"`
 	Chunks            []bgprocess.OutputChunk     `json:"chunks"`
 	Running           bool                        `json:"running"`
+	AwaitingApproval  bool                        `json:"awaiting_approval,omitempty"`
 	Truncated         bool                        `json:"truncated,omitempty"`
 	ExitCode          *int                        `json:"exit_code,omitempty"`
 	TerminationReason bgprocess.TerminationReason `json:"termination_reason,omitempty"`
@@ -78,6 +79,7 @@ func commandOutputOf(raw bgprocess.RawOutput, reason bgprocess.TerminationReason
 		NextCursor:        strconv.FormatInt(raw.Next, 10),
 		Chunks:            raw.Chunks,
 		Running:           raw.Running,
+		AwaitingApproval:  raw.AwaitingPerson,
 		Truncated:         raw.Truncated,
 		ExitCode:          raw.ExitCode,
 		TerminationReason: reason,
@@ -241,6 +243,7 @@ func runCommandBackground(
 		Stages:     stages,
 		IOParams:   ioParams,
 		PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
+		ServiceEnv: append([]string(nil), tctx.Host.HostResourceEnv...),
 	}
 	spawnFacts := confine.SpawnFacts{Report: CommandConfinementReport(
 		confine.BoundaryOf(confinement), commandNetworkPosture(tctx, toolName, commandLine),

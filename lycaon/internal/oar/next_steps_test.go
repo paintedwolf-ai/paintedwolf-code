@@ -138,8 +138,7 @@ func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *test
 	}{
 		{"rule when", &Rule{ID: "R", When: `paintedwolf.next_steps != ""`}},
 		{"rule flow", &Rule{ID: "R", Flow: []string{`paintedwolf.next_steps != ""`}}},
-		{"counter_scope", &Rule{ID: "R", CounterScope: NextStepsFact}},
-		{"step when", &Rule{ID: "R", Requires: Requires{Facts: []string{NextStepsFact}}, NextSteps: &NextSteps{
+		{"step when", &Rule{ID: "R", RequiresFacts: []string{NextStepsFact}, NextSteps: &NextSteps{
 			Steps: []NextStep{{When: `paintedwolf.next_steps != ""`, Tool: "recall", Say: "Use {{ call }}."}},
 		}}},
 	} {
@@ -173,10 +172,10 @@ func TestValidateNextStepsChecksArgsAgainstToolSchemas(t *testing.T) {
 		{"reissue path no tool accepts", &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
 			{Args: map[string]any{"bogus": "x"}, Say: "Use {{ call }}."},
 		}}}, "no declared tool accepts bogus"},
-		{"reissue selector must accept", &Rule{ID: "R", Selector: Selector{"tool": {"recall"}}, NextSteps: &NextSteps{Steps: []NextStep{
+		{"reissue selector must accept", &Rule{ID: "R", Selector: Selector{"tools": {"recall"}}, NextSteps: &NextSteps{Steps: []NextStep{
 			{Args: map[string]any{"overlay_id": "x"}, Say: "Use {{ call }}."},
 		}}}, "recall does not accept overlay_id"},
-		{"pick path checked", &Rule{ID: "R", Requires: Requires{Facts: []string{"paintedwolf.x"}}, NextSteps: &NextSteps{Steps: []NextStep{
+		{"pick path checked", &Rule{ID: "R", RequiresFacts: []string{"paintedwolf.x"}, NextSteps: &NextSteps{Steps: []NextStep{
 			{Tool: "recall", Pick: map[string]string{"bogus": "paintedwolf.x"}, Say: "Use {{ call }}."},
 		}}}, "recall does not accept bogus"},
 		{"or alternatives checked", &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
@@ -198,7 +197,7 @@ func TestValidateNextStepsAcceptsSchemaValidArgs(t *testing.T) {
 	loader, err := NewLoader("")
 	testutil.FailErr(t, "load OAR", err)
 	loader.SetToolSchemas(schemaTestConfig())
-	rule := &Rule{ID: "R", Requires: Requires{Facts: []string{"paintedwolf.command"}}, NextSteps: &NextSteps{Steps: []NextStep{
+	rule := &Rule{ID: "R", RequiresFacts: []string{"paintedwolf.command"}, NextSteps: &NextSteps{Steps: []NextStep{
 		{Tool: "recall", Args: map[string]any{"query": "{{ paintedwolf.command }}"}, Say: "Use {{ call }}."},
 		{Args: map[string]any{"overlay_id": "x"}, Say: "Use {{ call }}."},
 	}}}

@@ -19,9 +19,9 @@ func TestSharedObservationFactsRegistered(t *testing.T) {
 	}{
 		{"is_directory", "is_directory", func(gc *oar.GuardContext) { gc.Rejection.IsDirectory = true }},
 		{"not_found", "not_found", func(gc *oar.GuardContext) { gc.Rejection.NotFound = true }},
-		{"path_denied", "path_denied", func(gc *oar.GuardContext) { gc.Rejection.PathDenied = true }},
+		{"path_denied", "paintedwolf.path_denied", func(gc *oar.GuardContext) { gc.Rejection.PathDenied = true }},
 		{"reject_observation", "paintedwolf.reject_observation == 'path_escape'", func(gc *oar.GuardContext) { gc.Rejection.RejectObservation = "path_escape" }},
-		{"policy_denied", "policy_denied", func(gc *oar.GuardContext) { gc.Rejection.PolicyDenied = true }},
+		{"policy_denied", "paintedwolf.policy_denied", func(gc *oar.GuardContext) { gc.Rejection.PolicyDenied = true }},
 		{"command_not_argv", "paintedwolf.command_not_argv", func(gc *oar.GuardContext) { gc.Invocation.CommandNotArgv = true }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

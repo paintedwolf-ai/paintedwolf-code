@@ -31,7 +31,7 @@ func TestStaticRejectFormatterFormatParse(t *testing.T) {
 	}
 }
 
-// [OAR-SEL-1] A presentation boundary must not broaden selector membership.
+// A presentation boundary must not broaden selector membership.
 func TestRejectSelectorUsesExactMembership(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -59,7 +59,7 @@ func TestRejectSelectorUsesExactMembership(t *testing.T) {
 // beneath command, never another operation or an unbound command call.
 func TestRejectOperationSelectorFollowsBoundOperation(t *testing.T) {
 	entry := HintEntry{}
-	entry.Selector = map[string]any{"paintedwolf.operation": []any{"chmod"}}
+	entry.Selector = map[string]any{"ledger": map[string]any{"paintedwolf.operation": []any{"chmod"}}}
 	for _, tc := range []struct {
 		name string
 		data map[string]any

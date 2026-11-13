@@ -1,26 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_TERMINAL_PATH_REFUSED
 kind: policy
-anchor: tool.post_invoke
+on: tool.post_invoke
 selector:
-  tool: [command, verify, command_output]
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.process_running, paintedwolf.refused_terminal_read_paths, paintedwolf.refused_terminal_write_paths, paintedwolf.next_steps]
+  tools: [command, verify, command_output]
+requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.next_steps, paintedwolf.process_running, paintedwolf.refused_connect_ports, paintedwolf.refused_credential_store_paths, paintedwolf.refused_listen_ports, paintedwolf.refused_read_grants, paintedwolf.refused_signals, paintedwolf.refused_socket_paths, paintedwolf.refused_terminal_read_paths, paintedwolf.refused_terminal_write_paths, paintedwolf.refused_write_grants, paintedwolf.unsandboxed_refusals]
 when: >-
-  paintedwolf.confine_applied
-  && (size(paintedwolf.refused_terminal_read_paths) > 0 || size(paintedwolf.refused_terminal_write_paths) > 0)
-  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+  paintedwolf.confine_applied && (size(paintedwolf.refused_terminal_read_paths) > 0 || size(paintedwolf.refused_terminal_write_paths) > 0) && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running) && !((size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running) && tool in ["command", "verify"] && (size(paintedwolf.refused_read_grants) > 0 || size(paintedwolf.refused_write_grants) > 0 || size(paintedwolf.refused_credential_store_paths) > 0 || size(paintedwolf.unsandboxed_refusals) > 0 || size(paintedwolf.refused_listen_ports) > 0 || size(paintedwolf.refused_connect_ports) > 0 || size(paintedwolf.refused_signals) > 0 || size(paintedwolf.refused_socket_paths) > 0))
 effect: warn
-copy:
-  what: The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}.
-  cause: These paths belong to the host control plane; no approval opens them.
-  why: Capability requests cannot authorize access to the host's own authority.
-  fix: 'Use `@scratch` for working files. If host data is required, ask the user to copy it into an attached folder. {% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} A stop request alone does not establish exit. Do not reissue while the job is running.{% endif %}'
-  instead: Continue without these paths; do not request read_path, write_root, or host_execution to bypass this refusal
 x-paintedwolf-category: control-plane
 x-paintedwolf-emit: guard:sandbox
-x-paintedwolf-message: the sandbox refused a terminal control-plane path
+message: the sandbox refused a terminal control-plane path
+what: The sandbox refused terminal paths. Reads {{ paintedwolf.refused_terminal_read_paths }}; writes {{ paintedwolf.refused_terminal_write_paths }}.
+cause: These paths belong to the host control plane; no approval opens them.
+why: Capability requests cannot authorize access to the host's own authority.
+fix: 'Use `@scratch` for working files. If host data is required, ask the user to copy it into an attached folder. {% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} A stop request alone does not establish exit. Do not reissue while the job is running.{% endif %}'
+instead: Continue without these paths; do not request read_path, write_root, or host_execution to bypass this refusal
 x-paintedwolf-scenarios:
   - id: control_plane_read
     vars:

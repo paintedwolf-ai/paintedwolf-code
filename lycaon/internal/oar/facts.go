@@ -8,7 +8,7 @@ import (
 
 // catalogueFacts is the closed set of fact names a rule may reference, keyed by
 // the published name: bare for core and profile facts, paintedwolf.<fact> for host
-// facts ([OAR-FACT-18]). Built from the declaration table.
+// facts ([OAR-FACT-15]). Built from the declaration table.
 var (
 	catalogueFacts       map[string]struct{}
 	publishedFacts       map[string]struct{}
@@ -45,7 +45,7 @@ func init() {
 }
 
 // eachDeclaredFact visits catalogue facts and copy-only occurrence slots
-// ([OAR-FACT-11], [OAR-FACT-20]).
+// ([OAR-FACT-9], [OAR-FACT-2]).
 func eachDeclaredFact(fn func(factDecl)) {
 	for _, d := range factDecls {
 		fn(d)
@@ -100,7 +100,7 @@ func FactsReferenced(when string, flow []string) []string {
 	return out
 }
 
-// RuleFactsReferenced returns every runtime fact reference ([OAR-FACT-11]).
+// RuleFactsReferenced returns every runtime fact reference ([OAR-FACT-9]).
 func RuleFactsReferenced(r *Rule) []string {
 	if r == nil {
 		return nil
@@ -131,12 +131,8 @@ func RuleFactsReferenced(r *Rule) []string {
 	for _, name := range FactsReferenced(r.When, r.Flow) {
 		add(name)
 	}
-	for _, name := range r.Selector.Clauses() {
-		add(name)
-	}
-	add(r.CounterScope)
-	if r.Transform != nil && r.Transform.Target != "content" {
-		add(r.Transform.Target)
+	if len(r.Selector) > 0 {
+		add("tool")
 	}
 	for _, name := range copyRefs(r.Copy) {
 		add(name)

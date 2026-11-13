@@ -1,0 +1,29 @@
+{
+  "id": "sel-absent-when-fires",
+  "title": "A rule with neither when nor flow fires whenever it is selected",
+  "covers": [
+    "OAR-CONF-8"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "NO_CONDITION",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {
+      "tools": [
+        "read"
+      ]
+    },
+    "effect": "block"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "NO_CONDITION"
+  }
+}

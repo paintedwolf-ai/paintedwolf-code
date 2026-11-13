@@ -37,7 +37,7 @@ func (l *modelTurn) recoverRejectedResponse(
 	if partial != nil {
 		completion.Content, completion.Reasoning, completion.ReasoningDetails = partial.Content, partial.Reasoning, partial.ReasoningDetails
 	}
-	reject, blocked, _, _ := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{
+	reject, blocked := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{
 		Segments:           oarModelOutputSegments(completion.Content),
 		ToolCallUnparsed:   decision.Code == "TOOL_CALL_UNPARSED",
 		InvalidResponse:    decision.Code == "MODEL_RESPONSE_INVALID",

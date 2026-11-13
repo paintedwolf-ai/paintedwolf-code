@@ -21,6 +21,8 @@ type executionKeyInput struct {
 	// PathExtra changes which program an unqualified name resolves to, so two
 	// requests that differ only here are not the same execution.
 	PathExtra []string `json:"path_extra,omitempty"`
+	// ServiceEnv selects the endpoint a service's client reaches.
+	ServiceEnv []string `json:"service_env,omitempty"`
 }
 
 type executionKeyEnv struct {
@@ -63,6 +65,7 @@ func ExecutionKey(req Request) string {
 		ProfileID:  req.ProfileID,
 		Stages:     append([]lyexec.Stage(nil), req.Stages...),
 		PathExtra:  append([]string(nil), req.PathExtra...),
+		ServiceEnv: append([]string(nil), req.ServiceEnv...),
 	}
 	keys := make([]string, 0, len(req.InlineEnv))
 	for key := range req.InlineEnv {

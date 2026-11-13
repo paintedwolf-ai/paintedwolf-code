@@ -3,7 +3,10 @@ package oarcopy
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+
+	"github.com/lycaon/lycaon/internal/oarcore"
 
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
@@ -13,49 +16,35 @@ const HostFactNamespace = "paintedwolf"
 // CapabilitySnapshotKey carries typed host facts only during local formatting.
 const CapabilitySnapshotKey = "_host_capability_snapshot"
 
-// Standard profile names.
+// Standard profile names ([OAR-FACT-13]).
 const (
-	ProfileTool              = "tool"
-	ProfileSession           = "session"
-	ProfileFilesystem        = "filesystem"
-	ProfileContentProvenance = "content-provenance"
-	ProfileContent           = "content"
-	ProfileSecrets           = "secrets"
-	ProfileMCP               = "mcp"
+	ProfileFilesystem    = "filesystem"
+	ProfileContentSafety = "content-safety"
+	ProfileMCP           = "mcp"
 )
 
-var requiredCoreFacts = []string{
-	"anchor",
-	"fire_count",
-	"breaker_count",
+var (
+	requiredCoreFacts     = sortedKeys(oarcore.CoreFacts())
+	requiredCoreFunctions = sortedKeys(oarcore.CoreFunctions())
+	standardProfileFacts  = buildStandardProfileFacts()
+)
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
-var requiredCoreFunctions = []string{
-	"fire_count_of",
-	"breaker_count_of",
-}
-
-var standardProfileFacts = map[string][]string{
-	ProfileTool: {
-		"tool", "tool_args", "tool_args_fingerprint", "arg_validation_errors",
-		"arg_validation_reason", "arg_validation_field",
-		"permission_profile", "policy_denied",
-		"tool_arg_string", "tool_arg_int", "tool_arg_bool",
-	},
-	ProfileSession:    {"session_posture", "principal", "principal_roles"},
-	ProfileFilesystem: {"is_directory", "not_found", "path_denied", "path_outside_scope"},
-	ProfileSecrets:    {"secret_matches"},
-	ProfileContent:    {"content_length"},
-	ProfileContentProvenance: {
-		"content_roles", "content_origins", "content_authorities", "content_trust_tiers",
-		"content_sources", "content_segment_count", "content_contains_untrusted",
-	},
-	ProfileMCP: {
-		"mcp_provider_id", "mcp_tool_name", "mcp_qualified_tool", "mcp_provider_configured",
-		"mcp_provider_enabled", "mcp_call_ok", "mcp_error_code", "mcp_schema_matched",
-		"mcp_provider_configured_for", "mcp_provider_enabled_for",
-		"mcp_has_field", "mcp_field_bool", "mcp_field_string", "mcp_field_int",
-	},
+// buildStandardProfileFacts lists each profile's facts and functions.
+func buildStandardProfileFacts() map[string][]string {
+	out := map[string][]string{}
+	for name, def := range oarcore.StandardProfiles() {
+		out[name] = append(sortedKeys(def.Facts), sortedKeys(def.Functions)...)
+	}
+	return out
 }
 
 // RequiredCoreFacts returns the normative core facts.
@@ -84,6 +73,9 @@ func buildPortableNames() map[string]bool {
 	for _, name := range requiredCoreFacts {
 		out[name] = true
 	}
+	for _, name := range requiredCoreFunctions {
+		out[name] = true
+	}
 	for _, members := range standardProfileFacts {
 		for _, name := range members {
 			out[name] = true
@@ -99,8 +91,9 @@ func IsPortableFact(name string) bool {
 }
 
 var publishedFactNames = map[string]string{
-	"reason": "paintedwolf.rejection_reason",
-	"field":  "paintedwolf.rejection_field",
+	"reason":  "paintedwolf.rejection_reason",
+	"field":   "paintedwolf.rejection_field",
+	"profile": "paintedwolf.tool_profile",
 }
 
 var reasonFlags = map[string]string{

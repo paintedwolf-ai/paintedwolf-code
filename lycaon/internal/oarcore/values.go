@@ -11,7 +11,7 @@ func coerce(raw any, typ FactType, name string) (value, error) {
 	case TypeBool:
 		b, ok := raw.(bool)
 		if !ok {
-			return nil, raise("[OAR-FACT-26] fact %s is not a bool", name)
+			return nil, raise("[OAR-FACT-18] fact %s is not a bool", name)
 		}
 		return b, nil
 	case TypeInt:
@@ -22,32 +22,32 @@ func coerce(raw any, typ FactType, name string) (value, error) {
 			return int64(n), nil
 		case float64:
 			if math.IsNaN(n) || math.IsInf(n, 0) || n != math.Trunc(n) || n >= 9223372036854775808.0 || n < -9223372036854775808.0 {
-				return nil, raise("[OAR-FACT-26] fact %s is not an int", name)
+				return nil, raise("[OAR-FACT-18] fact %s is not an int", name)
 			}
 			return int64(n), nil
 		case json.Number:
 			v, err := strconv.ParseInt(string(n), 10, 64)
 			if err != nil {
-				return nil, raise("[OAR-FACT-26] fact %s is not an int", name)
+				return nil, raise("[OAR-FACT-18] fact %s is not an int", name)
 			}
 			return v, nil
 		default:
-			return nil, raise("[OAR-FACT-26] fact %s is not an int", name)
+			return nil, raise("[OAR-FACT-18] fact %s is not an int", name)
 		}
 	case TypeDouble:
 		n, ok := raw.(float64)
 		if !ok {
-			return nil, raise("[OAR-FACT-26] fact %s is not a double", name)
+			return nil, raise("[OAR-FACT-18] fact %s is not a double", name)
 		}
-		// Double facts must be finite ([OAR-FACT-23]).
+		// Double facts must be finite ([OAR-FACT-17]).
 		if math.IsInf(n, 0) || math.IsNaN(n) {
-			return nil, raise("[OAR-FACT-26] fact %s is not a finite double", name)
+			return nil, raise("[OAR-FACT-18] fact %s is not a finite double", name)
 		}
 		return n, nil
 	case TypeString:
 		s, ok := raw.(string)
 		if !ok {
-			return nil, raise("[OAR-FACT-26] fact %s is not a string", name)
+			return nil, raise("[OAR-FACT-18] fact %s is not a string", name)
 		}
 		return s, nil
 	case TypeListString:
@@ -59,13 +59,13 @@ func coerce(raw any, typ FactType, name string) (value, error) {
 			for i, x := range t {
 				s, ok := x.(string)
 				if !ok {
-					return nil, raise("[OAR-FACT-26] fact %s is not a list<string>", name)
+					return nil, raise("[OAR-FACT-18] fact %s is not a list<string>", name)
 				}
 				out[i] = s
 			}
 			return out, nil
 		default:
-			return nil, raise("[OAR-FACT-26] fact %s is not a list<string>", name)
+			return nil, raise("[OAR-FACT-18] fact %s is not a list<string>", name)
 		}
 	case TypeListMap:
 		switch t := raw.(type) {
@@ -76,39 +76,21 @@ func coerce(raw any, typ FactType, name string) (value, error) {
 			for i, x := range t {
 				m, ok := asObject(x)
 				if !ok {
-					return nil, raise("[OAR-FACT-26] fact %s is not a list<map>", name)
+					return nil, raise("[OAR-FACT-18] fact %s is not a list<map<string, dyn>>", name)
 				}
 				out[i] = m
 			}
 			return out, nil
 		default:
-			return nil, raise("[OAR-FACT-26] fact %s is not a list<map>", name)
+			return nil, raise("[OAR-FACT-18] fact %s is not a list<map<string, dyn>>", name)
 		}
-	case TypeMapString:
-		if m, ok := raw.(map[string]string); ok {
-			out := make(map[string]any, len(m))
-			for k, v := range m {
-				out[k] = v
-			}
-			return out, nil
-		}
-		m, ok := asObject(raw)
-		if !ok {
-			return nil, raise("[OAR-FACT-26] fact %s is not a map<string,string>", name)
-		}
-		for _, v := range m {
-			if _, ok := v.(string); !ok {
-				return nil, raise("[OAR-FACT-26] fact %s is not a map<string,string>", name)
-			}
-		}
-		return m, nil
 	case TypeMap:
 		m, ok := asObject(raw)
 		if !ok {
-			return nil, raise("[OAR-FACT-26] fact %s is not a map", name)
+			return nil, raise("[OAR-FACT-18] fact %s is not a map<string, dyn>", name)
 		}
 		return m, nil
 	default:
-		return nil, raise("[OAR-FACT-26] fact %s has an undeclarable type", name)
+		return nil, raise("[OAR-FACT-18] fact %s has an undeclarable type", name)
 	}
 }

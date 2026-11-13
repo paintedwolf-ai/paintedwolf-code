@@ -1,21 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: TOOL_NOT_OFFERED
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.tool_loadable, paintedwolf.tool_retired_to_content, paintedwolf.tool_retired_to_command, paintedwolf.tool_command_forms, paintedwolf.tool_discovery_available, paintedwolf.offered_tools, paintedwolf.tool_discovery_status, paintedwolf.tool_discovery_has_more, paintedwolf.next_steps]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.offered_tools, paintedwolf.rejection_code, paintedwolf.tool_command_forms, paintedwolf.tool_discovery_available, paintedwolf.tool_discovery_has_more, paintedwolf.tool_discovery_status, paintedwolf.tool_loadable, paintedwolf.tool_retired_to_command, paintedwolf.tool_retired_to_content]
 when: paintedwolf.rejection_code == "TOOL_NOT_OFFERED"
 effect: block
-copy:
-  what: '{% if paintedwolf.tool_retired_to_command %}`{{ tool }}` no longer exists as a tool{% else %}{% if paintedwolf.tool_retired_to_content %}`{{ tool }}` no longer exists; updates are assistant text{% else %}{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}{% endif %}{% endif %}'
-  cause: '{% if paintedwolf.tool_retired_to_command %}Native programs now do its work{% else %}{% if paintedwolf.tool_retired_to_content %}Assistant text in a response with tool calls reaches the user when its citations are valid{% else %}{% if paintedwolf.tool_loadable %}The current tool plan permits this tool to be loaded{% else %}The current tool plan provides no loading path for this name{% endif %}{% endif %}{% endif %}'
-  why: 'A tool call must use a schema offered on the current request. Tools offered now: {% if paintedwolf.offered_tools %}{{ paintedwolf.offered_tools }}{% else %}none{% endif %}.'
-  fix: '{% if paintedwolf.tool_retired_to_content %}Write the update as assistant text in your next response, with inline citations such as [path:line]. Before this request has evidence, it may go uncited. Do not call `{{ tool }}` again.{% endif %}{{ paintedwolf.next_steps }}{% if paintedwolf.tool_discovery_has_more %} To see more entries, pass `discovery.next_need` unchanged as `need`.{% endif %}{% if paintedwolf.tool_retired_to_command %}{% else %}{% if paintedwolf.tool_retired_to_content %}{% else %}{% if paintedwolf.tool_loadable %}{% else %}{% if paintedwolf.tool_discovery_status %}{% else %}{% if paintedwolf.tool_discovery_available %}{% else %}Choose an available tool that can perform the work. Do not request or retry this unavailable name; report the missing capability if the available tools cannot complete the assignment.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
-  instead: '{% if paintedwolf.tool_retired_to_content %}Write the update as text and keep your other tool calls{% else %}Do not repeat `{{ tool }}`; use what this request offers or report the constraint{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: This tool was not offered on this request
+message: This tool was not offered on this request
+what: '{% if paintedwolf.tool_retired_to_command %}`{{ tool }}` no longer exists as a tool{% else %}{% if paintedwolf.tool_retired_to_content %}`{{ tool }}` no longer exists; updates are assistant text{% else %}{% if paintedwolf.tool_loadable %}`{{ tool }}` is available but its schema is not loaded{% else %}`{{ tool }}` is unavailable on this model call{% endif %}{% endif %}{% endif %}'
+cause: '{% if paintedwolf.tool_retired_to_command %}Native programs now do its work{% else %}{% if paintedwolf.tool_retired_to_content %}Assistant text in a response with tool calls reaches the user when its citations are valid{% else %}{% if paintedwolf.tool_loadable %}The current tool plan permits this tool to be loaded{% else %}The current tool plan provides no loading path for this name{% endif %}{% endif %}{% endif %}'
+why: 'A tool call must use a schema offered on the current request. Tools offered now: {% if paintedwolf.offered_tools %}{{ paintedwolf.offered_tools }}{% else %}none{% endif %}.'
+fix: '{% if paintedwolf.tool_retired_to_content %}Write the update as assistant text in your next response, with inline citations such as [path:line]. Before this request has evidence, it may go uncited. Do not call `{{ tool }}` again.{% endif %}{{ paintedwolf.next_steps }}{% if paintedwolf.tool_discovery_has_more %} To see more entries, pass `discovery.next_need` unchanged as `need`.{% endif %}{% if paintedwolf.tool_retired_to_command %}{% else %}{% if paintedwolf.tool_retired_to_content %}{% else %}{% if paintedwolf.tool_loadable %}{% else %}{% if paintedwolf.tool_discovery_status %}{% else %}{% if paintedwolf.tool_discovery_available %}{% else %}Choose an available tool that can perform the work. Do not request or retry this unavailable name; report the missing capability if the available tools cannot complete the assignment.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}'
+instead: '{% if paintedwolf.tool_retired_to_content %}Write the update as text and keep your other tool calls{% else %}Do not repeat `{{ tool }}`; use what this request offers or report the constraint{% endif %}'
 x-paintedwolf-scenarios:
   - id: retired-to-command
     vars:
@@ -42,7 +40,6 @@ x-paintedwolf-scenarios:
       tool_loadable: false
       tool_discovery_available: true
       offered_tools: [read, request_tools]
-
   - id: unavailable-name-with-catalog
     vars:
       tool: write

@@ -94,12 +94,14 @@ func (p *GuardPipeline) EvaluateBlock(ctx context.Context, anchor string, gc *Gu
 	p.observeActivity(gc)
 	gc.DeriveToolClassFacts()
 	holder := newEvalHolder(gc, rules, p.counters)
-	publishOccurrenceAnchor(gc, anchor, p.capability())
+	publishOccurrenceAnchor(gc, anchor, p.declaration())
+	p.counters.applyRunCounts(gc, anchor)
 
 	matched, selectionErrors := p.selectRulesForAnchor(rules, anchor, gc)
 	if err := p.evaluateMatched(ctx, holder, gc, matched, selectionErrors, StageFromAnchor(anchor), res); err != nil {
 		return res, err
 	}
+	p.counters.recordOccurrence(gc, anchor, res.Decision)
 	if err := p.deliverAdvisories(ctx, anchor, gc, res); err != nil {
 		return res, err
 	}
@@ -125,9 +127,9 @@ func rejectDataFor(gc *GuardContext, code string) map[string]any {
 	if _, ok := out["tool"]; !ok && gc.Invocation.Tool != "" {
 		out["tool"] = gc.Invocation.Tool
 	}
-	if gc.Session.Profile != "" {
+	if gc.Session.Role != "" {
 		if _, ok := out["profile"]; !ok {
-			out["profile"] = gc.Session.Profile
+			out["profile"] = gc.Session.Role
 		}
 	}
 	out["worker_leg"] = gc.Session.WorkerLeg

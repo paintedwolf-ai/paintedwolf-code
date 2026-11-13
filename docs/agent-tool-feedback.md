@@ -405,11 +405,11 @@ error presentation and Continue/Retry actions remain unchanged.
 
 ## Coordinator nudges
 
-Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. All matched advisories are retained in evaluation order; the envelope identifies the primary code.
+Post-turn nudges carry OAR or grounding decisions that could not reject an already-finished generation. Each occurrence resolves to one decision with one code; the other rules that fired appear only on the applied-rules trace.
 
-Delivery routes each resolved advisory once ([`advisory_delivery.go`](../lycaon/internal/oar/advisory_delivery.go), [`policy_advisories.go`](../lycaon/internal/session/guidancedelivery/policy_advisories.go)). Warnings at `tool.post_invoke` and `credential.assignment` stay attached to the tool result; `worker.finalize` advisories travel in the parent envelope. Everything else enters an acknowledged policy queue, separate from lifecycle kicks, that the model loop drains on every iteration and after model-input evaluation, so feedback raised during a tool call reaches the next model request without waiting for a user turn.
+Delivery routes each non-blocking decision once ([`advisory_delivery.go`](../lycaon/internal/oar/advisory_delivery.go), [`policy_advisories.go`](../lycaon/internal/session/guidancedelivery/policy_advisories.go)). Warnings at `tool.post_invoke` and `credential.assignment` stay attached to the tool result; `worker.finalize` advisories travel in the parent envelope. Everything else enters an acknowledged policy queue, separate from lifecycle kicks, that the model loop drains on every iteration and after model-input evaluation, so feedback raised during a tool call reaches the next model request without waiting for a user turn.
 
-Queued entries retain anchor, qualified rule, effect, code, details, subject, and frozen display copy. Every occurrence is kept (OAR-EVAL-20); repetition policy belongs in OAR conditions and counters, not the queue. Persistence precedes acknowledgement, retries reuse the message ID, and model history receives the stored, screened message. Clearing a stopped or rewound task clears its pending feedback. Lifecycle-kick capacity eviction never discards queued policy feedback.
+Queued entries retain anchor, qualified rule, effect, code, details, subject, and frozen display copy. Every occurrence is kept ; repetition policy belongs in OAR conditions and counters, not the queue. Persistence precedes acknowledgement, retries reuse the message ID, and model history receives the stored, screened message. Clearing a stopped or rewound task clears its pending feedback. Lifecycle-kick capacity eviction never discards queued policy feedback.
 
 The default subject for a coordinator-only advisory is its session. A rule that observes a task, phase, worker, or resource supplies that target instead, so a changed subject is not suppressed as a duplicate.
 
@@ -521,7 +521,7 @@ Worker creation and history reads produce their own structured outcomes: invalid
 
 ## Deduplication
 
-Immediate rejections are returned for every failed invocation. Lifecycle guidance and banners may deduplicate identical rule/subject events within their declared lifecycle window. OAR advisory delivery preserves every resolved occurrence; its rules own repetition through conditions and counters.
+Immediate rejections are returned for every failed invocation. Lifecycle guidance and banners may deduplicate identical rule/subject events within their declared lifecycle window. OAR delivery preserves every occurrence's decision; its rules own repetition through conditions and counters.
 
 Dedup keys use codes and typed identities, never rendered prose. A changed target, rule, task, phase, or remedy surface is a distinct event.
 

@@ -1,29 +1,27 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_COMPLETION_REPORT_MISSING
 kind: invariant
-anchor: worker.report_check
-requires:
-  facts:
-    - paintedwolf.missing
+on: worker.report_check
+selector: {}
+requires_facts: [paintedwolf.missing]
 when: paintedwolf.missing
 effect: block
-copy:
-  what: 'The worker round ended without an accepted completion report.'
-  cause: 'The worker kept answering without a tool call, or its round ended another way before it reported.'
-  why: 'A missing report does not show whether the work was done. What the worker changed is kept with its job.'
-  fix: 'Inspect its result and retained observations, and preview what it changed. Resume the worker on its child session and ask for the report; start new work only for a specific unmet requirement.'
-  instead: 'State which report or evidence is missing. Do not rerun completed work merely to obtain a report.'
 # The leg is over when this fires; the reader is the dispatching coordinator,
 # whose tools the fix names.
 x-paintedwolf-audience:
   - coordinator
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
-x-paintedwolf-message: 'Worker ended without an accepted completion report'
+message: 'Worker ended without an accepted completion report'
+what: 'The worker round ended without an accepted completion report.'
+cause: 'The worker kept answering without a tool call, or its round ended another way before it reported.'
+why: 'A missing report does not show whether the work was done. What the worker changed is kept with its job.'
+fix: 'Inspect its result and retained observations, and preview what it changed. Resume the worker on its child session and ask for the report; start new work only for a specific unmet requirement.'
+instead: 'State which report or evidence is missing. Do not rerun completed work merely to obtain a report.'
 x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: missing report
       path: src/main.go
-      profile: coordinator
+      session_role: coordinator
       tool: task

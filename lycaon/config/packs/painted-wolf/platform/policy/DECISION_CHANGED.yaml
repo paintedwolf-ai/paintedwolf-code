@@ -1,27 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: DECISION_CHANGED
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.job_id, paintedwolf.next_steps]
+on: tool.rejected
+selector:
+  tools:
+    - answer_decision
+requires_facts: [paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "DECISION_CHANGED"
 effect: block
-copy:
-  what: The pending decision for worker {{ paintedwolf.job_id }} changed.
-  cause: The offered decision no longer matches the stored question and options.
-  why: A decision answer must resume the same suspended worker and answer the current question.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Inspect the current worker state before retrying.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: The pending decision for worker {{ paintedwolf.job_id }} changed.
+message: The pending decision for worker {{ paintedwolf.job_id }} changed.
+what: The pending decision for worker {{ paintedwolf.job_id }} changed.
+cause: The offered decision no longer matches the stored question and options.
+why: A decision answer must resume the same suspended worker and answer the current question.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Inspect the current worker state before retrying.
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    job_id: worker-1
-    status: complete
-selector:
-  tool:
-  - answer_decision
+  - id: default
+    vars:
+      job_id: worker-1
+      status: complete

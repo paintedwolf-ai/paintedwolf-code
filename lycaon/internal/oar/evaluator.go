@@ -1,49 +1,16 @@
 package oar
 
-// selectorMatches applies declared string and list membership clauses.
+import "slices"
+
+// selectorMatches applies the tools clause: the occurrence's tool is one of
+// the listed names, and no tool never matches ([OAR-SEL-6]).
 func selectorMatches(sel Selector, values map[string]any) bool {
-	if len(sel) == 0 {
+	want, ok := sel["tools"]
+	if !ok {
 		return true
 	}
-	for _, clause := range sel.Clauses() {
-		want := sel[clause]
-		if len(want) == 0 {
-			// [OAR-SEL-6] An empty clause matches nothing.
-			return false
-		}
-		switch value := values[clause].(type) {
-		case string:
-			if !containsExact(want, value) {
-				return false
-			}
-		case []string:
-			if !intersects(want, value) {
-				return false
-			}
-		default:
-			return false
-		}
-	}
-	return true
-}
-
-func intersects(want, have []string) bool {
-	for _, v := range have {
-		if containsExact(want, v) {
-			return true
-		}
-	}
-	return false
-}
-
-// containsExact compares by exact code-point equality ([OAR-EXPR-22]).
-func containsExact(list []string, want string) bool {
-	for _, s := range list {
-		if s == want {
-			return true
-		}
-	}
-	return false
+	tool, _ := values["tool"].(string)
+	return tool != "" && slices.Contains(want, tool)
 }
 
 // selectorFacts belongs to one selection pass; providers may change its source.

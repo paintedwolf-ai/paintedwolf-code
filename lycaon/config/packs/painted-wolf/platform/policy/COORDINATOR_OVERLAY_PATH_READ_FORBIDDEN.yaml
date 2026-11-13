@@ -1,23 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COORDINATOR_OVERLAY_PATH_READ_FORBIDDEN
 kind: policy
-anchor: coordinator.pre_invoke
-requires:
-  profiles:
-    - tool
-  facts: [paintedwolf.path, paintedwolf.path_is_worker_branch, paintedwolf.next_steps]
+on: coordinator.pre_invoke
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.path, paintedwolf.path_is_worker_branch]
 when: paintedwolf.path_is_worker_branch
 effect: block
-copy:
-  what: 'The coordinator request names a private worker sandbox path: {{ paintedwolf.path }}.'
-  cause: Worker sandbox paths are not coordinator filesystem inputs.
-  why: Overlay previews carry the worker intent and structured merge/conflict state without bypassing workspace ownership.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: 'Preserve the worker and overlay identities. Do not read private sandbox paths, guess another filesystem route, or restart work merely to inspect an overlay.'
-
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:path_is_worker_branch
-x-paintedwolf-message: 'Coordinator cannot access worker sandboxes — use `preview_overlay(path={{ paintedwolf.path }})`'
+message: 'Coordinator cannot access worker sandboxes — use `preview_overlay(path={{ paintedwolf.path }})`'
+what: 'The coordinator request names a private worker sandbox path: {{ paintedwolf.path }}.'
+cause: Worker sandbox paths are not coordinator filesystem inputs.
+why: Overlay previews carry the worker intent and structured merge/conflict state without bypassing workspace ownership.
+fix: '{{ paintedwolf.next_steps }}'
+instead: 'Preserve the worker and overlay identities. Do not read private sandbox paths, guess another filesystem route, or restart work merely to inspect an overlay.'
 x-paintedwolf-scenarios:
   - id: default
     vars:

@@ -1,28 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: JQ_PATH_REQUIRED
 kind: schema
-anchor: tool.rejected
-selector:
-  paintedwolf.operation:
-    - jq
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.path_required
-when: paintedwolf.rejection_code == "JQ_PATH_REQUIRED"
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.path_required, paintedwolf.rejection_code]
+when: paintedwolf.operation == "jq" && paintedwolf.rejection_code == "JQ_PATH_REQUIRED"
 effect: block
-copy:
-  what: jq was called without a path to a structured document.
-  cause: The path argument names the repo-relative JSON, YAML, or TOML file to query.
-  why: Structured rejects let agents branch without parsing free-form errors.
-  fix: Retry jq with path set to the file to query.
-  instead: Branch on Code; supply a path before retrying jq
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:jq
-x-paintedwolf-message: jq requires a path to the document
+message: jq requires a path to the document
+what: jq was called without a path to a structured document.
+cause: The path argument names the repo-relative JSON, YAML, or TOML file to query.
+why: Structured rejects let agents branch without parsing free-form errors.
+fix: Retry jq with path set to the file to query.
+instead: Branch on Code; supply a path before retrying jq
 x-paintedwolf-scenarios:
   - id: default
     vars:

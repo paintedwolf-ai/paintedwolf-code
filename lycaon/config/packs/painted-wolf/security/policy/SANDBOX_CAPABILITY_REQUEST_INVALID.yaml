@@ -1,46 +1,34 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_CAPABILITY_REQUEST_INVALID
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.capability
-  - paintedwolf.capability_request_fields
-  - paintedwolf.rejection_reason
-  - paintedwolf.rejection_field
-  - paintedwolf.capability_contract_known
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.capability, paintedwolf.capability_contract_known, paintedwolf.capability_request_fields, paintedwolf.rejection_code, paintedwolf.rejection_field, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "SANDBOX_CAPABILITY_REQUEST_INVALID"
 effect: block
-copy:
-  what: The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}{% if paintedwolf.rejection_field
-    %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}.
-  cause: The request did not match the receiving tool's declared capability schema.
-  why: ''
-  fix: '{% if paintedwolf.capability_contract_known %}{% if paintedwolf.capability_request_fields %}Use a non-empty capability_request object with fields from {{
-    paintedwolf.capability_request_fields }}, following this tool''s schema.{% else %}Remove capability_request; this tool does not accept it.{% endif %}{% endif
-    %}'
-  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox_capability
-x-paintedwolf-message: structured capability request invalid
+message: structured capability request invalid
+what: The structured execution capability request was invalid{% if paintedwolf.rejection_reason %} — {{ paintedwolf.rejection_reason }}{% endif %}{% if paintedwolf.rejection_field %} (field {{ paintedwolf.rejection_field }}){% endif %}{% if paintedwolf.capability %} ({{ paintedwolf.capability }}){% endif %}.
+cause: The request did not match the receiving tool's declared capability schema.
+why: ''
+fix: '{% if paintedwolf.capability_contract_known %}{% if paintedwolf.capability_request_fields %}Use a non-empty capability_request object with fields from {{ paintedwolf.capability_request_fields }}, following this tool''s schema.{% else %}Remove capability_request; this tool does not accept it.{% endif %}{% endif %}'
+instead: ''
 x-paintedwolf-scenarios:
-- id: server_and_client
-  vars:
-    tool: command
-- id: unsupported_field
-  vars:
-    reason: unsupported capability_request field
-    field: network
-- id: unsupported_capability
-  vars:
-    reason: capability is not declared by the tool contract
-    capability: loopback_connect
-- id: client_only
-  vars:
-    tool: page_open
-- id: no_capabilities
-  vars:
-    tool: read
+  - id: server_and_client
+    vars:
+      tool: command
+  - id: unsupported_field
+    vars:
+      reason: unsupported capability_request field
+      field: network
+  - id: unsupported_capability
+    vars:
+      reason: capability is not declared by the tool contract
+      capability: loopback_connect
+  - id: client_only
+    vars:
+      tool: page_open
+  - id: no_capabilities
+    vars:
+      tool: read
