@@ -147,7 +147,7 @@ var factDecls = []factDecl{
 	{"worker_artifact_measured", oarcore.TypeBool, FactTierHost, ""},
 	{"repeat_count", oarcore.TypeInt, FactTierHost, ""},
 	{"fruitless_search_run", oarcore.TypeInt, FactTierHost, ""},
-	{"repeated_reject_code", oarcore.TypeString, FactTierHost, ""},
+	{"repeated_rejection_code", oarcore.TypeString, FactTierHost, ""},
 	{"code_reject_responses", oarcore.TypeInt, FactTierHost, ""},
 	{"deferred_unactivated", oarcore.TypeInt, FactTierHost, ""},
 	{"worker_attempted_mutation", oarcore.TypeBool, FactTierHost, ""},
@@ -242,34 +242,34 @@ type observationFn struct {
 	ret     oarcore.FactType
 	tier    FactTier
 	profile string // standard profile name; empty unless tier is standard
-	bind    func(h *evalHolder, s string) any
+	bind    func(h *evalHolder, s string) (any, error)
 }
 
 var observationFns = []observationFn{
 	// Another rule's counters, named by id in the reading rule's namespace
 	// ([OAR-FIRE-6]).
-	{"fire_count_of", oarcore.TypeInt, FactTierCore, "", func(h *evalHolder, s string) any {
-		return h.counterOf(s, CounterFire)
+	{"fire_count_of", oarcore.TypeInt, FactTierCore, "", func(h *evalHolder, s string) (any, error) {
+		return h.counterOf(s, CounterFire), nil
 	}},
-	{"breaker_count_of", oarcore.TypeInt, FactTierCore, "", func(h *evalHolder, s string) any {
-		return h.counterOf(s, CounterBreaker)
+	{"breaker_count_of", oarcore.TypeInt, FactTierCore, "", func(h *evalHolder, s string) (any, error) {
+		return h.counterOf(s, CounterBreaker), nil
 	}},
 	// Typed accessors expose heterogeneous tool arguments.
-	{"tool_arg_string", oarcore.TypeString, FactTierHost, "", func(h *evalHolder, s string) any {
-		return EvalToolArgString(h.get(), s)
+	{"tool_arg_string", oarcore.TypeString, FactTierHost, "", func(h *evalHolder, s string) (any, error) {
+		return EvalToolArgString(h.get(), s), nil
 	}},
-	{"tool_arg_int", oarcore.TypeInt, FactTierHost, "", func(h *evalHolder, s string) any {
-		return EvalToolArgInt(h.get(), s)
+	{"tool_arg_int", oarcore.TypeInt, FactTierHost, "", func(h *evalHolder, s string) (any, error) {
+		return EvalToolArgInt(h.get(), s), nil
 	}},
-	{"tool_arg_bool", oarcore.TypeBool, FactTierHost, "", func(h *evalHolder, s string) any {
-		return EvalToolArgBool(h.get(), s)
+	{"tool_arg_bool", oarcore.TypeBool, FactTierHost, "", func(h *evalHolder, s string) (any, error) {
+		return EvalToolArgBool(h.get(), s), nil
 	}},
 	// The members of mcp_result that selection cannot type.
-	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPFieldBool(h.get(), s)
+	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) (any, error) {
+		return mcpMember[bool](h.get(), s)
 	}},
-	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPFieldInt(h.get(), s)
+	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) (any, error) {
+		return mcpMember[int64](h.get(), s)
 	}},
 }
 

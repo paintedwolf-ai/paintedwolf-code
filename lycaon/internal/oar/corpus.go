@@ -519,8 +519,10 @@ func corpusActual(res *PipelineResult, store *CounterStore, session string) map[
 // traceOutcome spells a trace outcome as fixtures do ([OAR-CONF-15]).
 func traceOutcome(o TraceOutcome) string {
 	switch o {
-	case TraceMonitoredFired, TraceMonitoredPassed, TraceMonitoredErrored:
+	case TraceMonitoredFired, TraceMonitoredPassed:
 		return "monitor"
+	case TraceMonitoredErrored:
+		return string(TraceErrored)
 	default:
 		return string(o)
 	}

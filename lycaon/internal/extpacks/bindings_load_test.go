@@ -197,14 +197,10 @@ func TestGoldenConditionFromEffectiveBindings(t *testing.T) {
 	gc := oar.NewGuardContext()
 	gc.MCP.MCPSchemaMatched = matched
 	gc.MCP.MCPFields = fields
-	if !gc.MCP.MCPSchemaMatched || !oar.EvalMCPFieldBool(gc, "is_ready") {
-		t.Fatal("expected mcp_schema_matched && is_ready")
-	}
-	if oar.EvalMCPFieldString(gc, "widget_status") != "ready" {
-		t.Fatal("widget_status")
-	}
-	if oar.EvalMCPFieldInt(gc, "widget_count") != 2 {
-		t.Fatal("widget_count")
+	ok, err := oar.EvaluateCondition(`mcp_schema_matched && mcp_field_bool("is_ready") && mcp_result.widget_status == "ready" && mcp_field_int("widget_count") == 2`, gc)
+	testutil.FailErr(t, "evaluate projected fields", err)
+	if !ok {
+		t.Fatalf("projected fields did not read by type: %+v", fields)
 	}
 
 	matchedBad, _, err := bindings.Apply(list, "fixture", "widget", `not-json`)

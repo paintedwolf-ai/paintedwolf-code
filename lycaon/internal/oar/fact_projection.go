@@ -165,7 +165,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"breaker_count":                       gc.Counters.BreakerCount,
 		"same_code_reject_run":                gc.Counters.SameCodeRejectRun,
 		"same_call_run":                       gc.Counters.SameCallRun,
-		"repeated_reject_code":                gc.Counters.RepeatedRejectCode,
+		"repeated_rejection_code":             gc.Counters.RepeatedRejectCode,
 		"code_reject_responses":               gc.Counters.CodeRejectResponses,
 		"deferred_unactivated":                gc.Counters.DeferredUnactivated,
 		"worker_attempted_mutation":           gc.Workers.WorkerAttemptedMutation,

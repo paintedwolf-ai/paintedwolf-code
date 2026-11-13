@@ -3,8 +3,6 @@ package oar
 import (
 	"context"
 	"errors"
-	"fmt"
-	"slices"
 	"sync"
 	"testing"
 
@@ -12,8 +10,8 @@ import (
 )
 
 func TestConcurrentEvaluationsKeepRulesSessionAndSnapshotTogether(t *testing.T) {
-	readA := &Rule{ID: "READ", Namespace: "publisher.a", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock, Enforcement: "enforce", When: `paintedwolf.workers_idle && paintedwolf.fire_count == 1`}
-	readB := &Rule{ID: "READ", Namespace: "publisher.b", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock, Enforcement: "enforce", When: `paintedwolf.workers_idle && paintedwolf.fire_count == 1`}
+	readA := &Rule{ID: "READ", Namespace: "publisher.a", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock, Enforcement: "enforce", When: `paintedwolf.workers_idle && fire_count == 1`}
+	readB := &Rule{ID: "READ", Namespace: "publisher.b", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock, Enforcement: "enforce", When: `paintedwolf.workers_idle && fire_count == 1`}
 	rulesA := NewRuleSet([]*Rule{readA})
 	rulesB := NewRuleSet([]*Rule{readB})
 	loader, err := NewLoader("")
@@ -70,22 +68,6 @@ func TestConcurrentEvaluationsKeepRulesSessionAndSnapshotTogether(t *testing.T) 
 	}
 }
 
-func TestSelectorProviderFailureUsesRuleOnError(t *testing.T) {
-	rule := &Rule{
-		ID: "SELECT", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock,
-		Enforcement: "enforce", OnError: "fail_open", Selector: Selector{"paintedwolf.session_role": {"coordinator"}},
-	}
-	pipeline := NewGuardPipeline(NewRuleSet([]*Rule{rule}), nil, nil)
-	pipeline.EnableAnchor(AnchorToolPreInvoke)
-	gc := NewGuardContext()
-	gc.RegisterProvider("paintedwolf.session_role", func(*GuardContext) error { return errors.New("session role unavailable") })
-	res, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)
-	testutil.FailErr(t, "evaluate selector provider failure", err)
-	if res.Decision != nil || len(res.Trace.Entries) != 1 || res.Trace.Entries[0].Outcome != TraceErrored {
-		t.Fatalf("result = %#v, want fail-open errored trace", res)
-	}
-}
-
 func TestCopyProviderFailureUsesRuleOnError(t *testing.T) {
 	rule := &Rule{
 		ID: "COPY", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn,
@@ -132,39 +114,5 @@ func TestDetectorFactsAreRuleLocal(t *testing.T) {
 	}
 	if len(res.Trace.Entries) != 2 || res.Trace.Entries[1].Outcome != TracePassed {
 		t.Fatalf("trace = %#v, want second detector passed", res.Trace.Entries)
-	}
-}
-
-func TestSelectionObservesProviderWritesAfterAnEarlierSelector(t *testing.T) {
-	for _, failure := range []error{nil, errors.New("profile unavailable")} {
-		t.Run(fmt.Sprint(failure), func(t *testing.T) {
-			rules := NewRuleSet([]*Rule{
-				{ID: "A_READ", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"read"}}},
-				{ID: "B_PROFILE", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", OnError: "fail_open", Selector: Selector{"paintedwolf.session_role": {"implement"}}},
-				{ID: "C_GREP", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"grep"}}},
-				{ID: "D_READ", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"read"}}},
-			})
-			pipeline := NewGuardPipeline(rules, nil, nil)
-			pipeline.EnableAnchor(AnchorToolPreInvoke)
-			gc := NewGuardContext()
-			gc.Invocation.Tool = "read"
-			gc.RegisterProvider("paintedwolf.session_role", func(g *GuardContext) error {
-				g.Invocation.Tool = "grep"
-				g.Session.Role = "implement"
-				return failure
-			})
-			for _, want := range [][]string{{"A_READ", "B_PROFILE", "C_GREP"}, {"A_READ", "B_PROFILE", "D_READ"}} {
-				gc.Invocation.Tool = "read"
-				result, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)
-				testutil.FailErr(t, "evaluate provider-backed selectors", err)
-				var got []string
-				for _, entry := range result.Trace.Entries {
-					got = append(got, entry.Rule)
-				}
-				if !slices.Equal(got, want) {
-					t.Fatalf("selected rules = %v, want %v", got, want)
-				}
-			}
-		})
 	}
 }

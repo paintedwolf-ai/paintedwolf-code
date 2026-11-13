@@ -44,9 +44,10 @@ on: tool.pre_invoke
 title: Author check rule
 selector:
   tools: [write]
-when: session_posture == "spec"
+requires_facts: [paintedwolf.session_posture]
+when: paintedwolf.session_posture == "spec"
 effect: block
-emit: rule:author_check
+x-paintedwolf-emit: rule:author_check
 message: Writes are blocked in spec.
 what: A write tool was called.
 cause: The session is in the spec posture.
@@ -63,11 +64,12 @@ const authorCheckFiringFixture = `{
     "kind": "policy",
     "on": "tool.pre_invoke",
     "selector": { "tools": ["write"] },
-    "when": "session_posture == \"spec\"",
+    "requires_facts": ["paintedwolf.session_posture"],
+    "when": "paintedwolf.session_posture == \"spec\"",
     "effect": "block",
-    "emit": "rule:author_check"
+    "x-paintedwolf-emit": "rule:author_check"
   },
-  "input": { "anchor": "tool.pre_invoke", "facts": { "tool": "write", "session_posture": "spec" } },
+  "input": { "anchor": "tool.pre_invoke", "facts": { "tool": "write", "paintedwolf.session_posture": "spec" }, "host_facts": { "paintedwolf.session_posture": "string" } },
   "expected": { "decision": "block", "code": "AUTHOR_CHECK_RULE" }
 }`
 
@@ -109,7 +111,7 @@ func TestCheckRuleFiles_ScenarioMismatch(t *testing.T) {
 }
 
 func TestCheckRuleFiles_UnknownFactIsLoadError(t *testing.T) {
-	bad := strings.Replace(authorCheckRule, `when: session_posture == "spec"`, "when: no_such_fact", 1)
+	bad := strings.Replace(authorCheckRule, `when: paintedwolf.session_posture == "spec"`, "when: no_such_fact", 1)
 	policy := authorCheckPaths(t, bad, nil)
 	got, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t))
 	if err != nil {
@@ -138,7 +140,7 @@ func TestCheckRuleFiles_LoadError(t *testing.T) {
 func TestCheckRuleFiles_SingleFileIgnoresSiblings(t *testing.T) {
 	policy := authorCheckPaths(t, authorCheckRule, nil)
 	broken := strings.Replace(authorCheckRule, "id: AUTHOR_CHECK_RULE", "id: SIBLING_RULE", 1)
-	broken = strings.Replace(broken, `when: session_posture == "spec"`, "when: no_such_fact", 1)
+	broken = strings.Replace(broken, `when: paintedwolf.session_posture == "spec"`, "when: no_such_fact", 1)
 	if err := os.WriteFile(filepath.Join(policy, "SIBLING_RULE.yaml"), []byte(broken), 0o600); err != nil {
 		t.Fatalf("write sibling: %v", err)
 	}
@@ -194,7 +196,7 @@ func snapshotTree(t *testing.T, root string) []string {
 }
 
 // Inline scenarios are part of the rule's copy contract.
-const authorCheckRuleWithScenarios = authorCheckRule + `scenarios:
+const authorCheckRuleWithScenarios = authorCheckRule + `x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: write

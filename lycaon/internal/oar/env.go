@@ -97,7 +97,7 @@ func specObservationFuncs(holder *evalHolder) map[string]func(any) (any, error) 
 			if !ok {
 				return zeroForFactType(fn.ret), nil
 			}
-			return fn.bind(holder, s), nil
+			return fn.bind(holder, s)
 		}
 	}
 	return out
