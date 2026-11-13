@@ -35,14 +35,8 @@ type Record struct {
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
 	pathTiers    map[string]string         // normalized path → trust tier at capture
-	// pathRoots records the owning root of any indexed path whose root
-	// differs from RootID (stored key → root ID). Absent entries share
-	// RootID; empty values mark legacy tokens.
-	pathRoots map[string]string
-	// pathDisplay stamps the session-folder display token for a stored key,
-	// computed at write and load time against the session's active root.
-	pathDisplay map[string]string
-	urls        recordURLs // addresses beyond the primary URL
+	rooted       recordPathRoots           // root identity of indexed paths beyond RootID
+	urls         recordURLs                // addresses beyond the primary URL
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`
@@ -56,6 +50,16 @@ type Record struct {
 	Attempt        int            `json:"attempt,omitempty"`
 	HeadSHA        string         `json:"head_sha,omitempty"`
 	RecordedAt     string         `json:"at,omitempty"` // RFC3339 in gate JSONL
+}
+
+// recordPathRoots is the root identity of a record's indexed paths.
+type recordPathRoots struct {
+	// owners maps a stored key to its root when that differs from RootID;
+	// absent entries share RootID and empty values mark legacy tokens.
+	owners map[string]string
+	// display is each stored key's session-folder token, stamped at write
+	// and load time against the session's active root.
+	display map[string]string
 }
 
 // recordURLs is the addresses a result carried beyond its primary URL.
