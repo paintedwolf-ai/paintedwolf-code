@@ -107,7 +107,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	}
 	definition := definitions[spec.Name]
 	mode := selectEffectMode(spec, request.EffectMode)
-	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 	if err != nil {
 		return ownerFailure(err), err
 	}
@@ -158,6 +158,7 @@ func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprog
 	tracker := d.run.beginOpTracker()
 	ctx = withOpTracker(ctx, tracker)
 	ctx = evidence.WithExchangeProvenanceObserver(ctx, tracker.addExchange)
+	ctx = evidence.WithContentFlowObserver(ctx, func(flow evidence.ContentFlow) { d.run.observeContentFlow(ctx, tracker, flow) })
 	if request.StreamPreparation != nil {
 		var err error
 		streams, err = request.StreamPreparation.PrepareStreams(ctx)

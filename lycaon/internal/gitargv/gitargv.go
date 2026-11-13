@@ -3,6 +3,7 @@ package gitargv
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 )
 
@@ -35,10 +36,17 @@ func LocalCloneSourcePath(source string) (string, bool) {
 		return "", false
 	}
 	if rest, ok := cutPrefixFold(trimmed, "file://"); ok {
-		if rest == "" {
+		// Git ignores a file URL's host and decodes the path from the first
+		// slash after it: file:///p and file://localhost/p both name /p.
+		slash := strings.IndexByte(rest, '/')
+		if slash < 0 {
 			return "", false
 		}
-		return rest, true
+		path, err := url.PathUnescape(rest[slash:])
+		if err != nil {
+			return "", false
+		}
+		return path, true
 	}
 	if strings.Contains(trimmed, "://") {
 		return "", false

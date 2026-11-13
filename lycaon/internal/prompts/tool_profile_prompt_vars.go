@@ -241,6 +241,19 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 	if commandMutates {
 		writeTools = append([]string{"command"}, writeTools...)
 	}
+	// Dual-state capability vars follow the command-reach contract rather
+	// than raw enablement: a form tool plus a reachable command leg admits
+	// the operation, and mutating forms additionally require command
+	// mutation. Today every dual-state form also requires its form tool, so
+	// the reach leg matches enablement; deriving through the reach tables
+	// keeps these vars tied to the SSOT if dispositions change.
+	reachHeld := make(map[string]bool, len(enabled)+1)
+	for name, ok := range enabled {
+		reachHeld[name] = ok
+	}
+	if commandMutates {
+		reachHeld[toolcontract.ReachCommandMutation] = true
+	}
 	out := map[string]any{
 		"profile_has_write_tools":         len(writeTools) > 0 || commandMutates,
 		"profile_has_read_tools":          len(readTools) > 0,
@@ -251,6 +264,9 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"has_find_tool":                   enabled["find"],
 		"native_edit_limit_mib":           readcaps.MaxMutationBytes >> 20,
 		"profile_has_jq_edit":             commandMutates,
+		"profile_has_summarize":           enabled["summarize"] || toolcontract.CommandLanguageReachable("summarize", reachHeld),
+		"profile_has_survey_repo":         enabled["survey_repo"] || toolcontract.CommandLanguageReachable("repo-map", reachHeld),
+		"profile_has_code_rewrite":        enabled["code_rewrite"] || (commandMutates && toolcontract.CommandLanguageReachable("code-rewrite", reachHeld)),
 		"profile_has_retrieval":           profileHasRetrievalTool(enabled),
 		"profile_has_terminal_capture":    commandMutates,
 		"command_on_floor":                enabled["command"] && !data.CommandDeferred,
@@ -270,7 +286,10 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		"host_runner_tools":               hostRunner,
 	}
 	for _, name := range currentToolNames() {
-		out["profile_has_"+name] = enabled[name]
+		key := "profile_has_" + name
+		if _, derived := out[key]; !derived {
+			out[key] = enabled[name]
+		}
 	}
 	offeredNames := toolViewNames(data.Tools)
 	MergeRunnerCapabilityVars(offeredNames, out)

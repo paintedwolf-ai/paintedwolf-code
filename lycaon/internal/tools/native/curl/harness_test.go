@@ -13,6 +13,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/httpaction"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -69,6 +71,12 @@ func newHarness(t *testing.T) *harness {
 	testutil.FailErr(t, "mutation owners", err)
 	owners, err := NewOwners(httpaction.Deps{Boundary: boundary}, mutations)
 	testutil.FailErr(t, "curl owners", err)
+	// Every attributed dial reaches the approval gate; these tests approve
+	// unless one installs its own resolver to observe the asks.
+	release := confine.SetEgressResolver(func(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
+		return true
+	})
+	t.Cleanup(func() { _ = release(context.Background()) })
 	paths, err := projectpaths.NewProgramPaths(t.Context(), boundary, tc, "")
 	testutil.FailErr(t, "program paths", err)
 	return &harness{t: t, root: root, tc: tc, owners: owners, pins: pins, program: mutation.Program{Paths: paths}}

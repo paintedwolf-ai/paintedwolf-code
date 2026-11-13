@@ -128,8 +128,10 @@ func renderSkillPreview(ctx context.Context, req AuthorRenderRequest, skillName,
 	}
 	out := AuthorRenderResult{}
 	templated := !sk.Project && (resource == "" || sk.TemplatesResource(resource))
+	var vars map[string]any
 	if templated {
-		vars, err := skillPreviewVars(req.Vars, profileID, surfaceID, sk)
+		var err error
+		vars, err = skillPreviewVars(req.Vars, profileID, surfaceID, sk)
 		if err != nil {
 			return AuthorRenderResult{}, err
 		}
@@ -149,6 +151,13 @@ func renderSkillPreview(ctx context.Context, req AuthorRenderRequest, skillName,
 		violations, err := checkSkillRender(sk, resource, source, out.Output, templated, profileID, surfaceID)
 		if err != nil {
 			return AuthorRenderResult{}, err
+		}
+		if templated && !sk.UserProvided {
+			extra, err := checkSkillRenderVarVariants(ctx, source, vars, violations, profileID, surfaceID)
+			if err != nil {
+				return AuthorRenderResult{}, err
+			}
+			violations = append(violations, extra...)
 		}
 		out.Violations = violations
 	}
@@ -321,6 +330,69 @@ func checkSkillRender(sk skills.Skill, resource, source, rendered string, templa
 	for _, tool := range skillUnreachableNames(rendered, declared, reachable) {
 		violations = append(violations, "unreachable_tool:"+tool)
 	}
+	for _, drift := range RenderedProseStructureDrift(rendered) {
+		violations = append(violations, "prose_drift:"+drift)
+	}
+	return violations, nil
+}
+
+// skillRenderVarOverrides are the environment facts the default skill preview
+// never varies: a git-less workspace and workspace root counts other than one.
+// Guard branches under these facts hide or show copy per reader state, so
+// --check renders each and reports what the branches expose.
+var skillRenderVarOverrides = []struct {
+	key   string
+	value any
+}{
+	{"has_git", false},
+	{"root_count", 0},
+	{"root_count", 2},
+}
+
+// checkSkillRenderVarVariants renders the skill under the environment states
+// the default preview never varies and reports rendered tool mentions those
+// branches expose that the reader cannot reach. Each violation names the
+// variant that exposed it; names the base render already reports are left to
+// the base violation.
+func checkSkillRenderVarVariants(ctx context.Context, source string, vars map[string]any, base []string, profileID, surfaceID string) ([]string, error) {
+	reachable, err := skillReachableTools(profileID, surfaceID)
+	if err != nil {
+		return nil, err
+	}
+	declared, err := skillDeclaredNames()
+	if err != nil {
+		return nil, err
+	}
+	reported := map[string]bool{}
+	for _, violation := range base {
+		if name, ok := strings.CutPrefix(violation, "unreachable_tool:"); ok {
+			reported[name] = true
+		}
+	}
+	var violations []string
+	seen := map[string]bool{}
+	for _, override := range skillRenderVarOverrides {
+		variant := make(map[string]any, len(vars)+1)
+		for k, v := range vars {
+			variant[k] = v
+		}
+		variant[override.key] = override.value
+		tpl, err := pongoplain.Compile(source)
+		if err != nil {
+			return nil, err
+		}
+		rendered, err := pongoplain.Execute(ctx, tpl, variant)
+		if err != nil {
+			return nil, err
+		}
+		for _, tool := range skillUnreachableNames(rendered, declared, reachable) {
+			if reported[tool] || seen[tool] {
+				continue
+			}
+			seen[tool] = true
+			violations = append(violations, fmt.Sprintf("unreachable_tool:%s [%s=%v]", tool, override.key, override.value))
+		}
+	}
 	return violations, nil
 }
 
@@ -400,8 +472,9 @@ func skillDeclaredNames() (map[string]bool, error) {
 }
 
 // namedToolCall matches backticked names — how copy tells a reader to call
-// something — the same shape toolvocab scans for.
-var namedToolCall = regexp.MustCompile("`([a-z][a-z0-9_]*)(?:`|[ \t]*\\()")
+// something — the same shape toolvocab scans for, including the `tool --flag`
+// invocation form audience.go's namedTool recognizes.
+var namedToolCall = regexp.MustCompile("`([a-z][a-z0-9_]*)(?:`|[ \t]*\\(|[ \t]+--)")
 
 // skillUnreachableNames returns the declared tools, operations, and command
 // forms rendered text names that reachable cannot satisfy, sorted.

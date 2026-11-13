@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -39,6 +40,10 @@ type NativeOperation struct {
 	// Tools are further identities Prepare may select per bound form (one
 	// umbrella command whose subcommands have their own tools).
 	Tools []string
+	// SelectMode names the catalog effect mode argv selects, as Prepare would,
+	// from argv alone; false when argv alone cannot say. A dispatcher's
+	// preflight uses it for the child it will run.
+	SelectMode func(context.Context, commandprogram.Fields) (string, bool)
 }
 
 // NativePrepared is one bound owner invocation: its review record and the
@@ -287,7 +292,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	if err != nil {
 		return refusedResult("TOOL_OWNER_FAILED"), err
 	}
-	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, d.childEffectSet(spec, spec.Effects[0].Mode, request))
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, d.childEffectSet(ctx, spec, spec.Effects[0].Mode, request))
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
@@ -334,7 +339,11 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 			}
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage, window: d.run.window}.Launch(ctx, execution, streams)
+					observe := func(stage tools.ToolContext, stamped confine.StampedRefusal, hosts []confine.EgressHost, directIPApplied bool) {
+						d.recordExternalStage(stage, stamped, hosts, directIPApplied)
+						opTrackerFromContext(ctx).addNetworkRead(reachedNetworkURLs(hosts))
+					}
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: observe, window: d.run.window}.Launch(ctx, execution, streams)
 				})
 			}}, nil
 		},
@@ -433,7 +442,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	} else {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
@@ -502,7 +511,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 					}
 				}
 				newMode := selectEffectMode(spec, actual.Mode)
-				newBound, bindErr := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, newMode, d.childEffectSet(spec, newMode, request))
+				newBound, bindErr := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, newMode, d.childEffectSet(ctx, spec, newMode, request))
 				if bindErr != nil {
 					if actual.Release != nil {
 						actual.Release()
@@ -689,7 +698,7 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 	var bound toolcontract.BoundOperation
 	if len(spec.Effects) > 0 {
 		mode := selectEffectMode(spec, request.EffectMode)
-		bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+		bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 		if err != nil {
 			return programChild{}, err
 		}

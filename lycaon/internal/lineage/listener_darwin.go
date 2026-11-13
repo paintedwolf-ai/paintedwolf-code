@@ -118,7 +118,7 @@ func listeners(query ListenerQuery) (ListenerTable, error) {
 	if err != nil {
 		return ListenerTable{}, err
 	}
-	return reconcileListeners(reads, query, os.Getpid(), pids, observeSockets), nil
+	return reconcileListeners(reads, query, os.Getpid(), pids, observeSockets, pcbTable), nil
 }
 
 func pcbTable(protocol Protocol) (socketTableRead, error) {
