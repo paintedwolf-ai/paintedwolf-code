@@ -93,9 +93,10 @@ var profileHasCapabilityAliases = map[string]bool{
 var profileHasIdentifier = regexp.MustCompile(`profile_has_([a-z0-9_]+)`)
 
 // UnreachableNames returns the tool, operation, and command-program names copy
-// tells its reader to reach but the reachable map cannot, sorted. A name is
-// reachable when the map holds it or when a reader with those facts can run it
-// as a command program: command forms need `command`, mutating forms need
+// tells its reader to reach but the reachable map cannot, and the evidence
+// handles (as "kind#") no reachable tool mints, sorted. A name is reachable when
+// the map holds it or when a reader with those facts can run it as a command
+// program: command forms need `command`, mutating forms need
 // ReachCommandMutation, and a dual-state form needs its tool. Callers render
 // copy first so guarded branches resolve against the reader's actual facts.
 func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []string {
@@ -121,6 +122,9 @@ func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []st
 			continue
 		}
 		add(name)
+	}
+	for _, handle := range c.unmintableHandles(corpus, reachable) {
+		add(handle)
 	}
 	sort.Strings(out)
 	return out
