@@ -10,7 +10,7 @@ const encoder = new TextEncoder();
 /** Byte span of `needle` in `source`, located on the encoded bytes. */
 function span(source: string, needle: string, sourceRef = ROOT): CommandActivitySpan {
   const index = source.indexOf(needle);
-  if (index < 0) throw new Error(`fixture missing ${needle}`);
+  expect(index, `fixture holds ${needle}`).toBeGreaterThanOrEqual(0);
   const start = encoder.encode(source.slice(0, index)).length;
   return { source_ref: sourceRef, start_byte: start, end_byte: start + encoder.encode(needle).length };
 }
