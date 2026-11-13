@@ -13,7 +13,7 @@ schema:
     command: {type: string, description: Bash source.}
     cwd: {type: string, description: "Folder path, `@label/...`, or `@scratch/...`."}
     timeout_ms: {type: integer, minimum: 1000, maximum: 7200000, description: Deadline ms.}
-    terminal_capture: {type: object, additionalProperties: false, description: Non-interactive one-shot PTY screen; terminal_open takes input., properties: {winsize: {type: object, additionalProperties: false, description: Dimensions., required: [cols, rows], properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Columns.}, rows: {type: integer, minimum: 1, maximum: 120, description: Rows.}}}, caption: {type: string, maxLength: 240, description: Label.}}}
+    terminal_capture: {type: object, additionalProperties: false, description: Non-interactive one-shot PTY screen., properties: {winsize: {type: object, additionalProperties: false, description: Dimensions., required: [cols, rows], properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Columns.}, rows: {type: integer, minimum: 1, maximum: 120, description: Rows.}}}, caption: {type: string, maxLength: 240, description: Label.}}}
     snapshot_capture: {type: object, additionalProperties: false, description: "Attach APP_SNAPSHOT on zero exit.", properties: {env_var: {type: string, default: APP_SNAPSHOT, description: Variable.}, view: {type: string, description: View.}, scale: {type: number, default: 2.0, description: Scale.}, caption: {type: string, maxLength: 240, description: Label.}}}
     socks_proxy: {type: boolean, default: false, description: SOCKS5h proxy.}
     capability_request:
