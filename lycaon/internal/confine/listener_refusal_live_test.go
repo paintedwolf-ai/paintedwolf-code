@@ -79,3 +79,13 @@ func TestHomebrewBindUnderEachConfinement(t *testing.T) {
 		t.Logf("%s: refusals %+v\noutput %s\nPROFILE-BEGIN %s\n%s\nPROFILE-END", name, refusals.Refusals, out, name, profile)
 	}
 }
+
+// Repeated refused binds by one executable in quick succession.
+func TestKernelReportsRepeatedBinds(t *testing.T) {
+	self := requireLiveBoundary(t)
+	requireRefusalWatch(t)
+	for i, port := range []string{"18781", "18781", "18782"} {
+		refusals, _ := refusalsOf(t, self, liveBoundaryRoots(t.TempDir()), "/opt/homebrew/bin/python3", "-c", "import socket; s=socket.socket(); s.bind(('127.0.0.1', "+port+"))")
+		t.Logf("attempt %d port %s: %d refusals %+v", i, port, len(refusals.Refusals), refusals.Refusals)
+	}
+}
