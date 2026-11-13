@@ -5484,16 +5484,16 @@ type ReplaceManagedSecretValueRequest struct {
 	SecretValue string `json:"secret_value"`
 }
 
-// ReplaceProjectViewRequest What one window of this person shows of the project right now. Send only surfaces that are visible; a window that shows none of them, or is hidden, sends none. Reports expire unless renewed.
+// ReplaceProjectViewRequest What one window of this person shows of the project right now. Every surface is present; one the window does not show is null, and a window that shows none of them, or is hidden, withdraws its report. Reports expire unless renewed.
 type ReplaceProjectViewRequest struct {
 	ClientID string `json:"client_id"`
 	// The window has keyboard focus.
 	Focused  bool                `json:"focused"`
-	Editor   *ViewReportEditor   `json:"editor,omitempty"`
-	Diff     *ViewReportPath     `json:"diff,omitempty"`
-	Folder   *ViewReportPath     `json:"folder,omitempty"`
-	Search   *ViewReportSearch   `json:"search,omitempty"`
-	Findings []ViewReportFinding `json:"findings,omitempty"`
+	Editor   *ViewReportEditor   `json:"editor"`
+	Diff     *ViewReportPath     `json:"diff"`
+	Folder   *ViewReportPath     `json:"folder"`
+	Search   *ViewReportSearch   `json:"search"`
+	Findings []ViewReportFinding `json:"findings"`
 }
 
 // RepoBrief Project orientation summary — languages detected by content via enry, listed in dominant-bytes order.

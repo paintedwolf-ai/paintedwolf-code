@@ -3,6 +3,7 @@ package editoradmin
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -21,7 +22,7 @@ func (s *Handler) HandleReplaceProjectView(w http.ResponseWriter, r *http.Reques
 		s.responses.DecodeError(w, r, err)
 		return
 	}
-	if !s.responses.RequireJSONObjectKeys(w, raw, "client_id", "focused") {
+	if !s.responses.RequireJSONObjectKeys(w, raw, "client_id", "focused", "editor", "diff", "folder", "search", "findings") {
 		return
 	}
 	if field, reason := invalidProjectView(req); field != "" {
@@ -67,7 +68,7 @@ func invalidProjectView(req wire.ReplaceProjectViewRequest) (field, reason strin
 		return "findings", "holds at most 8 findings"
 	}
 	for _, f := range req.Findings {
-		if f.Fingerprint == "" || len(f.Fingerprint) > 256 || f.RuleID == "" || len(f.RuleID) > 128 || !slices.Contains(wire.AllFindingLevelValues(), f.Level) {
+		if f.Fingerprint == "" || len(f.Fingerprint) > 256 || !validRuleID(f.RuleID) || !slices.Contains(wire.AllFindingLevelValues(), f.Level) {
 			return "findings", "each needs a fingerprint, a rule and a level"
 		}
 		if f.Location != nil && !location(f.Location.RootID, f.Location.Path, f.Location.Line) {
@@ -76,3 +77,7 @@ func invalidProjectView(req wire.ReplaceProjectViewRequest) (field, reason strin
 	}
 	return "", ""
 }
+
+var ruleIDPattern = regexp.MustCompile(`^[a-zA-Z0-9_.:/-]{1,128}$`)
+
+func validRuleID(id string) bool { return ruleIDPattern.MatchString(id) }

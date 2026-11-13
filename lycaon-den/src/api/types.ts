@@ -7577,16 +7577,16 @@ export interface components {
             level: components["schemas"]["FindingLevel"];
             location?: components["schemas"]["ViewLocation"];
         };
-        /** @description What one window of this person shows of the project right now. Send only surfaces that are visible; a window that shows none of them, or is hidden, sends none. Reports expire unless renewed. */
+        /** @description What one window of this person shows of the project right now. Every surface is present; one the window does not show is null, and a window that shows none of them, or is hidden, withdraws its report. Reports expire unless renewed. */
         ReplaceProjectViewRequest: {
             client_id: string;
             /** @description The window has keyboard focus. */
             focused: boolean;
-            editor?: components["schemas"]["ViewReportEditor"];
-            diff?: components["schemas"]["ViewReportPath"];
-            folder?: components["schemas"]["ViewReportPath"];
-            search?: components["schemas"]["ViewReportSearch"];
-            findings?: components["schemas"]["ViewReportFinding"][];
+            editor: components["schemas"]["ViewReportEditor"] | null;
+            diff: components["schemas"]["ViewReportPath"] | null;
+            folder: components["schemas"]["ViewReportPath"] | null;
+            search: components["schemas"]["ViewReportSearch"] | null;
+            findings: components["schemas"]["ViewReportFinding"][];
         };
         ViewReportPath: {
             /** Format: uuid */

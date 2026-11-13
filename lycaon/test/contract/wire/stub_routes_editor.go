@@ -46,6 +46,9 @@ func registerStubEditorRoutes(mux *http.ServeMux, writeJSON stubJSONWriter) {
 	mux.HandleFunc("PUT /v1/projects/{id}/editor-documents/retention", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
+	mux.HandleFunc("PUT /v1/projects/{id}/view", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("POST /v1/projects/{id}/editor-documents/status", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, api.EditorDocumentStatuses{Documents: []api.EditorDocumentStatus{}, Missing: []string{}})
 	})
