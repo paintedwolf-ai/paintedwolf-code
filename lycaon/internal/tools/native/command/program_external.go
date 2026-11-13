@@ -352,12 +352,12 @@ func (d *ProgramDispatcher) recordExternalStage(admitted tools.ToolContext, stam
 	if d == nil || d.run == nil || d.run.tc.Effects.Out == nil {
 		return
 	}
-	d.shared.mu.Lock()
-	defer d.shared.mu.Unlock()
-	d.run.tc.Effects.Out.Facts = tools.ApplyRefusalFacts(d.run.tc.Effects.Out.Facts, stamped)
-	childTC := admitted
-	childTC.Effects.Out = d.run.tc.Effects.Out
-	tools.CaptureExternalAccess(childTC, hosts, directIPApplied)
+	d.run.tc.Effects.Out.WithLock(func(out *tools.ToolInvocationOut) {
+		out.Facts = tools.ApplyRefusalFacts(out.Facts, stamped)
+		childTC := admitted
+		childTC.Effects.Out = out
+		tools.CaptureExternalAccess(childTC, hosts, directIPApplied)
+	})
 }
 
 // reachedNetworkURLs names the destinations beyond this machine a stage's

@@ -72,6 +72,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	}
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
+		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
 		if projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 1); err == nil {
 			out.CommandProgram = &projection.Program
 		}
