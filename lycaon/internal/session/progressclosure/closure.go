@@ -22,12 +22,22 @@ type Service struct {
 	mu        sync.Mutex
 	progress  Progress
 	tasks     Tasks
+	accounts  Accounts
 	baselines scopedstore.LRU[guard.ProgressClosureBaseline]
+}
+
+// Accounts records that the coordinator accounted for the results of the
+// acknowledged worker finishes.
+type Accounts interface {
+	AccountJobs(ctx context.Context, jobIDs []string) error
 }
 
 func New() *Service                       { return &Service{} }
 func (m *Service) SetProgress(p Progress) { m.progress = p }
 func (m *Service) SetTasks(p Tasks)       { m.tasks = p }
+
+// SetAccounts wires durable accounting of acknowledged results.
+func (m *Service) SetAccounts(a Accounts) { m.accounts = a }
 func (m *Service) Forget(id string)       { m.mu.Lock(); defer m.mu.Unlock(); m.baselines.Delete(id) }
 
 // Arm records a successful worker finish against the current checklist.

@@ -1,0 +1,27 @@
+oar: '1.0'
+id: INSTRUCT_WORKER_AGENT_SEALED
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - instruct_worker
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "INSTRUCT_WORKER_AGENT_SEALED"
+effect: block
+copy:
+  what: 'This worker''s agent cannot change.'
+  cause: It is a reviewer or bound to a plan or workflow, so its role and agent are sealed.
+  why: A sealed role keeps a review subject or plan leg exactly what was assigned.
+  fix: Instruct it without agent_type, or start a new worker with task.
+  instead: Branch on Code INSTRUCT_WORKER_AGENT_SEALED; do not retry the same call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
+x-paintedwolf-message: 'This worker''s agent cannot change.'
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: instruct_worker

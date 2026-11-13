@@ -1,0 +1,27 @@
+oar: '1.0'
+id: INSTRUCT_WORKER_AGENT_CHANGES_OPEN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - instruct_worker
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "INSTRUCT_WORKER_AGENT_CHANGES_OPEN"
+effect: block
+copy:
+  what: The worker still has changes that are not landed or rejected.
+  cause: Moving a write worker to a read agent would leave its changes without a workspace.
+  why: 'Shelved changes count: they can still be landed or rejected.'
+  fix: Land or reject its changes first, or keep a write agent.
+  instead: Branch on Code INSTRUCT_WORKER_AGENT_CHANGES_OPEN; do not retry the same call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
+x-paintedwolf-message: The worker still has changes that are not landed or rejected.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: instruct_worker

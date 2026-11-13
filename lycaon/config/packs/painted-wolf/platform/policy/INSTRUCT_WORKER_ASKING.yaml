@@ -1,0 +1,27 @@
+oar: '1.0'
+id: INSTRUCT_WORKER_ASKING
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - instruct_worker
+requires:
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "INSTRUCT_WORKER_ASKING"
+effect: block
+copy:
+  what: The worker is waiting on its question.
+  cause: The worker asked a blocking question and is suspended until it is answered.
+  why: An instruction cannot reach a suspended round; the answer resumes it.
+  fix: '{{ paintedwolf.next_steps }}'
+  instead: Branch on Code INSTRUCT_WORKER_ASKING; do not retry the same call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
+x-paintedwolf-message: The worker is waiting on its question.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: instruct_worker

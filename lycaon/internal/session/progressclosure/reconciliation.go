@@ -1,6 +1,7 @@
 package progressclosure
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -35,8 +36,10 @@ func (m *Service) Reconciliation(root string) *progress.Reconciliation {
 	return reconciliation(root, baseline)
 }
 
-// Acknowledge clears only the worker-finish set identified by token.
-func (m *Service) Acknowledge(root, token string) bool {
+// Acknowledge clears only the worker-finish set identified by token, after
+// recording each listed result as accounted for. A failed record leaves the
+// set armed, so the checklist update can acknowledge it again.
+func (m *Service) Acknowledge(ctx context.Context, root, token string) bool {
 	if m == nil || token == "" {
 		return false
 	}
@@ -46,8 +49,14 @@ func (m *Service) Acknowledge(root, token string) bool {
 	if !armed {
 		return false
 	}
-	if reconciliation(root, baseline).Token != token {
+	rec := reconciliation(root, baseline)
+	if rec.Token != token {
 		return false
+	}
+	if m.accounts != nil {
+		if err := m.accounts.AccountJobs(ctx, rec.Jobs); err != nil {
+			return false
+		}
 	}
 	m.baselines.Delete(root)
 	return true

@@ -57,6 +57,11 @@ tools:
   # message_coordinator worker note to its coordinator
   - message_coordinator
 
+  # instruct_worker, shelve_overlay, worker_history: long-lived worker control
+  - instruct_worker
+  - shelve_overlay
+  - worker_history
+
 
   # parse_* delegation plan parsing
   - parse_extract_json

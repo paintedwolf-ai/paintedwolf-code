@@ -64,6 +64,9 @@ func (s *SQLStore) CancelJob(ctx context.Context, id string, result *api.WorkerR
 	if err := insertCanceledWorkerResult(ctx, tx, id, claimToken, resultJSON, completedAt); err != nil {
 		return false, err
 	}
+	if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(completedAt), JobID: id}); err != nil {
+		return false, err
+	}
 	if _, err := q.CancelWorkerWaitLeases(ctx, db.CancelWorkerWaitLeasesParams{
 		UpdatedAt: completedAt, ResolvedAt: sql.NullString{String: completedAt, Valid: true},
 		WorkerJobID: sql.NullString{String: id, Valid: true},

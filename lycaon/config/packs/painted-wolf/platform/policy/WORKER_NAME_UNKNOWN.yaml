@@ -1,0 +1,28 @@
+oar: '1.0'
+id: WORKER_NAME_UNKNOWN
+kind: schema
+anchor: tool.rejected
+selector:
+  tool:
+    - instruct_worker
+    - worker_history
+requires:
+  facts: [paintedwolf.rejection_code]
+  profiles:
+    - tool
+when: paintedwolf.rejection_code == "WORKER_NAME_UNKNOWN"
+effect: block
+copy:
+  what: No worker in this session has that name.
+  cause: The name matches no worker this session started.
+  why: Workers are addressed by the name their task call returned, within the session that started them.
+  fix: Use a worker name from the roster, or start a new worker with task.
+  instead: Branch on Code WORKER_NAME_UNKNOWN; do not retry the same call
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
+x-paintedwolf-message: No worker in this session has that name.
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: instruct_worker

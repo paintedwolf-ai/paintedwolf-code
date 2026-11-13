@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
@@ -55,6 +56,9 @@ func (s *SQLStore) SetMergeStatuses(ctx context.Context, updates []MergeStatusUp
 			}
 			if n != 1 {
 				return fmt.Errorf("worker %s not found for merge status update", jobID)
+			}
+			if err := disposeWorkerRound(ctx, q, jobID, update.Status, ""); err != nil {
+				return err
 			}
 			if mergeStatusTerminal(update.Status) && worker.ParentSessionID.Valid {
 				if err := q.DeleteAgentCallReservations(ctx, db.DeleteAgentCallReservationsParams{
@@ -210,6 +214,9 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 	if n != 1 {
 		return fmt.Errorf("worker %s is not applying under this claim", jobID)
 	}
+	if err := disposeWorkerRound(ctx, q, jobID, api.WorkerMergeStatusMerged, plan.ID); err != nil {
+		return err
+	}
 	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
 		return err
 	}
@@ -229,4 +236,28 @@ func mergeStatusTerminal(status api.WorkerMergeStatus) bool {
 	default:
 		return false
 	}
+}
+
+// disposeWorkerRound records on a worker round's result what a merge status
+// did to its changes. Rejecting a result accounts for it, since its
+// deliverable stays open; a landing does not, and an orphaned stacked result
+// lost its changes with its parent. Jobs that run no worker round are
+// untouched.
+func disposeWorkerRound(ctx context.Context, q *db.Queries, jobID string, status api.WorkerMergeStatus, landedChangeID string) error {
+	now := db.NullString(db.FormatTime(time.Now().UTC()))
+	params := db.DisposeWorkerResultsByJobParams{
+		JobID: jobID, OperationID: "merge_status:" + jobID + ":" + string(status), ChangedAt: now,
+	}
+	switch status {
+	case api.WorkerMergeStatusMerged:
+		params.ChangeState, params.LandedChangeID = "landed", db.NullString(landedChangeID)
+	case api.WorkerMergeStatusRejected:
+		params.ChangeState, params.AccountedAt = "rejected", now
+	case api.WorkerMergeStatusOrphaned:
+		params.ChangeState = "rejected"
+	default:
+		return nil
+	}
+	_, err := q.DisposeWorkerResultsByJob(ctx, params)
+	return err
 }

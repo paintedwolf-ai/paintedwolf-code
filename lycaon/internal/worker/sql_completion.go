@@ -21,7 +21,10 @@ type JobCompletion struct {
 }
 
 // CompleteJob commits the result, overlay manifest, and merge status together.
-func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.WorkerResult, claimToken string, mergeStatus api.WorkerMergeStatus, clearWorkspace bool, overlayPath string) (JobCompletion, error) {
+// CompleteJob commits a job's result. A job that runs a worker round settles
+// that round in the same transaction, linking the checkpoint its changes
+// published; a job suspended on a decision leaves its round open.
+func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.WorkerResult, claimToken string, mergeStatus api.WorkerMergeStatus, clearWorkspace bool, overlayPath, checkpointID string) (JobCompletion, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return JobCompletion{}, err
@@ -101,6 +104,14 @@ func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.Worker
 		}); err != nil {
 			return JobCompletion{}, err
 		}
+		if mergeStatus != api.WorkerMergeStatusPending {
+			checkpointID = ""
+		}
+		if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{
+			SettledAt: db.NullString(completedAt), CheckpointID: checkpointID, JobID: id,
+		}); err != nil {
+			return JobCompletion{}, err
+		}
 	}
 	if mergeStatus != "" {
 		n, err := q.SetWorkerJobMergeStatus(ctx, db.SetWorkerJobMergeStatusParams{
@@ -171,6 +182,9 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 		ResultJson: sql.NullString{}, Error: errMsg, FailureJson: failureJSON,
 		CreatedAt: completedAt, ClaimToken: claimed.ClaimToken,
 	}); err != nil {
+		return false, err
+	}
+	if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(completedAt), JobID: claimed.ID}); err != nil {
 		return false, err
 	}
 	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {

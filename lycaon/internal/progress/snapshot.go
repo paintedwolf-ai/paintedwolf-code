@@ -1,6 +1,7 @@
 package progress
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
@@ -186,5 +187,5 @@ func resolveDocumentItemIDs(current Snapshot, next Document) []string {
 // Reconciler tracks pending worker finishes independently of the document.
 type Reconciler interface {
 	Reconciliation(string) *Reconciliation
-	Acknowledge(string, string) bool
+	Acknowledge(ctx context.Context, root, token string) bool
 }

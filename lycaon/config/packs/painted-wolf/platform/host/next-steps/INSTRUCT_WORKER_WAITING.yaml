@@ -1,0 +1,4 @@
+steps:
+  - tool: "worker_cancel"
+    say: "Leave it to start when its prerequisite lands, or withdraw it with {{ call }} and start a new worker."
+    otherwise: "Leave it to start when its prerequisite lands."
