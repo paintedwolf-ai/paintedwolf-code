@@ -210,7 +210,6 @@ func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
 		EffectiveAgents:  []string{"agent-1"},
 		WebSearchEnabled: true,
 		LoadedTools:      []string{"tool-1"},
-		OmittedUnits:     []string{"unit-1"},
 		ExecutionMode:    "mode-1",
 		VerifyCommand:    "verify-cmd",
 		WorkerToolBudget: spawn.WorkerToolBudget{Default: 10, Min: 2, Max: 50},
@@ -233,7 +232,6 @@ func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
 		{"EffectiveAgents", func(in *standingPromptInputs) { in.EffectiveAgents = []string{"agent-2"} }},
 		{"WebSearchEnabled", func(in *standingPromptInputs) { in.WebSearchEnabled = false }},
 		{"LoadedTools", func(in *standingPromptInputs) { in.LoadedTools = []string{"tool-2"} }},
-		{"OmittedUnits", func(in *standingPromptInputs) { in.OmittedUnits = []string{"unit-2"} }},
 		{"ExecutionMode", func(in *standingPromptInputs) { in.ExecutionMode = "mode-2" }},
 		{"VerifyCommand", func(in *standingPromptInputs) { in.VerifyCommand = "verify-cmd-2" }},
 		{"WorkerToolBudget", func(in *standingPromptInputs) { in.WorkerToolBudget.Default = 20 }},
@@ -246,7 +244,6 @@ func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
 			mutated.Vars = map[string]any{"v1": "val1"}
 			mutated.EffectiveAgents = append([]string(nil), base.EffectiveAgents...)
 			mutated.LoadedTools = append([]string(nil), base.LoadedTools...)
-			mutated.OmittedUnits = append([]string(nil), base.OmittedUnits...)
 
 			mc.mutate(&mutated)
 			mutKey, err := mutated.cacheKey()

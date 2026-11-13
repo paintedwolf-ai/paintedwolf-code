@@ -3,6 +3,7 @@ import json
 
 from common import digest
 from admission import verify_file
+from contracts import check
 from jsonschema import Draft202012Validator
 from rendering import ordered_messages
 
@@ -20,10 +21,9 @@ class OversizeRow(EncodingExclusion):
         super().__init__("oversize", "oversize row; truncation is forbidden", tokens=tokens, limit=limit)
 
 
-def check_row(row):
-    capture, validation = row["request_capture"], row["validation"]
+def check_capture(row, capture):
     check_controls(capture.get("controls", {}))
-    if capture.get("schema") not in ("pw-model-request-capture/1", "pw-model-request-capture/2") or validation.get("schema") != "pw-training-validation/1":
+    if capture.get("schema") != "pw-model-request-capture/3":
         raise ValueError("unsupported evidence schema")
     if not capture.get("messages") or any(m.get("content") is not None and not isinstance(m["content"], str) for m in capture["messages"]):
         raise ValueError("unsupported request messages")
@@ -31,26 +31,40 @@ def check_row(row):
         raise ValueError("missing host guidance")
     if capture["sha256"] != digest({k:v for k,v in capture.items() if k != "sha256"}):
         raise ValueError("capture digest mismatch")
-    if row["prompt"] != capture["messages"] or validation["request_sha256"] != capture["sha256"]:
+    if row["prompt"] != capture["messages"]:
         raise ValueError("request mismatch")
-    for key in ("host_revision", "epoch", "tool_surface", "state_sha256", "catalog_sha256"):
-        if not capture.get(key) or validation.get(key) != capture[key]:
-            raise ValueError("validation identity mismatch")
-    if validation.get("validator") != "paintedwolf-host-training-validation/1" or not validation.get("receipt_id"):
-        raise ValueError("host acceptance missing")
-    target = row.get("target", row.get("chosen"))
-    quality = validation.get("quality", {})
-    if quality.get("verdict") != "pass" or not quality.get("evidence_ids") or quality.get("request_sha256") != capture["sha256"] or quality.get("response_sha256") != digest(target):
+
+
+def check_quality(quality, capture, target):
+    if (quality.get("verdict") != "pass" or not quality.get("evidence_ids") or quality.get("request_sha256") != capture["sha256"]
+            or quality.get("response_sha256") != digest(target)):
         raise ValueError("independent quality binding missing")
     if quality.get("method") == "model_judge":
         if not quality.get("judge_model") or not quality.get("judge_revision"):
             raise ValueError("quality judge identity missing")
     elif quality.get("method") != "deterministic":
         raise ValueError("unsupported quality method")
-    if row["schema"] == "pw-custom-sft/1":
-        if validation.get("outcome") != "accepted" or validation.get("response_origin") != "model" or validation.get("response_sha256") != digest(target):
-            raise ValueError("response acceptance mismatch")
+
+
+def check_row(row):
+    """Admit only an eligible training row or a validated preference pair."""
+    capture = row["request_capture"]
+    check_capture(row, capture)
+    if row["schema"] == "pw-training-row/1":
+        check("training-row", row)
+        target = row["target"]
+        if row["response_sha256"] != digest(target):
+            raise ValueError("response binding mismatch")
+        check_quality(row["quality"], capture, target)
     elif row["schema"] == "pw-custom-dpo/1":
+        validation = row["validation"]
+        if validation.get("schema") != "pw-training-validation/1" or validation["request_sha256"] != capture["sha256"]:
+            raise ValueError("request mismatch")
+        for key in ("host_revision", "epoch", "contract_sha256", "state_sha256", "catalog_sha256"):
+            if not capture.get(key) or validation.get(key) != capture[key]:
+                raise ValueError("validation identity mismatch")
+        target = row["chosen"]
+        check_quality(validation.get("quality", {}), capture, target)
         if (validation.get("chosen_outcome") != "accepted" or validation.get("rejected_outcome") != "rejected"
                 or validation.get("preference") != "chosen" or row["chosen"] == row["rejected"]
                 or any(validation.get(k + "_sha256") != digest(row[k]) for k in ("chosen", "rejected"))):

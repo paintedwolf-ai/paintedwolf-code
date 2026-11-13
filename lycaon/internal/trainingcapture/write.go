@@ -78,7 +78,7 @@ func TurnCommitted(ctx context.Context, session, message string) {
 	if !ok {
 		return
 	}
-	fact := Fact{Schema: "pw-training-fact/1", Epoch: epoch, Kind: "turn_committed", SessionID: session,
+	fact := Fact{Schema: FactSchema, Epoch: epoch, Kind: "turn_committed", SessionID: session,
 		MessageID: message, DecidedAt: time.Now().UTC().Format(time.RFC3339Nano)}
 	if err := writeArtifact(root, fact); err != nil {
 		slog.WarnContext(ctx, "write training fact", "error", err)

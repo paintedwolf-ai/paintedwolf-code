@@ -10,8 +10,8 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/observability"
-	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/store"
@@ -45,14 +45,6 @@ func (m *Service) LoadedTools(sessionID string) map[string]bool {
 	return m.Ledger.Active(sessionID)
 }
 
-// OmittedUnits returns the instruction units the session's turn leaves out.
-func (m *Service) OmittedUnits(sessionID string) map[string]bool {
-	if m == nil {
-		return nil
-	}
-	return m.Ledger.Omitted(sessionID)
-}
-
 func (m *Service) Decider() decide.Decider {
 	if m == nil || m.decider == nil {
 		return decide.Absent{}
@@ -66,7 +58,6 @@ type Decision struct {
 	state      turnload.State
 	floor      []string
 	loadable   []string
-	guides     []string
 	decision   turnload.Decision
 	ranking    turnload.Ranking
 	skill      *skills.Skill
@@ -169,26 +160,20 @@ func (m *Service) Begin(
 		turnLoadLog.Warn("decision catalog unavailable", "error", err)
 		return nil
 	}
-	units, err := prompts.UnitCatalogFor(nil)
+	eff, err := extpacks.CatalogForConsumers()
 	if err != nil {
 		m.Ledger.ReconcileCatalog(sessionID, loadable, turnload.RankingUnavailable)
-		turnLoadLog.Warn("unit catalog unavailable", "error", err)
+		turnLoadLog.Warn("extension catalog unavailable", "error", err)
 		return nil
 	}
 	host := promptunit.HostWorker
-	mode := ""
 	if guard.IsCoordinatorProfile(profileID) {
 		host = promptunit.HostCoordinator
-		mode = surface.ExecutionModeFamily(surfaceID)
 	}
-	decision := &Decision{host: host, catalog: catalog, revision: units.Revision(), started: time.Now()}
+	decision := &Decision{host: host, catalog: catalog, revision: eff.Revision, started: time.Now()}
 	decision.floor = floor
 	decision.loadable = loadable
-	guides := units.Candidates(host, mode, nameSet(floor), nameSet(loadable))
-	for _, g := range guides {
-		decision.guides = append(decision.guides, g.ID)
-	}
-	candidates := turnload.Candidates(turnload.ToolCandidates(cards), turnload.GuideCandidates(guides))
+	candidates := turnload.ToolCandidates(cards)
 	stateSurface := surfaceID
 	if host == promptunit.HostWorker {
 		stateSurface = profileID
@@ -252,7 +237,6 @@ func (m *Service) Finish(ctx context.Context, sess *api.Session, sessionID strin
 		"host", decision.host,
 		"surface", decision.state.Surface,
 		"tools", decision.decision.ToolIDs(),
-		"omitted", decision.decision.OmittedIDs(),
 		"cache", decision.opening.Boundary.Cache,
 		"cold_reason", decision.opening.Boundary.Reason,
 		"kind", decision.decision.Kind,
@@ -272,7 +256,7 @@ func (d *Decision) receipt() store.TurnLoadReceipt {
 		StateJSON:       marshalJSON(d.state),
 		Decisions: marshalJSON(map[string]any{
 			"turn": d.decision, "skills": d.ranking, "preloaded_skill": preloadIdentity(d.preload), "floor": d.floor, "boundary": d.opening.Boundary,
-			"candidates": map[string][]string{"loadable": append([]string{}, d.loadable...), "guides": append([]string{}, d.guides...)},
+			"candidates": map[string][]string{"loadable": append([]string{}, d.loadable...)},
 		}),
 		ElapsedMs: time.Since(d.started).Milliseconds(),
 		Abstained: d.decision.Abstained && d.ranking.Engine.Name == "",
@@ -284,7 +268,16 @@ func (d *Decision) receipt() store.TurnLoadReceipt {
 	return receipt
 }
 
-// recordedStanding returns the standing surface the session's latest
+// LatestDecision returns the session's latest turn-load receipt; found is
+// false before the chat's first receipt.
+func (m *Service) LatestDecision(ctx context.Context, sessionID string) (store.TurnLoadReceipt, bool, error) {
+	if m == nil || m.store == nil {
+		return store.TurnLoadReceipt{}, false, nil
+	}
+	return m.store.LatestTurnLoadReceipt(ctx, sessionID)
+}
+
+// RecordedStanding returns the standing surface the session's latest
 // receipt recorded; found is false before the chat's first receipt.
 func (m *Service) RecordedStanding(ctx context.Context, sessionID string) (turnload.Standing, bool) {
 	if m == nil || m.store == nil {

@@ -1249,8 +1249,6 @@ components:
       $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadColdReason
     TurnLoadBoundary:
       $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadBoundary
-    TurnLoadGuides:
-      $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadGuides
     TurnLoadMatch:
       $ref: components/schemas/turn-load.yaml#/components/schemas/TurnLoadMatch
     QueueItem:

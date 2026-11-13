@@ -5,7 +5,6 @@ description: >-
   as evidence.
 slot: conduct
 order: 40
-needed_with: [render_view, capture_page, view_image, view_video, measure_page, page_open, terminal_snapshot]
 hosts: [coordinator, worker]
 ---
 {% if visual_show_available or profile_has_render_view or profile_has_view_image or profile_has_view_video %}### Visual evidence

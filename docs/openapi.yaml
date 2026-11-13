@@ -21992,9 +21992,6 @@ components:
           x-go-pointer: true
           $ref: '#/components/schemas/TurnLoadSkill'
           description: 'The skill whose body the turn carries: read at the turn decision, or by the tool_event that this receipt records.'
-        guides:
-          x-go-pointer: true
-          $ref: '#/components/schemas/TurnLoadGuides'
         match:
           x-go-pointer: true
           $ref: '#/components/schemas/TurnLoadMatch'
@@ -22127,19 +22124,6 @@ components:
           description: How long the route keeps an idle prefix; omitted when the provider documents no figure.
       required:
         - cache
-    TurnLoadGuides:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      description: How many loadable instruction units the turn rendered and left out of the prompt.
-      properties:
-        rendered:
-          type: integer
-        omitted:
-          type: integer
-      required:
-        - rendered
-        - omitted
     TurnLoadMatch:
       x-go-generate: true
       type: object

@@ -5,39 +5,17 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
-	"github.com/lycaon/lycaon/internal/coordinator/turnload"
-	"github.com/lycaon/lycaon/internal/decide"
-	"github.com/lycaon/lycaon/internal/decide/decidetest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/prompts/promptstest"
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
+func TestToolProceduresRenderTheUnitsTheirOfferedToolsAttach(t *testing.T) {
 	renderer := promptstest.InjectRenderer(t)
 	catalog, err := renderer.UnitCatalog()
 	testutil.FailErr(t, "load instruction catalog", err)
-	policy, err := turnload.LoadCatalog()
-	testutil.FailErr(t, "load decision release policy", err)
-	guides := turnload.GuideCandidates(catalog.Units())
-	scores := make(map[string]float64, len(guides))
-	for _, guide := range guides {
-		scores[guide.ID] = 0
-	}
-	engine := &decidetest.Fake{Answers: decide.Answers{
-		"guides": {Kind: decide.KindMulti, Probabilities: scores, Confidence: 1},
-	}}
-	decision := turnload.Decide(t.Context(), engine, policy.Turn, turnload.State{User: "explain the result"}, guides)
-	if decision.Abstained || len(decision.Omitted) == 0 {
-		t.Fatalf("pruning did not run: %+v", decision)
-	}
-	omitted := make(map[string]bool, len(decision.Omitted))
-	for id := range decision.Omitted {
-		omitted[id] = true
-	}
-	selection := promptunit.Selection{Host: promptunit.HostCoordinator,
-		Offered: map[string]bool{"edit": true, "update_progress": true}, Omitted: omitted}
+	selection := promptunit.Selection{Host: promptunit.HostCoordinator, Offered: map[string]bool{"edit": true, "update_progress": true}}
 	rendered := catalog.Rendered(selection)
 	for _, id := range []string{"coordinator-progress-procedure", "visual-show-the-design"} {
 		found := false
@@ -47,15 +25,51 @@ func TestCalibratedPruningPreservesCoordinatorRequirements(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Fatalf("calibrated pruning removed required unit %q", id)
+			t.Fatalf("offered tools did not render unit %q", id)
 		}
 	}
 	block, err := inject.RenderToolProceduresBlock(
 		t.Context(), renderer, "session", prompts.CoordinatorProfileID,
-		[]string{"command", "update_progress"}, omitted,
+		[]string{"command", "update_progress"},
 	)
 	testutil.FailErr(t, "render tool procedures block", err)
 	if !strings.Contains(block, "Snapshot the running UI") || !strings.Contains(block, "Snapshot the terminal") {
 		t.Fatalf("rendered tool procedures block missing visual snapshot checklist cue: %q", block)
+	}
+}
+
+func TestToolProcedureUnitsAreTheUnitsTheBlockRenders(t *testing.T) {
+	renderer := promptstest.InjectRenderer(t)
+	catalog, err := renderer.UnitCatalog()
+	testutil.FailErr(t, "load instruction catalog", err)
+	offered := []string{"edit", "update_progress"}
+	units, err := inject.ToolProcedureUnits(renderer, prompts.CoordinatorProfileID, offered)
+	testutil.FailErr(t, "list rendered units", err)
+	want := catalog.Rendered(prompts.UnitSelectionVars(promptunit.HostCoordinator, "", offered))
+	count := 0
+	for _, slotUnits := range want {
+		count += len(slotUnits)
+	}
+	if len(units) != count || count == 0 {
+		t.Fatalf("units = %d, rendered = %d", len(units), count)
+	}
+	attached := 0
+	for _, unit := range units {
+		if len(unit.Attaches) > 0 {
+			attached++
+			if !unit.AttachedTo(map[string]bool{"edit": true, "update_progress": true}) {
+				t.Fatalf("unit %q attaches none of the offered tools", unit.ID)
+			}
+		}
+	}
+	if attached == 0 {
+		t.Fatal("no unit attached to the offered tools")
+	}
+	worker, err := inject.ToolProcedureUnits(renderer, "implementer", nil)
+	testutil.FailErr(t, "list worker units", err)
+	for _, unit := range worker {
+		if len(unit.Attaches) > 0 || !unit.HostsFor(promptunit.HostWorker) {
+			t.Fatalf("worker render with no tools included %q", unit.ID)
+		}
 	}
 }

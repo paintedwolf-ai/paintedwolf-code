@@ -8499,7 +8499,6 @@ export interface components {
             boundary?: components["schemas"]["TurnLoadBoundary"];
             /** @description The skill whose body the turn carries: read at the turn decision, or by the tool_event that this receipt records. */
             preloaded_skill?: components["schemas"]["TurnLoadSkill"];
-            guides?: components["schemas"]["TurnLoadGuides"];
             match?: components["schemas"]["TurnLoadMatch"];
         };
         /**
@@ -8574,11 +8573,6 @@ export interface components {
              * @description How long the route keeps an idle prefix; omitted when the provider documents no figure.
              */
             cold_after_ms?: number;
-        };
-        /** @description How many loadable instruction units the turn rendered and left out of the prompt. */
-        TurnLoadGuides: {
-            rendered: number;
-            omitted: number;
         };
         /** @description How a request_tools or skills_read text resolved to names. */
         TurnLoadMatch: {
@@ -30434,7 +30428,6 @@ export type TurnLoadTool = components["schemas"]["TurnLoadTool"];
 export type TurnLoadCacheState = components["schemas"]["TurnLoadCacheState"];
 export type TurnLoadColdReason = components["schemas"]["TurnLoadColdReason"];
 export type TurnLoadBoundary = components["schemas"]["TurnLoadBoundary"];
-export type TurnLoadGuides = components["schemas"]["TurnLoadGuides"];
 export type TurnLoadMatch = components["schemas"]["TurnLoadMatch"];
 export type QueueItem = components["schemas"]["QueueItem"];
 export type QueueDraft = components["schemas"]["QueueDraft"];

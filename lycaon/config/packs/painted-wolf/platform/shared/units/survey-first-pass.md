@@ -5,7 +5,6 @@ description: >-
   the ladder from a repository map to a bounded read.
 slot: orientation
 order: 10
-needed_with: [command, scan_query, scan_summary]
 hosts: [coordinator, worker]
 ---
 **Choose the next read from the question and existing evidence.**

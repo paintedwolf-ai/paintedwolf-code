@@ -346,7 +346,11 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	}()
 
 	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
-	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
+	procedureProfile := profileID
+	if surfaceID != "" {
+		procedureProfile = surfaceID
+	}
+	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx, sess, procedureProfile))
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	if st != nil {
 		st.output.recoveryAdmitted = false

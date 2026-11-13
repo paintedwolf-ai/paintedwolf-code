@@ -134,7 +134,7 @@ func exportRows(t *testing.T, dbPath string, extra ...string) []decideRow {
 
 func TestDecideExportWritesCoordinatorAndWorkerRows(t *testing.T) {
 	f := newExportFixture(t)
-	candidates := `"floor":["read","request_tools"],"candidates":{"loadable":["jq_edit","web_search","command"],"guides":[]}`
+	candidates := `"floor":["read","request_tools"],"candidates":{"loadable":["jq_edit","web_search","command"]}`
 	f.receipt(t, f.root.ID, "u1", `{"host":"coordinator","user":"rewrite the version field in package.json","surface":"implement_investigate"}`, "{"+candidates+"}")
 	f.receipt(t, f.root.ID, "u2", `{"host":"coordinator","user":"thanks"}`, `{"floor":["read"]}`)
 	msgs, err := db.New(f.handle).ListSessionMessages(t.Context(), f.worker.ID)
@@ -177,7 +177,7 @@ func TestDecideExportKeepsOnlyTheNeedsOfAnIncompleteTurn(t *testing.T) {
 	f := newExportFixture(t)
 	_, err := f.handle.ExecContext(t.Context(), `UPDATE turns SET status = 'failed' WHERE session_id = ?`, f.root.ID)
 	testutil.FailErr(t, "fail turn", err)
-	f.receipt(t, f.root.ID, "u1", `{"host":"coordinator","user":"rewrite"}`, `{"floor":[],"candidates":{"loadable":["jq_edit"],"guides":[]}}`)
+	f.receipt(t, f.root.ID, "u1", `{"host":"coordinator","user":"rewrite"}`, `{"floor":[],"candidates":{"loadable":["jq_edit"]}}`)
 	rows := exportRows(t, f.path)
 	if len(rows) != 1 || !rows[0].Partial || len(rows[0].Labels.Tools) != 0 || len(rows[0].Labels.Requests) != 1 || rows[0].Labels.Kind != nil {
 		t.Fatalf("rows = %+v, want one partial row carrying only its request", rows)
