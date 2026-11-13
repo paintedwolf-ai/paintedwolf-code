@@ -278,7 +278,11 @@ func (w *bundleWriter) captures(ctx context.Context, dir string, inSession map[s
 					return nil, nil, err
 				}
 				delete(record, field)
-				record[field+"_blob"], _ = json.Marshal(ref)
+				blob, err := json.Marshal(ref)
+				if err != nil {
+					return nil, nil, fmt.Errorf("capture %s: %w", entry.Name(), err)
+				}
+				record[field+"_blob"] = blob
 			}
 			records = append(records, record)
 		default:
