@@ -14,7 +14,7 @@ selector:
     - terminal_close
 requires_facts: [paintedwolf.confine_applied, paintedwolf.confine_signals, paintedwolf.destination]
 when: >-
-  paintedwolf.confine_applied && "boundary_refused" in paintedwolf.confine_signals && !("remote_package_destination_denied" in paintedwolf.confine_signals)
+  paintedwolf.confine_applied && "boundary_refused" in paintedwolf.confine_signals && !("remote_package_destination_denied" in paintedwolf.confine_signals) && tool != "verify"
 effect: warn
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox

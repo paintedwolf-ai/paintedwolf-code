@@ -84,9 +84,9 @@ host_facts:
  - name: paintedwolf.repeated_reject_code
    type: string
    observation: The rejection code the loop guard saw repeat across the session's recent calls; empty when none repeats.
- - name: paintedwolf.credential_occurrences
+ - name: paintedwolf.credential_decisions
    type: int
-   observation: Times this session has seen the candidate credential's fingerprint before this occurrence.
+   observation: Earlier credential.assignment occurrences in this session that delivered a decision for the candidate's fingerprint.
  - name: paintedwolf.principal
    type: string
  - name: paintedwolf.principal_roles

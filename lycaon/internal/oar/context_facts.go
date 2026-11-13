@@ -232,9 +232,9 @@ type CountersFacts struct {
 	// session's earlier occurrences ([OAR-FIRE-8], [OAR-FIRE-9]).
 	SameCodeRejectRun int64
 	SameCallRun       int64
-	// CredentialOccurrences counts earlier occurrences in the session that
-	// observed the same credential fingerprint.
-	CredentialOccurrences int64
+	// CredentialDecisions counts earlier credential.assignment occurrences in
+	// the session that delivered a decision for the same fingerprint.
+	CredentialDecisions int64
 	// RepeatedRejectCode is the rejection code the loop guard observed
 	// repeating, or empty.
 	RepeatedRejectCode  string

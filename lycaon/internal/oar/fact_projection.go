@@ -14,7 +14,7 @@ import (
 // data never replaces.
 var occurrenceIdentityFacts = map[string]bool{
 	"paintedwolf.rejection_code": true, "paintedwolf.principal": true, "paintedwolf.principal_roles": true,
-	"paintedwolf.session_role": true, "paintedwolf.anchor": true, "paintedwolf.credential_occurrences": true,
+	"paintedwolf.session_role": true, "paintedwolf.anchor": true, "paintedwolf.credential_decisions": true,
 }
 
 func activation(gc *GuardContext) map[string]any {
@@ -71,7 +71,7 @@ func activation(gc *GuardContext) map[string]any {
 		// Occurrence data never replaces the counts the engine maintains.
 		out["fire_count"], out["breaker_count"], out["paintedwolf.anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
 		out["same_code_reject_run"], out["same_call_run"] = gc.Counters.SameCodeRejectRun, gc.Counters.SameCallRun
-		out["paintedwolf.credential_occurrences"] = gc.Counters.CredentialOccurrences
+		out["paintedwolf.credential_decisions"] = gc.Counters.CredentialDecisions
 	}
 	return out
 }
@@ -273,7 +273,7 @@ func sessionActivation(gc *GuardContext) map[string]any {
 	return map[string]any{
 		"anchor":                     gc.Anchor,
 		"fire_count":                 gc.Counters.FireCount,
-		"credential_occurrences":     gc.Counters.CredentialOccurrences,
+		"credential_decisions":       gc.Counters.CredentialDecisions,
 		"tool_profile":               gc.Session.PermissionProfile,
 		"principal":                  gc.Session.Principal,
 		"principal_roles":            strList(gc.Session.PrincipalRoles),

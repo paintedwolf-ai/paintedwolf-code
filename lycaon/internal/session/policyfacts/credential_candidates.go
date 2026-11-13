@@ -13,20 +13,21 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// credentialSightings counts, per session, the credential.assignment
-// occurrences that observed each credential fingerprint.
-type credentialSightings struct {
+// credentialDecisions counts, per session, the credential.assignment
+// occurrences for each fingerprint that delivered a decision. A monitored rule
+// delivers none, so it never suppresses a later warning.
+type credentialDecisions struct {
 	mu   sync.Mutex
 	seen map[string]map[secretmatch.SecretFingerprint]int64
 }
 
-func (s *credentialSightings) count(sessionID string, fp secretmatch.SecretFingerprint) int64 {
+func (s *credentialDecisions) count(sessionID string, fp secretmatch.SecretFingerprint) int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.seen[sessionID][fp]
 }
 
-func (s *credentialSightings) record(sessionID string, fp secretmatch.SecretFingerprint) {
+func (s *credentialDecisions) record(sessionID string, fp secretmatch.SecretFingerprint) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.seen == nil {
@@ -123,12 +124,12 @@ func (m *Service) candidateContext(ctx context.Context, sess *api.Session, tool 
 		gc.Published["paintedwolf.credential_fingerprint"] = string(fp)
 		return nil
 	})
-	gc.RegisterProvider("paintedwolf.credential_occurrences", func(gc *oar.GuardContext) error {
+	gc.RegisterProvider("paintedwolf.credential_decisions", func(gc *oar.GuardContext) error {
 		fp, err := fingerprint()
 		if err != nil {
 			return err
 		}
-		gc.Counters.CredentialOccurrences = m.credentialSightings.count(sess.ID, fp)
+		gc.Counters.CredentialDecisions = m.credentialDecisions.count(sess.ID, fp)
 		return nil
 	})
 	gc.RegisterProvider("paintedwolf.credential_harvested", func(gc *oar.GuardContext) error {
@@ -160,8 +161,8 @@ func (m *Service) evaluateCredentialCandidates(ctx context.Context, sess *api.Se
 		gc := m.candidateContext(ctx, sess, tool, args, candidate)
 		gc.SetContentSegments([]oar.ContentSegment{{Content: output, Role: "tool", Origin: "tool", Authority: "none", TrustTier: "untrusted", Source: tool}})
 		res, err := m.Pipeline.EvaluateBlock(ctx, oar.AnchorCredentialAssignment, gc)
-		if m.secretFP != nil {
-			m.credentialSightings.record(sess.ID, m.secretFP.Fingerprint(candidate.Value))
+		if err == nil && res != nil && res.Decision != nil && m.secretFP != nil {
+			m.credentialDecisions.record(sess.ID, m.secretFP.Fingerprint(candidate.Value))
 		}
 		if err != nil {
 			facts.ContentReplaced = true

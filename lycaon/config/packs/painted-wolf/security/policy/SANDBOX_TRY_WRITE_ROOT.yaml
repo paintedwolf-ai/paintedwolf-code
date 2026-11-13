@@ -8,7 +8,7 @@ selector:
   tools:
     - command
     - verify
-requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.missing_capability_write_root, paintedwolf.next_steps, paintedwolf.process_running, paintedwolf.refused_write_grants, paintedwolf.refused_write_paths]
+requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.missing_capability_write_root, paintedwolf.next_steps, paintedwolf.process_running, paintedwolf.refused_terminal_read_paths, paintedwolf.refused_terminal_write_paths, paintedwolf.refused_write_grants, paintedwolf.refused_write_paths]
 when: >-
   paintedwolf.confine_applied && size(paintedwolf.refused_write_grants) > 0 && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
 effect: warn
@@ -16,7 +16,7 @@ x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
 message: the sandbox refused a write this invocation needed
 what: In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}.
-cause: The requestable write grants are {{ paintedwolf.refused_write_grants }}; other refused paths may remain unavailable. A refused write can still leave a stage's exit status at 0, and command output cannot widen the boundary.
+cause: The requestable write grants are {{ paintedwolf.refused_write_grants }}; other refused paths may remain unavailable. A refused write can still leave a stage's exit status at 0, and command output cannot widen the boundary.{% if paintedwolf.refused_terminal_read_paths %} Reads of {{ paintedwolf.refused_terminal_read_paths }} were also refused; these host control-plane paths stay closed and no capability request opens them.{% endif %}{% if paintedwolf.refused_terminal_write_paths %} Writes to {{ paintedwolf.refused_terminal_write_paths }} were also refused; these host control-plane paths stay closed and no capability request opens them.{% endif %}
 why: ''
 fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_write_root %}{% if paintedwolf.refused_write_grants %}If the operation is still needed, submit only the remaining work. Set `capability_request.write_root` to the exact matching entry of {{ paintedwolf.refused_write_grants }} as one string. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
 instead: ''
