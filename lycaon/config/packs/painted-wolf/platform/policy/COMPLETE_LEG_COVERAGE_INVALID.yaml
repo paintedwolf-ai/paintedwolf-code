@@ -1,23 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMPLETE_LEG_COVERAGE_INVALID
 kind: policy
-anchor: tool.rejected
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.detail, paintedwolf.assignment, paintedwolf.next_steps]
-  profiles: [tool]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.assignment, paintedwolf.detail, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMPLETE_LEG_COVERAGE_INVALID"
 effect: block
-copy:
-  cause: "{{ paintedwolf.detail }}"
-  why: The assigned coverage review needs an explicit assessment of every assigned scope fact.
-  fix: 'Return coverage_review using this assignment''s subject.facts.revision and one cited assessment per fact. {{ paintedwolf.next_steps }} Retain unfinished material or essential work. Recorded assignment: {{ paintedwolf.assignment }}'
-  instead: 'Repair the coverage assessment and resubmit within this leg.'
-  what: The coverage assessment is missing, incomplete, or stale.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: complete_leg requires the assigned coverage assessment
-x-paintedwolf-scenarios:
-- id: missing
-  vars:
-    detail: coverage assessment missing
-    assignment: '{"id":"job","subject":{"facts":{"revision":"current","obligations":[],"gaps":[]}}}'
+category: recoverable
+emit: guard:tool
+message: complete_leg requires the assigned coverage assessment
+what: The coverage assessment is missing, incomplete, or stale.
+cause: "{{ paintedwolf.detail }}"
+why: The assigned coverage review needs an explicit assessment of every assigned scope fact.
+fix: 'Return coverage_review using this assignment''s subject.facts.revision and one cited assessment per fact. {{ paintedwolf.next_steps }} Retain unfinished material or essential work. Recorded assignment: {{ paintedwolf.assignment }}'
+instead: 'Repair the coverage assessment and resubmit within this leg.'
+scenarios:
+  - id: missing
+    vars:
+      detail: coverage assessment missing
+      assignment: '{"id":"job","subject":{"facts":{"revision":"current","obligations":[],"gaps":[]}}}'

@@ -1,25 +1,24 @@
-oar: '1.0'
+spec_version: "1.0"
 id: INVEST_CITATION_UNVERIFIABLE
 kind: invariant
-anchor: coordinator.closeout_check
-requires:
-  facts: [paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.citation_unverifiable, paintedwolf.surface, paintedwolf.path, paintedwolf.can_recall, paintedwolf.next_steps]
+on: coordinator.closeout_check
+selector: {}
+requires_facts: [paintedwolf.can_recall, paintedwolf.citation_unverifiable, paintedwolf.next_steps, paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.path, paintedwolf.surface]
 when: paintedwolf.surface == "implement_investigate" && paintedwolf.citation_unverifiable
 effect: block
-copy:
-  what: 'Investigate supplied {{ paintedwolf.offender_count }} citation(s) whose location or excerpt does not match the recorded evidence.'
-  cause: 'The citation does not resolve to the claimed recorded passage.'
-  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: 'Repair only the rejected citations, using the exact observed path and printed line, such as `[internal/a.go:42]`, or the bare path or handle. {{ paintedwolf.next_steps }} Keep the retained answer and drop any citation that cannot be supported.'
-  instead: 'Use existing coordinator or worker observations. Resuming work requires a fresh report.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator_investigate
-x-paintedwolf-evidence:
+category: recoverable
+emit: guard:coordinator_investigate
+message: 'Investigate citation location or excerpt did not match recorded evidence'
+what: 'Investigate supplied {{ paintedwolf.offender_count }} citation(s) whose location or excerpt does not match the recorded evidence.'
+cause: 'The citation does not resolve to the claimed recorded passage.'
+why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+fix: 'Repair only the rejected citations, using the exact observed path and printed line, such as `[internal/a.go:42]`, or the bare path or handle. {{ paintedwolf.next_steps }} Keep the retained answer and drop any citation that cannot be supported.'
+instead: 'Use existing coordinator or worker observations. Resuming work requires a fresh report.'
+evidence:
   ui_label: Evidence citations
   ui_check_id: cited_evidence
   in_session_retry: true
-x-paintedwolf-message: 'Investigate citation location or excerpt did not match recorded evidence'
-x-paintedwolf-scenarios:
+scenarios:
   - id: recall_callable
     vars:
       offender_count: 1

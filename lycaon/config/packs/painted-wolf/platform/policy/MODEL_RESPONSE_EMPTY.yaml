@@ -1,25 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: MODEL_RESPONSE_EMPTY
 kind: invariant
-anchor: model.output
-requires:
-  facts:
-    - paintedwolf.reject_observation
-    - paintedwolf.response_tools_callable
-    - paintedwolf.response_structured_output
+on: model.output
+selector: {}
+requires_facts: [paintedwolf.reject_observation, paintedwolf.response_structured_output, paintedwolf.response_tools_callable]
 when: paintedwolf.reject_observation == "terminal_empty_response"
 effect: block
-copy:
-  what: The response ended without an answer or a tool call.
-  cause: The host received no usable output from this attempt.
-  why: No action or completion can be established from an empty response.
-  fix: >-
-    {% if paintedwolf.response_structured_output %}Return the requested structured answer in the required format.{% else %}{% if paintedwolf.response_tools_callable %}Continue the task. If an action is needed, submit a native call using an offered tool and its schema; otherwise provide the answer in assistant content.{% else %}Provide the requested answer in assistant content. Tool calls are unavailable for this request.{% endif %}{% endif %}
-  instead: Do not infer that this attempt performed work.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: A terminal response contained no usable output
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:coordinator
+message: A terminal response contained no usable output
+what: The response ended without an answer or a tool call.
+cause: The host received no usable output from this attempt.
+why: No action or completion can be established from an empty response.
+fix: >-
+  {% if paintedwolf.response_structured_output %}Return the requested structured answer in the required format.{% else %}{% if paintedwolf.response_tools_callable %}Continue the task. If an action is needed, submit a native call using an offered tool and its schema; otherwise provide the answer in assistant content.{% else %}Provide the requested answer in assistant content. Tool calls are unavailable for this request.{% endif %}{% endif %}
+instead: Do not infer that this attempt performed work.
+scenarios:
   - id: no_tools
     vars: {}
   - id: native_tools

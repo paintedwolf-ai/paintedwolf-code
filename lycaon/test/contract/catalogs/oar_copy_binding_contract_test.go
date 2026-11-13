@@ -18,9 +18,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestStockPolicyCopyUsesFrozenBindings fails when a pack copy member (or
-// x-paintedwolf-message) carries a construct outside Appendix C or names a fact
-// this engine does not declare.
+// TestStockPolicyCopyUsesFrozenBindings fails when a pack copy member carries a
+// construct outside Appendix B or names a fact this engine does not declare.
 func TestStockPolicyCopyUsesFrozenBindings(t *testing.T) {
 	t.Parallel()
 	root := filepath.Join(contractcheck.RepoRoot(t), "lycaon", "config", "packs", "painted-wolf")
@@ -40,7 +39,7 @@ func TestStockPolicyCopyUsesFrozenBindings(t *testing.T) {
 			t.Errorf("%s: %v", path, uErr)
 			return nil
 		}
-		if _, isRule := doc["oar"]; !isRule {
+		if _, isRule := doc["spec_version"]; !isRule {
 			return nil // Host presentation entries use the separate guidance renderer.
 		}
 		rel, _ := filepath.Rel(root, path)
@@ -71,12 +70,7 @@ func copyTexts(doc map[string]any) []string {
 			out = append(out, s)
 		}
 	}
-	if copy, ok := doc["copy"].(map[string]any); ok {
-		for _, v := range copy {
-			add(v)
-		}
-	}
-	for _, key := range []string{"what", "cause", "why", "fix", "instead", "message", "x-paintedwolf-message"} {
+	for _, key := range []string{"what", "cause", "why", "fix", "instead", "message"} {
 		add(doc[key])
 	}
 	return out
@@ -106,7 +100,7 @@ func TestGroundingRepairCopyDeclaresCanRecall(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s missing from stock policy", code)
 		}
-		if entry.Requires == nil || !slices.Contains(entry.Requires.Facts, "paintedwolf.can_recall") {
+		if !slices.Contains(entry.RequiresFacts, "paintedwolf.can_recall") {
 			t.Errorf("%s does not require paintedwolf.can_recall", code)
 		}
 	}

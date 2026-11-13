@@ -1,0 +1,31 @@
+{
+  "id": "sel-empty-matches-all",
+  "title": "An empty selector matches every occurrence of the anchor",
+  "covers": [
+    "OAR-SEL-3",
+    "OAR-SEL-4",
+    "OAR-DOC-12",
+    "OAR-DOC-14"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "EMPTY_SELECTOR",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "tool == \"write\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "write",
+      "profile": "coordinator"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "EMPTY_SELECTOR"
+  }
+}

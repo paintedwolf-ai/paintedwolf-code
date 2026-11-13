@@ -1,57 +1,41 @@
-oar: '1.0'
+spec_version: "1.0"
 id: EDIT_OLD_STRING_NOT_FOUND
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - edit
-requires:
-  profiles:
-  - filesystem
-  - tool
-  facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.old_string_chars, paintedwolf.path, paintedwolf.total_lines, paintedwolf.replacement_matches, paintedwolf.replacement_line, paintedwolf.next_steps]
+  ledger:
+    paintedwolf.operation:
+      - edit
+requires_facts: [paintedwolf.next_steps, paintedwolf.old_string_chars, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.replacement_line, paintedwolf.replacement_matches, paintedwolf.total_lines]
 when: paintedwolf.rejection_code == "EDIT_OLD_STRING_NOT_FOUND"
 effect: block
-copy:
-  what: >-
-    {% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}.
-    The requested replacement is already present {{ paintedwolf.replacement_matches }} time(s),
-    first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}:
-    The searched text ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis
-    ({{ paintedwolf.total_lines }} lines).{% endif %}
-  cause: >-
-    {% if paintedwolf.replacement_matches %}The edit basis contains the replacement text but not the searched text.
-    This does not prove an earlier edit succeeded.{% else %}The searched text must match the source exactly.
-    Stale text, displayed line labels, indentation changes, or literal backslash escapes can prevent a match.
-    Valid JSON Unicode escapes are decoded before matching.{% endif %}
-  why: This rejected call made no change. Repeating the same old text and replacement cannot resolve this miss.
-  fix: >-
-    {% if paintedwolf.replacement_matches %}Read {{ paintedwolf.path }} around line {{ paintedwolf.replacement_line }}
-    and compare the existing replacement with the intended result. If it is the intended result,
-    continue with the remaining task without applying this edit again. Otherwise, compute a different edit
-    from the fresh source.{% else %}Read {{ paintedwolf.path }} and check whether the intended change is still needed.
-    If needed, use a fresh verbatim substring as the searched text, without displayed line labels and preserving indentation.{% endif %}
-  instead: '{{ paintedwolf.next_steps }} Do not replace the whole file to bypass a missing match.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:edit
-x-paintedwolf-message: edit old_string not found in file
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    old_string_chars: 42
-    path: internal/foo.go
-    profile: implement
-    source_history_offered: true
-    tool: edit
-    total_lines: 120
-
-- id: replacement_present
-  vars:
-    change_count: 2
-    old_string_chars: 42
-    path: internal/foo.go
-    profile: implement
-    tool: edit
-    total_lines: 120
-    replacement_matches: 1
-    replacement_line: 7
+category: recoverable
+emit: guard:edit
+message: edit old_string not found in file
+what: >-
+  {% if paintedwolf.replacement_matches %}No edit was applied to {{ paintedwolf.path }}. The requested replacement is already present {{ paintedwolf.replacement_matches }} time(s), first at line {{ paintedwolf.replacement_line }}.{% else %}No edit was applied to {{ paintedwolf.path }}: The searched text ({{ paintedwolf.old_string_chars }} chars) is absent from the edit basis ({{ paintedwolf.total_lines }} lines).{% endif %}
+cause: >-
+  {% if paintedwolf.replacement_matches %}The edit basis contains the replacement text but not the searched text. This does not prove an earlier edit succeeded.{% else %}The searched text must match the source exactly. Stale text, displayed line labels, indentation changes, or literal backslash escapes can prevent a match. Valid JSON Unicode escapes are decoded before matching.{% endif %}
+why: This rejected call made no change. Repeating the same old text and replacement cannot resolve this miss.
+fix: >-
+  {% if paintedwolf.replacement_matches %}Read {{ paintedwolf.path }} around line {{ paintedwolf.replacement_line }} and compare the existing replacement with the intended result. If it is the intended result, continue with the remaining task without applying this edit again. Otherwise, compute a different edit from the fresh source.{% else %}Read {{ paintedwolf.path }} and check whether the intended change is still needed. If needed, use a fresh verbatim substring as the searched text, without displayed line labels and preserving indentation.{% endif %}
+instead: '{{ paintedwolf.next_steps }} Do not replace the whole file to bypass a missing match.'
+scenarios:
+  - id: default
+    vars:
+      old_string_chars: 42
+      path: internal/foo.go
+      profile: implement
+      source_history_offered: true
+      tool: edit
+      total_lines: 120
+  - id: replacement_present
+    vars:
+      change_count: 2
+      old_string_chars: 42
+      path: internal/foo.go
+      profile: implement
+      tool: edit
+      total_lines: 120
+      replacement_matches: 1
+      replacement_line: 7

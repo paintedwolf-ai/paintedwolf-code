@@ -28,17 +28,17 @@ var hostCoreAdapters = map[string]string{
 	CoreAnchorModelToolResult: AnchorContentToolResult,
 }
 
-func (p *CapabilityDocument) requireHostAdapters() error {
+func (p *EngineDeclaration) requireHostAdapters() error {
 	native := map[string]bool{AnchorCoordinatorMidTurnNote: true, AnchorCoordinatorPreInvoke: true, AnchorSessionPreInvoke: true, AnchorCredentialAssignment: true, AnchorToolRejected: true, AnchorWorkerReportCheck: true, AnchorCoordinatorCloseoutCheck: true}
 	for core, local := range hostCoreAdapters {
 		native[local] = true
-		if declared, ok := p.Anchors.Core[core]; ok && declared != local {
-			return fmt.Errorf("[OAR-PROF-10] anchor %s requires host adapter %s, got %s", core, local, declared)
+		if declared, ok := p.ProfileMap.Core[core]; ok && declared != local {
+			return fmt.Errorf("anchor %s requires host adapter %s, got %s", core, local, declared)
 		}
 	}
-	for _, name := range p.Anchors.Host {
+	for _, name := range p.HostAnchors {
 		if !native[name] {
-			return fmt.Errorf("[OAR-PROF-10] no host adapter for anchor %s", name)
+			return fmt.Errorf("no host adapter for anchor %s", name)
 		}
 	}
 	facts := map[string]string{}
@@ -57,29 +57,33 @@ func (p *CapabilityDocument) requireHostAdapters() error {
 	}
 	for _, declared := range p.HostFacts {
 		if facts[declared.Name] != strings.TrimSpace(declared.Type) {
-			return fmt.Errorf("[OAR-FACT-24] host_facts %s has no provider of type %s", declared.Name, declared.Type)
+			return fmt.Errorf("host_facts %s has no provider of type %s", declared.Name, declared.Type)
 		}
 	}
 	registry := HostDetectors(nil)
 	for _, ref := range p.Detectors {
 		if registry.Lookup(ref) == nil {
-			return fmt.Errorf("[OAR-OPS-12] no host detector %s", ref)
+			return fmt.Errorf("[OAR-OPS-10] no host detector %s", ref)
 		}
 	}
 	return nil
 }
 
 // ValidateHostRuleSet refuses transformations at boundaries whose deliveries
-// cannot represent rewritten content ([OAR-PROF-10]).
+// cannot represent rewritten content, and transforms that name nothing to
+// replace.
 func ValidateHostRuleSet(rules *RuleSet) error {
 	for _, rule := range rules.All() {
 		if rule.Effect != EffectTransform {
 			continue
 		}
+		if rule.Transform == nil {
+			return fmt.Errorf("rule %s: transform carries no x-paintedwolf-transform, so the host has nothing to apply", rule.Qualified())
+		}
 		switch rule.Anchor {
 		case AnchorToolPost, AnchorContentOutput, AnchorContentToolResult, AnchorCredentialAssignment:
 		default:
-			return fmt.Errorf("[OAR-PROF-10] rule %s: transform cannot be delivered at anchor %s", rule.Qualified(), rule.Anchor)
+			return fmt.Errorf("rule %s: transform cannot be delivered at anchor %s", rule.Qualified(), rule.Anchor)
 		}
 	}
 	return nil

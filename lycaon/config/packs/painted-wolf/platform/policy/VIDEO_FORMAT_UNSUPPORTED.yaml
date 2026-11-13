@@ -1,29 +1,24 @@
-oar: '1.0'
+spec_version: "1.0"
 id: VIDEO_FORMAT_UNSUPPORTED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - view_video
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.mime, paintedwolf.next_steps]
-  profiles:
-  - tool
+  tools:
+    - view_video
+requires_facts: [paintedwolf.mime, paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "VIDEO_FORMAT_UNSUPPORTED"
 effect: block
-copy:
-  what: '{{ tool }} did not find a video container in {{ paintedwolf.path }}{% if paintedwolf.mime %} (detected {{ paintedwolf.mime
-    }}){% endif %}.'
-  cause: The file's leading bytes are not an MP4, QuickTime, or WebM container.
-  why: view_video draws frames from recordings; the container is read from the bytes, not the file name.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code VIDEO_FORMAT_UNSUPPORTED; use the tool for the file's actual type
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:view_video
-x-paintedwolf-message: view_video file is not a video container
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    mime: image/png
-    path: recordings/still.png
-    tool: view_video
+category: recoverable
+emit: guard:view_video
+message: view_video file is not a video container
+what: '{{ tool }} did not find a video container in {{ paintedwolf.path }}{% if paintedwolf.mime %} (detected {{ paintedwolf.mime }}){% endif %}.'
+cause: The file's leading bytes are not an MP4, QuickTime, or WebM container.
+why: view_video draws frames from recordings; the container is read from the bytes, not the file name.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code VIDEO_FORMAT_UNSUPPORTED; use the tool for the file's actual type
+scenarios:
+  - id: default
+    vars:
+      mime: image/png
+      path: recordings/still.png
+      tool: view_video

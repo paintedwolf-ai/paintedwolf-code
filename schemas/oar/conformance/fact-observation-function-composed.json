@@ -1,0 +1,28 @@
+{
+  "id": "fact-observation-function-composed",
+  "title": "A parameterized observation function is composed like any other observation",
+  "covers": [
+    "OAR-FACT-7"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "PATH_ESCAPED",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "path_outside_scope(\"read\")"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "path_outside_scope": true
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "PATH_ESCAPED"
+  }
+}

@@ -76,7 +76,7 @@ func TestWorkerBranchClaimPolicyConsumesActualRefusals(t *testing.T) {
 			result, err := pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
 			contractcheck.FailErr(t, "evaluate branch refusal", err)
 			if code == "WORKER_BRANCH_CLAIM_FAILED" {
-				if result == nil || result.Decision == nil || result.Decision.Code != code || len(result.Decision.Copy) != 5 {
+				if result == nil || result.Decision == nil || result.Decision.Code != code || !carriesRuleCopy(result.Decision.Copy) {
 					t.Fatalf("%s refusal lost policy: %+v", tool, result)
 				}
 			} else if result != nil && result.Decision != nil && result.Decision.Code == "WORKER_BRANCH_CLAIM_FAILED" {
@@ -93,4 +93,15 @@ func workerBranchCatalog(t *testing.T) []string {
 		t.Fatalf("nativemanifest.Load: %v", err)
 	}
 	return cfg.WorkerBranchTools()
+}
+
+// carriesRuleCopy reports whether a decision kept the rule's evaluated copy:
+// every shipped rule says what happened and why.
+func carriesRuleCopy(copy map[string]string) bool {
+	for _, member := range []string{"what", "cause"} {
+		if copy[member] == "" {
+			return false
+		}
+	}
+	return true
 }
