@@ -2,6 +2,7 @@ package workerrecords_test
 
 import (
 	"errors"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -191,5 +192,27 @@ func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
 	_, err = f.store.AdmitRound(t.Context(), f.coord, op("admit-closed"), w.WorkerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
 	if !errors.Is(err, workerrecords.ErrWorkerClosed) {
 		t.Fatalf("admission on a closed worker = %v", err)
+	}
+}
+
+// Open lane roots are each open worker's current lane; earlier generations
+// and closed workers' lanes are not listed.
+func TestOpenLaneRootsListCurrentLanesOfOpenWorkers(t *testing.T) {
+	f := newFixture(t)
+	open := f.createWorker(t, "create-open", workerrecords.WorkerSpec{Name: "open", ChildSessionID: "child-open"})
+	closed := f.createWorker(t, "create-closed", workerrecords.WorkerSpec{Name: "closed", ChildSessionID: "child-closed"})
+	for i, ref := range []string{"/lanes/open.1", "/lanes/open.2"} {
+		_, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-open-"+strconv.Itoa(i)), open.WorkerID, workerrecords.Preparation{PreparationRef: ref, BindingGeneration: int64(i + 1)})
+		testutil.FailErr(t, "record open lane", err)
+	}
+	_, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-closed"), closed.WorkerID, workerrecords.Preparation{PreparationRef: "/lanes/closed.1", BindingGeneration: 1})
+	testutil.FailErr(t, "record closed lane", err)
+	_, err = f.store.Close(t.Context(), f.coord, op("close"), closed.WorkerID, "withdrawn")
+	testutil.FailErr(t, "close", err)
+
+	roots, err := f.store.OpenLaneRoots(t.Context())
+	testutil.FailErr(t, "open lane roots", err)
+	if !slices.Equal(roots, []string{"/lanes/open.2"}) {
+		t.Fatalf("open lane roots = %v", roots)
 	}
 }

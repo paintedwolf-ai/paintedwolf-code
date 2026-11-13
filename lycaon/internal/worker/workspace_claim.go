@@ -379,9 +379,17 @@ func (q *sqlQueuePromotion) ListBranchJobs(ctx context.Context) ([]BranchJob, er
 			}
 		}
 		out = append(out, BranchJob{
-			ID: row.ID, ProjectID: row.ProjectID,
+			ID: row.ID, ProjectID: row.ProjectID, Branch: branchName(db.StringFromNull(row.WorkspaceRelpath)),
 			Sealed: branchJobSealed(status, mergeStatus, overlayID, branchRoot),
 		})
 	}
 	return out, nil
+}
+
+// branchName is the directory a branch root names, or "" for none.
+func branchName(root string) string {
+	if root = strings.TrimSpace(root); root == "" {
+		return ""
+	}
+	return filepath.Base(filepath.Clean(root))
 }

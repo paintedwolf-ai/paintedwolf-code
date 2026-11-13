@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workflow"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -57,6 +58,7 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Executor.SetPromptInjects(r.InjectRenderer)
 	r.Executor.SetPhaseTouchPaths(deps.Workflows.Manager.Ambient)
 	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(deps.Storage.Directory)
+	r.LaneRoots = workerrecords.New(deps.Storage.Database).OpenLaneRoots
 	if err := localdata.ClearRetiredWorkerSeeds(deps.Storage.Directory); err != nil {
 		slog.WarnContext(ctx, "clear retired worker seeds", "err", err)
 	}

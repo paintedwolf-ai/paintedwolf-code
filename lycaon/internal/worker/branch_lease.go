@@ -149,6 +149,9 @@ func LeaseExistingBranch(ctx context.Context, task *api.WorkerTask) (*BranchLeas
 type BranchJob struct {
 	ID        string
 	ProjectID string
+	// Branch names the job's branch directory: the job's own, or the lane
+	// of the worker whose round it ran.
+	Branch string
 	// Sealed reports a completed overlay whose changes are on record, so its
 	// tree can be reclaimed and rebuilt.
 	Sealed bool

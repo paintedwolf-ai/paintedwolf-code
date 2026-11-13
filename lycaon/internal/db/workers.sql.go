@@ -921,6 +921,39 @@ func (q *Queries) LatestRoundJobForJob(ctx context.Context, jobID string) (strin
 	return job_id, err
 }
 
+const listOpenWorkerLaneRefs = `-- name: ListOpenWorkerLaneRefs :many
+SELECT p.preparation_ref
+FROM worker_workspace_preparations p
+JOIN workers w ON w.id = p.worker_id
+WHERE w.closed_at IS NULL
+  AND p.preparation_ref != ''
+  AND p.generation = (SELECT MAX(q.generation) FROM worker_workspace_preparations q WHERE q.worker_id = p.worker_id)
+`
+
+// The current lane of every open worker.
+func (q *Queries) ListOpenWorkerLaneRefs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listOpenWorkerLaneRefs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var preparation_ref string
+		if err := rows.Scan(&preparation_ref); err != nil {
+			return nil, err
+		}
+		items = append(items, preparation_ref)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRoundInstructionsAfter = `-- name: ListRoundInstructionsAfter :many
 SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at

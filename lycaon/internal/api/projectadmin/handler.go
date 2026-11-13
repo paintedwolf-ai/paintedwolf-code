@@ -1,6 +1,7 @@
 package projectadmin
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -127,11 +128,13 @@ type Roots struct {
 }
 
 type Sandboxes struct {
-	Board                   *board.SnapshotBuilder
-	Sessions                *session.Host
-	WorkerBranchRoot        string
-	Workers                 worker.WorkerQueue
-	SettleWorker            workspace.SandboxSettler
+	Board            *board.SnapshotBuilder
+	Sessions         *session.Host
+	WorkerBranchRoot string
+	Workers          worker.WorkerQueue
+	SettleWorker     workspace.SandboxSettler
+	// LaneRoots lists every open worker's current lane, which reconciliation keeps.
+	LaneRoots               func(context.Context) ([]string, error)
 	background              *taskgroup.Group
 	sandboxReconcileLast    map[string]time.Time
 	sandboxReconcileMu      sync.Mutex

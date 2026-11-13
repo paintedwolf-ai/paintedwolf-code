@@ -303,6 +303,15 @@ WHERE id = (SELECT worker_id FROM worker_rounds WHERE job_id = sqlc.arg(job_id))
 -- name: GetWorkerNameByJob :one
 SELECT w.name FROM worker_rounds r JOIN workers w ON w.id = r.worker_id WHERE r.job_id = ?;
 
+-- name: ListOpenWorkerLaneRefs :many
+-- The current lane of every open worker.
+SELECT p.preparation_ref
+FROM worker_workspace_preparations p
+JOIN workers w ON w.id = p.worker_id
+WHERE w.closed_at IS NULL
+  AND p.preparation_ref != ''
+  AND p.generation = (SELECT MAX(q.generation) FROM worker_workspace_preparations q WHERE q.worker_id = p.worker_id);
+
 -- name: GetWorkerJobNames :one
 -- A job's worker name and, once its round settles, the result handle.
 SELECT w.name,

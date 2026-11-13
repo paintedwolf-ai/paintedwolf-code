@@ -449,7 +449,7 @@ WHERE id = sqlc.arg(id) AND claim_token = sqlc.arg(claim_token) AND workspace_ov
 
 -- Jobs own provisioning before their branch path and baseline are published.
 -- name: ListWorkerJobsForBranchRetention :many
-SELECT id, project_id, status, merge_status, workspace_overlay_id
+SELECT id, project_id, status, merge_status, workspace_overlay_id, workspace_relpath
 FROM worker_jobs
 ORDER BY created_at, id;
 
