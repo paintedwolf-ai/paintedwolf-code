@@ -198,8 +198,10 @@ func AgentLaunchOptions(launch LaunchPlan, dir string, environment, pathExtra []
 		for _, entry := range environment {
 			name, value, _ := strings.Cut(entry, "=")
 			trimmed := strings.TrimSpace(name)
+			// The program's own host-built value is not an export, even where this
+			// child's boundary adds PATH directories the program's base lacks.
 			if original, ok := trusted[name]; ok && original == value &&
-				(hasBlockedPrefix(strings.ToUpper(name)) || strings.EqualFold(name, "GIT_PAGER")) {
+				(reservedEnvKey(strings.ToUpper(trimmed)) || strings.EqualFold(trimmed, "GIT_PAGER")) {
 				continue
 			}
 			if defaultPath != "" && strings.EqualFold(trimmed, "PATH") && value == defaultPath {
