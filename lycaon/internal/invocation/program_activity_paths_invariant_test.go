@@ -83,19 +83,24 @@ func TestRedirectedWritesAlwaysNameTheirFiles(t *testing.T) {
 			groups = append(groups, activityGroup{input: input, key: activityKey{node: node, operation: input.operation}, parent: activityKey{node: "root"}, ordinal: int64(len(groups) + 1), counts: activityCounts{total: 1}})
 		}
 		for i := range 1 + random.IntN(6) {
-			node := fmt.Sprintf("statement-%d", i)
+			// As the parser records them: the statement and its redirect target
+			// are separate nodes, the redirect's span inside the statement's.
+			node, base := fmt.Sprintf("statement-%d", i), i*100
 			producer := producerFixture("producer-"+node, 0)
 			if random.IntN(2) == 0 {
 				producer = activityFixture("producer-"+node, "root", "cat", "cat", 0)
 				producer.receipt.EffectClasses = []string{"mutation"}
 			}
+			producer.span = api.CommandActivitySpan{SourceRef: "source", StartByte: base, EndByte: base + 40}
 			operator := []string{">", ">>", "&>", "&>>"}[random.IntN(4)]
 			write := redirectFixture("write-"+node, operator, pool[random.IntN(len(pool))], 0)
+			write.span = api.CommandActivitySpan{SourceRef: "source", StartByte: base + 4 + random.IntN(10), EndByte: base + 20 + random.IntN(20)}
 			add(producer, node)
-			add(write, node)
+			add(write, node+"-target")
 			statementOf[producer.receipt.ID], statementOf[write.receipt.ID] = node, node
 			if random.IntN(4) == 0 {
 				listing := activityFixture(fmt.Sprintf("list-%d", i), "root", "list_dir", "ls", 0)
+				listing.span = api.CommandActivitySpan{SourceRef: "source", StartByte: base + 50, EndByte: base + 60}
 				add(listing, listing.receipt.ID)
 			}
 		}

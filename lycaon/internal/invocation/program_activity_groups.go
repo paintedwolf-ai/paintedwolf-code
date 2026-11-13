@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -171,10 +170,9 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 		if activityPresentation(g.input).role == "container" {
 			continue
 		}
-		// A redirected producer supports the write its own statement made.
-		if j := slices.IndexFunc(groups, func(other activityGroup) bool {
-			return other.key.node != "" && other.key.node == g.key.node && activityRedirect(other.input)
-		}); j >= 0 && primary[j] {
+		// A redirected producer supports the write its own statement made: the
+		// redirect whose source span lies within the producer's statement.
+		if j := statementRedirect(groups, primary, g); j >= 0 {
 			assignments[i] = j
 			continue
 		}
@@ -305,4 +303,20 @@ func uniqueInOrder(values []string) []string {
 		}
 	}
 	return out
+}
+
+// statementRedirect is the anchored redirect inside g's statement, or -1.
+func statementRedirect(groups []activityGroup, primary map[int]bool, g activityGroup) int {
+	for j, other := range groups {
+		if primary[j] && activityRedirect(other.input) && spanWithin(other.input.span, g.input.span) {
+			return j
+		}
+	}
+	return -1
+}
+
+// spanWithin reports whether inner lies inside outer in the same source.
+func spanWithin(inner, outer api.CommandActivitySpan) bool {
+	return inner.SourceRef != "" && inner.SourceRef == outer.SourceRef &&
+		outer.StartByte <= inner.StartByte && inner.EndByte <= outer.EndByte && outer.StartByte < outer.EndByte
 }
