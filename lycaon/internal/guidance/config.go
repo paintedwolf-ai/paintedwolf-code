@@ -114,7 +114,19 @@ type HintEntryExtensions struct {
 	XAudience []string `yaml:"x-paintedwolf-audience,omitempty"`
 }
 
-// UnmarshalYAML decodes a policy unit into its normalized shape.
+// flatUnitMetadata is the host metadata of a copy-only unit, which is not an
+// OAR document and keeps plain field names.
+type flatUnitMetadata struct {
+	Emit          string          `yaml:"emit"`
+	Category      string          `yaml:"category"`
+	Evidence      *EvidenceMeta   `yaml:"evidence"`
+	ContextSchema map[string]any  `yaml:"context_schema"`
+	Scenarios     []ScenarioEntry `yaml:"scenarios"`
+}
+
+// UnmarshalYAML decodes a policy unit into its normalized shape. An OAR
+// document carries host metadata under x-paintedwolf- names; a copy-only unit
+// under plain names.
 func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 	type hintAlias HintEntry
 	var raw hintAlias
@@ -122,6 +134,13 @@ func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 	*e = HintEntry(raw)
+	if !e.IsOAR() {
+		var flat flatUnitMetadata
+		if err := node.Decode(&flat); err != nil {
+			return err
+		}
+		e.Emit, e.Category, e.Evidence, e.ContextSchema, e.Scenarios = flat.Emit, flat.Category, flat.Evidence, flat.ContextSchema, flat.Scenarios
+	}
 	if tools := stringList(e.Selector["tools"]); len(tools) > 0 {
 		e.Tools = tools
 	}

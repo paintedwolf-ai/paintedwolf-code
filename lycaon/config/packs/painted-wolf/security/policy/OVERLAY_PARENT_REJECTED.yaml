@@ -1,6 +1,6 @@
 id: OVERLAY_PARENT_REJECTED
-x-paintedwolf-emit: banner
-x-paintedwolf-category: advisory
+emit: banner
+category: advisory
 severity: info
 message: Overlay {{ paintedwolf.overlay_id }} was orphaned because its base {{ paintedwolf.base_overlay_id
   }} was rejected.
@@ -12,7 +12,7 @@ fix: Preserve any useful retained report. If its remaining work is still wanted,
   the current primary or another live base after checking the intended scope. Do not retry promotion or rejection
   of this orphaned overlay.
 instead: Account for the orphaned child and re-dispatch only work still required
-x-paintedwolf-scenarios:
+scenarios:
 - id: default
   vars:
     base_overlay_id: ov-grep-impl

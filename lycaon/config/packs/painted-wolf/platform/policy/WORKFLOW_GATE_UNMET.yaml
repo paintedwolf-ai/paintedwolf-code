@@ -1,5 +1,5 @@
-x-paintedwolf-emit: inject:active_workflow
-x-paintedwolf-category: expected_behavior
+emit: inject:active_workflow
+category: expected_behavior
 severity: info
 message: Phase gate blocked — failed_leaves present; do not mark phase complete in chat
 what: The current phase gate has unmet leaves listed in failed_leaves.

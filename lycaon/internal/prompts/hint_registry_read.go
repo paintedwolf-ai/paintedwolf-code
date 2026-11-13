@@ -10,11 +10,12 @@ import (
 
 // hintCodeRow projects policy data for tool-surface rendering.
 type hintCodeRow struct {
-	Emit     string   `yaml:"x-paintedwolf-emit"`
-	Category string   `yaml:"x-paintedwolf-category"`
-	Tools    []string `yaml:"tools"`
-	Instead  string   `yaml:"instead"`
-	When     string   `yaml:"when"`
+	SpecVersion string   `yaml:"spec_version"`
+	Emit        string   `yaml:"x-paintedwolf-emit"`
+	Category    string   `yaml:"x-paintedwolf-category"`
+	Tools       []string `yaml:"tools"`
+	Instead     string   `yaml:"instead"`
+	When        string   `yaml:"when"`
 
 	Selector hintCodeSelector `yaml:"selector"`
 }
@@ -30,6 +31,17 @@ func (r *hintCodeRow) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 	*r = hintCodeRow(raw)
+	// A copy-only unit is not an OAR document and keeps plain metadata names.
+	if r.SpecVersion == "" {
+		var flat struct {
+			Emit     string `yaml:"emit"`
+			Category string `yaml:"category"`
+		}
+		if err := node.Decode(&flat); err != nil {
+			return err
+		}
+		r.Emit, r.Category = flat.Emit, flat.Category
+	}
 	if len(r.Tools) == 0 {
 		r.Tools = append([]string(nil), r.Selector.Tools...)
 	}

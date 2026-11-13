@@ -1,5 +1,5 @@
-x-paintedwolf-emit: banner
-x-paintedwolf-category: expected_behavior
+emit: banner
+category: expected_behavior
 severity: warning
 requires:
   facts: [paintedwolf.operation]
@@ -18,7 +18,7 @@ fix: >-
   Choose name_glob when a filename pattern is known, or a concrete path with max_results/offset for a literal page. Use summarize when offered for an open question over unfamiliar scope.
 instead: >-
   Use the actual digest and current tool schema to refine scope; do not repeat identical arguments or invent a continuation cursor.
-x-paintedwolf-scenarios:
+scenarios:
 - id: default
   vars:
     path: .

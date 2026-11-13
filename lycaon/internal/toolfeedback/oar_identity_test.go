@@ -22,8 +22,8 @@ id: CALLER_POLICY
 kind: policy
 on: tool.pre_invoke
 selector: {}
-requires_facts: [paintedwolf.principal, paintedwolf.principal_roles]
-when: paintedwolf.principal == "person" && "owner" in paintedwolf.principal_roles && profile == "implement" && session_posture == "build"
+requires_facts: [paintedwolf.principal, paintedwolf.principal_roles, paintedwolf.session_posture, paintedwolf.tool_profile]
+when: paintedwolf.principal == "person" && "owner" in paintedwolf.principal_roles && paintedwolf.tool_profile == "implement" && paintedwolf.session_posture == "build"
 effect: block
 `
 	testutil.FailErr(t, "write caller policy", os.WriteFile(filepath.Join(dir, "caller.yaml"), []byte(document), 0o600))

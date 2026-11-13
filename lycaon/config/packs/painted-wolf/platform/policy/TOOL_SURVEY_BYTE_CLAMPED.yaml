@@ -1,5 +1,5 @@
-x-paintedwolf-emit: banner
-x-paintedwolf-category: informational
+emit: banner
+category: informational
 severity: info
 message: >-
   Survey output trimmed to the session byte cap: retained {{ paintedwolf.kept }} {{ paintedwolf.kept_unit }} in {{ paintedwolf.page_key }} from offset {{ paintedwolf.offset }}.
@@ -11,7 +11,7 @@ fix: >-
   When the payload provides next_offset, pass that value as the next call's offset, retaining the same path and filters. next_offset is a result field, not an input argument. Stop at the end or when no usable continuation is supplied.
 instead: >-
   Branch on truncated and the returned next_offset; preserve the accepted page and do not repeat identical pagination arguments.
-x-paintedwolf-scenarios:
+scenarios:
 - id: default
   vars:
     kept: 40
