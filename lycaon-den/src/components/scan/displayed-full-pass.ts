@@ -1,40 +1,36 @@
 import { createEffect, createSignal, on, onCleanup } from "solid-js";
 import type { SecurityFullPass, SecurityOverview } from "../../api/types.ts";
 import type { DisplayedFullPass } from "../../lib/scan-coverage.ts";
-import { MIN_VISIBLE_MS, MinVisibleHold } from "../../ui/min-visible-hold.ts";
+import { Linger, type Lingered } from "../../ui/linger.ts";
 
-/** Retains the active full pass for at least MIN_VISIBLE_MS after completion. */
+/** How long a finished pass stays shown as finished. */
+export const FINISHED_PASS_LINGER_MS = 1_600;
+
+/** The running pass, then briefly the pass it became. */
 export function createDisplayedFullPass(
   overview: () => SecurityOverview | null,
   scope: () => string | undefined,
-  minVisibleMs = MIN_VISIBLE_MS,
+  lingerMs = FINISHED_PASS_LINGER_MS,
 ): () => DisplayedFullPass | null {
-  const [heldId, setHeldId] = createSignal<string>();
-  let lastRunning: SecurityFullPass | undefined;
-  const hold = new MinVisibleHold<SecurityFullPass>(
-    (visible) => setHeldId([...visible.keys()].pop()),
-    { same: (shown, next) => shown.assessment_id === next.assessment_id, minVisibleMs },
+  const [shown, setShown] = createSignal<Lingered<SecurityFullPass> | undefined>();
+  const linger = new Linger<SecurityFullPass>(
+    (passes) => setShown([...passes.values()].pop()),
+    { lingerMs, same: (current, next) => current.assessment_id === next.assessment_id },
   );
 
-  createEffect(
-    on(scope, () => {
-      lastRunning = undefined;
-      hold.clear();
-    }, { defer: true }),
-  );
+  createEffect(on(scope, () => linger.clear(), { defer: true }));
   createEffect(() => {
     const running = overview()?.running;
-    if (running) lastRunning = running;
-    hold.update(running ? new Map([[running.assessment_id, running]]) : new Map());
+    linger.update(running ? new Map([[running.assessment_id, running]]) : new Map());
   });
-  onCleanup(() => hold.dispose());
+  onCleanup(() => linger.dispose());
 
   return () => {
     const current = overview();
     if (current?.running) return { pass: current.running, live: true };
-    const id = heldId();
-    if (!id) return null;
-    if (current?.last_full?.assessment_id === id) return { pass: current.last_full, live: false };
-    return lastRunning?.assessment_id === id ? { pass: lastRunning, live: false } : null;
+    const finished = shown();
+    if (!finished) return null;
+    const id = finished.value.assessment_id;
+    return { pass: current?.last_full?.assessment_id === id ? current.last_full : finished.value, live: false };
   };
 }

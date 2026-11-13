@@ -23,7 +23,7 @@ func (s *StreamSpill) Open(ctx context.Context) (io.ReadCloser, error) {
 }
 
 func (s *StreamSpill) releaseDisplay() {
-	s.Preview = nil
+	s.Display = StreamDisplay{}
 	if s.releasePreview != nil {
 		s.releasePreview()
 		s.releasePreview = nil

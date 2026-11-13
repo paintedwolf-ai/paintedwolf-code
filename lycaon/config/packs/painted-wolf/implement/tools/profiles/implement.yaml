@@ -39,9 +39,9 @@ tools:
   page_snapshot: true
   page_close: true
   terminal_open: sticky
-  terminal_send: sticky
-  terminal_read: sticky
-  terminal_snapshot: sticky
+  terminal_send: true
+  terminal_read: true
+  terminal_snapshot: true
   terminal_close: sticky
   command_output: sticky
   command_stop: sticky

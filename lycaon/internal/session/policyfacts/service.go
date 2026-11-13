@@ -32,6 +32,23 @@ type Service struct {
 	harvestHas                 HarvestedFingerprint
 	ignoredCredentialCandidate func(context.Context, string, string) bool
 	credentialSlots            func(context.Context, *api.Session) *secretmint.Inspector
+	socketResources            func(ctx context.Context, projectID string, paths []string) []string
+}
+
+// observeSocketResources names the host resources whose local service each
+// refused socket is.
+func (m *Service) observeSocketResources(ctx context.Context, gc *oar.GuardContext, projectID string) {
+	if paths := gc.Refusals.RefusedSocketPaths; len(paths) > 0 && m.socketResources != nil {
+		gc.Refusals.RefusedSocketHostResources = m.socketResources(ctx, projectID, paths)
+	}
+}
+
+// SetSocketResources names the host resources whose local service a refused
+// socket is.
+func (m *Service) SetSocketResources(source func(ctx context.Context, projectID string, paths []string) []string) {
+	if m != nil {
+		m.socketResources = source
+	}
 }
 
 func New(profiles Profiles) *Service { return &Service{profiles: profiles} }
