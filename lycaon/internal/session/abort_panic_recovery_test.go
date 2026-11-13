@@ -255,7 +255,7 @@ func TestAbortCancelsWorkersAndMarksIdle(t *testing.T) {
 func TestProf10PostTurnGatesCompletedTurnOnce(t *testing.T) {
 	testutil.FailErr(t, "install anchor catalogue", anchorcatalog.InstallBundled())
 	dir := t.TempDir()
-	document := "oar: '1.0'\nid: TURN_POLICY\nkind: policy\nanchor: agent.post_turn\nrequires:\n  profiles: [content]\nwhen: content_length > 0\neffect: block\non_fire: [increment_counter]\n"
+	document := "spec_version: '1.0'\nid: TURN_POLICY\nkind: policy\non: agent.post_turn\nselector: {}\nrequires_facts: [paintedwolf.content_length]\nwhen: paintedwolf.content_length > 0\neffect: block\non_fire: [increment_counter]\n"
 	testutil.FailErr(t, "write turn policy", os.WriteFile(filepath.Join(dir, "turn.yaml"), []byte(document), 0o600))
 	loader, err := oar.NewLoader("")
 	testutil.FailErr(t, "create loader", err)
@@ -268,9 +268,9 @@ func TestProf10PostTurnGatesCompletedTurnOnce(t *testing.T) {
 	sess := &api.Session{ID: "child", ParentSessionID: "parent"}
 	reject, blocked := mgr.Coordinator.Guards.BeforeFinish(t.Context(), sess, nil, "", "assembled prose", guidance.CloseoutDraft{}, "", true, nil, true)
 	if !blocked || reject == nil || reject.Code() != "TURN_POLICY" {
-		t.Fatalf("[OAR-PROF-10] completed turn bypassed policy: blocked=%v reject=%v", blocked, reject)
+		t.Fatalf("completed turn bypassed policy: blocked=%v reject=%v", blocked, reject)
 	}
 	if count := pipeline.Counters().Get(sess.ID, "TURN_POLICY", oar.CounterFire); count != 1 {
-		t.Fatalf("[OAR-FIRE-6] completed-turn occurrence fired %d times", count)
+		t.Fatalf("[OAR-FIRE-5] completed-turn occurrence fired %d times", count)
 	}
 }

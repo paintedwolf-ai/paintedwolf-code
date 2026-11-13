@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_ARGV_REQUIRED
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - command
-requires:
-  facts: [paintedwolf.rejection_code]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_ARGV_REQUIRED"
 effect: block
-copy:
-  what: '`{{ tool }}` requires explicit `command` text.'
-  cause: This invocation supplied no command text.
-  why: ''
-  fix: Supply the intended program or executable in `command`.
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: command() needs explicit command text
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    tool: command
+category: recoverable
+emit: guard:command_composition_redirect
+message: command() needs explicit command text
+what: '`{{ tool }}` requires explicit `command` text.'
+cause: This invocation supplied no command text.
+why: ''
+fix: Supply the intended program or executable in `command`.
+instead: ''
+scenarios:
+  - id: default
+    vars:
+      tool: command

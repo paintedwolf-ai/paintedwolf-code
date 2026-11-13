@@ -1,27 +1,20 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SUBMIT_VERDICT_INVALID
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.offenders_sample
-    - paintedwolf.review_expected_call
-    - paintedwolf.review_reason
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.offenders_sample, paintedwolf.rejection_code, paintedwolf.review_expected_call, paintedwolf.review_reason]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_INVALID"
 effect: block
-copy:
-  what: "The verdict payload does not match the active review phase contract."
-  cause: "{{ paintedwolf.review_reason }}. Affected fields or stamped claims: {{ paintedwolf.offenders_sample }}."
-  why: "The host records only the declared verdict schema and top-level citation channels."
-  fix: "Use the current schema: {{ paintedwolf.review_expected_call }}. Copy stamped claim IDs verbatim; the host feedback lists missing_claim_ids and expected_claim_ids. Correct omitted or misspelled claim IDs; do not register a follow-up question to repair them. Keep adjudication citations top-level and required claim or coverage citations within their entries; evidence-handle objects use handle, not evidence."
-  instead: "Correct the named fields using exact missing_claim_ids and expected_claim_ids when supplied, then resubmit the current expected call with observed citations."
-x-paintedwolf-category: recoverable
-x-paintedwolf-severity: error
-x-paintedwolf-message: submit_verdict payload does not match the active phase contract.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:workflow
+message: submit_verdict payload does not match the active phase contract.
+what: "The verdict payload does not match the active review phase contract."
+cause: "{{ paintedwolf.review_reason }}. Affected fields or stamped claims: {{ paintedwolf.offenders_sample }}."
+why: "The host records only the declared verdict schema and top-level citation channels."
+fix: "Use the current schema: {{ paintedwolf.review_expected_call }}. Copy stamped claim IDs verbatim; the host feedback lists missing_claim_ids and expected_claim_ids. Correct omitted or misspelled claim IDs; do not register a follow-up question to repair them. Keep adjudication citations top-level and required claim or coverage citations within their entries; evidence-handle objects use handle, not evidence."
+instead: "Correct the named fields using exact missing_claim_ids and expected_claim_ids when supplied, then resubmit the current expected call with observed citations."
+scenarios:
   - id: nested_citations
     vars:
       review_reason: 'verdict has undeclared field(s): cited_evidence'
@@ -31,4 +24,3 @@ x-paintedwolf-scenarios:
       review_reason: claim_outcome_required
       offenders_sample: secret-gates-hold
       review_expected_call: 'submit_verdict(verdict={verdict: CHALLENGED, challenges: [...]})'
-x-paintedwolf-emit: guard:workflow

@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"context"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"os"
@@ -36,39 +37,35 @@ func authorCheckPaths(t *testing.T, rule string, fixtures map[string]string) str
 	return policy
 }
 
-const authorCheckRule = `oar: "1.0"
+const authorCheckRule = `spec_version: "1.0"
 id: AUTHOR_CHECK_RULE
 kind: policy
-anchor: tool.pre_invoke
+on: tool.pre_invoke
+title: Author check rule
 selector:
-  tool: [write]
-requires:
-  profiles: [session, tool]
+  tools: [write]
 when: session_posture == "spec"
 effect: block
-copy:
-  title: Author check rule
-  what: A write tool was called.
-  cause: The session is in the spec posture.
-  why: Spec posture does not change files.
-  fix: Leave spec before writing.
-  instead: Branch on Code AUTHOR_CHECK_RULE
-x-paintedwolf-emit: rule:author_check
-x-paintedwolf-message: Writes are blocked in spec.
+emit: rule:author_check
+message: Writes are blocked in spec.
+what: A write tool was called.
+cause: The session is in the spec posture.
+why: Spec posture does not change files.
+fix: Leave spec before writing.
+instead: Branch on Code AUTHOR_CHECK_RULE
 `
 
 const authorCheckFiringFixture = `{
-  "name": "fires",
+  "id": "fires",
   "rule": {
-    "oar": "1.0",
+    "spec_version": "1.0",
     "id": "AUTHOR_CHECK_RULE",
     "kind": "policy",
-    "anchor": "tool.pre_invoke",
-    "selector": { "tool": ["write"] },
-    "requires": { "profiles": ["session", "tool"] },
+    "on": "tool.pre_invoke",
+    "selector": { "tools": ["write"] },
     "when": "session_posture == \"spec\"",
     "effect": "block",
-    "x-paintedwolf-emit": "rule:author_check"
+    "emit": "rule:author_check"
   },
   "input": { "anchor": "tool.pre_invoke", "facts": { "tool": "write", "session_posture": "spec" } },
   "expected": { "decision": "block", "code": "AUTHOR_CHECK_RULE" }
@@ -84,7 +81,7 @@ func authorCheckOpts(t *testing.T) RuleCheckOptions {
 
 func TestCheckRuleFiles_PassingRuleWithFixtures(t *testing.T) {
 	policy := authorCheckPaths(t, authorCheckRule, map[string]string{"fires.json": authorCheckFiringFixture})
-	got, err := CheckRuleFiles([]string{policy}, authorCheckOpts(t))
+	got, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t))
 	if err != nil {
 		t.Fatalf("CheckRuleFiles: %v", err)
 	}
@@ -102,7 +99,7 @@ func TestCheckRuleFiles_PassingRuleWithFixtures(t *testing.T) {
 func TestCheckRuleFiles_ScenarioMismatch(t *testing.T) {
 	wrong := strings.Replace(authorCheckFiringFixture, `"decision": "block"`, `"decision": "allow"`, 1)
 	policy := authorCheckPaths(t, authorCheckRule, map[string]string{"fires.json": wrong})
-	got, err := CheckRuleFiles([]string{policy}, authorCheckOpts(t))
+	got, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t))
 	if err != nil {
 		t.Fatalf("CheckRuleFiles: %v", err)
 	}
@@ -114,7 +111,7 @@ func TestCheckRuleFiles_ScenarioMismatch(t *testing.T) {
 func TestCheckRuleFiles_UnknownFactIsLoadError(t *testing.T) {
 	bad := strings.Replace(authorCheckRule, `when: session_posture == "spec"`, "when: no_such_fact", 1)
 	policy := authorCheckPaths(t, bad, nil)
-	got, err := CheckRuleFiles([]string{policy}, authorCheckOpts(t))
+	got, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t))
 	if err != nil {
 		t.Fatalf("CheckRuleFiles: %v", err)
 	}
@@ -129,7 +126,7 @@ func TestCheckRuleFiles_UnknownFactIsLoadError(t *testing.T) {
 func TestCheckRuleFiles_LoadError(t *testing.T) {
 	bad := strings.Replace(authorCheckRule, "kind: policy", "kind: nonsense", 1)
 	policy := authorCheckPaths(t, bad, nil)
-	got, err := CheckRuleFiles([]string{policy}, authorCheckOpts(t))
+	got, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t))
 	if err != nil {
 		t.Fatalf("CheckRuleFiles: %v", err)
 	}
@@ -145,7 +142,7 @@ func TestCheckRuleFiles_SingleFileIgnoresSiblings(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(policy, "SIBLING_RULE.yaml"), []byte(broken), 0o600); err != nil {
 		t.Fatalf("write sibling: %v", err)
 	}
-	got, err := CheckRuleFiles([]string{filepath.Join(policy, "AUTHOR_CHECK_RULE.yaml")}, authorCheckOpts(t))
+	got, err := CheckRuleFiles(context.Background(), []string{filepath.Join(policy, "AUTHOR_CHECK_RULE.yaml")}, authorCheckOpts(t))
 	if err != nil {
 		t.Fatalf("CheckRuleFiles: %v", err)
 	}
@@ -162,7 +159,7 @@ func TestCheckRuleFiles_ReadOnly(t *testing.T) {
 	policy := authorCheckPaths(t, authorCheckRule, map[string]string{"fires.json": authorCheckFiringFixture})
 	root := filepath.Dir(policy)
 	before := snapshotTree(t, root)
-	if _, err := CheckRuleFiles([]string{policy}, authorCheckOpts(t)); err != nil {
+	if _, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t)); err != nil {
 		t.Fatalf("CheckRuleFiles: %v", err)
 	}
 	after := snapshotTree(t, root)
@@ -197,7 +194,7 @@ func snapshotTree(t *testing.T, root string) []string {
 }
 
 // Inline scenarios are part of the rule's copy contract.
-const authorCheckRuleWithScenarios = authorCheckRule + `x-paintedwolf-scenarios:
+const authorCheckRuleWithScenarios = authorCheckRule + `scenarios:
   - id: default
     vars:
       tool: write
@@ -209,7 +206,7 @@ const authorCheckRuleWithScenarios = authorCheckRule + `x-paintedwolf-scenarios:
 func TestCheckRuleFiles_RunsScenariosDeclaredOnTheRule(t *testing.T) {
 	setupAuthorCheckRenderer(t)
 	policy := authorCheckPaths(t, authorCheckRuleWithScenarios, nil)
-	got, err := CheckRuleFiles([]string{policy}, authorCheckOpts(t))
+	got, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t))
 	if err != nil {
 		t.Fatalf("CheckRuleFiles: %v", err)
 	}
@@ -229,7 +226,7 @@ func TestCheckRuleFiles_DeclaredScenarioMismatchFails(t *testing.T) {
 	rule := strings.Replace(authorCheckRuleWithScenarios,
 		`      - "Leave spec before writing."`, `      - "words the copy never says"`, 1)
 	policy := authorCheckPaths(t, rule, nil)
-	got, err := CheckRuleFiles([]string{policy}, authorCheckOpts(t))
+	got, err := CheckRuleFiles(context.Background(), []string{policy}, authorCheckOpts(t))
 	if err != nil {
 		t.Fatalf("CheckRuleFiles: %v", err)
 	}

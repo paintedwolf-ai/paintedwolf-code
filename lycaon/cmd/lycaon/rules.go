@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -14,13 +15,13 @@ import (
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
-func runRules(args []string) error {
+func runRules(ctx context.Context, args []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: pw rules test [--project DIR] [--json] [PATH…]")
 	}
 	switch args[0] {
 	case "test":
-		return runRulesTest(args[1:])
+		return runRulesTest(ctx, args[1:])
 	default:
 		return fmt.Errorf("unknown rules command %q (want test)", args[0])
 	}
@@ -55,7 +56,7 @@ func parseRulesTestFlags(args []string) (rulesTestFlags, error) {
 	return f, nil
 }
 
-func runRulesTest(args []string) error {
+func runRulesTest(ctx context.Context, args []string) error {
 	flags, err := parseRulesTestFlags(args)
 	if err != nil {
 		return err
@@ -93,7 +94,7 @@ func runRulesTest(args []string) error {
 	if schemaDir == "" {
 		fmt.Fprintln(os.Stderr, "pw: no checkout beside this folder — rules compile against bundled schemas")
 	}
-	results, err := oar.CheckRuleFiles(paths, oar.RuleCheckOptions{
+	results, err := oar.CheckRuleFiles(ctx, paths, oar.RuleCheckOptions{
 		SchemaDir:         schemaDir,
 		AnchorCatalogPath: anchorCatalog,
 	})

@@ -60,8 +60,8 @@ func TestBootInstallsBundledAnchorCatalog(t *testing.T) {
 		if !strings.Contains(src, "anchorcatalog.InstallBundled") {
 			t.Fatalf("%s must call anchorcatalog.InstallBundled", rel)
 		}
-		if !strings.Contains(src, "InstallCapabilityBundled") {
-			t.Fatalf("%s must call InstallCapabilityBundled", rel)
+		if !strings.Contains(src, "InstallEngineDeclarationBundled") {
+			t.Fatalf("%s must call InstallEngineDeclarationBundled", rel)
 		}
 	}
 }

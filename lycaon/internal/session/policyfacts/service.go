@@ -63,9 +63,9 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 		gc.Session.Principal = sess.OwnerPersonID
 		gc.Session.WorkerLeg = sess.IsWorkerChild()
 		if sess.ParentSessionID == "" {
-			gc.Session.Profile = "coordinator"
+			gc.Session.Role = "coordinator"
 		}
-		gc.RegisterProvider("permission_profile", func(gc *oar.GuardContext) error {
+		gc.RegisterProvider("profile", func(gc *oar.GuardContext) error {
 			profile, err := m.profiles.PromptToolProfile(ctx, sess)
 			if err != nil {
 				return err

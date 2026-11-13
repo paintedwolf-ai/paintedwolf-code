@@ -55,7 +55,7 @@ type DeliveryResult struct {
 	Blocked  bool
 }
 
-// [OAR-PROF-10] The final envelope crosses policy once before parent delivery.
+// The final envelope crosses policy once before parent delivery.
 // Provisional report checks have their own native anchor and cannot replace it.
 func (m *DeliveryPolicy) Evaluate(ctx context.Context, env workercompletion.WorkerCompletionEnvelope) (DeliveryResult, error) {
 	out := DeliveryResult{Envelope: env}
@@ -68,7 +68,7 @@ func (m *DeliveryPolicy) Evaluate(ctx context.Context, env workercompletion.Work
 	gc := oar.NewGuardContext()
 	m.facts.FillSessionFacts(ctx, gc, nil, "", nil)
 	gc.Session.SessionID = env.ChildSessionID
-	gc.Session.Profile = "worker"
+	gc.Session.Role = "worker"
 	gc.Session.WorkerLeg = true
 	m.registerWorkerSessionFacts(ctx, gc, env.ChildSessionID)
 	gc.Grounding.WorkerSummaryPresent = strings.TrimSpace(env.Summary) != ""
@@ -105,7 +105,7 @@ func (m *DeliveryPolicy) Evaluate(ctx context.Context, env workercompletion.Work
 	return out, nil
 }
 
-// [OAR-FACT-11] Stored session metadata is read only by a selected fact consumer.
+// [OAR-FACT-9] Stored session metadata is read only by a selected fact consumer.
 func (m *DeliveryPolicy) registerWorkerSessionFacts(ctx context.Context, gc *oar.GuardContext, sessionID string) {
 	var once sync.Once
 	var sessionErr error
@@ -121,7 +121,7 @@ func (m *DeliveryPolicy) registerWorkerSessionFacts(ctx context.Context, gc *oar
 				return
 			}
 			if sess == nil {
-				sessionErr = fmt.Errorf("[OAR-FACT-26] worker session %s unavailable", sessionID)
+				sessionErr = fmt.Errorf("[OAR-FACT-18] worker session %s unavailable", sessionID)
 				return
 			}
 			workerSession = sess
@@ -138,7 +138,7 @@ func (m *DeliveryPolicy) registerWorkerSessionFacts(ctx context.Context, gc *oar
 		}
 		gc.RegisterProvider(name, bindSession)
 	}
-	gc.RegisterProvider("permission_profile", func(gc *oar.GuardContext) error {
+	gc.RegisterProvider("profile", func(gc *oar.GuardContext) error {
 		if err := bindSession(gc); err != nil {
 			return err
 		}

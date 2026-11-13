@@ -1,30 +1,29 @@
-oar: '1.0'
+spec_version: "1.0"
 id: AMBIENT_GROUNDING_ESCALATED
 kind: invariant
-anchor: coordinator.post_turn
-requires:
-  facts: [paintedwolf.claims_completion, paintedwolf.grounding_escalated, paintedwolf.can_recall, paintedwolf.next_steps]
+on: coordinator.post_turn
+selector: {}
+requires_facts: [paintedwolf.can_recall, paintedwolf.claims_completion, paintedwolf.grounding_escalated, paintedwolf.next_steps]
 when: paintedwolf.grounding_escalated && !paintedwolf.claims_completion
 effect: nudge
-copy:
-  cause: Several turns closed with citations or worker_summary tags that did not trace
-  why: Session keeps running; ground completion claims in observed evidence
-  fix: 'Ground further claims in observed evidence and any required worker summaries. Inspect the actual missing references or delivery state; do not spawn redundant work to clear an advisory. {{ paintedwolf.next_steps }}'
-  instead: Keep going; ground claims in observed evidence or worker_summary tags
-  what: Repeated grounding gaps flagged — advisory, not blocked
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:ambient_grounding
-x-paintedwolf-message: Repeated grounding gaps flagged — advisory, not blocked
-x-paintedwolf-scenarios:
-- id: recall_callable
-  vars:
-    can_recall: true
-- id: recall_not_callable
-  vars:
-    can_recall: false
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: read
+category: recoverable
+emit: guard:ambient_grounding
+message: Repeated grounding gaps flagged — advisory, not blocked
+what: Repeated grounding gaps flagged — advisory, not blocked
+cause: Several turns closed with citations or worker_summary tags that did not trace
+why: Session keeps running; ground completion claims in observed evidence
+fix: 'Ground further claims in observed evidence and any required worker summaries. Inspect the actual missing references or delivery state; do not spawn redundant work to clear an advisory. {{ paintedwolf.next_steps }}'
+instead: Keep going; ground claims in observed evidence or worker_summary tags
+scenarios:
+  - id: recall_callable
+    vars:
+      can_recall: true
+  - id: recall_not_callable
+    vars:
+      can_recall: false
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      session_role: coordinator
+      tool: read
