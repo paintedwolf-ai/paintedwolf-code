@@ -2,7 +2,7 @@
 import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyPrettyNativeConfig, createPrettyNativeDecorationsExtension } from "./pretty-native-layout.ts";
+import { applyPrettyConfig, createPrettyExtension } from "./pretty-layout.ts";
 import { PrettyBreakWidget, prettyLayoutActive, prettyLayoutDecorations, prettyVisualLineAt } from "./pretty-view.ts";
 
 const views: EditorView[] = [];
@@ -18,7 +18,7 @@ function open(doc: string, enabled = true, path = "data.json"): EditorView {
   document.body.appendChild(parent);
   const view = new EditorView({
     parent,
-    state: EditorState.create({ doc, extensions: [createPrettyNativeDecorationsExtension({ enabled, path })] }),
+    state: EditorState.create({ doc, extensions: [createPrettyExtension({ enabled, path })] }),
   });
   views.push(view);
   return view;
@@ -57,7 +57,7 @@ describe("Pretty presentation", () => {
     expect(view.state.facet(prettyLayoutActive)).toBe(true);
     expect(view.contentDOM.classList.contains("pw-pretty-wrap")).toBe(true);
     expect(view.dom.classList.contains("pw-pretty-active")).toBe(true);
-    applyPrettyNativeConfig(view, { enabled: false, path: "data.json" });
+    applyPrettyConfig(view, { enabled: false, path: "data.json" });
     expect(view.state.facet(prettyLayoutActive)).toBe(false);
     expect(view.contentDOM.classList.contains("pw-pretty-wrap")).toBe(false);
     expect(view.dom.classList.contains("pw-pretty-active")).toBe(false);
@@ -108,8 +108,8 @@ describe("Pretty presentation", () => {
     view.dispatch({ selection: { anchor: 5, head: 30 } });
     const before = view.state.selection.toJSON();
     const text = view.state.doc.toString();
-    applyPrettyNativeConfig(view, { enabled: false, path: "data.json" });
-    applyPrettyNativeConfig(view, { enabled: true, path: "data.json" });
+    applyPrettyConfig(view, { enabled: false, path: "data.json" });
+    applyPrettyConfig(view, { enabled: true, path: "data.json" });
     expect(view.state.selection.toJSON()).toEqual(before);
     expect(view.state.doc.toString()).toBe(text);
   });

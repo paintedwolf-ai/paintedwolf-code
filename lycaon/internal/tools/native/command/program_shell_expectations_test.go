@@ -49,8 +49,9 @@ func TestProcessAgeSelectionDoesNotClaimUnobservedNativeJob(t *testing.T) {
 func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	f := newProgramFixture(t)
 
-	// Start a foreign host process outside the session so ps/pgrep see it
-	// read-only, while kill/pkill refuse it with PROCESS_NOT_OWNED.
+	// Start a foreign host process outside the session: ps and pgrep list only
+	// the session's own processes, pkill finds nothing to match, and kill of
+	// its named PID refuses with PROCESS_NOT_OWNED.
 	foreignCmd := exec.Command("/bin/sleep", "30")
 	testutil.FailErr(t, "start foreign process", foreignCmd.Start())
 	t.Cleanup(func() {
@@ -60,16 +61,21 @@ func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	foreignPID := strconv.Itoa(foreignCmd.Process.Pid)
 
 	// Launch a session-owned external background job; $! must be its real OS PID
-	// and accepted by kill and wait, while ps aux, ps -ef and pgrep -f list both
-	// processes and mark the session's own job.
+	// and accepted by kill and wait, while ps aux, ps -ef and pgrep -f list it
+	// as the session's own job and omit the foreign process.
+	// The pipeline's own grep is a session member whose argv contains the
+	// pattern, and under load it can exec before the ps builtin snapshots the
+	// session. Bracketing the pattern's first digit keeps that self-row from
+	// matching, while a listing of the foreign process still matches through
+	// its PID column.
 	prog := fmt.Sprintf(
 		`external -- /bin/sleep 30 & bgpid=$!; `+
 			`external -- /bin/echo "bgpid=$bgpid"; `+
-			`ps aux | grep %s; `+
+			`ps aux | grep "[%c]%s"; `+
 			`ps -ef | grep "$bgpid"; `+
 			`pgrep -f -a "sleep 30"; `+
 			`kill "$bgpid"; wait "$bgpid"; external -- /bin/echo "waited=$?"`,
-		foreignPID,
+		foreignPID[0], foreignPID[1:],
 	)
 	out, err := f.call(t, t.Context(), prog)
 	testutil.FailErr(t, "run process inspection and $! lifecycle", err)
@@ -90,8 +96,8 @@ func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	if pidNum, convErr := strconv.Atoi(bgPID); convErr != nil || pidNum <= 0 {
 		t.Fatalf("expected $! for external background job to be numeric OS PID, got %q", bgPID)
 	}
-	if !strings.Contains(outcome.Stdout, foreignPID) {
-		t.Fatalf("expected ps aux to see foreign process %s in %q", foreignPID, outcome.Stdout)
+	if strings.Contains(outcome.Stdout, foreignPID) {
+		t.Fatalf("a native listing showed foreign process %s: %q", foreignPID, outcome.Stdout)
 	}
 	if !strings.Contains(outcome.Stdout, "[session job") {
 		t.Fatalf("expected ps/pgrep output to mark session-owned job in %q", outcome.Stdout)
@@ -111,8 +117,8 @@ func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	pkillForeignOut, err := f.call(t, t.Context(), `pkill -f "sleep 30"`)
 	testutil.FailErr(t, "pkill foreign process", err)
 	pkillForeign := decodeOutcome(t, pkillForeignOut)
-	if pkillForeign.Refusal == nil || pkillForeign.Refusal.Code != "PROCESS_NOT_OWNED" || !strings.Contains(pkillForeign.Stderr, "PROCESS_NOT_OWNED") {
-		t.Fatalf("expected PROCESS_NOT_OWNED for pkill matching only foreign process, got %+v", pkillForeign)
+	if pkillForeign.Refusal != nil || pkillForeign.Status != 1 || strings.Contains(pkillForeign.Stderr, foreignPID) {
+		t.Fatalf("pkill matching only a foreign process must find nothing, got %+v", pkillForeign)
 	}
 
 	// pkill on a session-owned job succeeds.
@@ -122,24 +128,37 @@ func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	if pkillOwned.Refusal != nil || !strings.Contains(pkillOwned.Stdout, "pkilled=143") {
 		t.Fatalf("expected pkill on owned process to settle with 143, got %+v", pkillOwned)
 	}
+
+	// A process a job started is the session's too: pkill signals that child
+	// alone, by its kernel instance, and the job's shell carries on.
+	childOut, err := f.call(t, t.Context(), `external -- /bin/sh -c '/bin/sleep 31; exit 0' & job=$!; i=0; until [ "$i" -ge 100 ]; do if pgrep -f -x '/bin/sleep 31'; then i=100; else i=$((i+1)); external -- /bin/sleep 0.1; fi; done; pkill -f -x '/bin/sleep 31'; external -- /bin/echo "pkill=$?"; wait "$job"; external -- /bin/echo "job=$?"`)
+	testutil.FailErr(t, "pkill a job's child", err)
+	child := decodeOutcome(t, childOut)
+	// The job finishing 0 is its shell going on after its child's signal; a
+	// signal to the job itself would settle it 143.
+	if child.Refusal != nil || !strings.Contains(child.Stdout, "pkill=0") || !strings.Contains(child.Stdout, "job=0") {
+		t.Fatalf("pkill of a job's child = %+v", child)
+	}
 }
 
 func TestProgramPsCustomHeadersAndUnknownField(t *testing.T) {
 	f := newProgramFixture(t)
-	pid := strconv.Itoa(os.Getpid())
-	for _, tc := range []struct{ args, stdout string }{
-		{"-o 'pid=Process number' -o uid=Owner", fmt.Sprintf("Process number Owner\n%s %d\n", pid, os.Getuid())},
-		{"-o pid=Number -o uid=Owner", fmt.Sprintf("Number Owner\n%s %d\n", pid, os.Getuid())},
-		{"-o pid= -o uid=", fmt.Sprintf("%s %d\n", pid, os.Getuid())},
+	uid := strconv.Itoa(os.Getuid())
+	for _, tc := range []struct{ args, header string }{
+		{"-o 'pid=Process number' -o uid=Owner", "Process number Owner\n"},
+		{"-o pid=Number -o uid=Owner", "Number Owner\n"},
+		{"-o pid= -o uid=", ""},
 	} {
-		out, err := f.call(t, t.Context(), "ps -p "+pid+" "+tc.args)
+		out, err := f.call(t, t.Context(), `external -- /bin/sleep 30 & p=$!; external -- /bin/echo "pid=$p"; ps -p "$p" `+tc.args+`; kill "$p"; wait "$p"`)
 		testutil.FailErr(t, "custom ps output", err)
 		got := decodeOutcome(t, out)
-		if got.Status != 0 || got.Stdout != tc.stdout {
-			t.Fatalf("ps %s: %+v; want %q", tc.args, got, tc.stdout)
+		pidLine, rest, _ := strings.Cut(got.Stdout, "\n")
+		pid := strings.TrimPrefix(pidLine, "pid=")
+		if want := tc.header + pid + " " + uid + "\n"; rest != want {
+			t.Fatalf("ps %s: %+v; want %q after the pid line", tc.args, got, want)
 		}
 	}
-	out, err := f.call(t, t.Context(), "ps -p "+pid+" -o nonsense")
+	out, err := f.call(t, t.Context(), `external -- /bin/sleep 30 & p=$!; ps -p "$p" -o nonsense; s=$?; kill "$p"; wait "$p"; exit $s`)
 	testutil.FailErr(t, "invalid ps field", err)
 	got := decodeOutcome(t, out)
 	if got.Status == 0 || got.Stdout != "" || got.Stderr != "ps: unknown output field: nonsense\n" {

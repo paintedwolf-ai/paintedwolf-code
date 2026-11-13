@@ -53,10 +53,37 @@ func mutationPathTargets(argv commandprogram.BoundArgv) []commandprogram.PathTar
 	case "tar":
 		option("-C", flag("-x"))
 		option("-f", flag("-c"))
+		option("-T", false)
+		option("-X", false)
 		if flag("-c") {
-			for _, path := range operands {
-				add(path, false)
+			// Members are read under -C, the way tar changes directory first.
+			dir := ""
+			if value, ok := argv.Last("-C"); ok && len(value.Values) > 0 {
+				dir = value.Values[0].Value
 			}
+			for _, path := range operands {
+				add(inDir(dir, path), false)
+			}
+		}
+	case "patch":
+		// Sections name their own files inside the patch; those bind when it
+		// is read. These are the names argv itself gives.
+		dir := ""
+		if value, ok := argv.Last("-d"); ok && len(value.Values) > 0 {
+			dir = value.Values[0].Value
+		}
+		for _, item := range argv.Items {
+			if item.Option != nil && item.Option.Key == "-i" {
+				for _, value := range item.Option.Values {
+					add(inDir(dir, value.Value), false)
+				}
+			}
+		}
+		if len(operands) > 0 {
+			add(inDir(dir, operands[0]), !flag("--dry-run"))
+		}
+		if len(operands) > 1 {
+			add(inDir(dir, operands[1]), false)
 		}
 	case "zip":
 		if len(operands) > 0 {

@@ -52,6 +52,9 @@ func run(t testing.TB, dir string, when *time.Time, args ...string) string {
 	out, code, err := gitexec.Run(t.Context(), dir, args, gitexec.Opts{
 		Profile:  gitexec.ProfileHermetic,
 		Identity: identity,
+		// Hermetic fixtures must not spawn detached auto-maintenance; its
+		// objects/maintenance.lock races callers copying fresh repositories.
+		ExtraConfig: []string{"maintenance.auto=false"},
 	})
 	if err != nil || code != 0 {
 		t.Fatalf("git %v in %s: exit %d: %v: %s", args, dir, code, err, out)

@@ -73,6 +73,18 @@ const errors = new Map<string, string>();
 const acquisitions = new Map<string, number>();
 const evictions = new Map<string, Promise<boolean>>();
 
+let departureInstalled = false;
+
+/** A page that unloads for good leaves its documents; one kept for back navigation stays. */
+function installDeparture(): void {
+  if (departureInstalled || typeof window === "undefined") return;
+  departureInstalled = true;
+  window.addEventListener("pagehide", (event) => {
+    if (event.persisted) return;
+    for (const replica of replicas.values()) replica.departOnUnload();
+  });
+}
+
 function connectionFor(projectId: string): Connection | undefined {
   const stack = connections.get(projectId);
   return stack?.[stack.length - 1] ?? retiring.get(projectId);
@@ -265,6 +277,7 @@ async function adoptOpenedReplica(projectId: string, client: LycaonClient, opene
       sessionId: connectionFor(projectId)?.sessionId() ?? "",
     }), incarnation, adopted);
     replicas.set(document.id, replica);
+    installDeparture();
     const created = replica;
     const initialization = created.initialize(recovery.records, offline).catch(async (error: unknown) => {
       if (replicas.get(document.id) === created) replicas.delete(document.id);
