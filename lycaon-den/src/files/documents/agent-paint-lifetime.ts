@@ -48,9 +48,8 @@ export function agentMarkLeavingAt(painted: PaintedAgentMark): number | null {
 }
 
 export function agentMarkPhase(painted: PaintedAgentMark, now: number): AgentMarkPhase {
-  const ended = endedAt(painted);
-  if (ended === null) return "live";
-  const leaving = agentMarkLeavingAt(painted)!;
+  const leaving = agentMarkLeavingAt(painted);
+  if (leaving === null) return "live";
   if (now < leaving) return "past";
   return now - leaving < AGENT_FADE_OUT_MS ? "leaving" : "gone";
 }
@@ -128,26 +127,27 @@ export function nextAgentPaint(
  */
 export function currentAgentSteps(marks: readonly PaintedAgentMark[], now: number): PaintedAgentMark[] {
   const current = currentItems(marks.filter((painted) => painted.leftAt === null && painted.supersededAt === null).map((painted) => painted.mark));
-  const pastByChat = new Map<string, PaintedAgentMark[]>();
+  const pastByChat = new Map<string, { painted: PaintedAgentMark; ended: number }[]>();
   const drawn = new Set<PaintedAgentMark>();
   for (const painted of marks) {
     const phase = agentMarkPhase(painted, now);
+    const ended = endedAt(painted);
     if (phase === "live" && current.has(painted.mark.source.item)) drawn.add(painted);
     else if (phase === "leaving") drawn.add(painted);
-    else if (phase === "past") {
+    else if (phase === "past" && ended !== null) {
       const list = pastByChat.get(painted.mark.chat.sessionId) ?? [];
-      list.push(painted);
+      list.push({ painted, ended });
       pastByChat.set(painted.mark.chat.sessionId, list);
     }
   }
   for (const list of pastByChat.values()) {
-    const items = [...new Set(list.map((painted) => painted.mark.source.item))]
-      .map((item) => ({ item, ended: Math.max(...list.filter((painted) => painted.mark.source.item === item).map((painted) => endedAt(painted)!)) }))
-      .sort((a, b) => b.ended - a.ended)
-      .slice(0, AGENT_PAST_MARKS_MAX)
-      .map(({ item }) => item);
-    const kept = new Set(items);
-    for (const painted of list) if (kept.has(painted.mark.source.item)) drawn.add(painted);
+    const newest = new Map<unknown, number>();
+    for (const { painted, ended } of list) {
+      const item = painted.mark.source.item;
+      newest.set(item, Math.max(newest.get(item) ?? ended, ended));
+    }
+    const kept = new Set([...newest].sort((a, b) => b[1] - a[1]).slice(0, AGENT_PAST_MARKS_MAX).map(([item]) => item));
+    for (const { painted } of list) if (kept.has(painted.mark.source.item)) drawn.add(painted);
   }
   return marks.filter((painted) => drawn.has(painted));
 }
