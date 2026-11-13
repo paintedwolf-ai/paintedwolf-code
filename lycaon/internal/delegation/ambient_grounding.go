@@ -211,7 +211,7 @@ func (g *AmbientGroundingCoordinator) applyOARAmbientGrounding(ctx context.Conte
 	}
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = sessionID
-	gc.Session.Profile = "coordinator"
+	gc.Session.Role = "coordinator"
 	tools.RegisterRecoveryFacts(ctx, gc)
 	ObserveDelegationGroundingVerdict(gc, verdict)
 	gc.Grounding.GroundingEscalated = groundingFlagged(g.State.Get(key), g.Config)

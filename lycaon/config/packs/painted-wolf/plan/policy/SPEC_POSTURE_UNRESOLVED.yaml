@@ -1,27 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SPEC_POSTURE_UNRESOLVED
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.rejection_code]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SPEC_POSTURE_UNRESOLVED"
 effect: block
-copy:
-  cause: Establish spec posture via /plan or write a blueprint file first
-  why: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
-  fix: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
-  instead: Establish spec posture before high-risk tools
-  what: Establish spec posture via /plan or write a blueprint file first
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: rule:spec
-x-paintedwolf-message: Establish spec posture via /plan or write a blueprint file first
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: state_start
 x-paintedwolf-audience:
-- coordinator
+  - coordinator
+category: recoverable
+emit: rule:spec
+message: Establish spec posture via /plan or write a blueprint file first
+what: Establish spec posture via /plan or write a blueprint file first
+cause: Establish spec posture via /plan or write a blueprint file first
+why: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
+fix: Use a staged command redirect to `${overlay_dir}/blueprints/<slug>.md` or run /plan
+instead: Establish spec posture before high-risk tools
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: state_start

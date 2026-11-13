@@ -1,23 +1,20 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_NATIVE_FORM_UNSUPPORTED
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.command, paintedwolf.source_line, paintedwolf.source_column]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.command, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line]
 when: paintedwolf.rejection_code == "COMMAND_NATIVE_FORM_UNSUPPORTED"
 effect: block
-copy:
-  what: '{% if paintedwolf.command %}{{ paintedwolf.command }} cannot run in this form{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line
-    }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.{% else %}This command cannot run in the requested form.{% endif %}'
-  cause: The native command adapter cannot execute this form.
-  why: ''
-  fix: ''
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command_native_admission
-x-paintedwolf-message: native operation form is unavailable
-x-paintedwolf-scenarios:
-- id: execution-pin-unavailable
-  vars:
-    tool: command
+category: recoverable
+emit: guard:command_native_admission
+message: native operation form is unavailable
+what: '{% if paintedwolf.command %}{{ paintedwolf.command }} cannot run in this form{% if paintedwolf.source_line %}{% if paintedwolf.source_column %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% endif %}.{% else %}This command cannot run in the requested form.{% endif %}'
+cause: The native command adapter cannot execute this form.
+why: ''
+fix: ''
+instead: ''
+scenarios:
+  - id: execution-pin-unavailable
+    vars:
+      tool: command

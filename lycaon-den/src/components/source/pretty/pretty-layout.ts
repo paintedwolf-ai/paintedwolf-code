@@ -1,7 +1,7 @@
 import { getIndentUnit, syntaxTree } from "@codemirror/language";
 import { type Annotation, type EditorState, type Extension, StateEffect, StateField } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { keepPositionInView } from "../editor/editor-settled-scroll.ts";
+import { preserveScrollAnchor } from "../editor/editor-settled-scroll.ts";
 import {
   awaitsParser,
   buildLayout,
@@ -69,7 +69,7 @@ export function createPrettyExtension(initial: PrettyConfig = { enabled: false }
   return [prettyPresentation, prettyLayoutField.init((state) => buildLayout(state, initial))];
 }
 
-/** Applies a configuration; turning layout on or off keeps the selection head in view. */
+/** Applies a configuration; turning layout on or off keeps the reader's place. */
 export function applyPrettyConfig(
   view: EditorView,
   config: PrettyConfig,
@@ -77,17 +77,12 @@ export function applyPrettyConfig(
 ): void {
   const current = view.state.field(prettyLayoutField, false);
   if (current && sameConfig(current.config, config)) return;
-  const toggled = current !== undefined && current.config.enabled !== config.enabled;
-  const head = (state: EditorState) => state.selection.main.head;
-  view.dispatch({
-    effects: [
-      setPrettyConfig.of(config),
-      ...(toggled ? [EditorView.scrollIntoView(head(view.state), { y: "nearest" })] : []),
-    ],
+  const apply = () => view.dispatch({
+    effects: setPrettyConfig.of(config),
     ...(annotations ? { annotations: [...annotations] } : {}),
   });
-  // The reflow moves the selection head; it stays in view.
-  if (toggled) keepPositionInView(view, head);
+  if (current !== undefined && current.config.enabled !== config.enabled) preserveScrollAnchor(view, apply);
+  else apply();
 }
 
 export const PRETTY_LIMIT_MESSAGES: Record<PrettyLimitReason, string> = {

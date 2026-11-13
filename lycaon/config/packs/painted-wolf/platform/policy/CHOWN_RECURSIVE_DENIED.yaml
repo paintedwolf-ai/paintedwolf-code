@@ -1,32 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: CHOWN_RECURSIVE_DENIED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - chown
-requires:
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  profiles:
-  - tool
+  ledger:
+    paintedwolf.operation:
+      - chown
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CHOWN_RECURSIVE_DENIED"
 effect: block
-copy:
-  cause: The invocation requested recursive ownership changes.
-  why: This tool applies ownership only to explicit bounded targets.
-  fix: Use explicit paths for the ownership changes actually requested, within the current schema’s batch limit.
-    Do not use a recursive command to bypass this restriction.
-  instead: Branch on Code CHOWN_RECURSIVE_DENIED; keep the intended targets explicit
-  what: Recursive chown is not supported.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:chown
-x-paintedwolf-message: chown:recursive chown not supported
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: scripts/run.sh
-    profile: implement
-    tool: chown
+category: recoverable
+emit: guard:chown
+message: chown:recursive chown not supported
+what: Recursive chown is not supported.
+cause: The invocation requested recursive ownership changes.
+why: This tool applies ownership only to explicit bounded targets.
+fix: Use explicit paths for the ownership changes actually requested, within the current schema’s batch limit. Do not use a recursive command to bypass this restriction.
+instead: Branch on Code CHOWN_RECURSIVE_DENIED; keep the intended targets explicit
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: scripts/run.sh
+      profile: implement
+      tool: chown

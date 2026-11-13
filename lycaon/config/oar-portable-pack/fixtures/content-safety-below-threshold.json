@@ -1,0 +1,56 @@
+{
+  "id": "content-safety-below-threshold",
+  "title": "Scores under the rule's thresholds are no decision at all",
+  "covers": [
+    "OAR-OPS-9",
+    "OAR-FACT-5"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "namespace": "example.security",
+      "emit": "example:pack",
+      "id": "INJECTION_FLAGGED",
+      "kind": "detector",
+      "on": "model.output",
+      "selector": {},
+      "requires_facts": [
+        "prompt_injection_score"
+      ],
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "prompt_injection_score > 0.5",
+      "effect": "warn",
+      "profile": "portable"
+    },
+    {
+      "spec_version": "1.0",
+      "namespace": "example.security",
+      "emit": "example:pack",
+      "id": "JAILBREAK_REFUSED",
+      "kind": "detector",
+      "on": "model.output",
+      "selector": {},
+      "requires_facts": [
+        "jailbreak_score"
+      ],
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "jailbreak_score > 0.8",
+      "effect": "block",
+      "profile": "portable"
+    }
+  ],
+  "input": {
+    "anchor": "model.output",
+    "facts": {
+      "prompt_injection_score": 0.42,
+      "jailbreak_score": 0.1
+    }
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

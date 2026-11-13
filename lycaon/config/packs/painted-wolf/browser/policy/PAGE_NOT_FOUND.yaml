@@ -1,25 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: PAGE_NOT_FOUND
 kind: schema
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.id, paintedwolf.next_steps]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.id, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PAGE_NOT_FOUND"
 effect: block
-copy:
-  what: No live page matches id {{ paintedwolf.id }} (closed, reaped, or never opened).
-  cause: Page handles are session-scoped and reaped on idle timeout, page_close, or session end.
-  why: Driving a missing handle cannot restore cookies or DOM state.
-  fix: 'Use an observed page ID only if it belongs to the intended target in this session. {{ paintedwolf.next_steps }} Do not substitute an unrelated live page.'
-  instead: Recover the intended target and account for missing page state
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:visual_page_session
-x-paintedwolf-message: page id is not a live held page in this session
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    id: missing-id
-    profile: implement
-    tool: page_act
+category: recoverable
+emit: guard:visual_page_session
+message: page id is not a live held page in this session
+what: No live page matches id {{ paintedwolf.id }} (closed, reaped, or never opened).
+cause: Page handles are session-scoped and reaped on idle timeout, page_close, or session end.
+why: Driving a missing handle cannot restore cookies or DOM state.
+fix: 'Use an observed page ID only if it belongs to the intended target in this session. {{ paintedwolf.next_steps }} Do not substitute an unrelated live page.'
+instead: Recover the intended target and account for missing page state
+scenarios:
+  - id: default
+    vars:
+      id: missing-id
+      profile: implement
+      tool: page_act

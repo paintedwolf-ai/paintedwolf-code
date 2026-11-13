@@ -131,7 +131,7 @@ func run(ctx context.Context, args []string) error {
 		return runExtensions(ctx, rest)
 	case "rules":
 		installAuthorCatalog(ctx)
-		return runRules(rest)
+		return runRules(ctx, rest)
 	case "prompts":
 		installAuthorCatalog(ctx)
 		return runPrompts(ctx, rest)

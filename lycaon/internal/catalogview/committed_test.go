@@ -200,7 +200,7 @@ func TestReadmitTrialsDoNotEnterSharedCache(t *testing.T) {
 		"contributions/commands/fine.yaml": "id: acme/good:fine\ntitle: Fine\naction:\n  kind: navigate\n  destination: home\n",
 	})
 	broken := fixturePack(t, "acme/broken", map[string]string{
-		"policy/BROKEN_POLICY.yaml": "oar: '1.0'\nid: BROKEN_POLICY\nkind: policy\nanchor: tool.pre_invoke\nwhen: '1'\neffect: block\n",
+		"policy/BROKEN_POLICY.yaml": "spec_version: '1.0'\nid: BROKEN_POLICY\nkind: policy\non: tool.pre_invoke\nwhen: '1'\neffect: block\n",
 	})
 	eff := resolveWithFixtures(t, good, broken)
 
@@ -224,10 +224,10 @@ func TestReadmitTrialsDoNotEnterSharedCache(t *testing.T) {
 
 // Catalog views use bytes captured at resolution.
 func TestBuildServesCapturedBytesAfterEdit(t *testing.T) {
-	const policyBody = "oar: '1.0'\nid: FIXTURE_CAPTURED\nkind: policy\nanchor: tool.post_invoke\n" +
-		"requires:\n  profiles:\n    - tool\nwhen: 'false'\neffect: warn\n" +
-		"copy:\n  cause: c\n  why: w\n  fix: f\n  instead: i\n" +
-		"x-paintedwolf-emit: rule:test\nx-paintedwolf-message: m\n"
+	const policyBody = "spec_version: '1.0'\nid: FIXTURE_CAPTURED\nkind: policy\non: tool.post_invoke\n" +
+		"selector: {}\nwhen: 'false'\neffect: warn\n" +
+		"cause: c\nwhy: w\nfix: f\ninstead: i\n" +
+		"emit: rule:test\nmessage: m\n"
 	pack := fixturePack(t, "acme/captured", map[string]string{
 		"policy/FIXTURE_CAPTURED.yaml": policyBody,
 		"agents/fixture-agent.yaml":    "id: fixture-agent\nname: Fixture\ntool_profile: read_only\n",
@@ -247,7 +247,7 @@ func TestBuildServesCapturedBytesAfterEdit(t *testing.T) {
 		if !ok {
 			t.Fatalf("unit path for %s not found", rel)
 		}
-		testutil.FailErr(t, "corrupt "+rel, os.WriteFile(at.String(), []byte("oar: '1.0'\nid: BROKEN_POLICY\nkind: policy\nanchor: tool.pre_invoke\nwhen: '1'\neffect: block\n"), 0o644))
+		testutil.FailErr(t, "corrupt "+rel, os.WriteFile(at.String(), []byte("spec_version: '1.0'\nid: BROKEN_POLICY\nkind: policy\non: tool.pre_invoke\nwhen: '1'\neffect: block\n"), 0o644))
 	}
 
 	view, err := catalogview.Build(t.Context(), configlayout.FindModuleRoot(), eff)
@@ -276,7 +276,7 @@ func TestForCommittedIsolatesUnattributedFailure(t *testing.T) {
 		"contributions/commands/fine.yaml": "id: acme/good:fine\ntitle: Fine\naction:\n  kind: navigate\n  destination: home\n",
 	})
 	broken := fixturePack(t, "acme/broken", map[string]string{
-		"policy/BROKEN_POLICY.yaml": "oar: '1.0'\nid: BROKEN_POLICY\nkind: policy\nanchor: tool.pre_invoke\nwhen: '1'\neffect: block\n",
+		"policy/BROKEN_POLICY.yaml": "spec_version: '1.0'\nid: BROKEN_POLICY\nkind: policy\non: tool.pre_invoke\nwhen: '1'\neffect: block\n",
 	})
 	eff := resolveWithFixtures(t, good, broken)
 

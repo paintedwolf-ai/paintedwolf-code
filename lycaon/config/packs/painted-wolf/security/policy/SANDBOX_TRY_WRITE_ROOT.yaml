@@ -1,61 +1,54 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_TRY_WRITE_ROOT
 kind: policy
-anchor: tool.post_invoke
+on: tool.post_invoke
 # command_output cannot carry a capability request; the retry is a fresh
 # command or verify call.
 selector:
-  tool:
+  tools:
     - command
     - verify
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.process_running, paintedwolf.refused_write_paths, paintedwolf.refused_write_grants, paintedwolf.missing_capability_write_root, paintedwolf.next_steps]
+requires_facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.missing_capability_write_root, paintedwolf.next_steps, paintedwolf.process_running, paintedwolf.refused_write_grants, paintedwolf.refused_write_paths]
 when: >-
-  paintedwolf.confine_applied
-  && size(paintedwolf.refused_write_grants) > 0
-  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+  paintedwolf.confine_applied && size(paintedwolf.refused_write_grants) > 0 && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
 effect: warn
-copy:
-  what: In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}.
-  cause: The requestable write grants are {{ paintedwolf.refused_write_grants }}; other refused paths may remain unavailable. A refused write can still leave a stage's
-    exit status at 0, and command output cannot widen the boundary.
-  why: ''
-  fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_write_root %}{% if paintedwolf.refused_write_grants %}If the operation is still needed, submit only the remaining work. Set `capability_request.write_root` to the exact matching entry of {{ paintedwolf.refused_write_grants }} as one string. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:sandbox
-x-paintedwolf-message: the sandbox refused a write this invocation needed
-x-paintedwolf-scenarios:
-- id: instruction_file
-  vars:
-    tool: command
-    failed_stages:
-    - touch AGENTS.md
-    refused_write_paths:
-    - /work/project/AGENTS.md
-    refused_write_grants:
-    - /work/project/AGENTS.md
-    tool_args: {}
-- id: running_job
-  vars:
-    tool: command
-    process_running: true
-    can_command_stop: true
-    can_command_output: true
-    refused_write_paths:
-    - /Users/person/.colima/default/colima.yaml
-    refused_write_grants:
-    - /Users/person/.colima/default
-    tool_args: {}
-- id: outside_roots
-  vars:
-    tool: verify
-    failed_stages:
-    - ./task check
-    refused_write_paths:
-    - /etc/hosts
-    refused_write_grants:
-    - /etc
-    tool_args: {}
+category: recoverable
+emit: guard:sandbox
+message: the sandbox refused a write this invocation needed
+what: In `{{ tool }}`, the sandbox refused writes to {{ paintedwolf.refused_write_paths }}{% if paintedwolf.process_running %} while the job runs{% endif %}.
+cause: The requestable write grants are {{ paintedwolf.refused_write_grants }}; other refused paths may remain unavailable. A refused write can still leave a stage's exit status at 0, and command output cannot widen the boundary.
+why: ''
+fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_write_root %}{% if paintedwolf.refused_write_grants %}If the operation is still needed, submit only the remaining work. Set `capability_request.write_root` to the exact matching entry of {{ paintedwolf.refused_write_grants }} as one string. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
+instead: ''
+scenarios:
+  - id: instruction_file
+    vars:
+      tool: command
+      failed_stages:
+        - touch AGENTS.md
+      refused_write_paths:
+        - /work/project/AGENTS.md
+      refused_write_grants:
+        - /work/project/AGENTS.md
+      tool_args: {}
+  - id: running_job
+    vars:
+      tool: command
+      process_running: true
+      can_command_stop: true
+      can_command_output: true
+      refused_write_paths:
+        - /Users/person/.colima/default/colima.yaml
+      refused_write_grants:
+        - /Users/person/.colima/default
+      tool_args: {}
+  - id: outside_roots
+    vars:
+      tool: verify
+      failed_stages:
+        - ./task check
+      refused_write_paths:
+        - /etc/hosts
+      refused_write_grants:
+        - /etc
+      tool_args: {}

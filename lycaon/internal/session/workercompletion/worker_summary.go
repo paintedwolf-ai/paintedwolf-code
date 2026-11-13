@@ -204,7 +204,7 @@ func decideWorkerSummary(
 	}
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = in.ChildSessionID
-	gc.Session.Profile = "worker"
+	gc.Session.Role = "worker"
 	tools.RegisterRecoveryFacts(tools.WithCallReach(ctx, in.Reach), gc)
 	publishWorkerSummaryFacts(gc, in.AgentType, obs)
 	putWorkerRejectData(gc, obs, data)

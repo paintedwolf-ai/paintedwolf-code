@@ -1,0 +1,55 @@
+{
+  "id": "destructive-delete-blocked",
+  "title": "A delete is refused outright and the occurrence ends there",
+  "covers": [
+    "OAR-EVAL-1",
+    "OAR-EVAL-3"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "namespace": "example.security",
+      "emit": "example:pack",
+      "id": "DELETE_REFUSED",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {
+        "tools": [
+          "delete"
+        ]
+      },
+      "effect": "block",
+      "profile": "portable"
+    },
+    {
+      "spec_version": "1.0",
+      "namespace": "example.security",
+      "emit": "example:pack",
+      "id": "DESTRUCTIVE_TOOL_WARN",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {
+        "tools": [
+          "delete",
+          "move",
+          "chmod"
+        ]
+      },
+      "effect": "warn",
+      "profile": "portable"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "delete"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "DELETE_REFUSED",
+    "applied": [
+      "DELETE_REFUSED:fired"
+    ]
+  }
+}

@@ -1,0 +1,31 @@
+{
+  "title": "Whitespace inside a binding is permitted and insignificant",
+  "covers": [
+    "OAR-COPY-8"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "WS",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "what": "tool={{tool}} profile={{ profile  }}."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "profile": "conformance"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "WS",
+    "copy": {
+      "what": "tool=read profile=conformance."
+    }
+  },
+  "id": "copy-whitespace-insignificant"
+}

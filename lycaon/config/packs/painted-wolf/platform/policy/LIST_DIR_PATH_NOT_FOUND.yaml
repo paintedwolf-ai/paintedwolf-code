@@ -1,30 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: LIST_DIR_PATH_NOT_FOUND
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - list_dir
-requires:
-  profiles:
-    - filesystem
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.path
+  ledger:
+    paintedwolf.operation:
+      - list_dir
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "LIST_DIR_PATH_NOT_FOUND"
 effect: block
-copy:
-  what: The listing path {{ paintedwolf.path }} does not exist.
-  cause: The path argument must name an existing directory under the attached project roots.
-  why: Structured rejects let agents branch without parsing free-form stat errors.
-  fix: Inspect the nearest existing parent, then list a directory shown there.
-  instead: Branch on Code; choose an existing directory before listing again
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:list_dir
-x-paintedwolf-message: list_dir path does not exist
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:list_dir
+message: list_dir path does not exist
+what: The listing path {{ paintedwolf.path }} does not exist.
+cause: The path argument must name an existing directory under the attached project roots.
+why: Structured rejects let agents branch without parsing free-form stat errors.
+fix: Inspect the nearest existing parent, then list a directory shown there.
+instead: Branch on Code; choose an existing directory before listing again
+scenarios:
   - id: default
     vars:
       path: missing/dir
