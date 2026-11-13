@@ -193,7 +193,7 @@ Each occurrence reads a snapshot of rule counters, keyed by rule identity and se
 
 The engine also maintains two runs per session and anchor ([OAR-FIRE-8], [OAR-FIRE-9]): `same_code_reject_run` counts the trailing occurrences blocked with one code, and `same_call_run` the trailing occurrences that repeated the current tool and arguments exactly. Neither a host provider nor a fixture may supply them ([OAR-FIRE-10]). Host retry observations, such as the loop guard's `paintedwolf.repeat_count`, are separate host facts.
 
-`WEAK_CREDENTIAL_LITERAL` and `CREDENTIAL_LITERAL` own the credential advisory thresholds. Each tests `paintedwolf.credential_occurrences == 0`, the session's earlier sightings of the candidate's fingerprint, so it warns once per credential per session. Harvest membership is checked against the root session. The host carries no separate warning latch.
+`WEAK_CREDENTIAL_LITERAL` and `CREDENTIAL_LITERAL` own the credential advisory thresholds. Each tests `paintedwolf.credential_decisions == 0`, the session's earlier occurrences that delivered a decision for the candidate's fingerprint, so it warns once per credential per session and a monitored rule consumes nothing. Harvest membership is checked against the root session. The host carries no separate warning latch.
 
 ## MCP facts (generic)
 
