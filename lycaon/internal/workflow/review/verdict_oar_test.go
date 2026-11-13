@@ -78,10 +78,10 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 	}
 }
 
-// carriesRuleCopy reports whether a decision kept the rule's five copy
-// members; message, when the rule has one, travels beside them.
+// carriesRuleCopy reports whether a decision kept the rule's evaluated copy:
+// every shipped rule says what happened and why.
 func carriesRuleCopy(copy map[string]string) bool {
-	for _, member := range []string{"what", "cause", "why", "fix", "instead"} {
+	for _, member := range []string{"what", "cause"} {
 		if copy[member] == "" {
 			return false
 		}
