@@ -159,36 +159,6 @@ export function activitySpanFailureCount(
   ).length;
 }
 
-export type ActivitySpanCompositionPart = {
-  label: string;
-  count: number;
-};
-
-/** Ordered tool-call composition for the expanded span. */
-export function activitySpanComposition(
-  entries: readonly ActivitySpanEntry[],
-): ActivitySpanCompositionPart[] {
-  const order: string[] = [];
-  const counts = new Map<string, number>();
-  for (const entry of entries) {
-    const label = entryCommandLabel(entry);
-    if (!counts.has(label)) {
-      order.push(label);
-      counts.set(label, 0);
-    }
-    counts.set(label, (counts.get(label) ?? 0) + 1);
-  }
-  return order.map((label) => ({ label, count: counts.get(label) ?? 0 }));
-}
-
-export function formatActivitySpanComposition(
-  parts: readonly ActivitySpanCompositionPart[],
-): string {
-  return parts
-    .map((part) => `${formatSentenceCase(part.label)} ×${part.count}`)
-    .join(" · ");
-}
-
 /** Resolves the specificity tier for a candidate from its role. */
 export function candidateTier(candidate: Pick<ActivityCandidate, "role">): number {
   return candidate.role ? ACTIVITY_ROLE_TIERS[candidate.role] : 0;

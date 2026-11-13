@@ -1,7 +1,6 @@
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
-import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 
 export type CommandActivityView = {
   fact: CommandActivity;
@@ -185,30 +184,10 @@ export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], f
  return headline;
 }
 
-export type CommandActivityProgressionChip = { group: string; steps: number };
-export type CommandActivityProgression = { groups: string[]; chips: CommandActivityProgressionChip[] };
-
-/** First-appearance group order with consecutive chip runs and their step counts. */
-export function commandActivityProgression(entries: readonly ActivitySpanEntry[]): CommandActivityProgression {
-  const groups: string[] = [];
-  const chips: CommandActivityProgressionChip[] = [];
-  for (const entry of entries) {
-    if (entry.kind !== "tool") continue;
-    const fact = entry.part.commandActivity?.fact;
-    const key = fact ? fact.group : entry.part.tool.trim().toLowerCase() || "tool activity";
-    const steps = fact?.steps?.length ?? 0;
-    if (fact && !groups.includes(fact.group)) groups.push(fact.group);
-    const last = chips[chips.length - 1];
-    if (last?.group === key) last.steps += steps;
-    else chips.push({ group: key, steps });
-  }
-  return { groups, chips };
+/** Activity groups in first-appearance order. */
+export function commandActivityGroups(entries: readonly ActivitySpanEntry[]): string[] {
+  return [...new Set(activityFacts(entries).map(fact => fact.group))];
 }
-
-export function formatCommandActivityProgression(progression: CommandActivityProgression): string {
-  return progression.chips.map(chip => `${formatSentenceCase(chip.group)} · ${chip.steps} ${chip.steps === 1 ? "step" : "steps"}`).join(" · ");
-}
-
 
 /** Receipts without an activity snapshot use the same card and retain all operations. */
 export function commandActivityPart(part: ToolPartView): ToolPartView {

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { CommandActivity, CommandActivityStep, CommandProgramReceipt } from "../../api/types.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
-import { commandActivityHeadline, commandActivityProgression, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
+import { commandActivityGroups, commandActivityHeadline, commandActivityRank, createCommandActivityProjection } from "./command-activity-model.ts";
 
 function fact(id: string, overrides: Partial<CommandActivity> = {}): CommandActivity {
   return { id, group: "Exploring project files", phase: "inspect", label: "Read source", subject: "source.rs", state: "completed", outcome: "Exited 0", status_code: 0, execution_ids: [id], spans: [], ...overrides };
@@ -218,19 +218,14 @@ it("holds running FormTool calls back and coalesces the settled inspect sequence
  expect(jobBetween.map(row => row.id)).toEqual(["side-c", "job", "side-d"]);
 });
 
-it("orders the progression by first appearance and counts steps per chip run", () => {
+it("lists activity groups in first-appearance order", () => {
  const project = createCommandActivityProjection();
  const entries = [
   entry("a", [fact("a", { steps: [step("s1"), step("s2")] })]),
   entry("b", [fact("b", { steps: [step("s3")] })]),
   entry("c", [fact("c", { group: "Changing files", label: "Change files", phase: "mutate" })]),
  ];
- const progression = commandActivityProgression(project(entries));
- expect(progression.groups).toEqual(["Exploring project files", "Changing files"]);
- expect(progression.chips).toEqual([
-  { group: "Exploring project files", steps: 3 },
-  { group: "Changing files", steps: 0 },
- ]);
+ expect(commandActivityGroups(project(entries))).toEqual(["Exploring project files", "Changing files"]);
 });
 
 it("keeps a program-level failure visible after successful child activities", () => {
