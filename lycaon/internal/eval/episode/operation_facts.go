@@ -55,10 +55,10 @@ type Operation struct {
 	FailureCode     string          `json:"failure_code,omitempty"`
 	// SourceVerdict is the verification verdict the host recorded for the
 	// source at SourceRevision; empty when the operation verified nothing.
-	SourceVerdict  string          `json:"source_verdict,omitempty"`
-	SourceRevision string          `json:"source_revision,omitempty"`
-	StartedAt       time.Time       `json:"started_at"`
-	SettledAt       *time.Time      `json:"settled_at,omitempty"`
+	SourceVerdict  string     `json:"source_verdict,omitempty"`
+	SourceRevision string     `json:"source_revision,omitempty"`
+	StartedAt      time.Time  `json:"started_at"`
+	SettledAt      *time.Time `json:"settled_at,omitempty"`
 }
 
 // SourceIdentity names an operation evidence source and the contract its
