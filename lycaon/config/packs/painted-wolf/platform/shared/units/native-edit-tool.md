@@ -7,10 +7,10 @@ order: 30
 attaches: [command, restore_version]
 hosts: [coordinator, worker]
 ---
-Publish supported source with a syntax-health result. New/clean files finish clean; broken files require strictly healthier repairs. Promotion needs a clean final merge plan.
+{% if profile_command_mutation != false or profile_has_restore_version %}Publish supported source with a syntax-health result. New/clean files finish clean; broken files require strictly healthier repairs. Promotion needs a clean final merge plan.
 
-- {% if profile_command_mutation %}Inspect the relevant source before editing. Use quoted here-documents or `printf` redirects for new files; `edit --path FILE --old-string OLD --new-string NEW` for an exact span of existing content, or `replace-lines`, `sed`, `awk`, `patch`, or `git apply`. On a conflict, inspect current state before retrying.{% else %}On this read-only surface, inspect the relevant source and report the needed change instead of editing; on a conflict, inspect current state before reporting.{% endif %}
-{% if profile_has_restore_version %}- `restore_version` restores a retained ledger version or removes a newly authored file; prefer it to hand-reverting.{% endif %}
-- For large files, use `outline`,{% if profile_has_summarize %} `summarize`,{% endif %} or bounded `grep -n` and `sed -n` before changing scoped source; any delivered source read establishes the edit base; one `command` program can read then edit. Line numbers from `cat -n` or `grep -n` are not file content: never copy them into new text.
+{% if profile_command_mutation != false %}- Inspect the relevant source before editing. Use quoted here-documents or `printf` redirects for new files; `edit --path FILE --old-string OLD --new-string NEW` for an exact span of existing content, or `replace-lines`, `sed`, `awk`, `patch`, or `git apply`. On a conflict, inspect current state before retrying.
+{% endif %}{% if profile_has_restore_version %}- `restore_version` restores a retained ledger version or removes a newly authored file; prefer it to hand-reverting.
+{% endif %}{% if profile_command_mutation != false %}- For large files, use `outline`,{% if profile_has_summarize %} `summarize`,{% endif %} or bounded `grep -n` and `sed -n` before changing scoped source; any delivered source read establishes the edit base; one `command` program can read then edit. Line numbers from `cat -n` or `grep -n` are not file content: never copy them into new text.
 - Use `CMD --help` for native command forms. Scope structural rewrites narrowly.
-{% include "partials/large-file-write-discipline.md" %}
+{% include "partials/large-file-write-discipline.md" %}{% endif %}{% endif %}

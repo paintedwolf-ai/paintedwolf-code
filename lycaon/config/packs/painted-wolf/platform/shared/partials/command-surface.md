@@ -7,7 +7,7 @@
 {% endfor %}Only these project folders have indexing, history and undo.{% if profile_command_mutation != false %} {% if reviews_confined_writes == false %}Other paths ask the person first, except temporary and cache folders.{% else %}Other paths, including temporary folders, ask the person first.{% endif %}{% endif %}
 {% endif %}{% if session_scratch_dir %}- `@scratch` → {{ session_scratch_dir }}: session scratch (`$TMPDIR`, `mktemp`); literal `/tmp` is the system's own.
 {% endif %}
-{% if profile_command_mutation != false %}External programs run in a sandbox unless the person approves host access.{% if not command_external_hidden %} For a native-name collision, use `external -- NAME` or `external -p PATH -- NAME`.{% endif %}
+{% if profile_command_mutation != false %}{% if profile_command_external_exec != false %}External programs run in a sandbox unless the person approves host access.{% if not command_external_hidden %} For a native-name collision, use `external -- NAME` or `external -p PATH -- NAME`.{% endif %}{% else %}Only native programs run on this surface; external programs are refused.{% endif %}
 
 {% if command_output_files %}For long output, read the saved copy named in the result.{% endif %}
 
