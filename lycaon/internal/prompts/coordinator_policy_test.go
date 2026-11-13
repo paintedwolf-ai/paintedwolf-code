@@ -74,11 +74,7 @@ func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
 		"max_write_workers",
 		"max_concurrent_tool_calls",
 		"worker_summary_max_chars",
-		"worker_tool_budget_default",
 		"hunt_wave_workers",
-		"throwaway_tool_loops_min",
-		"throwaway_tool_loops_max",
-		"deep_tool_loops_hint",
 		"max_author_progress_lines",
 		"max_progress_label_chars",
 	} {
@@ -94,9 +90,6 @@ func TestCoordinatorPolicyTemplateVarsKeys(t *testing.T) {
 	}
 	if vars["worker_summary_max_chars"] != limits.DefaultWorkerSummaryMaxChars {
 		t.Fatalf("worker_summary_max_chars = %v want %d", vars["worker_summary_max_chars"], limits.DefaultWorkerSummaryMaxChars)
-	}
-	if vars["worker_tool_budget_default"] != spawn.DefaultWorkerMaxToolLoops {
-		t.Fatalf("worker default = %v want %d", vars["worker_tool_budget_default"], spawn.DefaultWorkerMaxToolLoops)
 	}
 	if vars["max_author_progress_lines"] != progress.MaxAuthorProgressLines {
 		t.Fatalf("max_author_progress_lines = %v want %d", vars["max_author_progress_lines"], progress.MaxAuthorProgressLines)

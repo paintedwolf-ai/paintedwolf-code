@@ -234,8 +234,7 @@ export function WorkerTranscript(props: Props) {
     if (!row) return null;
     const used = row.tool_loops_used ?? 0;
     if (used <= 0) return null;
-    const max = row.max_tool_loops;
-    return max ? `${used} of ${max} tool turns so far` : `${used} tool turns so far`;
+    return `${used} ${used === 1 ? "turn" : "turns"} so far`;
   });
 
   const isWorking = createMemo(() => {

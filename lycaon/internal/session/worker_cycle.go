@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/spawn"
 
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -16,6 +17,13 @@ type WorkerCycleLister interface {
 }
 
 // workeradmission.CoordinatorTaskConcurrencyCap returns the max pending or running task() jobs for a parent session.
+// SetWorkerRounds sets the policy that bounds worker rounds and their notices.
+func (m *Host) SetWorkerRounds(policy spawn.RoundPolicy) {
+	if m != nil {
+		m.Coordinator.Nudging.Rounds = policy
+	}
+}
+
 // SetWorkerQueue wires the worker job ledger for coordinator worker-cycle guards.
 func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
 	if m != nil {
@@ -32,7 +40,6 @@ func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
 		m.Verification.Evidence.SetWorkers(q)
 		m.Runner.Settlement.SetWorkers(q)
 		m.Coordinator.Batch.SetWorkers(q)
-		m.Coordinator.Nudges.SetTasks(q)
 		m.Workers.State.SetWorkers(q)
 		m.Workers.Notes.SetWorkers(q)
 		m.Verification.SetWorkers(q)

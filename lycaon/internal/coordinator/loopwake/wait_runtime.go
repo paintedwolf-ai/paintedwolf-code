@@ -50,7 +50,7 @@ func alwaysBreaksSleep(wake anchor.ID, completingJobID string) bool {
 		return true
 	}
 	switch wake {
-	case anchor.LegFinished, anchor.WorkerTaskFinished, anchor.WorkerBudgetRequested:
+	case anchor.LegFinished, anchor.WorkerTaskFinished, anchor.WorkerRoundNotice:
 		return true
 	default:
 		return false

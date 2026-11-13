@@ -515,7 +515,7 @@ func (q *Queries) GetRootSessionID(ctx context.Context, id string) (string, erro
 
 const getSession = `-- name: GetSession :one
 SELECT id, title, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-       agent_type, provider_id, model, parent_session_id, max_tool_loops, compaction_generation, status, created_at, activity_at,
+       agent_type, provider_id, model, parent_session_id, compaction_generation, status, created_at, activity_at,
        updated_at, archived_at, pin_rank, seen_at
 FROM sessions
 WHERE id = ?
@@ -534,7 +534,6 @@ type GetSessionRow struct {
 	ProviderID           sql.NullString `json:"provider_id"`
 	Model                sql.NullString `json:"model"`
 	ParentSessionID      sql.NullString `json:"parent_session_id"`
-	MaxToolLoops         sql.NullInt64  `json:"max_tool_loops"`
 	CompactionGeneration int64          `json:"compaction_generation"`
 	Status               string         `json:"status"`
 	CreatedAt            string         `json:"created_at"`
@@ -561,7 +560,6 @@ func (q *Queries) GetSession(ctx context.Context, id string) (GetSessionRow, err
 		&i.ProviderID,
 		&i.Model,
 		&i.ParentSessionID,
-		&i.MaxToolLoops,
 		&i.CompactionGeneration,
 		&i.Status,
 		&i.CreatedAt,
@@ -928,9 +926,9 @@ const insertSession = `-- name: InsertSession :exec
 
 INSERT INTO sessions (
     id, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-    agent_type, provider_id, model, parent_session_id, max_tool_loops, compaction_generation,
+    agent_type, provider_id, model, parent_session_id, compaction_generation,
     title, status, created_at, activity_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?)
 `
 
 type InsertSessionParams struct {
@@ -945,7 +943,6 @@ type InsertSessionParams struct {
 	ProviderID      sql.NullString `json:"provider_id"`
 	Model           sql.NullString `json:"model"`
 	ParentSessionID sql.NullString `json:"parent_session_id"`
-	MaxToolLoops    sql.NullInt64  `json:"max_tool_loops"`
 	Title           sql.NullString `json:"title"`
 	Status          string         `json:"status"`
 	CreatedAt       string         `json:"created_at"`
@@ -967,7 +964,6 @@ func (q *Queries) InsertSession(ctx context.Context, arg InsertSessionParams) er
 		arg.ProviderID,
 		arg.Model,
 		arg.ParentSessionID,
-		arg.MaxToolLoops,
 		arg.Title,
 		arg.Status,
 		arg.CreatedAt,
@@ -2362,7 +2358,7 @@ func (q *Queries) ListSessionTreeSpillRefs(ctx context.Context, rootSessionID st
 
 const listSessions = `-- name: ListSessions :many
 SELECT id, title, project_id, owner_person_id, workspace_root_id, posture, workflow_id, workflow_version,
-       agent_type, provider_id, model, parent_session_id, max_tool_loops, compaction_generation, status, created_at, activity_at,
+       agent_type, provider_id, model, parent_session_id, compaction_generation, status, created_at, activity_at,
        updated_at, archived_at, pin_rank, seen_at
 FROM sessions
 ORDER BY created_at
@@ -2381,7 +2377,6 @@ type ListSessionsRow struct {
 	ProviderID           sql.NullString `json:"provider_id"`
 	Model                sql.NullString `json:"model"`
 	ParentSessionID      sql.NullString `json:"parent_session_id"`
-	MaxToolLoops         sql.NullInt64  `json:"max_tool_loops"`
 	CompactionGeneration int64          `json:"compaction_generation"`
 	Status               string         `json:"status"`
 	CreatedAt            string         `json:"created_at"`
@@ -2414,7 +2409,6 @@ func (q *Queries) ListSessions(ctx context.Context) ([]ListSessionsRow, error) {
 			&i.ProviderID,
 			&i.Model,
 			&i.ParentSessionID,
-			&i.MaxToolLoops,
 			&i.CompactionGeneration,
 			&i.Status,
 			&i.CreatedAt,
@@ -3438,16 +3432,16 @@ func (q *Queries) UpdateQueuedPromptSubmissionInput(ctx context.Context, arg Upd
 const updateSession = `-- name: UpdateSession :exec
 UPDATE sessions SET
     project_id = ?1, posture = ?2, agent_type = ?3,
-    provider_id = ?4, model = ?5, max_tool_loops = ?6,
-    title = ?7, status = ?8, compaction_generation = ?9,
-    archived_at = ?10, seen_at = ?11, updated_at = ?12,
+    provider_id = ?4, model = ?5,
+    title = ?6, status = ?7, compaction_generation = ?8,
+    archived_at = ?9, seen_at = ?10, updated_at = ?11,
     status_changed_at = CASE
-        WHEN status = ?8 THEN status_changed_at ELSE ?12
+        WHEN status = ?7 THEN status_changed_at ELSE ?11
     END,
     pin_rank = CASE
-        WHEN project_id = ?1 AND ?10 IS NULL THEN pin_rank
+        WHEN project_id = ?1 AND ?9 IS NULL THEN pin_rank
     END
-WHERE id = ?13
+WHERE id = ?12
 `
 
 type UpdateSessionParams struct {
@@ -3456,7 +3450,6 @@ type UpdateSessionParams struct {
 	AgentType            sql.NullString `json:"agent_type"`
 	ProviderID           sql.NullString `json:"provider_id"`
 	Model                sql.NullString `json:"model"`
-	MaxToolLoops         sql.NullInt64  `json:"max_tool_loops"`
 	Title                sql.NullString `json:"title"`
 	Status               string         `json:"status"`
 	CompactionGeneration int64          `json:"compaction_generation"`
@@ -3474,7 +3467,6 @@ func (q *Queries) UpdateSession(ctx context.Context, arg UpdateSessionParams) er
 		arg.AgentType,
 		arg.ProviderID,
 		arg.Model,
-		arg.MaxToolLoops,
 		arg.Title,
 		arg.Status,
 		arg.CompactionGeneration,

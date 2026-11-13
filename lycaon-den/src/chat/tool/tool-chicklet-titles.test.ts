@@ -47,7 +47,6 @@ const SAMPLE_ARGS: Record<string, Record<string, unknown>> = {
   promote_overlay: { overlay_id: "job-overlay-1" },
   reject_overlay: { overlay_id: "job-overlay-1", reason: "superseded" },
   preview_overlay: { overlay_id: "job-overlay-1", path: "main.go" },
-  extend_worker_budget: { job_id: "job-1", max_tool_loops: 80 },
   task: {
     agent_type: "implementer",
     description: "Add login form",

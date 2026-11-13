@@ -52,6 +52,9 @@ func acquireCoordinatorSources(m *Host, store Store, client modelcall.LLMClient,
 	m.Coordinator.Model = &promptsource.Model{PolicyIndex: m.Coordinator.PolicyIndex, Cost: tracker, History: m.Runner.History, LLM: client, LLMService: svc, Limits: m.Limits, Workspace: m.Workspace}
 	m.Coordinator.Projection = &promptsource.Projection{Events: nil, Rejections: m.Workers.Rejections, Sessions: store, Stash: stash, Transcript: m.Runner.Transcript, Workflow: nil}
 	m.Coordinator.Nudging = &promptsource.Nudges{DoomLoop: nil, Nudges: m.Coordinator.Nudges, Policy: m.ToolPolicy, Spend: m.Runner.Spend, Workers: nil}
+	if usage, ok := tracker.(promptsource.RoundUsage); ok {
+		m.Coordinator.Nudging.RoundUsage = usage
+	}
 	m.Coordinator.Completion = &promptsource.Closeout{Batch: m.Coordinator.Batch, Closeout: m.Coordinator.Closeout, Closeouts: m.Runner.Closeouts, Evidence: m.Verification.Evidence, Guards: m.Coordinator.Guards, Hints: nil, Nudges: m.Coordinator.Nudges, Policy: m.ToolPolicy, Rejects: nil, RenderKick: m.Workers.RenderKick, Reports: nil}
 	m.Coordinator.Assembly = &promptsource.Assembly{Messages: store.ReadMessageWindow, Briefs: m.SourceBriefs, Catalog: &m.Catalog, Closeout: m.Coordinator.Closeout, Feedback: nil, Frame: nil, Guards: m.Coordinator.Guards, Hints: nil, Limits: m.Limits, Loading: m.Coordinator.Loading, Model: m.Coordinator.Model, Notes: m.Workers.Notes, PolicyIndex: m.Coordinator.PolicyIndex, Processes: m.Processes, Profiles: m.Profiles, Prompts: nil, Repository: nil, Runtime: nil, Scan: nil, Stash: stash, State: m.Workers.State, WebResearch: nil, WorkerContext: nil, Workspace: m.Workspace, Workspaces: m.Workers.Workspaces, ToolContext: m.ToolContext}
 	m.Coordinator.Loop = &promptsource.Loop{ActiveRuns: nil, Admission: m.Admission, Events: nil, Frame: nil, Grounding: nil, Guidance: m.Coordinator.Guidance, Limits: m.Limits, Processes: m.Processes, Runtime: nil, ScanInFlight: scanInFlight, Sessions: store, Settlement: m.Runner.Settlement, State: m.Workers.State, Submissions: m.Submissions, Turns: m.Runner.Turns, Workers: nil, Workflow: nil}
@@ -84,6 +87,7 @@ func bindCoordinatorRuntime(m *Host, store Store) {
 	m.Coordinator.Admission = m.Admission
 	m.Coordinator.Runtime = runtime
 	m.Coordinator.Workers = &coordinatorcontrol.Workers{Runtime: runtime, Batch: m.Coordinator.Batch, Settlement: m.Runner.Settlement, Admission: m.Admission, Digests: m.Workers.Digests, Results: m.Workers.Results}
+	m.Coordinator.Nudging.RoundNotice = m.Coordinator.Workers.RoundNotice
 	m.Coordinator.Scans.Runtime = runtime
 
 	m.Coordinator.Profiles = m.Profiles

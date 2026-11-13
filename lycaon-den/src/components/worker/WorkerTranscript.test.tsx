@@ -290,7 +290,6 @@ describe("WorkerTranscript", () => {
           {
             ...runningWorker(),
             tool_loops_used: 4,
-            max_tool_loops: 40,
           },
         ]}
         appStore={appStore}
@@ -299,7 +298,7 @@ describe("WorkerTranscript", () => {
     ));
 
     expect(screen.getByTestId("worker-activity-preview").textContent).toBe(
-      "4 of 40 tool turns so far",
+      "4 turns so far",
     );
   });
 
@@ -313,7 +312,6 @@ describe("WorkerTranscript", () => {
           {
             ...completeWorker(),
             tool_loops_used: 12,
-            max_tool_loops: 40,
           },
         ]}
         appStore={appStore}
@@ -322,7 +320,7 @@ describe("WorkerTranscript", () => {
     ));
 
     expect(screen.getByTestId("worker-activity-preview").textContent).toBe(
-      "12 of 40 tool turns so far",
+      "12 turns so far",
     );
     expect(screen.queryByTestId("worker-no-activity")).toBeNull();
   });
@@ -498,7 +496,6 @@ describe("WorkerTranscript", () => {
       {
         ...runningWorker(),
         tool_loops_used: 3,
-        max_tool_loops: 40,
       },
     ]);
     await Promise.resolve();

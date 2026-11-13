@@ -729,5 +729,5 @@ type workerToolSelection struct{}
 func (workerToolSelection) FullCatalog(string) bool             { return false }
 func (workerToolSelection) OmittedUnits(string) map[string]bool { return nil }
 func (workerToolSelection) LoadedTools(string) map[string]bool {
-	return map[string]bool{"task": true, "pack_board": true, "worker_cancel": true, "answer_decision": true, "extend_worker_budget": true}
+	return map[string]bool{"task": true, "pack_board": true, "worker_cancel": true, "answer_decision": true}
 }

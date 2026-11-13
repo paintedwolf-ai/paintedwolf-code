@@ -98,19 +98,6 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}); err != nil {
 		return fmt.Errorf("answer_decision tool: %w", err)
 	}
-	if err := worker.RegisterExtendWorkerBudgetTool(b.execution.Host.Registry, worker.ExtendBudgetToolDeps{
-		Queue:      b.delegations.Queue,
-		Ledger:     b.boards.BudgetLedger,
-		ToolBudget: b.sessions.WorkerToolBudgetFor,
-	}); err != nil {
-		return fmt.Errorf("extend_worker_budget tool: %w", err)
-	}
-	if err := worker.RegisterDeclineWorkerBudgetTool(b.execution.Host.Registry, worker.DeclineBudgetToolDeps{
-		Queue:  b.delegations.Queue,
-		Ledger: b.boards.BudgetLedger,
-	}); err != nil {
-		return fmt.Errorf("decline_worker_budget tool: %w", err)
-	}
 	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.sessions.Manager.Promotion)
 	workerMergeSvc := &worker.MergeService{
 		Queue:         b.delegations.Queue,
@@ -182,7 +169,6 @@ func taskToolDeps(b *serveBuilder) worker.TaskToolDeps {
 		Queue:            b.delegations.Queue,
 		Agents:           b.agents.Registry,
 		Workers:          b.worker.cfg,
-		ToolBudget:       b.sessions.WorkerToolBudgetFor,
 		BindWorkflowTask: b.workflows.Manager.Fanout.BindWorkflowTask,
 		WorkflowWork:     b.workflows.Manager.Fanout.WorkflowWork,
 		TaskReceipt:      b.delegations.Queue.TaskReceipt,

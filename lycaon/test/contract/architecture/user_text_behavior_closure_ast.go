@@ -291,6 +291,10 @@ var coordinatorPongoBooleanGateRE = regexp.MustCompile(`\{%\s*(?:if|elif)\s+(?:n
 var bannedCoordinatorGateNameRE = regexp.MustCompile(`(?i)(greenfield|dispatch[_-]?hint|user[_-]?intent|(^|[_-])nl([_-]|$)|build[_-]?intent|chat[_-]?approv)`)
 
 var registeredCoordinatorBooleanGates = map[string]bool{
+	// Round notice measurements come from the host's usage ledger for the round.
+	"tokens":              true,
+	"spend_under_cent":    true,
+	"estimated_spend_usd": true,
 	// Bounded grounding repair samples carry host-populated sample strings, truthy when non-empty.
 	"observed_handles_sample": true,
 	"observed_paths_sample":   true,
@@ -432,10 +436,6 @@ var registeredCoordinatorBooleanGates = map[string]bool{
 	"scanner_id":                   true,
 	"obligations":                  true,
 	"last_worker_decision_request": true,
-	"worker_budget_exhausted":      true,
-	"budget_request_open":          true,
-	"at_host_max":                  true,
-	"request_open":                 true,
 	"review_verdict":               true,
 	"spawnable_reviewers":          true,
 	"review_followup_attempts":     true,

@@ -147,17 +147,6 @@ tools:
     title_keys: [path]
     path_entry: file
     activity: {headline: "editing files", salience: defining, role: mutation}
-  decline_worker_budget:
-    running_label: "Declining a task budget…"
-    title_keys: []
-    activity: {headline: "delegating work", salience: primary, role: coordination}
-    title_fallback: "Worker task"
-  extend_worker_budget:
-    running_label: "Extending a task budget…"
-    # max_tool_loops is an integer.
-    title_keys: []
-    activity: {headline: "delegating work", salience: primary, role: coordination}
-    title_fallback: "Worker task"
   extract_archive:
     title_keys: [path, dest]
     path_entry: file
@@ -355,9 +344,6 @@ tools:
     title_keys: [path]
     path_entry: file
     activity: {headline: "managing files", salience: defining, role: mutation}
-  request_budget:
-    title_keys: [remaining_work]
-    activity: {headline: "coordinating", salience: incidental, role: coordination}
   request_decision:
     title_keys: [question]
     activity: {headline: "resolving decisions", salience: defining, role: coordination}

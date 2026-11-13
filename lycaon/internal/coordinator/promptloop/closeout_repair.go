@@ -52,7 +52,6 @@ func (l *PromptLoop) prepareCloseoutRepair(ctx context.Context, setup *promptLoo
 	// normal spend, permission, runnable-state and completion guards still apply.
 	setup.completed += st.turnsRanThisRun
 	setup.maxIter = setup.completed + 2
-	st.progress().SetMaxToolLoops(setup.maxIter)
 	st.proseFinish = false
 	st.proseFinishDelivered = false
 	st.lastAssistantID = ""

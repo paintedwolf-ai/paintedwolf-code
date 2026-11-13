@@ -26,7 +26,7 @@ func (s *memorySessions) CreateWithStatus(ctx context.Context, req api.CreateSes
 	if err != nil {
 		return nil, err
 	}
-	return createMemorySession(ctx, s.core, owner.ID, req, projectID, "", "", 0, status)
+	return createMemorySession(ctx, s.core, owner.ID, req, projectID, "", "", status)
 }
 
 // CreateChild stores a child session linked to a parent coordinator session.
@@ -44,7 +44,7 @@ func (s *memorySessions) CreateChild(ctx context.Context, parent *api.Session, r
 		WorkspaceRootID: parent.WorkspaceRootID,
 		Posture:         mode,
 	}
-	sess, err := createMemorySession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, req.MaxToolLoops, api.SessionStatusIdle)
+	sess, err := createMemorySession(ctx, s.core, parent.OwnerPersonID, childReq, parent.ProjectID, parent.ID, req.AgentType, api.SessionStatusIdle)
 	if err != nil {
 		return nil, err
 	}
@@ -66,7 +66,7 @@ func (s *memorySessions) CreateChild(ctx context.Context, parent *api.Session, r
 	return sess, nil
 }
 
-func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID string, req api.CreateSessionRequest, projectID, parentID, agentType string, maxToolLoops int, status api.SessionStatus) (*api.Session, error) {
+func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID string, req api.CreateSessionRequest, projectID, parentID, agentType string, status api.SessionStatus) (*api.Session, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
@@ -102,7 +102,6 @@ func createMemorySession(ctx context.Context, s *memoryCore, ownerPersonID strin
 		Model:           model,
 		Status:          status,
 		ParentSessionID: parentID,
-		MaxToolLoops:    maxToolLoops,
 		CreatedAt:       now,
 		ActivityAt:      now,
 		UpdatedAt:       now,

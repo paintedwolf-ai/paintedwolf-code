@@ -50,10 +50,9 @@ func TestRenderWorkerTaskAssignment_rendersStructuredCharter(t *testing.T) {
 			DoneWhen:      []string{"Both modules have focused responsibilities."},
 			ContextRefs:   []string{"engine.py", "entities.py"},
 		},
-		AgentType:    "implementer",
-		WorkerJobID:  "job-abc-123",
-		Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"engine.py", "entities.py"}},
-		MaxToolLoops: 20,
+		AgentType:   "implementer",
+		WorkerJobID: "job-abc-123",
+		Scope:       api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"engine.py", "entities.py"}},
 	})
 	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
 	if strings.Contains(out, "User task (parent session):") {
@@ -69,13 +68,12 @@ func TestRenderWorkerTaskAssignment_rendersStructuredCharter(t *testing.T) {
 func TestRenderWorkerTaskAssignmentForwardsAttachmentsWhenBriefSet(t *testing.T) {
 	body := strings.Repeat("SECRET-BODY", 80)
 	out, err := RenderWorkerTaskAssignment(context.Background(), testInjectRenderer(t), WorkerTaskAssignmentInput{
-		SessionID:    "sess-inject-test",
-		ProjectDir:   t.TempDir(),
-		Charter:      testWorkerCharter("Analyze only the attached 33MB browser timeline JSON."),
-		AgentType:    "repo-researcher",
-		WorkerJobID:  "job-attach-1",
-		Scope:        api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"."}},
-		MaxToolLoops: 20,
+		SessionID:   "sess-inject-test",
+		ProjectDir:  t.TempDir(),
+		Charter:     testWorkerCharter("Analyze only the attached 33MB browser timeline JSON."),
+		AgentType:   "repo-researcher",
+		WorkerJobID: "job-attach-1",
+		Scope:       api.TaskScope{Mode: api.TaskScopeModeRead, Paths: []string{"."}},
 		Attachments: []promptattach.ForwardedAttachment{{
 			Filename:  "127.0.0.1-recording.json",
 			MIME:      "application/json",
@@ -148,13 +146,12 @@ func TestRenderWorkerTaskAssignmentLinkedCheckoutOrientation(t *testing.T) {
 	testutil.FailErr(t, "write worktree .git", os.WriteFile(filepath.Join(wtDir, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
 
 	out, err := RenderWorkerTaskAssignment(t.Context(), testInjectRenderer(t), WorkerTaskAssignmentInput{
-		SessionID:    "sess-linked",
-		ProjectDir:   projectDir,
-		Charter:      testWorkerCharter("Update worktree/main.go"),
-		AgentType:    "implementer",
-		WorkerJobID:  "job-linked",
-		Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"worktree/main.go"}},
-		MaxToolLoops: 10,
+		SessionID:   "sess-linked",
+		ProjectDir:  projectDir,
+		Charter:     testWorkerCharter("Update worktree/main.go"),
+		AgentType:   "implementer",
+		WorkerJobID: "job-linked",
+		Scope:       api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"worktree/main.go"}},
 	})
 	testutil.FailErr(t, "RenderWorkerTaskAssignment", err)
 	if !strings.Contains(out, "without VCS access in this workspace") || !strings.Contains(out, "read-scoped leg or the coordinator") {

@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -23,12 +24,12 @@ func drainAsyncTurns(t *testing.T, engine *LoopEngine) {
 	engine.Turns.WaitForAsyncTurns(ctx)
 }
 
-func TestBudgetRequestRunsWhileWorkerInFlight(t *testing.T) {
+func TestRoundNoticeRunsWhileWorkerInFlight(t *testing.T) {
 	engine := NewLoopEngine()
 	defer drainAsyncTurns(t, engine)
 	ws := t.TempDir()
 	var prompts atomic.Int32
-	var requestKicks atomic.Int32
+	var noticeKicks atomic.Int32
 	deps := loopDepsForTest()
 	deps.GetSession = func(context.Context, string) (*api.Session, error) {
 		return &api.Session{ID: "s1", Status: api.SessionStatusIdle, WorkspacePath: ws}, nil
@@ -44,23 +45,23 @@ func TestBudgetRequestRunsWhileWorkerInFlight(t *testing.T) {
 		return &promptresult.Result{}, nil
 	}
 	deps.QueueInform = func(_ context.Context, sessionID string, inform anchor.ID, env anchor.Envelope) {
-		if inform == anchor.WorkerBudgetRequested {
-			requestKicks.Add(1)
+		if inform == anchor.WorkerRoundNotice {
+			noticeKicks.Add(1)
 		}
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-1", budgetRequestEnvelope("job-1"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-1", roundNoticeEnvelope("job-1"))
 	drainAsyncTurns(t, engine)
-	if requestKicks.Load() != 1 {
-		t.Fatalf("budget-request kicks = %d want 1 while worker running", requestKicks.Load())
+	if noticeKicks.Load() != 1 {
+		t.Fatalf("round notice kicks = %d want 1 while worker running", noticeKicks.Load())
 	}
 	if prompts.Load() != 1 {
 		t.Fatalf("prompts = %d want 1 while worker running", prompts.Load())
 	}
 }
 
-func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
+func TestRoundNoticeKickCarriesMeasurementsWhileBusy(t *testing.T) {
 	_, file, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("runtime.Caller failed")
@@ -90,40 +91,41 @@ func TestBudgetRequestKickCarriesRequestWhileBusy(t *testing.T) {
 	}
 	engine.SetDeps(deps)
 
-	engine.Nudges.NudgeWorkerBudgetRequested(context.Background(), "s1", "job-A", budgetRequestEnvelope("job-A"))
+	engine.Nudges.NudgeWorkerRoundNotice(context.Background(), "s1", "job-A", roundNoticeEnvelope("job-A"))
 	drainAsyncTurns(t, engine)
 
-	wantID := anchor.InformRender(anchor.WorkerBudgetRequested)
+	wantID := anchor.InformRender(anchor.WorkerRoundNotice)
 	if id := kicks.TakePendingKickID("s1"); id != wantID {
 		t.Fatalf("pending kick id = %q want %q", id, wantID)
 	}
 	text, _, ok, _ := kicks.RenderPendingNudge(t.Context(), "s1", kick.CoordinatorKickRenderContext{})
 	if !ok {
-		t.Fatal("budget request rendered empty")
+		t.Fatal("round notice rendered empty")
 	}
-	for _, want := range []string{`extend_worker_budget(job_id="job-A", max_tool_loops=32)`, "trace the remaining callers"} {
+	facts := roundNoticeEnvelope("job-A").WorkerRoundNotice
+	for _, want := range []string{facts.JobID, facts.AgentType, strconv.Itoa(facts.ModelCalls)} {
 		if !strings.Contains(text, want) {
-			t.Fatalf("budget request = %q want %q", text, want)
+			t.Fatalf("round notice = %q want %q", text, want)
 		}
 	}
 }
 
-func TestBudgetRequestDeferralIsJobScoped(t *testing.T) {
+func TestRoundNoticeDeferralIsJobScoped(t *testing.T) {
 	engine := NewLoopEngine()
 	q := engine.Nudges.sessionDeferredQueue("s1")
-	q.push(pendingLoopWake{wake: anchor.WorkerBudgetRequested, inform: anchor.WorkerBudgetRequested, legID: "job-1"})
-	q.push(pendingLoopWake{wake: anchor.WorkerBudgetRequested, inform: anchor.WorkerBudgetRequested, legID: "job-2"})
+	q.push(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-1"})
+	q.push(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-2"})
 	q.push(pendingLoopWake{wake: anchor.LegFinished, inform: anchor.LegFinished, legID: "leg-1"})
 
-	engine.Nudges.dropDeferredBudgetRequestForJob("s1", "job-1")
+	engine.Nudges.dropDeferredRoundNoticesForJob("s1", "job-1")
 
 	remaining := q.drain()
 	if len(remaining) != 2 {
-		t.Fatalf("remaining = %d want 2 (job-2 request + leg-finished kept)", len(remaining))
+		t.Fatalf("remaining = %d want 2 (job-2 notice + leg-finished kept)", len(remaining))
 	}
 	for _, d := range remaining {
-		if d.wake == anchor.WorkerBudgetRequested && d.legID == "job-1" {
-			t.Fatal("job-1 budget request should have been evicted")
+		if d.wake == anchor.WorkerRoundNotice && d.legID == "job-1" {
+			t.Fatal("job-1 round notice should have been evicted")
 		}
 	}
 }

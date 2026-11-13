@@ -13,4 +13,4 @@ Finish through **`complete_leg`**, not prose JSON.
 - Board `Scan:` tails are not proof; cite the `scan#N` result itself.
 - `brief`/`objectives_met`: narrative only, ≤**{{ worker_summary_max_chars }}** chars — path facts in `findings[]`; prose path names are advisory, not proof.
 - If `complete_leg` is rejected, branch on the `Code:` and resend the whole report. A `WORKER_*` citation code lists what to fix or drop; keep everything else, and set `leg_status` from the evidence that remains. `WORKER_SUMMARY_TOO_LONG`: shorten the narrative fields, never `findings[]`.
-- The final tool round offers only `complete_leg`; use it.
+- `complete_leg` delivers and ends your round. A response without a tool call does not deliver.

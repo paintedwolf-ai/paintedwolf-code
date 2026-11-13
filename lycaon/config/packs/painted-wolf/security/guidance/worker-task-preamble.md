@@ -10,5 +10,5 @@
 {% endif %}{% if linked_checkout %}- git checkout: scope includes a linked worktree or submodule without VCS access in this workspace; history or branch work belongs to a read-scoped leg or the coordinator
 {% endif %}- obligation: apply changes through command or restore_version before closeout — reads alone do not complete a write leg
 - isolation: all project changes stay in this private view until promotion; suggested paths guide focus only
-- finish: the last iteration offers only `complete_leg`; finish edits and checks first
+- finish: `complete_leg` delivers and ends the round; finish edits and checks first
 {% endif %}{% endif %}

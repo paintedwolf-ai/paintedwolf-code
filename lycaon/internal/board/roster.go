@@ -27,8 +27,6 @@ func BuildWorkerRoster(tasks []api.WorkerTask, level api.BoardDetailLevel) []api
 			OverlayID:     strings.TrimSpace(task.OverlayID),
 			ScopeSummary:  task.EffectiveScope().Summary(),
 			Error:         strings.TrimSpace(task.Error),
-			MaxToolLoops:  task.MaxToolLoops,
-			BudgetRequest: task.BudgetRequest,
 			ToolLoopsUsed: task.ToolLoopsUsed,
 		}
 		if paths := changedPathsFromTask(task); len(paths) > 0 {

@@ -47,21 +47,6 @@ func validateLimitsPatch(raw map[string]any, req wire.SettingsLimitsPatch) (stri
 			return "await_parent_workers_timeout_ms", "await_parent_workers_timeout_ms " + msg
 		}
 	}
-	if _, ok := raw["worker_tool_budget_default"]; ok && raw["worker_tool_budget_default"] != nil {
-		if *req.WorkerToolBudgetDefault < 2 || *req.WorkerToolBudgetDefault > 120 {
-			return "worker_tool_budget_default", "worker_tool_budget_default must be between 2 and 120"
-		}
-	}
-	if _, ok := raw["worker_tool_budget_min"]; ok && raw["worker_tool_budget_min"] != nil {
-		if *req.WorkerToolBudgetMin < 2 || *req.WorkerToolBudgetMin > 120 {
-			return "worker_tool_budget_min", "worker_tool_budget_min must be between 2 and 120"
-		}
-	}
-	if _, ok := raw["worker_tool_budget_max"]; ok && raw["worker_tool_budget_max"] != nil {
-		if *req.WorkerToolBudgetMax < 2 || *req.WorkerToolBudgetMax > 120 {
-			return "worker_tool_budget_max", "worker_tool_budget_max must be between 2 and 120"
-		}
-	}
 	if _, ok := raw["session_spend_ceiling_nano_usd"]; ok && raw["session_spend_ceiling_nano_usd"] != nil {
 		if *req.SessionSpendCeilingNanoUSD < 0 {
 			return "session_spend_ceiling_nano_usd", "session_spend_ceiling_nano_usd must be >= 0"
@@ -146,27 +131,6 @@ func applyLimitsPatch(lim settings.SessionLimits, base settings.SessionLimits, r
 			lim.AwaitParentWorkersTimeoutSec = base.AwaitParentWorkersTimeoutSec
 		} else {
 			lim.AwaitParentWorkersTimeoutSec = *req.AwaitParentWorkersTimeoutMs / 1000
-		}
-	}
-	if _, ok := raw["worker_tool_budget_default"]; ok {
-		if raw["worker_tool_budget_default"] == nil {
-			lim.WorkerToolBudgetDefault = base.WorkerToolBudgetDefault
-		} else {
-			lim.WorkerToolBudgetDefault = *req.WorkerToolBudgetDefault
-		}
-	}
-	if _, ok := raw["worker_tool_budget_min"]; ok {
-		if raw["worker_tool_budget_min"] == nil {
-			lim.WorkerToolBudgetMin = base.WorkerToolBudgetMin
-		} else {
-			lim.WorkerToolBudgetMin = *req.WorkerToolBudgetMin
-		}
-	}
-	if _, ok := raw["worker_tool_budget_max"]; ok {
-		if raw["worker_tool_budget_max"] == nil {
-			lim.WorkerToolBudgetMax = base.WorkerToolBudgetMax
-		} else {
-			lim.WorkerToolBudgetMax = *req.WorkerToolBudgetMax
 		}
 	}
 	if _, ok := raw["session_spend_ceiling_nano_usd"]; ok {

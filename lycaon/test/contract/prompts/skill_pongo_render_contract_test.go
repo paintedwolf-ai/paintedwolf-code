@@ -28,7 +28,7 @@ func TestStockPackSkillsRenderWithPolicyVars(t *testing.T) {
 	if len(loaded) == 0 {
 		t.Fatal("expected stock pack skills")
 	}
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	vars := spawn.PolicyTemplateVars()
 	var failed []string
 	references := 0
 	for _, sk := range loaded {
@@ -82,7 +82,7 @@ func TestStockPackSkillsRenderWithPolicyVars(t *testing.T) {
 func TestStockTerminalEvidenceKeepsSecretPlaceholder(t *testing.T) {
 	contractcheck.ActivateStockCatalog(t)
 	loaded, _ := extpacks.LoadEffectiveSkills(extpacks.Active())
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	vars := spawn.PolicyTemplateVars()
 	found := false
 	for _, sk := range loaded {
 		if sk.Name != "verify-terminal-change" {

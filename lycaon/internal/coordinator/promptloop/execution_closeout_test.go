@@ -286,7 +286,7 @@ func newAttemptHarness(t *testing.T, workerChild bool, maxIter int, steps []scri
 		parent, err := messages.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 		testutil.FailErr(t, "create parent session", err)
 		sess, err = messages.CreateChild(ctx, parent, api.SpawnChildRequest{
-			AgentType: "implementer", MaxToolLoops: maxIter,
+			AgentType: "implementer",
 		})
 		testutil.FailErr(t, "create worker child session", err)
 	}
@@ -407,7 +407,7 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 			{completion: textReply("Worker closeout summary.")},
 		})
 		h.deps.Nudges.WorkerJob = func(_ context.Context, workerJobID string) (*api.WorkerTask, bool) {
-			return &api.WorkerTask{ID: workerJobID, ToolLoopsUsed: 1, MaxToolLoops: 3}, true
+			return &api.WorkerTask{ID: workerJobID, ToolLoopsUsed: 1}, true
 		}
 		h.deps.Control.WorkerGracefulCancelPending = func(context.Context, *api.Session) (string, bool) {
 			return "canceled after seeded round", client.index >= 1
@@ -449,15 +449,12 @@ func TestSinglePerAttemptIterationAllocatorAcrossMultiCallPaths(t *testing.T) {
 	})
 
 	t.Run("early_closeout_after_provider_failure", func(t *testing.T) {
-		h, _ := newAttemptHarness(t, true, 3, []scriptedModelStep{
+		h, _ := newAttemptHarness(t, false, 3, []scriptedModelStep{
 			{completion: readCall("read-before-timeout")},
 			{err: ErrLLMTurnTimeout},
 			{completion: textReply("Early closeout after provider timeout.")},
 		})
-		h.deps.Nudges.WorkerJob = func(_ context.Context, workerJobID string) (*api.WorkerTask, bool) {
-			return &api.WorkerTask{ID: workerJobID, ToolLoopsUsed: 1, MaxToolLoops: 3}, true
-		}
-		testutil.FailErr(t, "run early closeout after provider failure", h.runAttempt(t, "Investigate timeout.", "implementer", "job-timeout"))
+		testutil.FailErr(t, "run early closeout after provider failure", h.runAttempt(t, "Investigate timeout.", "coordinator", ""))
 		h.assertStrictlyIncreasingIterations(t, 2)
 	})
 

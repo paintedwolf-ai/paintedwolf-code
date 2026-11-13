@@ -18,6 +18,7 @@ import (
 
 const (
 	WorkerCompletionReportMissingCode = "WORKER_COMPLETION_REPORT_MISSING"
+	WorkerSpendLimitReachedCode       = "WORKER_SPEND_LIMIT_REACHED"
 	maxReportListItems                = 12
 	maxReportBriefChars               = 1200
 	maxReportListItemChars            = 200
@@ -430,23 +431,6 @@ func SourceEvidenceView(proof WorkerCompletionProof) (status, reason string, ref
 		return EvidenceStatusSatisfied, "", nil
 	}
 	return obligations[0].Status, obligations[0].Reason, append([]string(nil), obligations[0].EvidenceRefs...)
-}
-
-// SynthesizeCompletionReport builds a bounded report from child tool receipts.
-func SynthesizeCompletionReport(msgs []api.Message, agentType string, proof WorkerCompletionProof) (WorkerCompletionReport, bool) {
-	excerpts := collectToolExcerpts(msgs, 1200)
-	if excerpts == "" && proof.ReceiptCount == 0 && len(proof.ChangedPaths) == 0 {
-		return WorkerCompletionReport{}, false
-	}
-	report := WorkerCompletionReport{
-		LegStatus:     LegStatusPartial,
-		FilesModified: append([]string(nil), proof.ChangedPaths...),
-		ObjectivesMet: synthesizeObjectivesFromProof(proof, excerpts),
-		RemainingRisk: []string{"Worker did not call complete_leg"},
-		Brief:         synthesizeBrief(agentType, proof),
-	}
-	report.Normalize()
-	return report, true
 }
 
 func synthesizeObjectivesFromProof(proof WorkerCompletionProof, excerpts string) []string {

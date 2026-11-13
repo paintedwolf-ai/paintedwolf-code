@@ -26,17 +26,16 @@ type standingProfileInputs struct {
 }
 
 type standingPromptInputs struct {
-	PromptRevision   string                 `json:"prompt_revision"`
-	Profile          standingProfileInputs  `json:"profile"`
-	Vars             map[string]any         `json:"vars,omitempty"`
-	RootCount        int                    `json:"root_count"`
-	EffectiveAgents  []string               `json:"effective_agents,omitempty"`
-	WebSearchEnabled bool                   `json:"web_search_enabled"`
-	LoadedTools      []string               `json:"loaded_tools,omitempty"`
-	OmittedUnits     []string               `json:"omitted_units,omitempty"`
-	ExecutionMode    string                 `json:"execution_mode,omitempty"`
-	VerifyCommand    string                 `json:"verify_command,omitempty"`
-	WorkerToolBudget spawn.WorkerToolBudget `json:"worker_tool_budget"`
+	PromptRevision   string                `json:"prompt_revision"`
+	Profile          standingProfileInputs `json:"profile"`
+	Vars             map[string]any        `json:"vars,omitempty"`
+	RootCount        int                   `json:"root_count"`
+	EffectiveAgents  []string              `json:"effective_agents,omitempty"`
+	WebSearchEnabled bool                  `json:"web_search_enabled"`
+	LoadedTools      []string              `json:"loaded_tools,omitempty"`
+	OmittedUnits     []string              `json:"omitted_units,omitempty"`
+	ExecutionMode    string                `json:"execution_mode,omitempty"`
+	VerifyCommand    string                `json:"verify_command,omitempty"`
 
 	// Unexported catalog view is bound to PromptRevision, which covers catalog.Revision.
 	catalogView *catalogview.View
@@ -123,7 +122,7 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 	}
 	prompts.MergeUnitVars(surfaceVars, blocks)
 
-	policyVars := spawn.PolicyTemplateVars(in.WorkerToolBudget)
+	policyVars := spawn.PolicyTemplateVars()
 	keys := make([]string, 0, len(policyVars))
 	for k := range policyVars {
 		keys = append(keys, k)

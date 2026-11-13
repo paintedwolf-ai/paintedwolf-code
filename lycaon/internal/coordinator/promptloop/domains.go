@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/settings"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolfeedback"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
@@ -140,20 +141,22 @@ type ProjectionDeps struct {
 }
 
 type NudgesDeps struct {
-	DoomLoop                  DoomLoopGuard
-	FormatDoomLoopReject      func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error)
-	EscalateRepeatedCode      func(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal
-	CheckSpendCeiling         func(ctx context.Context, sessionID string, sess *api.Session) (SpendCeilingCheck, error)
-	IsSpendCeiling            func(error) bool
-	SecretWithheldNudge       SecretWithheldNudge
-	SurveyStreakNudge         SurveyStreakNudge
-	SpendRunwayNudge          SpendRunwayNudge
-	SpendSoftStopNudge        SpendSoftStopNudge
-	PublishWorkerProgress     func(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool)
-	WorkerJob                 func(ctx context.Context, workerJobID string) (*api.WorkerTask, bool)
-	WorkerBudgetRaisedNudge   func(ctx context.Context, sess *api.Session, used, max int) HostNudge
-	WorkerBudgetDeclinedNudge func(ctx context.Context, sess *api.Session, used, max int) HostNudge
-	WorkerBudgetAnswerWait    time.Duration
+	DoomLoop              DoomLoopGuard
+	FormatDoomLoopReject  func(ctx context.Context, sessionID, tool string, args map[string]any, count int, repeatedCode string) (*guidance.Refusal, error)
+	EscalateRepeatedCode  func(ctx context.Context, sessionID, tool string, original *guidance.Refusal) *guidance.Refusal
+	CheckSpendCeiling     func(ctx context.Context, sessionID string, sess *api.Session) (SpendCeilingCheck, error)
+	IsSpendCeiling        func(error) bool
+	SecretWithheldNudge   SecretWithheldNudge
+	SurveyStreakNudge     SurveyStreakNudge
+	SpendRunwayNudge      SpendRunwayNudge
+	SpendSoftStopNudge    SpendSoftStopNudge
+	PublishWorkerProgress func(ctx context.Context, workerJobID string, snap workerprogress.Snapshot, checkpoint bool)
+	WorkerJob             func(ctx context.Context, workerJobID string) (*api.WorkerTask, bool)
+	// WorkerRounds bounds tool-less worker responses and sets round notice thresholds.
+	WorkerRounds spawn.RoundPolicy
+	// WorkerRoundConsumption tells the worker's coordinator its round crossed a
+	// consumption threshold at modelCalls.
+	WorkerRoundConsumption func(ctx context.Context, sess *api.Session, workerJobID string, modelCalls int)
 }
 
 type ControlDeps struct {

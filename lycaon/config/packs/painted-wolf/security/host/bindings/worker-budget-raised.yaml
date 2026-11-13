@@ -1,7 +1,0 @@
-# Inform Binding. Anchor catalog is lifecycle SSOT.
-'on': worker.budget.raised
-selector:
-  surface: worker
-effect: inform
-render: worker-budget-raised
-tier: builtin

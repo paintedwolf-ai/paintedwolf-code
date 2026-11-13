@@ -26,15 +26,14 @@ type ContextStore interface {
 
 // Sealer writes tamper-evident authorization context rows at run-start.
 type Sealer struct {
-	Store            ContextStore
-	Profiles         map[string]sandbox.ToolProfile
-	Perms            *settings.ApprovalStore
-	ChatGrants       func(chatSessionID string) []hitl.ApprovalGrant
-	MCPInventory     func(ctx context.Context) MCPInventory
-	ToolAccess       func(ctx context.Context, sess *api.Session) sandbox.ToolAccess
-	RegisteredTools  func() []string
-	SpawnAllowlist   func(ctx context.Context, sess *api.Session) []string
-	WorkerToolBudget func(projectDir string) spawn.WorkerToolBudget
+	Store           ContextStore
+	Profiles        map[string]sandbox.ToolProfile
+	Perms           *settings.ApprovalStore
+	ChatGrants      func(chatSessionID string) []hitl.ApprovalGrant
+	MCPInventory    func(ctx context.Context) MCPInventory
+	ToolAccess      func(ctx context.Context, sess *api.Session) sandbox.ToolAccess
+	RegisteredTools func() []string
+	SpawnAllowlist  func(ctx context.Context, sess *api.Session) []string
 }
 
 // Seal assembles and appends the effective grant set when config_hash drifted.
@@ -56,15 +55,14 @@ func (s *Sealer) Seal(ctx context.Context, sess *api.Session, profileID, workerJ
 	mcpInv := s.mcpInventory(ctx)
 	mcpInv.Tools = MCPToolsFromProfile(profile)
 	in := AssembleInput{
-		Session:          sess,
-		ProfileID:        profileID,
-		Profile:          profile,
-		Perms:            perms,
-		ChatGrants:       s.chatGrants(sess.ID),
-		WorkerJobID:      workerJobID,
-		MCPInventory:     mcpInv,
-		SpawnAllowlist:   s.spawnAllowlist(ctx, sess),
-		WorkerToolBudget: s.workerBudget(sess),
+		Session:        sess,
+		ProfileID:      profileID,
+		Profile:        profile,
+		Perms:          perms,
+		ChatGrants:     s.chatGrants(sess.ID),
+		WorkerJobID:    workerJobID,
+		MCPInventory:   mcpInv,
+		SpawnAllowlist: s.spawnAllowlist(ctx, sess),
 	}
 	c := Assemble(in)
 	latest, err := s.Store.LatestContext(ctx, sess.ID)
@@ -121,11 +119,4 @@ func (s *Sealer) spawnAllowlist(ctx context.Context, sess *api.Session) []string
 		return spawn.AmbientAllowedAgents()
 	}
 	return s.SpawnAllowlist(ctx, sess)
-}
-
-func (s *Sealer) workerBudget(sess *api.Session) spawn.WorkerToolBudget {
-	if s == nil || s.WorkerToolBudget == nil || sess == nil {
-		return spawn.DefaultWorkerToolBudget()
-	}
-	return s.WorkerToolBudget(strings.TrimSpace(sess.WorkspacePath))
 }

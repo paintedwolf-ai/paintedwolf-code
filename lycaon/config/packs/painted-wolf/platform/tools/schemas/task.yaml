@@ -20,7 +20,7 @@ schema:
       description: Shared interface agreements and assumptions for this worker, up to 8192 UTF-8 bytes. Copy the same relevant contracts to collaborating assignments; workers do not inherit the parent conversation or sibling files.
     workflow_work_id:
       type: string
-      description: Host-issued work id for a planned leg or registered review question. Planned legs supply omitted agent_type, scope, and max_tool_loops; questions require an explicit agent and read scope. A resume retains its child's work id.
+      description: Host-issued work id for a planned leg or registered review question. Planned legs supply omitted agent_type and scope; questions require an explicit agent and read scope. A resume retains its child's work id.
     agent_type:
       description: "Worker agent id. Omit when resuming a child or dispatching a planned leg; either one supplies it."
       type: string
@@ -71,16 +71,6 @@ schema:
             minLength: 1
             maxLength: 240
       required: [goal, done_when]
-    max_tool_loops:
-      type: integer
-      minimum: 2
-      maximum: 120
-      description: >-
-        Optional worker tool-round ceiling (range 2-120). Omitted uses the planned
-        leg's ceiling, a resumed child's ceiling raised to its unanswered
-        request, or the host default. The host never raises a ceiling on its own;
-        a worker asks with request_budget and you grant with extend_worker_budget.
-        The final round offers only complete_leg.
     child_session_id:
       type: string
       description: >-
