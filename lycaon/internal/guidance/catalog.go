@@ -15,6 +15,8 @@ const (
 	UtilityPickSeedsUserRef        = "utility/pick-seeds-user"
 	UtilityRationaleSystemRef      = "utility/rationale-system"
 	UtilityRationaleUserRef        = "utility/rationale-user"
+	UtilityActivityChangeSystemRef = "utility/activity-change-system"
+	UtilityActivityChangeUserRef   = "utility/activity-change-user"
 	UtilityVerifyDetectSystemRef   = "utility/verify-detect-system"
 	UtilityCommitMessageSystemRef  = "utility/commit-message-system"
 	UtilitySessionTitleSystemRef   = "utility/session-title-system"

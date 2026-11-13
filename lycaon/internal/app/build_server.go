@@ -21,7 +21,6 @@ import (
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/findings"
 	"github.com/lycaon/lycaon/internal/harnessfixture"
@@ -252,29 +251,6 @@ func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJo
 	if err := b.server.Server.Admin.Extensions.Contributions.WarmContributionFrame(b.startup.ctx); err != nil {
 		b.startup.logger.Warn("contribution frame warm failed", "err", err)
 	}
-	return nil
-}
-
-// wireFileBriefings applies the briefing retention policy and builds the service.
-func wireFileBriefings(b *serveBuilder, deps *api.Dependencies) error {
-	fileBriefingConfig, err := filebriefing.LoadConfig()
-	if err != nil {
-		return fmt.Errorf("file briefing config: %w", err)
-	}
-	fileBriefingStore := filebriefing.NewSQL(b.storage.Database)
-	if b.settings.Service != nil && b.settings.Service.FileSummaries != nil && !b.settings.Service.FileSummaries.Enabled() {
-		if err := fileBriefingStore.Clear(b.startup.ctx); err != nil {
-			return fmt.Errorf("clear disabled file briefings: %w", err)
-		}
-	} else if err := fileBriefingStore.MaintainDevice(b.startup.ctx, fileBriefingConfig.Retention); err != nil {
-		return fmt.Errorf("maintain file briefings: %w", err)
-	}
-	deps.Source.Briefings.Files = filebriefing.NewService(b.startup.ctx, filebriefing.Dependencies{
-		Store: fileBriefingStore, Config: fileBriefingConfig, Generator: filebriefing.NewModelGenerator(b.providers.Service, b.sessions.Manager.Coordinator.Model.Cost),
-		Events: b.events.Hub, Settings: b.settings.Service.FileSummaries, Logger: b.startup.logger, Scheduler: b.providers.Briefings.Scheduler, Records: b.providers.Briefings.Store,
-	})
-	deps.Source.Briefings.Host = b.providers.Briefings
-	b.providers.Briefings.Publish(b.events.Hub, b.startup.logger)
 	return nil
 }
 

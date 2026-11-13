@@ -38,7 +38,7 @@ func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (b
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return briefing.CausalRead{}, err
 	}
-	output, err := q.BriefingActionOutput(ctx, db.BriefingActionOutputParams{
+	output, err := q.BriefingActionOutput(ctx, db.BriefingActionOutputParams{ArgsBytes: briefing.ArgsReadChars,
 		ProseBytes: briefing.ProseReadChars, ReasoningCap: briefing.ReasoningReadBytes,
 		SessionID: ref.SessionID, BeforeOrd: before, WorkerJobID: ref.WorkerJobID, ToolCallID: ref.ToolCallID,
 	})
@@ -48,7 +48,15 @@ func (c *Causal) ReadActionCause(ctx context.Context, ref briefing.ActionRef) (b
 	if err != nil {
 		return briefing.CausalRead{}, err
 	}
-	read := briefing.CausalRead{Found: true, OutputID: output.ID, Prose: output.Prose, ReasoningJSON: output.ReasoningPayload, ReasoningBytes: output.ReasoningBytes, CallsInOutput: int(output.CallCount)}
+	read := briefing.CausalRead{Found: true, OutputID: output.ID, Prose: output.Prose, ReasoningJSON: output.ReasoningPayload, ReasoningBytes: output.ReasoningBytes, CallsInOutput: int(output.CallCount),
+		Call: briefing.CallExcerpt{Name: output.CallName, Args: output.CallArgs}}
+	result, err := q.BriefingCallResult(ctx, db.BriefingCallResultParams{ContentBytes: briefing.ResultReadChars, SessionID: ref.SessionID, ToolCallID: db.NullString(ref.ToolCallID)})
+	switch {
+	case err == nil:
+		read.Call.Result = &briefing.ResultExcerpt{Tool: result.Tool, Outcome: result.Outcome, Content: result.Content, Ref: "message:" + result.ID}
+	case !errors.Is(err, sql.ErrNoRows):
+		return briefing.CausalRead{}, err
+	}
 	after := int64(-1)
 	intent, err := q.BriefingUserIntentBefore(ctx, db.BriefingUserIntentBeforeParams{IntentBytes: briefing.IntentReadChars, SessionID: ref.SessionID, BeforeOrd: output.Ord})
 	switch {

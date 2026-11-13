@@ -1,11 +1,12 @@
 id: painted-wolf/platform:files-toggle-summaries
-title: "File summaries"
+title: "Summaries"
 icon: surface
 scope: "global"
 keywords:
   - "file summary"
   - "summaries"
   - "disable summaries"
+  - "activity summaries"
 enablement:
   fact: "file_summaries_known"
 action:

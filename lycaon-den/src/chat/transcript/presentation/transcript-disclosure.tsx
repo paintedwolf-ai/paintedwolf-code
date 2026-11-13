@@ -66,6 +66,8 @@ export function animateDisclosureHeight(
 export type TranscriptDisclosure = {
   key: TranscriptDisclosureKey | undefined;
   open: Accessor<boolean>;
+  /** Opened by a person; a Find or navigation reveal alone is not. */
+  userOpen: Accessor<boolean>;
   /** Id of the panel the toggle controls. */
   panelId: string;
   /** Animates the disclosure that contains the clicked toggle. */
@@ -82,16 +84,25 @@ export function useTranscriptDisclosure(
   const store = useTranscriptDisclosureStore() ?? viewport?.disclosures;
   const currentKey = () => disclosureKey?.();
   const [localOpen, setLocalOpen] = createSignal(false);
+  const [localUserOpen, setLocalUserOpen] = createSignal(false);
 
   const open = () => {
     const key = currentKey();
     return key && store ? store.isOpen(key) : localOpen();
   };
 
+  const userOpen = () => {
+    const key = currentKey();
+    return key && store ? store.isUserOpen(key) : localUserOpen();
+  };
+
   const applyOpen = (next: boolean) => {
     const key = currentKey();
     if (key && store) store.setUserOpen(key, next);
-    else setLocalOpen(next);
+    else {
+      setLocalOpen(next);
+      setLocalUserOpen(next);
+    }
   };
 
   const revealTemporarily = (): (() => void) => {
@@ -122,6 +133,7 @@ export function useTranscriptDisclosure(
       return currentKey();
     },
     open,
+    userOpen,
     panelId: createUniqueId(),
     onToggleClick,
     applyOpen,

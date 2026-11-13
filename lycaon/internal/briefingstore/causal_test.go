@@ -3,6 +3,7 @@ package briefingstore
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,7 +53,7 @@ func assertActionCause(t *testing.T, sessions sessionWriter, reader briefing.Cau
 		history = append(history, api.Message{ID: "a-" + id, Role: api.MessageRoleAssistant, Content: "step", ToolCalls: call(id)}, result("r-"+id, id, "result "+id))
 	}
 	history = append(history,
-		api.Message{ID: "anchor", Role: api.MessageRoleAssistant, Content: "Pushing now.", ToolCalls: append(call("target"), call("other")...), ModelReasoning: &api.ModelReasoning{Text: "push after tests"}},
+		api.Message{ID: "anchor", Role: api.MessageRoleAssistant, Content: "Pushing now.", ToolCalls: append([]api.ToolCall{{ID: "target", Name: "command", Args: map[string]any{"command": "git push"}}}, call("other")...), ModelReasoning: &api.ModelReasoning{Text: "push after tests"}},
 		api.Message{ID: "worker", Role: api.MessageRoleAssistant, Content: "worker step", ToolCalls: call("worker-call"), WorkerID: workerRunA},
 	)
 	testutil.FailErr(t, "append history", sessions.AppendMessages(t.Context(), sessionID, history...))
@@ -61,6 +62,9 @@ func assertActionCause(t *testing.T, sessions sessionWriter, reader briefing.Cau
 	testutil.FailErr(t, "read pending action", err)
 	if !read.Found || read.OutputID != "anchor" || read.Prose != "Pushing now." || read.CallsInOutput != 2 || read.Intent != "second goal" || read.IntentID != "u2" {
 		t.Fatalf("anchor read: %+v", read)
+	}
+	if read.Call.Name != "command" || !strings.Contains(read.Call.Args, "git push") || read.Call.Result != nil {
+		t.Fatalf("pending call: %+v", read.Call)
 	}
 	if len(read.Results) != 3 || read.Results[0].Content != "result c1" || read.Results[2].Content != "result c3" {
 		t.Fatalf("results are not the last three after the goal, oldest first: %+v", read.Results)
@@ -72,6 +76,9 @@ func assertActionCause(t *testing.T, sessions sessionWriter, reader briefing.Cau
 	testutil.FailErr(t, "settle target", sessions.AppendMessages(t.Context(), sessionID, result("r-target", "target", "pushed"), api.Message{ID: "later", Role: api.MessageRoleAssistant, Content: "after", ToolCalls: call("target-again")}))
 	settled, err := reader.ReadActionCause(t.Context(), briefing.ActionRef{SessionID: sessionID, ToolCallID: "target"})
 	testutil.FailErr(t, "read settled action", err)
+	if settled.Call.Result == nil || settled.Call.Result.Content != "pushed" || settled.Call.Result.Ref != "message:r-target" {
+		t.Fatalf("settled call result: %+v", settled.Call)
+	}
 	if settled.OutputID != "anchor" || len(settled.Results) != 3 {
 		t.Fatalf("a settled read saw later rows: %+v", settled)
 	}

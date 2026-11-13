@@ -218,14 +218,14 @@ describe("menu item ids", () => {
     }
   });
 
-  it("projects File summaries as a checked View menu toggle", () => {
+  it("projects Summaries as a checked View menu toggle", () => {
     const summaries = () =>
       buildAppMenuSpec({ platform: "macos" })
         .find((spec) => spec.menu === "view")
         ?.groups.flat()
         .find((candidate) => candidate.id === stockId("files-toggle-summaries"));
     expect(summaries()).toMatchObject({
-      title: "File summaries",
+      title: "Summaries",
       checked: true,
       enabled: true,
     });

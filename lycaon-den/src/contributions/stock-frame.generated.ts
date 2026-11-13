@@ -1923,12 +1923,13 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "id": "painted-wolf/platform:files-toggle-summaries",
       "provider": "painted-wolf/platform",
-      "title": "File summaries",
+      "title": "Summaries",
       "scope": "global",
       "keywords": [
         "file summary",
         "summaries",
-        "disable summaries"
+        "disable summaries",
+        "activity summaries"
       ],
       "icon": "surface",
       "executor": "den",
@@ -4509,7 +4510,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "command": "painted-wolf/platform:files-toggle-summaries",
       "group": "2",
       "order": 6,
-      "label": "File summaries",
+      "label": "Summaries",
       "state": {
         "fact": "file_summaries_on"
       }

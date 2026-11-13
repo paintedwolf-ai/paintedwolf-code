@@ -233,6 +233,7 @@ describe("transcript disclosure leases", () => {
     const releaseFind = controller.disclosures.acquire(ROW);
     const releaseNavigation = controller.disclosures.acquire(ROW);
     expect(controller.disclosures.isOpen(ROW)).toBe(true);
+    expect(controller.disclosures.isUserOpen(ROW)).toBe(false);
     expect(controller.disclosures.userOpenKeys()).toEqual([]);
     releaseFind();
     expect(controller.disclosures.isOpen(ROW)).toBe(true);
@@ -245,6 +246,7 @@ describe("transcript disclosure leases", () => {
     const release = controller.disclosures.acquire(ROW);
     controller.disclosures.setUserOpen(ROW, true);
     release();
+    expect(controller.disclosures.isUserOpen(ROW)).toBe(true);
     expect(controller.disclosures.userOpenKeys()).toEqual([ROW]);
     expect(controller.disclosures.isOpen(ROW)).toBe(true);
   });
