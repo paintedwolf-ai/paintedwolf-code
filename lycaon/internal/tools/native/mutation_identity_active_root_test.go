@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -32,7 +33,7 @@ func TestWriteToolRecordsMutationIdentityAgainstTheActiveRoot(t *testing.T) {
 	}
 	for _, dir := range []string{primary, secondary} {
 		if err := os.MkdirAll(dir, 0o750); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "create directory", err)
 		}
 	}
 	recorder := &recordingMutations{}

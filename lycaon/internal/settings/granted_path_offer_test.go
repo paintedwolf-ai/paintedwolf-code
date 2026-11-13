@@ -480,7 +480,7 @@ func TestDirectoryHierarchyMintsDistinctOptionsAndDefaultsToContainingFolder(t *
 	dir := canonDir(t, t.TempDir())
 	folder := filepath.Join(dir, "src", "pkg")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	file := filepath.Join(folder, "file.go")
 	action := hitl.ProposedAction{
@@ -547,7 +547,7 @@ func TestMissingTargetWithMissingFolderOffersOnlyExact(t *testing.T) {
 func TestMissingTargetInExistingFolderStillGrantsTheFolder(t *testing.T) {
 	folder := filepath.Join(canonDir(t, t.TempDir()), "created")
 	if err := os.MkdirAll(folder, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	file := filepath.Join(folder, "file.go")
 	action := hitl.ProposedAction{
@@ -600,7 +600,7 @@ func TestMultipleReadTargetsOfferOneCrossingHierarchy(t *testing.T) {
 	second := filepath.Join(base, "second", "file.go")
 	for _, dir := range []string{filepath.Dir(first), filepath.Dir(second)} {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
-			t.Fatal(err)
+			testutil.FailErr(t, "create directory", err)
 		}
 	}
 	action := hitl.ProposedAction{

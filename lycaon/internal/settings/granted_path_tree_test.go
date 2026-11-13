@@ -19,7 +19,7 @@ import (
 func TestOrdinaryOutsideReadGrantsTheContainingFolder(t *testing.T) {
 	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	file := filepath.Join(dir, "release.go")
 
@@ -102,7 +102,7 @@ func TestHomeFileReadOffersHomeAndAncestors(t *testing.T) {
 func TestTaskReadGrantSilencesLaterReadsInTheFolder(t *testing.T) {
 	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	first := filepath.Join(dir, "release.go")
 	sibling := filepath.Join(dir, "client.go")
@@ -228,7 +228,7 @@ func TestOutsideReadAsksWithFileAccessAtEveryPosture(t *testing.T) {
 func TestTreeGrantDoesNotCoverSensitiveChildren(t *testing.T) {
 	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	ordinary := filepath.Join(dir, "main.go")
 	secret := filepath.Join(dir, ".env")
@@ -319,7 +319,7 @@ func TestOrdinaryOutsideWriteStaysExact(t *testing.T) {
 func TestDurableTreeGrantSurvivesReloadAndSilencesReads(t *testing.T) {
 	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		t.Fatal(err)
+		testutil.FailErr(t, "create directory", err)
 	}
 	first := filepath.Join(dir, "release.go")
 	sibling := filepath.Join(dir, "client.go")
