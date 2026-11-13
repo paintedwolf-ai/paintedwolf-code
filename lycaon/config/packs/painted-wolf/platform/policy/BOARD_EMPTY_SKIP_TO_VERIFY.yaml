@@ -1,5 +1,5 @@
-x-paintedwolf-emit: banner
-x-paintedwolf-category: informational
+emit: banner
+category: informational
 severity: info
 message: The board view contains no rendered entries.
 cause: This pack_board result explicitly reports board_chars as zero.

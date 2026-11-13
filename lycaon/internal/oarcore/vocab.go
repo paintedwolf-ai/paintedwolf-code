@@ -74,12 +74,12 @@ var coreFacts = map[string]FactType{
 	"same_call_run":        TypeInt,
 }
 
-// EngineMaintained are the core facts the engine computes per session itself;
+// engineMaintained are the core facts the engine computes per session itself;
 // no fact provider supplies them ([OAR-FIRE-10]).
-var EngineMaintained = []string{"fire_count", "breaker_count", "same_code_reject_run", "same_call_run"}
+var engineMaintained = []string{"fire_count", "breaker_count", "same_code_reject_run", "same_call_run"}
 
 // IsEngineMaintained reports whether name is a fact the engine maintains.
-func IsEngineMaintained(name string) bool { return contains(EngineMaintained, name) }
+func IsEngineMaintained(name string) bool { return contains(engineMaintained, name) }
 
 // coreFunctions are the core observation functions (section 5.3). Each reads
 // another rule's counter, named by a string literal ([OAR-FIRE-6]).

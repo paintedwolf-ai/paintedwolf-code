@@ -1,5 +1,5 @@
-x-paintedwolf-emit: banner
-x-paintedwolf-category: informational
+emit: banner
+category: informational
 severity: info
 message: Overlay {{ paintedwolf.overlay_id }} promote order — {{ paintedwolf.promote_order }}
 what: Preview reports whether this overlay is order-independent, sequential, clean-if-first,

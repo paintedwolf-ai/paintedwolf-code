@@ -1,5 +1,5 @@
-x-paintedwolf-emit: inject:active_workflow
-x-paintedwolf-category: recoverable
+emit: inject:active_workflow
+category: recoverable
 severity: error
 message: The workflow context is missing its composed draft or declared phase surface.
 what: The host cannot resolve a usable phase brief for the current workflow context.

@@ -1,5 +1,5 @@
-x-paintedwolf-emit: banner
-x-paintedwolf-category: expected_behavior
+emit: banner
+category: expected_behavior
 severity: info
 message: workflow_advance is unavailable on phase {{ paintedwolf.phase }}; the host advances it when its gates pass
 what: This workflow phase uses host auto-advance when gates pass

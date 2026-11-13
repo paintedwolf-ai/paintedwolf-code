@@ -74,7 +74,7 @@ func writePolicyPack(t *testing.T, dir, packID, code, anchor string) {
 		"spec_version: '1.0'\nid: "+code+"\nkind: policy\non: "+anchor+"\n"+
 			"selector: {}\nwhen: 'false'\neffect: warn\n"+
 			"cause: c\nwhy: w\nfix: f\ninstead: i\n"+
-			"emit: rule:test\nmessage: m\n")
+			"x-paintedwolf-emit: rule:test\nmessage: m\n")
 }
 
 func mustWriteFile(t *testing.T, path, body string) {

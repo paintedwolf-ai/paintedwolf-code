@@ -1,5 +1,5 @@
-x-paintedwolf-emit: banner
-x-paintedwolf-category: worker_dispatch
+emit: banner
+category: worker_dispatch
 severity: info
 message: In-flight workers (batch dispatch)
 cause: Multiple `task()` jobs are pending or running in this turn
@@ -7,7 +7,7 @@ why: Do not poll workers — wait for completion envelope(s) and pulse roster
 fix: Use the actual worker statuses and remaining capacity. Dispatch additional work only when it is eligible
   and capacity is available; otherwise await completion envelopes without polling.
 instead: Do not poll workers — wait for completion envelope(s) and pulse roster
-x-paintedwolf-context-schema:
+context_schema:
   required:
   - workers
 id: BANNER_WORKER_INFLIGHT_ROSTER

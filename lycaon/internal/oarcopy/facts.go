@@ -91,8 +91,9 @@ func IsPortableFact(name string) bool {
 }
 
 var publishedFactNames = map[string]string{
-	"reason": "paintedwolf.rejection_reason",
-	"field":  "paintedwolf.rejection_field",
+	"reason":  "paintedwolf.rejection_reason",
+	"field":   "paintedwolf.rejection_field",
+	"profile": "paintedwolf.tool_profile",
 }
 
 var reasonFlags = map[string]string{

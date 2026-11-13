@@ -1,5 +1,5 @@
-x-paintedwolf-emit: banner
-x-paintedwolf-category: informational
+emit: banner
+category: informational
 severity: info
 message: 'Spec posture progress — {{ paintedwolf.progress }}. Next: {{ paintedwolf.next_action }}'
 what: 'Spec posture progress — {{ paintedwolf.progress }}. Next: {{ paintedwolf.next_action }}'
