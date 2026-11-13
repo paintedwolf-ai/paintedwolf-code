@@ -81,16 +81,25 @@ export function sliceProgramSource(source: string, spans: readonly CommandActivi
   return slices.length ? slices.join("\n") : undefined;
 }
 
+/** The `command` argument as submitted, with the field its replacement marks are recorded against. */
+export function submittedCommand(call: ToolPartView): ActivityTargetText | undefined {
+  const text = call.args?.command;
+  if (typeof text !== "string" || !text) return undefined;
+  const redaction = call.argsRedaction
+    ? { meta: call.argsRedaction.meta, field: argRedactionField(call.argsRedaction.fieldPrefix, "command") }
+    : undefined;
+  return { text, redaction };
+}
+
 function callTarget(call: ToolPartView, member: CommandActivityView["members"][number] | undefined): ActivityTargetText | undefined {
   const full = activityCallCommand(call);
   const subject = member?.subject ? { text: member.subject } : undefined;
   if (!full) return subject;
-  const redaction = call.argsRedaction && typeof call.args?.command === "string"
-    ? { meta: call.argsRedaction.meta, field: argRedactionField(call.argsRedaction.fieldPrefix, "command") }
-    : undefined;
+  const submitted = submittedCommand(call);
   const program = call.commandProgram;
-  if (!program || (program.activities?.length ?? 0) <= 1 || !member) return { text: full, redaction };
+  if (!program || (program.activities?.length ?? 0) <= 1 || !member) return submitted ?? { text: full };
   // A replacement changes the text's length, so source byte offsets past it no longer line up.
+  const redaction = submitted?.redaction;
   if (redaction && spansForField({ host_secret_redaction: redaction.meta }, redaction.field).length) return subject;
   const slice = sliceProgramSource(full, member.spans, program.source_ref);
   return slice ? { text: slice } : subject;
