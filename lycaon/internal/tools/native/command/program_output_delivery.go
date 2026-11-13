@@ -133,10 +133,25 @@ func (r *ProgramRuntime) retainProgramStream(ctx context.Context, run *programRu
 	if result.err != nil {
 		return nil, false, result.err
 	}
-	if result.spill != nil && outputDeliveryLimit(result.spill.Failure) != nil {
-		return result.spill, metadata.Redacted, nil
+	spill, err := retainOutcome(result.spill, screenErr)
+	return spill, metadata.Redacted, err
+}
+
+// retainOutcome applies the retained stream's publication eligibility: a spill
+// that failed for a non-limit reason holds an incomplete prefix and must never
+// be delivered as the stream's output, while a limit-bounded prefix keeps its
+// visible limit metadata.
+func retainOutcome(spill *tooloutput.StreamSpill, screenErr error) (*tooloutput.StreamSpill, error) {
+	if spill == nil {
+		return nil, screenErr
 	}
-	return result.spill, metadata.Redacted, screenErr
+	if outputDeliveryLimit(spill.Failure) != nil {
+		return spill, nil
+	}
+	if spill.Failure != nil {
+		return nil, errors.Join(spill.Failure, screenErr)
+	}
+	return spill, screenErr
 }
 
 func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programRun, outputs *invocation.ProgramOutputRetention, stream *programStream, name string, budget int, scope captureprojection.Scope) (string, api.CommandProgramOutputWindow, error) {

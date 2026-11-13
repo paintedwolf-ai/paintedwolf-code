@@ -10,6 +10,8 @@ components:
       - is_primary
       - added_at
       - kind
+      - admitted
+      - admission_code
       additionalProperties: false
       properties:
         id:
@@ -33,6 +35,22 @@ components:
           type: string
           enum: [draft, attached]
           description: Engine-created draft workspace or user-attached folder.
+        admitted:
+          type: boolean
+          description: >-
+            Whether agents work in this folder. The host derives it from the
+            standing write-root check on current facts. A folder that is not
+            admitted stays attached for the editor only; agents, tools,
+            subprocesses and project policy never see it.
+        admission_code:
+          type: [string, "null"]
+          enum: [write_root_under_secret_store, write_root_contains_control_plane, null]
+          description: >-
+            Why agents do not work in this folder; null when admitted.
+            write_root_under_secret_store: the folder is inside the engine's
+            state, key material or a credential store.
+            write_root_contains_control_plane: the folder contains the engine's
+            state.
     ProjectPromotion:
       x-go-generate: true
       type: object

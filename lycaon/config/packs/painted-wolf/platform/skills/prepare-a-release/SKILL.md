@@ -19,7 +19,6 @@ description: Assemble and verify release versions, notes, artifacts, provenance,
 {% else %}5. **Prepare the release files in this overlay.** Apply the version bump and changelog edits the brief names, and draft the [release manifest](references/release-manifest.md) with intended identity and checks.
 6. **Report the overlay for promotion.** Name the files changed and verification results; the coordinator promotes the overlay and owns tagging, committing, publishing.
 {% endif %}
-
 ## Stopping rule
 
 Stop before creating or pushing tags, publishing packages, images, or releases, uploading updater metadata, changing signing keys, or rolling out to production. Stop at the first failed gate; later authorization covers the specific publishing action granted only.

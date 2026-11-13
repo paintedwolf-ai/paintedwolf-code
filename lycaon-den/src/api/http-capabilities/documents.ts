@@ -78,7 +78,8 @@ export function createDocumentsClient(j: JsonRequester): DocumentsClient {
     syncEditorDocument: (projectId, documentId, req) =>
       j(`/v1/projects/${projectId}/editor-documents/${documentId}/sync`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
     leaveEditorDocument: (projectId, documentId, req) =>
-      j(`/v1/projects/${projectId}/editor-documents/${documentId}/leave`, { ...jsonRequest("POST", req), signal: AbortSignal.timeout(30_000) }),
+      // Keepalive lets a leave sent while the page unloads still arrive.
+      j(`/v1/projects/${projectId}/editor-documents/${documentId}/leave`, { ...jsonRequest("POST", req), keepalive: true, signal: AbortSignal.timeout(30_000) }),
     discardEditorDocument: (projectId, documentId, req) =>
       j(`/v1/projects/${projectId}/editor-documents/${documentId}/discard`, jsonRequest("POST", req)),
     reloadEditorDocument: (projectId, documentId, req, sessionId) =>

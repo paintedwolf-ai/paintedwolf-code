@@ -102,17 +102,31 @@ Each root has a stable id, canonical filesystem location, display label, and pos
 | The draft scratch root (`RootKindDraft`) is the one root kind the host creates on its own | A fresh conversation needs a live file surface before a human has chosen a folder |
 | Symlink traversal is descriptor-relative and jailed | A lexical child path must not escape the approved tree |
 
-### A chosen folder can still be refused
+### Admitted and editor-only roots
 
-Human authority decides *whether* a folder is attached, not *that any folder may be*. An attached root is a standing write root for every later turn, so the host validates the destination and refuses a boundary it could not honestly contain:
+A person may attach any existing folder: the filesystem root, their home directory, the engine's own state tree, a credential store. The editor works in every attached root. Whether agents work there is a separate question, answered by the one check that decides whether a folder may be a standing agent write root (`confine.AttachedWriteRootRefused`):
 
-| Refused | Why |
-|---------|-----|
-| The filesystem root, or a path that is not absolute | A root that contains everything bounds nothing |
-| The user's home directory, including when the host cannot determine home at all | Home is the superset of the secret stores, credential material, and host config below it; unknown home identity refuses for the same reason |
-| A path that is, contains, or sits inside a secret store, credential store, or key material | Standing write authority over a credential store is not something a folder choice may confer |
+| Root | Standing write-root check | Editor | Agents |
+|------|---------------------------|--------|--------|
+| **Admitted** | Passes | Full use | Ordinary project scope |
+| **Editor-only** | Refused: the folder contains the state tree, or lies inside it, key material or a credential store | Full use | Not part of the project |
 
-The check runs in both path directions, so a candidate that merely *contains* a protected store is refused too. Each refusal returns a machine code naming the class, and nothing partial is attached. This is the same write-root validation the confinement layer applies to reviewed grants, not a separate list.
+The fact is derived from current host facts each time it is read. It is never stored, it is not a setting, and nobody chooses it, so it cannot disagree with the confinement floors. The project root wire object states it as `admitted`, with the check's machine code in `admission_code` when the root is editor-only.
+
+For agents an editor-only root does not exist, and every existing rule applies as if it were detached:
+
+| Situation | Result |
+|-----------|--------|
+| Every root is editor-only | The no-folder behavior |
+| The attached primary is editor-only | The first admitted root is the agents' primary |
+| A chat's active root is not admitted | The removed-root reassignment, applied after promotion and at startup; a chat is only ever created in an admitted root |
+| An agent names an editor-only root's label or a path inside it | The result for a path outside its roots |
+| A person references a file there in a prompt | The agent receives its absolute path |
+| `AGENTS.md`, overlays and skills inside it | Not project policy |
+| An editor-only root is attached, detached or renamed | Nothing reaches the model; root history records admitted sets |
+| Workers, local MCP servers, the managed browser, scans, trust inventory, file briefings | Computed from admitted roots |
+
+Code reads roots one of two ways. `project.RootRefsFrom`, `RootPaths` and `PrimaryRootPath` are the agent reading and return admitted roots; it is the default, so a consumer that has not chosen sees only what agents may see. `Project.SourceRoots()` and `WorkspaceID()` are the source reading and cover every root for the editor, the Git panel and source history. Execution-boundary root validation still runs on every launch as the backstop.
 
 ## Behavior by root state
 
@@ -120,9 +134,9 @@ The check runs in both path directions, so a candidate that merely *contains* a 
 |------------|----------|-------------------|
 | Conversation and workflows | Yes | Yes |
 | Configured model and web access | Yes, subject to policy | Yes, subject to policy |
-| Project file read/write tools | No | Root union, with active-root path context |
+| Project file read/write tools | No | Admitted root union, with active-root path context |
 | Project overlays and `AGENTS.md` | No | Resolved from admitted roots |
-| Source navigation and editor | No project source | Root-addressed source |
+| Source navigation and editor | No project source | Root-addressed source in every root |
 | Worker write overlays | No | Derived from scoped root snapshots |
 
 Outside-root access is handled by explicit granted paths and write-root authority. It does not mutate the attached-root list.
@@ -279,7 +293,7 @@ Before attaching a folder, the host may return a bounded **detect preview**: rep
 
 Source inventory is generation-bound and bounded by explicit resource limits. When warming or incomplete, the projection says so. An empty or partial inventory is never proof that the repository contains no relevant files. Repository briefs summarize stable structure for prompt orientation; they are projections over the current root generation, not substitutes for reading source, and a walk that hit its budget yields a brief that counts what was observed.
 
-A **physical workspace** is the project id plus its sorted canonical attached-root set. Source browsing, events, agent discovery, and watcher coverage share this identity; nothing durable is keyed by it. Editor documents and source history belong to the project and its source branch, so a root-set change re-addresses the tree without forking a logical file or stranding an unsaved draft. Source events state separately whether the workspace is a project tree or a worker tree.
+A **physical workspace** is the project id plus its sorted canonical attached-root set, editor-only roots included. Source browsing, events, agent discovery, and watcher coverage share this identity; nothing durable is keyed by it. Agent discovery reads only its admitted roots, and an editor-only root is observed on demand ([Source navigation](source-navigation.md)). Source history keeps the identity of a file the key-material or credential-store floor protects with its content not captured, so those bytes never enter the content store or a backup. Editor documents and source history belong to the project and its source branch, so a root-set change re-addresses the tree without forking a logical file or stranding an unsaved draft. Source events state separately whether the workspace is a project tree or a worker tree.
 
 Watcher coverage is asked at the grain of the claim: whole-tree reuse asks whether the root is fully covered, while a directory listing asks only about its own directory. Where coverage is absent, project reads apply a fifteen-minute stale threshold and schedule one coalesced refresh; root changes and observed watcher epochs still trigger immediately. Detached roots release their watcher descriptors once no project uses them. HTTP status, storage, pin, and walk reads read only durable state; client polling never schedules whole-tree work.
 
@@ -327,7 +341,8 @@ Root mutations, naming, deletion, and promotion are host-executed transitions. T
 | Root identity and resolution | `internal/project`, `internal/projectroot` |
 | Path scope checks against the admitted root set | `internal/sandbox` (canonicalizing; a resolved path is compared against the root) |
 | Descriptor-relative traversal that makes the jail hold | `internal/fseffect` (`openat`/`O_NOFOLLOW` per component) |
-| Execution-boundary write-root and protected-path confinement | `internal/confine` (`AttachedWriteRootRefused`), enforced by `internal/tools` |
+| Root admission | `internal/confine` (`AttachedWriteRootRefused`), read through `project.Root.Admission` |
+| Execution-boundary write-root and protected-path confinement | `internal/confine`, enforced by `internal/tools` |
 | Lifecycle exclusivity against running work | `internal/project/mutation_gate.go`, plus the dependent counts in the SQL registry |
 | Deletion and extension cleanup | `internal/projectremoval` |
 | Idle-project storage tiering | `internal/contentblob/density.go`; thresholds in `config/runtime/storage/density.yaml` |

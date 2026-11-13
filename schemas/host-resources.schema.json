@@ -207,10 +207,15 @@
         },
         "transport": { "enum": ["unix_socket", "named_pipe"] },
         "target": { "type": "string", "maxLength": 4096 },
-        "target_from": { "$ref": "#/$defs/capture" }
+        "target_from": { "$ref": "#/$defs/capture" },
+        "client_env": { "type": "string", "maxLength": 128, "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }
       },
       "allOf": [
         { "not": { "required": ["target", "target_from"] } },
+        {
+          "if": { "required": ["client_env"] },
+          "then": { "required": ["transport"], "properties": { "mode": { "const": "local_service" }, "transport": { "const": "unix_socket" } } }
+        },
         {
           "if": { "properties": { "mode": { "const": "local_service" } } },
           "then": { "required": ["transport", "target_from"] },

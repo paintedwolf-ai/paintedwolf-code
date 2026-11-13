@@ -101,3 +101,19 @@ func (r EffectRequirement) CommandEffects(child *CommandEffects) (CommandEffects
 	}
 	return effects, nil
 }
+
+// CompileEffectModes compiles every effect mode the command declares, with a
+// read-only child standing in for a bound child set, so an unclassified mode
+// fails where the command is registered rather than when it first runs.
+func (spec CommandSpecification) CompileEffectModes() error {
+	if len(spec.Effects) == 0 {
+		return fmt.Errorf("command %q declares no effect modes", spec.Name)
+	}
+	child := commandEffectBit(CommandReadOnly)
+	for _, effect := range spec.Effects {
+		if _, err := effect.CommandEffects(&child); err != nil {
+			return fmt.Errorf("command %q: %w", spec.Name, err)
+		}
+	}
+	return nil
+}
