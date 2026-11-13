@@ -7069,10 +7069,11 @@ type SourceComparisonViewUpdate struct {
 	Intent                 SourceComparisonIntent `json:"intent"`
 }
 
-// SourceContext Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory.
+// SourceContext Host-recorded source context supplied with this message; independent of evidence and filesystem inventory.
 type SourceContext struct {
 	Locations []NavigationTarget `json:"locations"`
 	Truncated bool               `json:"truncated"`
+	View      *ViewContext       `json:"view,omitempty"`
 }
 
 // SourceContributor One author of a change. Identity fields the contribution does not have are omitted.

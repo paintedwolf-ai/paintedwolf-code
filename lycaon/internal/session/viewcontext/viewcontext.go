@@ -16,7 +16,7 @@ import (
 )
 
 // MaxItems bounds each list a view context carries.
-const MaxItems = 12
+const MaxItems = 8
 
 // Views lists a person's live window reports, most recently focused first.
 type Views interface {
@@ -62,7 +62,7 @@ func (m *Service) Record(ctx context.Context, sess *api.Session, scope Scope, op
 		return history
 	}
 	opening := promptIndex(history, openingMessageID)
-	if opening < 0 || history[opening].ViewContext != nil {
+	if opening < 0 || viewOf(history[opening]) != nil {
 		return history
 	}
 	person := strings.TrimSpace(history[opening].AuthorPersonID)
@@ -84,7 +84,7 @@ func (m *Service) Record(ctx context.Context, sess *api.Session, scope Scope, op
 		return history
 	}
 	out := append([]api.Message(nil), history...)
-	out[opening].ViewContext, out[opening].Seq = stored.ViewContext, stored.Seq
+	out[opening].SourceContext, out[opening].Seq = stored.SourceContext, stored.Seq
 	return out
 }
 
@@ -143,6 +143,13 @@ func (m *Service) build(ctx context.Context, projectID, person string, scope Sco
 	return out, nil
 }
 
+func viewOf(m api.Message) *api.ViewContext {
+	if m.SourceContext == nil {
+		return nil
+	}
+	return m.SourceContext.View
+}
+
 func empty(v api.ViewContext) bool {
 	return len(v.Editors) == 0 && len(v.Diffs) == 0 && v.Folder == nil && v.Search == nil && len(v.Findings) == 0
 }
@@ -161,8 +168,8 @@ func promptIndex(history []api.Message, id string) int {
 
 func latestView(history []api.Message) *api.ViewContext {
 	for i := len(history) - 1; i >= 0; i-- {
-		if history[i].Role == api.MessageRoleUser && history[i].ViewContext != nil {
-			return history[i].ViewContext
+		if history[i].Role == api.MessageRoleUser && viewOf(history[i]) != nil {
+			return viewOf(history[i])
 		}
 	}
 	return nil

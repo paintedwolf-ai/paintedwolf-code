@@ -41,10 +41,10 @@ func TestInvalidProjectViewNamesTheFieldAtFault(t *testing.T) {
 		})
 	}
 	tooMany := valid()
-	for len(tooMany.Findings) <= 12 {
+	for len(tooMany.Findings) <= 8 {
 		tooMany.Findings = append(tooMany.Findings, tooMany.Findings[0])
 	}
 	if field, _ := invalidProjectView(tooMany); field != "findings" {
-		t.Fatalf("thirteen findings rejected at %q", field)
+		t.Fatalf("nine findings rejected at %q", field)
 	}
 }

@@ -42,7 +42,7 @@ type fakeStore struct{ patched map[string]api.ViewContext }
 
 func (s *fakeStore) PatchMessageViewContext(_ context.Context, _, messageID string, view api.ViewContext) (api.Message, error) {
 	s.patched[messageID] = view
-	return api.Message{ID: messageID, ViewContext: &view, Seq: int64(len(s.patched))}, nil
+	return api.Message{ID: messageID, SourceContext: &api.SourceContext{Locations: []api.NavigationTarget{}, View: &view}, Seq: int64(len(s.patched))}, nil
 }
 
 var (
@@ -57,7 +57,11 @@ func coordinator() *api.Session {
 }
 
 func prompt(id, author string, view *api.ViewContext) api.Message {
-	return api.Message{ID: id, Role: api.MessageRoleUser, AuthorPersonID: author, ViewContext: view}
+	msg := api.Message{ID: id, Role: api.MessageRoleUser, AuthorPersonID: author}
+	if view != nil {
+		msg.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{}, View: view}
+	}
+	return msg
 }
 
 type fixture struct {
@@ -108,7 +112,7 @@ func TestRecordGathersEveryVisibleSurfaceInWindowOrder(t *testing.T) {
 		Search:   &api.ViewSearch{Query: "LegacyToken", Hit: &api.ViewLocation{RootID: primary, Path: "auth.go", DisplayPath: "auth.go", Line: 12}},
 		Findings: []api.ViewFinding{{Fingerprint: "fp", RuleID: "go.sqli", Level: api.FindingLevelHigh, Location: &api.ViewLocation{RootID: primary, Path: "db.go", DisplayPath: "db.go", Line: 3}}},
 	}
-	if !reflect.DeepEqual(f.store.patched["u1"], want) || got[0].ViewContext == nil || !reflect.DeepEqual(*got[0].ViewContext, want) {
+	if !reflect.DeepEqual(f.store.patched["u1"], want) || got[0].SourceContext == nil || got[0].SourceContext.View == nil || !reflect.DeepEqual(*got[0].SourceContext.View, want) {
 		t.Fatalf("recorded %+v\nwant     %+v", f.store.patched["u1"], want)
 	}
 	if f.views.person != "alex" || !reflect.DeepEqual(f.editors.shown, []ShownEditor{{ClientID: "window:a", DocumentID: "doc-guide"}}) {

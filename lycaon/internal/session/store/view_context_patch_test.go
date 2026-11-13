@@ -28,12 +28,13 @@ func TestViewContextPatchRecordsOnceAndPreservesTheMessage(t *testing.T) {
 		},
 		"memory": func(*testing.T) viewContextStore { return NewMemory() },
 	}
+	attached := []api.NavigationTarget{{ProjectID: testdbseed.DefaultProjectID, RootID: "r", Path: "b.go", EntryKind: api.NavigationEntryKindFile}}
 	for name, open := range stores {
 		t.Run(name, func(t *testing.T) {
 			s := open(t)
 			sess, err := s.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 			testutil.FailErr(t, "create session", err)
-			testutil.FailErr(t, "append", s.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u", Role: api.MessageRoleUser, Content: "fix this"}))
+			testutil.FailErr(t, "append", s.AppendMessages(t.Context(), sess.ID, api.Message{ID: "u", Role: api.MessageRoleUser, Content: "fix this", SourceContext: &api.SourceContext{Locations: attached}}))
 			before, err := s.GetMessage(t.Context(), sess.ID, "u")
 			testutil.FailErr(t, "read prompt", err)
 			first := api.ViewContext{
@@ -45,15 +46,18 @@ func TestViewContextPatchRecordsOnceAndPreservesTheMessage(t *testing.T) {
 
 			after, err := s.PatchMessageViewContext(t.Context(), sess.ID, "u", first)
 			testutil.FailErr(t, "record view", err)
-			if after.Content != before.Content || after.Seq <= before.Seq || after.ViewContext == nil {
+			if after.Content != before.Content || after.Seq <= before.Seq || after.SourceContext == nil || after.SourceContext.View == nil {
 				t.Fatalf("patch changed the prompt: before=%+v after=%+v", before, after)
 			}
 			again, err := s.PatchMessageViewContext(t.Context(), sess.ID, "u", api.ViewContext{Editors: []api.ViewEditor{}, Diffs: []api.ViewPath{}, Findings: []api.ViewFinding{}})
 			testutil.FailErr(t, "record a second view", err)
 			stored, err := s.GetMessage(t.Context(), sess.ID, "u")
 			testutil.FailErr(t, "reread prompt", err)
-			if again.Seq != after.Seq || stored.ViewContext == nil || !reflect.DeepEqual(*stored.ViewContext, first) {
-				t.Fatalf("stored view = %+v; want the first one kept", stored.ViewContext)
+			if again.Seq != after.Seq || stored.SourceContext == nil || stored.SourceContext.View == nil || !reflect.DeepEqual(*stored.SourceContext.View, first) {
+				t.Fatalf("stored source context = %+v; want the first view kept", stored.SourceContext)
+			}
+			if !reflect.DeepEqual(stored.SourceContext.Locations, attached) {
+				t.Fatalf("recording the view changed attached locations: %+v", stored.SourceContext.Locations)
 			}
 			if _, err := s.PatchMessageViewContext(t.Context(), sess.ID, "missing", first); !errors.Is(err, ErrMessageNotFound) {
 				t.Fatalf("missing prompt = %v", err)

@@ -5,7 +5,7 @@ import "strconv"
 // MapText returns a copy with every free-text field passed through f, named
 // by its field path. Identities, levels and line numbers are not text.
 func (v ViewContext) MapText(f func(field, value string) string) ViewContext {
-	at := func(list string, i int) string { return "view_context." + list + "[" + strconv.Itoa(i) + "]" }
+	at := func(list string, i int) string { return "source_context.view." + list + "[" + strconv.Itoa(i) + "]" }
 	location := func(field string, l *ViewLocation) *ViewLocation {
 		if l == nil {
 			return nil
@@ -27,11 +27,11 @@ func (v ViewContext) MapText(f func(field, value string) string) ViewContext {
 	}
 	if v.Folder != nil {
 		folder := *v.Folder
-		folder.Path, folder.DisplayPath = f("view_context.folder.path", folder.Path), f("view_context.folder.display_path", folder.DisplayPath)
+		folder.Path, folder.DisplayPath = f("source_context.view.folder.path", folder.Path), f("source_context.view.folder.display_path", folder.DisplayPath)
 		out.Folder = &folder
 	}
 	if v.Search != nil {
-		out.Search = &ViewSearch{Query: f("view_context.search.query", v.Search.Query), Hit: location("view_context.search.hit", v.Search.Hit)}
+		out.Search = &ViewSearch{Query: f("source_context.view.search.query", v.Search.Query), Hit: location("source_context.view.search.hit", v.Search.Hit)}
 	}
 	out.Findings = make([]ViewFinding, len(v.Findings))
 	for i, finding := range v.Findings {

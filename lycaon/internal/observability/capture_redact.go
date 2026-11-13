@@ -289,9 +289,11 @@ func redactMessageContent(msg api.Message) api.Message {
 		}
 		msg.ProgressUpdate = &progress
 	}
-	if msg.ViewContext != nil {
-		view := msg.ViewContext.MapText(func(_, value string) string { return RedactCaptureText(value) })
-		msg.ViewContext = &view
+	if msg.SourceContext != nil && msg.SourceContext.View != nil {
+		source := *msg.SourceContext
+		view := source.View.MapText(func(_, value string) string { return RedactCaptureText(value) })
+		source.View = &view
+		msg.SourceContext = &source
 	}
 	if msg.IndexWarming != nil {
 		warming := *msg.IndexWarming

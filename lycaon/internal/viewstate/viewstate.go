@@ -16,7 +16,7 @@ import (
 const TTL = time.Minute
 
 // MaxWindows bounds the windows one person's view reads, most recently focused first.
-const MaxWindows = 12
+const MaxWindows = 8
 
 // ErrClientIdentity means a window reported under another person.
 var ErrClientIdentity = errors.New("view client belongs to another person")
