@@ -43,7 +43,7 @@ var factDecls = []factDecl{
 	{"same_call_run", oarcore.TypeInt, FactTierCore, ""},
 
 	{"anchor", oarcore.TypeString, FactTierHost, ""},
-	{"credential_occurrences", oarcore.TypeInt, FactTierHost, ""},
+	{"credential_decisions", oarcore.TypeInt, FactTierHost, ""},
 	{"tool_profile", oarcore.TypeString, FactTierHost, ""},
 	{"principal", oarcore.TypeString, FactTierHost, ""},
 	{"principal_roles", oarcore.TypeListString, FactTierHost, ""},
@@ -277,7 +277,7 @@ var observationFns = []observationFn{
 var engineCounterFacts = map[string]struct{}{
 	"fire_count": {}, "breaker_count": {}, "same_code_reject_run": {}, "same_call_run": {},
 	"paintedwolf.repeat_count": {}, "paintedwolf.fruitless_search_run": {},
-	"paintedwolf.code_reject_responses": {}, "paintedwolf.credential_occurrences": {},
+	"paintedwolf.code_reject_responses": {}, "paintedwolf.credential_decisions": {},
 }
 
 var detectorFacts = map[string]struct{}{

@@ -179,8 +179,8 @@ func TestMixedPathRecoveryKeepsTerminalPathsOutsideRequestedGrants(t *testing.T)
 				}
 				ctx := tools.WithCallReach(t.Context(), toolreach.Offered(names))
 				text, facts := mgr.ToolPolicy.AfterTool(ctx, &api.Session{ID: t.Name()}, "command", nil, "{}", 1, guidance.ToolResultFacts{Confine: obs})
-				if !facts.HasCode(access.code) || !facts.HasCode("SANDBOX_TERMINAL_PATH_REFUSED") {
-					t.Fatalf("mixed refusals lost a remedy: %s", text)
+				if !facts.HasCode(access.code) || facts.HasCode("SANDBOX_TERMINAL_PATH_REFUSED") {
+					t.Fatalf("the requestable remedy did not decide mixed refusals: %s", text)
 				}
 				for _, want := range []string{"/requestable/file", "/host/control"} {
 					if !strings.Contains(text, want) {

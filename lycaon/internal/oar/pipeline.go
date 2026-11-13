@@ -3,7 +3,6 @@ package oar
 import (
 	"context"
 	"fmt"
-
 )
 
 // PipelineResult is the outcome of one GuardPipeline.Evaluate call.
