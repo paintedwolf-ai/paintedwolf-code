@@ -17,6 +17,8 @@ import (
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hostmarker"
+	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/toolreach"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -173,11 +175,11 @@ func (l *toolInvocations) rejectToolOccurrence(ctx context.Context, sess *api.Se
 	}
 	data["tool"], data["profile"], data["turn_surface"] = tc.Name, toolCtx.Identity.Agent, toolCtx.Turn.TurnSurfaceID
 	if code == "TOOL_NOT_OFFERED" {
-		loadable := toolCtx.Turn.TurnToolPlan.Deferred(tc.Name) && tools.ToolOffered(ctx, "request_tools")
-		data["tool_loadable"] = loadable
+		route := oar.RouteTool(tools.CallReach(ctx), tc.Name)
+		data["tool_loadable"] = route.Status == toolreach.Loadable
 		data["tool_retired_to_content"] = toolRetiredToPublishedText(sess, tc.Name, toolCtx.Turn.TurnSurfaceID)
-		if forms, retired := toolcontract.RetiredCommandForms(tc.Name); retired {
-			data["tool_retired_to_command"], data["tool_command_forms"] = true, forms
+		if route.Retired {
+			data["tool_retired_to_command"], data["tool_command_forms"] = true, route.Forms
 		}
 		data["offered_tools"] = append([]string(nil), toolCtx.Turn.TurnOfferedToolNames...)
 		data["tool_discovery_available"] = tools.ToolOffered(ctx, "request_tools") && len(toolCtx.Turn.TurnToolPlan.DeferredNames()) > 0

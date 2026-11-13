@@ -128,12 +128,12 @@ func TestEmptyRecoveryUsesFrozenRequestEligibility(t *testing.T) {
 			if s != sess || anchor != oar.AnchorContentOutput || obs.EmptyResponse == nil || obs.EmptyResponse.ToolsCallable != req.ToolsCallable() || obs.EmptyResponse.StructuredOutput != (req.ResponseFormat != nil) {
 				t.Fatalf("mask%d: observation=%+v", mask, obs)
 			}
-			if len(obs.Segments) != 0 || len(obs.TextActionTools) != 0 {
+			if len(obs.Segments) != 0 || len(obs.TextAction.Tools) != 0 {
 				t.Fatal("provider text entered recovery observation")
 			}
 			return guidance.NewRefusal("MODEL_RESPONSE_EMPTY", "host recovery"), true, "", false
 		}}}}
-		render := turn.emptyResponseRecovery(sess, req)
+		render := turn.emptyResponseRecovery(sess, req, nil)
 		body, err := render(t.Context())
 		testutil.FailErr(t, "render recovery", err)
 		if body != "host recovery" || calls != 1 {

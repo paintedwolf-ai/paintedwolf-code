@@ -1040,6 +1040,14 @@ host_facts:
    type: list<string>
  - name: paintedwolf.offenders_sample
    type: string
+ - name: paintedwolf.text_action_fenced
+   type: bool
+ - name: paintedwolf.text_action_callable_tools
+   type: list<string>
+ - name: paintedwolf.text_action_loadable_tools
+   type: list<string>
+ - name: paintedwolf.text_action_command_forms
+   type: list<string>
  - name: paintedwolf.unaccounted_group_ids
    type: list<string>
  - name: paintedwolf.unaccounted_omitted

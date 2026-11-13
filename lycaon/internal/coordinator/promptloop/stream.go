@@ -345,7 +345,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		}
 	}()
 
-	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
+	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req, st)
 	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	if st != nil {
@@ -396,7 +396,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		slog.WarnContext(ctx, "record llm call usage", "call_id", llmCallID, "error", err)
 	}
 	outputGateStarted := time.Now()
-	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextAction.Tools}, "", nil)
+	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(contentOutputReach(ctx, st, req), sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextAction: response.TextAction}, "", nil)
 	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextAction.Tools)
 	if st != nil {
 		st.output.rejection = nil

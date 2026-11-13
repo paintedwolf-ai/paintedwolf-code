@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func (l *modelTurn) emptyResponseRecovery(sess *api.Session, req modelcall.CompletionRequest) func(context.Context) (string, error) {
+func (l *modelTurn) emptyResponseRecovery(sess *api.Session, req modelcall.CompletionRequest, st *promptLoopTurnState) func(context.Context) (string, error) {
 	if req.ToolProtocol != modelcall.ToolProtocolNative {
 		return nil
 	}
@@ -17,7 +17,7 @@ func (l *modelTurn) emptyResponseRecovery(sess *api.Session, req modelcall.Compl
 		StructuredOutput: req.ResponseFormat != nil,
 	}}
 	return func(ctx context.Context) (string, error) {
-		reject, blocked, _, _ := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, observation, "", nil)
+		reject, blocked, _, _ := l.Closeout.evaluateContentAnchor(contentOutputReach(ctx, st, req), sess, oar.AnchorContentOutput, observation, "", nil)
 		if !blocked || reject == nil {
 			return "", nil
 		}

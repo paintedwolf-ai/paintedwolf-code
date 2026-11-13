@@ -6,6 +6,8 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/responserecovery"
 	"github.com/lycaon/lycaon/internal/oar"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -37,7 +39,7 @@ func (l *modelTurn) recoverRejectedResponse(
 	if partial != nil {
 		completion.Content, completion.Reasoning, completion.ReasoningDetails = partial.Content, partial.Reasoning, partial.ReasoningDetails
 	}
-	reject, blocked, _, _ := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{
+	reject, blocked, _, _ := l.Closeout.evaluateContentAnchor(contentOutputReach(ctx, st, req), sess, oar.AnchorContentOutput, oar.ContentObservation{
 		Segments:           oarModelOutputSegments(completion.Content),
 		ToolCallUnparsed:   decision.Code == "TOOL_CALL_UNPARSED",
 		InvalidResponse:    decision.Code == "MODEL_RESPONSE_INVALID",
@@ -57,4 +59,18 @@ func (l *modelTurn) recoverRejectedResponse(
 	}
 	st.output.sourceContext = completion.SourceContext
 	return completion, nil
+}
+
+// contentOutputReach binds the frozen request to an output-gate evaluation,
+// so its rules and recovery steps see what the reader can still call.
+func contentOutputReach(ctx context.Context, st *promptLoopTurnState, req modelcall.CompletionRequest) context.Context {
+	if tools.CallReach(ctx).Known() {
+		return ctx
+	}
+	if st != nil {
+		if reach := st.requestReach(); reach.Known() {
+			return tools.WithCallReach(ctx, reach)
+		}
+	}
+	return tools.WithCallReach(ctx, toolreach.Offered(offeredToolNames(req.Tools)))
 }
