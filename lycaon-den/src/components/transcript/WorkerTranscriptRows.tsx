@@ -254,6 +254,7 @@ export function WorkerGroupRow(props: {
 
 export function FileEditFolds(props: {
   folds: readonly FileEditFold[];
+  omitted?: number;
   layout: TranscriptLayout;
   sessionId?: string | null;
   projectId?: string;
@@ -264,6 +265,7 @@ export function FileEditFolds(props: {
   const group = (
     <TranscriptDiffGroup
       folds={props.folds}
+      omitted={props.omitted}
       layout={props.layout}
       sessionId={props.sessionId}
       projectId={props.projectId}

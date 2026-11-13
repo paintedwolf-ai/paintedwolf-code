@@ -62,9 +62,10 @@ function rowFacts(item: TranscriptItem): string {
       return item.parts.map(toolPartFacts).join("\u0002");
     case "file_edit":
     case "worker_file_edit":
-      return item.folds
-        .map((fold) => `${fold.key}\u0001${fold.path}\u0001${fold.steps.length}\u0001${fold.net.added ?? ""}/${fold.net.removed ?? ""}`)
-        .join("\u0002");
+      return [
+        ...item.folds.map((fold) => `${fold.key}\u0001${fold.path}\u0001${fold.steps.length}\u0001${fold.net.added ?? ""}/${fold.net.removed ?? ""}`),
+        item.kind === "file_edit" ? String(item.omitted ?? 0) : "",
+      ].join("\u0002");
     case "progress_complete":
       return item.steps.map((step) => step.label).join("\u0002");
     case "progress_update":

@@ -371,6 +371,7 @@ export function TranscriptItemRow(props: {
         {(editItem) => (
           <FileEditFolds
             folds={editItem().folds}
+            omitted={editItem().omitted}
             layout={props.layout}
             sessionId={props.sessionId}
             projectId={props.projectId}
