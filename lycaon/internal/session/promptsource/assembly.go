@@ -114,7 +114,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 			if m == nil || m.Processes.Background == nil {
 				return nil
 			}
-			return m.Processes.Background.ActiveJobs(sessionID)
+			return m.Processes.Background.LedgerJobs(sessionID)
 		},
 		HeldCalls: func(sessionID string) []heldcall.Running {
 			if m == nil {

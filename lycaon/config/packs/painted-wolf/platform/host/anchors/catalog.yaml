@@ -641,7 +641,9 @@ anchors:
 
   - id: inject.command_jobs
     title: Live handles inject
-    description: Host-authoritative ledger of live command jobs and held tool calls.
+    description: >-
+      Host-authoritative ledger of running command jobs, command jobs that
+      exited before the agent observed them, and held tool calls.
     trigger_class: assembly_inject
     surface: agent
     planes: [inform]
@@ -649,7 +651,8 @@ anchors:
       vars:
         jobs: { type: "object[]", required: true }
         can_wait: { type: "bool", required: true }
-        has_command: { type: "bool", required: true }
+        has_running: { type: "bool", required: true }
+        has_exited: { type: "bool", required: true }
         has_held: { type: "bool", required: true }
 
   - id: inject.source_changes

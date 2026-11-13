@@ -91,14 +91,18 @@ func measureCoordinatorInjectBlock(
 				mode = bgprocess.JobModeAwaited
 				timeout = 10 * time.Minute
 			}
-			jobs = append(jobs, bgprocess.JobSnapshot{
+			job := bgprocess.JobSnapshot{
 				Handle: fmt.Sprintf("command-%d", i), Mode: mode, OriginTool: "verify",
 				StartedAt: now.Add(-time.Duration(i+1) * time.Minute), Timeout: timeout,
 				Stages: []hostcmd.StageResult{{
-					// A live job has not exited, so it carries no exit code.
 					Command: "./task test:digest -- ./internal/" + strings.Repeat("wide-scope/", 80),
 				}},
-			})
+			}
+			// The widest ledger mixes running jobs with unobserved exits.
+			if i >= 6 {
+				job.Exited, job.ExitCode, job.Refusals = true, 1, 3
+			}
+			jobs = append(jobs, job)
 		}
 		surface := "coordinator"
 		if spec.ID == "worker_command_jobs" {
