@@ -3216,10 +3216,10 @@
       "summary": "{% if paintedwolf.text_base_changed %}{{ paintedwolf.path }} no longer matches the validated write base.{% else %}The host could not confirm the current write base for {{ paintedwolf.path }}.{% endif %}"
     },
     "TOOL_ACTION_IN_TEXT": {
-      "branch_instruction": "If explaining tool syntax or logs, use a fenced code example with an explanation.",
+      "branch_instruction": "{% if paintedwolf.text_action_fenced %}Never label a code fence with a tool name. To show syntax to the person, label the fence json or text.{% else %}To show tool syntax or logs to the person, put the example in a code fence labelled json or text, with an explanation.{% endif %}",
       "category": "recoverable",
       "emit": "guard:coordinator",
-      "summary": "No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}."
+      "summary": "{% if paintedwolf.text_action_fenced %}No tool ran. The response wrote a call to {{ paintedwolf.offenders_sample }} in a code fence labelled with the tool name.{% else %}No tool ran. The response wrote a call to {{ paintedwolf.offenders_sample }} as a text envelope.{% endif %}"
     },
     "TOOL_ARGS_INVALID": {
       "category": "recoverable",

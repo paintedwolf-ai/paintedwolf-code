@@ -215,6 +215,9 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 		{"fenced example", "```json\n{\"tool_name\":\"read\",\"tool_args\":{}}\n```", 1, false, 0, 0},
 		{"fenced name arguments", "```json\n{\"name\":\"read\",\"arguments\":{\"path\":\"x\"}}\n```", 1, false, 0, 0},
 		{"explained tag", `Example: <tool_call>{"name":"read","arguments":{"path":"x"}}</tool_call>`, 1, false, 0, 0},
+		{"fenced call resubmit", "I will read it now.\n\n```read\n{\"path\":\"x\"}\n```", 1, false, 1, 1},
+		{"tilde fenced call resubmit", "~~~read\n{\"path\":\"x\"}\n~~~\nReading now.", 1, false, 1, 1},
+		{"fenced transcript", "```read\nx: file-body\n```", 1, false, 0, 0},
 		{"bounded retry", `{"tool":"read","args":{}}`, 20, false, BlockedLoopRejectCap + 1, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -275,6 +278,56 @@ func TestTextActionRecoveryThroughLoop(t *testing.T) {
 				t.Fatalf("rejected=%d nudges=%d executed=%d; want rejected=%d executed=%d", rejected, nudges, executed, tc.wantReject, tc.wantExec)
 			}
 		})
+	}
+}
+
+// With no turn left to repair it, a written call ends the turn with the host
+// closing; the blocked text is not assembled into an answer.
+func TestBlockedTextActionIsNotTheFinalAnswer(t *testing.T) {
+	fenced := "I will read it now.\n\n```read\n{\"path\":\"x\"}\n```"
+	reg := tools.NewStubRegistry()
+	testutil.FailErr(t, "register", reg.Register("read", func(context.Context, map[string]any, tools.ToolContext) (string, error) {
+		t.Fatal("a written call ran")
+		return "", nil
+	}))
+	client := &textActionClient{responses: []*modelcall.Completion{{Content: fenced}}}
+	limits := settings.DefaultSessionLimits()
+	limits.MaxIterations = 1
+	retracted := false
+	deps := PromptLoopDeps{
+		Context: ContextDeps{Tools: reg, Limits: func(context.Context, *api.Session) settings.SessionLimits { return limits }, BuildMessages: func(_ context.Context, _ *api.Session, h []api.Message, _ *inject.CoordinatorTurnFrame) ([]api.Message, error) {
+			return h, nil
+		}},
+		Model:    ModelDeps{LLM: client},
+		Closeout: CloseoutDeps{EvaluateContentAnchor: outputPolicyEvaluator(t, outputPolicyPipeline(t)())},
+		Projection: ProjectionDeps{
+			AppendDraftVersion: func(_ context.Context, _, _, body, code string) (int, error) {
+				if code == "TOOL_ACTION_IN_TEXT" && body == fenced {
+					retracted = true
+				}
+				return 1, nil
+			},
+			AppendMessages: func(_ context.Context, _ string, msgs ...api.Message) error {
+				for _, msg := range msgs {
+					if retracted && msg.Role == api.MessageRoleAssistant && strings.Contains(msg.Content, fenced) {
+						t.Fatalf("blocked text was committed after retraction: %+v", msg)
+					}
+				}
+				return nil
+			},
+			UpdateMessage: func(_ context.Context, _, _ string, msg api.Message) error {
+				if retracted && msg.DraftStatus != api.DraftStatusRejected && strings.Contains(msg.Content, fenced) {
+					t.Fatalf("blocked text was restored after retraction: %+v", msg)
+				}
+				return nil
+			},
+		},
+	}
+	sess := &api.Session{ID: t.Name(), Posture: api.SessionPostureBuild}
+	_, err := NewPromptLoopForTest(deps).Run(t.Context(), PromptRunInput{SessionID: sess.ID, Session: sess, History: []api.Message{{Role: api.MessageRoleUser, Content: "Read x"}}, ProfileID: "explore_readonly", ToolCtx: tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sess.ID}}})
+	testutil.FailErr(t, "run last turn", err)
+	if !retracted || client.calls != 1 {
+		t.Fatalf("retracted=%v model calls=%d", retracted, client.calls)
 	}
 }
 
