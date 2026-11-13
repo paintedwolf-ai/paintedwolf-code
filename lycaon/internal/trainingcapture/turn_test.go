@@ -12,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -50,6 +51,13 @@ func fixturePolicy(renderErr error) Policy {
 			}
 			body, err := json.Marshal(map[string]any{"rendered_for": provider + "/" + model, "messages": len(req.Messages)})
 			return "ollama", body, err
+		},
+		Surface: func(_ context.Context, offered []string) (PromptSurface, error) {
+			surface := PromptSurface{Units: []RenderedUnit{}, TurnLoadReceiptID: 7}
+			for _, name := range offered {
+				surface.Tools = append(surface.Tools, OfferedTool{Tool: name, Source: "standing"})
+			}
+			return surface, nil
 		},
 	}
 }
@@ -144,6 +152,8 @@ func readCapture(t *testing.T, tc admission) Record {
 func TestTrainingCaptureAdmission(t *testing.T) {
 	missing := Policy{StorageChanges: fixturePolicy(nil).StorageChanges}
 	unservable := fixturePolicy(errors.New("prompt exceeds the student's window"))
+	unsurfaced := fixturePolicy(nil)
+	unsurfaced.Surface = func(context.Context, []string) (PromptSurface, error) { return PromptSurface{}, errors.New("ledger closed") }
 	for _, tc := range []admission{
 		{name: "exact", settle: true},
 		{name: "retry", retry: true, settle: true, want: "ambiguous_dispatch"},
@@ -154,6 +164,7 @@ func TestTrainingCaptureAdmission(t *testing.T) {
 			messages: []api.Message{{Role: api.MessageRoleUser, Content: "hi"}, {Role: api.MessageRoleTool, Content: "MANAGED-SECRET value"}}},
 		{name: "student_cannot_be_served", settle: true, policy: &unservable, want: "student_cannot_be_served"},
 		{name: "no_renderer", settle: true, policy: &missing, want: "collection_policy_unavailable"},
+		{name: "surface_unavailable", settle: true, policy: &unsurfaced, want: "prompt_surface_unavailable"},
 		{name: "adapter_recorded_no_source", settle: true, noSource: true, want: "dispatch_source_unrecorded"},
 	} {
 		t.Run(tc.name, func(t *testing.T) { readCapture(t, tc) })
@@ -253,5 +264,33 @@ func TestInvalidStudentSetDisablesCapture(t *testing.T) {
 		if _, capture := Begin(t.Context(), "s", "m", "o"); capture != nil {
 			t.Fatalf("accepted invalid student set %s", value)
 		}
+	}
+}
+
+func TestTheCaptureRecordsTheSurfaceOfTheOfferedTools(t *testing.T) {
+	root := t.TempDir()
+	configure(t, root)
+	ctx, capture := Begin(context.Background(), "session", "message", "output")
+	req := Prepare(ctx, modelcall.CompletionRequest{Messages: []api.Message{{Role: api.MessageRoleUser, Content: "hi"}},
+		Tools: []tools.ToolMeta{{Name: "read"}, {Name: "command"}}}, fixturePolicy(nil))
+	req.ControlCapture.RecordDispatch(req, []byte(`{"teacher":true}`))
+	Observe(ctx, &modelcall.Completion{Content: "answer"}, false, "teacher", "teacher-model")
+	Settled(ctx, "output", api.Message{Content: "answer"})
+	testutil.FailErr(t, "finish", capture.Finish())
+	files, err := filepath.Glob(filepath.Join(root, "*.json"))
+	testutil.FailErr(t, "list", err)
+	raw, err := os.ReadFile(files[0])
+	testutil.FailErr(t, "read", err)
+	var got Record
+	testutil.FailErr(t, "decode", json.Unmarshal(raw, &got))
+	if got.Reason != "" || got.PromptSurface == nil || got.PromptSurface.TurnLoadReceiptID != 7 {
+		t.Fatalf("record = %+v", got)
+	}
+	var offered []string
+	for _, tool := range got.PromptSurface.Tools {
+		offered = append(offered, tool.Tool)
+	}
+	if !slices.Equal(offered, []string{"read", "command"}) {
+		t.Fatalf("offered = %v", offered)
 	}
 }

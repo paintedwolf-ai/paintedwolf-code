@@ -268,7 +268,16 @@ func (d *Decision) receipt() store.TurnLoadReceipt {
 	return receipt
 }
 
-// recordedStanding returns the standing surface the session's latest
+// LatestDecision returns the session's latest turn-load receipt; found is
+// false before the chat's first receipt.
+func (m *Service) LatestDecision(ctx context.Context, sessionID string) (store.TurnLoadReceipt, bool, error) {
+	if m == nil || m.store == nil {
+		return store.TurnLoadReceipt{}, false, nil
+	}
+	return m.store.LatestTurnLoadReceipt(ctx, sessionID)
+}
+
+// RecordedStanding returns the standing surface the session's latest
 // receipt recorded; found is false before the chat's first receipt.
 func (m *Service) RecordedStanding(ctx context.Context, sessionID string) (turnload.Standing, bool) {
 	if m == nil || m.store == nil {

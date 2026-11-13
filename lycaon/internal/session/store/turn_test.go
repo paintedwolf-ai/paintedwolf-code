@@ -333,3 +333,34 @@ func openTurnSQLStore(t *testing.T) turnTestStore {
 	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
 	return NewSQL(handle)
 }
+
+func TestReadModelOutputsReturnsASessionsOutputsWithTheirBodies(t *testing.T) {
+	handle := testdbfixture.Open(t, "outputs.db")
+	testdbseed.InsertProjectRoot(t, handle, testdbseed.DefaultProjectID, t.TempDir())
+	dataDir := t.TempDir()
+	st := NewSQL(handle)
+	st.SetDataDir(dataDir)
+	for _, id := range []string{"reader", "other"} {
+		testdbseed.InsertSession(t, handle, id, testdbseed.DefaultProjectID)
+	}
+	turn, err := st.BeginTurn(t.Context(), TurnStart{SessionID: "reader", ProjectID: testdbseed.DefaultProjectID, Origin: TurnOriginUser, InputJSON: `{}`})
+	testutil.FailErr(t, "begin turn", err)
+	for i, content := range []string{"First.", ""} {
+		_, err := st.SettleModelOutput(t.Context(), ModelOutput{ID: uuid.NewString(), TurnAttemptID: turn.Attempt.ID, SessionID: "reader",
+			Iteration: i + 1, MessageID: uuid.NewString(), Content: content, ToolCallsJSON: map[bool]string{true: `[{"id":"c1"}]`}[content == ""]})
+		testutil.FailErr(t, "settle output", err)
+	}
+	outputs, err := ReadModelOutputs(t.Context(), st.queries, dataDir, "reader")
+	testutil.FailErr(t, "read outputs", err)
+	if len(outputs) != 2 || outputs[0].Content != "First." || outputs[1].ToolCallsJSON != `[{"id":"c1"}]` || outputs[0].SettledAt.IsZero() {
+		t.Fatalf("outputs = %+v", outputs)
+	}
+	none, err := ReadModelOutputs(t.Context(), st.queries, dataDir, "other")
+	testutil.FailErr(t, "read empty session", err)
+	if len(none) != 0 {
+		t.Fatalf("another session's outputs = %+v", none)
+	}
+	if _, err := ReadModelOutputs(t.Context(), st.queries, t.TempDir(), "reader"); err == nil {
+		t.Fatal("an output whose body is missing was read")
+	}
+}
