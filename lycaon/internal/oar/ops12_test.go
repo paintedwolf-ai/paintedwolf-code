@@ -41,7 +41,7 @@ func TestLoaderRejectsUnresolvableDetectorRef(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected load rejection for unresolvable detector")
 	}
-	if !strings.Contains(err.Error(), "OAR-OPS-10") || !strings.Contains(err.Error(), "detector://not-registered") {
-		t.Fatalf("error = %q, want [OAR-OPS-10] naming the ref", err)
+	if !strings.Contains(err.Error(), "OAR-OPS-11") || !strings.Contains(err.Error(), "detector://not-registered") {
+		t.Fatalf("error = %q, want [OAR-OPS-11] naming the ref", err)
 	}
 }

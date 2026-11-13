@@ -26,8 +26,8 @@ func TestNeedsMCPSchemaFacts(t *testing.T) {
 	if !NeedsMCPSchemaFacts(`mcp_schema_matched && mcp_field_bool("is_started")`, nil) {
 		t.Fatal("expected true for schema refs")
 	}
-	if !NeedsMCPSchemaFacts(`mcp_has_field("issue_id")`, nil) {
-		t.Fatal("expected true for mcp_has_field")
+	if !NeedsMCPSchemaFacts(`mcp_result.issue_id != ""`, nil) {
+		t.Fatal("expected true for an mcp_result member")
 	}
 }
 
@@ -47,7 +47,7 @@ func TestMCPFieldAccessors(t *testing.T) {
 	gc.MCP.MCPSchemaMatched = matched
 	gc.MCP.MCPFields = fields
 
-	ok, err := EvaluateCondition(`mcp_schema_matched && mcp_has_field("issue_id") && mcp_field_string("issue_id") == "ISSUE-1" && mcp_field_bool("is_started") && mcp_field_int("item_count") == 3`, gc)
+	ok, err := EvaluateCondition(`mcp_schema_matched && mcp_result.issue_id == "ISSUE-1" && mcp_field_bool("is_started") && mcp_field_int("item_count") == 3`, gc)
 	testutil.FailErr(t, "eval", err)
 	if !ok {
 		t.Fatal("expected fire")
@@ -58,7 +58,7 @@ func TestLazyMCPSchemaApplyOnPost(t *testing.T) {
 	list, err := bindings.LoadDir(bindingsTestdata(t))
 	testutil.FailErr(t, "LoadDir", err)
 
-	when := `mcp_schema_matched && mcp_field_string("issue_id") == "ISSUE-1"`
+	when := `mcp_schema_matched && mcp_result.issue_id == "ISSUE-1"`
 	rs := NewRuleSet([]*Rule{{
 		SpecVersion: "1.0", ID: "MCP_SCHEMA_TEST", Kind: KindPolicy,
 		Anchor: AnchorToolPost, When: when,

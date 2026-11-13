@@ -2,6 +2,8 @@ package oar
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
 )
@@ -93,12 +95,15 @@ func rulesNeedMCPSchema(rules []*Rule) bool {
 	return false
 }
 
-// NeedsMCPSchemaFacts reports whether when/flow references schema variables or accessors.
+// NeedsMCPSchemaFacts reports whether when/flow reads the schema match,
+// mcp_result or one of its members, or an mcp_result accessor.
 func NeedsMCPSchemaFacts(when string, flow []string) bool {
 	needed := false
 	add := func(name string) {
-		switch name {
-		case "mcp_schema_matched", "mcp_has_field", "mcp_field_bool", "mcp_field_string", "mcp_field_int":
+		switch {
+		case name == "mcp_schema_matched", name == "mcp_result", name == "mcp_field_bool", name == "mcp_field_int":
+			needed = true
+		case strings.HasPrefix(name, "mcp_result."):
 			needed = true
 		}
 	}
@@ -109,64 +114,34 @@ func NeedsMCPSchemaFacts(when string, flow []string) bool {
 	return needed
 }
 
-// EvalMCPHasField is mcp_has_field(key).
-func EvalMCPHasField(gc *GuardContext, key string) bool {
-	if gc == nil || key == "" || gc.MCP.MCPFields == nil {
-		return false
+// mcpResult is the mcp_result fact: the value an occurrence published, else
+// the binding's projected fields.
+func mcpResult(gc *GuardContext) map[string]any {
+	if gc == nil {
+		return nil
 	}
-	_, ok := gc.MCP.MCPFields[key]
-	return ok
+	if published, ok := gc.Published["mcp_result"].(map[string]any); ok {
+		return published
+	}
+	return gc.MCP.MCPFields
 }
 
-// EvalMCPFieldBool is mcp_field_bool(key); missing/wrong type → false.
-func EvalMCPFieldBool(gc *GuardContext, key string) bool {
-	if gc == nil || gc.MCP.MCPFields == nil {
-		return false
+// mcpMember reads one typed member of mcp_result: the zero value when absent,
+// and a provider failure when present with another type.
+func mcpMember[T bool | int64](gc *GuardContext, key string) (any, error) {
+	var zero T
+	v, present := mcpResult(gc)[key]
+	if !present {
+		return zero, nil
 	}
-	v, ok := gc.MCP.MCPFields[key]
+	if n, ok := v.(int); ok {
+		v = int64(n)
+	}
+	typed, ok := v.(T)
 	if !ok {
-		return false
+		return nil, fmt.Errorf("mcp_result member %q is %T, not %T", key, v, zero)
 	}
-	b, ok := v.(bool)
-	if !ok {
-		return false
-	}
-	return b
-}
-
-// EvalMCPFieldString is mcp_field_string(key); missing/wrong type → "".
-func EvalMCPFieldString(gc *GuardContext, key string) string {
-	if gc == nil || gc.MCP.MCPFields == nil {
-		return ""
-	}
-	v, ok := gc.MCP.MCPFields[key]
-	if !ok {
-		return ""
-	}
-	s, ok := v.(string)
-	if !ok {
-		return ""
-	}
-	return s
-}
-
-// EvalMCPFieldInt is mcp_field_int(key); missing/wrong type → 0.
-func EvalMCPFieldInt(gc *GuardContext, key string) int64 {
-	if gc == nil || gc.MCP.MCPFields == nil {
-		return 0
-	}
-	v, ok := gc.MCP.MCPFields[key]
-	if !ok {
-		return 0
-	}
-	switch n := v.(type) {
-	case int64:
-		return n
-	case int:
-		return int64(n)
-	default:
-		return 0
-	}
+	return typed, nil
 }
 
 func (p *GuardPipeline) mcpBindingsForSession(ctx context.Context, sessionID string) []bindings.Binding {

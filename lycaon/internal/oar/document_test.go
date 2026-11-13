@@ -94,14 +94,14 @@ func TestValidateCatalogueTiersCatchesDrift(t *testing.T) {
 func ruleDoc(t *testing.T, overrides map[string]any) map[string]any {
 	t.Helper()
 	doc := map[string]any{
-		"spec_version": "1.0",
-		"id":           "SAMPLE_RULE",
-		"kind":         "policy",
-		"on":           "tool.pre_invoke",
-		"selector":     map[string]any{},
-		"effect":       "block",
-		"emit":         "guard:sample",
-		"when":         `tool == "read"`,
+		"spec_version":       "1.0",
+		"id":                 "SAMPLE_RULE",
+		"kind":               "policy",
+		"on":                 "tool.pre_invoke",
+		"selector":           map[string]any{},
+		"effect":             "block",
+		"x-paintedwolf-emit": "guard:sample",
+		"when":               `tool == "read"`,
 	}
 	for k, v := range overrides {
 		if v == nil {

@@ -125,7 +125,7 @@ func TestCapabilityDocumentRejectsMalformedMaps(t *testing.T) {
 	ensureCatalog(t)
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			_, err := ParseEngineDeclaration([]byte("host: paintedwolf\nactivity_window: 0\ndetectors: []\nexpression_nodes_max: 256\nsupports_transform: false\n" + tc.yaml))
+			_, err := ParseEngineDeclaration([]byte("host: paintedwolf\nactivity_window: 0\ndetectors: []\nexpression_nodes_max: 256\n" + tc.yaml))
 			if err == nil {
 				t.Fatal("expected a load error")
 			}
