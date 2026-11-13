@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"time"
+
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // ProgramParking ends a command call's turn while its waiting program keeps
@@ -42,4 +44,10 @@ type ParkedProgram interface {
 	// Settle delivers the program's end: its result, or the host error that
 	// kept one from being produced.
 	Settle(ctx context.Context, result string, err error)
+}
+
+// ProgramEffectSink records what a program did after the call that started it
+// returned. Those file edits belong on that call's stored result.
+type ProgramEffectSink interface {
+	AppendProgramEffects(ctx context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, omitted int)
 }

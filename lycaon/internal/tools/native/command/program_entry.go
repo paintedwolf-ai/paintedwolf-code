@@ -67,6 +67,8 @@ type ProgramRuntime struct {
 	ParkThreshold time.Duration
 	// Clock times program waits; nil is the system clock.
 	Clock commandprogram.Clock
+	// Effects records the file edits a program makes after its call returns.
+	Effects tools.ProgramEffectSink
 	// SourceRuns records a parked program's run evidence.
 	SourceRuns     SourceRunRecorder
 	FailureTracker *CommandFailureTracker
@@ -289,7 +291,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		Streams:        commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
 	// Evaluation writes its effects privately. They are merged into the call
-	// when it returns, whether the program has ended or detached.
+	// when it returns; a detached program's later file edits go to Effects.
 	callTC := tc
 	run.tc.Effects.Out = &tools.ToolInvocationOut{}
 	run.tc.Effects.GitNoRepository = &atomic.Bool{}

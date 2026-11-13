@@ -29,6 +29,7 @@ type QueryStore interface {
 	GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error)
 	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
+	ToolResultMessageID(ctx context.Context, sessionID, toolCallID string) (string, error)
 	// LastAssistantMessageContent and LastTurnMessageContent read one row from
 	// the transcript tail; "" when no such row exists.
 	LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error)

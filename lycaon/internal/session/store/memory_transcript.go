@@ -53,6 +53,21 @@ func (s *memoryTranscript) GetWorkerJobMessages(ctx context.Context, sessionID, 
 }
 
 // GetMessage reads one transcript projection by stable identity.
+func (s *memoryTranscript) ToolResultMessageID(ctx context.Context, sessionID, toolCallID string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	core := s.core
+	core.mu.RLock()
+	defer core.mu.RUnlock()
+	for _, message := range core.messages[sessionID] {
+		if message.ToolResult != nil && message.ToolResult.ToolCallID == toolCallID {
+			return message.ID, nil
+		}
+	}
+	return "", ErrMessageNotFound
+}
+
 func (s *memoryTranscript) GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return api.Message{}, err

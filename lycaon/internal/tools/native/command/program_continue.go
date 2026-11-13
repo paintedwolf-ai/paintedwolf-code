@@ -48,6 +48,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			}
 			<-ending.done
 			r.recordParkedRun(context.WithoutCancel(ctx), run)
+			r.recordDetachedEffects(context.WithoutCancel(ctx), run)
 			var outcome ProgramOutcome
 			decodeErr := json.Unmarshal([]byte(ending.result), &outcome)
 			status := outcome.Status
