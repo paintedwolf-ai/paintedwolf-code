@@ -100,35 +100,6 @@ func rootPathSpellings(root RootRef) []string {
 	return spellings
 }
 
-// rewriteFirstToken finds the next absolute attached-root path in s and returns
-// its token span with the display replacement.
-func rewriteFirstToken(s string, prefixes []string, roots []RootRef, activeRootID string) (start, end int, replacement string, found bool) {
-	best := -1
-	for _, prefix := range prefixes {
-		from := 0
-		for {
-			idx := strings.Index(s[from:], prefix)
-			if idx < 0 {
-				break
-			}
-			idx += from
-			if tokenStart, tokenEnd, ok := rewriteTokenSpan(s, idx, len(prefix)); ok {
-				if best < 0 || idx < best {
-					root, rootOK := rewriteTokenRoot(roots, s[tokenStart:tokenEnd])
-					if !rootOK {
-						continue
-					}
-					best = idx
-					start, end, found = tokenStart, tokenEnd, true
-					replacement = Qualify(roots, activeRootID, root, s[tokenStart:tokenEnd])
-				}
-			}
-			from = idx + len(prefix)
-		}
-	}
-	return start, end, replacement, found
-}
-
 // rewriteTokenSpan reports whether the prefix at idx starts a standalone path
 // token, and returns the token span covering the optional relative suffix.
 func rewriteTokenSpan(s string, idx, prefixLen int) (start, end int, ok bool) {

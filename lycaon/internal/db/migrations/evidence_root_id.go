@@ -218,28 +218,9 @@ func resolveEvidenceRootID(proj evidenceProjectRoots, active evidenceRoot, hasAc
 func backfillEvidenceSessionRootIDs(ctx context.Context, tx *sql.Tx, sess evidenceSessionRoots, proj evidenceProjectRoots, active evidenceRoot, hasActive bool) error {
 	after := ""
 	for {
-		rows, err := tx.QueryContext(ctx, `SELECT handle, path FROM evidence_records
-WHERE session_id = ? AND root_id = '' AND path != '' AND handle > ?
-ORDER BY handle LIMIT 64`, sess.id, after)
+		batch, err := unrootedEvidenceBatch(ctx, tx, sess.id, after)
 		if err != nil {
 			return err
-		}
-		type pending struct {
-			handle string
-			path   string
-		}
-		var batch []pending
-		for rows.Next() {
-			var p pending
-			if err := rows.Scan(&p.handle, &p.path); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			batch = append(batch, p)
-		}
-		closeErr := rows.Close()
-		if closeErr != nil {
-			return closeErr
 		}
 		if len(batch) == 0 {
 			return nil
@@ -262,6 +243,32 @@ ORDER BY handle LIMIT 64`, sess.id, after)
 			}
 		}
 	}
+}
+
+type unrootedEvidence struct {
+	handle string
+	path   string
+}
+
+// unrootedEvidenceBatch reads the next page of a session's records that still
+// lack a root, in handle order after the given handle.
+func unrootedEvidenceBatch(ctx context.Context, tx *sql.Tx, sessionID, after string) ([]unrootedEvidence, error) {
+	rows, err := tx.QueryContext(ctx, `SELECT handle, path FROM evidence_records
+WHERE session_id = ? AND root_id = '' AND path != '' AND handle > ?
+ORDER BY handle LIMIT 64`, sessionID, after)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var batch []unrootedEvidence
+	for rows.Next() {
+		var p unrootedEvidence
+		if err := rows.Scan(&p.handle, &p.path); err != nil {
+			return nil, err
+		}
+		batch = append(batch, p)
+	}
+	return batch, rows.Err()
 }
 
 // validateEvidenceRootID requires rooted records to stay root-scope-relative;

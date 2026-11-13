@@ -538,7 +538,7 @@ func TestDeniedMissingOutsidePathMatchesExistingPathByteForByte(t *testing.T) {
 	// ordinary scratch access and would never reach the outside-root gate.
 	home, err := os.UserHomeDir()
 	contractcheck.FailErr(t, "resolve user home", err)
-	base, err := os.MkdirTemp(home, "wr11-contract-fixture-")
+	base, err := os.MkdirTemp(home, "wr11-contract-fixture-") //nolint:usetesting // Fixture must be outside the temp scratch roots.
 	contractcheck.FailErr(t, "create outside fixture folder", err)
 	t.Cleanup(func() { os.RemoveAll(base) })
 	existing := filepath.Join(base, "release.go")

@@ -256,14 +256,6 @@ func (r *Reader) MoveUnchanged(ctx context.Context, roots []projectroot.RootRef,
 	return hex.EncodeToString(hash.Sum(nil)) == before.SHA256, nil
 }
 
-func branchPath(roots []projectroot.RootRef, branch, path string) (string, error) {
-	base, rel, err := branchLocation(roots, branch, path)
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(base, rel), nil
-}
-
 func branchPathAt(roots []projectroot.RootRef, branch, rootID, scopeRel string) (string, error) {
 	base, rel, err := branchLocationAt(roots, branch, rootID, scopeRel)
 	if err != nil {

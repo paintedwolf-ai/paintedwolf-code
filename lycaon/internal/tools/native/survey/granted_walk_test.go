@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/fspath"
@@ -26,7 +27,7 @@ func TestListDirGrantedOutsideRootWalkDropsNoEntries(t *testing.T) {
 
 	tctx := nativefixture.Context(primary)
 	release := projectpaths.SetGrantedAccessSource(func(_, _, abs string, _ bool) (projectpaths.Access, bool) {
-		if abs == grant || filepath.HasPrefix(abs, grant+string(filepath.Separator)) {
+		if abs == grant || strings.HasPrefix(abs, grant+string(filepath.Separator)) {
 			return projectpaths.Access{Path: grant, Tree: true}, true
 		}
 		return projectpaths.Access{}, false

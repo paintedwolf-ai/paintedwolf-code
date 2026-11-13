@@ -406,8 +406,10 @@ func outsideScratchDir(t *testing.T) string {
 	t.Helper()
 	home, err := os.UserHomeDir()
 	testutil.FailErr(t, "resolve user home", err)
-	base, err := os.MkdirTemp(home, "paintedwolf-fixture-")
+	base, err := os.MkdirTemp(home, "paintedwolf-fixture-") //nolint:usetesting // Fixture must be outside the temp scratch roots.
 	testutil.FailErr(t, "create outside fixture folder", err)
 	t.Cleanup(func() { os.RemoveAll(base) })
-	return base
+	resolved, err := filepath.EvalSymlinks(base)
+	testutil.FailErr(t, "resolve outside fixture folder", err)
+	return resolved
 }
