@@ -1,36 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: MKDIR_MODE_DENIED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - mkdir
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.mode_denied
-  - paintedwolf.mode
-  - paintedwolf.chmod_allowed_modes
+  ledger:
+    paintedwolf.operation:
+      - mkdir
+requires_facts: [paintedwolf.chmod_allowed_modes, paintedwolf.mode, paintedwolf.mode_denied, paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "MKDIR_MODE_DENIED"
 effect: block
-copy:
-  cause: The mode must be a complete three- or four-digit octal permission value from the current allowlist,
-    without special bits.
-  why: The requested directory permissions must satisfy the host boundary.
-  fix: Choose permissions appropriate to the intended directory from {{ paintedwolf.chmod_allowed_modes }}.
-    Do not silently broaden access.
-  instead: Correct the permission value before creating directories
-  what: mkdir rejected mode {{ paintedwolf.mode }}.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:mkdir
-x-paintedwolf-message: mkdir:mkdir mode not in allowlist
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: implement
-    tool: mkdir
+category: recoverable
+emit: guard:mkdir
+message: mkdir:mkdir mode not in allowlist
+what: mkdir rejected mode {{ paintedwolf.mode }}.
+cause: The mode must be a complete three- or four-digit octal permission value from the current allowlist, without special bits.
+why: The requested directory permissions must satisfy the host boundary.
+fix: Choose permissions appropriate to the intended directory from {{ paintedwolf.chmod_allowed_modes }}. Do not silently broaden access.
+instead: Correct the permission value before creating directories
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      session_role: implement
+      tool: mkdir

@@ -63,7 +63,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 	} else if err := anchorcatalog.InstallBundled(); err != nil {
 		return nil, fmt.Errorf("install bundled anchor catalog: %w", err)
 	}
-	if err := InstallCapabilityBundled(strings.TrimSpace(opts.SchemaDir)); err != nil {
+	if err := InstallEngineDeclarationBundled(strings.TrimSpace(opts.SchemaDir)); err != nil {
 		return nil, err
 	}
 	ruleDirs, fixtureFiles, err := classifyRulePaths(paths)
@@ -75,7 +75,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 	if err != nil {
 		return nil, fmt.Errorf("oar loader: %w", err)
 	}
-	runner, err := NewConformanceRunner(opts.SchemaDir)
+	runner, err := NewHostConformanceRunner(opts.SchemaDir, InstalledEngineDeclaration())
 	if err != nil {
 		return nil, fmt.Errorf("conformance runner: %w", err)
 	}
@@ -119,7 +119,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 					break
 				}
 			}
-			// x-paintedwolf-scenarios are the copy contract: render this Code with
+			// Scenarios are the copy contract: render this Code with
 			// these vars and it says these things.
 			if res.Code == "" {
 				rendered, mismatch := checkRenderScenarios(rule)
@@ -340,8 +340,8 @@ func loadFixtureFile(path string) ([]ConformanceFixture, error) {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
 		for i := range list {
-			if strings.TrimSpace(list[i].Name) == "" {
-				list[i].Name = fmt.Sprintf("%s[%d]", filepath.Base(path), i)
+			if strings.TrimSpace(list[i].ID) == "" {
+				list[i].ID = fmt.Sprintf("%s[%d]", filepath.Base(path), i)
 			}
 		}
 		return list, nil
@@ -350,8 +350,8 @@ func loadFixtureFile(path string) ([]ConformanceFixture, error) {
 	if err := json.Unmarshal(raw, &fx); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	if strings.TrimSpace(fx.Name) == "" {
-		fx.Name = strings.TrimSuffix(filepath.Base(path), ".json")
+	if strings.TrimSpace(fx.ID) == "" {
+		fx.ID = strings.TrimSuffix(filepath.Base(path), ".json")
 	}
 	return []ConformanceFixture{fx}, nil
 }
@@ -368,7 +368,7 @@ func fixtureRuleID(fx ConformanceFixture) string {
 }
 
 func fixtureName(fx ConformanceFixture) string {
-	if name := strings.TrimSpace(fx.Name); name != "" {
+	if name := strings.TrimSpace(fx.ID); name != "" {
 		return name
 	}
 	return "(unnamed fixture)"

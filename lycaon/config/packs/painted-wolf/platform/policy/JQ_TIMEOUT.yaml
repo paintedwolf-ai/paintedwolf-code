@@ -1,34 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: JQ_TIMEOUT
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - jq
-  - jq_edit
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.timeout_ms
+  ledger:
+    paintedwolf.operation:
+      - jq
+      - jq_edit
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.timeout_ms]
 when: paintedwolf.rejection_code == "JQ_TIMEOUT"
 effect: block
-copy:
-  what: jq query exceeded the {{ paintedwolf.timeout_ms }}ms execution budget.
-  cause: The program ran too long — often an unbounded generator (e.g. range/repeat/recurse).
-  why: The timeout bounds compute; structured rejects let agents branch without parsing free-form errors.
-  fix: Bound computation inside the query, for example with jq’s limit(n; expr) when that matches the intended
-    result. The tool’s output limit only pages computed values and cannot stop an unbounded generator. Preserve
-    any unmet coverage requirement.
-  instead: Branch on Code; simplify the query before retrying
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:jq
-x-paintedwolf-message: jq query exceeded its execution budget
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    profile: explore_readonly
-    timeout_ms: '5000'
-    tool: jq
+category: recoverable
+emit: guard:jq
+message: jq query exceeded its execution budget
+what: jq query exceeded the {{ paintedwolf.timeout_ms }}ms execution budget.
+cause: The program ran too long — often an unbounded generator (e.g. range/repeat/recurse).
+why: The timeout bounds compute; structured rejects let agents branch without parsing free-form errors.
+fix: Bound computation inside the query, for example with jq’s limit(n; expr) when that matches the intended result. The tool’s output limit only pages computed values and cannot stop an unbounded generator. Preserve any unmet coverage requirement.
+instead: Branch on Code; simplify the query before retrying
+scenarios:
+  - id: default
+    vars:
+      session_role: explore_readonly
+      timeout_ms: '5000'
+      tool: jq

@@ -46,7 +46,7 @@ func TestShippedPolicyUnitsAreReachable(t *testing.T) {
 			testutil.FailErr(t, "parse "+rel, yaml.Unmarshal(raw, &unit))
 			seen++
 			if strings.TrimSpace(unit.Enforcement) == "off" {
-				// [OAR-EVAL-11] keeps an enforcement-off unit load-checked without
+				// keeps an enforcement-off unit load-checked without
 				// rule evaluation; hint emissions render its copy through the
 				// host-raised hint channel. The unit still ships dead copy unless
 				// that channel can render something beyond the bare code.

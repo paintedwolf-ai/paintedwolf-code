@@ -1,21 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
-  profiles: [tool]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED"
 effect: block
-copy:
-  what: The review context changed after this submission was prepared.
-  cause: The submitted revision does not identify the current reconciliation inputs.
-  why: Existing accepted results remain recorded; their applicability is checked separately.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Refresh the context before dispatching any replacement review.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:workflow
-x-paintedwolf-message: Refresh the changed review context.
-x-paintedwolf-scenarios:
-- id: refresh
-  vars: {}
+category: recoverable
+emit: guard:workflow
+message: Refresh the changed review context.
+what: The review context changed after this submission was prepared.
+cause: The submitted revision does not identify the current reconciliation inputs.
+why: Existing accepted results remain recorded; their applicability is checked separately.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Refresh the context before dispatching any replacement review.
+scenarios:
+  - id: refresh
+    vars: {}

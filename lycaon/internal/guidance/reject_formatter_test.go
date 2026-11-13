@@ -31,7 +31,7 @@ func TestStaticRejectFormatterFormatParse(t *testing.T) {
 	}
 }
 
-// [OAR-SEL-1] A presentation boundary must not broaden selector membership.
+// A presentation boundary must not broaden selector membership.
 func TestRejectSelectorUsesExactMembership(t *testing.T) {
 	for _, tc := range []struct {
 		name     string

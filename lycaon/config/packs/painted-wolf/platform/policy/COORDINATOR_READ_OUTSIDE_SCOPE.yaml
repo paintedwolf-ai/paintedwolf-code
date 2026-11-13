@@ -1,28 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COORDINATOR_READ_OUTSIDE_SCOPE
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.next_steps]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COORDINATOR_READ_OUTSIDE_SCOPE"
 effect: block
-copy:
-  what: Coordinator {{ tool }} on {{ paintedwolf.path }} is outside allowed read scope
-  cause: Narrow the path to your read_globs — coordinator may sync-read product paths within scope
-  why: Narrow the path to your read_globs — coordinator may sync-read product paths within scope
-  fix: '{{ paintedwolf.next_steps }} Never tell the user source is unreadable.'
-  instead: 'Use paths within read_globs and survey inline first; delegate repo-wide discovery.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Coordinator read outside allowed read scope
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: read
 x-paintedwolf-audience:
-- coordinator
+  - coordinator
+category: recoverable
+emit: guard:coordinator
+message: Coordinator read outside allowed read scope
+what: Coordinator {{ tool }} on {{ paintedwolf.path }} is outside allowed read scope
+cause: Narrow the path to your read_globs — coordinator may sync-read product paths within scope
+why: Narrow the path to your read_globs — coordinator may sync-read product paths within scope
+fix: '{{ paintedwolf.next_steps }} Never tell the user source is unreadable.'
+instead: 'Use paths within read_globs and survey inline first; delegate repo-wide discovery.'
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      session_role: coordinator
+      tool: read

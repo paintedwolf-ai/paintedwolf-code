@@ -106,7 +106,7 @@ func TestGroundingRepairCopyDeclaresCanRecall(t *testing.T) {
 		if !ok {
 			t.Fatalf("%s missing from stock policy", code)
 		}
-		if entry.Requires == nil || !slices.Contains(entry.Requires.Facts, "paintedwolf.can_recall") {
+		if !slices.Contains(entry.RequiresFacts, "paintedwolf.can_recall") {
 			t.Errorf("%s does not require paintedwolf.can_recall", code)
 		}
 	}

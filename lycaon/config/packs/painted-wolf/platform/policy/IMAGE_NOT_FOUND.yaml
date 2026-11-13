@@ -1,30 +1,24 @@
-oar: '1.0'
+spec_version: "1.0"
 id: IMAGE_NOT_FOUND
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - view_image
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.path
-  profiles:
-  - tool
+  tools:
+    - view_image
+requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "IMAGE_NOT_FOUND"
 effect: block
-copy:
-  what: '{{ tool }} found no file at {{ paintedwolf.path }}.'
-  cause: The path resolved inside the read scope, but nothing exists there.
-  why: An image is inspected from its bytes; a missing file has none.
-  fix: Locate the image with an offered file search, then pass its exact path.
-  instead: Branch on Code IMAGE_NOT_FOUND; correct the path
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:view_image
-x-paintedwolf-message: view_image found no file at the path
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    path: assets/missing.png
-    profile: coordinator
-    tool: view_image
+category: recoverable
+emit: guard:view_image
+message: view_image found no file at the path
+what: '{{ tool }} found no file at {{ paintedwolf.path }}.'
+cause: The path resolved inside the read scope, but nothing exists there.
+why: An image is inspected from its bytes; a missing file has none.
+fix: Locate the image with an offered file search, then pass its exact path.
+instead: Branch on Code IMAGE_NOT_FOUND; correct the path
+scenarios:
+  - id: default
+    vars:
+      path: assets/missing.png
+      session_role: coordinator
+      tool: view_image

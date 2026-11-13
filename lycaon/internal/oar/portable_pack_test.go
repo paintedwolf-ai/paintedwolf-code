@@ -17,23 +17,27 @@ import (
 func TestPortablePackIsPortable(t *testing.T) {
 	ensureCatalog(t)
 	dir := filepath.Join(configlayout.FindModuleRoot(), "config", "oar-portable-pack")
+	profileRaw, err := os.ReadFile(filepath.Join(dir, "profile.yaml"))
+	testutil.FailErr(t, "read profile map", err)
+	var profileMap AnchorProfileMap
+	testutil.FailErr(t, "decode profile map", yaml.Unmarshal(profileRaw, &profileMap))
+	decl := &EngineDeclaration{
+		Host: "example", ProfileMap: profileMap, Profiles: []string{ProfileContentSafety, ProfileMCP},
+		Window: 16, ExpressionNodesMax: 256,
+		Detectors: []string{"detector://noop", "detector://error", "detector://fixture"},
+	}
+	_, err = decl.Environment()
+	testutil.FailErr(t, "portable engine declaration", err)
 	l, err := NewLoader("")
 	testutil.FailErr(t, "loader", err)
 	l.SetDetectors(corpusReservedDetectors())
-	capabilityRaw, err := os.ReadFile(filepath.Join(dir, "capability.yaml"))
-	testutil.FailErr(t, "read portable capability", err)
-	capability, err := ParseCapabilityDocumentShape(capabilityRaw)
-	testutil.FailErr(t, "portable capability", err)
-	l.SetCapability(capability)
+	l.SetDeclaration(decl)
 	entries, err := os.ReadDir(dir)
 	testutil.FailErr(t, "readdir", err)
 	var rules []*Rule
 	for _, ent := range entries {
 		name := ent.Name()
-		if ent.IsDir() || !strings.HasSuffix(name, ".yaml") {
-			continue
-		}
-		if name == "capability.yaml" || name == "config.yaml" {
+		if ent.IsDir() || !strings.HasSuffix(name, ".yaml") || name == "profile.yaml" {
 			continue
 		}
 		raw, err := os.ReadFile(filepath.Join(dir, name))
@@ -49,6 +53,16 @@ func TestPortablePackIsPortable(t *testing.T) {
 		rep := LintPortability(r)
 		if !rep.Portable {
 			t.Errorf("%s is not portable: host_anchor=%q host_facts=%v", r.Qualified(), rep.HostAnchor, rep.HostFacts)
+		}
+	}
+	outcomes, err := RunCorpusDir(filepath.Join(dir, "fixtures"))
+	testutil.FailErr(t, "run pack fixtures", err)
+	if len(outcomes) == 0 {
+		t.Fatal("portable pack carries no fixtures")
+	}
+	for _, o := range outcomes {
+		if o.Status != "pass" {
+			t.Errorf("fixture %s: %s", o.ID, o.Reason)
 		}
 	}
 }

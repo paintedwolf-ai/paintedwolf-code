@@ -1,29 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: ASK_USER_PROMPT_REQUIRED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - ask_user
-requires:
-  facts: [paintedwolf.rejection_code]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "ASK_USER_PROMPT_REQUIRED"
 effect: block
-copy:
-  what: ask_user was called with an empty prompt.
-  cause: The prompt argument was missing or whitespace-only after trim.
-  why: The feedback card has nothing to show the user.
-  fix: Call ask_user again with a non-empty prompt string.
-  instead: Branch on Code ASK_USER_PROMPT_REQUIRED; supply a non-empty prompt
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:ask_user
-x-paintedwolf-message: prompt is required
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:ask_user
+message: prompt is required
+what: ask_user was called with an empty prompt.
+cause: The prompt argument was missing or whitespace-only after trim.
+why: The feedback card has nothing to show the user.
+fix: Call ask_user again with a non-empty prompt string.
+instead: Branch on Code ASK_USER_PROMPT_REQUIRED; supply a non-empty prompt
+scenarios:
   - id: default
     vars:
       detail: stub
       path: src/main.go
-      profile: coordinator
+      session_role: coordinator
       tool: ask_user

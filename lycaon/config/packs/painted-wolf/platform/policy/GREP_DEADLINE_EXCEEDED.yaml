@@ -1,34 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: GREP_DEADLINE_EXCEEDED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - grep
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.timeout_ms
-    - paintedwolf.files_searched
-    - paintedwolf.largest_subtree
+  ledger:
+    paintedwolf.operation:
+      - grep
+requires_facts: [paintedwolf.files_searched, paintedwolf.largest_subtree, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.timeout_ms]
 when: paintedwolf.rejection_code == "GREP_DEADLINE_EXCEEDED"
 effect: block
-copy:
-  what: 'Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget after {{ paintedwolf.files_searched }} files; coverage is incomplete.'
-  cause: '{% if paintedwolf.largest_subtree %}Most of the budget went to {{ paintedwolf.largest_subtree }}.{% else %}The selected content could not be searched within the execution budget.{% endif %}'
-  why: Search execution is bounded to keep the host responsive; this is not evidence of absence.
-  fix: "Partition the same scope by directory or file filter and search each partition{% if paintedwolf.largest_subtree %}, starting with the subtree that consumed the budget{% endif %}. Exclude ignored files only when the task does not need them."
-  instead: Branch on Code; partition the search scope and retry
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:grep
-x-paintedwolf-message: Search exceeded its execution budget
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:grep
+message: Search exceeded its execution budget
+what: 'Search exceeded its {{ paintedwolf.timeout_ms }}ms execution budget after {{ paintedwolf.files_searched }} files; coverage is incomplete.'
+cause: '{% if paintedwolf.largest_subtree %}Most of the budget went to {{ paintedwolf.largest_subtree }}.{% else %}The selected content could not be searched within the execution budget.{% endif %}'
+why: Search execution is bounded to keep the host responsive; this is not evidence of absence.
+fix: "Partition the same scope by directory or file filter and search each partition{% if paintedwolf.largest_subtree %}, starting with the subtree that consumed the budget{% endif %}. Exclude ignored files only when the task does not need them."
+instead: Branch on Code; partition the search scope and retry
+scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
       tool: grep
       timeout_ms: 60000
       files_searched: 18240

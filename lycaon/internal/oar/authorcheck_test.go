@@ -36,39 +36,35 @@ func authorCheckPaths(t *testing.T, rule string, fixtures map[string]string) str
 	return policy
 }
 
-const authorCheckRule = `oar: "1.0"
+const authorCheckRule = `spec_version: "1.0"
 id: AUTHOR_CHECK_RULE
 kind: policy
-anchor: tool.pre_invoke
+on: tool.pre_invoke
+title: Author check rule
 selector:
-  tool: [write]
-requires:
-  profiles: [session, tool]
+  tools: [write]
 when: session_posture == "spec"
 effect: block
-copy:
-  title: Author check rule
-  what: A write tool was called.
-  cause: The session is in the spec posture.
-  why: Spec posture does not change files.
-  fix: Leave spec before writing.
-  instead: Branch on Code AUTHOR_CHECK_RULE
-x-paintedwolf-emit: rule:author_check
-x-paintedwolf-message: Writes are blocked in spec.
+emit: rule:author_check
+message: Writes are blocked in spec.
+what: A write tool was called.
+cause: The session is in the spec posture.
+why: Spec posture does not change files.
+fix: Leave spec before writing.
+instead: Branch on Code AUTHOR_CHECK_RULE
 `
 
 const authorCheckFiringFixture = `{
-  "name": "fires",
+  "id": "fires",
   "rule": {
-    "oar": "1.0",
+    "spec_version": "1.0",
     "id": "AUTHOR_CHECK_RULE",
     "kind": "policy",
-    "anchor": "tool.pre_invoke",
-    "selector": { "tool": ["write"] },
-    "requires": { "profiles": ["session", "tool"] },
+    "on": "tool.pre_invoke",
+    "selector": { "tools": ["write"] },
     "when": "session_posture == \"spec\"",
     "effect": "block",
-    "x-paintedwolf-emit": "rule:author_check"
+    "emit": "rule:author_check"
   },
   "input": { "anchor": "tool.pre_invoke", "facts": { "tool": "write", "session_posture": "spec" } },
   "expected": { "decision": "block", "code": "AUTHOR_CHECK_RULE" }
@@ -197,7 +193,7 @@ func snapshotTree(t *testing.T, root string) []string {
 }
 
 // Inline scenarios are part of the rule's copy contract.
-const authorCheckRuleWithScenarios = authorCheckRule + `x-paintedwolf-scenarios:
+const authorCheckRuleWithScenarios = authorCheckRule + `scenarios:
   - id: default
     vars:
       tool: write

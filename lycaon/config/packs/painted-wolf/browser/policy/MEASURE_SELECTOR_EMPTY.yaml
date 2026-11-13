@@ -1,30 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: MEASURE_SELECTOR_EMPTY
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - measure_page
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.selector_empty, paintedwolf.measure_selector, paintedwolf.capture_held_target, paintedwolf.measure_page_id, paintedwolf.next_steps]
+  tools:
+    - measure_page
+requires_facts: [paintedwolf.capture_held_target, paintedwolf.measure_page_id, paintedwolf.measure_selector, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.selector_empty]
 when: paintedwolf.rejection_code == "MEASURE_SELECTOR_EMPTY"
 effect: block
-copy:
-  what: Selector {{ paintedwolf.measure_selector }} matched zero nodes in the measured page.
-  cause: No matching node was present at this probe; the result does not establish whether the selector, page state,
-    or timing is wrong.
-  why: Silent empty success would invent geometry; the host rejects zero-node probes.
-  fix: '{% if paintedwolf.capture_held_target %}The measured page is {{ paintedwolf.measure_page_id }}. {{ paintedwolf.next_steps }}{% else %}This measurement navigated a fresh page. Actions in a separate capture do not change it; use a held page for stateful interactions if one is offered.{% endif %} Correct the selector only from observed page evidence; do not invent geometry.'
-  instead: Branch on Code MEASURE_SELECTOR_EMPTY; fix the selector
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:visual_capture
-x-paintedwolf-message: measure_page selector matched zero nodes
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    count: 0
-    selector: '#missing'
-    tool: measure_page
-    measure_selector: '#missing'
+category: recoverable
+emit: guard:visual_capture
+message: measure_page selector matched zero nodes
+what: Selector {{ paintedwolf.measure_selector }} matched zero nodes in the measured page.
+cause: No matching node was present at this probe; the result does not establish whether the selector, page state, or timing is wrong.
+why: Silent empty success would invent geometry; the host rejects zero-node probes.
+fix: '{% if paintedwolf.capture_held_target %}The measured page is {{ paintedwolf.measure_page_id }}. {{ paintedwolf.next_steps }}{% else %}This measurement navigated a fresh page. Actions in a separate capture do not change it; use a held page for stateful interactions if one is offered.{% endif %} Correct the selector only from observed page evidence; do not invent geometry.'
+instead: Branch on Code MEASURE_SELECTOR_EMPTY; fix the selector
+scenarios:
+  - id: default
+    vars:
+      count: 0
+      selector: '#missing'
+      tool: measure_page
+      measure_selector: '#missing'

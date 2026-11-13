@@ -59,7 +59,7 @@ func TestPolicyAdvisoryReachesActualModelRequest(t *testing.T) {
 			engine := prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})
 			mgr.SetPromptEngine(engine)
 			guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(engine))
-			rule := &oar.Rule{OAR: "1.0", ID: "DELIVERY_PROBE", Kind: oar.KindPolicy, Anchor: anchor, Effect: oar.EffectNudge, OnError: "fail_closed", Enforcement: "enforce", Copy: oar.Copy{What: "Carry this boundary observation forward"}}
+			rule := &oar.Rule{SpecVersion: "1.0", ID: "DELIVERY_PROBE", Kind: oar.KindPolicy, Anchor: anchor, Effect: oar.EffectNudge, OnError: "fail_closed", Enforcement: "enforce", Copy: oar.Copy{What: "Carry this boundary observation forward"}}
 			pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, oar.NewCounterStore())
 			pipeline.EnableAnchor(anchor)
 			pipeline.EnableAnchor(oar.AnchorCoordinatorCloseoutCheck)

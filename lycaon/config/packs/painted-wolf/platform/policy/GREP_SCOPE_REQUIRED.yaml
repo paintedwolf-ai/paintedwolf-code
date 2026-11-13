@@ -1,35 +1,27 @@
-oar: '1.0'
+spec_version: "1.0"
 id: GREP_SCOPE_REQUIRED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - grep
-requires:
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  profiles:
-  - tool
+  ledger:
+    paintedwolf.operation:
+      - grep
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "GREP_SCOPE_REQUIRED"
 effect: block
-copy:
-  what: Open-root grep requires a selected directory or narrowing file filter when the file count is unknown or
-    meets the structural threshold.
-  cause: The call left root scope open after the structural view was returned.
-  why: A scoped content walk preserves host responsiveness.
-  fix: Use a subdirectory from the returned structural view or a glob that selects a meaningful subset of the
-    original scope. An open-root glob such as *, **, **/*, or *.* does not narrow it. Preserve required coverage
-    when partitioning the search.
-  instead: Branch on Code; repeat the search with a narrower directory or file filter
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:grep
-x-paintedwolf-message: Open-root grep requires path or narrowing path_glob scope
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: open root
-    file_count: 50000
-    path: .
-    profile: coordinator
-    tool: grep
+category: recoverable
+emit: guard:grep
+message: Open-root grep requires path or narrowing path_glob scope
+what: Open-root grep requires a selected directory or narrowing file filter when the file count is unknown or meets the structural threshold.
+cause: The call left root scope open after the structural view was returned.
+why: A scoped content walk preserves host responsiveness.
+fix: Use a subdirectory from the returned structural view or a glob that selects a meaningful subset of the original scope. An open-root glob such as *, **, **/*, or *.* does not narrow it. Preserve required coverage when partitioning the search.
+instead: Branch on Code; repeat the search with a narrower directory or file filter
+scenarios:
+  - id: default
+    vars:
+      detail: open root
+      file_count: 50000
+      path: .
+      session_role: coordinator
+      tool: grep

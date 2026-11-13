@@ -1,25 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: PAGE_NOT_RUNNING
 kind: schema
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.id, paintedwolf.not_running, paintedwolf.next_steps]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.id, paintedwolf.next_steps, paintedwolf.not_running, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PAGE_NOT_RUNNING"
 effect: block
-copy:
-  what: Page {{ paintedwolf.id }} was closed or the browser target ended.
-  cause: The registry entry no longer has a usable browser page.
-  why: Act/snapshot need a live CDP target.
-  fix: '{{ paintedwolf.next_steps }} Opening a replacement does not restore the prior DOM, cookies, or completed interactions.'
-  instead: Recover the intended page explicitly and preserve state uncertainty
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:visual_page_session
-x-paintedwolf-message: page id exists but the CDP page is no longer running
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    id: dead-id
-    profile: implement
-    tool: page_act
+category: recoverable
+emit: guard:visual_page_session
+message: page id exists but the CDP page is no longer running
+what: Page {{ paintedwolf.id }} was closed or the browser target ended.
+cause: The registry entry no longer has a usable browser page.
+why: Act/snapshot need a live CDP target.
+fix: '{{ paintedwolf.next_steps }} Opening a replacement does not restore the prior DOM, cookies, or completed interactions.'
+instead: Recover the intended page explicitly and preserve state uncertainty
+scenarios:
+  - id: default
+    vars:
+      id: dead-id
+      session_role: implement
+      tool: page_act

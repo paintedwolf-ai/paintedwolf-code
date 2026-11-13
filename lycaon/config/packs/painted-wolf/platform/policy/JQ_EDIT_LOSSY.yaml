@@ -1,40 +1,30 @@
-oar: '1.0'
+spec_version: "1.0"
 id: JQ_EDIT_LOSSY
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - jq_edit
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.path
-    - paintedwolf.format
-    - paintedwolf.kind
-    - paintedwolf.line
-    - paintedwolf.profile_mutation_capable
+  ledger:
+    paintedwolf.operation:
+      - jq_edit
+requires_facts: [paintedwolf.format, paintedwolf.kind, paintedwolf.line, paintedwolf.operation, paintedwolf.path, paintedwolf.profile_mutation_capable, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "JQ_EDIT_LOSSY"
 effect: block
-copy:
-  what: 'Rewriting {{ paintedwolf.path }} as {{ paintedwolf.format }} would lose a {{ paintedwolf.kind }}{% if paintedwolf.line %} at line {{ paintedwolf.line }}{% endif %}; nothing was written.'
-  cause: The document holds syntax a structured rewrite cannot carry, such as TOML comments or datetimes, YAML anchors and aliases, or a YAML tag on a value the program changed.
-  why: A write that silently drops comments, references, or types changes more than the program asked for.
-  fix: '{% if paintedwolf.profile_mutation_capable %}Make this change with `edit --path` or `replace-lines`, which keep the surrounding text as written.{% else %}This rewrite needs a surface that can write files; the lossless structured rewrites are not offered on this read-only profile.{% endif %}'
-  instead: Branch on Code; edit the text directly
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:jq_edit
-x-paintedwolf-message: jq_edit rewrite would lose source syntax
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:jq_edit
+message: jq_edit rewrite would lose source syntax
+what: 'Rewriting {{ paintedwolf.path }} as {{ paintedwolf.format }} would lose a {{ paintedwolf.kind }}{% if paintedwolf.line %} at line {{ paintedwolf.line }}{% endif %}; nothing was written.'
+cause: The document holds syntax a structured rewrite cannot carry, such as TOML comments or datetimes, YAML anchors and aliases, or a YAML tag on a value the program changed.
+why: A write that silently drops comments, references, or types changes more than the program asked for.
+fix: '{% if paintedwolf.profile_mutation_capable %}Make this change with `edit --path` or `replace-lines`, which keep the surrounding text as written.{% else %}This rewrite needs a surface that can write files; the lossless structured rewrites are not offered on this read-only profile.{% endif %}'
+instead: Branch on Code; edit the text directly
+scenarios:
   - id: default
     vars:
       format: toml
       kind: comment
       line: '3'
       path: Cargo.toml
-      profile: implement
+      session_role: implement
       profile_mutation_capable: true
       tool: jq_edit
     expect_contains:
@@ -45,7 +35,7 @@ x-paintedwolf-scenarios:
       kind: comment
       line: '3'
       path: Cargo.toml
-      profile: worker_readonly
+      session_role: worker_readonly
       profile_mutation_capable: false
       tool: jq_edit
     expect_contains:

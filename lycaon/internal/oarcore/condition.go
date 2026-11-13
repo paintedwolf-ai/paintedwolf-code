@@ -136,7 +136,7 @@ func (r *Rule) EvaluateCondition(facts map[string]any, functions map[string]func
 	}
 	result, ok := got.(bool)
 	if !ok {
-		return false, raise("[OAR-FACT-4] when must evaluate to bool")
+		return false, raise("[OAR-FACT-3] when must evaluate to bool")
 	}
 	return result, nil
 }
@@ -145,7 +145,7 @@ func (r *Rule) EvaluateCondition(facts map[string]any, functions map[string]func
 func (r *Rule) Fact(name string, facts map[string]any) (any, error) {
 	decl, ok := r.environment.Facts[name]
 	if !ok {
-		return nil, raise("[OAR-FACT-26] undeclared fact %s", name)
+		return nil, raise("[OAR-FACT-18] undeclared fact %s", name)
 	}
 	raw, present := facts[name]
 	if !present {

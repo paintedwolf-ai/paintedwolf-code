@@ -1,34 +1,24 @@
-oar: '1.0'
+spec_version: "1.0"
 id: FETCH_URL_BODY_TOO_LARGE
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - fetch_url
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.bytes
-  - paintedwolf.max_bytes
-  - paintedwolf.resource_limit
+  tools:
+    - fetch_url
+requires_facts: [paintedwolf.bytes, paintedwolf.max_bytes, paintedwolf.rejection_code, paintedwolf.resource_limit]
 when: paintedwolf.rejection_code == "FETCH_URL_BODY_TOO_LARGE"
 effect: block
-copy:
-  what: fetch_url response exceeded the {{ paintedwolf.max_bytes }}-byte body cap (observed at least {{ paintedwolf.bytes
-    }} bytes).
-  cause: The host refuses oversized responses before returning partial source content.
-  why: Truncated source content cannot establish complete research coverage.
-  fix: Choose a genuinely smaller intended resource or a narrower endpoint. Cached line paging does not reduce the initial download; this tool has no Range-header argument. Report the size limit if the complete
-    resource is required.
-  instead: Branch on Code FETCH_URL_BODY_TOO_LARGE; choose a bounded source
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: fetch_url response exceeds the body size cap
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    bytes: '5242881'
-    max_bytes: '5242880'
-    tool: fetch_url
+category: recoverable
+emit: guard:fetch_url
+message: fetch_url response exceeds the body size cap
+what: fetch_url response exceeded the {{ paintedwolf.max_bytes }}-byte body cap (observed at least {{ paintedwolf.bytes }} bytes).
+cause: The host refuses oversized responses before returning partial source content.
+why: Truncated source content cannot establish complete research coverage.
+fix: Choose a genuinely smaller intended resource or a narrower endpoint. Cached line paging does not reduce the initial download; this tool has no Range-header argument. Report the size limit if the complete resource is required.
+instead: Branch on Code FETCH_URL_BODY_TOO_LARGE; choose a bounded source
+scenarios:
+  - id: default
+    vars:
+      bytes: '5242881'
+      max_bytes: '5242880'
+      tool: fetch_url

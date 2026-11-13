@@ -1,28 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: TOOL_PROFILE_DENIED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  profiles:
-  - tool
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TOOL_PROFILE_DENIED"
 effect: block
-copy:
-  cause: The current profile does not grant this tool.
-  why: Another tool cannot substitute for missing authority to perform the same protected operation.
-  fix: Use an offered permitted tool only when its operation remains within the current task authority. Otherwise
-    report the required capability through the available coordinator or user-response surface.
-  instead: Preserve the profile boundary and report unavailable work
-  what: '{{ tool }} is not permitted for the active agent profile.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool_profile
-x-paintedwolf-message: Tool is not allowed for the active agent profile
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: read
+category: recoverable
+emit: guard:tool_profile
+message: Tool is not allowed for the active agent profile
+what: '{{ tool }} is not permitted for the active agent profile.'
+cause: The current profile does not grant this tool.
+why: Another tool cannot substitute for missing authority to perform the same protected operation.
+fix: Use an offered permitted tool only when its operation remains within the current task authority. Otherwise report the required capability through the available coordinator or user-response surface.
+instead: Preserve the profile boundary and report unavailable work
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      session_role: coordinator
+      tool: read

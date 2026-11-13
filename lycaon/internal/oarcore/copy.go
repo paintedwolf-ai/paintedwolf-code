@@ -1,6 +1,6 @@
 package oarcore
 
-// Copy-binding language ([OAR-COPY-1]–[OAR-COPY-9]).
+// Copy-binding language ([OAR-COPY-1]–).
 // Parses at load and substitutes after the decision.
 
 import (

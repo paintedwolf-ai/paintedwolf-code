@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// [OAR-CONF-38] Every fixture uses production document loading and evaluation.
+// Every fixture uses production document loading and evaluation.
 func TestProductionEngineAgainstPublishedCorpus(t *testing.T) {
 	ensureCatalog(t)
 	dir := filepath.Join(testutil.CheckoutRoot(t), "schemas", "oar", "conformance")

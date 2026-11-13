@@ -102,7 +102,7 @@ func TestWorkerParentDeliveryPreservesFrozenDecision(t *testing.T) {
 	testutil.FailErr(t, "create parent", err)
 	child, err := mem.CreateChild(t.Context(), parent, api.SpawnChildRequest{AgentType: "implementer"})
 	testutil.FailErr(t, "create child", err)
-	rule := &oar.Rule{OAR: "1.0", ID: "CHANGED_POLICY", Kind: oar.KindPolicy, Anchor: oar.AnchorWorkerReportCheck, Effect: oar.EffectBlock, Enforcement: "enforce", OnError: "fail_closed", OnFire: []oar.OnFireAction{oar.OnFireIncrementCounter}, Copy: oar.Copy{What: "Changed after queue commit"}}
+	rule := &oar.Rule{SpecVersion: "1.0", ID: "CHANGED_POLICY", Kind: oar.KindPolicy, Anchor: oar.AnchorWorkerReportCheck, Effect: oar.EffectBlock, Enforcement: "enforce", OnError: "fail_closed", OnFire: []oar.OnFireAction{oar.OnFireIncrementCounter}, Copy: oar.Copy{What: "Changed after queue commit"}}
 	pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorWorkerReportCheck)
 	mgr.SetOARPipeline(pipeline, oar.NewRenderer(nil, nil))

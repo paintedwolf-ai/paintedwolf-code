@@ -39,7 +39,7 @@ func coerce(raw any, typ FactType, name string) (value, error) {
 		if !ok {
 			return nil, raise("[OAR-FACT-18] fact %s is not a double", name)
 		}
-		// Double facts must be finite ([OAR-FACT-23]).
+		// Double facts must be finite ([OAR-FACT-17]).
 		if math.IsInf(n, 0) || math.IsNaN(n) {
 			return nil, raise("[OAR-FACT-18] fact %s is not a finite double", name)
 		}

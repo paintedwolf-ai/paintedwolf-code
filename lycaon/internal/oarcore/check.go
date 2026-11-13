@@ -54,7 +54,7 @@ type checker struct {
 	env *Environment
 	// reachable is what the rule may name: the core tier is always reachable, and
 	// anything else only through `requires`. A reference outside it is rejected
-	// under [OAR-FACT-20], so portability is computable from the document alone.
+	// under [OAR-FACT-2], so portability is computable from the document alone.
 	reachable map[string]bool
 	refs      map[string]bool
 }
@@ -98,14 +98,14 @@ func (c *checker) walk(n *node) (FactType, error) {
 	return "", typeErr(n.offset, "unreachable node kind")
 }
 
-// list types a list literal. [OAR-EXPR-21] a list literal is list<string> when
+// list types a list literal. a list literal is list<string> when
 // every member is a string and list<map> when every member is a map, and is
 // rejected otherwise: members merely agreeing is necessary but not sufficient,
-// because [OAR-FACT-22] defines no other list type. The empty literal is
+// because [OAR-FACT-16] defines no other list type. The empty literal is
 // rejected because its type cannot be inferred.
 func (c *checker) list(n *node) (FactType, error) {
 	if len(n.items) == 0 {
-		return "", typeErr(n.offset, "[OAR-EXPR-21] the empty list literal [] has no inferable type")
+		return "", typeErr(n.offset, "the empty list literal [] has no inferable type")
 	}
 	types := make([]FactType, 0, len(n.items))
 	for _, item := range n.items {
@@ -139,7 +139,7 @@ func (c *checker) list(n *node) (FactType, error) {
 		}
 	}
 	return "", typeErr(n.offset,
-		"[OAR-EXPR-21] a list literal is list<string> or list<map>, given members of type %s",
+		"a list literal is list<string> or list<map>, given members of type %s",
 		strings.Join(distinct, ", "))
 }
 
@@ -147,10 +147,10 @@ func (c *checker) ident(n *node) (FactType, error) {
 	fact, declared := c.env.Facts[n.strValue]
 	if !declared {
 		if _, isFn := c.env.Functions[n.strValue]; isFn {
-			return "", typeErr(n.offset, "[OAR-FACT-3] %s is an observation function and must be called", n.strValue)
+			return "", typeErr(n.offset, "[OAR-FACT-2] %s is an observation function and must be called", n.strValue)
 		}
-		// [OAR-FACT-3] A mistyped fact name is a load failure, never a runtime
-		// default. [OAR-EXPR-2] a dotted identifier is a single name, so an author
+		// [OAR-FACT-2] A mistyped fact name is a load failure, never a runtime
+		// default. a dotted identifier is a single name, so an author
 		// reaching for field selection lands here and gets a hint.
 		return "", typeErr(n.offset, "unknown identifier %s%s", n.strValue, c.selectionHint(n.strValue))
 	}
@@ -163,28 +163,28 @@ func (c *checker) ident(n *node) (FactType, error) {
 
 func (c *checker) call(n *node) (FactType, error) {
 	name := n.strValue
-	// [OAR-EXPR-16] The language defines exactly four built-ins: size, and the
+	// The language defines exactly four built-ins: size, and the
 	// three string operations. Everything else is a declared observation
 	// function, which is subject to the tier rules.
 	if name == "size" {
 		if len(n.items) != 1 {
-			return "", typeErr(n.offset, "[OAR-EXPR-16] size() takes exactly one argument, given %d", len(n.items))
+			return "", typeErr(n.offset, "size() takes exactly one argument, given %d", len(n.items))
 		}
 		t, err := c.walk(n.items[0])
 		if err != nil {
 			return "", err
 		}
 		if t != TypeString && t != TypeListString && t != TypeListMap && t != TypeMap && t != typeDyn {
-			return "", typeErr(n.offset, "[OAR-EXPR-16] size() takes a string, a list, or a map, given %s", t)
+			return "", typeErr(n.offset, "size() takes a string, a list, or a map, given %s", t)
 		}
 		return TypeInt, nil
 	}
-	// [OAR-EXPR-16], [OAR-EXPR-22] starts_with, ends_with, and contains are
+	// starts_with, ends_with, and contains are
 	// (string, string) -> bool, compared by Unicode code point with no
 	// normalisation, no case folding, and no locale.
 	if isStringBuiltin(name) {
 		if len(n.items) != 2 {
-			return "", typeErr(n.offset, "[OAR-EXPR-16] %s() takes exactly two arguments, given %d", name, len(n.items))
+			return "", typeErr(n.offset, "%s() takes exactly two arguments, given %d", name, len(n.items))
 		}
 		a, err := c.walk(n.items[0])
 		if err != nil {
@@ -195,7 +195,7 @@ func (c *checker) call(n *node) (FactType, error) {
 			return "", err
 		}
 		if !is(a, TypeString) || !is(b, TypeString) {
-			return "", typeErr(n.offset, "[OAR-EXPR-16] %s() takes two string arguments, given %s and %s", name, a, b)
+			return "", typeErr(n.offset, "%s() takes two string arguments, given %s and %s", name, a, b)
 		}
 		return TypeBool, nil
 	}
@@ -203,7 +203,7 @@ func (c *checker) call(n *node) (FactType, error) {
 	fn, declared := c.env.Functions[name]
 	if !declared {
 		if _, isFact := c.env.Facts[name]; isFact {
-			return "", typeErr(n.offset, "[OAR-FACT-3] %s is a fact, not an observation function", name)
+			return "", typeErr(n.offset, "[OAR-FACT-2] %s is a fact, not an observation function", name)
 		}
 		return "", typeErr(n.offset, "unknown identifier %s", name)
 	}
@@ -213,7 +213,7 @@ func (c *checker) call(n *node) (FactType, error) {
 	c.refs[name] = true
 	if len(n.items) != 1 {
 		return "", typeErr(n.offset,
-			"[OAR-FACT-9] observation function %s takes exactly one argument, given %d", name, len(n.items))
+			"[OAR-FACT-7] observation function %s takes exactly one argument, given %d", name, len(n.items))
 	}
 	// Observation function arguments are ordinary expressions.
 	argType, err := c.walk(n.items[0])
@@ -222,12 +222,12 @@ func (c *checker) call(n *node) (FactType, error) {
 	}
 	if !is(argType, fn.Sig.Arg) {
 		return "", typeErr(n.offset,
-			"[OAR-FACT-9] observation function %s takes %s, given %s", name, fn.Sig.Arg, argType)
+			"[OAR-FACT-7] observation function %s takes %s, given %s", name, fn.Sig.Arg, argType)
 	}
 	return fn.Sig.Ret, nil
 }
 
-// index types the index operator exhaustively ([OAR-EXPR-13]).
+// index types the index operator exhaustively.
 func (c *checker) index(n *node) (FactType, error) {
 	target, err := c.walk(n.left)
 	if err != nil {
@@ -250,7 +250,7 @@ func (c *checker) index(n *node) (FactType, error) {
 		return typeDyn, nil
 	}
 	return "", typeErr(n.offset,
-		"[OAR-EXPR-13] the index operator does not accept %s indexed by %s", target, idx)
+		"the index operator does not accept %s indexed by %s", target, idx)
 }
 
 func (c *checker) unary(n *node) (FactType, error) {
@@ -259,9 +259,9 @@ func (c *checker) unary(n *node) (FactType, error) {
 		return "", err
 	}
 	if n.op == "!" {
-		// [OAR-EXPR-8] ! takes and produces bool.
+		// ! takes and produces bool.
 		if !is(t, TypeBool) {
-			return "", typeErr(n.offset, "[OAR-EXPR-8] ! takes bool, given %s", t)
+			return "", typeErr(n.offset, "! takes bool, given %s", t)
 		}
 		return TypeBool, nil
 	}
@@ -269,12 +269,12 @@ func (c *checker) unary(n *node) (FactType, error) {
 		return "", typeErr(n.offset, "[OAR-FACT-22] unary - fixes no type for the selected member %s", describe(n.left))
 	}
 	if !isNumeric(t) {
-		return "", typeErr(n.offset, "[OAR-EXPR-9] unary - takes int or double, given %s", t)
+		return "", typeErr(n.offset, "unary - takes int or double, given %s", t)
 	}
 	return t, nil
 }
 
-// ternary types the conditional. [OAR-EXPR-8] the condition is bool and the
+// ternary types the conditional. the condition is bool and the
 // branches share a type.
 func (c *checker) ternary(n *node) (FactType, error) {
 	cond, err := c.walk(n.left)
@@ -282,7 +282,7 @@ func (c *checker) ternary(n *node) (FactType, error) {
 		return "", err
 	}
 	if !is(cond, TypeBool) {
-		return "", typeErr(n.offset, "[OAR-EXPR-8] the ternary condition must be bool, given %s", cond)
+		return "", typeErr(n.offset, "the ternary condition must be bool, given %s", cond)
 	}
 	a, err := c.walk(n.right)
 	if err != nil {
@@ -300,7 +300,7 @@ func (c *checker) ternary(n *node) (FactType, error) {
 	case b == typeDyn:
 		return a, nil
 	}
-	return "", typeErr(n.offset, "[OAR-EXPR-8] the ternary branches are %s and %s, which differ", a, b)
+	return "", typeErr(n.offset, "the ternary branches are %s and %s, which differ", a, b)
 }
 
 func (c *checker) binary(n *node) (FactType, error) {
@@ -314,42 +314,42 @@ func (c *checker) binary(n *node) (FactType, error) {
 	}
 	op := n.op
 
-	// [OAR-EXPR-8] && and || take and produce bool.
+	// && and || take and produce bool.
 	if op == "&&" || op == "||" {
 		if !is(left, TypeBool) || !is(right, TypeBool) {
-			return "", typeErr(n.offset, "[OAR-EXPR-8] %s takes bool operands, given %s and %s", op, left, right)
+			return "", typeErr(n.offset, "%s takes bool operands, given %s and %s", op, left, right)
 		}
 		return TypeBool, nil
 	}
 
-	// [OAR-EXPR-12] in takes a string and a list<string>, or a string and a map,
+	// in takes a string and a list<string>, or a string and a map,
 	// and against a map tests key presence.
 	if op == "in" {
 		if !is(left, TypeString) {
-			return "", typeErr(n.offset, "[OAR-EXPR-12] in takes a string on the left, given %s", left)
+			return "", typeErr(n.offset, "in takes a string on the left, given %s", left)
 		}
 		if right != TypeListString && right != TypeMap && right != typeDyn {
-			return "", typeErr(n.offset, "[OAR-EXPR-12] in takes a list<string> or a map on the right, given %s", right)
+			return "", typeErr(n.offset, "in takes a list<string> or a map on the right, given %s", right)
 		}
 		return TypeBool, nil
 	}
 
-	// [OAR-EXPR-11] == and != take two operands of the same type, or one int and
+	// == and != take two operands of the same type, or one int and
 	// one double. A comparison between unrelated types is rejected at load rather
 	// than returning false.
 	if op == "==" || op == "!=" {
-		// [OAR-EXPR-21] Equality over two aggregates is rejected at load.
+		// Equality over two aggregates is rejected at load.
 		if isAggregate(left) && isAggregate(right) {
 			return "", typeErr(n.offset,
-				"[OAR-EXPR-21] %s does not compare two aggregate values, given %s and %s", op, left, right)
+				"%s does not compare two aggregate values, given %s and %s", op, left, right)
 		}
 		if !sameOrPromotable(left, right) {
-			return "", typeErr(n.offset, "[OAR-EXPR-11] %s compares unrelated types %s and %s", op, left, right)
+			return "", typeErr(n.offset, "%s compares unrelated types %s and %s", op, left, right)
 		}
 		return TypeBool, nil
 	}
 
-	// [OAR-EXPR-10] Ordering comparisons take two int, two double, one of each,
+	// Ordering comparisons take two int, two double, one of each,
 	// or two string.
 	if op == "<" || op == "<=" || op == ">" || op == ">=" {
 		if left == typeDyn && right == typeDyn {
@@ -362,10 +362,10 @@ func (c *checker) binary(n *node) (FactType, error) {
 			return TypeBool, nil
 		}
 		return "", typeErr(n.offset,
-			"[OAR-EXPR-10] %s takes two numbers or two strings, given %s and %s", op, left, right)
+			"%s takes two numbers or two strings, given %s and %s", op, left, right)
 	}
 
-	// [OAR-EXPR-9] Arithmetic takes two int or two double; % takes two int; +
+	// Arithmetic takes two int or two double; % takes two int; +
 	// additionally concatenates two strings.
 	if left == typeDyn && right == typeDyn {
 		return "", typeErr(n.offset, "[OAR-FACT-22] %s fixes no type for two selected members", op)
@@ -378,7 +378,7 @@ func (c *checker) binary(n *node) (FactType, error) {
 	}
 	if op == "%" {
 		if left != TypeInt || right != TypeInt {
-			return "", typeErr(n.offset, "[OAR-EXPR-9] %% takes two int operands, given %s and %s", left, right)
+			return "", typeErr(n.offset, "%% takes two int operands, given %s and %s", left, right)
 		}
 		return TypeInt, nil
 	}
@@ -392,22 +392,22 @@ func (c *checker) binary(n *node) (FactType, error) {
 		return TypeDouble, nil
 	}
 	return "", typeErr(n.offset,
-		"[OAR-EXPR-9] %s takes two int or two double operands, given %s and %s", op, left, right)
+		"%s takes two int or two double operands, given %s and %s", op, left, right)
 }
 
 func (c *checker) requireReachable(name string, tier Tier, offset int) error {
 	if tier == TierCore || c.reachable[name] {
 		return nil
 	}
-	// [OAR-FACT-20] Reject a reference to a non-core capability the rule does not
+	// [OAR-FACT-2] Reject a reference to a non-core capability the rule does not
 	// reach through requires.
 	return typeErr(offset,
-		"[OAR-FACT-20] %s is outside the core tier and the rule does not reach it through requires", name)
+		"[OAR-FACT-2] %s is outside the core tier and the rule does not reach it through requires", name)
 }
 
 // selectionHint names the one mistake this grammar invites: writing
-// `tool_args.path` and expecting field selection ([OAR-EXPR-2],
-// [OAR-EXPR-19]). The whole dotted string is one name, and the member is reached
+// `tool_args.path` and expecting field selection (
+// ). The whole dotted string is one name, and the member is reached
 // with `in` plus a typed accessor.
 func (c *checker) selectionHint(name string) string {
 	at := strings.LastIndex(name, ".")

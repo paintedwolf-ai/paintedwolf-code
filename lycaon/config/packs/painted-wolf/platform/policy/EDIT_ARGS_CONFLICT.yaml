@@ -1,34 +1,27 @@
-oar: '1.0'
+spec_version: "1.0"
 id: EDIT_ARGS_CONFLICT
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - edit
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.detail
-    - paintedwolf.conflict
+  ledger:
+    paintedwolf.operation:
+      - edit
+requires_facts: [paintedwolf.conflict, paintedwolf.detail, paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "EDIT_ARGS_CONFLICT"
 effect: block
-copy:
-  what: 'edit received conflicting arguments: {{ paintedwolf.detail }}.'
-  cause: edit replaces one exact span — old_string plus a different new_string. replace_all repeats that span; it is not a second mode.
-  why: The replacement must identify one exact source span.
-  fix: Copy old_string from read without displayed line labels, preserving indentation. Set a different new_string, then retry.
-  instead: Retry edit with the corrected arguments.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: 'edit arguments conflict: {{ paintedwolf.detail }}'
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:tool
+message: 'edit arguments conflict: {{ paintedwolf.detail }}'
+what: 'edit received conflicting arguments: {{ paintedwolf.detail }}.'
+cause: edit replaces one exact span — old_string plus a different new_string. replace_all repeats that span; it is not a second mode.
+why: The replacement must identify one exact source span.
+fix: Copy old_string from read without displayed line labels, preserving indentation. Set a different new_string, then retry.
+instead: Retry edit with the corrected arguments.
+scenarios:
   - id: default
     vars:
       detail: conflict
       handle: bg-1
       path: src/main.go
-      profile: coordinator
+      session_role: coordinator
       tool: edit

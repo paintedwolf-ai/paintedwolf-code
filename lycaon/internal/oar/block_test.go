@@ -75,7 +75,7 @@ func TestEvaluateBlockDisabledIsNoop(t *testing.T) {
 }
 
 func TestEvaluateBlockEmptyWhenFires(t *testing.T) {
-	// [OAR-EVAL-3]: a selected rule with neither when nor flow fires.
+	// : a selected rule with neither when nor flow fires.
 	ensureCatalog(t)
 	l, err := NewLoader(schemaDir(t))
 	testutil.FailErr(t, "loader", err)

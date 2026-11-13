@@ -1,31 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: PAGE_ID_REQUIRED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - page_act
     - page_snapshot
     - page_close
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.id_required
+requires_facts: [paintedwolf.id_required, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PAGE_ID_REQUIRED"
 effect: block
-copy:
-  what: id was missing or empty.
-  cause: page_act / page_snapshot / page_close address a held page by id.
-  why: Without an id the host cannot select which live page to drive.
-  fix: Pass id from a prior page_open result.
-  instead: Branch on Code PAGE_ID_REQUIRED; pass id from page_open
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:visual_page_session
-x-paintedwolf-message: page tool requires a non-empty id from page_open
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:visual_page_session
+message: page tool requires a non-empty id from page_open
+what: id was missing or empty.
+cause: page_act / page_snapshot / page_close address a held page by id.
+why: Without an id the host cannot select which live page to drive.
+fix: Pass id from a prior page_open result.
+instead: Branch on Code PAGE_ID_REQUIRED; pass id from page_open
+scenarios:
   - id: default
     vars:
-      profile: implement
+      session_role: implement
       tool: page_act

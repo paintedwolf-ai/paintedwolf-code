@@ -1,11 +1,11 @@
 # Recovery for downloaded code blocked outside reviewed registries.
 
-oar: '1.0'
+spec_version: "1.0"
 id: REMOTE_PACKAGE_EXECUTION_DESTINATION_DENIED
 kind: policy
-anchor: tool.post_invoke
+on: tool.post_invoke
 selector:
-  tool:
+  tools:
     - command
     - verify
     - command_output
@@ -14,32 +14,20 @@ selector:
     - terminal_read
     - terminal_snapshot
     - terminal_close
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.confine_applied
-    - paintedwolf.denial_subject
-    - paintedwolf.confine_signals
-    - paintedwolf.destination
+requires_facts: [paintedwolf.confine_applied, paintedwolf.confine_signals, paintedwolf.denial_subject, paintedwolf.destination]
 when: >-
-  paintedwolf.confine_applied
-  && paintedwolf.denial_subject == "remote_package_destination"
-  && "remote_package_destination_denied" in paintedwolf.confine_signals
+  paintedwolf.confine_applied && paintedwolf.denial_subject == "remote_package_destination" && "remote_package_destination_denied" in paintedwolf.confine_signals
 effect: warn
-copy:
-  what: Downloaded package code tried to connect to `{{ paintedwolf.destination }}`; the remote-package execution boundary blocked that destination.
-  cause: A package acquisition or one-shot runner starts without inherited credentials or sensitive reads and can reach only its reviewed package registries. That
-    boundary cannot be widened in the same invocation.
-  why: Adding direct IP, SOCKS, a destination approval, a local service, or a protected read to this package action will be rejected. Repeating the same action cannot
-    grant the downloaded code more authority.
-  fix: ''
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:sandbox
-x-paintedwolf-message: downloaded package code reached beyond its reviewed registries
-x-paintedwolf-scenarios:
-- id: required_destination
-  vars:
-    tool: command
-    destination: gitea.example.com
+category: recoverable
+emit: guard:sandbox
+message: downloaded package code reached beyond its reviewed registries
+what: Downloaded package code tried to connect to `{{ paintedwolf.destination }}`; the remote-package execution boundary blocked that destination.
+cause: A package acquisition or one-shot runner starts without inherited credentials or sensitive reads and can reach only its reviewed package registries. That boundary cannot be widened in the same invocation.
+why: Adding direct IP, SOCKS, a destination approval, a local service, or a protected read to this package action will be rejected. Repeating the same action cannot grant the downloaded code more authority.
+fix: ''
+instead: ''
+scenarios:
+  - id: required_destination
+    vars:
+      tool: command
+      destination: gitea.example.com

@@ -66,7 +66,7 @@ func RenderRuleCopy(r *Rule, facts map[string]any) map[string]string {
 		out, err := r.document.RenderCopy(facts)
 		if err != nil {
 			return map[string]string{}
-		} // [OAR-COPY-11] Error blocks retain identity without invalid copy.
+		} // Error blocks retain identity without invalid copy.
 		return out
 	}
 	out := map[string]string{}

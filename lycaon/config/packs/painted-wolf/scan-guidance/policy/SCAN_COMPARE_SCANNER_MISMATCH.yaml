@@ -1,31 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SCAN_COMPARE_SCANNER_MISMATCH
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - scan_compare
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  profiles:
-  - tool
+  tools:
+    - scan_compare
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SCAN_COMPARE_SCANNER_MISMATCH"
 effect: block
-copy:
-  what: The two scans were produced by different scanners.
-  cause: Scanner-specific findings and fingerprints do not share one comparison domain.
-  why: Treating different engines as revisions would fabricate regressions and resolutions.
-  fix: Compare two complete compatible scans from the same scanner. Board assessment summaries may combine
-    engines for overview, but they do not make cross-scanner finding identities comparable.
-  instead: Branch on Code; select a same-scanner baseline
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:scan_compare
-x-paintedwolf-message: Scanner mismatch — choose a same-scanner baseline
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: incompatible scans
-    path: src/main.go
-    profile: coordinator
-    tool: scan_compare
+category: recoverable
+emit: guard:scan_compare
+message: Scanner mismatch — choose a same-scanner baseline
+what: The two scans were produced by different scanners.
+cause: Scanner-specific findings and fingerprints do not share one comparison domain.
+why: Treating different engines as revisions would fabricate regressions and resolutions.
+fix: Compare two complete compatible scans from the same scanner. Board assessment summaries may combine engines for overview, but they do not make cross-scanner finding identities comparable.
+instead: Branch on Code; select a same-scanner baseline
+scenarios:
+  - id: default
+    vars:
+      detail: incompatible scans
+      path: src/main.go
+      session_role: coordinator
+      tool: scan_compare

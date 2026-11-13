@@ -8,21 +8,19 @@ import (
 )
 
 // hintCodeRow projects policy data for tool-surface rendering.
-// UnmarshalYAML flattens nested policy fields.
 type hintCodeRow struct {
 	Emit     string   `yaml:"emit"`
 	Category string   `yaml:"category"`
 	Tools    []string `yaml:"tools"`
 	Instead  string   `yaml:"instead"`
 
-	Copy      *hintCodeCopy       `yaml:"copy"`
-	Selector  map[string][]string `yaml:"selector"`
-	XEmit     string              `yaml:"x-paintedwolf-emit"`
-	XCategory string              `yaml:"x-paintedwolf-category"`
+	Selector  hintCodeSelector `yaml:"selector"`
+	XCategory string           `yaml:"x-paintedwolf-category"`
 }
 
-type hintCodeCopy struct {
-	Instead string `yaml:"instead"`
+type hintCodeSelector struct {
+	Tools  []string            `yaml:"tools"`
+	Ledger map[string][]string `yaml:"ledger"`
 }
 
 func (r *hintCodeRow) UnmarshalYAML(node *yaml.Node) error {
@@ -32,21 +30,15 @@ func (r *hintCodeRow) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 	*r = hintCodeRow(raw)
-	if r.Emit == "" {
-		r.Emit = r.XEmit
-	}
 	if r.Category == "" {
 		r.Category = r.XCategory
 	}
-	if r.Instead == "" && r.Copy != nil {
-		r.Instead = r.Copy.Instead
-	}
 	if len(r.Tools) == 0 {
-		r.Tools = append([]string(nil), r.Selector["tool"]...)
+		r.Tools = append([]string(nil), r.Selector.Tools...)
 	}
 	// An operation selector applies where that operation's structured tool is offered.
 	if len(r.Tools) == 0 {
-		r.Tools = append([]string(nil), r.Selector["paintedwolf.operation"]...)
+		r.Tools = append([]string(nil), r.Selector.Ledger["paintedwolf.operation"]...)
 	}
 	return nil
 }

@@ -34,7 +34,7 @@ func isFactType(s string) bool {
 }
 
 // FunctionSig is an observation function: one argument, one result
-// ([OAR-FACT-9]).
+// ([OAR-FACT-7]).
 type FunctionSig struct {
 	Arg FactType
 	Ret FactType
@@ -85,8 +85,8 @@ var coreFunctions = map[string]FunctionSig{
 	"path_outside_scope": {Arg: TypeString, Ret: TypeBool},
 }
 
-// reservedWords are the three words that are never an identifier
-// ([OAR-EXPR-24]). An engine MUST NOT declare a fact or an observation function
+// reservedWords are the three words that are never an identifier.
+// An engine MUST NOT declare a fact or an observation function
 // under one of them.
 var reservedWords = []string{"true", "false", "in"}
 
@@ -99,8 +99,7 @@ func isReservedWord(name string) bool {
 	return false
 }
 
-// stringBuiltins are the three (string, string) -> bool built-ins
-// ([OAR-EXPR-22]).
+// stringBuiltins are the three (string, string) -> bool built-ins.
 var stringBuiltins = []string{"starts_with", "ends_with", "contains"}
 
 func isStringBuiltin(name string) bool {
@@ -113,7 +112,7 @@ func isStringBuiltin(name string) bool {
 }
 
 // ProfileDef is one named capability profile. A profile is provided whole or not
-// at all ([OAR-FACT-16]).
+// at all ([OAR-FACT-13]).
 type ProfileDef struct {
 	Facts     map[string]FactType
 	Functions map[string]FunctionSig
@@ -175,7 +174,7 @@ var onFireWrites = map[string]string{
 }
 
 // reservedDetectors are the three detector references the corpus reserves
-// ([OAR-CONF-25]). None of them requires a model or a network.
+// ([OAR-CONF-18]). None of them requires a model or a network.
 var reservedDetectors = []string{
 	"detector://noop",
 	"detector://error",
@@ -205,4 +204,38 @@ func contains(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// CoreFacts returns the core fact names and types.
+func CoreFacts() map[string]FactType {
+	out := make(map[string]FactType, len(coreFacts))
+	for name, typ := range coreFacts {
+		out[name] = typ
+	}
+	return out
+}
+
+// CoreFunctions returns the core observation functions.
+func CoreFunctions() map[string]FunctionSig {
+	out := make(map[string]FunctionSig, len(coreFunctions))
+	for name, sig := range coreFunctions {
+		out[name] = sig
+	}
+	return out
+}
+
+// StandardProfiles returns each standard profile's facts and functions.
+func StandardProfiles() map[string]ProfileDef {
+	out := make(map[string]ProfileDef, len(profiles))
+	for name, def := range profiles {
+		copied := ProfileDef{Facts: map[string]FactType{}, Functions: map[string]FunctionSig{}}
+		for fact, typ := range def.Facts {
+			copied.Facts[fact] = typ
+		}
+		for fn, sig := range def.Functions {
+			copied.Functions[fn] = sig
+		}
+		out[name] = copied
+	}
+	return out
 }

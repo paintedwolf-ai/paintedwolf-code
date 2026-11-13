@@ -1,32 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: CWD_NOT_DIRECTORY
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - command
-  - verify
-  - terminal_open
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.cwd
+  tools:
+    - command
+    - verify
+    - terminal_open
+requires_facts: [paintedwolf.cwd, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CWD_NOT_DIRECTORY"
 effect: block
-copy:
-  what: The requested cwd {{ paintedwolf.cwd }} could not be resolved to an existing directory for {{ tool }}.
-  cause: The working directory must resolve to an existing directory within the permitted scope.
-  why: The process needs an existing working directory.
-  fix: Use an existing directory within this invocation's permitted scope.
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: '`command`/`terminal_open` cwd is not a directory'
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    cwd: README.md
-    profile: implement
-    tool: command
+category: recoverable
+emit: guard:tool
+message: '`command`/`terminal_open` cwd is not a directory'
+what: The requested cwd {{ paintedwolf.cwd }} could not be resolved to an existing directory for {{ tool }}.
+cause: The working directory must resolve to an existing directory within the permitted scope.
+why: The process needs an existing working directory.
+fix: Use an existing directory within this invocation's permitted scope.
+instead: ''
+scenarios:
+  - id: default
+    vars:
+      cwd: README.md
+      session_role: implement
+      tool: command

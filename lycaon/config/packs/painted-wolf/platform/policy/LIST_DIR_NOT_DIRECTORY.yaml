@@ -1,43 +1,33 @@
-oar: '1.0'
+spec_version: "1.0"
 id: LIST_DIR_NOT_DIRECTORY
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - list_dir
-requires:
-  profiles:
-  - filesystem
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.path
-  - paintedwolf.can_command
+  ledger:
+    paintedwolf.operation:
+      - list_dir
+requires_facts: [paintedwolf.can_command, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "LIST_DIR_NOT_DIRECTORY"
 effect: block
-copy:
-  what: The listing path {{ paintedwolf.path }} is not a directory.
-  cause: A listing traverses directories; the selected path names a file.
-  why: File content and directory membership are separate observations.
-  fix: '{% if paintedwolf.can_command %}Read the selected file’s content with `cat`, `head`, or `sed -n` inside
-    command.{% else %}File content requires a reader offered on the current surface.{% endif %} For directory
-    membership, list the intended parent directory instead.'
-  instead: Choose a directory to list, or use an offered file reader
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:list_dir
-x-paintedwolf-message: list_dir path is not a directory
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    path: docs/README.md
-    profile: explore_readonly
-    tool: list_dir
-- id: command-leg
-  vars:
-    can_command: true
-    path: docs/README.md
-    profile: explore_readonly
-    tool: list_dir
-  expect_contains:
-  - '`cat`'
+category: recoverable
+emit: guard:list_dir
+message: list_dir path is not a directory
+what: The listing path {{ paintedwolf.path }} is not a directory.
+cause: A listing traverses directories; the selected path names a file.
+why: File content and directory membership are separate observations.
+fix: '{% if paintedwolf.can_command %}Read the selected file’s content with `cat`, `head`, or `sed -n` inside command.{% else %}File content requires a reader offered on the current surface.{% endif %} For directory membership, list the intended parent directory instead.'
+instead: Choose a directory to list, or use an offered file reader
+scenarios:
+  - id: default
+    vars:
+      path: docs/README.md
+      session_role: explore_readonly
+      tool: list_dir
+  - id: command-leg
+    vars:
+      can_command: true
+      path: docs/README.md
+      session_role: explore_readonly
+      tool: list_dir
+    expect_contains:
+      - '`cat`'

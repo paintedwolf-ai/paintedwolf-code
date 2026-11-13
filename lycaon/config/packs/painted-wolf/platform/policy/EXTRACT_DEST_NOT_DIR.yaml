@@ -1,33 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: EXTRACT_DEST_NOT_DIR
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - extract_archive
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.dest
+  ledger:
+    paintedwolf.operation:
+      - extract_archive
+requires_facts: [paintedwolf.dest, paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "EXTRACT_DEST_NOT_DIR"
 effect: block
-copy:
-  what: The archive extraction destination {{ paintedwolf.dest }} exists but is not a directory.
-  cause: Destination must be an existing directory or a creatable directory path.
-  why: The destination is separate from the archive input and must contain the extracted entries.
-  fix: Choose the intended directory destination. Do not delete or overwrite the existing non-directory target
-    just to make extraction succeed.
-  instead: Branch on Code; fix args and retry once
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: extract destination is not a directory
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    path: out.txt
-    profile: coordinator
-    tool: extract_archive
-    dest: existing-file
+category: recoverable
+emit: guard:tool
+message: extract destination is not a directory
+what: The archive extraction destination {{ paintedwolf.dest }} exists but is not a directory.
+cause: Destination must be an existing directory or a creatable directory path.
+why: The destination is separate from the archive input and must contain the extracted entries.
+fix: Choose the intended directory destination. Do not delete or overwrite the existing non-directory target just to make extraction succeed.
+instead: Branch on Code; fix args and retry once
+scenarios:
+  - id: default
+    vars:
+      path: out.txt
+      session_role: coordinator
+      tool: extract_archive
+      dest: existing-file

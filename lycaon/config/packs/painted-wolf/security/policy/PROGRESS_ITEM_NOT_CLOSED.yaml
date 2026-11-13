@@ -1,28 +1,14 @@
-oar: '1.0'
+spec_version: "1.0"
 id: PROGRESS_ITEM_NOT_CLOSED
-status: deprecated
+kind: hint
+severity: block
+emit: guard:coordinator
+x-paintedwolf-status: deprecated
 x-paintedwolf-successor: PROGRESS_RECONCILIATION_REQUIRED
-kind: policy
-anchor: coordinator.pre_invoke
-requires:
-  profiles:
-    - tool
-  facts: [paintedwolf.pending, paintedwolf.progress_closed_beyond_baseline, paintedwolf.progress_reconciled_since_arm, paintedwolf.progress_closure_armed, paintedwolf.progress_gated_tool, paintedwolf.progress_open_items, paintedwolf.settled_work, paintedwolf.next_steps]
-when: paintedwolf.progress_closure_armed && paintedwolf.progress_gated_tool && paintedwolf.progress_open_items > 0 && !paintedwolf.progress_closed_beyond_baseline && !paintedwolf.progress_reconciled_since_arm
-effect: block
-copy:
-  what: 'Worker output completed while {{ paintedwolf.pending }} progress step(s) were open, and you called **`{{ tool }}`** before recording it{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}.'
-  cause: The checklist has not changed since that work completed.
-  why: Completed work that the checklist does not show hides real progress from the user.
-  fix: '{{ paintedwolf.next_steps }} Partial, failed, and held legs do not latch the checklist, so a resume of one is never blocked here on its own account. Resubmitting the identical checklist (`status: unchanged`) does not clear this reject. Then **immediately** retry `{{ tool }}`.'
-  instead: 'Record the completed work, then retry `{{ tool }}` on the next call; never resubmit the identical checklist.'
 x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Reconcile Progress rows before more progress-gated work
-x-paintedwolf-scenarios:
-  - id: not_closed
-    vars:
-      pending: 3
-      tool: task
-      settled_work:
-        - 'security-reviewer `job-1`: Loopback API authentication'
+message: Reconcile Progress rows before more progress-gated work
+what: Worker output completed while progress steps were open, and a progress-gated tool was called before the checklist recorded it.
+cause: The checklist had not changed since that work completed.
+why: Completed work that the checklist does not show hides real progress from the user.
+fix: Record the completed work in the checklist, then retry the gated tool. Resubmitting the identical checklist does not clear this reject.
+instead: Record the completed work, then retry on the next call.

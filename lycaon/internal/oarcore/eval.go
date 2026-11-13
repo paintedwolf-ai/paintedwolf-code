@@ -2,14 +2,14 @@ package oarcore
 
 // Evaluation of an already type-checked condition.
 //
-// [OAR-FACT-10] Condition evaluation is free of side-effects: nothing here
+// [OAR-FACT-8] Condition evaluation is free of side-effects: nothing here
 // mutates state and nothing performs input or output. Every state change an
 // engine makes is one the rule declared through `on_fire`.
 //
 // The only failures reachable at run time are the three the specification names:
-// an absent map key or an out-of-range index ([OAR-EXPR-13]), division or modulo
-// by zero ([OAR-EXPR-14]), and 64-bit integer overflow ([OAR-EXPR-15]). Each
-// raises, and the rule is then handled per its `on_error` ([OAR-OPS-3]).
+// an absent map key or an out-of-range index, division or modulo
+// by zero, and 64-bit integer overflow. Each
+// raises, and the rule is then handled per its `on_error` ([OAR-OPS-2]).
 
 import (
 	"fmt"
@@ -29,7 +29,7 @@ func raise(format string, args ...any) error {
 // value is a run-time value of the condition language. The Go representations
 // are fixed: bool, int64, float64, string, []string, []map[string]any (a
 // list<map>), and map[string]any (a map or a map<string,string>). There is no
-// null ([OAR-EXPR-7]): every declared fact has a value at every occurrence
+// null: every declared fact has a value at every occurrence
 // ([OAR-FACT-25]).
 type value any
 
@@ -107,7 +107,7 @@ func evalNode(n *node, ctx *evalContext) (value, error) {
 }
 
 // evalList builds a list literal. The checker already proved every member has
-// the same type, and that the type is string or map ([OAR-EXPR-21]).
+// the same type, and that the type is string or map.
 func evalList(n *node, ctx *evalContext) (value, error) {
 	if len(n.items) == 0 {
 		return nil, raise("the empty list literal has no inferable type")
@@ -204,7 +204,7 @@ func evalIndex(n *node, ctx *evalContext) (value, error) {
 	switch t := target.(type) {
 	case []string:
 		i, ok := idx.(int64)
-		// [OAR-EXPR-13], [OAR-EXPR-21] Out of range raises, and a negative index
+		// Out of range raises, and a negative index
 		// is out of range like any other.
 		if !ok || i < 0 || i >= int64(len(t)) {
 			return nil, raise("list index %v is out of range", idx)
@@ -227,7 +227,7 @@ func evalIndex(n *node, ctx *evalContext) (value, error) {
 		if !ok {
 			return nil, raise("a map is indexed by a string")
 		}
-		// [OAR-EXPR-13] An absent key raises.
+		// An absent key raises.
 		v, present := t[key]
 		if !present {
 			return nil, raise("map key %q is absent", key)
@@ -262,7 +262,7 @@ func evalUnary(n *node, ctx *evalContext) (value, error) {
 }
 
 func evalBinary(n *node, ctx *evalContext) (value, error) {
-	// [OAR-EXPR-5] && and || short-circuit: the right operand is not evaluated
+	// && and || short-circuit: the right operand is not evaluated
 	// when the left decides the result. A condition can therefore guard an
 	// expensive or partial sub-expression behind a cheap one.
 	if n.op == "&&" || n.op == "||" {
@@ -359,7 +359,7 @@ func evalAdd(l, r value) (value, error) {
 	case int64:
 		b := r.(int64)
 		sum := a + b
-		// [OAR-EXPR-15] Integer arithmetic that overflows 64 bits raises rather
+		// Integer arithmetic that overflows 64 bits raises rather
 		// than wraps.
 		if (a > 0 && b > 0 && sum < 0) || (a < 0 && b < 0 && sum >= 0) {
 			return nil, raise("addition overflows a 64-bit signed integer")
@@ -408,14 +408,14 @@ func evalDiv(l, r value) (value, error) {
 	switch a := l.(type) {
 	case int64:
 		b := r.(int64)
-		// [OAR-EXPR-14] Division by zero raises.
+		// Division by zero raises.
 		if b == 0 {
 			return nil, raise("division by zero")
 		}
 		if a == math.MinInt64 && b == -1 {
 			return nil, raise("division overflows a 64-bit signed integer")
 		}
-		// [OAR-EXPR-21] Integer division truncates toward zero, so -7 / 2 is -3,
+		// Integer division truncates toward zero, so -7 / 2 is -3,
 		// which is what Go's own integer division already does.
 		return a / b, nil
 	case float64:
@@ -437,19 +437,19 @@ func evalMod(l, r value) (value, error) {
 	if !ok {
 		return nil, raise("%% takes two int operands")
 	}
-	// [OAR-EXPR-14] Modulo by zero raises.
+	// Modulo by zero raises.
 	if b == 0 {
 		return nil, raise("modulo by zero")
 	}
 	if a == math.MinInt64 && b == -1 {
 		return int64(0), nil
 	}
-	// [OAR-EXPR-21] -7 % 2 is -1, which is what Go's own remainder already gives.
+	// -7 % 2 is -1, which is what Go's own remainder already gives.
 	return a % b, nil
 }
 
-// valuesEqual compares two values. [OAR-EXPR-10] an int is promoted to double
-// for a mixed comparison only. [OAR-EXPR-21] two aggregates never reach here:
+// valuesEqual compares two values. an int is promoted to double
+// for a mixed comparison only. two aggregates never reach here:
 // the type checker rejects that comparison at load.
 func valuesEqual(l, r value) bool {
 	li, lIsInt := l.(int64)
@@ -479,8 +479,7 @@ func valuesEqual(l, r value) bool {
 	return false
 }
 
-// compareValues orders two values. String comparison is by Unicode code point
-// ([OAR-EXPR-10]).
+// compareValues orders two values. String comparison is by Unicode code point.
 func compareValues(l, r value) (int, error) {
 	if ls, ok := l.(string); ok {
 		rs, ok := r.(string)
@@ -556,8 +555,7 @@ func compareCodePoints(a, b string) int {
 	}
 }
 
-// sizeOf counts members, or on a string the number of Unicode code points
-// ([OAR-EXPR-16]).
+// sizeOf counts members, or on a string the number of Unicode code points.
 func sizeOf(v value) (value, error) {
 	switch t := v.(type) {
 	case string:
@@ -567,7 +565,7 @@ func sizeOf(v value) (value, error) {
 	case []map[string]any:
 		return int64(len(t)), nil
 	case map[string]any:
-		// [OAR-EXPR-21] A map<string,string> is a map for the purposes of in and
+		// A map<string,string> is a map for the purposes of in and
 		// size().
 		return int64(len(t)), nil
 	case []any:
@@ -576,7 +574,7 @@ func sizeOf(v value) (value, error) {
 	return nil, raise("size() was applied to a scalar")
 }
 
-// [OAR-FACT-23], [OAR-EXPR-22] A string is a sequence of Unicode code points,
+// [OAR-FACT-17] A string is a sequence of Unicode code points,
 // and the three string built-ins compare over that sequence with no
 // normalisation, no case folding, and no locale. They run over runes, so an
 // astral-plane character is one member and a partial code point never matches.
@@ -624,7 +622,7 @@ func containsRunes(hay, pat []rune) bool {
 
 func finiteDouble(v float64) (value, error) {
 	if math.IsNaN(v) || math.IsInf(v, 0) {
-		return nil, raise("[OAR-EXPR-14] non-finite double arithmetic result")
+		return nil, raise("non-finite double arithmetic result")
 	}
 	return v, nil
 }
@@ -685,4 +683,3 @@ func normalizeMember(v any) value {
 	}
 	return v
 }
-

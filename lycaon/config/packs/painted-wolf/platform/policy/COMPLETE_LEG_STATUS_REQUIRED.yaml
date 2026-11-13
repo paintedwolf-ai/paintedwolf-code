@@ -1,27 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMPLETE_LEG_STATUS_REQUIRED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  profiles:
-  - tool
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMPLETE_LEG_STATUS_REQUIRED"
 effect: block
-copy:
-  cause: The report could not be decoded with a recognized leg_status.
-  why: The host needs a structured status and report before it can record the worker’s outcome.
-  fix: 'Use the current schema and set leg_status to complete, partial, or blocked according to the actual outcome. Preserve unresolved work and evidence; do not choose complete merely to satisfy the field.'
-  instead: 'Correct the report shape and actual status, then resubmit.'
-  what: complete_leg did not receive a valid completion report.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: complete_leg requires leg_status
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: missing status
-    path: src/main.go
-    profile: implementer
-    tool: complete_leg
+category: recoverable
+emit: guard:tool
+message: complete_leg requires leg_status
+what: complete_leg did not receive a valid completion report.
+cause: The report could not be decoded with a recognized leg_status.
+why: The host needs a structured status and report before it can record the worker’s outcome.
+fix: 'Use the current schema and set leg_status to complete, partial, or blocked according to the actual outcome. Preserve unresolved work and evidence; do not choose complete merely to satisfy the field.'
+instead: 'Correct the report shape and actual status, then resubmit.'
+scenarios:
+  - id: default
+    vars:
+      detail: missing status
+      path: src/main.go
+      session_role: implementer
+      tool: complete_leg

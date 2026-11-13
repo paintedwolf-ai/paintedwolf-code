@@ -1,36 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: GREP_MATCH_BUDGET
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - grep
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.limit_id
-  - paintedwolf.maximum
-  - paintedwolf.observed
-  - paintedwolf.grep_nested_repeat
-  - paintedwolf.max_len
+  ledger:
+    paintedwolf.operation:
+      - grep
+requires_facts: [paintedwolf.grep_nested_repeat, paintedwolf.limit_id, paintedwolf.max_len, paintedwolf.maximum, paintedwolf.observed, paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "GREP_MATCH_BUDGET"
 effect: block
-copy:
-  what: '{% if paintedwolf.limit_id %}grep: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} > {{ paintedwolf.maximum }}).{% else %}{% if paintedwolf.grep_nested_repeat %}grep: nested repetition exceeds the pattern budget.{% else %}{% if paintedwolf.max_len %}grep: pattern exceeds the {{ paintedwolf.max_len }}-byte limit.{% else %}grep: pattern budget exceeded.{% endif %}{% endif %}{% endif %}'
-  cause: The pattern or matching operation exceeded an admitted search limit.
-  why: The search stops at the limit instead of treating unfinished work as no match.
-  fix: Simplify the pattern or search smaller inputs before retrying.
-  instead: Use a fixed string search when regular expressions are unnecessary.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:grep
-x-paintedwolf-message: grep pattern exceeds safe search budget
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: grep
+category: recoverable
+emit: guard:grep
+message: grep pattern exceeds safe search budget
+what: '{% if paintedwolf.limit_id %}grep: {{ paintedwolf.limit_id }} limit exceeded ({{ paintedwolf.observed }} > {{ paintedwolf.maximum }}).{% else %}{% if paintedwolf.grep_nested_repeat %}grep: nested repetition exceeds the pattern budget.{% else %}{% if paintedwolf.max_len %}grep: pattern exceeds the {{ paintedwolf.max_len }}-byte limit.{% else %}grep: pattern budget exceeded.{% endif %}{% endif %}{% endif %}'
+cause: The pattern or matching operation exceeded an admitted search limit.
+why: The search stops at the limit instead of treating unfinished work as no match.
+fix: Simplify the pattern or search smaller inputs before retrying.
+instead: Use a fixed string search when regular expressions are unnecessary.
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      session_role: coordinator
+      tool: grep

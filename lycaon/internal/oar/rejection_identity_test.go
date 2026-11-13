@@ -47,14 +47,14 @@ func TestFact21RejectionMetadataCannotReplaceOccurrenceIdentity(t *testing.T) {
 	gc.Session.PermissionProfile = "restricted"
 	gc.ObservedRejectCode = "ORIGINAL_FAILURE"
 	gc.PutRejectData("ORIGINAL_FAILURE", map[string]any{
-		"tool": "spoofed", "principal": "spoofed", "permission_profile": "spoofed", "rejection_code": "spoofed",
+		"tool": "spoofed", "principal": "spoofed", "profile": "spoofed", "rejection_code": "spoofed",
 	})
 	facts := activation(gc)
 	for name, want := range map[string]string{
-		"tool": "mcp_provider_action", "principal": "person", "permission_profile": "restricted", "paintedwolf.rejection_code": "ORIGINAL_FAILURE",
+		"tool": "mcp_provider_action", "paintedwolf.principal": "person", "profile": "restricted", "paintedwolf.rejection_code": "ORIGINAL_FAILURE",
 	} {
 		if facts[name] != want {
-			t.Errorf("[OAR-FACT-21] metadata replaced %s: got %v, want %s", name, facts[name], want)
+			t.Errorf("[OAR-PROF-2] metadata replaced %s: got %v, want %s", name, facts[name], want)
 		}
 	}
 }

@@ -64,7 +64,7 @@ func (c *HintConfig) InSessionRetryCodes() []string {
 type HintEntry struct {
 	Emit          string        `yaml:"emit,omitempty"`
 	Effect        string        `yaml:"effect,omitempty"`
-	Anchor        string        `yaml:"anchor,omitempty"`
+	Anchor        string        `yaml:"on,omitempty"`
 	Tools         []string      `yaml:"tools,omitempty"`
 	Message       string        `yaml:"message,omitempty"`
 	What          string        `yaml:"what,omitempty"`
@@ -93,6 +93,7 @@ type HintEntryRule struct {
 
 // HintEntryPolicy holds OAR rule execution and dependency fields.
 type HintEntryPolicy struct {
+	SpecVersion         string         `yaml:"spec_version,omitempty"`
 	Enforcement         string         `yaml:"enforcement,omitempty"`
 	Mandatory           bool           `yaml:"mandatory,omitempty"`
 	OnError             string         `yaml:"on_error,omitempty"`
@@ -100,51 +101,24 @@ type HintEntryPolicy struct {
 	Flow                []string       `yaml:"flow,omitempty"`
 	References          map[string]any `yaml:"references,omitempty"`
 	Detector            map[string]any `yaml:"detector,omitempty"`
-	OAR                 string         `yaml:"oar,omitempty"`
-	Copy                *HintCopy      `yaml:"copy,omitempty"`
-	Requires            *HintRequires  `yaml:"requires,omitempty"`
+	RequiresFacts       []string       `yaml:"requires_facts,omitempty"`
 	HintEntryExtensions `yaml:",inline"`
 }
 
-// HintEntryExtensions holds rule lineage and host extension fields.
+// HintEntryExtensions holds this host's x-paintedwolf- fields.
 type HintEntryExtensions struct {
-	Overrides []string      `yaml:"overrides,omitempty"`
-	Status    string        `yaml:"status,omitempty"`
-	Related   []HintRelated `yaml:"related,omitempty"`
-	Successor string        `yaml:"x-paintedwolf-successor,omitempty"`
-	XEmit     string        `yaml:"x-paintedwolf-emit,omitempty"`
+	Status    string `yaml:"x-paintedwolf-status,omitempty"`
+	Successor string `yaml:"x-paintedwolf-successor,omitempty"`
 	// XAudience limits the tool profiles that can receive this rule.
-	XAudience      []string        `yaml:"x-paintedwolf-audience,omitempty"`
-	XCategory      string          `yaml:"x-paintedwolf-category,omitempty"`
-	XMessage       string          `yaml:"x-paintedwolf-message,omitempty"`
-	XScenarios     []ScenarioEntry `yaml:"x-paintedwolf-scenarios,omitempty"`
-	XEvidence      *EvidenceMeta   `yaml:"x-paintedwolf-evidence,omitempty"`
-	XContextSchema map[string]any  `yaml:"x-paintedwolf-context-schema,omitempty"`
+	XAudience []string `yaml:"x-paintedwolf-audience,omitempty"`
+	// XCategory classifies a hint, whose closed field set has no category.
+	XCategory string `yaml:"x-paintedwolf-category,omitempty"`
+	// XSeverity carries a presentation severity outside the standard's
+	// block, warn and info.
+	XSeverity string `yaml:"x-paintedwolf-severity,omitempty"`
 }
 
-// HintCopy contains presentation fields that do not affect decisions ([OAR-DOC-24]).
-type HintCopy struct {
-	Title   string `yaml:"title,omitempty"`
-	What    string `yaml:"what,omitempty"`
-	Cause   string `yaml:"cause,omitempty"`
-	Why     string `yaml:"why,omitempty"`
-	Fix     string `yaml:"fix,omitempty"`
-	Instead string `yaml:"instead,omitempty"`
-}
-
-// HintRequires declares capability profiles and host-tier facts ([OAR-DOC-21]).
-type HintRequires struct {
-	Profiles []string `yaml:"profiles,omitempty"`
-	Facts    []string `yaml:"facts,omitempty"`
-}
-
-// HintRelated records rule lineage without affecting decisions ([OAR-DOC-30]).
-type HintRelated struct {
-	ID   string `yaml:"id"`
-	Type string `yaml:"type"`
-}
-
-// UnmarshalYAML decodes a rule document into its normalized shape.
+// UnmarshalYAML decodes a policy unit into its normalized shape.
 func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 	type hintAlias HintEntry
 	var raw hintAlias
@@ -152,34 +126,25 @@ func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 	*e = HintEntry(raw)
-	if strings.TrimSpace(e.OAR) != "" {
-		e.projectOARFields()
+	if e.Category == "" {
+		e.Category = e.XCategory
 	}
+	if e.Severity == "" {
+		e.Severity = e.XSeverity
+	}
+	e.Tools = stringList(e.Selector["tools"])
 	return nil
 }
 
-// projectOARFields maps rule fields to the hint rendering model.
-func (e *HintEntry) projectOARFields() {
-	if c := e.Copy; c != nil {
-		e.Title = c.Title
-		e.What = c.What
-		e.Cause = c.Cause
-		e.Why = c.Why
-		e.Fix = c.Fix
-		e.Instead = c.Instead
-	}
-	e.Emit = e.XEmit
-	e.Category = e.XCategory
-	e.Message = e.XMessage
-	e.Scenarios = e.XScenarios
-	e.Evidence = e.XEvidence
-	e.ContextSchema = e.XContextSchema
-	e.Tools = stringList(e.Selector["tool"])
-}
+// IsOAR reports whether the unit is an Open Agent Rules document.
+func (e HintEntry) IsOAR() bool { return strings.TrimSpace(e.SpecVersion) != "" }
 
-// Operations is the rule's paintedwolf.operation selector: the bound native
-// operation beneath command, or the structured tool of that name.
-func (e HintEntry) Operations() []string { return stringList(e.Selector["paintedwolf.operation"]) }
+// Operations is the rule's paintedwolf.operation ledger clause: the bound
+// native operation beneath command, or the structured tool of that name.
+func (e HintEntry) Operations() []string {
+	ledger, _ := e.Selector["ledger"].(map[string]any)
+	return stringList(ledger["paintedwolf.operation"])
+}
 
 func stringList(v any) []string {
 	items, ok := v.([]any)

@@ -1,63 +1,34 @@
-oar: '1.0'
+spec_version: "1.0"
 id: MUTATION_BROKE_PARSE
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - edit
-    - replace_lines
-    - code_rewrite
-    - write
-    - command
-requires:
-  profiles:
-    - filesystem
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.parse_errors
-    - paintedwolf.python_indent_lines
-    - paintedwolf.syntax_diagnostics_truncated
-    - paintedwolf.parse_error
-    - paintedwolf.path
-    - paintedwolf.mutation_new_path
-    - paintedwolf.command_surface
-    - paintedwolf.syntax_override_commands
+  ledger:
+    paintedwolf.operation:
+      - edit
+      - replace_lines
+      - code_rewrite
+      - write
+      - command
+requires_facts: [paintedwolf.command_surface, paintedwolf.mutation_new_path, paintedwolf.operation, paintedwolf.parse_error, paintedwolf.parse_errors, paintedwolf.path, paintedwolf.python_indent_lines, paintedwolf.rejection_code, paintedwolf.syntax_diagnostics_truncated, paintedwolf.syntax_override_commands]
 when: paintedwolf.rejection_code == "MUTATION_BROKE_PARSE"
 effect: block
-copy:
-  what: '{{ tool }} on {{ paintedwolf.path }} was not applied because the parser reports a syntax error in the proposed file ({{ paintedwolf.parse_error }}).'
-  cause: >-
-    {% if paintedwolf.parse_errors %}Syntax diagnostics: {{ paintedwolf.parse_errors }}.
-    {% if paintedwolf.syntax_diagnostics_truncated %}Additional syntax faults were omitted.{% endif %}
-    {% else %}The completed parser found a syntax regression.{% endif %}
-    {% if paintedwolf.python_indent_lines %}Indentation near the edit: {{ paintedwolf.python_indent_lines }}.{% endif %}
-  why: A successful-looking broken mutation makes later locations and verification evidence unreliable. The host keeps the previous bytes, or leaves a rejected new path absent.
-  fix: >-
-    The reported locations refer to the rejected candidate, not saved file contents.
-    {% if paintedwolf.mutation_new_path %}This path was absent before this mutation;
-    the rejected candidate was not created. Correct the candidate and retry a complete
-    staged command redirect. If the path has since been created, read its current contents before replacing it.
-    {% else %}Read the current file before repairing it; rejected candidate text is not
-    a saved edit base. Correct the candidate with a complete staged command redirect,
-    or one `edit --path` or `replace-lines` whose span covers the whole change.{% endif %}
-    Resolve this rejected source mutation before running checks that require its proposed contents.
-    If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate,
-    {% if paintedwolf.command_surface %}use `tee --syntax-override-reason TEXT PATH`
-    with the complete candidate on stdin. The catalog supports this option on `{{ paintedwolf.syntax_override_commands }}`.
-    Redirects accept no override. The reason applies only to that operation.
-    {% else %}supply `syntax_override_reason` on the mutation call to proceed.{% endif %}
-  instead: Correct the candidate and retry one atomic mutation
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:edit
-x-paintedwolf-message: mutation would break parse; not applied
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:edit
+message: mutation would break parse; not applied
+what: '{{ tool }} on {{ paintedwolf.path }} was not applied because the parser reports a syntax error in the proposed file ({{ paintedwolf.parse_error }}).'
+cause: >-
+  {% if paintedwolf.parse_errors %}Syntax diagnostics: {{ paintedwolf.parse_errors }}. {% if paintedwolf.syntax_diagnostics_truncated %}Additional syntax faults were omitted.{% endif %} {% else %}The completed parser found a syntax regression.{% endif %} {% if paintedwolf.python_indent_lines %}Indentation near the edit: {{ paintedwolf.python_indent_lines }}.{% endif %}
+why: A successful-looking broken mutation makes later locations and verification evidence unreliable. The host keeps the previous bytes, or leaves a rejected new path absent.
+fix: >-
+  The reported locations refer to the rejected candidate, not saved file contents. {% if paintedwolf.mutation_new_path %}This path was absent before this mutation; the rejected candidate was not created. Correct the candidate and retry a complete staged command redirect. If the path has since been created, read its current contents before replacing it. {% else %}Read the current file before repairing it; rejected candidate text is not a saved edit base. Correct the candidate with a complete staged command redirect, or one `edit --path` or `replace-lines` whose span covers the whole change.{% endif %} Resolve this rejected source mutation before running checks that require its proposed contents. If the proposed syntax is intentional, intermediate, or the parser diagnostic is inaccurate, {% if paintedwolf.command_surface %}use `tee --syntax-override-reason TEXT PATH` with the complete candidate on stdin. The catalog supports this option on `{{ paintedwolf.syntax_override_commands }}`. Redirects accept no override. The reason applies only to that operation. {% else %}supply `syntax_override_reason` on the mutation call to proceed.{% endif %}
+instead: Correct the candidate and retry one atomic mutation
+scenarios:
   - id: default
     vars:
       parse_error: 'line 55: raise ValueError'
       path: ntp_check.py
-      profile: implement
+      session_role: implement
       tool: replace_lines
     expect_contains:
       - 'supply `syntax_override_reason`'
@@ -66,16 +37,15 @@ x-paintedwolf-scenarios:
       native_operation: replace_lines
       parse_error: 'line 55: raise ValueError'
       path: ntp_check.py
-      profile: implement
+      session_role: implement
       tool: command
     expect_contains:
       - 'tee --syntax-override-reason'
-
   - id: command-redirect
     vars:
       parse_error: 'missing newline'
       path: Dockerfile
       tool: command
-      profile: implement
+      session_role: implement
     expect_contains:
       - 'tee --syntax-override-reason'

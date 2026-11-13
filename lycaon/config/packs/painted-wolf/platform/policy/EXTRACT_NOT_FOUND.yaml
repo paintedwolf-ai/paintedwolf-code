@@ -1,32 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: EXTRACT_NOT_FOUND
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - extract_archive
-requires:
-  profiles:
-    - filesystem
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.path
+  ledger:
+    paintedwolf.operation:
+      - extract_archive
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "EXTRACT_NOT_FOUND"
 effect: block
-copy:
-  what: The archive extraction could not open {{ paintedwolf.path }} — path does not exist under the attached project roots.
-  cause: The path must name an existing archive file.
-  why: Structured rejects let agents branch without parsing free-form errors.
-  fix: Locate the archive with an offered listing or search capability; retry with its observed path.
-  instead: Branch on Code; fix args and retry once
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: archive path does not exist
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:tool
+message: archive path does not exist
+what: The archive extraction could not open {{ paintedwolf.path }} — path does not exist under the attached project roots.
+cause: The path must name an existing archive file.
+why: Structured rejects let agents branch without parsing free-form errors.
+fix: Locate the archive with an offered listing or search capability; retry with its observed path.
+instead: Branch on Code; fix args and retry once
+scenarios:
   - id: default
     vars:
       path: missing.zip
-      profile: coordinator
+      session_role: coordinator
       tool: extract_archive

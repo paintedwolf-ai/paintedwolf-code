@@ -60,7 +60,8 @@ func activation(gc *GuardContext) map[string]any {
 			oarcopy.PublishSocketReferences(out, gc.Refusals.RefusedSocketPaths)
 		}
 
-		out["fire_count"], out["breaker_count"], out["anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
+		out["paintedwolf.fire_count"], out["breaker_count"], out["paintedwolf.anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
+		out["paintedwolf.scoped_fire_count"] = gc.Counters.ScopedFireCount
 	}
 	return out
 }
@@ -80,7 +81,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"turn_tools":                          strList(gc.Session.TurnTools),
 		"session_posture":                     gc.Session.SessionPosture,
 		"surface":                             gc.Session.Surface,
-		"profile":                             gc.Session.Profile,
+		"session_role":                        gc.Session.Role,
 		"workers_idle":                        gc.Workers.WorkersIdle,
 		"worker_spawn_blocked":                gc.Workers.WorkerSpawnBlocked,
 		"active_worker_count":                 gc.Workers.ActiveWorkerCount,
@@ -187,11 +188,11 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"jailbreak_score":                     gc.Content.JailbreakScore,
 		"pii_entities":                        mapList(gc.Content.PIIEntities),
 		"secret_matches":                      mapList(gc.Content.SecretMatches),
-		"mcp_provider_id":                     gc.MCP.MCPProviderID,
+		"mcp_server_id":                       gc.MCP.MCPServerID,
 		"mcp_tool_name":                       gc.MCP.MCPToolName,
 		"mcp_qualified_tool":                  gc.MCP.MCPQualifiedTool,
-		"mcp_provider_configured":             gc.MCP.MCPProviderConfigured,
-		"mcp_provider_enabled":                gc.MCP.MCPProviderEnabled,
+		"mcp_server_configured":               gc.MCP.MCPServerConfigured,
+		"mcp_server_enabled":                  gc.MCP.MCPServerEnabled,
 		"mcp_call_ok":                         gc.MCP.MCPCallOK,
 		"mcp_error_code":                      gc.MCP.MCPErrorCode,
 		"mcp_schema_matched":                  gc.MCP.MCPSchemaMatched,
@@ -203,7 +204,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"git_no_repository_on_write_leg":      gc.Source.GitNoRepositoryOnWriteLeg,
 	}
 	maps.Copy(out, rejectObservationActivation(gc))
-	maps.Copy(out, standardActivation(gc))
+	maps.Copy(out, sessionActivation(gc))
 	maps.Copy(out, workflowActivation(gc))
 	return out
 }
@@ -253,13 +254,14 @@ func workflowActivation(gc *GuardContext) map[string]any {
 	}
 }
 
-// standardActivation defines core and standard-profile observations, including
-// the portable tool-profile fields copy may bind.
-func standardActivation(gc *GuardContext) map[string]any {
+// sessionActivation projects the core profile, counters, caller identity,
+// content provenance, and argument diagnostics.
+func sessionActivation(gc *GuardContext) map[string]any {
 	return map[string]any{
 		"anchor":                     gc.Anchor,
 		"fire_count":                 gc.Counters.FireCount,
-		"permission_profile":         gc.Session.PermissionProfile,
+		"scoped_fire_count":          gc.Counters.ScopedFireCount,
+		"profile":                    gc.Session.PermissionProfile,
 		"principal":                  gc.Session.Principal,
 		"principal_roles":            strList(gc.Session.PrincipalRoles),
 		"content_length":             gc.Content.ContentLength,

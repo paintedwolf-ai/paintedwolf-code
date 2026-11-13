@@ -82,7 +82,7 @@ func (m *Service) candidateContext(ctx context.Context, sess *api.Session, tool 
 	measurement("paintedwolf.credential_run_classes", func(m secretmint.Measurements) any { return m.RunClasses })
 	fingerprint := func() (secretmatch.SecretFingerprint, error) {
 		if m.secretFP == nil {
-			return "", fmt.Errorf("[OAR-FACT-26] credential_fingerprint provider unavailable")
+			return "", fmt.Errorf("[OAR-FACT-18] credential_fingerprint provider unavailable")
 		}
 		return m.secretFP.Fingerprint(candidate.Value), nil
 	}
@@ -103,7 +103,7 @@ func (m *Service) candidateContext(ctx context.Context, sess *api.Session, tool 
 			return err
 		}
 		if m.harvestHas == nil {
-			return fmt.Errorf("[OAR-FACT-26] credential_harvested provider unavailable")
+			return fmt.Errorf("[OAR-FACT-18] credential_harvested provider unavailable")
 		}
 		root := sessiontree.RootID(ctx, m.store, sess.ID)
 		if gc.Published == nil {

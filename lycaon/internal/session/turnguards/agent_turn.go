@@ -8,7 +8,7 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// [OAR-PROF-10] Provisional checks cannot substitute for the completed-turn gate.
+// Provisional checks cannot substitute for the completed-turn gate.
 func (m *Service) AfterTurn(ctx context.Context, sess *api.Session, content string, workersIdle bool) (*guidance.Refusal, bool) {
 	if m.ToolPolicy.Pipeline == nil || !m.ToolPolicy.Pipeline.AnchorEnforced(oar.AnchorCoordinatorPostTurn) {
 		return nil, false

@@ -105,7 +105,7 @@ func TestTutorialPackRuleLoadsAndConforms(t *testing.T) {
 	}
 	for _, fx := range fixtures {
 		if err := cr.RunFixture(fx); err != nil {
-			t.Errorf("%s: %v", fx.Name, err)
+			t.Errorf("%s: %v", fx.ID, err)
 		}
 	}
 }

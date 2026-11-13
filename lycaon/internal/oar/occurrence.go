@@ -9,7 +9,7 @@ import (
 // publishOccurrenceAnchor sets the core `anchor` fact for this occurrence.
 // The fact is the core spelling when the local catalog id implements a core
 // anchor ([OAR-PROF-1], [OAR-CONF-3]); otherwise it is the local id.
-func publishOccurrenceAnchor(gc *GuardContext, local string, cap *CapabilityDocument) {
+func publishOccurrenceAnchor(gc *GuardContext, local string, cap *EngineDeclaration) {
 	if gc == nil {
 		return
 	}
@@ -17,7 +17,7 @@ func publishOccurrenceAnchor(gc *GuardContext, local string, cap *CapabilityDocu
 		local = gc.Anchor
 	}
 	if cap == nil {
-		cap = InstalledCapabilityDocument()
+		cap = InstalledEngineDeclaration()
 	}
 	if IsCoreAnchor(local) {
 		gc.Anchor = local
@@ -32,11 +32,11 @@ func publishOccurrenceAnchor(gc *GuardContext, local string, cap *CapabilityDocu
 	}
 }
 
-func (p *GuardPipeline) capability() *CapabilityDocument {
+func (p *GuardPipeline) declaration() *EngineDeclaration {
 	if p != nil && p.loader != nil {
-		return p.loader.capabilityDoc()
+		return p.loader.declaration()
 	}
-	return InstalledCapabilityDocument()
+	return InstalledEngineDeclaration()
 }
 
 func validateFiredTransform(r *Rule, gc *GuardContext) error {
