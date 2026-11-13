@@ -54,6 +54,7 @@ type VisualCapture struct {
 
 // SourceRunCapture is a settled source run.
 type SourceRunCapture struct {
+	ProgramID        string
 	CheckID          string
 	IsCheck          bool
 	Command          string
