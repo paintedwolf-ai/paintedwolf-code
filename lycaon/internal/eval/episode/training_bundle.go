@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/debugpaths"
+	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
@@ -216,7 +218,7 @@ func (w *bundleWriter) write(ctx context.Context, evidence Evidence, operations 
 		opLines = append(opLines, op)
 	}
 	for name, lines := range map[string][]any{
-		"sessions.jsonl": sessions, "captures.jsonl": captured, "operations.jsonl": opLines, "observations.jsonl": observations,
+		debugpaths.Name(debugpaths.KindSessions): sessions, "captures.jsonl": captured, "operations.jsonl": opLines, "observations.jsonl": observations,
 		"effects.jsonl": effects, "decisions.jsonl": decisions, "completions.jsonl": completions,
 	} {
 		if err := w.lines(name, lines); err != nil {
@@ -327,7 +329,7 @@ func (w *bundleWriter) rawBlob(raw []byte) (string, error) {
 	sum := sha256.Sum256(raw)
 	name := hex.EncodeToString(sum[:])
 	if !w.blobs[name] {
-		if err := os.WriteFile(filepath.Join(w.out, "blobs", name), raw, 0o600); err != nil {
+		if _, err := fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.Location{Root: w.out, Rel: filepath.Join("blobs", name)}, Source: bytes.NewReader(raw), Mode: 0o600}); err != nil {
 			return "", err
 		}
 		w.blobs[name] = true
@@ -357,7 +359,7 @@ func (w *bundleWriter) json(name string, value any) error {
 }
 
 func (w *bundleWriter) file(name string, raw []byte) error {
-	if err := os.WriteFile(filepath.Join(w.out, name), raw, 0o600); err != nil {
+	if _, err := fseffect.Replace(fseffect.ReplaceRequest{Location: fseffect.Location{Root: w.out, Rel: name}, Source: bytes.NewReader(raw), Mode: 0o600}); err != nil {
 		return err
 	}
 	if name != "manifest.json" {
