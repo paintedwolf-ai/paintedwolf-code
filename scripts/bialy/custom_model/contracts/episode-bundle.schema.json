@@ -1,0 +1,359 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pw-training-episode-bundle/1",
+  "title": "Host episode bundle manifest",
+  "description": "Binds every file and content-addressed blob of one closed episode by SHA-256; $defs give each line's shape.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "host_commit",
+    "root_session_id",
+    "project_id",
+    "store_sha256",
+    "files",
+    "blobs"
+  ],
+  "properties": {
+    "schema": {
+      "const": "pw-training-episode-bundle/1"
+    },
+    "host_commit": {
+      "type": "string"
+    },
+    "root_session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "project_id": {
+      "type": "string"
+    },
+    "store_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "required": [
+        "catalog.json",
+        "sessions.jsonl",
+        "captures.jsonl",
+        "operations.jsonl",
+        "observations.jsonl",
+        "effects.jsonl",
+        "decisions.jsonl",
+        "completions.jsonl",
+        "source-inventory.json"
+      ]
+    },
+    "blobs": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      },
+      "uniqueItems": true
+    }
+  },
+  "$defs": {
+    "session": {
+      "type": "object",
+      "required": [
+        "id",
+        "project_id",
+        "messages_blob"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_id": {
+          "type": "string"
+        },
+        "project_id": {
+          "type": "string"
+        },
+        "messages_blob": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "capture": {
+      "type": "object",
+      "required": [
+        "schema",
+        "epoch",
+        "session_id",
+        "message_id",
+        "output_id",
+        "call_id",
+        "dispatches",
+        "settled",
+        "student_provider",
+        "student_model"
+      ],
+      "properties": {
+        "schema": {
+          "const": "pw-training-turn/1"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request_blob": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "student_request_blob": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "response_blob": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "exclusion_reason": {
+          "type": "string"
+        },
+        "prompt_surface": {
+          "type": "object",
+          "required": [
+            "tools",
+            "units"
+          ],
+          "properties": {
+            "tools": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "tool",
+                  "source"
+                ]
+              }
+            },
+            "units": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": [
+                  "id"
+                ]
+              }
+            },
+            "skill": {
+              "type": "object",
+              "required": [
+                "name"
+              ]
+            },
+            "turn_load_receipt_id": {
+              "type": "integer"
+            }
+          }
+        }
+      },
+      "not": {
+        "anyOf": [
+          {
+            "required": [
+              "request"
+            ]
+          },
+          {
+            "required": [
+              "student_request"
+            ]
+          },
+          {
+            "required": [
+              "response"
+            ]
+          }
+        ]
+      }
+    },
+    "operation": {
+      "type": "object",
+      "required": [
+        "id",
+        "session_id",
+        "source",
+        "contract",
+        "invoked",
+        "settlement",
+        "semantic_outcome",
+        "effect_state",
+        "started_at"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "parent_id": {
+          "type": "string"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message_id": {
+          "type": "string"
+        },
+        "tool_call_id": {
+          "type": "string"
+        },
+        "tool": {
+          "type": "string"
+        },
+        "args_sha256": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "contract": {
+          "type": "string",
+          "minLength": 1
+        },
+        "invoked": {
+          "type": "boolean"
+        },
+        "settlement": {
+          "enum": [
+            "settled",
+            "unsettled"
+          ]
+        },
+        "semantic_outcome": {
+          "enum": [
+            "success",
+            "failure",
+            "unknown"
+          ]
+        },
+        "effect_state": {
+          "enum": [
+            "none",
+            "known",
+            "unknown"
+          ]
+        },
+        "failure_code": {
+          "type": "string"
+        },
+        "source_revision": {
+          "type": "string"
+        },
+        "started_at": {
+          "type": "string"
+        },
+        "settled_at": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "decision": {
+      "type": "object",
+      "required": [
+        "kind",
+        "session_id",
+        "message_id",
+        "decided_at"
+      ],
+      "properties": {
+        "kind": {
+          "const": "turn_committed"
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "output_id": {
+          "type": "string"
+        },
+        "decided_at": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "completion": {
+      "type": "object",
+      "required": [
+        "id",
+        "session_id",
+        "message_id",
+        "turn_attempt_id",
+        "scripted",
+        "settled_at",
+        "body_blob"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "scripted": {
+          "type": "boolean"
+        },
+        "settled_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "body_blob": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "observation": {
+      "type": "object",
+      "required": [
+        "kind",
+        "value"
+      ],
+      "properties": {
+        "kind": {
+          "enum": [
+            "execution",
+            "allowance",
+            "verification",
+            "worker"
+          ]
+        }
+      }
+    },
+    "effect": {
+      "type": "object",
+      "required": [
+        "session_id",
+        "path",
+        "op"
+      ]
+    }
+  }
+}

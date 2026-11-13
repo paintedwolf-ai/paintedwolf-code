@@ -14,11 +14,11 @@ from export import export
 
 def fixture(group, mode):
     prompt = [{"role":"system","content":"Be precise"},{"role":"user","content":group}]
-    capture = {"schema":"pw-model-request-capture/2","messages":prompt,"tools":[],"controls":{"reasoning_effort":"none"},
-               "host_revision":"a"*40,"epoch":"fixture","tool_surface":"legacy","state_sha256":"b"*64,"catalog_sha256":"c"*64}
+    capture = {"schema":"pw-model-request-capture/3","messages":prompt,"tools":[],"controls":{"reasoning_effort":"none"},
+               "host_revision":"a"*40,"epoch":"fixture","contract_sha256":"d"*64,"state_sha256":"b"*64,"catalog_sha256":"c"*64}
     capture["sha256"] = digest(capture)
     target = {"role":"assistant","text":"answer","tool_calls":[]}
-    validation = {k:capture[k] for k in ("host_revision","epoch","tool_surface","state_sha256","catalog_sha256")}
+    validation = {k:capture[k] for k in ("host_revision","epoch","contract_sha256","state_sha256","catalog_sha256")}
     validation.update(schema="pw-training-validation/1",validator="paintedwolf-host-training-validation/1",
                       receipt_id="fixture",request_sha256=capture["sha256"],response_sha256=digest(target),
                       outcome="accepted",response_origin="model",

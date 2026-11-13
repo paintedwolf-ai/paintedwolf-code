@@ -23,7 +23,7 @@ class OversizeRow(EncodingExclusion):
 def check_row(row):
     capture, validation = row["request_capture"], row["validation"]
     check_controls(capture.get("controls", {}))
-    if capture.get("schema") not in ("pw-model-request-capture/1", "pw-model-request-capture/2") or validation.get("schema") != "pw-training-validation/1":
+    if capture.get("schema") != "pw-model-request-capture/3" or validation.get("schema") != "pw-training-validation/1":
         raise ValueError("unsupported evidence schema")
     if not capture.get("messages") or any(m.get("content") is not None and not isinstance(m["content"], str) for m in capture["messages"]):
         raise ValueError("unsupported request messages")
@@ -33,7 +33,7 @@ def check_row(row):
         raise ValueError("capture digest mismatch")
     if row["prompt"] != capture["messages"] or validation["request_sha256"] != capture["sha256"]:
         raise ValueError("request mismatch")
-    for key in ("host_revision", "epoch", "tool_surface", "state_sha256", "catalog_sha256"):
+    for key in ("host_revision", "epoch", "contract_sha256", "state_sha256", "catalog_sha256"):
         if not capture.get(key) or validation.get(key) != capture[key]:
             raise ValueError("validation identity mismatch")
     if validation.get("validator") != "paintedwolf-host-training-validation/1" or not validation.get("receipt_id"):
