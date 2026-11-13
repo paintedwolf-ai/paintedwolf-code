@@ -937,11 +937,13 @@ type BoardView struct {
 	// Coordinator session this board snapshot belongs to.
 	SessionID string `json:"session_id,omitempty"`
 	// One-line coordination headline (worker counts, merge status, conflicts).
-	Summary           string                       `json:"summary"`
-	Repo              RepoBrief                    `json:"repo"`
-	Git               *BoardGitSlice               `json:"git,omitempty"`
-	Scans             *BoardScansSlice             `json:"scans,omitempty"`
-	Roster            []BoardWorkerRosterEntry     `json:"roster,omitempty"`
+	Summary string                   `json:"summary"`
+	Repo    RepoBrief                `json:"repo"`
+	Git     *BoardGitSlice           `json:"git,omitempty"`
+	Scans   *BoardScansSlice         `json:"scans,omitempty"`
+	Roster  []BoardWorkerRosterEntry `json:"roster,omitempty"`
+	// Every open worker in the session, needing the coordinator first.
+	Workers           []BoardWorker                `json:"workers,omitempty"`
 	PromotePaths      []WorkerPromoteJobPathStatus `json:"promote_paths,omitempty"`
 	OverlayMergePlan  *OverlayMergePlan            `json:"overlay_merge_plan,omitempty"`
 	Delegation        []BoardDelegationEntry       `json:"delegation,omitempty"`
@@ -956,6 +958,26 @@ type BoardView struct {
 	TruncatedSections []string                     `json:"truncated_sections,omitempty"`
 	GeneratedAt       string                       `json:"generated_at"`
 	NowLine           string                       `json:"now_line"`
+}
+
+// BoardWorker One worker as its coordinator sees it, with the state admission reads.
+type BoardWorker struct {
+	Name      string            `json:"name"`
+	AgentType string            `json:"agent_type"`
+	ScopeMode string            `json:"scope_mode,omitempty"`
+	State     WorkerState       `json:"state"`
+	Reason    WorkerStateReason `json:"reason,omitempty"`
+	// The worker's latest instruction, else its brief, clipped to one line.
+	About string `json:"about,omitempty"`
+	// The pending decision an asking worker waits on.
+	Question string `json:"question,omitempty"`
+	// Handle of the worker's latest result.
+	ResultHandle      string                  `json:"result_handle,omitempty"`
+	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
+	ReadPaths         []string                `json:"read_paths,omitempty"`
+	ReadOmitted       int                     `json:"read_omitted,omitempty"`
+	ChangedPaths      []string                `json:"changed_paths,omitempty"`
+	ChangedOmitted    int                     `json:"changed_omitted,omitempty"`
 }
 
 // BoardWorkerRosterEntry

@@ -70,26 +70,63 @@ type Source struct {
 	Touches Touches
 }
 
-// Build returns the roster for a coordinator session. Closed workers are left
-// out; rows needing the coordinator come first.
+// Build returns the roster for a coordinator session, bounded to MaxRows.
+// Closed workers are left out; rows needing the coordinator come first.
 func (s Source) Build(ctx context.Context, sessionID string) (Roster, error) {
+	rows, err := s.rows(ctx, sessionID)
+	if err != nil {
+		return Roster{}, err
+	}
+	out := Roster{Rows: rows}
+	if len(rows) > MaxRows {
+		out.Rows, out.Omitted = rows[:MaxRows], len(rows)-MaxRows
+	}
+	return out, nil
+}
+
+// Board returns every open worker in the session for the board, in roster
+// order.
+func (s Source) Board(ctx context.Context, sessionID string) ([]api.BoardWorker, error) {
+	rows, err := s.rows(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]api.BoardWorker, 0, len(rows))
+	for _, row := range rows {
+		w := api.BoardWorker{
+			Name: row.Name, AgentType: row.Agent, ScopeMode: row.ScopeMode,
+			State: api.WorkerState(row.State), Reason: api.WorkerStateReason(row.Reason),
+			About: row.About, Question: row.Question,
+			ReadPaths: row.Read.Shown, ReadOmitted: row.Read.Omitted,
+			ChangedPaths: row.Changed.Shown, ChangedOmitted: row.Changed.Omitted,
+		}
+		if row.Result != nil {
+			w.ResultHandle = row.Result.Handle
+			w.ResultDisposition = api.WorkerResultDisposition(row.Result.Disposition)
+		}
+		out = append(out, w)
+	}
+	return out, nil
+}
+
+func (s Source) rows(ctx context.Context, sessionID string) ([]Row, error) {
 	actor := workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
 	workers, err := s.Reader.Records.Workers(ctx, actor)
 	if err != nil {
-		return Roster{}, err
+		return nil, err
 	}
 	var rows []Row
 	for _, w := range workers {
 		snap, err := s.Reader.Read(ctx, actor, w)
 		if err != nil {
-			return Roster{}, err
+			return nil, err
 		}
 		if snap.View.State == workerstate.Closed {
 			continue
 		}
 		row, err := s.row(ctx, actor, snap)
 		if err != nil {
-			return Roster{}, err
+			return nil, err
 		}
 		rows = append(rows, row)
 	}
@@ -99,11 +136,7 @@ func (s Source) Build(ctx context.Context, sessionID string) (Roster, error) {
 		}
 		return rows[i].Name < rows[j].Name
 	})
-	out := Roster{Rows: rows}
-	if len(rows) > MaxRows {
-		out.Rows, out.Omitted = rows[:MaxRows], len(rows)-MaxRows
-	}
-	return out, nil
+	return rows, nil
 }
 
 // priority orders states by how much they need the coordinator.

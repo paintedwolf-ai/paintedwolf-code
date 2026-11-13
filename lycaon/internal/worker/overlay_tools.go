@@ -23,15 +23,17 @@ type OverlayToolDeps struct {
 }
 
 // overlayJob resolves a result handle to the job whose changes it names.
-func overlayJob(ctx context.Context, deps OverlayToolDeps, tool string, tctx tools.ToolContext, handle string, op workerstate.Operation) (string, error) {
+// overlayJob resolves a result handle to the job holding its changes. Without
+// worker results the handle is the job itself and names no result.
+func overlayJob(ctx context.Context, deps OverlayToolDeps, tool string, tctx tools.ToolContext, handle string, op workerstate.Operation) (jobID, resultHandle string, err error) {
 	if deps.Results == nil {
-		return handle, nil
+		return handle, "", nil
 	}
 	ref, err := deps.Results.Result(ctx, coordinatorActor(tctx), handle, op)
 	if err != nil {
-		return "", workerToolReject(tool, "", "", err, handle)
+		return "", "", workerToolReject(tool, "", "", err, handle)
 	}
-	return ref.JobID, nil
+	return ref.JobID, handle, nil
 }
 
 // RegisterOverlayTools registers coordinator overlay tools.
@@ -49,7 +51,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
-		overlayID, err := overlayJob(ctx, deps, "promote_overlay", tctx, handle, workerstate.OpPromote)
+		overlayID, resultHandle, err := overlayJob(ctx, deps, "promote_overlay", tctx, handle, workerstate.OpPromote)
 		if err != nil {
 			return "", err
 		}
@@ -71,6 +73,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 			UserTurn:    tctx.Identity.UserTurn,
 		}
 		out, err := deps.Merge.PromoteOverlay(ctx, tctx.Identity.SessionID, overlayID, in)
+		out.ResultHandle = resultHandle
 		if err == nil {
 			tools.ReportSyntaxOverride(ctx, tctx, out.Applied...)
 		}
@@ -88,7 +91,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
-		overlayID, err := overlayJob(ctx, deps, "reject_overlay", tctx, handle, workerstate.OpReject)
+		overlayID, _, err := overlayJob(ctx, deps, "reject_overlay", tctx, handle, workerstate.OpReject)
 		if err != nil {
 			return "", err
 		}
@@ -110,7 +113,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
 		}
-		overlayID, err := overlayJob(ctx, deps, "preview_overlay", tctx, handle, workerstate.OpPreview)
+		overlayID, resultHandle, err := overlayJob(ctx, deps, "preview_overlay", tctx, handle, workerstate.OpPreview)
 		if err != nil {
 			return "", err
 		}
@@ -121,6 +124,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if err != nil {
 			return "", err
 		}
+		out.ResultHandle = resultHandle
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.OwnerRef = strings.TrimSpace(out.JobID)
 			tctx.Effects.Out.Completion = overlayCompletion("overlay_preview", out, "previewed")

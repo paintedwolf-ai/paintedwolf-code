@@ -11,6 +11,16 @@ func WorkerTasksFromSnapshot(snap api.BoardSnapshot) []api.WorkerTask {
 	return raw
 }
 
+// NamedWorkersFromSnapshot returns the per-worker rows embedded in a board
+// snapshot.
+func NamedWorkersFromSnapshot(snap api.BoardSnapshot) []api.BoardWorker {
+	if snap.Workers == nil {
+		return nil
+	}
+	raw, _ := (*snap.Workers)["workers"].([]api.BoardWorker)
+	return raw
+}
+
 // DelegationsFromSnapshot returns the delegations embedded in a board snapshot.
 func DelegationsFromSnapshot(snap api.BoardSnapshot) []api.Delegation {
 	if snap.Delegation == nil {

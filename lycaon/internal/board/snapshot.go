@@ -82,6 +82,8 @@ type SnapshotBuilder struct {
 	CostTrackingEnabled func() bool
 	// Worktree is nil when worktree bindings are unavailable.
 	Worktree func(ctx context.Context, sessionID string) *api.BoardGitWorktree
+	// NamedWorkers lists the session's open workers; nil leaves them out.
+	NamedWorkers func(ctx context.Context, sessionID string) ([]api.BoardWorker, error)
 }
 
 // Build scopes workers and workflows to the session, and repository facts to the workspace.
@@ -126,6 +128,13 @@ func (b *SnapshotBuilder) Build(ctx context.Context, projectID, workspacePath, s
 	}
 	workersSlice := api.BoardWorkersSlice{
 		"tasks": tasks,
+	}
+	if b.NamedWorkers != nil && sessionID != "" {
+		named, err := b.NamedWorkers(ctx, sessionID)
+		if err != nil {
+			return nil, err
+		}
+		workersSlice["workers"] = named
 	}
 
 	var activeRun *api.WorkflowRun

@@ -74,6 +74,51 @@ components:
         blocked_on_approval:
           type: boolean
           description: True when checkpoint SSE reports a pending human checkpoint for this worker child session
+    BoardWorker:
+      x-go-generate: true
+      type: object
+      description: One worker as its coordinator sees it, with the state admission reads.
+      required:
+      - name
+      - agent_type
+      - state
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+        agent_type:
+          type: string
+        scope_mode:
+          type: string
+        state:
+          $ref: worker.yaml#/components/schemas/WorkerState
+        reason:
+          $ref: worker.yaml#/components/schemas/WorkerStateReason
+        about:
+          type: string
+          description: The worker's latest instruction, else its brief, clipped to one line.
+        question:
+          type: string
+          description: The pending decision an asking worker waits on.
+        result_handle:
+          type: string
+          description: Handle of the worker's latest result.
+        result_disposition:
+          $ref: worker.yaml#/components/schemas/WorkerResultDisposition
+        read_paths:
+          type: array
+          items:
+            type: string
+        read_omitted:
+          type: integer
+          minimum: 0
+        changed_paths:
+          type: array
+          items:
+            type: string
+        changed_omitted:
+          type: integer
+          minimum: 0
     BoardForensicWorkers:
       x-go-generate: true
       type: object
@@ -125,6 +170,11 @@ components:
           type: array
           items:
             $ref: board.yaml#/components/schemas/BoardWorkerRosterEntry
+        workers:
+          type: array
+          description: Every open worker in the session, needing the coordinator first.
+          items:
+            $ref: board.yaml#/components/schemas/BoardWorker
         promote_paths:
           type: array
           items:

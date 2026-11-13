@@ -248,6 +248,7 @@ type WorkerMergeResult struct {
 	// OverlayPromotion is host-only transcript metadata.
 	OverlayPromotion *OverlayPromotion             `json:"-"`
 	JobID            string                        `json:"job_id"`
+	ResultHandle     string                        `json:"result_handle,omitempty"`
 	Mode             string                        `json:"mode"`
 	Status           WorkerMergeStatus             `json:"merge_status,omitempty"`
 	AgentType        string                        `json:"agent_type,omitempty"`

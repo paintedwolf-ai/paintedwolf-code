@@ -5699,6 +5699,8 @@ export interface components {
             git?: components["schemas"]["BoardGitSlice"];
             scans?: components["schemas"]["BoardScansSlice"];
             roster?: components["schemas"]["BoardWorkerRosterEntry"][];
+            /** @description Every open worker in the session, needing the coordinator first. */
+            workers?: components["schemas"]["BoardWorker"][];
             promote_paths?: components["schemas"]["WorkerPromoteJobPathStatus"][];
             overlay_merge_plan?: components["schemas"]["OverlayMergePlan"];
             delegation?: components["schemas"]["BoardDelegationEntry"][];
@@ -9668,6 +9670,8 @@ export interface components {
         WorkerMergeResult: {
             /** Format: uuid */
             job_id: string;
+            /** @description The result these changes belong to. */
+            result_handle?: string;
             mode: string;
             merge_status?: components["schemas"]["WorkerMergeStatus"];
             agent_type?: string;
@@ -14673,6 +14677,40 @@ export interface components {
         WorkerListResponse: {
             next_cursor?: string;
             workers: components["schemas"]["WorkerTask"][];
+        };
+        /**
+         * @description A worker's derived state.
+         * @enum {string}
+         */
+        WorkerState: "planned" | "waiting" | "working" | "asking" | "delivered" | "idle" | "failed" | "recovering" | "closed";
+        /**
+         * @description What qualifies a worker's state.
+         * @enum {string}
+         */
+        WorkerStateReason: "queued" | "parked" | "approval_wait" | "prerequisite" | "result_unaccounted" | "changes_unresolved" | "no_report" | "recovery_required" | "withdrawn" | "session_unusable";
+        /**
+         * @description What became of a worker's latest result.
+         * @enum {string}
+         */
+        WorkerResultDisposition: "unaccounted" | "accounted" | "open" | "landed" | "rejected" | "shelved";
+        /** @description One worker as its coordinator sees it, with the state admission reads. */
+        BoardWorker: {
+            name: string;
+            agent_type: string;
+            scope_mode?: string;
+            state: components["schemas"]["WorkerState"];
+            reason?: components["schemas"]["WorkerStateReason"];
+            /** @description The worker's latest instruction, else its brief, clipped to one line. */
+            about?: string;
+            /** @description The pending decision an asking worker waits on. */
+            question?: string;
+            /** @description Handle of the worker's latest result. */
+            result_handle?: string;
+            result_disposition?: components["schemas"]["WorkerResultDisposition"];
+            read_paths?: string[];
+            read_omitted?: number;
+            changed_paths?: string[];
+            changed_omitted?: number;
         };
         OverlayMergeSharedPath: {
             path: string;
@@ -30771,6 +30809,10 @@ export type WorkflowTopologyLeg = components["schemas"]["WorkflowTopologyLeg"];
 export type WorkflowRunUi = components["schemas"]["WorkflowRunUi"];
 export type WorkflowRunPage = components["schemas"]["WorkflowRunPage"];
 export type WorkerListResponse = components["schemas"]["WorkerListResponse"];
+export type WorkerState = components["schemas"]["WorkerState"];
+export type WorkerStateReason = components["schemas"]["WorkerStateReason"];
+export type WorkerResultDisposition = components["schemas"]["WorkerResultDisposition"];
+export type BoardWorker = components["schemas"]["BoardWorker"];
 export type OverlayMergeSharedPath = components["schemas"]["OverlayMergeSharedPath"];
 export type OverlayMergePlanEntry = components["schemas"]["OverlayMergePlanEntry"];
 export type OverlayMergePlan = components["schemas"]["OverlayMergePlan"];

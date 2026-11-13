@@ -68,6 +68,7 @@ func BuildBoardView(snapshot *api.BoardSnapshot, sessionID string, level api.Boa
 		roster := BuildWorkerRoster(tasks, level)
 		roster = AttachRosterReservations(roster, packboard.ReservationsFromSnapshot(snap))
 		view.Roster = roster
+		view.Workers = packboard.NamedWorkersFromSnapshot(snap)
 		view.PromotePaths = packboard.PromotePathsFromSnapshot(snap)
 		view.Delegation = BuildDelegationRoster(packboard.DelegationsFromSnapshot(snap), level)
 		view.ActiveWorkflowRun = snap.ActiveWorkflowRun

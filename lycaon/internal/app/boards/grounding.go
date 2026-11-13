@@ -264,6 +264,9 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 		Touches: r.deps.Sessions.Manager.Workers.Workspaces.Touches,
 	}
 	r.deps.Sessions.Manager.SetWorkerRoster(roster.Template)
+	if r.Snapshot != nil {
+		r.Snapshot.NamedWorkers = roster.Board
+	}
 	r.deps.Sessions.Manager.SetWorkerResultNotices(roster.ResultNotice)
 	coordinator := func(sessionID string) workerrecords.Actor {
 		return workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}

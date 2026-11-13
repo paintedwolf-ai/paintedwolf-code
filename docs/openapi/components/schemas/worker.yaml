@@ -222,6 +222,43 @@ components:
       - failed
       - canceled
       - held
+    WorkerState:
+      type: string
+      description: A worker's derived state.
+      enum:
+      - planned
+      - waiting
+      - working
+      - asking
+      - delivered
+      - idle
+      - failed
+      - recovering
+      - closed
+    WorkerStateReason:
+      type: string
+      description: What qualifies a worker's state.
+      enum:
+      - queued
+      - parked
+      - approval_wait
+      - prerequisite
+      - result_unaccounted
+      - changes_unresolved
+      - no_report
+      - recovery_required
+      - withdrawn
+      - session_unusable
+    WorkerResultDisposition:
+      type: string
+      description: What became of a worker's latest result.
+      enum:
+      - unaccounted
+      - accounted
+      - open
+      - landed
+      - rejected
+      - shelved
     WorkerMergeStatus:
       type: string
       description: |
@@ -767,6 +804,9 @@ components:
         job_id:
           type: string
           format: uuid
+        result_handle:
+          type: string
+          description: The result these changes belong to.
         mode:
           type: string
         merge_status:

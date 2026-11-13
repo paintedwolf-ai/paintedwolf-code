@@ -208,3 +208,25 @@ func TestResultNoticeDescribesTheSettledRound(t *testing.T) {
 		t.Fatalf("job without a round: ok=%v err=%v", ok, err)
 	}
 }
+
+// The board lists every open worker, beyond the request's row bound, with the
+// same state, result and paths the roster carries.
+func TestBoardListsEveryOpenWorker(t *testing.T) {
+	f := newFixture(t)
+	builder := f.worker(t, "builder", "implementer")
+	f.admit(t, builder, "job-b1", api.WorkerStatusRunning)
+	f.settle(t, builder, "job-b1", "checkpoint-b1", []string{"src/a.go"})
+	for i := range workerroster.MaxRows {
+		f.worker(t, fmt.Sprintf("idle%02d", i), "implementer")
+	}
+	rows, err := f.source.Board(t.Context(), "coord")
+	testutil.FailErr(t, "board", err)
+	if len(rows) != workerroster.MaxRows+1 {
+		t.Fatalf("board rows = %d want %d", len(rows), workerroster.MaxRows+1)
+	}
+	b := rows[0]
+	if b.Name != "builder" || b.State != api.WorkerStateDelivered || b.ResultHandle != "result-job-b1" ||
+		b.ResultDisposition != api.WorkerResultOpen || !slices.Equal(b.ChangedPaths, []string{"src/a.go"}) {
+		t.Fatalf("builder board row = %+v", b)
+	}
+}
