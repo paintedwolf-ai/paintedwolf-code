@@ -1,0 +1,40 @@
+package confine_test
+
+import (
+	"os/exec"
+	"path/filepath"
+	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
+)
+
+// A TCP listener the sandbox refuses reports its bind, whatever else the
+// program probed on the way.
+func TestKernelRefusalOfATCPListenerReachesItsAction(t *testing.T) {
+	self := requireLiveBoundary(t)
+	requireRefusalWatch(t)
+	python, err := exec.LookPath("python3")
+	if err != nil {
+		t.Skip("python3 is required to open a TCP listener")
+	}
+	project, err := filepath.EvalSymlinks(t.TempDir())
+	testutil.FailErr(t, "resolve project", err)
+	// What python3 -m http.server does before serving: pick the address
+	// family, then bind dual-stack. It exits instead of serving.
+	server := `import contextlib, http.server as h, socket
+class Server(h.ThreadingHTTPServer):
+    def server_bind(self):
+        with contextlib.suppress(Exception):
+            self.socket.setsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY, 0)
+        return super().server_bind()
+Server.address_family, address = h._get_best_family(None, 18799)
+Server(address, h.SimpleHTTPRequestHandler).server_close()`
+	refusals, out := refusalsOf(t, self, liveBoundaryRoots(project), python, "-c", server)
+	for _, refusal := range refusals.Refusals {
+		t.Logf("refusal %s %q recovery=%s process=%s", refusal.Operation, refusal.Target, refusal.Recovery, refusal.Process)
+	}
+	t.Logf("witness=%s omitted=%d output:\n%s", refusals.Witness, refusals.Omitted, out)
+	if _, ok := findRefusal(refusals, "network-bind", "local:*:18799"); !ok {
+		t.Fatalf("the refused listener did not reach the action: %+v", refusals.Refusals)
+	}
+}
