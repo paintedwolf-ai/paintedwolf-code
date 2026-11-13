@@ -1,0 +1,25 @@
+{
+  "id": "expr-double-literal-not-finite-rejected",
+  "title": "A double literal with no finite value is rejected at load",
+  "covers": [
+    "OAR-EXPR-15"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "1e400 > 0.0"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-15"
+  }
+}

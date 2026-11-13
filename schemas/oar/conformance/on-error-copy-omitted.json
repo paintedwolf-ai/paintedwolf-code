@@ -11,17 +11,21 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "when": "prompt_injection_score > 0.5",
+    "when": "1 / size(tool) == 0",
     "on_error": "fail_closed",
-    "what": "errors: {{ arg_validation_errors }}"
+    "what": "count: {{ example.count }}",
+    "requires_facts": [
+      "example.count"
+    ]
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
-      "prompt_injection_score": 1e999,
-      "arg_validation_errors": [
-        1
-      ]
+      "tool": "",
+      "example.count": "three"
+    },
+    "host_facts": {
+      "example.count": "int"
     }
   },
   "expected": {

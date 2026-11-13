@@ -1,0 +1,25 @@
+{
+  "id": "expr-null-is-unknown",
+  "title": "null is an unknown identifier",
+  "covers": [
+    "OAR-EXPR-7"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == null"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "null"
+  }
+}

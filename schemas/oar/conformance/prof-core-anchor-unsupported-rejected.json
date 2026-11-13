@@ -13,7 +13,6 @@
     "on": "model.input",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
     "when": "true"
   },
   "input": {

@@ -23,7 +23,8 @@
       "title": "A host fact declared in requires_facts renders in copy",
       "covers": [
         "OAR-COPY-5",
-        "OAR-FACT-19"
+        "OAR-FACT-19",
+        "OAR-FACT-15"
       ]
     },
     {
@@ -81,7 +82,8 @@
       "title": "A fact at its zero value renders, it does not vanish",
       "covers": [
         "OAR-FACT-25",
-        "OAR-COPY-4"
+        "OAR-COPY-4",
+        "OAR-FACT-24"
       ]
     },
     {
@@ -89,9 +91,10 @@
       "file": "detector-threshold-in-when.json",
       "title": "A detector supplies a score and the rule owns the threshold",
       "covers": [
-        "OAR-OPS-9",
+        "OAR-OPS-10",
         "OAR-FACT-9",
-        "OAR-CONF-18"
+        "OAR-CONF-18",
+        "OAR-FACT-6"
       ]
     },
     {
@@ -99,7 +102,7 @@
       "file": "detector-threshold-not-crossed.json",
       "title": "The same detector score below the rule's threshold produces no decision",
       "covers": [
-        "OAR-OPS-9"
+        "OAR-OPS-10"
       ]
     },
     {
@@ -119,11 +122,19 @@
       ]
     },
     {
+      "id": "doc-effect-outside-vocabulary-rejected",
+      "file": "doc-effect-outside-vocabulary-rejected.json",
+      "title": "An effect outside the four this version defines is rejected at load",
+      "covers": [
+        "OAR-DOC-8"
+      ]
+    },
+    {
       "id": "doc-extension-field-ignored",
       "file": "doc-extension-field-ignored.json",
       "title": "An x- extension field is ignored rather than rejected",
       "covers": [
-        "OAR-DOC-20"
+        "OAR-DOC-19"
       ]
     },
     {
@@ -132,14 +143,6 @@
       "title": "An id that does not match the identifier pattern is rejected at load",
       "covers": [
         "OAR-DOC-4"
-      ]
-    },
-    {
-      "id": "doc-legacy-tools-filter-honoured",
-      "file": "doc-legacy-tools-filter-honoured.json",
-      "title": "The deprecated top-level tools list still scopes a rule when selector.tools is absent",
-      "covers": [
-        "OAR-DOC-19"
       ]
     },
     {
@@ -155,9 +158,18 @@
       "file": "doc-namespace-identity.json",
       "title": "Two publishers may ship the same id under different namespaces; the decision still carries the bare id",
       "covers": [
+        "OAR-DOC-20",
         "OAR-DOC-21",
-        "OAR-DOC-22",
         "OAR-EVAL-7"
+      ]
+    },
+    {
+      "id": "doc-non-core-reference-must-be-listed",
+      "file": "doc-non-core-reference-must-be-listed.json",
+      "title": "A rule referencing a standard-profile fact it does not list is rejected at load",
+      "covers": [
+        "OAR-DOC-22",
+        "OAR-PROF-5"
       ]
     },
     {
@@ -165,7 +177,7 @@
       "file": "doc-profile-field-is-informational.json",
       "title": "The profile field records intent and derives no behaviour",
       "covers": [
-        "OAR-DOC-24"
+        "OAR-DOC-23"
       ]
     },
     {
@@ -174,6 +186,15 @@
       "title": "Interoperability taxonomy tags are telemetry and change nothing",
       "covers": [
         "OAR-DOC-16"
+      ]
+    },
+    {
+      "id": "doc-rule-set-duplicate-identity-rejected",
+      "file": "doc-rule-set-duplicate-identity-rejected.json",
+      "title": "A rule set holding two rules with one identity is rejected at load",
+      "covers": [
+        "OAR-DOC-28",
+        "OAR-DOC-27"
       ]
     },
     {
@@ -189,7 +210,7 @@
       "file": "doc-unknown-field-rejected.json",
       "title": "A field the specification does not define is rejected, naming the key",
       "covers": [
-        "OAR-DOC-20",
+        "OAR-DOC-19",
         "OAR-CONF-1"
       ]
     },
@@ -228,13 +249,12 @@
       ]
     },
     {
-      "id": "effect-transform-decision-shape",
-      "file": "effect-transform-decision-shape.json",
-      "title": "A transform rule produces a transform decision rather than a block",
+      "id": "doc-version-leading-zero-rejected",
+      "file": "doc-version-leading-zero-rejected.json",
+      "title": "A spec_version with a leading zero is not a version",
       "covers": [
-        "OAR-OPS-8",
-        "OAR-DOC-8",
-        "OAR-FACT-6"
+        "OAR-DOC-3",
+        "OAR-CONF-2"
       ]
     },
     {
@@ -255,6 +275,14 @@
       ]
     },
     {
+      "id": "eval-first-of-winning-effect-decides",
+      "file": "eval-first-of-winning-effect-decides.json",
+      "title": "When several rules fire with the winning effect, the first in order decides",
+      "covers": [
+        "OAR-EVAL-10"
+      ]
+    },
+    {
       "id": "eval-kind-order",
       "file": "eval-kind-order.json",
       "title": "Rules evaluate schema before policy before invariant, then by id",
@@ -262,6 +290,15 @@
         "OAR-EVAL-1",
         "OAR-EVAL-2",
         "OAR-CONF-10"
+      ]
+    },
+    {
+      "id": "eval-namespace-breaks-identifier-ties",
+      "file": "eval-namespace-breaks-identifier-ties.json",
+      "title": "Rules of one kind and id order by namespace",
+      "covers": [
+        "OAR-EVAL-1",
+        "OAR-DOC-21"
       ]
     },
     {
@@ -284,6 +321,288 @@
       ]
     },
     {
+      "id": "expr-arithmetic-faults-raise",
+      "file": "expr-arithmetic-faults-raise.json",
+      "title": "Division by zero, integer overflow and non-finite doubles raise",
+      "covers": [
+        "OAR-EXPR-14"
+      ]
+    },
+    {
+      "id": "expr-builtins-evaluate",
+      "file": "expr-builtins-evaluate.json",
+      "title": "The four built-ins evaluate as specified",
+      "covers": [
+        "OAR-EXPR-17"
+      ]
+    },
+    {
+      "id": "expr-call-arguments-are-expressions",
+      "file": "expr-call-arguments-are-expressions.json",
+      "title": "A call argument may be any condition of the declared type",
+      "covers": [
+        "OAR-EXPR-16"
+      ]
+    },
+    {
+      "id": "expr-call-signature-mismatch-rejected",
+      "file": "expr-call-signature-mismatch-rejected.json",
+      "title": "A call whose arguments do not match its signature is rejected at load",
+      "covers": [
+        "OAR-EXPR-16"
+      ]
+    },
+    {
+      "id": "expr-chained-relation-rejected",
+      "file": "expr-chained-relation-rejected.json",
+      "title": "A relation holding two relational operators is rejected at load",
+      "covers": [
+        "OAR-EXPR-4"
+      ]
+    },
+    {
+      "id": "expr-comment-rejected",
+      "file": "expr-comment-rejected.json",
+      "title": "A comment is not part of the language",
+      "covers": [
+        "OAR-EXPR-6"
+      ]
+    },
+    {
+      "id": "expr-double-literal-not-finite-rejected",
+      "file": "expr-double-literal-not-finite-rejected.json",
+      "title": "A double literal with no finite value is rejected at load",
+      "covers": [
+        "OAR-EXPR-15"
+      ]
+    },
+    {
+      "id": "expr-double-modulo-rejected",
+      "file": "expr-double-modulo-rejected.json",
+      "title": "Modulo on doubles is rejected at load",
+      "covers": [
+        "OAR-EXPR-9"
+      ]
+    },
+    {
+      "id": "expr-empty-list-rejected",
+      "file": "expr-empty-list-rejected.json",
+      "title": "An empty list literal is rejected at load",
+      "covers": [
+        "OAR-EXPR-7"
+      ]
+    },
+    {
+      "id": "expr-equality-of-aggregates-rejected",
+      "file": "expr-equality-of-aggregates-rejected.json",
+      "title": "Equality between lists or maps is rejected at load",
+      "covers": [
+        "OAR-EXPR-11"
+      ]
+    },
+    {
+      "id": "expr-equality-of-unrelated-types-rejected",
+      "file": "expr-equality-of-unrelated-types-rejected.json",
+      "title": "Equality between unrelated types is rejected at load",
+      "covers": [
+        "OAR-EXPR-11"
+      ]
+    },
+    {
+      "id": "expr-grammar-derives-every-form",
+      "file": "expr-grammar-derives-every-form.json",
+      "title": "Every form the grammar derives is accepted and evaluated",
+      "covers": [
+        "OAR-EXPR-1",
+        "OAR-EXPR-8"
+      ]
+    },
+    {
+      "id": "expr-in-tests-membership-and-keys",
+      "file": "expr-in-tests-membership-and-keys.json",
+      "title": "in tests list membership and map key presence",
+      "covers": [
+        "OAR-EXPR-12"
+      ]
+    },
+    {
+      "id": "expr-in-with-non-string-rejected",
+      "file": "expr-in-with-non-string-rejected.json",
+      "title": "in with a non-string left operand is rejected at load",
+      "covers": [
+        "OAR-EXPR-12"
+      ]
+    },
+    {
+      "id": "expr-index-rejected",
+      "file": "expr-index-rejected.json",
+      "title": "An index expression is outside the grammar and is rejected at load",
+      "covers": [
+        "OAR-EXPR-1"
+      ]
+    },
+    {
+      "id": "expr-int-against-double-rejected",
+      "file": "expr-int-against-double-rejected.json",
+      "title": "Ordering an int against a double is rejected at load",
+      "covers": [
+        "OAR-EXPR-10"
+      ]
+    },
+    {
+      "id": "expr-int-literal-out-of-range-rejected",
+      "file": "expr-int-literal-out-of-range-rejected.json",
+      "title": "An int literal beyond 64 bits is rejected at load",
+      "covers": [
+        "OAR-EXPR-15"
+      ]
+    },
+    {
+      "id": "expr-integer-division-truncates",
+      "file": "expr-integer-division-truncates.json",
+      "title": "Integer division and modulo truncate toward zero",
+      "covers": [
+        "OAR-EXPR-9"
+      ]
+    },
+    {
+      "id": "expr-least-int-literal",
+      "file": "expr-least-int-literal.json",
+      "title": "The least int is written as unary minus over 9223372036854775808",
+      "covers": [
+        "OAR-EXPR-15"
+      ]
+    },
+    {
+      "id": "expr-map-member-selected",
+      "file": "expr-map-member-selected.json",
+      "title": "A dotted reference selects a member of a map fact",
+      "covers": [
+        "OAR-EXPR-2",
+        "OAR-EXPR-13"
+      ]
+    },
+    {
+      "id": "expr-mixed-arithmetic-rejected",
+      "file": "expr-mixed-arithmetic-rejected.json",
+      "title": "Arithmetic mixing int and double is rejected at load",
+      "covers": [
+        "OAR-EXPR-9"
+      ]
+    },
+    {
+      "id": "expr-names-lex-greedily",
+      "file": "expr-names-lex-greedily.json",
+      "title": "A name beginning with a reserved word is one name",
+      "covers": [
+        "OAR-EXPR-6"
+      ]
+    },
+    {
+      "id": "expr-node-floor-accepted",
+      "file": "expr-node-floor-accepted.json",
+      "title": "A condition of 256 nodes is accepted",
+      "covers": [
+        "OAR-EXPR-19"
+      ]
+    },
+    {
+      "id": "expr-non-string-list-rejected",
+      "file": "expr-non-string-list-rejected.json",
+      "title": "A list literal of non-strings is rejected at load",
+      "covers": [
+        "OAR-EXPR-7"
+      ]
+    },
+    {
+      "id": "expr-non-string-member-raises",
+      "file": "expr-non-string-member-raises.json",
+      "title": "A present member that is not a string raises",
+      "covers": [
+        "OAR-EXPR-13"
+      ]
+    },
+    {
+      "id": "expr-null-is-unknown",
+      "file": "expr-null-is-unknown.json",
+      "title": "null is an unknown identifier",
+      "covers": [
+        "OAR-EXPR-7"
+      ]
+    },
+    {
+      "id": "expr-precedence-and-associativity",
+      "file": "expr-precedence-and-associativity.json",
+      "title": "Operators group by the specified precedence",
+      "covers": [
+        "OAR-EXPR-4"
+      ]
+    },
+    {
+      "id": "expr-selection-from-non-map-rejected",
+      "file": "expr-selection-from-non-map-rejected.json",
+      "title": "Selecting a member of a fact that is not a map is rejected at load",
+      "covers": [
+        "OAR-EXPR-2"
+      ]
+    },
+    {
+      "id": "expr-short-circuit-skips-raising-operand",
+      "file": "expr-short-circuit-skips-raising-operand.json",
+      "title": "A decided && or || does not evaluate its right operand",
+      "covers": [
+        "OAR-EXPR-5"
+      ]
+    },
+    {
+      "id": "expr-string-builtins-use-code-points",
+      "file": "expr-string-builtins-use-code-points.json",
+      "title": "String built-ins count and compare code points without folding case",
+      "covers": [
+        "OAR-EXPR-18"
+      ]
+    },
+    {
+      "id": "expr-string-escapes",
+      "file": "expr-string-escapes.json",
+      "title": "The six string escapes decode as specified",
+      "covers": [
+        "OAR-EXPR-3"
+      ]
+    },
+    {
+      "id": "expr-strings-order-by-code-point",
+      "file": "expr-strings-order-by-code-point.json",
+      "title": "Strings order by Unicode code point, not UTF-16 code unit",
+      "covers": [
+        "OAR-EXPR-10"
+      ]
+    },
+    {
+      "id": "expr-ternary-branches-agree",
+      "file": "expr-ternary-branches-agree.json",
+      "title": "A ternary whose branches differ in type is rejected at load",
+      "covers": [
+        "OAR-EXPR-8"
+      ]
+    },
+    {
+      "id": "expr-undeclared-function-rejected",
+      "file": "expr-undeclared-function-rejected.json",
+      "title": "A call to a function that is neither built-in nor declared is rejected at load",
+      "covers": [
+        "OAR-EXPR-17"
+      ]
+    },
+    {
+      "id": "expr-unknown-escape-rejected",
+      "file": "expr-unknown-escape-rejected.json",
+      "title": "An escape outside the six is rejected at load",
+      "covers": [
+        "OAR-EXPR-3"
+      ]
+    },
+    {
       "id": "fact-core-observation-composed",
       "file": "fact-core-observation-composed.json",
       "title": "A rule composes core observations rather than reading a verdict",
@@ -301,20 +620,36 @@
       ]
     },
     {
+      "id": "fact-int-out-of-range-fails-provider",
+      "file": "fact-int-out-of-range-fails-provider.json",
+      "title": "An int fact outside 64 bits routes the rule through on_error",
+      "covers": [
+        "OAR-FACT-17",
+        "OAR-OPS-2"
+      ]
+    },
+    {
+      "id": "fact-mcp-accessor-wrong-type-errors",
+      "file": "fact-mcp-accessor-wrong-type-errors.json",
+      "title": "A typed mcp accessor reading a member of another type is a fact-provider failure",
+      "covers": [
+        "OAR-FACT-23"
+      ]
+    },
+    {
+      "id": "fact-mcp-result-members-read-by-type",
+      "file": "fact-mcp-result-members-read-by-type.json",
+      "title": "The mcp profile reads result members by selection and typed accessors",
+      "covers": [
+        "OAR-FACT-13"
+      ]
+    },
+    {
       "id": "fact-non-boolean-condition-rejected",
       "file": "fact-non-boolean-condition-rejected.json",
       "title": "A condition that does not evaluate to a boolean is rejected at load",
       "covers": [
         "OAR-FACT-3"
-      ]
-    },
-    {
-      "id": "fact-non-finite-double-fails-provider",
-      "file": "fact-non-finite-double-fails-provider.json",
-      "title": "A double fact that is not finite routes the rule through on_error",
-      "covers": [
-        "OAR-FACT-17",
-        "OAR-OPS-2"
       ]
     },
     {
@@ -361,6 +696,14 @@
       ]
     },
     {
+      "id": "fire-counter-of-unknown-rule-rejected",
+      "file": "fire-counter-of-unknown-rule-rejected.json",
+      "title": "Reading the counters of a rule outside the rule set is rejected at load",
+      "covers": [
+        "OAR-FIRE-6"
+      ]
+    },
+    {
       "id": "fire-counter-read-before-increment",
       "file": "fire-counter-read-before-increment.json",
       "title": "A condition reads the counter value from before this occurrence's own increment",
@@ -371,9 +714,37 @@
     {
       "id": "fire-counter-threshold-crossing",
       "file": "fire-counter-threshold-crossing.json",
-      "title": "The threshold on an engine counter lives in the rule, not in the engine",
+      "title": "A rule reads another rule's counter on a later occurrence",
       "covers": [
-        "OAR-FIRE-3"
+        "OAR-FIRE-3",
+        "OAR-FIRE-4",
+        "OAR-FIRE-6"
+      ]
+    },
+    {
+      "id": "fire-counters-keyed-by-identity",
+      "file": "fire-counters-keyed-by-identity.json",
+      "title": "Rules sharing an id under different namespaces keep separate counters",
+      "covers": [
+        "OAR-FIRE-4",
+        "OAR-DOC-21"
+      ]
+    },
+    {
+      "id": "fire-counting-rule-feeds-escalation",
+      "file": "fire-counting-rule-feeds-escalation.json",
+      "title": "An allow rule that counts feeds a rule that escalates on the count",
+      "covers": [
+        "OAR-FIRE-6",
+        "OAR-FIRE-5"
+      ]
+    },
+    {
+      "id": "fire-fire-count-reads-increment-counter",
+      "file": "fire-fire-count-reads-increment-counter.json",
+      "title": "fire_count reads the counter increment_counter maintains",
+      "covers": [
+        "OAR-FIRE-6"
       ]
     },
     {
@@ -382,6 +753,49 @@
       "title": "A rule that fired and was enforced applies on_fire even when its effect loses precedence",
       "covers": [
         "OAR-EVAL-9"
+      ]
+    },
+    {
+      "id": "fire-publish-event-changes-nothing",
+      "file": "fire-publish-event-changes-nothing.json",
+      "title": "publish_event does not affect the decision, trace, or counters",
+      "covers": [
+        "OAR-FIRE-7"
+      ]
+    },
+    {
+      "id": "fire-same-call-run-breaks-on-different-arguments",
+      "file": "fire-same-call-run-breaks-on-different-arguments.json",
+      "title": "A call with different arguments ends the run of the same call",
+      "covers": [
+        "OAR-FIRE-9"
+      ]
+    },
+    {
+      "id": "fire-same-call-run-ignores-member-order",
+      "file": "fire-same-call-run-ignores-member-order.json",
+      "title": "same_call_run compares arguments as JSON values, ignoring member order",
+      "covers": [
+        "OAR-FIRE-9",
+        "OAR-FACT-20",
+        "OAR-FIRE-10"
+      ]
+    },
+    {
+      "id": "fire-same-code-reject-run-counts-blocks",
+      "file": "fire-same-code-reject-run-counts-blocks.json",
+      "title": "same_code_reject_run counts the latest blocks carrying one identifier",
+      "covers": [
+        "OAR-FIRE-8",
+        "OAR-FIRE-10"
+      ]
+    },
+    {
+      "id": "fire-same-code-reject-run-resets",
+      "file": "fire-same-code-reject-run-resets.json",
+      "title": "A decision other than a block ends the run of blocks",
+      "covers": [
+        "OAR-FIRE-8"
       ]
     },
     {
@@ -407,6 +821,14 @@
       "title": "Hint copy carrying a binding is rejected at load",
       "covers": [
         "OAR-HINT-3"
+      ]
+    },
+    {
+      "id": "hint-duplicate-code-rejected",
+      "file": "hint-duplicate-code-rejected.json",
+      "title": "Two hints with one code are rejected at load, whatever their namespace",
+      "covers": [
+        "OAR-HINT-2"
       ]
     },
     {
@@ -475,7 +897,15 @@
       "file": "ops-detector-ref-unresolvable-rejected.json",
       "title": "A detector-kind rule whose reference cannot be resolved is rejected at load",
       "covers": [
-        "OAR-OPS-10"
+        "OAR-OPS-11"
+      ]
+    },
+    {
+      "id": "ops-mandatory-monitor-rejected",
+      "file": "ops-mandatory-monitor-rejected.json",
+      "title": "A mandatory rule cannot be monitored",
+      "covers": [
+        "OAR-OPS-9"
       ]
     },
     {
@@ -493,6 +923,14 @@
       "title": "A monitored rule that would have blocked does not stop later rules",
       "covers": [
         "OAR-EVAL-8"
+      ]
+    },
+    {
+      "id": "ops-monitor-error-produces-no-decision",
+      "file": "ops-monitor-error-produces-no-decision.json",
+      "title": "A monitored rule that cannot be evaluated produces no decision",
+      "covers": [
+        "OAR-OPS-8"
       ]
     },
     {
@@ -543,6 +981,14 @@
       ]
     },
     {
+      "id": "ops-on-error-unknown-substitute-rejected",
+      "file": "ops-on-error-unknown-substitute-rejected.json",
+      "title": "An on_error naming no rule of the rule set is rejected at load",
+      "covers": [
+        "OAR-OPS-4"
+      ]
+    },
+    {
       "id": "ops-severity-does-not-affect-decision",
       "file": "ops-severity-does-not-affect-decision.json",
       "title": "Severity is telemetry only: an info-severity rule still produces its declared effect",
@@ -566,7 +1012,16 @@
       "title": "A rule on a core anchor the host declares unsupported is rejected at load",
       "covers": [
         "OAR-PROF-3",
-        "OAR-CONF-19"
+        "OAR-CONF-19",
+        "OAR-PROF-2"
+      ]
+    },
+    {
+      "id": "prof-profile-map-names-every-anchor",
+      "file": "prof-profile-map-names-every-anchor.json",
+      "title": "An anchor profile map that omits a core anchor is rejected",
+      "covers": [
+        "OAR-PROF-2"
       ]
     },
     {
@@ -582,7 +1037,7 @@
       "file": "prof-requires-facts-unmet-rejected.json",
       "title": "A rule requiring a fact the host does not provide is rejected at load, naming both",
       "covers": [
-        "OAR-DOC-23",
+        "OAR-DOC-22",
         "OAR-PROF-6",
         "OAR-CONF-4"
       ]
@@ -598,7 +1053,7 @@
     {
       "id": "sel-clauses-and",
       "file": "sel-clauses-and.json",
-      "title": "Selector clauses are conjunctive: one non-matching clause deselects the rule",
+      "title": "A selector clause that does not match deselects the rule",
       "covers": [
         "OAR-SEL-2",
         "OAR-SEL-4",
@@ -635,7 +1090,7 @@
     {
       "id": "sel-unmodelled-clause-does-not-match",
       "file": "sel-unmodelled-clause-does-not-match.json",
-      "title": "A selector clause naming a dimension the host does not model does not match",
+      "title": "A tools clause does not match at an anchor where no tool is invoked",
       "covers": [
         "OAR-SEL-6"
       ]

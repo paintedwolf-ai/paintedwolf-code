@@ -1,0 +1,42 @@
+{
+  "id": "fire-publish-event-changes-nothing",
+  "title": "publish_event does not affect the decision, trace, or counters",
+  "covers": [
+    "OAR-FIRE-7"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "nudge",
+    "when": "true",
+    "on_fire": [
+      "publish_event"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session"
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "R",
+    "on_fire": [
+      "publish_event"
+    ],
+    "applied": [
+      "R:fired"
+    ],
+    "counters": {
+      "R": {
+        "fire_count": 0,
+        "breaker_count": 0
+      }
+    }
+  }
+}
