@@ -33,7 +33,7 @@ export function FilesEditorToolbar(props: { children: JSX.Element; actions: JSX.
 }
 
 type StatusChip = { label: string; onOpen?: () => void; ref?: (element: HTMLButtonElement) => void };
-export type FilesEditorPrettyToggle = { enabled: boolean; available?: boolean; onToggle: () => void };
+export type FilesEditorPrettyToggle = { enabled: boolean; available?: boolean; reason?: string; onToggle: () => void };
 export type FilesEditorStatusProps = {
   identity: ReturnType<typeof resolveEditorIdentity>;
   windows?: JSX.Element;
@@ -71,6 +71,7 @@ export function FilesEditorStatus(props: FilesEditorStatusProps) {
     <ShowLatest when={props.eol}>{chip=><StatusChipView chip={chip()} testId="files-editor-eol-chip" />}</ShowLatest>
     {props.details}
     <Show when={props.simplified}><span class="den-files-editor__status-detail" data-testid="files-editor-simplified-chip">Simplified</span></Show>
+    <Show when={props.pretty?.reason}>{reason=><span class="den-files-editor__status-detail" data-testid="files-editor-pretty-reason">{reason()}</span>}</Show>
     <span class="den-files-editor__status-spacer" />
     <button type="button" class="den-files-editor__status-toggle den-inset-icon-btn den-files-editor__status-pretty"
       data-testid="files-editor-pretty-toggle" aria-pressed={prettyOn()}

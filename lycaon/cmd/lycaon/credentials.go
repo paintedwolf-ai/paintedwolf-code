@@ -1,9 +1,12 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/credentialstore"
@@ -104,7 +107,11 @@ func allCredentialSlots() ([]credentialstore.Slot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []credentialstore.Slot{provider, research, oauth, mcpStatic, fingerprint, managed, git, hostID}, nil
+	daemonToken, err := api.DefaultDaemonTokenSlot()
+	if err != nil {
+		return nil, err
+	}
+	return []credentialstore.Slot{provider, research, oauth, mcpStatic, fingerprint, managed, git, hostID, daemonToken}, nil
 }
 
 func describeCredentials(slots []credentialstore.Slot) error {
@@ -149,4 +156,26 @@ func purgeCredentials(args []string, slots []credentialstore.Slot) error {
 	}
 	fmt.Fprintln(os.Stderr, "purged encrypted credential vault and identity")
 	return nil
+}
+
+const tokenUsage = "usage: pw token print"
+
+// runToken implements the strictly read-only CLI retrieval command for the
+// standalone daemon bearer token. It honors LYCAON_API_TOKEN precedence and
+// otherwise reads ("daemon-token", "bearer") from the active profile's
+// credential-vault.age without creating or rotating any token.
+func runToken(args []string, out io.Writer) error {
+	if len(args) != 1 || args[0] != "print" {
+		return errors.New(tokenUsage)
+	}
+	if envToken := strings.TrimSpace(os.Getenv("LYCAON_API_TOKEN")); envToken != "" {
+		_, err := fmt.Fprintln(out, envToken)
+		return err
+	}
+	token, err := api.ReadAPIToken()
+	if err != nil {
+		return fmt.Errorf("read daemon token: %w", err)
+	}
+	_, err = fmt.Fprintln(out, token)
+	return err
 }

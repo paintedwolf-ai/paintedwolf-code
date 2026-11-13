@@ -184,6 +184,9 @@ func verifyContract(t *testing.T, c contractCase, obs runtimeObservation) {
 	if obs.Outcome.State != "completed" || obs.Outcome.Status != c.Status {
 		t.Fatalf("state %s status %d, want completed %d (stdout=%q stderr=%q)", obs.Outcome.State, obs.Outcome.Status, c.Status, obs.Outcome.Stdout, obs.Outcome.Stderr)
 	}
+	if obs.Outcome.Truncated {
+		t.Fatalf("outcome truncated before decode (stdout=%q stderr=%q)", obs.Outcome.Stdout, obs.Outcome.Stderr)
+	}
 	if obs.Outcome.Stderr != c.Stderr {
 		t.Fatalf("stderr = %q, want %q", obs.Outcome.Stderr, c.Stderr)
 	}

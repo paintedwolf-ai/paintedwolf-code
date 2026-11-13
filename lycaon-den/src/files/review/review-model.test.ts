@@ -21,6 +21,7 @@ import {
   unpresentedAgentFileCount,
   type LiveRowScope,
   type ReviewLiveRow,
+  type ShownLiveRow,
   type ReviewLiveState,
 } from "./review-model.ts";
 
@@ -324,10 +325,11 @@ describe("buildReviewRows", () => {
     },
   ]);
 
-  const live = (path: string, state: ReviewLiveState, overrides: Partial<ReviewLiveRow> = {}): ReviewLiveRow => ({
+  const live = (path: string, state: ReviewLiveState, overrides: Partial<ShownLiveRow> = {}): ShownLiveRow => ({
     rootId: "r1",
     path,
     state,
+    phase: "live",
     chatId: "s1",
     chatTitle: "Work",
     turn: 3,
@@ -343,6 +345,15 @@ describe("buildReviewRows", () => {
     expect(a?.liveVerb).toBe("editing");
     expect(a?.steps).toHaveLength(1);
     expect(a?.unpresentedAgentEffects).toBe(1);
+  });
+
+  it("shows editing that ended without landing as it was shown live, marked past", () => {
+    for (const path of ["src/a.ts", "src/new.ts"]) {
+      const shownLive = buildReviewRows(files, [live(path, "editing")]).find((r) => r.path === path)!;
+      const shownPast = buildReviewRows(files, [live(path, "editing", { phase: "past" })]).find((r) => r.path === path)!;
+      expect(shownLive.livePhase).toBe("live");
+      expect(shownPast).toEqual({ ...shownLive, livePhase: "past" });
+    }
   });
 
   it("orders in-flight rows ahead of settled ones", () => {
