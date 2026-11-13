@@ -2,6 +2,8 @@ package oar
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -198,6 +200,41 @@ func TestDetectorDispatchSecretMatch(t *testing.T) {
 	testutil.FailErr(t, "dispatch", err)
 	if len(findings) != 1 || findings[0].Fact != "secret_matches" {
 		t.Fatalf("expected secret_matches observation, got %#v", findings)
+	}
+}
+
+type refusingPublisher struct{}
+
+func (refusingPublisher) Publish(context.Context, OnFireEvent) error {
+	return errors.New("stream closed")
+}
+
+func TestFire7RefusedEventChangesNothingElse(t *testing.T) {
+	run := func(pub EventPublisher) (*PipelineResult, int64) {
+		rule := &Rule{
+			SpecVersion: "1.0", ID: "COORDINATOR_UNGROUNDED_CLAIM", Kind: KindInvariant,
+			Anchor: AnchorCoordinatorPostTurn, When: `paintedwolf.claims_completion`,
+			Effect: EffectNudge, OnFire: []OnFireAction{OnFirePublishEvent, OnFireIncrementCounter},
+			Enforcement: "enforce", OnError: "fail_closed",
+		}
+		store := NewCounterStore()
+		p := NewGuardPipeline(NewRuleSet([]*Rule{rule}), nil, store)
+		p.SetEventPublisher(pub)
+		gc := NewGuardContext()
+		gc.Session.SessionID = "s"
+		gc.Grounding.ClaimsCompletion = true
+		res, err := p.Evaluate(t.Context(), StagePostTurn, gc)
+		testutil.FailErr(t, "evaluate", err)
+		return res, store.Get("s", rule.ID, CounterFire)
+	}
+	accepted, acceptedFires := run(acceptPublisher{})
+	refused, refusedFires := run(refusingPublisher{})
+	if len(accepted.PublishedEvents) != 1 || len(refused.PublishedEvents) != 0 {
+		t.Fatalf("[OAR-FIRE-7] published events: accepted=%d refused=%d", len(accepted.PublishedEvents), len(refused.PublishedEvents))
+	}
+	if !reflect.DeepEqual(accepted.Decision, refused.Decision) || !reflect.DeepEqual(accepted.Trace, refused.Trace) || acceptedFires != refusedFires || acceptedFires != 1 {
+		t.Fatalf("[OAR-FIRE-7] refused event changed the occurrence: decision %+v vs %+v, trace %+v vs %+v, fires %d vs %d",
+			accepted.Decision, refused.Decision, accepted.Trace, refused.Trace, acceptedFires, refusedFires)
 	}
 }
 
