@@ -6,7 +6,7 @@ import type { ChatContentAccess, ChatContentMatch } from "./chat-content-reader.
 
 const MAX_MATCHES = 10000;
 
-/** Search exact retained content while the card body is absent. */
+/** Searches content on the host, so Find covers rows that are not loaded. */
 export function bindChatContentFind(options: {
   access: () => ChatContentAccess | undefined;
   host: () => HTMLElement | null | undefined;
