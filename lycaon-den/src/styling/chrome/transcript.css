@@ -222,8 +222,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* What the agent was told was open in the editor, under the person's message. */
-.den-editor-context {
+/* What the agent was told the person had in view, under their message. */
+.den-view-context {
   align-self: flex-end;
   display: flex;
   flex-wrap: wrap;
@@ -237,13 +237,9 @@
   line-height: 1.4;
 }
 
-.den-editor-context__file {
+.den-view-context__item {
   font-family: var(--den-font-mono);
   overflow-wrap: anywhere;
-}
-
-.den-editor-context__unsaved {
-  margin-inline-start: 3px;
 }
 
 .bubble--user {
