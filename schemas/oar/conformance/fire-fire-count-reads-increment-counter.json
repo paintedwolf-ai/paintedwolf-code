@@ -1,0 +1,35 @@
+{
+  "id": "fire-fire-count-reads-increment-counter",
+  "title": "fire_count reads the counter increment_counter maintains",
+  "covers": [
+    "OAR-FIRE-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "warn",
+    "when": "fire_count == 0",
+    "on_fire": [
+      "increment_counter"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session"
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "R",
+    "counters": {
+      "R": {
+        "fire_count": 1
+      }
+    }
+  }
+}

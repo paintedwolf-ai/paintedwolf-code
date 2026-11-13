@@ -63,10 +63,12 @@ type acceptPublisher struct{}
 
 func (acceptPublisher) Publish(context.Context, OnFireEvent) error { return nil }
 
-// ExecuteOnFire runs declared side effects.
-func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher, event OnFireEvent, code string, actions []OnFireAction) ([]OnFireAction, error) {
+// ExecuteOnFire runs declared side effects and returns the ones applied. An
+// event the publisher refuses is not applied and changes nothing else
+// ([OAR-FIRE-7]).
+func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher, event OnFireEvent, code string, actions []OnFireAction) []OnFireAction {
 	if len(actions) == 0 {
-		return nil, nil
+		return nil
 	}
 	if store == nil {
 		store = NewCounterStore()
@@ -87,28 +89,10 @@ func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher,
 			store.Reset(event.SessionID, code, CounterBreaker)
 		case OnFirePublishEvent:
 			if err := pub.Publish(ctx, event); err != nil {
-				return applied, err
+				continue
 			}
 		}
 		applied = append(applied, a)
 	}
-	return applied, nil
-}
-
-// applyScopedCounter applies a rule's counter actions to the additional
-// scope it declares; breakers and events stay keyed by the rule alone.
-func applyScopedCounter(store *CounterStore, sessionID, key string, actions []OnFireAction) {
-	if store == nil {
-		return
-	}
-	for _, a := range actions {
-		switch a {
-		case OnFireIncrementCounter:
-			store.Increment(sessionID, key, CounterFire, 1)
-		case OnFireResetCounter:
-			store.Reset(sessionID, key, CounterFire)
-		default:
-			// Breakers and events stay keyed by the rule alone.
-		}
-	}
+	return applied
 }

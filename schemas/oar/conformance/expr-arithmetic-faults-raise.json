@@ -1,0 +1,64 @@
+{
+  "id": "expr-arithmetic-faults-raise",
+  "title": "Division by zero, integer overflow and non-finite doubles raise",
+  "covers": [
+    "OAR-EXPR-14"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "A_DIVIDE",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "1 / 0 == 0",
+      "on_error": "fail_open"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "B_OVERFLOW",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "9223372036854775807 + 1 > 0",
+      "on_error": "fail_open"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "C_INFINITE",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "1.0 / 0.0 > 0.0",
+      "on_error": "fail_open"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "D_OVERFLOW_DOUBLE",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "1e308 * 10.0 > 0.0",
+      "on_error": "fail_open"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "A_DIVIDE:errored",
+      "B_OVERFLOW:errored",
+      "C_INFINITE:errored",
+      "D_OVERFLOW_DOUBLE:errored"
+    ]
+  }
+}

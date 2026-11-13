@@ -10,13 +10,13 @@ selector:
 requires_facts: [paintedwolf.action_host_resource_denials]
 when: 'size(paintedwolf.action_host_resource_denials) > 0'
 effect: block
-category: recoverable
-emit: guard:host_resource_policy
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:host_resource_policy
 message: host resource blocked by policy
 what: '{% if paintedwolf.action_host_resource_denials %}Effective policy denies these requested host resources: {{ paintedwolf.action_host_resource_denials }}.{% else %}A requested host resource was denied by effective policy.{% endif %}'
 cause: The structured process request named a host resource whose device or project access posture is deny.
 why: Host-resource policy is enforced before local-service or direct-network approval so a blocked resource cannot be recovered through a broader grant.
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default

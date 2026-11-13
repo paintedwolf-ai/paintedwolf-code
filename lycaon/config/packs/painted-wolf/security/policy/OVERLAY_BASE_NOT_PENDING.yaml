@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.base_overlay_checked, paintedwolf.base_overlay_id, paintedwolf.base_overlay_pending, paintedwolf.base_overlay_resolves, paintedwolf.merge_status, paintedwolf.rejection_reason, paintedwolf.tool_is_task]
 when: paintedwolf.tool_is_task && paintedwolf.base_overlay_checked && paintedwolf.base_overlay_id != "" && paintedwolf.base_overlay_resolves && !paintedwolf.base_overlay_pending
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: '`task()` scope.base_overlay_id={{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }}{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %} — can no longer be stacked on'
 what: 'Dispatch base_overlay_id {{ paintedwolf.base_overlay_id }} is {{ paintedwolf.merge_status }}, so it cannot stack on it{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}'
 cause: The observed base state does not permit stacking a new worker.
 why: The worker needs an eligible base whose changes remain available as its starting tree.
 fix: If the base is merged, start from primary with scope.base_overlay_id unset. If it is rejected, orphaned, or aborted, inspect the retained work before choosing an eligible replacement base or an independent task on primary. For another state, refresh the roster and resolve eligibility before retrying.
 instead: Use the observed merge_status and current roster to preserve required base changes; do not assume a closed base was merged.
-scenarios:
+x-paintedwolf-scenarios:
   - id: merged
     vars:
       base_overlay_id: ov-grep-impl

@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.count, paintedwolf.measure_selector, paintedwolf.rejection_code, paintedwolf.selector_ambiguous]
 when: paintedwolf.rejection_code == "MEASURE_SELECTOR_AMBIGUOUS"
 effect: block
-category: recoverable
-emit: guard:visual_capture
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
 message: measure_page selector matched more than one node
 what: Selector {{ paintedwolf.measure_selector }} matched {{ paintedwolf.count }} DOM nodes.
 cause: The selector is too broad for a single-node rect probe.
 why: measure_page requires exactly one node per selector so numbers are deterministic.
 fix: Narrow the selector to the one intended node using an observed unique attribute or context. Do not choose an arbitrary first match merely to obtain geometry.
 instead: Branch on Code MEASURE_SELECTOR_AMBIGUOUS; narrow the selector
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       count: 2

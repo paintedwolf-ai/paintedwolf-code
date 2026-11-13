@@ -95,11 +95,13 @@ func (p *GuardPipeline) EvaluateBlock(ctx context.Context, anchor string, gc *Gu
 	gc.DeriveToolClassFacts()
 	holder := newEvalHolder(gc, rules, p.counters)
 	publishOccurrenceAnchor(gc, anchor, p.declaration())
+	p.counters.applyRunCounts(gc, anchor)
 
 	matched, selectionErrors := p.selectRulesForAnchor(rules, anchor, gc)
 	if err := p.evaluateMatched(ctx, holder, gc, matched, selectionErrors, StageFromAnchor(anchor), res); err != nil {
 		return res, err
 	}
+	p.counters.recordOccurrence(gc, anchor, res.Decision)
 	if err := p.deliverAdvisories(ctx, anchor, gc, res); err != nil {
 		return res, err
 	}

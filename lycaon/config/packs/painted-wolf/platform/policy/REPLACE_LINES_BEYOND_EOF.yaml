@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: REPLACE_LINES_BEYOND_EOF
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - replace_lines
+selector: {}
 requires_facts: [paintedwolf.beyond_eof, paintedwolf.can_command, paintedwolf.end_line, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.start_line, paintedwolf.total_lines]
-when: paintedwolf.rejection_code == "REPLACE_LINES_BEYOND_EOF"
+when: paintedwolf.operation == "replace_lines" && paintedwolf.rejection_code == "REPLACE_LINES_BEYOND_EOF"
 effect: block
-category: recoverable
-emit: guard:replace_lines
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:replace_lines
 message: replace_lines range past end of file
 what: The line-range replacement on {{ paintedwolf.path }} range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} exceeds file length ({{ paintedwolf.total_lines }} lines).
 cause: Line numbers must fall within the file; check the file's line count before replacing a range.
 why: Splicing past EOF would corrupt file structure — narrow the range from a fresh read.
 fix: '{% if paintedwolf.can_command %}Check the current line count with `wc -l {{ paintedwolf.path }}` (0 also handles an empty file){% else %}Re-read {{ paintedwolf.path }} to get its current line count (an empty file has none){% endif %} and select the intended replacement within it. Do not retry at the rejected out-of-range start or use zero as a line number.'
 instead: Branch on Code; lower the line range or re-read total_lines
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       end_line: 200

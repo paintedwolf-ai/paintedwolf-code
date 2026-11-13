@@ -12,7 +12,6 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "nudge",
-    "emit": "rule:conformance",
     "when": "tool == \"read\"",
     "enforcement": "monitor",
     "on_fire": [

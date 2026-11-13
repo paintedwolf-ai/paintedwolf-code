@@ -2,15 +2,12 @@ spec_version: "1.0"
 id: EXTRACT_FORMAT_UNSUPPORTED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - extract_archive
+selector: {}
 requires_facts: [paintedwolf.can_command, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.unsupported]
-when: paintedwolf.rejection_code == "EXTRACT_FORMAT_UNSUPPORTED"
+when: paintedwolf.operation == "extract_archive" && paintedwolf.rejection_code == "EXTRACT_FORMAT_UNSUPPORTED"
 effect: block
-category: recoverable
-emit: guard:extract_archive
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:extract_archive
 message: extract_archive format not supported
 what: path {{ paintedwolf.path }} is not a supported archive extension.
 cause: This extractor accepts archive formats identified by the .zip and .tar.gz suffixes.
@@ -18,7 +15,7 @@ why: Narrow format set keeps parser and zip-slip defenses auditable.
 fix: >-
   Use an actual supported archive containing the intended data. Renaming an unsupported file does not convert its contents. {% if paintedwolf.can_command %}Inspect a single zip member with `unzip -p`, or extract a tar member with `tar -x -f`, inside command when that is the intended task.{% else %}Inspect a single uncompressed file with an offered reader when that is the intended task.{% endif %}
 instead: Branch on Code
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       allowed: .zip, .tar.gz

@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: CHMOD_SPECIAL_BIT_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - chmod
+selector: {}
 requires_facts: [paintedwolf.mode, paintedwolf.operation, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "CHMOD_SPECIAL_BIT_DENIED"
+when: paintedwolf.operation == "chmod" && paintedwolf.rejection_code == "CHMOD_SPECIAL_BIT_DENIED"
 effect: block
-category: recoverable
-emit: guard:chmod
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chmod
 message: chmod rejected setuid, setgid, or sticky bits
 what: chmod rejected special permission bits in mode {{ paintedwolf.mode }}.
 cause: Setuid, setgid and sticky bits are outside this tool’s permitted modes.
 why: Special permission bits change execution or directory-access semantics beyond ordinary rwx permissions.
 fix: Use an ordinary allowed permission mode that satisfies the task. If special bits are actually required, report this limitation instead of substituting broader access.
 instead: Branch on Code CHMOD_SPECIAL_BIT_DENIED; do not request special permission bits
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

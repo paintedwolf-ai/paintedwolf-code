@@ -11,7 +11,7 @@
     "selector": {},
     "effect": "block",
     "when": "tool == \"read\"",
-    "what": "Retained prefix at {{ paintedwolf.spill_path }}."
+    "what": "Retained prefix at {{ example.spill_path }}."
   },
   "input": {
     "anchor": "tool.pre_invoke",
@@ -19,11 +19,11 @@
       "tool": "read"
     },
     "host_facts": {
-      "paintedwolf.spill_path": "string"
+      "example.spill_path": "string"
     }
   },
   "expected": {
-    "error": "paintedwolf.spill_path"
+    "error": "example.spill_path"
   },
   "id": "copy-non-core-fact-unreached-rejected"
 }

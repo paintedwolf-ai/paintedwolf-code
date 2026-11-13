@@ -1,0 +1,29 @@
+{
+  "id": "expr-names-lex-greedily",
+  "title": "A name beginning with a reserved word is one name",
+  "covers": [
+    "OAR-EXPR-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "\"in\" in [\"in\", \"international\"] && size(\"international\") == 13"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

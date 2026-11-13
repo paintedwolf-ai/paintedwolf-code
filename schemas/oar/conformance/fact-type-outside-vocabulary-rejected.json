@@ -12,7 +12,7 @@
     "effect": "block",
     "when": "tool == \"read\"",
     "requires_facts": [
-      "paintedwolf.score"
+      "example.score"
     ]
   },
   "input": {
@@ -21,7 +21,7 @@
       "tool": "read"
     },
     "host_facts": {
-      "paintedwolf.score": "float"
+      "example.score": "float"
     }
   },
   "expected": {

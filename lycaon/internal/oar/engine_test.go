@@ -97,13 +97,16 @@ func TestEvaluateConditionGroundingFacts(t *testing.T) {
 	}
 }
 
-func TestPathOutsideScopeFunction(t *testing.T) {
+func TestPathOutsideScopeReadsTheCurrentTool(t *testing.T) {
 	gc := NewGuardContext()
 	gc.Access.PathOutsideScopeByTool = map[string]bool{"read": true}
-	ok, err := EvaluateCondition(`path_outside_scope("read")`, gc)
-	testutil.FailErr(t, "eval", err)
-	if !ok {
-		t.Fatal("expected path_outside_scope true")
+	for tool, want := range map[string]bool{"read": true, "write": false} {
+		gc.ObserveToolCall(tool, nil)
+		ok, err := EvaluateCondition(`path_outside_scope`, gc)
+		testutil.FailErr(t, "eval", err)
+		if ok != want {
+			t.Fatalf("path_outside_scope for %s = %v, want %v", tool, ok, want)
+		}
 	}
 }
 
@@ -196,8 +199,8 @@ func TestSyncRegistryThreadsReferences(t *testing.T) {
     references:
       owasp_llm: [LLM01]
       mitre_atlas: [AML.T0051]
-    emit: guard:test
-    category: recoverable
+    x-paintedwolf-emit: guard:test
+    x-paintedwolf-category: recoverable
 `
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "DEMO_OWASP_TAG.yaml"), []byte(body), 0o600))
 	regPath := filepath.Join(t.TempDir(), "guidance_registry.json")

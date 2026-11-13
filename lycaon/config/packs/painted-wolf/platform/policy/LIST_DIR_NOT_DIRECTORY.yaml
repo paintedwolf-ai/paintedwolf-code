@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: LIST_DIR_NOT_DIRECTORY
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - list_dir
+selector: {}
 requires_facts: [paintedwolf.can_command, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "LIST_DIR_NOT_DIRECTORY"
+when: paintedwolf.operation == "list_dir" && paintedwolf.rejection_code == "LIST_DIR_NOT_DIRECTORY"
 effect: block
-category: recoverable
-emit: guard:list_dir
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:list_dir
 message: list_dir path is not a directory
 what: The listing path {{ paintedwolf.path }} is not a directory.
 cause: A listing traverses directories; the selected path names a file.
 why: File content and directory membership are separate observations.
 fix: '{% if paintedwolf.can_command %}Read the selected file’s content with `cat`, `head`, or `sed -n` inside command.{% else %}File content requires a reader offered on the current surface.{% endif %} For directory membership, list the intended parent directory instead.'
 instead: Choose a directory to list, or use an offered file reader
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: docs/README.md

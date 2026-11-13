@@ -7,14 +7,14 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "ASK_USER_OPERATION_CONFLICT"
 effect: block
-category: recoverable
-emit: guard:ask_user
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ask_user
 message: a pending ask cannot change its content
 what: This ask_user call reuses a tool call id whose pending ask has different content.
 cause: A retried call must carry the same prompt, options, and artifacts as the ask it retries.
 why: The person may already be answering the original ask, so its content cannot change under them.
 fix: Retry with the original arguments, or wait for the pending answer before asking something new.
 instead: Do not edit a pending ask by resending it.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {"tool_call_id": "call-1", "session_role": "coordinator", "tool": "ask_user"}

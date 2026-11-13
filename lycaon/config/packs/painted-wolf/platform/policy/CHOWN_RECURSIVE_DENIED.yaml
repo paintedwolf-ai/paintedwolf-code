@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: CHOWN_RECURSIVE_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - chown
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "CHOWN_RECURSIVE_DENIED"
+when: paintedwolf.operation == "chown" && paintedwolf.rejection_code == "CHOWN_RECURSIVE_DENIED"
 effect: block
-category: recoverable
-emit: guard:chown
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chown
 message: chown:recursive chown not supported
 what: Recursive chown is not supported.
 cause: The invocation requested recursive ownership changes.
 why: This tool applies ownership only to explicit bounded targets.
 fix: Use explicit paths for the ownership changes actually requested, within the current schema’s batch limit. Do not use a recursive command to bypass this restriction.
 instead: Branch on Code CHOWN_RECURSIVE_DENIED; keep the intended targets explicit
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

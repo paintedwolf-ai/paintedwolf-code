@@ -7,14 +7,14 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SCAN_INVENTORY_STALE"
 effect: block
-category: recoverable
-emit: guard:scan_drilldown
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:scan_drilldown
 message: Scan inventory changed.
 what: The scan inventory changed between pages.
 cause: The requested inventory revision is no longer current.
 why: Continuing with the old offset could omit groups.
 fix: Restart paging at offset zero using the current inventory revision.
 instead: Preserve prior observations but recheck group membership against the current inventory.
-scenarios:
+x-paintedwolf-scenarios:
   - id: stale
     vars: {}

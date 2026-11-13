@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.content_type, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "FETCH_URL_DEST_REQUIRED"
 effect: block
-category: recoverable
-emit: guard:fetch_url
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
 message: recorded fetch_url binary transfer lacked a destination
 what: mode=raw fetched a non-image binary resource ({{ paintedwolf.content_type }}) without dest.
 cause: That invocation required a destination for binary transfers; that transfer path is retired.
 why: The current source reader returns readable documents or screened images.
 fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
 instead: Follow the current schema and access boundaries.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       content_type: image/png

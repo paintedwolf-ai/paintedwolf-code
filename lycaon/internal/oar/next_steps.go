@@ -91,7 +91,7 @@ func (l *Loader) validateNextSteps(r *Rule) error {
 		return nil
 	}
 	known := ruleFactRefs(r)
-	selectors := r.Selector["tool"]
+	selectors := r.Tools()
 	for i, step := range r.NextSteps.Steps {
 		if err := l.validateNextStep(step, known, selectors, fmt.Sprintf("rule %s next-steps[%d]", r.ID, i)); err != nil {
 			return err

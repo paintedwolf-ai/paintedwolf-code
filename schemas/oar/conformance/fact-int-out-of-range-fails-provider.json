@@ -1,5 +1,5 @@
 {
-  "title": "A double fact that is not finite routes the rule through on_error",
+  "title": "An int fact outside 64 bits routes the rule through on_error",
   "covers": [
     "OAR-FACT-17",
     "OAR-OPS-2"
@@ -11,19 +11,27 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "when": "prompt_injection_score > 0.5",
+    "when": "example.big > 0",
     "on_error": "fail_closed",
-    "what": "injection likelihood crossed the threshold."
+    "requires_facts": [
+      "example.big"
+    ]
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
-      "prompt_injection_score": 1e999
+      "example.big": 9223372036854775808
+    },
+    "host_facts": {
+      "example.big": "int"
     }
   },
   "expected": {
     "decision": "block",
-    "code": "R"
+    "code": "R",
+    "applied": [
+      "R:errored"
+    ]
   },
-  "id": "fact-non-finite-double-fails-provider"
+  "id": "fact-int-out-of-range-fails-provider"
 }

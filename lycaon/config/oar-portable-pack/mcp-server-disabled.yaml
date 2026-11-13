@@ -1,5 +1,5 @@
 # Uses a profile many hosts will not provide. `requires_facts` is what makes
-# that a clean load-time refusal instead of a mystery at run time ([OAR-DOC-23]):
+# that a clean load-time refusal instead of a mystery at run time ([OAR-DOC-22]):
 # a host without the `mcp` profile does not declare these facts, and the rule is
 # rejected with both names in the error.
 spec_version: "1.0"

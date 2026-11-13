@@ -6,9 +6,8 @@
   ],
   "rule": {
     "spec_version": "1.0",
-    "namespace": "example.security",
-    "emit": "example:pack",
     "id": "READ_OUTSIDE_SCOPE",
+    "namespace": "example.security",
     "kind": "policy",
     "on": "tool.pre_invoke",
     "selector": {
@@ -17,10 +16,16 @@
         "grep"
       ]
     },
-    "profile": "portable",
-    "when": "path_outside_scope(tool)",
+    "requires_facts": [
+      "path_outside_scope"
+    ],
+    "when": "path_outside_scope",
     "effect": "block",
-    "on_error": "fail_closed"
+    "on_error": "fail_closed",
+    "profile": "portable",
+    "title": "Read outside the declared scope",
+    "what": "The call reads a path outside the scope in force for this tool.",
+    "fix": "Read inside the scope, or widen the scope deliberately."
   },
   "input": {
     "anchor": "tool.pre_invoke",

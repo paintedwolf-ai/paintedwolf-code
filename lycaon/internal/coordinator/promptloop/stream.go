@@ -392,7 +392,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		slog.WarnContext(ctx, "record llm call usage", "call_id", llmCallID, "error", err)
 	}
 	outputGateStarted := time.Now()
-	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
+	reject, blocked := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
 	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextActionTools)
 	if st != nil {
 		st.output.rejection = nil
@@ -405,9 +405,6 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 			return nil, nil, reject
 		}
 		st.output.rejection = reject
-	} else if changed {
-		completion.Content = transformed
-		tokens = []string{transformed}
 	}
 	if input := completion.ContextInputTokens(); l.Deps.RecordCompactionTokenObservation != nil && input > 0 {
 		l.Deps.RecordCompactionTokenObservation(sessionID, callProvider, callModel, input, transcriptEstimate)

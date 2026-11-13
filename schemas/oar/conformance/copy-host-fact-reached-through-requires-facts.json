@@ -14,18 +14,18 @@
     "effect": "block",
     "when": "tool == \"read\"",
     "requires_facts": [
-      "paintedwolf.spill_path"
+      "example.spill_path"
     ],
-    "what": "Retained prefix at {{ paintedwolf.spill_path }}."
+    "what": "Retained prefix at {{ example.spill_path }}."
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
       "tool": "read",
-      "paintedwolf.spill_path": "tool-output/example.txt"
+      "example.spill_path": "tool-output/example.txt"
     },
     "host_facts": {
-      "paintedwolf.spill_path": "string"
+      "example.spill_path": "string"
     }
   },
   "expected": {

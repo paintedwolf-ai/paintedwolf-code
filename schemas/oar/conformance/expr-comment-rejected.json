@@ -1,0 +1,25 @@
+{
+  "id": "expr-comment-rejected",
+  "title": "A comment is not part of the language",
+  "covers": [
+    "OAR-EXPR-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true // always"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-6"
+  }
+}

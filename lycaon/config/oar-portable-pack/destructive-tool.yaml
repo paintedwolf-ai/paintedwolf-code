@@ -1,9 +1,8 @@
 # The specific refusal and the general flag.
 #
-# Revision 1.0 needed `overrides` for this shape — the specific rule silencing
-# the general one it refined. 1.0 has no `overrides`, and does not need one:
-# rules evaluate in a deterministic order ([OAR-EVAL-1]) and the first block
-# short-circuits the occurrence ([OAR-EVAL-3]). Both rules are `policy` kind, so
+# The specific rule silences the general one it refines without any override
+# mechanism: rules evaluate in a deterministic order ([OAR-EVAL-1]) and the
+# first block short-circuits the occurrence ([OAR-EVAL-3]). Both rules are `policy` kind, so
 # ascending id order puts DELETE_REFUSED first: a delete is refused outright and
 # the occurrence ends there, while the state changes that are still allowed are
 # flagged by the rule below.

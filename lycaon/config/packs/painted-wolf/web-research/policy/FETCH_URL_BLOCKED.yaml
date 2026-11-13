@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.detail, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "FETCH_URL_BLOCKED"
 effect: block
-category: recoverable
-emit: guard:fetch_url
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
 message: fetch_url blocked this host
 what: 'fetch_url refused the destination: {{ paintedwolf.detail }}.'
 cause: The host SSRF guard only allows public addresses — loopback, private, and link-local targets are refused.
 why: Fetching internal or metadata endpoints would leave the project sandbox.
 fix: 'Use a public HTTP(S) destination only when it is the intended resource. {{ paintedwolf.next_steps }}'
 instead: Branch on Code FETCH_URL_BLOCKED; use a public URL
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: 127.0.0.1 is not a public address

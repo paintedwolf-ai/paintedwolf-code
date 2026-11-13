@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMPLETE_LEG_ADDRESSED_SESSION"
 effect: block
-category: recoverable
-emit: guard:complete_leg
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:complete_leg
 message: This session has no worker leg to close.
 what: This session has no worker leg to close.
 cause: complete_leg ran in a session the user addressed directly, not in a spawned leg.
 why: The closeout envelope records a leg's result for the coordinator that dispatched it.
 fix: Finish this turn with your answer; a no-tool reply is the closeout here.
 instead: Branch on Code COMPLETE_LEG_ADDRESSED_SESSION; answer directly, do not retry here
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: explore
