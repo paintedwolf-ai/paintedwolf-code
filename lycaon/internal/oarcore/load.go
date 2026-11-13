@@ -270,10 +270,10 @@ func loadRule(obj map[string]any, env *Environment) (*Rule, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := loadSelector(obj, rule, env, reachable); err != nil {
+	if err := loadSelector(obj, rule, env); err != nil {
 		return nil, err
 	}
-	if err := loadWhen(obj, rule, env, reachable); err != nil {
+	if err := loadWhen(obj, rule, env); err != nil {
 		return nil, err
 	}
 	if err := loadCopy(obj, rule, env, reachable); err != nil {
@@ -562,7 +562,7 @@ var selectorStringLists = []string{"tools", "profiles", "surfaces", "session_pos
 // dimension.
 var selectorNullable = []string{"surface", "phase", "workflow", "tool"}
 
-func loadSelector(obj map[string]any, rule *Rule, env *Environment, reachable map[string]bool) error {
+func loadSelector(obj map[string]any, rule *Rule, env *Environment) error {
 	member, ok := asObject(obj["selector"])
 	if !ok {
 		return loadErr("[OAR-DOC-2] field \"selector\" must be an object")
@@ -632,9 +632,6 @@ func loadSelector(obj map[string]any, rule *Rule, env *Environment, reachable ma
 				if declared && decl.Type != TypeString && decl.Type != TypeListString {
 					return loadErr("[OAR-SEL-5] ledger clause names %s, whose type %s is neither string nor list<string>", name, decl.Type)
 				}
-				if declared && decl.Tier != TierCore && !reachable[name] {
-					return loadErr("[OAR-DOC-23] ledger clause names %s, which the rule does not reach through requires_facts", name)
-				}
 				values, err := ledgerValues(want, name)
 				if err != nil {
 					return err
@@ -664,7 +661,7 @@ func ledgerValues(want any, name string) ([]string, error) {
 
 // loadWhen parses and type-checks the condition against the declared
 // environment ([OAR-DOC-9], [OAR-CONF-5]).
-func loadWhen(obj map[string]any, rule *Rule, env *Environment, reachable map[string]bool) error {
+func loadWhen(obj map[string]any, rule *Rule, env *Environment) error {
 	raw, present := obj["when"]
 	if !present {
 		return nil
@@ -682,7 +679,7 @@ func loadWhen(obj map[string]any, rule *Rule, env *Environment, reachable map[st
 			return loadErr("rule %s condition has %d parse-tree nodes, above this engine's limit of %d", rule.Qualified, nodes, env.ExpressionNodesMax)
 		}
 	}
-	resultType, refs, err := checkCondition(ast, env, reachable)
+	resultType, refs, err := checkCondition(ast, env)
 	if err != nil {
 		return loadErr("rule %s condition: %s", rule.Qualified, err.Error())
 	}
@@ -711,6 +708,12 @@ func loadCopy(obj map[string]any, rule *Rule, env *Environment, reachable map[st
 		}
 		rule.Copy[member] = s
 	}
+	// Copy reaches the facts the rule names in requires_facts and those its
+	// condition and selector already reference.
+	referenced := make(map[string]bool, len(rule.Refs))
+	for name := range rule.Refs {
+		referenced[name] = true
+	}
 	names := make([]string, 0, len(rule.Copy))
 	for name := range rule.Copy {
 		names = append(names, name)
@@ -729,9 +732,9 @@ func loadCopy(obj map[string]any, rule *Rule, env *Environment, reachable map[st
 			if binding.Interpolate && !copyInterpolatable(decl.Type) {
 				return loadErr("[OAR-COPY-4] rule %s %s interpolates %s, whose type is %s", rule.Qualified, member, binding.Name, decl.Type)
 			}
-			// [OAR-COPY-5] A non-core fact named in copy is reached through
-			// requires_facts like any other reference.
-			if decl.Tier != TierCore && !reachable[binding.Name] {
+			// [OAR-COPY-5] A non-core fact named only in copy is reached
+			// through requires_facts.
+			if decl.Tier != TierCore && !reachable[binding.Name] && !referenced[binding.Name] {
 				return loadErr("[OAR-COPY-5] rule %s %s names %s, which the rule does not reach through requires_facts", rule.Qualified, member, binding.Name)
 			}
 			rule.Refs[binding.Name] = true

@@ -2,10 +2,8 @@ package oarcore
 
 import "strings"
 
-// CheckCondition type-checks source against env (–).
-// reachable is every name the rule may mention; pass every declared fact when
-// the caller already enforces `requires` separately.
-func CheckCondition(source string, env *Environment, reachable map[string]bool) error {
+// CheckCondition type-checks source against env.
+func CheckCondition(source string, env *Environment) error {
 	if strings.TrimSpace(source) == "" {
 		return nil
 	}
@@ -18,7 +16,7 @@ func CheckCondition(source string, env *Environment, reachable map[string]bool) 
 			return loadErr("condition has %d parse-tree nodes, above the declared expression_nodes_max of %d", n, env.ExpressionNodesMax)
 		}
 	}
-	typ, _, err := checkCondition(ast, env, reachable)
+	typ, _, err := checkCondition(ast, env)
 	if err != nil {
 		return err
 	}
@@ -36,21 +34,14 @@ func EvaluateCondition(source string, env *Environment, facts map[string]any, fu
 	if strings.TrimSpace(source) == "" {
 		return true, nil
 	}
-	reachable := map[string]bool{}
-	for name := range env.Facts {
-		reachable[name] = true
-	}
-	for name := range env.Functions {
-		reachable[name] = true
-	}
-	if err := CheckCondition(source, env, reachable); err != nil {
+	if err := CheckCondition(source, env); err != nil {
 		return false, err
 	}
 	root, err := parseCondition(source)
 	if err != nil {
 		return false, err
 	}
-	_, refs, err := checkCondition(root, env, reachable)
+	_, refs, err := checkCondition(root, env)
 	if err != nil {
 		return false, err
 	}

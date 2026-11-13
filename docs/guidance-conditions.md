@@ -40,7 +40,7 @@ Prefer composing observation facts over echoing a validation code. `when: '"<tok
 
 | Construct | Notes |
 |-----------|--------|
-| Identifiers | Declared fact names; dotted host names are single identifiers |
+| Identifiers | Declared fact names; dotted host names are single identifiers. A dotted name that is not declared, whose prefix is a `map<string, dyn>` fact, selects that member as a string, such as `tool_args.path` |
 | Calls | Declared observation functions plus `size`, `starts_with`, `ends_with`, and `contains` |
 | Logic | `&&` `\|\|` `!` |
 | Comparison | `==` `!=` `<` `<=` `>` `>=` `in` |

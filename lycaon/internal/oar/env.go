@@ -214,20 +214,6 @@ func capabilityEnvironment(cap *EngineDeclaration) (*oarcore.Environment, error)
 	return cap.Environment()
 }
 
-func specReachable(env *oarcore.Environment) map[string]bool {
-	out := map[string]bool{}
-	if env == nil {
-		return out
-	}
-	for name := range env.Facts {
-		out[name] = true
-	}
-	for name := range env.Functions {
-		out[name] = true
-	}
-	return out
-}
-
 func checkWhenAgainstSpec(when string, cap *EngineDeclaration) error {
 	if cap == nil {
 		cap = InstalledEngineDeclaration()
@@ -239,7 +225,7 @@ func checkWhenAgainstSpec(when string, cap *EngineDeclaration) error {
 	if err != nil {
 		return err
 	}
-	return oarcore.CheckCondition(when, env, specReachable(env))
+	return oarcore.CheckCondition(when, env)
 }
 
 func evalRuleWhen(holder *evalHolder, r *Rule, gc *GuardContext) (bool, error) {

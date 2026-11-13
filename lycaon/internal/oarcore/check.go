@@ -51,18 +51,16 @@ func sameOrPromotable(a, b FactType) bool {
 // checker type-checks one condition against a declared environment, collecting
 // the fact and function names it references.
 type checker struct {
-	env *Environment
-	// reachable is what the rule may name: the core tier is always reachable, and
-	// anything else only through `requires`. A reference outside it is rejected
-	// under [OAR-FACT-2], so portability is computable from the document alone.
-	reachable map[string]bool
-	refs      map[string]bool
+	env  *Environment
+	refs map[string]bool
 }
 
 // checkCondition type-checks node and returns its type and the names it
 // references.
-func checkCondition(n *node, env *Environment, reachable map[string]bool) (FactType, map[string]bool, error) {
-	c := &checker{env: env, reachable: reachable, refs: map[string]bool{}}
+// A condition may name any declared fact or function ([OAR-FACT-2]); only copy
+// must reach a non-core fact through the rule's references ([OAR-COPY-5]).
+func checkCondition(n *node, env *Environment) (FactType, map[string]bool, error) {
+	c := &checker{env: env, refs: map[string]bool{}}
 	t, err := c.walk(n)
 	if err != nil {
 		return "", nil, err
@@ -149,13 +147,16 @@ func (c *checker) ident(n *node) (FactType, error) {
 		if _, isFn := c.env.Functions[n.strValue]; isFn {
 			return "", typeErr(n.offset, "[OAR-FACT-2] %s is an observation function and must be called", n.strValue)
 		}
+		// [OAR-FACT-22] A dotted name that is not itself declared selects a
+		// member of a declared map<string, dyn>; its value is assumed to be a
+		// string.
+		if prefix, ok := c.mapSelection(n.strValue); ok {
+			c.refs[prefix] = true
+			return TypeString, nil
+		}
 		// [OAR-FACT-2] A mistyped fact name is a load failure, never a runtime
-		// default. a dotted identifier is a single name, so an author
-		// reaching for field selection lands here and gets a hint.
+		// default.
 		return "", typeErr(n.offset, "unknown identifier %s%s", n.strValue, c.selectionHint(n.strValue))
-	}
-	if err := c.requireReachable(n.strValue, fact.Tier, n.offset); err != nil {
-		return "", err
 	}
 	c.refs[n.strValue] = true
 	return fact.Type, nil
@@ -206,9 +207,6 @@ func (c *checker) call(n *node) (FactType, error) {
 			return "", typeErr(n.offset, "[OAR-FACT-2] %s is a fact, not an observation function", name)
 		}
 		return "", typeErr(n.offset, "unknown identifier %s", name)
-	}
-	if err := c.requireReachable(name, fn.Tier, n.offset); err != nil {
-		return "", err
 	}
 	c.refs[name] = true
 	if len(n.items) != 1 {
@@ -362,7 +360,7 @@ func (c *checker) binary(n *node) (FactType, error) {
 			return TypeBool, nil
 		}
 		return "", typeErr(n.offset,
-			"%s takes two numbers or two strings, given %s and %s", op, left, right)
+			"%s compares %s with %s; it takes two numbers or two strings", op, left, right)
 	}
 
 	// Arithmetic takes two int or two double; % takes two int; +
@@ -395,38 +393,30 @@ func (c *checker) binary(n *node) (FactType, error) {
 		"%s takes two int or two double operands, given %s and %s", op, left, right)
 }
 
-func (c *checker) requireReachable(name string, tier Tier, offset int) error {
-	if tier == TierCore || c.reachable[name] {
-		return nil
-	}
-	// [OAR-FACT-2] Reject a reference to a non-core capability the rule does not
-	// reach through requires.
-	return typeErr(offset,
-		"[OAR-FACT-2] %s is outside the core tier and the rule does not reach it through requires", name)
-}
-
 // selectionHint names the one mistake this grammar invites: writing
-// `tool_args.path` and expecting field selection (
-// ). The whole dotted string is one name, and the member is reached
-// with `in` plus a typed accessor.
+// `tool_args.path` and expecting field selection. The whole dotted string is
+// one name, and the member is reached with `in` plus a typed accessor.
 func (c *checker) selectionHint(name string) string {
 	at := strings.LastIndex(name, ".")
 	if at == -1 {
 		return ""
 	}
-	prefix, member := name[:at], name[at+1:]
+	prefix := name[:at]
 	decl, declared := c.env.Facts[prefix]
 	if !declared {
 		return ""
 	}
-	if decl.Type == TypeMap {
-		return fmt.Sprintf(
-			" — a dotted identifier is a single name and there is no field-selection operator;"+
-				" select the member with %s[%q]", prefix, member)
+	return fmt.Sprintf(" — only a map<string, dyn> fact has members to select; %s is a %s", prefix, decl.Type)
+}
+
+// mapSelection reports the map fact a dotted name selects a member of.
+func (c *checker) mapSelection(name string) (string, bool) {
+	at := strings.LastIndex(name, ".")
+	if at <= 0 {
+		return "", false
 	}
-	return fmt.Sprintf(
-		" — a dotted identifier is a single name and there is no field-selection operator; %s is a %s",
-		prefix, decl.Type)
+	decl, declared := c.env.Facts[name[:at]]
+	return name[:at], declared && decl.Type == TypeMap
 }
 
 // describe names the operand a diagnostic is about, when it has a name.

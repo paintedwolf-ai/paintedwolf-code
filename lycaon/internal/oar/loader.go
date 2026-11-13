@@ -43,7 +43,6 @@ type Loader struct {
 	decl        *EngineDeclaration
 	specEnvErr  error
 	specEnv     *oarcore.Environment
-	reachable   map[string]bool
 	hostFacts   map[string]struct{}
 	toolSchemas *toolschema.Config
 }
@@ -104,7 +103,6 @@ func (l *Loader) ValidateCondition(expr string) error {
 func (l *Loader) refreshEnvironment() {
 	decl := l.declaration()
 	l.specEnv, l.specEnvErr = capabilityEnvironment(decl)
-	l.reachable = specReachable(l.specEnv)
 	l.hostFacts = capabilityHostFacts(decl)
 }
 
@@ -115,7 +113,7 @@ func (l *Loader) checkWhen(expr string) error {
 	if strings.TrimSpace(expr) == "" {
 		return nil
 	}
-	return oarcore.CheckCondition(expr, l.specEnv, l.reachable)
+	return oarcore.CheckCondition(expr, l.specEnv)
 }
 
 func (l *Loader) declaration() *EngineDeclaration {
@@ -262,9 +260,7 @@ func linkRuleSet(rs *RuleSet) (*RuleSet, error) {
 	if err := RejectDuplicateIdentities(rs); err != nil {
 		return nil, err
 	}
-	if err := RejectUnknownErrorSubstitutes(rs); err != nil {
-		return nil, err
-	}
+	ResolveErrorSubstitutes(rs)
 	return rs, nil
 }
 

@@ -258,31 +258,40 @@ func RejectDuplicateIdentities(rs *RuleSet) error {
 	return nil
 }
 
-// RejectUnknownErrorSubstitutes refuses an on_error that names a rule that
-// is not in the loaded set ([OAR-OPS-4]).
-func RejectUnknownErrorSubstitutes(rs *RuleSet) error {
+// ResolveErrorSubstitutes binds each on_error substitute to the loaded rule
+// it names, whose copy the substituted block then carries. A substitute that
+// names no loaded rule still replaces the identifier ([OAR-OPS-4]).
+func ResolveErrorSubstitutes(rs *RuleSet) {
 	if rs == nil {
-		return nil
+		return
 	}
 	for _, r := range rs.All() {
 		if r == nil {
 			continue
 		}
-		switch strings.TrimSpace(r.OnError) {
-		case "", "fail_closed", "fail_open":
+		r.errorTarget = nil
+		want := errorSubstitute(r)
+		if want == "" {
 			continue
 		}
-		want := strings.TrimSpace(r.OnError)
-		if !strings.Contains(want, "/") && r.Namespace != "" {
-			want = r.Namespace + "/" + want
+		if target, ok := rs.Get(want); ok && target.Qualified() == want {
+			r.errorTarget = target
 		}
-		target, ok := rs.Get(want)
-		if !ok || target.Qualified() != want {
-			return fmt.Errorf("[OAR-OPS-4] rule %s names on_error %s, which is not loaded", r.Qualified(), want)
-		}
-		r.errorTarget = target
 	}
-	return nil
+}
+
+// errorSubstitute is the qualified identifier a rule's on_error substitutes,
+// or empty when on_error is fail_closed or fail_open.
+func errorSubstitute(r *Rule) string {
+	want := strings.TrimSpace(r.OnError)
+	switch want {
+	case "", "fail_closed", "fail_open":
+		return ""
+	}
+	if !strings.Contains(want, "/") && r.Namespace != "" {
+		want = r.Namespace + "/" + want
+	}
+	return want
 }
 
 // OnAnchor returns rules bound to anchor id in Emit order.

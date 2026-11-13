@@ -45,8 +45,9 @@ type FixtureInput struct {
 }
 
 // expectedKeys are the only keys a fixture may assert; any other is rejected
-// rather than passed silently ([OAR-CONF-15]).
-var expectedKeys = []string{"decision", "code", "on_fire", "applied", "counters", "error"}
+// rather than passed silently ([OAR-CONF-15]). copy asserts the rendered copy
+// a decision carries ([OAR-COPY-7]); the published corpus relies on it.
+var expectedKeys = []string{"decision", "code", "on_fire", "applied", "counters", "copy", "error"}
 
 // CorpusOutcome is one fixture's verdict.
 type CorpusOutcome struct {
@@ -399,6 +400,9 @@ func corpusActual(res *PipelineResult, store *CounterStore, session string) map[
 			onFire = []string{}
 		}
 		actual["on_fire"] = onFire
+		if len(d.Copy) > 0 {
+			actual["copy"] = d.Copy
+		}
 	}
 	return actual
 }
@@ -456,8 +460,36 @@ func compareExpected(expected map[string]json.RawMessage, actual map[string]any)
 			}
 			continue
 		}
+		if key == "copy" {
+			if err := compareCopy(want, got, actual["decision"]); err != nil {
+				return err
+			}
+			continue
+		}
 		if !reflect.DeepEqual(want, got) {
 			return fmt.Errorf("%s = %v, want %v", key, got, want)
+		}
+	}
+	return nil
+}
+
+// compareCopy checks the members a fixture names; null asserts the decision
+// carries no copy.
+func compareCopy(want, got, decision any) error {
+	if decision == "none" {
+		return fmt.Errorf("copy expected, the occurrence produced no decision")
+	}
+	if want == nil {
+		if got != nil {
+			return fmt.Errorf("copy = %v, want none", got)
+		}
+		return nil
+	}
+	wantMembers, _ := want.(map[string]any)
+	gotMembers, _ := got.(map[string]any)
+	for member, w := range wantMembers {
+		if g := gotMembers[member]; g != w {
+			return fmt.Errorf("copy %s = %v, want %v", member, g, w)
 		}
 	}
 	return nil

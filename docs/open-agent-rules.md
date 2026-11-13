@@ -227,7 +227,7 @@ If the required observation does not exist, add one host fact at the enforcement
 
 ## Conformance
 
-The vendored corpus lives in [`schemas/oar/conformance/`](../schemas/oar/conformance) and runs through the production loader and evaluator ([`corpus.go`](../lycaon/internal/oar/corpus.go), [`cmd/oar-conformance`](../lycaon/cmd/oar-conformance)). A fixture carries `rule` (one document or a list), optional `hints`, and an `input` with `anchor`, `facts`, `recent_tools`, `session_id`, `host_facts`, and `profile`; `expected` asserts any of `decision`, `code`, `on_fire`, `applied`, `counters`, and `error`, and any other key is refused. Each fixture runs on an engine whose anchor profile map is the fixture's own or maps every core anchor to itself, claims both standard profiles, and provides the three reserved detectors.
+The vendored corpus lives in [`schemas/oar/conformance/`](../schemas/oar/conformance) and runs through the production loader and evaluator ([`corpus.go`](../lycaon/internal/oar/corpus.go), [`cmd/oar-conformance`](../lycaon/cmd/oar-conformance)). A fixture carries `rule` (one document or a list), optional `hints`, and an `input` with `anchor`, `facts`, `recent_tools`, `session_id`, `host_facts`, and `profile`; `expected` asserts any of `decision`, `code`, `on_fire`, `applied`, `counters`, `copy`, and `error`, and any other key is refused. Each fixture runs on an engine whose anchor profile map is the fixture's own or maps every core anchor to itself, claims both standard profiles, and provides the three reserved detectors.
 
 Pack fixtures use the same shape and run through `pw rules test`; the [portable pack](../lycaon/config/oar-portable-pack) carries the standard's example rules and fixtures.
 

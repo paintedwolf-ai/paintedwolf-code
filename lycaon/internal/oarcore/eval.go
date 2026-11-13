@@ -14,6 +14,7 @@ package oarcore
 import (
 	"fmt"
 	"math"
+	"strings"
 )
 
 // Raise is a run-time condition failure. A rule whose condition raises is a rule
@@ -77,7 +78,7 @@ func evalNode(n *node, ctx *evalContext) (value, error) {
 	case nodeIdent:
 		v, produced := ctx.facts[n.strValue]
 		if !produced {
-			return nil, raise("fact %s was not produced", n.strValue)
+			return selectMember(n.strValue, ctx)
 		}
 		return v, nil
 	case nodeCall:
@@ -682,4 +683,24 @@ func normalizeMember(v any) value {
 		return strs
 	}
 	return v
+}
+
+// selectMember reads the member a dotted name selects from a map<string, dyn>
+// fact ([OAR-FACT-22]). An absent member reads as the empty string; a member
+// holding anything but a string fails like a provider ([OAR-FACT-23]).
+func selectMember(name string, ctx *evalContext) (value, error) {
+	at := strings.LastIndex(name, ".")
+	if at > 0 {
+		if m, ok := ctx.facts[name[:at]].(map[string]any); ok {
+			member, present := m[name[at+1:]]
+			if !present {
+				return "", nil
+			}
+			if s, isString := member.(string); isString {
+				return s, nil
+			}
+			return nil, raise("[OAR-FACT-23] %s holds %T where a string was assumed", name, member)
+		}
+	}
+	return nil, raise("fact %s was not produced", name)
 }

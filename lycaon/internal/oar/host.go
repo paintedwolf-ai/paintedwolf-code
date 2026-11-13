@@ -70,11 +70,15 @@ func (p *EngineDeclaration) requireHostAdapters() error {
 }
 
 // ValidateHostRuleSet refuses transformations at boundaries whose deliveries
-// cannot represent rewritten content.
+// cannot represent rewritten content, and transforms that name nothing to
+// replace.
 func ValidateHostRuleSet(rules *RuleSet) error {
 	for _, rule := range rules.All() {
 		if rule.Effect != EffectTransform {
 			continue
+		}
+		if rule.Transform == nil {
+			return fmt.Errorf("rule %s: transform carries no x-paintedwolf-transform, so the host has nothing to apply", rule.Qualified())
 		}
 		switch rule.Anchor {
 		case AnchorToolPost, AnchorContentOutput, AnchorContentToolResult, AnchorCredentialAssignment:

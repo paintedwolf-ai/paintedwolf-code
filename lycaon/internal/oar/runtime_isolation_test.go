@@ -180,7 +180,7 @@ func TestPublishEventFailureUsesOnErrorSubstituteCopy(t *testing.T) {
 	fallback := &Rule{ID: "FALLBACK", Namespace: "publisher", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectNudge, Enforcement: "enforce", Copy: Copy{Title: "Fallback"}}
 	primary := &Rule{ID: "PRIMARY", Namespace: "publisher", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", OnError: "FALLBACK", OnFire: []OnFireAction{OnFirePublishEvent}}
 	rules := NewRuleSet([]*Rule{primary, fallback})
-	testutil.FailErr(t, "resolve error substitute", RejectUnknownErrorSubstitutes(rules))
+	ResolveErrorSubstitutes(rules)
 	pipeline := NewGuardPipeline(rules, nil, nil)
 	pipeline.SetEventPublisher(failingEventPublisher{})
 	pipeline.EnableAnchor(AnchorToolPreInvoke)

@@ -2,7 +2,6 @@ package oar
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/lycaon/lycaon/internal/oarcore"
 )
@@ -419,10 +418,14 @@ func (p *GuardPipeline) applyOnError(r *Rule, gc *GuardContext, evalErr error) (
 		dec.Effect = EffectBlock
 		return &dec, true, nil
 	default:
+		// [OAR-OPS-4] block under the substituted identifier.
+		data := map[string]any{"error": evalErr.Error()}
 		if r.errorTarget == nil {
-			return nil, false, fmt.Errorf("rule %s: %w", r.ID, evalErr)
+			substitute := errorSubstitute(r)
+			dec := Decision{Effect: EffectBlock, Code: bareRuleID(substitute), Rule: substitute, Data: data}
+			return &dec, true, nil
 		}
-		dec := decisionFromRule(r.errorTarget, gc, map[string]any{"error": evalErr.Error()})
+		dec := decisionFromRule(r.errorTarget, gc, data)
 		dec.Effect = EffectBlock
 		dec.OnFire = nil
 		return &dec, true, nil

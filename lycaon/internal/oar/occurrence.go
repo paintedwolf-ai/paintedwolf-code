@@ -1,14 +1,12 @@
 package oar
 
 import (
-	"fmt"
-
 	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
-// publishOccurrenceAnchor sets the core `anchor` fact for this occurrence.
-// The fact is the core spelling when the local catalog id implements a core
-// anchor ([OAR-PROF-1], [OAR-CONF-3]); otherwise it is the local id.
+// publishOccurrenceAnchor sets the paintedwolf.anchor fact for this
+// occurrence: the core spelling when the local catalog id implements a core
+// anchor ([OAR-PROF-1], [OAR-CONF-3]), otherwise the local id.
 func publishOccurrenceAnchor(gc *GuardContext, local string, cap *EngineDeclaration) {
 	if gc == nil {
 		return
@@ -39,9 +37,12 @@ func (p *GuardPipeline) declaration() *EngineDeclaration {
 	return InstalledEngineDeclaration()
 }
 
+// validateFiredTransform checks a transform rule's replacement target. A rule
+// without x-paintedwolf-transform still decides transform; it names no content
+// to replace.
 func validateFiredTransform(r *Rule, gc *GuardContext) error {
 	if r == nil || r.Transform == nil {
-		return fmt.Errorf("effect transform requires a transform object")
+		return nil
 	}
 	facts := activation(gc)
 	contentLen := 0

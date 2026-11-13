@@ -103,9 +103,7 @@ func cloneRuleSet(rs *RuleSet) (*RuleSet, error) {
 		rules = append(rules, &clone)
 	}
 	cloned := NewRuleSet(rules)
-	if err := RejectUnknownErrorSubstitutes(cloned); err != nil {
-		return nil, err
-	}
+	ResolveErrorSubstitutes(cloned)
 	return cloned, nil
 }
 
