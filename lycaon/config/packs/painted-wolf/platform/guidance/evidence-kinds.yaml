@@ -17,7 +17,9 @@ evidence_kinds:
   delete:  { shape: file_region, mutation: true }
   diff:    { shape: file_region }
   web:     { shape: url }
-  command:    { shape: command }
+  # Program outcomes are window-bounded by CommandOutputBudget with recall refs;
+  # the commit diet must not re-cut that window (same rationale as read).
+  command:    { shape: command, transcript_diet: shape_bounded }
   git:     { shape: command, survey: true }
   git_receipt: { shape: command }
   overlay_receipt: { shape: command }
