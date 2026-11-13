@@ -282,9 +282,7 @@ func linkRuleSet(rs *RuleSet) (*RuleSet, error) {
 	if err := ResolveOverrides(rs); err != nil {
 		return nil, err
 	}
-	if err := RequireResolvableCounterReads(rs); err != nil {
-		return nil, fmt.Errorf("oar load: %w", err)
-	}
+
 	if err := RejectUnknownErrorSubstitutes(rs); err != nil {
 		return nil, err
 	}

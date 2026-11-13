@@ -1,0 +1,37 @@
+{
+  "title": "A hint document loads beside rules and leaves every decision alone",
+  "covers": [
+    "OAR-HINT-1",
+    "OAR-HINT-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "BLOCKER",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "what": "Reading is blocked by policy."
+  },
+  "hints": [
+    {
+      "spec_version": "1.0",
+      "id": "TOOL_OUTPUT_SPILL_CAPPED",
+      "kind": "hint",
+      "what": "Only the first bytes of the tool output were retained.",
+      "fix": "Read the retained prefix at the spill path."
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "BLOCKER"
+  },
+  "id": "hint-loads-and-does-not-perturb"
+}

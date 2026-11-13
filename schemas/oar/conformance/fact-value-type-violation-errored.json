@@ -1,0 +1,36 @@
+{
+  "title": "A fact value that violates its declared type is a provider failure, not a coercion",
+  "covers": [
+    "OAR-FACT-18"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "paintedwolf.attempts > 0",
+    "requires_facts": [
+      "paintedwolf.attempts"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "paintedwolf.attempts": "3"
+    },
+    "host_facts": {
+      "paintedwolf.attempts": "int"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:errored"
+    ]
+  },
+  "id": "fact-value-type-violation-errored"
+}

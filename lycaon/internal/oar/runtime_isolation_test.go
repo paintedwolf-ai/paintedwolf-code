@@ -190,14 +190,6 @@ func TestPublishEventFailureUsesOnErrorSubstituteCopy(t *testing.T) {
 	}
 }
 
-func TestCounterReferenceScannerIgnoresFunctionTextInsideStrings(t *testing.T) {
-	refs, err := oarcore.CounterReferences(`contains("fire_count_of(\"MISSING\")", "count") && fire_count_of("REAL") == 0`, "")
-	testutil.FailErr(t, "parse counter references", err)
-	if len(refs) != 1 || refs[0].Literal != "REAL" {
-		t.Fatalf("counter references = %#v, want only REAL", refs)
-	}
-}
-
 func TestSelectionObservesProviderWritesAfterAnEarlierSelector(t *testing.T) {
 	for _, failure := range []error{nil, errors.New("profile unavailable")} {
 		t.Run(fmt.Sprint(failure), func(t *testing.T) {

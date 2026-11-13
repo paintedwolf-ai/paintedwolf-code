@@ -1,0 +1,37 @@
+{
+  "id": "ops-monitor-suppresses-on-fire",
+  "title": "A rule in monitor mode applies no side-effect",
+  "covers": [
+    "OAR-OPS-1",
+    "OAR-FIRE-2"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "MONITORED_COUNTER",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "nudge",
+    "emit": "rule:conformance",
+    "when": "tool == \"read\"",
+    "enforcement": "monitor",
+    "on_fire": [
+      "increment_breaker"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session"
+  },
+  "expected": {
+    "decision": "none",
+    "counters": {
+      "MONITORED_COUNTER": {
+        "breaker_count": 0
+      }
+    }
+  }
+}

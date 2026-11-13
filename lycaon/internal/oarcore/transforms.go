@@ -184,6 +184,18 @@ func rewrite(pieces *[]piece, span Span, replacement func(string) string, origin
 	*pieces = out
 }
 
+// TransformSpec is the host's content mutation for a transform rule. The
+// document model names only the effect ([OAR-OPS-8]); how the content is
+// replaced is the host's, keyed by the rule.
+type TransformSpec struct {
+	Action      string
+	Target      string
+	Replacement string
+	// HasReplacement distinguishes an absent replacement from an empty one:
+	// redact may omit it, and the host then substitutes its own placeholder.
+	HasReplacement bool
+}
+
 func replacementFor(spec *TransformSpec) func(string) string {
 	// Redact uses the standard placeholder by default ([OAR-OPS-21]).
 	if spec.Action == "redact" {

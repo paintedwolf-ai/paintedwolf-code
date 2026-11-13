@@ -154,70 +154,89 @@ func (r *Rule) Fact(name string, facts map[string]any) (any, error) {
 	return coerce(raw, decl.Type, name)
 }
 
-// MatchSelector validates each selected observation before membership matching.
-func (r *Rule) MatchSelector(facts map[string]any) (bool, error) {
+// Dimensions are the selector dimensions a host models beyond the core
+// facts, by clause name. A present key with a nil value is an unbound
+// dimension; an absent key is one the host does not model.
+type Dimensions map[string]any
+
+// coreDimensions read the core fact each clause names ([OAR-SEL-5]).
+var coreDimensions = map[string]string{
+	"tool": "tool", "tools": "tool", "profiles": "profile", "session_posture": "session_posture",
+}
+
+// MatchSelector matches every clause against the occurrence ([OAR-SEL-2]). A
+// clause over a dimension the host does not model does not match
+// ([OAR-SEL-6]).
+func (r *Rule) MatchSelector(facts map[string]any, dims Dimensions) (bool, error) {
 	for _, clause := range r.Selector {
-		name, want := clause.Fact, clause.Values
-		v, err := r.Fact(name, facts)
-		if err != nil {
+		ok, err := r.matchClause(clause, facts, dims)
+		if err != nil || !ok {
 			return false, err
-		}
-		matched := false
-		switch actual := v.(type) {
-		case string:
-			for _, item := range want {
-				if actual == item {
-					matched = true
-					break
-				}
-			}
-		case []string:
-			for _, item := range want {
-				for _, value := range actual {
-					if value == item {
-						matched = true
-						break
-					}
-				}
-			}
-		}
-		if !matched {
-			return false, nil
 		}
 	}
 	return true, nil
+}
+
+func (r *Rule) matchClause(clause SelectorClause, facts map[string]any, dims Dimensions) (bool, error) {
+	if clause.Dimension == "ledger" {
+		for name, want := range clause.Ledger {
+			if _, declared := r.environment.Facts[name]; !declared {
+				return false, nil
+			}
+			v, err := r.Fact(name, facts)
+			if err != nil {
+				return false, err
+			}
+			if !memberOf(v, want) {
+				return false, nil
+			}
+		}
+		return true, nil
+	}
+	var actual value
+	if fact, core := coreDimensions[clause.Dimension]; core {
+		v, err := r.Fact(fact, facts)
+		if err != nil {
+			return false, err
+		}
+		actual = v
+	} else {
+		v, modeled := dims[clause.Dimension]
+		if !modeled {
+			return false, nil
+		}
+		actual = v
+	}
+	if clause.Null {
+		return actual == nil || actual == "", nil
+	}
+	return memberOf(actual, clause.Values), nil
+}
+
+// memberOf reports whether a string value is one of want, or a list value
+// shares a member with it.
+func memberOf(v value, want []string) bool {
+	switch actual := v.(type) {
+	case string:
+		for _, w := range want {
+			if actual == w {
+				return true
+			}
+		}
+	case []string:
+		for _, a := range actual {
+			for _, w := range want {
+				if a == w {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // FactDeclaration exposes the type and capability dependency for set linking.
 func (r *Rule) FactDeclaration(name string) (FactDecl, bool) {
 	decl, ok := r.environment.Facts[name]
 	return decl, ok
-}
-
-// CounterReferences reads counter targets from syntax, including decoded string literals.
-func CounterReferences(source, namespace string) ([]CounterRef, error) {
-	if strings.TrimSpace(source) == "" {
-		return nil, nil
-	}
-	root, err := parseCondition(source)
-	if err != nil {
-		return nil, err
-	}
-	var references []CounterRef
-	walkNodes(root, func(n *node) {
-		if n.kind != nodeCall {
-			return
-		}
-		counter, reader := counterReaders[n.strValue]
-		if !reader {
-			return
-		}
-		if len(n.items) != 1 || n.items[0].kind != nodeString {
-			err = loadErr("[OAR-FIRE-11] %s requires a string literal rule id", n.strValue)
-			return
-		}
-		literal := n.items[0].strValue
-		references = append(references, CounterRef{Fn: n.strValue, Counter: counter, Literal: literal, Target: ResolveRef(literal, namespace)})
-	})
-	return references, err
 }

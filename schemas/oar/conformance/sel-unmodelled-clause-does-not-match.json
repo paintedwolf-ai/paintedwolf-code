@@ -1,0 +1,31 @@
+{
+  "id": "sel-unmodelled-clause-does-not-match",
+  "title": "A selector clause naming a dimension the host does not model does not match",
+  "covers": [
+    "OAR-SEL-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "NEEDS_POSTURE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {
+      "session_posture": [
+        "spec"
+      ]
+    },
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "tool == \"read\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "session_posture": "default"
+    }
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

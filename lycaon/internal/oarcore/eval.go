@@ -49,7 +49,7 @@ func zeroValue(t FactType) value {
 		return []string{}
 	case TypeListMap:
 		return []map[string]any{}
-	case TypeMap, TypeMapString:
+	case TypeMap:
 		return map[string]any{}
 	}
 	return nil
@@ -92,7 +92,11 @@ func evalNode(n *node, ctx *evalContext) (value, error) {
 		if err != nil {
 			return nil, err
 		}
-		if cond.(bool) {
+		taken, err := asBool(cond)
+		if err != nil {
+			return nil, err
+		}
+		if taken {
 			return evalNode(n.right, ctx)
 		}
 		return evalNode(n.third, ctx)
@@ -228,7 +232,7 @@ func evalIndex(n *node, ctx *evalContext) (value, error) {
 		if !present {
 			return nil, raise("map key %q is absent", key)
 		}
-		return v, nil
+		return normalizeMember(v), nil
 	}
 	return nil, raise("the index operator was applied to a scalar")
 }
@@ -239,7 +243,11 @@ func evalUnary(n *node, ctx *evalContext) (value, error) {
 		return nil, err
 	}
 	if n.op == "!" {
-		return !v.(bool), nil
+		b, err := asBool(v)
+		if err != nil {
+			return nil, err
+		}
+		return !b, nil
 	}
 	switch x := v.(type) {
 	case int64:
@@ -257,25 +265,23 @@ func evalBinary(n *node, ctx *evalContext) (value, error) {
 	// [OAR-EXPR-5] && and || short-circuit: the right operand is not evaluated
 	// when the left decides the result. A condition can therefore guard an
 	// expensive or partial sub-expression behind a cheap one.
-	if n.op == "&&" {
+	if n.op == "&&" || n.op == "||" {
 		left, err := evalNode(n.left, ctx)
 		if err != nil {
 			return nil, err
 		}
-		if !left.(bool) {
-			return false, nil
-		}
-		return evalNode(n.right, ctx)
-	}
-	if n.op == "||" {
-		left, err := evalNode(n.left, ctx)
+		l, err := asBool(left)
 		if err != nil {
 			return nil, err
 		}
-		if left.(bool) {
-			return true, nil
+		if l == (n.op == "||") {
+			return l, nil
 		}
-		return evalNode(n.right, ctx)
+		right, err := evalNode(n.right, ctx)
+		if err != nil {
+			return nil, err
+		}
+		return asBool(right)
 	}
 
 	l, err := evalNode(n.left, ctx)
@@ -290,10 +296,12 @@ func evalBinary(n *node, ctx *evalContext) (value, error) {
 	switch n.op {
 	case "in":
 		return evalIn(l, r)
-	case "==":
-		return valuesEqual(l, r), nil
-	case "!=":
-		return !valuesEqual(l, r), nil
+	case "==", "!=":
+		if !comparable(l, r) {
+			return nil, raise("a selected member of type %T was compared with %T", l, r)
+		}
+		equal := valuesEqual(l, r)
+		return equal == (n.op == "=="), nil
 	case "<", "<=", ">", ">=":
 		cmp, err := compareValues(l, r)
 		if err != nil {
@@ -620,3 +628,61 @@ func finiteDouble(v float64) (value, error) {
 	}
 	return v, nil
 }
+
+// asBool reads a value a boolean context requires. Only a selected map member
+// can arrive with another type, and that is a fact-provider failure
+// ([OAR-FACT-22], [OAR-FACT-23]).
+func asBool(v value) (bool, error) {
+	b, ok := v.(bool)
+	if !ok {
+		return false, raise("a selected member of type %T stands where bool is required", v)
+	}
+	return b, nil
+}
+
+// comparable reports whether == may compare two runtime values: the same
+// scalar kind, or two numbers.
+func comparable(l, r value) bool {
+	switch l.(type) {
+	case int64, float64:
+		switch r.(type) {
+		case int64, float64:
+			return true
+		}
+		return false
+	case bool:
+		_, ok := r.(bool)
+		return ok
+	case string:
+		_, ok := r.(string)
+		return ok
+	}
+	return false
+}
+
+// normalizeMember gives a selected map member the engine's runtime kinds:
+// integers as int64, lists of strings as []string.
+func normalizeMember(v any) value {
+	switch x := v.(type) {
+	case int:
+		return int64(x)
+	case int32:
+		return int64(x)
+	case uint32:
+		return int64(x)
+	case float32:
+		return float64(x)
+	case []any:
+		strs := make([]string, 0, len(x))
+		for _, item := range x {
+			s, ok := item.(string)
+			if !ok {
+				return x
+			}
+			strs = append(strs, s)
+		}
+		return strs
+	}
+	return v
+}
+

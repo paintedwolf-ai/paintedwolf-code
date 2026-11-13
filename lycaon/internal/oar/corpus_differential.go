@@ -314,7 +314,6 @@ func validateCorpusRuleSet(fx corpusFixture, rs *RuleSet) (CorpusOutcome, bool) 
 	}{
 		{"identities", RejectDuplicateIdentities(rs)},
 		{"overrides", ResolveOverrides(rs)},
-		{"counters", RequireResolvableCounterReads(rs)},
 		{"on_error", RejectUnknownErrorSubstitutes(rs)},
 	}
 	for _, check := range checks {

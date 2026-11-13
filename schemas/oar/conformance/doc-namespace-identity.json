@@ -1,0 +1,43 @@
+{
+  "id": "doc-namespace-identity",
+  "title": "Two publishers may ship the same id under different namespaces; the decision still carries the bare id",
+  "covers": [
+    "OAR-DOC-21",
+    "OAR-DOC-22",
+    "OAR-EVAL-7"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "SHARED_CODE",
+      "kind": "schema",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "emit": "rule:conformance",
+      "when": "tool == \"read\"",
+      "namespace": "acme.security"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "SHARED_CODE",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "emit": "rule:conformance",
+      "when": "tool == \"read\"",
+      "namespace": "globex.policy"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "SHARED_CODE"
+  }
+}
