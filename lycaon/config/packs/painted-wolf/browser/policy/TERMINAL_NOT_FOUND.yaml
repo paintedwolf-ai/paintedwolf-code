@@ -24,6 +24,6 @@ scenarios:
   - id: default
     vars:
       id: missing-id
-      session_role: implement
+      profile: implement
       tool: terminal_send
       can_terminal_open: true

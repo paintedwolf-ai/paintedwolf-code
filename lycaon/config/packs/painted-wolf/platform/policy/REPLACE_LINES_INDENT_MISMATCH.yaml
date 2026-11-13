@@ -18,4 +18,4 @@ fix: 'Read the range, choose its actual shared whitespace prefix, and retry the 
 instead: 'Branch on Code; read the range and use its exact shared prefix'
 scenarios:
   - id: default
-    vars: {line: 12, path: pipeline.py, session_role: implement, tool: replace_lines}
+    vars: {line: 12, path: pipeline.py, profile: implement, tool: replace_lines}

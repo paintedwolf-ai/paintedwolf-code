@@ -22,7 +22,7 @@ scenarios:
     vars:
       entries: 600
       max_entries: 500
-      session_role: implement
+      profile: implement
       tool: extract_archive
   - id: partial_extraction
     vars:

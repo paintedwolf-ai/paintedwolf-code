@@ -21,7 +21,7 @@ scenarios:
     vars:
       extension: .pdf
       path: docs/spec.pdf
-      session_role: coordinator
+      profile: coordinator
       supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
       tool: view_image
   - id: command-leg
@@ -29,7 +29,7 @@ scenarios:
       can_command: true
       extension: .pdf
       path: docs/spec.pdf
-      session_role: coordinator
+      profile: coordinator
       supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
       tool: view_image
     expect_contains:

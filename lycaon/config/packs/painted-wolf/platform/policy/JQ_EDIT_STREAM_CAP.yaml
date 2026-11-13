@@ -22,5 +22,5 @@ scenarios:
     vars:
       cap: '20000'
       path: events.jsonl
-      session_role: implement
+      profile: implement
       tool: jq_edit

@@ -24,5 +24,5 @@ scenarios:
       allowed: '[auto json yaml toml]'
       format: xml
       path: config.xml
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: jq

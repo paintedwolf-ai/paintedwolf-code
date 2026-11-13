@@ -3,13 +3,13 @@ id: WRITE_SCOPE_DENIED
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.path, paintedwolf.patterns_list, paintedwolf.redirect, paintedwolf.rejection_code, paintedwolf.session_role]
+requires_facts: [paintedwolf.path, paintedwolf.patterns_list, paintedwolf.redirect, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WRITE_SCOPE_DENIED"
 effect: block
 category: recoverable
 emit: guard:write_scope
 message: path outside profile write scope
-what: '{{ tool }} path {{ paintedwolf.path }} is outside profile {{ paintedwolf.session_role }} write scope.'
+what: '{{ tool }} path {{ paintedwolf.path }} is outside profile {{ profile }} write scope.'
 cause: The path must match at least one allowed write glob for this profile.
 why: All mutations and file redirects must stay within the active write contract.
 fix: 'Allowed write globs for this profile:
@@ -24,7 +24,7 @@ scenarios:
       detail: bad args
       path: src/main.go
       patterns_list: '- `${overlay_dir}/blueprints/**`'
-      session_role: plan_write_only
+      profile: plan_write_only
       tool: write
   - id: command_redirect
     vars:
@@ -32,7 +32,7 @@ scenarios:
       kind: redirect
       path: weather_output.txt
       patterns_list: '- `${overlay_dir}/blueprints/**`'
-      session_role: plan_writer
+      profile: plan_writer
       tool: command
   - id: verify_redirect
     vars:
@@ -40,5 +40,5 @@ scenarios:
       kind: redirect
       path: out.log
       patterns_list: '- `${overlay_dir}/blueprints/**`'
-      session_role: plan_writer
+      profile: plan_writer
       tool: verify

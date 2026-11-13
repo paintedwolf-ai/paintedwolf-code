@@ -23,5 +23,5 @@ scenarios:
       operator: '|'
       path: ntp_check.py
       pattern: '$T | $B'
-      session_role: implement
+      profile: implement
       tool: code_rewrite

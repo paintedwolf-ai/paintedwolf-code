@@ -18,5 +18,5 @@ scenarios:
   - id: default
     vars:
       detail: bad args
-      session_role: coordinator
+      profile: coordinator
       tool: edit

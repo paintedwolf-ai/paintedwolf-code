@@ -20,5 +20,5 @@ instead: Remove cursor and retry the same scope once
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: summarize

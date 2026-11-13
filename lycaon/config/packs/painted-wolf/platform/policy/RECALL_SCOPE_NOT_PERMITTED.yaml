@@ -19,5 +19,5 @@ instead: Preserve permitted recall scope and report missing context
 scenarios:
   - id: default
     vars:
-      session_role: worker_readonly
+      profile: worker_readonly
       tool: recall

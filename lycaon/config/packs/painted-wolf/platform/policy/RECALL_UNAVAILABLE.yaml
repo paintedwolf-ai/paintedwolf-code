@@ -19,5 +19,5 @@ instead: Branch on Code RECALL_UNAVAILABLE; never read it as absence
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: recall

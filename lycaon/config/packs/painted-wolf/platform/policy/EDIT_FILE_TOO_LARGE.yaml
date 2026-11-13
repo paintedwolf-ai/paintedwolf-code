@@ -30,7 +30,7 @@ scenarios:
       can_command: true
       max_file_bytes: 4194304
       path: internal/huge.go
-      session_role: implement
+      profile: implement
       size: 5242880
       tool: edit
   - id: without_command
@@ -38,6 +38,6 @@ scenarios:
       can_command: false
       max_file_bytes: 4194304
       path: internal/huge.go
-      session_role: implement
+      profile: implement
       size: 5242880
       tool: edit

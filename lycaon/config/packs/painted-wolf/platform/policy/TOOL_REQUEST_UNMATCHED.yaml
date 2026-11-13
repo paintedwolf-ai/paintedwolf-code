@@ -5,13 +5,13 @@ on: tool.rejected
 selector:
   tools:
     - request_tools
-requires_facts: [paintedwolf.available, paintedwolf.need, paintedwolf.rejection_code, paintedwolf.session_role, paintedwolf.tool_discovery_has_more, paintedwolf.tool_discovery_status]
+requires_facts: [paintedwolf.available, paintedwolf.need, paintedwolf.rejection_code, paintedwolf.tool_discovery_has_more, paintedwolf.tool_discovery_status]
 when: paintedwolf.rejection_code == "TOOL_REQUEST_UNMATCHED"
 effect: block
 category: recoverable
 emit: guard:request_tools
-message: 'No schema loaded for "{{ paintedwolf.need }}" in profile {{ paintedwolf.session_role }}. Loadable: {{ paintedwolf.available }}'
-what: 'No schema loaded for the request "{{ paintedwolf.need }}" in profile {{ paintedwolf.session_role }}'
+message: 'No schema loaded for "{{ paintedwolf.need }}" in profile {{ profile }}. Loadable: {{ paintedwolf.available }}'
+what: 'No schema loaded for the request "{{ paintedwolf.need }}" in profile {{ profile }}'
 cause: No additional tool was selected for this need
 why: Existing tools remain available; an empty result does not establish that no relevant tool exists
 fix: >-
@@ -24,16 +24,16 @@ scenarios:
       available:
         - chmod
         - wc
-      session_role: implement
+      profile: implement
       need: frobnicate the widget
   - id: healthy_no_match_with_more
     vars:
-      session_role: coordinator
+      profile: coordinator
       need: dispatch a worker
       tool_discovery_status: no_match
       tool_discovery_has_more: true
   - id: healthy_no_match_last_page
     vars:
-      session_role: coordinator
+      profile: coordinator
       need: dispatch a worker
       tool_discovery_status: no_match

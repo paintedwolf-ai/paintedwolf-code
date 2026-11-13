@@ -87,7 +87,6 @@ Host behaviour the standard leaves to the implementation is carried in `x-painte
 | `x-paintedwolf-counter-scope` | A fact whose value keys an additional fire counter, read as `paintedwolf.scoped_fire_count` ([OAR-FIRE-4]) |
 | `x-paintedwolf-audience` | Tool profiles that may receive the rule |
 | `x-paintedwolf-status` / `x-paintedwolf-successor` | Deprecation and the code or boundary that replaces it |
-| `x-paintedwolf-severity` | A presentation severity outside the standard's `block`, `warn`, `info` |
 | `x-paintedwolf-category` | The category of a hint document, whose closed field set has none |
 
 ### Hints

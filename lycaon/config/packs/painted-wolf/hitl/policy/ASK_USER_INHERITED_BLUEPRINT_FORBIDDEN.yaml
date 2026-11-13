@@ -19,14 +19,14 @@ instead: Branch on Code ASK_USER_INHERITED_BLUEPRINT_FORBIDDEN; never replace th
 scenarios:
   - id: approved
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: ask_user
       inherited_blueprint_status: approved
       inherited_parent_run: parent-run
       inherited_blueprint_approved: true
   - id: invalid
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: ask_user
       inherited_blueprint_status: invalid
       inherited_parent_run: parent-run

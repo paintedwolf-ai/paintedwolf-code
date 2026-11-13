@@ -20,6 +20,6 @@ instead: ''
 scenarios:
   - id: blocked_git
     vars:
-      session_role: implement
+      profile: implement
       reason: blocked env key GIT_EXEC_PATH
       tool: command

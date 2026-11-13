@@ -22,5 +22,5 @@ scenarios:
       bytes: 41943040
       max_bytes: 20971520
       path: assets/huge.png
-      session_role: coordinator
+      profile: coordinator
       tool: view_image

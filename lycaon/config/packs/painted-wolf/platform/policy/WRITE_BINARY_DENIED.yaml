@@ -19,5 +19,5 @@ scenarios:
     vars:
       bytes: 128
       path: entities.py
-      session_role: implement
+      profile: implement
       tool: write

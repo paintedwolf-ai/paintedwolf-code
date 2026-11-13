@@ -20,6 +20,6 @@ scenarios:
       agent_type: implementer
       job_id: abc123
       path: src/main.go
-      session_role: implement
+      profile: implement
       reason: worker branch claim failed
       tool: write

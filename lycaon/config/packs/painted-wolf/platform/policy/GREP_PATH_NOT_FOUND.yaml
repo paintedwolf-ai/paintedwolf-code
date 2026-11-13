@@ -21,5 +21,5 @@ scenarios:
   - id: default
     vars:
       path: missing/file.go
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: grep

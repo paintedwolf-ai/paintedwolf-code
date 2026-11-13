@@ -19,5 +19,5 @@ instead: Branch on Code COMPLETE_LEG_ADDRESSED_SESSION; answer directly, do not 
 scenarios:
   - id: default
     vars:
-      session_role: explore
+      profile: explore
       tool: complete_leg

@@ -17,6 +17,6 @@ instead: ''
 scenarios:
   - id: default
     vars:
-      session_role: implement
+      profile: implement
       reason: subsystem owner unavailable
       tool: write

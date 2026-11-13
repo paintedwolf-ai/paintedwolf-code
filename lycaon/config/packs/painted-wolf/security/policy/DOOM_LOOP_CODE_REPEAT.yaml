@@ -19,13 +19,13 @@ scenarios:
     vars:
       code: COMMAND_NOT_ARGV
       count: 3
-      session_role: coordinator
+      profile: coordinator
       tool: command
   - id: worker_leg
     vars:
       code: WORKER_SCOPE_DENIED
       count: 3
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: read
       worker_leg: true
   - id: carries_repeated_code_exit
@@ -33,5 +33,5 @@ scenarios:
       code: PROGRESS_RECONCILIATION_REQUIRED
       code_instead: '`update_progress` with the current reconciliation_token and expected_revision, then retry `task`'
       count: 3
-      session_role: coordinator
+      profile: coordinator
       tool: task

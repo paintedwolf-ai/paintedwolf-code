@@ -18,4 +18,4 @@ fix: If the user explicitly requested removal of the empty directory, call delet
 instead: Do not broaden the target set or remove a non-empty directory
 scenarios:
   - id: default
-    vars: {path: tmp, session_role: implement, tool: delete}
+    vars: {path: tmp, profile: implement, tool: delete}

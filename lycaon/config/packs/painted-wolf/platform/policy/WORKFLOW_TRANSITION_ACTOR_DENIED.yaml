@@ -6,7 +6,6 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_TRANSITION_ACTOR_DENIED"
 effect: block
-x-paintedwolf-severity: error
 category: recoverable
 emit: guard:workflow
 message: coordinator is not an allowed actor on this choice transition

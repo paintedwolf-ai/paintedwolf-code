@@ -8,7 +8,6 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_START_REQUIRES_HUMAN_APPROVAL"
 effect: block
-x-paintedwolf-severity: error
 category: policy
 emit: guard:workflow
 message: Start this workflow from an explicit human action

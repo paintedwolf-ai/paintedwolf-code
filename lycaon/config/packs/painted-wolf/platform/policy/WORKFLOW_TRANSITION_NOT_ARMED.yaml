@@ -6,7 +6,6 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_TRANSITION_NOT_ARMED"
 effect: block
-x-paintedwolf-severity: error
 category: recoverable
 emit: guard:workflow
 message: 'choice transition when: readiness is not satisfied'

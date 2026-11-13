@@ -5,13 +5,13 @@ on: tool.rejected
 selector:
   tools:
     - wait
-requires_facts: [paintedwolf.condition, paintedwolf.rejection_code, paintedwolf.session_role, paintedwolf.wait_allowed_conditions]
+requires_facts: [paintedwolf.condition, paintedwolf.rejection_code, paintedwolf.wait_allowed_conditions]
 when: paintedwolf.rejection_code == "WAIT_CONDITION_NOT_ALLOWED"
 effect: block
 category: recoverable
 emit: guard:wait
 message: This wait condition is not available in the active tool profile
-what: Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ paintedwolf.session_role }}.
+what: Wait condition {{ paintedwolf.condition }} is unavailable in profile {{ profile }}.
 cause: 'The active wait schema allows these condition kinds: {{ paintedwolf.wait_allowed_conditions }}.'
 why: Wait subscriptions follow the same profile-specific capability contract as their event sources.
 fix: Use an allowed condition only when it observes the dependency you need. If this surface cannot observe that dependency, report it through the available task completion or user communication channel.
@@ -20,5 +20,5 @@ scenarios:
   - id: default
     vars:
       condition: process_done
-      session_role: worker_readonly
+      profile: worker_readonly
       tool: wait

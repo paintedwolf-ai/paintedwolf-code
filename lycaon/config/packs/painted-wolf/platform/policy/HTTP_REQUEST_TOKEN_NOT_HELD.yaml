@@ -18,4 +18,4 @@ fix: Make the request that captures the token first using capture_tokens, so the
 instead: Branch on Code HTTP_REQUEST_TOKEN_NOT_HELD; issue the auth request first, or reference a held token
 scenarios:
   - id: default
-    vars: {jar: api, missing: auth, held: [session], session_role: implement, tool: http_request}
+    vars: {jar: api, missing: auth, held: [session], profile: implement, tool: http_request}

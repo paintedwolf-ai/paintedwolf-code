@@ -19,6 +19,6 @@ instead: Report the interactive execution requirement until a PTY is available
 scenarios:
   - id: default
     vars:
-      session_role: implement
+      profile: implement
       reason: pty_unsupported
       tool: terminal_open

@@ -19,5 +19,5 @@ scenarios:
     vars:
       detail: bad args
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: workflow_transition

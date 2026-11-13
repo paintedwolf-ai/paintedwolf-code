@@ -6,7 +6,6 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_SCANS_PENDING"
 effect: block
-x-paintedwolf-severity: error
 category: recoverable
 emit: guard:workflow
 message: The review is waiting for bound scans.

@@ -20,12 +20,12 @@ scenarios:
       detail: bad args
       path: .git/hooks/pre-commit
       class: hooks
-      session_role: implement
+      profile: implement
       tool: write
   - id: config
     vars:
       detail: bad args
       path: .git/config
       class: config
-      session_role: implement
+      profile: implement
       tool: edit

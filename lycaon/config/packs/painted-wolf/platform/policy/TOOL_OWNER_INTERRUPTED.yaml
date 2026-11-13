@@ -17,6 +17,6 @@ instead: ''
 scenarios:
   - id: default
     vars:
-      session_role: implement
+      profile: implement
       reason: program admission closed
       tool: command

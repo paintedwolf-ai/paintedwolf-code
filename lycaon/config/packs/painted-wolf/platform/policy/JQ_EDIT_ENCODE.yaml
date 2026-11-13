@@ -23,5 +23,5 @@ scenarios:
       detail: TOML has no null value
       format: toml
       path: Cargo.toml
-      session_role: implement
+      profile: implement
       tool: jq_edit

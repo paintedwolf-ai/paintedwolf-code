@@ -18,5 +18,5 @@ scenarios:
   - id: default
     vars:
       path: ../outside
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: find

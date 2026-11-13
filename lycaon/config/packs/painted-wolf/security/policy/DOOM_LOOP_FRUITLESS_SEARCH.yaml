@@ -19,12 +19,12 @@ scenarios:
     vars:
       fruitless_search_run: 3
       pattern: mcpProjectDir
-      session_role: coordinator
+      profile: coordinator
       tool: grep
   - id: worker_leg
     vars:
       fruitless_search_run: 3
       pattern: RecordHostVisit
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: grep
       worker_leg: true

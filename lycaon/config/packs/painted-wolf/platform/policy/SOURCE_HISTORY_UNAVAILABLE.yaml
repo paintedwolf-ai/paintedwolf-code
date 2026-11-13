@@ -20,5 +20,5 @@ scenarios:
   - id: default
     vars:
       detail: the source ledger is not configured for this session
-      session_role: implement
+      profile: implement
       tool: source_history

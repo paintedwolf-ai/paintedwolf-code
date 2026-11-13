@@ -22,5 +22,5 @@ scenarios:
     vars:
       detail: bad args
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       tool: code_rewrite

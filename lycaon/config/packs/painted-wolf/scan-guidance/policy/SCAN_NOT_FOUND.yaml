@@ -20,6 +20,6 @@ instead: 'Preserve bound scan_ids; resolve unbound ids before drill-down.'
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       scan_id: deadbeef
       tool: scan_query

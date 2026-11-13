@@ -20,7 +20,7 @@ instead: '{{ paintedwolf.next_steps }}'
 scenarios:
   - id: default
     vars:
-      session_role: implement
+      profile: implement
       reason: connection refused
       retryable: true
       tool: http_request

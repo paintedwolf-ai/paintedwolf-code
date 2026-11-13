@@ -21,13 +21,13 @@ scenarios:
   - id: default
     vars:
       path: empty/
-      session_role: coordinator
+      profile: coordinator
       tool: summarize
   - id: pattern_miss
     vars:
       match_count: 0
       path: lycaon/internal/api/server.go
       pattern: func handle[A-Z]
-      session_role: coordinator
+      profile: coordinator
       sample_identifiers: handleSessions, handleWorkflowRuns, NewServer
       tool: summarize

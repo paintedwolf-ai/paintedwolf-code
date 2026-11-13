@@ -76,7 +76,7 @@ Facts are observations, not verdicts: `paintedwolf.unobserved_cited_paths`, `pai
 | `emit` | Provenance channel (`guard:…`, `rule:…`) |
 | `category`, `scenarios`, `evidence`, `context_schema` | Informational; scenarios render the copy contract |
 
-Host behaviour the standard leaves open ships as `x-paintedwolf-*` extensions: `x-paintedwolf-transform`, `x-paintedwolf-counter-scope`, `x-paintedwolf-audience`, `x-paintedwolf-status`, `x-paintedwolf-successor`, `x-paintedwolf-severity`, and, on hints, `x-paintedwolf-category`. See [Open Agent Rules](open-agent-rules.md#host-extensions).
+Host behaviour the standard leaves open ships as `x-paintedwolf-*` extensions: `x-paintedwolf-transform`, `x-paintedwolf-counter-scope`, `x-paintedwolf-audience`, `x-paintedwolf-status`, `x-paintedwolf-successor`, and, on hints, `x-paintedwolf-category`. See [Open Agent Rules](open-agent-rules.md#host-extensions).
 
 Rules and anchor bindings (`platform/host/bindings/*.yaml`, [`anchor-binding.schema.json`](../schemas/anchor-binding.schema.json)) both name a catalog anchor in `on`; write it `'on':` in YAML so it is not read as a boolean. The rule asks *when do I evaluate*, the binding asks *when do I render*.
 

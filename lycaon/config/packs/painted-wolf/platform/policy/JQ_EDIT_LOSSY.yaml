@@ -24,7 +24,7 @@ scenarios:
       kind: comment
       line: '3'
       path: Cargo.toml
-      session_role: implement
+      profile: implement
       profile_mutation_capable: true
       tool: jq_edit
     expect_contains:
@@ -35,7 +35,7 @@ scenarios:
       kind: comment
       line: '3'
       path: Cargo.toml
-      session_role: worker_readonly
+      profile: worker_readonly
       profile_mutation_capable: false
       tool: jq_edit
     expect_contains:

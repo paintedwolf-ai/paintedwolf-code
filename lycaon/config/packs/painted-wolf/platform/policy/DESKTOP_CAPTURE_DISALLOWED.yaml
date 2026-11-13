@@ -21,5 +21,5 @@ scenarios:
   - id: default
     vars:
       command: screencapture -x build/screen.png
-      session_role: coordinator
+      profile: coordinator
       tool: command

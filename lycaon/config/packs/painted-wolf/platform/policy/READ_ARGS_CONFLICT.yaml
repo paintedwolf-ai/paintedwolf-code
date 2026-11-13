@@ -22,14 +22,14 @@ scenarios:
     vars:
       detail: conflict
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: read
   - id: command-leg
     vars:
       can_command: true
       detail: conflict
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: read
     expect_contains:
       - '`sed -n'

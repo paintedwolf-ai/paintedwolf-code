@@ -24,7 +24,7 @@ scenarios:
       detail: invalid character
       format: json
       path: package.json
-      session_role: implement
+      profile: implement
       tool: jq
   - id: command-leg
     vars:
@@ -32,7 +32,7 @@ scenarios:
       detail: invalid character
       format: json
       path: package.json
-      session_role: implement
+      profile: implement
       tool: jq_edit
     expect_contains:
       - '`cat`'

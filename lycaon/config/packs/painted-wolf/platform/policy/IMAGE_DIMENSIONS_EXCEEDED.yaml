@@ -23,6 +23,6 @@ scenarios:
       height: 6000
       max_dimension: 4096
       path: assets/huge.png
-      session_role: coordinator
+      profile: coordinator
       tool: view_image
       width: 5000

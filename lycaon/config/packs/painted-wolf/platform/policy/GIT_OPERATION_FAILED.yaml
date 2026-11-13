@@ -18,4 +18,4 @@ fix: 'Inspect the retained result and `git status` through command before taking
 instead: Report any unresolved state; do not claim the repository was left unchanged or that the operation completed.
 scenarios:
   - id: conflict
-    vars: {tool: git_merge, session_role: coordinator, detail: conflicts}
+    vars: {tool: git_merge, profile: coordinator, detail: conflicts}

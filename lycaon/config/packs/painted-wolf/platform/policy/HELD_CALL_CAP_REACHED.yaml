@@ -37,5 +37,5 @@ scenarios:
     vars:
       limit: 4
       handles_text: held-1, held-2, held-3, held-4
-      session_role: coordinator
+      profile: coordinator
       tool: find

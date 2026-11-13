@@ -22,5 +22,5 @@ scenarios:
     vars:
       count: '3'
       path: config.json
-      session_role: implement
+      profile: implement
       tool: jq_edit

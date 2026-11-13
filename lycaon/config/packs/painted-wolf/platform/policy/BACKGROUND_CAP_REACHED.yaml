@@ -23,5 +23,5 @@ scenarios:
       background_limit: 4
       live_command_handles: [running-command]
       can_command_stop: true
-      session_role: implement
+      profile: implement
       tool: command

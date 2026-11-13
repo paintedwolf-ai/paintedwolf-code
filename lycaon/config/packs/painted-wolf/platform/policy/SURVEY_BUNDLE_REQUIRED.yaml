@@ -20,13 +20,13 @@ instead: Branch on Code; retry with a valid bundle id from your Tools section
 scenarios:
   - id: default
     vars:
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: survey_repo
   - id: command-leg
     vars:
       command_form: repo-map
       native_operation: survey_repo
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: command
     expect_contains:
       - 'repo-map'

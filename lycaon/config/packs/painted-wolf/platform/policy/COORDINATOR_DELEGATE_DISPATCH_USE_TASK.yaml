@@ -22,5 +22,5 @@ scenarios:
       can_task: true
       detail: ambient worker dispatch
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: delegate_dispatch

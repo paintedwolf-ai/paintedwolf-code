@@ -23,12 +23,12 @@ scenarios:
       resource: references/missing.md
       available:
         - references/failure-triage.md
-      session_role: implement
+      profile: implement
       tool: skills_read
   - id: empty_available
     vars:
       name: prepare-a-release
       resource: references/missing.md
       available: []
-      session_role: implement
+      profile: implement
       tool: skills_read

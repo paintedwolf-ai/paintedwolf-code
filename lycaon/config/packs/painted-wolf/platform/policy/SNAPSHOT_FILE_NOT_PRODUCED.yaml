@@ -20,5 +20,5 @@ scenarios:
   - id: default
     vars:
       path: build/screen.png
-      session_role: coordinator
+      profile: coordinator
       tool: command

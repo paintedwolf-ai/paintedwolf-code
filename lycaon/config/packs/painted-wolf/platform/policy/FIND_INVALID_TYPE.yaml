@@ -21,14 +21,14 @@ scenarios:
   - id: default
     vars:
       path: src/
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: find
       type: symlink
   - id: command-leg
     vars:
       native_operation: find
       path: src/
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: command
       type: link
     expect_contains:

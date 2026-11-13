@@ -21,5 +21,5 @@ scenarios:
   - id: default
     vars:
       path: missing.zip
-      session_role: coordinator
+      profile: coordinator
       tool: extract_archive

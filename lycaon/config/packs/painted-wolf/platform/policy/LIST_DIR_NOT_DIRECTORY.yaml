@@ -21,13 +21,13 @@ scenarios:
   - id: default
     vars:
       path: docs/README.md
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: list_dir
   - id: command-leg
     vars:
       can_command: true
       path: docs/README.md
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: list_dir
     expect_contains:
       - '`cat`'

@@ -22,6 +22,6 @@ instead: Branch on Code TERMINAL_ID_REQUIRED; pass id from terminal_open
 scenarios:
   - id: default
     vars:
-      session_role: implement
+      profile: implement
       reason: missing_id
       tool: terminal_send

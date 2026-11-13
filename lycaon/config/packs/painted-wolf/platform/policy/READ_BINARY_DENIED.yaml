@@ -19,7 +19,7 @@ scenarios:
     vars:
       bytes: 6148
       path: .DS_Store
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: read
   - id: image_file
     vars:
@@ -27,5 +27,5 @@ scenarios:
       workspace_image_supported: true
       can_view_image: true
       path: assets/logo.png
-      session_role: coordinator
+      profile: coordinator
       tool: read

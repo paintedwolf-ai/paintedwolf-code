@@ -23,6 +23,6 @@ scenarios:
       detail: bad args
       max_path_bytes: 2097152
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       size: 3000000
       tool: diff

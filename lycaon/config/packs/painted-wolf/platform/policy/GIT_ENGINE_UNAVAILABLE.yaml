@@ -32,4 +32,4 @@ fix: Report the dependency to the user so they can repair or reinstall the appli
 instead: Stop the dependent operation and report the unavailable engine without substituting another executable
 scenarios:
   - id: default
-    vars: {tool: git_status, session_role: coordinator}
+    vars: {tool: git_status, profile: coordinator}

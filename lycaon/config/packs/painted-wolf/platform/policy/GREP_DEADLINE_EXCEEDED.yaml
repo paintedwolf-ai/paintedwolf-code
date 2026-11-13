@@ -20,7 +20,7 @@ instead: Branch on Code; partition the search scope and retry
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: grep
       timeout_ms: 60000
       files_searched: 18240

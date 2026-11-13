@@ -20,7 +20,7 @@ scenarios:
   - id: default
     vars:
       max_pages: 2
-      session_role: implement
+      profile: implement
       tool: page_open
       can_page_close: true
       page_live_ids:

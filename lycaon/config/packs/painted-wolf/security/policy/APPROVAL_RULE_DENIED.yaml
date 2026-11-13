@@ -5,7 +5,7 @@ id: APPROVAL_RULE_DENIED
 kind: schema
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.command, paintedwolf.rejection_code, paintedwolf.rule_category, paintedwolf.rule_pack_id, paintedwolf.rule_pattern, paintedwolf.rule_scope, paintedwolf.rule_unit_id, paintedwolf.session_role]
+requires_facts: [paintedwolf.command, paintedwolf.rejection_code, paintedwolf.rule_category, paintedwolf.rule_pack_id, paintedwolf.rule_pattern, paintedwolf.rule_scope, paintedwolf.rule_unit_id]
 when: paintedwolf.rejection_code == "APPROVAL_RULE_DENIED"
 effect: block
 category: blocked
@@ -24,7 +24,7 @@ scenarios:
   - id: default
     vars:
       tool: command
-      session_role: implement
+      profile: implement
       command: npm publish
       rule_unit_id: approvals/rules/deny-npm-publish
       rule_pack_id: foxden/watchdog

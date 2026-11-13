@@ -21,6 +21,6 @@ instead: Branch on Code; simplify the query before retrying
 scenarios:
   - id: default
     vars:
-      session_role: explore_readonly
+      profile: explore_readonly
       timeout_ms: '5000'
       tool: jq

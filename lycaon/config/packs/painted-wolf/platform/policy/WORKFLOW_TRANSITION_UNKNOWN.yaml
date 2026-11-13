@@ -6,7 +6,6 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_TRANSITION_UNKNOWN"
 effect: block
-x-paintedwolf-severity: error
 category: recoverable
 emit: guard:workflow
 message: unknown choice transition_id for the current phase

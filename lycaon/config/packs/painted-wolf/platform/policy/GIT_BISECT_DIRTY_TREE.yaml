@@ -18,5 +18,5 @@ scenarios:
   - id: dirty
     vars:
       tool: command
-      session_role: coordinator
+      profile: coordinator
       path: src/main.go

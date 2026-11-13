@@ -21,13 +21,13 @@ scenarios:
     vars:
       detail: bad args
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: read
   - id: worker_leg
     vars:
       detail: bad args
       path: src/main.go
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: grep
       worker_leg: true
       can_complete_leg: true
@@ -35,5 +35,5 @@ scenarios:
     vars:
       count: 8
       handle: cmd_docker_01
-      session_role: coordinator
+      profile: coordinator
       tool: command_output

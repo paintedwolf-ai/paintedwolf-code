@@ -22,6 +22,6 @@ scenarios:
   - id: default
     vars:
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       reason: pattern is required
       tool: grep

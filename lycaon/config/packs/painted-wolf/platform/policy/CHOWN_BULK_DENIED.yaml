@@ -22,5 +22,5 @@ scenarios:
     vars:
       detail: bad args
       path: scripts/run.sh
-      session_role: implement
+      profile: implement
       tool: chown

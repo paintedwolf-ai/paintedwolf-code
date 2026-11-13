@@ -20,5 +20,5 @@ scenarios:
   - id: default
     vars:
       need: missing-skill
-      session_role: implement
+      profile: implement
       tool: skills_read

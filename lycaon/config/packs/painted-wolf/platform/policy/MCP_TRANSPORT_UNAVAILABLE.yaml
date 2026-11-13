@@ -17,6 +17,6 @@ instead: Preserve the pending operation while the provider recovers
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       provider: fixture
       tool: mcp_fixture_echo

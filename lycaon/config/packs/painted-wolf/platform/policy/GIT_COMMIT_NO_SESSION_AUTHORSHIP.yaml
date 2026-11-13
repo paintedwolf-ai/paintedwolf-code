@@ -20,5 +20,5 @@ instead: Branch on Code; pass paths or leave the tree alone
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: git_commit

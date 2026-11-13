@@ -78,7 +78,6 @@ func (bp *BlockPlane) evaluateBlock(ctx context.Context, anchor, tool, profile s
 	gc := oar.NewGuardContext()
 	gc.ObserveToolCall(tool, args)
 	fillOccurrenceIdentity(ctx, gc)
-	gc.Session.Role = profile
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
 	gc.DeriveToolClassFacts()
@@ -117,7 +116,6 @@ func (bp *BlockPlane) rejectFromObservation(ctx context.Context, anchor, tool, p
 	gc := oar.NewGuardContext()
 	gc.ObserveToolCall(tool, args)
 	fillOccurrenceIdentity(ctx, gc)
-	gc.Session.Role = profile
 	gc.Session.PermissionProfile = profile
 	gc.Progress.VerifyHasCommand = commandsurface.HasCommandInput(args)
 	if bp.MCPCatalog != nil {

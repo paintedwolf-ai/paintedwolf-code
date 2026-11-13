@@ -21,6 +21,6 @@ scenarios:
   - id: default
     vars:
       path: out.txt
-      session_role: coordinator
+      profile: coordinator
       tool: extract_archive
       dest: existing-file

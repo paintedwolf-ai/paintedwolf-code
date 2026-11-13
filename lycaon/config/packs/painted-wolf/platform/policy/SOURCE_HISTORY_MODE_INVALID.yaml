@@ -20,5 +20,5 @@ scenarios:
   - id: default
     vars:
       mode: blame
-      session_role: implement
+      profile: implement
       tool: source_history

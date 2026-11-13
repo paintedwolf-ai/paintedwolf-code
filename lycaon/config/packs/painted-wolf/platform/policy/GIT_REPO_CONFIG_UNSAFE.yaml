@@ -35,11 +35,11 @@ scenarios:
     vars:
       detail: bad args
       keys: filter.crypt
-      session_role: implement
+      profile: implement
       tool: git_status
   - id: proxy
     vars:
       detail: bad args
       keys: core.gitProxy
-      session_role: implement
+      profile: implement
       tool: git_diff

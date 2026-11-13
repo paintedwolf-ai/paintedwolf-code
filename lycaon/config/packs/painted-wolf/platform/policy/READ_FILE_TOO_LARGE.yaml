@@ -28,7 +28,7 @@ scenarios:
       detail: bad args
       max_file_bytes: 8388608
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       can_command: true
       size: 12000000
       tool: read
@@ -37,7 +37,7 @@ scenarios:
       detail: bad args
       max_file_bytes: 8388608
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       can_command: false
       size: 12000000
       tool: read

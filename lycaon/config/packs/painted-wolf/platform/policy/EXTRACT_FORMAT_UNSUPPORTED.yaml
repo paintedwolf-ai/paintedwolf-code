@@ -23,14 +23,14 @@ scenarios:
     vars:
       allowed: .zip, .tar.gz
       path: vendor/sdk.tar
-      session_role: implement
+      profile: implement
       tool: extract_archive
   - id: command-leg
     vars:
       allowed: .zip, .tar.gz
       can_command: true
       path: vendor/sdk.tar
-      session_role: implement
+      profile: implement
       tool: extract_archive
     expect_contains:
       - '`unzip -p`'

@@ -20,6 +20,6 @@ scenarios:
   - id: default
     vars:
       tool: ask_user
-      session_role: coordinator
+      profile: coordinator
       ask_prompt_runes: 901
       ask_prompt_limit: 900

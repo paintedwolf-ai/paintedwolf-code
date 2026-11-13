@@ -18,5 +18,5 @@ scenarios:
   - id: default
     vars:
       id: dead-id
-      session_role: implement
+      profile: implement
       tool: page_act

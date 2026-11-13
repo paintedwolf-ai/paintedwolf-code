@@ -19,5 +19,5 @@ scenarios:
     vars:
       detail: missing status
       path: src/main.go
-      session_role: implementer
+      profile: implementer
       tool: complete_leg

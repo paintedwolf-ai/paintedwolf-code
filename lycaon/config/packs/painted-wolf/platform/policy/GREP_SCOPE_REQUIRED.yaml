@@ -23,5 +23,5 @@ scenarios:
       detail: open root
       file_count: 50000
       path: .
-      session_role: coordinator
+      profile: coordinator
       tool: grep

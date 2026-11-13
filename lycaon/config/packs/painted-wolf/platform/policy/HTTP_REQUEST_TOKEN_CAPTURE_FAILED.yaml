@@ -22,5 +22,5 @@ scenarios:
     vars:
       jar: auth_api
       missing: [access_token]
-      session_role: implement
+      profile: implement
       tool: http_request

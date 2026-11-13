@@ -17,7 +17,8 @@
 # paintedwolf.has_completion_report (paintedwolf.closeout_has_answer);
 # paintedwolf.high_risk_tool (compose paintedwolf.tool_is_state, tool_is_delegation,
 # tool_is_handoff and tool_is_task in when);
-# paintedwolf.profile (paintedwolf.session_role; core profile is the permission profile).
+# paintedwolf.profile (core profile for the tool profile in force; paintedwolf.session_role
+# for whether the occurrence belongs to a coordinator or a worker).
 
 host: paintedwolf
 
@@ -125,6 +126,7 @@ host_facts:
    type: string
  - name: paintedwolf.session_role
    type: string
+   observation: coordinator or worker, for the session the occurrence belongs to; empty when unknown.
  - name: paintedwolf.phase
    type: string
  - name: paintedwolf.workers_idle

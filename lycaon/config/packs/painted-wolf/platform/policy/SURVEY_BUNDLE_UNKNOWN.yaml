@@ -25,7 +25,7 @@ scenarios:
         - ssot_drift
         - api_routes
       bundle: missing_bundle
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: survey_repo
   - id: command-leg
     vars:
@@ -36,7 +36,7 @@ scenarios:
       bundle: missing_bundle
       command_form: repo-map
       native_operation: survey_repo
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: command
     expect_contains:
       - 'repo-map'

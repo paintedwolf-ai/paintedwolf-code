@@ -20,10 +20,10 @@ scenarios:
   - id: default
     vars:
       mode: version
-      session_role: implement
+      profile: implement
       tool: source_history
   - id: base_version_id_without_version_id
     vars:
       mode: diff
-      session_role: implement
+      profile: implement
       tool: source_history

@@ -19,5 +19,5 @@ scenarios:
     vars:
       detail: Security scanners is off — turn it on in Settings → Security scanners
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: scan_pack

@@ -36,5 +36,5 @@ scenarios:
   - id: default
     vars:
       handle: held-1
-      session_role: coordinator
+      profile: coordinator
       tool: find

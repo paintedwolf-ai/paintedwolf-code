@@ -20,5 +20,5 @@ instead: Commit or tag from your terminal; do not retry unsigned here
 scenarios:
   - id: commit
     vars:
-      session_role: implement
+      profile: implement
       tool: git_commit

@@ -17,6 +17,6 @@ instead: Report the consent-storage failure and preserve the pending action
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       provider: fixture
       tool: mcp_fixture_echo

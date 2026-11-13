@@ -20,5 +20,5 @@ instead: Add path (or paths) as a sibling key alongside pattern and retry once
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: summarize

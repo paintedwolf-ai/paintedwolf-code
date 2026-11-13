@@ -22,7 +22,7 @@ scenarios:
     vars:
       end_line: 200
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       start_line: 150
       tool: replace_lines
       total_lines: 120
@@ -31,7 +31,7 @@ scenarios:
       can_command: true
       end_line: 200
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       start_line: 150
       tool: replace_lines
       total_lines: 120

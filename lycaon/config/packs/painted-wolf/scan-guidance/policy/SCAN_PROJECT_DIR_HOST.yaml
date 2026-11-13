@@ -21,6 +21,6 @@ instead: Omit project_dir — host binds scan tools to the session root
 scenarios:
   - id: default
     vars:
-      session_role: explore_readonly
+      profile: explore_readonly
       supplied: .
       tool: scan_list

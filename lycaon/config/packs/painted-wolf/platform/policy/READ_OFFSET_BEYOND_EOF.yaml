@@ -22,6 +22,6 @@ scenarios:
     vars:
       offset: 9999
       path: lycaon/internal/tools.go
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: read
       total_lines: 498

@@ -17,5 +17,5 @@ instead: Follow the current workflow version and task intent
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       rejection_reason: workflow version is unavailable

@@ -19,11 +19,11 @@ scenarios:
     vars:
       execution_outcome: completed
       bytes: 20000
-      session_role: coordinator
+      profile: coordinator
       tool: git_commit
   - id: failed_read
     vars:
       execution_outcome: error
       bytes: 20000
-      session_role: implement
+      profile: implement
       tool: read

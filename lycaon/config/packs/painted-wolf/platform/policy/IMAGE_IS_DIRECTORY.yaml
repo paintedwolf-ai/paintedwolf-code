@@ -20,5 +20,5 @@ scenarios:
   - id: default
     vars:
       path: assets/icons
-      session_role: coordinator
+      profile: coordinator
       tool: view_image

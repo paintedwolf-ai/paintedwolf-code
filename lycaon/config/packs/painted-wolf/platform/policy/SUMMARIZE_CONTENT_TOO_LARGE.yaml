@@ -23,5 +23,5 @@ scenarios:
       bytes: 500000
       cap: 400000
       path: README.md
-      session_role: coordinator
+      profile: coordinator
       tool: summarize

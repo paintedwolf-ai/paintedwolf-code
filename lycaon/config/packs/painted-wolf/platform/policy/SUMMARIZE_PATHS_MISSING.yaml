@@ -21,5 +21,5 @@ scenarios:
   - id: default
     vars:
       path: missing.go
-      session_role: coordinator
+      profile: coordinator
       tool: summarize

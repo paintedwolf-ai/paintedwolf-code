@@ -18,4 +18,4 @@ scenarios:
   - id: default
     vars:
       tool: command
-      session_role: implement
+      profile: implement

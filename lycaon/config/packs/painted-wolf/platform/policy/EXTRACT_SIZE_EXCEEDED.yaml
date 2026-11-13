@@ -22,5 +22,5 @@ scenarios:
     vars:
       bytes: 60000000
       max_uncompressed_bytes: 52428800
-      session_role: implement
+      profile: implement
       tool: extract_archive

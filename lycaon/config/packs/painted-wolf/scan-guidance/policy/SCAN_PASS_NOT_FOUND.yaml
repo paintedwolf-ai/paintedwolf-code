@@ -19,6 +19,6 @@ instead: 'Branch on Code SCAN_PASS_NOT_FOUND; reuse the pack receipt''s pass_id 
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       pass_id: deadbeef
       tool: scan_summary

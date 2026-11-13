@@ -17,4 +17,4 @@ fix: Use a file editing tool, or a separate command with capability_request.writ
 instead: Prepare the instruction change for an ordinary approval.
 scenarios:
   - id: persistent_terminal
-    vars: {path: AGENTS.md, tool: terminal_open, session_role: implement}
+    vars: {path: AGENTS.md, tool: terminal_open, profile: implement}

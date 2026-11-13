@@ -19,5 +19,5 @@ instead: ''
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: verify

@@ -21,12 +21,12 @@ scenarios:
   - id: default
     vars:
       detail: exact content for this version is unavailable
-      session_role: implement
+      profile: implement
       tool: source_history
   - id: diff_side
     vars:
       detail: version v1 has no text to diff
       side: base
       state: binary
-      session_role: implement
+      profile: implement
       tool: source_history

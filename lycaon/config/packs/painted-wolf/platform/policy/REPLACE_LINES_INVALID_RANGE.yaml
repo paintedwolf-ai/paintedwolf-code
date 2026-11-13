@@ -22,7 +22,7 @@ scenarios:
     vars:
       end_line: 10
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       reason: end_line must be >= start_line
       start_line: 20
       tool: replace_lines
@@ -31,7 +31,7 @@ scenarios:
       end_line: 10
       native_operation: replace_lines
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       reason: end_line must be >= start_line
       start_line: 20
       tool: command

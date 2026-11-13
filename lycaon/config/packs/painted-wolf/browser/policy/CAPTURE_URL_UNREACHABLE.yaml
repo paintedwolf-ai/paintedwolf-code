@@ -19,7 +19,7 @@ scenarios:
     vars:
       detail: bad args
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: capture_page
       navigation_url: http://127.0.0.1:5678/
       navigation_error: net::ERR_CONNECTION_REFUSED

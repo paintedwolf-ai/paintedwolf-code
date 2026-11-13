@@ -8,7 +8,6 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_FEEDBACK_PENDING"
 effect: block
-severity: info
 category: expected_behavior
 emit: guard:workflow
 message: The workflow is waiting for an existing feedback or decision card.

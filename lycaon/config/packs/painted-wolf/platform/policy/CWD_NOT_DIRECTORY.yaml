@@ -22,5 +22,5 @@ scenarios:
   - id: default
     vars:
       cwd: README.md
-      session_role: implement
+      profile: implement
       tool: command

@@ -19,5 +19,5 @@ instead: Use an offered current-source tool, or report the missing evidence
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: recall

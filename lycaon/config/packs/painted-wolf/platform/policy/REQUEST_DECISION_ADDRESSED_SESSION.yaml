@@ -19,5 +19,5 @@ instead: Branch on Code REQUEST_DECISION_ADDRESSED_SESSION; ask the user directl
 scenarios:
   - id: default
     vars:
-      session_role: explore
+      profile: explore
       tool: request_decision

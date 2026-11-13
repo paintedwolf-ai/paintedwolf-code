@@ -37,14 +37,14 @@ scenarios:
     vars:
       detail: bad args
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: read
       argument_schema_tool: read
   - id: mutation-sibling
     vars:
       detail: missing old_string
       path: ntp_check.py
-      session_role: implement
+      profile: implement
       suggested_tool: write
       tool: edit
       argument_schema_tool: edit
@@ -52,7 +52,7 @@ scenarios:
   - id: misplaced-field
     vars:
       tool: command
-      session_role: coordinator
+      profile: coordinator
       misplaced_fields:
         - host_resources
       belongs_under: capability_request
@@ -60,13 +60,13 @@ scenarios:
   - id: unknown-field
     vars:
       tool: command
-      session_role: coordinator
+      profile: coordinator
       rejection_field: timeout
       argument_schema_tool: command
   - id: unparsed-json
     vars:
       tool: http_request
-      session_role: implement
+      profile: implement
       rejection_field: body_json
       json_encoded: true
       expected_type: object
@@ -74,7 +74,7 @@ scenarios:
   - id: malformed-json
     vars:
       tool: submit_verdict
-      session_role: coordinator
+      profile: coordinator
       rejection_field: verdict
       json_malformed: true
       json_open_paths:
@@ -91,7 +91,7 @@ scenarios:
   - id: malformed-json-closed-early
     vars:
       tool: task
-      session_role: coordinator
+      profile: coordinator
       rejection_field: brief
       json_malformed: true
       json_trailing_text_at: 59
@@ -103,7 +103,7 @@ scenarios:
   - id: unplanned-work-id
     vars:
       tool: task
-      session_role: coordinator
+      profile: coordinator
       rejection_field: workflow_work_id
       rejection_reason: not_a_planned_fanout_phase
       inapplicable_fields:

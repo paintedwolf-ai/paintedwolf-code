@@ -21,6 +21,6 @@ instead: Branch on Code; correct the glob and retry
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: grep
       detail: unmatched brace

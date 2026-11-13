@@ -19,8 +19,8 @@ scenarios:
   - id: default
     vars:
       tool: command
-      session_role: implement
+      profile: implement
   - id: without_source_history
     vars:
       tool: command
-      session_role: plan_write_only
+      profile: plan_write_only

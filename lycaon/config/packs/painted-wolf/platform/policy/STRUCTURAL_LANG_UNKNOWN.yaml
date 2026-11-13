@@ -23,5 +23,5 @@ scenarios:
     vars:
       detail: unknown grammar "xyz"
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       tool: grep

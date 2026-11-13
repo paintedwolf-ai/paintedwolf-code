@@ -22,6 +22,6 @@ scenarios:
     vars:
       jar: registry
       reason: secret reference is revoked
-      session_role: implement
+      profile: implement
       tool: http_request
       cookie_jar_name: registry

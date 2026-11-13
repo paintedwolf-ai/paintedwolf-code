@@ -19,5 +19,5 @@ scenarios:
   - id: default
     vars:
       tool: update_progress
-      session_role: coordinator
+      profile: coordinator
       max_characters: 8000

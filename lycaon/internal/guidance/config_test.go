@@ -90,18 +90,17 @@ scenarios:
 	}
 }
 
-func TestHintDocumentCategoryAndSeverityExtensions(t *testing.T) {
+func TestHintDocumentCategoryExtension(t *testing.T) {
 	const document = `spec_version: '1.0'
 id: EXAMPLE
 kind: hint
 x-paintedwolf-category: recoverable
-x-paintedwolf-severity: error
 what: Action needs review
 `
 	var entry guidance.HintEntry
 	testutil.FailErr(t, "decode hint", yaml.Unmarshal([]byte(document), &entry))
-	if entry.Kind != "hint" || entry.Category != "recoverable" || entry.Severity != "error" {
-		t.Fatalf("hint extensions = %+v", entry)
+	if entry.Kind != "hint" || entry.Category != "recoverable" {
+		t.Fatalf("hint category = %+v", entry)
 	}
 }
 

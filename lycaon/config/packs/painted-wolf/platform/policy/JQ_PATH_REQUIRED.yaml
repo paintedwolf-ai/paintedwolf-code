@@ -20,5 +20,5 @@ instead: Branch on Code; supply a path before retrying jq
 scenarios:
   - id: default
     vars:
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: jq

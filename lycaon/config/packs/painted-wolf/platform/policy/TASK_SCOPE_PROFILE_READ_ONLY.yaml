@@ -20,7 +20,7 @@ scenarios:
       agent_type: repo-researcher
       detail: bad args
       path: docs/report.md
-      session_role: coordinator
+      profile: coordinator
       scope_mode: write
       scope_paths:
         - docs/report.md

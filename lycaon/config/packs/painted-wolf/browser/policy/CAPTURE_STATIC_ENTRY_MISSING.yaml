@@ -20,5 +20,5 @@ scenarios:
       detail: missing static entry
       entry: index.html
       path: /workspace/app
-      session_role: coordinator
+      profile: coordinator
       tool: page_open

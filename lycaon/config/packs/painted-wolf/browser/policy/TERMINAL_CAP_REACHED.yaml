@@ -19,7 +19,7 @@ instead: Retry the requested start only after capacity is available; this refuse
 scenarios:
   - id: default
     vars:
-      session_role: implement
+      profile: implement
       reason: cap_reached
       background_limit: 4
       live_terminal_ids: [running-terminal]

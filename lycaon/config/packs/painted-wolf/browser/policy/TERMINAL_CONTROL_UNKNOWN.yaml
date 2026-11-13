@@ -19,6 +19,6 @@ instead: Branch on Code TERMINAL_CONTROL_UNKNOWN; use a locked control token
 scenarios:
   - id: default
     vars:
-      session_role: implement
+      profile: implement
       reason: unknown control token {F1}
       tool: terminal_send

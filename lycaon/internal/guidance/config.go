@@ -113,9 +113,6 @@ type HintEntryExtensions struct {
 	XAudience []string `yaml:"x-paintedwolf-audience,omitempty"`
 	// XCategory classifies a hint, whose closed field set has no category.
 	XCategory string `yaml:"x-paintedwolf-category,omitempty"`
-	// XSeverity carries a presentation severity outside the standard's
-	// block, warn and info.
-	XSeverity string `yaml:"x-paintedwolf-severity,omitempty"`
 }
 
 // UnmarshalYAML decodes a policy unit into its normalized shape.
@@ -128,9 +125,6 @@ func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 	*e = HintEntry(raw)
 	if e.Category == "" {
 		e.Category = e.XCategory
-	}
-	if e.Severity == "" {
-		e.Severity = e.XSeverity
 	}
 	e.Tools = stringList(e.Selector["tools"])
 	return nil

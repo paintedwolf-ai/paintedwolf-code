@@ -23,5 +23,5 @@ scenarios:
       detail: stub
       max_options: '6'
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: ask_user

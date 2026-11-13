@@ -23,5 +23,5 @@ scenarios:
       detail: conflict
       handle: bg-1
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: edit

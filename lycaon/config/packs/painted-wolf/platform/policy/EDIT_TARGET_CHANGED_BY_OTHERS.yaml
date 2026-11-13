@@ -24,7 +24,7 @@ scenarios:
       change_count: 2
       old_string_chars: 42
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       source_history_offered: true
       tool: edit
       total_lines: 120
@@ -33,7 +33,7 @@ scenarios:
       change_count: 2
       old_string_chars: 42
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       tool: edit
       total_lines: 120
       replacement_matches: 1

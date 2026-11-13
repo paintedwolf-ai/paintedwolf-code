@@ -17,5 +17,5 @@ instead: Branch on Code; prefer peers that declare a code on IsError results
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: mcp_fixture_echo

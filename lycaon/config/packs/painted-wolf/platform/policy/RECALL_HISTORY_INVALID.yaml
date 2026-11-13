@@ -18,4 +18,4 @@ fix: >-
 instead: Pass a returned record_request as history, or a returned next_request as the complete recall arguments
 scenarios:
   - id: default
-    vars: {session_role: coordinator, tool: recall}
+    vars: {profile: coordinator, tool: recall}

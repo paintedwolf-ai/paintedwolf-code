@@ -22,5 +22,5 @@ scenarios:
     vars:
       need_one_of: path
       path: README.md
-      session_role: coordinator
+      profile: coordinator
       tool: summarize

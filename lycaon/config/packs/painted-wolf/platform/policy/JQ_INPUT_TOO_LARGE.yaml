@@ -23,5 +23,5 @@ scenarios:
       bytes: '26214400'
       max_bytes: '20971520'
       path: data/huge.json
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: jq

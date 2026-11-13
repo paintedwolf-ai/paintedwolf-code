@@ -22,14 +22,14 @@ scenarios:
     vars:
       detail: bad args
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: grep
   - id: command-leg
     vars:
       detail: bad args
       native_operation: grep
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: command
     expect_contains:
       - '-F'

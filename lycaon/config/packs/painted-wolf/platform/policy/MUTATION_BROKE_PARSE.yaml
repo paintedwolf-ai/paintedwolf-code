@@ -28,7 +28,7 @@ scenarios:
     vars:
       parse_error: 'line 55: raise ValueError'
       path: ntp_check.py
-      session_role: implement
+      profile: implement
       tool: replace_lines
     expect_contains:
       - 'supply `syntax_override_reason`'
@@ -37,7 +37,7 @@ scenarios:
       native_operation: replace_lines
       parse_error: 'line 55: raise ValueError'
       path: ntp_check.py
-      session_role: implement
+      profile: implement
       tool: command
     expect_contains:
       - 'tee --syntax-override-reason'
@@ -46,6 +46,6 @@ scenarios:
       parse_error: 'missing newline'
       path: Dockerfile
       tool: command
-      session_role: implement
+      profile: implement
     expect_contains:
       - 'tee --syntax-override-reason'

@@ -6,7 +6,6 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.regressed_group_ids, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.unaccounted_group_ids, paintedwolf.unaccounted_omitted]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_INVENTORY_UNACCOUNTED"
 effect: block
-x-paintedwolf-severity: error
 category: recoverable
 emit: guard:workflow
 message: The review leaves scanner groups unaccounted.

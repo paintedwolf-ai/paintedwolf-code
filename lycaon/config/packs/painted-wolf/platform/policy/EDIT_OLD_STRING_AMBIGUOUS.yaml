@@ -22,5 +22,5 @@ scenarios:
     vars:
       occurrences: 2
       path: internal/foo.go
-      session_role: implement
+      profile: implement
       tool: edit

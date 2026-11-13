@@ -20,5 +20,5 @@ scenarios:
   - id: default
     vars:
       path: src/main.go
-      session_role: implement
+      profile: implement
       tool: edit

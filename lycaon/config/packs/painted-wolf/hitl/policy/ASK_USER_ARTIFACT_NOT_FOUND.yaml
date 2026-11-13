@@ -21,5 +21,5 @@ scenarios:
     vars:
       detail: stub
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: ask_user

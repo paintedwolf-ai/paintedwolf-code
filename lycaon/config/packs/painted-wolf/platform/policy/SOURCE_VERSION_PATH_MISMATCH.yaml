@@ -22,5 +22,5 @@ scenarios:
     vars:
       detail: version v1 belongs to main.go, not other.go
       path: other.go
-      session_role: implement
+      profile: implement
       tool: source_history

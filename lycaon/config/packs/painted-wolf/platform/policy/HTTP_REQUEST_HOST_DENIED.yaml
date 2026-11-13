@@ -18,5 +18,5 @@ scenarios:
   - id: default
     vars:
       host: api.example.test
-      session_role: implement
+      profile: implement
       tool: http_request

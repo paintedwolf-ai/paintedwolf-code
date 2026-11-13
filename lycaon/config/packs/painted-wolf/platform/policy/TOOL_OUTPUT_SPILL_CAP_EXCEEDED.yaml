@@ -21,6 +21,6 @@ scenarios:
       execution_outcome: completed
       bytes: 70000000
       cap: 67108864
-      session_role: coordinator
+      profile: coordinator
       reason: structured_spill_cap
       tool: summarize

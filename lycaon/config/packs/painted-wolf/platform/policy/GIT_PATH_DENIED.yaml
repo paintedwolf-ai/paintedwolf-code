@@ -18,5 +18,5 @@ scenarios:
   - id: default
     vars:
       path: src/main.go
-      session_role: coordinator
+      profile: coordinator
       tool: git_diff

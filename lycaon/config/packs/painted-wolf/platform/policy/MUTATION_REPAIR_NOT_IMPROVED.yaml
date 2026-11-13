@@ -19,4 +19,4 @@ fix: 'Read the reported lines and surrounding code and make one atomic repair. U
 instead: 'Branch on Code; reduce syntax burden with one atomic repair'
 scenarios:
   - id: default
-    vars: {path: pipeline.py, session_role: implement, tool: replace_lines}
+    vars: {path: pipeline.py, profile: implement, tool: replace_lines}

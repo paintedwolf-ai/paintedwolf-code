@@ -18,7 +18,7 @@ scenarios:
   - id: root
     vars:
       path: .
-      session_role: coordinator
+      profile: coordinator
       tool: read
       can_list_dir: true
       can_find: true
@@ -27,7 +27,7 @@ scenarios:
   - id: default
     vars:
       path: lycaon/internal
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: read
       can_list_dir: true
       can_find: true
@@ -36,7 +36,7 @@ scenarios:
   - id: symbol_lookup
     vars:
       path: internal/session
-      session_role: explore_readonly
+      profile: explore_readonly
       tool: read
       can_list_dir: true
       can_find: true

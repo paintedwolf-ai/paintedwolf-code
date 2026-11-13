@@ -23,5 +23,5 @@ scenarios:
     vars:
       max_depth: '32'
       path: deep.yaml
-      session_role: implement
+      profile: implement
       tool: jq

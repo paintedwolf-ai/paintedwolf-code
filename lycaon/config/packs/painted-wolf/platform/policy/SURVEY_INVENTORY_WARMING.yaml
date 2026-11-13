@@ -22,6 +22,6 @@ instead: Branch on Code; retry later or narrow the path
 scenarios:
   - id: default
     vars:
-      session_role: coordinator
+      profile: coordinator
       tool: find
       timeout_ms: 2000

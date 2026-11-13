@@ -24,7 +24,7 @@ scenarios:
       parse_syntax_error: true
       parse_reason: syntax_error
       parse_error: line 783
-      session_role: implement
+      profile: implement
       tool: promote_overlay
   - id: timeout
     vars:

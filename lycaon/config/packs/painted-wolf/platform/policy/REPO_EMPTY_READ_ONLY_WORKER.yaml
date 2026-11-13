@@ -20,5 +20,5 @@ scenarios:
       agent_type: path-explorer
       detail: empty workspace
       path: .
-      session_role: coordinator
+      profile: coordinator
       tool: task

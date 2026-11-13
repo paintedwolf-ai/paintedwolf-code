@@ -21,7 +21,7 @@ scenarios:
       bytes: 70000000
       cap: 67108864
       path: .
-      session_role: coordinator
+      profile: coordinator
       reason: bare_repo_scope
       tool: summarize
   - id: unpaginated_survey
@@ -30,7 +30,7 @@ scenarios:
       bytes: 70000000
       cap: 67108864
       missing_args: offset, max_matches
-      session_role: coordinator
+      profile: coordinator
       reason: unpaginated_survey
       tool: grep
   - id: opaque_overflow
@@ -38,6 +38,6 @@ scenarios:
       execution_outcome: completed
       bytes: 70000000
       cap: 67108864
-      session_role: coordinator
+      profile: coordinator
       reason: opaque_overflow
       tool: command
