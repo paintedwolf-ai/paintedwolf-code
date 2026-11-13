@@ -43,16 +43,18 @@ type standingPromptInputs struct {
 
 	// Unexported catalog view is bound to PromptRevision, which covers catalog.Revision.
 	catalogView *catalogview.View
-	// toolProfiles is the view's profile set under the session posture.
-	toolProfiles []sandbox.ToolProfile
 }
 
-// withToolProfiles binds the posture-narrowed profiles and keys the prompt on
-// the effects they leave the coordinator.
-func (in standingPromptInputs) withToolProfiles(profiles []sandbox.ToolProfile) standingPromptInputs {
-	in.toolProfiles = profiles
+// withCatalogView binds the session's catalog and keys the prompt on the
+// command effects its posture leaves the coordinator, which the catalog
+// revision does not cover.
+func (in standingPromptInputs) withCatalogView(view *catalogview.View) standingPromptInputs {
+	in.catalogView = view
 	in.CommandEffects = nil
-	for _, profile := range profiles {
+	if view == nil {
+		return in
+	}
+	for _, profile := range view.ToolProfiles {
 		if profile.ID == prompts.CoordinatorProfileID {
 			in.CommandEffects = profile.CommandEffects.Classes()
 		}
@@ -98,7 +100,7 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 	}
 	turnSurface := prompts.SurfaceTurn{Plan: plan, Loaded: loadedMap}
 	if in.catalogView != nil {
-		toolProfiles = in.toolProfiles
+		toolProfiles = in.catalogView.ToolProfiles
 		turnSurface.Schemas = in.catalogView.ToolSchemas
 	}
 	if err := prompts.MergeCoordinatorSurfacePathVars(in.Profile.SurfaceID, toolProfiles, surfaceVars, turnSurface); err != nil {

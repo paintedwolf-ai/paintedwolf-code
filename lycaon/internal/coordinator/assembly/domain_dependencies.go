@@ -12,7 +12,6 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance/feedback"
 	"github.com/lycaon/lycaon/internal/heldcall"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -29,7 +28,6 @@ type promptSurfaceDeps struct {
 	Prompts                 prompts.PromptTemplateEngine
 	RepoKnownEmpty          func(ctx context.Context, workspacePath string) bool
 	SessionView             SessionView
-	CommandProfiles         CommandProfiles
 	WebSearchEnabled        func() bool
 	WorkspaceRoots          WorkspaceRootsLoader
 	CoordinatorProfile      func(context.Context, string) string
@@ -65,7 +63,6 @@ type promptProjection interface {
 	resolveCoordinatorProfile(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) (surface.TurnProfile, surface.ImplementSessionState)
 	resolveTurnRoster(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) *inject.AgentRoster
 	sessionCatalogView(context.Context, *api.Session) *catalogview.View
-	sessionToolProfiles(context.Context, *api.Session, *catalogview.View) []sandbox.ToolProfile
 	sourceHistoryOffered(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) bool
 	taskOffered(*api.Session, string, int) bool
 	workspaceRootsForTurn(context.Context, *api.Session, *TurnAssemblyScratch) ([]map[string]any, int, string, bool)
@@ -84,7 +81,6 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		Prompts:                 snapshot.Prompts,
 		RepoKnownEmpty:          snapshot.RepoKnownEmpty,
 		SessionView:             snapshot.SessionView,
-		CommandProfiles:         snapshot.CommandProfiles,
 		WebSearchEnabled:        snapshot.WebSearchEnabled,
 		WorkspaceRoots:          snapshot.WorkspaceRoots,
 	}

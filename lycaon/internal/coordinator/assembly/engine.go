@@ -18,7 +18,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/transcript"
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -73,10 +72,6 @@ type ProjectOverlayRootPaths func(ctx context.Context, sess *api.Session) []stri
 // When wired its answer is authoritative; unwired means device (Active) loaders.
 type SessionView func(ctx context.Context, sess *api.Session) *catalogview.View
 
-// CommandProfiles narrows tool profiles to what the session's posture lets
-// command do, as the sandbox admits them.
-type CommandProfiles func(ctx context.Context, sessionID string, profiles []sandbox.ToolProfile) []sandbox.ToolProfile
-
 // AgentsMDIndexInjector renders the cached session AGENTS.md index for each request.
 type AgentsMDIndexInjector func(ctx context.Context, sess *api.Session) (block api.Message, ok bool)
 
@@ -97,7 +92,6 @@ type AssemblyDeps struct {
 	WorkspaceRoots          WorkspaceRootsLoader
 	ProjectOverlayRootPaths ProjectOverlayRootPaths
 	SessionView             SessionView
-	CommandProfiles         CommandProfiles
 	AgentsMDIndex           AgentsMDIndexInjector
 	AgentsMDPolicies        AgentsMDPoliciesInjector
 	Limits                  func(context.Context, *api.Session) settings.SessionLimits

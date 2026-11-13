@@ -8,7 +8,6 @@ import (
 
 	"github.com/lycaon/lycaon/internal/catalogview"
 	"github.com/lycaon/lycaon/internal/prompts"
-	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -86,18 +85,6 @@ func (e *promptSurface) sessionCatalogView(ctx context.Context, sess *api.Sessio
 		return resolve(ctx, sess)
 	}
 	return nil
-}
-
-// sessionToolProfiles are the view's tool profiles with command effects
-// narrowed by the session posture, so prompts describe what the sandbox admits.
-func (e *promptSurface) sessionToolProfiles(ctx context.Context, sess *api.Session, view *catalogview.View) []sandbox.ToolProfile {
-	if view == nil {
-		return nil
-	}
-	if e == nil || e.deps.CommandProfiles == nil || sess == nil {
-		return view.ToolProfiles
-	}
-	return e.deps.CommandProfiles(ctx, sess.ID, view.ToolProfiles)
 }
 func (e *promptSurface) renderSystemPromptWithEngine(ctx context.Context, pe prompts.PromptTemplateEngine, sess *api.Session, templateRef string, vars map[string]any) (string, error) {
 	if e == nil || pe == nil {
