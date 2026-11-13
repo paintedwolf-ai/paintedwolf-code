@@ -46,7 +46,7 @@ Feedback copy must not name its own remedies. Bind the host fact `paintedwolf.ne
 
 ## Conformance fixtures
 
-Place JSON fixtures at `<pack>/conformance/*.json`, sibling to `<pack>/policy/` (one object or an array per file). Each fixture carries an `id` equal to its file stem, a `covers` list, a JSON copy of the rule document in `rule` (the runner evaluates that copy, so keep it identical to the YAML), an observation `input` with `anchor`, `facts`, and `host_facts` naming each `paintedwolf.*` fact it supplies with its type, and `expected` with any of `decision` (`block`, `warn`, `nudge`, `transform`, or `none`), `code`, `on_fire`, `applied`, `counters`, `copy`, or `error`. Any other `expected` key is refused. Include firing and non-firing cases for the boundary material to the rule.
+Place JSON fixtures at `<pack>/conformance/*.json`, sibling to `<pack>/policy/` (one object or an array per file). Each fixture carries an `id` equal to its file stem, a `covers` list, a JSON copy of the rule document in `rule` (the runner evaluates that copy, so keep it identical to the YAML), an observation `input` with `anchor`, `facts`, and `host_facts` naming each `paintedwolf.*` fact it supplies with its type, and `expected` with any of `decision` (`block`, `warn`, `nudge`, `transform`, or `none`), `code`, `on_fire`, `applied`, `counters`, or `error`, and optionally the rendered copy members the decision carries. Any other `expected` key is refused. Include firing and non-firing cases for the boundary material to the rule.
 
 Run:
 
