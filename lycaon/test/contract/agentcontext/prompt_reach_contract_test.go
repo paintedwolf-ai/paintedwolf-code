@@ -130,6 +130,8 @@ func TestRenderedCoordinatorKicksNameOnlyReachableTools(t *testing.T) {
 				reachable := plan.AddressableNames()
 				data := kickRenderFixture()
 				delete(data, "tools")
+				// The host digest quotes observations the reader already holds.
+				delete(data, "evidence_digest")
 				contractcheck.FailErr(t, "merge kick vars", prompts.MergeCoordinatorKickVarsForTools(data, reachable))
 				corpus, err := engine.RenderKick(context.Background(), kickID, data)
 				contractcheck.FailErr(t, "render kick", err)
@@ -185,6 +187,8 @@ func TestRenderedPhaseKicksNameOnlyTheirSurfacesTools(t *testing.T) {
 			t.Run(filepath.Base(filepath.Dir(file))+"/"+inject.Selector.Phase, func(t *testing.T) {
 				reachable := plan.AddressableNames()
 				data := kickRenderFixture()
+				// The host digest quotes observations the reader already holds.
+				delete(data, "evidence_digest")
 				contractcheck.FailErr(t, "merge kick vars", prompts.MergeCoordinatorKickVarsForTools(data, reachable))
 				corpus, err := engine.RenderKick(context.Background(), inject.Render, data)
 				contractcheck.FailErr(t, "render kick", err)
@@ -216,6 +220,8 @@ func TestRenderedWorkerKicksNameOnlyWorkerTools(t *testing.T) {
 					}
 				}
 				data := kickRenderFixture()
+				// The host digest quotes observations the reader already holds.
+				delete(data, "evidence_digest")
 				for key, value := range prompts.VisibleToolsNativePartialVars(reachable) {
 					data[key] = value
 				}
@@ -250,7 +256,7 @@ func TestRenderedWorkerPersonasNameOnlyReachableTools(t *testing.T) {
 					reachable = append(reachable, name)
 				}
 			}
-			corpus, err := prompts.RenderPersona(context.Background(), engine, agent.ID, nil)
+			corpus, err := prompts.RenderPersona(context.Background(), engine, agent.ID, prompts.VisibleToolsNativePartialVars(reachable))
 			contractcheck.FailErr(t, "render persona", err)
 			if names := unreachableNames(t, catalog, corpus, reachable); len(names) > 0 {
 				t.Errorf("names %s, which this profile does not hold:\n%s", strings.Join(names, ", "), linesNaming(corpus, names))

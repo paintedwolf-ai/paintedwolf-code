@@ -41,7 +41,8 @@ func TestInstructionUnitsNameOnlyReachableToolsAndHandles(t *testing.T) {
 			held[toolvocab.ReachCommandMutation] = true
 		}
 		for _, unit := range units.Units() {
-			if !unit.Stock {
+			// A unit with attaches renders only while one of them is offered.
+			if !unit.Stock || len(unit.Attaches) > 0 && !slices.ContainsFunc(unit.Attaches, func(tool string) bool { return slices.Contains(state.offered, tool) }) {
 				continue
 			}
 			rendered, err := engine.RenderUnit(t.Context(), unit.Ref, maps.Clone(vars))

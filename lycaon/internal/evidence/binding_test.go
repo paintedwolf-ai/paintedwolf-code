@@ -156,3 +156,21 @@ func TestProducibleKindsIncludeArgumentVariants(t *testing.T) {
 		t.Fatalf("undeclared tool kinds = %v", got)
 	}
 }
+
+func TestMintedKindsCountOperationsOnlyThroughCommand(t *testing.T) {
+	b, err := evidence.LoadBinding()
+	testutil.FailErr(t, "load binding", err)
+	readKind := b.ToolKind("read")
+	sealed := b.ToolKindForArgs("command", map[string]any{"terminal_capture": map[string]any{}})
+	held := b.ToolKind("terminal_snapshot")
+	alone, err := b.MintedKinds(map[string]bool{"terminal_snapshot": true})
+	testutil.FailErr(t, "minted alone", err)
+	if !alone[held] || alone[sealed] || alone[readKind] {
+		t.Fatalf("terminal_snapshot alone: held %t sealed %t read %t", alone[held], alone[sealed], alone[readKind])
+	}
+	withCommand, err := b.MintedKinds(map[string]bool{"terminal_snapshot": true, "command": true})
+	testutil.FailErr(t, "minted with command", err)
+	if !withCommand[held] || !withCommand[sealed] || !withCommand[readKind] {
+		t.Fatalf("with command: held %t sealed %t read %t", withCommand[held], withCommand[sealed], withCommand[readKind])
+	}
+}

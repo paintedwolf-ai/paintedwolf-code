@@ -3,10 +3,6 @@ package toolvocab
 import (
 	"regexp"
 	"sort"
-	"strings"
-
-	"github.com/lycaon/lycaon/internal/evidence"
-	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 // handleToken matches an evidence handle as copy writes it: kind# or kind#N.
@@ -14,29 +10,21 @@ import (
 // ledger, so the reader's own tools need not mint it.
 var handleToken = regexp.MustCompile(`(?:^|[^A-Za-z0-9_/.:-])([a-z][a-z0-9_]*)#`)
 
-// handleIndex maps each evidence kind to the tools and native operations that
-// mint it.
-func handleIndex() (map[string][]string, error) {
-	binding, err := evidence.LoadBinding()
+// mintFacts maps every evidence kind to whether reachable tools mint it, the
+// template fact copy gates handle names on.
+func (c *Catalog) mintFacts(reachable map[string]bool) map[string]bool {
+	minted, err := c.evidence.MintedKinds(reachable)
 	if err != nil {
-		return nil, err
+		return map[string]bool{}
 	}
-	out := map[string][]string{}
-	for kind := range binding.KindShapeMap() {
-		out[kind] = nil
-	}
-	for _, tool := range binding.DeclaredToolNames() {
-		for _, kind := range binding.ProducibleKinds(tool) {
-			out[kind] = append(out[kind], tool)
-		}
-	}
-	return out, nil
+	return minted
 }
 
 // unmintableHandles lists the handles corpus names that no reachable tool or
 // command operation mints, as "kind#". A tool name used as a handle is always
 // listed: handles are named by evidence kind.
 func (c *Catalog) unmintableHandles(corpus string, reachable map[string]bool) []string {
+	minted := c.mintFacts(reachable)
 	seen := map[string]bool{}
 	var out []string
 	for _, m := range handleToken.FindAllStringSubmatch(corpus, -1) {
@@ -45,30 +33,14 @@ func (c *Catalog) unmintableHandles(corpus string, reachable map[string]bool) []
 			continue
 		}
 		seen[name] = true
-		minters, kind := c.handleMinters[name]
-		if !kind {
-			if c.registered[name] || c.operations[name] {
-				out = append(out, name+"#")
-			}
-			continue
-		}
-		if !c.mints(minters, reachable) {
+		ok, kind := minted[name]
+		switch {
+		case kind && !ok:
+			out = append(out, name+"#")
+		case !kind && (c.registered[name] || c.operations[name]):
 			out = append(out, name+"#")
 		}
 	}
 	sort.Strings(out)
 	return out
-}
-
-func (c *Catalog) mints(minters []string, reachable map[string]bool) bool {
-	for _, tool := range minters {
-		tool = strings.TrimSpace(tool)
-		if reachable[tool] {
-			return true
-		}
-		if c.operations[tool] && toolcontract.CommandLanguageReachable(tool, reachable) {
-			return true
-		}
-	}
-	return false
 }

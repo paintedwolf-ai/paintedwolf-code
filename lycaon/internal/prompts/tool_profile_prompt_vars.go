@@ -255,6 +255,7 @@ func toolProfileCapabilityTemplateVars(data AgentToolSurfaceData) map[string]any
 		reachHeld[toolcontract.ReachCommandMutation] = true
 	}
 	out := map[string]any{
+		"mints":                           evidenceMints(reachHeld),
 		"profile_has_write_tools":         len(writeTools) > 0 || commandMutates,
 		"profile_has_read_tools":          len(readTools) > 0,
 		"profile_mutation_capable":        mutationCapable,

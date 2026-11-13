@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/toolschema"
@@ -26,10 +27,10 @@ type Catalog struct {
 	// operations are native operations command reaches. A profile deny governs them,
 	// but no remedy or selector may name one as a tool.
 	operations map[string]bool
-	// handleMinters maps each evidence kind to the tools and operations that
-	// mint it, so copy can name only handles its reader can hold.
-	handleMinters map[string][]string
-	schemas       *toolschema.Config
+	// evidence says which kinds each tool mints, so copy can name only handles
+	// its reader can hold.
+	evidence *evidence.Binding
+	schemas  *toolschema.Config
 }
 
 // NewCatalog builds the declared tool vocabulary.
@@ -64,7 +65,7 @@ func NewCatalog(
 	for _, name := range cfg.AllOperations() {
 		c.operations[strings.TrimSpace(name)] = true
 	}
-	if c.handleMinters, err = handleIndex(); err != nil {
+	if c.evidence, err = evidence.LoadBinding(); err != nil {
 		return nil, fmt.Errorf("evidence kinds: %w", err)
 	}
 	for _, list := range [][]string{cfg.AllTools(), cfg.HostProducedTools} {
