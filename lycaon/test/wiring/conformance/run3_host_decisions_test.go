@@ -75,13 +75,10 @@ func TestRun3NativeJobPIDAndPsAux(t *testing.T) {
 	if header == "" || row == "" {
 		t.Fatalf("ps aux omitted its columns or job row: %q", obs.Outcome.Stdout)
 	}
+	// ps lists only the session's own processes. A native job has no kernel
+	// process, so its row names the job and leaves kernel facts unknown.
 	fields := strings.Fields(row)
-	if len(fields) < 10 {
-		t.Fatalf("ps aux row lacks its columns: %q", row)
-	}
-	for _, column := range []int{2, 3, 4, 5, 7, 8, 9} {
-		if fields[column] == "-" {
-			t.Fatalf("ps aux left column %d blank: %q", column, row)
-		}
+	if len(fields) < 10 || fields[1] != pid || !strings.Contains(row, "[session job]") {
+		t.Fatalf("ps aux row is not the session's job %s: %q", pid, row)
 	}
 }

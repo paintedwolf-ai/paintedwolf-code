@@ -25,7 +25,7 @@ No pattern catalog recognizes every credential. Exact managed-secret evidence is
 
 ## Credential vault
 
-All credential families share one `{configdir}/credential-vault.age` document: a versioned JSON map partitioned into provider, web-research, MCP OAuth, secret-fingerprint, managed-secret, and credential-file-evidence namespaces. An age X25519 identity encrypts it; every mutation decrypts the latest document under an interprocess lock and writes a fresh ciphertext through the atomic filesystem transaction boundary. The vault and any file-backed identity are owner-only (`0600`) under an owner-only config directory (`0700`); both the engine and the desktop shell tighten that directory whenever they touch it, because either may create it first. Windows has no POSIX mode and inherits the profile access rules. Credential files are excluded from backups, restores, diagnostics bundles, and agent-readable host-data paths.
+All credential families share one `{configdir}/credential-vault.age` document: a versioned JSON map partitioned into provider, web-research, MCP OAuth, MCP static credentials (`mcp-credentials`), host identity (`host-identity`), standalone daemon bearer token (`daemon-token`), git-credentials, secret-fingerprint, managed-secret, and credential-file-evidence namespaces. An age X25519 identity encrypts it; every mutation decrypts the latest document under an interprocess lock and writes a fresh ciphertext through the atomic filesystem transaction boundary. The vault and any file-backed identity are owner-only (`0600`) under an owner-only config directory (`0700`); both the engine and the desktop shell tighten that directory whenever they touch it, because either may create it first. Windows has no POSIX mode and inherits the profile access rules. Credential files (including retired legacy `api.token` and `host-identity.pem` artifacts and `mcp.yaml` overlays) are excluded from backups, restores, diagnostics bundles, and agent-readable host-data paths.
 
 | Runtime | Identity protection | Unlock behavior |
 |---------|---------------------|-----------------|
@@ -191,7 +191,7 @@ Resolution is closed to outbound tools that screen after substitution. `secret_r
 |---|---|---|
 | `command` | `command`, `verify` | Executor, over process arguments and environment |
 | `terminal` | `terminal_open`, `terminal_send` | Executor, over process arguments and terminal input |
-| `http_request` | `http_request` | HTTP request construction |
+| `http_request` | `http_request`; `curl` in a command program | HTTP request construction. `curl` declares its slots: header values and `Host`, `-u` credentials, a body or form value written inline, and `--pass`. A `--pass` reference opens the key the request presents, so it is reviewed toward the request's recipient before the key is opened, as the values the request sends are. A reference anywhere else in its argv (the URL, a file path, `-A`, `-b`, `-G` or URL-encoded data) refuses with `SECRET_REFERENCE_OUTSIDE_SINK` |
 | `mcp` | every admitted MCP tool | MCP call arguments |
 | `file` | `write`, `edit`, `replace_lines`, `jq_edit` | Screened file save; slot resolution (`content`, `old_string`/`new_string`, `new_content`, `vars`) |
 

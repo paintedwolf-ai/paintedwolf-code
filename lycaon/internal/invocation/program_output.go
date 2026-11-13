@@ -113,7 +113,8 @@ func (r *SQLRecorder) AttachProgramOutput(ctx context.Context, programID string,
 			return err
 		}
 		defer func() { _ = tx.Rollback() }()
-		if err := insertProgramOutput(ctx, tx, programID, output, reference, string(mappings), spill.Preview); err != nil {
+		text := capturedText{StreamDisplay: spill.Display, linesKnown: spill.Complete}
+		if err := insertProgramOutput(ctx, tx, programID, output, reference, string(mappings), text); err != nil {
 			return err
 		}
 		return tx.Commit()
@@ -137,6 +138,36 @@ func outputPreview(preview []byte, size int64) (string, bool) {
 	return strings.ToValidUTF8(string(cut), "\uFFFD"), int64(len(cut)) < size
 }
 
+// maxOutputTailLines bounds the trailing lines a receipt page carries.
+const maxOutputTailLines = 6
+
+// outputTail keeps the last whole lines of a spilled tail. A tail shorter than
+// its output starts mid-line, so that partial line is dropped when another exists.
+func outputTail(tail []byte, size int64) string {
+	if len(tail) == 0 {
+		return ""
+	}
+	cut := size > int64(len(tail))
+	for skip := 0; skip < utf8.UTFMax && len(tail) > 0 && !utf8.RuneStart(tail[0]); skip++ {
+		tail = tail[1:]
+	}
+	text := strings.ToValidUTF8(string(tail), "�")
+	if cut {
+		if at := strings.IndexByte(text, '\n'); at >= 0 && at < len(text)-1 {
+			text = text[at+1:]
+		}
+	}
+	lines := strings.Split(strings.TrimSuffix(text, "\n"), "\n")
+	return strings.Join(lines[max(0, len(lines)-maxOutputTailLines):], "\n")
+}
+
+// capturedText is the screened display text recorded beside an output body.
+type capturedText struct {
+	tooloutput.StreamDisplay
+	// linesKnown is false when capture stopped before the stream ended.
+	linesKnown bool
+}
+
 func lastRuneStart(b []byte) int {
 	for i := len(b) - 1; i >= 0 && i >= len(b)-utf8.UTFMax; i-- {
 		if utf8.RuneStart(b[i]) {
@@ -146,7 +177,7 @@ func lastRuneStart(b []byte) int {
 	return len(b)
 }
 
-func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output RetainedOutput, reference tooloutput.RetainedStreamReference, mappings string, screenedPreview []byte) error {
+func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output RetainedOutput, reference tooloutput.RetainedStreamReference, mappings string, text capturedText) error {
 	blob, err := json.Marshal(reference.Blob)
 	if err != nil {
 		return err
@@ -158,13 +189,21 @@ func insertProgramOutput(ctx context.Context, tx *sql.Tx, program string, output
 	if mappings == "" {
 		mappings = "[]"
 	}
-	preview, truncated := outputPreview(screenedPreview, reference.Blob.Size)
+	preview, truncated := outputPreview(text.Preview, reference.Blob.Size)
+	tail := ""
+	if truncated {
+		tail = outputTail(text.Tail, reference.Blob.Size)
+	}
+	var lines any
+	if text.linesKnown {
+		lines = text.Lines
+	}
 	events := int64(1 + len(output.Mappings))
-	bytes := int64(len(program) + len(output.ExecutionID) + len(output.Stream) + len(output.Reference) + len(reference.RetentionClaimID) + len(reference.InitiatingClaimID) + len(reference.Blob.ID) + len(blob) + len(mappings) + len(preview))
+	bytes := int64(len(program) + len(output.ExecutionID) + len(output.Stream) + len(output.Reference) + len(reference.RetentionClaimID) + len(reference.InitiatingClaimID) + len(reference.Blob.ID) + len(blob) + len(mappings) + len(preview) + len(tail))
 	if err := chargeProgramTrace(ctx, tx, program, events, bytes, traceChargeNonTerminal); err != nil {
 		return err
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_id,blob_json,complete,redacted,mappings_json,preview,preview_truncated,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, reference.Blob.ID, string(blob), output.Complete, output.Redacted, mappings, preview, truncated, time.Now().UTC().Format(time.RFC3339Nano))
+	_, err = tx.ExecContext(ctx, `INSERT INTO invocation_program_outputs(id,program_id,execution_id,stream,reference,retention_claim_id,initiating_claim_id,blob_id,blob_json,complete,redacted,mappings_json,preview,preview_truncated,tail_preview,line_count,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, uuid.NewString(), program, execution, output.Stream, output.Reference, reference.RetentionClaimID, reference.InitiatingClaimID, reference.Blob.ID, string(blob), output.Complete, output.Redacted, mappings, preview, truncated, tail, lines, time.Now().UTC().Format(time.RFC3339Nano))
 	return err
 }
 

@@ -22,7 +22,7 @@ metadata:
 The body is executed by whichever model is running, including a small one. Write for the weakest reader you ship to.
 
 1. **Open with the entry check.** Give the observation that proves the skill applies and what to do when it fails.
-2. **One action per numbered step.** Name the tool or the exact command the step runs. Shell work is a `command` program (`rg -n 'Pattern' src/`, `git log --oneline -n 10`, `curl -sS -i <url>`), not a separate tool per utility. Native `git apply`, `patch -p1` and `sed -i` retain review, revision capture and recovery.
+2. **One action per numbered step.** Name the tool or the exact command the step runs. Shell work is a `command` program (`rg -n 'Pattern' src/`, `git log --oneline -n 10`, `curl -sS -i <url>`), not a separate tool per utility. Native `git apply`, `patch -p1` and `sed -i`{% if profile_command_mutation %} retain review, revision capture and recovery{% else %} are mutation programs and need a mutation-capable command scope{% endif %}.
 3. **Name the artifact each step produces.** If it is a table, give its columns; if it is a decision, give the options.
 4. **Show one worked example**: a filled-in row, command, or minimal snippet. Long examples belong in `references/`.
 5. **Bound every search** with a count, a depth, or the condition that ends it.

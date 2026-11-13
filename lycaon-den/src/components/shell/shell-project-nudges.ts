@@ -82,7 +82,7 @@ export function createShellProjectNudges({ appStore, activeProject, activeProjec
       if (!project || scope.phase !== "ready" || !readyChat()) return false;
       return shouldShowNoFolderBanner({
         isDraft: !!project.is_draft,
-        rootCount: project.roots?.length ?? 0,
+        agentRootCount: project.roots?.filter((root) => root.admitted).length ?? 0,
         dismissed: nofolderDismissed().has(project.id),
         chatReady: true,
       });

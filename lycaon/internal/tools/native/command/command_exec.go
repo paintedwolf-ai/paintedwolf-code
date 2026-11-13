@@ -225,6 +225,7 @@ func runCommandForeground(
 		Stages:     stages,
 		IOParams:   ioParams,
 		PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
+		ServiceEnv: append([]string(nil), tctx.Host.HostResourceEnv...),
 	}
 	spawnFacts := confine.SpawnFacts{Report: CommandConfinementReport(
 		confine.BoundaryOf(confinement), commandNetworkPosture(tctx, toolName, cmdKey),
@@ -360,23 +361,49 @@ func (b commandForegroundConfine) close(ctx context.Context) []confine.EgressHos
 }
 
 // BindAgentLaunch admits the confined launch for an agent-chosen host program
-// such as the bundled Git. hostSockets are sockets the host serves to that
+// such as the bundled Git. services are sockets the host serves to that
 // program itself, so they need no user capability. release closes its action
 // lease.
-func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, commandLine string, hostSockets []confine.SocketGrant) (exec.LaunchPlan, func(context.Context), error) {
-	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, hostSockets, commandLine, subject, true)
+func BindAgentLaunch(ctx context.Context, tctx tools.ToolContext, subject, commandLine string, services []confine.HostService) (exec.LaunchPlan, func(context.Context, tools.AgentLaunchOutcome), error) {
+	bound, err := bindCommandForegroundConfine(ctx, tctx, nil, services, commandLine, subject, true)
 	if err != nil {
 		return exec.LaunchPlan{}, nil, err
 	}
-	release := func(ctx context.Context) { bound.close(ctx) }
+	release := func(ctx context.Context, outcome tools.AgentLaunchOutcome) {
+		observeAgentLaunch(ctx, tctx, bound, commandLine, outcome)
+	}
 	return agentCommandLaunch(tctx, subject, bound.confinement, bound.lease, commandLine), release, nil
+}
+
+// observeAgentLaunch settles a native owner's confined launch into the
+// command's confinement facts, as an external stage's are: what the kernel
+// refused, what the host's own services declined, and whether it failed.
+func observeAgentLaunch(ctx context.Context, tctx tools.ToolContext, bound commandForegroundConfine, commandLine string, outcome tools.AgentLaunchOutcome) {
+	settleCtx := context.WithoutCancel(ctx)
+	refusals := bound.lease.SettledRefusals(settleCtx)
+	if len(outcome.Refusals) > 0 {
+		refusals = refusals.Merge(confine.SandboxRefusals{Refusals: outcome.Refusals})
+	}
+	network := bound.close(settleCtx)
+	boundary := confine.BoundaryOf(bound.confinement)
+	if !boundary.Applied || tctx.Effects.Out == nil {
+		return
+	}
+	var failed []string
+	if outcome.Failed {
+		failed = []string{commandLine}
+	}
+	stamped := confine.StampRefusal("command", tctx.Identity.SessionID, boundary, confine.RefusalContext{
+		MediatedNetwork: network, FailedStages: failed, Refusals: refusals,
+	})
+	tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 }
 
 func bindCommandForegroundConfine(
 	ctx context.Context,
 	tctx tools.ToolContext,
 	extraWriteRoots []string,
-	hostSockets []confine.SocketGrant,
+	services []confine.HostService,
 	cmdKey string,
 	toolName string,
 	confineJob bool,
@@ -388,7 +415,7 @@ func bindCommandForegroundConfine(
 		if tr != nil {
 			return commandForegroundConfine{}, tr
 		}
-		confReq.SocketGrants = append(confReq.SocketGrants, hostSockets...)
+		confReq.HostServices = services
 		resolved, applied := confine.DefaultConfinement(confReq)
 		bound.confinement = resolved
 		if err := confine.RequireApplied(applied); err != nil {

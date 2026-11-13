@@ -16,13 +16,13 @@ func initGitRepo(t *testing.T, dir string) {
 	t.Helper()
 	CloneFixtureInto(t, "empty-configured", dir, func(seed string) {
 		initCmd := exec.CommandContext(context.Background(), "git", "init", seed)
-		initCmd.Env = lyexec.LocalGitEnv()
+		initCmd.Env = SeedGitEnv()
 		if out, err := initCmd.CombinedOutput(); err != nil {
 			t.Fatalf("git init: %v %s", err, out)
 		}
 		config := func(key, val string) {
 			cmd := exec.CommandContext(context.Background(), "git", "-C", seed, "config", key, val)
-			cmd.Env = lyexec.LocalGitEnv()
+			cmd.Env = SeedGitEnv()
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("git config %s: %v %s", key, err, out)
 			}

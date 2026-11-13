@@ -51,36 +51,12 @@ func TestAgentAdaptersReachFilesThroughTheDoor(t *testing.T) {
 		if gf.IsTest || !hasAnyPrefix(rel, agentAdapterPackages) {
 			continue
 		}
-		osName := importName(gf.AST, "os")
-		if osName == "" {
-			continue
-		}
-		for _, decl := range gf.AST.Decls {
-			fn, ok := decl.(*ast.FuncDecl)
-			if !ok || fn.Body == nil {
+		for _, use := range agentFilesystemUses(gf.AST, rel) {
+			if _, exempt := agentFilesystemExemptions[use.key]; exempt {
+				delete(unused, use.key)
 				continue
 			}
-			ast.Inspect(fn.Body, func(n ast.Node) bool {
-				call, ok := n.(*ast.CallExpr)
-				if !ok {
-					return true
-				}
-				sel, ok := call.Fun.(*ast.SelectorExpr)
-				if !ok {
-					return true
-				}
-				pkg, ok := sel.X.(*ast.Ident)
-				if !ok || pkg.Name != osName || !rawFilesystemCalls[sel.Sel.Name] {
-					return true
-				}
-				key := rel + ":" + fn.Name.Name
-				if _, exempt := agentFilesystemExemptions[key]; exempt {
-					delete(unused, key)
-					return true
-				}
-				offences = append(offences, key+" calls os."+sel.Sel.Name)
-				return true
-			})
+			offences = append(offences, use.key+" uses os."+use.call)
 		}
 	}
 	sort.Strings(offences)
@@ -96,6 +72,40 @@ func TestAgentAdaptersReachFilesThroughTheDoor(t *testing.T) {
 		sort.Strings(stale)
 		t.Errorf("these exemptions no longer match anything and should be deleted:\n  %s", strings.Join(stale, "\n  "))
 	}
+}
+
+// filesystemUse is one raw os call or function value, keyed by the file and
+// the function (or "<package>" for a package-level declaration) holding it.
+type filesystemUse struct{ key, call string }
+
+// agentFilesystemUses finds every raw filesystem use in file: a call, a
+// function value or a package-level closure, wherever it appears.
+func agentFilesystemUses(file *ast.File, rel string) []filesystemUse {
+	osName := importName(file, "os")
+	if osName == "" {
+		return nil
+	}
+	var uses []filesystemUse
+	if osName == "." {
+		return []filesystemUse{{key: rel + ":<package>", call: "dot import"}}
+	}
+	for _, decl := range file.Decls {
+		owner := "<package>"
+		if fn, ok := decl.(*ast.FuncDecl); ok {
+			owner = fn.Name.Name
+		}
+		ast.Inspect(decl, func(n ast.Node) bool {
+			sel, ok := n.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			if pkg, ok := sel.X.(*ast.Ident); ok && pkg.Name == osName && rawFilesystemCalls[sel.Sel.Name] {
+				uses = append(uses, filesystemUse{key: rel + ":" + owner, call: sel.Sel.Name})
+			}
+			return true
+		})
+	}
+	return uses
 }
 
 func hasAnyPrefix(s string, prefixes []string) bool {
