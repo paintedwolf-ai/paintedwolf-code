@@ -108,7 +108,7 @@ type ProgramHTTPProvenance struct {
 
 // BuildProgramHTTPRecord constructs an http_response ledger record for a command
 // program that observed external HTTP traffic or wrote external custody files.
-func BuildProgramHTTPRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+func BuildProgramHTTPRecord(roots CitationRoots, prov ProgramHTTPProvenance) Record {
 	if !prov.UntrustedContent && len(prov.ObservedURLs) == 0 && len(prov.CustodyPaths) == 0 {
 		return Record{}
 	}
@@ -125,7 +125,7 @@ func BuildProgramHTTPRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 		rec.touchURL(u)
 	}
 	for _, p := range prov.CustodyPaths {
-		addRecordPath(CitationRoots{ProjectDir: projectDir}, &rec, p, FidelityStructured)
+		addRecordPath(roots, &rec, p, FidelityStructured)
 	}
 	if strings.TrimSpace(prov.ProgramID) != "" {
 		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))
@@ -135,7 +135,7 @@ func BuildProgramHTTPRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 
 // BuildProgramTreeRecord constructs the custody record for directories a
 // command program filled from the network, such as a clone.
-func BuildProgramTreeRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+func BuildProgramTreeRecord(roots CitationRoots, prov ProgramHTTPProvenance) Record {
 	if len(prov.CustodyTrees) == 0 {
 		return Record{}
 	}
@@ -151,7 +151,7 @@ func BuildProgramTreeRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 		rec.touchURL(u)
 	}
 	for _, p := range prov.CustodyTrees {
-		addRecordPath(CitationRoots{ProjectDir: projectDir}, &rec, p, FidelityStructured)
+		addRecordPath(roots, &rec, p, FidelityStructured)
 	}
 	if strings.TrimSpace(prov.ProgramID) != "" {
 		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))
@@ -161,7 +161,7 @@ func BuildProgramTreeRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 
 // BuildProgramCustodyReplacementRecord constructs a whole-file local write record
 // when a command program overwrites or removes paths that previously held external custody.
-func BuildProgramCustodyReplacementRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+func BuildProgramCustodyReplacementRecord(roots CitationRoots, prov ProgramHTTPProvenance) Record {
 	if len(prov.ClearedPaths) == 0 {
 		return Record{}
 	}
@@ -172,7 +172,7 @@ func BuildProgramCustodyReplacementRecord(projectDir string, prov ProgramHTTPPro
 		SourceTool: "command",
 	}
 	for _, p := range prov.ClearedPaths {
-		addRecordPath(CitationRoots{ProjectDir: projectDir}, &rec, p, FidelityStructured)
+		addRecordPath(roots, &rec, p, FidelityStructured)
 	}
 	if strings.TrimSpace(prov.ProgramID) != "" {
 		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))

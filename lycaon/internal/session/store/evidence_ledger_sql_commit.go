@@ -65,15 +65,15 @@ func recordCanAffectExternalCustody(kind, sourceTool, path string) bool {
 }
 
 // loadMetadataLedger reads live custody-relevant record metadata (without body blobs).
-func loadMetadataLedger(ctx context.Context, q *db.Queries, sessionID string) (evidence.Ledger, error) {
+func loadMetadataLedger(ctx context.Context, q *db.Queries, sessionID string, roots evidence.CitationRoots) (evidence.Ledger, error) {
 	rows, err := q.ListEvidenceRecords(ctx, sessionID)
 	if err != nil {
 		return evidence.Ledger{}, err
 	}
-	return buildMetadataLedgerFromRows(rows)
+	return buildMetadataLedgerFromRows(rows, roots)
 }
 
-func buildMetadataLedgerFromRows(rows []db.ListEvidenceRecordsRow) (evidence.Ledger, error) {
+func buildMetadataLedgerFromRows(rows []db.ListEvidenceRecordsRow, roots evidence.CitationRoots) (evidence.Ledger, error) {
 	var records []evidence.Record
 	for _, r := range rows {
 		if r.SupersededBy.Valid || !recordCanAffectExternalCustody(r.Kind, r.SourceTool, r.Path) {
@@ -97,6 +97,7 @@ func buildMetadataLedgerFromRows(rows []db.ListEvidenceRecordsRow) (evidence.Led
 		if !rec.HasExternalCustody() && !evidence.ReplacesWholeFileCustody(rec) {
 			continue
 		}
+		evidence.StampDisplayKeys(roots, &rec)
 		records = append(records, rec)
 	}
 	return evidence.AssembleLedger(records), nil
@@ -191,7 +192,9 @@ func loadCommitLedgers(ctx context.Context, q *db.Queries, sessionID string, roo
 			bindingRecs = append(bindingRecs, stamped)
 		}
 		if wantCustody && (rec.HasExternalCustody() || evidence.ReplacesWholeFileCustody(rec)) {
-			custodyRecs = append(custodyRecs, rec)
+			stamped := rec
+			evidence.StampDisplayKeys(roots, &stamped)
+			custodyRecs = append(custodyRecs, stamped)
 		}
 	}
 	bindings := evidence.InitLedger()
@@ -234,12 +237,9 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 	}
 	defer func() { _ = tx.Rollback() }()
 	qtx := s.queries.WithTx(tx)
-	roots, err := evidenceCitationRoots(ctx, qtx, sessionID)
+	roots, err := sessionCitationRoots(ctx, qtx, sessionID, projectDir)
 	if err != nil {
 		return "", content, err
-	}
-	if len(roots.Roots) == 0 {
-		roots.ProjectDir = projectDir
 	}
 	rec := evidence.BuildEvidenceRecordRooted(roots, toolName, args, content)
 	if rec.Kind == "" {
@@ -298,15 +298,16 @@ func commitEvidenceToolResultSQL(ctx context.Context, s *sqlCore, sessionID, pro
 	rec.Handle = handle
 	if len(highlightRecs) > 0 {
 		if !metaLoaded {
-			metaLedger, err = loadMetadataLedger(ctx, qtx, sessionID)
+			metaLedger, err = loadMetadataLedger(ctx, qtx, sessionID, roots)
 			if err != nil {
 				return "", content, err
 			}
 		}
 		for i := range highlightRecs {
+			evidence.StampDisplayKeys(roots, &highlightRecs[i])
 			hPaths := evidence.ContentPathsForRecord(highlightRecs[i])
 			if len(hPaths) == 0 && highlightRecs[i].Path != "" {
-				hPaths = []string{highlightRecs[i].Path}
+				hPaths = evidence.DisplayPathsForRecord(highlightRecs[i])
 			}
 			if urls := evidence.ExternalCustodyURLs(metaLedger, hPaths); len(urls) > 0 {
 				evidence.ApplyExternalCustody(&highlightRecs[i], urls)

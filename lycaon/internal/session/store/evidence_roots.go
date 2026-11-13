@@ -61,3 +61,16 @@ func primaryRootPath(refs []projectroot.RootRef) string {
 	}
 	return ""
 }
+
+// sessionCitationRoots resolves the session's roots, anchoring a session with
+// no attached roots at the caller's project directory.
+func sessionCitationRoots(ctx context.Context, q *db.Queries, sessionID, projectDir string) (evidence.CitationRoots, error) {
+	roots, err := evidenceCitationRoots(ctx, q, sessionID)
+	if err != nil {
+		return evidence.CitationRoots{}, err
+	}
+	if len(roots.Roots) == 0 {
+		roots.ProjectDir = projectDir
+	}
+	return roots, nil
+}
