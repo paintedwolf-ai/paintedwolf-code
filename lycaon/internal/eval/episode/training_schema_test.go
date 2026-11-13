@@ -83,7 +83,7 @@ func TestTheContractAndBundleRecordsFollowTheirPublishedSchemas(t *testing.T) {
 		t.Fatalf("manifest fields = %v, schema requires %v", jsonKeys(t, manifest), sorted(bundle.Required))
 	}
 	settled := time.Now()
-	full := Operation{ParentID: "p", MessageID: "m", ToolCallID: "c", Tool: "t", ArgsDigest: "a", FailureCode: "f", SourceRevision: "r", SettledAt: &settled}
+	full := Operation{ParentID: "p", MessageID: "m", ToolCallID: "c", Tool: "t", ArgsDigest: "a", FailureCode: "f", SourceVerdict: "passed", SourceRevision: "r", SettledAt: &settled}
 	keys := jsonKeys(t, full)
 	definition := bundle.Defs["operation"]
 	for _, key := range keys {

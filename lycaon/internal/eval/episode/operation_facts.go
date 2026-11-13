@@ -53,7 +53,10 @@ type Operation struct {
 	SemanticOutcome SemanticOutcome `json:"semantic_outcome"`
 	EffectState     EffectState     `json:"effect_state"`
 	FailureCode     string          `json:"failure_code,omitempty"`
-	SourceRevision  string          `json:"source_revision,omitempty"`
+	// SourceVerdict is the verification verdict the host recorded for the
+	// source at SourceRevision; empty when the operation verified nothing.
+	SourceVerdict  string          `json:"source_verdict,omitempty"`
+	SourceRevision string          `json:"source_revision,omitempty"`
 	StartedAt       time.Time       `json:"started_at"`
 	SettledAt       *time.Time      `json:"settled_at,omitempty"`
 }
@@ -128,7 +131,7 @@ func receiptOperation(identity SourceIdentity, receipt api.InvocationReceipt, se
 		ID: receipt.ID, SessionID: sessionID, MessageID: messageID, ToolCallID: receipt.ToolCallID,
 		Tool: receipt.Tool, ArgsDigest: receipt.ArgsDigest, Source: identity.Source, Contract: identity.Contract,
 		Invoked: receipt.Invoked, Settlement: Unsettled, SemanticOutcome: OutcomeUnknown, EffectState: EffectsUnknown,
-		SourceRevision: receipt.SourceRevision, StartedAt: receipt.StartedAt, SettledAt: receipt.SettledAt,
+		SourceVerdict: receipt.SourceVerdict, SourceRevision: receipt.SourceRevision, StartedAt: receipt.StartedAt, SettledAt: receipt.SettledAt,
 	}
 	if receipt.SettledAt != nil {
 		op.Settlement = Settled

@@ -77,7 +77,7 @@ func TestReceiptOperationsReadOutcomeFromStatusAndVerdict(t *testing.T) {
 			if op.Settlement != tc.settle || op.SemanticOutcome != tc.outcome || op.EffectState != tc.effects || op.FailureCode != tc.failure {
 				t.Fatalf("operation = %+v", op)
 			}
-			if op.ID != "r1" || op.SessionID != "s1" || op.MessageID != "m1" || op.Source != "invocation-receipt" {
+			if op.ID != "r1" || op.SessionID != "s1" || op.MessageID != "m1" || op.Source != "invocation-receipt" || op.SourceVerdict != tc.receipt.SourceVerdict {
 				t.Fatalf("operation identity = %+v", op)
 			}
 		})

@@ -250,6 +250,9 @@
         "failure_code": {
           "type": "string"
         },
+        "source_verdict": {
+          "type": "string"
+        },
         "source_revision": {
           "type": "string"
         },
