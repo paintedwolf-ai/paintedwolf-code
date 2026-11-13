@@ -2,6 +2,8 @@ package confine_test
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"os/exec"
 	"path/filepath"
 	"testing"
@@ -93,4 +95,18 @@ func TestKernelReportsRepeatedBinds(t *testing.T) {
 func TestProcessSandboxState(t *testing.T) {
 	out, err := exec.Command("/usr/bin/python3", "-c", "import ctypes, os; lib = ctypes.CDLL(None); print('sandboxed', lib.sandbox_check(os.getpid(), None, 0), 'parent', lib.sandbox_check(os.getppid(), None, 0))").CombinedOutput()
 	t.Logf("%s err=%v", out, err)
+}
+
+// A process that is refused many operations before its bind: does the bind
+// report still arrive?
+func TestKernelReportsABindAfterManyRefusals(t *testing.T) {
+	self := requireLiveBoundary(t)
+	requireRefusalWatch(t)
+	outside := outsideTemporaryWriteRoots(t)
+	for _, before := range []int{0, 2, 5, 10, 30} {
+		script := "import os, socket\nfor i in range(" + strconv.Itoa(before) + "):\n    try: open(os.path.join(" + strconv.Quote(outside) + ", 'f%d' % i), 'w')\n    except OSError: pass\ns = socket.socket()\ntry: s.bind(('127.0.0.1', 18780))\nexcept OSError as e: print('bind', e)\n"
+		refusals, out := refusalsOf(t, self, liveBoundaryRoots(t.TempDir()), "/opt/homebrew/bin/python3", "-c", script)
+		_, bound := findRefusal(refusals, "network-bind", "local:*:18780")
+		t.Logf("after %d refused writes: %d refusals, omitted %d, bind reported %v; %s", before, len(refusals.Refusals), refusals.Omitted, bound, strings.TrimSpace(out))
+	}
 }
