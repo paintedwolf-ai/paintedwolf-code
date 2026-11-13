@@ -9,7 +9,7 @@ schema:
   properties:
     secret_use: {type: object, additionalProperties: false, required: [services], description: "Origins for `{{paintedwolf-secret:…}}`.", properties: {services: {type: array, minItems: 1, maxItems: 8, description: Origin URLs., items: {type: string, maxLength: 1024}}}}
     id: {type: string, description: Handle from terminal_open.}
-    input: {type: string, description: "Text and named controls; {LeftBrace} and {RightBrace} write literal braces."}
+    input: {type: string, description: "Payload to type; {LeftBrace} and {RightBrace} type braces; protected references insert as bytes."}
     observe: {type: string, enum: [ack, delta, screen], default: screen, description: "Return ack, one output delta, or the settled screen."}
   required: [id, input]
   additionalProperties: false

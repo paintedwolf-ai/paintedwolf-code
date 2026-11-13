@@ -1,7 +1,7 @@
 tags: [terminal]
 description: >-
-  Open a live terminal for an interactive program. Returns a session id and the
-  settled screen with its artifact_id; input, read, snapshot and close tools
+  Open a live terminal for an interactive program. Returns a session id and an
+  artifact_id image of the first screen; input, read, snapshot and close tools
   attach once it is open.
 schema:
   type: object
