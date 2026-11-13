@@ -46,5 +46,6 @@ describe("securityViewFacet", () => {
   it("names a finding without a place it can address", () => {
     expect(securityViewFacet("r", finding("file:///etc/passwd")).findings?.[0]?.location).toBeUndefined();
     expect(securityViewFacet("r", null)).toEqual({});
+    expect(securityViewFacet("r", { ...finding("src/db.go"), rule_id: "r".repeat(129) })).toEqual({});
   });
 });
