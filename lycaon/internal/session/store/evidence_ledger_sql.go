@@ -23,6 +23,7 @@ type storedLineRangesPayload struct {
 	PathsTouched   []string                  `json:"paths_touched,omitempty"`
 	URLsTouched    []string                  `json:"urls_touched,omitempty"`
 	URLTitles      map[string]string         `json:"url_titles,omitempty"`
+	URLsShown      []string                  `json:"urls_shown,omitempty"`
 	GrepLines      map[string]map[int]string `json:"grep_lines,omitempty"`
 	PathTiers      map[string]string         `json:"path_tiers,omitempty"`
 	// PathRoots maps a stored path key to its owning root ID.
@@ -45,6 +46,7 @@ func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 		PathsTouched:     aux.PathsTouched,
 		URLsTouched:      aux.URLsTouched,
 		URLTitles:        aux.URLTitles,
+		URLsShown:        aux.URLsShown,
 		GrepLines:        aux.GrepLines,
 		PathTiers:        aux.PathTiers,
 		PathRoots:        aux.PathRoots,
@@ -81,6 +83,7 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 		PathsTouched:     payload.PathsTouched,
 		URLsTouched:      payload.URLsTouched,
 		URLTitles:        payload.URLTitles,
+		URLsShown:        payload.URLsShown,
 		GrepLines:        payload.GrepLines,
 		PathTiers:        payload.PathTiers,
 		PathRoots:        payload.PathRoots,

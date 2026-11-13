@@ -673,15 +673,27 @@ func fileFacts(t FileTarget) []Fact {
 	return facts
 }
 
+// RetrievalCovers reports whether a retrieval capability's contract covers
+// this dial. Choosing among displayed links can carry a short value out, so a
+// displayed link is covered only while the chat is known to hold no credential.
+func (f Facts) RetrievalCovers() bool {
+	d := f.Destination
+	if d == nil {
+		return false
+	}
+	if d.Retrieval {
+		return true
+	}
+	return d.DisplayedLink && f.Ran.Has(ProducerExposure) && !f.SecretExposed
+}
+
 // agentChosenOutbound reviews the first contact with a destination nobody
 // configured once the chat has read content this app did not author, or
-// cannot say whether it has: until then the broker's record of the contact is
-// the audit, and after it the agent's choice may not be its own. Readable HTTP
-// follows the same authority as a tunnel, since a method is an execution
-// fact, not proof that a request only retrieves. A declared retrieval
-// capability already covers reaching its sources.
+// cannot say whether it has: after that the agent's choice may not be its
+// own. A readable request is reviewed like a tunnel, since its method does not
+// show that it only retrieves.
 func agentChosenOutbound(f Facts, p Posture) (bool, []Fact, string) {
-	if f.Destination == nil || f.Leased || f.RequestConsented || f.Destination.Configured || f.Destination.Retrieval {
+	if f.Destination == nil || f.Leased || f.RequestConsented || f.Destination.Configured || f.RetrievalCovers() {
 		return false, nil, ""
 	}
 	if !f.Destination.FirstUseThisSession {
@@ -697,15 +709,21 @@ func agentChosenOutbound(f Facts, p Posture) (bool, []Fact, string) {
 	if f.Destination.Opaque {
 		reason = "opens an opaque tunnel to a destination you did not configure"
 	}
+	origin := "chosen by the agent, not configured"
+	if f.Destination.DisplayedLink {
+		origin = "a link from a page this chat read, not configured"
+	}
 	cited := []Fact{
 		fact("destination.host", endpointLabel(*f.Destination), "egress_broker"),
-		fact("destination.origin", "chosen by the agent, not configured", "egress_broker"),
+		fact("destination.origin", origin, "egress_broker"),
 		fact("effect.class", reason, "egress_broker"),
 	}
 	if registry := f.Destination.PublicRegistry; registry != "" {
 		cited = append(cited, fact("destination.registry", "public package registry: "+registry, "package_registries"))
 	}
-	if f.Ran.Has(ProducerExposure) && f.SecretExposed && f.Destination.PublicRegistry != "" {
+	// Cite exposure only where it withdrew a baseline.
+	withdrawn := f.Destination.PublicRegistry != "" || f.Destination.DisplayedLink
+	if f.Ran.Has(ProducerExposure) && f.SecretExposed && withdrawn {
 		cited = append(cited, fact("session.state", "this chat has read credential-class content", "exposure_ledger"))
 	}
 	// Cite ingestion only when its producer reported.
@@ -717,11 +735,11 @@ func agentChosenOutbound(f Facts, p Posture) (bool, []Fact, string) {
 }
 
 // secretExposedOutbound reviews sends after credential-class content enters
-// the chat. Recognized-secret screening of a readable request is not a
-// confidentiality proof, so readable requests ask too; a retrieval capability's
+// the chat. Screening a readable request for recognized secrets does not show
+// it carries none, so readable requests ask too; a retrieval capability's
 // payloads keep their own screening.
 func secretExposedOutbound(f Facts) (bool, []Fact, string) {
-	if f.Destination == nil || f.Leased || f.RequestConsented || !f.SecretExposed || f.Destination.Retrieval {
+	if f.Destination == nil || f.Leased || f.RequestConsented || !f.SecretExposed || f.RetrievalCovers() {
 		return false, nil, ""
 	}
 	return true, []Fact{

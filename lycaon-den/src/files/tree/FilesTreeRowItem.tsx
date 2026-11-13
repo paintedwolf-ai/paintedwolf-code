@@ -23,7 +23,7 @@ type RowTrailing =
 function sameTrailing(a: RowTrailing, b: RowTrailing): boolean {
   if (a.kind !== b.kind) return false;
   if (a.kind === "presence" && b.kind === "presence") {
-    return a.chip.state === b.chip.state && a.chip.description === b.chip.description;
+    return a.chip.state === b.chip.state && a.chip.phase === b.chip.phase && a.chip.description === b.chip.description;
   }
   if (a.kind === "scope" && b.kind === "scope") {
     return a.changeKind === b.changeKind;
@@ -261,6 +261,7 @@ export function FileEntryRow(props: {
               return name ? agentNameStyle(name.chat) : undefined;
             })()}
             data-agent-session={agentName()?.chat.sessionId}
+            data-agent-phase={agentName()?.phase}
             data-tip={agentName()?.labels.join("; ")}
           >
             {row().name}

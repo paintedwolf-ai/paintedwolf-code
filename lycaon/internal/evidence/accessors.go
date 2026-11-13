@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"path"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -162,12 +163,55 @@ func (rec *Record) touchURL(rawURL string) {
 	if rec.URL == "" {
 		rec.URL = url
 	}
-	for _, existing := range rec.urlsTouched {
+	for _, existing := range rec.urls.touched {
 		if existing == url {
 			return
 		}
 	}
-	rec.urlsTouched = append(rec.urlsTouched, url)
+	rec.urls.touched = append(rec.urls.touched, url)
+}
+
+// showURL remembers an address a read page displayed. It is not a source the
+// chat read, so it grounds no citation.
+func (rec *Record) showURL(rawURL string) {
+	if rec == nil {
+		return
+	}
+	url := strings.TrimSpace(rawURL)
+	if url == "" || slices.Contains(rec.urls.shown, url) {
+		return
+	}
+	rec.urls.shown = append(rec.urls.shown, url)
+}
+
+// URLStanding is how a ledger knows an address, weakest first.
+type URLStanding uint8
+
+const (
+	// URLUnknown is an address no record carries.
+	URLUnknown URLStanding = iota
+	// URLDisplayed is an address a read page displayed.
+	URLDisplayed
+	// URLSource is an address a tool returned or read.
+	URLSource
+)
+
+// StandingOfURL reports the strongest way the ledger recorded exactly this
+// address.
+func StandingOfURL(ev Ledger, rawURL string) URLStanding {
+	url := strings.TrimSpace(rawURL)
+	if url == "" {
+		return URLUnknown
+	}
+	if VerifyURLObserved(ev, url) {
+		return URLSource
+	}
+	for _, rec := range ev.Handles {
+		if slices.Contains(rec.urls.shown, url) {
+			return URLDisplayed
+		}
+	}
+	return URLUnknown
 }
 
 // ObservedURLsForRecord returns distinct URLs observed on a record.
@@ -186,7 +230,7 @@ func ObservedURLsForRecord(rec Record) []string {
 		out = append(out, u)
 	}
 	add(rec.URL)
-	for _, u := range rec.urlsTouched {
+	for _, u := range rec.urls.touched {
 		add(u)
 	}
 	return out
@@ -201,19 +245,19 @@ func (rec *Record) touchURLTitle(rawURL, title string) {
 	if rawURL == "" || title == "" {
 		return
 	}
-	if rec.urlTitles == nil {
-		rec.urlTitles = make(map[string]string)
+	if rec.urls.titles == nil {
+		rec.urls.titles = make(map[string]string)
 	}
-	rec.urlTitles[rawURL] = title
+	rec.urls.titles[rawURL] = title
 }
 
 // URLTitles returns the page titles this record observed, keyed by URL.
 func (rec Record) URLTitles() map[string]string {
-	if len(rec.urlTitles) == 0 {
+	if len(rec.urls.titles) == 0 {
 		return nil
 	}
-	out := make(map[string]string, len(rec.urlTitles))
-	for u, t := range rec.urlTitles {
+	out := make(map[string]string, len(rec.urls.titles))
+	for u, t := range rec.urls.titles {
 		out[u] = t
 	}
 	return out

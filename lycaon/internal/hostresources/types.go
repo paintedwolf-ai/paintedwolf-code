@@ -170,4 +170,7 @@ type ActionResolution struct {
 	// WriteRoots are expanded daemon state directories from the matching
 	// realization. Internal to execution — not projected onto the wire.
 	WriteRoots []string
+	// ClientEnv holds NAME=reference entries that point a resource's client at
+	// its reviewed endpoint. Internal to execution — not projected onto the wire.
+	ClientEnv []string
 }
