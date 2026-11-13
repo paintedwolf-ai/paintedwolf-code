@@ -170,7 +170,9 @@ func (p loadablePolicy) ListForPrompt(context.Context, *api.Session, string) []t
 	return out
 }
 
-func (loadablePolicy) EvaluateInvoke(context.Context, *api.Session, string, map[string]any) error { return nil }
+func (loadablePolicy) EvaluateInvoke(context.Context, *api.Session, string, map[string]any) error {
+	return nil
+}
 
 func TestTurnOptimizationFailureClearsTheStaleSkill(t *testing.T) {
 	st := store.NewMemory()
