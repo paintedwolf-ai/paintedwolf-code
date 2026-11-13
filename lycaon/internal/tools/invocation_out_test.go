@@ -220,3 +220,13 @@ func TestConcurrentMergeWriteAndTakeLoseNothing(t *testing.T) {
 		t.Fatalf("recorded %d feedback items, want %d", got, stages)
 	}
 }
+
+func TestNilOutIgnoresMergesTakesAndWrites(t *testing.T) {
+	var out *tools.ToolInvocationOut
+	out.MergeChild(filledOut(t), tools.MergeProgram)
+	out.WithLock(func(*tools.ToolInvocationOut) { t.Fatal("a nil value ran a write") })
+	out.AddSourceDelivery(tools.SourceDeliveryTag{Handle: "delivery"})
+	if taken := out.TakeCommitted(); taken == nil || taken.SourceContext != nil {
+		t.Fatalf("a nil value yielded %+v", taken)
+	}
+}
