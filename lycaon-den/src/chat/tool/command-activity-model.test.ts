@@ -33,7 +33,7 @@ describe("command activity composition", () => {
   expect(after.map(row => row.id)).toEqual([before[0]!.id]);
   expect(after[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["a", "b"]);
   expect(after[0]!.commandActivity!.members.map(member => member.id)).toEqual(["read-a", "read-b"]);
-  expect(after[0]!.commandActivity!.programIds).toEqual(["program:a", "program:b"]);
+  expect(after[0]!.commandActivity!.receiptScopes).toEqual([{ programId: "program:a", activityId: "read-a" }, { programId: "program:b", activityId: "read-b" }]);
  });
  it("keeps coalescing idempotent across re-projections", () => {
   const project = createCommandActivityProjection();
@@ -203,7 +203,7 @@ it("holds running FormTool calls back and coalesces the settled inspect sequence
  expect(rows[0]!.id).toBe("call-0");
  expect(rows[0]!.commandActivity!.calls.map(call => call.toolCallId)).toEqual(["call-0", "call-1", "call-2", "call-3"]);
  expect(rows[0]!.commandActivity!.members.map(member => member.id)).toEqual(["fact-0", "fact-1", "fact-2", "fact-3"]);
- expect(rows[0]!.commandActivity!.programIds).toEqual(["program:call-0", "program:call-1", "program:call-2", "program:call-3"]);
+ expect(rows[0]!.commandActivity!.receiptScopes.map(scope => scope.programId)).toEqual(["program:call-0", "program:call-1", "program:call-2", "program:call-3"]);
  const interrupted = parts(project([
   entry("side-a", [fact("side-a")], "summarize"),
   entry("read", undefined, "read"),
@@ -244,4 +244,35 @@ it("keeps a program-level failure visible after successful child activities", ()
  expect(rows[0]!.status).toBe("completed");
  expect(rows[1]!.status).toBe("error");
  expect(rows[1]!.commandActivity!.fact.subject).toBe("PROGRAM_TRACE_LIMIT");
+});
+
+describe("receipt scopes", () => {
+ function scopes(entries: ActivitySpanEntry[]) {
+  return parts(createCommandActivityProjection()(entries)).map(row => row.commandActivity!.receiptScopes);
+ }
+ it("records each folded program's own activity in call order", () => {
+  expect(scopes([entry("a", [fact("read-a")]), entry("b", [fact("read-b")]), entry("c", [fact("read-c")])])).toEqual([[
+   { programId: "program:a", activityId: "read-a" }, { programId: "program:b", activityId: "read-b" }, { programId: "program:c", activityId: "read-c" },
+  ]]);
+ });
+ it("records a fact without executions as its whole program", () => {
+  expect(scopes([entry("a", [fact("refused", { execution_ids: [], state: "refused" })])])).toEqual([[{ programId: "program:a" }]]);
+ });
+ it("records one scope per row when a call splits into rows", () => {
+  expect(scopes([entry("call", [fact("build", { phase: "execute", group: "Running commands" }), fact("test", { phase: "execute", group: "Running programs" })])])).toEqual([
+   [{ programId: "program:call", activityId: "build" }], [{ programId: "program:call", activityId: "test" }],
+  ]);
+ });
+ it("keeps a repeated scope once and lets a whole program replace its activities in place", () => {
+  const first = entry("a", [fact("read-a")]);
+  const repeated = entry("b", [fact("read-a")]);
+  if (repeated.kind === "tool") repeated.part.commandProgram = first.kind === "tool" ? first.part.commandProgram : undefined;
+  expect(scopes([first, repeated])).toEqual([[{ programId: "program:a", activityId: "read-a" }]]);
+  const whole = entry("c", [fact("read-c", { execution_ids: [] })]);
+  if (whole.kind === "tool") whole.part.commandProgram = first.kind === "tool" ? first.part.commandProgram : undefined;
+  expect(scopes([first, entry("b", [fact("read-b")]), whole])).toEqual([[{ programId: "program:a" }, { programId: "program:b", activityId: "read-b" }]]);
+ });
+ it("records nothing for a call without a recorded program", () => {
+  expect(parts(createCommandActivityProjection()([entry("plain")])).map(row => row.commandActivity?.receiptScopes)).toEqual([undefined]);
+ });
 });

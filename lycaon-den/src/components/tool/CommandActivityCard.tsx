@@ -1,7 +1,6 @@
 import { Show, createMemo, createResource, splitProps } from "solid-js";
 import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";
 import type { LycaonClient } from "../../api/client.ts";
-import type { CommandActivity } from "../../api/types.ts";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import type { TranscriptLayout } from "../../chat/transcript/layout/transcript-layout.ts";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
@@ -22,8 +21,8 @@ type Props = {
   slots?: ToolBriefingSlots;
 };
 
-/** Receipt pages loaded per card; the Receipt link covers every program. */
-const LOADED_PROGRAMS = 3;
+/** Receipt scopes previewed per card; the Receipt link covers every scope. */
+const LOADED_SCOPES = 3;
 const EXECUTIONS_PER_PROGRAM = 6;
 
 export function CommandActivityCard(props: Props) {
@@ -34,30 +33,16 @@ export function CommandActivityCard(props: Props) {
 
 function CommandActivityDetails(props: Props & { activity: () => NonNullable<ToolPartView["commandActivity"]> }) {
   const activity = props.activity;
-  // Program calls fold in order with their members; output-read calls carry no member.
-  const programs = createMemo(() => {
-    const seen = new Set<string>();
-    const out: { id: string; state: string; settledAt?: string; activityId?: string }[] = [];
-    let member = 0;
-    for (const call of activity().calls) {
-      const program = call.commandProgram;
-      if (!program) continue;
-      const fact: CommandActivity | undefined = activity().members[member++];
-      if (seen.has(program.id)) continue;
-      seen.add(program.id);
-      out.push({ id: program.id, state: program.state, settledAt: program.settled_at, activityId: fact && fact.execution_ids.length ? fact.id : undefined });
-    }
-    return out;
-  });
   const snapshot = createMemo(() => {
     const client = props.client ?? getLycaonClient();
     if (!client || !props.sessionId) return undefined;
-    const requests = programs().slice(0, LOADED_PROGRAMS);
-    const key = JSON.stringify([requests, activity().fact.state, activity().fact.execution_count, activity().fact.failed_count]);
+    const requests = activity().receiptScopes.slice(0, LOADED_SCOPES);
+    const programs = requests.map(scope => activity().calls.find(call => call.commandProgram?.id === scope.programId)?.commandProgram);
+    const key = JSON.stringify([requests, programs.map(program => [program?.state, program?.settled_at]), activity().fact.state, activity().fact.execution_count, activity().fact.failed_count]);
     return { client, sessionId: props.sessionId, requests, key };
   }, undefined, { equals: (a, b) => a?.client === b?.client && a?.sessionId === b?.sessionId && a?.key === b?.key });
   const [pages] = createResource(snapshot, ({ client, sessionId, requests }) =>
-    Promise.all(requests.map(request => client.getCommandProgramReceipt(sessionId, request.id, { limit: EXECUTIONS_PER_PROGRAM, cursor: undefined, activity_id: request.activityId }))),
+    Promise.all(requests.map(request => client.getCommandProgramReceipt(sessionId, request.programId, { limit: EXECUTIONS_PER_PROGRAM, cursor: undefined, activity_id: request.activityId }))),
   );
   const loaded = () => pages.state === "ready" || pages.state === "refreshing" ? pages.latest ?? [] : [];
   const executions = createMemo(() => loaded().flatMap(page => page?.executions ?? []));
@@ -67,7 +52,7 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
   const exceptions = createMemo(() => activityExceptions(activity(), executions(), feedback()));
   const receipts = createMemo<CommandReceiptContent>(() => ({
     kind: "command_receipts",
-    programs: programs().map(program => ({ id: program.id, activityId: program.activityId })),
+    programs: activity().receiptScopes.map(scope => ({ id: scope.programId, activityId: scope.activityId })),
     context: JSON.stringify({ activities: activity().members, facts: exceptions(), feedback: props.part.feedback }),
   }));
   return <div class="den-activity-detail" data-testid="command-activity-details">
@@ -79,6 +64,6 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
     <ActivityCalls activity={activity()} projectId={props.projectId} />
     <ActivityExceptions facts={exceptions()} />
     <Show when={pages.state === "errored"}><p class="den-activity-note">Execution details are unavailable. The recorded activity is still shown.</p></Show>
-    <ActivityFooter activity={activity()} projectId={props.projectId} executions={executions()} receipts={receipts()} evidence={props.slots?.evidence} />
+    <ActivityFooter activity={activity()} projectId={props.projectId} receipts={receipts()} evidence={props.slots?.evidence} />
   </div>;
 }

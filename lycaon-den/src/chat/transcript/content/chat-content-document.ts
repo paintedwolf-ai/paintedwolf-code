@@ -1,6 +1,8 @@
 import type { ChatContentReference, HostSecretRedactionMeta } from "../../../api/types.ts";
 
 type InlineContent = { kind: "inline"; text: string; redaction?: HostSecretRedactionMeta };
+/** A whole recorded program, or the executions one host activity selects. */
+export type CommandReceiptScope = { readonly programId: string; readonly activityId?: string };
 export type CommandReceiptContent = { kind: "command_receipts"; programs: { id: string; activityId?: string }[]; context: string };
 type Content = CommandReceiptContent | InlineContent | { kind: "retained"; reference: ChatContentReference } | { kind: "process"; handle: string };
 

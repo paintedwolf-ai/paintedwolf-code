@@ -1,5 +1,4 @@
 import { For, Index, Show, createMemo, createSignal, type JSX } from "solid-js";
-import type { CommandExecutionReceipt } from "../../api/types.ts";
 import { activityStepsDiffer, commandActivityStepOutcome, type ActivityFact, type ActivityOutput } from "../../chat/tool/command-activity-details.ts";
 import type { CommandActivityView } from "../../chat/tool/command-activity-model.ts";
 import { activityCallCommand } from "../../chat/tool/command-activity-source.ts";
@@ -129,7 +128,6 @@ export function ActivityExceptions(props: { facts: readonly ActivityFact[] }) {
 }
 
 export function ActivityFooter(props: ActivityProps & {
-  executions: readonly CommandExecutionReceipt[];
   receipts?: CommandReceiptContent;
   evidence?: JSX.Element;
 }) {
@@ -138,8 +136,8 @@ export function ActivityFooter(props: ActivityProps & {
   return <nav class="den-activity-footer" aria-label="Activity records" data-testid="activity-footer">
     <Show when={single()} keyed>{call => <><CallInputLink {...props} call={call} testId="activity-input" /><CallOutputLink {...props} call={call} testId="activity-call-output" /></>}</Show>
     <Show when={props.activity.fact.job_handle} keyed>{handle => <ToolContentLink short pane={`activity:${props.activity.fact.id}:process`} label="Process output" testId="activity-process-output" content={{ kind: "process", handle }} projectId={props.projectId} />}</Show>
-    <Show when={props.executions.length > 0 && props.receipts} keyed>
-      {(receipts) => <ToolContentLink short pane={`activity:${props.activity.fact.id}:receipts`} label="Receipt" testId="command-activity-receipts" content={receipts} projectId={props.projectId} />}
+    <Show when={props.receipts?.programs.length ? props.receipts : undefined} keyed>
+      {(receipts) => <ToolContentLink short pane={`activity:${props.activity.fact.id}:receipts`} label="Receipt" testId="command-activity-receipts" content={receipts} language="jsonl" projectId={props.projectId} />}
     </Show>
     <Show when={decisions().length}>
       <ToolContentLink short pane={`activity:${props.activity.fact.id}:decisions`} label="Host decisions" testId="command-activity-decisions" projectId={props.projectId}
