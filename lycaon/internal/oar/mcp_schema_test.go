@@ -199,3 +199,25 @@ func TestGoldenFixtureWidgetCondition(t *testing.T) {
 		t.Fatal("wrong JSON must not fire")
 	}
 }
+
+func TestMCPResultMembersReadByType(t *testing.T) {
+	gc := NewGuardContext()
+	gc.MCP.MCPFields = map[string]any{"ok": true, "count": float64(3), "ratio": 3.5, "label": "three"}
+	for condition, want := range map[string]bool{
+		`mcp_field_bool("ok")`:          true,
+		`mcp_field_int("count") == 3`:   true,
+		`mcp_field_int("missing") == 0`: true,
+		`mcp_field_bool("missing")`:     false,
+	} {
+		got, err := EvaluateCondition(condition, gc)
+		testutil.FailErr(t, condition, err)
+		if got != want {
+			t.Errorf("%s = %v, want %v", condition, got, want)
+		}
+	}
+	for _, condition := range []string{`mcp_field_int("ratio") == 3`, `mcp_field_int("label") == 3`, `mcp_field_bool("count")`} {
+		if _, err := EvaluateCondition(condition, gc); err == nil {
+			t.Errorf("%s read a member of another type", condition)
+		}
+	}
+}

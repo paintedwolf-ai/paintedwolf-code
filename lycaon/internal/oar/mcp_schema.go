@@ -3,6 +3,7 @@ package oar
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/mcp/bindings"
@@ -134,8 +135,14 @@ func mcpMember[T bool | int64](gc *GuardContext, key string) (any, error) {
 	if !present {
 		return zero, nil
 	}
-	if n, ok := v.(int); ok {
+	switch n := v.(type) {
+	case int:
 		v = int64(n)
+	case float64:
+		// A JSON number is an integer member when its value is integral.
+		if n == math.Trunc(n) && n >= math.MinInt64 && n < math.MaxInt64 {
+			v = int64(n)
+		}
 	}
 	typed, ok := v.(T)
 	if !ok {
