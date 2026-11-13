@@ -26,10 +26,9 @@ function openAPIReceiptLimitBounds(): { minimum: number; maximum: number } {
   };
   const params = spec.paths["/v1/sessions/{id}/program-receipts/{program_id}"]?.get.parameters ?? [];
   const limit = params.find((param) => param.name === "limit")?.schema;
-  if (typeof limit?.minimum !== "number" || typeof limit.maximum !== "number") {
-    throw new Error("OpenAPI limit bounds missing for getCommandProgramReceipt");
-  }
-  return { minimum: limit.minimum, maximum: limit.maximum };
+  expect(limit?.minimum, "OpenAPI limit bounds missing for getCommandProgramReceipt").toBeTypeOf("number");
+  expect(limit?.maximum, "OpenAPI limit bounds missing for getCommandProgramReceipt").toBeTypeOf("number");
+  return limit as { minimum: number; maximum: number };
 }
 
 describe("execution records document", () => {
