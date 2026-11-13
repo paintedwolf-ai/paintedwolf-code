@@ -162,22 +162,27 @@ func (inv *invocation) readFile(operand string) ([]byte, error) {
 	return data, nil
 }
 
-// uploadBody is -T's file read through read authority, or stdin for "-",
-// as exact bytes.
+// uploadBody is -T's operand as exact bytes.
 func (inv *invocation) uploadBody() (string, error) {
-	if inv.opts.upload != "-" {
-		data, err := inv.readFile(inv.opts.upload)
-		return string(data), err
+	data, err := inv.readInput(inv.opts.upload)
+	return string(data), err
+}
+
+// readInput reads a data, form or upload operand: "-" is stdin, read once as
+// curl does, and anything else is a file read through read authority.
+func (inv *invocation) readInput(operand string) ([]byte, error) {
+	if operand != "-" {
+		return inv.readFile(operand)
 	}
 	maximum := inv.owners.limits["stream_bytes"]
 	data, err := io.ReadAll(io.LimitReader(inv.stdin, maximum+1))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	if int64(len(data)) > maximum {
-		return "", &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": int64(len(data))}}
+		return nil, &toolrejection.ToolReject{Code: "COMMAND_LIMIT_EXCEEDED", Data: map[string]any{"limit_id": "stream_bytes", "resource_unit": "bytes", "maximum": maximum, "observed": int64(len(data))}}
 	}
-	return string(data), nil
+	return data, nil
 }
 
 // uploadURL appends the uploaded file's name to a URL without a file part,
@@ -203,7 +208,7 @@ func (inv *invocation) dataBody() (string, error) {
 		switch part.kind {
 		case "data", "binary":
 			if file, ok := strings.CutPrefix(value, "@"); ok {
-				data, err := inv.readFile(file)
+				data, err := inv.readInput(file)
 				if err != nil {
 					return "", err
 				}
@@ -230,7 +235,7 @@ func (inv *invocation) jsonBody() (string, error) {
 	var b strings.Builder
 	for _, value := range inv.opts.json {
 		if file, ok := strings.CutPrefix(value, "@"); ok {
-			data, err := inv.readFile(file)
+			data, err := inv.readInput(file)
 			if err != nil {
 				return "", err
 			}
@@ -261,7 +266,7 @@ func (inv *invocation) urlencoded(value string) (string, error) {
 	eq := strings.IndexByte(value, '=')
 	at := strings.IndexByte(value, '@')
 	if at >= 0 && (eq < 0 || at < eq) {
-		data, err := inv.readFile(value[at+1:])
+		data, err := inv.readInput(value[at+1:])
 		if err != nil {
 			return "", err
 		}
@@ -310,7 +315,7 @@ func (inv *invocation) formParts() ([]any, error) {
 			}
 			parts = append(parts, part)
 		case strings.HasPrefix(value, "<"):
-			data, err := inv.readFile(value[1:])
+			data, err := inv.readInput(value[1:])
 			if err != nil {
 				return nil, err
 			}
