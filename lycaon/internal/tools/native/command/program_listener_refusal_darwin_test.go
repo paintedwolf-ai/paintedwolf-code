@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -139,14 +140,21 @@ func TestProgramListenerBareLaunchInThisProcess(t *testing.T) {
 	}
 	self, err := os.Executable()
 	testutil.FailErr(t, "self", err)
-	c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDeny}
-	lease, err := confine.BindAction(&c, confine.EgressCommand{SessionID: "bare", ToolName: "command", CommandLine: "python3"})
-	testutil.FailErr(t, "bind action", err)
-	cmd, cleanup, err := confine.Command(context.Background(), self, "/opt/homebrew/bin/python3", []string{"-c", "import socket; s=socket.socket(); s.bind(('127.0.0.1', 18788))"}, c)
-	testutil.FailErr(t, "command", err)
-	out, _ := cmd.CombinedOutput()
-	cleanup()
-	refusals := lease.SettledRefusals(t.Context())
-	lease.Close(t.Context())
-	t.Logf("bare launch refusals %+v output %s", refusals.Refusals, out)
+	minimal := filepath.Join(t.TempDir(), "helpermain")
+	build := exec.Command("go", "build", "-tags", "confinehelpermain", "-o", minimal, "github.com/lycaon/lycaon/internal/confine/testdata/helpermain")
+	if out, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("build minimal helper: %v\n%s", err, out)
+	}
+	for _, helper := range []string{self, minimal} {
+		c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDeny}
+		lease, err := confine.BindAction(&c, confine.EgressCommand{SessionID: "bare", ToolName: "command", CommandLine: "python3"})
+		testutil.FailErr(t, "bind action", err)
+		cmd, cleanup, err := confine.Command(context.Background(), helper, "/opt/homebrew/bin/python3", []string{"-c", "import socket; s=socket.socket(); s.bind(('127.0.0.1', 18788))"}, c)
+		testutil.FailErr(t, "command", err)
+		out, _ := cmd.CombinedOutput()
+		cleanup()
+		refusals := lease.SettledRefusals(t.Context())
+		lease.Close(t.Context())
+		t.Logf("helper %s: refusals %+v output %s", filepath.Base(helper), refusals.Refusals, out)
+	}
 }
