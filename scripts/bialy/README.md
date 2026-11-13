@@ -412,7 +412,8 @@ record the numbers beside the value in the catalog comment.
 **Where the evidence is.** Every decision writes `turn_load_receipts` in the
 dev store (`store.db`): `trigger` is `turn`, `request`, `lookup`, or
 `tool_event`; `state_json` is what the engine read; `decisions_json` holds the
-scores. Provider calls are in `debug/sessions/*/llm-requests.jsonl` with
+scores. A `visibility` receipt records a changed continuation surface without
+claiming a prediction or request; it does not create a turn-training row. Provider calls are in `debug/sessions/*/llm-requests.jsonl` with
 `duration_ms`, `usage`, `completion.reasoning_bytes`, `tools[].Name`, and
 `request_controls`. `lycaon-debug decide probe --request TEXT` scores one
 request through the shipped heads; `scripts/bialy/request_probe.py` scores

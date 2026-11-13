@@ -11,9 +11,18 @@ import (
 )
 
 // requestArgs builds the http_request owner's declared argument record from
-// curl's forms. Headers, credentials and bodies are carried as written, so a
-// secret reference reaches only the owner's declared header and auth sinks.
+// curl's forms, then takes the admitted record's resolved values at its own
+// paths, so managed-secret references reach only curl's declared slots.
 func (inv *invocation) requestArgs(cookieHeader string) (map[string]any, error) {
+	args, err := inv.buildRequestArgs(cookieHeader)
+	if err != nil {
+		return nil, err
+	}
+	applyResolved(args, inv.record, inv.resolvedRecord())
+	return args, nil
+}
+
+func (inv *invocation) buildRequestArgs(cookieHeader string) (map[string]any, error) {
 	o := inv.opts
 	args := map[string]any{"url": o.url}
 	method := o.method

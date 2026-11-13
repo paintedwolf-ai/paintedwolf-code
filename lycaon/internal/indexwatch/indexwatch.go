@@ -200,7 +200,7 @@ func changedPaths(before, after indexEntries, keep func(string) bool) []string {
 func (s Snapshot) entries(ctx context.Context, indexFile string) (indexEntries, error) {
 	out := indexEntries{}
 	opts := gitexec.Opts{Profile: gitexec.ProfileHermetic, IndexFile: indexFile}
-	err := gitexec.RunRecords(ctx, s.repoRoot, []string{"ls-files", "--stage", "-z"}, opts, func(raw []byte) error {
+	err := gitexec.RunRecords(gitexec.WithHostPurpose(ctx, "index_watch"), s.repoRoot, []string{"ls-files", "--stage", "-z"}, opts, func(raw []byte) error {
 		meta, path, ok := strings.Cut(string(raw), "\t")
 		fields := strings.Fields(meta)
 		if !ok || len(fields) != 3 || len(fields[2]) != 1 || fields[2][0] < '0' || fields[2][0] > '3' {
@@ -218,7 +218,7 @@ func (s Snapshot) dirty(ctx context.Context, indexFile string, paths []string) (
 	opts := gitexec.Opts{Profile: gitexec.ProfileHermetic, IndexFile: indexFile}
 	for start := 0; start < len(paths); start += 256 {
 		args := append([]string{"--literal-pathspecs", "diff-files", "--name-only", "-z", "--"}, paths[start:min(start+256, len(paths))]...)
-		if err := gitexec.RunRecords(ctx, s.repoRoot, args, opts, func(raw []byte) error {
+		if err := gitexec.RunRecords(gitexec.WithHostPurpose(ctx, "index_watch"), s.repoRoot, args, opts, func(raw []byte) error {
 			out[string(raw)] = true
 			return nil
 		}); err != nil {

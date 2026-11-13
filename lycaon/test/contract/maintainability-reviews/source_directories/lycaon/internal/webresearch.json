@@ -1,0 +1,16 @@
+{
+  "category": "source_directories",
+  "artifact": "lycaon/internal/webresearch",
+  "kind": "module",
+  "workstream": "web-research-flow",
+  "disposition": "retain",
+  "reason": "Retain the web research package at 53 production and 72 test files. Search providers and fetch share egress, secret screening, indexing, and budgets. Read-only fetch registration, visual screening, and content classification are explicit file boundaries; removing raw transfers reduces behavior without creating a second network authority.",
+  "reviewed_commit": "655e22133e9396805819a601fbd788f77270eecb",
+  "ceiling": 53,
+  "boundaries": {
+    "lycaon/internal/webresearch/fetch_readonly_test.go": "9531624acebbd93bf17450c4e2fcceed6af1b4e14f80275f062dbffd91e6a37b",
+    "lycaon/internal/webresearch/fetch_format_test.go": "8c28f8f03259a79bad20ceb86600e9f9690c6f3ac0dd71c9584129970acb7d79",
+    "lycaon/internal/webresearch/fetch_visual_test.go": "44777c7fc7835e6adf426aeb3c1761b56a3a753a1781625ae1d6e1b0532abbef"
+  },
+  "reviewed_shape": "22bc4c3308a3c485f18ff4d461fdb3179ef53a845f9619b3ae83650ae18cfced"
+}

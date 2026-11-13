@@ -36,7 +36,7 @@ func TestServicePreservesCustodyForRunningGenerationAcrossPackageUpgrade(t *test
 	}
 	f.addProcess(process{pid: 302, ppid: 300, uid: 1000, start: 25, image: engineImage, generation: shaA})
 	testutil.FailErr(t, "close before sidecar restart", client.Close())
-	f.peer = Peer{UID: 1000, PID: 302}
+	f.setPeer(Peer{UID: 1000, PID: 302})
 	if resp := do(t, client, vaultidentity.Request{Op: vaultidentity.OpRead, Account: account}); resp.Status != vaultidentity.StatusOK || string(resp.Value) != "kept-across-upgrade" || resp.LauncherPID != 300 {
 		t.Fatalf("read after sidecar relaunch on generation A = %+v", resp)
 	}
@@ -45,7 +45,7 @@ func TestServicePreservesCustodyForRunningGenerationAcrossPackageUpgrade(t *test
 	f.addProcess(process{pid: 400, ppid: 1, uid: 1000, start: 30, image: desktopB, exePath: filepath.Join(f.generationsDir, shaB, "bin/painted-wolf-code")})
 	f.addProcess(process{pid: 401, ppid: 400, uid: 1000, start: 40, image: engineB, exePath: filepath.Join(f.generationsDir, shaB, "bin/pw")})
 	testutil.FailErr(t, "close before launch B", client.Close())
-	f.peer = Peer{UID: 1000, PID: 401}
+	f.setPeer(Peer{UID: 1000, PID: 401})
 	if resp := do(t, client, vaultidentity.Request{Op: vaultidentity.OpRead, Account: account}); resp.Status != vaultidentity.StatusOK || string(resp.Value) != "kept-across-upgrade" || resp.LauncherPID != 400 {
 		t.Fatalf("read on new launch B = %+v", resp)
 	}
@@ -53,7 +53,7 @@ func TestServicePreservesCustodyForRunningGenerationAcrossPackageUpgrade(t *test
 	// Once session A exits and releases its generation lock, generation A is refused.
 	testutil.FailErr(t, "release generation A lock", lockA.Close())
 	testutil.FailErr(t, "close before retired check", client.Close())
-	f.peer = Peer{UID: 1000, PID: 302}
+	f.setPeer(Peer{UID: 1000, PID: 302})
 	if resp := do(t, client, vaultidentity.Request{Op: vaultidentity.OpRead, Account: account}); resp.Status != vaultidentity.StatusRefused || resp.Code != string(launchverify.CodeExecutableMismatch) {
 		t.Fatalf("retired unlocked generation A = %+v", resp)
 	}

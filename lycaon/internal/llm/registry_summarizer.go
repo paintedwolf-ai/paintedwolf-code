@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/cost"
+	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -120,6 +121,21 @@ func (r *RegistrySummarizer) degradeSummarize(ctx context.Context, systemPrompt,
 	return fail()
 }
 
+// answerTokens keeps maxTokens for the answer on a model that cannot turn
+// reasoning off: its cap also covers reasoning, which runs at least at low
+// effort, so that allowance is added.
+func (r *RegistrySummarizer) answerTokens(ctx context.Context, p modelcall.Provider, model string, maxTokens int) int {
+	if maxTokens <= 0 || r.Registry == nil {
+		return maxTokens
+	}
+	entry, _ := r.Registry.thinkingModelEntry(ctx, p.ID(), model)
+	if !modelcall.ResolveModelThinking(p.Profile(), entry, model).AlwaysOn {
+		return maxTokens
+	}
+	allowance, _ := modelcall.ThinkLow.AnthropicBudget()
+	return maxTokens + allowance
+}
+
 func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Provider, model, systemPrompt, userPrompt string, maxTokens int) (string, error) {
 	today, err := guidance.RenderTodayLine(ctx, time.Now(), ResolveModelCutoff(model))
 	if err != nil {
@@ -135,8 +151,9 @@ func (r *RegistrySummarizer) summarizeWith(ctx context.Context, p modelcall.Prov
 		Debug:    modelcall.RequestDebug{Purpose: r.Purpose},
 		// Short utility outputs use the configured no-reasoning mode.
 		Think:     modelcall.ThinkOff,
-		MaxTokens: maxTokens,
+		MaxTokens: r.answerTokens(ctx, p, model, maxTokens),
 	}
+	maxTokens = req.MaxTokens
 	if compaction.SummaryFormatRequested(ctx) {
 		req.ResponseFormat = compaction.CompactionSummaryResponseFormat()
 	}
@@ -170,27 +187,23 @@ func (r *RegistrySummarizer) localDefaultAvailable(ctx context.Context) bool {
 }
 
 func (r *RegistrySummarizer) coordinatorProvider(ctx context.Context) (modelcall.Provider, string, error) {
-	return r.slotProvider(func(p ModelPolicy) ModelRef {
+	return r.slotProvider(ctx, func(p ModelPolicy) ModelRef {
 		return CoordinatorRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
 	}, "coordinator model not configured")
 }
 
 func (r *RegistrySummarizer) liteProvider(ctx context.Context) (modelcall.Provider, string, error) {
-	return r.slotProvider(func(p ModelPolicy) ModelRef {
+	return r.slotProvider(ctx, func(p ModelPolicy) ModelRef {
 		return SummarizerRefWithLocalDefault(p, r.localDefaultAvailable(ctx))
 	}, "lite model not configured")
 }
 
 // slotProvider advances past standing model refusals.
-func (r *RegistrySummarizer) slotProvider(pick func(ModelPolicy) ModelRef, missing string) (modelcall.Provider, string, error) {
+func (r *RegistrySummarizer) slotProvider(ctx context.Context, pick func(ModelPolicy) ModelRef, missing string) (modelcall.Provider, string, error) {
 	if r.Policy == nil || r.Registry == nil {
 		return nil, "", fmt.Errorf("registry not configured")
 	}
-	scope := r.Scope
-	if scope == "" {
-		scope = SettingsScopeGlobal
-	}
-	policy, err := r.Policy.Get(scope, r.ProjectDir)
+	policy, err := r.modelPolicy(ctx)
 	if err != nil {
 		return nil, "", err
 	}
@@ -228,15 +241,11 @@ func (r *RegistrySummarizer) Summarize(ctx context.Context, systemPrompt, userPr
 }
 
 // SummaryRevision identifies the routed utility policy that plans summaries.
-func (r *RegistrySummarizer) SummaryRevision() (string, error) {
+func (r *RegistrySummarizer) SummaryRevision(ctx context.Context) (string, error) {
 	if r.Policy == nil {
 		return "local", nil
 	}
-	scope := r.Scope
-	if scope == "" {
-		scope = SettingsScopeGlobal
-	}
-	policy, err := r.Policy.Get(scope, r.ProjectDir)
+	policy, err := r.modelPolicy(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -259,4 +268,16 @@ func (r *RegistrySummarizer) SummaryBudget(ctx context.Context) compaction.Summa
 	}
 	output := min(1536, max(1, window/8))
 	return compaction.SummaryBudget{Input: max(1, window*3/4-output-summaryRequestHeadroom), Output: output}
+}
+
+// Explicit bindings take precedence over the invoking session's settings roots.
+func (r *RegistrySummarizer) modelPolicy(ctx context.Context) (ModelPolicy, error) {
+	if r.Scope != "" || r.ProjectDir != "" {
+		scope := r.Scope
+		if scope == "" {
+			scope = SettingsScopeProject
+		}
+		return r.Policy.Get(scope, r.ProjectDir)
+	}
+	return r.Policy.GetForProjectRoots(curationctx.SessionFrom(ctx).SettingsRoots)
 }

@@ -15,6 +15,9 @@ export function ToolContentLink(props: {
   toolCallId?: string;
   revealOffset?: number;
   testId?: string;
+  path?: string;
+  language?: string;
+  short?: boolean;
 }) {
   const tool = useToolContent();
   const source = useSourceContext();
@@ -32,6 +35,8 @@ export function ToolContentLink(props: {
       title: `${props.label} · ${identity.title ?? "Tool"}`,
       content: props.content,
       revealOffset: props.revealOffset,
+      ...(props.path ? { path: props.path } : {}),
+      ...(props.language ? { language: props.language } : {}),
     };
   };
   const open = () => {
@@ -41,5 +46,5 @@ export function ToolContentLink(props: {
   createEffect(() => {
     if (props.revealOffset !== undefined && findController.isOpen()) untrack(open);
   });
-  return <ChatContentLink searchable={searchable()} label={props.label} projectId={projectId()} document={document} testId={props.testId ?? "tool-content-link"} />;
+  return <ChatContentLink searchable={searchable()} label={props.label} projectId={projectId()} document={document} testId={props.testId ?? "tool-content-link"} short={props.short} />;
 }

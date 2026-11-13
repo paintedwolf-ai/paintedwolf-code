@@ -67,7 +67,7 @@ export function DocumentWindows(props: { projectId: string; replica?: DocumentRe
     } finally { if (alive) setBusy(null); }
   };
   return <Show when={windows().length > 1}>
-    <button type="button" class="den-files-editor__status-toggle den-document-windows" data-testid="document-windows"
+    <button type="button" class="den-files-editor__status-toggle den-inset-icon-btn den-document-windows" data-testid="document-windows"
       aria-label={`Open in ${windows().length} windows`} aria-haspopup="menu" aria-expanded={anchor() !== null}
       onClick={event => { setAnchor(anchor() ? null : event.currentTarget); }}>
       <ThemeIcon slot="new-window" />

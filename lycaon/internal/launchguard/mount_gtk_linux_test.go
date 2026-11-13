@@ -42,7 +42,12 @@ func TestMountGTKSettingsModuleIsRefusedWhileChooserReadsFUSE(t *testing.T) {
 	settings := filepath.Join(home, ".config", "gtk-3.0")
 	testutil.FailErr(t, "prepare own GTK settings", os.MkdirAll(settings, 0700))
 	testutil.FailErr(t, "select the absolute FUSE module through GTK settings", os.WriteFile(filepath.Join(settings, "settings.ini"), []byte("[Settings]\ngtk-modules="+filepath.Join(volume, "module.so")+"\n"), 0600))
-	environment := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
+	// The fixture install root ships a bwrap shim: inside the protected
+	// desktop Landlock denies mount(2), the runner's glycin icon loaders
+	// misread the real bwrap death there, and the shim makes glycin run its
+	// loader directly instead. Both lanes share the environment.
+	fixture := installLaunchFixture(t)
+	environment := []string{"HOME=" + home, "PATH=" + filepath.Join(fixture.install, "bin") + ":/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
 	payload := filepath.Join(volume, "payload")
 	ordinary := exec.Command(desktop, "--ordinary-read", payload)
 	ordinary.Env = environment
@@ -57,7 +62,6 @@ func TestMountGTKSettingsModuleIsRefusedWhileChooserReadsFUSE(t *testing.T) {
 		t.Fatalf("unexpected constructor marker %q", loaded)
 	}
 	testutil.FailErr(t, "clear only the positive-control marker", os.Remove(marker))
-	fixture := installLaunchFixture(t)
 	binaries := append([]string(nil), fixture.binaries...)
 	binaries[2] = desktop
 	testutil.FailErr(t, "stage GTK desktop with current selected launch helpers and exact manifest", sudoFixture(t, "upgrade-gtk", fixture.dir, fixtureBinsEnv+"="+strings.Join(binaries, ":")))
@@ -302,7 +306,7 @@ func TestMountGTKChooserReadsVolumeAttachedAfterReadiness(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, fixture.bootstrap, "--protected-watch", payload)
-	command.Env = []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
+	command.Env = []string{"HOME=" + home, "PATH=" + filepath.Join(fixture.install, "bin") + ":/usr/bin:/bin", "DISPLAY=" + display, "GDK_BACKEND=x11", "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
 	input, err := command.StdinPipe()
 	testutil.FailErr(t, "create late-volume controls", err)
 	defer input.Close()

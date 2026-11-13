@@ -1,6 +1,9 @@
 package gitexec
 
-import "strings"
+import (
+	"context"
+	"strings"
+)
 
 // neutralizeArgs disables repository-owned execution hooks.
 func neutralizeArgs(sshCommand string) ([]string, error) {
@@ -33,6 +36,36 @@ func neutralizeArgs(sshCommand string) ([]string, error) {
 		"-c", "merge.verifySignatures=false",
 		"-c", "advice.detachedHead=false",
 	}, nil
+}
+
+// agentTransportArgs admit only Git's own transports to an agent's Git: a
+// remote helper (<transport>::) runs a local program the agent named by URL.
+var agentTransportArgs = []string{
+	"-c", "protocol.allow=never",
+	"-c", "protocol.https.allow=always",
+	"-c", "protocol.http.allow=always",
+	"-c", "protocol.ssh.allow=always",
+	"-c", "protocol.git.allow=always",
+	"-c", "protocol.file.allow=user",
+}
+
+// hostPurposeTransportArgs keep host bookkeeping in an agent's call off every
+// transport but the local one.
+var hostPurposeTransportArgs = []string{
+	"-c", "protocol.allow=never",
+	"-c", "protocol.file.allow=user",
+}
+
+// transportArgs follows the launch's authority; a person's own Git keeps the
+// default transports and helpers.
+func transportArgs(ctx context.Context) []string {
+	switch {
+	case agentLaunched(ctx):
+		return agentTransportArgs
+	case hostPurposeInAgentEntry(ctx):
+		return hostPurposeTransportArgs
+	}
+	return nil
 }
 
 // Batch mode turns unavailable prompts into immediate errors.

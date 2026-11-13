@@ -60,6 +60,11 @@ func ToAPI(p *Project) api.Project {
 		if hash := strings.TrimSpace(r.GitRemoteHash); hash != "" {
 			wr.GitRemoteHash = &hash
 		}
+		admitted, code := r.Admission()
+		wr.Admitted = admitted
+		if !admitted {
+			wr.AdmissionCode = &code
+		}
 		out.Roots = append(out.Roots, wr)
 	}
 	return out

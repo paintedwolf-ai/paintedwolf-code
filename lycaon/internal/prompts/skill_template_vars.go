@@ -3,10 +3,13 @@ package prompts
 import (
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolsurface"
 )
 
 // SkillSurfaceVarsInput carries the caller facts a pack skill body renders with.
 type SkillSurfaceVarsInput struct {
+	// Plan is the invocation snapshot; author previews use the catalog.
+	Plan toolsurface.Plan
 	// ProfileID is the reader's tool profile id ("coordinator", "implement", ...).
 	ProfileID string
 	// SurfaceID is the coordinator turn surface; empty outside coordinator profiles.
@@ -34,7 +37,7 @@ func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) 
 	coordinator := in.ProfileID == CoordinatorProfileID
 	setCallerShapeVars(vars, in, coordinator)
 	if coordinator && in.SurfaceID != "" {
-		turn := SurfaceTurn{Loaded: coordinatorSurfaceLoaded(in)}
+		turn := SurfaceTurn{Plan: in.Plan, Loaded: coordinatorSurfaceLoaded(in)}
 		if err := MergeCoordinatorSurfacePathVars(in.SurfaceID, nil, vars, turn); err != nil {
 			return nil, err
 		}
@@ -45,7 +48,7 @@ func SkillSurfaceTemplateVars(in SkillSurfaceVarsInput) (map[string]any, error) 
 	if err != nil {
 		return nil, err
 	}
-	surface, err := LoadAgentToolSurface(in.ProfileID, in.Offered, nil, SurfaceTurn{Loaded: toolNameSet(in.Offered)}, profiles)
+	surface, err := LoadAgentToolSurface(in.ProfileID, in.Offered, nil, SurfaceTurn{Plan: in.Plan, Loaded: toolNameSet(in.Offered)}, profiles)
 	if err != nil {
 		return nil, err
 	}
@@ -72,11 +75,11 @@ func defaultDelegationBudget(budget spawn.WorkerToolBudget) spawn.WorkerToolBudg
 	return budget
 }
 
-// coordinatorSurfaceLoaded marks every tool the surface can reach as loaded:
-// the caller's offered set plus the surface floor and its full loadable set.
-// Skill copy renders against the whole addressable set so deferred tools do not
-// blank instructions before request_tools runs, matching the contract matrix.
+// coordinatorSurfaceLoaded teaches reachable operations, including deferred tools.
 func coordinatorSurfaceLoaded(in SkillSurfaceVarsInput) map[string]bool {
+	if in.Plan.Compiled() {
+		return toolNameSet(in.Plan.AddressableNames())
+	}
 	loaded := toolNameSet(in.Offered)
 	if floor, err := LoadCoordinatorSurfaceFloor(in.SurfaceID); err == nil {
 		for _, name := range floor {

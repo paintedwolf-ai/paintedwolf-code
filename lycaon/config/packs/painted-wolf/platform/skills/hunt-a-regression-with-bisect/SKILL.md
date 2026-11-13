@@ -19,7 +19,6 @@ Use this workflow to turn "it broke sometime" into the exact commit, mechanicall
 2. Write the check as a script that exits 0 on good, non-zero on bad, and 125 when the state cannot be judged, and include it verbatim in your report so the search is repeatable.
 3. Include the endpoints, the script, and the failing behavior in your leg report for the coordinator to run the bisect; the fix remains a separate decision made on that evidence.
 {% endif %}
-
 ## Boundaries
 
 - {% if has_git and not on_worker_branch %}Bisect only checks out history; it must not carry uncommitted work. `git bisect start` refuses a tree with tracked changes. Run the bisect in a separate worktree instead (`git worktree add @scratch/bisect HEAD`, then `cd @scratch/bisect`) rather than stashing or discarding anything.{% else %}Bisect only checks out history; it must not carry uncommitted work, and a write overlay holds no history to check out — the search belongs to a read leg or the coordinator.{% endif %}

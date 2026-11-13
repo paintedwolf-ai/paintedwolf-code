@@ -293,9 +293,12 @@ func (g *RuleApprovalGate) declaredFileTargets(action hitl.ProposedAction) []*ga
 		}
 		// Scratch and cache authority comes from the subprocess filesystem boundary.
 		if len(action.Execution.Contained.WriteRoots) > 0 {
-			target.WithinConfinement = confine.PathWithinWriteRoots(path, action.Execution.Contained.WriteRoots)
+			target.WithinConfinement = confine.PathWithinRoots(path, action.Execution.Contained.WriteRoots)
 		} else if root, err := confine.FilesystemRootForPath(action.Scope.ProjectID, roots, nil, action.Scope.SessionScratchRoot, path); err == nil {
 			target.WithinConfinement = root != ""
+		}
+		if !pathWrite && confine.PathWithinRoots(path, action.Execution.Contained.ReadRoots) {
+			target.WithinConfinement = true
 		}
 		// ClassifyResolved covers sensitive descendants and path aliases.
 		if m, ok := g.sources.Locations.ClassifyResolved(path, catalogMode); ok {

@@ -209,10 +209,6 @@ func validatePromoteSyntax(ctx context.Context, plans []promoteMutation) *promot
 func (issue *promoteSyntaxIssue) rejectData(jobID string) map[string]any {
 	data := issue.change.FeedbackFacts("merged")
 	data["job_id"], data["path"] = jobID, issue.path
-	if diag, ok := syntaxhealth.NearestDiagnostic(issue.change.After, 0, 0); ok {
-		data["parse_error"] = diag.Description()
-		data["syntax_diagnostic"] = diag
-	}
 	return data
 }
 

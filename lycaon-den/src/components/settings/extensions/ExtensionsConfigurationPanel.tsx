@@ -10,7 +10,7 @@ import type {
 import { DenButton } from "../../primitives/DenButton.tsx";
 import { DenCheckbox } from "../../primitives/DenCheckbox.tsx";
 import { DenInput } from "../../primitives/DenInput.tsx";
-import { DenNumberInput } from "../../primitives/DenNumberInput.tsx";
+import { DenNumberInput, fieldNumber } from "../../primitives/DenNumberInput.tsx";
 import { DenSelect } from "../../primitives/DenSelect.tsx";
 import { EXTENSIONS_SETTINGS_COPY as C } from "../../../settings/extensions/extensions-settings-copy.ts";
 import { chromeProps } from "../../../styling/ui-chrome.ts";
@@ -222,8 +222,8 @@ function ConfigurationControl(props: {
               max={props.property.max}
               disabled={props.disabled}
               onChange={(e) => {
-                const next = Number(e.currentTarget.value);
-                if (!Number.isNaN(next)) props.onChange(next);
+                const next = fieldNumber(e.currentTarget);
+                if (next != null) props.onChange(next);
               }}
             />
           }

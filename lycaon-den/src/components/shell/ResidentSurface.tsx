@@ -64,15 +64,12 @@ export function ResidentSurface(props: Props) {
   const canPublish = createMemo(
     () => presence() !== "idle" && props.payloadAvailable !== false && preparation.ready(),
   );
-  usePresentationParticipant(props.surfaceKey, settled, preparation.notice);
+  const report = { notice: preparation.notice, pending: preparation.pending };
+  usePresentationParticipant(props.surfaceKey, settled, report);
 
   createEffect(() => {
     const parent = props.preparation;
-    if (parent) {
-      onCleanup(
-        parent.register(props.surfaceKey, settled, preparation.notice),
-      );
-    }
+    if (parent) onCleanup(parent.register(props.surfaceKey, settled, report));
   });
 
   createEffect(() => {

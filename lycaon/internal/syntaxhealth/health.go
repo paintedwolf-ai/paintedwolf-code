@@ -97,6 +97,10 @@ func Analyze(ctx context.Context, langName, filename string, src []byte, purpose
 	if entry.Name == "css" {
 		parseSrc = normalizeModernCSS(src)
 	}
+	if entry.Name == "dockerfile" && len(src) > 0 && src[len(src)-1] != '\n' {
+		// The grammar requires a line terminator; source bytes remain unchanged.
+		parseSrc = append(append([]byte(nil), src...), '\n')
+	}
 	tree, err := tsparse.Parse(ctx, entry.Language(), parseSrc, purpose)
 	if err != nil {
 		report.Status = StatusFailed

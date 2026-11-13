@@ -9,9 +9,6 @@ import (
 	"strings"
 )
 
-// DiscoveryPageSize bounds each catalog response independently of catalog size.
-const DiscoveryPageSize = 20
-
 // DiscoveryPageBytes leaves room for its refusal and invocation envelope.
 const DiscoveryPageBytes = 16 << 10
 
@@ -38,8 +35,15 @@ type discoveryCursor struct {
 	Order  []string `json:"order,omitempty"`
 }
 
+// DiscoveryInstructions carries rendered copy for each pagination state.
+type DiscoveryInstructions struct {
+	Empty string
+	More  string
+	Final string
+}
+
 // Discover binds pagination to the need, surface scope, and current catalog.
-func Discover(scope, need, cursor, status string, failure RankingFailure, entries []DiscoveryEntry, order ...string) (*Discovery, error) {
+func Discover(scope, need, cursor, status string, failure RankingFailure, entries []DiscoveryEntry, instructions DiscoveryInstructions, order ...string) (*Discovery, error) {
 	entries = append([]DiscoveryEntry{}, entries...)
 	for i := range entries {
 		entries[i].Description = BoundDescription(entries[i].Description)
@@ -74,30 +78,43 @@ func Discover(scope, need, cursor, status string, failure RankingFailure, entrie
 		}
 		offset = next.Offset
 	}
-	end := min(offset+DiscoveryPageSize, len(entries))
-	out := &Discovery{Status: status, Failure: failure, Total: len(entries), Instruction: "Select a relevant entry by calling this tool with its exact name as need. To see more entries, pass next_need unchanged as need. To restart discovery, repeat the original description."}
-	for {
-		out.Entries, out.NextNeed = entries[offset:end], ""
-		if end < len(entries) {
+	page := func(end int) (*Discovery, int, error) {
+		out := &Discovery{Status: status, Failure: failure, Total: len(entries), Entries: entries[offset:end], Instruction: instructions.Final}
+		if len(entries) == 0 {
+			out.Instruction = instructions.Empty
+		} else if end < len(entries) {
+			out.Instruction = instructions.More
 			raw, err := json.Marshal(discoveryCursor{Need: need, Digest: digest, Offset: end, Order: order})
 			if err != nil {
-				return nil, err
+				return nil, 0, err
 			}
 			out.NextNeed = "discovery:" + base64.RawURLEncoding.EncodeToString(raw)
 		}
 		raw, err := json.Marshal(out)
+		return out, len(raw), err
+	}
+	// A final page has different guidance and no continuation overhead.
+	out, size, err := page(len(entries))
+	if err != nil || size <= DiscoveryPageBytes {
+		return out, err
+	}
+	var best *Discovery
+	for low, high := offset+1, len(entries)-1; low <= high; {
+		end := low + (high-low)/2
+		candidate, size, err := page(end)
 		if err != nil {
 			return nil, err
 		}
-		if len(raw) <= DiscoveryPageBytes {
-			break
+		if size <= DiscoveryPageBytes {
+			best, low = candidate, end+1
+		} else {
+			high = end - 1
 		}
-		if end <= offset+1 {
-			return nil, fmt.Errorf("discovery page cannot fit its entry and continuation within %d bytes", DiscoveryPageBytes)
-		}
-		end--
 	}
-	return out, nil
+	if best == nil {
+		return nil, fmt.Errorf("discovery page cannot fit its entry and continuation within %d bytes", DiscoveryPageBytes)
+	}
+	return best, nil
 }
 
 func sortDiscoveryEntries(entries []DiscoveryEntry, order []string) {

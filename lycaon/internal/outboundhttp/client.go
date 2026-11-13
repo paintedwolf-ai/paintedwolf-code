@@ -85,7 +85,9 @@ type Request struct {
 	Redirects     RedirectMode
 	RedirectLimit int
 	MaxBodyBytes  int64
-	DiscardBody   bool
+	// TruncateBody cuts a longer body to MaxBodyBytes instead of refusing it.
+	TruncateBody bool
+	DiscardBody  bool
 	// StreamBody receives a size-limited reader; the receipt records its bytes and digest.
 	StreamBody func(io.Reader) error
 	// UnixSocket names the reviewed local service in receipts.
@@ -172,7 +174,9 @@ type Response struct {
 	Timing      *HopTiming `json:"timing_ms,omitempty"`
 	TLS         *TLSInfo   `json:"tls,omitempty"`
 	// BodyObserved excludes HEAD responses and discarded bodies.
-	BodyObserved  bool           `json:"-"`
+	BodyObserved bool `json:"-"`
+	// Truncated reports a TruncateBody response cut at MaxBodyBytes.
+	Truncated     bool           `json:"-"`
 	FirstHopLocal netip.AddrPort `json:"-"`
 	FirstHopPeer  netip.AddrPort `json:"-"`
 	// StatusLine is the final response's protocol and status as received,
@@ -279,7 +283,7 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		}
 		ioStarted := time.Now()
 		// Approval waits use the session-stop context outside the turn deadline.
-		ioCtx, ioCancel := context.WithTimeout(hitl.WaitContext(ctx), remaining)
+		ioCtx, ioCancel := hitl.IOContext(ctx, remaining)
 		transport, dnsElapsed, err := in.transportForHop(ioCtx, current)
 		if err != nil {
 			ioCancel()
@@ -379,7 +383,7 @@ func (in Request) finishResponse(
 	observed *HopObservation, begun time.Time, firstHopLocal, firstHopPeer netip.AddrPort,
 ) (Response, error) {
 	tlsInfo := observed.TLS
-	result, readErr := readResponse(resp, method, current.String(), hops, limit, in.DiscardBody, in.StreamBody, hopTiming)
+	result, readErr := readResponse(resp, method, current.String(), hops, limit, in.TruncateBody, in.DiscardBody, in.StreamBody, hopTiming)
 	ioElapsed += time.Since(ioStarted)
 	hopTiming.Total = time.Since(ioStarted).Milliseconds()
 	transport.CloseIdleConnections()
@@ -538,7 +542,7 @@ func withoutBodyHeaders(headers []Header) []Header {
 	return out
 }
 
-func readResponse(resp *http.Response, method, finalURL string, hops []Hop, limit int64, discard bool, stream func(io.Reader) error, timing *HopTiming) (Response, error) {
+func readResponse(resp *http.Response, method, finalURL string, hops []Hop, limit int64, truncate, discard bool, stream func(io.Reader) error, timing *HopTiming) (Response, error) {
 	defer func() { _ = resp.Body.Close() }()
 	readStart := time.Now()
 	// A HEAD response carries no body, so there is nothing to size or digest.
@@ -551,7 +555,7 @@ func readResponse(resp *http.Response, method, finalURL string, hops []Hop, limi
 			Redirects: hops, ContentType: resp.Header.Get("Content-Type"), StatusLine: statusLine(resp),
 		}, nil
 	}
-	if resp.ContentLength > limit {
+	if resp.ContentLength > limit && !truncate {
 		return Response{}, &BodyTooLargeError{Limit: limit}
 	}
 	if stream != nil {
@@ -568,14 +572,18 @@ func readResponse(resp *http.Response, method, finalURL string, hops []Hop, limi
 	if err != nil {
 		return Response{}, &TransferError{Err: err}
 	}
-	if int64(len(body)) > limit {
+	truncated := int64(len(body)) > limit
+	if truncated && !truncate {
 		return Response{}, &BodyTooLargeError{Limit: limit}
+	}
+	if truncated {
+		body = body[:limit]
 	}
 	sum := sha256.Sum256(body)
 	return Response{
 		Status: resp.StatusCode, FinalURL: finalURL, Headers: responseHeaders(resp.Header, false),
 		Redirects: hops, Body: body, Bytes: int64(len(body)), SHA256: hex.EncodeToString(sum[:]),
-		ContentType: resp.Header.Get("Content-Type"), BodyObserved: true, StatusLine: statusLine(resp),
+		ContentType: resp.Header.Get("Content-Type"), BodyObserved: true, StatusLine: statusLine(resp), Truncated: truncated,
 	}, nil
 }
 

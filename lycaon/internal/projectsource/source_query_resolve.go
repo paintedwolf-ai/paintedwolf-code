@@ -45,7 +45,7 @@ var sourceCommitID = regexp.MustCompile(`^[0-9a-fA-F]{7,64}$`)
 // checkoutRefs lists the short names of dir's branches, remote-tracking branches, and tags when
 // one of its remotes is repo.
 func checkoutRefs(ctx context.Context, dir, repo string) (map[string]bool, bool) {
-	ctx, cancel := context.WithTimeout(ctx, sourceRemoteTimeout)
+	ctx, cancel := context.WithTimeout(gitexec.WithHostPurpose(ctx, "source_checkout_refs"), sourceRemoteTimeout)
 	defer cancel()
 	git := func(args ...string) []string {
 		out, code, err := gitexec.Run(ctx, dir, args, gitexec.Opts{Profile: gitexec.ProfileHermetic, Timeout: sourceRemoteTimeout})

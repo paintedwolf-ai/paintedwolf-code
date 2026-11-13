@@ -13,6 +13,8 @@ export type SurfaceRevealOptions = {
   name?: string;
   participate?: boolean;
   notice?: () => PreparationNotice | null;
+  /** Names of the unsettled conditions behind `ready`. */
+  pending?: () => readonly string[];
   /** Lets a renderable failure settle preparation. */
   faulted?: () => boolean;
   deferInitialReveal?: boolean;
@@ -102,7 +104,7 @@ export function useSurfaceReveal(options: SurfaceRevealOptions = {}): SurfaceRev
   if (options.participate !== false) usePresentationParticipant(
     options.name ?? "surface",
     createMemo(() => revealed() || contentReady() || Boolean(options.faulted?.())),
-    options.notice,
+    { notice: options.notice, pending: options.pending },
   );
 
   return { ready: revealed, animate, finishAnimation: () => setAnimate(false), reset };
