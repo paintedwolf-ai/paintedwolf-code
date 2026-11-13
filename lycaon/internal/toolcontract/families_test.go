@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/nativemanifest"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
@@ -21,9 +22,7 @@ func TestExpandFamiliesGrantsCompanions(t *testing.T) {
 // out of, so a launcher on a floor never drags controls onto it.
 func TestResourceControlsAreOneFamilyWithoutTheirLauncher(t *testing.T) {
 	cfg, err := nativemanifest.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "load native manifest", err)
 	implied := map[string][]string{}
 	for _, fact := range cfg.ResourceImpliedFacts() {
 		implied[fact] = cfg.ResourceImpliedTools(fact)
