@@ -18,19 +18,22 @@ def fixture(group, mode):
                "host_revision":"a"*40,"epoch":"fixture","contract_sha256":"d"*64,"state_sha256":"b"*64,"catalog_sha256":"c"*64}
     capture["sha256"] = digest(capture)
     target = {"role":"assistant","text":"answer","tool_calls":[]}
+    quality = {"method":"deterministic","verdict":"pass","evidence_ids":["fixture"],
+               "request_sha256":capture["sha256"],"response_sha256":digest(target)}
+    if mode == "sft":
+        return {"schema":"pw-training-row/1","session":"s-"+group,"message_id":"m-"+group,"prompt":prompt,"target":target,
+                "request_capture":capture,"response_sha256":digest(target),"split_group":group,
+                "execution":{"receipt_id":"fixture","settled_at":"2026-11-12T10:00:00Z","calls":[],"committed":True},
+                "source":{"bundle_sha256":"e"*64,"capture_sha256":"f"*64},"quality":quality,
+                "admission":{"eligibility":"eligible","category":"closeout","semantic_outcome":"success"}}
     validation = {k:capture[k] for k in ("host_revision","epoch","contract_sha256","state_sha256","catalog_sha256")}
     validation.update(schema="pw-training-validation/1",validator="paintedwolf-host-training-validation/1",
                       receipt_id="fixture",request_sha256=capture["sha256"],response_sha256=digest(target),
-                      outcome="accepted",response_origin="model",
-                      quality={"method":"deterministic","verdict":"pass","evidence_ids":["fixture"],
-                               "request_sha256":capture["sha256"],"response_sha256":digest(target)})
-    row = {"schema":"pw-custom-"+mode+"/1","prompt":prompt,"request_capture":capture,"validation":validation,"split_group":group}
-    if mode == "sft":
-        row["target"] = target
-    else:
-        row.update(chosen=target,rejected=dict(target,text="wrong"))
-        validation.update(chosen_outcome="accepted",rejected_outcome="rejected",preference="chosen",
-                          chosen_sha256=digest(target),rejected_sha256=digest(row["rejected"]))
+                      outcome="accepted",response_origin="model",quality=quality)
+    row = {"schema":"pw-custom-dpo/1","prompt":prompt,"request_capture":capture,"validation":validation,"split_group":group,
+           "chosen":target,"rejected":dict(target,text="wrong")}
+    validation.update(chosen_outcome="accepted",rejected_outcome="rejected",preference="chosen",
+                      chosen_sha256=digest(target),rejected_sha256=digest(row["rejected"]))
     return row
 
 
