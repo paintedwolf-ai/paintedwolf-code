@@ -94,6 +94,29 @@ func (p Prepared) Transfer() Transfer {
 	return *p.transfer
 }
 
+// SelectMode names the effect mode argv selects, as Prepare does.
+func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
+	bound, err := commandprogram.CatalogBinder{}.Bind(o.spec, argv)
+	if err != nil {
+		return "", false
+	}
+	opts, err := parseOptions(bound)
+	if err != nil {
+		return "", false
+	}
+	return transferMode(opts), true
+}
+
+// transferMode writes files when an output, header dump or cookie jar names one.
+func transferMode(opts options) string {
+	for _, destination := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
+		if destination != "" && destination != "-" && destination != "/dev/null" {
+			return "-o--D--c-to-file"
+		}
+	}
+	return "request"
+}
+
 // Prepare binds argv through the catalog grammar and validates every form
 // before anything is read, sent or written.
 func (o *Owners) Prepare(program mutation.Program, request commandprogram.OperationRequest) (Prepared, error) {
@@ -119,12 +142,7 @@ func (o *Owners) Prepare(program mutation.Program, request commandprogram.Operat
 	if err != nil {
 		return Prepared{}, err
 	}
-	mode := "request"
-	for _, destination := range []string{opts.output, opts.dumpHeader, opts.cookieJar} {
-		if destination != "" && destination != "-" && destination != "/dev/null" {
-			mode = "-o--D--c-to-file"
-		}
-	}
+	mode := transferMode(opts)
 	review := bound.Review(o.operation)
 	review.PathTargets = curlPathTargets(opts)
 	review.Record, review.Represented = requestRecord(opts)

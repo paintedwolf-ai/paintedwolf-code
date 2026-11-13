@@ -477,7 +477,7 @@ var childFeedback sync.Mutex
 // forwardChildFeedback states a completed child's advisories on the program's
 // result, the only tool result its reader sees.
 func forwardChildFeedback(program, child *tools.ToolInvocationOut) {
-	if program == nil || len(child.Facts.Feedback) == 0 {
+	if program == nil || (len(child.Facts.Feedback) == 0 && !child.Facts.Confine.Applied) {
 		return
 	}
 	childFeedback.Lock()
@@ -485,4 +485,6 @@ func forwardChildFeedback(program, child *tools.ToolInvocationOut) {
 	for _, item := range child.Facts.Feedback {
 		program.Facts = program.Facts.WithFeedback(item.Code, item.Details, item.Subject)
 	}
+	// A native owner's own confined launch reports like an external stage.
+	program.Facts.Confine = program.Facts.Confine.Merge(child.Facts.Confine)
 }

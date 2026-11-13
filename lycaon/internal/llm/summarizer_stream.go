@@ -92,7 +92,7 @@ func (r *RegistrySummarizer) streamLite(ctx context.Context, p modelcall.Provide
 		}),
 		Debug:     modelcall.RequestDebug{Purpose: r.Purpose},
 		Think:     modelcall.ThinkOff,
-		MaxTokens: maxTokens,
+		MaxTokens: r.answerTokens(ctx, p, model, maxTokens),
 	}
 	req = r.utilityRequest(ctx, req)
 	attempt := r.beginUtilityCall(ctx, p, model)

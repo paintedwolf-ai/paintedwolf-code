@@ -136,10 +136,10 @@ export function ActivityFooter(props: ActivityProps & {
   const single = () => props.activity.calls.length === 1 ? props.activity.calls[0] : undefined;
   const decisions = () => props.activity.decisions ?? [];
   return <nav class="den-activity-footer" aria-label="Activity records" data-testid="activity-footer">
-    <Show when={single()}>{call => <><CallInputLink {...props} call={call()} testId="activity-input" /><CallOutputLink {...props} call={call()} testId="activity-call-output" /></>}</Show>
+    <Show when={single()} keyed>{call => <><CallInputLink {...props} call={call} testId="activity-input" /><CallOutputLink {...props} call={call} testId="activity-call-output" /></>}</Show>
     <Show when={props.activity.fact.job_handle} keyed>{handle => <ToolContentLink short pane={`activity:${props.activity.fact.id}:process`} label="Process output" testId="activity-process-output" content={{ kind: "process", handle }} projectId={props.projectId} />}</Show>
-    <Show when={props.executions.length > 0 && props.receipts}>
-      {(receipts) => <ToolContentLink short pane={`activity:${props.activity.fact.id}:receipts`} label="Receipt" testId="command-activity-receipts" content={receipts()} projectId={props.projectId} />}
+    <Show when={props.executions.length > 0 && props.receipts} keyed>
+      {(receipts) => <ToolContentLink short pane={`activity:${props.activity.fact.id}:receipts`} label="Receipt" testId="command-activity-receipts" content={receipts} projectId={props.projectId} />}
     </Show>
     <Show when={decisions().length}>
       <ToolContentLink short pane={`activity:${props.activity.fact.id}:decisions`} label="Host decisions" testId="command-activity-decisions" projectId={props.projectId}

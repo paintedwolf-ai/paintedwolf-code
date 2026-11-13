@@ -91,7 +91,8 @@ func runCommandTerminalCapture(
 	request := hostcmd.Request{
 		Launch:     agentCommandLaunch(tctx, toolName, bound.confinement, bound.lease, commandLine),
 		ProjectDir: cwd, ProfileID: tctx.ProfileID(), Stages: stages, IOParams: ioParams,
-		PathExtra: append([]string(nil), tctx.Host.HostResourcePathExtra...),
+		PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
+		ServiceEnv: append([]string(nil), tctx.Host.HostResourceEnv...),
 	}
 	facts := confine.SpawnFacts{
 		Report: confine.ReportOf(confine.BoundaryOf(bound.confinement)).
@@ -105,6 +106,11 @@ func runCommandTerminalCapture(
 		facts.Network = bound.lease.ObservedHosts
 	}
 	if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {
+		// Nothing ran: release the action's boundary before refusing.
+		bound.close(ctx)
+		if directIPApplied {
+			tools.EmitDirectIPLifecycle(tctx, tools.DirectIPLifecycleCompleted)
+		}
 		return RunOutcome{}, toolrejection.HeldHandOffReject(toolName, err)
 	}
 	var sourceRevision, sourceRootDigest string

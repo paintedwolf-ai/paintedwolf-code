@@ -19,4 +19,5 @@ agents:
       focus: "Read external documentation and gather open-web evidence for the brief."
       process:
         - "Prefer web_search and fetch_url for external facts."
+        - "Local file reads are not offered on this profile; route comparison needs to the coordinator."
         - "Return cited facts and URLs for coordinator synthesis."

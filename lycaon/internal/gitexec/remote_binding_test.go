@@ -4,6 +4,8 @@ import (
 	"errors"
 	"slices"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func gitConfig(t *testing.T, dir string, args ...string) {
@@ -62,5 +64,18 @@ func TestResolveRemoteURLsFollowsGitSelectionAndRewrites(t *testing.T) {
 	}
 	if _, err := ResolveRemoteURLs(t.Context(), dir, RemoteIntent{Remote: "--upload-pack=touch"}); !errors.Is(err, ErrRemoteUnresolved) {
 		t.Fatalf("option-shaped remote: %v", err)
+	}
+}
+
+// A rewrite base or prefix with spaces resolves as Git reads it.
+func TestResolveRemoteURLsReadsRewriteRulesWithSpaces(t *testing.T) {
+	useBundledGit(t)
+	dir := t.TempDir()
+	initRepo(t, dir)
+	gitConfig(t, dir, "url.https://spaced.example.test/a b/.insteadOf", "short with space:")
+	got, err := ResolveRemoteURLs(t.Context(), dir, RemoteIntent{Remote: "short with space:repo.git"})
+	testutil.FailErr(t, "resolve", err)
+	if want := []string{"https://spaced.example.test/a b/repo.git"}; !slices.Equal(got, want) {
+		t.Fatalf("resolved %q, want %q", got, want)
 	}
 }

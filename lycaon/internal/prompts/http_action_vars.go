@@ -2,10 +2,10 @@ package prompts
 
 import "slices"
 
-// The HTTP-action teaching group: http_request, with fetch_url and wait as the
-// alternatives its copy points at. Teaching renders for a tool on this turn's
-// schema; one that is not offered stays untaught until it loads.
-var httpActionTools = []string{"http_request", "fetch_url", "wait"}
+// The HTTP-action teaching group: fetch_url, with wait as the alternative its
+// copy points at. Teaching renders for a tool on this turn's schema; one that
+// is not offered stays untaught until it loads.
+var httpActionTools = []string{"fetch_url", "wait"}
 
 // MergeHTTPActionVars publishes availability for the HTTP-action group from
 // this turn's offered schemas.

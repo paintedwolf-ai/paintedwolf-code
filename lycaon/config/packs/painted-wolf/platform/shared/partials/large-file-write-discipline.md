@@ -1,3 +1,3 @@
 - If you have only an outline and most of the file changes, use targeted patches through `command` or split modules with staged redirects; never regenerate a large file in one turn.
-- Native edits reject files over {{ native_edit_limit_mib }} MiB{% if profile_has_command %}; use `command` (`sed`, `awk`, `python`, `jq`) for larger files{% endif %}.
+{% if profile_command_mutation %}- Whole-document replacement edits (`edit`, `replace-lines`{% if profile_has_code_rewrite %}, `code-rewrite`{% endif %}) reject files over {{ native_edit_limit_mib }} MiB{% if profile_has_command %}; stream larger files through `command` (`sed`, `awk`, `python3`, `jq`){% endif %}.{% endif %}
 - Rewrite through tool calls across turns so each change lands and can be verified. Keep file contents out of message prose.

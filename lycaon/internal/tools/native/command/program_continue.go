@@ -36,7 +36,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	handle, err := r.Supervisor.Background.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: run.tc.Identity.SessionID, RootSessionID: run.tc.ChatSessionID(),
 		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
-		CommandLine: run.source, OriginTool: "command", ToolCallID: run.tc.Identity.ToolCallID,
+		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID,
 		Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.Interrupt(run.root.Identity.ProgramID) })
 			defer stop()
