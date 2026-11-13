@@ -420,10 +420,15 @@ margin: 4px 0 0;
 
 .den-citation-grounding-code,
 .den-citation-grounding-context,
-.den-citation-grounding-scope {
+.den-citation-grounding-scope,
+.den-citation-grounding-source {
   margin: 6px 0 0;
   font-size: var(--text-den-hint);
   color: var(--den-text-muted);
+}
+
+.den-citation-grounding-host-box .den-citation-grounding-source {
+  margin-top: 0;
 }
 
 /* Grounded path / URL open affordances */
