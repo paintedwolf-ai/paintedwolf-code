@@ -256,6 +256,8 @@ func routeOperation(rules FilesystemRules, operation, target string) SandboxRefu
 		r.Recovery = RecoverLocalListen
 	case operation == "signal":
 		r.Recovery = RecoverProcessControl
+	case operation == "system-info", operation == "system-socket" && isStateObservationSocket(target):
+		r.Recovery = RecoverNone
 	default:
 		r.Recovery = RecoverHostExecution
 	}
@@ -286,6 +288,26 @@ func isBenignSocketProbe(target string) bool {
 	return slices.Contains(systemResolverSocketPaths, target) ||
 		target == "fsmonitor--daemon.ipc" ||
 		strings.HasSuffix(target, "/fsmonitor--daemon.ipc")
+}
+
+// The kernel answers a refused system-info query with redacted values instead
+// of failing it. Programs open routing (AF_ROUTE) and kernel control or event
+// (AF_SYSTEM) sockets to read interface state and continue without them; the
+// controls that change state need root, which host execution does not grant.
+const (
+	socketFamilyRoute  = "17"
+	socketFamilySystem = "32"
+)
+
+// isStateObservationSocket reads the family from the kernel's
+// `domain:<n> type:<n> protocol:<n>` system-socket target.
+func isStateObservationSocket(target string) bool {
+	for field := range strings.FieldsSeq(target) {
+		if family, ok := strings.CutPrefix(field, "domain:"); ok {
+			return family == socketFamilyRoute || family == socketFamilySystem
+		}
+	}
+	return false
 }
 
 // operationAccess classifies the kernel's filesystem operations; empty for

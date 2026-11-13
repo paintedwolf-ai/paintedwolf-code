@@ -70,6 +70,47 @@ func TestSandboxRecoveryRoutesDeclaredCapabilityFacts(t *testing.T) {
 	}
 }
 
+// Invariant I10, delivery half: refusals that withhold interface state route
+// to no recovery (confine's routing invariant), so whatever mix of them a
+// program trips, no host execution is recommended, and a reported listener
+// still delivers the listen recovery beside them.
+func TestInterfaceStateRefusalsNeverRecommendHostExecution(t *testing.T) {
+	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
+	mgr := newPostToolGuidanceManager(t)
+	probes := []confine.SandboxRefusal{
+		{Operation: "system-socket", Target: "domain:32 type:2 protocol:2", Process: "Python", Count: 1, Recovery: confine.RecoverNone},
+		{Operation: "system-info", Target: "net.link.addr", Process: "Python", Count: 1, Recovery: confine.RecoverNone},
+		{Operation: "system-socket", Target: "domain:17 type:3 protocol:0", Process: "node", Count: 1, Recovery: confine.RecoverNone},
+	}
+	listener := confine.SandboxRefusal{Operation: "network-bind", Target: "local:*:8765", Process: "Python", Count: 1, Recovery: confine.RecoverLocalListen}
+	for mask := 1; mask < 1<<len(probes); mask++ {
+		for _, withListener := range []bool{false, true} {
+			for _, running := range []bool{false, true} {
+				var refusals []confine.SandboxRefusal
+				for i, probe := range probes {
+					if mask&(1<<i) != 0 {
+						refusals = append(refusals, probe)
+					}
+				}
+				if withListener {
+					refusals = append(refusals, listener)
+				}
+				obs := confine.Observation{Applied: true, Running: running, Refusals: confine.SandboxRefusals{Witness: confine.WitnessKernel, Refusals: refusals}}
+				if !running {
+					obs.FailedStages = []string{"python3 -m http.server 8765"}
+				}
+				_, facts := mgr.ToolPolicy.AfterTool(tools.WithCallReach(t.Context(), toolreach.Offered([]string{"command"})), &api.Session{ID: t.Name()}, "command", map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
+				if facts.HasCode("SANDBOX_TRY_HOST_EXECUTION") {
+					t.Errorf("probes %b listener=%v running=%v: host execution recommended", mask, withListener, running)
+				}
+				if facts.HasCode("SANDBOX_TRY_LOCAL_NETWORK") != withListener {
+					t.Errorf("probes %b listener=%v running=%v: listen recovery delivered=%v", mask, withListener, running, !withListener)
+				}
+			}
+		}
+	}
+}
+
 func TestSandboxRecoveryPreservesRunningJobDependency(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", filepath.Join(t.TempDir(), "config"))
 	mgr := newPostToolGuidanceManager(t)
