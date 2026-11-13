@@ -144,7 +144,7 @@ func TestExplicitRouteAskPostureRequiresSelectedRouteAndPreservesOrdinaryDNS(t *
 	confine.SetEgressPosture(confine.PostureAsk)
 	t.Cleanup(func() {
 		confine.SetEgressPosture(confine.PostureObserve)
-		confine.SetEgressResolver(nil)
+		restoreResolver()
 	})
 
 	for _, tcCase := range []struct {
@@ -331,7 +331,7 @@ func newRedirectRouteFixture(t *testing.T) *redirectRouteFixture {
 	confine.SetEgressPosture(confine.PostureAsk)
 	t.Cleanup(func() {
 		confine.SetEgressPosture(confine.PostureObserve)
-		confine.SetEgressResolver(nil)
+		restoreResolver()
 	})
 
 	confine.SetEgressResolver(func(ctx context.Context, _ confine.EgressCommand, ep egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {

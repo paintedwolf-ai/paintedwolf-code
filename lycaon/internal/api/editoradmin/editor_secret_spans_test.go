@@ -102,6 +102,11 @@ func TestScreenProjectionCompletesInTheBackground(t *testing.T) {
 		t.Fatalf("completed screen = %+v", screen)
 	}
 
+	// The background goroutine keeps publishing after the screen lands in
+	// the memo; drain it before swapping the screener so the swap cannot
+	// race the completion's event work.
+	f.h.background.Wait(t.Context())
+
 	spans := f.h.SecretSpans
 	f.h.SecretSpans = nil
 	status, none := f.h.EditorScreenProjection(t.Context(), d)
@@ -149,7 +154,7 @@ func TestRepublishWithoutEventsOnlyInvalidatesTheScreen(t *testing.T) {
 	if f.h.editorScreens.begin(d.ID, d.ProjectID, "digest") {
 		t.Fatal("a pending screening was admitted twice")
 	}
-	f.h.finishEditorScreen(t.Context(), *d, "digest")
+	f.h.finishEditorScreen(t.Context(), f.h.SecretSpans, *d, "digest")
 	if _, ok := f.h.EditorScreen(d.ID, "digest"); !ok {
 		t.Fatal("finished screen was not retained for an unpublished document")
 	}

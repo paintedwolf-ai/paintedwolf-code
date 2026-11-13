@@ -19,17 +19,31 @@ func TestHostKey(t *testing.T) {
 	}
 }
 
-func TestVisitedHostsFromLedger(t *testing.T) {
+// Hosts that only appear in ingested content are not contacts; the chat's
+// own dial outranks an audited dial, which outranks a retrieval of the same
+// host.
+func TestContactsAreOnlyDialedHosts(t *testing.T) {
+	dialed, _ := DialedHostRecord("dialed.example")
+	retrieved, _ := RetrievedHostRecord("retrieved.example")
+	both, _ := RetrievedHostRecord("both.example")
+	bothOwn, _ := DialedHostRecord("both.example")
+	audited, _ := AuditedHostRecord("audited.example")
+	auditedRetrieved, _ := RetrievedHostRecord("audited.example")
+	auditedOwn, _ := AuditedHostRecord("both.example")
 	ev := AssembleLedger([]Record{
 		{Handle: "web#1", URL: "https://a.example/x", SourceTool: "fetch_url"},
 		{Handle: "web#2", URL: "https://B.example/y", SourceTool: "web_search"},
 		{Handle: "file#1", Path: "a.go", SourceTool: "read"},
+		dialed, retrieved, both, bothOwn, audited, auditedRetrieved, auditedOwn,
 	})
-	hosts := VisitedHostsFromLedger(ev)
-	if _, ok := hosts["a.example"]; !ok {
-		t.Fatalf("missing a.example: %v", hosts)
+	want := map[string]Contact{"dialed.example": ContactOwn, "retrieved.example": ContactRetrieval, "both.example": ContactOwn, "audited.example": ContactAudited}
+	got := ContactsFromLedger(ev)
+	if len(got) != len(want) {
+		t.Fatalf("contacts %v, want %v", got, want)
 	}
-	if _, ok := hosts["b.example"]; !ok {
-		t.Fatalf("missing b.example: %v", hosts)
+	for host, contact := range want {
+		if got[host] != contact {
+			t.Fatalf("%s: contact %d, want %d", host, got[host], contact)
+		}
 	}
 }

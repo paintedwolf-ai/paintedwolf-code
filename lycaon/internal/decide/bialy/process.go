@@ -240,10 +240,12 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 	raw = append(raw, '\n')
 	_, err = p.stdin.Write(raw)
 	if err != nil {
-		// A partial write may already have submitted work.
+		// A partial write may already have submitted work. The reader reaps
+		// the exit status and stderr before done closes, so report the
+		// engine's exit rather than the pipe error the write tripped over.
 		p.kill()
 		<-p.done
-		return response{}, errors.Join(errEngineExited, err)
+		return response{}, p.exitErr
 	}
 	select {
 	case resp, ok := <-ch:

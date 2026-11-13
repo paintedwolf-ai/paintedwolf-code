@@ -1,6 +1,6 @@
 import type { LycaonClient } from "../../../api/client.ts";
 import type { ChatContentReference, ChatContentRow, RedactedSpan } from "../../../api/types.ts";
-import { DEFAULT_PRETTY_RESOURCE_LIMITS, utf8ByteLength } from "../../../components/source/pretty/pretty-limits.ts";
+import { PRETTY_MAX_INPUT } from "../../../components/source/pretty/pretty-layout.ts";
 import { ByteCache, retainedValueBytes } from "../../../utils/byte-cache.ts";
 
 export type ChatContentBoundedSnapshot = {
@@ -27,6 +27,11 @@ export type ChatContentAccess = {
 };
 
 /** The observer projection carries the first viewport before a card is clicked. */
+/** Whether retained content is too large to load whole for Pretty. A character is at most four UTF-8 bytes. */
+export function exceedsPrettyInput(reference: { total_runes: number; size_bytes: number }): boolean {
+  return reference.total_runes > PRETTY_MAX_INPUT || reference.size_bytes > 4 * PRETTY_MAX_INPUT;
+}
+
 export function createChatContentAccess(options: {
   client: LycaonClient;
   sessionId: string;
@@ -63,12 +68,7 @@ export function createChatContentAccess(options: {
       return parts.join("");
     },
     readBoundedSnapshot: async (signal) => {
-      if (
-        reference.size_bytes > DEFAULT_PRETTY_RESOURCE_LIMITS.maxInputUtf8Bytes ||
-        reference.total_runes > DEFAULT_PRETTY_RESOURCE_LIMITS.maxInputUtf16Units
-      ) {
-        return null;
-      }
+      if (exceedsPrettyInput(reference)) return null;
       const cacheKey = `${prefix}snapshot`;
       const cached = snapshots.get(cacheKey);
       if (cached && cached.sha256 === reference.sha256 && cached.totalRunes === reference.total_runes) {
@@ -116,15 +116,12 @@ export function createChatContentAccess(options: {
           spans.push({ ...span, start: offset + span.start });
         }
         utf16Total += page.text.length;
-        if (utf16Total > DEFAULT_PRETTY_RESOURCE_LIMITS.maxInputUtf16Units) return null;
+        if (utf16Total > PRETTY_MAX_INPUT) return null;
         parts.push(page.text);
         offset = page.end_offset;
         if (offset === reference.total_runes && page.complete === false) return null;
       }
       const fullText = parts.join("");
-      if (utf8ByteLength(fullText) > DEFAULT_PRETTY_RESOURCE_LIMITS.maxInputUtf8Bytes) {
-        return null;
-      }
       const result: ChatContentBoundedSnapshot = {
         sha256: reference.sha256,
         totalRunes: reference.total_runes,

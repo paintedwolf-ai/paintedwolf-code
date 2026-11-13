@@ -42,7 +42,12 @@ func TestProtectedStandardStreamModuleIngress(t *testing.T) {
 	var backing unix.Stat_t
 	testutil.FailErr(t, "record memfd kernel identity", unix.Fstat(descriptor, &backing))
 	t.Logf("module SHA256=%x size=%d device=%d inode=%d mode=%o", sha256.Sum256(raw), len(raw), backing.Dev, backing.Ino, backing.Mode)
-	environment := []string{"HOME=" + home, "PATH=/usr/bin:/bin", "DISPLAY=" + display, "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
+	// The fixture install root ships a bwrap shim: inside the protected
+	// desktop Landlock denies mount(2), the runner's glycin icon loaders
+	// misread the real bwrap death there, and the shim makes glycin run its
+	// loader directly instead. Both lanes share the environment.
+	fixture := installLaunchFixture(t)
+	environment := []string{"HOME=" + home, "PATH=" + filepath.Join(fixture.install, "bin") + ":/usr/bin:/bin", "DISPLAY=" + display, "LANG=C.UTF-8", "DBUS_SESSION_BUS_ADDRESS=unix:path=" + filepath.Join(home, "absent-session-bus")}
 	marker := filepath.Join(home, "stream-module-marker")
 	report := filepath.Join(home, "gtk-report.json")
 	run := func(program string) streamGTKFacts {
@@ -74,7 +79,6 @@ func TestProtectedStandardStreamModuleIngress(t *testing.T) {
 		t.Fatalf("constructor marker %q", loaded)
 	}
 	testutil.FailErr(t, "clear positive-control marker", os.Remove(marker))
-	fixture := installLaunchFixture(t)
 	binaries := append([]string(nil), fixture.binaries...)
 	binaries[2] = desktop
 	testutil.FailErr(t, "stage actual GTK desktop with exact selected helpers", sudoFixture(t, "upgrade-gtk", fixture.dir, fixtureBinsEnv+"="+strings.Join(binaries, ":")))

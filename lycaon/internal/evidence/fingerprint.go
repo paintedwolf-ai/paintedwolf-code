@@ -128,6 +128,9 @@ func buildEvidenceRecord(projectDir, toolName string, args map[string]any, conte
 		rec.Fidelity = FidelityStructured
 		rec.touchURL(stringArg(args, "url"))
 		populateFetchTitle(&rec, stringArg(args, "url"), content)
+		for _, shown := range urlsInToolBody(stripToolHostSuffix(content)) {
+			rec.showURL(shown)
+		}
 		if dest := stringArg(args, "dest"); dest != "" {
 			addRecordPath(projectDir, &rec, dest, FidelityStructured)
 			rec.Custody.External = true
@@ -382,10 +385,30 @@ func populateHTTPRequestRecord(projectDir string, rec *Record, args map[string]a
 				addRecordPath(projectDir, rec, strings.TrimSpace(spillPath), FidelityStructured)
 			}
 		}
+		// Header values, redirect targets and cookie names are the server's
+		// text, delivered whatever happened to the body.
+		if carriesServerText(obj) {
+			rec.UntrustedContent = true
+		}
 	}
 	captureRecordBody(rec, content)
 }
 
+func carriesServerText(obj map[string]any) bool {
+	for _, key := range []string{"headers", "redirects", "cookies"} {
+		switch v := obj[key].(type) {
+		case []any:
+			if len(v) > 0 {
+				return true
+			}
+		case map[string]any:
+			if len(v) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
 func isSyntacticLoopbackURL(rawURL string) bool {
 	u, err := url.Parse(strings.TrimSpace(rawURL))
 	if err != nil || u.Hostname() == "" {

@@ -267,8 +267,7 @@ func TestExecuteResumeInjectsAssignmentPrompt(t *testing.T) {
 
 type outcomeRunner struct {
 	fakePromptRunner
-	msgs                []api.Message
-	closeoutAddsLegTool bool
+	msgs []api.Message
 }
 
 func (o *outcomeRunner) Prompt(ctx context.Context, sessionID, text string) (*promptresult.Result, error) {
@@ -278,12 +277,7 @@ func (o *outcomeRunner) Prompt(ctx context.Context, sessionID, text string) (*pr
 		text      string
 	}{sessionID, text})
 	o.mu.Unlock()
-	if o.closeoutAddsLegTool && strings.Contains(text, "[host:worker-closeout]") {
-		o.msgs = append(o.msgs, api.Message{
-			Role:       api.MessageRoleTool,
-			ToolResult: &api.ToolResult{Tool: "complete_leg", Outcome: api.ToolResultOutcomeCompleted, ToolArgs: map[string]any{"leg_status": "complete", "findings": []any{map[string]any{"path": "a.go", "line": 1, "excerpt": "package a"}}, "objectives_met": []string{"Surveyed a.go"}, "brief": "Surveyed a.go"}},
-		})
-	}
+
 	return &promptresult.Result{MessageID: "msg-1"}, nil
 }
 
@@ -322,11 +316,10 @@ func (o *outcomeRunner) WorkerSummaryFinalizeOpts(context.Context, *api.Session)
 	}
 }
 
-func TestExecuteResolvesSummaryWithoutPlaceholder(t *testing.T) {
+func TestExecutePreservesObservedPartialWithoutAcceptedReport(t *testing.T) {
 	dir := t.TempDir()
 	readJSON := `{"path":"a.go","content":"1|package a","offset":1,"end_line":1,"limit":10}`
 	runner := &outcomeRunner{
-		closeoutAddsLegTool: true,
 		msgs: []api.Message{
 			{
 				Role:      api.MessageRoleAssistant,
@@ -347,14 +340,36 @@ func TestExecuteResolvesSummaryWithoutPlaceholder(t *testing.T) {
 	if strings.TrimSpace(result.Summary) == "" {
 		t.Fatal("result summary empty after closeout synthesis")
 	}
-	if result.Status != "complete" {
-		t.Fatalf("status = %q want complete", result.Status)
+	if result.Status != "partial" {
+		t.Fatalf("status = %q want partial", result.Status)
 	}
 	if result.CompletionReport == nil || result.CompletionReport.Brief == "" {
 		t.Fatalf("completion report = %+v", result.CompletionReport)
 	}
-	if len(runner.promptCalls) < 2 {
-		t.Fatalf("promptCalls = %d want primary + closeout", len(runner.promptCalls))
+	if len(runner.promptCalls) != 1 {
+		t.Fatalf("promptCalls = %d want one primary turn", len(runner.promptCalls))
+	}
+}
+
+func TestExecuteRetainsAcceptedReportWithoutAnotherTurn(t *testing.T) {
+	report := &api.WorkerReportAcceptance{
+		WorkerID:  "job-accepted",
+		Report:    &api.WorkerCompletionReport{LegStatus: "complete", Brief: "Inspected assigned source"},
+		Grounding: &api.CitationGrounding{Traced: true},
+	}
+	runner := &outcomeRunner{msgs: []api.Message{{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+		Tool: "complete_leg", Outcome: api.ToolResultOutcomeCompleted, WorkerReport: report,
+	}}}}
+	exec := newTestWorkerExecutor(t, runner)
+	result, err := exec.Execute(t.Context(), api.WorkerTask{
+		ID: "job-accepted", ParentSessionID: "parent-1", Prompt: "inspect", Brief: "fixture", AgentType: "path-explorer",
+	}, WorkerRunContext{ProjectDir: t.TempDir()})
+	testutil.FailErr(t, "execute accepted report", err)
+	if result.Status != "complete" || result.CompletionReport == nil || result.CompletionReport.Brief != report.Report.Brief {
+		t.Fatalf("accepted report changed: %+v", result)
+	}
+	if len(runner.promptCalls) != 1 {
+		t.Fatalf("promptCalls = %d want one primary turn", len(runner.promptCalls))
 	}
 }
 

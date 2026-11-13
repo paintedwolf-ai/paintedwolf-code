@@ -56,6 +56,9 @@ func TestProtectedLaunchFixture(t *testing.T) {
 	case "seal-entry-child":
 		err = runSealEntryChild(dir)
 	case "remove":
+		if target, linkErr := os.Readlink("/run/painted-wolf-code/vault-identity.sock"); linkErr == nil && strings.HasPrefix(target, dir+"/") {
+			_ = os.Remove("/run/painted-wolf-code/vault-identity.sock")
+		}
 		err = os.RemoveAll(dir)
 	case "lock-free":
 		err = lockFree(filepath.Join(dir, "locks", os.Getenv(fixtureHash)+".lock"))
@@ -122,8 +125,8 @@ func lockFree(path string) error {
 const fixtureLibraryRoot = "/usr/lib"
 
 func installFixture(dir string, binaries []string) error {
-	if len(binaries) != 4 {
-		return errors.New("fixture needs bootstrap, entry, desktop and fixed transition binaries")
+	if len(binaries) != 5 {
+		return errors.New("fixture needs bootstrap, entry, desktop, fixed transition and bwrap shim binaries")
 	}
 	install := filepath.Join(dir, "install")
 	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
@@ -161,8 +164,8 @@ func copyRootBinary(source, target string, mode uint32, extra []byte) (string, i
 }
 
 func stageFixtureGeneration(dir, version string, binaries []string, extra []byte) error {
-	if len(binaries) != 4 {
-		return errors.New("fixture needs bootstrap, entry, desktop and fixed transition binaries")
+	if len(binaries) != 5 {
+		return errors.New("fixture needs bootstrap, entry, desktop, fixed transition and bwrap shim binaries")
 	}
 	install := filepath.Join(dir, "install")
 	staging := filepath.Join(dir, "staging")
@@ -186,6 +189,7 @@ func stageFixtureGeneration(dir, version string, binaries []string, extra []byte
 		{binaries[2], "painted-wolf-code", extra},
 		{binaries[2], "pw", extra},
 		{binaries[3], "pw-mount-intake-transition", nil},
+		{binaries[4], "bwrap", nil},
 	} {
 		sum, size, err := copyRootBinary(role.source, filepath.Join(staging, "bin", role.name), 0o755, role.extra)
 		if err != nil {
@@ -256,6 +260,16 @@ func runVaultServer(dir, vaultBin, uidStr, gidStr string) error {
 		}
 	}
 	if err := os.WriteFile(filepath.Join(dir, "vault.pid"), []byte(strconv.Itoa(os.Getpid())), 0o644); err != nil {
+		return err
+	}
+	if err := os.MkdirAll("/run/painted-wolf-code", 0o755); err != nil {
+		return err
+	}
+	if err := os.Chmod("/run/painted-wolf-code", 0o755); err != nil {
+		return err
+	}
+	_ = os.Remove("/run/painted-wolf-code/vault-identity.sock")
+	if err := os.Symlink(filepath.Join(runDir, "vault.sock"), "/run/painted-wolf-code/vault-identity.sock"); err != nil {
 		return err
 	}
 	runtime.LockOSThread()
@@ -355,7 +369,10 @@ var sharedLaunchHelpers = sync.OnceValues(func() (string, error) {
 	if err := buildBinary(filepath.Join(dir, "pw-launch-entry"), "github.com/lycaon/lycaon/cmd/pw-launch-entry", ""); err != nil {
 		return "", err
 	}
-	if err := buildBinary(filepath.Join(dir, "painted-wolf-code"), "./testdata/protecteddesktop", ""); err != nil {
+	if err := buildBinary(filepath.Join(dir, "painted-wolf-code"), "./testdata/protecteddesktop", "", "-tags=paintedwolf_release"); err != nil {
+		return "", err
+	}
+	if err := buildBinary(filepath.Join(dir, "bwrap"), "./testdata/bwrapshim", ""); err != nil {
 		return "", err
 	}
 	return dir, buildMountTransitionImage(filepath.Join(dir, "pw-mount-intake-transition"))
@@ -386,12 +403,13 @@ func installLaunchFixture(t *testing.T, modes ...launchFixtureBuild) launchFixtu
 		layout += " " + linked
 		entryFlags = linked
 	}
-	binaries := []string{filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry"), filepath.Join(build, "painted-wolf-code"), filepath.Join(build, "pw-mount-intake-transition")}
+	binaries := []string{filepath.Join(build, "pw-launch"), filepath.Join(build, "pw-launch-entry"), filepath.Join(build, "painted-wolf-code"), filepath.Join(build, "pw-mount-intake-transition"), filepath.Join(build, "bwrap")}
 	goBuild(t, binaries[0], "github.com/lycaon/lycaon/cmd/pw-launch", layout, options...)
 	if measured {
 		goBuild(t, binaries[1], "github.com/lycaon/lycaon/cmd/pw-launch-entry", entryFlags, options...)
-		goBuild(t, binaries[2], "./testdata/protecteddesktop", "")
+		goBuild(t, binaries[2], "./testdata/protecteddesktop", "", "-tags=paintedwolf_release")
 		buildMountTransition(t, binaries[3])
+		goBuild(t, binaries[4], "./testdata/bwrapshim", "")
 	} else {
 		helpers, err := sharedLaunchHelpers()
 		testutil.FailErr(t, "build shared launch helpers", err)

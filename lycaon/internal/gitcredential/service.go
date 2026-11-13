@@ -2,6 +2,7 @@ package gitcredential
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/osprocess"
+	"github.com/lycaon/lycaon/internal/socketref"
 )
 
 // SocketEnv carries the per-invocation service socket to the helper Git runs.
@@ -29,7 +31,9 @@ type ServeOptions struct {
 	// GitBinary is the bundled git the helper must descend from.
 	GitBinary string
 	// Store answers helper operations; the vault when nil.
-	Store backend
+	Store Backend
+	// Scope, when set, limits answers to the invocation's admitted recipients.
+	Scope *Scope
 }
 
 // Service answers the credential-helper protocol for one Git invocation over
@@ -39,7 +43,7 @@ type ServeOptions struct {
 type Service struct {
 	listener  *net.UnixListener
 	directory string
-	store     backend
+	store     Backend
 	gitBinary string
 	helper    string
 	deadline  time.Duration
@@ -70,7 +74,7 @@ func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("git credential service: %w", err)
 	}
-	directory, err := os.MkdirTemp(socketRoot(), "pw-git-")
+	directory, err := socketref.ServiceDirectory()
 	if err != nil {
 		return nil, fmt.Errorf("git credential service: %w", err)
 	}
@@ -83,6 +87,9 @@ func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
 	if store == nil {
 		store = VaultBackend()
 	}
+	if options.Scope != nil {
+		store = scopedBackend{inner: store, scope: options.Scope}
+	}
 	service := &Service{
 		listener: listener, directory: directory, store: store, gitBinary: gitBinary, helper: helper,
 		deadline: requestDeadline, bound: make(chan struct{}),
@@ -91,16 +98,6 @@ func Serve(ctx context.Context, options ServeOptions) (*Service, error) {
 	go service.accept()
 	context.AfterFunc(ctx, func() { _ = service.Close() })
 	return service, nil
-}
-
-// socketRoot prefers the per-user runtime directory, whose lifetime is the session.
-func socketRoot() string {
-	if runtime := filepath.Clean(os.Getenv("XDG_RUNTIME_DIR")); filepath.IsAbs(runtime) {
-		if info, err := os.Stat(runtime); err == nil && info.IsDir() {
-			return runtime
-		}
-	}
-	return os.TempDir()
 }
 
 // Bind names the started process of the served invocation: the git process
@@ -163,10 +160,11 @@ func (s *Service) handle(conn *net.UnixConn) error {
 	case <-time.After(time.Until(deadline)):
 		return errors.New("git credential service was never bound to its invocation")
 	}
-	if err := verifyPeer(conn, s.helper, s.gitBinary, s.served); err != nil {
+	first, err := verifyPeer(conn, s.helper, s.gitBinary, s.served)
+	if err != nil {
 		return err
 	}
-	reader := bufio.NewReader(io.LimitReader(conn, maxCredentialInputBytes+maxOperation+2))
+	reader := bufio.NewReader(io.LimitReader(io.MultiReader(bytes.NewReader(first), conn), maxCredentialInputBytes+maxOperation+2))
 	operation, err := reader.ReadString('\n')
 	if err != nil {
 		return err
@@ -206,7 +204,7 @@ func Forward(operation, socketPath string, in io.Reader, out io.Writer) error {
 	if len(request) > maxCredentialInputBytes {
 		return errors.New("credential request exceeds its limit")
 	}
-	if _, err := io.WriteString(conn, operation+"\n"); err != nil {
+	if err := writeIdentified(conn, []byte(operation+"\n")); err != nil {
 		return err
 	}
 	if _, err := conn.Write(request); err != nil {

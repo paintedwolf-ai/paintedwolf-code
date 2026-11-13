@@ -24,8 +24,21 @@ import {
   registerPrettySurfaceCapability,
   resetPrettyDisplayStateForTests,
   setPrettyDisplayEnabled,
+  setPrettyLayoutOutcome,
   togglePrettyDisplayPref,
 } from "./pretty-display-state.ts";
+
+// A surface whose view reports layout active whenever Pretty is on, as an editor with a layout rule does.
+function reportingSurface(projectId: string, tabKey: string) {
+  setPrettyLayoutOutcome(projectId, tabKey, isPrettyDisplayEnabled(projectId, tabKey) ? { kind: "active" } : { kind: "off" });
+  return registerPrettySurfaceCapability(projectId, tabKey, {
+    enabled: () => isPrettyDisplayEnabled(projectId, tabKey),
+    onToggle: () => {
+      const next = togglePrettyDisplayPref(projectId, tabKey);
+      setPrettyLayoutOutcome(projectId, tabKey, next ? { kind: "active" } : { kind: "off" });
+    },
+  });
+}
 
 afterEach(() => {
   cleanup();
@@ -131,18 +144,8 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
     expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
     expect(invokePrettyToggleForTab(projectId, tabA)).toBe(false);
 
-    const unregisterA = registerPrettySurfaceCapability(projectId, tabA, {
-      enabled: () => isPrettyDisplayEnabled(projectId, tabA),
-      onToggle: () => {
-        togglePrettyDisplayPref(projectId, tabA);
-      },
-    });
-    const unregisterB = registerPrettySurfaceCapability(projectId, tabB, {
-      enabled: () => isPrettyDisplayEnabled(projectId, tabB),
-      onToggle: () => {
-        togglePrettyDisplayPref(projectId, tabB);
-      },
-    });
+    const unregisterA = reportingSurface(projectId, tabA);
+    const unregisterB = reportingSurface(projectId, tabB);
 
     expect(prettyBtn.disabled).toBe(false);
     expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
@@ -262,19 +265,55 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
     expect(icons[0]?.getAttribute("data-tip")).toBe("File comparison");
   });
 
-  it("drives persistent depressed styling for both Pretty and Wrap from aria-pressed while keeping their selection independent (FMT-AC-06)", async () => {
+  it("shows Pretty pressed only while layout is active, disabled without a rule, and gives a reason at a limit (FMT-AC-28)", () => {
+    const projectId = "proj-outcomes";
+    const tabKey = fileBufferKey("root", "big.json");
+    const [toggle, setToggle] = createSignal(prettyStatusToggleForTab(projectId, tabKey));
+    const view = render(() => (
+      <FilesEditorStatus
+        identity={resolveEditorIdentity({ historical: false, workerDraft: false, deleted: false, writable: true, preview: false, editable: true })}
+        dirtyCount={0}
+        language="JSON"
+        pretty={toggle()}
+      />
+    ));
+    const refresh = () => setToggle(prettyStatusToggleForTab(projectId, tabKey));
+    const prettyBtn = view.getByTestId("files-editor-pretty-toggle") as HTMLButtonElement;
+    const unregister = registerPrettySurfaceCapability(projectId, tabKey, {
+      enabled: () => isPrettyDisplayEnabled(projectId, tabKey),
+      onToggle: () => {
+        togglePrettyDisplayPref(projectId, tabKey);
+      },
+    });
+    setPrettyDisplayEnabled(projectId, tabKey, true);
+    setPrettyLayoutOutcome(projectId, tabKey, { kind: "limit", reason: "size", length: 3_000_000 });
+    refresh();
+    expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+    expect(prettyBtn.disabled).toBe(false);
+    expect(view.getByTestId("files-editor-pretty-reason").textContent).toBe("Too large for Pretty");
+    expect(isPrettyDisplayEnabled(projectId, tabKey)).toBe(true);
+
+    setPrettyLayoutOutcome(projectId, tabKey, { kind: "active" });
+    refresh();
+    expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
+    expect(view.queryByTestId("files-editor-pretty-reason")).toBeNull();
+
+    setPrettyLayoutOutcome(projectId, tabKey, { kind: "unavailable" });
+    refresh();
+    expect(prettyBtn.disabled).toBe(true);
+    expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+    expect(isPrettyDisplayEnabled(projectId, tabKey)).toBe(true);
+    unregister();
+  });
+
+  it("shows Wrap pressed and disabled while Pretty is on and restores the stored Wrap preference after (FMT-AC-06)", async () => {
     const projectId = "proj-independent-toggles";
     const tabKey = fileBufferKey("root", "both.json");
     const initialWrap = editorWordWrapPref();
     await saveEditorWordWrap(false);
 
     try {
-      const unregister = registerPrettySurfaceCapability(projectId, tabKey, {
-        enabled: () => isPrettyDisplayEnabled(projectId, tabKey),
-        onToggle: () => {
-          togglePrettyDisplayPref(projectId, tabKey);
-        },
-      });
+      const unregister = reportingSurface(projectId, tabKey);
 
       const view = render(() => (
         <FilesEditorStatus
@@ -295,24 +334,34 @@ describe("Pretty display host contributions and status chrome (FMT-AC-06, FMT-IN
       const prettyBtn = view.getByTestId("files-editor-pretty-toggle") as HTMLButtonElement;
       const wrapBtn = view.getByTestId("files-editor-wrap-toggle") as HTMLButtonElement;
 
-      // 1. Both off
+      // Both off.
       expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
       expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.disabled).toBe(false);
 
-      // 2. Pretty on, Wrap off
+      // Pretty on: Wrap shows pressed and disabled; its preference is unchanged.
       fireEvent.click(prettyBtn);
       expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
-      expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
-
-      // 3. Both Pretty and Wrap on simultaneously
-      fireEvent.click(wrapBtn);
-      expect(prettyBtn.getAttribute("aria-pressed")).toBe("true");
       expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(wrapBtn.disabled).toBe(true);
+      fireEvent.click(wrapBtn);
+      expect(editorWordWrapPref()).toBe(false);
 
-      // 4. Pretty off via Alt+P/menu handler while Wrap remains on
+      // Pretty off: the stored preference applies again.
       expect(invokePrettyToggleForTab(projectId, tabKey)).toBe(true);
       expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("false");
+      expect(wrapBtn.disabled).toBe(false);
+
+      // Wrap on, then Pretty on and off: Wrap stays pressed throughout.
+      fireEvent.click(wrapBtn);
+      await Promise.resolve();
       expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+      fireEvent.click(prettyBtn);
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(invokePrettyToggleForTab(projectId, tabKey)).toBe(true);
+      expect(wrapBtn.getAttribute("aria-pressed")).toBe("true");
+      expect(editorWordWrapPref()).toBe(true);
 
       unregister();
     } finally {

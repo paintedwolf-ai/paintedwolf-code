@@ -638,6 +638,21 @@ it.each(["unchanged", "changed", "metadata"])("preserves opening bytes when %s s
   expect(host.text.toString()).toBe(view.state.doc.toString());
 });
 
+describe("leaving on unload", () => {
+  it("leaves with its identity at once, and not after it has stopped", async () => {
+    const leaveEditorDocument = vi.fn(async () => undefined);
+    const { replica } = await open(new DocumentFixture(), memoryDocumentOutbox(), { leaveEditorDocument });
+    replica.departOnUnload();
+    expect(leaveEditorDocument).toHaveBeenCalledWith(replica.accepted.project_id, replica.accepted.id, {
+      client_id: replica.clientId, incarnation: replica.incarnation,
+    });
+    await replica.close();
+    leaveEditorDocument.mockClear();
+    replica.departOnUnload();
+    expect(leaveEditorDocument).not.toHaveBeenCalled();
+  });
+});
+
 describe("refused edits", () => {
   it("sets refused edits aside one undo away and returns to the host text", async () => {
     const host = new DocumentFixture();
