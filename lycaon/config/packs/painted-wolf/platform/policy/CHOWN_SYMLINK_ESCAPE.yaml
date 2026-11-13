@@ -1,33 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: CHOWN_SYMLINK_ESCAPE
 kind: schema
-anchor: tool.rejected
-selector:
-  paintedwolf.operation:
-  - chown
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.operation
-  - paintedwolf.path_escape
-  - paintedwolf.path
-when: paintedwolf.rejection_code == "CHOWN_SYMLINK_ESCAPE"
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.path_escape, paintedwolf.rejection_code]
+when: paintedwolf.operation == "chown" && paintedwolf.rejection_code == "CHOWN_SYMLINK_ESCAPE"
 effect: block
-copy:
-  cause: The resolved target leaves the workspace or write scope.
-  why: The resolved target needs its own write authority.
-  fix: Use an intended in-scope target only; do not replace or retarget links merely to evade the boundary.
-  instead: Branch on Code CHOWN_SYMLINK_ESCAPE; preserve resolved-target authority
-  what: The link target for {{ paintedwolf.path }} is outside the permitted ownership-change scope.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:chown
-x-paintedwolf-message: chown:chown symlink target escapes scope
+message: chown:chown symlink target escapes scope
+what: The link target for {{ paintedwolf.path }} is outside the permitted ownership-change scope.
+cause: The resolved target leaves the workspace or write scope.
+why: The resolved target needs its own write authority.
+fix: Use an intended in-scope target only; do not replace or retarget links merely to evade the boundary.
+instead: Branch on Code CHOWN_SYMLINK_ESCAPE; preserve resolved-target authority
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: scripts/run.sh
-    profile: implement
-    tool: chown
+  - id: default
+    vars:
+      detail: bad args
+      path: scripts/run.sh
+      profile: implement
+      tool: chown

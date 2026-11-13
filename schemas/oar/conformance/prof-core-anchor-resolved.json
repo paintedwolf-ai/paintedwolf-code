@@ -1,0 +1,31 @@
+{
+  "id": "prof-core-anchor-resolved",
+  "title": "A rule on a core anchor is resolved through the host profile map and fires",
+  "covers": [
+    "OAR-PROF-1",
+    "OAR-PROF-3",
+    "OAR-CONF-3"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "PORTABLE_POST_TURN",
+    "kind": "invariant",
+    "on": "agent.post_turn",
+    "selector": {},
+    "effect": "nudge",
+    "when": "not_found",
+    "requires_facts": [
+      "not_found"
+    ]
+  },
+  "input": {
+    "anchor": "agent.post_turn",
+    "facts": {
+      "not_found": true
+    }
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "PORTABLE_POST_TURN"
+  }
+}

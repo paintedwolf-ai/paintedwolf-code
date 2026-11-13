@@ -1,32 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_PWD_NOT_CWD
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - command
-  - verify
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.cwd
-  - paintedwolf.pwd
+  tools:
+    - command
+    - verify
+requires_facts: [paintedwolf.cwd, paintedwolf.pwd, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_PWD_NOT_CWD"
 effect: block
-copy:
-  what: env.PWD ({{ paintedwolf.pwd }}) does not match the resolved working directory ({{ paintedwolf.cwd }}) for this {{ tool }} call.
-  cause: cwd comes from the per-call cwd arg (branch-anchored on write workers), not env.PWD.
-  why: env.PWD is a plain environment variable; it does not chdir.
-  fix: ''
-  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: env.PWD does not set the working directory
+message: env.PWD does not set the working directory
+what: env.PWD ({{ paintedwolf.pwd }}) does not match the resolved working directory ({{ paintedwolf.cwd }}) for this {{ tool }} call.
+cause: cwd comes from the per-call cwd arg (branch-anchored on write workers), not env.PWD.
+why: env.PWD is a plain environment variable; it does not chdir.
+fix: ''
+instead: ''
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    command: go mod tidy
-    cwd: /project
-    pwd: /project/subdir
+  - id: default
+    vars:
+      command: go mod tidy
+      cwd: /project
+      pwd: /project/subdir

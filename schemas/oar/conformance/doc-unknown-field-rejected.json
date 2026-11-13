@@ -1,0 +1,27 @@
+{
+  "id": "doc-unknown-field-rejected",
+  "title": "A field the specification does not define is rejected, naming the key",
+  "covers": [
+    "OAR-DOC-19",
+    "OAR-CONF-1"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "UNKNOWN_KEY",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true",
+    "not_a_field": "nope"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "not_a_field"
+  }
+}

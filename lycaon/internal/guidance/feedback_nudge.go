@@ -15,7 +15,7 @@ type GuidanceNudge struct {
 }
 
 // ErrGroundingNudge is a non-fatal grounding warning injected after a turn.
-// Code is the first fired identifier ([OAR-EVAL-19]). Items is every advisory.
+// Code is the first fired identifier. Items is every advisory.
 type ErrGroundingNudge struct {
 	Code  string
 	Data  map[string]any

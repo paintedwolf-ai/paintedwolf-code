@@ -1,0 +1,25 @@
+{
+  "id": "expr-unknown-escape-rejected",
+  "title": "An escape outside the six is rejected at load",
+  "covers": [
+    "OAR-EXPR-3"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"\\u0041\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-3"
+  }
+}

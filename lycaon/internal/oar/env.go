@@ -1,8 +1,6 @@
 package oar
 
 import (
-	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
@@ -18,7 +16,7 @@ type evalHolder struct {
 	counters    *CounterStore
 	rules       *RuleSet
 	currentRule *Rule
-	// snapshot precedes this occurrence's side-effects ([OAR-FIRE-6]).
+	// snapshot precedes this occurrence's side-effects ([OAR-FIRE-5]).
 	snapshot map[string]map[CounterKind]int64
 }
 
@@ -40,29 +38,6 @@ func (h *evalHolder) setCurrentRule(r *Rule) {
 	if h != nil {
 		h.currentRule = r
 	}
-}
-
-// counterOf reads kind for ruleID in the evaluating session. An absent store or
-// session yields 0, the same value an unfired rule has ([OAR-FIRE-11]).
-func (h *evalHolder) counterOf(ruleID string, kind CounterKind) int64 {
-	if h == nil {
-		return 0
-	}
-	gc := h.get()
-	store := h.counters
-	if gc == nil || store == nil || gc.Session.SessionID == "" {
-		return 0
-	}
-	ns := ""
-	if current := h.currentRule; current != nil {
-		ns = current.Namespace
-	}
-	target := resolveCounterTarget(h.rules, ruleID, ns)
-	key := ruleID
-	if target != nil {
-		key = counterKeyFor(target, gc)
-	}
-	return h.getCounter(gc.Session.SessionID, key, kind)
 }
 
 func (h *evalHolder) beginOccurrence(store *CounterStore, sessionID string) {
@@ -89,80 +64,22 @@ func (h *evalHolder) getCounter(sessionID, key string, kind CounterKind) int64 {
 	return store.Get(sessionID, key, kind)
 }
 
-func resolveCounterTarget(rs *RuleSet, ref, namespace string) *Rule {
-	if rs == nil {
-		return nil
-	}
-	qualified := ref
-	if !strings.Contains(ref, "/") && namespace != "" {
-		qualified = namespace + "/" + ref
-	}
-	for _, r := range rs.All() {
-		if r.Qualified() == qualified {
-			return r
-		}
-	}
-	return nil
-}
-
-func counterKeyFor(r *Rule, gc *GuardContext) string {
+// counterKeyFor keys a rule's counters by its identity; the store adds the
+// session ([OAR-FIRE-4]).
+func counterKeyFor(r *Rule, _ *GuardContext) string {
 	if r == nil {
 		return ""
 	}
-	q := r.Qualified()
-	if strings.TrimSpace(r.CounterScope) == "" {
-		return q
-	}
-	scope := scopedFactString(gc, r.CounterScope)
-	return q + "#" + scope
+	return r.Qualified()
 }
 
-// scopedFactString returns the string value a rule observes for the named fact.
-func scopedFactString(gc *GuardContext, name string) string {
-	value, _ := activation(gc)[name].(string)
-	return value
-}
-
-func (h *evalHolder) counterScope(target *Rule) (string, error) {
-	if target == nil {
-		return "", fmt.Errorf("[OAR-FIRE-11] unknown counter target")
+// counterOf reads another rule's counter, named by id in the reading rule's
+// namespace, from the pre-occurrence snapshot ([OAR-FIRE-5], [OAR-FIRE-6]).
+func (h *evalHolder) counterOf(id string, kind CounterKind) int64 {
+	if h == nil || h.gc == nil || h.currentRule == nil {
+		return 0
 	}
-	if target.CounterScope == "" {
-		return target.Qualified(), nil
-	}
-	if err := h.gc.Ensure(target.CounterScope); err != nil {
-		return "", err
-	}
-	facts := activation(h.gc)
-	value := facts[target.CounterScope]
-	if target.document != nil {
-		var err error
-		value, err = target.document.Fact(target.CounterScope, facts)
-		if err != nil {
-			return "", err
-		}
-	}
-	if value == nil {
-		value = ""
-	}
-	scope, ok := value.(string)
-	if !ok {
-		return "", fmt.Errorf("[OAR-FACT-26] %s must be a string", target.CounterScope)
-	}
-	return target.Qualified() + "#" + scope, nil
-}
-
-func (h *evalHolder) readCounter(ref string, kind CounterKind) (any, error) {
-	namespace := ""
-	if h.currentRule != nil {
-		namespace = h.currentRule.Namespace
-	}
-	target := resolveCounterTarget(h.rules, ref, namespace)
-	key, err := h.counterScope(target)
-	if err != nil {
-		return nil, err
-	}
-	return h.getCounter(h.gc.Session.SessionID, key, kind), nil
+	return h.getCounter(h.gc.Session.SessionID, oarcore.Identity(h.currentRule.Namespace, id), kind)
 }
 
 func specObservationFuncs(holder *evalHolder) map[string]func(any) (any, error) {
@@ -180,13 +97,7 @@ func specObservationFuncs(holder *evalHolder) map[string]func(any) (any, error) 
 			if !ok {
 				return zeroForFactType(fn.ret), nil
 			}
-			if name == "fire_count_of" {
-				return holder.readCounter(s, CounterFire)
-			}
-			if name == "breaker_count_of" {
-				return holder.readCounter(s, CounterBreaker)
-			}
-			return fn.bind(holder, s), nil
+			return fn.bind(holder, s)
 		}
 	}
 	return out
@@ -220,42 +131,20 @@ func evalCondition(holder *evalHolder, when string, gc *GuardContext) (bool, err
 		return true, nil
 	}
 	holder.set(gc)
-	env, err := capabilityEnvironment(InstalledCapabilityDocument())
+	env, err := capabilityEnvironment(InstalledEngineDeclaration())
 	if err != nil {
 		return false, err
 	}
 	return oarcore.EvaluateCondition(when, env, activation(gc), specObservationFuncs(holder))
 }
 
-func capabilityEnvironment(cap *CapabilityDocument) (*oarcore.Environment, error) {
-	raw, err := json.Marshal(cap)
-	if err != nil {
-		return nil, err
-	}
-	var document map[string]any
-	if err := json.Unmarshal(raw, &document); err != nil {
-		return nil, err
-	}
-	return oarcore.LoadCapability(document)
+func capabilityEnvironment(cap *EngineDeclaration) (*oarcore.Environment, error) {
+	return cap.Environment()
 }
 
-func specReachable(env *oarcore.Environment) map[string]bool {
-	out := map[string]bool{}
-	if env == nil {
-		return out
-	}
-	for name := range env.Facts {
-		out[name] = true
-	}
-	for name := range env.Functions {
-		out[name] = true
-	}
-	return out
-}
-
-func checkWhenAgainstSpec(when string, cap *CapabilityDocument) error {
+func checkWhenAgainstSpec(when string, cap *EngineDeclaration) error {
 	if cap == nil {
-		cap = InstalledCapabilityDocument()
+		cap = InstalledEngineDeclaration()
 	}
 	if strings.TrimSpace(when) == "" {
 		return nil
@@ -264,7 +153,7 @@ func checkWhenAgainstSpec(when string, cap *CapabilityDocument) error {
 	if err != nil {
 		return err
 	}
-	return oarcore.CheckCondition(when, env, specReachable(env))
+	return oarcore.CheckCondition(when, env)
 }
 
 func evalRuleWhen(holder *evalHolder, r *Rule, gc *GuardContext) (bool, error) {
@@ -278,7 +167,7 @@ func evalRuleWhen(holder *evalHolder, r *Rule, gc *GuardContext) (bool, error) {
 	return evalCondition(holder, r.When, gc)
 }
 
-// EvalPathOutsideScope is the observation for path_outside_scope(tool).
+// EvalPathOutsideScope is the path_outside_scope observation for a tool.
 func EvalPathOutsideScope(gc *GuardContext, tool string) bool {
 	if gc == nil {
 		return false
@@ -294,7 +183,7 @@ func EvalPathOutsideScope(gc *GuardContext, tool string) bool {
 	return false
 }
 
-// Typed argument accessors return zero for absent or mismatched types ([OAR-EXPR-19]).
+// Typed argument accessors return zero for absent or mismatched types.
 func EvalToolArgString(gc *GuardContext, key string) string {
 	if gc == nil {
 		return ""

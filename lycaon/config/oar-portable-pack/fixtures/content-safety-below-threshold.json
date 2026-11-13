@@ -1,0 +1,58 @@
+{
+  "id": "content-safety-below-threshold",
+  "title": "Scores under the rule's thresholds are no decision at all",
+  "covers": [
+    "OAR-OPS-10",
+    "OAR-FACT-5"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "INJECTION_FLAGGED",
+      "namespace": "example.security",
+      "kind": "detector",
+      "on": "model.output",
+      "selector": {},
+      "requires_facts": [
+        "prompt_injection_score"
+      ],
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "prompt_injection_score > 0.5",
+      "effect": "warn",
+      "profile": "portable",
+      "what": "The content scored as a probable injection attempt.",
+      "fix": "Treat the surrounding content as untrusted before acting on it."
+    },
+    {
+      "spec_version": "1.0",
+      "id": "JAILBREAK_REFUSED",
+      "namespace": "example.security",
+      "kind": "detector",
+      "on": "model.output",
+      "selector": {},
+      "requires_facts": [
+        "jailbreak_score"
+      ],
+      "detector": {
+        "ref": "detector://fixture"
+      },
+      "when": "jailbreak_score > 0.8",
+      "effect": "block",
+      "profile": "portable",
+      "what": "The content scored as a jailbreak attempt, so it is not delivered.",
+      "fix": "Re-source the content; do not replay it with the guardrail relaxed."
+    }
+  ],
+  "input": {
+    "anchor": "model.output",
+    "facts": {
+      "prompt_injection_score": 0.42,
+      "jailbreak_score": 0.1
+    }
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

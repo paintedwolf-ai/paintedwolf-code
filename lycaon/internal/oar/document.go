@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"sort"
 	"strings"
 )
@@ -11,7 +12,7 @@ const CurrentOARVersion = "1.0"
 // SchemaBaseURL is the published $id base the OAR schemas carry.
 const SchemaBaseURL = "https://openagentrules.org/spec/" + CurrentOARVersion + "/"
 
-func capabilityHostFacts(cap *CapabilityDocument) map[string]struct{} {
+func capabilityHostFacts(cap *EngineDeclaration) map[string]struct{} {
 	out := map[string]struct{}{}
 	if cap == nil {
 		return out
@@ -25,7 +26,7 @@ func capabilityHostFacts(cap *CapabilityDocument) map[string]struct{} {
 }
 
 // RuleIdentity is the (namespace, id) pair that identifies a rule. An empty
-// namespace means the loading host's own scope ([OAR-DOC-8]).
+// namespace means the loading host's own scope ([OAR-DOC-22]).
 type RuleIdentity struct {
 	Namespace string
 	ID        string
@@ -47,50 +48,45 @@ func (id RuleIdentity) String() string {
 	return id.Namespace + "/" + id.ID
 }
 
-// Qualified returns the rule's qualified identifier, which is what a counter is
-// keyed by ([OAR-FIRE-5]) and what evaluation order sorts on ([OAR-EVAL-1]).
+// Qualified returns the rule's identity as one string, which counters and the
+// trace are keyed by ([OAR-FIRE-4]).
 func (r *Rule) Qualified() string {
 	return r.Identity().String()
 }
 
-// RequiresFor derives capability profiles and host-tier facts from a condition and selector.
-func RequiresFor(when string, flow []string, selector Selector) Requires {
+// Tools are the tool names the rule's selector admits; empty admits every tool.
+func (r *Rule) Tools() []string {
+	return r.Selector["tools"]
+}
+
+// Operations are the paintedwolf.operation values the rule's condition
+// requires: the native operation beneath command, or the structured tool of
+// that name.
+func (r *Rule) Operations() []string {
+	return oarcore.ConjunctValues(r.When, "paintedwolf.operation")
+}
+
+// RequiresFor derives requires_facts: every fact a condition, flow and
+// selector reference beyond the core tier ([OAR-DOC-23], [OAR-PROF-5]).
+func RequiresFor(when string, flow []string, selector Selector) []string {
 	tiers := map[string]FactTier{}
-	profiles := map[string]string{}
 	for _, d := range factDecls {
-		name := publishedName(d.name, d.tier)
-		tiers[name] = d.tier
-		profiles[name] = d.profile
+		tiers[publishedName(d.name, d.tier)] = d.tier
 	}
 	for _, f := range observationFns {
-		name := publishedName(f.name, f.tier)
-		tiers[name] = f.tier
-		profiles[name] = f.profile
+		tiers[publishedName(f.name, f.tier)] = f.tier
 	}
-
 	names := FactsReferenced(when, flow)
 	names = append(names, selector.Clauses()...)
-
-	var out Requires
-	seenProfile := map[string]bool{}
-	seenFact := map[string]bool{}
+	seen := map[string]bool{}
+	var out []string
 	for _, name := range names {
-		switch tiers[name] {
-		case FactTierStandard:
-			if p := profiles[name]; p != "" && !seenProfile[p] {
-				seenProfile[p] = true
-				out.Profiles = append(out.Profiles, p)
-			}
-		case FactTierHost:
-			if !seenFact[name] {
-				seenFact[name] = true
-				out.Facts = append(out.Facts, name)
-			}
-		case FactTierCore:
+		if t, declared := tiers[name]; declared && t != FactTierCore && !seen[name] {
+			seen[name] = true
+			out = append(out, name)
 		}
 	}
-	sort.Strings(out.Profiles)
-	sort.Strings(out.Facts)
+	sort.Strings(out)
 	return out
 }
 
@@ -102,7 +98,7 @@ type PortabilityReport struct {
 	Portable   bool
 }
 
-// LintPortability reports non-portable references without rejecting the rule ([OAR-PROF-8]).
+// LintPortability reports non-portable references without rejecting the rule ([OAR-PROF-7]).
 func LintPortability(r *Rule) PortabilityReport {
 	if r == nil {
 		return PortabilityReport{}
@@ -111,7 +107,7 @@ func LintPortability(r *Rule) PortabilityReport {
 	if !IsCoreAnchor(r.Anchor) {
 		// A resolved anchor is a local id; a local id implementing a core anchor
 		// still came from a portable rule.
-		if InstalledCapabilityDocument().CoreAnchorFor(r.Anchor) == "" {
+		if InstalledEngineDeclaration().CoreAnchorFor(r.Anchor) == "" {
 			rep.HostAnchor = r.Anchor
 			rep.Portable = false
 		}
@@ -136,7 +132,7 @@ func LintPortability(r *Rule) PortabilityReport {
 	return rep
 }
 
-// referencedIdentifiers includes conditions, flow, selectors, and copy ([OAR-FACT-11], [OAR-COPY-5]).
+// referencedIdentifiers includes conditions, flow, selectors, and copy ([OAR-FACT-9], [OAR-COPY-5]).
 func referencedIdentifiers(r *Rule) []string {
 	names := FactsReferenced(r.When, r.Flow)
 	names = append(names, r.Selector.Clauses()...)

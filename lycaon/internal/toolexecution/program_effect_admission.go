@@ -228,7 +228,7 @@ func (s ProgramSurface) profileReject(code string, facts toolcontract.OperationF
 		}
 	}
 	return &toolrejection.ToolReject{Code: code, FailureClass: api.FailureClassPolicyRejection, OwnerRef: facts.Contract.Owner, Data: map[string]any{
-		"tool": facts.Identity, "permission_profile": s.profile, "expected_form": strings.Join(forms, "\n"),
+		"tool": facts.Identity, "profile": s.profile, "expected_form": strings.Join(forms, "\n"),
 		"source_start_byte": invocation.Span.StartByte, "source_end_byte": invocation.Span.EndByte,
 		"source_line": invocation.Span.Line, "source_column": invocation.Span.Column, "source_unit_id": invocation.SourceUnitID,
 	}}

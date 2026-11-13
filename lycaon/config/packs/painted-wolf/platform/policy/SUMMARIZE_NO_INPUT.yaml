@@ -1,25 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SUMMARIZE_NO_INPUT
 kind: schema
-anchor: tool.rejected
-selector:
-  paintedwolf.operation:
-    - summarize
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.operation]
-  profiles:
-    - tool
-when: paintedwolf.rejection_code == "SUMMARIZE_NO_INPUT"
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
+when: paintedwolf.operation == "summarize" && paintedwolf.rejection_code == "SUMMARIZE_NO_INPUT"
 effect: block
-copy:
-  what: '`summarize` was called with no material — path, paths, and content were all missing or empty.'
-  cause: Supply path, paths, or inline content; a task string alone supplies no material.
-  why: The host gathers only from structured args; text inside task is never parsed for paths.
-  fix: Retry with a path, e.g. {"path":"README.md"} — that is the whole call. Add task only to focus the brief, e.g. {"path":"lycaon/internal/session","task":"how does abort work?"}.
-  instead: Branch on Code; call `summarize` with a path (or paths/content) and retry once
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:summarize
-x-paintedwolf-message: '`summarize` needs a path (or paths/content)'
+message: '`summarize` needs a path (or paths/content)'
+what: '`summarize` was called with no material — path, paths, and content were all missing or empty.'
+cause: Supply path, paths, or inline content; a task string alone supplies no material.
+why: The host gathers only from structured args; text inside task is never parsed for paths.
+fix: Retry with a path, e.g. {"path":"README.md"} — that is the whole call. Add task only to focus the brief, e.g. {"path":"lycaon/internal/session","task":"how does abort work?"}.
+instead: Branch on Code; call `summarize` with a path (or paths/content) and retry once
 x-paintedwolf-scenarios:
   - id: default
     vars:

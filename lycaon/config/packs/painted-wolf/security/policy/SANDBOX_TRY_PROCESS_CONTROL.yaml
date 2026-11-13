@@ -1,37 +1,31 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_TRY_PROCESS_CONTROL
 kind: policy
-anchor: tool.post_invoke
+on: tool.post_invoke
 # command_output cannot carry a capability request; the retry is a fresh
 # command or verify call.
 selector:
-  tool:
+  tools:
     - command
     - verify
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.confine_applied, paintedwolf.failed_stages, paintedwolf.process_running, paintedwolf.refused_signals, paintedwolf.missing_capability_process_control, paintedwolf.next_steps]
+requires_facts: [paintedwolf.confine_applied, paintedwolf.destination, paintedwolf.failed_stages, paintedwolf.missing_capability_process_control, paintedwolf.next_steps, paintedwolf.process_running, paintedwolf.refused_signals, paintedwolf.refused_terminal_read_paths, paintedwolf.refused_terminal_write_paths]
 when: >-
-  paintedwolf.confine_applied
-  && size(paintedwolf.refused_signals) > 0
-  && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
+  paintedwolf.confine_applied && size(paintedwolf.refused_signals) > 0 && (size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running)
 effect: warn
-copy:
-  what: 'In `{{ tool }}`, the sandbox refused signals to processes outside the command''s boundary: {{ paintedwolf.refused_signals }}.'
-  cause: '{% if paintedwolf.missing_capability_process_control %}This invocation did not declare process-control access.{% endif %}'
-  why: ''
-  fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_process_control %}{% if paintedwolf.refused_signals %}If the operation is still needed, submit only the remaining work. Request `capability_request.process_control` for the refused process operation. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
-  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
-x-paintedwolf-message: the sandbox refused a signal to a process outside the boundary
+message: the sandbox refused a signal to a process outside the boundary
+what: 'In `{{ tool }}`, the sandbox refused signals to processes outside the command''s boundary: {{ paintedwolf.refused_signals }}.'
+cause: '{% if paintedwolf.missing_capability_process_control %}This invocation did not declare process-control access.{% endif %}{% if paintedwolf.refused_terminal_read_paths %} Reads of {{ paintedwolf.refused_terminal_read_paths }} were also refused; these host control-plane paths stay closed and no capability request opens them.{% endif %}{% if paintedwolf.refused_terminal_write_paths %} Writes to {{ paintedwolf.refused_terminal_write_paths }} were also refused; these host control-plane paths stay closed and no capability request opens them.{% endif %}{% if paintedwolf.destination %} The egress broker also refused a connection to `{{ paintedwolf.destination }}`.{% endif %}'
+why: ''
+fix: '{% if paintedwolf.process_running %}{{ paintedwolf.next_steps }} Do not start replacement work while this job is running. {% endif %}{% if paintedwolf.missing_capability_process_control %}{% if paintedwolf.refused_signals %}If the operation is still needed, submit only the remaining work. Request `capability_request.process_control` for the refused process operation. Preserve completed effects and resolve uncertain outcomes before retrying them.{% endif %}{% endif %}'
+instead: ''
 x-paintedwolf-scenarios:
-- id: stop_server
-  vars:
-    tool: command
-    failed_stages:
-    - kill 4121
-    refused_signals:
-    - signal (kill)
-    tool_args: {}
+  - id: stop_server
+    vars:
+      tool: command
+      failed_stages:
+        - kill 4121
+      refused_signals:
+        - signal (kill)
+      tool_args: {}

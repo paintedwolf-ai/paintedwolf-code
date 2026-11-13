@@ -176,6 +176,39 @@ func TestVerifyURLObservedIgnoresFetchBodyLinks(t *testing.T) {
 	}
 }
 
+// A read page's links are known as displayed, apart from the sources the chat
+// read, and that standing survives the store round trip.
+func TestStandingOfURLSeparatesSourcesFromDisplayedLinks(t *testing.T) {
+	body := "# Page\n\nsee also https://example.com/other?p=2 and [x](https://third.example/x)\n"
+	rec := evidence.BuildEvidenceRecord("", "fetch_url", map[string]any{"url": "https://example.com/page"}, body)
+	rec.Handle = "web#1"
+	restored := evidence.Record{Handle: rec.Handle, Kind: rec.Kind, Shape: rec.Shape, URL: rec.URL}
+	evidence.ApplyRecordAux(&restored, evidence.CloneRecordForStore(rec))
+	search := evidence.BuildEvidenceRecord("", "web_search", map[string]any{"query": "q"}, `{"results":[{"url":"https://hit.example/a","title":"A"}]}`)
+	search.Handle = "web#2"
+
+	for name, page := range map[string]evidence.Record{"built": rec, "restored": restored} {
+		ev := evidence.Ledger{Handles: map[string]evidence.Record{page.Handle: page, search.Handle: search}}
+		for address, want := range map[string]evidence.URLStanding{
+			"https://example.com/page":      evidence.URLSource,
+			"https://hit.example/a":         evidence.URLSource,
+			"https://example.com/other?p=2": evidence.URLDisplayed,
+			"https://third.example/x":       evidence.URLDisplayed,
+			"https://example.com/other":     evidence.URLUnknown,
+			"https://example.com/other?p=3": evidence.URLUnknown,
+			"https://third.example/":        evidence.URLUnknown,
+			"":                              evidence.URLUnknown,
+		} {
+			if got := evidence.StandingOfURL(ev, address); got != want {
+				t.Errorf("%s: StandingOfURL(%q) = %d, want %d", name, address, got, want)
+			}
+			if cited := evidence.VerifyURLObserved(ev, address); cited != (want == evidence.URLSource) {
+				t.Errorf("%s: %q grounds a citation = %v", name, address, cited)
+			}
+		}
+	}
+}
+
 func TestVerificationAndOverlayOutcomesProduceCitableReceipts(t *testing.T) {
 	for _, tc := range []struct{ tool, handle, body string }{
 		{"verify", "command#1", `{"outcome":"passed","command":"python3 -m unittest","exit_code":0}`},

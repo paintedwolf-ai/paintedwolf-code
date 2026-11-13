@@ -1,28 +1,20 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_READ_PATH_DENIED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.user_guidance
-  - paintedwolf.path
-  profiles:
-  - tool
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.path, paintedwolf.rejection_code, paintedwolf.user_guidance]
 when: paintedwolf.rejection_code == "SANDBOX_READ_PATH_DENIED"
 effect: block
-copy:
-  what: '{{ tool }} was not granted read access to {{ paintedwolf.path }}.'
-  cause: Read authority is not on this invocation.
-  why: Retrying the same read_path request loops on the same refusal.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
-    before requesting approval for a corrected action.{% else %}Continue without the content and report what is missing.
-    Wait for new user direction before requesting approval again.{% endif %}'
-  instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-category: user-decision
 x-paintedwolf-emit: guard:sandbox_read_path
-x-paintedwolf-message: this command cannot read the protected path
+message: this command cannot read the protected path
+what: '{{ tool }} was not granted read access to {{ paintedwolf.path }}.'
+cause: Read authority is not on this invocation.
+why: Retrying the same read_path request loops on the same refusal.
+fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction before requesting approval for a corrected action.{% else %}Continue without the content and report what is missing. Wait for new user direction before requesting approval again.{% endif %}'
+instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-scenarios:
-- id: command_read_path_denied
-  vars:
-    tool: command
+  - id: command_read_path_denied
+    vars:
+      tool: command

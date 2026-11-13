@@ -9,7 +9,6 @@ type InvocationFacts struct {
 	CapabilityContract              *toolcontract.ToolCapabilitySnapshot
 	Tool                            string
 	ToolArgs                        map[string]any
-	ToolArgsFingerprint             string
 	PatternParseOK                  bool
 	ArgValidationErrors             []string
 	ArgValidationReason             string
@@ -40,7 +39,7 @@ type SessionFacts struct {
 	SessionID                string
 	SessionPosture           string
 	Surface                  string
-	Profile                  string
+	Role                     string
 	Phase                    string
 	WorkerLeg                bool
 	SurfaceMayFinish         bool
@@ -61,8 +60,6 @@ type ProgressFacts struct {
 	ProgressClosureArmed         bool
 	ProgressGatedTool            bool
 	ProgressMissing              bool
-	ProgressClosedBeyondBaseline bool
-	ProgressReconciledSinceArm   bool
 	CloseoutHasAnswer            bool
 	CloseoutOnlyRepairDirectives bool
 	TaskEnvelopeEcho             bool
@@ -148,10 +145,12 @@ type RefusalsFacts struct {
 	RefusedTerminalReadPaths    []string
 	RefusedTerminalWritePaths   []string
 	RefusedSocketPaths          []string
-	RefusedConnectPorts         []string
-	RefusedListenPorts          []string
-	RefusedSignals              []string
-	UnsandboxedRefusals         []string
+	// RefusedSocketHostResources are available resources whose local service a refused socket is.
+	RefusedSocketHostResources []string
+	RefusedConnectPorts        []string
+	RefusedListenPorts         []string
+	RefusedSignals             []string
+	UnsandboxedRefusals        []string
 }
 
 type SourceFacts struct {
@@ -213,25 +212,34 @@ type RejectionFacts struct {
 }
 
 type MCPFacts struct {
-	MCPProviderID         string
-	MCPToolName           string
-	MCPQualifiedTool      string
-	MCPProviderConfigured bool
-	MCPProviderEnabled    bool
-	MCPCallOK             bool
-	MCPErrorCode          string
-	MCPSchemaMatched      bool
-	MCPFields             map[string]any
-	MCPResultText         string
-	MCPCatalog            MCPCatalogView
+	MCPServerID         string
+	MCPToolName         string
+	MCPQualifiedTool    string
+	MCPServerConfigured bool
+	MCPServerEnabled    bool
+	MCPCallOK           bool
+	MCPErrorCode        string
+	MCPSchemaMatched    bool
+	MCPFields           map[string]any
+	MCPResultText       string
+	MCPCatalog          MCPCatalogView
 }
 
 type CountersFacts struct {
-	FireCount           int64
+	FireCount    int64
+	BreakerCount int64
+	// SameCodeRejectRun and SameCallRun are computed by the engine from the
+	// session's earlier occurrences ([OAR-FIRE-8], [OAR-FIRE-9]).
+	SameCodeRejectRun int64
+	SameCallRun       int64
+	// CredentialDecisions counts earlier credential.assignment occurrences in
+	// the session that delivered a decision for the same fingerprint.
+	CredentialDecisions int64
+	// RepeatedRejectCode is the rejection code the loop guard observed
+	// repeating, or empty.
+	RepeatedRejectCode  string
 	RepeatCount         int64
-	BreakerCount        int64
 	FruitlessSearchRun  int64
-	SameCodeRejectRun   int64
 	CodeRejectResponses int64
 	DeferredUnactivated int64
 }

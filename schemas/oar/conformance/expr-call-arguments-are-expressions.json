@@ -1,0 +1,29 @@
+{
+  "id": "expr-call-arguments-are-expressions",
+  "title": "A call argument may be any condition of the declared type",
+  "covers": [
+    "OAR-EXPR-16"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "size(tool + \"s\") == size(\"reads\") && starts_with(tool + \"x\", \"rea\")"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

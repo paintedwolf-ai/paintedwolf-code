@@ -1,0 +1,31 @@
+{
+  "id": "sel-clauses-and",
+  "title": "A selector clause that does not match deselects the rule",
+  "covers": [
+    "OAR-SEL-2",
+    "OAR-SEL-4",
+    "OAR-CONF-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "BOTH_CLAUSES",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {
+      "tools": [
+        "read"
+      ]
+    },
+    "effect": "block",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "write"
+    }
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

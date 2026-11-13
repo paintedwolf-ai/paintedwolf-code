@@ -1,30 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SOURCE_VERSION_UNAVAILABLE
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - source_history
     - restore_version
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.rejection_code
-    - paintedwolf.detail
-    - paintedwolf.side
-    - paintedwolf.state
+requires_facts: [paintedwolf.detail, paintedwolf.rejection_code, paintedwolf.side, paintedwolf.state]
 when: paintedwolf.rejection_code == "SOURCE_VERSION_UNAVAILABLE"
 effect: block
-copy:
-  what: Content for source version is unavailable{% if paintedwolf.side %} on the {{ paintedwolf.side }} side ({{ paintedwolf.state }}){% endif %} — {{ paintedwolf.detail }}.
-  cause: The version is recorded in the ledger, but its exact bytes were not captured or are no longer addressable.
-  why: Large files, binary content, and metadata-only observations retain ledger coordinates without content blobs.
-  fix: Inspect metadata via mode effects or lines instead of requesting content.
-  instead: Branch on Code; query metadata instead of content
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:source_history
-x-paintedwolf-message: content for source version is unavailable
+message: content for source version is unavailable
+what: Content for source version is unavailable{% if paintedwolf.side %} on the {{ paintedwolf.side }} side ({{ paintedwolf.state }}){% endif %} — {{ paintedwolf.detail }}.
+cause: The version is recorded in the ledger, but its exact bytes were not captured or are no longer addressable.
+why: Large files, binary content, and metadata-only observations retain ledger coordinates without content blobs.
+fix: Inspect metadata via mode effects or lines instead of requesting content.
+instead: Branch on Code; query metadata instead of content
 x-paintedwolf-scenarios:
   - id: default
     vars:

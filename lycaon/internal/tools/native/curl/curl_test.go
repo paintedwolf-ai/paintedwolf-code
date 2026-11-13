@@ -476,6 +476,28 @@ func TestCurlRefusesInvalidUsage(t *testing.T) {
 	}
 }
 
+func TestCurlTimeoutsAcceptEveryRepresentableDuration(t *testing.T) {
+	h := newHarness(t)
+	for _, flag := range []string{"--max-time", "--connect-timeout"} {
+		for value, want := range map[string]time.Duration{"0.3": 300 * time.Millisecond, "10": 10 * time.Second, "300": 5 * time.Minute, "9223372036": 9223372036 * time.Second} {
+			prepared, _, err := h.prepare(flag, value, "http://a.test")
+			testutil.FailErr(t, flag+" "+value, err)
+			got := prepared.options.maxTime
+			if flag == "--connect-timeout" {
+				got = prepared.options.connectTimeout
+			}
+			if got != want {
+				t.Errorf("%s %s = %v, want %v", flag, value, got, want)
+			}
+		}
+		for _, value := range []string{"-1", "inf", "nan", "9223372037", "ten"} {
+			if _, _, err := h.prepare(flag, value, "http://a.test"); err == nil {
+				t.Errorf("%s %s accepted", flag, value)
+			}
+		}
+	}
+}
+
 func TestCurlDirectIPHonorsDeclaredDestinationPolicy(t *testing.T) {
 	h := newHarness(t)
 	denied := h.curl(t.Context(), "-s", "--connect-timeout", "0.05", "http://192.0.2.1:8080/health")

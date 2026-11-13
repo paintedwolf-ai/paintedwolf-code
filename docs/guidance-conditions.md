@@ -10,7 +10,7 @@ Hint `when` expressions use the **OAR condition language over typed facts**. Thi
 
 ## Purpose
 
-Every hint emitted on a `guard:*` or `rule:*` channel is an OAR rule binding. The host assembles a typed `GuardContext`, evaluates `when:`, and renders `effect` (`block` / `warn` / `nudge` / `allow` / `transform`) plus optional `on_fire`.
+Every hint emitted on a `guard:*` or `rule:*` channel is an OAR rule binding. The host assembles a typed `GuardContext`, evaluates `when:`, and renders `effect` (`block` / `warn` / `nudge` / `allow`) plus optional `on_fire`.
 
 Adding a hint is normally one YAML file. New Go is required only for a new fact provider (observation) or declared `on_fire` effect, never a new predicate language.
 
@@ -21,33 +21,35 @@ Adding a hint is normally one YAML file. New Go is required only for a new fact 
 Expressions use the frozen OAR grammar and closed type environment. Identifiers are fact names from the [fact catalogue](open-agent-rules.md#fact-catalogue). Common shapes:
 
 ```yaml
-when: session_posture == "spec" && paintedwolf.tool_is_state
-when: path_outside_scope("read")
+when: paintedwolf.session_posture == "spec" && paintedwolf.tool_is_state
+when: path_outside_scope
 when: !paintedwolf.stub_valid && tool == "task"
-when: is_directory
+when: same_call_run >= 2
+when: mcp_result.status == "denied"
 ```
 
-### Two fact tiers
+### Fact tiers
 
 | Tier | Naming | Examples |
 |------|--------|----------|
-| **Standard** (portable profiles `tool`, `session`, `filesystem`, `content-provenance`, `content`, `secrets`, `mcp`; [`catalogue.go`](../lycaon/internal/oar/catalogue.go)) | Bare name | `tool`, `session_posture`, `path_outside_scope("read")`, `is_directory`, `not_found`, `path_denied` |
-| **Host** | Published as `paintedwolf.<name>` (`HostFactNamespace` in [`oarcopy/facts.go`](../lycaon/internal/oarcopy/facts.go)) | `paintedwolf.surface`, `paintedwolf.stub_valid`, `paintedwolf.unobserved_cited_handles` |
+| **Core** (every anchor) | Bare name | `tool`, `tool_args`, `fire_count`, `breaker_count`, `same_code_reject_run`, `same_call_run` |
+| **Standard** (profiles `filesystem`, `content-safety`, `mcp`; [`catalogue.go`](../lycaon/internal/oar/catalogue.go)) | Bare name | `is_directory`, `not_found`, `path_outside_scope`, `secret_matches`, `mcp_result` |
+| **Host** | Published as `paintedwolf.<name>` (`HostFactNamespace` in [`oarcopy/facts.go`](../lycaon/internal/oarcopy/facts.go)) | `paintedwolf.session_posture`, `paintedwolf.stub_valid`, `paintedwolf.unobserved_cited_handles` |
 
 The prefix keeps a portable rule from binding this engine's host vocabulary.
 
-Prefer composing observation facts over echoing a validation code. `when: '"<token>" in arg_validation_errors'` is valid for a **schema** rule that attaches copy to one argument rejection; policy and invariant rules compose the underlying observations. The list carries the observation token a reject publishes, not its `Code:`. The `rejectCodeObservation` map in [`toolrejection/observation_facts.go`](../lycaon/internal/toolrejection/observation_facts.go) resolves a code to its token, and a rule that spells the token itself gates on a fact nothing sets.
+Prefer composing observation facts over echoing a validation code. `when: '"<token>" in paintedwolf.arg_validation_errors'` is valid for a **schema** rule that attaches copy to one argument rejection; policy and invariant rules compose the underlying observations. The list carries the observation token a reject publishes, not its `Code:`. The `rejectCodeObservation` map in [`toolrejection/observation_facts.go`](../lycaon/internal/toolrejection/observation_facts.go) resolves a code to its token, and a rule that spells the token itself gates on a fact nothing sets.
 
 | Construct | Notes |
 |-----------|--------|
-| Identifiers | Declared fact names; dotted host names are single identifiers |
-| Calls | Declared observation functions plus `size`, `starts_with`, `ends_with`, and `contains` |
+| References | Declared fact names, dotted host names included. A dotted name that is not declared selects a string member of the map fact the rest names, such as `tool_args.path` |
+| Calls | Declared observation functions, the counter readers `fire_count_of("ID")` and `breaker_count_of("ID")` with a literal rule id, plus `size`, `starts_with`, `ends_with`, and `contains` |
 | Logic | `&&` `\|\|` `!` |
-| Comparison | `==` `!=` `<` `<=` `>` `>=` `in` |
-| Values | Typed literals, list literals, arithmetic, indexing, and ternary expressions |
+| Comparison | `==` `!=` `<` `<=` `>` `>=` between values of one scalar type; `in` against a list |
+| Values | Typed literals, non-empty string list literals, arithmetic, and ternary expressions; no indexing |
 | Grouping | Parentheses |
 
-The loader parses and type-checks every condition against the closed catalogue. Runtime errors, such as an out-of-range index, follow the rule's `on_error` policy.
+The loader parses and type-checks every condition against the closed catalogue, and each refusal cites its `[OAR-EXPR-n]` clause. Runtime errors, such as an absent map member, follow the rule's `on_error` policy.
 
 ---
 
@@ -59,38 +61,29 @@ Facts are observations, not verdicts: `paintedwolf.unobserved_cited_paths`, `pai
 
 ## Rule document fields
 
-[`oar.schema.json`](../schemas/oar/oar.schema.json) closes the world: `additionalProperties: false`, with one escape hatch for `^x-` implementation extensions. A key that is not below and does not start with `x-` fails validation.
+[`oar.schema.json`](../schemas/oar/oar.schema.json) closes the world, with one escape hatch for `^x-` implementation extensions. A key that is not below and does not start with `x-` fails validation.
 
 | Field | Role |
 |-------|------|
-| `oar` | Format marker and compatibility gate (`"1.0"`); its presence is what makes a document a rule. **Required** |
+| `spec_version` | Format marker and compatibility gate (`"1.0"`); its presence is what makes a document a rule. **Required** |
 | `id` / stem | Stable `Code:` (= file stem). **Required** |
-| `kind` | `schema` \| `policy` \| `invariant` \| `detector`. **Required** |
-| `anchor` | Catalog Anchor id ([catalog.yaml](../lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml)). **Required**, and it is `anchor`, never `on`; see below |
-| `effect` | `block` \| `warn` \| `nudge` \| `allow` \| `transform`. **Required** |
-| `selector` | Optional AND clauses (`profiles`, `tool`, …) |
+| `kind` | `schema` \| `policy` \| `invariant` \| `detector`, or `hint` for static copy that is never evaluated. **Required** |
+| `on` | Catalog anchor id ([catalog.yaml](../lycaon/config/packs/painted-wolf/platform/host/anchors/catalog.yaml)). **Required** |
+| `namespace` | Publisher scope; identity is `namespace/id` |
+| `selector` | `tools`, the tools the rule applies to; `{}` selects every occurrence. Anything else a rule scopes on is a fact in `when`. **Required** |
+| `requires_facts` | Every non-core fact the rule reads in `when` or copy |
+| `effect` | `block` \| `warn` \| `nudge` \| `allow`. **Required** |
 | `when` | Condition over facts |
-| `on_fire` | Declared engine side-effects (counters, breakers, …) |
-| `copy` | Nested block holding `title` / `what` / `why` / `cause` / `fix` / `instead` (`instead` is the branch instruction). These are not top-level keys |
-| `x-paintedwolf-emit` | Provenance channel (`guard:…`, `rule:…`) |
-| `x-paintedwolf-scenarios` | Samples for conformance seeding |
+| `on_fire` | Declared engine side-effects (counters, breakers, events) |
+| `enforcement`, `mandatory`, `on_error` | Monitor or enforce; whether configuration may disable the rule; `fail_closed`, `fail_open`, or the id of a same-namespace rule whose block substitutes |
+| `what` / `cause` / `why` / `fix` / `instead` / `message` | Copy, top-level; `instead` is the branch instruction |
+Host metadata ships as `x-paintedwolf-*` extensions: `x-paintedwolf-emit` (provenance channel, `guard:…` or `rule:…`), `x-paintedwolf-category`, `x-paintedwolf-scenarios` (copy renders), `x-paintedwolf-evidence`, `x-paintedwolf-context-schema`, `x-paintedwolf-audience`, `x-paintedwolf-status`, and `x-paintedwolf-successor`. See [Open Agent Rules](open-agent-rules.md#host-extensions).
 
-`emit`, `message`, `category`, and `scenarios` are host concerns the portable format does not define, so they ship as `x-paintedwolf-*` extensions (`x-paintedwolf-emit`, `x-paintedwolf-message`, `x-paintedwolf-category`, `x-paintedwolf-scenarios`, plus `x-paintedwolf-audience`, `x-paintedwolf-evidence`, and `x-paintedwolf-severity` where used). Full portable field table: <https://openagentrules.org/spec/1.0/> § Document model.
-
-### `anchor:` on rules, `on:` on bindings
-
-They are different documents, and there is no alias.
-
-| Document | Key | Schema |
-|----------|-----|--------|
-| OAR **rule** (`policy/<CODE>.yaml`) | `anchor:` | [`oar.schema.json`](../schemas/oar/oar.schema.json) requires `anchor` and declares no `on` |
-| Anchor **binding** (`platform/host/bindings/*.yaml`) | `'on':` (quoted, so YAML does not read it as a boolean) | [`anchor-binding.schema.json`](../schemas/anchor-binding.schema.json) requires `on`, `selector`, `effect` |
-
-Both name a catalog Anchor id; the rule asks *when do I evaluate*, the binding asks *when do I render*.
+Rules and anchor bindings (`platform/host/bindings/*.yaml`, [`anchor-binding.schema.json`](../schemas/anchor-binding.schema.json)) both name a catalog anchor in `on`; write it `'on':` in YAML so it is not read as a boolean. The rule asks *when do I evaluate*, the binding asks *when do I render*.
 
 ### Flat copy units
 
-Some units under the pack `policy/` dirs are not OAR rule documents: they carry no `oar:` key and no `anchor:`, and hold `emit`, `message`, `what`/`cause`/`why`/`fix`/`instead` flat at the top level. They are informational copy for a code the host raises itself, and `emit` names where that copy is drawn:
+Some units under the pack `policy/` dirs are not OAR documents: they carry no `spec_version`, and hold `emit`, `message`, `what`/`cause`/`why`/`fix`/`instead` flat at the top level. They are informational copy for a code the host raises itself, and `emit` names where that copy is drawn:
 
 | `emit` | Drawn |
 |--------|-------|
@@ -100,7 +93,7 @@ Some units under the pack `policy/` dirs are not OAR rule documents: they carry 
 
 None are conditions; nothing evaluates a `when` for them, and they need no rejection fields or scenarios ([`guidance.CopyOnlyEmit`](../lycaon/internal/guidance/reject_code_loader.go)). A rejection a tool returns is an OAR rule on `tool.rejected`, even when the same code also lists in an inject. Author a new conditional hint as an OAR rule document.
 
-`context_schema` (required template keys) belongs to that flat shape and to the user-notice units under `platform/host/user-notices/`. It is not an OAR rule field and the rule schema rejects it.
+Their copy binds host data the raising code path supplies, which an OAR hint's static copy cannot carry. `context_schema` lists the template keys a flat unit requires. Flat units are this host's format, so their metadata keeps plain names; an OAR document carries the same metadata under `x-paintedwolf-` names because the standard closes its field set.
 
 ---
 
@@ -126,8 +119,8 @@ Machine-readable subset: [`schemas/guidance_registry.json`](../schemas/guidance_
 
 | Check | Where |
 |-------|--------|
-| Every `guard:`/`rule:` hint has `anchor:` + `kind` and loads as OAR | [`oar_catalog_contract_test.go`](../lycaon/test/contract/catalogs/oar_catalog_contract_test.go) |
-| Every `anchor:` resolves to a catalog Anchor | same (`ResolveRuleAnchor` + `anchorcatalog.Has`) |
+| Every `guard:`/`rule:` hint has `on` + `kind` and loads as OAR | [`oar_catalog_contract_test.go`](../lycaon/test/contract/catalogs/oar_catalog_contract_test.go) |
+| Every `on` resolves to a catalog anchor | same (`ResolveRuleAnchor` + `anchorcatalog.Has`) |
 | Emission sites use registry codes | [`guidance_emission_contract_test.go`](../lycaon/test/contract/architecture/guidance_emission_contract_test.go) |
 | `when` type-checks against the fact env | OAR loader / engine |
 

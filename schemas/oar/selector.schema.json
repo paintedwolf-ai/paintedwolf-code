@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openagentrules.org/spec/1.0/selector.schema.json",
+  "title": "Selector",
+  "description": "The closed selector vocabulary ([OAR-SEL-7]). Clauses are conjunctive ([OAR-SEL-2]); an omitted clause is permissive ([OAR-SEL-3]); clauses match machine-observable state only ([OAR-SEL-5]).",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "tools": {
+      "type": "array",
+      "description": "Tool names the occurrence's core fact `tool` must be one of. Does not match at an anchor where no tool is invoked ([OAR-SEL-6]).",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  }
+}

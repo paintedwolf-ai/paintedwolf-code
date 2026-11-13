@@ -1,30 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COORDINATOR_DELEGATE_DISPATCH_USE_TASK
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.task_dispatchable, paintedwolf.next_steps]
+on: tool.rejected
+selector:
+  tools:
+    - delegate_dispatch
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.task_dispatchable]
 when: paintedwolf.rejection_code == "COORDINATOR_DELEGATE_DISPATCH_USE_TASK"
 effect: block
-copy:
-  what: This turn uses ambient worker dispatch rather than workflow delegation legs.
-  cause: delegate_dispatch is not available on this implement surface.
-  why: The current task schema determines which worker profiles and scope are accepted.
-  fix: '{% if paintedwolf.task_dispatchable %}{{ paintedwolf.next_steps }}{% else %}This turn has no available worker-dispatch path. Continue with the offered tools, or report the capability limitation if delegation is required.{% endif %}'
-  instead: 'Use the worker-dispatch path this request offers, or report that worker dispatch is unavailable.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Use the current implement surface’s available worker-dispatch path
+message: Use the current implement surface’s available worker-dispatch path
+what: This turn uses ambient worker dispatch rather than workflow delegation legs.
+cause: delegate_dispatch is not available on this implement surface.
+why: The current task schema determines which worker profiles and scope are accepted.
+fix: '{% if paintedwolf.task_dispatchable %}{{ paintedwolf.next_steps }}{% else %}This turn has no available worker-dispatch path. Continue with the offered tools, or report the capability limitation if delegation is required.{% endif %}'
+instead: 'Use the worker-dispatch path this request offers, or report that worker dispatch is unavailable.'
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    can_task: true
-    detail: ambient worker dispatch
-    path: src/main.go
-    profile: coordinator
-    tool: delegate_dispatch
-selector:
-  tool:
-  - delegate_dispatch
+  - id: default
+    vars:
+      can_task: true
+      detail: ambient worker dispatch
+      path: src/main.go
+      profile: coordinator
+      tool: delegate_dispatch

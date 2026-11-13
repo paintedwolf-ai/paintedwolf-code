@@ -1,0 +1,27 @@
+{
+  "id": "doc-title-does-not-affect-decision",
+  "title": "A title is a label: it changes nothing about the decision",
+  "covers": [
+    "OAR-DOC-5"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "TITLED_RULE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "title": "A human-readable label that must not matter"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "TITLED_RULE"
+  }
+}

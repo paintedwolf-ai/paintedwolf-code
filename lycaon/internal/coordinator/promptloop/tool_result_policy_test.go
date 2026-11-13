@@ -15,7 +15,7 @@ import (
 
 func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 	for _, block := range []bool{false, true} {
-		name := "transform"
+		name := "allow"
 		if block {
 			name = "block"
 		}
@@ -30,15 +30,15 @@ func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 					Tools: reg,
 				},
 				Closeout: CloseoutDeps{
-					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
+					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool) {
 						seen++
 						if anchor != oar.AnchorContentToolResult || tool != "recall" || args["query"] != "observed-input" || len(observation.Segments) != 1 || !strings.Contains(observation.Segments[0].Content, "unreviewed-secret") {
-							t.Fatalf("[OAR-FACT-21] incomplete result occurrence: anchor=%s tool=%s args=%v segments=%v", anchor, tool, args, observation.Segments)
+							t.Fatalf("[OAR-PROF-2] incomplete result occurrence: anchor=%s tool=%s args=%v segments=%v", anchor, tool, args, observation.Segments)
 						}
 						if block {
-							return guidance.NewRefusal("RESULT_POLICY", "Result withheld"), true, "", false
+							return guidance.NewRefusal("RESULT_POLICY", "Result withheld"), true
 						}
-						return nil, false, "reviewed replacement", true
+						return nil, false
 					},
 				},
 			})
@@ -51,11 +51,8 @@ func TestOps8ToolResultPolicyControlsEveryDeliveredCapture(t *testing.T) {
 			testutil.FailErr(t, "execute tool delivery", out.endTurn)
 			encoded, err := json.Marshal(out.toolMsg)
 			testutil.FailErr(t, "encode delivered result", err)
-			if seen != 1 || strings.Contains(string(encoded), "unreviewed-secret") {
-				t.Fatalf("[OAR-OPS-8] source escaped result policy: seen=%d result=%s", seen, encoded)
-			}
-			if !block && !strings.Contains(out.toolMsg.Content, "reviewed replacement") {
-				t.Fatalf("[OAR-OPS-8] replacement was not delivered: %s", encoded)
+			if seen != 1 || strings.Contains(string(encoded), "unreviewed-secret") == block {
+				t.Fatalf("[OAR-OPS-6] result delivery ignored the policy decision: seen=%d result=%s", seen, encoded)
 			}
 		})
 	}

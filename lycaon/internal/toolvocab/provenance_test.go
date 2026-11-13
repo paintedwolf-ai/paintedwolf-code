@@ -25,8 +25,7 @@ func readRuleNamingGrep(t *testing.T) *oar.RuleSet {
 	return oar.NewRuleSet([]*oar.Rule{{
 		ID:        "READ_TOO_BIG",
 		Anchor:    oar.AnchorToolHandler,
-		Selector:  oar.Selector{"tool": {"recall"}},
-		Fix:       "Use `source_history` to find the region first.",
+		Selector:  oar.Selector{"tools": {"recall"}},
 		Copy:      oar.Copy{Fix: "Use `source_history` to find the region first."},
 		NextSteps: &oar.NextSteps{Mentions: []string{"source_history"}},
 	}})
@@ -101,7 +100,7 @@ func TestCredentialAssignmentAudienceFollowsInvokingTool(t *testing.T) {
 	}, toolvocab.Provenance{})
 	testutil.FailErr(t, "create catalog", err)
 	audience, err := toolvocab.Audience(catalog, toolvocab.Surfaces{Coordinator: "coordinator", Workers: []string{"reader"}}, &oar.Rule{
-		ID: "ASSIGNMENT", Anchor: oar.AnchorCredentialAssignment, Selector: oar.Selector{"tool": {"write"}},
+		ID: "ASSIGNMENT", Anchor: oar.AnchorCredentialAssignment, Selector: oar.Selector{"tools": {"write"}},
 	})
 	testutil.FailErr(t, "resolve assignment audience", err)
 	if strings.Join(audience, ",") != "coordinator,editor" {
@@ -114,7 +113,7 @@ func TestRecoveryReachabilityIncludesCallExamples(t *testing.T) {
 	testutil.FailErr(t, "create catalog", err)
 	for _, remedy := range []string{"Call `source_history`.", "Call `source_history(pattern=\"needle\")`.", "Use `source_history (pattern=…)` then inspect the result."} {
 		rules := oar.NewRuleSet([]*oar.Rule{{ID: "RECOVERY", Anchor: oar.AnchorToolRejected,
-			Selector: oar.Selector{"tool": {"recall"}}, Fix: remedy, Copy: oar.Copy{Fix: remedy}}})
+			Selector: oar.Selector{"tools": {"recall"}}, Copy: oar.Copy{Fix: remedy}}})
 		if _, err := toolvocab.CheckRules(catalog, surfaces(), rules); err == nil || !strings.Contains(err.Error(), "acme_narrow") {
 			t.Errorf("unreachable call %q was not rejected: %v", remedy, err)
 		}
@@ -125,7 +124,7 @@ func TestRejectionAnchorRecomputesRecoveryAudience(t *testing.T) {
 	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
 	testutil.FailErr(t, "create catalog", err)
 	rule := &oar.Rule{ID: "RECOVERY", Anchor: oar.AnchorCoordinatorPreInvoke,
-		Fix: "Use `source_history`.", Copy: oar.Copy{Fix: "Use `source_history`."},
+		Copy:      oar.Copy{Fix: "Use `source_history`."},
 		NextSteps: &oar.NextSteps{Mentions: []string{"source_history"}}}
 	_, err = toolvocab.CheckRules(catalog, surfaces(), oar.NewRuleSet([]*oar.Rule{rule}))
 	testutil.FailErr(t, "coordinator recovery", err)
@@ -155,8 +154,8 @@ func TestBundledCopyNamesAToolOnlyAsSubjectMentionOrCheckedStep(t *testing.T) {
 		"guarded remedy":        {Copy: oar.Copy{Fix: "{% if paintedwolf.x %}Call `recall`.{% endif %}"}},
 		"bare remedy":           {Copy: oar.Copy{Why: "Use source_history first."}},
 		"retired name":          {Copy: oar.Copy{Fix: "Call `list_dir`."}},
-		"post-invoke operation": {Anchor: oar.AnchorToolPost, Selector: oar.Selector{"paintedwolf.operation": {"list_dir"}}},
-		"subject call in fix":   {Selector: oar.Selector{"tool": {"recall"}}, Copy: oar.Copy{Fix: "Retry `recall(query=\"x\")`."}},
+		"post-invoke operation": {Anchor: oar.AnchorToolPost, When: `paintedwolf.operation == "list_dir"`},
+		"subject call in fix":   {Selector: oar.Selector{"tools": {"recall"}}, Copy: oar.Copy{Fix: "Retry `recall(query=\"x\")`."}},
 		"retired next step":     {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "list_dir", Say: "{{ call }}"}}}},
 		"undeclared argument":   {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Args: map[string]any{"q": "x"}, Say: "{{ call }}"}}}},
 		"incomplete call":       {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Say: "{{ call }}"}}}},
@@ -166,7 +165,7 @@ func TestBundledCopyNamesAToolOnlyAsSubjectMentionOrCheckedStep(t *testing.T) {
 		}
 	}
 	for name, rule := range map[string]*oar.Rule{
-		"subject":   {Selector: oar.Selector{"tool": {"recall"}}, Copy: oar.Copy{What: "`recall` failed."}},
+		"subject":   {Selector: oar.Selector{"tools": {"recall"}}, Copy: oar.Copy{What: "`recall` failed."}},
 		"mention":   {NextSteps: &oar.NextSteps{Mentions: []string{"recall"}}, Copy: oar.Copy{Why: "Results from `recall` are retained."}},
 		"fact name": {Copy: oar.Copy{Fix: "See {{ paintedwolf.source_history }}."}},
 		"next step": {NextSteps: &oar.NextSteps{Steps: []oar.NextStep{{Tool: "recall", Complete: true, Args: map[string]any{"query": "x"}, Say: "{{ call }}"}}}},

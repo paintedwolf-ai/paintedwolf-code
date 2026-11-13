@@ -53,25 +53,31 @@ func (userHelpers) Store(gitcredential.Credential) error { return nil }
 func (userHelpers) Erase(gitcredential.Credential) error { return nil }
 
 // AgentCredentials is the credential service one agent network command's Git
-// asks. It answers get only, only for recipients admitted to it, and only once
-// the person granted credential use; the confined helper never reads the
-// person's helpers itself.
+// asks. It answers get only, only for recipients admitted to it, and only with
+// a found credential its release let go to that recipient; the confined helper
+// never reads the person's helpers itself.
 type AgentCredentials struct {
 	service *gitcredential.Service
 	scope   *gitcredential.Scope
 }
 
+// Recipient and Credential restate the scoped service's release vocabulary:
+// agent code reaches saved credentials only through this door, so its release
+// callback names the types here rather than the credential store's package.
+type (
+	Recipient  = gitcredential.Recipient
+	Credential = gitcredential.Credential
+)
+
 // StartAgentCredentials starts a service with an empty scope; Admit adds each
-// recipient once its contact is authorized, and granted lets it answer.
-func StartAgentCredentials(ctx context.Context, granted bool) (*AgentCredentials, error) {
+// recipient once its contact is authorized, and release reviews each found
+// credential before Git receives it.
+func StartAgentCredentials(ctx context.Context, release gitcredential.ReleaseFunc) (*AgentCredentials, error) {
 	bin, err := binaryPathFn()
 	if err != nil {
 		return nil, err
 	}
-	scope := &gitcredential.Scope{}
-	if granted {
-		scope.Grant()
-	}
+	scope := &gitcredential.Scope{Release: release}
 	service, err := gitcredential.Serve(ctx, gitcredential.ServeOptions{GitBinary: bin, Store: agentCredentialStore(), Scope: scope})
 	if err != nil {
 		return nil, err
@@ -98,8 +104,8 @@ func (c *AgentCredentials) Admit(urls ...string) {
 	}
 }
 
-// Declined is each admitted recipient Git asked credentials for without a
-// grant, as a URL.
+// Declined is each admitted recipient whose found credential the release did
+// not let go, as a URL.
 func (c *AgentCredentials) Declined() []string {
 	var out []string
 	for _, r := range c.scope.Declined() {

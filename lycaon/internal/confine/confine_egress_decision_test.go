@@ -106,3 +106,75 @@ func TestRetrievalDialsFollowTheirContract(t *testing.T) {
 		t.Fatal("an ask rule on a retrieval dial did not reach the gate")
 	}
 }
+
+// Below Strict the confinement leaves a dial quiet only when a retrieval
+// capability reaches a source. Every dial whose address the agent wrote is the
+// gate's to decide, whichever tool makes it.
+func TestAgentAuthoredAddressesReachTheGate(t *testing.T) {
+	ep := egressproxy.Endpoint{Host: "page.example", Transport: egressproxy.TransportHTTPRequest, Port: 443}
+	for name, tc := range map[string]struct {
+		cmd         EgressCommand
+		reachesGate bool
+	}{
+		"source reader, source address":   {cmd: EgressCommand{Image: "fetch_url"}},
+		"web search":                      {cmd: EgressCommand{Image: "web_search"}},
+		"MCP tool":                        {cmd: EgressCommand{ToolName: "mcp_acme_ship"}},
+		"source reader, displayed link":   {cmd: EgressCommand{Image: "fetch_url", Origin: AddressDisplayed}, reachesGate: true},
+		"source reader, authored address": {cmd: EgressCommand{Image: "fetch_url", Origin: AddressAuthored}, reachesGate: true},
+		"request tool":                    {cmd: EgressCommand{Image: "http_request", ToolName: "http_request"}, reachesGate: true},
+		"command":                         {cmd: EgressCommand{ToolName: "command", CommandLine: "curl https://page.example/"}, reachesGate: true},
+	} {
+		t.Run(name, func(t *testing.T) {
+			b := newTestBroker()
+			reached := false
+			b.resolver = func(context.Context, EgressCommand, egressproxy.Endpoint, *EgressDetectionCitation) bool {
+				reached = true
+				return true
+			}
+			cmd := tc.cmd
+			cmd.SessionID, cmd.ToolCallID = "s1", "a1"
+			if !b.decideAttributedEndpoint(context.Background(), cmd, ep) {
+				t.Fatal("the dial was refused")
+			}
+			if reached != tc.reachesGate {
+				t.Fatalf("reached the gate = %v, want %v", reached, tc.reachesGate)
+			}
+		})
+	}
+}
+
+// A host the agent named in a retrieval request, or one beneath it, reaches
+// the gate; the request's other hosts stay its sources.
+func TestNamedHostsReachTheGate(t *testing.T) {
+	cmd := EgressCommand{SessionID: "s1", Image: "web_search", NamedHosts: []string{"named.example"}}
+	for host, authored := range map[string]bool{
+		"named.example":       true,
+		"Named.Example":       true,
+		"www.named.example":   true,
+		"notnamed.example":    false,
+		"example":             false,
+		"named.example.other": false,
+		"result.example":      false,
+	} {
+		t.Run(host, func(t *testing.T) {
+			if got := cmd.OriginOf(host) == AddressAuthored; got != authored {
+				t.Fatalf("authored = %v, want %v", got, authored)
+			}
+			b := newTestBroker()
+			reached := false
+			b.resolver = func(context.Context, EgressCommand, egressproxy.Endpoint, *EgressDetectionCitation) bool {
+				reached = true
+				return true
+			}
+			dial := cmd
+			dial.ToolCallID = "call-" + host
+			ep := egressproxy.Endpoint{Host: host, Transport: egressproxy.TransportHTTPRequest, Port: 443}
+			if !b.decideAttributedEndpoint(context.Background(), dial, ep) {
+				t.Fatal("the dial was refused")
+			}
+			if reached != authored {
+				t.Fatalf("reached the gate = %v, want %v", reached, authored)
+			}
+		})
+	}
+}

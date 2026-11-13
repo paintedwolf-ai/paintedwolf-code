@@ -1,25 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SUMMARIZE_PATHS_MISSING
 kind: schema
-anchor: tool.rejected
-selector:
-  paintedwolf.operation:
-    - summarize
-requires:
-  profiles:
-    - tool
-  facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.missing_paths, paintedwolf.next_steps]
-when: paintedwolf.rejection_code == "SUMMARIZE_PATHS_MISSING"
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.missing_paths, paintedwolf.next_steps, paintedwolf.operation, paintedwolf.rejection_code]
+when: paintedwolf.operation == "summarize" && paintedwolf.rejection_code == "SUMMARIZE_PATHS_MISSING"
 effect: block
-copy:
-  what: 'Some requested summarize inputs do not exist: {{ paintedwolf.missing_paths }}.'
-  cause: Each path or paths entry must be an existing repo-relative file or directory.
-  why: A summary must preserve the requested input scope; silently dropping missing entries would make it incomplete.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code; fix paths and retry once
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:summarize
-x-paintedwolf-message: requested summary inputs include missing paths
+message: requested summary inputs include missing paths
+what: 'Some requested summarize inputs do not exist: {{ paintedwolf.missing_paths }}.'
+cause: Each path or paths entry must be an existing repo-relative file or directory.
+why: A summary must preserve the requested input scope; silently dropping missing entries would make it incomplete.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code; fix paths and retry once
 x-paintedwolf-scenarios:
   - id: default
     vars:

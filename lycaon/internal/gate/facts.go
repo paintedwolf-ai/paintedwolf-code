@@ -150,10 +150,12 @@ type Endpoint struct {
 	// FirstUseThisSession is true when this chat has not yet reached this
 	// host in the same way: by its own dial, or for a retrieval dial, by any.
 	FirstUseThisSession bool
-	// Retrieval is a dial made under a declared retrieval capability, such
-	// as web research, whose contract covers reaching its sources; only
-	// Strict's first-contact confirmation applies to it.
+	// Retrieval is a retrieval capability, such as web research, reaching one
+	// of its sources; only Strict's first-contact confirmation applies to it.
 	Retrieval bool
+	// DisplayedLink is a retrieval capability following a link a read page
+	// displayed.
+	DisplayedLink bool
 }
 
 // FileMode is which direction a filesystem action moves content.

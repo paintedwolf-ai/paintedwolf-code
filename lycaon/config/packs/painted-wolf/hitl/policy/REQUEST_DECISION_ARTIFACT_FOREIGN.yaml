@@ -1,25 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: REQUEST_DECISION_ARTIFACT_FOREIGN
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - request_decision
-requires:
-  facts: [paintedwolf.rejection_code]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "REQUEST_DECISION_ARTIFACT_FOREIGN"
 effect: block
-copy:
-  what: request_decision referenced an artifact outside this session tree.
-  cause: The artifact belongs to another session tree.
-  why: A worker decision may attach only in-tree artifacts.
-  fix: Pass an artifact produced in this session tree.
-  instead: Branch on Code REQUEST_DECISION_ARTIFACT_FOREIGN; pass an in-tree artifact UUID
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:request_decision
-x-paintedwolf-message: artifact is outside this session tree
+message: artifact is outside this session tree
+what: request_decision referenced an artifact outside this session tree.
+cause: The artifact belongs to another session tree.
+why: A worker decision may attach only in-tree artifacts.
+fix: Pass an artifact produced in this session tree.
+instead: Branch on Code REQUEST_DECISION_ARTIFACT_FOREIGN; pass an in-tree artifact UUID
 x-paintedwolf-scenarios:
   - id: default
     vars:

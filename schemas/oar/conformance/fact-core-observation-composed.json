@@ -1,0 +1,33 @@
+{
+  "id": "fact-core-observation-composed",
+  "title": "A rule composes core observations rather than reading a verdict",
+  "covers": [
+    "OAR-FACT-1",
+    "OAR-FACT-5"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "SCOPE_DENIED",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "not_found && !is_directory && tool == \"read\"",
+    "requires_facts": [
+      "is_directory",
+      "not_found"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "not_found": true,
+      "is_directory": false
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "SCOPE_DENIED"
+  }
+}

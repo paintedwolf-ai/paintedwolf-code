@@ -21,9 +21,9 @@ import (
 	"github.com/lycaon/lycaon/internal/captureprojection"
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/commandsurface"
-	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/platform"
+	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcommand"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -146,45 +146,6 @@ type programRun struct {
 	window     *programWindow
 	sessions   SessionOwners
 	provenance programProvenanceState
-}
-
-// ProgramOutcome is the command tool's result for a settled program.
-type ProgramOutcome struct {
-	ResultVersion    int                              `json:"result_version,omitempty"`
-	Outcome          string                           `json:"outcome,omitempty"`
-	ProgramID        string                           `json:"program_id"`
-	State            string                           `json:"state"`
-	Status           int                              `json:"status"`
-	StopCode         string                           `json:"stop_code,omitempty"`
-	Stdout           string                           `json:"stdout"`
-	Stderr           string                           `json:"stderr"`
-	StdoutRef        string                           `json:"stdout_ref,omitempty"`
-	StderrRef        string                           `json:"stderr_ref,omitempty"`
-	Outputs          []api.CommandProgramOutputWindow `json:"outputs,omitempty"`
-	Truncated        bool                             `json:"truncated,omitempty"`
-	ExecutedChildren int                              `json:"executed_children"`
-	CompletedEffects int                              `json:"completed_effects"`
-	UncertainEffects int                              `json:"uncertain_effects"`
-	NativeGaps       int                              `json:"native_gaps,omitempty"`
-	// CPUTimeUnmeasured marks a time report whose user and sys count native
-	// operations as zero.
-	CPUTimeUnmeasured bool `json:"cpu_time_unmeasured,omitempty"`
-	ReplayAvailable   bool `json:"replay_available"`
-	// Refusal is the host decision that stopped the program; the output and
-	// status of every child that ran before it stay in this outcome.
-	Refusal *ProgramRefusal `json:"refusal,omitempty"`
-	// SourceWindow is the observation window of a program that launched an
-	// external process.
-	SourceWindow *hostcmd.SourceWindow `json:"source_window,omitempty"`
-}
-
-// ProgramRefusal is a typed host refusal at the program's stop point with its
-// rendered feedback.
-type ProgramRefusal struct {
-	Code            string                                       `json:"code"`
-	Feedback        string                                       `json:"feedback"`
-	Details         map[string]any                               `json:"details,omitempty"`
-	DeliveryFailure *toolexecution.ProgramRefusalDeliveryFailure `json:"delivery_failure,omitempty"`
 }
 
 // Run parses and validates the whole submitted program before any effect,
@@ -391,7 +352,13 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 	}
 	scope := captureprojection.Scope{ProjectID: tc.Identity.ProjectID, RootSessionID: tc.ChatSessionID(), SessionID: tc.Identity.SessionID}
 	screening := captureprojection.StreamOptions{WorkingMemory: memory, Bounds: secretmatch.StreamBounds{InputBytes: invocation.MaximumProgramInputBytes, OutputBytes: invocation.MaximumProgramInputBytes, MemoryBytes: 32 << 20, DetectorWork: 1 << 30}}
+	var retainSerial sync.Mutex
 	run.retainOutput = func(ctx context.Context, executionID, stream string, data []byte, complete bool) error {
+		// Retentions serialize per run: each pass leases the zstd stream
+		// reader's 32 MiB working window, and concurrent leases overflow the
+		// program's working account before either publication finishes.
+		retainSerial.Lock()
+		defer retainSerial.Unlock()
 		outputScreening := screening
 		outputScreening.Policy = secretmatch.StreamPolicy{ManagedEchoes: true}
 		spill, redacted, err := r.retainScreened(ctx, memory, executionID+":"+stream, data, scope, outputScreening)
@@ -402,7 +369,12 @@ func (r *ProgramRuntime) bindProgramCapture(ctx context.Context, run *programRun
 		if _, err := outputs.Attach(ctx, root.Identity.ProgramID, output, spill); err != nil {
 			return errors.Join(err, spill.Close())
 		}
-		return nil
+		body, err := outputs.Open(ctx, tc.Identity.SessionID, root.Identity.ProgramID, output.Reference)
+		if err != nil {
+			return err
+		}
+		err = scratch.PublishCommandOutput(tc.Host.SessionOutputDir, scratch.CommandOutput{ProgramID: root.Identity.ProgramID, ExecutionID: executionID, Stream: stream}, body.Reader)
+		return errors.Join(err, body.Reader.Close())
 	}
 	maximumNodes := 0
 	for _, limit := range run.catalog.Language.Limits {
@@ -767,52 +739,4 @@ func (r *programRun) setSourceText(unitID, text string) {
 	}
 	r.sources[unitID] = text
 	r.sourcesMu.Unlock()
-}
-
-// childOutputBytes bounds each child stream the output store retains.
-const childOutputBytes = 64 << 10
-
-// childOutputs wraps a child's streams so source mappings on top-level stdout
-// carry their stream offset and only a failed child's stderr is retained per
-// execution; pipe stages produce no retention rows.
-func (r *programRun) childOutputs(request commandprogram.OperationRequest, streams commandprogram.Streams) (commandprogram.Streams, func(context.Context, toolcontract.ProducerResult, error)) {
-	teed := streams
-	outputView, errorView := newChildStreamView(streams.Output), newChildStreamView(streams.Error)
-	if outputView != nil {
-		teed.Output = outputView
-	}
-	errorOutput := nonNilWriter(streams.Error)
-	if errorView != nil {
-		errorOutput = errorView
-	}
-	closeViews := func() {
-		if outputView != nil {
-			outputView.Close()
-		}
-		if errorView != nil {
-			errorView.Close()
-		}
-	}
-	if r.retainOutput == nil {
-		teed.Error = errorOutput
-		return teed, func(context.Context, toolcontract.ProducerResult, error) { closeViews() }
-	}
-	stderr := &boundedBuffer{limit: childOutputBytes}
-	if errorView != nil {
-		errorView.copy = stderr
-		teed.Error = errorView
-	} else {
-		teed.Error = io.MultiWriter(errorOutput, stderr)
-	}
-	execution := request.Invocation.Identity.ExecutionID
-	return teed, func(ctx context.Context, result toolcontract.ProducerResult, err error) {
-		defer closeViews()
-		failed := err != nil || result.Status != 0 || (result.Terminal != "" && result.Terminal != toolcontract.ProducerCompleted)
-		if !failed {
-			return
-		}
-		if data := stderr.Bytes(); len(data) > 0 {
-			_ = r.retainOutput(context.WithoutCancel(ctx), execution, "stderr", data, !stderr.truncated)
-		}
-	}
 }
