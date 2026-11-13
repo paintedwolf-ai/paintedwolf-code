@@ -52,6 +52,10 @@ func zeroValue(t FactType) value {
 		return []map[string]any{}
 	case TypeMap:
 		return map[string]any{}
+	case typeDyn:
+		// dyn is the type of a selected map member and never declarable
+		// ([OAR-FACT-25]); no declared fact carries it.
+		return nil
 	}
 	return nil
 }
@@ -298,7 +302,7 @@ func evalBinary(n *node, ctx *evalContext) (value, error) {
 	case "in":
 		return evalIn(l, r)
 	case "==", "!=":
-		if !comparable(l, r) {
+		if !comparableValues(l, r) {
 			return nil, raise("a selected member of type %T was compared with %T", l, r)
 		}
 		equal := valuesEqual(l, r)
@@ -639,9 +643,9 @@ func asBool(v value) (bool, error) {
 	return b, nil
 }
 
-// comparable reports whether == may compare two runtime values: the same
+// comparableValues reports whether == may compare two runtime values: the same
 // scalar kind, or two numbers.
-func comparable(l, r value) bool {
+func comparableValues(l, r value) bool {
 	switch l.(type) {
 	case int64, float64:
 		switch r.(type) {

@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -26,7 +27,7 @@ func TestConformanceRunnerSpecPosture(t *testing.T) {
 		t.Fatalf("expected fixtures, got %d", len(fxs))
 	}
 	for _, fx := range fxs {
-		if err := cr.RunFixture(fx); err != nil {
+		if err := cr.RunFixture(context.Background(), fx); err != nil {
 			t.Errorf("%s: %v", fx.ID, err)
 		}
 	}

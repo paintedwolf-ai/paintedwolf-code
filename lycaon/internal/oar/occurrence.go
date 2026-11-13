@@ -101,19 +101,3 @@ func applyRuleTransforms(content string, contributions []transformContribution) 
 	}
 	return oarcore.ApplyTransforms(content, converted, targetFacts, ruleIDs)
 }
-
-func reportTransforms(specs []*TransformSpec) []map[string]any {
-	out := make([]map[string]any, 0, len(specs))
-	for _, spec := range specs {
-		if spec == nil {
-			continue
-		}
-		out = append(out, oarcore.ReportTransform(&oarcore.TransformSpec{
-			Action:         spec.Action,
-			Target:         spec.Target,
-			Replacement:    spec.Replacement,
-			HasReplacement: spec.HasReplacement,
-		}))
-	}
-	return out
-}

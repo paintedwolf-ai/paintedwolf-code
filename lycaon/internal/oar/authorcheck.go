@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -51,7 +52,7 @@ type RuleCheckOptions struct {
 //
 // The result set is one row per rule plus one row per fixture that names a
 // rule no checked file provided.
-func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, error) {
+func CheckRuleFiles(ctx context.Context, paths []string, opts RuleCheckOptions) ([]RuleCheckResult, error) {
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("no rule paths given")
 	}
@@ -113,7 +114,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 			res := RuleCheckResult{RuleID: rule.ID, Path: ruleSourcePath(rule, dir.label)}
 			for _, fx := range fixturesByRule[rule.ID] {
 				res.Scenarios++
-				if err := runner.RunFixture(fx); err != nil {
+				if err := runner.RunFixture(ctx, fx); err != nil {
 					res.Code = RuleCheckScenarioMismatch
 					res.Detail = fmt.Sprintf("%s: %v", fixtureName(fx), err)
 					break
@@ -139,7 +140,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 		}
 		for _, fx := range fxs {
 			res := RuleCheckResult{RuleID: id, Path: fixtureName(fx), Scenarios: 1}
-			if err := runner.RunFixture(fx); err != nil {
+			if err := runner.RunFixture(ctx, fx); err != nil {
 				res.Code = RuleCheckScenarioMismatch
 				res.Detail = err.Error()
 			}
@@ -148,7 +149,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 	}
 	for _, fx := range orphanFixtures {
 		res := RuleCheckResult{Path: fixtureName(fx), Scenarios: 1}
-		if err := runner.RunFixture(fx); err != nil {
+		if err := runner.RunFixture(ctx, fx); err != nil {
 			res.Code = RuleCheckScenarioMismatch
 			res.Detail = err.Error()
 		}

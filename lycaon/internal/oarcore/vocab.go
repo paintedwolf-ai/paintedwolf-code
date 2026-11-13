@@ -184,11 +184,8 @@ var reservedDetectors = []string{
 var kinds = []string{"schema", "policy", "invariant", "detector"}
 
 var (
-	effects          = []string{"block", "warn", "nudge", "allow", "transform"}
-	enforcements     = []string{"enforce", "monitor"}
-	statuses         = []string{"experimental", "test", "stable", "deprecated"}
-	relatedTypes     = []string{"derived", "obsolete", "merged", "renamed", "similar"}
-	transformActions = []string{"redact", "replace", "annotate"}
+	effects      = []string{"block", "warn", "nudge", "allow", "transform"}
+	enforcements = []string{"enforce", "monitor"}
 )
 
 // The format version this implementation supports.

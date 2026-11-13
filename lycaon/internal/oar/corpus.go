@@ -159,7 +159,7 @@ func fixtureNumbers(v any) any {
 }
 
 // RunCorpusDir evaluates every fixture in dir.
-func RunCorpusDir(dir string) ([]CorpusOutcome, error) {
+func RunCorpusDir(ctx context.Context, dir string) ([]CorpusOutcome, error) {
 	fixtures, err := LoadFixturesDir(dir)
 	if err != nil {
 		return nil, err
@@ -170,7 +170,7 @@ func RunCorpusDir(dir string) ([]CorpusOutcome, error) {
 		if err != nil {
 			return nil, err
 		}
-		actual, err := runner.run(fx)
+		actual, err := runner.run(ctx, fx)
 		outcome := CorpusOutcome{ID: fx.ID, Status: "pass", Actual: actual}
 		if err != nil {
 			outcome.Status, outcome.Reason = "fail", err.Error()
@@ -181,12 +181,12 @@ func RunCorpusDir(dir string) ([]CorpusOutcome, error) {
 }
 
 // RunFixture evaluates one fixture and reports the first disagreement.
-func (cr *ConformanceRunner) RunFixture(fx ConformanceFixture) error {
-	_, err := cr.run(fx)
+func (cr *ConformanceRunner) RunFixture(ctx context.Context, fx ConformanceFixture) error {
+	_, err := cr.run(ctx, fx)
 	return err
 }
 
-func (cr *ConformanceRunner) run(fx ConformanceFixture) (map[string]any, error) {
+func (cr *ConformanceRunner) run(ctx context.Context, fx ConformanceFixture) (map[string]any, error) {
 	for key := range fx.Expected {
 		if !containsExact(expectedKeys, key) {
 			return nil, fmt.Errorf("[OAR-CONF-15] fixture %s asserts undefined expected key %q", fx.ID, key)
@@ -223,7 +223,7 @@ func (cr *ConformanceRunner) run(fx ConformanceFixture) (map[string]any, error) 
 		local = anchor
 	}
 	pipeline.EnableAnchor(local)
-	res, err := pipeline.EvaluateBlock(context.Background(), local, gc)
+	res, err := pipeline.EvaluateBlock(ctx, local, gc)
 	if err != nil {
 		return map[string]any{"error": err.Error()}, err
 	}
@@ -421,8 +421,9 @@ func traceOutcome(o TraceOutcome) string {
 	switch o {
 	case TraceMonitoredFired, TraceMonitoredPassed, TraceMonitoredErrored:
 		return "monitor"
+	default:
+		return string(o)
 	}
-	return string(o)
 }
 
 func expectedString(expected map[string]json.RawMessage, key string) (string, bool) {
@@ -595,8 +596,14 @@ func SeedFixturesFromScenarios(policyDir, outDir string, codes []string) error {
 		if r.Anchor == AnchorToolRejected {
 			facts[oarcopy.HostFactNamespace+".rejection_code"] = code
 		}
-		decision, _ := json.Marshal(string(r.Effect))
-		ruleCode, _ := json.Marshal(r.ID)
+		decision, err := json.Marshal(string(r.Effect))
+		if err != nil {
+			return err
+		}
+		ruleCode, err := json.Marshal(r.ID)
+		if err != nil {
+			return err
+		}
 		fx := ConformanceFixture{
 			ID: code, Rule: doc,
 			Input:    FixtureInput{Anchor: r.Anchor, Facts: facts},

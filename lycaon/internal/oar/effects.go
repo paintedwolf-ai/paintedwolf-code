@@ -107,6 +107,8 @@ func applyScopedCounter(store *CounterStore, sessionID, key string, actions []On
 			store.Increment(sessionID, key, CounterFire, 1)
 		case OnFireResetCounter:
 			store.Reset(sessionID, key, CounterFire)
+		default:
+			// Breakers and events stay keyed by the rule alone.
 		}
 	}
 }
