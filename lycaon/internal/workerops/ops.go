@@ -85,6 +85,15 @@ var (
 type Service struct {
 	Reader Reader
 	Agents AgentLane
+	// Accounted hears of results an operation accounted for, by job, so the
+	// checklist latch can release them.
+	Accounted func(sessionID string, jobIDs []string)
+}
+
+func (s *Service) accounted(sessionID, jobID string) {
+	if s.Accounted != nil && jobID != "" {
+		s.Accounted(sessionID, []string{jobID})
+	}
 }
 
 func (s *Service) resolve(ctx context.Context, actor workerrecords.Actor, name string) (Snapshot, error) {
@@ -159,6 +168,7 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 				return Receipt{}, err
 			}
 			receipt.Accounted = result.ResultID
+			s.accounted(actor.SessionID, result.JobID)
 		}
 	}
 	return receipt, nil
@@ -201,6 +211,7 @@ func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op work
 			return workerrecords.Disposition{}, err
 		}
 	}
+	s.accounted(actor.SessionID, ref.JobID)
 	return d, nil
 }
 

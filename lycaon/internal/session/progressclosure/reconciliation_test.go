@@ -231,3 +231,23 @@ func TestAcknowledgementAccountsForTheListedResults(t *testing.T) {
 		t.Fatalf("accounted %v", accounts.jobs)
 	}
 }
+
+// An operation that accounts for one finish releases only that finish; the
+// latch clears with the last one.
+func TestReleaseDropsAccountedFinishes(t *testing.T) {
+	store := progress.NewMemoryStore()
+	testutil.FailErr(t, "seed pending document", store.Set("session", "- [ ] Deliver"))
+	closure := progressclosure.New()
+	closure.SetProgress(store)
+	closure.Arm(t.Context(), "session", "worker-a")
+	closure.Arm(t.Context(), "session", "worker-b")
+	closure.Release("session", []string{"worker-a"})
+	rec := closure.Reconciliation("session")
+	if rec == nil || !slices.Equal(rec.Jobs, []string{"worker-b"}) {
+		t.Fatalf("after one release = %+v", rec)
+	}
+	closure.Release("session", []string{"worker-b"})
+	if closure.Reconciliation("session") != nil {
+		t.Fatal("latch kept after its last finish was accounted for")
+	}
+}

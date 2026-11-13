@@ -28,6 +28,7 @@ type sqlQueueConfig struct {
 	workflowRuns     *WorkflowDomains
 	sessionAdmission func(ctx context.Context, sessionID string, fn func() error) error
 	failureCatalog   ExecuteFailureRenderer
+	lanes            *WorkerLanes
 }
 
 type sqlQueueCore struct {
@@ -143,6 +144,13 @@ func (q *SQLQueue) SetWorkerWorkspaceManager(ws WorkerWorkspaceManager) {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 	q.workerWorkspace = ws
+}
+
+// SetWorkerLanes runs worker rounds' write jobs in their workers' lanes.
+func (q *SQLQueue) SetWorkerLanes(lanes *WorkerLanes) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.lanes = lanes
 }
 
 // SetProjectStore loads project roots when provisioning worker sandboxes.

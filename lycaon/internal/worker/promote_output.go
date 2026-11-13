@@ -187,6 +187,9 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 		}
 	}
 	sort.Strings(out.Orphaned)
+	if s.Accounted != nil {
+		s.Accounted(sessionID, []string{overlayID})
+	}
 	return out, nil
 }
 

@@ -106,7 +106,11 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 			agent, mode = job.AgentType, job.ScopeMode
 		}
 		prompt := job.Instructions
+		// A worker started without a standing brief works toward its instruction.
 		goal := w.Brief
+		if goal == "" {
+			goal = job.Instructions
+		}
 		if job.Brief != "" {
 			goal = job.Brief
 			prompt = formatTaskCharter(api.WorkerTaskCharter{Goal: job.Brief}) + "\n\n" + job.Instructions

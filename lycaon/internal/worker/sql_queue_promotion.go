@@ -165,11 +165,20 @@ func (q *sqlQueuePromotion) ListByWorkspacePath(ctx context.Context, workspacePa
 	return q.store.ListByWorkspacePath(ctx, workspacePath, status...)
 }
 
-// ListPendingOverlayPromote returns completed write workers awaiting overlay promote.
+// ListPendingOverlayPromote returns completed write workers awaiting overlay
+// promote. Shelved changes stay unlanded on purpose and are not listed.
 func (q *sqlQueuePromotion) ListPendingOverlayPromote(ctx context.Context, sessionID string) ([]api.WorkerTask, error) {
 	tasks, err := q.ListBySession(ctx, "", sessionID, api.WorkerStatusComplete)
 	if err != nil {
 		return nil, err
+	}
+	shelvedIDs, err := q.store.queries.ListShelvedWorkerJobs(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	shelved := make(map[string]struct{}, len(shelvedIDs))
+	for _, id := range shelvedIDs {
+		shelved[id] = struct{}{}
 	}
 	var pending []api.WorkerTask
 	for _, task := range tasks {
@@ -177,6 +186,9 @@ func (q *sqlQueuePromotion) ListPendingOverlayPromote(ctx context.Context, sessi
 			continue
 		}
 		if task.MergeStatus != api.WorkerMergeStatusPending {
+			continue
+		}
+		if _, ok := shelved[task.ID]; ok {
 			continue
 		}
 		pending = append(pending, task)
