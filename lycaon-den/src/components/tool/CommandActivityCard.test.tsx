@@ -126,7 +126,7 @@ describe("activity footer and records", () => {
     const get = vi.fn(async (_session: string, programId: string) => ({ ...page([{ ...receipt(), id: `${programId}:execution`, program_id: programId }]), program: { ...program, id: programId } }));
     const { view } = await opened(value, get);
     fireEvent.click(assertNamedControl(await view.findByTestId("command-activity-receipts"), "button"));
-    expect(sink.mock.calls.at(-1)?.[0].document.content.programs.map((item: { id: string }) => item.id)).toEqual(["program", "p2", "p3", "p4", "p5"]);
+    expect(sink.mock.calls.at(-1)?.[0].document.content.scopes.map((item: { programId: string }) => item.programId)).toEqual(["program", "p2", "p3", "p4", "p5"]);
     expect(get).toHaveBeenCalledTimes(3);
   });
 
