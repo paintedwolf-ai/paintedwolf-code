@@ -194,11 +194,6 @@ func (p PromoteRoots) WritePrimaryBytes(task *api.WorkerTask, qualifiedPath stri
 	return p.writePrimaryBytesAt(task, id.RootID, id.ScopeRel, content, nil, nil)
 }
 
-// WritePrimaryBytesAt writes exact content to the structured source-root location.
-func (p PromoteRoots) WritePrimaryBytesAt(task *api.WorkerTask, rootID, scopeRel string, content []byte) error {
-	return p.writePrimaryBytesAt(task, rootID, scopeRel, content, nil, nil)
-}
-
 func (p PromoteRoots) writePrimaryBytes(task *api.WorkerTask, qualifiedPath string, content []byte, restoreMode *os.FileMode, verify func(fseffect.Target) error) error {
 	qualifiedPath = filepath.ToSlash(filepath.Clean(strings.TrimSpace(qualifiedPath)))
 	if qualifiedPath == "" || qualifiedPath == "." || sandbox.HasParentTraversal(qualifiedPath) {
