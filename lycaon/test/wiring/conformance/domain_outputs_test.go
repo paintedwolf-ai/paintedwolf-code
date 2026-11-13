@@ -16,14 +16,20 @@ import (
 func verifyInspectDomainOutputs(t *testing.T, observed runtimeObservation) {
 	t.Helper()
 	decoder := json.NewDecoder(strings.NewReader(observed.Outcome.Stdout))
+	decode := func(step string, v any) {
+		t.Helper()
+		if err := decoder.Decode(v); err != nil {
+			t.Fatalf("%s: %v\noutcome: %+v", step, err, observed.Outcome)
+		}
+	}
 	var outline nativesurvey.ReadResponse
-	testutil.FailErr(t, "decode native outline", decoder.Decode(&outline))
+	decode("decode native outline", &outline)
 	if outline.Path != "code.go" || outline.Mode != "outline" || outline.TotalLines != 6 || len(outline.Symbols) != 1 || outline.Symbols[0].Name != "Alpha" || outline.Symbols[0].Line != 4 {
 		t.Fatalf("outline = %+v", outline)
 	}
 	var maps [2]reposurvey.RepoResponse
 	for i := range maps {
-		testutil.FailErr(t, "decode native repository map", decoder.Decode(&maps[i]))
+		decode("decode native repository map", &maps[i])
 		if maps[i].Bundle != "layout_overview" || maps[i].Digest == "" || maps[i].Groups == 0 || maps[i].EntriesExamined == 0 {
 			t.Fatalf("repository map %d = %+v", i, maps[i])
 		}
@@ -32,7 +38,7 @@ func verifyInspectDomainOutputs(t *testing.T, observed runtimeObservation) {
 		t.Fatalf("depth two examined fewer entries than depth one: %+v", maps)
 	}
 	var summary nativesurvey.SummarizeResponse
-	testutil.FailErr(t, "decode native summary", decoder.Decode(&summary))
+	decode("decode native summary", &summary)
 	if summary.Task != "Alpha" || len(summary.Pack.Identity) == 0 || summary.Pack.Identity[0].Path != "code.go" {
 		t.Fatalf("summary = %+v", summary)
 	}
