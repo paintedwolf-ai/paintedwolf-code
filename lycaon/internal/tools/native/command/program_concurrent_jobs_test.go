@@ -23,7 +23,7 @@ func TestConcurrentProgramsKeepTheirOwnBareWaitJobs(t *testing.T) {
 		var handle string
 		_, err = supervisor.RunProgram(admitted, root, func(ctx context.Context) (toolcontract.ProducerResult, error) {
 			var startErr error
-			handle, startErr = supervisor.StartJob(ctx, root, func(ctx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			handle, startErr = startJob(ctx, supervisor, root, func(ctx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				noteJobNative(ctx, []string{"waiting"})
 				<-ctx.Done()
 				return toolcontract.ProducerResult{Status: 130}, ctx.Err()
