@@ -244,6 +244,11 @@ func (p *ProgramPaths) Bind(ctx context.Context, operand string, write bool) (Bo
 		return BoundPath{}, err
 	}
 	relative, err := exactRelativeOperand(resolved, addressed)
+	if err != nil && resolved.External {
+		// An outside grant anchors on canonical names, so an operand spelled
+		// through a leaf symlink opens the canonical object the grant covers.
+		relative, err = filepath.FromSlash(resolved.ScopeRel), nil
+	}
 	if err != nil {
 		return BoundPath{}, err
 	}
