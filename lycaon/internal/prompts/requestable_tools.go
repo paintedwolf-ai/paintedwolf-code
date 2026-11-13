@@ -1,9 +1,8 @@
 package prompts
 
 import (
-	"strings"
-
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolpresentation"
 	"github.com/lycaon/lycaon/internal/toolschema"
 	"github.com/lycaon/lycaon/internal/toolsurface"
@@ -16,10 +15,15 @@ type RequestableToolView struct {
 	Role    string
 }
 
-var capabilityLabels = []struct{ role, label string }{
+// capabilityLabels lists requestable capabilities in render order. IDs are
+// presentation roles, except that the command role splits by which launchers
+// remain requestable.
+var capabilityLabels = []struct{ id, label string }{
 	{"investigation", "repository investigation"},
 	{"mutation", "file and git changes"},
-	{"command", "commands and interactive terminal sessions"},
+	{capabilityCommandAndTerminal, "commands and interactive terminal sessions"},
+	{capabilityCommandOnly, "commands and background output"},
+	{capabilityTerminalOnly, "interactive terminal sessions and screen snapshots"},
 	{"process", "processes"},
 	{"interface_test", "browser pages and screenshots"},
 	{"inspection", "viewing images, video, and rendered views"},
@@ -30,37 +34,55 @@ var capabilityLabels = []struct{ role, label string }{
 	{"coordination", "workers, workflows, budgets, and managed secrets"},
 }
 
+const (
+	capabilityCommandAndTerminal = "command"
+	capabilityCommandOnly        = "command_only"
+	capabilityTerminalOnly       = "terminal_only"
+)
+
 // RequestableCapabilities lists the capability labels present in rows in a fixed order.
 func RequestableCapabilities(rows []RequestableToolView) []string {
-	present := make(map[string]bool, len(rows))
-	hasCommand := false
-	hasTerminalSession := false
-	for _, row := range rows {
-		present[row.Role] = true
-		if row.Name == "command" {
-			hasCommand = true
-		}
-		if strings.HasPrefix(row.Name, "terminal_") {
-			hasTerminalSession = true
-		}
-	}
-	out := make([]string, 0, len(capabilityLabels))
+	present := requestableCapabilityIDs(rows)
+	out := make([]string, 0, len(present))
 	for _, c := range capabilityLabels {
-		if !present[c.role] {
-			continue
+		if present[c.id] {
+			out = append(out, c.label)
 		}
-		label := c.label
-		if c.role == "command" {
-			switch {
-			case hasTerminalSession && !hasCommand:
-				label = "interactive terminal sessions and screen snapshots"
-			case !hasTerminalSession:
-				label = "commands and background output"
-			}
-		}
-		out = append(out, label)
 	}
 	return out
+}
+
+// requestableCapabilityIDs skips resource controls: they arrive with their live
+// resource, so requesting one ahead of it gains nothing.
+func requestableCapabilityIDs(rows []RequestableToolView) map[string]bool {
+	present := make(map[string]bool, len(rows))
+	commandRole, command, terminal := false, false, false
+	for _, row := range rows {
+		if toolcontract.ResourceControl(row.Name) {
+			continue
+		}
+		if row.Role != "command" {
+			present[row.Role] = true
+			continue
+		}
+		commandRole = true
+		switch row.Name {
+		case "command":
+			command = true
+		case "terminal_open":
+			terminal = true
+		}
+	}
+	switch {
+	case !commandRole:
+	case command && !terminal:
+		present[capabilityCommandOnly] = true
+	case terminal && !command:
+		present[capabilityTerminalOnly] = true
+	default:
+		present[capabilityCommandAndTerminal] = true
+	}
+	return present
 }
 
 // SurfaceTurn holds session-loaded tools and tool schemas for a turn.
