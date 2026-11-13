@@ -7,6 +7,7 @@ import (
 	runstate "github.com/lycaon/lycaon/internal/workflow/runstate"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
+	"github.com/lycaon/lycaon/internal/api/briefingadmin"
 	"github.com/lycaon/lycaon/internal/api/capabilityadmin"
 	"github.com/lycaon/lycaon/internal/api/extensionadmin"
 	"github.com/lycaon/lycaon/internal/api/sourceapi"
@@ -24,7 +25,6 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/extensionstate"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -160,7 +160,7 @@ type SourceDependencies struct {
 	SourceLedger    *sourceledger.Store
 	SourceMutations *projectsource.SourceMutationService
 	FileOperations  *fileops.Service
-	FileBriefings   *filebriefing.Service
+	Briefings       briefingadmin.Services
 	EditorDocuments *editordoc.Service
 	EditorClients   *editordoc.ClientLiveness
 	AgentPresence   *agentpresence.Tracker

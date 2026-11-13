@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"github.com/lycaon/lycaon/internal/bootrecovery"
+	"github.com/lycaon/lycaon/internal/briefinghost"
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -26,7 +27,7 @@ type Runtime struct {
 	Costs   cost.CostTracker
 	Pricing *settings.PricingHost
 	// Briefings explains files, actions and activities with the utility model.
-	Briefings *Briefings
+	Briefings *briefinghost.Host
 }
 
 func (b *Runtime) Build(ctx context.Context, options Options, database *db.Store, dataDir string, settingsSvc *settings.Service, resources ResourceLifetime, recovery *bootrecovery.Registry) error {

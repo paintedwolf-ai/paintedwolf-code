@@ -52,6 +52,11 @@ components:
         - delegation_leg_not_found
         - feedback_not_pending
         - feedback_response_required
+        - briefing_disabled
+        - briefing_target_unavailable
+        - briefing_busy
+        - briefing_unavailable
+        - briefing_record_not_found
         - file_briefing_disabled
         - file_briefing_not_found
         - file_briefing_unavailable

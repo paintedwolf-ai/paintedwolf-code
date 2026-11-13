@@ -85,3 +85,13 @@ func TestManifestTracksSourceRevisionAndPrompt(t *testing.T) {
 		t.Fatalf("manifest does not describe the submitted prompt: %+v", material.Manifest.Contract)
 	}
 }
+
+func TestResponseReferencesItsRecordOnlyWhenRecorded(t *testing.T) {
+	if Response(Briefing{ProjectID: "p"}).EvidenceRef != nil {
+		t.Fatal("an unrecorded summary claimed evidence")
+	}
+	ref := Response(Briefing{ProjectID: "p", RecordID: "r"}).EvidenceRef
+	if ref == nil || ref.ProjectID != "p" || ref.RecordID != "r" || fileBriefingEvent(Briefing{ProjectID: "p", RecordID: "r"}, "complete").EvidenceRef == nil {
+		t.Fatalf("evidence %+v", ref)
+	}
+}

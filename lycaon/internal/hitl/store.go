@@ -72,7 +72,7 @@ type Store interface {
 	// SetPendingAIRationale writes Payload["ai_rationale"] (and clears the
 	// ai_rationale_pending flag) only while status is pending. Returns
 	// applied=false when the row is missing or already resolved.
-	SetPendingAIRationale(ctx context.Context, checkpointID, text string) (applied bool, err error)
+	SetPendingAIRationale(ctx context.Context, checkpointID, text, recordID string) (applied bool, err error)
 	// ClearPendingAIRationaleFlag clears Payload["ai_rationale_pending"] only while
 	// status is pending — the fail-soft path when a rationale call produced nothing.
 	// Returns applied=false when the row is missing, already resolved, or the flag

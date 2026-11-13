@@ -142,7 +142,7 @@ func (a *approvalRationaleAttacher) settle(ctx context.Context, projectID string
 		_ = a.deps.Checkpoints.ClearPendingToolApprovalAIRationale(ctx, snap.TargetKey)
 		return
 	}
-	applied, err := a.deps.Checkpoints.PatchPendingToolApprovalAIRationale(ctx, snap.TargetKey, text)
+	applied, err := a.deps.Checkpoints.PatchPendingToolApprovalAIRationale(ctx, snap.TargetKey, text, snap.RecordID)
 	if err != nil || !applied || a.deps.Pins == nil {
 		return
 	}
@@ -155,7 +155,7 @@ func (a *approvalRationaleAttacher) evidence(ctx context.Context, req toolapprov
 	identity := req.ToolContext.Identity
 	ev := briefing.ActionEvidence{Action: briefing.ActionFacts{
 		Tool: req.Tool, CallRef: "tool_call:" + identity.ToolCallID, Args: req.Args,
-		Files: append([]string(nil), req.Files...), Project: req.ToolContext.ActiveRootPath(),
+		Files: append([]string(nil), req.Files...), Project: req.ToolContext.ActiveRootPath(), Session: identity.SessionID,
 	}}
 	if req.Explanation != nil {
 		ev.HostFacts.Text = strings.TrimSpace(strings.Join([]string{req.Explanation.What, req.Explanation.Who, req.Explanation.IfWrong}, "\n"))

@@ -63,7 +63,7 @@ func (m *settledJoinHITL) SessionApprovalDenied(context.Context, string) (bool, 
 func (m *settledJoinHITL) OldestPendingCheckpoints(context.Context) (map[string]time.Time, error) {
 	return nil, nil
 }
-func (m *settledJoinHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string) (bool, error) {
+func (m *settledJoinHITL) PatchPendingToolApprovalAIRationale(context.Context, string, string, string) (bool, error) {
 	return false, nil
 }
 func (m *settledJoinHITL) ClearPendingToolApprovalAIRationale(context.Context, string) error {

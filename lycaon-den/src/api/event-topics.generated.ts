@@ -33,6 +33,7 @@ export const ALL_EVENT_TOPICS = [
   "source_changed",
   "source_operation",
   "file_briefing",
+  "briefing",
   "artifact",
   "agent_presence",
   "editor_document",

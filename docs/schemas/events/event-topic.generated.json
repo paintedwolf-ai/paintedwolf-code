@@ -29,6 +29,7 @@
     "source_changed",
     "source_operation",
     "file_briefing",
+    "briefing",
     "artifact",
     "agent_presence",
     "editor_document",

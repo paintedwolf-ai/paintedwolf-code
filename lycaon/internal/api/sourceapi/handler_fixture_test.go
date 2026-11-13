@@ -61,12 +61,12 @@ func newSourceHandlerFixture(t *testing.T, opts ...func(*Deps)) *Handler {
 	}
 	required := apitestdeps.Deps{
 		Store: deps.SessionStore, Projects: deps.ProjectRegistry, EditorDocuments: deps.EditorDocuments,
-		FileBriefings: deps.FileBriefings, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate,
+		FileBriefings: deps.Briefings.Files, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate,
 		SourceLedger: deps.SourceLedger, SourceMutations: deps.SourceMutations, FileOperations: deps.FileOperations,
 		Workers: deps.Workers,
 	}
 	apitestdeps.Fill(t, &required)
-	deps.EditorDocuments, deps.FileBriefings, deps.ManagedSecrets = required.EditorDocuments, required.FileBriefings, required.ManagedSecrets
+	deps.EditorDocuments, deps.Briefings.Files, deps.ManagedSecrets = required.EditorDocuments, required.FileBriefings, required.ManagedSecrets
 	deps.MutationGate, deps.SourceLedger = required.MutationGate, required.SourceLedger
 	deps.SourceMutations, deps.FileOperations = required.SourceMutations, required.FileOperations
 	deps.Workers = required.Workers

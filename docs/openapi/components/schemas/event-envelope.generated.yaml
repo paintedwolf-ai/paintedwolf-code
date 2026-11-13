@@ -33,6 +33,7 @@ components:
       - $ref: '#/components/schemas/EventEnvelopeSourceChanged'
       - $ref: '#/components/schemas/EventEnvelopeSourceOperation'
       - $ref: '#/components/schemas/EventEnvelopeFileBriefing'
+      - $ref: '#/components/schemas/EventEnvelopeBriefing'
       - $ref: '#/components/schemas/EventEnvelopeArtifact'
       - $ref: '#/components/schemas/EventEnvelopeAgentPresence'
       - $ref: '#/components/schemas/EventEnvelopeEditorDocument'
@@ -72,6 +73,7 @@ components:
           source_changed: '#/components/schemas/EventEnvelopeSourceChanged'
           source_operation: '#/components/schemas/EventEnvelopeSourceOperation'
           file_briefing: '#/components/schemas/EventEnvelopeFileBriefing'
+          briefing: '#/components/schemas/EventEnvelopeBriefing'
           artifact: '#/components/schemas/EventEnvelopeArtifact'
           agent_presence: '#/components/schemas/EventEnvelopeAgentPresence'
           editor_document: '#/components/schemas/EventEnvelopeEditorDocument'
@@ -416,6 +418,18 @@ components:
             const: file_briefing
           data:
             $ref: 'project/file-briefings.yaml#/components/schemas/FileBriefingEvent'
+    EventEnvelopeBriefing:
+      allOf:
+      - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'
+      - type: object
+        required:
+        - topic
+        - data
+        properties:
+          topic:
+            const: briefing
+          data:
+            $ref: 'project/briefings.yaml#/components/schemas/BriefingEvent'
     EventEnvelopeArtifact:
       allOf:
       - $ref: 'events.yaml#/components/schemas/EventEnvelopeBase'

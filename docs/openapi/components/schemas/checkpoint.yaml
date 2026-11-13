@@ -509,6 +509,10 @@ components:
           $ref: checkpoint.yaml#/components/schemas/ApprovalPlan
         ai_rationale: { x-go-name: "AIRationale", type: string}
         ai_rationale_pending: { x-go-name: "AIRationalePending", type: boolean}
+        ai_rationale_evidence_ref:
+          x-go-name: AIRationaleEvidenceRef
+          x-go-pointer: true
+          $ref: project/briefings.yaml#/components/schemas/BriefingEvidenceRef
         joined_count:
           type: integer
           minimum: 1

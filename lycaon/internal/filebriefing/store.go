@@ -44,18 +44,18 @@ type Section struct {
 
 // Briefing is pinned to one resolved source revision.
 type Briefing struct {
-	ProjectID, RootID, Path, TargetKey, AttemptID string
-	Presentation, SourceSHA256                    string
-	Trigger                                       string
-	Status                                        Status
-	Error                                         string
-	FallbackText                                  string
-	Truncated                                     bool
-	Preview                                       Preview
-	Locations                                     []Location
-	Sections                                      []Section
-	UpdatedAt                                     time.Time
-	LastAccessedAt                                time.Time
+	ProjectID, RootID, Path, TargetKey, AttemptID, RecordID string
+	Presentation, SourceSHA256                              string
+	Trigger                                                 string
+	Status                                                  Status
+	Error                                                   string
+	FallbackText                                            string
+	Truncated                                               bool
+	Preview                                                 Preview
+	Locations                                               []Location
+	Sections                                                []Section
+	UpdatedAt                                               time.Time
+	LastAccessedAt                                          time.Time
 }
 
 // Outcome belongs to one generation attempt.
@@ -130,7 +130,7 @@ func (m *Memory) Complete(_ context.Context, outcome Outcome) error {
 		return ErrNotFound
 	}
 	b.Status, b.Error, b.FallbackText, b.UpdatedAt = StatusComplete, "", "", outcome.UpdatedAt
-	b.Sections = cloneSections(outcome.Sections)
+	b.Sections, b.RecordID = cloneSections(outcome.Sections), outcome.RecordID
 	b.Truncated = outcome.Truncated
 	m.rows[k] = b
 	return nil
@@ -549,7 +549,7 @@ func briefingFromRow(row db.FileBriefings) (Briefing, error) {
 	}
 	return Briefing{
 		ProjectID: row.ProjectID, RootID: row.RootID, Path: row.Path, TargetKey: row.TargetKey,
-		AttemptID:    row.AttemptID,
+		AttemptID: row.AttemptID, RecordID: row.RecordID,
 		Presentation: row.Presentation, SourceSHA256: row.SourceSha256, Trigger: row.Trigger,
 		Status: Status(row.Status), Truncated: row.Truncated != 0, Error: row.Error, FallbackText: row.FallbackText,
 		Preview: preview, Locations: locations, Sections: cloneSections(sections),

@@ -111,6 +111,7 @@ var (
 	operationGetBackupCapabilities              = generatedOperation{ID: "getBackupCapabilities", Method: "GET", Path: "/v1/backup/capabilities"}
 	operationGetBlueprint                       = generatedOperation{ID: "getBlueprint", Method: "GET", Path: "/v1/projects/{id}/blueprints/{blueprint_id}", Params: []string{"id", "blueprint_id"}}
 	operationGetBoard                           = generatedOperation{ID: "getBoard", Method: "GET", Path: "/v1/projects/{id}/board", Params: []string{"id"}}
+	operationGetBriefingRecord                  = generatedOperation{ID: "getBriefingRecord", Method: "GET", Path: "/v1/projects/{id}/briefings/records/{record_id}", Params: []string{"id", "record_id"}}
 	operationGetChatContent                     = generatedOperation{ID: "getChatContent", Method: "GET", Path: "/v1/sessions/{id}/messages/{message_id}/content", Params: []string{"id", "message_id"}}
 	operationGetChatVault                       = generatedOperation{ID: "getChatVault", Method: "GET", Path: "/v1/sessions/{id}/vault", Params: []string{"id"}}
 	operationGetCodeScan                        = generatedOperation{ID: "getCodeScan", Method: "GET", Path: "/v1/projects/{id}/scans/{scan_id}", Params: []string{"id", "scan_id"}}
@@ -274,6 +275,7 @@ var (
 	operationReplaceScannerSlot                 = generatedOperation{ID: "replaceScannerSlot", Method: "PUT", Path: "/v1/scanners/slots/{category}", Params: []string{"category"}, RecordsPersonAction: true}
 	operationReplaceSourceViewportInterest      = generatedOperation{ID: "replaceSourceViewportInterest", Method: "PUT", Path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}", Params: []string{"id", "view_id", "interest_id"}}
 	operationReplaceWebResearchCredential       = generatedOperation{ID: "replaceWebResearchCredential", Method: "PUT", Path: "/v1/web-research/providers/{provider_id}/credential", Params: []string{"provider_id"}, RecordsPersonAction: true}
+	operationRequestBriefing                    = generatedOperation{ID: "requestBriefing", Method: "POST", Path: "/v1/projects/{id}/briefings", Params: []string{"id"}}
 	operationRequestFileBriefing                = generatedOperation{ID: "requestFileBriefing", Method: "POST", Path: "/v1/projects/{id}/source/file-briefings", Params: []string{"id"}}
 	operationResetStore                         = generatedOperation{ID: "resetStore", Method: "POST", Path: "/v1/store/reset", RecordsPersonAction: true}
 	operationResolveCheckpoint                  = generatedOperation{ID: "resolveCheckpoint", Method: "POST", Path: "/v1/sessions/{id}/checkpoints/{checkpoint_id}", Params: []string{"id", "checkpoint_id"}, RecordsPersonAction: true}
@@ -450,6 +452,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetBackupCapabilities,
 	operationGetBlueprint,
 	operationGetBoard,
+	operationGetBriefingRecord,
 	operationGetChatContent,
 	operationGetChatVault,
 	operationGetCodeScan,
@@ -613,6 +616,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationReplaceScannerSlot,
 	operationReplaceSourceViewportInterest,
 	operationReplaceWebResearchCredential,
+	operationRequestBriefing,
 	operationRequestFileBriefing,
 	operationResetStore,
 	operationResolveCheckpoint,

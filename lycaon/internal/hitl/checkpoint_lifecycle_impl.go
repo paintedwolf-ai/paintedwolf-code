@@ -300,7 +300,7 @@ func (m *Checkpoints) resolveCheckpointAdmitted(ctx context.Context, sessionID, 
 }
 
 // PatchPendingToolApprovalAIRationale updates and republishes only still-pending cards.
-func (m *Checkpoints) PatchPendingToolApprovalAIRationale(ctx context.Context, checkpointID, text string) (bool, error) {
+func (m *Checkpoints) PatchPendingToolApprovalAIRationale(ctx context.Context, checkpointID, text, recordID string) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -308,7 +308,7 @@ func (m *Checkpoints) PatchPendingToolApprovalAIRationale(ctx context.Context, c
 	if checkpointID == "" || text == "" {
 		return false, nil
 	}
-	applied, err := m.Store.SetPendingAIRationale(ctx, checkpointID, text)
+	applied, err := m.Store.SetPendingAIRationale(ctx, checkpointID, text, recordID)
 	if err != nil || !applied || m.Store.EventsViaOutbox() {
 		return applied, err
 	}

@@ -86,7 +86,7 @@ func (p *patchCapture) next(t *testing.T) checkpointEvent {
 	}
 }
 
-func (p *patchCapture) PatchPendingToolApprovalAIRationale(_ context.Context, _, text string) (bool, error) {
+func (p *patchCapture) PatchPendingToolApprovalAIRationale(_ context.Context, _, text, _ string) (bool, error) {
 	p.events <- checkpointEvent{text: text}
 	return !p.resolved, nil
 }

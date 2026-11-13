@@ -284,6 +284,8 @@ func (s *Server) registerProjectRoutes(r chi.Router) {
 	s.registerV1Operation(r, operationRestoreProjectSourceCommitState, s.Sources.Mutations.HandleRestoreProjectSourceCommitState)
 	s.registerV1Operation(r, operationGetFileBriefing, s.Sources.Briefings.HandleGetFileBriefing)
 	s.registerV1Operation(r, operationRequestFileBriefing, s.Sources.Briefings.HandleRequestFileBriefing)
+	s.registerV1Operation(r, operationRequestBriefing, s.Sources.Briefings.Engine.HandleRequestBriefing)
+	s.registerV1Operation(r, operationGetBriefingRecord, s.Sources.Briefings.Engine.HandleGetBriefingRecord)
 	s.registerV1Operation(r, operationCompleteProjectSourcePresentation, s.Sources.History.HandleCompleteProjectSourcePresentation)
 	s.registerV1Operation(r, operationWithdrawProjectSourcePresentation, s.Sources.History.HandleWithdrawProjectSourcePresentation)
 	s.registerV1Operation(r, operationListProjectSourceSeen, s.Sources.History.HandleListProjectSourceSeen)

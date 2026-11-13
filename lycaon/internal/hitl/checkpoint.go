@@ -126,7 +126,7 @@ type CheckpointManager interface {
 	// PatchPendingToolApprovalAIRationale sets ai_rationale on a still-pending
 	// tool_approval checkpoint, republishes only when the write applied, and
 	// reports whether it applied.
-	PatchPendingToolApprovalAIRationale(ctx context.Context, checkpointID, text string) (bool, error)
+	PatchPendingToolApprovalAIRationale(ctx context.Context, checkpointID, text, recordID string) (bool, error)
 	// ClearPendingToolApprovalAIRationale clears pending rationale and publishes applied changes.
 	ClearPendingToolApprovalAIRationale(ctx context.Context, checkpointID string) error
 	// PatchPendingToolApprovalJoined records joined callers and may raise the

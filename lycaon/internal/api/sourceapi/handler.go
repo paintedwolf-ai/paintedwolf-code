@@ -13,7 +13,6 @@ import (
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/editordoc"
 	"github.com/lycaon/lycaon/internal/events"
-	"github.com/lycaon/lycaon/internal/filebriefing"
 	"github.com/lycaon/lycaon/internal/fileops"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectsource"
@@ -39,7 +38,7 @@ type Deps struct {
 	EditorClients   *editordoc.ClientLiveness
 	EditorDocuments *editordoc.Service
 	Events          events.ReplayHub
-	FileBriefings   *filebriefing.Service
+	Briefings       briefingadmin.Services
 	// FileOperations journals file requests.
 	FileOperations  *fileops.Service
 	ManagedSecrets  *secretcap.Service
@@ -224,7 +223,7 @@ type Operations struct {
 func New(responses *httpio.Responder, background *taskgroup.Group, operations Operations, deps Deps) Handler {
 	httpio.RequireDependencies("sourceapi",
 		httpio.Required{Name: "EditorDocuments", Present: deps.EditorDocuments != nil},
-		httpio.Required{Name: "FileBriefings", Present: deps.FileBriefings != nil},
+		httpio.Required{Name: "Briefings.Files", Present: deps.Briefings.Files != nil},
 		httpio.Required{Name: "FileOperations", Present: deps.FileOperations != nil},
 		httpio.Required{Name: "ManagedSecrets", Present: deps.ManagedSecrets != nil},
 		httpio.Required{Name: "MutationGate", Present: deps.MutationGate != nil},
@@ -279,7 +278,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	h.Views.Trees = h.Trees
 	h.Views.Workspace = h.Workspace
 	h.Workspace.Watch = h.Watch
-	h.Briefings = briefingadmin.New(responses, briefingadmin.Dependencies{EditorDocuments: deps.EditorDocuments, FileBriefings: deps.FileBriefings, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, WorkerBranchRoot: h.Workspace.WorkerBranchRoot})
+	h.Briefings = briefingadmin.New(responses, briefingadmin.Dependencies{EditorDocuments: deps.EditorDocuments, Briefings: deps.Briefings, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, WorkerBranchRoot: h.Workspace.WorkerBranchRoot})
 	return h
 }
 

@@ -70,6 +70,8 @@ type ActionFacts struct {
 	Args    map[string]any
 	Files   []string
 	Project string
+	// Session scopes every item's readers: all of them come from its transcript.
+	Session string
 }
 
 // PlanInput is the tracked plan at the action, or why it is unavailable.
@@ -108,7 +110,7 @@ func PurposeSection(ctx context.Context, ev ActionEvidence) (SectionPlan, error)
 	var items []Item
 	add := func(key string, role Role, kind, ref, text string, limit int, gap string) {
 		text = observability.RedactCaptureText(strings.TrimSpace(text))
-		item := Item{Key: key, Role: role, SourceKind: kind, Ref: ref}
+		item := Item{Key: key, Role: role, SourceKind: kind, Ref: ref, Audience: ev.Action.Session}
 		switch {
 		case text != "":
 			clamped := clampSection(text, limit)

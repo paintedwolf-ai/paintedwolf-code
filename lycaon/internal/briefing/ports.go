@@ -69,6 +69,9 @@ const (
 	CodeQueueExpired     = "queue_expired"
 	CodeAdmissionRefused = "admission_refused"
 	CodeInterrupted      = "interrupted"
+	// CodeCancelled ends an attempt the scheduler stopped; its status is
+	// cancelled rather than failed.
+	CodeCancelled = "cancelled"
 )
 
 // Attempts keeps target state. Complete and Fail apply only for the active

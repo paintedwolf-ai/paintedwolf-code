@@ -21,8 +21,22 @@ type Target struct {
 	Epoch            int64
 	Revision         int64
 	Attempt          AttemptView
-	Intent           *Intent
+	Facts            TargetFacts
 	UpdatedAt        time.Time
+}
+
+// TargetFacts are host facts attached to a target beside its resolution.
+type TargetFacts struct {
+	// Intent is a linked approval's persisted action; provenance only.
+	Intent  *Intent
+	Outcome Outcome
+}
+
+// Outcome is the structured result of the action a target explains.
+type Outcome struct {
+	State     string `json:"state"`
+	ReceiptID string `json:"receipt_id,omitempty"`
+	ExitCode  *int   `json:"exit_code,omitempty"`
 }
 
 // TargetSection is one section of a target's current resolution.
@@ -84,8 +98,11 @@ func targetFromRow(row db.BriefingTargets) (Target, error) {
 	for _, section := range sections {
 		target.Sections = append(target.Sections, TargetSection{SectionHash: briefing.SectionHash{SectionID: section.SectionID, ManifestHash: section.ManifestHash}, Resolved: section.Resolved})
 	}
+	if err := json.Unmarshal([]byte(row.OutcomeJson), &target.Facts.Outcome); err != nil {
+		return Target{}, err
+	}
 	if row.IntentText.Valid {
-		target.Intent = &Intent{Text: row.IntentText.String, CheckpointID: row.IntentCheckpointID.String, ActionID: row.IntentActionID.String, Scope: row.IntentScope.String}
+		target.Facts.Intent = &Intent{Text: row.IntentText.String, CheckpointID: row.IntentCheckpointID.String, ActionID: row.IntentActionID.String, Scope: row.IntentScope.String}
 	}
 	var err error
 	if row.AttemptStartedAt.Valid {

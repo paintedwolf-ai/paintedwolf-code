@@ -48,6 +48,9 @@ type Item struct {
 	Reason     string    `json:"reason,omitempty"`
 	Text       string    `json:"-"`
 	Digest     string    `json:"digest,omitempty"`
+	// Audience is the session whose readers may see the item; empty means
+	// anyone who can read the project. It never enters the hash.
+	Audience string `json:"-"`
 }
 
 // Template identifies the prompt contract a section was asked under.
@@ -159,7 +162,8 @@ func (m Manifest) Unavailable() int {
 // displayItem is an item with the excerpt it submitted.
 type displayItem struct {
 	Item
-	Text string `json:"text,omitempty"`
+	Text     string `json:"text,omitempty"`
+	Audience string `json:"audience,omitempty"`
 }
 
 // Display serializes the sealed manifest with each item's submitted excerpt,
@@ -168,7 +172,7 @@ func (m Manifest) Display() ([]byte, error) {
 	sealed := m.Sealed()
 	items := make([]displayItem, len(sealed.Items))
 	for i, item := range sealed.Items {
-		items[i] = displayItem{Item: item, Text: item.Text}
+		items[i] = displayItem{Item: item, Text: item.Text, Audience: item.Audience}
 	}
 	return json.Marshal(struct {
 		Manifest

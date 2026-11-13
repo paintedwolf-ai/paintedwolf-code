@@ -124,7 +124,7 @@ func RequiredTestDeps(t *testing.T, deps hostapi.Dependencies) hostapi.Dependenc
 		Settings: deps.Core.Settings, Invocations: deps.Core.Invocations, MutationGate: deps.Core.MutationGate,
 		ManagedSecrets: deps.Approvals.ManagedSecrets, SecretIgnores: deps.Approvals.SecretIgnores, SourceLedger: deps.Source.SourceLedger,
 		SourceMutations: deps.Source.SourceMutations, FileOperations: deps.Source.FileOperations,
-		EditorDocuments: deps.Source.EditorDocuments, FileBriefings: deps.Source.FileBriefings, Workflows: deps.Workflow.Workflows,
+		EditorDocuments: deps.Source.EditorDocuments, FileBriefings: deps.Source.Briefings.Files, Workflows: deps.Workflow.Workflows,
 		WorkflowRuns: deps.Workflow.WorkflowRuns, WorkflowComposer: deps.Workflow.WorkflowComposer, WorkflowPersister: deps.Workflow.WorkflowPersister,
 		Blueprints: deps.Workflow.Blueprints, ScanCoordinator: deps.Scans.ScanCoordinator, ScanCadence: deps.Scans.ScanCadence,
 		PublishDetections: deps.Scans.PublishDetections, DataDir: deps.Storage.DataDir, ModuleRoot: deps.Storage.ModuleRoot,
@@ -147,7 +147,7 @@ func RequiredTestDeps(t *testing.T, deps hostapi.Dependencies) hostapi.Dependenc
 	if deps.Source.SourceInventory == nil {
 		deps.Source.SourceInventory = fill.SourceLedger.Inventory
 	}
-	deps.Source.EditorDocuments, deps.Source.FileBriefings, deps.Workflow.Workflows = fill.EditorDocuments, fill.FileBriefings, fill.Workflows
+	deps.Source.EditorDocuments, deps.Source.Briefings.Files, deps.Workflow.Workflows = fill.EditorDocuments, fill.FileBriefings, fill.Workflows
 	deps.Workflow.WorkflowRuns, deps.Workflow.WorkflowComposer, deps.Workflow.WorkflowPersister = fill.WorkflowRuns, fill.WorkflowComposer, fill.WorkflowPersister
 	deps.Workflow.Blueprints, deps.Scans.ScanCoordinator, deps.Scans.ScanCadence = fill.Blueprints, fill.ScanCoordinator, fill.ScanCadence
 	deps.Scans.PublishDetections, deps.Storage.DataDir, deps.Storage.ModuleRoot = fill.PublishDetections, fill.DataDir, fill.ModuleRoot

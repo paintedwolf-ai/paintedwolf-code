@@ -309,3 +309,38 @@ func TestSupersededAttemptCannotPublish(t *testing.T) {
 		t.Fatal("superseded attempt settled the target")
 	}
 }
+
+func TestOrphanedAttemptIsReplaced(t *testing.T) {
+	engine, store, log := newTestEngine(t, &countingGenerator{text: "Rebuild the cache."})
+	store.attempts["t"] = "ghost"
+	_, err := engine.Request(t.Context(), request("t", false, purposeSection("intent", Generated)))
+	testutil.FailErr(t, "request", err)
+	failed, done := receive(t, log.seen), receive(t, log.seen)
+	if failed.Status != StatusFailed || failed.AttemptID != "ghost" || failed.ErrorCode != CodeInterrupted {
+		t.Fatalf("orphan not ended: %+v", failed)
+	}
+	if done.Status != StatusComplete || done.AttemptID == "ghost" {
+		t.Fatalf("replacement did not settle: %+v", done)
+	}
+}
+
+func TestStoppedRunEndsCancelled(t *testing.T) {
+	generator := &countingGenerator{text: "unused", release: make(chan struct{}), entered: make(chan struct{}, 1)}
+	engine, _, log := newTestEngine(t, generator)
+	_, err := engine.Request(t.Context(), request("t", false, purposeSection("intent", Generated)))
+	testutil.FailErr(t, "request", err)
+	receive(t, generator.entered)
+	engine.scheduler.Cancel(func(job Job) bool { return JobProfile(job) == "tool_activity" })
+	if snap := receive(t, log.seen); snap.Status != StatusFailed || snap.ErrorCode != CodeCancelled {
+		t.Fatalf("stopped run settled as %+v", snap)
+	}
+}
+
+func TestJobProfileReadsOnlyEngineJobs(t *testing.T) {
+	if got := JobProfile(Job{Key: jobKey(request("t", false))}); got != "tool_activity" {
+		t.Fatalf("engine job profile %q", got)
+	}
+	if got := JobProfile(Job{Key: "file\x00p\x00tool_activity\x00x"}); got != "" {
+		t.Fatalf("another kind's job read as %q", got)
+	}
+}

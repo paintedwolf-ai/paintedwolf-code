@@ -98,7 +98,7 @@ func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, m
 	}
 	briefing.Status, briefing.Truncated, briefing.Error, briefing.UpdatedAt =
 		StatusComplete, truncated, "", outcome.UpdatedAt
-	briefing.Sections = outcome.Sections
+	briefing.Sections, briefing.RecordID = outcome.Sections, outcome.RecordID
 	s.publishFileBriefingEvent(context.WithoutCancel(ctx), fileBriefingEvent(briefing, "complete"))
 	s.maintainFileBriefings(context.WithoutCancel(ctx), briefing)
 	slog.InfoContext(ctx, "file briefing complete", "project_id", briefing.ProjectID, "path", briefing.Path,
@@ -192,7 +192,7 @@ func fileBriefingEvent(b Briefing, status string) wire.FileBriefingEvent {
 		Status: status, Preview: &preview, Locations: fileBriefingLocationsDTO(b.Locations),
 		Sections: fileBriefingSectionsDTO(b.Sections), FallbackText: b.FallbackText,
 		Truncated: b.Truncated, Error: b.Error,
-		UpdatedAt: b.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		UpdatedAt: b.UpdatedAt.UTC().Format(time.RFC3339Nano), EvidenceRef: evidenceRef(b),
 	}
 }
 

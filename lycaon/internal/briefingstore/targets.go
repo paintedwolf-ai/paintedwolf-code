@@ -170,8 +170,12 @@ func (s *Targets) CompleteAttempt(ctx context.Context, request briefing.Request,
 func (s *Targets) FailAttempt(ctx context.Context, request briefing.Request, attemptID string, failure briefing.Failure) (briefing.Settled, error) {
 	var settled briefing.Settled
 	err := s.inTx(ctx, func(q *db.Queries) error {
+		status := "failed"
+		if failure.Code == briefing.CodeCancelled {
+			status = "cancelled"
+		}
 		revision, err := q.FailBriefingTargetAttempt(ctx, db.FailBriefingTargetAttemptParams{
-			ErrorCode: failure.Code, ErrorMessage: failure.Message, UpdatedAt: s.stamp(),
+			AttemptStatus: status, ErrorCode: failure.Code, ErrorMessage: failure.Message, UpdatedAt: s.stamp(),
 			ProjectID: request.ProjectID, ProfileID: request.ProfileID, TargetKey: request.TargetKey, AttemptID: attemptID,
 		})
 		if errors.Is(err, sql.ErrNoRows) {

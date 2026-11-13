@@ -13,7 +13,7 @@ import (
 
 type Dependencies struct {
 	EditorDocuments  *editordoc.Service
-	FileBriefings    *filebriefing.Service
+	Briefings        Services
 	ProjectRegistry  project.Registry
 	SessionStore     session.Store
 	SourceLedger     *sourceledger.Store
@@ -27,8 +27,10 @@ type Handler struct {
 	SourceLedger     *sourceledger.Store
 	workerBranchRoot func(context.Context, string, string) (string, func())
 	responses        *httpio.Responder
+	Engine           *EngineRoutes
 }
 
 func New(responses *httpio.Responder, deps Dependencies) *Handler {
-	return &Handler{EditorDocuments: deps.EditorDocuments, FileBriefings: deps.FileBriefings, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, workerBranchRoot: deps.WorkerBranchRoot, responses: responses}
+	return &Handler{EditorDocuments: deps.EditorDocuments, FileBriefings: deps.Briefings.Files, ProjectRegistry: deps.ProjectRegistry, SessionStore: deps.SessionStore, SourceLedger: deps.SourceLedger, workerBranchRoot: deps.WorkerBranchRoot, responses: responses,
+		Engine: &EngineRoutes{services: deps.Briefings, projects: deps.ProjectRegistry, sessions: deps.SessionStore, responses: responses}}
 }
