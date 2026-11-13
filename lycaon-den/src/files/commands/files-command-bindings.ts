@@ -25,7 +25,8 @@ import { goToNextFinding, goToPreviousFinding } from "../../components/source/an
 import { convertIndentationCommand } from "../../components/source/editor/indent-convert.ts";
 import { beginInlineEditPanel, beginRenameCard } from "../../components/source/inline-edit/run-editor-action.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
-import { getFilesEditorView, invokePrettyToggleForTab } from "../editor/files-editor-host.ts";
+import { getFilesEditorView } from "../editor/files-editor-host.ts";
+import { invokePrettyToggleForTab } from "../editor/pretty-display-state.ts";
 import { filesTreeCollapsed } from "../tree/files-tree-window-state.ts";
 import { selectedFileVersion, toggleVersionComparison } from "../history/files-version-selection.ts";
 import { versionRestoreOffered } from "../history/file-version-restore.ts";

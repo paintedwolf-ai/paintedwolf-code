@@ -1,106 +1,121 @@
 {
-  "_note": "[OAR-CONF-27] every MUST or MUST NOT clause of Open Agent Rules 1.0 is either cited by the covers list of a fixture in this directory, or listed here with a written justification. [OAR-CONF-28] an exemption is admissible only for a clause a fixture cannot observe: a requirement on how an engine declares its own vocabulary, on how this document is versioned, or on the absence of a behaviour. Each entry below names the check that enforces the clause instead. The gate is scripts/check-coverage.mjs, which fails the build on a gap, on a stale exemption, and on a fixture citing a clause the specification does not define.",
-  "exempt": [
-    {
-      "clause_id": "OAR-CONF-17",
-      "reason": "A requirement on the shape of a fixture, not on engine behaviour: a fixture cannot assert something about its own file name. Enforced instead by scripts/check-coverage.mjs, which fails when a fixture's id does not equal its file name stem or when it cites a clause the specification does not define, and by the unit test 'every fixture validates against the published fixture schema' in packages/oar-ref/test/corpus.test.ts, which enforces the required members and the non-empty covers list.",
-      "check": "scripts/check-coverage.mjs, packages/oar-ref/test/corpus.test.ts"
-    },
-    {
-      "clause_id": "OAR-CONF-18",
-      "reason": "A requirement on the shape of a fixture's input block. Enforced instead by the unit test 'every fixture validates against the published fixture schema' in packages/oar-ref/test/corpus.test.ts: the published schema requires capability, admits exactly one of the two occurrence spellings, closes each to its own members, and validates capability against oar-capability.schema.json.",
-      "check": "packages/oar-ref/test/corpus.test.ts"
-    },
-    {
-      "clause_id": "OAR-CONF-19",
-      "reason": "A requirement that every fixture carry input.capability. A fixture asserting it would have to be about some other fixture. Enforced instead by the unit test 'every fixture declares the host it assumes' in packages/oar-ref/test/corpus.test.ts, which walks the whole corpus, and by the runner, which reports a fixture with no capability document as a failure rather than falling back to its own host.",
-      "check": "packages/oar-ref/test/corpus.test.ts, packages/oar-ref/src/runner.ts"
-    },
-    {
-      "clause_id": "OAR-CONF-22",
-      "reason": "A requirement on the absence of a behaviour: an engine must reject an expected key this specification does not define rather than passing it silently. A fixture carrying such a key would be a fixture the corpus must not contain, so the clause cannot be exercised from inside the corpus. Enforced instead by the unit test 'a fixture carrying an undefined expected key is rejected' in packages/oar-ref/test/runner.test.ts, which hands the runner a synthetic fixture with an undefined expected key and requires a failure naming it.",
-      "check": "packages/oar-ref/test/runner.test.ts"
-    },
-    {
-      "clause_id": "OAR-CONF-24",
-      "reason": "A requirement on how an implementation reports its own conformance run: a skipped fixture is not a passed fixture, and skips must be reported with their reason. No fixture can observe the report that contains it. Enforced instead by the unit test 'a fixture whose capability set cannot be adopted is skipped, not passed' in packages/oar-ref/test/runner.test.ts, and by bin/oar-conformance.mjs, which prints SKIP distinctly from PASS and FAIL and reports the three counts separately.",
-      "check": "packages/oar-ref/test/runner.test.ts, packages/oar-ref/bin/oar-conformance.mjs"
-    },
-    {
-      "clause_id": "OAR-CONF-27",
-      "reason": "The coverage gate itself. A fixture cannot assert that a build gate exists. Enforced instead by scripts/check-coverage.mjs, which is this file's reader: it parses every clause identifier from the published specification, keeps those whose text carries MUST, and exits non-zero unless each is cited by a fixture's covers list or listed here. It runs in CI as the task coverage target.",
-      "check": "scripts/check-coverage.mjs"
-    },
-    {
-      "clause_id": "OAR-CONF-28",
-      "reason": "A requirement on the admissibility of the entries in this file, and on their form. Enforced instead by scripts/check-coverage.mjs, which rejects an entry naming a clause the specification does not define, an entry for a clause that carries no MUST, a duplicate entry, an entry whose justification is missing or too short to be a justification, and an entry for a clause a fixture already covers. That each justification names the check enforcing the clause instead is met by every entry here and is reviewed by a human.",
-      "check": "scripts/check-coverage.mjs"
-    },
-    {
-      "clause_id": "OAR-CONF-30",
-      "reason": "A requirement on the wording of the fixtures themselves, not on engine behaviour: a fixture cannot assert that its own expected.error is a single machine token. Enforced instead by scripts/check-coverage.mjs, which rejects any expected.error that is not a bare token matching ^[A-Za-z0-9_][A-Za-z0-9_./:<>-]*$, and by the unit test 'every expected.error is a single machine token' in packages/oar-ref/test/corpus.test.ts. Together these keep the corpus asserting that the right thing was named rather than how it was phrased.",
-      "check": "scripts/check-coverage.mjs, packages/oar-ref/test/corpus.test.ts"
-    },
-    {
-      "clause_id": "OAR-CONF-32",
-      "reason": "A requirement on how a fixture must reach a counter value, not on engine behaviour: a fixture cannot assert that it itself arrived at a counter through declared side-effects rather than by supplying it ready-made. Enforced instead by scripts/check-coverage.mjs, which fails a fixture supplying fire_count, breaker_count, fire_count_of or breaker_count_of in facts, and one asserting a counter larger than the occurrences it lists could have written.",
-      "check": "scripts/check-coverage.mjs"
-    },
-    {
-      "clause_id": "OAR-CONF-35",
-      "reason": "A requirement on the published manifest and on the shape of a conformance claim: no fixture can observe the manifest that lists it, or the claim that skipped it. Enforced instead by scripts/check-coverage.mjs, which recomputes the baseline predicate from every fixture's own capability document and fails the build when the manifest's baseline flags disagree with it in either direction, and by the runner, which reports skips distinctly so a claim that skipped a baseline fixture is visible on its face.",
-      "check": "scripts/check-coverage.mjs, packages/oar-ref/bin/oar-conformance.mjs"
-    },
-    {
-      "clause_id": "OAR-CONF-36",
-      "reason": "A requirement on the shape of the corpus, not on engine behaviour: a fixture cannot assert that its own capability document is minimal, and a fixture asserting it about another fixture would be testing the corpus rather than an engine. The clause is also behavioural by construction \u2014 a declaration is permitted exactly when removing it would change the outcome \u2014 so the only way to evaluate it is to remove each declaration and re-run, which is a property of the corpus as a whole. Enforced instead by scripts/check-capability-minimal.mjs, which probes every fixture's capability dimension by dimension against the reference engine and fails when a declaration can be removed with the verdict unchanged.",
-      "check": "scripts/check-capability-minimal.mjs"
-    },
-    {
-      "clause_id": "OAR-EXPR-18",
-      "reason": "A requirement satisfied structurally rather than behaviourally: evaluation must terminate, and the grammar has no loop, no recursion, and no user-defined function. A fixture can only demonstrate that one particular condition terminated, which is not the claim. Enforced instead by the grammar in Appendix A.1 and by the unit test 'the parse tree admits no loop, recursion, or user-defined function' in packages/oar-ref/test/expression.test.ts, which asserts the node kinds the parser can produce are exactly those [OAR-EXPR-20] enumerates and that none of them introduces a binding form.",
-      "check": "packages/oar-ref/test/expression.test.ts"
-    },
-    {
-      "clause_id": "OAR-FIRE-9",
-      "reason": "An inability to apply a declared side-effect is a fault in the engine's own counter store or event stream. The fixture schema has no fault-injection input, so no fixture can make a conforming store refuse a write, and a fixture that could would be testing the harness rather than the format. Enforced instead by the unit test 'a side-effect that cannot be applied is routed through on_error' in packages/oar-ref/test/engine.test.ts, which arms the CounterStore failure seam and asserts the rule is traced as errored and handled per its on_error.",
-      "check": "packages/oar-ref/test/engine.test.ts"
-    },
-    {
-      "clause_id": "OAR-VER-1",
-      "reason": "A requirement on how this specification is revised: a minor revision must be additive. It constrains a future document, not any engine behaviour observable at an anchor occurrence, so no fixture can be written against it. Enforced instead by the immutability gate scripts/freeze-spec.sh, run in CI as the task spec:freeze:check job, which fails when an already-published version directory changes; a minor revision therefore has to arrive as a new directory whose additive nature is reviewed against the previous one.",
-      "check": "scripts/freeze-spec.sh"
-    },
-    {
-      "clause_id": "OAR-VER-2",
-      "reason": "A requirement on how this specification is revised: a change breaking a valid document of the current major must bump the major. It constrains the editors, not an engine. The observable half \u2014 that an engine refuses a major it does not implement \u2014 is fixtured by doc-unsupported-major-rejected. Enforced instead by the immutability gate scripts/freeze-spec.sh and by review of the change log in Appendix B.",
-      "check": "scripts/freeze-spec.sh"
-    },
-    {
-      "clause_id": "OAR-VER-3",
-      "reason": "A requirement that a published version of this specification is immutable and that a correction ships as a new version. Nothing about an anchor occurrence can observe it. Enforced instead by scripts/freeze-spec.sh, run in CI as the task spec:freeze:check job, which diffs the working tree against HEAD for every published version directory and fails on any edit in place.",
-      "check": "scripts/freeze-spec.sh"
-    },
-    {
-      "clause_id": "OAR-VER-4",
-      "reason": "Advice to a rule author targeting a mixed fleet, derived from [OAR-DOC-5]. The engine behaviour it rests on is fixtured by doc-forward-minor-rejected and doc-current-minor-loads; what remains is an authoring practice no engine can be tested for. Enforced instead by those two fixtures plus the publisher-facing note in examples/portable-pack/README.md.",
-      "check": "doc-forward-minor-rejected, doc-current-minor-loads"
-    },
-    {
-      "clause_id": "OAR-VER-5",
-      "reason": "A requirement on how the profile catalogue is revised: adding a fact to an existing profile must bump the major or introduce a new profile name. It constrains a future edit of vocabulary.yaml, not an engine. Enforced instead by the immutability gate scripts/freeze-spec.sh, and by the unit test 'the transcribed vocabulary matches the published tables' in packages/oar-ref/test/vocabulary.test.ts, which fails the build if a profile's membership drifts from the published tables in either direction.",
-      "check": "scripts/freeze-spec.sh, packages/oar-ref/test/vocabulary.test.ts"
-    },
-    {
-      "clause_id": "OAR-CONF-38",
-      "reason": "A fixture cannot inspect the implementation path used to execute it. Enforced by adapter review and integration tests showing that the production document loader and evaluator consume conformance inputs directly.",
-      "check": "packages/oar-ref/src/runner.ts and implementation adapter review"
-    },
-    {
-      "clause_id": "OAR-PROF-10",
-      "reason": "A fixture evaluates an occurrence but cannot observe transport delivery or whether withheld content reached a caller. Host integration tests must prove that pre-invoke blocks prevent dispatch, post-invoke blocks withhold complete results, and transforms replace the delivered representation.",
-      "check": "host transport integration tests and capability adapter review"
-    }
-  ],
-  "partial": []
+ "_note": "Normative MUST or MUST NOT clauses verified by schema checks, unit tests, or static validation rather than runtime conformance fixtures. Enforced by scripts/check-coverage.mjs.",
+ "exempt": [
+  {
+   "clause_id": "OAR-DOC-15",
+   "reason": "A default-value clause: it fixes what a document without `stream` means, and every content-anchor fixture without `stream` exercises that default implicitly. The rejection path for the one value a fixture can distinguish is fixtured (stream-chunk-unsupported-rejected, [OAR-OPS-6]). A fixture asserting the default itself would have to observe the engine's internal evaluation mode, which the fixture contract has no key for.",
+   "check": "packages/oar-ref/src/load.ts (stream defaults to buffered), spec/oar/1.0/conformance/stream-chunk-unsupported-rejected.json"
+  },
+  {
+   "clause_id": "OAR-DOC-29",
+   "reason": "An informational-field clause: `emit` is provenance metadata an engine MUST accept and MUST NOT interpret. Acceptance is enforced by the published schema (oar.schema.json) and by every fixture, whose rules carry `emit` and resolve normally; non-interpretation is a negative requirement on engine internals that no single fixture can isolate, because a fixture asserts outcomes, and an engine that ignored `emit` and one that read it produce the same outcomes on every fixture that does not depend on the difference.",
+   "check": "spec/oar/1.0/schemas/oar.schema.json, packages/oar-ref/src/load.ts (emit parsed and never read)"
+  },
+  {
+   "clause_id": "OAR-DOC-30",
+   "reason": "An informational-field clause: `category`, `context_schema`, `scenarios`, and `evidence` are publisher metadata an engine MUST accept and MUST NOT derive behaviour from. Acceptance is enforced by the published schema; non-derivation is a negative requirement on engine internals, and a fixture cannot distinguish an engine that ignores the fields from one that reads them without a fixture whose outcome depends on them — which would contradict the clause.",
+   "check": "spec/oar/1.0/schemas/oar.schema.json, packages/oar-ref/src/load.ts (fields accepted, never read)"
+  },
+  {
+   "clause_id": "OAR-SEL-5",
+   "reason": "A negative requirement on selector semantics: an engine MUST NOT match selector clauses against natural-language text or infer values from prose shape. A fixture can only assert what an engine does, not what it refrains from doing internally; every selector fixture asserts the machine-observable matching that is required, and the closed selector-clause vocabulary is enforced by the published schema and the loader.",
+   "check": "spec/oar/1.0/schemas/oar.schema.json, packages/oar-ref/src/load.ts (readSelector closes the clause set)"
+  },
+  {
+   "clause_id": "OAR-FACT-4",
+   "reason": "A normative stance on fact providers: a fact is an observation, never a verdict. It binds providers, not the evaluating engine, and no fixture can observe the provenance of a value — the detector fixture fact-detector-reports-observations-rule-owns-threshold exercises the division of labour the clause states, with the threshold in the rule.",
+   "check": "spec/oar/1.0/conformance/fact-detector-reports-observations-rule-owns-threshold.json"
+  },
+  {
+   "clause_id": "OAR-FACT-8",
+   "reason": "A guarantee of the frozen condition language: the language of section 5 has no assignment, no effectful call, and no input or output construct, so a condition cannot mutate state or perform I/O by construction. The closed grammar is enforced by the parser and the loader's type check; a fixture cannot assert the absence of a construct the language does not offer.",
+   "check": "packages/oar-ref/src/parse.ts (closed grammar), packages/oar-ref/src/load.ts (checkType)"
+  },
+  {
+   "clause_id": "OAR-FACT-11",
+   "reason": "A structural requirement on the engine's declared fact environment: every fact carries exactly one tier. The tiers are fixed in the reference environment (the core and standard tables of section 5) and for host facts by the loader, which assigns tier `host` to every name declared through the host-fact declaration; a fixture observes facts, not the tier metadata behind them.",
+   "check": "packages/oar-ref/src/env.ts (tier on every declaration), packages/oar-ref/src/env.ts (withHostFacts assigns tier host), packages/oar-ref/test/env.test.ts"
+  },
+  {
+   "clause_id": "OAR-FACT-12",
+   "reason": "A completeness claim on the engine's fact environment: an engine MUST provide every core fact of section 5.2. The reference environment declares the full core table, and the corpus exercises the core facts throughout; a fixture cannot assert the presence of a fact no rule references, and a rule referencing all of them at once would test the environment, not the engine's behaviour at an occurrence.",
+   "check": "packages/oar-ref/src/env.ts (CORE_FACTS transcribed from section 5.2), packages/oar-ref/test/env.test.ts"
+  },
+  {
+   "clause_id": "OAR-FACT-13",
+   "reason": "A completeness claim on standard profiles, symmetric with [OAR-FACT-12]: an engine claiming a profile MUST provide all of its facts and functions. The reference environment declares the full content-safety and mcp tables of section 5.4; the corpus exercises profile facts through the detector fixtures. A fixture cannot assert the completeness of a bundle, only the behaviour of the members a rule names.",
+   "check": "packages/oar-ref/src/env.ts (STANDARD_FACTS transcribed from section 5.4), packages/oar-ref/test/env.test.ts"
+  },
+  {
+   "clause_id": "OAR-FACT-14",
+   "reason": "A negative requirement on the engine's declared environment: an engine MUST NOT redefine the name, type, or meaning of a core or standard fact. The reference environment is a single immutable table; the host-fact loader rejects a declaration colliding with any declared fact or function name, which is the one path a redefinition could take at load.",
+   "check": "packages/oar-ref/src/env.ts (withHostFacts collision rejection), packages/oar-ref/test/env.test.ts"
+  },
+  {
+   "clause_id": "OAR-FACT-20",
+   "reason": "A digest-stability requirement: `tool_args_fingerprint` MUST be stable across sessions for the same tool and arguments and differ otherwise. Stability is a property over many occurrences and sessions; a single-occurrence fixture can observe one value but cannot assert equality or inequality it has no second occurrence to compare against, and the fixture contract has no cross-fixture state.",
+   "check": "packages/oar-ref/src/env.ts (fingerprint observation), packages/oar-ref/test/env.test.ts"
+  },
+  {
+   "clause_id": "OAR-FACT-21",
+   "reason": "A within-occurrence consistency requirement: every rule at one occurrence observes the same value for the same fact. The engine assembles the fact map once per occurrence and passes the same map to every rule's evaluation, so the property holds by construction; a fixture would need two rules observing the same fact and disagreeing to violate it, which the frozen evaluation algorithm cannot express.",
+   "check": "packages/oar-ref/src/decide.ts (facts assembled once per occurrence, shared by every rule)"
+  },
+  {
+   "clause_id": "OAR-PROF-4",
+   "reason": "A permissive clause: a host MAY accept host-native `on` values. The reference engine models only the core anchor set and exercises the rejection path (prof-core-anchor-unsupported-rejected); the acceptance path is host-optional behaviour, and a fixture requiring it would demand capability the specification deliberately leaves optional.",
+   "check": "packages/oar-ref/src/load.ts (resolveAnchor)"
+  },
+  {
+   "clause_id": "OAR-PROF-7",
+   "reason": "A SHOULD-level tooling clause: an engine SHOULD offer a portability report. It describes an operator-facing feature outside the evaluation and fixture contracts; no fixture key can assert the presence of a report, and the clause explicitly forbids making non-portability a load failure, which the loader observes.",
+   "check": "packages/oar-ref/src/load.ts (non-portable rules load)"
+  },
+  {
+   "clause_id": "OAR-HINT-5",
+   "reason": "A load-error reporting clause for hints: an engine MUST report a load error in a hint and MUST NOT render a hint that failed to load. The fixture contract asserts one outcome per fixture; a fixture carrying a broken hint alongside a working rule would need a key asserting the hint-level error without failing the whole fixture, which `expected` does not offer. The rejection paths are exercised by the hint fixtures that assert the load error as the fixture's outcome (hint-evaluation-field-rejected, hint-without-copy-rejected, hint-copy-must-be-static), and the loader refuses to register a hint that failed to load.",
+   "check": "packages/oar-ref/src/load.ts (loadHint), packages/oar-ref/src/runner.ts (hints loaded, never evaluated), spec/oar/1.0/conformance/hint-evaluation-field-rejected.json"
+  },
+  {
+   "clause_id": "OAR-CONF-13",
+   "reason": "A requirement on the shape of a fixture, not on engine behaviour: a fixture cannot assert something about its own members. Enforced instead by scripts/check-coverage.mjs, which fails when a fixture's id does not equal its file name stem, when it cites a clause the specification does not define, or when it is not listed in manifest.json, and by the reference runner's closed fixture vocabulary, which the unit test 'every fixture uses only the members the fixture shape defines' in packages/oar-ref/test/corpus.test.ts applies to the whole corpus.",
+   "check": "scripts/check-coverage.mjs, packages/oar-ref/src/runner.ts (fixtureShapeError), packages/oar-ref/test/corpus.test.ts"
+  },
+  {
+   "clause_id": "OAR-CONF-14",
+   "reason": "A requirement on the shape of a fixture: the id MUST equal the file name stem and `covers` MUST be non-empty and defined. A fixture asserting this would have to be about some other fixture. Enforced by scripts/check-coverage.mjs, which fails on a stem mismatch and on a covers entry the specification does not define.",
+   "check": "scripts/check-coverage.mjs"
+  },
+  {
+   "clause_id": "OAR-CONF-15",
+   "reason": "A requirement on the shape of a fixture's expected block: the seven keys and the rejection of any other key. A corpus fixture cannot carry an undefined key and still pass, so the rejection is exercised by the unit test 'a fixture asserting an undefined expected key fails rather than passing', and the runner refuses such a fixture before evaluating it.",
+   "check": "packages/oar-ref/src/runner.ts (fixtureShapeError), packages/oar-ref/test/corpus.test.ts"
+  },
+  {
+   "clause_id": "OAR-CONF-16",
+   "reason": "A requirement on the act of claiming conformance: an implementation MUST pass every fixture within its declared profiles and report what it skipped. It binds the implementer's claim, not the engine at an occurrence; the reference runner's report (fixtures passed, clauses exercised) is the reporting mechanism, and no fixture can assert a property of the run that contains it.",
+   "check": "packages/oar-ref/src/runner.ts (RunReport), packages/oar-ref/bin/oar-conformance.mjs"
+  },
+  {
+   "clause_id": "OAR-CONF-17",
+   "reason": "A requirement on the shape of the published corpus: every fixture MUST use core anchors and core- or standard-tier facts only. A fixture asserting it would have to be about the corpus rather than an occurrence. Enforced by scripts/check-coverage.mjs and by review of the corpus; the host-fact fixtures declare their host facts through input.host_facts precisely so that the fixture itself remains runnable by an implementation that models no host-specific state.",
+   "check": "scripts/check-coverage.mjs, spec/oar/1.0/conformance/"
+  },
+  {
+   "clause_id": "OAR-DOC-26",
+   "reason": "A versioning-policy clause binding future revisions of the specification, not engine behaviour at an occurrence: a minor revision MUST be additive. No fixture can exercise a revision that has not been published; the policy is enforced by review of each revision against the change log (Appendix A) and by the schema version gate, which pins documents to the major they declare.",
+   "check": "spec/oar/1.0/open-agent-rules.md (Appendix A), packages/oar-ref/src/load.ts (version gate)"
+  },
+  {
+   "clause_id": "OAR-DOC-27",
+   "reason": "A versioning-policy clause binding future revisions: a breaking change MUST bump the major version. Like [OAR-DOC-26] it constrains how the specification may evolve, not how an engine evaluates an occurrence; the major-version gate (doc-unsupported-major-rejected) is the enforceable edge and is fixtured.",
+   "check": "spec/oar/1.0/conformance/doc-unsupported-major-rejected.json"
+  },
+  {
+   "clause_id": "OAR-DOC-28",
+   "reason": "A publication-policy clause: a published version is immutable and corrections ship as new versions. It binds the specification's own release process; there is no engine behaviour to fixture, and the version gate plus the change log are the mechanisms that keep published versions distinct.",
+   "check": "spec/oar/1.0/open-agent-rules.md (Appendix A), packages/oar-ref/src/load.ts (version gate)"
+  }
+ ],
+ "partial": []
 }

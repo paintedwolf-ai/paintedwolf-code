@@ -1,0 +1,26 @@
+{
+  "title": "A copy construct outside the grammar is rejected by name",
+  "covers": [
+    "OAR-COPY-3"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "what": "{% when tool %}x{% endif %}"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "when"
+  },
+  "id": "copy-malformed-construct-rejected"
+}

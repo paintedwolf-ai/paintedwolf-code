@@ -1,28 +1,24 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_IN_FLIGHT
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool: [command, verify]
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.handles_text, paintedwolf.next_steps]
+  tools: [command, verify]
+requires_facts: [paintedwolf.handles_text, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_IN_FLIGHT"
 effect: block
-copy:
-  what: An awaited command job is already live for this session ({{ paintedwolf.handles_text }}).
-  cause: Awaited commands use one default lane so a slow command remains controllable instead of being obscured by overlapping work.
-  why: Launching another awaited command would create implicit concurrency and resource contention.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Inspect or stop the live awaited command before launching another
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command_job
-x-paintedwolf-message: awaited command job already in flight
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    handles:
-    - command-1
-    handles_text: command-1
-    can_command_output: true
+category: recoverable
+emit: guard:command_job
+message: awaited command job already in flight
+what: An awaited command job is already live for this session ({{ paintedwolf.handles_text }}).
+cause: Awaited commands use one default lane so a slow command remains controllable instead of being obscured by overlapping work.
+why: Launching another awaited command would create implicit concurrency and resource contention.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Inspect or stop the live awaited command before launching another
+scenarios:
+  - id: default
+    vars:
+      handles:
+        - command-1
+      handles_text: command-1
+      can_command_output: true

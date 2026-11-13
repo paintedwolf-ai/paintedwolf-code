@@ -138,8 +138,7 @@ func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *test
 	}{
 		{"rule when", &Rule{ID: "R", When: `paintedwolf.next_steps != ""`}},
 		{"rule flow", &Rule{ID: "R", Flow: []string{`paintedwolf.next_steps != ""`}}},
-		{"counter_scope", &Rule{ID: "R", CounterScope: NextStepsFact}},
-		{"step when", &Rule{ID: "R", Requires: Requires{Facts: []string{NextStepsFact}}, NextSteps: &NextSteps{
+		{"step when", &Rule{ID: "R", RequiresFacts: []string{NextStepsFact}, NextSteps: &NextSteps{
 			Steps: []NextStep{{When: `paintedwolf.next_steps != ""`, Tool: "recall", Say: "Use {{ call }}."}},
 		}}},
 	} {
@@ -153,7 +152,7 @@ func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *test
 
 // Copy that displays next steps needs steps to display.
 func TestHostRuleSetRejectsABoundFactWithoutSteps(t *testing.T) {
-	rule := &Rule{ID: "R", Requires: Requires{Facts: []string{NextStepsFact}}, Copy: Copy{Fix: "{{ paintedwolf.next_steps }}"}}
+	rule := &Rule{ID: "R", RequiresFacts: []string{NextStepsFact}, Copy: Copy{Fix: "{{ paintedwolf.next_steps }}"}}
 	if err := ValidateHostRuleSet(NewRuleSet([]*Rule{rule})); err == nil {
 		t.Fatal("accepted a rule that displays next steps it does not have")
 	}
@@ -186,7 +185,7 @@ func TestValidateNextStepsChecksArgsAgainstToolSchemas(t *testing.T) {
 		{"reissue selector must accept", &Rule{ID: "R", Selector: Selector{"tool": {"recall"}}, NextSteps: &NextSteps{Steps: []NextStep{
 			{Args: map[string]any{"overlay_id": "x"}, Say: "Use {{ call }}."},
 		}}}, "recall does not accept overlay_id"},
-		{"pick path checked", &Rule{ID: "R", Requires: Requires{Facts: []string{"paintedwolf.x"}}, NextSteps: &NextSteps{Steps: []NextStep{
+		{"pick path checked", &Rule{ID: "R", RequiresFacts: []string{"paintedwolf.x"}, NextSteps: &NextSteps{Steps: []NextStep{
 			{Tool: "recall", Pick: map[string]string{"bogus": "paintedwolf.x"}, Say: "Use {{ call }}."},
 		}}}, "recall does not accept bogus"},
 		{"or alternatives checked", &Rule{ID: "R", NextSteps: &NextSteps{Steps: []NextStep{
@@ -208,7 +207,7 @@ func TestValidateNextStepsAcceptsSchemaValidArgs(t *testing.T) {
 	loader, err := NewLoader("")
 	testutil.FailErr(t, "load OAR", err)
 	loader.SetToolSchemas(schemaTestConfig())
-	rule := &Rule{ID: "R", Requires: Requires{Facts: []string{"paintedwolf.command"}}, NextSteps: &NextSteps{Steps: []NextStep{
+	rule := &Rule{ID: "R", RequiresFacts: []string{"paintedwolf.command"}, NextSteps: &NextSteps{Steps: []NextStep{
 		{Tool: "recall", Args: map[string]any{"query": "{{ paintedwolf.command }}"}, Say: "Use {{ call }}."},
 		{Args: map[string]any{"overlay_id": "x"}, Say: "Use {{ call }}."},
 	}}}

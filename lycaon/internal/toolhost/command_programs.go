@@ -154,7 +154,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 			if !textutil.PathUtility(name) {
 				continue
 			}
-			owners.Natives[name] = command.NativeOperation{Tool: name, ClosedForms: name == "sed", Prepare: func(ctx context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			owners.Natives[name] = command.NativeOperation{Tool: name, ClosedForms: name == "sed", SelectMode: func(ctx context.Context, argv commandprogram.Fields) (string, bool) {
+				return textOwners.SelectMode(ctx, memory, argv)
+			}, Prepare: func(ctx context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				request.Invocation.Scope.Directory = frame.Cwd().DisplayPath
 				currentTC := frame.ToolContext()
 				publication := &mutation.Publication{Owners: mutationOwners, Program: mutation.Program{Paths: frame}, Tools: currentTC, Admission: directProgramOutputAdmission(&currentTC)}
@@ -192,7 +194,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		for _, name := range searchOwners.Commands() {
 			tool, _ := searchOwners.Operation(name)
-			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			owners.Natives[name] = command.NativeOperation{Tool: tool, SelectMode: func(_ context.Context, argv commandprogram.Fields) (string, bool) {
+				return searchOwners.SelectMode(argv)
+			}, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, dispatch commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				prepared, err := searchOwners.Prepare(frame, dispatch, request)
 				if err != nil {
 					return command.NativePrepared{}, err
@@ -202,7 +206,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		for _, name := range mutationOwners.Commands() {
 			tool, _ := mutationOwners.Operation(name)
-			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			owners.Natives[name] = command.NativeOperation{Tool: tool, SelectMode: func(_ context.Context, argv commandprogram.Fields) (string, bool) {
+				return mutationOwners.SelectMode(argv)
+			}, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				prepared, err := mutationOwners.Prepare(mutation.Program{Paths: frame}, request)
 				if err != nil {
 					return command.NativePrepared{}, err
@@ -212,7 +218,9 @@ func (t programOwnerTools) compose(recorder *invocation.SQLRecorder) (func(tools
 		}
 		for _, name := range queryOwners.Commands() {
 			tool, _ := queryOwners.Operation(name)
-			owners.Natives[name] = command.NativeOperation{Tool: tool, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
+			owners.Natives[name] = command.NativeOperation{Tool: tool, SelectMode: func(_ context.Context, argv commandprogram.Fields) (string, bool) {
+				return queryOwners.SelectMode(argv)
+			}, Prepare: func(_ context.Context, frame *projectpaths.ProgramPaths, _ commandprogram.Dispatch, request commandprogram.OperationRequest) (command.NativePrepared, error) {
 				//nolint:contextcheck // Query target preparation uses the bound ProgramPaths frame context.
 				prepared, err := queryOwners.Prepare(query.Program{Paths: frame}, request)
 				if err != nil {
@@ -246,6 +254,7 @@ func (t programOwnerTools) gitOperation() (func(*mutation.Owners) command.Native
 	owners.Boundary = t.boundary
 	owners.PrivateGit = t.privateGit
 	owners.Launch = command.BindAgentLaunch
+	owners.SecretAsk, owners.SecretMatcher = t.http.SecretAsk, t.http.SecretMatcher
 	registered := func(tool string) bool {
 		if tool == "" || t.registry == nil {
 			return false

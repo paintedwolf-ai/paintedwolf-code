@@ -87,7 +87,7 @@ func (l *modelTurn) buildTurnRequest(
 	if reject, blocked, _, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oar.ContentObservation{Segments: oarContentSegments(messages)}, "", nil); blocked {
 		return coordinatorTurnRequest{}, reject
 	} else if changed {
-		return coordinatorTurnRequest{}, fmt.Errorf("[OAR-PROF-10] model.input transform cannot preserve message roles and provenance")
+		return coordinatorTurnRequest{}, fmt.Errorf("model.input transform cannot preserve message roles and provenance")
 	}
 	if l.Inbox.Deps.TakePolicyFeedback != nil {
 		feedback, err := l.Inbox.Deps.TakePolicyFeedback(ctx, sessionID)

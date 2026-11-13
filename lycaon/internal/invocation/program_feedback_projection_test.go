@@ -108,7 +108,7 @@ func TestProgramFailureKeepsActualParentAndEffectsOnProviderProjection(t *testin
 	// native path operand must never replace the submitted command object.
 	testutil.FailErr(t, "install actual OAR anchors", anchorcatalog.InstallBundled())
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
-	policy := &oar.Rule{ID: code, Kind: oar.KindPolicy, Anchor: oar.AnchorToolRejected, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool == "command" && paintedwolf.native_operation == "write" && tool_arg_string("command") == "${op} arg" && tool_arg_string("path") == ""`, Copy: oar.Copy{What: "Actual command envelope selected", Fix: "Inspect the permitted source before preparing the remaining action."}}
+	policy := &oar.Rule{ID: code, Kind: oar.KindPolicy, Anchor: oar.AnchorToolRejected, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool == "command" && paintedwolf.native_operation == "write" && paintedwolf.tool_arg_string("command") == "${op} arg" && paintedwolf.tool_arg_string("path") == ""`, Copy: oar.Copy{What: "Actual command envelope selected", Fix: "Inspect the permitted source before preparing the remaining action."}}
 	pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{policy}), nil, oar.NewCounterStore())
 	pipeline.EnableAnchor(oar.AnchorToolRejected)
 	executor := toolexecution.NewExecutor(nil, nil, "fixture")

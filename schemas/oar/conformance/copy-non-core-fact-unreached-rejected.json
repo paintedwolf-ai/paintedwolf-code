@@ -1,0 +1,29 @@
+{
+  "title": "Copy naming a host fact the rule does not require is rejected at load",
+  "covers": [
+    "OAR-COPY-5"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "what": "Retained prefix at {{ paintedwolf.spill_path }}."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "host_facts": {
+      "paintedwolf.spill_path": "string"
+    }
+  },
+  "expected": {
+    "error": "paintedwolf.spill_path"
+  },
+  "id": "copy-non-core-fact-unreached-rejected"
+}

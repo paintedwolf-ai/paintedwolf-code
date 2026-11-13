@@ -40,7 +40,7 @@ func TestSecretDetectorFindings(t *testing.T) {
 	start, okStart := row["start"].(int)
 	end, okEnd := row["end"].(int)
 	if !okStart || !okEnd || string([]rune(gc.Content.Content)[start:end]) != "AKIAQYJK5TXV4NZR7SGB" {
-		t.Fatalf("[OAR-OPS-14] invalid Unicode span: %#v", row)
+		t.Fatalf("invalid Unicode span: %#v", row)
 	}
 }
 
@@ -57,11 +57,11 @@ func TestOARLoadWithSecretDetector(t *testing.T) {
 	if _, err := os.Stat(schemaDir); err != nil {
 		schemaDir = filepath.Join(root, "..", "schemas")
 	}
-	p, err := oar.LoadCapabilityDocument(profile)
-	testutil.FailErr(t, "LoadCapabilityDocument", err)
-	prev := oar.InstalledCapabilityDocument()
-	oar.InstallCapabilityDocument(p)
-	t.Cleanup(func() { oar.InstallCapabilityDocument(prev) })
+	p, err := oar.LoadEngineDeclaration(profile)
+	testutil.FailErr(t, "LoadEngineDeclaration", err)
+	prev := oar.InstalledEngineDeclaration()
+	oar.InstallEngineDeclaration(p)
+	t.Cleanup(func() { oar.InstallEngineDeclaration(prev) })
 
 	reg := oar.NewDetectorRegistry()
 	reg.Register(oar.SecretMatchDetector{})

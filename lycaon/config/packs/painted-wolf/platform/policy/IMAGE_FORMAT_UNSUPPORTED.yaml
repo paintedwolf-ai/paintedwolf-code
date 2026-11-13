@@ -1,45 +1,36 @@
-oar: '1.0'
+spec_version: "1.0"
 id: IMAGE_FORMAT_UNSUPPORTED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - view_image
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.path
-  - paintedwolf.extension
-  - paintedwolf.supported_formats
-  - paintedwolf.can_command
-  profiles:
-  - tool
+  tools:
+    - view_image
+requires_facts: [paintedwolf.can_command, paintedwolf.extension, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.supported_formats]
 when: paintedwolf.rejection_code == "IMAGE_FORMAT_UNSUPPORTED"
 effect: block
-copy:
-  what: '{{ tool }} does not support the image format of {{ paintedwolf.path }}.'
-  cause: 'The file extension {{ paintedwolf.extension }} is not among supported visual formats ({{ paintedwolf.supported_formats }}).'
-  why: view_image inspects and perceives visual image assets (.svg, .png, .jpg, .jpeg, .webp, .gif).
-  fix: '{% if paintedwolf.can_command %}For text or code files, read them with `cat`, `head`, or `sed -n` inside command instead.{% else %}For text or code files, use an offered reader instead.{% endif %} For image files, ensure the file has a supported image extension.'
-  instead: Branch on Code IMAGE_FORMAT_UNSUPPORTED; read text files with an offered reader, or convert the asset to a supported image format
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:view_image
-x-paintedwolf-message: view_image format unsupported
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    extension: .pdf
-    path: docs/spec.pdf
-    profile: coordinator
-    supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
-    tool: view_image
-- id: command-leg
-  vars:
-    can_command: true
-    extension: .pdf
-    path: docs/spec.pdf
-    profile: coordinator
-    supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
-    tool: view_image
-  expect_contains:
-  - '`cat`'
+category: recoverable
+emit: guard:view_image
+message: view_image format unsupported
+what: '{{ tool }} does not support the image format of {{ paintedwolf.path }}.'
+cause: 'The file extension {{ paintedwolf.extension }} is not among supported visual formats ({{ paintedwolf.supported_formats }}).'
+why: view_image inspects and perceives visual image assets (.svg, .png, .jpg, .jpeg, .webp, .gif).
+fix: '{% if paintedwolf.can_command %}For text or code files, read them with `cat`, `head`, or `sed -n` inside command instead.{% else %}For text or code files, use an offered reader instead.{% endif %} For image files, ensure the file has a supported image extension.'
+instead: Branch on Code IMAGE_FORMAT_UNSUPPORTED; read text files with an offered reader, or convert the asset to a supported image format
+scenarios:
+  - id: default
+    vars:
+      extension: .pdf
+      path: docs/spec.pdf
+      profile: coordinator
+      supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
+      tool: view_image
+  - id: command-leg
+    vars:
+      can_command: true
+      extension: .pdf
+      path: docs/spec.pdf
+      profile: coordinator
+      supported_formats: .svg, .png, .jpg, .jpeg, .webp, .gif
+      tool: view_image
+    expect_contains:
+      - '`cat`'
