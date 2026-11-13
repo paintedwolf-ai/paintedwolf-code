@@ -388,10 +388,32 @@ func PrimaryCommandLine(args map[string]any, stages []exec.Stage) string {
 	if lines, err := pipelineLinesFromArg(args["pipeline"]); err == nil && len(lines) > 0 {
 		return strings.Join(lines, " | ")
 	}
+	// A program's hosted child carries its reached argv.
+	if argv := argvWords(args["argv"]); len(argv) > 0 {
+		return exec.Stage{Name: argv[0], Args: argv[1:]}.CommandLine()
+	}
 	if len(stages) > 0 {
 		return stages[0].CommandLine()
 	}
 	return ""
+}
+
+func argvWords(raw any) []string {
+	switch words := raw.(type) {
+	case []string:
+		return words
+	case []any:
+		out := make([]string, 0, len(words))
+		for _, word := range words {
+			text, ok := word.(string)
+			if !ok {
+				return nil
+			}
+			out = append(out, text)
+		}
+		return out
+	}
+	return nil
 }
 
 // RenderStages writes a plan's stages back as one command line that parses to them.

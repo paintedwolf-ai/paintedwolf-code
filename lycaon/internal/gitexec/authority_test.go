@@ -31,6 +31,10 @@ func TestAgentEntryRequiresAnExplicitLaunchAuthority(t *testing.T) {
 	if err != nil || got.Kind != exec.LaunchAgentCommand || got.Subject != "git" {
 		t.Fatalf("agent launch plan = %+v, %v", got, err)
 	}
+	// A host purpose inside an agent launch keeps that launch.
+	if got, err := launchPlan(WithHostPurpose(launched, "repository_lease"), "git"); err != nil || got.Kind != exec.LaunchAgentCommand {
+		t.Fatalf("host purpose replaced the agent launch: %+v, %v", got, err)
+	}
 	// A nested tool call starts from its own entry, not its caller's launch.
 	if _, err := launchPlan(AgentEntry(launched), "git"); !errors.Is(err, ErrLaunchAuthorityRequired) {
 		t.Fatalf("nested entry inherited the caller's launch: %v", err)

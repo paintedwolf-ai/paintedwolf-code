@@ -9,6 +9,7 @@ import { visualProducerEntryKey } from "../../chat/visual/visual-artifact-canoni
 import { TranscriptVisualSlot } from "../transcript/TranscriptVisualSlot.tsx";
 import { StructuredToolBody } from "./StructuredToolBody.tsx";
 import { ToolPartShell } from "./ToolPartShell.tsx";
+import type { ToolBriefingSlots } from "./tool-briefing-slots.ts";
 import { TurnLoadFootLine } from "./TurnLoadFootLine.tsx";
 
 type Props = {
@@ -18,6 +19,7 @@ type Props = {
   projectId?: string;
   client?: LycaonClient | null;
   rootRefs?: readonly ResolveProjectRoot[];
+  slots?: ToolBriefingSlots;
 };
 
 /** Collapsible card for native tool results (read / write / command / other). */
@@ -25,7 +27,7 @@ export function GenericToolCard(props: Props) {
   const visual = () => visualFromPart(props.part);
   createEffect(() => { buildStructuredToolPresentation(props.part); });
   return (
-    <ToolPartShell part={props.part} layout={props.layout} sessionId={props.sessionId} projectId={props.projectId} client={props.client}>
+    <ToolPartShell slots={props.slots} part={props.part} layout={props.layout} sessionId={props.sessionId} projectId={props.projectId} client={props.client}>
       <StructuredToolBody
         part={props.part}
         sessionId={props.sessionId}

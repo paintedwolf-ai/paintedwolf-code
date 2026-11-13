@@ -74,6 +74,7 @@ elif 'install' in sys.argv:
                     path.write_bytes(PAYLOAD)
 
                 with patch.object(NATIVE, "ROOT", root), patch.dict(os.environ, env), \
+                        patch.object(NATIVE.apt_origins, "APT_ROOT", root / "apt"), \
                         patch.object(NATIVE, "transfer", side_effect=transfer) as fetch:
                     NATIVE.main("plan")
                     output = (root / "output").read_text()
@@ -91,8 +92,7 @@ elif 'install' in sys.argv:
                 self.assertIn("Acquire::ForceHash=SHA256", records[1])
                 self.assertIn("APT::Keep-Downloaded-Packages=true", records[2])
                 self.assertIn("--no-download", records[2])
-                self.assertIn("Acquire::Retries=2", records[0])
-                self.assertIn("180s", records[0])
+                self.assertIn(f"{NATIVE.apt_origins.ATTEMPT_SECONDS}s", records[0])
                 self.assertEqual(records[2][-2:], ["xclip", "sway"])
 
     def test_only_matching_archives_are_reused(self):
@@ -130,7 +130,7 @@ elif 'install' in sys.argv:
             self.assertEqual(calls, [row["uri"], "https://archive.ubuntu.com/ubuntu/pool/a.deb"])
             self.assertTrue(NATIVE.verified(root / row["name"], row))
             self.assertFalse((root / "partial" / row["name"]).exists())
-        self.assertEqual(NATIVE.origins("https://packages.example.test/pool/a.deb"),
+        self.assertEqual(NATIVE.apt_origins.fallback_uris("https://packages.example.test/pool/a.deb"),
                          ["https://packages.example.test/pool/a.deb"])
 
     def test_single_origin_transient_failure_has_a_bounded_retry(self):

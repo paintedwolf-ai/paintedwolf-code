@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	lycexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/invocation"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -30,12 +31,19 @@ type NativeOperation struct {
 	// ClosedForms keeps unsupported owner forms as typed refusals instead of
 	// launching an installed program with different authority.
 	ClosedForms bool
+	// SecretSlots are the review argument slots where this command form
+	// carries managed-secret references to its owner; elsewhere they refuse.
+	SecretSlots []string
 	// Prepare binds a reached request in its directory frame; dispatch is that
 	// frame, through which owners such as find -exec run their children.
 	Prepare func(context.Context, *projectpaths.ProgramPaths, commandprogram.Dispatch, commandprogram.OperationRequest) (NativePrepared, error)
 	// Tools are further identities Prepare may select per bound form (one
 	// umbrella command whose subcommands have their own tools).
 	Tools []string
+	// SelectMode names the catalog effect mode argv selects, as Prepare would,
+	// from argv alone; false when argv alone cannot say. A dispatcher's
+	// preflight uses it for the child it will run.
+	SelectMode func(context.Context, commandprogram.Fields) (string, bool)
 }
 
 // NativePrepared is one bound owner invocation: its review record and the
@@ -61,6 +69,9 @@ type NativePrepared struct {
 	// Release frees any admitted resources retained by the prepared invocation
 	// across start/approval refusals and owner completion.
 	Release func()
+	// LaunchesConfined marks a form whose owner starts a confined process; it
+	// is admitted with the call's launch capabilities, as an external launch is.
+	LaunchesConfined bool
 }
 
 // ProgramOwners is one program's host owner set. Publication and Input serve
@@ -281,7 +292,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	if err != nil {
 		return refusedResult("TOOL_OWNER_FAILED"), err
 	}
-	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, d.childEffectSet(spec, spec.Effects[0].Mode, request))
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, d.childEffectSet(ctx, spec, spec.Effects[0].Mode, request))
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
@@ -328,7 +339,11 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 			}
 			return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, admitted tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: d.recordExternalStage, window: d.run.window}.Launch(ctx, execution, streams)
+					observe := func(stage tools.ToolContext, stamped confine.StampedRefusal, hosts []confine.EgressHost, directIPApplied bool) {
+						d.recordExternalStage(stage, stamped, hosts, directIPApplied)
+						opTrackerFromContext(ctx).addNetworkRead(reachedNetworkURLs(hosts))
+					}
+					return ExternalStages{ToolContext: admitted, Cwd: cwd, BaseEnvironment: d.run.baseEnv, ObserveStage: observe, window: d.run.window}.Launch(ctx, execution, streams)
 				})
 			}}, nil
 		},
@@ -383,7 +398,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	prepared, err := operation.Prepare(ctx, d.paths, d, prepareReq)
 	if err != nil {
-		if gap := unsupportedForm(spec, err); gap != nil && !operation.ClosedForms && (operation.Tool != "" || len(operation.Tools) > 0) && d.GapLaunchable(request) {
+		if gap := unsupportedForm(spec, err); gap != nil && (operation.Tool != "" || len(operation.Tools) > 0) && d.GapLaunchable(request) {
 			request.Gap = gap
 			return d.invokeExternal(ctx, request, streams)
 		}
@@ -417,7 +432,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	}
 	var operationDef toolcontract.OperationDefinition
 	if definition, ok := d.run.registry.Operation(tool); ok && definitionHasCommand(definition.Operation, spec.Name) {
-		operationDef = offeredProgramDefinition(tool, definition.Operation)
+		operationDef = offeredProgramDefinition(tool, definition.Operation, operation.SecretSlots)
 	} else if tool == spec.Name {
 		var err error
 		operationDef, err = d.catalogDefinition(spec)
@@ -427,7 +442,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	} else {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
@@ -496,7 +511,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 					}
 				}
 				newMode := selectEffectMode(spec, actual.Mode)
-				newBound, bindErr := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, newMode, d.childEffectSet(spec, newMode, request))
+				newBound, bindErr := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, newMode, d.childEffectSet(ctx, spec, newMode, request))
 				if bindErr != nil {
 					if actual.Release != nil {
 						actual.Release()
@@ -571,7 +586,7 @@ func (d *ProgramDispatcher) invokeHosted(ctx context.Context, spec toolcontract.
 	if prepared.Mode != "" {
 		request.EffectMode = prepared.Mode
 	}
-	return d.invokeHost(ctx, request, streams, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	return d.invokeHost(ctx, request, streams, prepared.LaunchesConfined, func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		if err := d.checkPreparedPolicy(ctx, tc, spec, request.EffectMode, request, d.paths.Cwd(), prepared.Review); err != nil {
 			return ownerFailure(err), err
 		}
@@ -683,7 +698,7 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 	var bound toolcontract.BoundOperation
 	if len(spec.Effects) > 0 {
 		mode := selectEffectMode(spec, request.EffectMode)
-		bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+		bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 		if err != nil {
 			return programChild{}, err
 		}
