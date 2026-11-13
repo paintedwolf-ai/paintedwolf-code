@@ -52,6 +52,8 @@ type Assembly struct {
 	Notes    *workeroutcomes.Notes
 	// MessageDelivery delivers coordinator and worker messages into requests.
 	MessageDelivery assembly.MessageDeliveryRecorder
+	// WorkerRoster lists a coordinator's workers for its requests.
+	WorkerRoster assembly.WorkerRosterSource
 	PolicyIndex     *policyindex.Service
 	Processes       *processcontrol.Service
 	Profiles        *profiles.Service
@@ -78,6 +80,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
 		WorkerContext:         m.WorkerContext,
+		WorkerRoster:          m.WorkerRoster,
 		Deliveries:            assembly.Deliveries{SiblingNotes: m.Notes, Messages: m.MessageDelivery},
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,

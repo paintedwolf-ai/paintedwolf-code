@@ -44,7 +44,12 @@ type Results struct {
 	sessions       SessionReader
 	limits         SessionLimits
 	workerNames    func(ctx context.Context, jobID string) (string, bool, error)
+	resultNotices  ResultNotices
 }
+
+// ResultNotices describes a settled worker round for its coordinator's
+// notice; ok is false for a job that runs no worker round.
+type ResultNotices func(ctx context.Context, jobID string) (notice map[string]any, ok bool, err error)
 
 type ResultPorts struct {
 	Tasks          TaskReader
@@ -71,6 +76,9 @@ func (m *Results) SetWorkflowSource(source ActiveWorkflow)  { m.workflowSource =
 func (m *Results) SetWorkerNames(names func(ctx context.Context, jobID string) (string, bool, error)) {
 	m.workerNames = names
 }
+
+// SetResultNotices sets how a settled round is described to its coordinator.
+func (m *Results) SetResultNotices(notices ResultNotices) { m.resultNotices = notices }
 
 // ValidateWorkflow rejects incomplete worker-to-workflow composition.
 func (m *Results) ValidateWorkflow() error {
@@ -129,6 +137,17 @@ func (m *Results) EnvelopeForTerminal(ctx context.Context, sessionID, completing
 	env.CompletedAt = &now
 	if digest := m.digests.Take(jobID); digest != "" {
 		env.WorkerDigest = digest
+	}
+	if m.resultNotices != nil {
+		notice, ok, err := m.resultNotices(ctx, jobID)
+		if err != nil {
+			slog.WarnContext(ctx, "describe worker result for coordinator envelope", "job_id", jobID, "error", err)
+		} else if ok {
+			if env.Vars == nil {
+				env.Vars = map[string]any{}
+			}
+			env.Vars["worker_result"] = notice
+		}
 	}
 	if m.decisions != nil {
 		req, ok, err := m.decisions.GetByJob(ctx, jobID)

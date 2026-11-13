@@ -93,6 +93,9 @@ type Deliveries struct {
 	Messages     MessageDeliveryRecorder
 }
 
+// WorkerRosterSource returns a coordinator session's bounded worker roster.
+type WorkerRosterSource func(ctx context.Context, sessionID string) (rows []map[string]any, omitted int, err error)
+
 type AssemblyDeps struct {
 	Prompts                 prompts.PromptTemplateEngine
 	Injects                 *prompts.InjectRenderer
@@ -106,11 +109,14 @@ type AssemblyDeps struct {
 	Workflows               WorkflowManifestSource
 	CoordinatorFrame        inject.CoordinatorTurnFrameSource
 	WorkerContext           WorkerContextBuilder
-	Deliveries              Deliveries
-	PeerReservations        PeerReservationSource
-	WorkflowHints           *guidance.HintConfig
-	GateFeedback            *feedback.GateFeedbackCatalog
-	ScanGuidance            ScanGuidanceHook
+	// WorkerRoster lists a coordinator's workers for its request: one map per
+	// worker in roster order, and how many it left out.
+	WorkerRoster     WorkerRosterSource
+	Deliveries       Deliveries
+	PeerReservations PeerReservationSource
+	WorkflowHints    *guidance.HintConfig
+	GateFeedback     *feedback.GateFeedbackCatalog
+	ScanGuidance     ScanGuidanceHook
 	// RepoKnownEmpty reports a measured empty workspace. An unmeasured tree is
 	// unknown, not empty.
 	RepoKnownEmpty   func(ctx context.Context, workspacePath string) bool

@@ -4,8 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/lycaon/lycaon/internal/workermessaging"
-	"github.com/lycaon/lycaon/internal/workerrecords"
 
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/briefingstore"
@@ -34,6 +32,10 @@ import (
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workermessaging"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/internal/workerroster"
 )
 
 // WireGroundingAndFindings wires grounding coordinators, progress, visual, and decision tools.
@@ -256,6 +258,12 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Delegations.Queue)
 	r.deps.Sessions.Manager.SetWorkerRounds(r.deps.WorkersCfg.RoundPolicy())
 	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Delegations.Cancel)
+	roster := workerroster.Source{
+		Reader:  workerops.Reader{Records: r.WorkerRecords, Jobs: r.deps.Delegations.Queue, Decisions: r.deps.Sessions.Decisions},
+		Touches: r.deps.Sessions.Manager.Workers.Workspaces.Touches,
+	}
+	r.deps.Sessions.Manager.SetWorkerRoster(roster.Template)
+	r.deps.Sessions.Manager.SetWorkerResultNotices(roster.ResultNotice)
 	r.ParentWaiter = worker.NewParentWorkerWaiter()
 
 	if err := call.RegisterHandoffTools(r.deps.Execution.Host.Registry, call.HandoffToolDeps{Calls: r.Calls, Sessions: callLookup}); err != nil {

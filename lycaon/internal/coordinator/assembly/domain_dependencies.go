@@ -52,6 +52,7 @@ type turnContextDeps struct {
 	SynthesisEvidence SynthesisEvidenceSource
 	TurnSourceBriefs  func(ctx context.Context, sess *api.Session) map[string]inject.SourceChangeBrief
 	WorkerContext     WorkerContextBuilder
+	WorkerRoster      WorkerRosterSource
 	WorkflowHints     *guidance.HintConfig
 	WorkflowArchive   func(context.Context, string) string
 	PromptConfigured  bool
@@ -120,6 +121,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		SynthesisEvidence: snapshot.SynthesisEvidence,
 		TurnSourceBriefs:  snapshot.TurnSourceBriefs,
 		WorkerContext:     snapshot.WorkerContext,
+		WorkerRoster:      snapshot.WorkerRoster,
 		WorkflowHints:     snapshot.WorkflowHints,
 		WorkflowArchive:   surfaceDeps.WorkflowArchive,
 		PromptConfigured:  snapshot.Prompts != nil,

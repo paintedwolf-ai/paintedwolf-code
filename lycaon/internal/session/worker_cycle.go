@@ -2,10 +2,11 @@ package session
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/coordinator/assembly"
-	"github.com/lycaon/lycaon/internal/spawn"
 
+	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
+	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -17,7 +18,6 @@ type WorkerCycleLister interface {
 	ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error)
 }
 
-// workeradmission.CoordinatorTaskConcurrencyCap returns the max pending or running task() jobs for a parent session.
 // SetWorkerRounds sets the policy that bounds worker rounds and their notices.
 func (m *Host) SetWorkerRounds(policy spawn.RoundPolicy) {
 	if m != nil {
@@ -70,6 +70,23 @@ func (m *Host) SetWorkerNames(names func(ctx context.Context, jobID string) (str
 	if m.Workers.Results != nil {
 		m.Workers.Results.SetWorkerNames(names)
 	}
+}
+
+// SetWorkerResultNotices sets how a settled round is described in its
+// coordinator's notice.
+func (m *Host) SetWorkerResultNotices(notices workeroutcomes.ResultNotices) {
+	if m == nil || m.Workers.Results == nil {
+		return
+	}
+	m.Workers.Results.SetResultNotices(notices)
+}
+
+// SetWorkerRoster sets how a coordinator's request lists its workers.
+func (m *Host) SetWorkerRoster(roster assembly.WorkerRosterSource) {
+	if m == nil || m.Coordinator.Assembly == nil {
+		return
+	}
+	m.Coordinator.Assembly.WorkerRoster = roster
 }
 
 // SetWorkerMessages sets how messages between a coordinator and its workers

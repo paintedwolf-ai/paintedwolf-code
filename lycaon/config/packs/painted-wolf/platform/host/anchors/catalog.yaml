@@ -64,6 +64,7 @@ anchors:
         worker_digest: { type: string }
         evidence_digest: { type: string }
         last_worker_decision_request: { type: object }
+        worker_result: { type: object }
         job_id: { type: string }
         child_session_id: { type: string }
 
