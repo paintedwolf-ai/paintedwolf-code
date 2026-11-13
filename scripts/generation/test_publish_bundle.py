@@ -13,7 +13,7 @@ import publish_bundle
 
 
 def signed(model, device, revision="r1"):
-    payload = "model.safetensors" if device == "mlx" else "model-Q4_K_M.gguf"
+    payload = "model.safetensors" if device == "mlx" else "model.gguf"
     files = [{"name": "config.json"}, {"name": "chat_template.jinja"}] if device == "mlx" else []
     return {"manifest": {"model": model, "revision": revision, "device": device, "artifact": {"name": payload}, "files": files},
             "signature": "s", "key_id": "k"}
@@ -80,7 +80,7 @@ class PublishTests(unittest.TestCase):
             put.write_text('#!/bin/sh\necho "$2" >> %s\n' % log)
             keys = publish_bundle.publish(fake, root, "/keys.json", "gemma4-e4b-paintedwolf", "vulkan", put=put)
             self.assertEqual(log.read_text().split(), keys)
-            self.assertEqual(keys, ["models/gemma4-e4b-paintedwolf/vulkan/r1/model-Q4_K_M.gguf",
+            self.assertEqual(keys, ["models/gemma4-e4b-paintedwolf/vulkan/r1/model.gguf",
                                     "models/gemma4-e4b-paintedwolf/vulkan/r1/manifest.json"])
 
     def test_the_command_line_prints_each_key(self):

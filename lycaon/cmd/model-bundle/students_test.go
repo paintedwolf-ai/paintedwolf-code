@@ -22,7 +22,7 @@ import (
 var studentPayloads = map[string][][2]string{
 	"mlx": {{"model.safetensors", "safetensors"}, {"config.json", "config"}, {"tokenizer.json", "tokenizer"},
 		{"tokenizer_config.json", "tokenizer"}, {"chat_template.jinja", "template"}, {"generation_config.json", "config"}},
-	"vulkan": {{"model-Q4_K_M.gguf", "gguf"}},
+	"vulkan": {{"model.gguf", "gguf"}},
 }
 
 func TestEveryStudentBundlePreparesSignsAndVerifiesForItsOwnSlot(t *testing.T) {
