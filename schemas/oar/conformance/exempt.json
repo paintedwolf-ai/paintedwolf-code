@@ -78,8 +78,8 @@
   },
   {
    "clause_id": "OAR-CONF-13",
-   "reason": "A requirement on the shape of a fixture, not on engine behaviour: a fixture cannot assert something about its own members. Enforced instead by scripts/check-coverage.mjs, which fails when a fixture's id does not equal its file name stem, when it cites a clause the specification does not define, or when it is not listed in manifest.json, and by the unit test 'every fixture validates against the published fixture schema' in packages/oar-ref/test/corpus.test.ts, which enforces the required members and the closed input and expected vocabularies.",
-   "check": "scripts/check-coverage.mjs, packages/oar-ref/test/corpus.test.ts"
+   "reason": "A requirement on the shape of a fixture, not on engine behaviour: a fixture cannot assert something about its own members. Enforced instead by scripts/check-coverage.mjs, which fails when a fixture's id does not equal its file name stem, when it cites a clause the specification does not define, or when it is not listed in manifest.json, and by the reference runner's closed fixture vocabulary, which the unit test 'every fixture uses only the members the fixture shape defines' in packages/oar-ref/test/corpus.test.ts applies to the whole corpus.",
+   "check": "scripts/check-coverage.mjs, packages/oar-ref/src/runner.ts (fixtureShapeError), packages/oar-ref/test/corpus.test.ts"
   },
   {
    "clause_id": "OAR-CONF-14",
@@ -88,8 +88,8 @@
   },
   {
    "clause_id": "OAR-CONF-15",
-   "reason": "A requirement on the shape of a fixture's expected block: the six keys and the rejection of any other key. Enforced by the unit test 'every fixture validates against the published fixture schema' in packages/oar-ref/test/corpus.test.ts, which closes `expected` to its six members, and by the runner, which rejects an unknown expected key rather than passing it silently.",
-   "check": "packages/oar-ref/test/corpus.test.ts, packages/oar-ref/src/runner.ts"
+   "reason": "A requirement on the shape of a fixture's expected block: the seven keys and the rejection of any other key. A corpus fixture cannot carry an undefined key and still pass, so the rejection is exercised by the unit test 'a fixture asserting an undefined expected key fails rather than passing', and the runner refuses such a fixture before evaluating it.",
+   "check": "packages/oar-ref/src/runner.ts (fixtureShapeError), packages/oar-ref/test/corpus.test.ts"
   },
   {
    "clause_id": "OAR-CONF-16",

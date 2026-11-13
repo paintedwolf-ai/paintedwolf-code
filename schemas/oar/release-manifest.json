@@ -1,6 +1,6 @@
 {
   "oar_release_version": "1.0",
-  "content_sha256": "b97d8835d4055b146bf7fb74173a76d91281ae44e5b36017b81826ff4c0bd146",
+  "content_sha256": "a77e38f654a69a45b208fa02e3291e9864408408c24b1018de96fa69347870de",
   "files": {
     "EXTENSIONS.md": "b3b60e164aa3e8f7bc7c148f0a6f1b5b2643ecbd806591b88b5971133d15690f",
     "clause-index.json": "421cf6aeef57766a450ac6c7acbffea45870241871a07bdfbdae9ab9ddf86fc3",
@@ -37,7 +37,7 @@
     "conformance/eval-kind-order.json": "e0a93b3b74f7ad5b0f1cd3c10ffbebc0f5fd09ec49ae498b771ed73169373259",
     "conformance/eval-precedence-block-wins.json": "ca189b0bfba93aafa1037723ab0e0835caa2379a3e57f93811270be66104d759",
     "conformance/eval-precedence-nudge-over-warn.json": "7bba741b2a89852a69868bc422669ca2cd39f1955525fa19505e82014258d587",
-    "conformance/exempt.json": "652212c52439f83fc72267a5d5d7b0dd9fcec6ff6ab62044d23eda525301ebe6",
+    "conformance/exempt.json": "1942598e4c0eb47040b38ce469c64f6a1d653f210a4eeb908da6f05450623007",
     "conformance/fact-core-observation-composed.json": "1fe9e1650ddf94a58fb913ec30f8ac19de35066492f0e61373db7141364e13dd",
     "conformance/fact-dyn-member-comparison-rejected.json": "6937eced5b9f7c417fcd2bbf9530f345242d8194077d8608528cd6e4b8733bd9",
     "conformance/fact-non-boolean-condition-rejected.json": "42f65c2aa3b666973910ee13c337a7a50f0bb525faa203935712c0b7ec02b712",
@@ -82,7 +82,7 @@
     "conformance/sel-unmodelled-clause-does-not-match.json": "863a8c15f6b03eb6d347c607a7b240f698648dde7e9f0341906011f54d698bb1",
     "conformance/stream-chunk-unsupported-rejected.json": "fc941344427098260de8d3335cbb3cfe781b6b0e5e882749460b2be1562eb179",
     "conformance/substitute-carries-copy.json": "a13286fd607ba23cd93a1b83b42ab469501c403c737fd853be8678f8f2da57b2",
-    "open-agent-rules.md": "964ae1d187bd0eac978b52d52e537fb49169a69a027ff7b22bedf6c22e54970c",
+    "open-agent-rules.md": "ebc19423dbcff6e021405bd2048b22059dae01f0d8c6699199246dc9d5b875ac",
     "schemas/oar-profile.schema.json": "5abf92122e02b580ef13d2f68e5d280a54f83dbd7b307b001c02f5c1b45233fb",
     "schemas/oar.schema.json": "8bc27c851820a10c89699ec5bab1373a4ab4b39aabc2cb44407a52408d809acd",
     "schemas/selector.schema.json": "0dafdc32b6bd1869b2fcdee5edc06ed37d68cccc44183d9de9bbd5cd60e1aadb",

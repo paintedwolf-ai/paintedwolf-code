@@ -3,7 +3,7 @@
   "oar_version": "1.0",
   "upstream": "https://openagentrules.org/spec/1.0/",
   "source": "https://openagentrules.org/spec/1.0/release-manifest.json",
-  "oar_content_sha256": "b97d8835d4055b146bf7fb74173a76d91281ae44e5b36017b81826ff4c0bd146",
+  "oar_content_sha256": "a77e38f654a69a45b208fa02e3291e9864408408c24b1018de96fa69347870de",
   "corpus_fixtures": 76,
   "files": {
     "conformance/copy-does-not-affect-decision.json": {
@@ -139,7 +139,7 @@
       "source": "conformance/eval-precedence-nudge-over-warn.json"
     },
     "conformance/exempt.json": {
-      "sha256": "652212c52439f83fc72267a5d5d7b0dd9fcec6ff6ab62044d23eda525301ebe6",
+      "sha256": "1942598e4c0eb47040b38ce469c64f6a1d653f210a4eeb908da6f05450623007",
       "source": "conformance/exempt.json"
     },
     "conformance/fact-core-observation-composed.json": {
@@ -327,7 +327,7 @@
       "source": "schemas/oar.schema.json"
     },
     "release-manifest.json": {
-      "sha256": "e84dfdf1e3bc608d40329c17d59d284650fa13aa90b682899f7cbba935b169e3",
+      "sha256": "64094fae65610ccedc7d843f17c90239ad2379025450b09a4a59d5652ff8e9d1",
       "source": "release-manifest.json"
     },
     "selector.schema.json": {

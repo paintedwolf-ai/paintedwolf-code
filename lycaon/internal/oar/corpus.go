@@ -125,6 +125,9 @@ func LoadFixturesDir(dir string) ([]ConformanceFixture, error) {
 // reach a provider failure ([OAR-FACT-17]).
 func decodeFixture(raw []byte) (ConformanceFixture, error) {
 	var fx ConformanceFixture
+	if err := checkFixtureShape(raw); err != nil {
+		return fx, err
+	}
 	dec := json.NewDecoder(bytes.NewReader(raw))
 	dec.UseNumber()
 	if err := dec.Decode(&fx); err != nil {
@@ -134,6 +137,46 @@ func decodeFixture(raw []byte) (ConformanceFixture, error) {
 		fx.Input.Facts[name] = fixtureNumbers(value)
 	}
 	return fx, nil
+}
+
+// The closed fixture vocabulary ([OAR-CONF-13], [OAR-CONF-15]).
+var (
+	fixtureMembers = []string{"id", "title", "covers", "rule", "hints", "input", "expected"}
+	inputMembers   = []string{"anchor", "facts", "recent_tools", "session_id", "host_facts", "profile"}
+)
+
+// checkFixtureShape refuses a fixture carrying an undefined member, one
+// missing input or expected, or one with neither rules nor hints.
+func checkFixtureShape(raw []byte) error {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return err
+	}
+	for key := range top {
+		if !containsExact(fixtureMembers, key) {
+			return fmt.Errorf("[OAR-CONF-13] fixture carries undefined member %q", key)
+		}
+	}
+	for _, key := range []string{"input", "expected"} {
+		if _, ok := top[key]; !ok {
+			return fmt.Errorf("[OAR-CONF-13] fixture is missing %q", key)
+		}
+	}
+	_, hasRule := top["rule"]
+	_, hasHints := top["hints"]
+	if !hasRule && !hasHints {
+		return fmt.Errorf("[OAR-CONF-13] fixture carries neither %q nor %q", "rule", "hints")
+	}
+	var input map[string]json.RawMessage
+	if err := json.Unmarshal(top["input"], &input); err != nil {
+		return fmt.Errorf("[OAR-CONF-13] fixture input: %w", err)
+	}
+	for key := range input {
+		if !containsExact(inputMembers, key) {
+			return fmt.Errorf("[OAR-CONF-13] fixture input carries undefined member %q", key)
+		}
+	}
+	return nil
 }
 
 func fixtureNumbers(v any) any {
@@ -363,6 +406,9 @@ func hostFixtureDeclaration(host *EngineDeclaration, in FixtureInput) (*EngineDe
 
 func fixtureRuleDocuments(raw json.RawMessage) ([]json.RawMessage, error) {
 	trimmed := strings.TrimSpace(string(raw))
+	if trimmed == "" || trimmed == "null" {
+		return nil, nil
+	}
 	if strings.HasPrefix(trimmed, "[") {
 		var list []json.RawMessage
 		if err := json.Unmarshal(raw, &list); err != nil {
