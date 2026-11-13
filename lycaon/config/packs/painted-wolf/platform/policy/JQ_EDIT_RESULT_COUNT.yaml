@@ -1,30 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: JQ_EDIT_RESULT_COUNT
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - jq_edit
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.path
-    - paintedwolf.count
+  ledger:
+    paintedwolf.operation:
+      - jq_edit
+requires_facts: [paintedwolf.count, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "JQ_EDIT_RESULT_COUNT"
 effect: block
-copy:
-  what: The jq program produced {{ paintedwolf.count }} documents from the single document {{ paintedwolf.path }}; nothing was written.
-  cause: The program emits several values, for example by iterating with `.[]` or using `,` at the top level.
-  why: A single document written back as a stream would change what the file is.
-  fix: Update the document inside one expression, for example `.items |= map(...)` instead of `.items[] | ...`.
-  instead: Branch on Code; make the program return one document
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:jq_edit
-x-paintedwolf-message: jq_edit program produced several documents from one
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:jq_edit
+message: jq_edit program produced several documents from one
+what: The jq program produced {{ paintedwolf.count }} documents from the single document {{ paintedwolf.path }}; nothing was written.
+cause: The program emits several values, for example by iterating with `.[]` or using `,` at the top level.
+why: A single document written back as a stream would change what the file is.
+fix: Update the document inside one expression, for example `.items |= map(...)` instead of `.items[] | ...`.
+instead: Branch on Code; make the program return one document
+scenarios:
   - id: default
     vars:
       count: '3'

@@ -118,7 +118,7 @@ func Build(ctx context.Context, moduleRoot string, eff *extpacks.EffectiveCatalo
 		return nil, fmt.Errorf("catalogview anchor catalog: %w", err)
 	}
 	schemaDir := configlayout.SchemasDir(moduleRoot)
-	if err := oar.InstallCapabilityBundled(schemaDir); err != nil {
+	if err := oar.InstallEngineDeclarationBundled(schemaDir); err != nil {
 		return nil, fmt.Errorf("catalogview oar capability: %w", err)
 	}
 	loader, err := oar.NewLoader(schemaDir)

@@ -1,0 +1,41 @@
+{
+  "id": "read-outside-scope-blocked",
+  "title": "A read outside the declared scope is blocked",
+  "covers": [
+    "OAR-SEL-2",
+    "OAR-FACT-7",
+    "OAR-EVAL-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "namespace": "example.security",
+    "emit": "example:pack",
+    "id": "READ_OUTSIDE_SCOPE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {
+      "tools": [
+        "read",
+        "grep"
+      ]
+    },
+    "profile": "portable",
+    "when": "path_outside_scope(tool)",
+    "effect": "block",
+    "on_error": "fail_closed"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "path_outside_scope": true
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "READ_OUTSIDE_SCOPE",
+    "applied": [
+      "READ_OUTSIDE_SCOPE:fired"
+    ]
+  }
+}

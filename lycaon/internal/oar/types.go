@@ -51,8 +51,8 @@ const (
 
 // Selector narrows a rule to a subset of the occurrences of its anchor. Each
 // clause is named by a fact and matches by set membership; clauses are
-// conjunctive, and an omitted clause is permissive ([OAR-SEL-1]–[OAR-SEL-5]).
-// An unknown clause name is a load error ([OAR-SEL-3]).
+// conjunctive, and an omitted clause is permissive ([OAR-SEL-3]).
+// An unknown clause name is a load error ([OAR-SEL-7]).
 type Selector map[string][]string
 
 // Clauses returns the clause names in sorted order, for stable diagnostics.
@@ -94,16 +94,9 @@ func ValidateTier(t Tier) error {
 	}
 }
 
-// Requires is what a rule declares it needs from the host, so its portability
-// is computable from the document alone ([OAR-DOC-21], [OAR-FACT-20]).
-type Requires struct {
-	Profiles []string `yaml:"profiles,omitempty" json:"profiles,omitempty"`
-	Facts    []string `yaml:"facts,omitempty" json:"facts,omitempty"`
-}
-
-// Copy is the closed presentation-text object. No member of it may affect
-// selection, evaluation, ordering, precedence, or the returned decision: two
-// rules differing only in Copy produce identical decisions ([OAR-DOC-24]).
+// Copy is a rule's presentation text. No member of it may affect selection,
+// evaluation, ordering, precedence, or the returned decision ([OAR-DOC-18],
+// [OAR-COPY-6]).
 type Copy struct {
 	Title   string `yaml:"title,omitempty" json:"title,omitempty"`
 	What    string `yaml:"what,omitempty" json:"what,omitempty"`
@@ -111,22 +104,27 @@ type Copy struct {
 	Why     string `yaml:"why,omitempty" json:"why,omitempty"`
 	Fix     string `yaml:"fix,omitempty" json:"fix,omitempty"`
 	Instead string `yaml:"instead,omitempty" json:"instead,omitempty"`
+	Message string `yaml:"message,omitempty" json:"message,omitempty"`
 }
 
 // Rule is one parsed OAR document.
 type Rule struct {
-	document  *oarcore.Rule
-	OAR       string // the format marker and version ([OAR-DOC-3])
-	ID        string
-	Namespace string // publisher scope; empty means the loading host's own
-	Requires  Requires
-	Status    string
-	Overrides []string
-	// overrideTargets are Overrides resolved to loaded rule ids by
-	// ResolveOverrides before evaluate.
-	overrideTargets []string
-	Title           string
-	Kind            Kind
+	document *oarcore.Rule
+	raw      map[string]any // the authored document
+	// CounterScope names a string fact whose value keys an additional fire
+	// counter ([OAR-FIRE-4]); empty when the rule declares none.
+	CounterScope string
+	// Disabled is set by operator configuration, never by the document.
+	Disabled    bool
+	SpecVersion string // the document's spec_version ([OAR-DOC-3])
+	ID          string
+	Namespace   string // publisher scope; empty means the loading host's own
+	// RequiresFacts are the facts the rule needs beyond the core tier
+	// ([OAR-DOC-23]).
+	RequiresFacts []string
+	Severity      string
+	Title         string
+	Kind          Kind
 	// Anchor is the host-resolved lifecycle moment.
 	Anchor      string
 	Selector    Selector
@@ -139,12 +137,10 @@ type Rule struct {
 	// errorTarget is the substitute resolved at load.
 	errorTarget *Rule
 	OnFire      []OnFireAction
-	// CounterScope names the fact that keys this rule's counters.
-	CounterScope string
-	References   References
-	Detector     *DetectorRef
-	Copy         Copy
-	// Transform is present if and only if Effect is transform ([OAR-DOC-22]).
+	References  References
+	Detector    *DetectorRef
+	Copy        Copy
+	// Transform is present if and only if Effect is transform ([OAR-OPS-8]).
 	Transform *TransformSpec
 
 	// Audience narrows the tool profiles that can receive this rule when the
@@ -156,16 +152,13 @@ type Rule struct {
 	// Scenarios are the authored conformance fixtures for this rule.
 	Scenarios []guidance.ScenarioEntry
 
-	// Emit, What, Cause, and Fix are rendering inputs.
+	// Emit is the provenance channel the rendering uses.
 	Emit   string
-	What   string
-	Cause  string
-	Fix    string
 	Tier   Tier   // provenance: builtin | project | pack
 	Source string // path or pack name
 }
 
-// TransformSpec describes a content mutation ([OAR-OPS-13]).
+// TransformSpec describes a content mutation ([OAR-OPS-8]).
 type TransformSpec struct {
 	Action      string
 	Target      string
@@ -174,8 +167,8 @@ type TransformSpec struct {
 	HasReplacement bool
 }
 
-// Advisory is one enforced same-effect fire on a nudge or warn decision
-// ([OAR-EVAL-20]). Copy is rendered independently of the others ([OAR-COPY-9]).
+// Advisory is one enforced same-effect fire on a nudge or warn decision.
+// Copy is rendered independently of the others.
 // Data is this host's per-code reject payload for envelope rendering.
 type Advisory struct {
 	Code string
@@ -184,23 +177,22 @@ type Advisory struct {
 	Data map[string]any
 }
 
-// Decision is the engine outcome for one occurrence ([OAR-EVAL-8]).
+// Decision is the engine outcome for one occurrence ([OAR-EVAL-6]).
 type Decision struct {
 	Effect Effect
 	Code   string
-	// Rule is the qualified identifier ([OAR-DOC-8]): namespace/id, or the
+	// Rule is the qualified identifier ([OAR-DOC-22]): namespace/id, or the
 	// bare id when the document has no namespace.
 	Rule   string
 	Data   map[string]any
 	OnFire []OnFireAction
 	// Advisories is every enforced rule that fired with the winning advisory
 	// effect, in evaluation order. Empty when the decision is block, transform,
-	// or none ([OAR-EVAL-20]). The first item is the named decision
-	// ([OAR-EVAL-19]).
+	// or none. The first item is the named decision.
 	Advisories []Advisory
 	// Copy is the rendered copy of the rule whose identifiers this decision
 	// carries ([OAR-COPY-7]). Substitution does not change the decision
-	// ([OAR-COPY-6], [OAR-DOC-24]).
+	// ([OAR-COPY-6], [OAR-DOC-18]).
 	Copy map[string]string
 }
 
@@ -247,7 +239,7 @@ func (rs *RuleSet) Get(id string) (*Rule, bool) {
 }
 
 // RejectDuplicateIdentities refuses a set that contains two rules with the
-// same qualified identifier ([OAR-DOC-9]).
+// same qualified identifier ([OAR-DOC-22]).
 func RejectDuplicateIdentities(rs *RuleSet) error {
 	if rs == nil {
 		return nil
@@ -259,38 +251,47 @@ func RejectDuplicateIdentities(rs *RuleSet) error {
 		}
 		q := r.Qualified()
 		if seen[q] {
-			return fmt.Errorf("[OAR-DOC-9] rule set contains two rules with qualified identifier %s", q)
+			return fmt.Errorf("[OAR-DOC-22] rule set contains two rules with qualified identifier %s", q)
 		}
 		seen[q] = true
 	}
 	return nil
 }
 
-// RejectUnknownErrorSubstitutes refuses an on_error that names a rule that
-// is not in the loaded set ([OAR-OPS-5]).
-func RejectUnknownErrorSubstitutes(rs *RuleSet) error {
+// ResolveErrorSubstitutes binds each on_error substitute to the loaded rule
+// it names, whose copy the substituted block then carries. A substitute that
+// names no loaded rule still replaces the identifier ([OAR-OPS-4]).
+func ResolveErrorSubstitutes(rs *RuleSet) {
 	if rs == nil {
-		return nil
+		return
 	}
 	for _, r := range rs.All() {
 		if r == nil {
 			continue
 		}
-		switch strings.TrimSpace(r.OnError) {
-		case "", "fail_closed", "fail_open":
+		r.errorTarget = nil
+		want := errorSubstitute(r)
+		if want == "" {
 			continue
 		}
-		want := strings.TrimSpace(r.OnError)
-		if !strings.Contains(want, "/") && r.Namespace != "" {
-			want = r.Namespace + "/" + want
+		if target, ok := rs.Get(want); ok && target.Qualified() == want {
+			r.errorTarget = target
 		}
-		target, ok := rs.Get(want)
-		if !ok || target.Qualified() != want {
-			return fmt.Errorf("[OAR-OPS-5] rule %s names on_error %s, which is not loaded", r.Qualified(), want)
-		}
-		r.errorTarget = target
 	}
-	return nil
+}
+
+// errorSubstitute is the qualified identifier a rule's on_error substitutes,
+// or empty when on_error is fail_closed or fail_open.
+func errorSubstitute(r *Rule) string {
+	want := strings.TrimSpace(r.OnError)
+	switch want {
+	case "", "fail_closed", "fail_open":
+		return ""
+	}
+	if !strings.Contains(want, "/") && r.Namespace != "" {
+		want = r.Namespace + "/" + want
+	}
+	return want
 }
 
 // OnAnchor returns rules bound to anchor id in Emit order.

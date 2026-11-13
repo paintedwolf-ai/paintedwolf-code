@@ -57,6 +57,7 @@ func (s *programStream) writeLocated(p []byte) (int, int64, error) {
 		return 0, s.size, nil
 	}
 	if err := s.ctx.Err(); err != nil {
+		s.truncated = true
 		return 0, s.size, err
 	}
 	if int64(len(p)) > s.limit-s.size {

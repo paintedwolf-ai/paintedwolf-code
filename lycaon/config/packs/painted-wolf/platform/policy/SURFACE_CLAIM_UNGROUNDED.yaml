@@ -1,23 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SURFACE_CLAIM_UNGROUNDED
 kind: invariant
-anchor: worker.report_check
-requires:
-  facts: [paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.profile, paintedwolf.surface_claim_ungrounded, paintedwolf.can_recall, paintedwolf.next_steps]
-when: paintedwolf.profile == "worker" && paintedwolf.surface_claim_ungrounded
+on: worker.report_check
+selector: {}
+requires_facts: [paintedwolf.can_recall, paintedwolf.next_steps, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.session_role, paintedwolf.surface_claim_ungrounded]
+when: paintedwolf.session_role == "worker" && paintedwolf.surface_claim_ungrounded
 effect: block
-copy:
-  what: 'A claim about how a running UI or app behaves has no runtime surface snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  cause: 'Authored render mockups establish design intent, and flat command stdout establishes output; neither establishes a running screen state.'
-  why: Structural snapshot + console/log from a surface capture are the groundable floor for running-app claims.
-  fix: 'Cite an existing page#, tui# or terminal_session# snapshot that supports the finding. {{ paintedwolf.next_steps }} If absent, obtain the observation with the capture or terminal controls offered on this turn, or remove the unsupported runtime claim before completing the leg.'
-  instead: 'Return a partial result and name the missing runtime observation in remaining_risk when capture is unavailable. Preserve completed work; do not replay a mutating command merely to add a screenshot.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:worker_summary
-x-paintedwolf-evidence:
+category: recoverable
+emit: guard:worker_summary
+message: Observed-runtime claim lacks a runtime surface snapshot
+what: 'A claim about how a running UI or app behaves has no runtime surface snapshot evidence (page capture for DOM; sealed terminal_capture or held terminal_snapshot for terminal screens). Cited instead: {{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+cause: 'Authored render mockups establish design intent, and flat command stdout establishes output; neither establishes a running screen state.'
+why: Structural snapshot + console/log from a surface capture are the groundable floor for running-app claims.
+fix: 'Cite an existing page#, tui# or terminal_session# snapshot that supports the finding. {{ paintedwolf.next_steps }} If absent, obtain the observation with the capture or terminal controls offered on this turn, or remove the unsupported runtime claim before completing the leg.'
+instead: 'Return a partial result and name the missing runtime observation in remaining_risk when capture is unavailable. Preserve completed work; do not replay a mutating command merely to add a screenshot.'
+evidence:
   in_session_retry: true
-x-paintedwolf-message: Observed-runtime claim lacks a runtime surface snapshot
-x-paintedwolf-scenarios:
+scenarios:
   - id: recall_callable
     vars:
       offender_count: 1

@@ -218,9 +218,9 @@ func cacheFixtureCatalog(t *testing.T) ([]extpacks.PackContent, extpacks.Desired
 	t.Helper()
 	dir := t.TempDir()
 	writePack(t, dir, "cache", "fixture/cache", map[string]string{
-		"policy/FIXTURE_CACHE.yaml": "oar: '1.0'\nid: FIXTURE_CACHE\nkind: policy\nanchor: tool.post_invoke\n" +
-			"requires:\n  profiles: [tool]\nwhen: 'false'\neffect: warn\n" +
-			"copy:\n  cause: c\n  why: w\n  fix: f\n  instead: i\n",
+		"policy/FIXTURE_CACHE.yaml": "spec_version: '1.0'\nid: FIXTURE_CACHE\nkind: policy\non: tool.post_invoke\n" +
+			"selector: {}\nwhen: 'false'\neffect: warn\n" +
+			"cause: c\nwhy: w\nfix: f\ninstead: i\n",
 		"approvals/fixture/explain.yaml":        "approval_explanations:\n  fixture: {}\n",
 		"tools/profiles/fixture.yaml":           "id: fixture\ntools: {}\n",
 		"agents/fixture.yaml":                   "id: fixture\nname: Fixture\ntool_profile: fixture\ntopology_roles: [coordinator]\n",

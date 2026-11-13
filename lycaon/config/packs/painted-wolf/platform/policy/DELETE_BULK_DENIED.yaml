@@ -1,35 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: DELETE_BULK_DENIED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - delete
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.max_paths
-  - paintedwolf.requested
-  - paintedwolf.bulk_denied
+  ledger:
+    paintedwolf.operation:
+      - delete
+requires_facts: [paintedwolf.bulk_denied, paintedwolf.max_paths, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.requested]
 when: paintedwolf.rejection_code == "DELETE_BULK_DENIED"
 effect: block
-copy:
-  what: delete requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.
-  cause: The explicit target count exceeds the per-call bound.
-  why: Deletion targets must remain bounded and reviewable.
-  fix: Keep each batch at or below {{ paintedwolf.max_paths }} and include only intended deletion targets.
-    Preserve child-before-parent ordering when the task actually requires both.
-  instead: Branch on Code; reduce paths[] length
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:delete
-x-paintedwolf-message: delete requested too many paths in one call
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: delete
+category: recoverable
+emit: guard:delete
+message: delete requested too many paths in one call
+what: delete requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.
+cause: The explicit target count exceeds the per-call bound.
+why: Deletion targets must remain bounded and reviewable.
+fix: Keep each batch at or below {{ paintedwolf.max_paths }} and include only intended deletion targets. Preserve child-before-parent ordering when the task actually requires both.
+instead: Branch on Code; reduce paths[] length
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: delete

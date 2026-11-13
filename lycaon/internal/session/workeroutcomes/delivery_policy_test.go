@@ -24,7 +24,7 @@ func TestProf10WorkerFinalizationGatesSuccessfulAndFailedEnvelopes(t *testing.T)
 		for _, status := range []string{"complete", "partial", "failed"} {
 			t.Run(effect+"/"+status, func(t *testing.T) {
 				dir := t.TempDir()
-				document := "oar: '1.0'\nid: DELIVERY_POLICY\nkind: policy\nanchor: agent.finalize\nrequires:\n  profiles: [content, session]\nwhen: content_length > 0 && principal == \"person\"\neffect: " + effect + "\non_fire: [increment_counter]\n"
+				document := "spec_version: '1.0'\nid: DELIVERY_POLICY\nkind: policy\non: agent.finalize\nselector: {}\nrequires_facts: [paintedwolf.content_length, paintedwolf.principal]\nwhen: paintedwolf.content_length > 0 && paintedwolf.principal == \"person\"\neffect: " + effect + "\non_fire: [increment_counter]\n"
 				testutil.FailErr(t, "write delivery policy", os.WriteFile(filepath.Join(dir, "arbitrary.yaml"), []byte(document), 0o600))
 				loader, err := oar.NewLoader("")
 				testutil.FailErr(t, "create loader", err)
@@ -44,17 +44,17 @@ func TestProf10WorkerFinalizationGatesSuccessfulAndFailedEnvelopes(t *testing.T)
 				testutil.FailErr(t, "evaluate worker delivery", err)
 				body := workercompletion.FormatWorkerCompletionEnvelope(delivery.Envelope)
 				if !strings.Contains(body, "DELIVERY_POLICY") {
-					t.Fatalf("[OAR-PROF-10] policy feedback missing: %s", body)
+					t.Fatalf("policy feedback missing: %s", body)
 				}
 				if effect == "block" {
 					if !delivery.Blocked || strings.Contains(body, "original-secret") || delivery.Envelope.State != "partial" {
-						t.Fatalf("[OAR-PROF-10] blocked content delivered: %+v", delivery)
+						t.Fatalf("blocked content delivered: %+v", delivery)
 					}
 				} else if delivery.Blocked || !strings.Contains(body, "original-secret-report") || delivery.Envelope.State != status {
-					t.Fatalf("[OAR-EVAL-8] advisory altered delivery: %+v", delivery)
+					t.Fatalf("[OAR-EVAL-6] advisory altered delivery: %+v", delivery)
 				}
 				if count := pipeline.Counters().Get("child", "DELIVERY_POLICY", oar.CounterFire); count != 1 {
-					t.Fatalf("[OAR-FIRE-6] finalization fired %d times", count)
+					t.Fatalf("[OAR-FIRE-5] finalization fired %d times", count)
 				}
 			})
 		}

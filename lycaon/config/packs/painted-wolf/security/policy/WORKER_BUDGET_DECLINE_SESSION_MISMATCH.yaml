@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_BUDGET_DECLINE_SESSION_MISMATCH
 kind: schema
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.job_id, paintedwolf.next_steps]
+on: tool.rejected
+selector:
+  tools:
+    - decline_worker_budget
+requires_facts: [paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKER_BUDGET_DECLINE_SESSION_MISMATCH"
 effect: block
-copy:
-  what: decline_worker_budget may only target jobs spawned from the caller session
-  cause: job_id {{ paintedwolf.job_id }} belongs to another parent session
-  why: Answering a worker's budget request is a coordinator→worker control plane action scoped to your session
-  fix: 'Use job_id from your worker enqueue result. {{ paintedwolf.next_steps }}'
-  instead: Branch on Code; pass a job_id belonging to this session
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:decline_worker_budget
-x-paintedwolf-message: Worker job {{ paintedwolf.job_id }} does not belong to this coordinator session
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    job_id: job-other
-selector:
-  tool:
-  - decline_worker_budget
+category: recoverable
+emit: guard:decline_worker_budget
+message: Worker job {{ paintedwolf.job_id }} does not belong to this coordinator session
+what: decline_worker_budget may only target jobs spawned from the caller session
+cause: job_id {{ paintedwolf.job_id }} belongs to another parent session
+why: Answering a worker's budget request is a coordinator→worker control plane action scoped to your session
+fix: 'Use job_id from your worker enqueue result. {{ paintedwolf.next_steps }}'
+instead: Branch on Code; pass a job_id belonging to this session
+scenarios:
+  - id: default
+    vars:
+      job_id: job-other

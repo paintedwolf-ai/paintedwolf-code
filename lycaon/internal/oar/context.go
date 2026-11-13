@@ -268,6 +268,6 @@ func (gc *GuardContext) DeriveToolClassFacts() {
 		gc.Invocation.ToolPayloadChunkable = false
 	}
 	if gc.Session.PermissionProfile == "" {
-		gc.Session.PermissionProfile = gc.Session.Profile
+		gc.Session.PermissionProfile = gc.Session.Role
 	}
 }

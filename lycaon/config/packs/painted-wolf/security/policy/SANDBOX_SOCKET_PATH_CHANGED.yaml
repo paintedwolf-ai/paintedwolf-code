@@ -1,26 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_SOCKET_PATH_CHANGED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  profiles:
-  - tool
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SANDBOX_SOCKET_PATH_CHANGED"
 effect: block
-copy:
-  what: A host-approved socket grant is no longer usable for this invocation.
-  cause: The approved enforcement mode, live socket binding, or pathname is no longer available.
-    A retained binding cannot be reconstructed from its saved pathname.
-  why: The operation must use the authority and local-service recipient that the person approved.
-  fix: Request the socket again with a fresh `capability_request` or the same socket argument after confirming
-    the intended service is running. Preserve completed effects; retry only the operation still needed. A retained-object grant needs fresh approval after the service or engine
-    restarts. Saved intent and stored credentials remain available; approve their new recipient when asked.
-  instead: Branch on Code; re-request after the socket path is stable
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:sandbox_socket
-x-paintedwolf-message: socket grant changed before use
-x-paintedwolf-scenarios:
-- id: default
-  vars: {}
+category: recoverable
+emit: guard:sandbox_socket
+message: socket grant changed before use
+what: A host-approved socket grant is no longer usable for this invocation.
+cause: The approved enforcement mode, live socket binding, or pathname is no longer available. A retained binding cannot be reconstructed from its saved pathname.
+why: The operation must use the authority and local-service recipient that the person approved.
+fix: Request the socket again with a fresh `capability_request` or the same socket argument after confirming the intended service is running. Preserve completed effects; retry only the operation still needed. A retained-object grant needs fresh approval after the service or engine restarts. Saved intent and stored credentials remain available; approve their new recipient when asked.
+instead: Branch on Code; re-request after the socket path is stable
+scenarios:
+  - id: default
+    vars: {}

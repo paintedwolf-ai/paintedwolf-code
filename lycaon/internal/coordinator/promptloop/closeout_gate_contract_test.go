@@ -639,7 +639,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 				}
 				return
 			}
-			if selected == nil || selected.Code != tc.code || len(selected.Copy) != 5 {
+			if selected == nil || selected.Code != tc.code || !carriesRuleCopy(selected.Copy) {
 				t.Fatalf("closeout did not retain evaluated decision: %+v", selected)
 			}
 			if out.committed || out.endWithoutAssemble != tc.duplicate || out.retry == tc.duplicate {
@@ -668,4 +668,15 @@ func TestCommittedFindingKeepsItsWhere(t *testing.T) {
 	if where := meta.Findings[0].Where[0]; where.Path != "a.go" || where.Line != 2 {
 		t.Fatalf("where = %+v", where)
 	}
+}
+
+// carriesRuleCopy reports whether a decision kept the rule's evaluated copy:
+// every shipped rule says what happened and why.
+func carriesRuleCopy(copy map[string]string) bool {
+	for _, member := range []string{"what", "cause"} {
+		if copy[member] == "" {
+			return false
+		}
+	}
+	return true
 }
