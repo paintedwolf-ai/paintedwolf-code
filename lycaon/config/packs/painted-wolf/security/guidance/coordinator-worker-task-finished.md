@@ -13,7 +13,7 @@ Route verify, re-dispatch, or user reply from `report_json` (`leg_status`, `file
 - `job_id`: `{{ last_worker_decision_request.job_id }}`
 - `child_session_id`: `{{ last_worker_decision_request.child_session_id }}`
 - question: {{ last_worker_decision_request.question }}
-- options:{% for o in last_worker_decision_request.options %} `{{ o }}`{% if not forloop.Last %},{% endif %}{% endfor %}
+{% if last_worker_decision_request.options %}- options:{% for o in last_worker_decision_request.options %} `{{ o }}`{% if not forloop.Last %},{% endif %}{% endfor %}{% else %}- options: none; answer in your own words{% endif %}
 
 `decision` → {% if profile_has_answer_decision %}`answer_decision`{% else %}answer it{% endif %} when you own the choice, else {% if profile_has_ask_user %}`ask_user`{% else %}ask the user{% endif %} (host/env precondition — actionable steps, not Allow/Deny). `checkpoint` → user approves the surfaced child checkpoint. `sandbox` → corrected in-root recovery leg, or {% if profile_has_ask_user %}`ask_user`{% else %}ask the user{% endif %} for a true host fix.{% if profile_has_wait %} Then `wait(resume=true)` when waiting on the human.{% endif %}
 {% endif %}
