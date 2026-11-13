@@ -3260,7 +3260,7 @@ type FeedbackSubject struct {
 	ID   string `json:"id"`
 }
 
-// FileBriefingEvent Revision-keyed briefing update with delta, result, or error.
+// FileBriefingEvent Revision-keyed briefing update with its result or error.
 type FileBriefingEvent struct {
 	ProjectID    string                 `json:"project_id"`
 	TargetKey    string                 `json:"target_key"`
@@ -3274,7 +3274,6 @@ type FileBriefingEvent struct {
 	Locations    []FileBriefingLocation `json:"locations,omitempty"`
 	Sections     []FileBriefingSection  `json:"sections,omitempty"`
 	FallbackText string                 `json:"fallback_text"`
-	Delta        string                 `json:"delta,omitempty"`
 	Truncated    bool                   `json:"truncated"`
 	Error        string                 `json:"error,omitempty"`
 	UpdatedAt    string                 `json:"updated_at"`

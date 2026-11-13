@@ -34,7 +34,7 @@ const currentRequest = '{"root_id":"r1","path":"main.go","presentation":"current
 describe("file briefing live store", () => {
   beforeEach(resetFileBriefingLiveForTest);
 
-  it("appends revision-matched deltas and seals with validated sections", () => {
+  it("seals with validated sections and their evidence, ignoring older updates", () => {
     const listener = vi.fn();
     subscribeFileBriefings(listener);
     receiveFileBriefingSnapshot("p1", {
@@ -53,60 +53,28 @@ describe("file briefing live store", () => {
       root_id: "r1",
       path: "main.go",
       source_sha256: "sha-1",
-      status: "streaming",
-      delta: "Purpose: builds ",
-      updated_at: "2026-08-14T00:00:01Z",
-    });
-    applyFileBriefingEvent({
-      ...eventFields,
-      project_id: "p1",
-      root_id: "r1",
-      path: "main.go",
-      source_sha256: "sha-1",
-      status: "streaming",
-      delta: "the app.",
-      updated_at: "2026-08-14T00:00:02Z",
-    });
-    expect(getLiveFileBriefing("p1", currentRequest)?.streamText).toBe(
-      "Purpose: builds the app.",
-    );
-    expect(getLiveFileBriefing("p1", currentRequest)?.locations).toEqual([
-      { line: 8, name: "Serve", kind: "function" },
-    ]);
-    applyFileBriefingEvent({
-      ...eventFields,
-      project_id: "p1",
-      root_id: "r1",
-      path: "main.go",
-      source_sha256: "sha-1",
       status: "complete",
       preview,
       sections: [{ kind: "purpose", text: "Final explanation." }],
+      evidence_ref: { project_id: "p1", record_id: "rec" },
       updated_at: "2026-08-14T00:00:03Z",
     });
     expect(getLiveFileBriefing("p1", currentRequest)).toMatchObject({
       status: "complete",
       sections: [{ kind: "purpose", text: "Final explanation." }],
+      evidence_ref: { project_id: "p1", record_id: "rec" },
+      locations: [{ line: 8, name: "Serve", kind: "function" }],
     });
-    expect(getLiveFileBriefing("p1", currentRequest)?.streamText).toBeUndefined();
-    expect(getLiveFileBriefing("p1", currentRequest)?.locations).toEqual([
-      { line: 8, name: "Serve", kind: "function" },
-    ]);
-
     applyFileBriefingEvent({
       ...eventFields,
       project_id: "p1",
       root_id: "r1",
       path: "main.go",
       source_sha256: "sha-1",
-      status: "streaming",
-      delta: "stale fragment",
+      status: "pending",
       updated_at: "2026-08-14T00:00:02Z",
     });
-    expect(getLiveFileBriefing("p1", currentRequest)).toMatchObject({
-      status: "complete",
-      sections: [{ kind: "purpose", text: "Final explanation." }],
-    });
+    expect(getLiveFileBriefing("p1", currentRequest)?.status).toBe("complete");
     expect(listener).toHaveBeenCalled();
   });
 
@@ -138,15 +106,14 @@ describe("file briefing live store", () => {
       root_id: "r1",
       path: "main.go",
       source_sha256: "sha-1",
-      status: "streaming",
-      delta: "stale fragment",
+      status: "complete",
+      sections: [{ kind: "purpose", text: "Stale explanation." }],
       updated_at: "2026-08-14T00:00:02Z",
     });
     expect(getLiveFileBriefing("p1", currentRequest)).toMatchObject({
       attempt_id: "22222222-2222-4222-8222-222222222222",
       status: "pending",
     });
-    expect(getLiveFileBriefing("p1", currentRequest)?.streamText).toBeUndefined();
   });
 
   it("marks only the changed source revision stale", () => {
@@ -236,44 +203,6 @@ describe("file briefing live store", () => {
 
     expect(getLiveFileBriefing("p1", "version-1")?.sections[0]?.text).toBe("First.");
     expect(getLiveFileBriefing("p1", "version-2")?.sections[0]?.text).toBe("Second.");
-  });
-
-  it("keeps streamed explanation when the terminal result has no sections", () => {
-    receiveFileBriefingSnapshot("p1", {
-      ...briefingFields,
-      root_id: "r1",
-      path: "main.go",
-      source_sha256: "sha-1",
-      status: "pending",
-      preview,
-      locations: [],
-      updated_at: "2026-08-14T00:00:00Z",
-    }, currentRequest);
-    applyFileBriefingEvent({
-      ...eventFields,
-      project_id: "p1",
-      root_id: "r1",
-      path: "main.go",
-      source_sha256: "sha-1",
-      status: "streaming",
-      delta: "Purpose: builds the app.",
-      updated_at: "2026-08-14T00:00:01Z",
-    });
-    applyFileBriefingEvent({
-      ...eventFields,
-      project_id: "p1",
-      root_id: "r1",
-      path: "main.go",
-      source_sha256: "sha-1",
-      status: "preview",
-      preview,
-      updated_at: "2026-08-14T00:00:02Z",
-    });
-    expect(getLiveFileBriefing("p1", currentRequest)).toMatchObject({
-      status: "preview",
-      streamText: "Purpose: builds the app.",
-      sections: [],
-    });
   });
 
   it("bounds settled in-process cache entries", () => {

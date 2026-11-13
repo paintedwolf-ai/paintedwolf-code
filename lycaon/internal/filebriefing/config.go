@@ -19,7 +19,6 @@ type Config struct {
 	SystemPrompt string           `yaml:"system_prompt"`
 	Material     MaterialConfig   `yaml:"material"`
 	Generation   GenerationConfig `yaml:"generation"`
-	Stream       StreamConfig     `yaml:"stream"`
 	Retention    RetentionConfig  `yaml:"retention"`
 }
 
@@ -38,11 +37,6 @@ type GenerationConfig struct {
 	MaxOutputChars  int `yaml:"max_output_chars"`
 	TimeoutMS       int `yaml:"timeout_ms"`
 	MinPartialChars int `yaml:"min_partial_chars"`
-}
-
-type StreamConfig struct {
-	ChunkChars int `yaml:"chunk_chars"`
-	FlushMS    int `yaml:"flush_ms"`
 }
 
 type RetentionConfig struct {
@@ -100,8 +94,6 @@ func (c Config) validate() error {
 		{"generation.max_output_chars", c.Generation.MaxOutputChars},
 		{"generation.timeout_ms", c.Generation.TimeoutMS},
 		{"generation.min_partial_chars", c.Generation.MinPartialChars},
-		{"stream.chunk_chars", c.Stream.ChunkChars},
-		{"stream.flush_ms", c.Stream.FlushMS},
 	}
 	for _, item := range values {
 		if item.value <= 0 {
@@ -146,8 +138,4 @@ func (c RetentionConfig) validate() error {
 
 func (c Config) GenerationTimeout() time.Duration {
 	return time.Duration(c.Generation.TimeoutMS) * time.Millisecond
-}
-
-func (c Config) StreamFlushInterval() time.Duration {
-	return time.Duration(c.Stream.FlushMS) * time.Millisecond
 }

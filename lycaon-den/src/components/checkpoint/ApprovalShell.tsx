@@ -17,7 +17,8 @@ import { pendingAttachmentsForSession } from "../../chat/composer/composer-attac
 import { APPROVALS_COPY } from "../../settings/security/approvals-copy.ts";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
 import { DenButton } from "../primitives/DenButton.tsx";
-import { RandomLetterReveal } from "../primitives/RandomLetterReveal.tsx";
+import { BriefingEvidenceLink, BriefingSummary, type SummarySection } from "../../briefing/BriefingSummary.tsx";
+import type { BriefingEvidenceRef } from "../../api/types.ts";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import {
   createDockCollapse,
@@ -237,7 +238,8 @@ export function ContextZone(p: {
   /** Host note shown beside the impact. */
   note?: string;
   noteTestid?: string;
-  agent?: { text?: string; pending?: boolean; onceKey: string };
+  /** onceKey is the rationale's evidence record when it has one. */
+  agent?: { text?: string; pending?: boolean; onceKey: string; evidence?: BriefingEvidenceRef };
   detailRows?: DetailRow[];
   detailActions?: JSX.Element;
 }) {
@@ -245,6 +247,10 @@ export function ContextZone(p: {
   const hasDetails = () =>
     (p.detailRows?.length ?? 0) > 0;
   const copy = APPROVALS_COPY.card;
+  const agentSections = (): SummarySection[] => {
+    const text = p.agent?.text?.trim();
+    return [text ? { id: "purpose", label: copy.agentLine.label, text: `“${text}”`, source: "summarizer" } : { id: "purpose", label: copy.agentLine.label }];
+  };
   return (
     <Show when={p.lead || p.impact || p.note || hasAgent() || hasDetails()}>
       <div class="den-approval-card-context" data-zone="context">
@@ -281,46 +287,9 @@ export function ContextZone(p: {
           )}
         </Show>
         <Show when={hasAgent()}>
-          <div
-            class="den-approval-card-agent"
-            data-testid="approval-agent-line"
-          >
-            <span
-              class="den-approval-card-agent-icon"
-              data-tip={copy.agentLine.disclaimer}
-              aria-hidden="true"
-            >
-              ✦
-            </span>
-            <span class="den-visually-hidden">{copy.agentLine.disclaimer}</span>
-            <Show
-              when={p.agent?.text?.trim()}
-              keyed
-              fallback={
-                <span
-                  class="den-approval-card-agent-pending"
-                  data-testid="approval-ai-rationale-pending"
-                  aria-label={copy.agentLine.pending}
-                >
-                  <span class="den-approval-card-agent-skeleton" />
-                  <span class="den-approval-card-agent-skeleton den-approval-card-agent-skeleton--short" />
-                </span>
-              }
-            >
-              {(text) => (
-                <span class="den-approval-card-agent-text">
-                  <span class="den-approval-card-agent-label">
-                    {copy.agentLine.label}:
-                  </span>{" "}
-                  <RandomLetterReveal
-                    text={`“${text}”`}
-                    onceKey={p.agent?.onceKey ?? ""}
-                    class="den-approval-card-agent-body"
-                    data-testid="approval-ai-rationale"
-                  />
-                </span>
-              )}
-            </Show>
+          <div class="den-approval-card-agent" data-testid="approval-agent-line">
+            <BriefingSummary disclaimer={copy.agentLine.disclaimer} recordId={p.agent?.onceKey ?? null} sections={agentSections()} />
+            <Show when={p.agent?.evidence}>{(reference) => <BriefingEvidenceLink reference={reference()} />}</Show>
           </div>
         </Show>
         <Show when={hasDetails()}>

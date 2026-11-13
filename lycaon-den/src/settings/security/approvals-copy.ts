@@ -129,7 +129,6 @@ export const APPROVALS_COPY = {
     /** Labels agent-authored context. */
     agentLine: {
       label: "Agent",
-      pending: "Summarizing how this fits the goal…",
       disclaimer:
         "AI-generated to add context. It can be incomplete or wrong — base your decision on the action above.",
     },

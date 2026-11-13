@@ -31,9 +31,6 @@ generation:
   max_output_chars: 8192
   timeout_ms: 20000
   min_partial_chars: 120
-stream:
-  chunk_chars: 48
-  flush_ms: 100
   retry_count: 2
 retention:
   revisions_per_file: 4

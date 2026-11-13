@@ -17863,7 +17863,7 @@ components:
         - truncated
         - updated_at
       additionalProperties: false
-      description: Revision-keyed briefing update with delta, result, or error.
+      description: Revision-keyed briefing update with its result or error.
       properties:
         project_id:
           type: string
@@ -17891,7 +17891,6 @@ components:
           enum:
             - preview
             - pending
-            - streaming
             - complete
             - failed
         preview:
@@ -17906,9 +17905,6 @@ components:
           items:
             $ref: '#/components/schemas/FileBriefingSection'
         fallback_text:
-          type: string
-          maxLength: 8192
-        delta:
           type: string
           maxLength: 8192
         truncated:

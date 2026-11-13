@@ -63,9 +63,7 @@ type FileSummaryLoad = {
 };
 
 function briefingSettled(summary: LiveFileBriefing | null): boolean {
-  return summary !== null &&
-    summary.status !== "pending" &&
-    summary.status !== "streaming";
+  return summary !== null && summary.status !== "pending";
 }
 
 function viewSettled(view: FileSummaryView | null): boolean {

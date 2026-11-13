@@ -38,6 +38,11 @@ type Props = {
   "data-testid"?: string;
 };
 
+/** The AI mark; surfaces that compose their own text use it beside that text. */
+export function BriefingMark(props: { disclaimer?: string }) {
+  return <Mark disclaimer={props.disclaimer ?? briefingCopy.disclaimer} />;
+}
+
 function Mark(props: { disclaimer: string }) {
   return (
     <>

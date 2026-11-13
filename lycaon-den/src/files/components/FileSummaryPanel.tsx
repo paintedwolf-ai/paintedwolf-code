@@ -1,10 +1,13 @@
-import { For, Show, createMemo } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import type {
   FileBriefingLocation,
   FileBriefingSection,
 } from "../../api/types.ts";
 import { languageLabelForDetectedLanguage } from "../../components/source/editor/codemirror-lang.ts";
 import { MarkdownBody } from "../../components/transcript/MarkdownBody.tsx";
+import { RandomLetterReveal } from "../../components/primitives/RandomLetterReveal.tsx";
+import { BriefingEvidenceLink, BriefingMark, BriefingSummary } from "../../briefing/BriefingSummary.tsx";
+import { briefingRevealText, splitBriefingInline } from "../../briefing/briefing-inline.ts";
 import type { LiveFileBriefing } from "./file-briefing-live.ts";
 import type { FileBriefingTarget } from "./file-briefing-target.ts";
 
@@ -26,30 +29,8 @@ const sectionLabel = {
 
 export function fileSummaryFallbackMarkdown(summary: LiveFileBriefing): string {
   if (summary.sections.length > 0) return "";
-  if (summary.status === "pending" || summary.status === "streaming") return "";
-  return summary.fallback_text.trim() || summary.streamText?.trim() || "";
-}
-
-export type FileSummaryInlinePart = {
-  kind: "text" | "code";
-  text: string;
-};
-
-/** Briefing prose supports inline code spans only. */
-export function splitFileSummaryInline(text: string): FileSummaryInlinePart[] {
-  const parts: FileSummaryInlinePart[] = [];
-  const codeSpan = /`([^`\n]+)`/g;
-  let cursor = 0;
-  for (const match of text.matchAll(codeSpan)) {
-    const start = match.index;
-    const end = start + match[0].length;
-    if (text[start - 1] === "`" || text[end] === "`") continue;
-    if (start > cursor) parts.push({ kind: "text", text: text.slice(cursor, start) });
-    parts.push({ kind: "code", text: match[1] ?? "" });
-    cursor = end;
-  }
-  if (cursor < text.length) parts.push({ kind: "text", text: text.slice(cursor) });
-  return parts.length > 0 ? parts : [{ kind: "text", text }];
+  if (summary.status === "pending") return "";
+  return summary.fallback_text.trim();
 }
 
 /** Only a unique, exact host-known declaration name is navigable. */
@@ -74,13 +55,33 @@ type SummarySectionProps = {
   section: FileBriefingSection;
   locations: ReadonlyMap<string, FileBriefingLocation | null>;
   onOpen: (line: number) => void;
+  /** Reveal key when the section arrived while the panel was watching. */
+  revealKey?: string;
 };
 
+/**
+ * A section that arrives while watched plays the shared reveal as plain
+ * text, then becomes its navigable line.
+ */
 function FileSummarySectionLine(props: SummarySectionProps) {
-  const parts = createMemo(() => splitFileSummaryInline(props.section.text));
+  const [revealed, setRevealed] = createSignal(!props.revealKey);
+  return (
+    <Show when={revealed()} fallback={
+      <p class="den-file-summary__section">
+        <BriefingMark /> <strong>{sectionLabel[props.section.kind]}:</strong>{" "}
+        <RandomLetterReveal text={briefingRevealText(props.section.text)} onceKey={props.revealKey} onRevealed={() => setRevealed(true)} />
+      </p>
+    }>
+      <NavigableSectionLine {...props} />
+    </Show>
+  );
+}
+
+function NavigableSectionLine(props: SummarySectionProps) {
+  const parts = createMemo(() => splitBriefingInline(props.section.text));
   return (
     <p class="den-file-summary__section">
-      <strong>{sectionLabel[props.section.kind]}:</strong>{" "}
+      <BriefingMark /> <strong>{sectionLabel[props.section.kind]}:</strong>{" "}
       <For each={parts()}>
         {(part) => {
           if (part.kind === "text") return part.text;
@@ -127,10 +128,16 @@ export function FileSummaryPanel(props: Props) {
     if (props.target.presentation === "document") return "Summarize this draft";
     return "Summarize current file";
   };
-  const summarizing = () =>
-    props.loading ||
-    props.summary?.status === "pending" ||
-    props.summary?.status === "streaming";
+  const summarizing = () => props.loading || props.summary?.status === "pending";
+  // Sections that arrive after the panel saw them pending reveal once.
+  let watchedPending = false;
+  createEffect(() => {
+    if (summarizing()) watchedPending = true;
+  });
+  const revealKey = (kind: string) => {
+    const record = props.summary?.evidence_ref?.record_id;
+    return watchedPending && record ? `${record}\0${kind}` : undefined;
+  };
 
   return (
     <section
@@ -188,9 +195,11 @@ export function FileSummaryPanel(props: Props) {
                   section={section}
                   locations={locations()}
                   onOpen={(line) => props.onOpenLocation(props.target, line)}
+                  revealKey={revealKey(section.kind)}
                 />
               )}
             </For>
+            <Show when={props.summary?.evidence_ref}>{(reference) => <BriefingEvidenceLink reference={reference()} />}</Show>
           </div>
         </Show>
       </Show>
@@ -201,9 +210,8 @@ export function FileSummaryPanel(props: Props) {
           summarizing()
         }
       >
-        <p class="den-file-summary__state" role="status" data-testid="file-summary-summarizing">
-          Summarizing this file…
-        </p>
+        <BriefingSummary recordId={null} data-testid="file-summary-summarizing"
+          sections={(["purpose", "structure", "key_behavior"] as const).map((id) => ({ id, label: sectionLabel[id] }))} />
       </Show>
       <Show
         when={
