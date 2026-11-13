@@ -10,6 +10,8 @@ import (
 // ledger, so the reader's own tools need not mint it.
 var handleToken = regexp.MustCompile(`(?:^|[^A-Za-z0-9_/.:-])([a-z][a-z0-9_]*)#`)
 
+var emptyHandle = regexp.MustCompile("`#[0-9N]*`")
+
 // mintFacts maps every evidence kind to whether reachable tools mint it, the
 // template fact copy gates handle names on.
 func (c *Catalog) mintFacts(reachable map[string]bool) map[string]bool {
@@ -27,6 +29,10 @@ func (c *Catalog) unmintableHandles(corpus string, reachable map[string]bool) []
 	minted := c.mintFacts(reachable)
 	seen := map[string]bool{}
 	var out []string
+	// A handle rendered from an absent fact leaves only its marker.
+	if emptyHandle.MatchString(corpus) {
+		out = append(out, "#")
+	}
 	for _, m := range handleToken.FindAllStringSubmatch(corpus, -1) {
 		name := m[1]
 		if seen[name] {

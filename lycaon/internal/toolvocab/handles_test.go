@@ -65,3 +65,11 @@ func TestUnreachableNamesReportsToolNamesUsedAsHandles(t *testing.T) {
 		t.Fatalf("tool used as handle: %v", got)
 	}
 }
+
+func TestUnreachableNamesReportsAHandleRenderedWithoutItsFact(t *testing.T) {
+	catalog, err := toolvocab.NewCatalog(&toolschema.Config{}, readOnlyProfiles(), toolvocab.Provenance{})
+	testutil.FailErr(t, "catalog", err)
+	if got := toolvocab.UnreachableNames(catalog, "its `#` handle proves only that it ran", map[string]bool{"recall": true}); !slices.Contains(got, "#") {
+		t.Fatalf("empty handle: %v", got)
+	}
+}
