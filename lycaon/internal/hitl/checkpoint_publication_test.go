@@ -144,7 +144,7 @@ func TestPatchPendingAIRationaleNoSSEAfterResolve(t *testing.T) {
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusPending)
 
 	// Successful patch while pending publishes and surfaces ai_rationale.
-	if err := mgr.PatchPendingToolApprovalAIRationale(ctx, resp.CheckpointID, "Pushes the fix the user asked for."); err != nil {
+	if _, err := mgr.PatchPendingToolApprovalAIRationale(ctx, resp.CheckpointID, "Pushes the fix the user asked for."); err != nil {
 		testutil.FailErr(t, "PatchPending while pending", err)
 	}
 	select {
@@ -167,7 +167,7 @@ func TestPatchPendingAIRationaleNoSSEAfterResolve(t *testing.T) {
 	assertCheckpointEvent(t, ch, resp.CheckpointID, api.CheckpointStatusApproved)
 
 	// Stale patch after resolve must no-op the write and publish no SSE.
-	if err := mgr.PatchPendingToolApprovalAIRationale(ctx, resp.CheckpointID, "should not appear"); err != nil {
+	if _, err := mgr.PatchPendingToolApprovalAIRationale(ctx, resp.CheckpointID, "should not appear"); err != nil {
 		testutil.FailErr(t, "PatchPending after resolve", err)
 	}
 	select {

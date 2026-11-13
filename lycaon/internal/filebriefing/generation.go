@@ -15,7 +15,7 @@ import (
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
-func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, prompt, projectDir string) {
+func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, material Material, projectDir string) {
 	startedAt := time.Now()
 	if s.generator == nil {
 		if briefing.Trigger == "automatic" {
@@ -32,7 +32,7 @@ func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, p
 	collectedRunes := 0
 	streamClamped := false
 	generatedText, err := s.generator.Generate(
-		generationCtx, GenerationRequest{ProjectID: briefing.ProjectID, ProjectDir: projectDir, Trigger: briefing.Trigger, SystemPrompt: s.config.SystemPrompt, Prompt: prompt, MaxTokens: s.config.Generation.MaxOutputTokens},
+		generationCtx, GenerationRequest{ProjectID: briefing.ProjectID, ProjectDir: projectDir, Trigger: briefing.Trigger, SystemPrompt: s.config.SystemPrompt, Prompt: material.Prompt, MaxTokens: s.config.Generation.MaxOutputTokens},
 		func(delta string) {
 			remaining := s.config.Generation.MaxOutputChars - collectedRunes
 			boundedDelta := runeclamp.Fit(delta, max(remaining, 0))
@@ -88,6 +88,7 @@ func (s *Service) completeFileBriefing(ctx context.Context, briefing Briefing, p
 	outcome := Outcome{
 		ProjectID: briefing.ProjectID, RootID: briefing.RootID, Path: briefing.Path, TargetKey: briefing.TargetKey,
 		AttemptID: briefing.AttemptID, Sections: sections, Truncated: truncated, UpdatedAt: time.Now().UTC(),
+		RecordID: s.recorder.record(ctx, briefing, material.Manifest, generatedText, truncated),
 	}
 	if err := s.store.Complete(ctx, outcome); err != nil {
 		if !errors.Is(err, ErrNotFound) {

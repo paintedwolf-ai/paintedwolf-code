@@ -41,6 +41,9 @@ type Policy struct {
 	QueueWait time.Duration
 }
 
+// ApprovalPolicy starts at once: a person is waiting on the card.
+var ApprovalPolicy = Policy{Admission: Immediate}
+
 // QueuedPolicy is the step, activity and worker contract.
 var QueuedPolicy = Policy{Admission: Queued, QueueLimit: 64, Active: 2, QueueWait: 30 * time.Second}
 

@@ -25,6 +25,8 @@ type Runtime struct {
 	Curator llm.Curator
 	Costs   cost.CostTracker
 	Pricing *settings.PricingHost
+	// Briefings explains files, actions and activities with the utility model.
+	Briefings *Briefings
 }
 
 func (b *Runtime) Build(ctx context.Context, options Options, database *db.Store, dataDir string, settingsSvc *settings.Service, resources ResourceLifetime, recovery *bootrecovery.Registry) error {
@@ -73,6 +75,9 @@ func (b *Runtime) Build(ctx context.Context, options Options, database *db.Store
 		return err
 	}
 	b.Costs = tracker
+	if err := b.buildBriefings(ctx, database, dataDir, resources, recovery); err != nil {
+		return err
+	}
 
 	if settingsSvc == nil || settingsSvc.Pricing == nil {
 		return fmt.Errorf("pricing settings store not configured")

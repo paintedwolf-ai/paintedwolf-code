@@ -18,12 +18,16 @@ type memStore struct {
 	records  map[string][]SectionHash
 	attempts map[string]string
 	settled  map[string]string
-	nextID   int
+	// cooling is the failure automatic requests report instead of starting.
+	cooling *Failure
+	nextID  int
 }
 
 func newMemStore() *memStore {
 	return &memStore{results: map[string]Result{}, records: map[string][]SectionHash{}, attempts: map[string]string{}, settled: map[string]string{}}
 }
+
+func (m *memStore) Epoch(context.Context, string) (int64, error) { return 1, nil }
 
 func (m *memStore) GetResults(_ context.Context, _ string, hashes []string) (map[string]Result, error) {
 	m.mu.Lock()
@@ -37,7 +41,7 @@ func (m *memStore) GetResults(_ context.Context, _ string, hashes []string) (map
 	return out, nil
 }
 
-func (m *memStore) PutResult(_ context.Context, _ string, _ Manifest, hash string, result Result) error {
+func (m *memStore) PutResult(_ context.Context, _ string, _ int64, _ Manifest, hash string, result Result) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if prior, ok := m.results[hash]; ok && !(prior.Source == SourceFallback && result.Source == SourceSummarizer) {
@@ -47,43 +51,53 @@ func (m *memStore) PutResult(_ context.Context, _ string, _ Manifest, hash strin
 	return nil
 }
 
-func (m *memStore) StartAttempt(_ context.Context, request Request, _ []SectionHash) (string, bool, error) {
+func (m *memStore) StartAttempt(_ context.Context, request Request, _ int64, _ []SectionHash) (Attempt, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if id, ok := m.attempts[request.TargetKey]; ok {
-		return id, true, nil
+		return Attempt{ID: id, Joined: true}, nil
+	}
+	if m.cooling != nil && !request.Manual {
+		return Attempt{ID: "failed", Cooling: m.cooling}, nil
 	}
 	m.nextID++
 	id := fmt.Sprint(m.nextID)
 	m.attempts[request.TargetKey] = id
-	return id, false, nil
+	return Attempt{ID: id}, nil
 }
 
-func (m *memStore) CompleteAttempt(_ context.Context, request Request, attempt string, _ []SectionHash, recordID string) (bool, error) {
+func (m *memStore) CompleteAttempt(_ context.Context, request Request, attempt string, _ []SectionHash, recordID string) (Settled, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.attempts[request.TargetKey] != attempt {
-		return false, nil
+		return Settled{}, nil
 	}
 	delete(m.attempts, request.TargetKey)
 	m.settled[request.TargetKey] = recordID
-	return true, nil
+	return Settled{Applied: true}, nil
 }
 
-func (m *memStore) FailAttempt(_ context.Context, request Request, attempt, _ string) (bool, error) {
+func (m *memStore) Resolve(_ context.Context, request Request, _ int64, _ []SectionHash, recordID string) (Settled, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.settled[request.TargetKey] = recordID
+	return Settled{Applied: true}, nil
+}
+
+func (m *memStore) FailAttempt(_ context.Context, request Request, attempt string, _ Failure) (Settled, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.attempts[request.TargetKey] != attempt {
-		return false, nil
+		return Settled{}, nil
 	}
 	delete(m.attempts, request.TargetKey)
-	return true, nil
+	return Settled{Applied: true}, nil
 }
 
-func (m *memStore) PutRecord(_ context.Context, _, recordID, _, _ string, sections []SectionHash) error {
+func (m *memStore) PutRecord(_ context.Context, _ string, _ int64, record Record) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.records[recordID] = sections
+	m.records[record.ID] = record.Sections
 	return nil
 }
 
@@ -251,6 +265,25 @@ func TestFailedGenerationWithoutFallbackFailsTheAttempt(t *testing.T) {
 	}
 	if len(store.results) != 0 || len(store.records) != 0 || len(store.attempts) != 0 || len(store.settled) != 0 {
 		t.Fatalf("failure left state: %+v %+v %+v %+v", store.results, store.records, store.attempts, store.settled)
+	}
+}
+
+func TestCoolingFailureAnswersWithoutAModelCall(t *testing.T) {
+	generator := &countingGenerator{text: "Retried."}
+	engine, store, log := newTestEngine(t, generator)
+	store.cooling = &Failure{Code: CodeGenerationFailed, Message: "provider down"}
+	snap, err := engine.Request(t.Context(), request("x", false, purposeSection("anything", Generated)))
+	testutil.FailErr(t, "automatic", err)
+	if snap.Status != StatusFailed || snap.ErrorCode != CodeGenerationFailed || generator.calls.Load() != 0 {
+		t.Fatalf("cooling target asked the model: calls=%d %+v", generator.calls.Load(), snap)
+	}
+	retried, err := engine.Request(t.Context(), request("x", true, purposeSection("anything", Generated)))
+	testutil.FailErr(t, "manual", err)
+	if retried.Status != StatusPending {
+		t.Fatalf("manual retry waited: %+v", retried)
+	}
+	if done := receive(t, log.seen); done.Status != StatusComplete || generator.calls.Load() != 1 {
+		t.Fatalf("manual retry: calls=%d %+v", generator.calls.Load(), done)
 	}
 }
 

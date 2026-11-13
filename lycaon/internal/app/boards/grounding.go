@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 
-	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/briefingstore"
 	"github.com/lycaon/lycaon/internal/browser"
 	"github.com/lycaon/lycaon/internal/browser/renderhandle"
@@ -261,7 +260,8 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 }
 
 func (r *Runtime) wireApprovalRationaleAttacher() {
-	if r.deps.Execution.Host == nil || r.deps.Sessions.Checkpoints == nil || r.deps.Sessions.Manager == nil || r.Progress == nil {
+	briefings := r.deps.Providers.Briefings
+	if r.deps.Execution.Host == nil || r.deps.Sessions.Checkpoints == nil || r.deps.Sessions.Manager == nil || r.Progress == nil || briefings == nil {
 		return
 	}
 	var enabledFn func() bool
@@ -274,7 +274,9 @@ func (r *Runtime) wireApprovalRationaleAttacher() {
 		Workers:     r.deps.Delegations.Queue,
 		Progress:    r.Progress,
 		Root:        sessionRootResolver{store: r.deps.Storage.Sessions},
-		Generator:   briefing.NewModelGenerator(r.deps.Providers.Service, r.deps.Providers.Costs),
+		Engine:      briefings.Engine,
+		Router:      briefings.Router,
+		Pins:        briefings.Store,
 		Checkpoints: r.deps.Sessions.Checkpoints,
 		EnabledFn:   enabledFn,
 	})

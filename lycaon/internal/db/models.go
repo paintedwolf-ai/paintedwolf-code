@@ -146,6 +146,91 @@ type BlueprintApprovals struct {
 	RevokedCause       string         `json:"revoked_cause"`
 }
 
+type BriefingCheckpointPins struct {
+	CheckpointID string `json:"checkpoint_id"`
+	ManifestHash string `json:"manifest_hash"`
+	ProjectID    string `json:"project_id"`
+	RecordID     string `json:"record_id"`
+	CreatedAt    string `json:"created_at"`
+}
+
+type BriefingEpochs struct {
+	ProjectID  string `json:"project_id"`
+	CacheEpoch int64  `json:"cache_epoch"`
+}
+
+type BriefingManifests struct {
+	ProjectID         string `json:"project_id"`
+	ManifestHash      string `json:"manifest_hash"`
+	ProfileID         string `json:"profile_id"`
+	ProfileVersion    string `json:"profile_version"`
+	SectionID         string `json:"section_id"`
+	TemplateID        string `json:"template_id"`
+	TemplateVersion   string `json:"template_version"`
+	ContentBlobSha256 string `json:"content_blob_sha256"`
+	CoverageJson      string `json:"coverage_json"`
+	UnavailableInputs int64  `json:"unavailable_inputs"`
+	CreatedAt         string `json:"created_at"`
+}
+
+type BriefingRecordSections struct {
+	ProjectID    string `json:"project_id"`
+	RecordID     string `json:"record_id"`
+	Ordinal      int64  `json:"ordinal"`
+	SectionID    string `json:"section_id"`
+	ManifestHash string `json:"manifest_hash"`
+}
+
+type BriefingRecords struct {
+	ProjectID      string `json:"project_id"`
+	RecordID       string `json:"record_id"`
+	ProfileID      string `json:"profile_id"`
+	ProfileVersion string `json:"profile_version"`
+	Method         string `json:"method"`
+	OriginJson     string `json:"origin_json"`
+	CreatedAt      string `json:"created_at"`
+}
+
+type BriefingResults struct {
+	ProjectID    string         `json:"project_id"`
+	ManifestHash string         `json:"manifest_hash"`
+	Text         string         `json:"text"`
+	Source       string         `json:"source"`
+	ProviderID   string         `json:"provider_id"`
+	Model        string         `json:"model"`
+	QualityJson  string         `json:"quality_json"`
+	CreatedAt    string         `json:"created_at"`
+	UpgradedAt   sql.NullString `json:"upgraded_at"`
+}
+
+type BriefingTargets struct {
+	ProjectID          string         `json:"project_id"`
+	ProfileID          string         `json:"profile_id"`
+	TargetKey          string         `json:"target_key"`
+	TargetKind         string         `json:"target_kind"`
+	TargetJson         string         `json:"target_json"`
+	ScopeFingerprint   string         `json:"scope_fingerprint"`
+	SectionsJson       string         `json:"sections_json"`
+	RecordID           sql.NullString `json:"record_id"`
+	CacheEpoch         int64          `json:"cache_epoch"`
+	Revision           int64          `json:"revision"`
+	AttemptID          string         `json:"attempt_id"`
+	AttemptTrigger     string         `json:"attempt_trigger"`
+	InvocationClass    string         `json:"invocation_class"`
+	AttemptStatus      string         `json:"attempt_status"`
+	AttemptStartedAt   sql.NullString `json:"attempt_started_at"`
+	ErrorCode          string         `json:"error_code"`
+	ErrorMessage       string         `json:"error_message"`
+	RegenerateOutcome  string         `json:"regenerate_outcome"`
+	IntentText         sql.NullString `json:"intent_text"`
+	IntentCheckpointID sql.NullString `json:"intent_checkpoint_id"`
+	IntentActionID     sql.NullString `json:"intent_action_id"`
+	IntentScope        sql.NullString `json:"intent_scope"`
+	OutcomeJson        string         `json:"outcome_json"`
+	CreatedAt          string         `json:"created_at"`
+	UpdatedAt          string         `json:"updated_at"`
+}
+
 type CallReservations struct {
 	Path      string         `json:"path"`
 	Agent     string         `json:"agent"`
@@ -630,6 +715,7 @@ type FileBriefings struct {
 	UpdatedAt        string        `json:"updated_at"`
 	LastAccessedAtMs int64         `json:"last_accessed_at_ms"`
 	StorageBytes     sql.NullInt64 `json:"storage_bytes"`
+	RecordID         string        `json:"record_id"`
 }
 
 type Findings struct {

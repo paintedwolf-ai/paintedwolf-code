@@ -2,12 +2,12 @@ package toolhost
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/curationctx"
 	"github.com/lycaon/lycaon/internal/hitl"
-	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/progress"
 	"github.com/lycaon/lycaon/internal/toolapproval"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -32,14 +32,21 @@ type RootSessionResolver interface {
 	RootSessionID(ctx context.Context, sessionID string) string
 }
 
-// ApprovalRationaleDeps wires the live evidence and generation for approval
-// rationales.
+// CheckpointPins keeps a record for as long as its checkpoint exists.
+type CheckpointPins interface {
+	PinCheckpoint(ctx context.Context, projectID, checkpointID, recordID string) error
+}
+
+// ApprovalRationaleDeps wires the live evidence and the shared briefing
+// engine for approval rationales.
 type ApprovalRationaleDeps struct {
 	Cause       briefing.CausalReader
 	Workers     WorkerTaskLoader
 	Progress    ProgressContentLoader
 	Root        RootSessionResolver
-	Generator   briefing.Generator
+	Engine      *briefing.Engine
+	Router      *briefing.Router
+	Pins        CheckpointPins
 	Checkpoints hitl.CheckpointManager
 	// EnabledFn reports whether the global AI-rationale setting is on. Nil means
 	// enabled.
@@ -53,10 +60,12 @@ type approvalRationaleAttacher struct {
 // NewApprovalRationaleAttacher returns nil when no model can explain an
 // approval, so cards never reserve a rationale slot that cannot fill.
 func NewApprovalRationaleAttacher(deps ApprovalRationaleDeps) toolapproval.AIRationaleAttacher {
-	if deps.Checkpoints == nil || deps.Cause == nil || deps.Generator == nil {
+	if deps.Checkpoints == nil || deps.Cause == nil || deps.Engine == nil || deps.Router == nil {
 		return nil
 	}
-	return &approvalRationaleAttacher{deps: deps}
+	attacher := &approvalRationaleAttacher{deps: deps}
+	deps.Router.Handle(ApprovalProfileID, attacher.settle)
+	return attacher
 }
 
 // Enabled reports whether the global AI-rationale setting is on.
@@ -87,20 +96,57 @@ func (a *approvalRationaleAttacher) run(parent context.Context, req toolapproval
 		ToolCallID:      req.ToolContext.Identity.ToolCallID,
 		ProjectDir:      req.ToolContext.ActiveRootPath(),
 	})
-	text := ""
-	if section, err := briefing.PurposeSection(ctx, a.evidence(ctx, req)); err == nil {
-		raw, _, _, genErr := a.deps.Generator.Generate(ctx, briefing.Invocation{Purpose: ApprovalProfileID, Requested: true, Prompt: section.Prompt})
-		if genErr == nil {
-			if parsed, parseErr := section.Manifest.Contract.Parse(raw); parseErr == nil {
-				text = strings.TrimSpace(observability.RedactCaptureText(parsed))
-			}
-		}
-	}
-	if text == "" {
+	identity := req.ToolContext.Identity
+	section, err := briefing.PurposeSection(ctx, a.evidence(ctx, req))
+	if err != nil {
 		_ = a.deps.Checkpoints.ClearPendingToolApprovalAIRationale(ctx, req.CheckpointID)
 		return
 	}
-	_ = a.deps.Checkpoints.PatchPendingToolApprovalAIRationale(ctx, req.CheckpointID, text)
+	snap, err := a.deps.Engine.Request(ctx, briefing.Request{
+		ProjectID: identity.ProjectID, ProjectDir: req.ToolContext.ActiveRootPath(),
+		ProfileID: ApprovalProfileID, Version: approvalProfileVersion, TargetKey: req.CheckpointID,
+		TargetKind: "effect", TargetJSON: approvalTarget(req), ScopeFingerprint: identity.ToolCallID,
+		Policy: briefing.ApprovalPolicy, Sections: []briefing.SectionPlan{section},
+	})
+	if err != nil {
+		_ = a.deps.Checkpoints.ClearPendingToolApprovalAIRationale(ctx, req.CheckpointID)
+		return
+	}
+	if snap.Status == briefing.StatusComplete {
+		a.settle(ctx, identity.ProjectID, snap)
+	}
+}
+
+const approvalProfileVersion = "1"
+
+func approvalTarget(req toolapproval.AIRationaleAttachRequest) string {
+	raw, err := json.Marshal(struct {
+		CheckpointID string `json:"checkpoint_id"`
+		ToolCallID   string `json:"tool_call_id"`
+		Tool         string `json:"tool"`
+	}{req.CheckpointID, req.ToolContext.Identity.ToolCallID, req.Tool})
+	if err != nil {
+		return "{}"
+	}
+	return string(raw)
+}
+
+// settle shows a settled sentence on its still-pending card and pins the
+// record only when the card took it.
+func (a *approvalRationaleAttacher) settle(ctx context.Context, projectID string, snap briefing.Snapshot) {
+	text := ""
+	if snap.Status == briefing.StatusComplete && len(snap.Sections) == 1 && snap.Sections[0].Result != nil {
+		text = snap.Sections[0].Result.Text
+	}
+	if text == "" {
+		_ = a.deps.Checkpoints.ClearPendingToolApprovalAIRationale(ctx, snap.TargetKey)
+		return
+	}
+	applied, err := a.deps.Checkpoints.PatchPendingToolApprovalAIRationale(ctx, snap.TargetKey, text)
+	if err != nil || !applied || a.deps.Pins == nil {
+		return
+	}
+	_ = a.deps.Pins.PinCheckpoint(ctx, projectID, snap.TargetKey, snap.RecordID)
 }
 
 // evidence reads what the approval card has always used, through the bounded

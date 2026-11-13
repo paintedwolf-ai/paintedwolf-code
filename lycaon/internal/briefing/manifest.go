@@ -126,3 +126,52 @@ func RecordID(profileID, profileVersion string, sections []SectionHash) string {
 	sum := sha256.Sum256(canonical)
 	return hex.EncodeToString(sum[:])
 }
+
+// Coverage is one item's selection fact, kept for display and never hashed
+// beyond what the manifest already holds.
+type Coverage struct {
+	Key       string    `json:"key"`
+	Role      Role      `json:"role"`
+	Inclusion Inclusion `json:"inclusion"`
+	Reason    string    `json:"reason,omitempty"`
+}
+
+// Coverage lists every item's inclusion, in manifest order.
+func (m Manifest) Coverage() []Coverage {
+	out := make([]Coverage, len(m.Items))
+	for i, item := range m.Items {
+		out[i] = Coverage{Key: item.Key, Role: item.Role, Inclusion: item.Inclusion, Reason: item.Reason}
+	}
+	return out
+}
+
+// Unavailable counts items that had no readable or immutable form.
+func (m Manifest) Unavailable() int {
+	n := 0
+	for _, item := range m.Items {
+		if item.Inclusion == Unavailable {
+			n++
+		}
+	}
+	return n
+}
+
+// displayItem is an item with the excerpt it submitted.
+type displayItem struct {
+	Item
+	Text string `json:"text,omitempty"`
+}
+
+// Display serializes the sealed manifest with each item's submitted excerpt,
+// which is what an evidence view shows.
+func (m Manifest) Display() ([]byte, error) {
+	sealed := m.Sealed()
+	items := make([]displayItem, len(sealed.Items))
+	for i, item := range sealed.Items {
+		items[i] = displayItem{Item: item, Text: item.Text}
+	}
+	return json.Marshal(struct {
+		Manifest
+		Items []displayItem `json:"items"`
+	}{sealed, items})
+}

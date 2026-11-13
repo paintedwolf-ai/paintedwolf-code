@@ -124,8 +124,9 @@ type CheckpointManager interface {
 	ApprovalReviewSuppressed(ctx context.Context, sessionID, key string) (bool, error)
 	SessionApprovalDenied(ctx context.Context, sessionID string) (bool, error)
 	// PatchPendingToolApprovalAIRationale sets ai_rationale on a still-pending
-	// tool_approval checkpoint and republishes SSE only when the write applied.
-	PatchPendingToolApprovalAIRationale(ctx context.Context, checkpointID, text string) error
+	// tool_approval checkpoint, republishes only when the write applied, and
+	// reports whether it applied.
+	PatchPendingToolApprovalAIRationale(ctx context.Context, checkpointID, text string) (bool, error)
 	// ClearPendingToolApprovalAIRationale clears pending rationale and publishes applied changes.
 	ClearPendingToolApprovalAIRationale(ctx context.Context, checkpointID string) error
 	// PatchPendingToolApprovalJoined records joined callers and may raise the
