@@ -180,18 +180,34 @@ func (rec *Record) showURL(rawURL string) {
 	rec.urls.shown = append(rec.urls.shown, url)
 }
 
-// URLShown reports whether a read page displayed exactly this address.
-func URLShown(ev Ledger, rawURL string) bool {
+// URLStanding is how a ledger knows an address, weakest first.
+type URLStanding uint8
+
+const (
+	// URLUnknown is an address no record carries.
+	URLUnknown URLStanding = iota
+	// URLDisplayed is an address a read page displayed.
+	URLDisplayed
+	// URLSource is an address a tool returned or read.
+	URLSource
+)
+
+// StandingOfURL reports the strongest way the ledger recorded exactly this
+// address.
+func StandingOfURL(ev Ledger, rawURL string) URLStanding {
 	url := strings.TrimSpace(rawURL)
 	if url == "" {
-		return false
+		return URLUnknown
+	}
+	if VerifyURLObserved(ev, url) {
+		return URLSource
 	}
 	for _, rec := range ev.Handles {
 		if slices.Contains(rec.urls.shown, url) {
-			return true
+			return URLDisplayed
 		}
 	}
-	return false
+	return URLUnknown
 }
 
 // ObservedURLsForRecord returns distinct URLs observed on a record.

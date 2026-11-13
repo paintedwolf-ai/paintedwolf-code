@@ -54,9 +54,9 @@ type ToolDeps struct {
 	SecretAsk secretmatch.AskFunc
 	// VisualScreen coordinates pre-perception credential screening.
 	VisualScreen *visualscreen.Gate
-	// ObservedURL reports whether a session's evidence recorded this exact
-	// address; nil means no address counts as observed.
-	ObservedURL func(sessionID, rawURL string) bool
+	// AddressOrigin reports how a session's evidence knows this exact
+	// address; nil means the agent wrote every address.
+	AddressOrigin func(sessionID, rawURL string) confine.AddressOrigin
 }
 
 const (
@@ -97,8 +97,12 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 			}
 		}
 		contest, _ := args["unredact"].(string)
-		ctx = withToolEgressGate(ctx, deps, tctx, toolEgress{image: "web_search", declaredHosts: DeclaredEndpointHosts(settings, deps.Registry)}, contest,
-			webSearchDestination(settings, deps.Registry))
+		dial := toolEgress{
+			image:         "web_search",
+			declaredHosts: DeclaredEndpointHosts(settings, deps.Registry),
+			namedHosts:    queryNamedHosts(query),
+		}
+		ctx = withToolEgressGate(ctx, deps, tctx, dial, contest, webSearchDestination(settings, deps.Registry))
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		var discoverer DirectDiscoverer
 		if getFactory != nil {
@@ -180,8 +184,9 @@ func RegisterToolsWithFactory(reg *tools.DefaultRegistry, deps ToolDeps, getFact
 type toolEgress struct {
 	image         string
 	declaredHosts []string
-	// authored is true when the agent wrote the requested address.
-	authored bool
+	origin        confine.AddressOrigin
+	// namedHosts are hosts the agent wrote into the request.
+	namedHosts []string
 }
 
 // withToolEgressGate attaches the invocation's dial facts and secret fanout.
@@ -195,14 +200,15 @@ func withToolEgressGate(ctx context.Context, deps ToolDeps, tctx tools.ToolConte
 	}
 	ctx = secretmatch.WithAskAttribution(ctx, attr)
 	ctx = egressgate.WithAttribution(ctx, confine.EgressCommand{
-		SessionID:           tctx.Identity.SessionID,
-		RootSessionID:       tctx.ChatSessionID(),
-		ProjectID:           tctx.Identity.ProjectID,
-		ProjectDir:          tctx.ActiveRootPath(),
-		ToolCallID:          tctx.Identity.ToolCallID,
-		Image:               dial.image,
-		DeclaredHosts:       dial.declaredHosts,
-		AuthoredDestination: dial.authored,
+		SessionID:     tctx.Identity.SessionID,
+		RootSessionID: tctx.ChatSessionID(),
+		ProjectID:     tctx.Identity.ProjectID,
+		ProjectDir:    tctx.ActiveRootPath(),
+		ToolCallID:    tctx.Identity.ToolCallID,
+		Image:         dial.image,
+		DeclaredHosts: dial.declaredHosts,
+		Origin:        dial.origin,
+		NamedHosts:    dial.namedHosts,
 	})
 	return withSecretScreen(ctx, deps.SecretMatcher, deps.SecretAsk, contestToken, fanout)
 }

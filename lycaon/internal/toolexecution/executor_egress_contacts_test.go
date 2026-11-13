@@ -36,8 +36,7 @@ func (f *fakeHostLedger) RecordContact(_ context.Context, _, host string, contac
 }
 
 func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
-	retrievalDial := confine.EgressCommand{ToolName: ingestion.ToolFetchURL}
-	ownDial := confine.EgressCommand{ToolName: "curl"}
+	const retrievalDial, ownDial = true, false
 
 	t.Run("missing ledger is first use", func(t *testing.T) {
 		var nilNetwork *Network
@@ -106,8 +105,7 @@ func TestFirstUseThisSessionDecidesPerDialKind(t *testing.T) {
 }
 
 func TestRecordHostVisitSeparatesDialKinds(t *testing.T) {
-	retrievalDial := confine.EgressCommand{ToolName: ingestion.ToolWebSearch}
-	ownDial := confine.EgressCommand{ToolName: "curl"}
+	const retrievalDial, ownDial = true, false
 
 	t.Run("own dial records the chat's own contact", func(t *testing.T) {
 		ledger := &fakeHostLedger{}
@@ -165,35 +163,26 @@ func TestSessionHostLedgerSetterWiresTheLedger(t *testing.T) {
 	}
 }
 
-// A source reader's request for an address the agent wrote is the chat's own
-// dial: only the chat's own contact makes its host familiar, it is recorded as
-// one, and the gate does not see a retrieval.
-func TestAuthoredRetrievalAddressIsTheChatsOwnDial(t *testing.T) {
-	authored := confine.EgressCommand{Image: ingestion.ToolFetchURL, AuthoredDestination: true}
-	observed := confine.EgressCommand{Image: ingestion.ToolFetchURL}
+// The gate hears a retrieval tool's dial as a source, a displayed link or
+// neither, by how the tool came by the address.
+func TestDestinationFactCarriesTheAddressOrigin(t *testing.T) {
 	ep := egressproxy.Endpoint{Host: "example.com", Port: 443, Transport: egressproxy.TransportHTTPRequest}
-
-	ledger := &fakeHostLedger{contacts: map[string]evidence.Contact{"example.com": evidence.ContactRetrieval}}
-	e := &Network{}
-	e.SetSessionHostLedger(ledger)
-	if !e.firstUseThisSession(authored, "chat", "example.com", false) {
-		t.Fatal("a retrieved source must not make the agent's authored request familiar")
-	}
-	if e.firstUseThisSession(observed, "chat", "example.com", false) {
-		t.Fatal("a repeat retrieval of the same host must stay familiar")
-	}
-
-	e.recordHostVisit(t.Context(), authored, "chat", "example.com")
-	e.recordHostVisit(t.Context(), observed, "chat", "example.com")
-	if !slices.Equal(ledger.kinds, []evidence.Contact{evidence.ContactOwn, evidence.ContactRetrieval}) {
-		t.Fatalf("recorded contacts = %v", ledger.kinds)
-	}
-
-	if destinationFact(authored, ep, true, "", "").Retrieval {
-		t.Fatal("an authored address reached the gate as a retrieval")
-	}
-	if !destinationFact(observed, ep, true, "", "").Retrieval {
-		t.Fatal("an observed address lost its retrieval fact")
+	authored := confine.EgressCommand{Image: ingestion.ToolFetchURL, Origin: confine.AddressAuthored}
+	for name, tc := range map[string]struct {
+		cmd                  confine.EgressCommand
+		retrieval, displayed bool
+	}{
+		"source":         {cmd: confine.EgressCommand{Image: ingestion.ToolFetchURL}, retrieval: true},
+		"displayed link": {cmd: confine.EgressCommand{Image: ingestion.ToolFetchURL, Origin: confine.AddressDisplayed}, displayed: true},
+		"authored":       {cmd: authored},
+		"named host":     {cmd: confine.EgressCommand{Image: ingestion.ToolWebSearch, NamedHosts: []string{"example.com"}}},
+		"unnamed host":   {cmd: confine.EgressCommand{Image: ingestion.ToolWebSearch, NamedHosts: []string{"other.example"}}, retrieval: true},
+		"command":        {cmd: confine.EgressCommand{ToolName: "command", Origin: confine.AddressDisplayed}},
+	} {
+		fact := destinationFact(tc.cmd, ep, "", "")
+		if fact.Retrieval != tc.retrieval || fact.DisplayedLink != tc.displayed {
+			t.Errorf("%s: retrieval = %v, displayed link = %v", name, fact.Retrieval, fact.DisplayedLink)
+		}
 	}
 	if got := endpointAskSubject(authored, ep).Explanation.Who; got != hitl.WhoAgentAction {
 		t.Fatalf("a tool's own request is an action, got %q", got)

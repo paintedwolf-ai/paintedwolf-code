@@ -260,6 +260,7 @@ function ContentSection(props: {
 }) {
   return <ToolContentLink pane={`output:${props.index}`}
     label={props.section.label ?? "Output"} projectId={props.projectId}
+    path={props.section.path} language={props.section.language}
     content={{ kind: "inline", text: props.section.text, redaction: props.redaction ?? undefined }} />;
 }
 

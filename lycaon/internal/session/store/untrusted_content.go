@@ -140,31 +140,30 @@ func (ev *sqlEvidence) SessionContacts(sessionID string) map[string]evidence.Con
 	return evidence.ContactsFromLedger(ledger)
 }
 
-// SessionObservedURL reports whether the session's evidence recorded exactly
-// this address, as a source or as one a read page displayed. An unreadable
-// ledger observes nothing.
-func (ev *memoryEvidence) SessionObservedURL(sessionID, rawURL string) bool {
+// SessionURLStanding reports how the session's evidence knows exactly this
+// address. An unreadable ledger knows nothing.
+func (ev *memoryEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return false
+		return evidence.URLUnknown
 	}
 	ledger, err := loadLedgerMemory(context.Background(), ev.core, sessionID)
 	if err != nil {
-		return false
+		return evidence.URLUnknown
 	}
-	return evidence.VerifyURLObserved(ledger, rawURL) || evidence.URLShown(ledger, rawURL)
+	return evidence.StandingOfURL(ledger, rawURL)
 }
 
-func (ev *sqlEvidence) SessionObservedURL(sessionID, rawURL string) bool {
+func (ev *sqlEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
 	sessionID = strings.TrimSpace(sessionID)
 	if sessionID == "" {
-		return false
+		return evidence.URLUnknown
 	}
 	ledger, err := loadLedger(context.Background(), ev.core, ev.core.queries, sessionID)
 	if err != nil {
-		return false
+		return evidence.URLUnknown
 	}
-	return evidence.VerifyURLObserved(ledger, rawURL) || evidence.URLShown(ledger, rawURL)
+	return evidence.StandingOfURL(ledger, rawURL)
 }
 
 // RecordContact adds an allowed dial to the chat's contacts. The record carries
