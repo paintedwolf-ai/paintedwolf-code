@@ -82,7 +82,9 @@ func TestProgramRefusedListenerVariants(t *testing.T) {
 		`external -- /bin/sh -c "python3 -m http.server 18795 --bind 0.0.0.0; sleep 1"`,
 		`external -- /usr/bin/python3 -c "import socket; s=socket.socket(); s.bind(('0.0.0.0', 18794))"`,
 		`external -- /opt/homebrew/bin/python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 18793))"`,
-		`external -- /opt/homebrew/bin/python3 -c "import socket; s=socket.socket(socket.AF_INET6); s.bind(('::1', 18792))"`,
+		`external -- /usr/bin/env -i /opt/homebrew/bin/python3 -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 18792))"`,
+		`external -- /opt/homebrew/Cellar/python@3.15/3.15.2/Frameworks/Python.framework/Versions/3.15/Resources/Python.app/Contents/MacOS/Python -c "import socket; s=socket.socket(); s.bind(('127.0.0.1', 18790))"`,
+		`external -- /opt/homebrew/bin/python3 -c "import os; print(sorted(os.environ))"`,
 	} {
 		out, err := f.call(t, t.Context(), source)
 		testutil.FailErr(t, "run variant", err)
