@@ -119,7 +119,7 @@ func TestABundleBindsEveryFileAndBlobAndNamesTheCommittedOutput(t *testing.T) {
 	if digest(t, filepath.Join(f.capture, "store.db")) != before {
 		t.Fatal("export changed the capture")
 	}
-	for _, name := range BundleFiles {
+	for _, name := range BundleFiles() {
 		if manifest.Files[name] != digest(t, filepath.Join(out, name)) {
 			t.Fatalf("%s is not bound by the manifest", name)
 		}
