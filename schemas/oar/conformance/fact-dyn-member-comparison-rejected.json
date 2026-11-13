@@ -1,0 +1,28 @@
+{
+  "title": "A condition comparing a selected dyn member is rejected at load",
+  "covers": [
+    "OAR-FACT-22"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool_args.count > 1"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "tool_args": {
+        "count": 2
+      }
+    }
+  },
+  "expected": {
+    "error": "compares"
+  },
+  "id": "fact-dyn-member-comparison-rejected"
+}

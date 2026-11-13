@@ -1,42 +1,32 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_GLOB_BUDGET_EXCEEDED
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - command
-  - verify
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.pattern
-  - paintedwolf.glob_limit
-  - paintedwolf.max
-  - paintedwolf.glob_limit_known
+  tools:
+    - command
+    - verify
+requires_facts: [paintedwolf.glob_limit, paintedwolf.glob_limit_known, paintedwolf.max, paintedwolf.pattern, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_GLOB_BUDGET_EXCEEDED"
 effect: block
-copy:
-  what: 'Glob expansion exceeded its bound{% if paintedwolf.pattern %} for `{{ paintedwolf.pattern }}`{% endif %}.{% if paintedwolf.glob_limit_known %} Maximum: {{
-    paintedwolf.max }}{% if paintedwolf.glob_limit %} {{ paintedwolf.glob_limit }}{% endif %}.{% endif %}'
-  cause: Glob expansion stopped at the reported bound; the host did not truncate the match set.
-  why: ''
-  fix: ''
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: glob expansion exceeded its bound
-x-paintedwolf-scenarios:
-- id: matches
-  vars:
-    tool: command
-    pattern: '**/*.go'
-    glob_limit: matches
-    max: 1000
-- id: entries
-  vars:
-    tool: command
-    pattern: '**'
-    glob_limit: entries
-    max: 50000
+category: recoverable
+emit: guard:command_composition_redirect
+message: glob expansion exceeded its bound
+what: 'Glob expansion exceeded its bound{% if paintedwolf.pattern %} for `{{ paintedwolf.pattern }}`{% endif %}.{% if paintedwolf.glob_limit_known %} Maximum: {{ paintedwolf.max }}{% if paintedwolf.glob_limit %} {{ paintedwolf.glob_limit }}{% endif %}.{% endif %}'
+cause: Glob expansion stopped at the reported bound; the host did not truncate the match set.
+why: ''
+fix: ''
+instead: ''
+scenarios:
+  - id: matches
+    vars:
+      tool: command
+      pattern: '**/*.go'
+      glob_limit: matches
+      max: 1000
+  - id: entries
+    vars:
+      tool: command
+      pattern: '**'
+      glob_limit: entries
+      max: 50000

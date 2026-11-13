@@ -441,11 +441,11 @@ func TestFire5CredentialWarningsAreScopedBySessionAndFingerprint(t *testing.T) {
 		sess := &api.Session{ID: sessionID}
 		output, _ := mgr.ToolPolicy.AfterTool(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
 		if got := strings.Count(output, "Code: WEAK_CREDENTIAL_LITERAL"); got != 2 {
-			t.Fatalf("[OAR-FIRE-5] %s warned %d times: %s", sessionID, got, output)
+			t.Fatalf("[OAR-FIRE-4] %s warned %d times: %s", sessionID, got, output)
 		}
 		output, _ = mgr.ToolPolicy.AfterTool(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
 		if strings.Contains(output, "WEAK_CREDENTIAL_LITERAL") {
-			t.Fatalf("[OAR-FIRE-5] repeated credential warned again: %s", output)
+			t.Fatalf("[OAR-FIRE-4] repeated credential warned again: %s", output)
 		}
 	}
 }
@@ -466,11 +466,11 @@ func TestEval10CredentialMonitorDoesNotConsumeWarning(t *testing.T) {
 	rule.Enforcement = "monitor"
 	output, _ := mgr.ToolPolicy.AfterTool(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
 	if strings.Contains(output, "WEAK_CREDENTIAL_LITERAL") {
-		t.Fatal("[OAR-EVAL-10] monitored warning was delivered")
+		t.Fatal("[OAR-OPS-1] monitored warning was delivered")
 	}
 	rule.Enforcement = "enforce"
 	output, _ = mgr.ToolPolicy.AfterTool(t.Context(), sess, "write", args, "written", 1, guidance.ToolResultFacts{})
 	if !strings.Contains(output, "Code: WEAK_CREDENTIAL_LITERAL") {
-		t.Fatalf("[OAR-EVAL-10] monitor consumed warning: %s", output)
+		t.Fatalf("[OAR-OPS-1] monitor consumed warning: %s", output)
 	}
 }

@@ -1,29 +1,20 @@
-oar: '1.0'
+spec_version: "1.0"
 id: OVERLAY_BASE_MISSING
 kind: policy
-anchor: coordinator.pre_invoke
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.base_overlay_id
-  - paintedwolf.base_overlay_checked
-  - paintedwolf.base_overlay_resolves
-  - paintedwolf.tool_is_task
-  - paintedwolf.rejection_reason
+on: coordinator.pre_invoke
+selector: {}
+requires_facts: [paintedwolf.base_overlay_checked, paintedwolf.base_overlay_id, paintedwolf.base_overlay_resolves, paintedwolf.rejection_reason, paintedwolf.tool_is_task]
 when: paintedwolf.tool_is_task && paintedwolf.base_overlay_checked && paintedwolf.base_overlay_id != "" && !paintedwolf.base_overlay_resolves
 effect: block
-copy:
-  what: 'Dispatch could not resolve base_overlay_id {{ paintedwolf.base_overlay_id }} to a write overlay on this session{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}'
-  cause: The requested base was not found as a write overlay owned by this session.
-  why: A stacked worker must start from the intended base; silently substituting primary would change its inputs.
-  fix: Check the current pulse roster for an eligible write overlay and correct scope.base_overlay_id. Drop the field only if the work should start from primary without the requested base.
-  instead: Preserve the intended dependency; resolve the base or explicitly choose an independent task on primary before retrying.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: '`task()` scope.base_overlay_id={{ paintedwolf.base_overlay_id }} names no live write overlay
-  on this session{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}'
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    base_overlay_id: ov-grep-impl
+category: recoverable
+emit: guard:coordinator
+message: '`task()` scope.base_overlay_id={{ paintedwolf.base_overlay_id }} names no live write overlay on this session{% if paintedwolf.rejection_reason %} ({{ paintedwolf.rejection_reason }}){% endif %}'
+what: 'Dispatch could not resolve base_overlay_id {{ paintedwolf.base_overlay_id }} to a write overlay on this session{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}'
+cause: The requested base was not found as a write overlay owned by this session.
+why: A stacked worker must start from the intended base; silently substituting primary would change its inputs.
+fix: Check the current pulse roster for an eligible write overlay and correct scope.base_overlay_id. Drop the field only if the work should start from primary without the requested base.
+instead: Preserve the intended dependency; resolve the base or explicitly choose an independent task on primary before retrying.
+scenarios:
+  - id: default
+    vars:
+      base_overlay_id: ov-grep-impl

@@ -1,26 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SUMMARIZE_PATTERN_NEEDS_PATH
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - summarize
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.operation]
-  profiles:
-    - tool
+  ledger:
+    paintedwolf.operation:
+      - summarize
+requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SUMMARIZE_PATTERN_NEEDS_PATH"
 effect: block
-copy:
-  what: '`summarize` received pattern but no path or paths — content grep must be scoped.'
-  cause: pattern is RE2 content grep under path, not a repo-wide filename filter.
-  why: Unscoped pattern walks the whole tree and returns unrelated files; path anchors gather to the area you mean.
-  fix: Retry with path plus pattern, e.g. {"task":"…","path":"lycaon/internal/session","pattern":"Abort"}.
-  instead: Add path (or paths) as a sibling key alongside pattern and retry once
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:summarize
-x-paintedwolf-message: '`summarize` pattern requires path as a sibling key'
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:summarize
+message: '`summarize` pattern requires path as a sibling key'
+what: '`summarize` received pattern but no path or paths — content grep must be scoped.'
+cause: pattern is RE2 content grep under path, not a repo-wide filename filter.
+why: Unscoped pattern walks the whole tree and returns unrelated files; path anchors gather to the area you mean.
+fix: Retry with path plus pattern, e.g. {"task":"…","path":"lycaon/internal/session","pattern":"Abort"}.
+instead: Add path (or paths) as a sibling key alongside pattern and retry once
+scenarios:
   - id: default
     vars:
       profile: coordinator

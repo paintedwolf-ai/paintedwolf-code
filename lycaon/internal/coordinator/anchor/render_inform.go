@@ -42,7 +42,7 @@ func InformRenderFor(ctx context.Context, id ID, match MatchContext) string {
 	gc := oar.NewGuardContext()
 	gc.Session.Phase = match.Phase
 	gc.Session.Surface = match.Surface
-	gc.Session.Profile = match.Profile
+	gc.Session.PermissionProfile = match.Profile
 	gc.Session.SessionPosture = match.SessionPosture
 	if !reg.WhenMatches(b, gc) {
 		return ""

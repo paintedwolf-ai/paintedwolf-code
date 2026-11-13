@@ -1,30 +1,24 @@
-oar: '1.0'
+spec_version: "1.0"
 id: INVEST_HANDLE_NOT_OBSERVED
 kind: invariant
-anchor: coordinator.closeout_check
-requires:
-  facts:
-    - paintedwolf.offender_count
-    - paintedwolf.offenders_omitted
-    - paintedwolf.offenders_sample
-    - paintedwolf.surface
-    - paintedwolf.unobserved_cited_handles
+on: coordinator.closeout_check
+selector: {}
+requires_facts: [paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.surface, paintedwolf.unobserved_cited_handles]
 when: paintedwolf.surface == "implement_investigate" && size(paintedwolf.unobserved_cited_handles) > 0
 effect: block
-copy:
-  what: Investigate cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat.
-  cause: An evidence handle or path did not match the evidence ledger for this chat
-  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: 'Repair only the rejected citations. Cite an exact printed handle such as `[command#4]`, or an observed path and printed line such as `[internal/a.go:42]`. Write web sources as Markdown links. Drop a citation with no matching receipt.'
-  instead: 'Use existing coordinator or worker observations that support the retained answer. Resuming work requires a fresh report.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator_investigate
-x-paintedwolf-evidence:
+category: recoverable
+emit: guard:coordinator_investigate
+message: 'Investigate cited evidence not observed in the report evidence'
+what: Investigate cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat.
+cause: An evidence handle or path did not match the evidence ledger for this chat
+why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+fix: 'Repair only the rejected citations. Cite an exact printed handle such as `[command#4]`, or an observed path and printed line such as `[internal/a.go:42]`. Write web sources as Markdown links. Drop a citation with no matching receipt.'
+instead: 'Use existing coordinator or worker observations that support the retained answer. Resuming work requires a fresh report.'
+evidence:
   ui_label: Evidence handles
   ui_check_id: evidence_handles
   in_session_retry: true
-x-paintedwolf-message: 'Investigate cited evidence not observed in the report evidence'
-x-paintedwolf-scenarios:
+scenarios:
   - id: ungrounded_path
     vars:
       offender_count: 1

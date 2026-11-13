@@ -57,13 +57,13 @@ func TestEval20QueuesAllNamespacedAdvisoriesInOneDelivery(t *testing.T) {
 	text := message.Content
 	ok := len(lease.Entries) == 40
 	if !ok || strings.Count(text, "Code: SHARED") != 40 {
-		t.Fatalf("[OAR-EVAL-20] advisories collided or exceeded the queue: %q, ok=%v", text, ok)
+		t.Fatalf("advisories collided or exceeded the queue: %q, ok=%v", text, ok)
 	}
 	previous := -1
 	for i := range 40 {
 		index := strings.Index(text, fmt.Sprintf("Frozen advisory %02d", i))
 		if index <= previous {
-			t.Fatalf("[OAR-EVAL-20] advisory %d missing or out of order: %q", i, text)
+			t.Fatalf("advisory %d missing or out of order: %q", i, text)
 		}
 		previous = index
 	}

@@ -1,0 +1,26 @@
+{
+  "title": "Copy binding an undeclared fact is rejected at load",
+  "covers": [
+    "OAR-COPY-2"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "what": "value {{ ghost_fact }}."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "ghost_fact"
+  },
+  "id": "copy-unknown-binding-rejected"
+}

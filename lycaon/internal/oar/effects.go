@@ -12,14 +12,11 @@ const (
 	TraceFired   TraceOutcome = "fired"
 	TracePassed  TraceOutcome = "passed"
 	TraceErrored TraceOutcome = "errored"
-	// Monitor outcomes preserve the observed result ([OAR-OPS-9]).
+	// Monitor outcomes preserve the observed result ([OAR-OPS-7]).
 	TraceMonitoredFired  TraceOutcome = "monitored_fired"
 	TraceMonitoredPassed TraceOutcome = "monitored_passed"
-	// TraceMonitoredErrored records a raised monitor rule ([OAR-EVAL-10]).
+	// TraceMonitoredErrored records a raised monitor rule ([OAR-OPS-1]).
 	TraceMonitoredErrored TraceOutcome = "monitored_errored"
-	// TraceSuppressed records a rule another rule's overrides withdrew for this
-	// occurrence: no decision, no side-effect, but still traced ([OAR-EVAL-14]).
-	TraceSuppressed TraceOutcome = "suppressed"
 )
 
 // TraceEntry records one rule evaluation for telemetry.
@@ -96,4 +93,22 @@ func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher,
 		applied = append(applied, a)
 	}
 	return applied, nil
+}
+
+// applyScopedCounter applies a rule's counter actions to the additional
+// scope it declares; breakers and events stay keyed by the rule alone.
+func applyScopedCounter(store *CounterStore, sessionID, key string, actions []OnFireAction) {
+	if store == nil {
+		return
+	}
+	for _, a := range actions {
+		switch a {
+		case OnFireIncrementCounter:
+			store.Increment(sessionID, key, CounterFire, 1)
+		case OnFireResetCounter:
+			store.Reset(sessionID, key, CounterFire)
+		default:
+			// Breakers and events stay keyed by the rule alone.
+		}
+	}
 }

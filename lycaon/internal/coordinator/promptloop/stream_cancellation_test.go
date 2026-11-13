@@ -256,6 +256,6 @@ func TestOARContentSegmentsPreserveDeveloperRoleAndAuthority(t *testing.T) {
 func TestOps8ContentBufferRetainsWhitespace(t *testing.T) {
 	segments := oarContentSegments([]api.Message{{Role: api.MessageRoleUser, Content: " \n\t "}})
 	if len(segments) != 1 || segments[0].Content != " \n\t " {
-		t.Fatalf("[OAR-OPS-8] whitespace content omitted from the occurrence: %#v", segments)
+		t.Fatalf("[OAR-OPS-6] whitespace content omitted from the occurrence: %#v", segments)
 	}
 }

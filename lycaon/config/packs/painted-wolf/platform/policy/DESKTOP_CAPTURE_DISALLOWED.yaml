@@ -1,31 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: DESKTOP_CAPTURE_DISALLOWED
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - command
-  - verify
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.command
-  profiles:
-  - tool
+  tools:
+    - command
+    - verify
+requires_facts: [paintedwolf.command, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "DESKTOP_CAPTURE_DISALLOWED"
 effect: block
-copy:
-  what: Desktop screen capture command {{ paintedwolf.command }} is disallowed.
-  cause: Desktop screen capture is outside this invocation's allowed surface.
-  why: ''
-  fix: ''
-  instead: ''
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command
-x-paintedwolf-message: desktop screen capture commands are disallowed
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    command: screencapture -x build/screen.png
-    profile: coordinator
-    tool: command
+category: recoverable
+emit: guard:command
+message: desktop screen capture commands are disallowed
+what: Desktop screen capture command {{ paintedwolf.command }} is disallowed.
+cause: Desktop screen capture is outside this invocation's allowed surface.
+why: ''
+fix: ''
+instead: ''
+scenarios:
+  - id: default
+    vars:
+      command: screencapture -x build/screen.png
+      profile: coordinator
+      tool: command

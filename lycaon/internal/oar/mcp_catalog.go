@@ -34,10 +34,10 @@ func ObserveMCPStructuralPre(gc *GuardContext, tool string, catalog MCPCatalogVi
 	if !ok {
 		return
 	}
-	gc.MCP.MCPProviderID = providerID
+	gc.MCP.MCPServerID = providerID
 	gc.MCP.MCPToolName = toolName
-	gc.MCP.MCPProviderConfigured = catalog.ProviderConfigured(providerID)
-	gc.MCP.MCPProviderEnabled = catalog.ProviderEnabled(providerID)
+	gc.MCP.MCPServerConfigured = catalog.ProviderConfigured(providerID)
+	gc.MCP.MCPServerEnabled = catalog.ProviderEnabled(providerID)
 }
 
 // ObserveMCPStructuralPost fills the structural MCP facts for tool.post_invoke.
@@ -55,16 +55,16 @@ func ObserveMCPStructuralPost(gc *GuardContext, tool string, catalog MCPCatalogV
 	gc.MCP.MCPFields = nil
 }
 
-// EvalMCPProviderConfigured is the parameterized observation mcp_provider_configured_for(id).
-func EvalMCPProviderConfigured(gc *GuardContext, id string) bool {
+// EvalMCPServerConfigured is the parameterized observation mcp_server_configured_for(id).
+func EvalMCPServerConfigured(gc *GuardContext, id string) bool {
 	if gc == nil || id == "" || gc.MCP.MCPCatalog == nil {
 		return false
 	}
 	return gc.MCP.MCPCatalog.ProviderConfigured(id)
 }
 
-// EvalMCPProviderEnabled is the parameterized observation mcp_provider_enabled_for(id).
-func EvalMCPProviderEnabled(gc *GuardContext, id string) bool {
+// EvalMCPServerEnabled is the parameterized observation mcp_server_enabled_for(id).
+func EvalMCPServerEnabled(gc *GuardContext, id string) bool {
 	if gc == nil || id == "" || gc.MCP.MCPCatalog == nil {
 		return false
 	}

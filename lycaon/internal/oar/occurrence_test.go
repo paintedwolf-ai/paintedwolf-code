@@ -11,7 +11,7 @@ import (
 func TestPublishOccurrenceAnchorUsesCoreSpelling(t *testing.T) {
 	ensureCatalog(t)
 	gc := NewGuardContext()
-	publishOccurrenceAnchor(gc, AnchorContentInput, InstalledCapabilityDocument())
+	publishOccurrenceAnchor(gc, AnchorContentInput, InstalledEngineDeclaration())
 	if gc.Anchor != CoreAnchorModelInput {
 		t.Fatalf("anchor fact = %q, want %q", gc.Anchor, CoreAnchorModelInput)
 	}
@@ -50,7 +50,7 @@ func TestCapabilityFactsAreAvailableToEveryConsumer(t *testing.T) {
 				expr = "size(" + name + ") >= 0"
 			}
 			if err := checkWhenAgainstSpec(expr, nil); err != nil {
-				t.Fatalf("[OAR-FACT-27] declared fact must type-check in when: %v", err)
+				t.Fatalf("[OAR-FACT-11] declared fact must type-check in when: %v", err)
 			}
 		})
 	}
@@ -63,13 +63,13 @@ func TestEvaluateConditionDivisionByZeroRaises(t *testing.T) {
 	}
 }
 
-func TestTransformAccumulatesAndApplies(t *testing.T) {
+func TestTransformAppliesItsReplacement(t *testing.T) {
 	ensureCatalog(t)
 	l, err := NewLoader("")
 	testutil.FailErr(t, "loader", err)
-	l.SetCapability(&CapabilityDocument{
-		Version: "1.0",
-		Anchors: AnchorMap{Core: map[string]string{
+	l.SetDeclaration(&EngineDeclaration{
+		Host: "paintedwolf",
+		ProfileMap: AnchorProfileMap{Version: "1.0", Unsupported: []string{}, Core: map[string]string{
 			CoreAnchorToolPreInvoke:   AnchorToolPreInvoke,
 			CoreAnchorToolHandler:     AnchorToolHandler,
 			CoreAnchorToolPostInvoke:  AnchorToolPost,
