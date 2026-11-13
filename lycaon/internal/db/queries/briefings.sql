@@ -195,3 +195,14 @@ LIMIT sqlc.arg(row_limit);
 
 -- name: ListBriefingProjects :many
 SELECT project_id FROM briefing_epochs ORDER BY project_id;
+
+-- BriefingApprovedRationale finds the persisted rationale of the approved
+-- card that admitted one tool call.
+-- name: BriefingApprovedRationale :one
+SELECT id, CAST(COALESCE(json_extract(payload_json, '$.ai_rationale'), '') AS TEXT) AS rationale
+FROM checkpoints
+WHERE session_id = sqlc.arg(session_id) AND kind = 'tool_approval' AND status = 'approved'
+  AND json_extract(payload_json, '$.tool_call_id') = CAST(sqlc.arg(tool_call_id) AS TEXT)
+  AND COALESCE(json_extract(payload_json, '$.ai_rationale'), '') <> ''
+ORDER BY created_at DESC
+LIMIT 1;

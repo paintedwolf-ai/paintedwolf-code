@@ -249,7 +249,7 @@ func (s *History) QueryFileVersions(
 	for _, version := range out.Versions {
 		windowIDs = append(windowIDs, version.CommandWindowID)
 	}
-	out.CommandWindows, err = s.commands.commandWindowsFor(ctx, windowIDs)
+	out.CommandWindows, err = s.commands.CommandWindows(ctx, windowIDs)
 	if err != nil {
 		return FileVersionsResult{}, err
 	}
@@ -292,7 +292,7 @@ type History struct {
 }
 
 type historyCommandsPort interface {
-	commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error)
+	CommandWindows(ctx context.Context, ids []string) (map[string]CommandWindow, error)
 }
 
 type historyGitPort interface {

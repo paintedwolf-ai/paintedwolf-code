@@ -637,8 +637,8 @@ func commandWindowFromRow(row db.SourceCommandWindows) CommandWindow {
 	}
 }
 
-// commandWindowsFor resolves the windows a page of effects or versions names.
-func (s *Commands) commandWindowsFor(ctx context.Context, ids []string) (map[string]CommandWindow, error) {
+// CommandWindows reads windows by id; unknown ids are absent from the map.
+func (s *Commands) CommandWindows(ctx context.Context, ids []string) (map[string]CommandWindow, error) {
 	unique := make([]string, 0, len(ids))
 	seen := make(map[string]struct{}, len(ids))
 	for _, id := range ids {

@@ -7,7 +7,6 @@ import { wholeFileOpChange } from "../../components/source/reader/source-reader-
 import {
   buildReviewWalkDetails,
   reviewWalkFileProgress,
-  type ReviewWalkDetails,
 } from "./review-walk-details.ts";
 import {
   commandWindowAdmissionLabel,
@@ -16,6 +15,8 @@ import {
   commandWindowStateNote,
 } from "../source/source-command-window.ts";
 import { gitChangeRefs } from "../source/source-git-change.ts";
+import { lineCountLabel, lineCounts } from "./review-walk-counts.ts";
+import { WalkSummaryLine, type WalkStepBriefing } from "../walk/walk-briefing.tsx";
 import {
   walkStepActor,
   walkGroupFileSummary,
@@ -38,6 +39,7 @@ type Props = {
   ready: boolean;
   comparison: ComparisonSnapshot | null;
   walkSteps: readonly WalkStep[];
+  briefing?: WalkStepBriefing;
 };
 
 function shortCommit(commit: string | undefined): string {
@@ -49,19 +51,6 @@ function gitCommitSpan(step: WalkGitStep): string {
   const to = shortCommit(step.change.to_commit);
   if (from && to) return `${from} → ${to}`;
   return to || from;
-}
-
-function lineCountLabel(before: number, after: number): string {
-  const unit = after === 1 ? "line" : "lines";
-  return before === after ? `${after} ${unit}` : `${before} → ${after} ${unit}`;
-}
-
-function lineCounts(
-  details: ReviewWalkDetails,
-): { before: number; after: number } | null {
-  const before = details.beforeLines;
-  const after = details.afterLines;
-  return before === null || after === null ? null : { before, after };
 }
 
 export function ReviewWalkContext(props: Props) {
@@ -250,18 +239,14 @@ export function ReviewWalkContext(props: Props) {
     <Show when={details()}>
       {(detail) => (
         <>
-          <p
-            class="den-review-detail__summary"
-            data-testid="review-walk-summary"
-          >
-            {detail().summary}
-          </p>
+          <WalkSummaryLine briefing={props.briefing}>{detail().summary}</WalkSummaryLine>
           <div class="den-review-detail__meta">
             <span>
               {walkStepActor(current())}
               <Show when={relativeTimeLabel(held().observed_at)}>
                 {(time) => <> · {time()}</>}
               </Show>
+              <Show when={props.briefing?.evidence}>{(link) => <> · {link()}</>}</Show>
             </span>
           </div>
           <Show when={detail().availabilityNote}>

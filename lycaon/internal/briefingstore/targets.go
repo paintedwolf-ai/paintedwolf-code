@@ -314,3 +314,22 @@ func (s *Retention) PinCheckpoint(ctx context.Context, projectID, checkpointID, 
 		return nil
 	})
 }
+
+// LinkApprovedRationale links the persisted rationale of the approved card
+// that admitted a request's action, if there is one. It reads the stored
+// card, never a patch result, and changes nothing else about the target.
+func (s *Targets) LinkApprovedRationale(ctx context.Context, request briefing.Request) error {
+	if request.Action == nil {
+		return nil
+	}
+	row, err := s.queries.BriefingApprovedRationale(ctx, db.BriefingApprovedRationaleParams{SessionID: request.Action.SessionID, ToolCallID: request.Action.ToolCallID})
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return s.LinkApprovalIntent(ctx, request.ProjectID, request.ProfileID, request.TargetKey, Intent{
+		Text: row.Rationale, CheckpointID: row.ID, ActionID: request.Action.ToolCallID, Scope: request.TargetKey,
+	})
+}

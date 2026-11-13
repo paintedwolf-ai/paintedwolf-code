@@ -117,6 +117,7 @@ func (p *Profile) Resolve(ctx context.Context, target briefing.Target) (briefing
 		ProjectID: target.ProjectID, ProjectDir: target.ProjectDir, ProfileID: ProfileID, Version: profileVersion,
 		TargetKey: key, TargetKind: "activity", TargetJSON: canonical, ScopeFingerprint: key,
 		Manual: target.Manual, Policy: p.Policy(), Sections: sections,
+		Action: &briefing.ActionRef{SessionID: wanted.SessionID, ToolCallID: wanted.ToolCallIds[0]},
 	}, nil
 }
 
