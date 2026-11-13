@@ -63,16 +63,32 @@ func (r *ProgramRuntime) outcome(ctx context.Context, run *programRun, outputs *
 	}
 	programID := run.root.Identity.ProgramID
 	out := ProgramOutcome{
-		ProgramID:        programID,
-		State:            projection.Program.State,
-		Status:           result.Status,
-		StopCode:         result.StopCode,
-		ExecutedChildren: projection.ExecutedChildren,
-		CompletedEffects: projection.CompletedEffects,
-		UncertainEffects: projection.UncertainEffects,
-		NativeGaps:       projection.NativeGaps,
+		ProgramID:                programID,
+		DetailRef:                projection.DetailReference,
+		State:                    projection.Program.State,
+		Status:                   result.Status,
+		StopCode:                 result.StopCode,
+		ExecutedChildren:         projection.ExecutedChildren,
+		CompletedEffects:         projection.CompletedEffects,
+		UncertainEffects:         projection.UncertainEffects,
+		NativeGaps:               projection.NativeGaps,
+		OmittedNonzeroExecutions: projection.OmittedNonzero,
 	}
 
+	for _, child := range projection.Nonzero {
+		receipt := child.Receipt
+		observed := ProgramExecutionOutcome{EvidenceKind: receipt.EvidenceKind, ExecutionID: receipt.ID, SourceUnitID: child.SourceUnitID, Span: child.Span,
+			State: receipt.State, StatusCode: receipt.StatusCode, OwnerStarted: receipt.OwnerStarted, OwnerInvoked: receipt.OwnerInvoked,
+			OutputPublishable: receipt.OutputPublishable, DetailRef: receipt.DetailRef}
+		for _, output := range receipt.Outputs {
+			path, err := (scratch.CommandOutput{ProgramID: programID, ExecutionID: receipt.ID, Stream: output.Stream}).Path()
+			if err != nil {
+				return ProgramOutcome{}, err
+			}
+			observed.Outputs = append(observed.Outputs, ProgramExecutionOutput{Stream: output.Stream, Ref: output.Ref, OutputPath: "@output/" + path, SizeBytes: output.SizeBytes, Complete: output.Complete})
+		}
+		out.NonzeroExecutions = append(out.NonzeroExecutions, observed)
+	}
 	stdoutBudget, stderrBudget := splitStreamBudgets(CommandOutputBudget(run.tc.Host.ModelContextWindow), int(stdout.Len()), int(stderr.Len()))
 	for i, stream := range []*programStream{stdout, stderr} {
 		if stream.Len() == 0 {
@@ -170,7 +186,7 @@ func (r *ProgramRuntime) deliverProgramStream(ctx context.Context, run *programR
 	if err != nil {
 		return "", api.CommandProgramOutputWindow{}, err
 	}
-	err = scratch.PublishCommandOutput(run.tc.Host.SessionOutputDir, program, name, body)
+	err = scratch.PublishCommandOutput(run.tc.Host.SessionOutputDir, scratch.CommandOutput{ProgramID: program, Stream: name}, body)
 	closeErr := body.Close()
 	if err != nil || closeErr != nil {
 		return "", api.CommandProgramOutputWindow{}, errors.Join(err, closeErr)
