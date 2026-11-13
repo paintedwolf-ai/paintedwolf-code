@@ -328,6 +328,9 @@ func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
 	if got := next(); got != round2 {
 		t.Fatalf("consumer ran while its producer works: next = %q", got)
 	}
+	if _, err := f.queue.ClaimWorkerBranch(t.Context(), "job-c"); !errors.Is(err, ErrWorkerPrerequisitesPending) {
+		t.Fatalf("branch claim while the producer works: err = %v", err)
+	}
 	claimed, err := f.queue.ClaimNext(t.Context(), ClaimRequest{ClaimedBy: "test", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "claim producer", err)
 	won, err := f.queue.Complete(t.Context(), claimed, api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
@@ -336,6 +339,9 @@ func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
 	}
 	if got := next(); got != "job-c" {
 		t.Fatalf("consumer still held after its producer delivered again: next = %q", got)
+	}
+	if _, err := f.queue.ClaimWorkerBranch(t.Context(), "job-c"); err != nil {
+		t.Fatalf("branch claim after the producer delivered again: %v", err)
 	}
 }
 

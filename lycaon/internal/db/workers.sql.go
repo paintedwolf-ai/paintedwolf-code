@@ -884,6 +884,21 @@ func (q *Queries) InsertWorkerWorkspacePreparation(ctx context.Context, arg Inse
 	return err
 }
 
+const latestRoundJobForJob = `-- name: LatestRoundJobForJob :one
+SELECT CAST(COALESCE((SELECT latest.job_id FROM worker_rounds origin
+    JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+    WHERE origin.job_id = ?1 ORDER BY latest.ordinal DESC LIMIT 1), ?1) AS TEXT) AS job_id
+`
+
+// The job of the latest round of the worker that ran this job, or the job
+// itself when it ran no worker round.
+func (q *Queries) LatestRoundJobForJob(ctx context.Context, jobID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, latestRoundJobForJob, jobID)
+	var job_id string
+	err := row.Scan(&job_id)
+	return job_id, err
+}
+
 const listRoundInstructionsAfter = `-- name: ListRoundInstructionsAfter :many
 SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
