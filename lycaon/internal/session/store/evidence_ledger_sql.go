@@ -25,7 +25,7 @@ type storedLineRangesPayload struct {
 	URLTitles      map[string]string         `json:"url_titles,omitempty"`
 	GrepLines      map[string]map[int]string `json:"grep_lines,omitempty"`
 	PathTiers      map[string]string         `json:"path_tiers,omitempty"`
-	// PathRoots maps a stored path key to its owning root ID (payload v2).
+	// PathRoots maps a stored path key to its owning root ID.
 	// Empty values mark legacy keys that resolve under no attached root.
 	PathRoots        map[string]string `json:"path_roots,omitempty"`
 	Surface          string            `json:"surface,omitempty"`
@@ -39,7 +39,7 @@ type storedLineRangesPayload struct {
 func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 	aux := evidence.CloneRecordForStore(rec)
 	payload := storedLineRangesPayload{
-		Version:          2,
+		Version:          1,
 		SourceDelivery:   rec.SourceDelivery,
 		Ranges:           rec.LineRanges,
 		PathsTouched:     aux.PathsTouched,
@@ -72,7 +72,7 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 		return err
 	}
 	// v1 payloads predate durable root identity; v2 adds path_roots.
-	if payload.Version != 1 && payload.Version != 2 {
+	if payload.Version != 1 {
 		return fmt.Errorf("unsupported evidence record payload version %d", payload.Version)
 	}
 	rec.LineRanges = payload.Ranges

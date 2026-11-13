@@ -208,7 +208,6 @@ var noneClassifiedPathArgs = map[string]noneClassifiedPathArgEntry{
 	"capture_page/routes.body_path":     {resolver: "read"},
 	"page_act/actions.routes.body_path": {resolver: "read"},
 	"page_open/routes.body_path":        {resolver: "read"},
-	"fetch_url/dest":                    {resolver: "write"},
 	"render_view/dest":                  {resolver: "write"},
 	"http_request/body_path":            {resolver: "bind"},
 	"http_request/form.path":            {resolver: "bind"},
