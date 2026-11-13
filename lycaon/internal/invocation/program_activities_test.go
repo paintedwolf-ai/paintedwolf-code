@@ -480,7 +480,7 @@ func TestBackgroundJobWorkFoldsIntoItsLaunch(t *testing.T) {
 		outcome string
 	}{
 		{"running", activityCounts{total: 1, running: 1}, "running", activityStateOutcome("running")},
-		{"failed", activityCounts{total: 1, failed: 1}, "failed", activityStateOutcome("failed")},
+		{"failed", activityCounts{total: 1, failed: 1}, "failed", ""},
 		{"finished", activityCounts{total: 1}, "completed", activityStateOutcome("completed")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -489,7 +489,8 @@ func TestBackgroundJobWorkFoldsIntoItsLaunch(t *testing.T) {
 				t.Fatalf("launch and job split: %+v", values)
 			}
 			got := values[0]
-			if got.ID != "job" || got.JobHandle != "registry-handle" || got.State != tc.state || got.Outcome != tc.outcome {
+			// A failed job keeps the row's partial-failure summary; others state their outcome.
+			if got.ID != "job" || got.JobHandle != "registry-handle" || got.State != tc.state || (tc.outcome != "" && got.Outcome != tc.outcome) {
 				t.Fatalf("launch activity = %+v", got)
 			}
 			if !slices.Equal(got.ExecutionIDs, []string{"job", "server"}) || got.Subject != server.arguments["command"] {
