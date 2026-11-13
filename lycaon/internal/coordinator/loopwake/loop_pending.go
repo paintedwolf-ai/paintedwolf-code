@@ -77,8 +77,8 @@ func (q *deferredNudgeQueue) push(d pendingLoopWake) {
 	q.items = append(q.items, d)
 }
 
-// removeRoundNoticesForJob drops a terminal job's deferred round notices.
-func (q *deferredNudgeQueue) removeRoundNoticesForJob(jobID string) bool {
+// removeRunningWorkerWakesForJob drops a terminal job's deferred wakes about it running.
+func (q *deferredNudgeQueue) removeRunningWorkerWakesForJob(jobID string) bool {
 	jobID = strings.TrimSpace(jobID)
 	if jobID == "" {
 		return false
@@ -88,7 +88,7 @@ func (q *deferredNudgeQueue) removeRoundNoticesForJob(jobID string) bool {
 	kept := q.items[:0:0]
 	found := false
 	for _, it := range q.items {
-		if it.wake == anchor.WorkerRoundNotice && strings.TrimSpace(it.legID) == jobID {
+		if anchor.AboutRunningWorker(it.wake) && strings.TrimSpace(it.legID) == jobID {
 			found = true
 			continue
 		}

@@ -223,6 +223,8 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		// Envelope.Vars keys declared on the post-turn / landing-advisory anchors.
 		"tool": true, "pending": true, "workflow_id": true, "guidance": true, "llm_timeout": true,
 		"held_call_handle": true, "held_call_tool": true, "held_call_outcome": true,
+		// The worker message page counts the messages it carries.
+		"message_count": true,
 	}
 	entries, err := config.List(config.PlatformGuidance)
 	testutil.FailErr(t, "readdir kicks", err)

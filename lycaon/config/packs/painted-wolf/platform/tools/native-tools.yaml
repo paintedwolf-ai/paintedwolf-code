@@ -72,6 +72,7 @@ multi_root:
     - record_finding
     - update_progress
     - request_decision
+    - message_coordinator
     - handoff_init
     - handoff_reserve
     - handoff_release
@@ -340,6 +341,7 @@ bounded_in_process:
 session_scope:
   complete_leg: worker_child
   request_decision: worker_child
+  message_coordinator: worker_child
 
 # Connected servers register these prefixes after boot.
 # Other profile patterns resolve against the registered tool set.
@@ -393,6 +395,7 @@ approval_reversibility:
   plan_append_review_evidence: reversible
   promote_overlay: reversible
   recall: reversible
+  message_coordinator: reversible
   record_finding: reversible
   reject_overlay: reversible
   render_view: recoverable
@@ -475,6 +478,7 @@ owner:
   preview_overlay: worker_merge
   promote_overlay: worker_merge
   recall: sessions
+  message_coordinator: workers
   record_finding: findings
   reject_overlay: worker_merge
   render_view: visual
@@ -557,6 +561,7 @@ batch_policy:
   plan_append_review_evidence: serial
   promote_overlay: serial
   recall: shared
+  message_coordinator: serial
   record_finding: serial
   reject_overlay: serial
   render_view: serial
@@ -661,6 +666,7 @@ lifecycle:
   plan_append_review_evidence: effect_attempt
   promote_overlay: journaled_mutation
   recall: read_only
+  message_coordinator: db_transaction
   record_finding: db_transaction
   reject_overlay: effect_attempt
   render_view: effect_attempt

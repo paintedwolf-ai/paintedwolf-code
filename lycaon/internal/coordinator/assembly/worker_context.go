@@ -16,8 +16,8 @@ func (e *turnContextAssembler) appendWorkerLegInject(ctx context.Context, sess *
 		return nil, err
 	}
 	legCtx.Checklist = FilterChecklistDedup(legCtx.Checklist, ExtractProcessBullets(rendered))
-	if deps.SiblingNoteDelivery != nil {
-		page, err := deps.SiblingNoteDelivery.PrepareSiblingNotes(ctx, sess.ID, siblingNoteInjectCap)
+	if deps.Deliveries.SiblingNotes != nil {
+		page, err := deps.Deliveries.SiblingNotes.PrepareSiblingNotes(ctx, sess.ID, siblingNoteInjectCap)
 		if err != nil {
 			return nil, err
 		}

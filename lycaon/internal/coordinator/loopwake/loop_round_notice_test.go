@@ -117,7 +117,7 @@ func TestRoundNoticeDeferralIsJobScoped(t *testing.T) {
 	q.push(pendingLoopWake{wake: anchor.WorkerRoundNotice, inform: anchor.WorkerRoundNotice, legID: "job-2"})
 	q.push(pendingLoopWake{wake: anchor.LegFinished, inform: anchor.LegFinished, legID: "leg-1"})
 
-	engine.Nudges.dropDeferredRoundNoticesForJob("s1", "job-1")
+	engine.Nudges.dropDeferredRunningWorkerWakes("s1", "job-1")
 
 	remaining := q.drain()
 	if len(remaining) != 2 {

@@ -107,8 +107,8 @@ func (l *Nudges) deliverNudge(ctx context.Context, sessionID string, pending pen
 		return
 	}
 	blocked := l.Turns.hostTurnBlocked(ctx, sessionID)
-	// A round notice is actionable while its job is running.
-	perJobWake := strings.TrimSpace(completingJobID) != "" || wake == anchor.WorkerRoundNotice
+	// A wake about a running worker is actionable while its job runs.
+	perJobWake := strings.TrimSpace(completingJobID) != "" || anchor.AboutRunningWorker(wake)
 	if !l.Cycles.workerCycleIdle(ctx, sessionID, completingJobID) && !perJobWake {
 		loopLogNudge(sessionID, wake, inform, legID, completingJobID, "defer_worker_cycle")
 		l.deferNudge(ctx, sessionID, pending)
@@ -202,6 +202,13 @@ func (l *Nudges) NudgeProcessRefused(ctx context.Context, sessionID, handle stri
 }
 func (l *Nudges) NudgeWorkerRoundNotice(ctx context.Context, sessionID, jobID string, env anchor.Envelope) {
 	l.Nudge(ctx, sessionID, anchor.WorkerRoundNotice, anchor.WorkerRoundNotice, jobID, env)
+}
+
+// NudgeWorkerMessage wakes a coordinator for a message from running job
+// jobID that needs a reply. It has no inform: the message itself reaches the
+// coordinator on its next request's message page.
+func (l *Nudges) NudgeWorkerMessage(ctx context.Context, sessionID, jobID string) {
+	l.Nudge(ctx, sessionID, anchor.WorkerMessageReceived, "", jobID, anchor.Envelope{})
 }
 func (l *Nudges) NudgeLegFinished(ctx context.Context, parentID string, completedAt time.Time, legID string) {
 	env := anchor.Envelope{}
@@ -363,12 +370,12 @@ func (l *Nudges) kickStillQueued(sessionID string, wake anchor.ID) bool {
 	kickID := anchor.InformRender(wake)
 	return kickID != "" && deps.HasQueuedKick(sessionID, kickID)
 }
-func (l *Nudges) dropDeferredRoundNoticesForJob(sessionID, jobID string) {
+func (l *Nudges) dropDeferredRunningWorkerWakes(sessionID, jobID string) {
 	if l == nil || strings.TrimSpace(sessionID) == "" || strings.TrimSpace(jobID) == "" {
 		return
 	}
-	if l.sessionDeferredQueue(sessionID).removeRoundNoticesForJob(jobID) {
-		loopLogNudge(sessionID, anchor.WorkerRoundNotice, anchor.WorkerRoundNotice, jobID, "", "drop:job_terminal")
+	if l.sessionDeferredQueue(sessionID).removeRunningWorkerWakesForJob(jobID) {
+		loopLogNudge(sessionID, "", "", jobID, "", "drop:job_terminal")
 	}
 }
 func (l *Nudges) deferNudge(ctx context.Context, sessionID string, d pendingLoopWake) {

@@ -35,26 +35,26 @@ type promptSurfaceDeps struct {
 }
 
 type turnContextDeps struct {
-	AgentsMDPolicies    AgentsMDPoliciesInjector
-	AgentsMDIndex       AgentsMDIndexInjector
-	Board               BoardPrependHook
-	BoardOrientReady    BoardOrientReadyRecorder
-	CommandJobs         func(sessionID string) []bgprocess.JobSnapshot
-	CoordinatorFrame    inject.CoordinatorTurnFrameSource
-	GateFeedback        *feedback.GateFeedbackCatalog
-	HeldCalls           func(sessionID string) []heldcall.Running
-	Injects             *prompts.InjectRenderer
-	PeerReservations    PeerReservationSource
-	ReadMessageWindow   inject.MessageWindowReader
-	SiblingNoteDelivery SiblingNoteDeliveryRecorder
-	SkillPointer        func(sessionID string) *turnload.SkillRank
-	SkillPreload        func(sessionID string) *turnload.SkillPreload
-	SynthesisEvidence   SynthesisEvidenceSource
-	TurnSourceBriefs    func(ctx context.Context, sess *api.Session) map[string]inject.SourceChangeBrief
-	WorkerContext       WorkerContextBuilder
-	WorkflowHints       *guidance.HintConfig
-	WorkflowArchive     func(context.Context, string) string
-	PromptConfigured    bool
+	AgentsMDPolicies  AgentsMDPoliciesInjector
+	AgentsMDIndex     AgentsMDIndexInjector
+	Board             BoardPrependHook
+	BoardOrientReady  BoardOrientReadyRecorder
+	CommandJobs       func(sessionID string) []bgprocess.JobSnapshot
+	CoordinatorFrame  inject.CoordinatorTurnFrameSource
+	GateFeedback      *feedback.GateFeedbackCatalog
+	HeldCalls         func(sessionID string) []heldcall.Running
+	Injects           *prompts.InjectRenderer
+	PeerReservations  PeerReservationSource
+	ReadMessageWindow inject.MessageWindowReader
+	Deliveries        Deliveries
+	SkillPointer      func(sessionID string) *turnload.SkillRank
+	SkillPreload      func(sessionID string) *turnload.SkillPreload
+	SynthesisEvidence SynthesisEvidenceSource
+	TurnSourceBriefs  func(ctx context.Context, sess *api.Session) map[string]inject.SourceChangeBrief
+	WorkerContext     WorkerContextBuilder
+	WorkflowHints     *guidance.HintConfig
+	WorkflowArchive   func(context.Context, string) string
+	PromptConfigured  bool
 }
 
 type promptProjection interface {
@@ -103,26 +103,26 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 	}
 	prompt := &promptSurface{deps: surfaceDeps, cache: cache}
 	turn := &turnContextAssembler{surface: prompt, deps: turnContextDeps{
-		AgentsMDPolicies:    snapshot.AgentsMDPolicies,
-		AgentsMDIndex:       snapshot.AgentsMDIndex,
-		Board:               snapshot.Board,
-		BoardOrientReady:    snapshot.BoardOrientReady,
-		CommandJobs:         snapshot.CommandJobs,
-		CoordinatorFrame:    snapshot.CoordinatorFrame,
-		GateFeedback:        snapshot.GateFeedback,
-		HeldCalls:           snapshot.HeldCalls,
-		Injects:             snapshot.Injects,
-		PeerReservations:    snapshot.PeerReservations,
-		ReadMessageWindow:   snapshot.ReadMessageWindow,
-		SiblingNoteDelivery: snapshot.SiblingNoteDelivery,
-		SkillPointer:        snapshot.SkillPointer,
-		SkillPreload:        snapshot.SkillPreload,
-		SynthesisEvidence:   snapshot.SynthesisEvidence,
-		TurnSourceBriefs:    snapshot.TurnSourceBriefs,
-		WorkerContext:       snapshot.WorkerContext,
-		WorkflowHints:       snapshot.WorkflowHints,
-		WorkflowArchive:     surfaceDeps.WorkflowArchive,
-		PromptConfigured:    snapshot.Prompts != nil,
+		AgentsMDPolicies:  snapshot.AgentsMDPolicies,
+		AgentsMDIndex:     snapshot.AgentsMDIndex,
+		Board:             snapshot.Board,
+		BoardOrientReady:  snapshot.BoardOrientReady,
+		CommandJobs:       snapshot.CommandJobs,
+		CoordinatorFrame:  snapshot.CoordinatorFrame,
+		GateFeedback:      snapshot.GateFeedback,
+		HeldCalls:         snapshot.HeldCalls,
+		Injects:           snapshot.Injects,
+		PeerReservations:  snapshot.PeerReservations,
+		ReadMessageWindow: snapshot.ReadMessageWindow,
+		Deliveries:        snapshot.Deliveries,
+		SkillPointer:      snapshot.SkillPointer,
+		SkillPreload:      snapshot.SkillPreload,
+		SynthesisEvidence: snapshot.SynthesisEvidence,
+		TurnSourceBriefs:  snapshot.TurnSourceBriefs,
+		WorkerContext:     snapshot.WorkerContext,
+		WorkflowHints:     snapshot.WorkflowHints,
+		WorkflowArchive:   surfaceDeps.WorkflowArchive,
+		PromptConfigured:  snapshot.Prompts != nil,
 	}}
 	return prompt, turn
 }

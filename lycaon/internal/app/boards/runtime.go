@@ -2,6 +2,7 @@ package boards
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/browser"
@@ -24,6 +25,7 @@ type ResourceTracker interface {
 type Runtime struct {
 	Snapshot       *board.SnapshotBuilder
 	Findings       *findings.SQLStore
+	WorkerRecords  *workerrecords.Store
 	Progress       *progress.SQLStore
 	Visual         visual.Store
 	Calls          *call.SQLManager

@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workermessaging"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/briefingstore"
@@ -88,6 +90,14 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.Findings = findings.NewSQLStore(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.Workers.Notes.SetFindings(r.Findings)
 	r.deps.Sessions.Manager.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
+	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
+	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
+	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{
+		Records:    r.WorkerRecords,
+		NeedsReply: r.deps.Sessions.Manager.Coordinator.Workers.MessageNeedsReply,
+	}); err != nil {
+		return fmt.Errorf("message_coordinator tool: %w", err)
+	}
 	if err := native.RegisterRecordFindingTool(r.deps.Execution.Host.Registry, reporttools.RecordFindingGates{
 		Grounding: r.Grounding,
 	}, r.Findings, r.rootSessionKey); err != nil {

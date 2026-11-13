@@ -31,6 +31,7 @@ const (
 	ProcessFinished               ID = "process.finished"
 	ProcessRefused                ID = "process.refused"
 	WorkerRoundNotice             ID = "worker.round.notice"
+	WorkerMessageReceived         ID = "worker.message.received"
 	EditFollowUpRepeat            ID = "edit.follow_up.repeat"
 	CoordinatorCloseout           ID = "coordinator.closeout"
 	CoordinatorCitationGrounding  ID = "coordinator.citation.grounding"
@@ -63,6 +64,7 @@ const (
 	InjectExecutionState          ID = "inject.execution_state"
 	InjectTurnState               ID = "inject.turn_state"
 	InjectCommandJobs             ID = "inject.command_jobs"
+	InjectWorkerMessages          ID = "inject.worker_messages"
 	InjectToolProcedures          ID = "inject.tool_procedures"
 	InjectSkillProcedure          ID = "inject.skill_procedure"
 	InjectSkillPointer            ID = "inject.skill_pointer"
@@ -126,3 +128,10 @@ func SameInform(kickID string, id ID) bool {
 
 // String returns the catalog id.
 func (id ID) String() string { return string(id) }
+
+// AboutRunningWorker reports a wake that concerns a worker job that is still
+// running: it is actionable before the job settles and resumes a wait on
+// that job without satisfying it.
+func AboutRunningWorker(id ID) bool {
+	return id == WorkerRoundNotice || id == WorkerMessageReceived
+}

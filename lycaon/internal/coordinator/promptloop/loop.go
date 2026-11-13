@@ -201,8 +201,8 @@ loop:
 			loopExit = exit
 			break
 		}
-		if sess.IsWorkerChild() && l.Context.Deps.CommitWorkerContext != nil {
-			if err := l.Context.Deps.CommitWorkerContext(turnCtx, id, assistantMsg.ID); err != nil {
+		if l.Context.Deps.CommitTurnContext != nil {
+			if err := l.Context.Deps.CommitTurnContext(turnCtx, id, assistantMsg.ID); err != nil {
 				return nil, err
 			}
 		}

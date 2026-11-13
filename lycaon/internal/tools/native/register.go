@@ -214,6 +214,14 @@ func RegisterCompleteLegTool(reg *tools.DefaultRegistry, decode workertools.Comp
 	return reg.Register(workertools.CompleteLegTool, workertools.CompleteLegHandler(decode))
 }
 
+// RegisterMessageCoordinatorTool registers message_coordinator.
+func RegisterMessageCoordinatorTool(reg *tools.DefaultRegistry, deps workertools.MessageCoordinatorDeps) error {
+	if reg == nil {
+		return fmt.Errorf("registry required")
+	}
+	return reg.Register(workertools.MessageCoordinatorTool, workertools.MessageCoordinatorHandler(deps))
+}
+
 func RegisterRequestDecisionTool(reg *tools.DefaultRegistry, deps workertools.RequestDecisionDeps) error {
 	if reg == nil {
 		return fmt.Errorf("registry required")

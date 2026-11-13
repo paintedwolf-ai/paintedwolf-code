@@ -344,6 +344,9 @@ tools:
     title_keys: [path]
     path_entry: file
     activity: {headline: "managing files", salience: defining, role: mutation}
+  message_coordinator:
+    title_keys: [text]
+    activity: {headline: "messaging the coordinator", salience: supporting, role: coordination}
   request_decision:
     title_keys: [question]
     activity: {headline: "resolving decisions", salience: defining, role: coordination}

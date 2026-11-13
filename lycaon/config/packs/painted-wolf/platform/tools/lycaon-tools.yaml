@@ -54,6 +54,9 @@ tools:
   # request_decision worker escalation (resumable)
   - request_decision
 
+  # message_coordinator worker note to its coordinator
+  - message_coordinator
+
 
   # parse_* delegation plan parsing
   - parse_extract_json

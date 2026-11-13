@@ -37,33 +37,35 @@ type AssemblyWorkflow struct {
 }
 
 type Assembly struct {
-	Workflow      AssemblyWorkflow
-	Messages      inject.MessageWindowReader
-	Briefs        *sourcebrief.Service
-	Catalog       *sessioncatalog.Service
-	Closeout      *closeoutassembly.Service
-	Feedback      *feedback.GateFeedbackCatalog
-	Frame         inject.CoordinatorTurnFrameSource
-	Guards        *turnguards.Service
-	Hints         *guidance.HintConfig
-	Limits        *sessionlimits.Service
-	Loading       *loading.Service
-	Model         *Model
-	Notes         *workeroutcomes.Notes
-	PolicyIndex   *policyindex.Service
-	Processes     *processcontrol.Service
-	Profiles      *profiles.Service
-	Prompts       prompts.PromptTemplateEngine
-	Repository    repoinfo.Provider
-	Runtime       *coordinator.Runtime
-	Scan          assembly.ScanGuidanceHook
-	Stash         *toolpresentation.Stash
-	State         *workeroutcomes.State
-	WebResearch   *webresearch.ConfigStore
-	WorkerContext assembly.WorkerContextBuilder
-	Workspace     *sessionscope.Service
-	Workspaces    *workerworkspace.Service
-	ToolContext   *toolcontext.Service
+	Workflow AssemblyWorkflow
+	Messages inject.MessageWindowReader
+	Briefs   *sourcebrief.Service
+	Catalog  *sessioncatalog.Service
+	Closeout *closeoutassembly.Service
+	Feedback *feedback.GateFeedbackCatalog
+	Frame    inject.CoordinatorTurnFrameSource
+	Guards   *turnguards.Service
+	Hints    *guidance.HintConfig
+	Limits   *sessionlimits.Service
+	Loading  *loading.Service
+	Model    *Model
+	Notes    *workeroutcomes.Notes
+	// MessageDelivery delivers coordinator and worker messages into requests.
+	MessageDelivery assembly.MessageDeliveryRecorder
+	PolicyIndex     *policyindex.Service
+	Processes       *processcontrol.Service
+	Profiles        *profiles.Service
+	Prompts         prompts.PromptTemplateEngine
+	Repository      repoinfo.Provider
+	Runtime         *coordinator.Runtime
+	Scan            assembly.ScanGuidanceHook
+	Stash           *toolpresentation.Stash
+	State           *workeroutcomes.State
+	WebResearch     *webresearch.ConfigStore
+	WorkerContext   assembly.WorkerContextBuilder
+	Workspace       *sessionscope.Service
+	Workspaces      *workerworkspace.Service
+	ToolContext     *toolcontext.Service
 }
 
 func (m *Assembly) Build() assembly.AssemblyDeps {
@@ -76,7 +78,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
 		WorkerContext:         m.WorkerContext,
-		SiblingNoteDelivery:   m.Notes,
+		Deliveries:            assembly.Deliveries{SiblingNotes: m.Notes, Messages: m.MessageDelivery},
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,
 		ExecutionModes:        rt.ExecutionModeStore(),

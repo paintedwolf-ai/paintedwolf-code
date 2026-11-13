@@ -192,7 +192,7 @@ func waitTriggerSet(triggers []WaitTrigger) map[WaitTrigger]struct{} {
 type waitMatchInput struct {
 	Wake            anchor.ID
 	CompletingJobID string
-	// Subject is the wake's handle: a process handle, or the job a round notice is about.
+	// Subject is the wake's handle: a process handle, or the running job a worker wake is about.
 	Subject        string
 	ProcessHandles []string
 	// WorkerHandles narrows next_worker_done to the named task ids.
@@ -215,8 +215,8 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 	case anchor.ProcessFinished, anchor.ProcessRefused:
 		_, ok := set[WaitTriggerProcessDone]
 		return ok && handleMatches(in.ProcessHandles, in.Subject)
-	case anchor.WorkerRoundNotice:
-		_, ok := roundNoticeCondition(set, in.WorkerHandles, in.Subject)
+	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived:
+		_, ok := runningWorkerCondition(set, in.WorkerHandles, in.Subject)
 		return ok
 	case anchor.WorkerTaskFinished, anchor.LegFinished:
 		if in.OverlayPromoteDue {
@@ -244,9 +244,9 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 	}
 }
 
-// roundNoticeCondition finds the worker subscription a round notice about
-// jobID resumes: a wait on that worker, or on all workers.
-func roundNoticeCondition(set map[WaitTrigger]struct{}, handles []string, jobID string) (WaitTrigger, bool) {
+// runningWorkerCondition finds the worker subscription a wake about running
+// job jobID resumes: a wait on that worker, or on all workers.
+func runningWorkerCondition(set map[WaitTrigger]struct{}, handles []string, jobID string) (WaitTrigger, bool) {
 	if _, ok := set[WaitTriggerNextWorkerDone]; ok && handleMatches(handles, jobID) {
 		return WaitTriggerNextWorkerDone, true
 	}
@@ -271,10 +271,14 @@ func waitConditionForWake(triggers []WaitTrigger, in waitMatchInput) (awaitstore
 		_, ok := set[WaitTriggerProcessDone]
 		ok = ok && handleMatches(in.ProcessHandles, in.Subject)
 		return awaitstore.Condition{Kind: string(WaitTriggerProcessDone), Handles: []string{in.Subject}, Outcome: "refused"}, ok
-	case anchor.WorkerRoundNotice:
-		// The worker is still running, so the wait ends with a notice, not as satisfied.
-		trigger, ok := roundNoticeCondition(set, in.WorkerHandles, in.Subject)
-		return awaitstore.Condition{Kind: string(trigger), Handles: []string{strings.TrimSpace(in.Subject)}, Outcome: "notice"}, ok
+	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived:
+		// The worker is still running, so the wait ends with what arrived, not as satisfied.
+		outcome := "notice"
+		if in.Wake == anchor.WorkerMessageReceived {
+			outcome = "message"
+		}
+		trigger, ok := runningWorkerCondition(set, in.WorkerHandles, in.Subject)
+		return awaitstore.Condition{Kind: string(trigger), Handles: []string{strings.TrimSpace(in.Subject)}, Outcome: outcome}, ok
 	case anchor.WorkerTaskFinished, anchor.LegFinished:
 		if in.OverlayPromoteDue {
 			if _, ok := set[WaitTriggerOverlayPromote]; ok {

@@ -241,6 +241,15 @@ anchors:
         tool_calls: { type: int }
         tools_done: { type: int }
 
+  - id: worker.message.received
+    title: Worker message received
+    description: A running worker sent its coordinator a message that needs a reply. Non-content Anchor — the message reaches the coordinator through its message page, so there is no inform Binding.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars: {}
+
   - id: edit.follow_up.repeat
     title: Edit follow-up repeat
     description: Two consecutive user-visible turns each answered with coordinator inline file edits.
@@ -608,6 +617,22 @@ anchors:
         can_wait: { type: "bool", required: true }
         has_command: { type: "bool", required: true }
         has_held: { type: "bool", required: true }
+
+  - id: inject.worker_messages
+    title: Worker messages inject
+    description: >-
+      The oldest undelivered page of messages for this session: what its
+      workers said to the coordinator, or what the coordinator instructed this
+      worker. Delivery commits only after a successful response.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        recipient: { type: string, required: true }
+        message_count: { type: int, required: true }
+        has_needs_reply: { type: bool, required: true }
+        more: { type: bool, required: true }
 
   - id: inject.source_changes
     title: Source change brief inject

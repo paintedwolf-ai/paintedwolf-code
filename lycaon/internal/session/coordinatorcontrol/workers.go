@@ -43,6 +43,16 @@ func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.W
 	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerRoundNotice(ctx, parentID, facts.JobID, anchor.Envelope{WorkerRoundNotice: &facts})
 }
 
+// MessageNeedsReply wakes a coordinator for a running worker's message that
+// asks for an answer.
+func (m *Workers) MessageNeedsReply(ctx context.Context, parentID, jobID string) {
+	parentID = strings.TrimSpace(parentID)
+	if m == nil || parentID == "" || strings.TrimSpace(jobID) == "" {
+		return
+	}
+	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerMessage(ctx, parentID, strings.TrimSpace(jobID))
+}
+
 func (m *Workers) AfterTerminal(
 	ctx context.Context,
 	parentID, completingJobID string,

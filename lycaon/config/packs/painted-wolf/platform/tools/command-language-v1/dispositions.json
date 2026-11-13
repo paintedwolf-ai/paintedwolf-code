@@ -1165,6 +1165,23 @@
       "command_forms": []
     },
     {
+      "tool": "message_coordinator",
+      "owner": "workers",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "db_transaction",
+      "reuse": "Native registration over the worker records store; one typed operation that appends a worker message.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/message_coordinator.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
+      "existing_semantic_difference": "Host-held worker messages; see current description",
+      "implementing_issues": [],
+      "existing_rejection_code": "",
+      "command_forms": []
+    },
+    {
       "tool": "mkdir",
       "owner": "filesystem",
       "disposition": "replace-routine-schema",

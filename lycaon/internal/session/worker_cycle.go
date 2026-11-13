@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/coordinator/assembly"
 	"github.com/lycaon/lycaon/internal/spawn"
 
 	"github.com/lycaon/lycaon/internal/session/projectcontrol"
@@ -55,4 +56,13 @@ func (m *Host) SetWorkerQueue(q WorkerCycleLister) {
 		m.Coordinator.Loading.SetWorkers(q)
 		m.Runner.Transcript.SetWorkers(q)
 	}
+}
+
+// SetWorkerMessages sets how messages between a coordinator and its workers
+// reach their requests.
+func (m *Host) SetWorkerMessages(delivery assembly.MessageDeliveryRecorder) {
+	if m == nil || m.Coordinator.Assembly == nil {
+		return
+	}
+	m.Coordinator.Assembly.MessageDelivery = delivery
 }

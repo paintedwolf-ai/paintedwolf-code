@@ -22,6 +22,7 @@ var (
 		"handoff_reserve",
 		"held_result",
 		"held_stop",
+		"message_coordinator",
 		"pack_board",
 		"parse_decomposition",
 		"parse_delegation_plan",
