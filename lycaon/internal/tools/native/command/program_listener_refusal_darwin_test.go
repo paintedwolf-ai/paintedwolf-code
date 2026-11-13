@@ -4,6 +4,7 @@ package command_test
 
 import (
 	"context"
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -120,4 +121,32 @@ func TestProgramListenerProfile(t *testing.T) {
 	testutil.FailErr(t, "render bare profile", err)
 	t.Logf("PROFILE-BEGIN command\n%s\nPROFILE-END", profile)
 	t.Logf("PROFILE-BEGIN bare\n%s\nPROFILE-END", bare)
+}
+
+// The same Homebrew bind launched by the bare confined command in this process.
+func TestProgramListenerBareLaunchInThisProcess(t *testing.T) {
+	if testing.Short() || !confine.Available() {
+		t.Skip("darwin + seatbelt sandbox required")
+	}
+	confine.StartRefusalWatch(t.Context(), "")
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	for !confine.RefusalWatchLive() {
+		if ctx.Err() != nil {
+			t.Skip("kernel sandbox reports are not readable on this host")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	self, err := os.Executable()
+	testutil.FailErr(t, "self", err)
+	c := confine.Confinement{Roots: []string{t.TempDir()}, Network: confine.NetworkDeny}
+	lease, err := confine.BindAction(&c, confine.EgressCommand{SessionID: "bare", ToolName: "command", CommandLine: "python3"})
+	testutil.FailErr(t, "bind action", err)
+	cmd, cleanup, err := confine.Command(context.Background(), self, "/opt/homebrew/bin/python3", []string{"-c", "import socket; s=socket.socket(); s.bind(('127.0.0.1', 18788))"}, c)
+	testutil.FailErr(t, "command", err)
+	out, _ := cmd.CombinedOutput()
+	cleanup()
+	refusals := lease.SettledRefusals(t.Context())
+	lease.Close(t.Context())
+	t.Logf("bare launch refusals %+v output %s", refusals.Refusals, out)
 }
