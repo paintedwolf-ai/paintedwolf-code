@@ -14,18 +14,18 @@ import (
 )
 
 type fakeRuntime struct {
-	settled    []string
+	checked    []string
 	published  []string
-	settleErr  error
+	holders    bool
 	publishErr error
 	checkpoint string
 }
 
-func (r *fakeRuntime) SettleBranchRuntime(_ context.Context, viewID, _ string) error {
-	r.settled = append(r.settled, viewID)
-	err := r.settleErr
-	r.settleErr = nil
-	return err
+func (r *fakeRuntime) HoldersUnresolved(_ context.Context, root string) (bool, error) {
+	r.checked = append(r.checked, root)
+	holders := r.holders
+	r.holders = false
+	return holders, nil
 }
 
 func (r *fakeRuntime) PublishCheckpoint(_ context.Context, root string) (string, error) {
@@ -67,22 +67,22 @@ func TestSettlementPublishesCheckpointThenResultThenLinks(t *testing.T) {
 	if settled.Ordinal != 2 || settled.CheckpointID != "cp-round-2" {
 		t.Fatalf("settled = %+v", settled)
 	}
-	if len(runtime.settled) != 1 || runtime.settled[0] != f.workerID+".1" || len(runtime.published) != 1 || len(order) != 1 || order[0] != "result:cp-round-2" {
-		t.Fatalf("runtime %v / %v, publish %v", runtime.settled, runtime.published, order)
+	if len(runtime.checked) != 1 || len(runtime.published) != 1 || len(order) != 1 || order[0] != "result:cp-round-2" {
+		t.Fatalf("runtime %v / %v, publish %v", runtime.checked, runtime.published, order)
 	}
 	again, err := f.settle(t, runtime, "job-2", publish)
 	testutil.FailErr(t, "settle again", err)
-	if again != settled || len(runtime.settled) != 1 || len(order) != 1 {
+	if again != settled || len(runtime.checked) != 1 || len(order) != 1 {
 		t.Fatalf("a settled round was settled again: %+v", again)
 	}
 }
 
-// Unreleased holders block settlement: no checkpoint, no result, the round
+// A writer still running blocks settlement: no checkpoint, no result, the round
 // stays unsettled and a retry completes it.
 func TestSettlementBlockedByHoldersPublishesNothing(t *testing.T) {
 	f := newLandingFixture(t)
 	f.openRound(t, "job-2")
-	runtime := &fakeRuntime{checkpoint: "cp-2", settleErr: errors.New("process still writing")}
+	runtime := &fakeRuntime{checkpoint: "cp-2", holders: true}
 	published := 0
 	publish := func(context.Context, string) error { published++; return nil }
 	_, err := f.settle(t, runtime, "job-2", publish)

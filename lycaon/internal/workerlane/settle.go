@@ -10,16 +10,17 @@ import (
 	"github.com/lycaon/lycaon/internal/workspace"
 )
 
-// Runtime is Milestone 14's settlement of a lane view: releasing its
-// processes and mounts, and publishing its checkpoint.
+// Runtime is Milestone 14's view of a lane at delivery: whether anything
+// still writes to it, and publishing its checkpoint under the adapter's
+// barrier. Delivery keeps the view; releasing it is retention's job.
 type Runtime interface {
-	SettleBranchRuntime(ctx context.Context, viewID, root string) error
+	HoldersUnresolved(ctx context.Context, root string) (bool, error)
 	PublishCheckpoint(ctx context.Context, root string) (checkpointID string, err error)
 }
 
-// ErrSettlementBlocked reports a lane whose writers or resources could not be
-// released. The round stays unsettled and its work recoverable; no result is
-// published from unsealed state.
+// ErrSettlementBlocked reports a lane that still has a writer, needs
+// recovery, or could not seal its checkpoint. The round stays unsettled and
+// its work recoverable; no result is published from unsealed state.
 var ErrSettlementBlocked = errors.New("lane settlement is blocked")
 
 // SettleRequest settles one round after a valid report.
@@ -39,8 +40,9 @@ type Settled struct {
 	CheckpointID string `json:"checkpoint_id,omitempty"`
 }
 
-// Settle runs lifecycle §3 for a round: release the lane's runtime, publish
-// its checkpoint, publish the result, then link the round to the checkpoint.
+// Settle runs lifecycle §3 for a round: account for the lane's writers,
+// publish its checkpoint, publish the result, then link the round to the
+// checkpoint. The lane stays live for the worker's next round.
 // Each step is safe to repeat after a crash; a settled round returns its
 // settlement.
 func (s *Service) Settle(ctx context.Context, runtime Runtime, req SettleRequest) (Settled, error) {
@@ -71,9 +73,12 @@ func (s *Service) Settle(ctx context.Context, runtime Runtime, req SettleRequest
 		return Settled{}, err
 	}
 	if hasLane {
-		viewID := laneViewID(req.WorkerID, lane.Generation)
-		if err := runtime.SettleBranchRuntime(ctx, viewID, lane.Root); err != nil {
+		unresolved, err := runtime.HoldersUnresolved(ctx, lane.Root)
+		if err != nil {
 			return Settled{}, fmt.Errorf("%w: %w", ErrSettlementBlocked, err)
+		}
+		if unresolved {
+			return Settled{}, ErrSettlementBlocked
 		}
 		if checkpointID, err = runtime.PublishCheckpoint(ctx, lane.Root); err != nil {
 			return Settled{}, fmt.Errorf("%w: publish checkpoint: %w", ErrSettlementBlocked, err)
@@ -89,12 +94,13 @@ func (s *Service) Settle(ctx context.Context, runtime Runtime, req SettleRequest
 	return Settled{Ordinal: settled.Ordinal, CheckpointID: settled.CheckpointID}, nil
 }
 
-// ManagerRuntime settles lanes through a Milestone 14 workspace manager.
-type ManagerRuntime struct{ Manager *workspace.Manager }
+// ManagerRuntime reads and seals lanes through Milestone 14.
+type ManagerRuntime struct{ State M14State }
 
-// SettleBranchRuntime releases the view's processes and mounts.
-func (r ManagerRuntime) SettleBranchRuntime(ctx context.Context, viewID, root string) error {
-	return r.Manager.SettleBranchRuntime(ctx, viewID, root)
+// HoldersUnresolved reports a lane that still runs commands or needs recovery.
+func (r ManagerRuntime) HoldersUnresolved(ctx context.Context, root string) (bool, error) {
+	recovery, holders, err := r.State.Readiness(ctx, root)
+	return recovery || holders, err
 }
 
 // PublishCheckpoint publishes the view's private changes and returns the
