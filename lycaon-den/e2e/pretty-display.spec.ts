@@ -364,6 +364,42 @@ modelIndependentWebE2e("keeps the selection and brings it into view across toggl
   }
 });
 
+modelIndependentWebE2e("keeps the text at the top of the view across toggles when the caret is off screen", async ({ page, request }) => {
+  const { scroller } = await openPretty(page, request, ITEMS_1_MB);
+  await page.evaluate(() => window.__pretty.view().dispatch({ selection: { anchor: 0 } }));
+  await scroller.evaluate((element) => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
+  await settle(page);
+  await settle(page);
+  // The document position drawn at the top edge, and how far below the edge it sits.
+  const topText = () => page.evaluate(() => {
+    const view = window.__pretty.view();
+    const port = view.scrollDOM.getBoundingClientRect();
+    const content = view.contentDOM.getBoundingClientRect();
+    const pos = view.posAtCoords({ x: content.left + 4, y: port.top + 4 }, false);
+    return { pos, line: view.defaultLineHeight };
+  });
+  const offsetOf = (pos: number) => page.evaluate((pos) => {
+    const view = window.__pretty.view();
+    const rect = view.coordsAtPos(pos, 1);
+    return rect ? rect.top - view.scrollDOM.getBoundingClientRect().top : null;
+  }, pos);
+  for (let i = 0; i < 4; i++) {
+    const before = await topText();
+    const offsetBefore = (await offsetOf(before.pos))!;
+    expect(await page.evaluate(() => {
+      const view = window.__pretty.view();
+      const rect = view.coordsAtPos(0);
+      return Boolean(rect && rect.bottom > view.scrollDOM.getBoundingClientRect().top);
+    })).toBe(false);
+    await page.getByTestId("files-editor-pretty-toggle").click();
+    await expect.poll(async () => {
+      const offset = await offsetOf(before.pos);
+      return offset !== null && Math.abs(offset - offsetBefore) < 2 * before.line;
+    }, { message: `toggle ${i}`, timeout: 5_000 }).toBe(true);
+    await settle(page);
+  }
+});
+
 for (const wrapPref of [false, true]) {
   modelIndependentWebE2e(`renders source text at every scroll position (Wrap ${wrapPref ? "on" : "off"})`, async ({ page, request }) => {
     const nodes: number[] = [];
