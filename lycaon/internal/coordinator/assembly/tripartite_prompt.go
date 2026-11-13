@@ -66,6 +66,7 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		WorkerToolBudget: e.workerToolBudget(ctx, sess),
 		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
+	in = in.withToolProfiles(e.sessionToolProfiles(ctx, sess, in.catalogView))
 	stableKey, err := in.cacheKey()
 	if err != nil {
 		return "", err
@@ -149,6 +150,7 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 		WorkerToolBudget: e.workerToolBudget(ctx, sess),
 		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
+	in = in.withToolProfiles(e.sessionToolProfiles(ctx, sess, in.catalogView))
 	rendered, err := renderStandingPrompt(ctx, pe, in)
 	if err != nil {
 		return "", profile, transition, err

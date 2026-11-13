@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 type standingProfileInputs struct {
@@ -37,9 +38,26 @@ type standingPromptInputs struct {
 	ExecutionMode    string                 `json:"execution_mode,omitempty"`
 	VerifyCommand    string                 `json:"verify_command,omitempty"`
 	WorkerToolBudget spawn.WorkerToolBudget `json:"worker_tool_budget"`
+	// CommandEffects is what the session posture leaves the coordinator's command.
+	CommandEffects []toolcontract.CommandEffectClass `json:"command_effects,omitempty"`
 
 	// Unexported catalog view is bound to PromptRevision, which covers catalog.Revision.
 	catalogView *catalogview.View
+	// toolProfiles is the view's profile set under the session posture.
+	toolProfiles []sandbox.ToolProfile
+}
+
+// withToolProfiles binds the posture-narrowed profiles and keys the prompt on
+// the effects they leave the coordinator.
+func (in standingPromptInputs) withToolProfiles(profiles []sandbox.ToolProfile) standingPromptInputs {
+	in.toolProfiles = profiles
+	in.CommandEffects = nil
+	for _, profile := range profiles {
+		if profile.ID == prompts.CoordinatorProfileID {
+			in.CommandEffects = profile.CommandEffects.Classes()
+		}
+	}
+	return in
 }
 
 func (in standingPromptInputs) cacheKey() (string, error) {
@@ -80,7 +98,7 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 	}
 	turnSurface := prompts.SurfaceTurn{Plan: plan, Loaded: loadedMap}
 	if in.catalogView != nil {
-		toolProfiles = in.catalogView.ToolProfiles
+		toolProfiles = in.toolProfiles
 		turnSurface.Schemas = in.catalogView.ToolSchemas
 	}
 	if err := prompts.MergeCoordinatorSurfacePathVars(in.Profile.SurfaceID, toolProfiles, surfaceVars, turnSurface); err != nil {

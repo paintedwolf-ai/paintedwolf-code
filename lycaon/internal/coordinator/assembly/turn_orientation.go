@@ -75,7 +75,7 @@ func (e *turnContextAssembler) prependCoordinatorRunInject(
 		var toolProfiles []sandbox.ToolProfile
 		if view := e.surface.sessionCatalogView(ctx, sess); view != nil {
 			catalog = view.Catalog
-			toolProfiles = view.ToolProfiles
+			toolProfiles = e.surface.sessionToolProfiles(ctx, sess, view)
 		}
 		block, err := inject.RenderImplementSpawnInject(
 			ctx, deps.Injects, sess.ID, spawnAgents, spawn.MaxInFlightTaskWorkers, facts.SurfaceID, facts.RootCount, facts.RepoKnownEmpty, facts.WebSearchEnabled,
@@ -146,7 +146,7 @@ func (e *turnContextAssembler) prependTransitionInject(
 	var toolProfiles []sandbox.ToolProfile
 	turnSurface := prompts.SurfaceTurn{Loaded: e.surface.loadedTools(sess)}
 	if view := e.surface.sessionCatalogView(ctx, sess); view != nil {
-		toolProfiles = view.ToolProfiles
+		toolProfiles = e.surface.sessionToolProfiles(ctx, sess, view)
 		turnSurface.Schemas = view.ToolSchemas
 	}
 	if err := prompts.MergeCoordinatorSurfacePathVars(profile.SurfaceID, toolProfiles, surfaceVars, turnSurface); err != nil {

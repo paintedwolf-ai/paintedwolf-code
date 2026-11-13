@@ -19,7 +19,9 @@ func CommandGuidanceFactKeys() []string {
 		"command_output_files",
 		"is_coordinator",
 		"platform_os",
+		"profile_command_external_exec",
 		"profile_command_mutation",
+		"profile_command_network_egress",
 		"profile_has_capture_page",
 		"profile_has_command",
 		"profile_has_command_output",
@@ -100,14 +102,10 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if in.IsCoordinator && strings.TrimSpace(in.SurfaceID) != "" {
 		floor, _ := LoadCoordinatorSurfaceFloor(in.SurfaceID)
 		vars["command_on_floor"] = slices.Contains(floor, "command")
-		ApplyCoordinatorSurfaceCommandEffects(in.SurfaceID, offered, deferred, vars)
 	} else {
 		vars["command_on_floor"] = slices.Contains(offered, "command")
-		if !ScopeAllowsCommandMutation(scopeID) {
-			ApplyReadOnlyCommandEffects(offered, deferred, vars)
-		}
 	}
-	MergeRunnerCapabilityVars(offered, vars)
+	RestrictCommandEffects(ScopeCommandEffects(scopeID), offered, deferred, vars)
 	syncCommandExternalFacts(vars)
 
 	hasCommandOffered := slices.Contains(offered, "command")

@@ -28,6 +28,7 @@ type promptSurfaceDeps struct {
 	Prompts                 prompts.PromptTemplateEngine
 	RepoKnownEmpty          func(ctx context.Context, workspacePath string) bool
 	SessionView             SessionView
+	CommandProfiles         CommandProfiles
 	WebSearchEnabled        func() bool
 	WorkspaceRoots          WorkspaceRootsLoader
 	CoordinatorProfile      func(context.Context, string) string
@@ -81,6 +82,7 @@ func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*prom
 		Prompts:                 snapshot.Prompts,
 		RepoKnownEmpty:          snapshot.RepoKnownEmpty,
 		SessionView:             snapshot.SessionView,
+		CommandProfiles:         snapshot.CommandProfiles,
 		WebSearchEnabled:        snapshot.WebSearchEnabled,
 		WorkspaceRoots:          snapshot.WorkspaceRoots,
 	}

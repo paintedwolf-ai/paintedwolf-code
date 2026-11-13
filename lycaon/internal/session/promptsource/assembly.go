@@ -102,6 +102,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		WorkspaceRoots:          m.Workspace.PromptRootRows,
 		ProjectOverlayRootPaths: m.Workspace.PromptRoots,
 		SessionView:             m.Catalog.ViewForSession,
+		CommandProfiles:         m.Profiles.ConstrainCommandProfiles,
 		AgentsMDIndex:           m.PolicyIndex.Index,
 		AgentsMDPolicies: func(ctx context.Context, sess *api.Session, history []api.Message) ([]api.Message, error) {
 			delivery, err := m.PolicyIndex.ResolveCurrent(ctx, sess, history)

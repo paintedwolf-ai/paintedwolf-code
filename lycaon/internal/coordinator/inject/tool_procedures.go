@@ -20,9 +20,7 @@ func RenderToolProceduresBlock(
 	sort.Strings(names)
 	vars := prompts.VisibleToolsNativePartialVars(names)
 	vars["offered_tools"] = names
-	if !prompts.ScopeAllowsCommandMutation(profileID) {
-		prompts.ApplyReadOnlyCommandEffects(names, nil, vars)
-	}
+	prompts.RestrictCommandEffects(prompts.ScopeCommandEffects(profileID), names, nil, vars)
 	prompts.MergeProfileRequestableVars(profileID, names, vars)
 	surface := "worker"
 	host := promptunit.HostWorker
