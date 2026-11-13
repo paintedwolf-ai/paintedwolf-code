@@ -2,6 +2,7 @@
 package guidance
 
 import (
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"maps"
 	"sort"
 	"strings"
@@ -62,7 +63,7 @@ func (c *HintConfig) InSessionRetryCodes() []string {
 
 // HintEntry holds rule metadata and its normalized presentation fields.
 type HintEntry struct {
-	Emit          string        `yaml:"emit,omitempty"`
+	Emit          string        `yaml:"x-paintedwolf-emit,omitempty"`
 	Effect        string        `yaml:"effect,omitempty"`
 	Anchor        string        `yaml:"on,omitempty"`
 	Tools         []string      `yaml:"tools,omitempty"`
@@ -72,7 +73,7 @@ type HintEntry struct {
 	Why           string        `yaml:"why,omitempty"`
 	Fix           string        `yaml:"fix,omitempty"`
 	Instead       string        `yaml:"instead,omitempty"`
-	Evidence      *EvidenceMeta `yaml:"evidence,omitempty"`
+	Evidence      *EvidenceMeta `yaml:"x-paintedwolf-evidence,omitempty"`
 	HintEntryRule `yaml:",inline"`
 }
 
@@ -81,12 +82,12 @@ type HintEntryRule struct {
 	ID                string          `yaml:"id,omitempty"`
 	Title             string          `yaml:"title,omitempty"`
 	Kind              string          `yaml:"kind,omitempty"`
-	Category          string          `yaml:"category,omitempty"`
+	Category          string          `yaml:"x-paintedwolf-category,omitempty"`
 	Severity          string          `yaml:"severity,omitempty"`
 	When              string          `yaml:"when,omitempty"`
 	DraftOutcomeLabel string          `yaml:"draft_outcome_label,omitempty"`
-	ContextSchema     map[string]any  `yaml:"context_schema,omitempty"`
-	Scenarios         []ScenarioEntry `yaml:"scenarios,omitempty"`
+	ContextSchema     map[string]any  `yaml:"x-paintedwolf-context-schema,omitempty"`
+	Scenarios         []ScenarioEntry `yaml:"x-paintedwolf-scenarios,omitempty"`
 	Selector          map[string]any  `yaml:"selector,omitempty"`
 	HintEntryPolicy   `yaml:",inline"`
 }
@@ -111,8 +112,6 @@ type HintEntryExtensions struct {
 	Successor string `yaml:"x-paintedwolf-successor,omitempty"`
 	// XAudience limits the tool profiles that can receive this rule.
 	XAudience []string `yaml:"x-paintedwolf-audience,omitempty"`
-	// XCategory classifies a hint, whose closed field set has no category.
-	XCategory string `yaml:"x-paintedwolf-category,omitempty"`
 }
 
 // UnmarshalYAML decodes a policy unit into its normalized shape.
@@ -123,9 +122,6 @@ func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 	*e = HintEntry(raw)
-	if e.Category == "" {
-		e.Category = e.XCategory
-	}
 	if tools := stringList(e.Selector["tools"]); len(tools) > 0 {
 		e.Tools = tools
 	}
@@ -135,11 +131,11 @@ func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 // IsOAR reports whether the unit is an Open Agent Rules document.
 func (e HintEntry) IsOAR() bool { return strings.TrimSpace(e.SpecVersion) != "" }
 
-// Operations is the rule's paintedwolf.operation ledger clause: the bound
-// native operation beneath command, or the structured tool of that name.
+// Operations are the paintedwolf.operation values the rule's condition
+// requires: the bound native operation beneath command, or the structured tool
+// of that name.
 func (e HintEntry) Operations() []string {
-	ledger, _ := e.Selector["ledger"].(map[string]any)
-	return stringList(ledger["paintedwolf.operation"])
+	return oarcore.ConjunctValues(e.When, "paintedwolf.operation")
 }
 
 func stringList(v any) []string {

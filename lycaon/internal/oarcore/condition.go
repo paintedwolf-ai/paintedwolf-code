@@ -95,6 +95,41 @@ func ConditionFactComparisons(source string) ([]FactComparison, error) {
 	return comparisons, nil
 }
 
+// ConjunctValues returns the values a condition requires fact to take: the
+// literals of `fact == "v"` and `fact in [...]` among the top-level conjuncts.
+// It is empty when no conjunct constrains fact that way.
+func ConjunctValues(source, fact string) []string {
+	if strings.TrimSpace(source) == "" {
+		return nil
+	}
+	root, err := parseCondition(source)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	var walk func(*node)
+	walk = func(n *node) {
+		if n.kind != nodeBinary {
+			return
+		}
+		switch {
+		case n.op == "&&":
+			walk(n.left)
+			walk(n.right)
+		case n.op == "==" && n.left.kind == nodeIdent && n.left.strValue == fact && n.right.kind == nodeString:
+			out = append(out, n.right.strValue)
+		case n.op == "in" && n.left.kind == nodeIdent && n.left.strValue == fact && n.right.kind == nodeList:
+			for _, item := range n.right.items {
+				if item.kind == nodeString {
+					out = append(out, item.strValue)
+				}
+			}
+		}
+	}
+	walk(root)
+	return out
+}
+
 // EvaluateCondition uses the document's checked tree and capability types.
 func (r *Rule) EvaluateCondition(facts map[string]any, functions map[string]func(any) (any, error)) (bool, error) {
 	ctx := &evalContext{facts: map[string]value{}, functions: map[string]func(value) (value, error){}}

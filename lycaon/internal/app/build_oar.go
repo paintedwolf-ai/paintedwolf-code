@@ -49,9 +49,6 @@ func (b *serveBuilder) wireOARBlockPlane() error {
 	}
 	loader.SetDetectors(detectors)
 	rs := b.catalog.DeviceView.Rules
-	if err := oar.ValidateHostRuleSet(rs); err != nil {
-		return err
-	}
 	pipeline := oar.NewGuardPipeline(rs, loader, oar.NewCounterStore())
 	pipeline.SetDetectors(detectors)
 	pipeline.SetFactProvider("secret_matches", func(gc *oar.GuardContext) error {

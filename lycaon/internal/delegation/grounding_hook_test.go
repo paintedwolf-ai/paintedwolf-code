@@ -87,12 +87,12 @@ func TestGroundingLifecycleRetainsCloseoutRefusalAndOnePostTurnNotice(t *testing
 	cfg.CircuitBreaker.EscalateMode = "block"
 	coord := NewGroundingCoordinator(store, nil, nil, cfg, nil, nil)
 	coord.Pipeline = groundingTestPipeline(t)
-	var notices []oar.Advisory
+	var notices []*oar.Decision
 	coord.Pipeline.SetAdvisorySink(func(_ context.Context, _ string, anchor string, d *oar.Decision) error {
 		if anchor != oar.AnchorCoordinatorPostTurn {
 			t.Fatalf("notice delivered at %s", anchor)
 		}
-		notices = append(notices, d.Advisories...)
+		notices = append(notices, d)
 		return nil
 	})
 	err = coord.CheckDelegationCloseout(t.Context(), delegation.ID)
@@ -125,12 +125,12 @@ func TestAmbientGroundingDeliversOnceWithoutBlockingAndResetsCounters(t *testing
 	coord := NewAmbientGroundingCoordinator(nil, nil, nil, cfg, nil, nil)
 	coord.Pipeline = groundingTestPipeline(t)
 	const sessionID = "ambient-lifecycle"
-	var notices []oar.Advisory
+	var notices []*oar.Decision
 	coord.Pipeline.SetAdvisorySink(func(_ context.Context, _ string, anchor string, d *oar.Decision) error {
 		if anchor != oar.AnchorCoordinatorPostTurn || d.Effect != oar.EffectNudge {
 			t.Fatalf("ambient decision changed boundary or effect: %s %+v", anchor, d)
 		}
-		notices = append(notices, d.Advisories...)
+		notices = append(notices, d)
 		return nil
 	})
 	in := AmbientGroundingInput{SessionID: sessionID, Jobs: []api.WorkerTask{{ID: "finished-job", Status: api.WorkerStatusComplete}}}

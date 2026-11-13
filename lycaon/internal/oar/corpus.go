@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/oarcopy"
+	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // Conformance fixtures (section 10.2), run through the production engine. The
@@ -34,14 +36,23 @@ type ConformanceFixture struct {
 	Expected map[string]json.RawMessage `json:"expected"`
 }
 
-// FixtureInput is the occurrence a fixture evaluates.
+// FixtureInput is the occurrence a fixture evaluates, after the earlier
+// occurrences it lists in the same session.
 type FixtureInput struct {
-	Anchor      string            `json:"anchor"`
-	Facts       map[string]any    `json:"facts"`
-	RecentTools []string          `json:"recent_tools,omitempty"`
-	SessionID   string            `json:"session_id,omitempty"`
-	HostFacts   map[string]string `json:"host_facts,omitempty"`
-	Profile     json.RawMessage   `json:"profile,omitempty"`
+	Anchor      string              `json:"anchor"`
+	Facts       map[string]any      `json:"facts"`
+	RecentTools []string            `json:"recent_tools,omitempty"`
+	SessionID   string              `json:"session_id,omitempty"`
+	HostFacts   map[string]string   `json:"host_facts,omitempty"`
+	Profile     json.RawMessage     `json:"profile,omitempty"`
+	Occurrences []FixtureOccurrence `json:"occurrences,omitempty"`
+}
+
+// FixtureOccurrence is one earlier occurrence of a fixture's session.
+type FixtureOccurrence struct {
+	Anchor      string         `json:"anchor"`
+	Facts       map[string]any `json:"facts"`
+	RecentTools []string       `json:"recent_tools,omitempty"`
 }
 
 // expectedKeys are the only keys a fixture may assert; any other is rejected
@@ -136,13 +147,19 @@ func decodeFixture(raw []byte) (ConformanceFixture, error) {
 	for name, value := range fx.Input.Facts {
 		fx.Input.Facts[name] = fixtureNumbers(value)
 	}
+	for _, occ := range fx.Input.Occurrences {
+		for name, value := range occ.Facts {
+			occ.Facts[name] = fixtureNumbers(value)
+		}
+	}
 	return fx, nil
 }
 
 // The closed fixture vocabulary ([OAR-CONF-13], [OAR-CONF-15]).
 var (
-	fixtureMembers = []string{"id", "title", "covers", "rule", "hints", "input", "expected"}
-	inputMembers   = []string{"anchor", "facts", "recent_tools", "session_id", "host_facts", "profile"}
+	fixtureMembers    = []string{"id", "title", "covers", "rule", "hints", "input", "expected"}
+	inputMembers      = []string{"anchor", "facts", "recent_tools", "session_id", "host_facts", "profile", "occurrences"}
+	occurrenceMembers = []string{"anchor", "facts", "recent_tools"}
 )
 
 // checkFixtureShape refuses a fixture carrying an undefined member, one
@@ -153,7 +170,7 @@ func checkFixtureShape(raw []byte) error {
 		return err
 	}
 	for key := range top {
-		if !containsExact(fixtureMembers, key) {
+		if !slices.Contains(fixtureMembers, key) {
 			return fmt.Errorf("[OAR-CONF-13] fixture carries undefined member %q", key)
 		}
 	}
@@ -172,8 +189,41 @@ func checkFixtureShape(raw []byte) error {
 		return fmt.Errorf("[OAR-CONF-13] fixture input: %w", err)
 	}
 	for key := range input {
-		if !containsExact(inputMembers, key) {
+		if !slices.Contains(inputMembers, key) {
 			return fmt.Errorf("[OAR-CONF-13] fixture input carries undefined member %q", key)
+		}
+	}
+	var shape struct {
+		Facts       map[string]json.RawMessage   `json:"facts"`
+		SessionID   string                       `json:"session_id"`
+		Occurrences []map[string]json.RawMessage `json:"occurrences"`
+	}
+	if err := json.Unmarshal(top["input"], &shape); err != nil {
+		return fmt.Errorf("[OAR-CONF-13] fixture input: %w", err)
+	}
+	if len(shape.Occurrences) > 0 && shape.SessionID == "" {
+		return fmt.Errorf("[OAR-CONF-13] fixture lists occurrences without a session_id")
+	}
+	factSets := []map[string]json.RawMessage{shape.Facts}
+	for _, occ := range shape.Occurrences {
+		for key := range occ {
+			if !slices.Contains(occurrenceMembers, key) {
+				return fmt.Errorf("[OAR-CONF-13] fixture occurrence carries undefined member %q", key)
+			}
+		}
+		var facts map[string]json.RawMessage
+		if raw, ok := occ["facts"]; ok {
+			if err := json.Unmarshal(raw, &facts); err != nil {
+				return fmt.Errorf("[OAR-CONF-13] fixture occurrence facts: %w", err)
+			}
+		}
+		factSets = append(factSets, facts)
+	}
+	for _, facts := range factSets {
+		for name := range facts {
+			if oarcore.IsEngineMaintained(name) {
+				return fmt.Errorf("[OAR-FIRE-10] fixture supplies %s, which the engine maintains", name)
+			}
 		}
 	}
 	return nil
@@ -231,7 +281,7 @@ func (cr *ConformanceRunner) RunFixture(ctx context.Context, fx ConformanceFixtu
 
 func (cr *ConformanceRunner) run(ctx context.Context, fx ConformanceFixture) (map[string]any, error) {
 	for key := range fx.Expected {
-		if !containsExact(expectedKeys, key) {
+		if !slices.Contains(expectedKeys, key) {
 			return nil, fmt.Errorf("[OAR-CONF-15] fixture %s asserts undefined expected key %q", fx.ID, key)
 		}
 	}
@@ -254,24 +304,33 @@ func (cr *ConformanceRunner) run(ctx context.Context, fx ConformanceFixture) (ma
 	if session == "" {
 		session = "fixture"
 	}
-	gc := factsToContext(fx.Input.Facts)
+	occurrences := append(append([]FixtureOccurrence(nil), fx.Input.Occurrences...),
+		FixtureOccurrence{Anchor: fx.Input.Anchor, Facts: fx.Input.Facts, RecentTools: fx.Input.RecentTools})
+	var res *PipelineResult
+	for _, occ := range occurrences {
+		if res, err = cr.evaluateOccurrence(ctx, pipeline, session, occ); err != nil {
+			return map[string]any{"error": err.Error()}, err
+		}
+	}
+	actual = corpusActual(res, store, session)
+	return actual, compareExpected(fx.Expected, actual)
+}
+
+// evaluateOccurrence runs one occurrence of a fixture's session.
+func (cr *ConformanceRunner) evaluateOccurrence(ctx context.Context, pipeline *GuardPipeline, session string, occ FixtureOccurrence) (*PipelineResult, error) {
+	gc := factsToContext(occ.Facts)
 	gc.Session.SessionID = session
-	gc.Session.RecentToolNames = fx.Input.RecentTools
-	anchor := strings.TrimSpace(fx.Input.Anchor)
+	gc.Session.RecentToolNames = occ.RecentTools
+	anchor := strings.TrimSpace(occ.Anchor)
 	if anchor == "" {
-		return actual, fmt.Errorf("fixture %s declares no anchor", fx.ID)
+		return nil, fmt.Errorf("fixture occurrence declares no anchor")
 	}
 	local, err := cr.loader.declaration().ResolveAnchor(anchor)
 	if err != nil {
 		local = anchor
 	}
 	pipeline.EnableAnchor(local)
-	res, err := pipeline.EvaluateBlock(ctx, local, gc)
-	if err != nil {
-		return map[string]any{"error": err.Error()}, err
-	}
-	actual = corpusActual(res, store, session)
-	return actual, compareExpected(fx.Expected, actual)
+	return pipeline.EvaluateBlock(ctx, local, gc)
 }
 
 // prepare builds the fixture's environment and loads its rules and hints.
@@ -283,10 +342,13 @@ func (cr *ConformanceRunner) prepare(fx ConformanceFixture) (*GuardPipeline, *Co
 	cr.loader.SetDeclaration(decl)
 	detectors := corpusReservedDetectors()
 	cr.loader.SetDetectors(detectors)
+	hints := make([]*oarcore.Hint, 0, len(fx.Hints))
 	for _, raw := range fx.Hints {
-		if err := cr.loader.LoadHintJSON(raw); err != nil {
+		hint, err := cr.loader.LoadHintJSON(raw)
+		if err != nil {
 			return nil, nil, err
 		}
+		hints = append(hints, hint)
 	}
 	docs, err := fixtureRuleDocuments(fx.Rule)
 	if err != nil {
@@ -301,6 +363,7 @@ func (cr *ConformanceRunner) prepare(fx ConformanceFixture) (*GuardPipeline, *Co
 		rules = append(rules, r)
 	}
 	rs := NewRuleSet(rules)
+	rs.hints = hints
 	if _, err := linkRuleSet(rs); err != nil {
 		return nil, nil, err
 	}
@@ -312,8 +375,8 @@ func (cr *ConformanceRunner) prepare(fx ConformanceFixture) (*GuardPipeline, *Co
 }
 
 // fixtureDeclaration is the engine a fixture runs on: the host's own when one
-// is given, otherwise every core anchor mapped to itself with both standard
-// profiles claimed. Either way the fixture's profile map replaces the
+// is given, otherwise every core anchor mapped to itself with every standard
+// profile claimed. Either way the fixture's profile map replaces the
 // engine's ([OAR-CONF-19]), the reserved detectors are provided
 // ([OAR-CONF-18]), and the host facts the fixture declares are added
 // ([OAR-FACT-25]).
@@ -323,11 +386,10 @@ func fixtureDeclaration(host *EngineDeclaration, in FixtureInput) (*EngineDeclar
 	}
 	decl := &EngineDeclaration{
 		Host:               "fixture",
-		Profiles:           []string{"content-safety", "mcp"},
+		Profiles:           []string{ProfileFilesystem, ProfileContentSafety, ProfileMCP},
 		Window:             16,
 		Detectors:          []string{"detector://noop", "detector://error", "detector://fixture"},
 		ExpressionNodesMax: 256,
-		SupportsTransform:  true,
 		ProfileMap:         AnchorProfileMap{Version: SupportedSpecVersion, Core: map[string]string{}, Unsupported: []string{}},
 	}
 	for _, core := range coreAnchors {
@@ -365,7 +427,7 @@ func hostFixtureDeclaration(host *EngineDeclaration, in FixtureInput) (*EngineDe
 	decl.HostFacts = append([]HostFactDecl(nil), host.HostFacts...)
 	decl.Detectors = append([]string(nil), host.Detectors...)
 	for _, ref := range []string{"detector://noop", "detector://error", "detector://fixture"} {
-		if !containsExact(decl.Detectors, ref) {
+		if !slices.Contains(decl.Detectors, ref) {
 			decl.Detectors = append(decl.Detectors, ref)
 		}
 	}
@@ -419,11 +481,12 @@ func fixtureRuleDocuments(raw json.RawMessage) ([]json.RawMessage, error) {
 	return []json.RawMessage{raw}, nil
 }
 
-// corpusActual projects a result into the expected keys.
+// corpusActual projects a result into the expected keys. The trace and the
+// counters name rules by identity ([OAR-CONF-15]).
 func corpusActual(res *PipelineResult, store *CounterStore, session string) map[string]any {
 	applied := []string{}
 	for _, entry := range res.Trace.Entries {
-		applied = append(applied, bareRuleID(entry.Rule)+":"+traceOutcome(entry.Outcome))
+		applied = append(applied, entry.Rule+":"+traceOutcome(entry.Outcome))
 	}
 	actual := map[string]any{"decision": "none", "applied": applied, "on_fire": []string{}}
 	counters := map[string]any{}
@@ -432,7 +495,7 @@ func corpusActual(res *PipelineResult, store *CounterStore, session string) map[
 		for k, v := range row {
 			values[k] = v
 		}
-		counters[bareRuleID(rule)] = values
+		counters[rule] = values
 	}
 	actual["counters"] = counters
 	if d := res.Decision; d != nil {
@@ -451,15 +514,6 @@ func corpusActual(res *PipelineResult, store *CounterStore, session string) map[
 		}
 	}
 	return actual
-}
-
-// bareRuleID is the identifier a fixture names a rule by: its id without the
-// publisher namespace ([OAR-EVAL-7]).
-func bareRuleID(qualified string) string {
-	if at := strings.LastIndex(qualified, "/"); at >= 0 {
-		return qualified[at+1:]
-	}
-	return qualified
 }
 
 // traceOutcome spells a trace outcome as fixtures do ([OAR-CONF-15]).
@@ -638,7 +692,7 @@ func SeedFixturesFromScenarios(policyDir, outDir string, codes []string) error {
 		if err != nil {
 			return err
 		}
-		facts := map[string]any{"tool": firstTool(r), "session_posture": "spec"}
+		facts := map[string]any{"tool": firstTool(r), oarcopy.HostFactNamespace + ".session_posture": "spec"}
 		if r.Anchor == AnchorToolRejected {
 			facts[oarcopy.HostFactNamespace+".rejection_code"] = code
 		}
@@ -667,7 +721,7 @@ func SeedFixturesFromScenarios(policyDir, outDir string, codes []string) error {
 }
 
 func firstTool(r *Rule) string {
-	if tools := r.Selector["tool"]; len(tools) > 0 {
+	if tools := r.Selector["tools"]; len(tools) > 0 {
 		return tools[0]
 	}
 	return ""

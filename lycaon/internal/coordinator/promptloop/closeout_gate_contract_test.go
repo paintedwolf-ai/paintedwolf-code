@@ -75,9 +75,6 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 					return nil, err
 				}
 				c.fired = append(c.fired, result.Decision.Code)
-				for _, advisory := range result.Decision.Advisories {
-					c.fired = append(c.fired, advisory.Code)
-				}
 				if result.Decision.Effect != oar.EffectBlock {
 					return nil, nil
 				}

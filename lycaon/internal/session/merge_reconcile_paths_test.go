@@ -116,7 +116,7 @@ func TestCatalogGroundingVerdictsDoNotOverlap(t *testing.T) {
 			if code == "COORDINATOR_GROUNDING_ESCALATED" {
 				result, err := sessionTestOARPipeline(t).EvaluateBlock(t.Context(), oar.AnchorCoordinatorPostTurn, gc)
 				testutil.FailErr(t, "evaluate escalation notice", err)
-				if result.Decision == nil || result.Decision.Effect != oar.EffectNudge || len(result.Decision.Advisories) != 1 || result.Decision.Advisories[0].Code != code {
+				if result.Decision == nil || result.Decision.Effect != oar.EffectNudge || result.Decision.Code != code {
 					t.Fatalf("post-turn advisory = %+v", result.Decision)
 				}
 			} else {

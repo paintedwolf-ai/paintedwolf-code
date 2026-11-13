@@ -172,9 +172,8 @@ func TestRendererMapsEffects(t *testing.T) {
 		t.Fatalf("got %s", rendered[0].Channel)
 	}
 	rendered, err = r.Render(context.Background(), StagePostTool, &Decision{
-		Effect:     EffectWarn,
-		Code:       "DOOM_LOOP_REPEAT_WARN",
-		Advisories: []Advisory{{Code: "DOOM_LOOP_REPEAT_WARN"}},
+		Effect: EffectWarn,
+		Code:   "DOOM_LOOP_REPEAT_WARN",
 	})
 	testutil.FailErr(t, "render warn", err)
 	if rendered[0].Channel != ChannelBanner {
@@ -204,8 +203,7 @@ func TestDetectorDispatchSecretMatch(t *testing.T) {
 
 func TestExecuteOnFireRespectsClosedVocab(t *testing.T) {
 	store := NewCounterStore()
-	_, err := ExecuteOnFire(t.Context(), store, nil, OnFireEvent{SessionID: "s"}, "C", []OnFireAction{OnFireIncrementCounter, OnFireResetCounter})
-	testutil.FailErr(t, "execute side effects", err)
+	ExecuteOnFire(t.Context(), store, nil, OnFireEvent{SessionID: "s"}, "C", []OnFireAction{OnFireIncrementCounter, OnFireResetCounter})
 	if store.Get("s", "C", CounterFire) != 0 {
 		t.Fatal("reset should clear")
 	}

@@ -2,25 +2,17 @@ package oar
 
 import (
 	"context"
+	"fmt"
 
-	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
 // PipelineResult is the outcome of one GuardPipeline.Evaluate call.
 type PipelineResult struct {
 	// Decision is the resolved outcome ([OAR-EVAL-6]). Nil means none.
-	// Nudge and warn list every same-effect fire on Advisories.
 	Decision *Decision
 	Trace    AppliedRulesTrace
 	// Enforced is false when EvaluateBlock runs for an Anchor that was not EnableAnchor'd.
 	Enforced bool
-	// Transforms is the accumulated mutation list when the resolved decision
-	// is transform. A block discards every accumulated transform.
-	Transforms        []*TransformSpec
-	SkippedTransforms []oarcore.SkippedTransform
-	// Content is the post-transform buffer when the occurrence carried content.
-	Content    string
-	ContentSet bool
 	// AppliedOnFire is every on_fire action of a rule that fired and was
 	// enforced, in evaluation order, including a rule whose effect lost
 	// precedence ([OAR-EVAL-9]).
@@ -146,11 +138,13 @@ func (p *GuardPipeline) Evaluate(ctx context.Context, stage Stage, gc *GuardCont
 	gc.DeriveToolClassFacts()
 	holder := newEvalHolder(gc, rules, p.counters)
 	publishOccurrenceAnchor(gc, "", p.declaration())
+	p.counters.applyRunCounts(gc, string(stage))
 
 	matched, selectionErrors := p.selectRules(rules, stage, "", gc)
 	if err := p.evaluateMatched(ctx, holder, gc, matched, selectionErrors, stage, res); err != nil {
 		return res, err
 	}
+	p.counters.recordOccurrence(gc, string(stage), res.Decision)
 	return res, nil
 }
 
@@ -184,8 +178,7 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 			if d != nil {
 				blocks = append(blocks, *d)
 				if stop {
-					res.Decision = resolve(blocks, nil, nil, nil)
-					finishContent(res, gc, nil)
+					res.Decision = resolve(blocks, nil, nil)
 					return nil
 				}
 			}
@@ -197,14 +190,6 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 			continue
 		}
 		d := decisionFromRule(r, gc, nil)
-		ruleCounterKey := counterKeyFor(r, gc)
-		scopedKey, scopeErr := holder.scopedCounterKey(r)
-		var transformTarget any
-		if r.Transform != nil {
-			if r.Transform.Target != "content" {
-				transformTarget = activation(gc)[r.Transform.Target]
-			}
-		}
 		restoreRuleDetector()
 		event := OnFireEvent{
 			SessionID: gc.Session.SessionID,
@@ -212,55 +197,21 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 			Anchor:    r.Anchor,
 			Effect:    r.Effect,
 		}
-		applied, sideEffectErr := ExecuteOnFire(ctx, p.counters, p.publisher, event, ruleCounterKey, r.OnFire)
-		if sideEffectErr == nil {
-			sideEffectErr = scopeErr
-		}
-		if sideEffectErr == nil && scopedKey != "" {
-			applyScopedCounter(p.counters, gc.Session.SessionID, scopedKey, r.OnFire)
-		}
+		// Rules read the counter snapshot taken before this occurrence, so
+		// applying side-effects here cannot change what a later rule reads
+		// ([OAR-FIRE-5]). An event the host cannot accept never changes the
+		// decision, the trace, or a counter ([OAR-FIRE-7]).
+		applied := ExecuteOnFire(ctx, p.counters, p.publisher, event, counterKeyFor(r, gc), r.OnFire)
 		res.AppliedOnFire = append(res.AppliedOnFire, applied...)
 		for _, action := range applied {
 			if action == OnFirePublishEvent {
 				res.PublishedEvents = append(res.PublishedEvents, event)
 			}
 		}
-		if sideEffectErr != nil {
-			last := len(res.Trace.Entries) - 1
-			res.Trace.Entries[last].Outcome = TraceErrored
-			res.Trace.Entries[last].Error = sideEffectErr.Error()
-			d, stop, applyErr := p.applyOnError(r, gc, sideEffectErr)
-			if applyErr != nil {
-				return applyErr
-			}
-			if d != nil {
-				blocks = append(blocks, *d)
-				if stop {
-					res.Decision = resolve(blocks, nil, nil, nil)
-					finishContent(res, gc, nil)
-					return nil
-				}
-			}
-			continue
-		}
 		switch r.Effect {
 		case EffectBlock:
 			// [OAR-EVAL-3] the first enforced block short-circuits.
-			res.Decision = resolve([]Decision{d}, nil, nil, nil)
-			finishContent(res, gc, nil)
-			return nil
-		case EffectTransform:
-			// [OAR-EVAL-3] so does the first enforced transform.
-			var contributions []transformContribution
-			if r.Transform != nil {
-				contributions = append(contributions, transformContribution{
-					rule:       r.Qualified(),
-					spec:       r.Transform,
-					targetFact: transformTarget,
-				})
-			}
-			res.Decision = resolve(nil, []Decision{d}, nil, nil)
-			finishContent(res, gc, contributions)
+			res.Decision = resolve([]Decision{d}, nil, nil)
 			return nil
 		case EffectNudge:
 			nudges = append(nudges, d)
@@ -269,8 +220,7 @@ func (p *GuardPipeline) evaluateMatched(ctx context.Context, holder *evalHolder,
 		case EffectAllow:
 		}
 	}
-	res.Decision = resolve(blocks, nil, nudges, warns)
-	finishContent(res, gc, nil)
+	res.Decision = resolve(blocks, nudges, warns)
 	return nil
 }
 
@@ -334,20 +284,9 @@ func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rul
 	if holder != nil {
 		holder.setCurrentRule(r)
 	}
-	key, err := holder.counterScope(r)
-	if err != nil {
-		return TraceErrored, err
-	}
+	key := counterKeyFor(r, gc)
 	gc.Counters.FireCount = holder.getCounter(gc.Session.SessionID, key, CounterFire)
 	gc.Counters.BreakerCount = holder.getCounter(gc.Session.SessionID, key, CounterBreaker)
-	scoped, err := holder.scopedCounterKey(r)
-	if err != nil {
-		return TraceErrored, err
-	}
-	gc.Counters.ScopedFireCount = 0
-	if scoped != "" {
-		gc.Counters.ScopedFireCount = holder.getCounter(gc.Session.SessionID, scoped, CounterFire)
-	}
 	if r.Kind == KindDetector {
 		ref := ""
 		if r.Detector != nil {
@@ -366,11 +305,6 @@ func (p *GuardPipeline) evalRule(ctx context.Context, holder *evalHolder, r *Rul
 	}
 	if !ok {
 		return notFiredOutcome(r), nil
-	}
-	if r.Effect == EffectTransform {
-		if err := validateFiredTransform(r, gc); err != nil {
-			return TraceErrored, err
-		}
 	}
 	if r.document != nil {
 		if _, err := r.document.RenderCopy(activation(gc)); err != nil {
@@ -418,12 +352,11 @@ func (p *GuardPipeline) applyOnError(r *Rule, gc *GuardContext, evalErr error) (
 		dec.Effect = EffectBlock
 		return &dec, true, nil
 	default:
-		// [OAR-OPS-4] block under the substituted identifier.
+		// [OAR-OPS-4] block under the substitute rule's identifier and copy; the
+		// rule-set check guarantees the substitute is loaded.
 		data := map[string]any{"error": evalErr.Error()}
 		if r.errorTarget == nil {
-			substitute := errorSubstitute(r)
-			dec := Decision{Effect: EffectBlock, Code: bareRuleID(substitute), Rule: substitute, Data: data}
-			return &dec, true, nil
+			return nil, false, fmt.Errorf("[OAR-OPS-4] rule %s on_error names %s, which is not loaded", r.Qualified(), r.OnError)
 		}
 		dec := decisionFromRule(r.errorTarget, gc, data)
 		dec.Effect = EffectBlock

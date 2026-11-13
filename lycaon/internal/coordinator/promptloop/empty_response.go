@@ -17,7 +17,7 @@ func (l *modelTurn) emptyResponseRecovery(sess *api.Session, req modelcall.Compl
 		StructuredOutput: req.ResponseFormat != nil,
 	}}
 	return func(ctx context.Context) (string, error) {
-		reject, blocked, _, _ := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, observation, "", nil)
+		reject, blocked := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, observation, "", nil)
 		if !blocked || reject == nil {
 			return "", nil
 		}

@@ -21,6 +21,7 @@ const (
 // Standard profile names. A profile is provided whole or not at all
 // ([OAR-FACT-13]).
 const (
+	ProfileFilesystem    = oarcopy.ProfileFilesystem
 	ProfileContentSafety = oarcopy.ProfileContentSafety
 	ProfileMCP           = oarcopy.ProfileMCP
 )
@@ -35,12 +36,15 @@ type factDecl struct {
 
 // factDecls is the closed fact set in documentation order.
 var factDecls = []factDecl{
-	// Engine counter scope beyond the core breaker ([OAR-FIRE-4]).
-	{"anchor", oarcore.TypeString, FactTierHost, ""},
-	{"fire_count", oarcore.TypeInt, FactTierHost, ""},
-	{"scoped_fire_count", oarcore.TypeInt, FactTierHost, ""},
+	// The counts the engine maintains per session ([OAR-FIRE-10]).
+	{"fire_count", oarcore.TypeInt, FactTierCore, ""},
+	{"breaker_count", oarcore.TypeInt, FactTierCore, ""},
+	{"same_code_reject_run", oarcore.TypeInt, FactTierCore, ""},
+	{"same_call_run", oarcore.TypeInt, FactTierCore, ""},
 
-	{"profile", oarcore.TypeString, FactTierCore, ""},
+	{"anchor", oarcore.TypeString, FactTierHost, ""},
+	{"credential_occurrences", oarcore.TypeInt, FactTierHost, ""},
+	{"tool_profile", oarcore.TypeString, FactTierHost, ""},
 	{"principal", oarcore.TypeString, FactTierHost, ""},
 	{"principal_roles", oarcore.TypeListString, FactTierHost, ""},
 	{"content_length", oarcore.TypeInt, FactTierHost, ""},
@@ -67,7 +71,7 @@ var factDecls = []factDecl{
 	{"mid_turn_evidence_unreadable", oarcore.TypeBool, FactTierHost, ""},
 	{"last_assistant", oarcore.TypeString, FactTierHost, ""},
 	{"turn_tools", oarcore.TypeListString, FactTierHost, ""},
-	{"session_posture", oarcore.TypeString, FactTierCore, ""},
+	{"session_posture", oarcore.TypeString, FactTierHost, ""},
 	{"surface", oarcore.TypeString, FactTierHost, ""},
 	{"session_role", oarcore.TypeString, FactTierHost, ""},
 	{"phase", oarcore.TypeString, FactTierHost, ""},
@@ -99,7 +103,7 @@ var factDecls = []factDecl{
 	{"pending_user_input", oarcore.TypeBool, FactTierHost, ""},
 	{"stub_valid", oarcore.TypeBool, FactTierHost, ""},
 	{"pattern_parse_ok", oarcore.TypeBool, FactTierHost, ""},
-	{"arg_validation_errors", oarcore.TypeListString, FactTierCore, ""},
+	{"arg_validation_errors", oarcore.TypeListString, FactTierHost, ""},
 	{"arg_validation_reason", oarcore.TypeString, FactTierHost, ""},
 	{"arg_validation_field", oarcore.TypeString, FactTierHost, ""},
 	{"action_host_resource_denials", oarcore.TypeListString, FactTierHost, ""},
@@ -128,7 +132,6 @@ var factDecls = []factDecl{
 	{"worktree_stale_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"worktree_leftover_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"worktree_conflict_paths", oarcore.TypeListString, FactTierHost, ""},
-	{"tool_args_fingerprint", oarcore.TypeString, FactTierCore, ""},
 	{"tool_is_state", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_delegation", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_task", oarcore.TypeBool, FactTierHost, ""},
@@ -144,8 +147,7 @@ var factDecls = []factDecl{
 	{"worker_artifact_measured", oarcore.TypeBool, FactTierHost, ""},
 	{"repeat_count", oarcore.TypeInt, FactTierHost, ""},
 	{"fruitless_search_run", oarcore.TypeInt, FactTierHost, ""},
-	{"breaker_count", oarcore.TypeInt, FactTierCore, ""},
-	{"same_code_reject_run", oarcore.TypeInt, FactTierCore, ""},
+	{"repeated_reject_code", oarcore.TypeString, FactTierHost, ""},
 	{"code_reject_responses", oarcore.TypeInt, FactTierHost, ""},
 	{"deferred_unactivated", oarcore.TypeInt, FactTierHost, ""},
 	{"worker_attempted_mutation", oarcore.TypeBool, FactTierHost, ""},
@@ -181,9 +183,10 @@ var factDecls = []factDecl{
 	{"last_audit_ungrounded", oarcore.TypeBool, FactTierHost, ""},
 	{"grounding_escalated", oarcore.TypeBool, FactTierHost, ""},
 	{"command_not_argv", oarcore.TypeBool, FactTierHost, ""},
-	{"is_directory", oarcore.TypeBool, FactTierCore, ""},
-	{"not_found", oarcore.TypeBool, FactTierCore, ""},
-	{"path_denied", oarcore.TypeBool, FactTierCore, ""},
+	{"is_directory", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
+	{"not_found", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
+	{"path_outside_scope", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
+	{"path_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"bulk_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"binary_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"mode_denied", oarcore.TypeBool, FactTierHost, ""},
@@ -195,7 +198,7 @@ var factDecls = []factDecl{
 	{"conflict", oarcore.TypeBool, FactTierHost, ""},
 	{"path_required", oarcore.TypeBool, FactTierHost, ""},
 	{"id_required", oarcore.TypeBool, FactTierHost, ""},
-	{"policy_denied", oarcore.TypeBool, FactTierCore, ""},
+	{"policy_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"unknown_target", oarcore.TypeBool, FactTierHost, ""},
 	{"missing", oarcore.TypeBool, FactTierHost, ""},
 	{"forbidden", oarcore.TypeBool, FactTierHost, ""},
@@ -212,9 +215,12 @@ var factDecls = []factDecl{
 	{"mcp_qualified_tool", oarcore.TypeString, FactTierStandard, ProfileMCP},
 	{"mcp_server_configured", oarcore.TypeBool, FactTierStandard, ProfileMCP},
 	{"mcp_server_enabled", oarcore.TypeBool, FactTierStandard, ProfileMCP},
+	{"mcp_configured_servers", oarcore.TypeListString, FactTierStandard, ProfileMCP},
+	{"mcp_enabled_servers", oarcore.TypeListString, FactTierStandard, ProfileMCP},
 	{"mcp_call_ok", oarcore.TypeBool, FactTierStandard, ProfileMCP},
 	{"mcp_error_code", oarcore.TypeString, FactTierStandard, ProfileMCP},
 	{"mcp_schema_matched", oarcore.TypeBool, FactTierStandard, ProfileMCP},
+	{"mcp_result", oarcore.TypeMap, FactTierStandard, ProfileMCP},
 	{"credential_length", oarcore.TypeInt, FactTierHost, ""},
 	{"credential_distinct_words", oarcore.TypeInt, FactTierHost, ""},
 	{"credential_longest_run", oarcore.TypeInt, FactTierHost, ""},
@@ -240,8 +246,13 @@ type observationFn struct {
 }
 
 var observationFns = []observationFn{
-	{"path_outside_scope", oarcore.TypeBool, FactTierCore, "", func(h *evalHolder, s string) any {
-		return EvalPathOutsideScope(h.get(), s)
+	// Another rule's counters, named by id in the reading rule's namespace
+	// ([OAR-FIRE-6]).
+	{"fire_count_of", oarcore.TypeInt, FactTierCore, "", func(h *evalHolder, s string) any {
+		return h.counterOf(s, CounterFire)
+	}},
+	{"breaker_count_of", oarcore.TypeInt, FactTierCore, "", func(h *evalHolder, s string) any {
+		return h.counterOf(s, CounterBreaker)
 	}},
 	// Typed accessors expose heterogeneous tool arguments.
 	{"tool_arg_string", oarcore.TypeString, FactTierHost, "", func(h *evalHolder, s string) any {
@@ -253,21 +264,9 @@ var observationFns = []observationFn{
 	{"tool_arg_bool", oarcore.TypeBool, FactTierHost, "", func(h *evalHolder, s string) any {
 		return EvalToolArgBool(h.get(), s)
 	}},
-	// The _for suffix distinguishes functions from facts ([OAR-FACT-19]).
-	{"mcp_server_configured_for", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPServerConfigured(h.get(), s)
-	}},
-	{"mcp_server_enabled_for", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPServerEnabled(h.get(), s)
-	}},
-	{"mcp_has_field", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPHasField(h.get(), s)
-	}},
+	// The members of mcp_result that selection cannot type.
 	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
 		return EvalMCPFieldBool(h.get(), s)
-	}},
-	{"mcp_field_string", oarcore.TypeString, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPFieldString(h.get(), s)
 	}},
 	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
 		return EvalMCPFieldInt(h.get(), s)
@@ -276,9 +275,9 @@ var observationFns = []observationFn{
 
 // Fact classes identify counter, detector, lazy-provider, and structural sources.
 var engineCounterFacts = map[string]struct{}{
-	"paintedwolf.repeat_count": {}, "breaker_count": {}, "paintedwolf.fire_count": {}, "paintedwolf.scoped_fire_count": {},
-	"same_code_reject_run": {}, "paintedwolf.fruitless_search_run": {},
-	"paintedwolf.code_reject_responses": {},
+	"fire_count": {}, "breaker_count": {}, "same_code_reject_run": {}, "same_call_run": {},
+	"paintedwolf.repeat_count": {}, "paintedwolf.fruitless_search_run": {},
+	"paintedwolf.code_reject_responses": {}, "paintedwolf.credential_occurrences": {},
 }
 
 var detectorFacts = map[string]struct{}{

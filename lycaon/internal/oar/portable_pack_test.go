@@ -86,11 +86,11 @@ func (l *Loader) loadPortableYAML(raw []byte) ([]*Rule, error) {
 		if strings.TrimSpace(id) == "" {
 			continue
 		}
-		rule, skip, err := l.parseRule(id, doc)
+		rule, _, err := l.parseRule(id, doc)
 		if err != nil {
 			return nil, err
 		}
-		if skip || rule == nil {
+		if rule == nil {
 			continue
 		}
 		out = append(out, rule)

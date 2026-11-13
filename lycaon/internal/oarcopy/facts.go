@@ -18,6 +18,7 @@ const CapabilitySnapshotKey = "_host_capability_snapshot"
 
 // Standard profile names ([OAR-FACT-13]).
 const (
+	ProfileFilesystem    = "filesystem"
 	ProfileContentSafety = "content-safety"
 	ProfileMCP           = "mcp"
 )

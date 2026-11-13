@@ -184,9 +184,9 @@ func TestOARVersionWindow(t *testing.T) {
 		}
 	}
 	// Unmarked documents are not OAR rules.
-	_, skip, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{"spec_version": nil}))
+	rule, hint, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{"spec_version": nil}))
 	testutil.FailErr(t, "parse unmarked document", err)
-	if !skip {
+	if rule != nil || hint != nil {
 		t.Fatal("unmarked document was loaded as an OAR rule")
 	}
 }

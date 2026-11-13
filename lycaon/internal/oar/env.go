@@ -1,7 +1,6 @@
 package oar
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/oarcopy"
@@ -74,32 +73,13 @@ func counterKeyFor(r *Rule, _ *GuardContext) string {
 	return r.Qualified()
 }
 
-func (h *evalHolder) counterScope(target *Rule) (string, error) {
-	if target == nil {
-		return "", fmt.Errorf("[OAR-FIRE-4] unknown counter target")
+// counterOf reads another rule's counter, named by id in the reading rule's
+// namespace, from the pre-occurrence snapshot ([OAR-FIRE-5], [OAR-FIRE-6]).
+func (h *evalHolder) counterOf(id string, kind CounterKind) int64 {
+	if h == nil || h.gc == nil || h.currentRule == nil {
+		return 0
 	}
-	return target.Qualified(), nil
-}
-
-// scopedCounterKey keys the additional counter a rule declares through
-// x-paintedwolf-counter-scope; empty when it declares none.
-func (h *evalHolder) scopedCounterKey(r *Rule) (string, error) {
-	if r == nil || r.CounterScope == "" {
-		return "", nil
-	}
-	if err := h.gc.Ensure(r.CounterScope); err != nil {
-		return "", err
-	}
-	facts := activation(h.gc)
-	value := facts[r.CounterScope]
-	if r.document != nil {
-		var err error
-		if value, err = r.document.Fact(r.CounterScope, facts); err != nil {
-			return "", err
-		}
-	}
-	scope, _ := value.(string)
-	return r.Qualified() + "#" + scope, nil
+	return h.getCounter(h.gc.Session.SessionID, oarcore.Identity(h.currentRule.Namespace, id), kind)
 }
 
 func specObservationFuncs(holder *evalHolder) map[string]func(any) (any, error) {
@@ -187,7 +167,7 @@ func evalRuleWhen(holder *evalHolder, r *Rule, gc *GuardContext) (bool, error) {
 	return evalCondition(holder, r.When, gc)
 }
 
-// EvalPathOutsideScope is the observation for path_outside_scope(tool).
+// EvalPathOutsideScope is the path_outside_scope observation for a tool.
 func EvalPathOutsideScope(gc *GuardContext, tool string) bool {
 	if gc == nil {
 		return false

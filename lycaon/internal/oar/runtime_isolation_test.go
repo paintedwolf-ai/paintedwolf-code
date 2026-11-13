@@ -127,67 +127,11 @@ func TestDetectorFactsAreRuleLocal(t *testing.T) {
 	pipeline.EnableAnchor(AnchorContentOutput)
 	res, err := pipeline.EvaluateBlock(t.Context(), AnchorContentOutput, NewGuardContext())
 	testutil.FailErr(t, "evaluate detector rules", err)
-	if len(res.Decision.Advisories) != 1 || res.Decision.Advisories[0].Code != "A_FIRST" {
-		t.Fatalf("advisories = %#v, want only A_FIRST", res.Decision.Advisories)
+	if res.Decision == nil || res.Decision.Code != "A_FIRST" {
+		t.Fatalf("decision = %#v, want A_FIRST", res.Decision)
 	}
 	if len(res.Trace.Entries) != 2 || res.Trace.Entries[1].Outcome != TracePassed {
 		t.Fatalf("trace = %#v, want second detector passed", res.Trace.Entries)
-	}
-}
-
-// The first enforced transform short-circuits the occurrence ([OAR-EVAL-3]).
-func TestFirstTransformShortCircuits(t *testing.T) {
-	first := &Rule{
-		ID: "A_FIRST", Kind: KindDetector, Anchor: AnchorContentOutput, Effect: EffectTransform, Enforcement: "enforce",
-		Detector:  &DetectorRef{Ref: "detector://spans"},
-		Transform: &TransformSpec{Action: "replace", Target: "secret_matches", Replacement: "X", HasReplacement: true},
-	}
-	second := &Rule{
-		ID: "B_SECOND", Kind: KindDetector, Anchor: AnchorContentOutput, Effect: EffectTransform, Enforcement: "enforce",
-		Detector:  &DetectorRef{Ref: "detector://none"},
-		Transform: &TransformSpec{Action: "replace", Target: "secret_matches", Replacement: "Y", HasReplacement: true},
-	}
-	registry := NewDetectorRegistry()
-	registry.Register(fixedDetector{name: "spans", findings: []Finding{{
-		Fact: "secret_matches", Value: []any{map[string]any{"start": 0, "end": 1}},
-	}}})
-	registry.Register(fixedDetector{name: "none"})
-	pipeline := NewGuardPipeline(NewRuleSet([]*Rule{first, second}), nil, nil)
-	pipeline.SetDetectors(registry)
-	pipeline.EnableAnchor(AnchorContentOutput)
-	gc := NewGuardContext()
-	gc.SetContentSegments([]ContentSegment{{Content: "abcdef"}})
-	res, err := pipeline.EvaluateBlock(t.Context(), AnchorContentOutput, gc)
-	testutil.FailErr(t, "evaluate detector transforms", err)
-	if res.Content != "Xbcdef" {
-		t.Fatalf("content = %q, want Xbcdef", res.Content)
-	}
-	if len(res.Transforms) != 1 || res.Transforms[0].Target != "secret_matches" {
-		t.Fatalf("reported transforms = %#v, want only the first rule's", res.Transforms)
-	}
-	if len(res.Trace.Entries) != 1 || res.Trace.Entries[0].Rule != "A_FIRST" {
-		t.Fatalf("trace = %#v, want only A_FIRST evaluated", res.Trace.Entries)
-	}
-}
-
-type failingEventPublisher struct{}
-
-func (failingEventPublisher) Publish(context.Context, OnFireEvent) error {
-	return errors.New("event stream refused write")
-}
-
-func TestPublishEventFailureUsesOnErrorSubstituteCopy(t *testing.T) {
-	fallback := &Rule{ID: "FALLBACK", Namespace: "publisher", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectNudge, Enforcement: "enforce", Copy: Copy{Title: "Fallback"}}
-	primary := &Rule{ID: "PRIMARY", Namespace: "publisher", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", OnError: "FALLBACK", OnFire: []OnFireAction{OnFirePublishEvent}}
-	rules := NewRuleSet([]*Rule{primary, fallback})
-	ResolveErrorSubstitutes(rules)
-	pipeline := NewGuardPipeline(rules, nil, nil)
-	pipeline.SetEventPublisher(failingEventPublisher{})
-	pipeline.EnableAnchor(AnchorToolPreInvoke)
-	res, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, NewGuardContext())
-	testutil.FailErr(t, "evaluate event failure", err)
-	if res.Decision == nil || res.Decision.Rule != "publisher/FALLBACK" || res.Decision.Copy["title"] != "Fallback" {
-		t.Fatalf("decision = %#v, want substituted fallback with copy", res.Decision)
 	}
 }
 

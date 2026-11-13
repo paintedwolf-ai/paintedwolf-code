@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -10,6 +11,21 @@ type fakeMCPCatalog struct {
 	configured map[string]bool
 	enabled    map[string]bool
 	tools      map[string]struct{ providerID, toolName string }
+}
+
+func (f *fakeMCPCatalog) ConfiguredProviderIDs() []string { return sortedTrue(f.configured) }
+
+func (f *fakeMCPCatalog) EnabledProviderIDs() []string { return sortedTrue(f.enabled) }
+
+func sortedTrue(set map[string]bool) []string {
+	out := []string{}
+	for id, ok := range set {
+		if ok {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (f *fakeMCPCatalog) ProviderConfigured(id string) bool {
