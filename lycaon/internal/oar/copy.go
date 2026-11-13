@@ -28,6 +28,7 @@ func copyFields(c Copy) []struct{ name, text string } {
 		{"why", c.Why},
 		{"fix", c.Fix},
 		{"instead", c.Instead},
+		{"message", c.Message},
 	}
 }
 

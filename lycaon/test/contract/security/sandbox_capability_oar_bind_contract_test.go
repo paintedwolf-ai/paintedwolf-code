@@ -72,8 +72,13 @@ func assertIntrinsicRejection(t *testing.T, pipeline *oar.GuardPipeline, tool, c
 		result, err := pipeline.EvaluateBlock(t.Context(), oar.AnchorToolRejected, gc)
 		contractcheck.FailErr(t, "evaluate intrinsic refusal", err)
 		if observed == code {
-			if result == nil || result.Decision == nil || result.Decision.Code != code || len(result.Decision.Copy) != 5 {
+			if result == nil || result.Decision == nil || result.Decision.Code != code {
 				t.Fatalf("%s on %s lost policy: %+v", code, tool, result)
+			}
+			for _, member := range []string{"what", "cause", "why", "fix", "instead"} {
+				if result.Decision.Copy[member] == "" {
+					t.Fatalf("%s on %s lost its %s copy: %v", code, tool, member, result.Decision.Copy)
+				}
 			}
 		} else if result != nil && result.Decision != nil && result.Decision.Code == code {
 			t.Fatalf("unrelated refusal on %s selected %s", tool, code)

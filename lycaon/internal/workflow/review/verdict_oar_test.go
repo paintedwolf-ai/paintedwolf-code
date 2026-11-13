@@ -58,7 +58,7 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 			}
 			failure := plane.RejectObservation(ctx, "submit_verdict", "coordinator", nil, reject)
 			refusal, ok := guidance.RefusalFromError(failure)
-			if !ok || refusal.Code() != code || toolrejection.AsToolReject(failure) != reject || len(refusal.Copy) != 5 {
+			if !ok || refusal.Code() != code || toolrejection.AsToolReject(failure) != reject || !carriesRuleCopy(refusal.Copy) {
 				t.Fatalf("lost evaluated refusal or original cause: %v", failure)
 			}
 			if count := pipeline.Counters().Get(t.Name(), rule.Qualified(), oar.CounterFire); count != 1 {
@@ -76,4 +76,15 @@ func TestWorkflowVerdictRefusalsRetainPolicyOccurrenceAndStructuredCause(t *test
 			}
 		})
 	}
+}
+
+// carriesRuleCopy reports whether a decision kept the rule's five copy
+// members; message, when the rule has one, travels beside them.
+func carriesRuleCopy(copy map[string]string) bool {
+	for _, member := range []string{"what", "cause", "why", "fix", "instead"} {
+		if copy[member] == "" {
+			return false
+		}
+	}
+	return true
 }
