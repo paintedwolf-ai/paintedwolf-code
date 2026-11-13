@@ -62,6 +62,17 @@ const (
 	CompositionHostUtility RequestComposition = "host_utility"
 )
 
+// RequestUrgency says whether someone is waiting on a request.
+type RequestUrgency uint8
+
+const (
+	// UrgencyInteractive is a request a turn or a person waits on.
+	UrgencyInteractive RequestUrgency = iota
+	// UrgencyBackground is work off the latency path; it yields shared
+	// compute to interactive requests.
+	UrgencyBackground
+)
+
 // ToolCallProtocol selects the action grammar for one request. The default is
 // native structured calls; a provider capability alone never selects a fallback.
 type ToolCallProtocol string
@@ -82,10 +93,12 @@ type CompletionRequest struct {
 	ThinkingOverride      *ThinkingOverride                     `json:"-" yaml:"-"`
 	ThinkingOverrideStyle modelinfo.ThinkStyle                  `json:"-" yaml:"-"`
 	ControlCapture        *RequestControlCapture                `json:"-" yaml:"-"`
-	sourceCapture         *SourceRequestCapture
-	Model                 string
-	Messages              []api.Message
-	Tools                 []tools.ToolMeta
+	// Urgency orders this request against others for shared local compute.
+	Urgency       RequestUrgency `json:"-" yaml:"-"`
+	sourceCapture *SourceRequestCapture
+	Model         string
+	Messages      []api.Message
+	Tools         []tools.ToolMeta
 	// ToolUse says whether the model may call Tools in this request.
 	ToolUse ToolUse
 	Debug   RequestDebug

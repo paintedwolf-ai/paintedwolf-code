@@ -145,6 +145,9 @@ type Decider interface {
 	// Rank scores each candidate's relevance to task on the engine's rubric
 	// with the named head.
 	Rank(ctx context.Context, head Head, task string, candidates []string) ([]float64, Engine, error)
+	// HoldPriority keeps lower-priority work off the engine's device until the
+	// returned release runs, so consecutive calls are not interleaved with it.
+	HoldPriority(ctx context.Context) (release func())
 	// Available reports whether an engine can answer at all.
 	Available() bool
 	// Loaded reports whether the engine serves head with trained weights.
@@ -177,6 +180,9 @@ func (Absent) Decide(context.Context, Head, any, map[string]Question) (Result, e
 func (Absent) Rank(context.Context, Head, string, []string) ([]float64, Engine, error) {
 	return nil, Engine{}, ErrUnavailable
 }
+
+// HoldPriority holds nothing.
+func (Absent) HoldPriority(context.Context) func() { return func() {} }
 
 // Available is false.
 func (Absent) Available() bool { return false }

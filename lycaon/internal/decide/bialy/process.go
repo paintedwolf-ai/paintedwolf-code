@@ -213,7 +213,7 @@ func (p *process) roundTrip(ctx context.Context, req request) (response, error) 
 		return response{}, p.exitErr
 	default:
 	}
-	permit, err := p.acquireDevice(ctx)
+	permit, err := p.acquireDevice(ctx, req.Method)
 	if err != nil {
 		<-p.admitted
 		return response{}, err

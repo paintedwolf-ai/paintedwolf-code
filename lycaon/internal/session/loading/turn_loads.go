@@ -205,10 +205,8 @@ func (m *Service) Begin(
 		Attachments:     attachmentKinds(in),
 		Loaded:          neededForTurn(m.Ledger.Needed(sessionID), history, epoch),
 	}
-	d := m.Decider()
 	finishDeciding := m.beginDeciding(ctx, sess, sessionID, api.TurnLoadTriggerTurn, "")
-	decision.decision = turnload.Decide(ctx, d, catalog.Turn, decision.state, candidates)
-	m.selectSkillPreload(ctx, sess, profileID, text, decision)
+	m.decideTurn(ctx, sess, profileID, text, decision, candidates)
 	finishDeciding()
 	_, found := m.RecordedStanding(ctx, sessionID)
 	decision.opening = turnload.TurnOpening{
@@ -221,6 +219,16 @@ func (m *Service) Begin(
 	m.Ledger.BeginTurn(sessionID, decision.opening, decision.decision)
 	m.Ledger.ExposeCatalog(sessionID, decision.ranking.Failure)
 	return decision
+}
+
+// decideTurn asks the engine for the turn's tools and then its skill. One
+// priority hold spans both calls so no generation step runs between them.
+func (m *Service) decideTurn(ctx context.Context, sess *api.Session, profileID, text string, decision *Decision, candidates []turnload.Candidate) {
+	d := m.Decider()
+	release := d.HoldPriority(ctx)
+	defer release()
+	decision.decision = turnload.Decide(ctx, d, decision.catalog.Turn, decision.state, candidates)
+	m.selectSkillPreload(ctx, sess, profileID, text, decision)
 }
 
 // NewestUserMessageID is the id of the last message a person wrote.
@@ -247,7 +255,7 @@ func (m *Service) Finish(ctx context.Context, sess *api.Session, sessionID strin
 	m.renderSkillPreload(ctx, sessionID, tctx, decision)
 	receipt := decision.receipt()
 	m.recordTurnLoad(ctx, sess, sessionID, receipt)
-	turnLoadLog.Info("turn load decided",
+	attrs := []any{
 		"session_id", sessionID,
 		"host", decision.host,
 		"surface", decision.state.Surface,
@@ -257,7 +265,12 @@ func (m *Service) Finish(ctx context.Context, sess *api.Session, sessionID strin
 		"cold_reason", decision.opening.Boundary.Reason,
 		"kind", decision.decision.Kind,
 		"abstained", decision.decision.Abstained,
-		"elapsed_ms", receipt.ElapsedMs)
+		"elapsed_ms", receipt.ElapsedMs,
+	}
+	if decision.ranking.Failure != "" {
+		attrs = append(attrs, "skill_ranking_failure", decision.ranking.Failure)
+	}
+	turnLoadLog.Info("turn load decided", attrs...)
 }
 
 // receipt is the turn's record: the state the engine read, what it answered,
