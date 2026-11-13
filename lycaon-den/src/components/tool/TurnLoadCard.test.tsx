@@ -1,4 +1,4 @@
-import { disclosureToggle } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, rowSpokenLabel, rowVisibleText } from "../../test/transcript-disclosure-fixture.ts";
 import { describe, expect, it } from "vitest";
 import { fireEvent, render } from "@solidjs/testing-library";
 import type { TurnLoad } from "../../api/types.ts";
@@ -28,9 +28,10 @@ describe("TurnLoadCard", () => {
     const { getByTestId } = render(() => <TurnLoadCard row={toolsRow} layout="chat" />);
     const card = getByTestId("turn-load-card") as HTMLElement;
     expect(card.dataset.tool).toBe("Bialy");
-    expect(card.textContent).toContain("git_commit, git_status");
-    expect(card.textContent).toContain("offered · 438 ms");
+    expect(rowSpokenLabel(card)).toContain("git_commit, git_status");
+    expect(rowVisibleText(card)).toContain("offered · 438 ms");
     fireEvent.click(disclosureToggle(card));
+    expect(card.querySelector('[data-testid="activity-target"]')).toBeNull();
     expect(getByTestId("turn-load-kind").textContent).toBe("change · .86");
     expect(getByTestId("turn-load-tools").textContent).toContain("git_commit .88");
     expect(getByTestId("turn-load-guides").textContent).toBe("6 rendered · 9 left out of the prompt");

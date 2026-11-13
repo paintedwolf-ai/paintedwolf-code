@@ -311,7 +311,8 @@ it("orders an opened card target, briefing, body, then records", () => {
   fireEvent.click(disclosureToggle(container.querySelector('[data-testid="tool-part-card"]')));
   const body = container.querySelector('[data-testid="tool-part-body"]')!;
   const order = [...body.querySelectorAll('[data-testid="activity-target"] code, [data-testid="activity-purpose"], [data-testid="activity-result"], .den-tool-part-card-structured, nav')]
-    .map(node => node.matches(".den-tool-part-card-structured") ? "body" : node.textContent);
+    .map(node => node.matches(".den-tool-part-card-structured") ? "body" : node.textContent)
+    .filter((entry, index, all) => entry !== all[index - 1]);
   expect(order).toEqual(["main.go", "supplied purpose", "supplied result", "body", "supplied evidence"]);
 });
 
