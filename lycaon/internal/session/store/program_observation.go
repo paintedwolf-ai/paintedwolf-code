@@ -68,13 +68,28 @@ func (ev *memoryEvidence) CommitProgramObservation(ctx context.Context, sessionI
 	return rec.Handle, nil
 }
 
-// CommitProgramHTTPProvenance persists an http_response observation for a command program
-// that delivered external HTTP content or wrote external custody files, and records
-// whole-file custody replacement for any cleared paths.
+// programProvenanceRecords are the records one command program's network
+// reads produce, in custody order: what it received, the directories it
+// filled, and the external-custody paths it replaced locally.
+func programProvenanceRecords(projectDir string, prov evidence.ProgramHTTPProvenance) []evidence.Record {
+	var recs []evidence.Record
+	for _, rec := range []evidence.Record{
+		evidence.BuildProgramHTTPRecord(projectDir, prov),
+		evidence.BuildProgramTreeRecord(projectDir, prov),
+		evidence.BuildProgramCustodyReplacementRecord(projectDir, prov),
+	} {
+		if rec.Kind != "" {
+			recs = append(recs, rec)
+		}
+	}
+	return recs
+}
+
+// CommitProgramHTTPProvenance persists what a command program received from
+// the network, the directories it filled, and the custody it replaced.
 func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error) {
-	httpRec := evidence.BuildProgramHTTPRecord(projectDir, prov)
-	clearRec := evidence.BuildProgramCustodyReplacementRecord(projectDir, prov)
-	if httpRec.Kind == "" && clearRec.Kind == "" {
+	recs := programProvenanceRecords(projectDir, prov)
+	if len(recs) == 0 {
 		return "", nil
 	}
 	s := ev.core
@@ -92,69 +107,51 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 	if err != nil {
 		return "", err
 	}
-	needHTTPSeq := httpRec.Kind != "" && evidence.ReplacesWholeFileCustody(httpRec) && httpRec.CustodySeq() == 0
-	needClearSeq := clearRec.Kind != "" && evidence.ReplacesWholeFileCustody(clearRec) && clearRec.CustodySeq() == 0
 	nextSeq := 0
-	if needHTTPSeq || needClearSeq {
-		nextSeq, err = nextCustodySeq(ctx, q, sessionID)
+	var inserted []evidence.Record
+	for i := range recs {
+		rec := &recs[i]
+		ordinal, err := nextEvidenceOrdinal(ctx, q, sessionID, rec.Kind)
 		if err != nil {
 			return "", err
 		}
-	}
-	var retHandle string
-	var httpInserted bool
-	if httpRec.Kind != "" {
-		ordinal, err := nextEvidenceOrdinal(ctx, q, sessionID, httpRec.Kind)
-		if err != nil {
-			return "", err
-		}
-		httpRec.Handle = evidence.FormatHandle(httpRec.Kind, ordinal)
-		if needHTTPSeq {
-			httpRec.SetCustodySeq(nextSeq)
+		rec.Handle = evidence.FormatHandle(rec.Kind, ordinal)
+		if evidence.ReplacesWholeFileCustody(*rec) && rec.CustodySeq() == 0 {
+			if nextSeq == 0 {
+				if nextSeq, err = nextCustodySeq(ctx, q, sessionID); err != nil {
+					return "", err
+				}
+			}
+			rec.SetCustodySeq(nextSeq)
 			nextSeq++
 		}
-		httpInserted, err = writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, httpRec)
+		ok, err := writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, *rec)
 		if err != nil {
 			return "", err
 		}
-		retHandle = httpRec.Handle
-	}
-	if clearRec.Kind != "" {
-		ordinal, err := nextEvidenceOrdinal(ctx, q, sessionID, clearRec.Kind)
-		if err != nil {
-			return "", err
-		}
-		clearRec.Handle = evidence.FormatHandle(clearRec.Kind, ordinal)
-		if needClearSeq {
-			clearRec.SetCustodySeq(nextSeq)
-		}
-		if _, err := writeEvidenceRecord(ctx, q, s.dataDir, sessionID, projectID, clearRec); err != nil {
-			return "", err
-		}
-		if retHandle == "" {
-			retHandle = clearRec.Handle
+		if ok {
+			inserted = append(inserted, *rec)
 		}
 	}
 	if err := tx.Commit(); err != nil {
 		return "", err
 	}
-	if httpInserted {
-		bumpUntrusted(s, sessionID, httpRec)
-		bumpSecretExposure(s, sessionID, httpRec)
-		if err := s.projectUntrustedLedger(ctx, nil, sessionID, httpRec); err != nil {
+	for _, rec := range inserted {
+		bumpUntrusted(s, sessionID, rec)
+		bumpSecretExposure(s, sessionID, rec)
+		if err := s.projectUntrustedLedger(ctx, nil, sessionID, rec); err != nil {
 			return "", err
 		}
 	}
-	return retHandle, nil
+	return recs[0].Handle, nil
 }
 
 func (ev *memoryEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	httpRec := evidence.BuildProgramHTTPRecord(projectDir, prov)
-	clearRec := evidence.BuildProgramCustodyReplacementRecord(projectDir, prov)
-	if httpRec.Kind == "" && clearRec.Kind == "" {
+	recs := programProvenanceRecords(projectDir, prov)
+	if len(recs) == 0 {
 		return "", nil
 	}
 	s := ev.core
@@ -163,22 +160,14 @@ func (ev *memoryEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessi
 	if _, ok := s.sessions[sessionID]; !ok {
 		return "", ErrSessionNotFound
 	}
-	var retHandle string
-	if httpRec.Kind != "" {
-		httpRec.Handle = evidence.FormatHandle(httpRec.Kind, nextEvidenceOrdinalLocked(s, sessionID, httpRec.Kind))
-		putMemoryEvidenceRowLocked(s, sessionID, httpRec.Handle, httpRec)
-		bumpUntrustedLocked(s, sessionID, httpRec)
-		bumpSecretExposureLocked(s, sessionID, httpRec)
-		retHandle = httpRec.Handle
+	for i := range recs {
+		rec := &recs[i]
+		rec.Handle = evidence.FormatHandle(rec.Kind, nextEvidenceOrdinalLocked(s, sessionID, rec.Kind))
+		putMemoryEvidenceRowLocked(s, sessionID, rec.Handle, *rec)
+		bumpUntrustedLocked(s, sessionID, *rec)
+		bumpSecretExposureLocked(s, sessionID, *rec)
 	}
-	if clearRec.Kind != "" {
-		clearRec.Handle = evidence.FormatHandle(clearRec.Kind, nextEvidenceOrdinalLocked(s, sessionID, clearRec.Kind))
-		putMemoryEvidenceRowLocked(s, sessionID, clearRec.Handle, clearRec)
-		if retHandle == "" {
-			retHandle = clearRec.Handle
-		}
-	}
-	return retHandle, nil
+	return recs[0].Handle, nil
 }
 
 // ExternalCustodyURLsForPaths returns external URLs associated with any of paths in sessionID.

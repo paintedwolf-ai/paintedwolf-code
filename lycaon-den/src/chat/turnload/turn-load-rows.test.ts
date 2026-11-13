@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Message, TurnLoad } from "../../api/types.ts";
-import { turnLoadRowSummary, turnLoadRows } from "./turn-load-rows.ts";
+import { turnLoadRowSummary, turnLoadRows, turnLoadToolDetail } from "./turn-load-rows.ts";
 
 const user = (id: string, ord: number): Message => ({
   id, ord, seq: ord, role: "user", origin: "user", authority: "user", trust_tier: "trusted", content: id, created_at: "t",
@@ -63,4 +63,8 @@ describe("turn load rows", () => {
     });
     expect(turnLoadRowSummary(floor!)).toEqual({ title: "floor only · 9 guides left out", operation: "inspect", state: "438 ms" });
   });
+});
+
+it("distinguishes fallback exposure from a prediction or request", () => {
+  expect(turnLoadToolDetail({ tool: "task", source: "fallback", carried: false })).toBe("selection unavailable");
 });

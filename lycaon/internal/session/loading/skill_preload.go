@@ -25,7 +25,7 @@ func (m *Service) SkillPointer(sessionID string) *turnload.SkillRank {
 }
 
 func (m *Service) selectSkillPreload(ctx context.Context, sess *api.Session, profileID, text string, decision *Decision) {
-	if decision.catalog.Turn.Skills.PreloadAt <= 0 || m.skillBody == nil || m.skills == nil {
+	if decision.decision.Failure.RequiresFullCatalog() || decision.catalog.Turn.Skills.PreloadAt <= 0 || m.skillBody == nil || m.skills == nil {
 		return
 	}
 	roots, err := m.Workspace.Paths(ctx, sess)

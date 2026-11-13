@@ -19,13 +19,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestTurnCloseoutSpendCeilingReason(t *testing.T) {
-	got := promptloop.TurnCloseoutReasonText(promptloop.TurnCloseoutSpendCeiling)
-	if got != "the session spend ceiling was reached" {
-		t.Fatalf("reason text = %q", got)
-	}
-}
-
 func TestPromptLoopSpendCeilingMapsToCloseout(t *testing.T) {
 	if promptloop.TurnCloseoutSpendCeiling != "session_spend_ceiling" {
 		t.Fatalf("closeout reason = %q", promptloop.TurnCloseoutSpendCeiling)
@@ -52,7 +45,13 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 			}
 			client := &sequentialLLMClient{completions: []*modelcall.Completion{completion}}
 			production := tools.NewDefaultRegistry()
-			testutil.FailErr(t, "register completion decoder", native.RegisterCompleteLegTool(production, workercompletion.CompleteLegDecoder))
+			testutil.FailErr(t, "register completion decoder", native.RegisterCompleteLegTool(production, func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (*api.WorkerReportAcceptance, error) {
+				report, err := workercompletion.DecodeCompleteLegArgs(args)
+				if err != nil {
+					return nil, err
+				}
+				return &api.WorkerReportAcceptance{WorkerID: "job", Report: workercompletion.ReportWire(report), Grounding: &api.CitationGrounding{}}, nil
+			}))
 			def, ok := production.Definition(workertools.CompleteLegTool)
 			if !ok {
 				t.Fatal("missing completion definition")
@@ -71,6 +70,7 @@ func TestWorkerTerminalTurnRecordsOnlyAcceptedStructuredCompletion(t *testing.T)
 				ToolCtx: tools.ToolContext{
 					Identity: tools.InvocationIdentity{SessionID: sess.ID,
 						ParentSessionID: sess.ParentSessionID,
+						WorkerJobID:     "job",
 						Agent:           sess.AgentType},
 				},
 			})

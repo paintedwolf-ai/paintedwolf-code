@@ -113,6 +113,9 @@ func (m *Service) turnToolSets(ctx context.Context, sess *api.Session, profileID
 	}
 	floor = plan.ImmediateNames()
 	for _, name := range plan.DeferredNames() {
+		if _, permitted := byName[name]; !permitted {
+			continue
+		}
 		loadable = append(loadable, name)
 		cards = append(cards, card(name))
 	}
@@ -136,28 +139,39 @@ func (m *Service) turnToolSets(ctx context.Context, sess *api.Session, profileID
 func (m *Service) Begin(
 	ctx context.Context, sess *api.Session, sessionID string, in promptinput.Input, history []api.Message, surfaceID, profileID, openingMessageID string,
 ) *Decision {
-	if m == nil || m.Ledger == nil || sess == nil {
+	if m == nil || m.Ledger == nil || sess == nil || ctx.Err() != nil {
 		return nil
+	}
+	rootCount := m.Workspace.RootCount(ctx, sess)
+	floor, loadable, cards := m.turnToolSets(ctx, sess, profileID, surfaceID, rootCount)
+	var availability turnload.RankingFailure
+	if !m.Decider().Available() {
+		availability = turnload.RankingUnavailable
 	}
 	request := m.ResolvedRequest(ctx, sess)
 	openingMessageID, text, ok := m.Request(ctx, in, history, openingMessageID, request)
 	if !ok {
+		opening, _ := RequestOpening(history, request)
+		m.reconcileVisibility(ctx, sess, opening, surfaceID, floor, loadable, availability)
 		return nil
 	}
 	if sess.IsWorkerChild() {
 		text, ok = m.WorkerRequest(sess, in.WorkerJobID, openingMessageID, history)
 		if !ok {
 			m.beginUndecidedTurn(ctx, sess, history, surfaceID, profileID, openingMessageID)
+			m.Ledger.ExposeCatalog(sessionID, availability)
 			return nil
 		}
 	}
 	catalog, err := turnload.LoadCatalog()
 	if err != nil {
+		m.Ledger.ReconcileCatalog(sessionID, loadable, turnload.RankingUnavailable)
 		turnLoadLog.Warn("decision catalog unavailable", "error", err)
 		return nil
 	}
 	units, err := prompts.UnitCatalogFor(nil)
 	if err != nil {
+		m.Ledger.ReconcileCatalog(sessionID, loadable, turnload.RankingUnavailable)
 		turnLoadLog.Warn("unit catalog unavailable", "error", err)
 		return nil
 	}
@@ -168,8 +182,6 @@ func (m *Service) Begin(
 		mode = surface.ExecutionModeFamily(surfaceID)
 	}
 	decision := &Decision{host: host, catalog: catalog, revision: units.Revision(), started: time.Now()}
-	rootCount := m.Workspace.RootCount(ctx, sess)
-	floor, loadable, cards := m.turnToolSets(ctx, sess, profileID, surfaceID, rootCount)
 	decision.floor = floor
 	decision.loadable = loadable
 	guides := units.Candidates(host, mode, nameSet(floor), nameSet(loadable))
@@ -207,6 +219,7 @@ func (m *Service) Begin(
 		HistoryEpoch:     epoch,
 	}
 	m.Ledger.BeginTurn(sessionID, decision.opening, decision.decision)
+	m.Ledger.ExposeCatalog(sessionID, decision.ranking.Failure)
 	return decision
 }
 
@@ -290,4 +303,9 @@ func (m *Service) RecordedStanding(ctx context.Context, sessionID string) (turnl
 		return turnload.Standing{}, true
 	}
 	return standing, true
+}
+
+// FullCatalog is the session visibility state shared by prompt assembly.
+func (m *Service) FullCatalog(sessionID string) bool {
+	return m != nil && m.Ledger.FullCatalog(sessionID)
 }

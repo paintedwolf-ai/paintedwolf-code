@@ -1,6 +1,7 @@
 package httpaction
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"github.com/lycaon/lycaon/internal/testdbfixture"
@@ -14,8 +15,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/egressproxy"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/secretcap"
@@ -87,6 +90,7 @@ func runRequest(t *testing.T, deps Deps, args map[string]any, tctx tools.ToolCon
 }
 
 func TestHTTPRequestCookieJarPersistsALoginSessionWithoutDisclosingValues(t *testing.T) {
+	approveDials(t)
 	secrets, remembered := testSecrets(t)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
@@ -166,6 +170,7 @@ func fmtResult(t *testing.T, got result) string {
 }
 
 func TestHTTPRequestAuthQueryAndFormReachTheServer(t *testing.T) {
+	approveDials(t)
 	var seen struct {
 		auth, query, contentType, field, filename, fileBody string
 	}
@@ -237,6 +242,7 @@ func TestHTTPRequestAuthQueryAndFormReachTheServer(t *testing.T) {
 }
 
 func TestHTTPRequestResponsePathStreamsPastTheInlineCap(t *testing.T) {
+	approveDials(t)
 	size := int64(outboundhttp.DefaultBodyMax + 4096)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/octet-stream")
@@ -271,6 +277,7 @@ func TestHTTPRequestResponsePathStreamsPastTheInlineCap(t *testing.T) {
 }
 
 func TestHTTPRequestSupportsBodyFormAndSentHeaders(t *testing.T) {
+	approveDials(t)
 	var seen struct {
 		method, contentType, body string
 	}
@@ -314,4 +321,27 @@ func TestHTTPRequestSupportsBodyFormAndSentHeaders(t *testing.T) {
 	if !foundContentType {
 		t.Fatalf("SentHeaders did not contain Content-Type: %+v", got.SentHeaders)
 	}
+}
+
+// approveAll stands in for the approval gate, which admits these loopback
+// requests under their capability. Every attributed dial reaches it.
+func approveAll(context.Context, confine.EgressCommand, egressproxy.Endpoint, *confine.EgressDetectionCitation) bool {
+	return true
+}
+
+func TestMain(m *testing.M) {
+	confine.SetEgressResolver(approveAll)
+	os.Exit(m.Run())
+}
+
+// restoreResolver puts the package's approving gate back after a test that
+// installed its own.
+func restoreResolver() { confine.SetEgressResolver(approveAll) }
+
+// approveDials makes a test independent of whatever an earlier test left
+// installed.
+func approveDials(t *testing.T) {
+	t.Helper()
+	restoreResolver()
+	t.Cleanup(restoreResolver)
 }

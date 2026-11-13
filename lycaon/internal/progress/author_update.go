@@ -49,7 +49,7 @@ type AuthorUpdateResult struct {
 	ReconciliationStatus string   `json:"reconciliation_status"`
 	Updated              bool     `json:"document_changed"`
 	StateChanged         bool     `json:"state_changed"`
-	DeliverableClosed    bool     `json:"deliverable_closed"`
+	ClosedItemIDs        []string `json:"closed_item_ids"`
 	Snapshot             Snapshot `json:"snapshot"`
 }
 
@@ -189,7 +189,7 @@ func (u AuthorUpdate) Apply(ctx context.Context, store Store, root string, recon
 	result.Updated = previous.Content != snapshot.Content || !slices.Equal(previous.ItemIDs, snapshot.ItemIDs)
 	transitions := ClassifyTransitions(previous, snapshot)
 	result.StateChanged = transitions.Changed
-	result.DeliverableClosed = transitions.Closed
+	result.ClosedItemIDs = transitions.ClosedItemIDs
 	if result.Updated {
 		NotifyWriteObservers(ctx, WriteEvent{SessionID: root, Before: previous, After: snapshot})
 	}

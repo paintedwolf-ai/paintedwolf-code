@@ -18,9 +18,8 @@ func RememberCommandSourceDelivery(ctx context.Context, tc ToolContext, memory *
 	if !ok {
 		return
 	}
-	identity := strings.TrimPrefix(mapping.Source.SourceID, "disk:")
-	root, path, ok := strings.Cut(identity, "/")
-	if !ok || identity == mapping.Source.SourceID || root == "" || path == "" {
+	location, ok := tc.ResolveSourceCapture(mapping.Source.SourceID)
+	if !ok {
 		return
 	}
 	switch mapping.Source.Representation {
@@ -39,11 +38,11 @@ func RememberCommandSourceDelivery(ctx context.Context, tc ToolContext, memory *
 		return
 	}
 	defer release()
-	branch, err := tc.SourceBranch(root)
+	branch, err := tc.SourceBranch(location.RootID)
 	if err != nil {
 		return
 	}
-	doc, open, err := documents.OpenDocument(ctx, tc.Identity.ProjectID, branch, root, path)
+	doc, open, err := documents.OpenDocument(ctx, tc.Identity.ProjectID, branch, location.RootID, location.Path)
 	if err != nil || !open {
 		return
 	}

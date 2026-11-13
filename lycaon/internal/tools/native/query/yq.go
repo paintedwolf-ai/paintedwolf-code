@@ -173,11 +173,16 @@ func yqImplicitFile(ctx context.Context, paths *projectpaths.ProgramPaths, argv 
 	return regularYqFile(ctx, paths, operand)
 }
 
-// regularYqFile is yq's maybeFile for an unmarked first operand.
+// regularYqFile is yq's maybeFile for an unmarked first operand. It runs
+// before admission, so only a name inside the attached roots is inspected; one
+// that resolves beyond them is a file for admission to review, never statted.
 func regularYqFile(ctx context.Context, paths *projectpaths.ProgramPaths, operand string) bool {
 	bound, err := paths.Bind(ctx, operand, false)
 	if err != nil || bound.Null {
 		return false
+	}
+	if bound.Resolved.External {
+		return true
 	}
 	stat, err := bound.Stat(true)
 	return err == nil && stat.Mode.IsRegular()

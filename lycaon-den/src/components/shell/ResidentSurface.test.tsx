@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { usePresentationParticipant } from "../../ui/presentation-context.tsx";
-import { PRESENTATION_LOADING_GRACE_MS } from "../../ui/presentation.ts";
+import { PRESENTATION_LOADING_GRACE_MS, createPreparation } from "../../ui/presentation.ts";
 import { createSignal, For, onMount } from "solid-js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@solidjs/testing-library";
@@ -92,6 +92,26 @@ describe("ResidentSurface", () => {
     flushPaint(2);
     expect(onReady).toHaveBeenCalledOnce();
     expect(screen.getAllByTestId("resident-surface").every((el) => el.dataset.presentation === "published")).toBe(true);
+  });
+
+  it("names the innermost unsettled section to the preparation it reports to", () => {
+    const [ready, setReady] = createSignal(false);
+    const workspace = createPreparation();
+    render(() => (
+      <ResidentSurface surfaceKey="stage" presence="pending" preparation={workspace}>
+        <PreparedSurface name="panel">
+          <ResidentSurface surfaceKey="section" presence="active">
+            <PreparedSurface name="body" ready={ready}>
+              <span>Complete content</span>
+            </PreparedSurface>
+          </ResidentSurface>
+        </PreparedSurface>
+      </ResidentSurface>
+    ));
+    expect(workspace.pending()).toEqual(["stage/panel/section/body"]);
+    setReady(true);
+    flushPaint();
+    expect(workspace.pending()).toEqual([]);
   });
 
   it("lets pending focus requests re-check a region once its surface becomes reachable", async () => {

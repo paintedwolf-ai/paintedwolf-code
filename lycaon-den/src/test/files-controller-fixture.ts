@@ -12,7 +12,7 @@ export function controllerSource(content = "original", partial: Partial<ProjectS
 
 export function filesControllerFixture(projectId: string) {
   const client = stubClient({ getProjectSource: vi.fn().mockResolvedValue(controllerSource()) });
-  const root = { id: "root", label: "Root", path: "/project", kind: "attached", is_primary: true, added_at: "2026-10-11T00:00:00Z" } satisfies ProjectRoot;
+  const root = { id: "root", label: "Root", path: "/project", kind: "attached", admitted: true, admission_code: null, is_primary: true, added_at: "2026-10-11T00:00:00Z" } satisfies ProjectRoot;
   const state = () => projectFilesState(projectId);
   const open = (path = "file.ts") => {
     const key = openFilesBuffer(projectId, { rootId: root.id, rootLabel: root.label, path, intent: "permanent" });

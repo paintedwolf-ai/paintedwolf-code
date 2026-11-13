@@ -436,7 +436,11 @@ Matched results explain how to recover their public records when no body is pres
 ### Progress reconciliation
 
 `update_progress` returns the current bounded document snapshot, an opaque revision,
-`document_changed`, `state_changed`, `deliverable_closed`, and `reconciliation_status`.
+`document_changed`, `state_changed`, `closed_item_ids`, and `reconciliation_status`.
+The snapshot summary counts pending, completed, not-pursued and optional rows.
+`all_required_items_terminal` allows explicit not-pursued decisions;
+`all_required_items_completed` does not. These describe authored checklist state,
+not independent proof of the work. Closed IDs identify transitions in this update.
 The revision includes the bound workflow run and persisted last-write identity;
 copy it into `expected_revision` when replacing the document. First creation
 may omit it; replacements without a revision return `PROGRESS_REVISION_REQUIRED`

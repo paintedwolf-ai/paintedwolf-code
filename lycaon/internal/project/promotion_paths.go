@@ -36,9 +36,6 @@ func resolvePromotionDestination(destPath string) (string, error) {
 	if !empty {
 		return "", ErrPromotionDestinationNotEmpty
 	}
-	if err := defaultOpenPolicy.ValidateOpenPath(folder); err != nil {
-		return "", err
-	}
 	return folder, nil
 }
 

@@ -105,7 +105,9 @@ must resubmit the corrected report, and the host never substitutes provenance
 for an explicitly contradictory handle. Scanner-only findings cite the scanner
 handle without source coordinates; source findings cite the source observation.
 Web findings cite a web handle without source coordinates and put observed URLs
-in `cited_urls`.
+in `cited_urls`. Source rejection feedback distinguishes an unknown handle, a wrong
+path, an uncovered delivered range, and an excerpt mismatch while retaining the
+observed range.
 
 A resumed child keeps its conversation, but a new worker job has a new evidence
 boundary. Earlier reads and fetches must be reacquired before the new job can
@@ -122,7 +124,7 @@ Resolution produces one of five verdicts (`internal/evidence/resolve.go`):
 - **ambiguous**: more than one ledger record satisfies the claim;
 - **unverifiable**: the host cannot connect the claim to admitted evidence.
 
-Every file-reading tool retains its lines in the host's numbered-line grammar (`internal/hostmarker`), and the verifiers read that same grammar back from retained bodies. Command output reaches the model as printed. Each source delivery's tag states what it delivered, such as `[read#7 a.go:10-20]`, from host facts; copied, it is a citation. Output that printed a line's own number, such as `cat -n` or `grep -n`, or an excerpt the host verified, supports a coordinate exactly. A coordinate inside a delivered range with neither is `traced`, never exact, because its reader counted. Line filters in a pipeline map no source, so such a read holds only its `command#` handle. The meaningful-span floor applies to the excerpt as the worker cited it. A path citation whose line is wrong but whose excerpt matches exactly one live line of the cited path is re-anchored to that line and the correction is written back onto the citation and counted in the grounding audit; an excerpt that matches several lines, or none, is not corrected.
+Typed source deliveries retain exact source lines and their delivered byte boundaries. Multiline excerpts must match one contiguous span within that observation, preserving blank lines and clipping; another observation or the working tree cannot supply missing bytes. Numbered read observations retain the host's numbered-line grammar (`internal/hostmarker`). Command output reaches the model as printed. Each source delivery's tag states what it delivered, such as `[read#7 a.go:10-20]`, from host facts; copied, it is a citation. Output that printed a line's own number, such as `cat -n` or `grep -n`, or an excerpt the host verified, supports a coordinate exactly. A coordinate inside a delivered range with neither is `traced`, never exact, because its reader counted. Line filters in a pipeline map no source, so such a read holds only its `command#` handle. The meaningful-span floor applies to the excerpt as the worker cited it. A path citation whose line is wrong but whose excerpt matches exactly one live line of the cited path is re-anchored to that line and the correction is written back onto the citation and counted in the grounding audit; an excerpt that matches several lines, or none, is not corrected.
 
 Matched, traced, and bound are grounded; ambiguous and unverifiable block the strict completion paths. Binding exists because a citation can be correct and still fail an exact match (a differently normalized path, a stale ordinal), and refusing it would spend repair budget on a claim the evidence already supports. Where several records fit, the host has no basis for choosing one, and picking would manufacture a provenance the worker never established; that is why `ambiguous` is a separate verdict rather than a tie broken quietly.
 

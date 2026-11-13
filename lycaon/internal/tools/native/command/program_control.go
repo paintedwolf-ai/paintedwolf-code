@@ -91,12 +91,12 @@ func (d *ProgramDispatcher) InvokeEvaluator(ctx context.Context, request command
 	if err != nil {
 		return refusedResult("COMMAND_OPERAND_INVALID"), err
 	}
-	return d.invokeHost(ctx, request, streams, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	return d.invokeHost(ctx, request, streams, false, func(ctx context.Context, _ tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		return body(ctx, streams)
 	})
 }
 
-func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
+func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogram.OperationRequest, streams commandprogram.Streams, launches bool, body func(context.Context, tools.ToolContext, commandprogram.Streams) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error) {
 	spec, ok := d.run.commands[request.OperationID]
 	if !ok {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), fmt.Errorf("evaluator operation is not catalogued")
@@ -107,11 +107,14 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	}
 	definition := definitions[spec.Name]
 	mode := selectEffectMode(spec, request.EffectMode)
-	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 	if err != nil {
 		return ownerFailure(err), err
 	}
 	arguments := map[string]any{"argv": request.Argv.Values(), "source_unit_id": request.Invocation.SourceUnitID, "source_start_byte": request.Invocation.Span.StartByte, "source_end_byte": request.Invocation.Span.EndByte}
+	if launches {
+		arguments = d.run.nativeArguments(arguments, definition.ReadOnlyFacts().Contract, nil)
+	}
 	child, err := d.prepareInvocation(ctx, definition, request.Invocation, spec.Name, arguments, nil)
 	if err != nil {
 		return d.prepareChildFailure(streams, spec.Name, request, err)
@@ -123,8 +126,7 @@ func (d *ProgramDispatcher) invokeHost(ctx context.Context, request commandprogr
 	effect := toolexecution.NativeEffect{Operation: bound, Arguments: arguments, Streams: runStreams, Inspection: d.run.capture, Stage: toolcontract.ExecutionStage{ExecutionID: request.Invocation.Identity.ExecutionID, OperationID: definition.ReadOnlyFacts().Identity, Argv: request.Argv.Values()}, PrepareReviewed: func(context.Context, map[string]any, tools.ToolContext) (toolexecution.PreparedNativeEffect, error) {
 		return toolexecution.PreparedNativeEffect{Operation: bound, InvokeOwner: func(ctx context.Context, tc tools.ToolContext, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			return d.runProducer(ctx, request, streams, func(ctx context.Context, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
-				tracker.w = nonNilWriter(streams.Error)
-				streams.Error = tracker
+				streams.Error = markingWriter{w: nonNilWriter(streams.Error), tracker: tracker}
 				return body(ctx, tc, streams)
 			})
 		}}, nil
@@ -156,6 +158,7 @@ func (d *ProgramDispatcher) runProducer(ctx context.Context, request commandprog
 	tracker := d.run.beginOpTracker()
 	ctx = withOpTracker(ctx, tracker)
 	ctx = evidence.WithExchangeProvenanceObserver(ctx, tracker.addExchange)
+	ctx = evidence.WithContentFlowObserver(ctx, func(flow evidence.ContentFlow) { d.run.observeContentFlow(ctx, tracker, flow) })
 	if request.StreamPreparation != nil {
 		var err error
 		streams, err = request.StreamPreparation.PrepareStreams(ctx)

@@ -9,12 +9,10 @@ import (
 	"time"
 
 	contractfixture "github.com/lycaon/lycaon/internal/api/contractfixture"
-	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/search"
 )
 
 func TestHandleSearchExportJSONLAcrossProjects(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB, srv := contractfixture.NewSearchExportServer(t)
 	contractfixture.SeedSearchRow(t, sqlDB, search.IndexRow{
 		ID: "a1", ProjectID: "proj-a", Source: search.SourceTool, HitKind: search.HitKindWeb,
@@ -40,7 +38,6 @@ func TestHandleSearchExportJSONLAcrossProjects(t *testing.T) {
 }
 
 func TestHandleSearchExportCSVIncludesProjectName(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB, srv := contractfixture.NewSearchExportServer(t)
 	contractfixture.SeedSearchRow(t, sqlDB, search.IndexRow{
 		ID: "a1", ProjectID: "proj-a", Source: search.SourceTool, HitKind: search.HitKindWeb,
@@ -70,7 +67,6 @@ func TestHandleSearchExportSARIFRequiresScanScope(t *testing.T) {
 }
 
 func TestHandleSearchExportSARIFScanScoped(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB, srv := contractfixture.NewSearchExportServer(t)
 	contractfixture.SeedSearchRow(t, sqlDB, search.IndexRow{
 		ID: "scan-1", ProjectID: "proj-a", Source: search.SourceFinding, HitKind: search.HitKindFinding,
@@ -101,7 +97,6 @@ func TestHandleSearchExportInvalidFormat(t *testing.T) {
 }
 
 func TestHandleSearchExportTruncationHeaderFalseForSmallResult(t *testing.T) {
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	sqlDB, srv := contractfixture.NewSearchExportServer(t)
 	contractfixture.SeedSearchRow(t, sqlDB, search.IndexRow{
 		ID: "a1", ProjectID: "proj-a", Source: search.SourceTool, HitKind: search.HitKindWeb,

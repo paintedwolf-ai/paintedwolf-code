@@ -1,0 +1,25 @@
+oar: '1.0'
+id: GIT_REMOTE_CHANGED
+kind: schema
+anchor: tool.rejected
+requires:
+  facts:
+  - paintedwolf.rejection_code
+  profiles:
+  - tool
+when: paintedwolf.rejection_code == "GIT_REMOTE_CHANGED"
+effect: block
+copy:
+  what: The Git remote changed while its hosts were being authorized.
+  cause: The repository's remote URLs resolved differently after authorization, so Git did not contact any remote.
+  why: Authorization covers the remotes that were resolved; a changed remote needs its own decision.
+  fix: Run the command again so the current remotes are authorized.
+  instead: Do not reach the remote through another network client or an external git
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_git_remote
+x-paintedwolf-message: The Git remote changed during authorization
+x-paintedwolf-scenarios:
+- id: default
+  vars:
+    tool: command
+    profile: implement

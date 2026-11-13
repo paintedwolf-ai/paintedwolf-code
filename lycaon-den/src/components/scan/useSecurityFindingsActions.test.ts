@@ -56,6 +56,8 @@ const sampleRoot: ProjectRoot = {
   is_primary: true,
   added_at: "2026-01-01T00:00:00Z",
   kind: "attached",
+  admitted: true,
+  admission_code: null,
 };
 
 describe("useSecurityFindingsActions", () => {
