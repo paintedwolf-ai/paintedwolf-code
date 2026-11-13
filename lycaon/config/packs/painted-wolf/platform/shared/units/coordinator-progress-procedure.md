@@ -4,7 +4,7 @@ description: >-
   reconciling worker results, and closing delivered work.
 slot: procedures
 order: 5
-attaches: [update_progress, task, delegate_dispatch, delegate_decompose, command, restore_version]
+attaches: [update_progress]
 hosts: [coordinator]
 ---
 Store the checklist with `update_progress(content=…, expected_revision=…, item_ids=…)`, copying the host snapshot revision and row `item_ids` (`null` for new rows, omitting removed rows; first call may omit both); assistant reply text never updates it.
