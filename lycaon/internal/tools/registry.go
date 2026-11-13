@@ -29,11 +29,16 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// FileEditCapture is optional Den UI metadata for completed file mutation tools.
+// FileEditCapture is one text change a call made, for the result's diff.
 type FileEditCapture struct {
+	// RootID is the attached root holding Path; empty for a path outside the roots.
+	RootID string
 	Path   string
+	// Before is nil when the call created the file.
 	Before *string
 	After  string
+	// Deleted means the call removed the file; After is empty.
+	Deleted bool
 }
 
 // VisualCapture is optional visual artifact bytes for store-backed projection.

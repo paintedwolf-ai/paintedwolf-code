@@ -528,9 +528,11 @@ func applyToolResultSidecars(
 	}
 	if fileEdit := captures.fileEdit; fileEdit != nil {
 		tr.FileEdit = &api.FileEditSnapshot{
-			Path:   fileEdit.Path,
-			Before: fileEdit.Before,
-			After:  fileEdit.After,
+			RootID:  fileEdit.RootID,
+			Path:    fileEdit.Path,
+			Before:  fileEdit.Before,
+			After:   fileEdit.After,
+			Deleted: fileEdit.Deleted,
 		}
 	}
 	if captures.externalAccess != nil {

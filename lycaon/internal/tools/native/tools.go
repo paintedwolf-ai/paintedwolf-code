@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
@@ -45,20 +46,30 @@ func (t *WriteTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 	return result.Receipt(), nil
 }
 
-func captureFileEdit(tctx tools.ToolContext, path, after string, before *string) {
-	if tctx.Effects.Out == nil || strings.TrimSpace(path) == "" {
+// textEdit is one landed change to a file's text.
+type textEdit struct {
+	before  *string
+	after   string
+	deleted bool
+}
+
+// captureFileEdit records a landed text change on the call's outputs. A file
+// under an attached root is named by that root and its path within it.
+func captureFileEdit(tctx tools.ToolContext, resolved projectpaths.Resolved, edit textEdit) {
+	if tctx.Effects.Out == nil || strings.TrimSpace(resolved.DisplayPath) == "" {
 		return
 	}
+	capture := tools.FileEditCapture{Path: resolved.DisplayPath, Deleted: edit.deleted}
+	if root, rel, ok := tctx.SourceLocation(resolved.Abs); ok && rel != "" {
+		capture.RootID, capture.Path = root.ID, rel
+	}
 	// The recorded edit names each value this call resolved by its reference.
-	if before != nil {
-		referenced := tctx.Effects.Secrets.ReferenceEchoes(*before)
-		before = &referenced
+	if edit.before != nil {
+		referenced := tctx.Effects.Secrets.ReferenceEchoes(*edit.before)
+		capture.Before = &referenced
 	}
-	tctx.Effects.Out.FileEdit = &tools.FileEditCapture{
-		Path:   path,
-		Before: before,
-		After:  tctx.Effects.Secrets.ReferenceEchoes(after),
-	}
+	capture.After = tctx.Effects.Secrets.ReferenceEchoes(edit.after)
+	tctx.Effects.Out.FileEdit = &capture
 }
 
 // verifyTextWriteBase compares the destination immediately before replacement.
