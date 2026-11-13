@@ -17,7 +17,6 @@ import type { ToolActivityRole } from "./tool-presentation.generated.ts";
 import type { ToolPartStatus, ToolPartView } from "./tool-part-model.ts";
 import type { ActivitySpanEntry, DisplayTranscriptItem, RawTranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 import type { TranscriptLayout } from "../transcript/layout/transcript-layout.ts";
-import { formatSentenceCase } from "../../format/format-sentence-case.ts";
 import { LOCAL_AI_LABEL, turnLoadRowSummary } from "../turnload/turn-load-rows.ts";
 
 const INDEX_WARMING_ACTIVITY = { headline: "researching", weight: 1, role: "research" as const } as const;
