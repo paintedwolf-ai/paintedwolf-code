@@ -35,6 +35,7 @@ var toolsNativeSchemaOnly = map[string]string{
 	"held_stop":                      "held call companion — registered at serve boot",
 	"fetch_url":                      "web research — registered at serve boot",
 	"request_decision":               "worker decision escalation — registered at serve boot",
+	"message_coordinator":            "worker note to its coordinator — registered at serve boot",
 	"record_finding":                 "findings feed writer — registered at serve boot",
 	"scan_pack":                      "scan orchestration — schema built from the live scanner registry at serve boot",
 	"scan_list":                      "native scan drill-down — schema registered at serve boot via RegisterScanTools",
