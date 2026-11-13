@@ -293,3 +293,10 @@ JOIN worker_rounds r ON r.job_id = res.worker_job_id
 JOIN workers w ON w.id = r.worker_id
 WHERE w.session_id = sqlc.arg(session_id) AND d.change_state = 'shelved';
 
+-- name: LatestRoundJobForJob :one
+-- The job of the latest round of the worker that ran this job, or the job
+-- itself when it ran no worker round.
+SELECT CAST(COALESCE((SELECT latest.job_id FROM worker_rounds origin
+    JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+    WHERE origin.job_id = sqlc.arg(job_id) ORDER BY latest.ordinal DESC LIMIT 1), sqlc.arg(job_id)) AS TEXT) AS job_id;
+
