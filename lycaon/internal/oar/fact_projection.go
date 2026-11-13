@@ -10,11 +10,12 @@ import (
 
 // activation publishes occurrence facts under their rule-visible names.
 // occurrenceIdentityFacts are host facts the occurrence itself establishes —
-// rejection identity, caller, role, anchor, and counters — which occurrence
-// data never replaces.
+// rejection identity, caller, role, profile, posture, anchor, and counters —
+// which occurrence data never replaces.
 var occurrenceIdentityFacts = map[string]bool{
 	"paintedwolf.rejection_code": true, "paintedwolf.principal": true, "paintedwolf.principal_roles": true,
-	"paintedwolf.session_role": true, "paintedwolf.anchor": true, "paintedwolf.credential_decisions": true,
+	"paintedwolf.session_role": true, "paintedwolf.tool_profile": true, "paintedwolf.session_posture": true,
+	"paintedwolf.anchor": true, "paintedwolf.credential_decisions": true,
 }
 
 func activation(gc *GuardContext) map[string]any {
