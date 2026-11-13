@@ -73,6 +73,10 @@ func (p *CapabilityDocument) requireHostAdapters() error {
 // cannot represent rewritten content ([OAR-PROF-10]).
 func ValidateHostRuleSet(rules *RuleSet) error {
 	for _, rule := range rules.All() {
+		// Copy that displays next steps would render without a remedy.
+		if rule.NextSteps == nil && bindsNextSteps(rule) {
+			return fmt.Errorf("rule %s displays %s but has no next-steps entry", rule.Qualified(), NextStepsFact)
+		}
 		if rule.Effect != EffectTransform {
 			continue
 		}
