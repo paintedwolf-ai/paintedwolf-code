@@ -4,12 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/llm/actionenvelope"
 	"github.com/lycaon/lycaon/internal/llm/failure"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -32,55 +34,63 @@ type proseToolCall struct {
 // ToolResponse retains the delivered completion and the non-executable action
 // observation. Only a native call or a request-selected protocol supplies calls.
 type ToolResponse struct {
-	Completion      *modelcall.Completion
-	TextActionTools []string
+	Completion *modelcall.Completion
+	TextAction actionenvelope.Observation
 }
 
 // ClassifyToolResponse is the action/content boundary for every model role.
-func ClassifyToolResponse(profile providerprofile.Profile, req modelcall.CompletionRequest, c *modelcall.Completion, providerID, model string) (*ToolResponse, error) {
+// deferred names the tools the frozen request can load but does not offer.
+func ClassifyToolResponse(profile providerprofile.Profile, req modelcall.CompletionRequest, deferred []string, c *modelcall.Completion, providerID, model string) (*ToolResponse, error) {
 	out := &ToolResponse{Completion: c}
 	if c == nil || len(c.ToolCalls) > 0 || !req.ToolsCallable() {
 		return out, nil
 	}
 	switch req.ToolProtocol {
 	case modelcall.ToolProtocolNative:
-		offered := make([]string, 0, len(req.Tools))
-		for _, meta := range req.Tools {
-			offered = append(offered, meta.Name)
-		}
-		out.TextActionTools = actionenvelope.Names(c.Content, offered)
-		return out, nil
 	case modelcall.ToolProtocolHarmony:
 		if !profile.TextToolCallGrammars.Supports(providerprofile.TextToolCallGrammarHarmony) {
 			return nil, fmt.Errorf("provider does not support the selected Harmony action protocol")
 		}
 		recovered := *c
 		out.Completion = RecoverHarmonyCompletion(&recovered, true)
-		if len(recovered.ToolCalls) > 0 && !validRecoveredToolCalls(recovered.ToolCalls, req.Tools) {
-			return nil, &failure.ProviderToolCallsInProseError{ProviderID: providerID, Model: model}
+		if len(recovered.ToolCalls) > 0 {
+			if !validRecoveredToolCalls(recovered.ToolCalls, req.Tools) {
+				return nil, &failure.ProviderToolCallsInProseError{ProviderID: providerID, Model: model}
+			}
+			return out, nil
 		}
-		return out, nil
 	case modelcall.ToolProtocolEnvelope:
 		if !profile.TextToolCallGrammars.Supports(providerprofile.TextToolCallGrammarBoundedEnvelope) {
 			return nil, fmt.Errorf("provider does not support the selected envelope action protocol")
 		}
+		if calls, detected := recoverToolCallsFromProse(c.Content); detected {
+			if len(calls) > 0 && validRecoveredToolCalls(calls, req.Tools) {
+				recovered := *c
+				recovered.ToolCalls, recovered.Content = calls, ""
+				out.Completion = &recovered
+				return out, nil
+			}
+			if !profile.ToolCalls.SupportsToolCalls() {
+				return nil, &failure.ProviderToolCallsUnsupportedError{ProviderID: providerID, Model: model}
+			}
+			return nil, &failure.ProviderToolCallsInProseError{ProviderID: providerID, Model: model}
+		}
 	default:
 		return nil, fmt.Errorf("unknown action protocol %q", req.ToolProtocol)
 	}
-	calls, detected := recoverToolCallsFromProse(c.Content)
-	if !detected {
-		return out, nil
+	out.TextAction = detectTextAction(out.Completion.Content, req.Tools, deferred)
+	return out, nil
+}
+
+// detectTextAction reads tool names and schemas from the request alone: its
+// offered tools, its loadable tools, and the operations command replaced.
+func detectTextAction(content string, offered []tools.ToolMeta, deferred []string) actionenvelope.Observation {
+	schemas := make([]actionenvelope.Tool, 0, len(offered))
+	for _, meta := range offered {
+		schemas = append(schemas, actionenvelope.Tool{Name: meta.Name, ArgsSchema: meta.ArgsSchema})
 	}
-	if len(calls) > 0 && validRecoveredToolCalls(calls, req.Tools) {
-		recovered := *c
-		recovered.ToolCalls, recovered.Content = calls, ""
-		out.Completion = &recovered
-		return out, nil
-	}
-	if !profile.ToolCalls.SupportsToolCalls() {
-		return nil, &failure.ProviderToolCallsUnsupportedError{ProviderID: providerID, Model: model}
-	}
-	return nil, &failure.ProviderToolCallsInProseError{ProviderID: providerID, Model: model}
+	retired, _ := toolcontract.CommandOperations()
+	return actionenvelope.Detect(content, schemas, append(slices.Clone(deferred), retired...))
 }
 
 func validRecoveredToolCalls(calls []api.ToolCall, offered []tools.ToolMeta) bool {

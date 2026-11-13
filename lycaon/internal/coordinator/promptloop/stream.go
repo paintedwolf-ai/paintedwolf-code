@@ -377,7 +377,11 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		return completion, nil, truncErr
 	}
 
-	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, completion, providerID, model)
+	var deferred []string
+	if st != nil {
+		deferred = st.turnToolPlan.DeferredNames()
+	}
+	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, deferred, completion, providerID, model)
 	if err != nil {
 		l.recordAbandonedTurnUsage(ctx, sess, llmCallID, providerID, model, req, delivered)
 		return nil, nil, err
@@ -392,8 +396,8 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		slog.WarnContext(ctx, "record llm call usage", "call_id", llmCallID, "error", err)
 	}
 	outputGateStarted := time.Now()
-	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
-	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextActionTools)
+	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextAction.Tools}, "", nil)
+	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextAction.Tools)
 	if st != nil {
 		st.output.rejection = nil
 		if !blocked {
@@ -401,7 +405,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		}
 	}
 	if blocked {
-		if st == nil || len(response.TextActionTools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {
+		if st == nil || len(response.TextAction.Tools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {
 			return nil, nil, reject
 		}
 		st.output.rejection = reject
