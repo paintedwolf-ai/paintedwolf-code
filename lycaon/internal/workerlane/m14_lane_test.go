@@ -16,14 +16,14 @@ import (
 
 // realLane wires a lane service to a Milestone 14 workspace manager over a
 // one-file project.
-func realLane(t *testing.T) (*landingFixture, *workspace.Manager, []projectroot.RootRef) {
+func realLane(t *testing.T) (*landingFixture, []projectroot.RootRef) {
 	t.Helper()
 	f := newLandingFixture(t)
 	mgr := workspace.NewManager(t.TempDir())
 	f.lanes = workerlane.New(mgr, f.records)
 	project := t.TempDir()
 	testutil.FailErr(t, "seed project", os.WriteFile(filepath.Join(project, "main.go"), []byte("package main\n"), 0o644))
-	return f, mgr, []projectroot.RootRef{{ID: "primary", Path: project, IsPrimary: true}}
+	return f, []projectroot.RootRef{{ID: "primary", Path: project, IsPrimary: true}}
 }
 
 func primaryPath(t *testing.T, branchRoot string) string {
@@ -42,7 +42,7 @@ func primaryPath(t *testing.T, branchRoot string) string {
 // Work a round left in the lane survives a correction round; a landing gives
 // the next round a fresh tree of source, and a rejection resets it.
 func TestLaneKeepsWorkAcrossRoundsOnARealBranch(t *testing.T) {
-	f, mgr, roots := realLane(t)
+	f, roots := realLane(t)
 	admit := func(op string, facts workerlane.Facts) workerlane.Binding {
 		t.Helper()
 		b, err := f.lanes.Admit(t.Context(), workerlane.Request{Actor: f.actor, Op: workerrecords.Op{ID: op}, WorkerID: f.workerID, Facts: facts, Roots: roots, ActiveRootID: "primary"})
@@ -62,7 +62,7 @@ func TestLaneKeepsWorkAcrossRoundsOnARealBranch(t *testing.T) {
 		t.Fatalf("work did not survive the correction round: %v", err)
 	}
 
-	runtime := workerlane.ManagerRuntime{Manager: mgr}
+	runtime := workerlane.ManagerRuntime{State: workerlane.NewM14State(jobLookup{})}
 	f.openRound(t, "job-2")
 	settled, err := f.lanes.Settle(t.Context(), runtime, workerlane.SettleRequest{
 		Actor: f.actor, Op: workerrecords.Op{ID: "settle-real"}, WorkerID: f.workerID, JobID: "job-2",
