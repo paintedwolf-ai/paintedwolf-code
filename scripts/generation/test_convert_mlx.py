@@ -27,7 +27,8 @@ ROPE = {"full_attention": {"partial_rotary_factor": 0.25, "rope_theta": 1000000.
 BASE = {"hidden_size": 128, "intermediate_size": 256, "num_attention_heads": 2, "num_key_value_heads": 1, "head_dim": 64,
         "global_head_dim": 128, "vocab_size": 256, "vocab_size_per_layer_input": 256, "sliding_window": 8,
         "use_double_wide_mlp": False, "rope_parameters": ROPE, "final_logit_softcapping": 30.0, "tie_word_embeddings": True,
-        "layer_types": ["sliding_attention", "sliding_attention", "sliding_attention", "full_attention"], "num_hidden_layers": 4}
+        # KV-shared layers reuse an earlier layer of their own type, so both types precede them.
+        "layer_types": ["sliding_attention", "full_attention", "sliding_attention", "full_attention"], "num_hidden_layers": 4}
 # Tiny models with each pinned tier's architecture.
 TIERS = {
     "e4b": ("gemma4", dict(BASE, model_type="gemma4_text", hidden_size_per_layer_input=64, num_kv_shared_layers=2)),
