@@ -481,7 +481,7 @@ func TestBackgroundJobWorkFoldsIntoItsLaunch(t *testing.T) {
 		outcome string
 	}{
 		{"running", activityCounts{total: 1, running: 1}, "running", activityStateOutcome("running")},
-		{"failed", activityCounts{total: 1, failed: 1}, "failed", activityStateOutcome("failed")},
+		{"failed", activityCounts{total: 1, failed: 1}, "failed", ""},
 		{"finished", activityCounts{total: 1}, "completed", activityStateOutcome("completed")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -490,7 +490,8 @@ func TestBackgroundJobWorkFoldsIntoItsLaunch(t *testing.T) {
 				t.Fatalf("launch and job split: %+v", values)
 			}
 			got := values[0]
-			if got.ID != "job" || got.JobHandle != "registry-handle" || got.State != tc.state || got.Outcome != tc.outcome {
+			// A failed job keeps the row's partial-failure summary; others state their outcome.
+			if got.ID != "job" || got.JobHandle != "registry-handle" || got.State != tc.state || (tc.outcome != "" && got.Outcome != tc.outcome) {
 				t.Fatalf("launch activity = %+v", got)
 			}
 			if !slices.Equal(got.ExecutionIDs, []string{"job", "server"}) || got.Subject != server.arguments["command"] {
@@ -555,5 +556,19 @@ func TestFoldedWritesNameEveryFile(t *testing.T) {
 	}
 	if rule := activityPresentation(producerFixture("producer", 0)); rule.role != "support" {
 		t.Fatalf("redirected producer role = %q", rule.role)
+	}
+}
+
+func TestLaunchIsNamedByItsJobsFirstProcess(t *testing.T) {
+	server := activityFixture("server", "job", "command", "external", 0)
+	server.arguments["command"] = "python3 -m http.server 8000"
+	log := activityFixture("log", "job", "write", "write", 10)
+	log.receipt.EffectClasses = []string{"mutation"}
+	log.arguments["path_targets"] = map[string]any{"read": []any{}, "write": []any{"server.log"}}
+	groups := launchedGroups(server, activityCounts{total: 1, running: 1})
+	groups = append(groups, activityGroup{input: log, key: activityKey{node: "log"}, parent: activityKey{launch: "job"}, ordinal: 3, counts: activityCounts{total: 1}})
+	values := composeActivityGroups(groups, false)
+	if len(values) != 1 || values[0].Subject != server.arguments["command"] {
+		t.Fatalf("launch = %+v", values)
 	}
 }
