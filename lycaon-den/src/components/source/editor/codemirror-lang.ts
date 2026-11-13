@@ -384,6 +384,9 @@ const EXT_TO_LANG: Record<string, () => LanguageSupport | Language> = {
   promql: () => wordLanguage(WORD_LANG_SPECS.promql),
 };
 
+/** Label for text with no language. */
+export const PLAIN_TEXT_LABEL = "Plain text";
+
 const EXT_TO_LABEL: Record<string, string> = {
   ts: "TypeScript",
   tsx: "TSX",
@@ -397,9 +400,11 @@ const EXT_TO_LABEL: Record<string, string> = {
   pyi: "Python",
   json: "JSON",
   jsonc: "JSON",
+  jsonl: "JSON Lines",
+  ndjson: "JSON Lines",
   yaml: "YAML",
   yml: "YAML",
-  txt: "Plain text",
+  txt: PLAIN_TEXT_LABEL,
   md: "Markdown",
   mdx: "Markdown",
   sh: "Shell",
@@ -576,7 +581,7 @@ export function languageLabelForDetectedLanguage(
   const key = language.trim().toLowerCase();
   if (!key) return languageLabelForPath(path);
   if (key === "vimdoc" && extensionOf(basenameOf(path)) === "txt") {
-    return "Plain text";
+    return PLAIN_TEXT_LABEL;
   }
   const known = DETECTED_LANGUAGE_TO_LABEL[key] ?? EXT_TO_LABEL[key];
   if (known) return known;

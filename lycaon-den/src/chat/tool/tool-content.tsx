@@ -1,5 +1,5 @@
 import { createContext, useContext, type Accessor } from "solid-js";
-import type { ChatContentAccess } from "../transcript/content/chat-content-reader.ts";
+import type { RetainedChatContentAccess } from "../transcript/content/chat-content-reader.ts";
 
 type ToolContent = {
   identity: Accessor<{
@@ -9,8 +9,8 @@ type ToolContent = {
     projectId?: string;
     title?: string;
   }>;
-  output: Accessor<ChatContentAccess | undefined>;
-  args: Accessor<ChatContentAccess | undefined>;
+  output: Accessor<RetainedChatContentAccess | undefined>;
+  args: Accessor<RetainedChatContentAccess | undefined>;
   outputOffset: Accessor<number | undefined>;
   argsOffset: Accessor<number | undefined>;
   revealedCallId?: Accessor<string | undefined>;
