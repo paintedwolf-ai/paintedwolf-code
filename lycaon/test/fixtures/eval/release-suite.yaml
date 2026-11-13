@@ -20,6 +20,20 @@ cases:
       - Delivers a final terminal capture after the last source change and presents it in the answer.
       - Completes the requested work without rescue, unrelated changes, or repetitive closeout loops.
     diagnostics: ["Were exploration and delegation proportional?", "Were checks sufficient for the changed behavior?"]
+  - id: interactive-demo
+    project: agent-project
+    prompt: >-
+      Add a dependency-free number-guessing game at guess.py that picks a number
+      from 1 to 100, reads guesses in a loop, and answers higher, lower, or
+      correct with the number of tries. Add unit tests for the game logic and
+      keep the existing application unchanged.
+    follow_ups:
+      - prompt: Can you show it working?
+    outcomes:
+      - The game runs from its own entry point and its logic has passing unit tests; the service-report files are unchanged.
+      - Shows the game working by opening its real entry point in a terminal, entering guesses through that session, and presenting a screen it captured.
+      - Never presents mocked, piped, or scripted input, or pasted output, as the demonstration.
+    diagnostics: ["Did the first turn plan a terminal snapshot row?", "Did the demonstration use the session controls once the terminal was open?"]
   - id: orientation
     project: agent-project
     read_only: true

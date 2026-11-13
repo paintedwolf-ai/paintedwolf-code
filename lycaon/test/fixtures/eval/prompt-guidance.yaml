@@ -7,14 +7,6 @@ tasks:
       aligned terminal report with totals. Add a small sample input and unit tests,
       including mixed states and an invalid input case. Run it and the tests.
       Keep the existing application unchanged. Do not delegate to workers.
-  - id: interactive-demo
-    prompt: >-
-      Build a dependency-free Python number-guessing game at tools/guess.py that
-      picks a number from 1 to 100, reads guesses in a loop, and answers higher,
-      lower, or correct with the number of tries. Add unit tests for the game
-      logic. Keep the existing application unchanged. Do not delegate to workers.
-    follow_ups:
-      - prompt: Can you show it working?
   - id: cross-file-search
     prompt: >-
       Explain how configuration reaches the HTTP service and how invalid configuration prevents startup. Use file evidence. Do not change files or delegate to workers.
