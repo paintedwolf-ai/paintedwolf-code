@@ -118,9 +118,6 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", err
 		}
 		receiptRoot = resolved.DisplayPath
-		if err != nil {
-			return "", err
-		}
 		if err := t.runFindRoot(ctx, tctx, resolved.Root, resolved.Abs, resolved.DisplayPath,
 			maxDepth, maxResults, offset, nameGlob, entryType, includeIgnored, nil, &resp,
 			&skipped, &matchedTotal, &truncated, &deeperPathsOmitted); err != nil {

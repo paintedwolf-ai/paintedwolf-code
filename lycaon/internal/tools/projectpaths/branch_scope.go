@@ -171,7 +171,7 @@ func commandCwdUnderBranch(ctx context.Context, tctx tools.ToolContext, branch, 
 	if cwdArg == "" {
 		return branch, ".", nil
 	}
-	branchRel, displayPath := "", ""
+	var branchRel, displayPath string
 	if filepath.IsAbs(cwdArg) {
 		// An in-root absolute cwd maps into the worker branch; anything
 		// outside the attached roots stays out of scope.
