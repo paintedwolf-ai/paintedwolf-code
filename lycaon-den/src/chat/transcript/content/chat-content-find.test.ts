@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { createRoot, createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LycaonApiError } from "../../../api/http.ts";
