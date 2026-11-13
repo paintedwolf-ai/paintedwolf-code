@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -29,17 +30,14 @@ type toolState struct {
 func TestRenderedCopyNamesOnlyReachableEvidenceHandles(t *testing.T) {
 	binding, err := evidence.LoadBinding()
 	contractcheck.FailErr(t, "load evidence binding", err)
+	manifest, err := nativemanifest.Load()
+	contractcheck.FailErr(t, "load native manifest", err)
 	kinds := binding.KindShapeMap()
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	templates := sharedPromptTemplates(t)
 	states := evidenceHandleStates(t, binding)
 	for _, state := range states {
-		reachable := map[string]bool{}
-		for _, tool := range append(slices.Clone(state.offered), state.requestable...) {
-			for _, kind := range binding.ProducibleKinds(tool) {
-				reachable[kind] = true
-			}
-		}
+		reachable := reachableKinds(binding, manifest, append(slices.Clone(state.offered), state.requestable...))
 		vars := prompts.VisibleToolsNativePartialVars(state.offered)
 		prompts.MergeVisualShowVars(state.offered, state.requestable, vars)
 		for _, name := range templates {
@@ -88,6 +86,26 @@ func TestStaticCopyNamesDeclaredEvidenceHandles(t *testing.T) {
 			}
 		}
 	}
+}
+
+// reachableKinds includes what command mints by running native operations,
+// such as read# from cat.
+func reachableKinds(binding *evidence.Binding, manifest nativemanifest.Config, tools []string) map[string]bool {
+	out := map[string]bool{}
+	for _, tool := range tools {
+		names := []string{tool}
+		if tool == "command" {
+			for _, group := range manifest.Operations {
+				names = append(names, group...)
+			}
+		}
+		for _, name := range names {
+			for _, kind := range binding.ProducibleKinds(name) {
+				out[kind] = true
+			}
+		}
+	}
+	return out
 }
 
 func sharedPromptTemplates(t *testing.T) []string {
