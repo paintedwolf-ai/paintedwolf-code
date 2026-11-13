@@ -313,16 +313,3 @@ func ApplyTransforms(content string, transforms []*TransformSpec, targetFacts []
 	}
 	return out, skipped
 }
-
-// ReportTransform projects a TransformSpec into the shape fixtures assert
-// ([OAR-CONF-15]): action and target always, replacement only when present.
-func ReportTransform(spec *TransformSpec) map[string]any {
-	out := map[string]any{
-		"action": spec.Action,
-		"target": spec.Target,
-	}
-	if spec.HasReplacement {
-		out["replacement"] = spec.Replacement
-	}
-	return out
-}
