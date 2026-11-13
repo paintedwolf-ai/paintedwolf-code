@@ -1,7 +1,10 @@
 import { createEffect, createSignal, onCleanup, untrack } from "solid-js";
+import { isApiErrorCode } from "../../../api/http.ts";
 import { findController, refreshFindResults } from "../../../find/find-controller.ts";
 import { registerFindRevealHost } from "../../../find/find-reveal.ts";
-import type { ChatContentAccess } from "./chat-content-reader.ts";
+import type { ChatContentAccess, ChatContentMatch } from "./chat-content-reader.ts";
+
+const MAX_MATCHES = 10000;
 
 /** Search exact retained content while the card body is absent. */
 export function bindChatContentFind(options: {
@@ -9,38 +12,51 @@ export function bindChatContentFind(options: {
   host: () => HTMLElement | null | undefined;
   collapsed: () => boolean;
   expand: () => () => void;
-  reveal: (offset: number) => void;
+  reveal: (match: ChatContentMatch) => void;
+  /** Receives a search the content kept changing under. */
+  onError?: (cause: unknown) => void;
 }) {
-  const [matches, setMatches] = createSignal<{ from: number; to: number }[]>([]);
+  const [matches, setMatches] = createSignal<readonly ChatContentMatch[]>([]);
   const id = `chat-content-find:${crypto.randomUUID()}`;
   createEffect(() => {
     const host = options.host(); if (!host) return;
     onCleanup(registerFindRevealHost({ id, hostEl: () => host,
-      isCollapsed: options.collapsed, revealForFind: options.expand, remoteMatches: matches,
-      revealRemoteMatch: index => { const match = matches()[index]; if (match) options.reveal(match.from); },
+      isCollapsed: options.collapsed, revealForFind: options.expand,
+      remoteMatches: () => matches().map(match => ({ from: 0, to: match.length })),
+      revealRemoteMatch: index => { const match = matches()[index]; if (match) options.reveal(match); },
     }));
   });
+  // One refresh per query: a search the content changed under runs once more on the new revision.
+  let refreshedFor: string | undefined;
   createEffect(() => {
     const access = options.access();
     const query = findController.query();
     const sensitive = findController.caseSensitive();
     const active = findController.isOpen();
+    access?.revision();
     setMatches([]);
     if (!access || !query || !active) return;
+    const search = `${query}\0${sensitive}`;
+    if (refreshedFor !== undefined && refreshedFor !== search) refreshedFor = undefined;
     const abort = new AbortController();
     const timer = setTimeout(() => {
       void (async () => {
-        const matches: { from: number; to: number }[] = [];
+        const found: ChatContentMatch[] = [];
         for (let cursor: string | undefined = undefined; ;) {
-          const page = await access.search(query, cursor, sensitive, abort.signal);
+          const page = await access.find(query, cursor, sensitive, abort.signal);
           if (abort.signal.aborted) return;
-          matches.push(...page.matches.map(match => ({ from: match.offset, to: match.offset + match.length })));
-          if (matches.length >= 10000 || !page.next_cursor) break;
+          found.push(...page.matches);
+          if (found.length >= MAX_MATCHES || !page.next_cursor) break;
           cursor = page.next_cursor;
         }
-        setMatches(matches.slice(0, 10000));
+        setMatches(found.slice(0, MAX_MATCHES));
         untrack(refreshFindResults);
-      })().catch(() => { /* The reader exposes fetch errors and retry when opened. */ });
+      })().catch(cause => {
+        if (abort.signal.aborted || !isApiErrorCode(cause, ["chat_content_changed"])) return;
+        if (refreshedFor === search) { options.onError?.(cause); return; }
+        refreshedFor = search;
+        void access.refresh(abort.signal).catch(() => { /* The reader reports read failures. */ });
+      });
     }, 120);
     onCleanup(() => { clearTimeout(timer); abort.abort(); });
   });

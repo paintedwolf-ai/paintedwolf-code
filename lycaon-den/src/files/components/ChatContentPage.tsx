@@ -3,7 +3,10 @@ import { EditorView } from "@codemirror/view";
 import { Compartment, StateEffect } from "@codemirror/state";
 import type { LycaonClient } from "../../api/client.ts";
 import { chatContentDocumentKey, type ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
-import { createChatContentAccess, exceedsPrettyInput } from "../../chat/transcript/content/chat-content-reader.ts";
+import type { ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
+import { CommandReceiptLimitError } from "../../chat/transcript/content/command-receipt-access.ts";
+import { useChatContentAccess } from "../../chat/transcript/content/use-chat-content-access.ts";
+import { languageLabelForDetectedLanguage, PLAIN_TEXT_LABEL } from "../../components/source/editor/codemirror-lang.ts";
 import { bindChatContentFind } from "../../chat/transcript/content/chat-content-find.ts";
 import { getBackgroundProcessSnapshot, prepareBackgroundProcessOutput, subscribeBackgroundProcessStore } from "../../chat/tool/background-process-store.ts";
 import { bindFindableView } from "../../find/use-findable-view.ts";
@@ -34,7 +37,6 @@ import { resolveEditorIdentity } from "../documents/editor-identity.ts";
 import { indentChipLabel } from "../../components/source/editor/indent-detect.ts";
 import { DocumentWindows } from "./DocumentWindows.tsx";
 import { useResidentInteractive } from "../../ui/resident-presence-context.tsx";
-import { useCommandReceiptDocument } from "../documents/command-receipt-document.ts";
 import { reportSurfaceFailure } from "../../notices/surface-failure.ts";
 import {
   buildRawRedactionExtension,
@@ -49,6 +51,11 @@ const contentFailure = {
   title: "Content unavailable",
   suggestedAction: "Reopen the content from the chat, or check the connection.",
 };
+const changingFailure = {
+  code: "chat_content_changing",
+  title: "Content is still changing",
+  suggestedAction: "Try again when the command finishes.",
+};
 const copyFailure = {
   code: "chat_content_copy_failed",
   title: "Couldn’t copy the content",
@@ -59,14 +66,14 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   const interactive = useResidentInteractive();
   const [host, setHost] = createSignal<HTMLElement | null>(null);
   const [editorHost, setEditorHost] = createSignal<HTMLDivElement>();
-  const [found, setFound] = createSignal<number>();
+  const [found, setFound] = createSignal<ChatContentMatch>();
   const [retainedText, setRetainedText] = createSignal<ChatRetainedText | null>(null);
   const [processSnapshot, setProcessSnapshot] = createSignal<{ text: string; rev: number } | null>(null);
   const copyAbort = new AbortController();
   onCleanup(() => copyAbort.abort());
   const reportError = (cause: unknown) => reportSurfaceFailure(contentFailure, cause, props.projectId);
   const reportCopyError = (cause: unknown) => reportSurfaceFailure(copyFailure, cause, props.projectId);
-  const receipts = useCommandReceiptDocument(() => props.document, () => props.client, reportError);
+  const reportChanging = (cause: unknown) => reportSurfaceFailure(changingFailure, cause, props.projectId);
   const tabKey = createMemo(() => chatContentDocumentKey(props.document));
   const prettyEnabled = () => isPrettyDisplayEnabled(props.projectId, tabKey());
   const layoutAvailable = () => prettyTargetFor(props.document.path, props.document.language) !== null;
@@ -92,48 +99,33 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
       setProcessSnapshot(null);
     }
   });
-  const retainedSource = createMemo<Parameters<typeof createChatContentAccess>[0] | undefined>(() => {
-    const content = props.document.content;
-    if (props.document.kind !== "tool" || content.kind !== "retained" || !props.client) return undefined;
-    return { client: props.client, sessionId: props.document.sessionId,
-      messageId: props.document.messageId, reference: content.reference };
-  }, undefined, {
-    equals: (previous, next) => previous === next || !!previous && !!next &&
-      previous.client === next.client && previous.sessionId === next.sessionId &&
-      previous.messageId === next.messageId && previous.reference.field === next.reference.field &&
-      previous.reference.tool_call_id === next.reference.tool_call_id &&
-      previous.reference.sha256 === next.reference.sha256,
-  });
-  const access = createMemo(() => {
-    const source = retainedSource();
-    return source ? createChatContentAccess(source) : undefined;
-  });
+  const access = useChatContentAccess(() => props.document, () => props.client, reportError);
   let retainedGen = 0;
   createEffect(() => {
     const contentAccess = access();
     const enabled = prettyEnabled();
     const key = tabKey();
+    contentAccess?.revision();
     const gen = ++retainedGen;
     setRetainedText(null);
     if (!contentAccess || !enabled) return;
     const abort = new AbortController();
     onCleanup(() => abort.abort());
     void contentAccess
-      .readBoundedSnapshot(abort.signal)
+      .prettySnapshot(abort.signal)
       .then((snap) => {
-        if (abort.signal.aborted || gen !== retainedGen) return;
-        if (!snap) {
+        if (abort.signal.aborted || gen !== retainedGen || !snap) return;
+        if ("limit" in snap) {
           // The paged reader keeps the text; at the size limit Pretty says why it is not laid out.
-          if (exceedsPrettyInput(contentAccess.reference)) {
-            setPrettyLayoutOutcome(props.projectId, key, { kind: "limit", reason: "size", length: contentAccess.reference.total_runes });
-          }
+          setPrettyLayoutOutcome(props.projectId, key, { kind: "limit", reason: "size", length: snap.limit });
           return;
         }
-        if (snap.sha256 !== contentAccess.reference.sha256 || !redactionSpansFit(snap.text, snap.spans)) return;
+        if (!redactionSpansFit(snap.text, snap.spans)) return;
         setRetainedText({ text: snap.text, spans: snap.spans });
       })
-      .catch(() => {
-        /* Retained read failure keeps the protected raw ChatContentEditor view. */
+      .catch((cause) => {
+        // Other failures keep the protected paged view.
+        if (cause instanceof CommandReceiptLimitError) reportChanging(cause);
       });
   });
   const [reader, setReader] = createSignal<ChatContentEditor>();
@@ -158,23 +150,30 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   createEffect(() => {
     const parent = editorHost(), content = access();
     if (!parent || !content || retainedText()) return;
+    // A new revision replaces every row, so it gets a new editor.
+    content.revision();
     const editor = new ChatContentEditor(parent, content, untrack(editorDisplayPrefs), reportError);
     setReader(editor);
     onCleanup(() => { editor.destroy(); setReader(undefined); });
   });
-  const revealInInlinePretty = (runeOffset: number, runeLength = 0) => {
+  const revealInInlinePretty = (match: ChatContentMatch) => {
     const view = inlineEditor();
     if (!view) return;
     const raw = view.state.doc.toString();
-    const from = runeOffsetToUtf16(raw, runeOffset);
-    const to = runeLength > 0 ? runeOffsetToUtf16(raw, runeOffset + runeLength) : from;
-    view.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+    let base = 0;
+    if ("row" in match) for (let row = 0; row < match.row && base >= 0; row++) base = raw.indexOf("\n", base) + 1;
+    const start = "row" in match ? runeOffsetToUtf16(raw.slice(base), match.column) + base : runeOffsetToUtf16(raw, match.offset);
+    const end = match.length > 0 ? start + runeOffsetToUtf16(raw.slice(start), match.length) : start;
+    view.dispatch({ selection: { anchor: start, head: end }, scrollIntoView: true });
+  };
+  const reveal = (match: ChatContentMatch) => {
+    const editor = reader();
+    if (editor && usePagedReader()) void editor.revealMatch(match);
+    else revealInInlinePretty(match);
   };
   createEffect(() => {
-    const target = props.document.revealOffset, editor = reader();
-    if (target === undefined) return;
-    if (editor && usePagedReader()) void editor.reveal(target);
-    else revealInInlinePretty(target);
+    const target = props.document.revealOffset;
+    if (target !== undefined && (reader() || inlineEditor())) reveal({ offset: target, length: 0 });
   });
   createEffect(() => { const prefs = editorDisplayPrefs(); reader()?.reader.prefs(prefs); });
   createEffect(on(
@@ -183,14 +182,10 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
     { defer: true },
   ));
   createEffect(() => {
-    const offset = found();
-    if (offset !== undefined && findController.isOpen()) {
-      const len = Array.from(untrack(findController.query)).length;
-      if (usePagedReader()) void reader()?.reveal(offset, len);
-      else revealInInlinePretty(offset, len);
-    }
+    const match = found();
+    if (match !== undefined && findController.isOpen()) untrack(() => reveal(match));
   });
-  bindChatContentFind({ access: () => interactive() ? access() : undefined, host, collapsed: () => false, expand: () => () => {}, reveal: setFound });
+  bindChatContentFind({ access: () => interactive() ? access() : undefined, host, collapsed: () => false, expand: () => () => {}, reveal: setFound, onError: reportChanging });
   bindFindableView({ id: chatContentDocumentKey(props.document), root: host,
     get provider() { return usePagedReader() ? "dom" : "codemirror"; }, getEditorView: activeEditor, primary: interactive, enabled: interactive });
   createEffect(() => {
@@ -211,38 +206,43 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
     const editor = reader(), view = activeEditor(), content = access();
     if (!view) return;
     if (!usePagedReader() || !editor || !content) { openGotoLine(view); return; }
-    openGotoLine({ lineCount: Math.max(1, content.reference.rows),
+    openGotoLine({ lineCount: Math.max(1, content.rows()),
       currentLine: (editor.reader.document.at(view.state.selection.main.head)?.slot.index ?? 0) + 1,
       focus: () => view.focus(), goTo: (line, column) => { void editor.revealRow(line - 1, column); },
     });
   };
   const copy = () => {
     const content = access();
-    if (props.document.content.kind === "command_receipts" && !receipts().ready) {
-      reportCopyError(new Error("Wait for the complete execution records before copying."));
-      return;
-    }
-    if (props.document.content.kind === "retained" && !content) {
+    if ((props.document.content.kind === "retained" || props.document.content.kind === "command_receipts") && !content) {
       reportCopyError(new Error("Reconnect to copy the complete document."));
       return;
     }
-    void (content ? content.text(0, content.reference.total_runes, copyAbort.signal) : Promise.resolve(inlineEditor()?.state.doc.toString() ?? ""))
+    void (content ? content.copyAll(copyAbort.signal) : Promise.resolve(inlineEditor()?.state.doc.toString() ?? ""))
       .then(copyTextToClipboard).catch(reportCopyError);
   };
   createEffect(() => { props.onHandle?.({ gotoLine }); onCleanup(() => props.onHandle?.(undefined)); });
   const isProcessSnapshot = () => props.document.content.kind === "process" && prettyEnabled();
+  // An unsettled receipt is a snapshot of records that are still being written.
+  const isSnapshot = () => isProcessSnapshot() || access()?.settled() === false;
+  const refreshSnapshot = () => {
+    if (isProcessSnapshot()) refreshProcessSnapshot();
+    else void access()?.refresh(copyAbort.signal).catch(reportError);
+  };
+  const languageLabel = () => props.document.language || props.document.path
+    ? languageLabelForDetectedLanguage(props.document.language ?? "", props.document.path ?? "")
+    : PLAIN_TEXT_LABEL;
   return <section ref={setHost} class="den-source-reader" data-testid="chat-content-page" aria-label={props.document.title}>
     <ReadonlyFilesDocument title={props.document.title}
-      actions={<Show when={isProcessSnapshot()}><button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="chat-process-pretty-refresh" aria-label="Refresh snapshot" data-tip="Refresh snapshot" data-tip-pos="below" onClick={refreshProcessSnapshot}>Refresh</button></Show>}
+      actions={<Show when={isSnapshot()}><button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="chat-process-pretty-refresh" aria-label="Refresh snapshot" data-tip="Refresh snapshot" data-tip-pos="below" onClick={refreshSnapshot}>Refresh</button></Show>}
       onFind={() => { activeEditor()?.focus(); openFind(); }} onGotoLine={gotoLine} onCopy={copy}
       status={{ identity: resolveEditorIdentity({ historical: false, workerDraft: false, deleted: false, writable: null, preview: false, editable: false, unsupported: true }),
         windows: <DocumentWindows projectId={props.projectId} />,
         dirtyCount: projectFilesState(props.projectId).order.filter(key => projectFilesState(props.projectId).byKey[key]?.dirty).length,
-        cursor: cursor(), language: "Plain text", indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
-        details: <><Show when={isProcessSnapshot()}><span class="den-files-editor__status-detail" data-testid="chat-process-pretty-snapshot">Snapshot</span></Show><span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span></>,
+        cursor: cursor(), language: languageLabel(), indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
+        details: <><Show when={isSnapshot()}><span class="den-files-editor__status-detail" data-testid="chat-process-pretty-snapshot">Snapshot</span></Show><span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span></>,
         pretty: prettyStatusToggleForTab(props.projectId, tabKey()),
       }}>
-    <Show when={usePagedReader()} fallback={<InlineChatContent receiptText={receipts().text} document={props.document} client={props.client} prettyEnabled={prettyEnabled()} processSnapshot={processSnapshot()} retainedText={retainedText()} onOutcome={(outcome) => setPrettyLayoutOutcome(props.projectId, tabKey(), outcome)} onError={reportError} onEditor={setInlineEditor} />}>
+    <Show when={usePagedReader()} fallback={<InlineChatContent document={props.document} client={props.client} prettyEnabled={prettyEnabled()} processSnapshot={processSnapshot()} retainedText={retainedText()} onOutcome={(outcome) => setPrettyLayoutOutcome(props.projectId, tabKey(), outcome)} onError={reportError} onEditor={setInlineEditor} />}>
       <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setEditorHost} /></div>
     </Show>
     </ReadonlyFilesDocument>
@@ -250,7 +250,6 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
 }
 
 function InlineChatContent(props: {
-  receiptText: string;
   document: ChatContentDocument;
   client: LycaonClient | null;
   prettyEnabled: boolean;
@@ -272,7 +271,6 @@ function InlineChatContent(props: {
     if (props.retainedText) return props.retainedText.text;
     const content = props.document.content;
     if (content.kind === "inline") return content.text;
-    if (content.kind === "command_receipts") return props.receiptText;
     if (content.kind === "retained") return (content.reference.preview_rows ?? []).map(row => row.text).join("");
     if (content.kind === "process" && props.prettyEnabled && props.processSnapshot) return props.processSnapshot.text;
     revision();

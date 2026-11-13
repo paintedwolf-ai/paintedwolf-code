@@ -1,31 +1,32 @@
 import { Decoration } from "@codemirror/view";
 import { EditorSelection } from "@codemirror/state";
-import type { ChatContentRow, SourceReaderRow } from "../../api/types.ts";
-import type { ChatContentAccess } from "../../chat/transcript/content/chat-content-reader.ts";
+import type { SourceReaderRow } from "../../api/types.ts";
+import type { ChatContentAccess, ChatContentDocumentRow, ChatContentMatch } from "../../chat/transcript/content/chat-content-reader.ts";
 import { redactionMarkModifier, redactionMarkTitle } from "../../chat/transcript/content/redaction-spans.ts";
 import { ReaderEditor } from "../../components/source/reader/source-reader-editor.ts";
 import { MAIN_SECTION, readerGap, type ReaderSlot } from "../../components/source/reader/source-reader-document.ts";
 import type { EditorDisplayPrefs } from "../../components/source/editor/codemirror-theme.ts";
 import type { ReaderTextAccess } from "../../components/source/reader/source-reader-selection.ts";
 
-function sourceRow(row: ChatContentRow): SourceReaderRow {
+function sourceRow(row: ChatContentDocumentRow): SourceReaderRow {
   return { index: row.index, end: row.index+1, kind: "equal", text: row.text, before_line: 0, after_line: row.index+1, changed: [] };
 }
 
-/** Only nearby chat rows retain their text. */
+/** Only nearby chat rows retain their text. An editor shows one revision of its document. */
 export class ChatContentEditor {
   readonly reader: ReaderEditor;
-  private readonly rows = new Map<number, ChatContentRow>();
+  private readonly rows = new Map<number, ChatContentDocumentRow>();
   private readonly abort = new AbortController();
   private readonly pending = new Map<number, Promise<void>>();
   private readonly access: ChatContentAccess;
+  private readonly total: number;
   private readonly error: (cause: unknown) => void;
   private current = 0;
   private revealGeneration = 0;
 
   constructor(parent: HTMLElement, access: ChatContentAccess, prefs: EditorDisplayPrefs, error: (cause: unknown) => void) {
-    this.access = access; this.error = error;
-    for (const row of access.reference.preview_rows ?? []) this.rows.set(row.index, row);
+    this.access = access; this.error = error; this.total = access.rows();
+    for (const row of access.previewRows()) this.rows.set(row.index, row);
     const textAccess: ReaderTextAccess = {
       selection: async (start, end) => {
         const parts: string[] = [];
@@ -42,7 +43,7 @@ export class ChatContentEditor {
         }
         return parts.join("");
       },
-      content: () => access.text(0, access.reference.total_runes, this.abort.signal),
+      content: () => access.copyAll(this.abort.signal),
     };
     this.reader = new ReaderEditor({ parent, surface: "diff-viewer", label: "Chat content", prefs, access: () => textAccess, fullSide: () => "after", changes: () => false,
       scrollPastEnd: false, commandBridge: true, facts: () => {}, hideFacts: () => {}, error,
@@ -52,7 +53,7 @@ export class ChatContentEditor {
         const entry = editor.document.at(block.from);
         if (entry) {
           const fraction = entry.slot.pending ? Math.max(0, Math.min(1, (top-block.top)/Math.max(1,block.height))) : 0;
-          this.current = Math.min(access.reference.rows-1, entry.slot.index + Math.floor(fraction*(entry.slot.end-entry.slot.index)));
+          this.current = Math.min(this.total-1, entry.slot.index + Math.floor(fraction*(entry.slot.end-entry.slot.index)));
           access.rememberPosition(this.current);
         }
       },
@@ -74,9 +75,9 @@ export class ChatContentEditor {
     if (access.position()>0) void this.revealRow(access.position());
   }
 
-  private async read(index: number, signal: AbortSignal): Promise<ChatContentRow[]> {
-    const cached: ChatContentRow[] = [];
-    for (let i=index; i<Math.min(index+64,this.access.reference.rows); i++) {
+  private async read(index: number, signal: AbortSignal): Promise<ChatContentDocumentRow[]> {
+    const cached: ChatContentDocumentRow[] = [];
+    for (let i=index; i<Math.min(index+64,this.total); i++) {
       const row=this.access.peek(i); if (!row) break; cached.push(row);
     }
     return cached.length ? cached : this.access.read(index,signal);
@@ -105,7 +106,7 @@ export class ChatContentEditor {
       if (row.index>cursor) slots.push(readerGap(cursor,row.index,true,row.index-cursor));
       slots.push(sourceRow(row)); cursor=row.index+1;
     }
-    if (cursor<this.access.reference.rows) slots.push(readerGap(cursor,this.access.reference.rows,true,this.access.reference.rows-cursor));
+    if (cursor<this.total) slots.push(readerGap(cursor,this.total,true,this.total-cursor));
     this.reader.setRows(slots,reset);
     if (!reset) {
       const ranges = positions.flatMap(({ anchor, head }) => {
@@ -152,18 +153,15 @@ export class ChatContentEditor {
     if (!this.abort.signal.aborted && generation===this.revealGeneration) this.reader.reveal(MAIN_SECTION,index,{row:index,from:column-1,to:column-1});
   }
 
-  async reveal(offset: number, length = 0): Promise<void> {
+  async revealMatch(match: ChatContentMatch): Promise<void> {
     const generation=++this.revealGeneration;
     try {
-      const rows=await this.access.locate(offset,this.abort.signal);
-      if (this.abort.signal.aborted || generation!==this.revealGeneration || !rows[0]) return;
-      this.current=rows[0].index;
-      for (const row of rows) this.rows.set(row.index,row);
+      const target=await this.access.revealTarget(match,this.abort.signal);
+      if (this.abort.signal.aborted || generation!==this.revealGeneration || !target) return;
+      this.current=target.row;
+      for (const row of target.rows) this.rows.set(row.index,row);
       this.publish();
-      const row=rows[0], runes=Array.from(row.text);
-      const from=runes.slice(0,offset-row.offset).join("").length;
-      const to=from+runes.slice(offset-row.offset,offset-row.offset+length).join("").length;
-      this.reader.reveal(MAIN_SECTION,row.index,{ row:row.index,from,to });
+      this.reader.reveal(MAIN_SECTION,target.row,{ row:target.row,from:target.from,to:target.to });
     } catch (cause) { if (!this.abort.signal.aborted && generation===this.revealGeneration) this.error(cause); }
   }
 

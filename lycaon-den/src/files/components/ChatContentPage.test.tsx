@@ -12,6 +12,7 @@ import { FIND_BAR_ID } from "../../find/command-bar-disclosure.ts";
 import { applyBackgroundProcessEvent, resetBackgroundProcessStoreForTests } from "../../chat/tool/background-process-store.ts";
 import { clearChatContentCache } from "../../chat/transcript/content/chat-content-reader.ts";
 import { resetPrettyDisplayStateForTests } from "../editor/pretty-display-state.ts";
+import { languageLabelForDetectedLanguage, PLAIN_TEXT_LABEL } from "../../components/source/editor/codemirror-lang.ts";
 
 afterEach(() => {
   resetFindControllerForTests();
@@ -21,30 +22,47 @@ afterEach(() => {
 });
 
 describe("chat content Files pane", () => {
-  it("loads complete execution records in Files without paging controls", async () => {
-    const get = vi.fn().mockResolvedValueOnce({program:{id:"program"},executions:[{id:"first-record"}],executions_omitted:1,next_cursor:"next"})
-      .mockResolvedValueOnce({program:{id:"program"},executions:[{id:"last-record"}],executions_omitted:0});
-    const view = render(() => <ChatContentPage projectId="project" client={stubClient({getCommandProgramReceipt:get})} document={{
-      kind:"tool",sessionId:"session",messageId:"message",toolCallId:"call",pane:"receipts",title:"Execution records",
-      content:{kind:"command_receipts",programs:[{id:"program",activityId:"activity"}],context:'{"facts":[]}'},
-    }} />);
-    await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain("last-record"));
-    expect(view.container.querySelector(".cm-content")?.textContent).toContain("first-record");
-    expect(get).toHaveBeenCalledTimes(2);
+  const receiptDocument = (scopes = [{ programId: "program", activityId: "activity" }]): ChatContentDocument => ({
+    kind:"tool",sessionId:"session",messageId:"message",toolCallId:"call",pane:"receipts",title:"Receipt",language:"jsonl",
+    content:{kind:"command_receipts",scopes},
+  });
+  const receiptPage = (total: number, settled = true) => vi.fn(async (_session: string, _scopes: readonly string[], window: { offset: number; limit: number }) => ({
+    revision:"a".repeat(64),total_rows:total,settled,offset:window.offset,end_offset:Math.min(total,window.offset+window.limit),complete:window.offset+window.limit>=total,
+    rows:Array.from({length:Math.max(0,Math.min(total,window.offset+window.limit)-window.offset)},(_,index)=>({index:window.offset+index,text:`{"type":"execution","row":${window.offset+index}}`})),
+  }));
+
+  it("opens a large receipt with one request and pages the rest on demand", async () => {
+    const get = receiptPage(65537);
+    const view = render(() => <ChatContentPage projectId="project" client={stubClient({getCommandReceiptDocument:get})} document={receiptDocument()} />);
+    await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain('"row":0'));
+    expect(get).toHaveBeenCalledTimes(1);
+    expect(get.mock.calls[0]?.slice(1, 3)).toEqual([["program:activity"], { offset: 0, limit: 64 }]);
+    expect(view.container.querySelector(".den-files-editor__status-language")?.textContent).toBe(languageLabelForDetectedLanguage("jsonl", ""));
+    expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
   });
 
-  it("keeps an unavailable execution document out of Copy contents", async () => {
+  it("marks a receipt of a running program as a snapshot that refreshes", async () => {
+    const get = receiptPage(3, false);
+    const view = render(() => <ChatContentPage projectId="project" client={stubClient({getCommandReceiptDocument:get})} document={receiptDocument()} />);
+    await waitFor(() => expect(view.getByTestId("chat-process-pretty-snapshot")).toBeTruthy());
+    fireEvent.click(assertNamedControl(view.getByTestId("chat-process-pretty-refresh"), "button"));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
+    expect(get.mock.calls[1]?.[2]).toEqual({ offset: 0, limit: 64 });
+  });
+
+  it("reports Copy of a receipt that is not open", async () => {
     const notices = createNoticeStore(); registerNoticePublisher(notices);
     try {
-      const view = render(() => <ChatContentPage projectId="project" client={null} document={{
-        kind:"tool",sessionId:"session",messageId:"message",toolCallId:"call",pane:"receipts",title:"Execution records",
-        content:{kind:"command_receipts",programs:[{id:"program"}],context:"{}"},
-      }} />);
-      await waitFor(() => expect(view.container.querySelector(".cm-content")?.textContent).toContain("Execution records are unavailable"));
+      const view = render(() => <ChatContentPage projectId="project" client={null} document={receiptDocument()} />);
       fireEvent.click(assertNamedControl(view.getByTestId("files-readonly-copy"), "button"));
       const rows = selectProjectNoticeGroups(notices.index()).find(group => group.projectId === "project")?.notices ?? [];
       expect(rows.some(row => row.code === "chat_content_copy_failed")).toBe(true);
     } finally { registerNoticePublisher(null); }
+  });
+
+  it("shows Plain text for content without a language or path", () => {
+    const view = render(() => <ChatContentPage projectId="project" client={null} document={{kind:"tool",sessionId:"session",messageId:"message",toolCallId:"call",pane:"output",title:"Output",content:{kind:"inline",text:"plain"}}} />);
+    expect(view.container.querySelector(".den-files-editor__status-language")?.textContent).toBe(PLAIN_TEXT_LABEL);
   });
 
   it("opens prepared large output in a read-only CodeMirror with the Files editor controls", async () => {

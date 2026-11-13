@@ -129,6 +129,9 @@ export interface SessionsClient {
   listSessionInvocations(sessionId: string, opts?: { limit?: number; cursor?: string }): Promise<InvocationReceiptList>;
   /** One bounded page of a command program's host child receipts. */
   getCommandProgramReceipt(sessionId: string, programId: string, opts?: { limit?: number; cursor?: string; activity_id?: string; signal?: AbortSignal }): Promise<CommandProgramReceiptPage>;
+  /** A row window of the host-written receipt document; without a revision it reads the current snapshot. */
+  getCommandReceiptDocument(sessionId: string, scopes: readonly string[], window: { offset: number; limit: number; revision?: string }, signal?: AbortSignal): Promise<import("../types.ts").CommandReceiptDocumentPage>;
+  searchCommandReceiptDocument(sessionId: string, scopes: readonly string[], search: { revision: string; q: string; caseSensitive: boolean; cursor?: string; limit: number }, signal?: AbortSignal): Promise<import("../types.ts").CommandReceiptSearchPage>;
   createSessionArtifact(
     sessionId: string,
     recording: Blob,
@@ -282,6 +285,10 @@ export function createSessionsClient(j: JsonRequester, connection: BackendConnec
           cursor: opts?.cursor,
         })}`,
       ),
+    getCommandReceiptDocument: (sessionId, scopes, window, signal) =>
+      j(`/v1/sessions/${sessionId}/program-receipt-document${formatQuery({ scopes, ...window })}`, { signal }),
+    searchCommandReceiptDocument: (sessionId, scopes, search, signal) =>
+      j(`/v1/sessions/${sessionId}/program-receipt-document/search${formatQuery({ scopes, revision: search.revision, q: search.q, case_sensitive: search.caseSensitive, cursor: search.cursor, limit: search.limit })}`, { signal }),
     getCommandProgramReceipt: (sessionId, programId, opts) =>
       j(
         `/v1/sessions/${sessionId}/program-receipts/${encodeURIComponent(programId)}${formatQuery({

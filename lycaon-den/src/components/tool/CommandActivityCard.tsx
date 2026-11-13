@@ -67,8 +67,7 @@ function CommandActivityDetails(props: Props & { activity: () => NonNullable<Too
   const exceptions = createMemo(() => activityExceptions(activity(), executions(), feedback()));
   const receipts = createMemo<CommandReceiptContent>(() => ({
     kind: "command_receipts",
-    programs: programs().map(program => ({ id: program.id, activityId: program.activityId })),
-    context: JSON.stringify({ activities: activity().members, facts: exceptions(), feedback: props.part.feedback }),
+    scopes: programs().map(program => ({ programId: program.id, ...(program.activityId ? { activityId: program.activityId } : {}) })),
   }));
   return <div class="den-activity-detail" data-testid="command-activity-details">
     <ActivityCommand activity={activity()} projectId={props.projectId} />
