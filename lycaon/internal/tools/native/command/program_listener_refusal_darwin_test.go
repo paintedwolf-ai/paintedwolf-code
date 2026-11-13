@@ -56,3 +56,37 @@ func TestProgramRefusedListenerCarriesItsBind(t *testing.T) {
 		t.Fatalf("the refused bind did not reach the observation: %+v", observed.Refusals.Refusals)
 	}
 }
+
+func TestProgramRefusedListenerVariants(t *testing.T) {
+	if testing.Short() || !confine.Available() {
+		t.Skip("darwin + seatbelt sandbox required")
+	}
+	confine.StartRefusalWatch(t.Context(), "")
+	ctx, cancel := context.WithTimeout(t.Context(), 15*time.Second)
+	defer cancel()
+	for !confine.RefusalWatchLive() {
+		if ctx.Err() != nil {
+			t.Skip("kernel sandbox reports are not readable on this host")
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	f := newProgramFixture(t)
+	var effects tools.ToolInvocationOut
+	f.Configure = func(tc *tools.ToolContext) {
+		effects = tools.ToolInvocationOut{}
+		tc.Effects.Out = &effects
+	}
+	for _, source := range []string{
+		`external -- python3 -c "import socket; s=socket.socket(); s.bind(('0.0.0.0', 18797))"`,
+		`external -- /usr/bin/nc -l 18796`,
+		`external -- /bin/sh -c "python3 -m http.server 18795 --bind 0.0.0.0; sleep 1"`,
+		`external -- /usr/bin/touch /var/root/pw-denied`,
+	} {
+		out, err := f.call(t, t.Context(), source)
+		testutil.FailErr(t, "run variant", err)
+		t.Logf("%s => status %d witness=%s", source, decodeOutcome(t, out).Status, effects.Facts.Confine.Refusals.Witness)
+		for _, refusal := range effects.Facts.Confine.Refusals.Refusals {
+			t.Logf("   refusal %s %q recovery=%s process=%s", refusal.Operation, refusal.Target, refusal.Recovery, refusal.Process)
+		}
+	}
+}
