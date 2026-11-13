@@ -1,27 +1,62 @@
 package toolcontract_test
 
 import (
+	"slices"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func TestExpandFamiliesGrantsCompanions(t *testing.T) {
-	got := toolcontract.ExpandFamilies([]string{"terminal_open", "read"})
-	want := map[string]bool{
-		"terminal_open":     true,
-		"terminal_read":     true,
-		"terminal_send":     true,
-		"terminal_snapshot": true,
-		"terminal_close":    true,
-		"read":              true,
+	got := toolcontract.ExpandFamilies([]string{"terminal_read", "read"})
+	slices.Sort(got)
+	want := []string{"read", "terminal_close", "terminal_read", "terminal_send", "terminal_snapshot"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("expand = %v, want %v", got, want)
 	}
-	if len(got) != len(want) {
-		t.Fatalf("expand = %v", got)
+}
+
+// Every live resource's own controls form one family that its launcher stays
+// out of, so a launcher on a floor never drags controls onto it.
+func TestResourceControlsAreOneFamilyWithoutTheirLauncher(t *testing.T) {
+	cfg, err := nativemanifest.Load()
+	if err != nil {
+		t.Fatal(err)
 	}
-	for _, name := range got {
-		if !want[name] {
-			t.Fatalf("unexpected %s in %v", name, got)
+	implied := map[string][]string{}
+	for _, fact := range cfg.ResourceImpliedFacts() {
+		implied[fact] = cfg.ResourceImpliedTools(fact)
+	}
+	controls := nativemanifest.ExclusiveImplied(implied)
+	if len(controls) != len(implied) {
+		t.Fatalf("every resource needs its own controls: %v", controls)
+	}
+	presence := map[string]toolcontract.ResourcePresence{
+		nativemanifest.ResourceFactCommandJobs: {CommandJobs: true},
+		nativemanifest.ResourceFactTerminals:   {Terminals: true},
+		nativemanifest.ResourceFactPages:       {Pages: true},
+		nativemanifest.ResourceFactHeldCalls:   {HeldCalls: true},
+	}
+	for fact, want := range controls {
+		live := toolcontract.Implied(presence[fact])
+		for _, control := range want {
+			got := toolcontract.ExpandFamilies([]string{control})
+			slices.Sort(got)
+			if !slices.Equal(got, want) {
+				t.Fatalf("%s: family of %s = %v, want %v", fact, control, got, want)
+			}
+			if !toolcontract.ResourceControl(control) || !slices.Contains(live, control) {
+				t.Fatalf("%s: %s must be a control the live resource implies", fact, control)
+			}
+		}
+	}
+	for _, launcher := range []string{"command", "terminal_open", "page_open", "wait"} {
+		if got := toolcontract.ExpandFamilies([]string{launcher}); !slices.Equal(got, []string{launcher}) {
+			t.Fatalf("%s expands to %v", launcher, got)
+		}
+		if toolcontract.ResourceControl(launcher) {
+			t.Fatalf("%s is not a resource control", launcher)
 		}
 	}
 }
