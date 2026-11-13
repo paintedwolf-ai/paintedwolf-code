@@ -2,8 +2,10 @@ package episode
 
 import (
 	"runtime/debug"
+	"slices"
 
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
+	"github.com/lycaon/lycaon/internal/debugpaths"
 	"github.com/lycaon/lycaon/internal/trainingcapture"
 )
 
@@ -12,12 +14,15 @@ const (
 	BundleSchema   = "pw-training-episode-bundle/1"
 )
 
-// BundleFiles are the files every episode bundle holds beside manifest.json
+// bundleFiles are the files every episode bundle holds beside manifest.json
 // and its blobs directory.
-var BundleFiles = []string{
-	"catalog.json", "sessions.jsonl", "captures.jsonl", "operations.jsonl", "observations.jsonl",
+var bundleFiles = []string{
+	"catalog.json", debugpaths.Name(debugpaths.KindSessions), "captures.jsonl", "operations.jsonl", "observations.jsonl",
 	"effects.jsonl", "decisions.jsonl", "completions.jsonl", "source-inventory.json",
 }
+
+// BundleFiles returns a fresh copy of the bundle file names.
+func BundleFiles() []string { return slices.Clone(bundleFiles) }
 
 // TrainingContract is what a factory needs to read this host's evidence
 // without naming its tools or its storage: the record schemas, the bundle
@@ -43,7 +48,7 @@ func Contract() TrainingContract {
 	return TrainingContract{
 		Schema: ContractSchema, HostCommit: commit, HostModified: modified,
 		Bundle: BundleSchema, Capture: trainingcapture.Schema, Fact: trainingcapture.FactSchema,
-		Files:           append([]string(nil), BundleFiles...),
+		Files:           BundleFiles(),
 		Sources:         SourceIdentities(),
 		Settlement:      []Settlement{Settled, Unsettled},
 		SemanticOutcome: []SemanticOutcome{OutcomeSuccess, OutcomeFailure, OutcomeUnknown},

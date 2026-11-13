@@ -68,7 +68,7 @@ func TestTheContractAndBundleRecordsFollowTheirPublishedSchemas(t *testing.T) {
 		t.Fatalf("contract fields = %v, schema requires %v", jsonKeys(t, Contract()), sorted(contract.Required))
 	}
 	for field, value := range map[string]any{
-		"files": BundleFiles, "settlement": Contract().Settlement,
+		"files": BundleFiles(), "settlement": Contract().Settlement,
 		"semantic_outcome": Contract().SemanticOutcome, "effect_state": Contract().EffectState,
 	} {
 		raw, err := json.Marshal(value)
