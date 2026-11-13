@@ -66,7 +66,7 @@ func resolveFilesystemReach(images []string, cmd string, args map[string]any, pr
 	base := commandBaseDir(args, projectDir)
 	for _, target := range targets {
 		resolved, ok := resolveTargetPath(target, base)
-		if !ok || !confine.PathWithinWriteRoots(resolved, writeRoots) {
+		if !ok || !confine.PathWithinRoots(resolved, writeRoots) {
 			return "", false
 		}
 	}
@@ -94,7 +94,7 @@ func resolveGitWorktreeReach(images []string, cmd string, args map[string]any, p
 		}
 		tree = resolved
 	}
-	if tree == "" || !confine.PathWithinWriteRoots(tree, writeRoots) {
+	if tree == "" || !confine.PathWithinRoots(tree, writeRoots) {
 		return "", false
 	}
 	// A path argument can still carry the operation outside the tree
@@ -102,7 +102,7 @@ func resolveGitWorktreeReach(images []string, cmd string, args map[string]any, p
 	// Only path-shaped operands here: git's own subcommands and refs are bare words.
 	for _, target := range commandOperands(cmd, false) {
 		resolved, ok := resolveTargetPath(target, tree)
-		if !ok || !confine.PathWithinWriteRoots(resolved, writeRoots) {
+		if !ok || !confine.PathWithinRoots(resolved, writeRoots) {
 			return "", false
 		}
 	}

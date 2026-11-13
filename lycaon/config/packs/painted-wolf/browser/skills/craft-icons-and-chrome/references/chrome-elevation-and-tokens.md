@@ -47,4 +47,3 @@ Modern web application chrome draws from proven architectural patterns in permis
 | **Tailwind UI Patterns** | **MIT (open components)** | Multi-layer drop shadows (`shadow-sm`, `shadow-md`, `shadow-xl`), subtle ring borders (`ring-1 ring-inset`), and tabular numeric alignment. |
 
 All specimen assets in `assets/` synthesize these architectural patterns into standalone, zero-dependency HTML components styled with the host design kit tokens.
-

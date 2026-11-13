@@ -1,12 +1,15 @@
 package hostcontracts
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	hostapi "github.com/lycaon/lycaon/internal/api"
+	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/credentialstore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -32,20 +35,69 @@ func TestWriteDaemonManifestMode0600(t *testing.T) {
 	}
 }
 
-func TestWriteAPITokenFileMode0600(t *testing.T) {
+func TestWriteAPITokenPersistsToVaultAndRemovesLegacyFile(t *testing.T) {
 	dir := t.TempDir()
+	cfgDir := filepath.Join(dir, ".config", "paintedwolf")
 	t.Setenv("HOME", dir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
+	testutil.FailErr(t, "mkdir config", os.MkdirAll(cfgDir, 0o700))
 
-	path, err := hostapi.WriteAPITokenFile("secret-token")
-	testutil.FailErr(t, "WriteAPITokenFile failed", err)
-	info, err := os.Stat(path)
-	testutil.FailErr(t, "stat path", err)
+	legacyPath := filepath.Join(cfgDir, hostapi.LegacyTokenFileName)
+	testutil.FailErr(t, "seed legacy api.token", os.WriteFile(legacyPath, []byte("legacy-plaintext-token\n"), 0o600))
+
+	// ReadAPIToken must not import or fall back to legacy api.token before vault write.
+	if _, err := hostapi.ReadAPIToken(); err == nil {
+		t.Fatal("ReadAPIToken unexpectedly fell back to legacy api.token")
+	}
+
+	vaultPath, err := hostapi.WriteAPIToken("secret-token")
+	testutil.FailErr(t, "WriteAPIToken failed", err)
+	if vaultPath != credentialstore.DefaultVaultPath(cfgDir) {
+		t.Fatalf("vaultPath = %q, want %q", vaultPath, credentialstore.DefaultVaultPath(cfgDir))
+	}
+	info, err := os.Stat(vaultPath)
+	testutil.FailErr(t, "stat vault path", err)
 	if info.Mode().Perm() != 0o600 {
 		t.Fatalf("mode = %o, want 0600", info.Mode().Perm())
 	}
-	got, err := hostapi.ReadAPITokenFile()
+	if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy api.token remained on disk after vault persistence: %v", err)
+	}
+
+	got, err := hostapi.ReadAPIToken()
 	if err != nil || got != "secret-token" {
-		t.Fatalf("read token: %q err=%v", got, err)
+		t.Fatalf("ReadAPIToken = %q err=%v, want %q", got, err, "secret-token")
+	}
+}
+
+func TestWriteAPITokenPreservesLegacyFileOnVaultWriteFailureAndReportsUnlinkFailure(t *testing.T) {
+	dir := t.TempDir()
+	cfgDir := filepath.Join(dir, ".config", "paintedwolf")
+	t.Setenv("HOME", dir)
+	t.Setenv(configdir.EnvConfigDir, cfgDir)
+	testutil.FailErr(t, "mkdir config", os.MkdirAll(cfgDir, 0o700))
+
+	legacyPath := filepath.Join(cfgDir, hostapi.LegacyTokenFileName)
+	testutil.FailErr(t, "seed legacy api.token", os.WriteFile(legacyPath, []byte("legacy-keep\n"), 0o600))
+
+	// Block credential-vault.age with a directory so vault open/write fails.
+	vaultPath := credentialstore.DefaultVaultPath(cfgDir)
+	testutil.FailErr(t, "block vault path", os.MkdirAll(vaultPath, 0o700))
+
+	if _, err := hostapi.WriteAPIToken("fresh-token"); err == nil {
+		t.Fatal("WriteAPIToken succeeded despite blocked vault path")
+	}
+	if data, err := os.ReadFile(legacyPath); err != nil || string(data) != "legacy-keep\n" {
+		t.Fatalf("legacy api.token was altered on failed vault write: %q, %v", data, err)
+	}
+
+	// Remove vault blocker and replace legacyPath with a non-empty directory so os.Remove fails with non-ErrNotExist.
+	testutil.FailErr(t, "remove vault blocker", os.Remove(vaultPath))
+	testutil.FailErr(t, "remove legacy file", os.Remove(legacyPath))
+	testutil.FailErr(t, "mkdir non-empty legacy dir", os.MkdirAll(filepath.Join(legacyPath, "child"), 0o700))
+
+	if _, err := hostapi.WriteAPIToken("fresh-token"); err == nil {
+		t.Fatal("WriteAPIToken ignored non-ErrNotExist legacy unlink failure")
 	}
 }
 

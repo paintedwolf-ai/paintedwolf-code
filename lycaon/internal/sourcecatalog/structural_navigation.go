@@ -95,7 +95,7 @@ func (b *structuralBuilder) completeCoverage(ctx context.Context, root *os.Root,
 			}
 		}
 		if err := children.VisitUnresolved(ctx, func(item pagedview.RangeItem[TreeItem]) (bool, error) {
-			if !directoryOrderKind(item.Key) || item.Value.Symlink || b.policy.boundaryDir(item.Value.Path) != "" {
+			if !directoryOrderKind(item.Key) || item.Value.Symlink || b.policy.rootOnDemand() || b.policy.boundaryDir(item.Value.Path) != "" {
 				return true, nil
 			}
 			return true, frontier.push([]string{item.Value.Path})

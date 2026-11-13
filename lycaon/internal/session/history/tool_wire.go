@@ -35,6 +35,7 @@ func (m *Service) ToolWire(ctx context.Context, sess *api.Session, toolName, con
 			ParentSessionID:   sess.ParentSessionID,
 			ProjectID:         sess.ProjectID,
 			ProjectDir:        projectDir,
+			SettingsRoots:     m.Workspace.SettingsRoots(ctx, sess),
 			HostDataDir:       project.HostDataDir(m.dataDir, sess.ProjectID),
 			MaxToolSpillBytes: m.Limits.Effective(ctx, sess).MaxToolSpillBytes,
 			Posture:           sess.Posture,

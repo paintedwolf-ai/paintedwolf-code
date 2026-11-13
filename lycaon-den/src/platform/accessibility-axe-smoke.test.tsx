@@ -219,6 +219,8 @@ path: "big.dat",
             is_primary: true,
             added_at: "2026-01-01T00:00:00Z",
             kind: "attached",
+            admitted: true,
+            admission_code: null,
           },
         ]}
         onInnerLayerChange={() => undefined}
@@ -278,6 +280,8 @@ path: "a.png",
             is_primary: true,
             added_at: "2026-01-01T00:00:00Z",
             kind: "attached",
+            admitted: true,
+            admission_code: null,
           },
         ]}
         client={null}

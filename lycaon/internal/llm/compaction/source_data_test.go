@@ -29,13 +29,21 @@ func TestSourceDataPreservesToolEvidenceAcrossSegments(t *testing.T) {
 	}
 	recovered := map[string]string{}
 	for _, segment := range segments {
-		if len(segment.ToolCalls) != 0 || segment.ToolCallID != "" || segment.ToolName != "" {
+		if len(segment.ToolCalls) != 0 || segment.Authority != api.ContentAuthorityNone {
 			t.Fatal("segment retained live tool payload")
 		}
-		if tokenest.EstimateDefault(segment.Content) > 16 {
+		var fragment struct {
+			Source    string `json:"source_fragment"`
+			MessageID string `json:"message_id"`
+		}
+		testutil.FailErr(t, "decode source fragment", json.Unmarshal([]byte(segment.Content), &fragment))
+		if fragment.MessageID != segment.ID {
+			t.Fatal("fragment lost source identity")
+		}
+		if tokenest.EstimateDefault(fragment.Source) > 16 {
 			t.Fatal("unbounded source segment")
 		}
-		recovered[segment.ID] += segment.Content
+		recovered[segment.ID] += fragment.Source
 	}
 	for _, row := range rows {
 		want, err := sourceData(row)

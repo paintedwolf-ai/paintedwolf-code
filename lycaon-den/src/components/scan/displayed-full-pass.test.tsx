@@ -1,8 +1,7 @@
 import { createRoot, createSignal } from "solid-js";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { CodeScan, SecurityFullPass, SecurityOverview } from "../../api/types.ts";
-import { MIN_VISIBLE_MS } from "../../ui/min-visible-hold.ts";
-import { createDisplayedFullPass } from "./displayed-full-pass.ts";
+import { FINISHED_PASS_LINGER_MS, createDisplayedFullPass } from "./displayed-full-pass.ts";
 
 function pass(id: string, status: CodeScan["status"]): SecurityFullPass {
   return {
@@ -43,27 +42,27 @@ describe("createDisplayedFullPass", () => {
     dispose();
   });
 
-  it("holds a pass that finished within the minimum interval at its final state", () => {
+  it("shows a pass that finished at its final state for the linger time, however long it ran", () => {
     vi.useFakeTimers();
     const { displayed, setValue, dispose } = mount(overview({ running: pass("a1", "running") }));
-    vi.advanceTimersByTime(200);
+    vi.advanceTimersByTime(60_000);
     const finished = { ...pass("a1", "complete"), completed_at: "2026-09-10T17:15:58Z" };
     setValue(overview({ last_full: finished }));
     expect(displayed()).toEqual({ pass: finished, live: false });
 
-    vi.advanceTimersByTime(MIN_VISIBLE_MS - 201);
+    vi.advanceTimersByTime(FINISHED_PASS_LINGER_MS - 1);
     expect(displayed()?.live).toBe(false);
     vi.advanceTimersByTime(1);
     expect(displayed()).toBeNull();
     dispose();
   });
 
-  it("lets a pass that was shown longer than the interval leave at once", () => {
+  it("shows the last running state of a pass the host has not reported finished", () => {
     vi.useFakeTimers();
-    const { displayed, setValue, dispose } = mount(overview({ running: pass("a1", "running") }));
-    vi.advanceTimersByTime(MIN_VISIBLE_MS + 1);
-    setValue(overview({ last_full: pass("a1", "complete") }));
-    expect(displayed()).toBeNull();
+    const running = pass("a1", "running");
+    const { displayed, setValue, dispose } = mount(overview({ running }));
+    setValue(overview({}));
+    expect(displayed()).toEqual({ pass: running, live: false });
     dispose();
   });
 

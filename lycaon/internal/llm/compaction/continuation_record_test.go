@@ -2,6 +2,7 @@ package compaction
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"regexp"
@@ -195,7 +196,11 @@ func TestContinuationSegmentsCoverWholeUnicodeObservation(t *testing.T) {
 	testutil.FailErr(t, "segment sources", err)
 	var recovered strings.Builder
 	for _, segment := range segments {
-		recovered.WriteString(segment.Content)
+		var fragment struct {
+			Source string `json:"source_fragment"`
+		}
+		testutil.FailErr(t, "decode fragment", json.Unmarshal([]byte(segment.Content), &fragment))
+		recovered.WriteString(fragment.Source)
 	}
 	projected, err := sourceData(ContextMessage{ID: "read", Ord: 7, Role: "tool", Content: body, ToolName: "read"})
 	testutil.FailErr(t, "project source", err)

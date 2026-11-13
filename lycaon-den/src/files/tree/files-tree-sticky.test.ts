@@ -17,7 +17,7 @@ import { buildPagedTreeModel } from "./files-tree-paged-model.ts";
 
 type FixtureRow = { kind: "entry"; entry: FlatTreeRow } | { kind: "ancillary" };
 const ROOT: ProjectRoot = {
-  id: "r1", label: "repo", path: "/repo", kind: "attached", is_primary: true,
+  id: "r1", label: "repo", path: "/repo", kind: "attached", admitted: true, admission_code: null, is_primary: true,
   added_at: "2026-09-15T00:00:00Z",
 };
 const H = FILES_TREE_ROW_HEIGHT_PX;

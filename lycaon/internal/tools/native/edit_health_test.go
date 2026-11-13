@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/syntaxhealth"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
@@ -94,8 +93,8 @@ func TestMutationHealthPythonRejectIncludesSourceDiagnostic(t *testing.T) {
 	if err == nil || !errors.As(err, &reject) || reject.Code != "MUTATION_BROKE_PARSE" {
 		t.Fatalf("err = %v want MUTATION_BROKE_PARSE", err)
 	}
-	diagnostic, ok := reject.Data["syntax_diagnostic"].(syntaxhealth.Diagnostic)
-	if !ok || diagnostic.Row <= 1 || reject.Data["parse_language"] != "python" {
+	diagnostic, ok := reject.Data["syntax_diagnostic"].(map[string]any)
+	if !ok || diagnostic["row"].(int) <= 1 || reject.Data["parse_language"] != "python" {
 		t.Fatalf("Python source diagnostic missing: %+v", reject.Data)
 	}
 	if parseError, _ := reject.Data["parse_error"].(string); parseError == "" || strings.Contains(parseError, "line 1") {

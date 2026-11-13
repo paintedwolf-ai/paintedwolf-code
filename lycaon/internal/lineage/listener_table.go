@@ -1,8 +1,10 @@
 package lineage
 
 import (
+	"errors"
 	"net/netip"
 	"slices"
+	"syscall"
 )
 
 // Protocol is a transport whose bound sockets the kernel tables report.
@@ -78,11 +80,12 @@ type socketTableRead struct {
 }
 
 // reconcileListeners joins table reads with a walk of every readable process.
-// A read is withheld when the walk holds a listener it lacks, or when it falls
-// short of its declared count and shows no socket of any other process. Listeners
-// only the walk saw are still reported, since this user's processes are readable
-// whatever the table shows.
-func reconcileListeners(reads []socketTableRead, query ListenerQuery, self int, pids []int, observe func(pid int) ([]SocketObservation, error)) ListenerTable {
+// A read is withheld when the walk holds a listener it lacks and the
+// discrepancy survives a fresh read and a re-observation of the holders, or
+// when it falls short of its declared count and shows no socket of any other
+// process. Listeners only the walk saw are still reported, since this user's
+// processes are readable whatever the table shows.
+func reconcileListeners(reads []socketTableRead, query ListenerQuery, self int, pids []int, observe func(pid int) ([]SocketObservation, error), reread func(protocol Protocol) (socketTableRead, error)) ListenerTable {
 	walked := make(map[int][]SocketObservation, len(pids))
 	for _, pid := range pids {
 		if pid <= 0 {
@@ -102,6 +105,7 @@ func reconcileListeners(reads []socketTableRead, query ListenerQuery, self int, 
 				rows = append(rows, row)
 			}
 		}
+		disputed := map[uint64][]int{}
 		showsOther := false
 		for _, pid := range pids {
 			for _, socket := range walked[pid] {
@@ -112,12 +116,15 @@ func reconcileListeners(reads []socketTableRead, query ListenerQuery, self int, 
 				if !socket.Listening || listed[socket.handle] {
 					continue
 				}
-				complete = false
 				listed[socket.handle] = true
+				disputed[socket.handle] = append(disputed[socket.handle], pid)
 				if query.wants(socket.Protocol, socket.Local) {
 					rows = append(rows, kernelListener{Protocol: socket.Protocol, Local: socket.Local, UID: socket.uid, Handle: socket.handle})
 				}
 			}
+		}
+		if len(disputed) > 0 && withheld(read.Protocol, read.Records, disputed, observe, reread) {
+			complete = false
 		}
 		if read.Declared > len(read.Records) && !showsOther {
 			complete = false
@@ -127,6 +134,58 @@ func reconcileListeners(reads []socketTableRead, query ListenerQuery, self int, 
 		Listeners: resolveListeners(rows, pids, func(pid int) ([]SocketObservation, error) { return walked[pid], nil }),
 		Complete:  complete,
 	}
+}
+
+// withheld decides whether listeners the walk saw but the table read lacks
+// were hidden by the host rather than created after the read. A handle the
+// read delivered in another state, or a fresh read delivers now, dates the
+// listener after the first read. One both reads lack while a holder still
+// observes it listening is withholding; one no holder observes anymore is
+// closed, so absence stays trustworthy.
+func withheld(protocol Protocol, delivered map[uint64]bool, disputed map[uint64][]int, observe func(pid int) ([]SocketObservation, error), reread func(Protocol) (socketTableRead, error)) bool {
+	pending := make(map[uint64]bool, len(disputed))
+	for handle := range disputed {
+		if !delivered[handle] {
+			pending[handle] = true
+		}
+	}
+	if len(pending) > 0 && reread != nil {
+		if fresh, err := reread(protocol); err == nil {
+			for handle := range pending {
+				if fresh.Records[handle] {
+					delete(pending, handle)
+				}
+			}
+		}
+	}
+	if len(pending) == 0 {
+		return false
+	}
+	holders := make([]int, 0, len(disputed))
+	seen := make(map[int]bool, len(disputed))
+	for _, held := range disputed {
+		for _, pid := range held {
+			if !seen[pid] {
+				seen[pid] = true
+				holders = append(holders, pid)
+			}
+		}
+	}
+	for _, pid := range holders {
+		sockets, err := observe(pid)
+		if err != nil {
+			if errors.Is(err, syscall.ESRCH) {
+				continue
+			}
+			return true
+		}
+		for _, socket := range sockets {
+			if socket.Listening && pending[socket.handle] {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // resolveListeners attaches to each row every process incarnation whose

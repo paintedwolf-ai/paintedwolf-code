@@ -1,6 +1,7 @@
 package webresearch
 
 import (
+	"bytes"
 	"compress/gzip"
 	"context"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/egressclass"
 	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/httpclient"
+	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"io"
 	"net/http"
 	"net/netip"
@@ -80,25 +82,124 @@ func providerHTTPTimeout(timeoutSec int) time.Duration {
 	return timeout
 }
 
+// providerBodyMax is the provider response prefix a search reads.
+const providerBodyMax = 1 << 20
+
+// newProviderRequest builds the provider request as inert data. The exchange
+// itself goes through outboundhttp (or, under LYCAON_TEST, the injected seam
+// client), so the request object never reaches the network directly.
+func newProviderRequest(ctx context.Context, method, rawURL string, body []byte) (*http.Request, error) {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return nil, err
+	}
+	req := &http.Request{
+		Method: method,
+		URL:    u,
+		Header: make(http.Header),
+	}
+	if len(body) > 0 {
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		req.ContentLength = int64(len(body))
+		req.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
+	}
+	return req.WithContext(ctx), nil
+}
+
 func doProviderHTTP(ctx context.Context, req *http.Request, timeoutSec int, allowPrivate bool) ([]byte, int, error) {
 	// Apply the host gate before starting the network deadline.
 	if err := egressgate.AwaitHost(ctx, req.URL.Hostname()); err != nil {
 		return nil, 0, err
 	}
 	timeout := providerHTTPTimeout(timeoutSec)
-	ctx, cancel := egressgate.IOContext(ctx, timeout)
-	defer cancel()
-	req = req.WithContext(ctx)
-
-	client, err := providerEgressClient(ctx, req.URL, allowPrivate)
-	if err != nil {
+	if providerHTTPClient != nil {
+		// Validation precedes the injected transport; the seam keeps the
+		// pre-door exchange shape for boundary tests.
+		ioCtx, cancel := egressgate.IOContext(ctx, timeout)
+		defer cancel()
+		if _, err := providerEgressClient(ioCtx, req.URL, allowPrivate); err != nil {
+			return nil, 0, err
+		}
+		return readProviderHTTP(providerHTTPClient, req.WithContext(ioCtx))
+	}
+	if _, err := validateProviderEndpoint(req.URL.String(), allowPrivate); err != nil {
 		return nil, 0, err
 	}
-	if providerHTTPClient != nil {
-		// Validation precedes the injected transport.
-		client = providerHTTPClient
+	return providerHTTPThroughDoor(ctx, req, timeout, allowPrivate)
+}
+
+// providerHTTPThroughDoor exchanges the built request through outboundhttp.
+func providerHTTPThroughDoor(ctx context.Context, req *http.Request, timeout time.Duration, allowPrivate bool) ([]byte, int, error) {
+	var body []byte
+	if req.Body != nil && req.Body != http.NoBody {
+		b, err := io.ReadAll(req.Body)
+		_ = req.Body.Close()
+		if err != nil {
+			return nil, 0, err
+		}
+		body = b
 	}
-	return readProviderHTTP(client, req)
+	doorReq := outboundhttp.Request{
+		Class:  egressclass.WebResearchRequest,
+		Method: req.Method,
+		URL:    req.URL.String(),
+		// Origin headers stay scoped to the declared provider origin; redirect
+		// hops re-send only the host-authored headers.
+		OriginHeaders: providerOriginHeaders(req.Header),
+		Body:          body,
+		Timeout:       timeout,
+		Redirects:     outboundhttp.RedirectSafe,
+		RedirectLimit: outboundhttp.MaxRedirectLimit,
+		MaxBodyBytes:  providerBodyMax,
+		TruncateBody:  true,
+		AllowAddress: func(addr netip.Addr, _ uint16) bool {
+			return ipProviderEgress(addr, allowPrivate)
+		},
+		BeforeHop: providerHop(allowPrivate),
+	}
+	started := time.Now()
+	resp, err := outboundhttp.Do(ctx, doorReq)
+	if err != nil {
+		// A malformed automatic gzip decode is retried once under the same
+		// deadline with an explicit identity encoding.
+		if req.Method == http.MethodGet && len(body) == 0 && errors.Is(err, gzip.ErrHeader) {
+			if remaining := timeout - time.Since(started); remaining > 0 {
+				retry := doorReq
+				retry.OriginHeaders = append(append([]outboundhttp.Header(nil), doorReq.OriginHeaders...),
+					outboundhttp.Header{Name: "Accept-Encoding", Value: "identity"})
+				retry.Timeout = remaining
+				retryResp, retryErr := outboundhttp.Do(ctx, retry)
+				if retryErr == nil {
+					return retryResp.Body, retryResp.Status, nil
+				}
+				err = retryErr
+			}
+		}
+		return nil, 0, sanitizeProviderHTTPError(req, err)
+	}
+	return resp.Body, resp.Status, nil
+}
+
+// providerHop holds every hop, redirects included, to the provider endpoint
+// policy before the host gate.
+func providerHop(allowPrivate bool) func(context.Context, *url.URL) error {
+	return func(ctx context.Context, hopURL *url.URL) error {
+		if _, err := validateProviderEndpoint(hopURL.String(), allowPrivate); err != nil {
+			return err
+		}
+		return egressgate.AwaitHost(ctx, hopURL.Hostname())
+	}
+}
+
+// providerOriginHeaders carries the built request headers to the door.
+func providerOriginHeaders(header http.Header) []outboundhttp.Header {
+	out := make([]outboundhttp.Header, 0, len(header))
+	for name, values := range header {
+		for _, value := range values {
+			out = append(out, outboundhttp.Header{Name: name, Value: value})
+		}
+	}
+	return out
 }
 
 func readProviderHTTP(client *http.Client, req *http.Request) ([]byte, int, error) {

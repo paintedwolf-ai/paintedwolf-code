@@ -26,6 +26,15 @@ class DiagnosticLaneTests(unittest.TestCase):
         caller = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())
         self.assertIn("inputs.lane == ''", caller['jobs']['integration']['with']['affected'])
 
+    def test_fast_dispatch_provisions_the_scope_its_ready_lane_executes(self):
+        caller = yaml.safe_load((ROOT / '.github/workflows/ci.yml').read_text())
+        self.assertIs(caller['jobs']['fast']['with']['affected'], True)
+        result = self.plan('fast', 'ready', affected=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = json.loads(result.stdout)['include']
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]['repository_tools'])
+
     def test_normal_dispatch_binds_the_queue_but_a_diagnostic_does_not(self):
         workflow = yaml.safe_load((ROOT / '.github/workflows/verification.yml').read_text())
         command = next(step['run'] for step in workflow['jobs']['plan']['steps']
@@ -57,11 +66,11 @@ else: raise SystemExit(2)
                 self.assertEqual(sum(call == ['-m', 'ci_policy.queue_dispatch'] for call in observed),
                                  0 if lane else 1)
 
-    def plan(self, profile, lane, event='workflow_dispatch'):
+    def plan(self, profile, lane, event='workflow_dispatch', affected=False):
         environment = {**os.environ, 'GITHUB_EVENT_NAME': event}
         environment.pop('GITHUB_STEP_SUMMARY', None)
         return subprocess.run([sys.executable, str(ROOT / 'scripts/ci_verification.py'),
-                               'matrix', profile, '--lane', lane],
+                               'matrix', profile, '--lane', lane, *(['--affected'] if affected else [])],
                               cwd=ROOT, env=environment, text=True, capture_output=True, timeout=30)
 
     def test_manual_selection_keeps_every_shard_of_the_requested_lane(self):

@@ -55,6 +55,10 @@ func activation(gc *GuardContext) map[string]any {
 		// Authoritative invocation and diagnostic facts overwrite any untrusted keys in ObservationData or Published.
 		oarcopy.PublishInvocationRecovery(out, gc.Invocation.Tool, gc.Invocation.ToolArgs, gc.Invocation.CapabilityContract)
 		oarcopy.PublishDiagnosticKnowledge(out, gc.ObservationData)
+		// A sandbox refusal names its sockets outside the observation data.
+		if len(gc.Refusals.RefusedSocketPaths) > 0 {
+			oarcopy.PublishSocketReferences(out, gc.Refusals.RefusedSocketPaths)
+		}
 
 		out["fire_count"], out["breaker_count"], out["anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
 	}
@@ -126,6 +130,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"refused_terminal_read_paths":         strList(gc.Refusals.RefusedTerminalReadPaths),
 		"refused_terminal_write_paths":        strList(gc.Refusals.RefusedTerminalWritePaths),
 		"refused_socket_paths":                strList(gc.Refusals.RefusedSocketPaths),
+		"refused_socket_host_resources":       strList(gc.Refusals.RefusedSocketHostResources),
 		"refused_connect_ports":               strList(gc.Refusals.RefusedConnectPorts),
 		"refused_listen_ports":                strList(gc.Refusals.RefusedListenPorts),
 		"refused_signals":                     strList(gc.Refusals.RefusedSignals),

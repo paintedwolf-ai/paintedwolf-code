@@ -87,7 +87,6 @@ func (c *ErrScanCoordinator) SnapshotStore() *sourcesnapshot.Store { return nil 
 
 func NewInMemoryDelegationServer(t *testing.T) *api.Server {
 	t.Helper()
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	store := store.NewMemory()
 	mock := llm.NewMockProvider(TestMockConfig(t))
 	mgr := session.NewHost(store, session.Models{Client: mock, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())

@@ -25,7 +25,6 @@ func TestCreateSessionReturnsBeforeInventoryAndDetachesCancellation(t *testing.T
 	// The project is created on the registry, not through the server: project
 	// creation schedules its own inventory, and the fake must see only the
 	// session's.
-	project.SetDefaultOpenPolicy(project.TestOpenPolicy())
 	registry := project.NewMemoryRegistry()
 	p, err := project.CreateWithRoot(t.Context(), registry, t.TempDir())
 	testutil.FailErr(t, "create project", err)

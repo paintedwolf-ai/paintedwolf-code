@@ -148,31 +148,6 @@ func ConfirmNumberedWindow(path, numbered, responseID, deliveryID string) (Deliv
 	return out, nil
 }
 
-func verifyDeliveredSource(rec Record, claim Claim) (bool, string) {
-	fact := rec.SourceDelivery
-	if fact == nil || fact.ResponseID == "" || fact.DeliveryID == "" || fact.StartLine < 1 || fact.EndLine < fact.StartLine {
-		return false, ""
-	}
-	if claim.Path != "" && NormalizeLedgerPath(claim.Path) != NormalizeLedgerPath(rec.Path) {
-		return false, ""
-	}
-	excerpt := strings.TrimSpace(claim.Excerpt)
-	if claim.Line > 0 {
-		if claim.Line < fact.StartLine || claim.Line > fact.EndLine {
-			return false, ""
-		}
-		if excerpt == "" {
-			return true, ""
-		}
-		index := claim.Line - fact.StartLine
-		return index < len(rec.Body) && strings.Contains(rec.Body[index], excerpt), ""
-	}
-	if excerpt == "" {
-		return true, ""
-	}
-	return excerptInRecordBodies(rec, excerpt), ""
-}
-
 // RecordStateBytes measures the detached observation copy without allocating it.
 // Delivery consumers reserve this before Record; input capture and the original
 // opaque observation remain independently retained by their producing owner.

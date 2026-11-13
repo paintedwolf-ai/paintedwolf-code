@@ -60,7 +60,10 @@ func RunStage() error {
 		return err
 	}
 	defer func() { _ = proc.Close() }()
-	frame := os.NewFile(stageFrameFD, "sealed-entry-spec")
+	frame, err := sealStageFrame()
+	if err != nil {
+		return err
+	}
 	spec, err := readEntry(frame)
 	if err != nil {
 		return err
@@ -149,6 +152,25 @@ func RunStage() error {
 	}
 	defer func() { _ = proof.Close() }()
 	return slots.execute(roles, proof, transition)
+}
+
+// sealStageFrame takes ownership of the bootstrap's sealed entry specification.
+// The stage's descriptor numbers shift as workers open and close theirs, and a
+// number freed by an early close is reused by the next open, so a spawn that
+// seals by number would hand the child whatever descriptor 3 had become.
+// Duplication moves the specification above the stage's fixed layout and
+// releases the bootstrap's number immediately; every consumer shares the
+// owned copy.
+func sealStageFrame() (*os.File, error) {
+	duplicated, err := unix.FcntlInt(stageFrameFD, unix.F_DUPFD_CLOEXEC, stageGuardianFD+1)
+	if err != nil {
+		return nil, fmt.Errorf("seal the protected entry specification: %w", err)
+	}
+	if err := unix.Close(stageFrameFD); err != nil {
+		_ = unix.Close(duplicated)
+		return nil, fmt.Errorf("seal the protected entry specification: %w", err)
+	}
+	return os.NewFile(uintptr(duplicated), "sealed-entry-spec"), nil
 }
 
 // The readiness marker is sent only after the broker has dropped its initial

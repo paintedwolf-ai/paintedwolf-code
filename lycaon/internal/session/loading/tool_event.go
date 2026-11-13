@@ -24,7 +24,7 @@ func (m *Service) ObserveToolCall(ctx context.Context, sess *api.Session, tctx t
 }
 
 func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx tools.ToolContext, tool string) {
-	if m.skillBody == nil || m.skills == nil {
+	if m.skillBody == nil || m.skills == nil || m.Ledger.FullCatalog(sess.ID) {
 		return
 	}
 	catalog, err := turnload.LoadCatalog()
@@ -46,6 +46,7 @@ func (m *Service) readSkillForTool(ctx context.Context, sess *api.Session, tctx 
 	finishDeciding := m.beginDeciding(ctx, sess, sess.ID, api.TurnLoadTriggerToolEvent, tctx.Identity.ToolCallID)
 	outcome := turnload.RankToolEvent(ctx, m.Decider(), catalog.ToolEvent, request, card, roster)
 	finishDeciding()
+	m.Ledger.ExposeCatalog(sess.ID, outcome.Ranking.Failure)
 	var preload *turnload.SkillPreload
 	switch {
 	case outcome.Read != nil:
