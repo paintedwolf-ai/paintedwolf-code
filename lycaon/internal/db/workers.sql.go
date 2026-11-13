@@ -251,6 +251,41 @@ func (q *Queries) GetWorker(ctx context.Context, id string) (Workers, error) {
 	return i, err
 }
 
+const getWorkerByChildSession = `-- name: GetWorkerByChildSession :one
+SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
+       delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
+       closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
+FROM workers WHERE child_session_id = ?
+`
+
+func (q *Queries) GetWorkerByChildSession(ctx context.Context, childSessionID sql.NullString) (Workers, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerByChildSession, childSessionID)
+	var i Workers
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.SessionID,
+		&i.Name,
+		&i.AgentType,
+		&i.ScopeMode,
+		&i.Brief,
+		&i.ChildSessionID,
+		&i.DelegationID,
+		&i.LegID,
+		&i.WorkflowRunID,
+		&i.WorkflowPhase,
+		&i.WorkflowWorkID,
+		&i.ClosedAt,
+		&i.ClosedReason,
+		&i.NextRoundOrdinal,
+		&i.NextMessageSeq,
+		&i.OperationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getWorkerByName = `-- name: GetWorkerByName :one
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
