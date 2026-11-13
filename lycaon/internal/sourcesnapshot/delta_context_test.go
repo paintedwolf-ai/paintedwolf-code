@@ -3,6 +3,7 @@ package sourcesnapshot
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -64,24 +65,38 @@ func TestSharedSnapshotSurvivesItsFirstConsumersCancellation(t *testing.T) {
 	testutil.FailErr(t, "remaining consumer publishes", <-otherDone)
 }
 
-type observingScopes struct{ observed context.Context }
+// observingScopes records the context of captures for one root; events from
+// other tests reach the same process-wide observer and are ignored.
+type observingScopes struct {
+	root     string
+	mu       sync.Mutex
+	observed context.Context
+}
 
 func (s *observingScopes) Capture(ctx context.Context, root string) *sourcescope.Scope {
-	s.observed = ctx
+	if filepath.Clean(root) == s.root {
+		s.mu.Lock()
+		s.observed = ctx
+		s.mu.Unlock()
+	}
 	return sourcescope.New(root, sourcescope.Options{})
 }
 
 func TestDeltaScopeUsesEventContext(t *testing.T) {
 	store := openSnapshotStore(t)
-	provider := &observingScopes{}
+	root := filepath.Clean(t.TempDir())
+	provider := &observingScopes{root: root}
 	store.SetScopes(provider)
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	store.deltas.observe(ctx, repochange.Event{
-		Kind: repochange.WorktreeChanged, ProjectDir: t.TempDir(), Paths: []string{"main.go"},
+		Kind: repochange.WorktreeChanged, ProjectDir: root, Paths: []string{"main.go"},
 	})
-	if provider.observed != ctx {
-		t.Fatalf("scope provider lost event context: %v", provider.observed)
+	provider.mu.Lock()
+	observed := provider.observed
+	provider.mu.Unlock()
+	if observed != ctx {
+		t.Fatalf("scope provider lost event context: %v", observed)
 	}
 }
 
