@@ -280,7 +280,7 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		DocumentUnresolvable: func(body string) bool {
 			return secretmatch.ContainsReferenceToken(body) || secretmatch.ContainsMalformedReferenceToken(body)
 		},
-		Executions: dispatcher, Supervision: r.Supervisor, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
+		Executions: dispatcher, Supervision: runSupervision{ProgramSupervisor: r.Supervisor, run: run}, Predicates: commandprogram.PredicateRuntime{Patterns: commandprogram.NativePredicatePatterns{Memory: memory}},
 		Memory:         memory,
 		Clock:          r.clock(),
 		ResourceLimits: confineLimits{},

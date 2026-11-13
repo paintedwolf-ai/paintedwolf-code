@@ -2,6 +2,7 @@ package inject
 
 import (
 	"context"
+	"slices"
 	"strings"
 	"time"
 
@@ -64,6 +65,12 @@ func RenderCommandJobsBlock(
 	return strings.TrimSpace(block)
 }
 
+// commandLedgerLine keeps each ledger row on one line: a multiline statement's
+// lines are joined by single spaces before clamping.
 func commandLedgerLine(command string) string {
-	return runeclamp.Clamp(strings.ToValidUTF8(command, "�"), maxCommandLedgerLineRunes)
+	lines := strings.FieldsFunc(strings.ToValidUTF8(command, "�"), func(r rune) bool { return r == '\n' || r == '\r' })
+	for i := range lines {
+		lines[i] = strings.TrimSpace(lines[i])
+	}
+	return runeclamp.Clamp(strings.Join(slices.DeleteFunc(lines, func(line string) bool { return line == "" }), " "), maxCommandLedgerLineRunes)
 }

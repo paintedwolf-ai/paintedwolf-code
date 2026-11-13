@@ -158,7 +158,7 @@ func (e *evaluation) recordSource(executionID string, pin toolcontract.SourcePin
 // background hands a trailing & statement to host job supervision. The job runs
 // in an isolated frame with captured variables and directory, its own status
 // and host-stop latch, and the streams the supervisor owns for it. The parent
-// continues at once with status 0 and $! naming the session job handle.
+// continues at once with status 0 and $! naming the job's numeric ID.
 func (f *frame) background(ctx context.Context, s commandsurface.Statement) error {
 	run, err := f.beginRecorded(ctx, s.SyntaxLocation, "&")
 	if err != nil {
@@ -175,7 +175,7 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 	statement := s
 	statement.Background = false
 	releaseDescriptors := job.io.retain()
-	handle, err := f.e.ports.Supervision.StartJob(ctx, run.inv, func(jobCtx context.Context, handle string, streams Streams) (toolcontract.ProducerResult, error) {
+	started, err := f.e.ports.Supervision.StartJob(ctx, run.inv, func(jobCtx context.Context, handle string, streams Streams) (toolcontract.ProducerResult, error) {
 		defer release()
 		defer job.wait.finish()
 		job.wait.Job(handle)
@@ -198,10 +198,10 @@ func (f *frame) background(ctx context.Context, s commandsurface.Statement) erro
 		release()
 		return f.settle(ctx, run, ownerResult(err), err)
 	}
-	run.record.JobHandle = handle
-	f.state.lastJob, f.state.hasJob = handle, true
+	run.record.JobHandle = started.Handle
+	f.state.lastJob, f.state.hasJob = started.ID, true
 	f.e.mu.Lock()
-	f.e.jobs = append(f.e.jobs, handle)
+	f.e.jobs = append(f.e.jobs, started.Handle)
 	f.e.mu.Unlock()
 	return f.settle(ctx, run, ordinaryResult(0), nil)
 }
