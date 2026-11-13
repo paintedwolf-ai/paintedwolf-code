@@ -3460,7 +3460,7 @@
       "branch_instruction": "Retain existing results and state that this operation was not executed; do not create replacement work or write into the parent workspace to bypass isolation.",
       "category": "recoverable",
       "emit": "guard:worker_branch_claim",
-      "summary": "Isolating tool **{{ tool }}** could not claim a private write-worker branch."
+      "summary": "Isolating tool **{{ tool }}** could not claim the worker's private view."
     },
     "WORKER_BUDGET_DECLINE_NO_REQUEST": {
       "branch_instruction": "Branch on Code; nothing is left to decline for this job",
