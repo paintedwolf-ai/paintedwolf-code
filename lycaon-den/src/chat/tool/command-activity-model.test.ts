@@ -264,13 +264,15 @@ describe("receipt scopes", () => {
   ]);
  });
  it("keeps a repeated scope once and lets a whole program replace its activities in place", () => {
-  const first = entry("a", [fact("read-a")]);
-  const repeated = entry("b", [fact("read-a")]);
-  if (repeated.kind === "tool") repeated.part.commandProgram = first.kind === "tool" ? first.part.commandProgram : undefined;
-  expect(scopes([first, repeated])).toEqual([[{ programId: "program:a", activityId: "read-a" }]]);
-  const whole = entry("c", [fact("read-c", { execution_ids: [] })]);
-  if (whole.kind === "tool") whole.part.commandProgram = first.kind === "tool" ? first.part.commandProgram : undefined;
-  expect(scopes([first, entry("b", [fact("read-b")]), whole])).toEqual([[{ programId: "program:a" }, { programId: "program:b", activityId: "read-b" }]]);
+  // Calls that ran under one program carry its id with their own facts.
+  const onProgramA = (id: string, facts: CommandActivity[]): ActivitySpanEntry => {
+   const value = entry(id, facts);
+   if (value.kind === "tool" && value.part.commandProgram) value.part.commandProgram = { ...value.part.commandProgram, id: "program:a" };
+   return value;
+  };
+  expect(scopes([entry("a", [fact("read-a")]), onProgramA("b", [fact("read-a")])])).toEqual([[{ programId: "program:a", activityId: "read-a" }]]);
+  expect(scopes([entry("a", [fact("read-a")]), entry("b", [fact("read-b")]), onProgramA("c", [fact("read-c", { execution_ids: [] })])])).toEqual([[{ programId: "program:a" }, { programId: "program:b", activityId: "read-b" }]]);
+  expect(scopes([entry("a", [fact("read-a", { execution_ids: [] })]), onProgramA("b", [fact("read-b")])])).toEqual([[{ programId: "program:a" }]]);
  });
  it("records nothing for a call without a recorded program", () => {
   expect(parts(createCommandActivityProjection()([entry("plain")])).map(row => row.commandActivity?.receiptScopes)).toEqual([undefined]);
