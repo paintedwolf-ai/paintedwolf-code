@@ -322,7 +322,8 @@ func TestBackgroundJobRunsWithCapturedState(t *testing.T) {
 	if err != nil || out.Status != 0 {
 		t.Fatalf("evaluate: %v", err)
 	}
-	if f.stdout.String() != "job-1\n" || !slices.Equal(out.Jobs, []string{"job-1"}) || len(f.jobs.runs) != 1 {
+	// $! names the job's numeric ID; the outcome lists registry handles.
+	if f.stdout.String() != "1\n" || !slices.Equal(out.Jobs, []string{"job-1"}) || len(f.jobs.runs) != 1 {
 		t.Fatalf("job handle %q %v", f.stdout.String(), out.Jobs)
 	}
 	var jobOut bytes.Buffer

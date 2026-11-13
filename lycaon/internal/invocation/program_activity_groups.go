@@ -236,13 +236,14 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	}
 	var result []api.CommandActivity
 	positions := map[int]int{}
-	active := -1
+	// The row sequential primaries fold into, and the group that opened it.
+	activeRow, activeGroup := -1, activityGroup{}
 	for i, g := range groups {
 		if !primary[i] {
 			continue
 		}
-		if active >= 0 && activityFolds(groups[active], g) {
-			positions[i] = positions[active]
+		if activeRow >= 0 && activityFolds(activeGroup, g) {
+			positions[i] = activeRow
 			continue
 		}
 		positions[i] = len(result)
@@ -251,7 +252,7 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 			activity.Subject = subjects[i]
 		}
 		result = append(result, activity)
-		active = i
+		activeRow, activeGroup = positions[i], g
 	}
 	for i, g := range groups {
 		if owner, ok := assignments[i]; ok {
