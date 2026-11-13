@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/anchorcatalog"
@@ -104,8 +106,8 @@ func LoadFixturesDir(dir string) ([]ConformanceFixture, error) {
 		if err != nil {
 			return nil, err
 		}
-		var fx ConformanceFixture
-		if err := json.Unmarshal(raw, &fx); err != nil {
+		fx, err := decodeFixture(raw)
+		if err != nil {
 			return nil, fmt.Errorf("%s: %w", name, err)
 		}
 		if fx.ID == "" {
@@ -115,6 +117,44 @@ func LoadFixturesDir(dir string) ([]ConformanceFixture, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out, nil
+}
+
+// decodeFixture reads one fixture. Fact numbers keep their full range: a
+// literal beyond a double's range is the non-finite value a fixture uses to
+// reach a provider failure ([OAR-FACT-17]).
+func decodeFixture(raw []byte) (ConformanceFixture, error) {
+	var fx ConformanceFixture
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&fx); err != nil {
+		return fx, err
+	}
+	for name, value := range fx.Input.Facts {
+		fx.Input.Facts[name] = fixtureNumbers(value)
+	}
+	return fx, nil
+}
+
+func fixtureNumbers(v any) any {
+	switch t := v.(type) {
+	case json.Number:
+		f, err := strconv.ParseFloat(t.String(), 64)
+		if err != nil && !errors.Is(err, strconv.ErrRange) {
+			return t.String()
+		}
+		return f
+	case map[string]any:
+		for k, e := range t {
+			t[k] = fixtureNumbers(e)
+		}
+		return t
+	case []any:
+		for i, e := range t {
+			t[i] = fixtureNumbers(e)
+		}
+		return t
+	}
+	return v
 }
 
 // RunCorpusDir evaluates every fixture in dir.
@@ -336,7 +376,7 @@ func fixtureRuleDocuments(raw json.RawMessage) ([]json.RawMessage, error) {
 func corpusActual(res *PipelineResult, store *CounterStore, session string) map[string]any {
 	applied := []string{}
 	for _, entry := range res.Trace.Entries {
-		applied = append(applied, entry.Rule+":"+traceOutcome(entry.Outcome))
+		applied = append(applied, bareRuleID(entry.Rule)+":"+traceOutcome(entry.Outcome))
 	}
 	actual := map[string]any{"decision": "none", "applied": applied, "on_fire": []string{}}
 	counters := map[string]any{}
@@ -345,7 +385,7 @@ func corpusActual(res *PipelineResult, store *CounterStore, session string) map[
 		for k, v := range row {
 			values[k] = v
 		}
-		counters[rule] = values
+		counters[bareRuleID(rule)] = values
 	}
 	actual["counters"] = counters
 	if d := res.Decision; d != nil {
@@ -361,6 +401,15 @@ func corpusActual(res *PipelineResult, store *CounterStore, session string) map[
 		actual["on_fire"] = onFire
 	}
 	return actual
+}
+
+// bareRuleID is the identifier a fixture names a rule by: its id without the
+// publisher namespace ([OAR-EVAL-7]).
+func bareRuleID(qualified string) string {
+	if at := strings.LastIndex(qualified, "/"); at >= 0 {
+		return qualified[at+1:]
+	}
+	return qualified
 }
 
 // traceOutcome spells a trace outcome as fixtures do ([OAR-CONF-15]).

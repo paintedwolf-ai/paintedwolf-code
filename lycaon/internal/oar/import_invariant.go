@@ -188,7 +188,7 @@ func (imp *InvariantImport) ToRule() *Rule {
 		Enforcement: "enforce",
 		OnError:     "fail_closed",
 		Emit:        imp.Emit,
-		What:        imp.Message,
+		Copy:        Copy{What: imp.Message},
 		Tier:        TierPack,
 		Source:      "import:invariant",
 	}
@@ -235,7 +235,7 @@ func (imp *InvariantImport) ToHintYAML() ([]byte, error) {
 	// Copy members are top-level ([OAR-DOC-18]); emit and category are
 	// informational fields of the document model ([OAR-DOC-29], [OAR-DOC-30]).
 	fmt.Fprintf(&b, "    title: %q\n", r.Title)
-	fmt.Fprintf(&b, "    what: %q\n", r.What)
+	fmt.Fprintf(&b, "    what: %q\n", r.Copy.What)
 	fmt.Fprintf(&b, "    emit: %s\n", r.Emit)
 	b.WriteString("    category: recoverable\n")
 	return []byte(b.String()), nil

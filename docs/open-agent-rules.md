@@ -56,7 +56,7 @@ Evaluation is deterministic over an admitted rule set and frozen fact snapshot. 
 
 ## Rule kinds
 
-`kind` is one of `schema`, `policy`, `invariant`, `detector`. Per the schema, it "fixes evaluation order and nothing else": evaluation runs schema, then policy, then invariant, then detector. Kind says *when among its peers* a rule is checked, not why it exists or what it may do.
+A rule's `kind` is one of `schema`, `policy`, `invariant`, `detector`; `hint` marks a document that is never evaluated ([Hints](#hints)). For rules, kind fixes evaluation order and nothing else: evaluation runs schema, then policy, then invariant, then detector. Kind says *when among its peers* a rule is checked, not why it exists or what it may do.
 
 | Kind | Evaluates | Typical use |
 |---|---|---|
@@ -151,7 +151,7 @@ The fact environment is closed and declared before any rule compiles ([OAR-FACT-
 | Standard | `content-safety` (`prompt_injection_score`, `jailbreak_score`, `pii_entities`, `secret_matches`) and `mcp` (`mcp_server_*`, `mcp_tool_name`, `mcp_call_ok`, field accessors) | whole, as claimed in the engine declaration |
 | Host | `paintedwolf.*` | as declared in the engine declaration |
 
-Parameterized observations are typed functions over a declared argument, such as “receipt of this type exists”.
+Parameterized observations are typed functions over a declared argument, such as “receipt of this type exists”. `paintedwolf.tool_arg_string`, `paintedwolf.tool_arg_int`, and `paintedwolf.tool_arg_bool` read one tool argument by name with that type, and return the type's zero value when the argument is absent or holds another type; an integral decoded number counts as an `int`.
 
 Parameterized observations are not arbitrary callbacks. Their names, argument types, cost, and result types are part of the closed environment. Evaluation cannot read the filesystem, network, database, or transcript beyond facts already captured for the anchor. Exact names and operators: [Guidance conditions](guidance-conditions.md).
 
@@ -202,6 +202,8 @@ Bindings read fields, not prose. An error code must come from the declared error
 ## Content-safety surface
 
 Inbound content safety uses explicit authority and provenance facts. A rule may observe that content came from a tool, repository, attachment, or remote response and ask for the host's bounded handling effect. It cannot scan the content to decide whether it “looks like instructions.”
+
+At content anchors the host publishes one entry per content segment, in segment order: `paintedwolf.content_roles`, `paintedwolf.content_origins`, `paintedwolf.content_authorities`, `paintedwolf.content_trust_tiers`, and `paintedwolf.content_sources`. `paintedwolf.content_segment_count` counts the segments, `paintedwolf.content_contains_untrusted` is true when any segment's trust tier is `untrusted`, and `paintedwolf.content_length` is the length of the content.
 
 Outbound secret protection uses host secret evidence and typed redaction/exfiltration facts. Detector rules can add provenance such as credential minting, but the security subsystem performs screening and approval.
 

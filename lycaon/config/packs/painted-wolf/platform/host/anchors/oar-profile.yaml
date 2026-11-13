@@ -179,10 +179,6 @@ host_facts:
    type: bool
  - name: paintedwolf.verify_declared
    type: bool
- - name: paintedwolf.progress_closed_beyond_baseline
-   type: bool
- - name: paintedwolf.progress_reconciled_since_arm
-   type: bool
  - name: paintedwolf.pending_user_input
    type: bool
  - name: paintedwolf.stub_valid

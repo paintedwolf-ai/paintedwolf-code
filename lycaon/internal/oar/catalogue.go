@@ -96,8 +96,6 @@ var factDecls = []factDecl{
 	{"path_is_worker_branch", oarcore.TypeBool, FactTierHost, ""},
 	{"verify_has_command", oarcore.TypeBool, FactTierHost, ""},
 	{"verify_declared", oarcore.TypeBool, FactTierHost, ""},
-	{"progress_closed_beyond_baseline", oarcore.TypeBool, FactTierHost, ""},
-	{"progress_reconciled_since_arm", oarcore.TypeBool, FactTierHost, ""},
 	{"pending_user_input", oarcore.TypeBool, FactTierHost, ""},
 	{"stub_valid", oarcore.TypeBool, FactTierHost, ""},
 	{"pattern_parse_ok", oarcore.TypeBool, FactTierHost, ""},

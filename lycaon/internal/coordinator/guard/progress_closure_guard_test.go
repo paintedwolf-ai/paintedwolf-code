@@ -7,73 +7,71 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-func TestObserveProgressItemNotClosedBeforeDispatch_blocksWhenArmed(t *testing.T) {
+func TestObserveProgressReconciliationBeforeDispatch_blocksWhenArmed(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	content := "## Progress\n- [ ] ship\n- [ ] verify\n"
 	gc := oar.NewGuardContext()
-	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "task", ProgressClosureBaseline{Closed: 0, Content: content}, true, gc)
+	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, true, gc)
 	if !hasRejectCode(gc, ProgressReconciliationRequiredCode) {
 		t.Fatalf("want %s in %v", ProgressReconciliationRequiredCode, gc.Invocation.ArgValidationErrors)
 	}
 }
 
-func TestObserveProgressItemNotClosedBeforeDispatch_allowsWhenUnarmed(t *testing.T) {
+func TestObserveProgressReconciliationBeforeDispatch_allowsWhenUnarmed(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	content := "## Progress\n- [ ] ship\n"
 	gc := oar.NewGuardContext()
-	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "task", ProgressClosureBaseline{Content: content}, false, gc)
+	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, false, gc)
 	if hasRejectCode(gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("unarmed latch must not observe reject")
 	}
 }
 
-func TestObserveProgressItemNotClosedBeforeDispatch_allowsRead(t *testing.T) {
+func TestObserveProgressReconciliationBeforeDispatch_allowsRead(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	content := "## Progress\n- [ ] ship\n"
 	gc := oar.NewGuardContext()
-	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "read", ProgressClosureBaseline{Content: content}, true, gc)
+	ObserveProgressReconciliationBeforeDispatch(sess, content, "read", ProgressClosureBaseline{}, true, gc)
 	if hasRejectCode(gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("read must not observe reject")
 	}
 }
 
-func TestObserveProgressItemNotClosedBeforeDispatch_terminalDocumentStillNeedsAcknowledgement(t *testing.T) {
+func TestObserveProgressReconciliationBeforeDispatch_terminalDocumentStillNeedsAcknowledgement(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
-	armContent := "## Progress\n- [ ] ship\n- [ ] verify\n"
 	content := "## Progress\n- [x] ship\n- [ ] verify\n"
 	gc := oar.NewGuardContext()
-	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "task", ProgressClosureBaseline{Closed: 0, Content: armContent}, true, gc)
+	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, true, gc)
 	if !hasRejectCode(gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("document transition bypassed worker acknowledgement")
 	}
 }
 
-func TestObserveProgressItemNotClosedBeforeDispatch_relabelDoesNotAcknowledgeWorker(t *testing.T) {
+func TestObserveProgressReconciliationBeforeDispatch_relabelDoesNotAcknowledgeWorker(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
-	baseline := "- [x] survey\n- [ ] challenge claims\n- [ ] report"
 	current := "- [x] survey with more detail\n- [ ] challenge claims\n- [ ] report"
 	gc := oar.NewGuardContext()
-	ObserveProgressItemNotClosedBeforeDispatch(sess, current, "task", ProgressClosureBaseline{Closed: 1, Content: baseline}, true, gc)
+	ObserveProgressReconciliationBeforeDispatch(sess, current, "task", ProgressClosureBaseline{}, true, gc)
 	if !hasRejectCode(gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("label rewrite acknowledged a worker result")
 	}
 }
 
-func TestObserveProgressItemNotClosedBeforeDispatch_blocksOnIdenticalChecklist(t *testing.T) {
+func TestObserveProgressReconciliationBeforeDispatch_blocksOnIdenticalChecklist(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	content := "## Progress\n- [x] survey\n- [ ] challenge claims\n"
 	gc := oar.NewGuardContext()
-	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "task", ProgressClosureBaseline{Closed: 1, Content: content}, true, gc)
+	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, true, gc)
 	if !hasRejectCode(gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("identical checklist since arm must observe reject")
 	}
 }
 
-func TestObserveProgressItemNotClosedBeforeDispatch_skipsWorkerChild(t *testing.T) {
+func TestObserveProgressReconciliationBeforeDispatch_skipsWorkerChild(t *testing.T) {
 	sess := &api.Session{ID: "child-1", ParentSessionID: "root-1"}
 	content := "## Progress\n- [ ] ship\n"
 	gc := oar.NewGuardContext()
-	ObserveProgressItemNotClosedBeforeDispatch(sess, content, "task", ProgressClosureBaseline{Content: content}, true, gc)
+	ObserveProgressReconciliationBeforeDispatch(sess, content, "task", ProgressClosureBaseline{}, true, gc)
 	if hasRejectCode(gc, ProgressReconciliationRequiredCode) {
 		t.Fatal("worker child must not observe reject")
 	}
@@ -90,19 +88,19 @@ func TestProgressReconciliationSuccessorSelectsFromCurrentFacts(t *testing.T) {
 	if pipeline == nil {
 		t.Fatal("stock progress rules failed to load")
 	}
-	baseline := ProgressClosureBaseline{Content: "- [ ] Deliver", Settled: []string{"worker"}}
+	baseline := ProgressClosureBaseline{Settled: []string{"worker"}}
 	for _, tc := range []struct {
 		name, content, tool   string
 		armed, child, blocked bool
 	}{
-		{"old blocking predicate", baseline.Content, "task", true, false, true},
+		{"open checklist", "- [ ] Deliver", "task", true, false, true},
 		{"terminal document", "- [x] Deliver", "task", true, false, true},
 		{"relabelled document", "- [ ] Deliver revised", "task", true, false, true},
 		{"empty document", "", "task", true, false, true},
 		{"unarmed", "- [ ] Deliver", "task", false, false, false},
 		{"unarmed empty", "", "task", false, false, false},
-		{"read only", baseline.Content, "read", true, false, false},
-		{"worker child", baseline.Content, "task", true, true, false},
+		{"read only", "- [ ] Deliver", "read", true, false, false},
+		{"worker child", "- [ ] Deliver", "task", true, true, false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			session := &api.Session{ID: "session"}
@@ -110,7 +108,7 @@ func TestProgressReconciliationSuccessorSelectsFromCurrentFacts(t *testing.T) {
 				session.ParentSessionID = "root"
 			}
 			facts := oar.NewGuardContext()
-			ObserveProgressItemNotClosedBeforeDispatch(session, tc.content, tc.tool, baseline, tc.armed, facts)
+			ObserveProgressReconciliationBeforeDispatch(session, tc.content, tc.tool, baseline, tc.armed, facts)
 			result, err := pipeline.EvaluateBlock(t.Context(), oar.AnchorCoordinatorPreInvoke, facts)
 			if err != nil {
 				t.Fatalf("stock progress selection failed: %v", err)

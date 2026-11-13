@@ -61,8 +61,6 @@ type ProgressFacts struct {
 	ProgressClosureArmed         bool
 	ProgressGatedTool            bool
 	ProgressMissing              bool
-	ProgressClosedBeyondBaseline bool
-	ProgressReconciledSinceArm   bool
 	CloseoutHasAnswer            bool
 	CloseoutOnlyRepairDirectives bool
 	TaskEnvelopeEcho             bool

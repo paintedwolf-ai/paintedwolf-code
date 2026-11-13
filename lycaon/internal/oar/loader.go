@@ -376,7 +376,6 @@ func materialize(doc *oarcore.Rule, entry guidance.HintEntry, fields oarFields) 
 		Title: fields.Title, What: doc.Copy["what"], Cause: doc.Copy["cause"], Why: doc.Copy["why"],
 		Fix: doc.Copy["fix"], Instead: doc.Copy["instead"], Message: doc.Copy["message"],
 	}
-	r.What, r.Cause, r.Fix = r.Copy.What, r.Copy.Cause, r.Copy.Fix
 	for _, s := range doc.OnFire {
 		if a, err := ParseOnFire(s); err == nil {
 			r.OnFire = append(r.OnFire, a)

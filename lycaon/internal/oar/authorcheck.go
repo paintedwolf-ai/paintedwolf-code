@@ -335,19 +335,25 @@ func loadFixtureFile(path string) ([]ConformanceFixture, error) {
 	}
 	trimmed := strings.TrimSpace(string(raw))
 	if strings.HasPrefix(trimmed, "[") {
-		var list []ConformanceFixture
-		if err := json.Unmarshal(raw, &list); err != nil {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
-		for i := range list {
-			if strings.TrimSpace(list[i].ID) == "" {
-				list[i].ID = fmt.Sprintf("%s[%d]", filepath.Base(path), i)
+		list := make([]ConformanceFixture, 0, len(items))
+		for i, item := range items {
+			fx, err := decodeFixture(item)
+			if err != nil {
+				return nil, fmt.Errorf("%s[%d]: %w", path, i, err)
 			}
+			if strings.TrimSpace(fx.ID) == "" {
+				fx.ID = fmt.Sprintf("%s[%d]", filepath.Base(path), i)
+			}
+			list = append(list, fx)
 		}
 		return list, nil
 	}
-	var fx ConformanceFixture
-	if err := json.Unmarshal(raw, &fx); err != nil {
+	fx, err := decodeFixture(raw)
+	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
 	if strings.TrimSpace(fx.ID) == "" {
@@ -417,7 +423,7 @@ func hintEntryForRule(rule *Rule) guidance.HintEntry {
 		What:    rule.Copy.What,
 		Cause:   rule.Copy.Cause,
 		Why:     rule.Copy.Why,
-		Fix:     rule.Fix,
+		Fix:     rule.Copy.Fix,
 		Instead: rule.Copy.Instead,
 	}
 }

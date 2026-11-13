@@ -152,11 +152,8 @@ type Rule struct {
 	// Scenarios are the authored conformance fixtures for this rule.
 	Scenarios []guidance.ScenarioEntry
 
-	// Emit, What, Cause, and Fix are rendering inputs.
+	// Emit is the provenance channel the rendering uses.
 	Emit   string
-	What   string
-	Cause  string
-	Fix    string
 	Tier   Tier   // provenance: builtin | project | pack
 	Source string // path or pack name
 }

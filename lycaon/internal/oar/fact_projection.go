@@ -9,6 +9,15 @@ import (
 )
 
 // activation publishes occurrence facts under their rule-visible names.
+// occurrenceIdentityFacts are host facts the occurrence itself establishes —
+// rejection identity, caller, role, anchor, and counters — which occurrence
+// data never replaces.
+var occurrenceIdentityFacts = map[string]bool{
+	"paintedwolf.rejection_code": true, "paintedwolf.principal": true, "paintedwolf.principal_roles": true,
+	"paintedwolf.session_role": true, "paintedwolf.anchor": true, "paintedwolf.fire_count": true,
+	"paintedwolf.scoped_fire_count": true,
+}
+
 func activation(gc *GuardContext) map[string]any {
 	bare := bareActivation(gc)
 	tiers := bareFactTiers
@@ -19,7 +28,7 @@ func activation(gc *GuardContext) map[string]any {
 	if gc != nil {
 		for name, value := range oarcopy.FactsFromData(gc.ObservationData) {
 			// Rejection presentation metadata cannot replace canonical protocol observations.
-			if !strings.HasPrefix(name, "paintedwolf.") || name == "paintedwolf.rejection_code" {
+			if !strings.HasPrefix(name, "paintedwolf.") || occurrenceIdentityFacts[name] {
 				continue
 			}
 			// Host presentation fields are declared strings; serialize their structured source at the producer boundary.
@@ -106,8 +115,6 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"path_is_worker_branch":               gc.Workers.PathIsWorkerBranch,
 		"verify_has_command":                  gc.Progress.VerifyHasCommand,
 		"verify_declared":                     gc.Progress.VerifyDeclared,
-		"progress_closed_beyond_baseline":     gc.Progress.ProgressClosedBeyondBaseline,
-		"progress_reconciled_since_arm":       gc.Progress.ProgressReconciledSinceArm,
 		"pending_user_input":                  gc.Session.PendingUserInput,
 		"stub_valid":                          gc.Session.StubValid,
 		"pattern_parse_ok":                    gc.Invocation.PatternParseOK,
