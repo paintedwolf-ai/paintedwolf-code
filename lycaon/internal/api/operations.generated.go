@@ -115,6 +115,7 @@ var (
 	operationGetChatVault                       = generatedOperation{ID: "getChatVault", Method: "GET", Path: "/v1/sessions/{id}/vault", Params: []string{"id"}}
 	operationGetCodeScan                        = generatedOperation{ID: "getCodeScan", Method: "GET", Path: "/v1/projects/{id}/scans/{scan_id}", Params: []string{"id", "scan_id"}}
 	operationGetCommandProgramReceipt           = generatedOperation{ID: "getCommandProgramReceipt", Method: "GET", Path: "/v1/sessions/{id}/program-receipts/{program_id}", Params: []string{"id", "program_id"}}
+	operationGetCommandReceiptDocument          = generatedOperation{ID: "getCommandReceiptDocument", Method: "GET", Path: "/v1/sessions/{id}/program-receipt-document", Params: []string{"id"}}
 	operationGetContributions                   = generatedOperation{ID: "getContributions", Method: "GET", Path: "/v1/contributions"}
 	operationGetCoordinatorContext              = generatedOperation{ID: "getCoordinatorContext", Method: "GET", Path: "/v1/sessions/{id}/coordinator-context", Params: []string{"id"}}
 	operationGetCostSummary                     = generatedOperation{ID: "getCostSummary", Method: "GET", Path: "/v1/cost/summary"}
@@ -301,6 +302,7 @@ var (
 	operationSaveEditorDocument                 = generatedOperation{ID: "saveEditorDocument", Method: "POST", Path: "/v1/projects/{id}/editor-documents/{document_id}/save", Params: []string{"id", "document_id"}, RecordsPersonAction: true}
 	operationSearch                             = generatedOperation{ID: "search", Method: "POST", Path: "/v1/search"}
 	operationSearchChatContent                  = generatedOperation{ID: "searchChatContent", Method: "GET", Path: "/v1/sessions/{id}/messages/{message_id}/content/search", Params: []string{"id", "message_id"}}
+	operationSearchCommandReceiptDocument       = generatedOperation{ID: "searchCommandReceiptDocument", Method: "GET", Path: "/v1/sessions/{id}/program-receipt-document/search", Params: []string{"id"}}
 	operationSearchContributionSource           = generatedOperation{ID: "searchContributionSource", Method: "POST", Path: "/v1/projects/{id}/contribution-search/{source_id}", Params: []string{"id", "source_id"}}
 	operationSearchProjectSource                = generatedOperation{ID: "searchProjectSource", Method: "GET", Path: "/v1/projects/{id}/source/search", Params: []string{"id"}}
 	operationSearchSourceView                   = generatedOperation{ID: "searchSourceView", Method: "GET", Path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search", Params: []string{"id", "view_id", "presentation_id"}}
@@ -454,6 +456,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetChatVault,
 	operationGetCodeScan,
 	operationGetCommandProgramReceipt,
+	operationGetCommandReceiptDocument,
 	operationGetContributions,
 	operationGetCoordinatorContext,
 	operationGetCostSummary,
@@ -640,6 +643,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationSaveEditorDocument,
 	operationSearch,
 	operationSearchChatContent,
+	operationSearchCommandReceiptDocument,
 	operationSearchContributionSource,
 	operationSearchProjectSource,
 	operationSearchSourceView,

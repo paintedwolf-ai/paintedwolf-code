@@ -168,7 +168,7 @@ func selectExecutionProjection(ctx context.Context, tx *sql.Tx, program, kind st
 	}
 	out := make([]ExecutionProjection, 0, len(entries))
 	for _, entry := range entries {
-		values, _, err := readExecutions(ctx, tx, program, entry.ordinal-1, 1, executionSelection{})
+		values, _, err := readExecutions(ctx, tx, program, entry.ordinal-1, 0, 1, executionSelection{})
 		if err != nil {
 			return nil, err
 		}

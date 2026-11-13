@@ -4,12 +4,13 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
-	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/lycaon/lycaon/internal/api/httpio"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/runematch"
 	"github.com/lycaon/lycaon/internal/session/store"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -146,8 +147,7 @@ func (s *Content) HandleSearchChatContent(w http.ResponseWriter, r *http.Request
 		return
 	}
 	rawQuery := r.URL.Query().Get("q")
-	query := []rune(rawQuery)
-	if len(query) == 0 || len(query) > 1024 {
+	if n := utf8.RuneCountInString(rawQuery); n == 0 || n > 1024 {
 		s.responses.InvalidQueryParam(w, "q", "Search requires between 1 and 1024 characters.")
 		return
 	}
@@ -178,49 +178,14 @@ func (s *Content) HandleSearchChatContent(w http.ResponseWriter, r *http.Request
 		s.responses.PageCursorError(w, r, "cursor", pagecursor.ErrInvalid)
 		return
 	}
-	if !sensitive {
-		for i := range query {
-			query[i] = unicode.ToLower(query[i])
-		}
-	}
+	pattern := runematch.Compile(rawQuery, sensitive)
 	matches := make([]wire.ChatContentMatch, 0)
-	// Prefix fallback makes repeated-prefix searches linear in retained text size.
-	prefix := make([]int, len(query))
-	for i, matched := 1, 0; i < len(query); i++ {
-		for matched > 0 && query[i] != query[matched] {
-			matched = prefix[matched-1]
-		}
-		if query[i] == query[matched] {
-			matched++
-		}
-		prefix[i] = matched
-	}
-	at, matched := start, 0
-	for at < len(read.text) {
-		if at%4096 == 0 {
-			if r.Context().Err() != nil {
-				return
-			}
-		}
-		actual := read.text[at]
-		if !sensitive {
-			actual = unicode.ToLower(actual)
-		}
-		for matched > 0 && actual != query[matched] {
-			matched = prefix[matched-1]
-		}
-		if actual == query[matched] {
-			matched++
-		}
-		at++
-		if matched != len(query) {
-			continue
-		}
-		matches = append(matches, wire.ChatContentMatch{Offset: at - len(query), Length: len(query)})
-		matched = 0
-		if len(matches) == page.Limit {
-			break
-		}
+	at, err := pattern.Scan(r.Context(), read.text, start, func(match int) bool {
+		matches = append(matches, wire.ChatContentMatch{Offset: match, Length: pattern.Len()})
+		return len(matches) < page.Limit
+	})
+	if err != nil {
+		return
 	}
 	out := wire.ChatContentSearchPage{Matches: matches}
 	if at < len(read.text) {

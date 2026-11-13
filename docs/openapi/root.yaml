@@ -111,6 +111,10 @@ paths:
     $ref: paths/chat-content.yaml#/paths/~1v1~1sessions~1{id}~1messages~1{message_id}~1content~1search
   /v1/sessions/{id}/program-receipts/{program_id}:
     $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1program-receipts~1{program_id}
+  /v1/sessions/{id}/program-receipt-document:
+    $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1program-receipt-document
+  /v1/sessions/{id}/program-receipt-document/search:
+    $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1program-receipt-document~1search
   /v1/sessions/{id}/invocations:
     $ref: paths/sessions/activity.yaml#/paths/~1v1~1sessions~1{id}~1invocations
   /v1/sessions/{id}/export:

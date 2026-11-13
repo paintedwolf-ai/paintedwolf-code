@@ -164,6 +164,7 @@ func TestSearchEndpointsEnforceCanonicalQParameter(t *testing.T) {
 		"searchProjectSource":  true,
 		"searchProjectSymbols": true,
 		"searchChatContent":    true,
+		"searchCommandReceiptDocument": true,
 	}
 
 	for _, route := range routes {

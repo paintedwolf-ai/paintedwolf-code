@@ -1540,6 +1540,44 @@ type CommandProgramReceiptPage struct {
 	NextCursor        string            `json:"next_cursor,omitempty"`
 }
 
+// CommandReceiptDocumentPage
+type CommandReceiptDocumentPage struct {
+	// Snapshot these rows belong to.
+	Revision  string `json:"revision"`
+	TotalRows int    `json:"total_rows"`
+	// True when no scoped program is still running or waiting, so the revision is final.
+	Settled bool `json:"settled"`
+	Offset  int  `json:"offset"`
+	// Row just past this window; total_rows at the end of the document.
+	EndOffset int `json:"end_offset"`
+	// True when this window reaches the end of the document.
+	Complete bool                `json:"complete"`
+	Rows     []CommandReceiptRow `json:"rows"`
+}
+
+// CommandReceiptMatch
+type CommandReceiptMatch struct {
+	Row int `json:"row"`
+	// Rune offset of the match within its row.
+	Column int `json:"column"`
+	// Match length in runes.
+	Length int `json:"length"`
+}
+
+// CommandReceiptRow
+type CommandReceiptRow struct {
+	Index int `json:"index"`
+	// One JSON record without its line break. type is program, execution or node. A program record holds program, progress when recorded, activity for an activity scope, execution_count and node_count. An execution record holds program_id, activity_id for an activity scope, and execution. A node record holds program_id and node.
+	Text string `json:"text"`
+}
+
+// CommandReceiptSearchPage
+type CommandReceiptSearchPage struct {
+	Matches []CommandReceiptMatch `json:"matches"`
+	// Opaque cursor for the next search page; absent when the search reached the end of the document.
+	NextCursor string `json:"next_cursor,omitempty"`
+}
+
 // CommandRevisionConflict Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed.
 type CommandRevisionConflict struct {
 	Path             string `json:"path"`

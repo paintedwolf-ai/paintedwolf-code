@@ -7,6 +7,23 @@ components:
       schema:
         type: string
         format: uuid
+    CommandReceiptScopes:
+      name: scopes
+      in: query
+      required: true
+      description: >-
+        Ordered scopes of the document. A scope is a program id, for all of its executions, or
+        program_id:activity_id, for the executions that host activity selects. A scope may not
+        repeat, and a program may not appear both whole and by activity.
+      style: form
+      explode: true
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 64
+        items:
+          type: string
+          pattern: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$'
     ProjectId:
       name: id
       in: path

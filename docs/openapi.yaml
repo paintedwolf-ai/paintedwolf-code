@@ -615,6 +615,110 @@ paths:
           $ref: '#/components/responses/Conflict'
         default:
           $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/program-receipt-document:
+    get:
+      tags:
+        - sessions
+      operationId: getCommandReceiptDocument
+      x-positional-window: true
+      summary: Read a row window of a command receipt document
+      description: The document is JSON Lines written by the host from durable program records. For each scope in order it holds one program row, then the scope's execution rows by ordinal, then the program's node rows by node id. Reads that name a revision answer chat_content_changed once the records behind it change.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CommandReceiptScopes'
+        - name: revision
+          in: query
+          description: Snapshot to read. Omit it to read the current snapshot.
+          schema:
+            type: string
+            pattern: ^[0-9a-f]{64}$
+        - name: offset
+          in: query
+          description: Zero-based row to start at.
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 64
+      responses:
+        '200':
+          description: Rows from one snapshot of the receipt document
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandReceiptDocumentPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
+  /v1/sessions/{id}/program-receipt-document/search:
+    get:
+      tags:
+        - sessions
+      operationId: searchCommandReceiptDocument
+      summary: Search a command receipt document without reading its rows
+      description: Each request scans a bounded number of rows, so a page may hold no matches and still carry next_cursor.
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+        - $ref: '#/components/parameters/CommandReceiptScopes'
+        - name: revision
+          in: query
+          required: true
+          schema:
+            type: string
+            pattern: ^[0-9a-f]{64}$
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 1024
+        - name: case_sensitive
+          in: query
+          schema:
+            type: boolean
+            default: false
+        - name: cursor
+          in: query
+          schema:
+            type: string
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 50
+      responses:
+        '200':
+          description: Matches by row and rune column in the named snapshot
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommandReceiptSearchPage'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/sessions/{id}/invocations:
     get:
       tags:
@@ -14310,6 +14414,20 @@ components:
       schema:
         type: string
         format: uuid
+    CommandReceiptScopes:
+      name: scopes
+      in: query
+      required: true
+      description: Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity.
+      style: form
+      explode: true
+      schema:
+        type: array
+        minItems: 1
+        maxItems: 64
+        items:
+          type: string
+          pattern: ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})?$
     DraftSlotId:
       name: slot_id
       in: path
@@ -30149,6 +30267,91 @@ components:
           type: integer
         next_cursor:
           type: string
+    CommandReceiptRow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - index
+        - text
+      properties:
+        index:
+          type: integer
+          minimum: 0
+        text:
+          type: string
+          description: One JSON record without its line break. type is program, execution or node. A program record holds program, progress when recorded, activity for an activity scope, execution_count and node_count. An execution record holds program_id, activity_id for an activity scope, and execution. A node record holds program_id and node.
+    CommandReceiptDocumentPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - revision
+        - total_rows
+        - settled
+        - offset
+        - end_offset
+        - complete
+        - rows
+      properties:
+        revision:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+          description: Snapshot these rows belong to.
+        total_rows:
+          type: integer
+          minimum: 1
+        settled:
+          type: boolean
+          description: True when no scoped program is still running or waiting, so the revision is final.
+        offset:
+          type: integer
+          minimum: 0
+        end_offset:
+          type: integer
+          minimum: 0
+          description: Row just past this window; total_rows at the end of the document.
+        complete:
+          type: boolean
+          description: True when this window reaches the end of the document.
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandReceiptRow'
+    CommandReceiptMatch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - row
+        - column
+        - length
+      properties:
+        row:
+          type: integer
+          minimum: 0
+        column:
+          type: integer
+          minimum: 0
+          description: Rune offset of the match within its row.
+        length:
+          type: integer
+          minimum: 1
+          description: Match length in runes.
+    CommandReceiptSearchPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - matches
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandReceiptMatch'
+        next_cursor:
+          type: string
+          description: Opaque cursor for the next search page; absent when the search reached the end of the document.
     InvocationReceiptList:
       x-go-generate: true
       type: object

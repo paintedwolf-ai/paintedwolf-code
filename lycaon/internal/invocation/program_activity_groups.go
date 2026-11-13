@@ -55,7 +55,7 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 	}
 	for i := range groups {
 		g := &groups[i]
-		receipts, _, err := readExecutions(ctx, tx, program, g.ordinal-1, 1, executionSelection{})
+		receipts, _, err := readExecutions(ctx, tx, program, g.ordinal-1, 0, 1, executionSelection{})
 		if err != nil {
 			return nil, err
 		}
