@@ -2,10 +2,10 @@ package confine_test
 
 import (
 	"context"
-	"strconv"
-	"strings"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/confine"
