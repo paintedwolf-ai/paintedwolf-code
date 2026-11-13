@@ -5,13 +5,17 @@
   box-shadow: inset 0 0 0 1px var(--den-line);
   overflow: visible;
   min-width: 0;
+  /* Rows keep the outcome and disclosure mark on one line at every width. */
+  & .den-tool-part-chicklet-main {
+    flex-wrap: nowrap;
+    overflow: hidden;
+  }
   &[data-expanded="true"] > .den-transcript-disclosure-header {
     width: 100%;
     padding: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--den-line) 55%, transparent);
   }
-  &[data-expanded="true"] .den-tool-part-title {
-    max-width: none;
+  &[data-expanded="true"] .den-workflow-explain-summary {
     white-space: normal;
   }
   &[data-expanded="true"] .den-tool-part-progress-state {
@@ -285,10 +289,28 @@ display: inline-flex;
 
 
 @utility den-tool-part-name {
-flex: 0 0 auto;
+flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-weight: 600;
   font-size: var(--text-den-compact);
   letter-spacing: 0.02em;
+}
+
+
+@utility den-tool-part-outcome {
+flex: 0 1 auto;
+  min-width: 0;
+  max-width: 55%;
+  margin-left: auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--text-den-hint);
+  color: var(--den-text-muted);
+  font-variant-numeric: tabular-nums;
 }
 
 
@@ -314,14 +336,22 @@ flex: 0 0 auto;
 }
 
 
-@utility den-tool-part-title {
-font-size: var(--text-den-compact);
+@utility den-workflow-explain-summary {
+flex: 0 1 auto;
+  min-width: 0;
+  font-size: var(--text-den-compact);
   font-weight: 400;
   color: var(--den-text-muted);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 14rem;
+}
+
+
+@utility den-workflow-explain-state {
+font-size: var(--text-den-compact);
+  font-weight: 400;
+  color: var(--den-text-muted);
 }
 
 

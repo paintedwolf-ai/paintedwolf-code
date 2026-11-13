@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { at, keyAt } from "../../test/at.ts";
 import fixtures from "../fixtures/tool-messages.json";
-import type { CommandProgramReceipt, Message } from "../../api/types.ts";
+import type { CommandActivity, CommandActivityStep, CommandProgramReceipt, Message } from "../../api/types.ts";
 import {
   classifyToolKind,
   isBenignToolResult,
@@ -545,6 +545,35 @@ it("shows a background activity's observed process outcome rather than its launc
  part.status="completed";applyBackgroundProcessOutputs("activity-job",[]);
  expect(toolCompletionLabel(part,"activity-job")).toBe("Completed");
  resetBackgroundProcessStoreForTests();
+});
+
+describe("folded counts on an activity's outcome", () => {
+  const step = (id: string): CommandActivityStep => ({ id, command: id, count: 1, running: 0, waiting: 0, failed: 0, refused: 0, interrupted: 0, state: "completed", outcome: "Finished" });
+  const call = (id: string): ToolPartView => ({ id, toolCallId: id, assistantMessageId: "assistant", messageId: id, tool: "command", kind: "command", status: "completed" });
+  function activity(fact: Partial<CommandActivity>, extra: Partial<NonNullable<ToolPartView["commandActivity"]>> = {}, part: Partial<ToolPartView> = {}): ToolPartView {
+    const recorded: CommandActivity = { id: "fact", group: "Reading files", phase: "inspect", label: "Read source", subject: "source.rs", state: "completed", outcome: "Exited 0", execution_ids: [], spans: [], ...fact };
+    return { ...call("row"), ...part, commandActivity: { fact: recorded, members: [recorded], calls: [call("a"), call("b"), call("c")], programIds: [], ...extra } };
+  }
+  beforeEach(() => resetBackgroundProcessStoreForTests());
+
+  it("follows the recorded outcome and its repetitions, however many calls folded", () => {
+    expect(toolCompletionLabel(activity({ steps: [step("a"), step("b")] }))).toBe("Exited 0 · 2 steps");
+    expect(toolCompletionLabel(activity({ outcome: "Finished", repetitions: 2, steps: [step("a"), step("b")] }))).toBe("Finished · 2 runs · 2 steps");
+    expect(toolCompletionLabel(activity({ steps: [step("a")] }))).toBe("Exited 0");
+  });
+
+  it("follows a background job's observed outcome with its output reads", () => {
+    const running = activity({ job_handle: "job", steps: [step("a"), step("b")] }, { outputReads: 3 });
+    applyBackgroundProcessEvent({ session_id: "counts", process_id: "job", stream: "stdout", end_offset: 1, running: true });
+    expect(toolCompletionLabel(running, "counts")).toBe("Running · 3 output reads");
+    applyBackgroundProcessEvent({ session_id: "counts", process_id: "job", stream: "exit", end_offset: 1, running: false, exit_code: 0 });
+    expect(toolCompletionLabel(activity({ job_handle: "job" }, { outputReads: 1 }), "counts")).toBe("Exited 0 · 1 output read");
+  });
+
+  it("follows the launch's own process outcome", () => {
+    applyBackgroundProcessOutputs("counts", []);
+    expect(toolCompletionLabel(activity({ steps: [step("a"), step("b")] }, {}, { process: { handle: "launch", running: true } }), "counts")).toBe("Completed · 2 steps");
+  });
 });
 
 

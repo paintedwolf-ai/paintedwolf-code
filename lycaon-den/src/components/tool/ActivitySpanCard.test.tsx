@@ -606,6 +606,25 @@ describe("ActivitySpanCard", () => {
     ).toBeTruthy();
   });
 
+  it("opens an index warming row as one of the span's accordion rows", () => {
+    const webEntries: ActivitySpanEntry[] = [
+      { kind: "tool", part: parts[0]! },
+      { kind: "index_warming", key: "iw-accordion", meta: { trigger: "fetch", tier: "crawl", hosts: ["docs.example"], pages: 2 } },
+    ];
+    const { container } = render(() => (
+      <ActivitySpanCard label="web research" entries={webEntries} layout="chat" sessionId="s1" entryKey="iw-span" />
+    ));
+    const tool = container.querySelector<HTMLElement>(".den-activity-span-items [data-testid='tool-part-card']")!;
+    const warming = container.querySelector<HTMLElement>("[data-testid='index-warming-chicklet']")!;
+    expect(warming.querySelector(".den-row-mark")).toBeTruthy();
+    expect(warming.querySelector(".den-tool-chicklet-caret")).toBeNull();
+    fireEvent.click(disclosureToggle(tool));
+    expect(isDisclosureOpen(tool)).toBe(true);
+    fireEvent.click(disclosureToggle(warming));
+    expect(isDisclosureOpen(warming)).toBe(true);
+    expect(isDisclosureOpen(tool)).toBe(false);
+  });
+
   it("uses chip layout for nested tools in any transcript layout", () => {
     for (const layout of ["chat", "worker"] as const) {
       const { container } = render(() => (

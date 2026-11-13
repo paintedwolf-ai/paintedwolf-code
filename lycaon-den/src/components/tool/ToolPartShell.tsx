@@ -47,6 +47,8 @@ type Props = {
   name?: string;
   /** Briefing placed around the card body; cards that place it themselves omit it. */
   slots?: ToolBriefingSlots;
+  /** What the call ran, drawn first in the opened details. */
+  target?: JSX.Element;
   children: JSX.Element;
 };
 
@@ -87,16 +89,15 @@ export function ToolPartShell(props: Props) {
     processRevision();
     const activity = props.part.commandActivity;
     if (!activity) return toolSummaryFields(props.part, props.sessionId);
-    const stepCount = activity.fact.steps?.length ?? 0;
-    const suffix = activity.outputReads ? ` · ${activity.outputReads} output reads` : stepCount > 1 ? ` · ${stepCount} steps` : "";
-    return { status: toolPartDisplayStatus(props.part, props.sessionId), title: activity.fact.subject + suffix };
+    return { status: toolPartDisplayStatus(props.part, props.sessionId), title: activity.fact.subject };
   };
   const toolName = () => props.name?.trim() || props.part.commandActivity?.fact.label || props.part.tool;
   const toolLabel = () => formatToolLabel(toolName());
+  // The row shows only action and outcome, so the spoken label also carries the target.
   const accessibleSummary = () => {
     const title = summary().title;
     const target = title !== toolName() && title !== toolLabel() ? title : "";
-    return [toolLabel(), target, props.part.commandActivity ? completion() : undefined, statusDot(summary().status)].filter(Boolean).join(", ");
+    return [toolLabel(), target, completion(), statusDot(summary().status)].filter(Boolean).join(", ");
   };
   const completion = () => { processRevision(); return toolCompletionLabel(props.part, props.sessionId); };
   const [hostEl, setHostEl] = createSignal<HTMLElement | null>(null);
@@ -225,17 +226,8 @@ export function ToolPartShell(props: Props) {
           aria-hidden="true"
         />
         <span class="den-tool-part-name">{toolLabel()}</span>
-        <Show
-          when={
-            summary().title &&
-            summary().title !== toolName() &&
-            summary().title !== toolLabel()
-          }
-        >
-          <span class="den-tool-part-title" data-tip={summary().title} data-tip-when-clipped="">{summary().title}</span>
-        </Show>
         <Show when={completion()}>
-          {(label) => <span data-testid="tool-part-completion" data-tip={label()} data-tip-when-clipped="" class={props.part.commandActivity ? "den-command-activity-outcome" : "den-tool-part-title"}>{label()}</span>}
+          {(label) => <span data-testid="tool-part-completion" data-tip={label()} data-tip-when-clipped="" class="den-tool-part-outcome">{label()}</span>}
         </Show>
       </TranscriptChickletSummary>
       <TranscriptDisclosurePanel
@@ -248,6 +240,7 @@ export function ToolPartShell(props: Props) {
             toolCallId: props.part.toolCallId ?? props.part.id, title: `${toolLabel()} · ${props.part.title ?? ""}` }),
         }}>
           <Show when={open()}>
+            {props.target}
             <Show when={props.slots?.purpose}>{(purpose) => <div class="den-activity-purpose" data-testid="activity-purpose">{purpose()}</div>}</Show>
             <Show when={props.slots?.result}>{(result) => <div class="den-activity-result" data-testid="activity-result">{result()}</div>}</Show>
             {props.children}

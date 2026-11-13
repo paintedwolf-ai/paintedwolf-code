@@ -389,21 +389,32 @@ export function toolSummaryFields(
   };
 }
 
-export function toolCompletionLabel(part: ToolPartView, sessionId?: string): string | undefined {
-  if (part.commandActivity) {
-    const job = part.commandActivity.fact.job_handle;
-    const snapshot = job && sessionId ? getBackgroundProcessSnapshot(sessionId, job) : undefined;
-    if (snapshot?.running) return "Running";
-    if (snapshot?.exitCode !== undefined) return `Exited ${snapshot.exitCode}`;
-    if (part.process && part.status !== "error") {
-      const process = sessionId ? getBackgroundProcessSnapshot(sessionId, part.process.handle) : undefined;
-      if (toolPartDisplayStatus(part, sessionId) === "running") return "Running";
-      if (process?.exitCode !== undefined) return `Exited ${process.exitCode}`;
-      return "Completed";
-    }
-    const fact = part.commandActivity.fact;
-    return `${fact.outcome}${(fact.repetitions ?? 0) > 1 ? ` · ${fact.repetitions!.toLocaleString()} runs` : ""}`;
+function commandActivityOutcome(part: ToolPartView, activity: CommandActivityView, sessionId?: string): string {
+  const job = activity.fact.job_handle;
+  const snapshot = job && sessionId ? getBackgroundProcessSnapshot(sessionId, job) : undefined;
+  if (snapshot?.running) return "Running";
+  if (snapshot?.exitCode !== undefined) return `Exited ${snapshot.exitCode}`;
+  if (part.process && part.status !== "error") {
+    const process = sessionId ? getBackgroundProcessSnapshot(sessionId, part.process.handle) : undefined;
+    if (toolPartDisplayStatus(part, sessionId) === "running") return "Running";
+    if (process?.exitCode !== undefined) return `Exited ${process.exitCode}`;
+    return "Completed";
   }
+  const repetitions = activity.fact.repetitions ?? 0;
+  return `${activity.fact.outcome}${repetitions > 1 ? ` · ${repetitions.toLocaleString()} runs` : ""}`;
+}
+
+/** Folded work a row stands for, counted independently of how many calls it folded. */
+function commandActivityCounts(activity: CommandActivityView): string {
+  const reads = activity.outputReads ?? 0;
+  if (reads > 0) return ` · ${reads.toLocaleString()} output ${reads === 1 ? "read" : "reads"}`;
+  const steps = activity.fact.steps?.length ?? 0;
+  return steps > 1 ? ` · ${steps.toLocaleString()} steps` : "";
+}
+
+export function toolCompletionLabel(part: ToolPartView, sessionId?: string): string | undefined {
+  const activity = part.commandActivity;
+  if (activity) return commandActivityOutcome(part, activity, sessionId) + commandActivityCounts(activity);
   const completion = part.completion;
   const operation = completion?.operation.trim().replaceAll("_", " ");
   const state = completion?.state.trim().replaceAll("_", " ");

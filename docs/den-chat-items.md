@@ -114,6 +114,8 @@ Activity-span principles:
 
 A large set of file folds may receive a manifest group. That is presentation over the same rows, not a new source of change history.
 
+**Tool rows.** Every row in a span shows a status dot, the action, the outcome on the right, and the disclosure mark; what the call targeted is spoken in the row's accessible name and shown when it opens. A tool card whose call submitted a command, or whose summary names a path, URL, or query, opens with that target in monospace with a copy action, ahead of any briefing; a command shown there is left out of the card's input facts and keeps its replacement marks. Skill, verdict, and turn-decision cards state their subject in their own bodies and open without a separate target. An index warming row reads Finished or Skipped, opens with its host and page counts, and opens and closes with the span's other rows.
+
 ## Command activities
 
 Command activities describe structural operations over the host execution ledger.
@@ -140,10 +142,11 @@ activity's result. Retained transcripts resolve host activity summaries before
 mounting rows when their stored snapshot has no structural steps. Failed detail
 reads preserve the recorded command.
 
-Den keeps the existing group, single-line activity and expanded-detail structure.
-Activity grouping does not add a disclosure level. Rows show the action, target
-and outcome; row targets ellipsize without displacing status or disclosure
-controls.
+Activities sit in the span as single-line rows that open into details; grouping
+adds no further disclosure level. Rows show only the action and outcome, with
+any output-read or step count after the outcome, so neither is clipped by a
+target at chat widths. The target stays in the row's accessible name, in a
+single-entry span's hint, and in Find.
 
 An expanded activity uses one fixed order, omitting any part with nothing to
 show: the command; a purpose sentence when a briefing supplies one; a result

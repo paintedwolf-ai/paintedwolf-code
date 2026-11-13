@@ -1,5 +1,5 @@
 import { stubClient } from "../../test/client-fixture.ts";
-import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, isDisclosureOpen, expectSameCollapsedFace, rowSpokenLabel, rowVisibleText } from "../../test/transcript-disclosure-fixture.ts";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { render, fireEvent } from "@solidjs/testing-library";
 import { ToolPartShell } from "./ToolPartShell.tsx";
@@ -66,7 +66,7 @@ describe("ToolPartShell open-state persistence", () => {
     );
   });
 
-  it("appends the step count to a command activity chicklet", () => {
+  it("shows a command activity's step count on its outcome and its subject only in the spoken label", () => {
     const item = part("tc-steps");
     item.tool = "command";
     item.commandActivity = {
@@ -87,17 +87,19 @@ describe("ToolPartShell open-state persistence", () => {
       members: [],
       programIds: [],
     };
-    const { getByText } = render(() => (
+    const { getByTestId } = render(() => (
       <TranscriptViewportProvider value={controller}>
         <ToolPartShell part={item} layout="chat" sessionId="s1">
           body
         </ToolPartShell>
       </TranscriptViewportProvider>
     ));
-    expect(getByText("source.rs · 2 steps")).toBeTruthy();
+    expect(getByTestId("tool-part-completion").textContent).toBe("Exited 0 · 2 steps");
+    expect(rowVisibleText(getByTestId("tool-part-card"))).not.toContain("source.rs");
+    expect(rowSpokenLabel(getByTestId("tool-part-card"))).toContain("source.rs");
   });
 
-  it("appends output reads instead of steps when reads are folded", () => {
+  it("shows output reads instead of steps on the outcome when reads are folded", () => {
     const item = part("tc-reads");
     item.tool = "command";
     item.commandActivity = {
@@ -119,14 +121,14 @@ describe("ToolPartShell open-state persistence", () => {
       programIds: [],
       outputReads: 3,
     };
-    const { getByText } = render(() => (
+    const { getByTestId } = render(() => (
       <TranscriptViewportProvider value={controller}>
         <ToolPartShell part={item} layout="chat" sessionId="s1">
           body
         </ToolPartShell>
       </TranscriptViewportProvider>
     ));
-    expect(getByText("server · 3 output reads")).toBeTruthy();
+    expect(getByTestId("tool-part-completion").textContent).toBe("Running · 3 output reads");
   });
 
   it("projects invocation identity onto the card", () => {

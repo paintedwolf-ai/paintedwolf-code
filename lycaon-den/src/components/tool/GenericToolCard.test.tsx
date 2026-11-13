@@ -1,15 +1,17 @@
 import { assertNamedControl } from "../../test/controls.ts";
-import { disclosureToggle, isDisclosureOpen } from "../../test/transcript-disclosure-fixture.ts";
+import { disclosureToggle, isDisclosureOpen, rowSpokenLabel, rowVisibleText } from "../../test/transcript-disclosure-fixture.ts";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@solidjs/testing-library";
 import { GenericToolCard } from "./GenericToolCard.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
+import { writeClipboardText } from "../../utils/clipboard.ts";
 
 const openFilesSurface = vi.hoisted(() => vi.fn());
 const openInSearch = vi.hoisted(() => vi.fn());
 vi.mock("../../platform/navigation/open-files-surface.ts", () => ({ openFilesSurface }));
 vi.mock("../../search/search-nav.ts", () => ({ openInSearch }));
-beforeEach(() => { openFilesSurface.mockReset(); openInSearch.mockReset(); });
+vi.mock("../../utils/clipboard.ts", () => ({ writeClipboardText: vi.fn().mockResolvedValue(undefined) }));
+beforeEach(() => { openFilesSurface.mockReset(); openInSearch.mockReset(); vi.mocked(writeClipboardText).mockClear(); });
 
 function readPart(
   overrides: Partial<ToolPartView> = {},
@@ -288,26 +290,63 @@ describe("GenericToolCard", () => {
   });
 });
 
-it("leads with the command and retains its exact handle in the disclosure", async () => {
+it("names its target in the spoken label and leads the opened details with it", async () => {
   const handle = "7441efdd-29d7-4cd9-899e-3c542d62d8ba";
   const { container, findByText } = render(() => <GenericToolCard layout="chat" part={readPart({
     tool: "command_output", kind: "generic", title: "./task den:test:fast", args: { handle, cursor: 0 }, output: "done",
   })} />);
-  const summary = container.querySelector<HTMLElement>(".den-transcript-disclosure-toggle")!;
-  if (!summary) throw new Error("Missing command summary");
-  expect(summary.textContent).toContain("./task den:test:fast");
-  expect(summary.textContent).not.toContain(handle);
-  expect(summary.getAttribute("aria-label")).toContain("./task den:test:fast");
-  fireEvent.click(summary);
+  const card = container.querySelector('[data-testid="tool-part-card"]');
+  expect(rowVisibleText(card)).not.toContain("./task den:test:fast");
+  expect(rowVisibleText(card)).not.toContain(handle);
+  expect(rowSpokenLabel(card)).toContain("./task den:test:fast");
+  fireEvent.click(disclosureToggle(card));
+  expect(container.querySelector('[data-testid="activity-target"] code')?.textContent).toBe("./task den:test:fast");
   expect(await findByText(handle)).toBeTruthy();
 });
 
-it("places a briefing around the body only when the card is open", () => {
+it("orders an opened card target, briefing, body, then records", () => {
   const slots = { purpose: <span>supplied purpose</span>, result: <span>supplied result</span>, evidence: <button type="button">supplied evidence</button> };
   const { container } = render(() => <GenericToolCard layout="chat" part={readPart()} slots={slots} />);
   expect(container.querySelector('[data-testid="activity-purpose"]')).toBeNull();
   fireEvent.click(disclosureToggle(container.querySelector('[data-testid="tool-part-card"]')));
   const body = container.querySelector('[data-testid="tool-part-body"]')!;
-  const order = [...body.querySelectorAll('[data-testid="activity-purpose"], [data-testid="activity-result"], nav')].map(node => node.textContent);
-  expect(order).toEqual(["supplied purpose", "supplied result", "supplied evidence"]);
+  const order = [...body.querySelectorAll('[data-testid="activity-target"] code, [data-testid="activity-purpose"], [data-testid="activity-result"], .den-tool-part-card-structured, nav')]
+    .map(node => node.matches(".den-tool-part-card-structured") ? "body" : node.textContent);
+  expect(order).toEqual(["main.go", "supplied purpose", "supplied result", "body", "supplied evidence"]);
+});
+
+describe("a command call without a program", () => {
+  const source = "mkdir -p mud web && cat > mud/world.py <<'EOF'\nROOMS = {}\nEOF";
+  const commandPart = (overrides: Partial<ToolPartView> = {}) => readPart({ tool: "command", kind: "command", title: undefined, status: "error", outcome: "rejected", output: "Code: COMMAND_REFUSED", args: { command: source, cwd: "/workspace/project" }, ...overrides });
+
+  it("shows the command once, first, with its working directory kept in the input", () => {
+    const { container } = render(() => <GenericToolCard layout="chat" part={commandPart()} />);
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="tool-part-card"]')));
+    expect(container.querySelector('[data-testid="activity-target"] code')?.textContent).toBe(source);
+    const input = container.querySelector(".den-tool-part-card-structured")?.textContent ?? "";
+    expect(input).not.toContain(source);
+    expect(input).toContain("/workspace/project");
+  });
+
+  it("marks the host's replacements inside the command", () => {
+    const redacted = "curl -H 'token: [REDACTED]' example.test";
+    const meta = { spans: [{ field: "tool_calls.0.args.command", start: redacted.indexOf("[REDACTED]"), length: "[REDACTED]".length, kind: "secret" as const }] };
+    const { container } = render(() => <GenericToolCard layout="chat" part={commandPart({ args: { command: redacted }, argsRedaction: { meta, fieldPrefix: "tool_calls.0.args" } })} />);
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="tool-part-card"]')));
+    expect(container.querySelector('[data-testid="activity-target"] .den-redaction-mark')?.textContent).toBe("[REDACTED]");
+  });
+
+  it("copies the whole command", async () => {
+    const { container } = render(() => <GenericToolCard layout="chat" part={commandPart()} />);
+    fireEvent.click(disclosureToggle(container.querySelector('[data-testid="tool-part-card"]')));
+    fireEvent.click(assertNamedControl(screen.getByTestId("activity-target-copy"), "button"));
+    await vi.waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith(source));
+  });
+});
+
+it("keeps a path in the input facts beside the target", () => {
+  const { container } = render(() => <GenericToolCard layout="chat" part={readPart()} projectId="project" />);
+  fireEvent.click(disclosureToggle(container.querySelector('[data-testid="tool-part-card"]')));
+  expect(container.querySelector('[data-testid="activity-target"] code')?.textContent).toBe("main.go");
+  expect(container.querySelector(".den-tool-part-card-structured")?.textContent).toContain("main.go");
 });
