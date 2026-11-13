@@ -40,6 +40,10 @@ type NativeOperation struct {
 	// Tools are further identities Prepare may select per bound form (one
 	// umbrella command whose subcommands have their own tools).
 	Tools []string
+	// SelectMode names the catalog effect mode argv selects, as Prepare would,
+	// from argv alone; false when argv alone cannot say. A dispatcher's
+	// preflight uses it for the child it will run.
+	SelectMode func(context.Context, commandprogram.Fields) (string, bool)
 }
 
 // NativePrepared is one bound owner invocation: its review record and the
@@ -288,7 +292,7 @@ func (d *ProgramDispatcher) invokeExternal(ctx context.Context, request commandp
 	if err != nil {
 		return refusedResult("TOOL_OWNER_FAILED"), err
 	}
-	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, d.childEffectSet(spec, spec.Effects[0].Mode, request))
+	bound, err := toolcontract.BindOperation(definition, request.Invocation, spec.Name, spec.Effects[0].Mode, d.childEffectSet(ctx, spec, spec.Effects[0].Mode, request))
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
@@ -438,7 +442,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 	} else {
 		return d.invokeHosted(ctx, spec, prepared, request, streams)
 	}
-	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+	bound, err := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 	if err != nil {
 		return refusedResult("COMMAND_NATIVE_FORM_UNSUPPORTED"), err
 	}
@@ -507,7 +511,7 @@ func (d *ProgramDispatcher) invokeNative(ctx context.Context, spec toolcontract.
 					}
 				}
 				newMode := selectEffectMode(spec, actual.Mode)
-				newBound, bindErr := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, newMode, d.childEffectSet(spec, newMode, request))
+				newBound, bindErr := toolcontract.BindOperation(operationDef, request.Invocation, spec.Name, newMode, d.childEffectSet(ctx, spec, newMode, request))
 				if bindErr != nil {
 					if actual.Release != nil {
 						actual.Release()
@@ -694,7 +698,7 @@ func (d *ProgramDispatcher) prepare(ctx context.Context, spec toolcontract.Comma
 	var bound toolcontract.BoundOperation
 	if len(spec.Effects) > 0 {
 		mode := selectEffectMode(spec, request.EffectMode)
-		bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(spec, mode, request))
+		bound, err = toolcontract.BindOperation(definition, request.Invocation, spec.Name, mode, d.childEffectSet(ctx, spec, mode, request))
 		if err != nil {
 			return programChild{}, err
 		}

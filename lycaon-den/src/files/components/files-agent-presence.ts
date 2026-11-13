@@ -7,10 +7,8 @@ import { Linger, type LingerPhase, type Lingered } from "../../ui/linger.ts";
 import {
   AGENT_FILE_STATE_TEXT,
   AGENT_LINGER_MS,
-  AGENT_RECENT_TEXT,
   agentFileKey,
-  agentRecentKind,
-  agentRecentLabel,
+  agentStateLingers,
   projectAgentFiles,
   type AgentChat,
   type AgentFilePresence,
@@ -18,7 +16,7 @@ import {
 } from "./agent-presence.ts";
 import { agentPresenceFor } from "./agent-presence-store.ts";
 
-/** Highest-priority activity and its owning chat; past once that activity has ended. */
+/** The file's highest-priority activity and its chat. */
 export type FilesAgentChip = {
   state: AgentFileState;
   phase: LingerPhase;
@@ -37,7 +35,7 @@ export type FilesAgentPresence = {
 };
 
 type ChipFact = { state: AgentFileState; chat: AgentChat; description: string };
-type NameFact = { chat: AgentChat; labels: readonly string[]; recent: AgentFilePresence["recent"] };
+type NameFact = { chat: AgentChat; labels: readonly string[]; lingers: boolean };
 
 function sameChat(a: AgentChat, b: AgentChat): boolean {
   return a.sessionId === b.sessionId && a.slot === b.slot && a.title === b.title;
@@ -48,10 +46,7 @@ function sameChip(a: ChipFact, b: ChipFact): boolean {
 }
 
 function sameName(a: NameFact, b: NameFact): boolean {
-  const sameRecent = a.recent === null || b.recent === null
-    ? a.recent === b.recent
-    : a.recent.kind === b.recent.kind && sameChat(a.recent.chat, b.recent.chat);
-  return sameChat(a.chat, b.chat) && sameRecent
+  return sameChat(a.chat, b.chat) && a.lingers === b.lingers
     && a.labels.length === b.labels.length && a.labels.every((label, index) => label === b.labels[index]);
 }
 
@@ -67,25 +62,17 @@ function chipFacts(files: ReadonlyMap<string, AgentFilePresence>): Map<string, C
 function nameFacts(files: ReadonlyMap<string, AgentFilePresence>): Map<string, NameFact> {
   const out = new Map<string, NameFact>();
   for (const [key, file] of files) {
-    if (file.highlight) out.set(key, { chat: file.highlight, labels: file.labels, recent: file.recent });
+    if (file.highlight) out.set(key, { chat: file.highlight, labels: file.labels, lingers: file.lingers });
   }
   return out;
 }
 
 function shownChip({ value, phase }: Lingered<ChipFact>): FilesAgentChip {
-  const recent = phase === "past" ? agentRecentKind(value.state) : null;
-  return {
-    state: value.state,
-    phase,
-    text: recent ? AGENT_RECENT_TEXT[recent] : AGENT_FILE_STATE_TEXT[value.state],
-    description: recent ? agentRecentLabel(value.chat, recent) : value.description,
-    sessionId: value.chat.sessionId,
-  };
+  return { state: value.state, phase, text: AGENT_FILE_STATE_TEXT[value.state], description: value.description, sessionId: value.chat.sessionId };
 }
 
 function shownName({ value, phase }: Lingered<NameFact>): FilesAgentName {
-  const recent = phase === "past" ? value.recent : null;
-  return { chat: value.chat, phase, labels: recent ? [agentRecentLabel(recent.chat, recent.kind)] : value.labels };
+  return { chat: value.chat, phase, labels: value.labels };
 }
 
 function sameKinds(a: AgentActivityKinds, b: AgentActivityKinds): boolean {
@@ -115,7 +102,7 @@ export function agentNameStyle(chat: AgentChat): Record<string, string> {
   return agentColorStyle(agentPalette()?.(chat.slot));
 }
 
-/** Shows file activity as it is reported; editing and reading stay shown, as past, after they end. */
+/** Editing and reading stay shown, as past, after they end. */
 export function createFilesAgentPresence(options: {
   projectId: () => string;
   openSessionId: () => string | undefined;
@@ -124,11 +111,11 @@ export function createFilesAgentPresence(options: {
   const [shownNames, setShownNames] = createSignal<ReadonlyMap<string, FilesAgentName>>(new Map());
   const chips = new Linger<ChipFact>(
     (shown) => setShownChips(new Map([...shown].map(([key, entry]) => [key, shownChip(entry)]))),
-    { lingerMs: AGENT_LINGER_MS, same: sameChip, lingers: (fact) => agentRecentKind(fact.state) !== null },
+    { lingerMs: AGENT_LINGER_MS, same: sameChip, lingers: (fact) => agentStateLingers(fact.state) },
   );
   const names = new Linger<NameFact>(
     (shown) => setShownNames(new Map([...shown].map(([key, entry]) => [key, shownName(entry)]))),
-    { lingerMs: AGENT_LINGER_MS, same: sameName, lingers: (fact) => fact.recent !== null },
+    { lingerMs: AGENT_LINGER_MS, same: sameName, lingers: (fact) => fact.lingers },
   );
   onCleanup(watchAgentPalette());
   onCleanup(() => {
@@ -162,10 +149,7 @@ export function createFilesAgentPresence(options: {
     const chip = shownChips().get(key) ?? null;
     const name = shownNames().get(key) ?? null;
     if (!chip && !name) return null;
-    const labels = [
-      ...(chip?.phase === "past" ? [chip.description] : []),
-      ...(name?.labels ?? (chip ? [chip.description] : [])),
-    ];
+    const labels = [...(chip ? [chip.description] : []), ...(name?.labels ?? [])];
     return { chip, name, labels: [...new Set(labels)] };
   };
 }

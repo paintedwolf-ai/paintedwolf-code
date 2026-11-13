@@ -138,6 +138,26 @@ func (r *programRun) observeProvenanceFileRead(ctx context.Context, root, path s
 	r.provenance.mu.Unlock()
 }
 
+// observeContentFlow records an owner's read of stored content for the op's
+// streams, and carries the custody of what it read to files it derived from it.
+func (r *programRun) observeContentFlow(ctx context.Context, tracker *opProvenanceTracker, flow evidence.ContentFlow) {
+	if r == nil || tracker == nil {
+		return
+	}
+	source := r.normalizeProvenancePath("", flow.Source)
+	if source == "" {
+		return
+	}
+	tracker.addReadPath(source)
+	if len(flow.Files) == 0 {
+		return
+	}
+	urls := r.lookupCustodyURLs(ctx, []string{source})
+	for _, file := range flow.Files {
+		r.addCustodyFile(r.normalizeProvenancePath("", file), urls)
+	}
+}
+
 func (r *programRun) noteInputRedirectRead(tracker *opProvenanceTracker, normPath string) {
 	if r == nil || normPath == "" {
 		return

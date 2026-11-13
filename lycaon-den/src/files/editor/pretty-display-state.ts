@@ -1,4 +1,5 @@
 import { createSignal } from "solid-js";
+import { PRETTY_LIMIT_MESSAGES, type PrettyOutcome } from "../../components/source/pretty/pretty-layout.ts";
 
 export type PrettySurfaceCapability = {
   enabled: () => boolean;
@@ -7,13 +8,17 @@ export type PrettySurfaceCapability = {
 };
 
 export type PrettyStatusToggle = {
+  /** Layout is active in the view. */
   enabled: boolean;
   available: boolean;
+  /** Why layout is not active although Pretty is on. */
+  reason?: string;
   onToggle: () => void;
 };
 
 const prefByProjectTab = new Map<string, boolean>();
 const capabilityByProjectTab = new Map<string, PrettySurfaceCapability>();
+const outcomeByProjectTab = new Map<string, PrettyOutcome>();
 const [prettyStateVersion, setPrettyStateVersion] = createSignal(0);
 
 function bumpPrettyState(): void {
@@ -54,7 +59,8 @@ export function clearPrettyDisplayTab(projectId: string, tabKey: string | null |
   const key = projectTabEntryKey(projectId, tabKey);
   const removedPref = prefByProjectTab.delete(key);
   const removedCap = capabilityByProjectTab.delete(key);
-  if (removedPref || removedCap) bumpPrettyState();
+  const removedOutcome = outcomeByProjectTab.delete(key);
+  if (removedPref || removedCap || removedOutcome) bumpPrettyState();
 }
 
 export function clearPrettyDisplayProject(projectId: string): void {
@@ -67,10 +73,12 @@ export function clearPrettyDisplayProject(projectId: string): void {
       changed = true;
     }
   }
-  for (const key of Array.from(capabilityByProjectTab.keys())) {
-    if (key.startsWith(prefix)) {
-      capabilityByProjectTab.delete(key);
-      changed = true;
+  for (const map of [capabilityByProjectTab, outcomeByProjectTab]) {
+    for (const key of Array.from(map.keys())) {
+      if (key.startsWith(prefix)) {
+        map.delete(key);
+        changed = true;
+      }
     }
   }
   if (changed) bumpPrettyState();
@@ -114,16 +122,28 @@ export function invokePrettyToggleForTab(
   return handled !== false;
 }
 
+/** Records the layout outcome a surface's view reports. */
+export function setPrettyLayoutOutcome(projectId: string, tabKey: string, outcome: PrettyOutcome): void {
+  if (!projectId || !tabKey) return;
+  const key = projectTabEntryKey(projectId, tabKey);
+  if (outcomeByProjectTab.get(key) === outcome) return;
+  outcomeByProjectTab.set(key, outcome);
+  bumpPrettyState();
+}
+
 export function prettyStatusToggleForTab(
   projectId: string,
   tabKey: string | null | undefined,
 ): PrettyStatusToggle {
   const capability = getPrettySurfaceCapability(projectId, tabKey);
-  const available = Boolean(capability && (!capability.available || capability.available()));
-  const enabled = available && capability ? capability.enabled() : false;
+  const outcome = projectId && tabKey ? outcomeByProjectTab.get(projectTabEntryKey(projectId, tabKey)) : undefined;
+  const available = Boolean(capability && (!capability.available || capability.available()))
+    && outcome?.kind !== "unavailable";
+  const preferred = available && capability ? capability.enabled() : false;
   return {
-    enabled,
+    enabled: preferred && outcome?.kind === "active",
     available,
+    ...(preferred && outcome?.kind === "limit" ? { reason: PRETTY_LIMIT_MESSAGES[outcome.reason] } : {}),
     onToggle: () => {
       invokePrettyToggleForTab(projectId, tabKey);
     },
@@ -133,5 +153,6 @@ export function prettyStatusToggleForTab(
 export function resetPrettyDisplayStateForTests(): void {
   prefByProjectTab.clear();
   capabilityByProjectTab.clear();
+  outcomeByProjectTab.clear();
   bumpPrettyState();
 }

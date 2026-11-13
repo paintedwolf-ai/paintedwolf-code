@@ -6,7 +6,7 @@ import { Linger, type Lingered } from "../../ui/linger.ts";
 /** How long a finished pass stays shown as finished. */
 export const FINISHED_PASS_LINGER_MS = 1_600;
 
-/** Presents the running pass live, then the pass it became, as finished, for a moment. */
+/** The running pass, then briefly the pass it became. */
 export function createDisplayedFullPass(
   overview: () => SecurityOverview | null,
   scope: () => string | undefined,

@@ -431,7 +431,7 @@ export function unpresentedAgentFileCount(
 export type ReviewListRow = ReviewFileRow & {
   /** In-flight verb, or null when idle. */
   liveVerb: string | null;
-  /** Past once the in-flight work has ended without landing. */
+  /** Past once the work ended without landing. */
   livePhase: LingerPhase | null;
   /** Opens read-only when drafted in a worker overlay. */
   sandbox: boolean;
@@ -475,10 +475,6 @@ const LIVE_VERB: Record<ReviewLiveState, string> = {
   sandbox: "drafting",
   reserved: "reserved",
 };
-
-function liveVerb(row: ShownLiveRow): string {
-  return row.phase === "past" ? `was ${LIVE_VERB[row.state]}` : LIVE_VERB[row.state];
-}
 
 /** Worker drafts open read-only until they land. */
 function liveSandbox(state: ReviewLiveState): boolean {
@@ -532,7 +528,7 @@ function liveOnlyRow(live: ShownLiveRow): ReviewListRow {
     presentationEffectId: null,
     presentationOrdinal: null,
     contributors: [],
-    liveVerb: liveVerb(live),
+    liveVerb: LIVE_VERB[live.state],
     livePhase: live.phase,
     sandbox: liveSandbox(live.state),
     added: null,
@@ -557,7 +553,7 @@ export function buildReviewRows(
     const stat = f.commit ? undefined : stats.get(key);
     const row: ReviewListRow = {
       ...f,
-      liveVerb: current ? liveVerb(current) : null,
+      liveVerb: current ? LIVE_VERB[current.state] : null,
       livePhase: current?.phase ?? null,
       sandbox: current ? liveSandbox(current.state) : false,
       added: stat?.added ?? null,

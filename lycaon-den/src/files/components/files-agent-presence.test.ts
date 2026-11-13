@@ -51,16 +51,18 @@ describe("files agent presence", () => {
     vi.useRealTimers();
   });
 
-  it("shows editing as live, then as past once it ends, then nothing after the bound", () => {
+  it("keeps what live editing showed, marked past, until the bound", () => {
     const view = mount();
     publish("p1", { activities: [editing] });
-    expect(view.file()?.chip).toMatchObject({ state: "editing", phase: "live", text: "editing" });
+    const live = view.file()!;
+    expect(live.chip).toMatchObject({ state: "editing", phase: "live" });
     vi.advanceTimersByTime(30_000);
 
     publish("p1", {});
-    expect(view.file()?.chip).toMatchObject({ state: "editing", phase: "past", text: "was editing" });
-    expect(view.file()?.name?.phase).toBe("past");
-    expect(view.file()?.labels).toEqual(["Fix login: was editing a moment ago"]);
+    const past = view.file()!;
+    expect(past.chip).toEqual({ ...live.chip, phase: "past" });
+    expect(past.name).toEqual({ ...live.name, phase: "past" });
+    expect(past.labels).toEqual(live.labels);
 
     vi.advanceTimersByTime(AGENT_LINGER_MS - 1);
     expect(view.file()?.chip?.phase).toBe("past");
@@ -69,14 +71,17 @@ describe("files agent presence", () => {
     view.dispose();
   });
 
-  it("keeps a live name while the editing chip goes past, and names both facts", () => {
+  it("keeps a live name while the editing chip goes past, and lists the ended fact with the live ones", () => {
     const view = mount();
     publish("p1", { activities: [editing], reads: [read] });
+    const editingFact = view.file()!.chip!.description;
     publish("p1", { reads: [read] });
 
-    expect(view.file()?.chip?.phase).toBe("past");
-    expect(view.file()?.name?.phase).toBe("live");
-    expect(view.file()?.labels).toEqual(["Fix login: was editing a moment ago", "Fix login: read this turn"]);
+    const file = view.file()!;
+    expect(file.chip).toMatchObject({ phase: "past", description: editingFact });
+    expect(file.name?.phase).toBe("live");
+    expect(file.labels).toEqual([editingFact, ...file.name!.labels]);
+    expect(file.name!.labels).not.toContain(editingFact);
     view.dispose();
   });
 

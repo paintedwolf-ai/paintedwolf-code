@@ -1,6 +1,7 @@
 package curl
 
 import (
+	"context"
 	"maps"
 	"slices"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
 // A reference in curl argv lies in a declared slot exactly when curl sends it
@@ -163,5 +165,51 @@ func TestCurlBodyFormsNameTheirFiles(t *testing.T) {
 		if !slices.Equal(paths, want) {
 			t.Fatalf("%v targets %v, want %v", words, paths, want)
 		}
+	}
+}
+
+// A referenced --pass opens the key the request presents to its recipient,
+// so it is reviewed toward that recipient before its value is handed off, as
+// every other reference the request sends is: a release lets it open the
+// key, and a decline refuses before anything is read or sent.
+func TestCurlReviewsAReferencedPassphrase(t *testing.T) {
+	matcher, err := secretmatch.BuildMatcher(secretmatch.Bundled())
+	testutil.FailErr(t, "matcher", err)
+	fingerprinter, err := secretmatch.NewFingerprinter([]byte(strings.Repeat("p", 32)))
+	testutil.FailErr(t, "fingerprinter", err)
+	matcher.SetFingerprinter(fingerprinter)
+	for _, decision := range []secretmatch.Decision{secretmatch.SendUnchanged, secretmatch.Withhold} {
+		t.Run(string(decision), func(t *testing.T) {
+			h := newHarness(t)
+			id := uuid.NewString()
+			ref := secretmatch.ReferenceToken(id)
+			var asked []secretmatch.Alert
+			h.owners.HTTP.SecretMatcher = matcher
+			h.owners.HTTP.SecretAsk = func(_ context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
+				asked = append(asked, alert)
+				return secretmatch.Resolution{Decision: decision}, nil
+			}
+			prepared, _, err := h.prepare("--cert", "client.pem", "--key", "client.key", "--pass", ref, "https://mtls.example.test/api")
+			testutil.FailErr(t, "prepare", err)
+			resolved := replaceReference(prepared.Review.Arguments(), ref, "held-passphrase")
+			tc := h.tc
+			tc.Effects.Secrets = secretcap.NewResolutionForTest(resolved.(map[string]any), []secretcap.TestResolvedValue{
+				{ID: id, Name: "key-pass", Value: "held-passphrase", Path: passphrasePath},
+			})
+			inv := newInvocation(t.Context(), prepared, tc, commandprogram.Streams{})
+			got, err := inv.passphrase()
+			if len(asked) != 1 || asked[0].DestinationLabel != "https://mtls.example.test:443" || len(asked[0].Fingerprints) != 1 {
+				t.Fatalf("passphrase review asked %+v", asked)
+			}
+			if decision == secretmatch.SendUnchanged {
+				if err != nil || got != "held-passphrase" {
+					t.Fatalf("released passphrase = %q, %v", got, err)
+				}
+				return
+			}
+			if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != toolrejection.OutboundSecretDeniedCode || got != "" {
+				t.Fatalf("declined passphrase = %q, %v", got, err)
+			}
+		})
 	}
 }
