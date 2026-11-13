@@ -332,11 +332,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		return coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish)
 	}
 	ctx = attachStreamObservers(ctx, l, sess, sessionID, llmCallID, callProvider, callModel, isCoordinatorTurn, finishPreparing, loopProgress)
-	callFailed := func() {
-		if isCoordinatorTurn {
-			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, loopProgress())
-		}
-	}
+	callFailed := l.streamCallFailedFunc(ctx, sess, sessionID, llmCallID, callProvider, callModel, isCoordinatorTurn, loopProgress)
 	suppressCallFailed := false
 	// Publish one terminal event even after cancellation.
 	defer func() {
@@ -445,6 +441,17 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	completion.ProviderID = providerID
 	completion.Model = model
 	return completion, tokens, nil
+}
+
+func (l *modelTurn) streamCallFailedFunc(
+	ctx context.Context, sess *api.Session, sessionID, llmCallID, callProvider, callModel string,
+	isCoordinatorTurn bool, loopProgress func() *api.CoordinatorLoopProgress,
+) func() {
+	return func() {
+		if isCoordinatorTurn {
+			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, loopProgress())
+		}
+	}
 }
 
 func beginTurnCallLedger(ctx context.Context, costDep any, sess *api.Session, llmCallID, callProvider, callModel string) func() {
