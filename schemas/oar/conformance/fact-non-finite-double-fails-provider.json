@@ -1,0 +1,29 @@
+{
+  "title": "A double fact that is not finite routes the rule through on_error",
+  "covers": [
+    "OAR-FACT-17",
+    "OAR-OPS-2"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "prompt_injection_score > 0.5",
+    "on_error": "fail_closed",
+    "what": "injection likelihood crossed the threshold."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "prompt_injection_score": 1e999
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R"
+  },
+  "id": "fact-non-finite-double-fails-provider"
+}

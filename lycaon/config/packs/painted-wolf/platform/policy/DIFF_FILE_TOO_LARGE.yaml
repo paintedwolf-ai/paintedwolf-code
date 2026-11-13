@@ -1,39 +1,28 @@
-oar: '1.0'
+spec_version: "1.0"
 id: DIFF_FILE_TOO_LARGE
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - diff
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.max_path_bytes
-  - paintedwolf.path
-  - paintedwolf.size
-  - paintedwolf.resource_limit
+  ledger:
+    paintedwolf.operation:
+      - diff
+requires_facts: [paintedwolf.max_path_bytes, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit, paintedwolf.size]
 when: paintedwolf.rejection_code == "DIFF_FILE_TOO_LARGE"
 effect: block
-copy:
-  what: diff path {{ paintedwolf.path }} exceeds max_path_bytes {{ paintedwolf.max_path_bytes }} (size {{ paintedwolf.size
-    }}).
-  cause: An input exceeds the host’s per-file diff budget.
-  why: The host bounds input memory and comparison cost at {{ paintedwolf.max_path_bytes }} bytes per file.
-  fix: Use an offered bounded read to inspect the relevant text, or compare smaller intended inputs. A partial
-    read is not a full-file diff; report that limit instead of claiming a complete comparison.
-  instead: Branch on Code
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:diff
-x-paintedwolf-message: diff input file exceeds max_path_bytes
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    max_path_bytes: 2097152
-    path: internal/foo.go
-    profile: implement
-    size: 3000000
-    tool: diff
+category: recoverable
+emit: guard:diff
+message: diff input file exceeds max_path_bytes
+what: diff path {{ paintedwolf.path }} exceeds max_path_bytes {{ paintedwolf.max_path_bytes }} (size {{ paintedwolf.size }}).
+cause: An input exceeds the host’s per-file diff budget.
+why: The host bounds input memory and comparison cost at {{ paintedwolf.max_path_bytes }} bytes per file.
+fix: Use an offered bounded read to inspect the relevant text, or compare smaller intended inputs. A partial read is not a full-file diff; report that limit instead of claiming a complete comparison.
+instead: Branch on Code
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      max_path_bytes: 2097152
+      path: internal/foo.go
+      profile: implement
+      size: 3000000
+      tool: diff

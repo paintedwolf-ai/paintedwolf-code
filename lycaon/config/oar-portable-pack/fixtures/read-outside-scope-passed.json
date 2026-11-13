@@ -1,0 +1,35 @@
+{
+  "id": "read-outside-scope-passed",
+  "title": "A read inside the scope is not a decision",
+  "covers": [
+    "OAR-EVAL-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "namespace": "example.security",
+    "emit": "example:pack",
+    "id": "READ_OUTSIDE_SCOPE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {
+      "tools": [
+        "read",
+        "grep"
+      ]
+    },
+    "profile": "portable",
+    "when": "path_outside_scope(tool)",
+    "effect": "block",
+    "on_error": "fail_closed"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "path_outside_scope": false
+    }
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

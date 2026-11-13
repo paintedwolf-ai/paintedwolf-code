@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: MESSAGE_COORDINATOR_ADDRESSED_SESSION
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - message_coordinator
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "MESSAGE_COORDINATOR_ADDRESSED_SESSION"
 effect: block
-copy:
-  what: There is no coordinator above this session to message.
-  cause: message_coordinator ran in a session the user addressed directly, not in a worker.
-  why: The message goes to the coordinator that started this worker.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code MESSAGE_COORDINATOR_ADDRESSED_SESSION; tell the user directly, do not retry here
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:message_coordinator
-x-paintedwolf-message: There is no coordinator above this session to message.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:message_coordinator
+message: There is no coordinator above this session to message.
+what: There is no coordinator above this session to message.
+cause: message_coordinator ran in a session the user addressed directly, not in a worker.
+why: The message goes to the coordinator that started this worker.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code MESSAGE_COORDINATOR_ADDRESSED_SESSION; tell the user directly, do not retry here
+scenarios:
   - id: default
     vars:
       profile: explore

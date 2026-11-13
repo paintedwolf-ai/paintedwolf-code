@@ -1,35 +1,31 @@
-oar: '1.0'
+spec_version: "1.0"
 id: READ_BINARY_DENIED
 kind: schema
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.bytes, paintedwolf.path, paintedwolf.binary_denied, paintedwolf.workspace_image_supported, paintedwolf.rejection_reason, paintedwolf.next_steps]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.binary_denied, paintedwolf.bytes, paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.workspace_image_supported]
 when: paintedwolf.rejection_code == "READ_BINARY_DENIED"
 effect: block
-copy:
-  what: '{{ tool }} could not decode {{ paintedwolf.path }}{% if paintedwolf.bytes %} ({{ paintedwolf.bytes }} input bytes){% endif %} as supported bounded
-    text.'
-  cause: 'The text reader reported: {{ paintedwolf.rejection_reason }}.'
-  why: Binary content, unsupported encoding, or a decoding bound cannot be treated as readable source text.
-  fix: '{{ paintedwolf.next_steps }} A different text file cannot substitute for required evidence from this asset. Preserve any unresolved content requirement.'
-  instead: Diagnose the text-decoding failure; do not invent replacement evidence
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:read
-x-paintedwolf-message: read refused binary file content
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    bytes: 6148
-    path: .DS_Store
-    profile: explore_readonly
-    tool: read
-- id: image_file
-  vars:
-    bytes: 4096
-    workspace_image_supported: true
-    can_view_image: true
-    path: assets/logo.png
-    profile: coordinator
-    tool: read
+category: recoverable
+emit: guard:read
+message: read refused binary file content
+what: '{{ tool }} could not decode {{ paintedwolf.path }}{% if paintedwolf.bytes %} ({{ paintedwolf.bytes }} input bytes){% endif %} as supported bounded text.'
+cause: 'The text reader reported: {{ paintedwolf.rejection_reason }}.'
+why: Binary content, unsupported encoding, or a decoding bound cannot be treated as readable source text.
+fix: '{{ paintedwolf.next_steps }} A different text file cannot substitute for required evidence from this asset. Preserve any unresolved content requirement.'
+instead: Diagnose the text-decoding failure; do not invent replacement evidence
+scenarios:
+  - id: default
+    vars:
+      bytes: 6148
+      path: .DS_Store
+      profile: explore_readonly
+      tool: read
+  - id: image_file
+    vars:
+      bytes: 4096
+      workspace_image_supported: true
+      can_view_image: true
+      path: assets/logo.png
+      profile: coordinator
+      tool: read

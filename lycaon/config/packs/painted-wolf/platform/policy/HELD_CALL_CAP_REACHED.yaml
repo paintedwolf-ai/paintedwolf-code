@@ -1,41 +1,38 @@
-oar: '1.0'
+spec_version: "1.0"
 id: HELD_CALL_CAP_REACHED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-    - find
-    - grep
-    - wc
-    - list_dir
-    - summarize
-    - survey_repo
-    - diff
-    - git_status
-    - git_diff
-    - git_log
-    - git_show
-    - git_blame
-    - git_compare
-    - git_branches
-    - git_ref
-    - git_stash_list
-requires:
-  profiles:
-    - tool
-  facts: [paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.limit, paintedwolf.handles_text, paintedwolf.next_steps]
+  ledger:
+    paintedwolf.operation:
+      - find
+      - grep
+      - wc
+      - list_dir
+      - summarize
+      - survey_repo
+      - diff
+      - git_status
+      - git_diff
+      - git_log
+      - git_show
+      - git_blame
+      - git_compare
+      - git_branches
+      - git_ref
+      - git_stash_list
+requires_facts: [paintedwolf.handles_text, paintedwolf.limit, paintedwolf.next_steps, paintedwolf.operation, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "HELD_CALL_CAP_REACHED"
 effect: block
-copy:
-  what: This session already holds {{ paintedwolf.limit }} running calls ({{ paintedwolf.handles_text }}).
-  cause: Earlier calls outlived their foreground wait and have not settled.
-  why: The limit bounds background work one session can leave running.
-  fix: '{{ paintedwolf.next_steps }} Then repeat this call.'
-  instead: Free a held call before starting another
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:held_call
-x-paintedwolf-message: held call cap reached
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:held_call
+message: held call cap reached
+what: This session already holds {{ paintedwolf.limit }} running calls ({{ paintedwolf.handles_text }}).
+cause: Earlier calls outlived their foreground wait and have not settled.
+why: The limit bounds background work one session can leave running.
+fix: '{{ paintedwolf.next_steps }} Then repeat this call.'
+instead: Free a held call before starting another
+scenarios:
   - id: default
     vars:
       limit: 4

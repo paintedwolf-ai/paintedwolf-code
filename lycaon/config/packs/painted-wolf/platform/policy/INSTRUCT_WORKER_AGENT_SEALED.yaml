@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: INSTRUCT_WORKER_AGENT_SEALED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - instruct_worker
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps, paintedwolf.worker]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_AGENT_SEALED"
 effect: block
-copy:
-  what: 'This worker''s agent cannot change.'
-  cause: It is a reviewer or bound to a plan or workflow, so its role and agent are sealed.
-  why: A sealed role keeps a review subject or plan leg exactly what was assigned.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code INSTRUCT_WORKER_AGENT_SEALED; do not retry the same call
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:instruct_worker
-x-paintedwolf-message: 'This worker''s agent cannot change.'
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:instruct_worker
+message: 'This worker''s agent cannot change.'
+what: 'This worker''s agent cannot change.'
+cause: It is a reviewer or bound to a plan or workflow, so its role and agent are sealed.
+why: A sealed role keeps a review subject or plan leg exactly what was assigned.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code INSTRUCT_WORKER_AGENT_SEALED; do not retry the same call
+scenarios:
   - id: default
     vars:
       profile: coordinator

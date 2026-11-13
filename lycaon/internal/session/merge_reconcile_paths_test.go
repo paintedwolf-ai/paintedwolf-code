@@ -57,7 +57,7 @@ func TestMergeReconcilePathsNotRegisteredForInvestigateProductWrite(t *testing.T
 	}
 }
 
-// [OAR-EVAL-8] Catalog selection uses the producer's observed facts.
+// [OAR-EVAL-6] Catalog selection uses the producer's observed facts.
 func requireCatalogDecision(t *testing.T, anchor string, gc *oar.GuardContext, code string) {
 	t.Helper()
 	result, err := sessionTestOARPipeline(t).EvaluateBlock(context.Background(), anchor, gc)

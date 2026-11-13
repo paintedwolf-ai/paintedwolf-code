@@ -1,27 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_NAME_UNKNOWN
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - instruct_worker
     - worker_history
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKER_NAME_UNKNOWN"
 effect: block
-copy:
-  what: No worker in this session has that name.
-  cause: The name matches no worker this session started.
-  why: Workers are addressed by the name their task call returned, within the session that started them.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code WORKER_NAME_UNKNOWN; do not retry the same call
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:instruct_worker
-x-paintedwolf-message: No worker in this session has that name.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:instruct_worker
+message: No worker in this session has that name.
+what: No worker in this session has that name.
+cause: The name matches no worker this session started.
+why: Workers are addressed by the name their task call returned, within the session that started them.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code WORKER_NAME_UNKNOWN; do not retry the same call
+scenarios:
   - id: default
     vars:
       profile: coordinator

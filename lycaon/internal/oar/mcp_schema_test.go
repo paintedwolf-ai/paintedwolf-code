@@ -36,7 +36,7 @@ func TestMCPFieldAccessors(t *testing.T) {
 	testutil.FailErr(t, "LoadDir", err)
 
 	gc := NewGuardContext()
-	gc.MCP.MCPProviderID = "fixture"
+	gc.MCP.MCPServerID = "fixture"
 	gc.MCP.MCPToolName = "echo"
 	gc.MCP.MCPResultText = `{"id":"ISSUE-1","count":3,"state":{"type":"started","name":"In Progress"}}`
 	matched, fields, err := bindings.Apply(list, "fixture", "echo", gc.MCP.MCPResultText)
@@ -60,7 +60,7 @@ func TestLazyMCPSchemaApplyOnPost(t *testing.T) {
 
 	when := `mcp_schema_matched && mcp_field_string("issue_id") == "ISSUE-1"`
 	rs := NewRuleSet([]*Rule{{
-		OAR: "1.0", ID: "MCP_SCHEMA_TEST", Kind: KindPolicy,
+		SpecVersion: "1.0", ID: "MCP_SCHEMA_TEST", Kind: KindPolicy,
 		Anchor: AnchorToolPost, When: when,
 		Effect: EffectWarn, Enforcement: "enforce", OnError: "fail_closed",
 	}})
@@ -84,7 +84,7 @@ func TestLazyMCPSchemaApplyOnPost(t *testing.T) {
 
 	gc := NewGuardContext()
 	gc.Invocation.Tool = "mcp_fixture_echo"
-	gc.MCP.MCPProviderID = "fixture"
+	gc.MCP.MCPServerID = "fixture"
 	gc.MCP.MCPToolName = "echo"
 	gc.MCP.MCPResultText = `{"id":"ISSUE-1","count":1,"state":{"type":"started","name":"x"}}`
 
@@ -105,9 +105,9 @@ func TestLazyMCPSchemaSkippedWithoutRefs(t *testing.T) {
 	list, err := bindings.LoadDir(bindingsTestdata(t))
 	testutil.FailErr(t, "LoadDir", err)
 
-	when := `mcp_provider_id == "fixture" && mcp_call_ok`
+	when := `mcp_server_id == "fixture" && mcp_call_ok`
 	rs := NewRuleSet([]*Rule{{
-		OAR: "1.0", ID: "MCP_STRUCT_ONLY", Kind: KindPolicy,
+		SpecVersion: "1.0", ID: "MCP_STRUCT_ONLY", Kind: KindPolicy,
 		Anchor: AnchorToolPost, When: when,
 		Effect: EffectWarn, Enforcement: "enforce", OnError: "fail_closed",
 	}})
@@ -123,7 +123,7 @@ func TestLazyMCPSchemaSkippedWithoutRefs(t *testing.T) {
 
 	gc := NewGuardContext()
 	gc.Invocation.Tool = "mcp_fixture_echo"
-	gc.MCP.MCPProviderID = "fixture"
+	gc.MCP.MCPServerID = "fixture"
 	gc.MCP.MCPToolName = "echo"
 	gc.MCP.MCPCallOK = true
 	gc.MCP.MCPResultText = `{"id":"ISSUE-1","count":1,"state":{"type":"started","name":"x"}}`
@@ -144,7 +144,7 @@ func TestLazyMCPSchemaNeverOnPreInvoke(t *testing.T) {
 
 	when := `mcp_schema_matched`
 	rs := NewRuleSet([]*Rule{{
-		OAR: "1.0", ID: "MCP_PRE_SCHEMA", Kind: KindPolicy,
+		SpecVersion: "1.0", ID: "MCP_PRE_SCHEMA", Kind: KindPolicy,
 		Anchor: AnchorToolPreInvoke, When: when,
 		Effect: EffectBlock, Enforcement: "enforce", OnError: "fail_closed",
 	}})
@@ -159,7 +159,7 @@ func TestLazyMCPSchemaNeverOnPreInvoke(t *testing.T) {
 	})
 
 	gc := NewGuardContext()
-	gc.MCP.MCPProviderID = "fixture"
+	gc.MCP.MCPServerID = "fixture"
 	gc.MCP.MCPToolName = "echo"
 	gc.MCP.MCPResultText = `{"id":"x"}`
 

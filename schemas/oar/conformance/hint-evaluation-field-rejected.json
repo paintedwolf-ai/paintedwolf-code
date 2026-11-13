@@ -1,0 +1,23 @@
+{
+  "title": "A hint that carries a condition is rejected at load",
+  "covers": [
+    "OAR-HINT-1"
+  ],
+  "hints": [
+    {
+      "spec_version": "1.0",
+      "id": "H",
+      "kind": "hint",
+      "when": "tool == \"read\"",
+      "what": "x."
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {}
+  },
+  "expected": {
+    "error": "when"
+  },
+  "id": "hint-evaluation-field-rejected"
+}

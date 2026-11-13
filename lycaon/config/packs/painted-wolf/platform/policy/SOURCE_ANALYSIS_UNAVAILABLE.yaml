@@ -1,30 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SOURCE_ANALYSIS_UNAVAILABLE
 kind: policy
-anchor: tool.post_invoke
-requires:
-  profiles: [tool]
-  facts:
-    - paintedwolf.source_analysis_unavailable
-    - paintedwolf.path
-    - paintedwolf.parse_failure_count
-    - paintedwolf.parse_paths
-    - paintedwolf.parse_failure
-    - paintedwolf.next_steps
+on: tool.post_invoke
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.parse_failure, paintedwolf.parse_failure_count, paintedwolf.parse_paths, paintedwolf.path, paintedwolf.source_analysis_unavailable]
 when: paintedwolf.source_analysis_unavailable
 effect: warn
-copy:
-  what: 'Some source analysis is unavailable ({{ paintedwolf.parse_failure_count }} failure(s)): {{ paintedwolf.parse_paths }}.'
-  cause: 'First failure, {{ paintedwolf.path }}: {{ paintedwolf.parse_failure }}. Per-file diagnostics are retained in the result.'
-  why: 'Available text and completed matches remain useful, but missing symbols or matches do not establish their absence in the affected files.'
-  fix: >-
-    {{ paintedwolf.next_steps }} For inline content, inspect the supplied text directly.
-    Report the host parser failure to the coordinator or user; retry structural analysis after its cause is resolved.
-  instead: Keep completed results and account for the missing analysis explicitly
-x-paintedwolf-category: informational
-x-paintedwolf-emit: guard:source_analysis
-x-paintedwolf-message: source analysis is unavailable for part of the result
-x-paintedwolf-scenarios:
+category: informational
+emit: guard:source_analysis
+message: source analysis is unavailable for part of the result
+what: 'Some source analysis is unavailable ({{ paintedwolf.parse_failure_count }} failure(s)): {{ paintedwolf.parse_paths }}.'
+cause: 'First failure, {{ paintedwolf.path }}: {{ paintedwolf.parse_failure }}. Per-file diagnostics are retained in the result.'
+why: 'Available text and completed matches remain useful, but missing symbols or matches do not establish their absence in the affected files.'
+fix: >-
+  {{ paintedwolf.next_steps }} For inline content, inspect the supplied text directly. Report the host parser failure to the coordinator or user; retry structural analysis after its cause is resolved.
+instead: Keep completed results and account for the missing analysis explicitly
+scenarios:
   - id: partial_search
     vars:
       tool: grep

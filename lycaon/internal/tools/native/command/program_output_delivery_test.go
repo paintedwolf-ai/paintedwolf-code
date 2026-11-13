@@ -3,6 +3,7 @@ package command
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tooloutput"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -67,9 +69,79 @@ func TestWindowStreamOutputSnapsToLineBoundariesAndRendersNotice(t *testing.T) {
 	}
 }
 
+func TestRetainOutcomePublicationEligibility(t *testing.T) {
+	clean := &tooloutput.StreamSpill{Complete: true}
+	limited := &tooloutput.StreamSpill{Complete: false, Failure: &tooloutput.StreamSpillLimitError{Maximum: 256 << 20, Observed: 300 << 20}}
+	failed := &tooloutput.StreamSpill{Complete: false, Failure: errors.New("blob copy failed mid-stream")}
+	screenErr := errors.New("screening aborted")
+
+	spill, err := retainOutcome(clean, nil)
+	if err != nil || spill != clean {
+		t.Fatalf("clean spill = (%v, %v), want (spill, nil)", spill, err)
+	}
+	spill, err = retainOutcome(limited, nil)
+	if err != nil || spill != limited {
+		t.Fatalf("limit-bounded spill = (%v, %v), want (spill, nil)", spill, err)
+	}
+	spill, err = retainOutcome(failed, nil)
+	if spill != nil || err == nil || !errors.Is(err, failed.Failure) {
+		t.Fatalf("failed spill = (%v, %v), want (nil, failure)", spill, err)
+	}
+	spill, err = retainOutcome(failed, screenErr)
+	if spill != nil || err == nil || !errors.Is(err, failed.Failure) || !errors.Is(err, screenErr) {
+		t.Fatalf("failed spill with screen error = (%v, %v), want (nil, joined)", spill, err)
+	}
+	spill, err = retainOutcome(nil, screenErr)
+	if spill != nil || !errors.Is(err, screenErr) {
+		t.Fatalf("missing spill = (%v, %v), want (nil, screenErr)", spill, err)
+	}
+	spill, err = retainOutcome(nil, nil)
+	if spill != nil || err != nil {
+		t.Fatalf("missing spill without error = (%v, %v), want (nil, nil)", spill, err)
+	}
+}
+
+func TestWindowStreamOutputMarksIncompleteCapture(t *testing.T) {
+	data := []byte("alpha one\nalpha two\nalpha three\n")
+	outputPath := "@output/prog-1.stdout"
+	sample, err := sampleOutput(bytes.NewReader(data), 12<<10)
+	testutil.FailErr(t, "sample output", err)
+	delivered, win, parts, err := sample.window(t.Context(), "stdout", "output:program:prog-1:stdout", outputPath, false)
+	testutil.FailErr(t, "window incomplete capture", err)
+
+	if win.Complete || !win.Truncated {
+		t.Fatalf("window = %+v, want complete=false truncated=true", win)
+	}
+	if !strings.HasPrefix(delivered, string(data)) {
+		t.Fatalf("delivered output lost captured prefix:\n%s", delivered)
+	}
+	if !strings.Contains(delivered, "saved output is incomplete") {
+		t.Fatalf("delivered output missing incomplete notice:\n%s", delivered)
+	}
+	if len(parts) != 1 || parts[0].start != 0 || !bytes.Equal(parts[0].data, data) {
+		t.Fatalf("parts = %+v, want the full captured prefix", parts)
+	}
+
+	var large strings.Builder
+	for i := 1; i <= 500; i++ {
+		fmt.Fprintf(&large, "line-%04d: abcdefghijklmnopqrstuvwxyz0123456789\n", i)
+	}
+	largeData := []byte(large.String())
+	sample, err = sampleOutput(bytes.NewReader(largeData), 12<<10)
+	testutil.FailErr(t, "sample large output", err)
+	delivered, win, _, err = sample.window(t.Context(), "stdout", "output:program:prog-1:stdout", outputPath, false)
+	testutil.FailErr(t, "window large incomplete capture", err)
+	if win.Complete || !win.Truncated {
+		t.Fatalf("large window = %+v, want complete=false truncated=true", win)
+	}
+	if !strings.Contains(delivered, "saved output is incomplete") {
+		t.Fatalf("large delivered output missing incomplete notice:\n%s", delivered)
+	}
+}
+
 func TestPublishOutputAndParseSource(t *testing.T) {
 	outputDir := t.TempDir()
-	testutil.FailErr(t, "publishOutputCopy", scratch.PublishCommandOutput(outputDir, "prog-42", "stdout", strings.NewReader("alpha\nbeta\n")))
+	testutil.FailErr(t, "publishOutputCopy", scratch.PublishCommandOutput(outputDir, scratch.CommandOutput{ProgramID: "prog-42", Stream: "stdout"}, strings.NewReader("alpha\nbeta\n")))
 	target := filepath.Join(outputDir, "prog-42.stdout")
 	info, err := os.Stat(target)
 	testutil.FailErr(t, "stat output copy", err)

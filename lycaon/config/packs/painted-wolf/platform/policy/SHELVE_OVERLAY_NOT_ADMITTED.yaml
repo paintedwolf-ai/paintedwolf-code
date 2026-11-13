@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SHELVE_OVERLAY_NOT_ADMITTED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - shelve_overlay
-requires:
-  facts: [paintedwolf.rejection_code]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SHELVE_OVERLAY_NOT_ADMITTED"
 effect: block
-copy:
-  what: 'The worker''s state does not admit shelving now.'
-  cause: The worker is working, asking or recovering, or has no open changes.
-  why: Changes are resolved only while their worker is between rounds.
-  fix: Wait for the worker to deliver, or check the roster for its open changes.
-  instead: Branch on Code SHELVE_OVERLAY_NOT_ADMITTED; do not retry the same call
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:shelve_overlay
-x-paintedwolf-message: 'The worker''s state does not admit shelving now.'
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:shelve_overlay
+message: 'The worker''s state does not admit shelving now.'
+what: 'The worker''s state does not admit shelving now.'
+cause: The worker is working, asking or recovering, or has no open changes.
+why: Changes are resolved only while their worker is between rounds.
+fix: Wait for the worker to deliver, or check the roster for its open changes.
+instead: Branch on Code SHELVE_OVERLAY_NOT_ADMITTED; do not retry the same call
+scenarios:
   - id: default
     vars:
       profile: coordinator

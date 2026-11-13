@@ -32,6 +32,23 @@ type Service struct {
 	harvestHas                 HarvestedFingerprint
 	ignoredCredentialCandidate func(context.Context, string, string) bool
 	credentialSlots            func(context.Context, *api.Session) *secretmint.Inspector
+	socketResources            func(ctx context.Context, projectID string, paths []string) []string
+}
+
+// observeSocketResources names the host resources whose local service each
+// refused socket is.
+func (m *Service) observeSocketResources(ctx context.Context, gc *oar.GuardContext, projectID string) {
+	if paths := gc.Refusals.RefusedSocketPaths; len(paths) > 0 && m.socketResources != nil {
+		gc.Refusals.RefusedSocketHostResources = m.socketResources(ctx, projectID, paths)
+	}
+}
+
+// SetSocketResources names the host resources whose local service a refused
+// socket is.
+func (m *Service) SetSocketResources(source func(ctx context.Context, projectID string, paths []string) []string) {
+	if m != nil {
+		m.socketResources = source
+	}
 }
 
 func New(profiles Profiles) *Service { return &Service{profiles: profiles} }
@@ -46,9 +63,9 @@ func (m *Service) FillSessionFacts(ctx context.Context, gc *oar.GuardContext, se
 		gc.Session.Principal = sess.OwnerPersonID
 		gc.Session.WorkerLeg = sess.IsWorkerChild()
 		if sess.ParentSessionID == "" {
-			gc.Session.Profile = "coordinator"
+			gc.Session.Role = "coordinator"
 		}
-		gc.RegisterProvider("permission_profile", func(gc *oar.GuardContext) error {
+		gc.RegisterProvider("profile", func(gc *oar.GuardContext) error {
 			profile, err := m.profiles.PromptToolProfile(ctx, sess)
 			if err != nil {
 				return err

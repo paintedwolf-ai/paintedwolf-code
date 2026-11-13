@@ -9,7 +9,7 @@ import (
 
 func advisoryRule(id string, effect Effect, anchor string) *Rule {
 	return &Rule{
-		OAR: "1.0", ID: id, Kind: KindPolicy,
+		SpecVersion: "1.0", ID: id, Kind: KindPolicy,
 		Anchor: anchor, Effect: effect, Enforcement: "enforce",
 		OnError: "fail_closed",
 		Copy:    Copy{What: id + " what", Fix: id + " fix"},
@@ -61,20 +61,6 @@ func TestAdvisoriesWarnsAccumulate(t *testing.T) {
 	}
 	if len(res.Decision.Advisories) != 2 || res.Decision.Advisories[0].Code != "A_NOTE" || res.Decision.Advisories[1].Code != "B_NOTE" {
 		t.Fatalf("advisories = %#v", res.Decision.Advisories)
-	}
-}
-
-func TestAdvisoriesOmitASuppressedRule(t *testing.T) {
-	specific := advisoryRule("A_SPECIFIC", EffectNudge, AnchorCoordinatorPostTurn)
-	specific.Overrides = []string{"B_GENERAL"}
-	specific.overrideTargets = []string{"B_GENERAL"}
-	general := advisoryRule("B_GENERAL", EffectNudge, AnchorCoordinatorPostTurn)
-	res := evaluateAdvisories(t, []*Rule{specific, general}, AnchorCoordinatorPostTurn, nil)
-	if res.Decision == nil || res.Decision.Code != "A_SPECIFIC" {
-		t.Fatalf("decision = %#v", res.Decision)
-	}
-	if len(res.Decision.Advisories) != 1 || res.Decision.Advisories[0].Code != "A_SPECIFIC" {
-		t.Fatalf("advisories = %#v, want only A_SPECIFIC", res.Decision.Advisories)
 	}
 }
 

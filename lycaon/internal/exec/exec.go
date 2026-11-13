@@ -43,8 +43,11 @@ type ExecOpts struct {
 	AppendEnv []string
 	// PathExtra appends host-derived resource directories to PATH.
 	PathExtra []string
-	Stdin     *StdinSpec
-	Redirect  *RedirectSpec
+	// ServiceEnv holds NAME=value entries a declared host service gives its
+	// client. A program's own export of NAME wins.
+	ServiceEnv []string
+	Stdin      *StdinSpec
+	Redirect   *RedirectSpec
 	// NoTimeout skips the run-to-completion deadline (background pipelines).
 	NoTimeout bool
 	// SeparateStderr preserves stdout for structured parsing.

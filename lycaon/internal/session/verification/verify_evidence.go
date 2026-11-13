@@ -106,6 +106,10 @@ func (m *Service) RecordSourceRunTerminal(
 		},
 		RecordedAt: recordedAt.UTC().Format(time.RFC3339Nano),
 	}
+	if run.ProgramID != "" {
+		rec.Artifacts["verdict_scope"] = "program"
+		rec.Artifacts["program_id"] = run.ProgramID
+	}
 	rec.Artifacts["source_revision"] = run.SourceRevision
 	rec.Artifacts["source_root_digest"] = run.SourceRootDigest
 	root := m.EvidenceRootFor(sess)

@@ -40,7 +40,7 @@ type SessionFacts struct {
 	SessionID                string
 	SessionPosture           string
 	Surface                  string
-	Profile                  string
+	Role                     string
 	Phase                    string
 	WorkerLeg                bool
 	SurfaceMayFinish         bool
@@ -61,8 +61,6 @@ type ProgressFacts struct {
 	ProgressClosureArmed         bool
 	ProgressGatedTool            bool
 	ProgressMissing              bool
-	ProgressClosedBeyondBaseline bool
-	ProgressReconciledSinceArm   bool
 	CloseoutHasAnswer            bool
 	CloseoutOnlyRepairDirectives bool
 	TaskEnvelopeEcho             bool
@@ -148,10 +146,12 @@ type RefusalsFacts struct {
 	RefusedTerminalReadPaths    []string
 	RefusedTerminalWritePaths   []string
 	RefusedSocketPaths          []string
-	RefusedConnectPorts         []string
-	RefusedListenPorts          []string
-	RefusedSignals              []string
-	UnsandboxedRefusals         []string
+	// RefusedSocketHostResources are available resources whose local service a refused socket is.
+	RefusedSocketHostResources []string
+	RefusedConnectPorts        []string
+	RefusedListenPorts         []string
+	RefusedSignals             []string
+	UnsandboxedRefusals        []string
 }
 
 type SourceFacts struct {
@@ -213,21 +213,22 @@ type RejectionFacts struct {
 }
 
 type MCPFacts struct {
-	MCPProviderID         string
-	MCPToolName           string
-	MCPQualifiedTool      string
-	MCPProviderConfigured bool
-	MCPProviderEnabled    bool
-	MCPCallOK             bool
-	MCPErrorCode          string
-	MCPSchemaMatched      bool
-	MCPFields             map[string]any
-	MCPResultText         string
-	MCPCatalog            MCPCatalogView
+	MCPServerID         string
+	MCPToolName         string
+	MCPQualifiedTool    string
+	MCPServerConfigured bool
+	MCPServerEnabled    bool
+	MCPCallOK           bool
+	MCPErrorCode        string
+	MCPSchemaMatched    bool
+	MCPFields           map[string]any
+	MCPResultText       string
+	MCPCatalog          MCPCatalogView
 }
 
 type CountersFacts struct {
 	FireCount           int64
+	ScopedFireCount     int64
 	RepeatCount         int64
 	BreakerCount        int64
 	FruitlessSearchRun  int64

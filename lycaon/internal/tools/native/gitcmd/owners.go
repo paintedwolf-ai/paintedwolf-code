@@ -25,6 +25,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/sandbox"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -60,6 +61,10 @@ type Owners struct {
 	// Launch admits the confined launch every Git process of one command runs
 	// under. Without it no Git command runs.
 	Launch AgentLaunch
+	// SecretAsk and SecretMatcher review each saved credential before it
+	// leaves for its recipient. Without them no saved credential is used.
+	SecretAsk     secretmatch.AskFunc
+	SecretMatcher *secretmatch.Matcher
 
 	catalog toolcontract.LanguageCatalog
 	specs   map[string]toolcontract.CommandSpecification
@@ -291,6 +296,7 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		}()
 		ctx = gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan})
 	}
+	ctx = reportRepositoryRead(ctx, p.commandDir())
 	if _, ok := mutateForms[p.command.spec.Name]; ok {
 		return invokeMutation(ctx, p, tc, streams)
 	}
