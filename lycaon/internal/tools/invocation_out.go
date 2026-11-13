@@ -32,9 +32,10 @@ func (o *ToolInvocationOut) MergeChild(child *ToolInvocationOut, scope MergeScop
 	defer o.mu.Unlock()
 	child.mu.Lock()
 	defer child.mu.Unlock()
-	if child.FileEdit != nil {
-		o.FileEdit = child.FileEdit
+	for _, edit := range child.FileEdits {
+		o.RecordFileEdit(edit)
 	}
+	o.FileEditsOmitted += child.FileEditsOmitted
 	if context := child.SourceContext; context != nil {
 		for _, target := range context.Locations {
 			o.recordSourceLocation(target)
@@ -73,7 +74,8 @@ func (o *ToolInvocationOut) TakeCommitted() *ToolInvocationOut {
 	}
 	o.mu.Lock()
 	defer o.mu.Unlock()
-	taken.FileEdit, o.FileEdit = o.FileEdit, nil
+	taken.FileEdits, o.FileEdits = o.FileEdits, nil
+	taken.FileEditsOmitted, o.FileEditsOmitted = o.FileEditsOmitted, 0
 	taken.SourceContext, o.SourceContext = o.SourceContext, nil
 	taken.sourceLocations, o.sourceLocations = o.sourceLocations, nil
 	taken.SourceReads, o.SourceReads = o.SourceReads, nil

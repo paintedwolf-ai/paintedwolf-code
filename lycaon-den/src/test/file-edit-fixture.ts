@@ -12,7 +12,7 @@ export function fileEditPreviewFixture(edit: FileEditSnapshot): FileEditPreview 
   const id = hash(JSON.stringify(edit));
   retainedFileEditFixtures.set(id, edit);
   const changes = diffLines(edit.before ?? "", edit.after);
-  return { path: edit.path, root_id: edit.root_id, reference: { message_id: id, tool_call_id: id, index: 0 },
+  return { path: edit.path, root_id: edit.root_id, reference: { message_id: id, tool_call_id: id, source: "file_edit", index: 0 },
     before_sha256: hash(edit.before ?? ""), after_sha256: hash(edit.after), created: edit.before == null, deleted: !!edit.deleted,
     added: changes.filter(change => change.added).reduce((sum,change) => sum + (change.count ?? 0),0),
     removed: changes.filter(change => change.removed).reduce((sum,change) => sum + (change.count ?? 0),0),

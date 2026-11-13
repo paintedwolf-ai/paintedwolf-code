@@ -26,7 +26,8 @@ const (
 // Every exported field of ToolInvocationOut has exactly one merge rule.
 var invocationOutRules = map[string]mergeRule{
 	"SourceContext":    committedEffect,
-	"FileEdit":         committedEffect,
+	"FileEdits":        committedEffect,
+	"FileEditsOmitted": committedEffect,
 	"SourceReads":      committedEffect,
 	"SourceDeliveries": committedEffect,
 	"Listener":         committedEffect,
@@ -69,6 +70,8 @@ func filledOut(t *testing.T) *tools.ToolInvocationOut {
 			field.SetString("set")
 		case reflect.Bool:
 			field.SetBool(true)
+		case reflect.Int:
+			field.SetInt(1)
 		case reflect.Slice:
 			field.Set(reflect.MakeSlice(field.Type(), 1, 1))
 		case reflect.Struct:

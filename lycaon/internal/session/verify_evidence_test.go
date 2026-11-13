@@ -76,8 +76,8 @@ func workSince(history []api.Message) []api.Message {
 	return append(history,
 		api.Message{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "write", Args: map[string]any{"path": "a.go"}}}},
 		api.Message{Role: api.MessageRoleTool, Content: "ok", ToolResult: &api.ToolResult{
-			Outcome:  api.ToolResultOutcomeCompleted,
-			FileEdit: &api.FileEditSnapshot{Path: "a.go"},
+			Outcome:   api.ToolResultOutcomeCompleted,
+			FileEdits: []api.FileEditSnapshot{{Path: "a.go"}},
 		}},
 	)
 }

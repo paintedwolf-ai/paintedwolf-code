@@ -2,9 +2,8 @@ import {
   SKILL_CHICKLET_NAME,
   isSkillToolPart,
 } from "../skill/skill-card-model.ts";
-import { fileEditFromPart } from "../file-edit/file-edit-model.ts";
-import { foldFileEdits } from "../file-edit/file-edit-fold.ts";
-import type { FileEditFold, FileEditStep } from "../file-edit/file-edit-fold.ts";
+import { partHasFileEdits } from "../file-edit/file-edit-model.ts";
+import { collectSegmentFolds } from "../file-edit/file-edit-fold.ts";
 import { indexWarmingChickletTitle } from "../transcript/projection/index-warming-copy.ts";
 import {
   isLoopbackTarget,
@@ -318,63 +317,8 @@ function emitWorkerRun(
 function candidateIsFileEdit(candidate: ActivityCandidate): boolean {
   return (
     candidate.entry.kind === "tool" &&
-    fileEditFromPart(candidate.entry.part) != null
+    partHasFileEdits(candidate.entry.part)
   );
-}
-
-/** Groups one turn's writes by path and first write. */
-type SegmentFolds = {
-  folds: FileEditFold[];
-  /** First writes anchor each path's diff card. */
-  anchorPartIds: Set<string>;
-  anchorMessageIdByPartId: Map<string, string>;
-};
-
-/** Repeated writes share a card anchored at the first write. */
-function collectSegmentFolds(
-  items: readonly RawTranscriptItem[],
-): SegmentFolds[] {
-  const segments: SegmentFolds[] = [];
-  let steps: FileEditStep[] = [];
-  let anchorPartIds = new Set<string>();
-  let anchorMessageIdByPartId = new Map<string, string>();
-  let seenPaths = new Set<string>();
-
-  const closeSegment = () => {
-    segments.push({
-      folds: foldFileEdits(steps),
-      anchorPartIds,
-      anchorMessageIdByPartId,
-    });
-    steps = [];
-    anchorPartIds = new Set();
-    anchorMessageIdByPartId = new Map();
-    seenPaths = new Set();
-  };
-
-  for (const item of items) {
-    if (item.kind === "user") {
-      closeSegment();
-      continue;
-    }
-    if (item.kind !== "tool") continue;
-    const snapshot = fileEditFromPart(item.part);
-    if (!snapshot) continue;
-    steps.push({
-      key: item.part.id,
-      toolCallId: item.part.toolCallId,
-      messageId: item.part.messageId,
-      snapshot,
-      tool: item.part.tool,
-    });
-    if (!seenPaths.has(snapshot.path)) {
-      seenPaths.add(snapshot.path);
-      anchorPartIds.add(item.part.id);
-      anchorMessageIdByPartId.set(item.part.id, item.part.messageId);
-    }
-  }
-  closeSegment();
-  return segments;
 }
 
 /** Project raw activity rows into scoped spans and turn-folded diff rows. */
@@ -395,7 +339,8 @@ export function projectActivitySpans(
 
   const emitAnchoredFolds = () => {
     if (runAnchorPartIds.length === 0 || !segment) return;
-    const anchored = new Set(runAnchorPartIds);
+    const anchors = segment.anchorFoldKeysByPartId;
+    const anchored = new Set(runAnchorPartIds.flatMap((id) => anchors.get(id) ?? []));
     const folds = segment.folds.filter((fold) => anchored.has(fold.key));
     if (folds.length === 0) return;
     const first = folds[0]!;
@@ -403,8 +348,7 @@ export function projectActivitySpans(
       kind: "file_edit",
       key: `file-edit:${first.key}`,
       folds,
-      anchorMessageId:
-        segment.anchorMessageIdByPartId.get(first.key) ?? first.key,
+      anchorMessageId: first.steps[0]?.messageId ?? first.key,
     });
   };
 
@@ -464,7 +408,7 @@ export function projectActivitySpans(
     run.push(candidate);
     if (
       candidate.entry.kind === "tool" &&
-      segment?.anchorPartIds.has(candidate.entry.part.id)
+      segment?.anchorFoldKeysByPartId.has(candidate.entry.part.id)
     ) {
       runAnchorPartIds.push(candidate.entry.part.id);
     }

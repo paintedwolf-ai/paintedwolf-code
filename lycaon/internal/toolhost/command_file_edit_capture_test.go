@@ -53,29 +53,29 @@ func TestCommandTextMutationsRecordRootQualifiedEdits(t *testing.T) {
 	for name, tc := range map[string]struct {
 		secondary bool
 		source    string
-		want      tools.FileEditCapture
+		want      api.FileEditSnapshot
 	}{
 		"edit in the primary root": {
 			source: `edit --path notes.txt --old-string alpha --new-string beta`,
-			want:   tools.FileEditCapture{RootID: "r1", Path: "notes.txt", After: "beta\n"},
+			want:   api.FileEditSnapshot{RootID: "r1", Path: "notes.txt", After: "beta\n"},
 		},
 		"redirect in the primary root": {
 			source: `printf 'gamma\n' > notes.txt`,
-			want:   tools.FileEditCapture{RootID: "r1", Path: "notes.txt", After: "gamma\n"},
+			want:   api.FileEditSnapshot{RootID: "r1", Path: "notes.txt", After: "gamma\n"},
 		},
 		"edit in a second root": {
 			secondary: true,
 			source:    `edit --path @docs/notes.txt --old-string alpha --new-string beta`,
-			want:      tools.FileEditCapture{RootID: "r2", Path: "notes.txt", After: "beta\n"},
+			want:      api.FileEditSnapshot{RootID: "r2", Path: "notes.txt", After: "beta\n"},
 		},
 		"removal in the primary root": {
 			source: `rm notes.txt`,
-			want:   tools.FileEditCapture{RootID: "r1", Path: "notes.txt", Deleted: true},
+			want:   api.FileEditSnapshot{RootID: "r1", Path: "notes.txt", Deleted: true},
 		},
 		"removal in a second root": {
 			secondary: true,
 			source:    `rm @docs/notes.txt`,
-			want:      tools.FileEditCapture{RootID: "r2", Path: "notes.txt", Deleted: true},
+			want:      api.FileEditSnapshot{RootID: "r2", Path: "notes.txt", Deleted: true},
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -85,12 +85,12 @@ func TestCommandTextMutationsRecordRootQualifiedEdits(t *testing.T) {
 				dir = f.docs
 			}
 			f.seed(t, dir, "notes.txt", "alpha\n")
-			got := f.run(t, tc.source).FileEdit
-			if got == nil || got.Before == nil || *got.Before != "alpha\n" {
-				t.Fatalf("recorded %+v, want the prior text as its base", got)
+			edits := f.run(t, tc.source).FileEdits
+			if len(edits) != 1 || edits[0].Before == nil || *edits[0].Before != "alpha\n" {
+				t.Fatalf("recorded %+v, want one edit based on the prior text", edits)
 			}
-			if got.RootID != tc.want.RootID || got.Path != tc.want.Path || got.After != tc.want.After || got.Deleted != tc.want.Deleted {
-				t.Fatalf("recorded %+v, want %+v", *got, tc.want)
+			if got := edits[0]; got.RootID != tc.want.RootID || got.Path != tc.want.Path || got.After != tc.want.After || got.Deleted != tc.want.Deleted {
+				t.Fatalf("recorded %+v, want %+v", got, tc.want)
 			}
 		})
 	}
@@ -135,8 +135,8 @@ func TestCommandMutationsWithoutEditableTextRecordNoEdit(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newCaptureFixture(t)
 			tc.seed(t, f)
-			if got := f.run(t, tc.source).FileEdit; got != nil {
-				t.Fatalf("recorded %+v, want no edit", *got)
+			if got := f.run(t, tc.source).FileEdits; len(got) != 0 {
+				t.Fatalf("recorded %+v, want no edit", got)
 			}
 		})
 	}
@@ -156,15 +156,15 @@ func numberedLines(count int, needles ...int) string {
 	return b.String()
 }
 
-// A program's reads are the lines that reached the model, not the lines a
-// stage scanned on the way.
+// A program's reads are the lines that reached the model from the stage that
+// read the file, not the lines a stage scanned on the way.
 func TestCommandReadsRecordDeliveredLinesOnly(t *testing.T) {
 	for name, tc := range map[string]struct {
 		source string
 		want   []agentpresence.Span
 	}{
-		"a pipeline keeps its first lines": {
-			source: `cat notes.txt | head -n 5`,
+		"the first lines of a file": {
+			source: `head -n 5 notes.txt`,
 			want:   []agentpresence.Span{{StartLine: 1, EndLine: 5}},
 		},
 		"a search delivers its matching lines": {
@@ -196,5 +196,15 @@ func TestCommandReadsRecordDeliveredLinesOnly(t *testing.T) {
 				t.Fatalf("source context %+v, want the delivered file", out.SourceContext)
 			}
 		})
+	}
+}
+
+// Text that reaches the model through a later stage carries no source lines,
+// so it is stated as no read rather than as the whole file.
+func TestCommandReadsThroughAnotherStageRecordNoRead(t *testing.T) {
+	f := newCaptureFixture(t)
+	f.seed(t, f.Dir, "notes.txt", numberedLines(20))
+	if out := f.run(t, `cat notes.txt | head -n 5`); len(out.SourceReads) != 0 || out.SourceContext != nil {
+		t.Fatalf("recorded reads %+v and context %+v for piped text", out.SourceReads, out.SourceContext)
 	}
 }

@@ -287,9 +287,11 @@ func (r *messageRedactor) toolResult(source *api.ToolResult) *api.ToolResult {
 		}
 		out.Invocation = &invocation
 	}
-	if source.FileEdit != nil {
-		edit := r.fileEdit(*source.FileEdit, "tool_result.file_edit")
-		out.FileEdit = &edit
+	if len(source.FileEdits) > 0 {
+		out.FileEdits = make([]api.FileEditSnapshot, len(source.FileEdits))
+		for i, edit := range source.FileEdits {
+			out.FileEdits[i] = r.fileEdit(edit, atIndex("tool_result.file_edits", i))
+		}
 	}
 	if source.OverlayPromotion != nil {
 		promotion := *source.OverlayPromotion

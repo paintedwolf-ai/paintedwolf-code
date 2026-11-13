@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const coordinatorProfileID = "coordinator"
@@ -59,17 +60,17 @@ func captureFileEdit(tctx tools.ToolContext, resolved projectpaths.Resolved, edi
 	if tctx.Effects.Out == nil || strings.TrimSpace(resolved.DisplayPath) == "" {
 		return
 	}
-	capture := tools.FileEditCapture{Path: resolved.DisplayPath, Deleted: edit.deleted}
+	recorded := api.FileEditSnapshot{Path: resolved.DisplayPath, Deleted: edit.deleted}
 	if root, rel, ok := tctx.SourceLocation(resolved.Abs); ok && rel != "" {
-		capture.RootID, capture.Path = root.ID, rel
+		recorded.RootID, recorded.Path = root.ID, rel
 	}
 	// The recorded edit names each value this call resolved by its reference.
 	if edit.before != nil {
 		referenced := tctx.Effects.Secrets.ReferenceEchoes(*edit.before)
-		capture.Before = &referenced
+		recorded.Before = &referenced
 	}
-	capture.After = tctx.Effects.Secrets.ReferenceEchoes(edit.after)
-	tctx.Effects.Out.FileEdit = &capture
+	recorded.After = tctx.Effects.Secrets.ReferenceEchoes(edit.after)
+	tctx.Effects.Out.RecordFileEdit(recorded)
 }
 
 // verifyTextWriteBase compares the destination immediately before replacement.

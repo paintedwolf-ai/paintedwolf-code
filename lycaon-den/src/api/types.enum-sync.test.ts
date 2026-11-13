@@ -84,10 +84,10 @@ describe("workflow span DTO contract", () => {
 });
 
 describe("tool result DTO contract", () => {
-  it("ToolResult includes outcome, codes, ui_visibility, and file_edit", () => {
+  it("ToolResult includes outcome, codes, ui_visibility, and file_edits", () => {
     const yaml = readOpenAPIBundle();
     const props = openAPISchemaProperties(yaml, "ToolResult");
-    for (const field of ["outcome", "codes", "ui_visibility", "file_edit"]) {
+    for (const field of ["outcome", "codes", "ui_visibility", "file_edits"]) {
       expect(props).toContain(field);
     }
     const snapshotProps = openAPISchemaProperties(yaml, "FileEditSnapshot");

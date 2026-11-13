@@ -505,7 +505,7 @@ func TestModelSecretScreenInspectsEveryFieldItWouldRedact(t *testing.T) {
 			Tool: "promote_overlay", OverlayPromotion: &api.OverlayPromotion{Files: []api.FileEditSnapshot{{Path: "app.env", After: "TOKEN=" + modelScreenGitHubToken}}},
 		}}},
 		{"tool_result_file_edit", api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
-			Tool: "edit", FileEdit: &api.FileEditSnapshot{Path: "app.env", After: "TOKEN=" + modelScreenGitHubToken},
+			Tool: "edit", FileEdits: []api.FileEditSnapshot{{Path: "app.env", After: "TOKEN=" + modelScreenGitHubToken}},
 		}}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -644,7 +644,7 @@ func TestRedactMessageForStorageCoversWorkflowAndCheckpointProjections(t *testin
 		ToolResult: &api.ToolResult{
 			Content:          "ok",
 			Feedback:         []api.ToolFeedback{{Details: map[string]any{"note": secret}}},
-			FileEdit:         &api.FileEditSnapshot{Path: "path-" + secret, Before: &before, After: "after " + secret},
+			FileEdits:        []api.FileEditSnapshot{{Path: "path-" + secret, Before: &before, After: "after " + secret}, {Path: "b.go", After: "second " + secret}},
 			OverlayPromotion: &api.OverlayPromotion{Files: []api.FileEditSnapshot{{Path: "path-" + secret, Before: &before, After: "after " + secret}}},
 			ExternalAccess:   &api.ExternalAccess{DeclaredDestinations: []string{"https://" + secret}},
 			Skill:            &api.SkillActivation{Instructions: "use " + secret, Resources: []string{"resource-" + secret}},
@@ -663,6 +663,18 @@ func TestRedactMessageForStorageCoversWorkflowAndCheckpointProjections(t *testin
 	raw, err := json.Marshal(stored)
 	testutil.FailErr(t, "marshal screened message", err)
 	exposure.Absent(t, string(raw), secret)
+	// Each edit's fields are named by its place in the list, which stored spans are matched by.
+	named := map[string]bool{}
+	if stored.HostSecretRedaction != nil {
+		for _, span := range stored.HostSecretRedaction.Spans {
+			named[span.Field] = true
+		}
+	}
+	for _, field := range []string{"tool_result.file_edits.0.path", "tool_result.file_edits.0.before", "tool_result.file_edits.0.after", "tool_result.file_edits.1.after"} {
+		if !named[field] {
+			t.Fatalf("no span names %s; spans name %v", field, named)
+		}
+	}
 	if original.ToolResult.OverlayPromotion.Files[0].After != "after "+secret {
 		t.Fatal("storage redaction mutated promotion snapshots")
 	}

@@ -49,7 +49,7 @@ func effectFixture(t *testing.T, stage effectStage) (*programtest.Fixture, *tool
 }
 
 func recordEdit(tc tools.ToolContext, path string) {
-	tc.Effects.Out.FileEdit = &tools.FileEditCapture{Path: path, After: "after"}
+	tc.Effects.Out.RecordFileEdit(api.FileEditSnapshot{Path: path, After: "after"})
 }
 
 func recordEveryEffect(tc tools.ToolContext) {
@@ -61,11 +61,12 @@ func recordEveryEffect(tc tools.ToolContext) {
 	}}
 }
 
+// editedPath is the one file the call's outputs hold an edit for.
 func editedPath(out *tools.ToolInvocationOut) string {
-	if out.FileEdit == nil {
+	if len(out.FileEdits) != 1 {
 		return ""
 	}
-	return out.FileEdit.Path
+	return out.FileEdits[0].Path
 }
 
 func TestProgramCarriesStageEffectsToItsCall(t *testing.T) {

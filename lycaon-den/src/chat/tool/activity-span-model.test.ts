@@ -238,7 +238,7 @@ describe("activity span membership", () => {
         part("w1", "write", "a.go", {
           workflowRunId: "workflow-1",
           kind: "write",
-          fileEdit: fileEditPreviewFixture({ path: "a.go", before: "old", after: "new" }),
+          fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "old", after: "new" })],
         }),
       ),
       tool(
@@ -269,7 +269,7 @@ describe("activity span membership", () => {
         part("w1", "write", "a.go", {
           workflowRunId: "workflow-1",
           kind: "write",
-          fileEdit: fileEditPreviewFixture({ path: "a.go", before: "old", after: "new" }),
+          fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "old", after: "new" })],
         }),
       ),
       tool(
@@ -277,7 +277,7 @@ describe("activity span membership", () => {
           assistantMessageId: "assistant-2",
           workflowRunId: "workflow-1",
           kind: "write",
-          fileEdit: fileEditPreviewFixture({ path: "b.go", before: "", after: "new file" }),
+          fileEdits: [fileEditPreviewFixture({ path: "b.go", before: "", after: "new file" })],
         }),
       ),
     ]);
@@ -300,7 +300,7 @@ describe("activity span membership", () => {
         part("w1", "write", "a.go", {
           workflowRunId: "workflow-1",
           kind: "write",
-          fileEdit: fileEditPreviewFixture({ path: "a.go", before: "old", after: "v1" }),
+          fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "old", after: "v1" })],
         }),
       ),
       tool(
@@ -315,7 +315,7 @@ describe("activity span membership", () => {
           assistantMessageId: "assistant-3",
           workflowRunId: "workflow-1",
           kind: "write",
-          fileEdit: fileEditPreviewFixture({ path: "a.go", before: "v1", after: "v2" }),
+          fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "v1", after: "v2" })],
         }),
       ),
     ]);
@@ -351,7 +351,7 @@ describe("activity span membership", () => {
         part("w1", "write", "a.go", {
           workflowRunId: "workflow-1",
           kind: "write",
-          fileEdit: fileEditPreviewFixture({ path: "a.go", before: "old", after: "v1" }),
+          fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "old", after: "v1" })],
         }),
       ),
       { kind: "user", key: "u2", text: "keep going" },
@@ -360,7 +360,7 @@ describe("activity span membership", () => {
           assistantMessageId: "assistant-2",
           workflowRunId: "workflow-1",
           kind: "write",
-          fileEdit: fileEditPreviewFixture({ path: "a.go", before: "v1", after: "v2" }),
+          fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "v1", after: "v2" })],
         }),
       ),
     ]);

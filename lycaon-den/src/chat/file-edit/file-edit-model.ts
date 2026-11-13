@@ -9,9 +9,11 @@ export const FILE_EDIT_ARG_KEYS = new Set([
   "patch",
 ]);
 
-/** Wire file_edit when the path is set. */
-export function fileEditFromPart(part: ToolPartView): FileEditPreview | null {
-  const edit = part.fileEdit;
-  if (!edit?.path.trim()) return null;
-  return edit;
+/** The call's recorded file edits that name a path, in recorded order. */
+export function fileEditsFromPart(part: ToolPartView): FileEditPreview[] {
+  return (part.fileEdits ?? []).filter((edit) => edit.path.trim() !== "");
+}
+
+export function partHasFileEdits(part: ToolPartView): boolean {
+  return fileEditsFromPart(part).length > 0;
 }

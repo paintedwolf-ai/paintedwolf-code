@@ -1,6 +1,7 @@
-import { fileEditFromPart } from "./file-edit-model.ts";
+import { fileEditsFromPart } from "./file-edit-model.ts";
 import type { FileEditPreview } from "../../api/types.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
+import type { RawTranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 import { sourceChangeFromPresence, type SourceReaderChange } from "../../components/source/reader/source-reader-change.ts";
 
 /** One write in run order. */
@@ -29,6 +30,11 @@ export type FileEditFold = {
   steps: FileEditStep[];
 };
 
+/** A file's identity within a turn: the same path in two roots is two files. */
+export function fileEditPathKey(snapshot: Pick<FileEditPreview, "root_id" | "path">): string {
+  return snapshot.root_id ? `${snapshot.root_id}\0${snapshot.path}` : snapshot.path;
+}
+
 /** Group writes by path, first touch first, and compose each path's range. */
 export function foldFileEdits(
   steps: readonly FileEditStep[],
@@ -36,9 +42,7 @@ export function foldFileEdits(
   const order: string[] = [];
   const byPath = new Map<string, FileEditStep[]>();
   for (const step of steps) {
-    const path = step.snapshot.root_id
-      ? `${step.snapshot.root_id}\0${step.snapshot.path}`
-      : step.snapshot.path;
+    const path = fileEditPathKey(step.snapshot);
     const existing = byPath.get(path);
     if (existing) {
       existing.push(step);
@@ -95,13 +99,61 @@ export function singleFileEditFold(
 export function fileEditStepsFromParts(
   parts: readonly ToolPartView[],
 ): FileEditStep[] {
-  const steps: FileEditStep[] = [];
-  for (const part of parts) {
-    const snapshot = fileEditFromPart(part);
-    if (!snapshot) continue;
-    steps.push({ key: part.id, toolCallId: part.toolCallId, messageId: part.messageId, snapshot, tool: part.tool });
+  return parts.flatMap(fileEditStepsFromPart);
+}
+
+/** One step per file the call edited; a call that edits several files anchors several folds. */
+export function fileEditStepsFromPart(part: ToolPartView): FileEditStep[] {
+  return fileEditsFromPart(part).map((snapshot, index) => ({
+    key: `${part.id}:${index}`,
+    toolCallId: part.toolCallId,
+    messageId: part.messageId,
+    snapshot,
+    tool: part.tool,
+  }));
+}
+
+/** One turn's writes folded by file. */
+export type SegmentFolds = {
+  folds: FileEditFold[];
+  /** The folds each call anchors: the files it was first to write this turn. */
+  anchorFoldKeysByPartId: Map<string, string[]>;
+};
+
+/** Repeated writes to a file share the card anchored at its first write. */
+export function collectSegmentFolds(
+  items: readonly RawTranscriptItem[],
+): SegmentFolds[] {
+  const segments: SegmentFolds[] = [];
+  let steps: FileEditStep[] = [];
+  let anchorFoldKeysByPartId = new Map<string, string[]>();
+  let seenFiles = new Set<string>();
+
+  const closeSegment = () => {
+    segments.push({ folds: foldFileEdits(steps), anchorFoldKeysByPartId });
+    steps = [];
+    anchorFoldKeysByPartId = new Map();
+    seenFiles = new Set();
+  };
+
+  for (const item of items) {
+    if (item.kind === "user") {
+      closeSegment();
+      continue;
+    }
+    if (item.kind !== "tool") continue;
+    for (const step of fileEditStepsFromPart(item.part)) {
+      steps.push(step);
+      const file = fileEditPathKey(step.snapshot);
+      if (seenFiles.has(file)) continue;
+      seenFiles.add(file);
+      const anchored = anchorFoldKeysByPartId.get(item.part.id);
+      if (anchored) anchored.push(step.key);
+      else anchorFoldKeysByPartId.set(item.part.id, [step.key]);
+    }
   }
-  return steps;
+  closeSegment();
+  return segments;
 }
 
 export function fileEditFoldIsNoop(fold: FileEditFold): boolean {

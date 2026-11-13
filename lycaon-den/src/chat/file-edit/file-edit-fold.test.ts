@@ -1,16 +1,19 @@
 import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { describe, expect, it } from "vitest";
 import {
+  collectSegmentFolds,
   fileEditChange,
   fileEditFoldFingerprint,
   fileEditFoldIsNoop,
   fileEditLineStat,
+  fileEditPathKey,
   fileEditStepsFromParts,
   foldFileEdits,
   singleFileEditFold,
 } from "./file-edit-fold.ts";
 import type { FileEditStep } from "./file-edit-fold.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
+import type { RawTranscriptItem } from "../transcript/projection/transcript-item-model.ts";
 
 function step(
   key: string,
@@ -195,18 +198,104 @@ describe("fileEditStepsFromParts", () => {
       args: {},
       output: "",
       error: null,
-      fileEdit: null,
+      fileEdits: [],
       ...over,
     }) as ToolPartView;
 
   it("takes one step per write, in call order, and skips calls that wrote nothing", () => {
     const steps = fileEditStepsFromParts([
-      part({ id: "p1", fileEdit: fileEditPreviewFixture({ path: "a.ts", before: V1, after: V2 }) }),
+      part({ id: "p1", fileEdits: [fileEditPreviewFixture({ path: "a.ts", before: V1, after: V2 })] }),
       part({ id: "p2", tool: "read", kind: "read" }),
-      part({ id: "p3", fileEdit: fileEditPreviewFixture({ path: "a.ts", before: V2, after: V3 }) }),
+      part({ id: "p3", fileEdits: [fileEditPreviewFixture({ path: "a.ts", before: V2, after: V3 })] }),
     ]);
-    expect(steps.map((s) => s.key)).toEqual(["p1", "p3"]);
+    expect(steps.map((s) => s.key)).toEqual(["p1:0", "p3:0"]);
     expect(steps[0]!.tool).toBe("edit");
+  });
+
+  it("takes one step per file a call edited", () => {
+    const steps = fileEditStepsFromParts([
+      part({
+        id: "p1",
+        tool: "command",
+        kind: "command",
+        fileEdits: [
+          fileEditPreviewFixture({ path: "a.ts", before: V1, after: V2 }),
+          fileEditPreviewFixture({ path: "b.ts", after: V1 }),
+        ],
+      }),
+    ]);
+    expect(steps.map((s) => [s.key, s.snapshot.path, s.messageId])).toEqual([
+      ["p1:0", "a.ts", "m1"],
+      ["p1:1", "b.ts", "m1"],
+    ]);
+  });
+});
+
+describe("collectSegmentFolds", () => {
+  const command = (id: string, ...edits: Parameters<typeof fileEditPreviewFixture>[0][]): RawTranscriptItem =>
+    ({
+      kind: "tool",
+      key: id,
+      part: {
+        id,
+        toolCallId: id,
+        assistantMessageId: "a1",
+        messageId: `result-${id}`,
+        tool: "command",
+        kind: "command",
+        status: "completed",
+        fileEdits: edits.map(fileEditPreviewFixture),
+      },
+    }) as RawTranscriptItem;
+  const user = { kind: "user", key: "u" } as RawTranscriptItem;
+
+  it("anchors every file a call was first to write this turn to that call", () => {
+    const [segment] = collectSegmentFolds([
+      command("c1", { path: "a.ts", before: V1, after: V2 }, { path: "b.ts", after: V1 }),
+      command("c2", { path: "a.ts", before: V2, after: V3 }, { path: "c.ts", after: V1 }),
+    ]);
+    expect(segment!.folds.map((fold) => [fold.key, fold.path, fold.steps.length])).toEqual([
+      ["c1:0", "a.ts", 2],
+      ["c1:1", "b.ts", 1],
+      ["c2:1", "c.ts", 1],
+    ]);
+    expect([...segment!.anchorFoldKeysByPartId]).toEqual([
+      ["c1", ["c1:0", "c1:1"]],
+      ["c2", ["c2:1"]],
+    ]);
+    expect(segment!.folds[0]!.net.before_sha256).toBe(fileEditPreviewFixture({ path: "a.ts", before: V1, after: V2 }).before_sha256);
+    expect(segment!.folds[0]!.net.after_sha256).toBe(fileEditPreviewFixture({ path: "a.ts", before: V2, after: V3 }).after_sha256);
+  });
+
+  it("keeps the same path in two roots as two files", () => {
+    const [segment] = collectSegmentFolds([
+      command("c1", { root_id: "app", path: "README.md", before: V1, after: V2 }),
+      command("c2", { root_id: "docs", path: "README.md", before: V1, after: V2 }),
+    ]);
+    expect(segment!.folds.map((fold) => [fold.key, fold.net.root_id])).toEqual([
+      ["c1:0", "app"],
+      ["c2:0", "docs"],
+    ]);
+    expect(fileEditPathKey({ root_id: "app", path: "README.md" })).not.toBe(fileEditPathKey({ root_id: "docs", path: "README.md" }));
+    expect(fileEditPathKey({ path: "README.md" })).toBe("README.md");
+  });
+
+  it("starts a new set of folds at each user turn", () => {
+    const segments = collectSegmentFolds([
+      command("c1", { path: "a.ts", before: V1, after: V2 }),
+      user,
+      command("c2", { path: "a.ts", before: V2, after: V3 }),
+    ]);
+    expect(segments.map((segment) => segment.folds.map((fold) => fold.key))).toEqual([["c1:0"], ["c2:0"]]);
+  });
+
+  it("anchors a file added to an earlier call's result to that call", () => {
+    const before = collectSegmentFolds([command("c1", { path: "a.ts", before: V1, after: V2 })])[0]!;
+    const after = collectSegmentFolds([
+      command("c1", { path: "a.ts", before: V1, after: V2 }, { path: "late.ts", after: V1 }),
+    ])[0]!;
+    expect(before.anchorFoldKeysByPartId.get("c1")).toEqual(["c1:0"]);
+    expect(after.anchorFoldKeysByPartId.get("c1")).toEqual(["c1:0", "c1:1"]);
   });
 });
 
