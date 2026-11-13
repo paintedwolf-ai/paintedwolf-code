@@ -120,7 +120,7 @@ type supervisedProgram struct {
 
 type supervisedKey struct{}
 
-var _ commandprogram.ProgramSupervision = (*ProgramSupervisor)(nil)
+var _ commandprogram.ProgramSupervision = runSupervision{}
 
 // RunProgram supervises one program to its aggregate outcome. A stop or loss
 // overrides the evaluator's status with the typed host stop; children keep the
