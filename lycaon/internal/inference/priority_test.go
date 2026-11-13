@@ -103,3 +103,30 @@ func TestPriorityHoldsAreBoundedAndIndependent(t *testing.T) {
 		t.Fatalf("closed priority: %v", err)
 	}
 }
+
+func TestReleasedHoldAdmitsWaitersInPriorityOrder(t *testing.T) {
+	d := device(t, 8)
+	lease, err := d.HoldPriority(t.Context(), work("decision", Decision))
+	if err != nil {
+		t.Fatalf("hold decision priority: %v", err)
+	}
+	defer lease.Release()
+	background := submit(t, d, "background", Background)
+	foreground := submit(t, d, "foreground", Foreground)
+	for range 2 {
+		batch := submit(t, d, "decision", Decision)
+		<-batch.ready
+		batch.permit.Complete()
+		if snapshot := d.Snapshot(); snapshot.Active != nil || snapshot.Queued != 2 {
+			t.Fatalf("lower priority ran between held decisions: %+v", snapshot)
+		}
+	}
+	lease.Release()
+	<-foreground.ready
+	if d.Snapshot().Queued != 1 {
+		t.Fatal("background work ran before foreground work")
+	}
+	foreground.permit.Complete()
+	<-background.ready
+	background.permit.Complete()
+}

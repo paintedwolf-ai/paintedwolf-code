@@ -69,7 +69,7 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 		return nil, ErrContextCapacityExceeded
 	}
 	req.RecordBudget(maximum, nil, nil)
-	cursor, err := p.runtime.prepare(ctx, render, schema, maximum, req.Composition, contract)
+	cursor, err := p.runtime.prepare(ctx, render, schema, maximum, req.Composition, requestPriority(req), contract)
 	if err != nil {
 		release()
 		return nil, err
@@ -84,7 +84,15 @@ func (p *Provider) Stream(ctx context.Context, req modelcall.CompletionRequest) 
 	return out, nil
 }
 
-func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json.RawMessage, maximum int, composition modelcall.RequestComposition, contract outputContract) (*progressCursor, error) {
+// requestPriority places background requests behind those someone waits on.
+func requestPriority(req modelcall.CompletionRequest) inference.Priority {
+	if req.Urgency == modelcall.UrgencyBackground {
+		return inference.Background
+	}
+	return inference.Foreground
+}
+
+func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json.RawMessage, maximum int, composition modelcall.RequestComposition, priority inference.Priority, contract outputContract) (*progressCursor, error) {
 	child := p.loaded.process
 	measured, err := p.measure(ctx, render)
 	if err != nil {
@@ -106,7 +114,7 @@ func (p *Runtime) prepare(ctx context.Context, render renderRequest, schema json
 	sampling := p.loaded.sampling
 	request := beginRequest{RequestID: p.loaded.request, PromptTokens: rendered.PromptTokens, MaxNewTokens: maximum, Temperature: sampling.Temperature, TopP: sampling.TopP, TopK: sampling.TopK, Seed: binary.LittleEndian.Uint64(entropy[:]), CheckpointTokens: rendered.CheckpointTokens, OutputSchema: schema, OutputContract: contract}
 	var begun begunResult
-	if err := child.call(ctx, command{Method: "begin", Request: request}, "begun", inference.Foreground, true, &begun); err != nil {
+	if err := child.call(ctx, command{Method: "begin", Request: request}, "begun", priority, true, &begun); err != nil {
 		return nil, err
 	}
 	if begun.RequestID != request.RequestID || begun.ReusedPrefixTokens < 0 || begun.ReusedPrefixTokens >= len(rendered.PromptTokens) {
@@ -137,9 +145,10 @@ func (p *Provider) generate(ctx context.Context, req modelcall.CompletionRequest
 		chunk.ProviderID, chunk.Model = p.id, model
 		return sendGenerationChunk(ctx, out, chunk)
 	}
+	priority := requestPriority(req)
 	for {
 		result := progressResult{expected: cursor}
-		err := p.runtime.loaded.process.call(ctx, command{Method: "advance", RequestID: cursor.requestID}, "progress", inference.Foreground, true, &result)
+		err := p.runtime.loaded.process.call(ctx, command{Method: "advance", RequestID: cursor.requestID}, "progress", priority, true, &result)
 		usage := modelcall.TokenUsage{Present: true, PromptTokens: cursor.processed, CompletionTokens: cursor.generated, CacheReadInputTokens: cursor.reused}
 		if err != nil {
 			send(modelcall.StreamChunk{Err: failure.InterruptedResponse(ctx, p.id, model, err), Done: true, Usage: usage})

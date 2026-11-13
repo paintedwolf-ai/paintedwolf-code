@@ -62,6 +62,17 @@ const (
 	CompositionHostUtility RequestComposition = "host_utility"
 )
 
+// RequestUrgency says whether someone is waiting on a request.
+type RequestUrgency uint8
+
+const (
+	// UrgencyInteractive is a request a turn or a person waits on.
+	UrgencyInteractive RequestUrgency = iota
+	// UrgencyBackground is work off the latency path; it yields shared
+	// compute to interactive requests.
+	UrgencyBackground
+)
+
 // ToolCallProtocol selects the action grammar for one request. The default is
 // native structured calls; a provider capability alone never selects a fallback.
 type ToolCallProtocol string
@@ -92,6 +103,8 @@ type CompletionRequest struct {
 	// Composition says who composed this request. The zero value is the
 	// coordinator conversation; utility calls stamp their own at one funnel.
 	Composition RequestComposition
+	// Urgency orders this request against others for shared local compute.
+	Urgency RequestUrgency
 	// Think is the call site's reasoning directive.
 	Think ThinkLevel
 	// MaxTokens caps completion output when positive.

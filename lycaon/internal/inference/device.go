@@ -5,7 +5,12 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
+
+	"github.com/lycaon/lycaon/internal/observability"
 )
+
+var log = observability.LazyComponent("inference")
 
 var (
 	ErrQueueFull = errors.New("inference: device queue is full")
@@ -22,11 +27,33 @@ const (
 	Background
 )
 
+func (p Priority) String() string {
+	switch p {
+	case Decision:
+		return "decision"
+	case EssentialSummary:
+		return "essential_summary"
+	case Foreground:
+		return "foreground"
+	case Background:
+		return "background"
+	}
+	return "unknown"
+}
+
 // Work identifies a bounded physical step in one runtime generation.
 type Work struct {
 	Owner      string
 	Generation uint64
 	Priority   Priority
+	// Step names the runtime operation the permit covers.
+	Step string
+}
+
+// Step is one completed permit and how long it held the device.
+type Step struct {
+	Work Work
+	Held time.Duration
 }
 
 // Device admits one physical step at a time. Cancellation never releases active work.
@@ -37,13 +64,14 @@ type Device struct {
 	active        *Permit
 	waiters       []*ticket
 	priorityHolds [4]int
+	observe       func(Step)
 }
 
 func NewDevice(queueLimit int) (*Device, error) {
 	if queueLimit < 1 {
 		return nil, errors.New("inference: queue limit must be positive")
 	}
-	return &Device{limit: queueLimit}, nil
+	return &Device{limit: queueLimit, observe: logStep}, nil
 }
 
 type ticket struct {
@@ -57,9 +85,14 @@ type ticket struct {
 
 // Permit remains held until the runtime has synchronized or its process has exited.
 type Permit struct {
-	device *Device
-	work   Work
-	once   sync.Once
+	device   *Device
+	work     Work
+	admitted time.Time
+	once     sync.Once
+}
+
+func logStep(step Step) {
+	log.Debug("device step", "owner", step.Work.Owner, "step", step.Work.Step, "priority", step.Work.Priority.String(), "hold_ms", step.Held.Milliseconds())
 }
 
 func (d *Device) Acquire(ctx context.Context, work Work) (*Permit, error) {
@@ -142,7 +175,7 @@ func (d *Device) dispatch() {
 			close(t.ready)
 			continue
 		}
-		t.permit = &Permit{device: d, work: t.work}
+		t.permit = &Permit{device: d, work: t.work, admitted: time.Now()}
 		d.active = t.permit
 		close(t.ready)
 	}
@@ -153,9 +186,10 @@ func (p *Permit) Complete() {
 	p.once.Do(func() {
 		d := p.device
 		d.mu.Lock()
-		defer d.mu.Unlock()
 		d.active = nil
 		d.dispatch()
+		d.mu.Unlock()
+		d.observe(Step{Work: p.work, Held: time.Since(p.admitted)})
 	})
 }
 
