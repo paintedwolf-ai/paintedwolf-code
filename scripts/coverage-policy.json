@@ -52,6 +52,10 @@
       "decision head scripts": {
         "start": "scripts/bialy",
         "pattern": "test_*.py"
+      },
+      "code-rank partitions": {
+        "start": "scripts/bialy/rerank",
+        "pattern": "test_*.py"
       }
     }
   }
