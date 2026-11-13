@@ -11,7 +11,7 @@ func (p Plan) BoundedRetainedStorage() bool {
 
 func (p Plan) reviewedRetainedRoute() bool {
 	const sourceID = "2026-10-16 14:45:20 555e07ef33f69a0957d24d8e555b702464a131d6f1607f4c3c1e4551e8e6ca76"
-	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "4572ca290ba86b424ecbb400f5ad28c5a44d2cb793cbfaf8d75c11585879b303"}) {
+	if sqlite3.SQLITE_SOURCE_ID != sourceID || p.Target != (Baseline{Revision: 5, Shape: "27cd7ace653f82afd599d3bb25fcdd41b0add5a04888807f06f761ec722b45c4"}) {
 		return false
 	}
 	if p.Source != manifestLayoutSource || p.CopyPlan() == nil || len(p.steps) != 1 {
