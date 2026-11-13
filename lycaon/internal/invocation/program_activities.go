@@ -40,8 +40,8 @@ func activityOutcome(receipt api.CommandExecutionReceipt) (string, string) {
 	}
 }
 
-func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandProgramReceipt) ([]api.CommandActivity, error) {
-	groups, err := readActivityGroups(ctx, tx, program.ID)
+func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandProgramReceipt, display func(string) string) ([]api.CommandActivity, error) {
+	groups, err := readActivityGroups(ctx, tx, program.ID, display)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +60,7 @@ func readProgramActivities(ctx context.Context, tx *sql.Tx, program api.CommandP
 
 // ActivitySummary reads complete counts without paging execution bodies.
 func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program string) (api.CommandProgramReceipt, error) {
+	display := r.pathDisplay(ctx, session)
 	tx, err := r.beginProgramRead(ctx)
 	if err != nil {
 		return api.CommandProgramReceipt{}, err
@@ -69,7 +70,7 @@ func (r *SQLRecorder) ActivitySummary(ctx context.Context, session, program stri
 	if err != nil {
 		return result, err
 	}
-	result.Activities, err = readProgramActivities(ctx, tx, result)
+	result.Activities, err = readProgramActivities(ctx, tx, result, display)
 	if err != nil {
 		return result, err
 	}

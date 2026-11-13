@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -48,7 +49,7 @@ func readActivityCounts(ctx context.Context, tx *sql.Tx, program string) (groups
 	return groups, rows.Err()
 }
 
-func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]activityGroup, error) {
+func readActivityGroups(ctx context.Context, tx *sql.Tx, program string, display func(string) string) ([]activityGroup, error) {
 	groups, err := readActivityCounts(ctx, tx, program)
 	if err != nil {
 		return nil, err
@@ -62,7 +63,7 @@ func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]acti
 		if len(receipts) != 1 {
 			return nil, fmt.Errorf("activity representative is unavailable")
 		}
-		g.input, err = readActivityInput(ctx, tx, receipts[0])
+		g.input, err = readActivityInput(ctx, tx, receipts[0], display)
 		if err != nil {
 			return nil, err
 		}
@@ -168,6 +169,13 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 			continue
 		}
 		if activityPresentation(g.input).role == "container" {
+			continue
+		}
+		// A redirected producer supports the write its own statement made.
+		if j := slices.IndexFunc(groups, func(other activityGroup) bool {
+			return other.key.node != "" && other.key.node == g.key.node && activityRedirect(other.input)
+		}); j >= 0 && primary[j] {
+			assignments[i] = j
 			continue
 		}
 		parent := g.parent

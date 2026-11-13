@@ -36,6 +36,19 @@ func DisplayPath(roots []RootRef, rootID, rel string) string {
 	return rel
 }
 
+// DisplayAbsolute renders an absolute path under one of roots in its display
+// spelling; a path outside every root keeps its absolute form.
+func DisplayAbsolute(roots []RootRef, abs string) string {
+	if !filepath.IsAbs(abs) {
+		return abs
+	}
+	root, rel, err := rootForAbsolute(roots, filepath.Clean(abs))
+	if err != nil {
+		return abs
+	}
+	return DisplayPath(roots, root.ID, filepath.ToSlash(rel))
+}
+
 // VirtualScratchLabel names the host namespace for the invoking session's
 // scratch folder. Virtual roots are addressed like attached roots, so no
 // attached root may carry their labels.
