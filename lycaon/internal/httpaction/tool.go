@@ -533,12 +533,28 @@ func send(
 		// A redirect carries the request's material again: a same-origin hop
 		// keeps its headers and a 307 or 308 keeps its body. A release revoked
 		// while an earlier hop ran is not replayed.
-		if secretmatch.HTTPOrigin(hop.URL) == secretmatch.HTTPOrigin(spec.target) {
+		sameOrigin := secretmatch.HTTPOrigin(hop.URL) == secretmatch.HTTPOrigin(spec.target)
+		resendsBody := strings.EqualFold(hop.Method, spec.method)
+		if !sameOrigin && !resendsBody {
+			return nil
+		}
+		// What the first hop checked before sending applies again before the
+		// material is resent: a classification withdrawn or a jar revoked
+		// while an earlier hop ran stops the replay.
+		if deps.SecretMatcher != nil {
+			if err := deps.SecretMatcher.CheckClassification(hopCtx, outbound.classification); err != nil {
+				return screenFaultReject(secretmatch.FaultStageRaise)
+			}
+		}
+		if sameOrigin {
+			if err := checkTokenJarState(hopCtx, deps, tokenJarReq, tokenJar); err != nil {
+				return err
+			}
 			if err := tctx.Effects.Secrets.Precheck(hopCtx, spec.outgoingHeaders); err != nil {
 				return toolrejection.HeldHandOffReject("http_request", err)
 			}
 		}
-		if strings.EqualFold(hop.Method, spec.method) {
+		if resendsBody {
 			if err := tctx.Effects.Secrets.Precheck(hopCtx, spec.outgoingBody); err != nil {
 				return toolrejection.HeldHandOffReject("http_request", err)
 			}
