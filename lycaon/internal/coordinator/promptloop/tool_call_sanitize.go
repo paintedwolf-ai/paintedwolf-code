@@ -113,6 +113,14 @@ func (st *promptLoopTurnState) requestReach() toolreach.Request {
 	return toolreach.Freeze(st.offeredToolNames, st.turnToolPlan).WithPrograms(st.turnPrograms)
 }
 
+// deferredToolNames are the tools the frozen plan can load onto a later request.
+func (st *promptLoopTurnState) deferredToolNames() []string {
+	if st == nil {
+		return nil
+	}
+	return st.turnToolPlan.DeferredNames()
+}
+
 func (st *promptLoopTurnState) stampOfferedToolNames(metas []tools.ToolMeta) {
 	if st != nil {
 		st.offeredToolNames = offeredToolNames(metas)
