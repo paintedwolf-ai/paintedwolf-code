@@ -93,18 +93,18 @@ type CompletionRequest struct {
 	ThinkingOverride      *ThinkingOverride                     `json:"-" yaml:"-"`
 	ThinkingOverrideStyle modelinfo.ThinkStyle                  `json:"-" yaml:"-"`
 	ControlCapture        *RequestControlCapture                `json:"-" yaml:"-"`
-	sourceCapture         *SourceRequestCapture
-	Model                 string
-	Messages              []api.Message
-	Tools                 []tools.ToolMeta
+	// Urgency orders this request against others for shared local compute.
+	Urgency       RequestUrgency `json:"-" yaml:"-"`
+	sourceCapture *SourceRequestCapture
+	Model         string
+	Messages      []api.Message
+	Tools         []tools.ToolMeta
 	// ToolUse says whether the model may call Tools in this request.
 	ToolUse ToolUse
 	Debug   RequestDebug
 	// Composition says who composed this request. The zero value is the
 	// coordinator conversation; utility calls stamp their own at one funnel.
 	Composition RequestComposition
-	// Urgency orders this request against others for shared local compute.
-	Urgency RequestUrgency
 	// Think is the call site's reasoning directive.
 	Think ThinkLevel
 	// MaxTokens caps completion output when positive.
