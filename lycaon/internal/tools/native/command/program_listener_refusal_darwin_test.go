@@ -95,3 +95,29 @@ func TestProgramRefusedListenerVariants(t *testing.T) {
 		}
 	}
 }
+
+// Logs the profile a command launch applies, for comparison with the bare one.
+func TestProgramListenerProfile(t *testing.T) {
+	if testing.Short() || !confine.Available() {
+		t.Skip("darwin + seatbelt sandbox required")
+	}
+	f := newProgramFixture(t)
+	var captured tools.ToolContext
+	f.Configure = func(tc *tools.ToolContext) { captured = *tc }
+	_, err := f.call(t, t.Context(), "true")
+	testutil.FailErr(t, "capture tool context", err)
+	request, reject := tools.ConfineRequestForSpawn(t.Context(), captured, nil)
+	if reject != nil {
+		t.Fatalf("confine request: %v", reject)
+	}
+	c, applied := confine.DefaultConfinement(request)
+	if !applied {
+		t.Fatal("default confinement unavailable")
+	}
+	profile, err := confine.BuildSeatbeltProfile(*c)
+	testutil.FailErr(t, "render profile", err)
+	bare, err := confine.BuildSeatbeltProfile(confine.Confinement{Roots: c.Roots, Network: confine.NetworkDeny})
+	testutil.FailErr(t, "render bare profile", err)
+	t.Logf("PROFILE-BEGIN command\n%s\nPROFILE-END", profile)
+	t.Logf("PROFILE-BEGIN bare\n%s\nPROFILE-END", bare)
+}
