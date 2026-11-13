@@ -10,8 +10,8 @@ export function commandProgramActive(program: CommandProgramReceipt): boolean {
 }
 
 /** The newer of the persisted program and an observed one; ties go to the observation. */
-export function preferredCommandProgram(canonical: CommandProgramReceipt | undefined, observed: CommandProgramReceipt | undefined): CommandProgramReceipt | undefined {
-  if (!observed) return canonical;
+export function preferredCommandProgram(canonical: CommandProgramReceipt | null | undefined, observed: CommandProgramReceipt | undefined): CommandProgramReceipt | undefined {
+  if (!observed) return canonical ?? undefined;
   if (!canonical) return observed;
   return (observed.activity_revision ?? 0) >= (canonical.activity_revision ?? 0) ? observed : canonical;
 }
