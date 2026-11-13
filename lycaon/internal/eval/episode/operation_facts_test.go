@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/invocation"
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -167,9 +168,7 @@ func TestOperationsJoinCallsToTheirMessagesAndUseTheProgramWhenOneExists(t *test
 	program := api.CommandProgramReceipt{State: "completed", StatusCode: code(0), SettledAt: settledAt()}
 	reads := fakeProgramReads{programs: map[string]string{"r1": "p1"}, pages: map[string][]api.CommandProgramReceiptPage{"p1": programPages(program, child("e1", "completed", code(0), "none"), child("e2", "completed", code(0), "completed"))}}
 	ops, err := evidence.ReadOperations(t.Context(), reads)
-	if err != nil {
-		t.Fatal(err)
-	}
+	testutil.FailErr(t, "evidence.ReadOperations failed", err)
 	var ids, sources []string
 	for _, op := range ops {
 		ids, sources = append(ids, op.ID), append(sources, op.Source)
