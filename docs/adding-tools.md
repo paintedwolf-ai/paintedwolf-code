@@ -60,7 +60,7 @@ Membership rule, enforced by an AST scan (`TestEnvelopeOnlyToolsUseSafecmdAST`):
 
 \* `read` is read-only but participates in curation, evidence, and edit tracking, so it remains host-coupled.
 
-`write` calls `tctx.WorkerCoord.BeforeWorkerWrite()` synchronously to reserve paths against sibling workers; `edit` sets `tctx.Out.FileEdit` for the Den edit card. Those dependencies belong in the native subsystem owner rather than behind a wire adapter.
+`write` calls `tctx.WorkerCoord.BeforeWorkerWrite()` synchronously to reserve paths against sibling workers; a text mutation records its change with `tctx.Effects.Out.RecordFileEdit` for the Den diff. Those dependencies belong in the native subsystem owner rather than behind a wire adapter.
 
 ## First-party native Go
 
