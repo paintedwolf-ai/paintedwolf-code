@@ -1,0 +1,30 @@
+{
+  "id": "detector-threshold-not-crossed",
+  "title": "The same detector score below the rule's threshold produces no decision",
+  "covers": [
+    "OAR-OPS-9"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "INJECTION_SUSPECTED",
+    "kind": "detector",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "prompt_injection_score > 0.8",
+    "detector": {
+      "ref": "detector://fixture"
+    }
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "prompt_injection_score": 0.42
+    }
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

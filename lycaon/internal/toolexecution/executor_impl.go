@@ -29,6 +29,7 @@ const networkEgressTool = "network"
 func (e *Executor) Invoke(ctx context.Context, qualifiedName string, args map[string]any, tc tools.ToolContext) (out string, err error) {
 	ctx, socketScope := socketref.WithScope(ctx)
 	defer socketScope.Close()
+	args = capabilityrequest.CanonicalArguments(args)
 	tc.BeginInvocation()
 	defer func() { tc.Effects.Secrets.Finish(ctx) }()
 	// Exits render their own rejects; this is the backstop for one that does not.

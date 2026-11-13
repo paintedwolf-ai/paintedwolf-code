@@ -1,0 +1,35 @@
+{
+  "id": "flow-sequence-does-not-match",
+  "title": "A flow whose steps appear out of order does not match",
+  "covers": [
+    "OAR-FACT-10"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "READ_THEN_WRITE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "emit": "rule:conformance",
+    "when": "true",
+    "flow": [
+      "read",
+      "write"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "recent_tools": [
+      "write",
+      "grep",
+      "read"
+    ]
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

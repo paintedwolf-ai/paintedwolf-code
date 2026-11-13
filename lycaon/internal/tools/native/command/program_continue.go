@@ -66,6 +66,10 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	if err := <-attached; err != nil {
 		return "", err
 	}
+	if e.waits != nil {
+		session := run.tc.Identity.SessionID
+		e.waits.promoted(func() func() { return r.Supervisor.Background.BeginPersonWait(session, handle) })
+	}
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
 		if projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 1); err == nil {

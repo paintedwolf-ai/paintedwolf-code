@@ -1,30 +1,24 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SYNTH_HANDLE_NOT_IN_LEGS
 kind: invariant
-anchor: coordinator.closeout_check
-requires:
-  facts:
-    - paintedwolf.offender_count
-    - paintedwolf.offenders_omitted
-    - paintedwolf.offenders_sample
-    - paintedwolf.surface
-    - paintedwolf.unobserved_cited_handles
+on: coordinator.closeout_check
+selector: {}
+requires_facts: [paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.surface, paintedwolf.unobserved_cited_handles]
 when: paintedwolf.surface != "implement_investigate" && size(paintedwolf.unobserved_cited_handles) > 0
 effect: block
-copy:
-  what: Synthesis cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat.
-  cause: An evidence handle or path did not match the evidence ledger for this chat
-  why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
-  fix: 'Cite an exact printed handle such as `[command#4]`, or an observed path and printed line such as `[internal/a.go:42]`, from your or a worker''s tool results. Write web sources as Markdown links. Drop a citation with no matching receipt.'
-  instead: Repair the rejected citations using only evidence already present in this chat
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator_synthesis
-x-paintedwolf-evidence:
+category: recoverable
+emit: guard:coordinator_synthesis
+message: Synthesis cited evidence not seen in tool results for this chat
+what: Synthesis cited {{ paintedwolf.offender_count }} evidence item(s) not seen in your tool results or worker results for this chat.
+cause: An evidence handle or path did not match the evidence ledger for this chat
+why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
+fix: 'Cite an exact printed handle such as `[command#4]`, or an observed path and printed line such as `[internal/a.go:42]`, from your or a worker''s tool results. Write web sources as Markdown links. Drop a citation with no matching receipt.'
+instead: Repair the rejected citations using only evidence already present in this chat
+evidence:
   ui_label: Evidence handles
   ui_check_id: evidence_handles
   in_session_retry: true
-x-paintedwolf-message: Synthesis cited evidence not seen in tool results for this chat
-x-paintedwolf-scenarios:
+scenarios:
   - id: ungrounded_path
     vars:
       offender_count: 1

@@ -129,22 +129,3 @@ func TestSurveyArchetypesIncludeFirstPassLadder(t *testing.T) {
 		}
 	}
 }
-
-func TestOARSpecVersionFrozenAt10(t *testing.T) {
-	t.Parallel()
-	root := contractcheck.RepoRoot(t)
-	schemaPath := filepath.Join(root, "schemas", "oar", "oar.schema.json")
-	raw, err := os.ReadFile(schemaPath)
-	contractcheck.FailErr(t, "read vendored oar.schema.json", err)
-	if !strings.Contains(string(raw), `"oar"`) {
-		t.Fatal("vendored oar.schema.json missing the oar format marker")
-	}
-	if strings.Contains(string(raw), `"spec_version"`) {
-		t.Fatal("vendored oar.schema.json contains spec_version — refresh from the standard")
-	}
-	sample, err := os.ReadFile(filepath.Join(root, "schemas", "fixtures", "oar-sample-rule.json"))
-	contractcheck.FailErr(t, "read oar-sample-rule.json", err)
-	if !strings.Contains(string(sample), `"oar": "1.0"`) && !strings.Contains(string(sample), `"oar":"1.0"`) {
-		t.Fatal("schemas/fixtures/oar-sample-rule.json must declare oar 1.0")
-	}
-}

@@ -73,18 +73,18 @@ func TestValidateCatalogueTiersCatchesDrift(t *testing.T) {
 		}
 	})
 	t.Run("profile_member_removed", func(t *testing.T) {
-		// Claimed profiles require every member ([OAR-FACT-16]).
+		// Claimed profiles require every member ([OAR-FACT-13]).
 		saved := factDecls
 		var kept []factDecl
 		for _, d := range saved {
-			if d.name != "policy_denied" {
+			if d.name != "jailbreak_score" {
 				kept = append(kept, d)
 			}
 		}
 		factDecls = kept
 		t.Cleanup(func() { factDecls = saved })
 		err := ValidateCatalogueTiers()
-		if err == nil || !strings.Contains(err.Error(), `standard profile "tool" member "policy_denied" is not in FactCatalogue()`) {
+		if err == nil || !strings.Contains(err.Error(), `standard profile "content-safety" member "jailbreak_score" is not in FactCatalogue()`) {
 			t.Fatalf("err = %v", err)
 		}
 	})
@@ -94,14 +94,14 @@ func TestValidateCatalogueTiersCatchesDrift(t *testing.T) {
 func ruleDoc(t *testing.T, overrides map[string]any) map[string]any {
 	t.Helper()
 	doc := map[string]any{
-		"oar":                "1.0",
-		"id":                 "SAMPLE_RULE",
-		"kind":               "policy",
-		"anchor":             "tool.pre_invoke",
-		"effect":             "block",
-		"x-paintedwolf-emit": "guard:sample",
-		"when":               `tool == "read"`,
-		"requires":           map[string]any{"profiles": []any{"tool"}},
+		"spec_version": "1.0",
+		"id":           "SAMPLE_RULE",
+		"kind":         "policy",
+		"on":           "tool.pre_invoke",
+		"selector":     map[string]any{},
+		"effect":       "block",
+		"emit":         "guard:sample",
+		"when":         `tool == "read"`,
 	}
 	for k, v := range overrides {
 		if v == nil {
@@ -124,7 +124,7 @@ func testLoader(t *testing.T) *Loader {
 func TestRequiresFactsRejectedAtLoad(t *testing.T) {
 	l := testLoader(t)
 	_, _, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{
-		"requires": map[string]any{"profiles": []any{"tool"}, "facts": []any{"ghost_fact"}},
+		"requires_facts": []any{"paintedwolf.ghost_fact"},
 	}))
 	if err == nil {
 		t.Fatal("expected a load error")
@@ -134,16 +134,9 @@ func TestRequiresFactsRejectedAtLoad(t *testing.T) {
 		t.Fatalf("error %q does not contain %q", err, want)
 	}
 	if _, _, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{
-		"requires": map[string]any{"profiles": []any{"tool"}, "facts": []any{"paintedwolf.surface"}},
+		"requires_facts": []any{"paintedwolf.surface", "prompt_injection_score"},
 	})); err != nil {
 		t.Fatalf("provided facts should load: %v", err)
-	}
-	// A profile this host does not provide is named in the error too.
-	_, _, err = l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{
-		"requires": map[string]any{"profiles": []any{"tool", "telepathy"}},
-	}))
-	if err == nil || !strings.Contains(err.Error(), `requires capability profile "telepathy"`) {
-		t.Fatalf("err = %v", err)
 	}
 }
 
@@ -182,16 +175,16 @@ func TestNamespaceIdentity(t *testing.T) {
 // TestOARVersionWindow accepts only the supported version.
 func TestOARVersionWindow(t *testing.T) {
 	l := testLoader(t)
-	if _, _, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{"oar": "1.0"})); err != nil {
-		t.Fatalf("oar 1.0 should load: %v", err)
+	if _, _, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{"spec_version": "1.0"})); err != nil {
+		t.Fatalf("spec_version 1.0 should load: %v", err)
 	}
 	for _, v := range []string{"2.0", "1.1", "draft"} {
-		if _, _, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{"oar": v})); err == nil {
-			t.Fatalf("expected oar %s to be rejected", v)
+		if _, _, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{"spec_version": v})); err == nil {
+			t.Fatalf("expected spec_version %s to be rejected", v)
 		}
 	}
 	// Unmarked documents are not OAR rules.
-	_, skip, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{"oar": nil}))
+	_, skip, err := l.parseRule("SAMPLE_RULE", ruleDoc(t, map[string]any{"spec_version": nil}))
 	testutil.FailErr(t, "parse unmarked document", err)
 	if !skip {
 		t.Fatal("unmarked document was loaded as an OAR rule")
@@ -217,14 +210,14 @@ func TestDocumentWorldIsClosed(t *testing.T) {
 	}
 }
 
-// Presentation copy is excluded from decision identity ([OAR-DOC-24]).
+// Presentation copy is excluded from decision identity ([OAR-DOC-18]).
 func TestCopyDoesNotAffectTheDecision(t *testing.T) {
 	l := testLoader(t)
 	var got []string
 	for _, what := range []string{"one wording", "a completely different wording"} {
 		r, _, err := l.parseRule("COPY_PROBE", ruleDoc(t, map[string]any{
 			"id":   "COPY_PROBE",
-			"copy": map[string]any{"what": what, "fix": what},
+			"what": what, "fix": what,
 		}))
 		testutil.FailErr(t, "parse "+what, err)
 		p := NewGuardPipeline(NewRuleSet([]*Rule{r}), l, NewCounterStore())
@@ -244,16 +237,15 @@ func TestCopyDoesNotAffectTheDecision(t *testing.T) {
 // Portability findings do not fail rule loading.
 func TestLintPortability(t *testing.T) {
 	l := testLoader(t)
-	p, err := LoadCapabilityDocument(hostCapabilityDocumentPath(t))
+	p, err := LoadEngineDeclaration(hostCapabilityDocumentPath(t))
 	testutil.FailErr(t, "load host profile", err)
-	prev := InstalledCapabilityDocument()
-	InstallCapabilityDocument(p)
-	t.Cleanup(func() { InstallCapabilityDocument(prev) })
+	prev := InstalledEngineDeclaration()
+	InstallEngineDeclaration(p)
+	t.Cleanup(func() { InstallEngineDeclaration(prev) })
 
 	core, _, err := l.parseRule("PORTABLE_RULE", ruleDoc(t, map[string]any{
-		"id": "PORTABLE_RULE", "anchor": "agent.post_turn",
-		"when":     `policy_denied && tool == "read"`,
-		"requires": map[string]any{"profiles": []any{"tool"}},
+		"id": "PORTABLE_RULE", "on": "agent.post_turn",
+		"when": `policy_denied && tool == "read"`,
 	}))
 	testutil.FailErr(t, "parse portable rule", err)
 	if rep := LintPortability(core); !rep.Portable {
@@ -261,9 +253,9 @@ func TestLintPortability(t *testing.T) {
 	}
 
 	host, _, err := l.parseRule("HOST_RULE", ruleDoc(t, map[string]any{
-		"id": "HOST_RULE", "anchor": "session.pre_invoke",
-		"when":     "paintedwolf.pending_overlay_promote",
-		"requires": map[string]any{"facts": []any{"paintedwolf.pending_overlay_promote"}},
+		"id": "HOST_RULE", "on": "session.pre_invoke",
+		"when":           "paintedwolf.pending_overlay_promote",
+		"requires_facts": []any{"paintedwolf.pending_overlay_promote"},
 	}))
 	testutil.FailErr(t, "parse host rule", err)
 	rep := LintPortability(host)

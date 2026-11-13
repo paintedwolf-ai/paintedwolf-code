@@ -201,9 +201,6 @@ func catalogCopyFields(unit map[string]any) []string {
 		}
 	}
 	collect(unit)
-	if nested, ok := unit["copy"].(map[string]any); ok {
-		collect(nested)
-	}
 	return out
 }
 

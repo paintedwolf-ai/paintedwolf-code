@@ -1,28 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SCAN_NOT_FOUND
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - scan_summary
     - scan_query
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
-  profiles:
-    - filesystem
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SCAN_NOT_FOUND"
 effect: block
-copy:
-  what: scan_id does not match a stored scan row for the active project root.
-  cause: The supplied id is missing, truncated, stale, or not from the host scan store.
-  why: Drill-down reads persisted ingest keyed by the full per-engine scan UUID.
-  fix: 'For bound work, report the missing assigned id; do not substitute ambient scans. {{ paintedwolf.next_steps }}'
-  instead: 'Preserve bound scan_ids; resolve unbound ids before drill-down.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:scan_drilldown
-x-paintedwolf-message: Scan id not found for this project
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:scan_drilldown
+message: Scan id not found for this project
+what: scan_id does not match a stored scan row for the active project root.
+cause: The supplied id is missing, truncated, stale, or not from the host scan store.
+why: Drill-down reads persisted ingest keyed by the full per-engine scan UUID.
+fix: 'For bound work, report the missing assigned id; do not substitute ambient scans. {{ paintedwolf.next_steps }}'
+instead: 'Preserve bound scan_ids; resolve unbound ids before drill-down.'
+scenarios:
   - id: default
     vars:
       profile: coordinator

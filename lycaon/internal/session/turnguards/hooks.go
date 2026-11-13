@@ -55,7 +55,7 @@ func (m *Service) BeforeTool(
 		guard.ObserveTaskWhilePendingUserInput(sess, implState, tool, gc)
 		guard.ObserveCoordinatorWorkerBranchPath(sess, tool, args, gc)
 		guard.ObserveProgressMissingBeforeDispatch(sess, currentProgress, tool, reviewLoopActive, gc)
-		guard.ObserveProgressItemNotClosedBeforeDispatch(sess, currentProgress, tool, closureBaseline, closureArmed, gc)
+		guard.ObserveProgressReconciliationBeforeDispatch(sess, currentProgress, tool, closureBaseline, closureArmed, gc)
 		guard.ObserveCoordinatorBatchPhaseTool(sess, tool, implState, m.Batch.TurnGuard(sess.ID), gc)
 		guard.ObserveCoordinatorSynthesisWrapupTool(surfaceID, tool, tools.ToolOffered(ctx, tool), gc)
 		guard.ObserveVerifyCommandUndeclared(tool, declaredVerify, args, gc)
