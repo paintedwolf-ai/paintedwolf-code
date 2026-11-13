@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/eval/episode"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -43,5 +45,38 @@ func TestTrainingBundleRequiresEveryInput(t *testing.T) {
 	missing := t.TempDir()
 	if err := runEval([]string{"training-bundle", "--capture", missing, "--captures", missing, "--session", "s", "--out", filepath.Join(missing, "b")}); err == nil {
 		t.Fatal("a bundle was written from a capture with no store")
+	}
+}
+
+func TestTrainingContractRejectsAnUnparseableFlagSet(t *testing.T) {
+	if err := runEval([]string{"training-contract", "--undefined"}); err == nil {
+		t.Fatal("an undefined flag was accepted")
+	}
+}
+
+func TestTrainingContractRefusesARelativeOutput(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := runEval([]string{"training-contract", "--out", "contract"}); err == nil {
+		t.Fatal("a relative output directory was accepted")
+	}
+}
+
+func TestTrainingBundleWritesTheManifest(t *testing.T) {
+	capture := t.TempDir()
+	database := testdbfixture.OpenPath(t, filepath.Join(capture, "store.db"))
+	testdbseed.InsertSession(t, database, "root", testdbseed.DefaultProjectID)
+	_, err := database.ExecContext(t.Context(), `PRAGMA wal_checkpoint(TRUNCATE)`)
+	testutil.FailErr(t, "checkpoint capture", err)
+	out := filepath.Join(t.TempDir(), "bundle")
+	testutil.FailErr(t, "write bundle", runEval([]string{
+		"training-bundle", "--capture", capture, "--captures", filepath.Join(t.TempDir(), "none"),
+		"--session", "root", "--out", out,
+	}))
+	raw, err := os.ReadFile(filepath.Join(out, "manifest.json"))
+	testutil.FailErr(t, "read manifest", err)
+	var manifest episode.BundleManifest
+	testutil.FailErr(t, "decode manifest", json.Unmarshal(raw, &manifest))
+	if manifest.RootSessionID != "root" || manifest.StoreSHA256 == "" || len(manifest.Files) == 0 {
+		t.Fatalf("manifest = %+v", manifest)
 	}
 }
