@@ -72,8 +72,9 @@ func authenticatedRemote(t *testing.T, bin, repo string) (*httptest.Server, *[]s
 }
 
 // An agent network command's Git reaches credentials only through its scoped
-// service: an admitted recipient authenticates, an unadmitted one receives
-// nothing, and the user's store is never written.
+// service: an admitted recipient authenticates once its credential is
+// released, a declined one is recorded, an unadmitted one receives nothing,
+// and the user's store is never written.
 func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 	bin := useBundledGit(t)
 	self, err := os.Executable()
@@ -94,10 +95,11 @@ func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 	}}
 	agentCredentialStore = func() gitcredential.Backend { return store }
 
-	run := func(admit bool) (string, int) {
-		credentials, err := StartAgentCredentials(t.Context())
+	var declined []string
+	run := func(admit, released bool) (string, int) {
+		credentials, err := StartAgentCredentials(t.Context(), func(gitcredential.Recipient, gitcredential.Credential) bool { return released })
 		testutil.FailErr(t, "start credentials", err)
-		defer func() { _ = credentials.Close() }()
+		defer func() { declined = credentials.Declined(); _ = credentials.Close() }()
 		if admit {
 			credentials.Admit(server.URL + "/repo.git")
 		}
@@ -109,19 +111,73 @@ func TestAgentCredentialsReachOnlyAdmittedRecipients(t *testing.T) {
 		return string(out), code
 	}
 
-	if out, code := run(false); code == 0 {
+	if out, code := run(false, true); code == 0 {
 		t.Fatalf("unadmitted recipient authenticated: %s", out)
+	}
+	if out, code := run(true, false); code == 0 || len(declined) != 1 || declined[0] != server.URL {
+		t.Fatalf("a declined recipient: code %d, declined %v, %s", code, declined, out)
 	}
 	for _, header := range *seen {
 		if header != "" {
-			t.Fatalf("credentials reached an unadmitted recipient: %q", header)
+			t.Fatalf("credentials reached an unadmitted or declined recipient: %q", header)
 		}
 	}
-	if out, code := run(true); code != 0 {
-		t.Fatalf("admitted recipient failed: code %d %s", code, out)
+	if out, code := run(true, true); code != 0 || len(declined) != 0 {
+		t.Fatalf("admitted, released recipient failed: code %d, declined %v, %s", code, declined, out)
 	}
 	if store.writes != 0 {
 		t.Fatalf("agent Git wrote the user's credential store %d times", store.writes)
+	}
+}
+
+// writeCredentialHelperScript writes an executable helper that drains its
+// request and answers with a fixed credential.
+func writeCredentialHelperScript(t *testing.T, body string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "helper")
+	if err := os.WriteFile(path, []byte("#!/bin/sh\n"+body), 0o755); err != nil {
+		testutil.FailErr(t, "write file", err)
+	}
+	return path
+}
+
+func TestUserHelpersGetRunsConfiguredHelper(t *testing.T) {
+	useBundledGit(t)
+	helper := writeCredentialHelperScript(t, "cat > /dev/null\necho username=alice\necho password=helper-secret\n")
+	executablePath = func() (string, error) { return helper, nil }
+	SetHostConfig(stubHostConfig{helper: "osxkeychain"})
+
+	got, ok, err := (userHelpers{}).Get(gitcredential.Credential{Protocol: "https", Host: "example.com", Path: "repo.git"})
+	if err != nil || !ok {
+		t.Fatalf("Get = (%+v, %v, %v)", got, ok, err)
+	}
+	if got.Username != "alice" || got.Password != "helper-secret" {
+		t.Fatalf("credential = %+v", got)
+	}
+}
+
+func TestUserHelpersGetFailsClosedWithoutHelper(t *testing.T) {
+	useBundledGit(t)
+	SetHostConfig(nil)
+
+	got, ok, err := (userHelpers{}).Get(gitcredential.Credential{Protocol: "https", Host: "example.com"})
+	if err != nil || ok {
+		t.Fatalf("Get without a helper = (%+v, %v, %v)", got, ok, err)
+	}
+	if got != (gitcredential.Credential{}) {
+		t.Fatalf("credential = %+v", got)
+	}
+}
+
+func TestUserHelpersStoreAndErase(t *testing.T) {
+	useBundledGit(t)
+
+	cred := gitcredential.Credential{Protocol: "https", Host: "example.com", Username: "alice", Password: "helper-secret"}
+	if err := (userHelpers{}).Store(cred); err != nil {
+		t.Fatalf("Store: %v", err)
+	}
+	if err := (userHelpers{}).Erase(cred); err != nil {
+		t.Fatalf("Erase: %v", err)
 	}
 }
 

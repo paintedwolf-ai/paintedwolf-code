@@ -3,6 +3,7 @@ package gitcmd
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -17,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/commandsurface"
 	"github.com/lycaon/lycaon/internal/fileclone"
 	"github.com/lycaon/lycaon/internal/git"
+	"github.com/lycaon/lycaon/internal/gitcredential"
 	"github.com/lycaon/lycaon/internal/gitengine"
 	gittestsetup "github.com/lycaon/lycaon/internal/testsetup/git"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -35,6 +37,14 @@ var (
 )
 
 func TestMain(m *testing.M) {
+	// Agent Git runs this binary as its credential helper.
+	if len(os.Args) == 3 && os.Args[1] == "git-credential-vault" {
+		if err := gitcredential.Forward(os.Args[2], os.Getenv(gitcredential.SocketEnv), os.Stdin, os.Stdout); err != nil {
+			fmt.Fprintln(os.Stderr, "credential helper:", err)
+			os.Exit(1)
+		}
+		os.Exit(0)
+	}
 	gittestsetup.Enable()
 	root, err := os.MkdirTemp("", "gitcmd-templates-*")
 	if err != nil {

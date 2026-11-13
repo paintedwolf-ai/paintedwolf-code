@@ -1624,6 +1624,8 @@ CREATE TABLE IF NOT EXISTS invocation_program_outputs (
     mappings_json TEXT NOT NULL CHECK (json_valid(mappings_json)),
     preview TEXT NOT NULL DEFAULT '',
     preview_truncated INTEGER NOT NULL DEFAULT 0 CHECK (preview_truncated IN (0,1)),
+    tail_preview TEXT NOT NULL DEFAULT '',
+    line_count INTEGER CHECK (line_count IS NULL OR line_count >= 0),
     created_at TEXT NOT NULL,
     inline_digest TEXT NOT NULL DEFAULT '' CHECK (length(inline_digest) IN (0,64)),
     inline_body BLOB CHECK (inline_body IS NULL OR (stream='arguments' AND length(inline_body)<=16384 AND blob_json='{}' AND length(inline_digest)=64)),

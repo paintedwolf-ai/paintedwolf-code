@@ -66,7 +66,7 @@ func TestProgramRootSourceRetainsActualClaimAndRestoresWithoutSyntheticChild(t *
 	testutil.FailErr(t, "release actual ledger fault", err)
 	body, err := f.recorder.BeginProgramWithSource(t.Context(), f.sourceStart, spill, false)
 	testutil.FailErr(t, "atomically attach source and program", err)
-	if body.Reference().RetentionClaimID != claim || quota.disk != 1 || quota.state != 1 || spill.Preview != nil {
+	if body.Reference().RetentionClaimID != claim || quota.disk != 1 || quota.state != 1 || spill.Display.Preview != nil {
 		t.Fatalf("claim or quota moved incorrectly: %+v", quota)
 	}
 	if _, err = spill.Open(t.Context()); err == nil {

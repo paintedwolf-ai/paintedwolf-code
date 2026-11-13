@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -64,6 +65,11 @@ func TestDetachedDrainIncludesNestedWorkAndHonorsCancellation(t *testing.T) {
 }
 
 func TestServerCleanupReliablyReleasesResourcesInvariant(t *testing.T) {
+	// Watchers are process-global by design and outlive any single server;
+	// exclude them from the cleanup invariant's goroutine accounting.
+	repochange.DisableWatchersForTest()
+	t.Cleanup(repochange.ResetWatchersForTest)
+
 	runtime.GC()
 	baselineGoroutines := runtime.NumGoroutine()
 
@@ -92,13 +98,15 @@ func TestServerCleanupReliablyReleasesResourcesInvariant(t *testing.T) {
 		t.Fatalf("drain source catalog after server cleanup: %v", err)
 	}
 
+	settleCtx, settleCancel := context.WithTimeout(context.Background(), testutil.Timeout(5*time.Minute))
+	defer settleCancel()
 	for {
 		runtime.GC()
 		growth := runtime.NumGoroutine() - baselineGoroutines
 		if growth <= 2 {
 			break
 		}
-		if t.Context().Err() != nil {
+		if settleCtx.Err() != nil {
 			t.Fatalf("goroutines did not settle after cleanup: baseline %d, now %d (growth %d)",
 				baselineGoroutines, runtime.NumGoroutine(), growth)
 		}

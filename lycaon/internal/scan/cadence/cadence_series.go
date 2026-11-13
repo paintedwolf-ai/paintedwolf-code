@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/confine"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -17,6 +18,10 @@ type seriesPlanner struct {
 
 func (p seriesPlanner) syncLocked(ctx context.Context, canonical string) ([]scanbase.SeriesRow, error) {
 	if p.c.roots.isRetired(canonical) {
+		return nil, nil
+	}
+	// Scans serve agents, so a root agents do not use is never scheduled.
+	if refused, _ := confine.AttachedWriteRootRefused(canonical); refused {
 		return nil, nil
 	}
 	selected := scanbase.ListSelectedScanners(ctx, p.c.Registry, canonical)

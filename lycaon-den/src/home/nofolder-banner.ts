@@ -1,7 +1,7 @@
-/** Shows the folder prompt for a ready, rootless saved project. */
+/** Shows the folder prompt for a ready saved project with no folder agents use. */
 export type NoFolderBannerInput = {
   isDraft: boolean;
-  rootCount: number;
+  agentRootCount: number;
   dismissed: boolean;
   chatReady: boolean;
 };
@@ -9,7 +9,7 @@ export type NoFolderBannerInput = {
 export function shouldShowNoFolderBanner(input: NoFolderBannerInput): boolean {
   if (!input.chatReady) return false;
   if (input.isDraft) return false;
-  if (input.rootCount !== 0) return false;
+  if (input.agentRootCount !== 0) return false;
   if (input.dismissed) return false;
   return true;
 }

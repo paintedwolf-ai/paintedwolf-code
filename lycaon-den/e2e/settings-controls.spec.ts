@@ -313,10 +313,18 @@ webE2e("every settings shortcut can be rebound and reset without losing its iden
   const { apiUrl, token } = apiConfig();
   const response = await request.get(`${apiUrl}/v1/contributions`, { headers: { Authorization: `Bearer ${token}` } });
   expect(response.ok()).toBeTruthy();
-  const frame = await response.json() as { keybindings: { id: string }[] };
-  const expectedIds = ["nav.leader", ...frame.keybindings.map((binding) => binding.id)].sort();
+  const frame = await response.json() as { keybindings: { id: string; bindings: Record<string, string[]> }[] };
   await page.goto("/");
   await expectShellReady(page);
+  // Only bindings the page's platform declares can be changed there.
+  const platform = await page.evaluate(async () => {
+    const url = "/src/shortcuts/platform.ts";
+    const module = await import(/* @vite-ignore */ url) as typeof import("../src/shortcuts/platform.ts");
+    return module.shortcutPlatform();
+  });
+  const expectedIds = ["nav.leader", ...frame.keybindings
+    .filter((binding) => platform in binding.bindings)
+    .map((binding) => binding.id)].sort();
   await openSettings(page);
   await page.getByTestId("general-tab-keyboard").click();
   const stored = (id: string) => page.evaluate(({ key, id }) => {

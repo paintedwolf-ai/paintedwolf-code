@@ -3,6 +3,7 @@ package security
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/fspath"
+	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectignore"
 )
 
@@ -19,7 +20,7 @@ func (b *Runtime) ScanIgnores(ctx context.Context, root string) map[string]proje
 	projectID := ""
 	canonical := fspath.CanonicalPath(root)
 	for _, p := range projects {
-		for _, r := range p.Roots {
+		for _, r := range project.AdmittedRoots(&p) {
 			if fspath.CanonicalPath(r.Path) != canonical {
 				continue
 			}

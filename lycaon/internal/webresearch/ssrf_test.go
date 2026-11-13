@@ -2,11 +2,13 @@ package webresearch
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/egress"
@@ -143,7 +145,7 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 		t.Fatalf("normalize metadata url: %v", err)
 	}
 	//nolint:bodyclose // the assertion is that guardedGet errors before any response exists
-	if _, _, err := guardedGet(context.Background(), u, researchAcceptHeader); err == nil || !strings.Contains(err.Error(), "blocked") {
+	if _, _, err := guardedGet(context.Background(), u, researchAcceptHeader, fetchBodyByteLimit); err == nil || !strings.Contains(err.Error(), "blocked") {
 		t.Fatalf("redirect to metadata address must be blocked, got err=%v", err)
 	}
 
@@ -151,12 +153,60 @@ func TestGuardedGetRevalidatesRedirectHops(t *testing.T) {
 	if err != nil {
 		t.Fatalf("normalize hop url: %v", err)
 	}
-	resp, finalURL, err := guardedGet(context.Background(), u, researchAcceptHeader)
+	resp, finalURL, err := guardedGet(context.Background(), u, researchAcceptHeader, fetchBodyByteLimit)
 	if err != nil {
 		t.Fatalf("same-host redirect should be followed: %v", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK || !strings.HasSuffix(finalURL, "/final") {
 		t.Fatalf("expected 200 at /final, got %d at %s", resp.StatusCode, finalURL)
+	}
+}
+
+// A guarded read returns the prefix its caller reads, however large the page.
+func TestGuardedGetReturnsTheCallersPrefix(t *testing.T) {
+	prev := ipAllowed
+	ipAllowed = func(a netip.Addr) bool { return a.IsLoopback() }
+	t.Cleanup(func() { ipAllowed = prev })
+	page := strings.Repeat("p", fetchBodyByteLimit+1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(page))
+	}))
+	t.Cleanup(srv.Close)
+	u, err := normalizeFetchURL(srv.URL)
+	if err != nil {
+		t.Fatalf("normalize: %v", err)
+	}
+	resp, _, err := guardedGet(context.Background(), u, researchAcceptHeader, verifyBodyByteLimit)
+	if err != nil {
+		t.Fatalf("a page past the fetch bound failed: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil || string(body) != page[:verifyBodyByteLimit] {
+		t.Fatalf("read %d bytes, err %v; want the first %d", len(body), err, verifyBodyByteLimit)
+	}
+}
+
+// A fetch's I/O bound is the caller's remaining deadline, read before the door
+// waits for any approval, and never more than the default.
+func TestFetchTimeoutFollowsTheCallersDeadline(t *testing.T) {
+	if got := fetchTimeout(context.Background()); got != defaultFetchTimeout {
+		t.Fatalf("no deadline = %v, want the default", got)
+	}
+	probe, cancel := context.WithTimeout(context.Background(), verifyFetchTimeout)
+	defer cancel()
+	if got := fetchTimeout(probe); got <= 0 || got > verifyFetchTimeout {
+		t.Fatalf("a probe's deadline = %v, want at most %v", got, verifyFetchTimeout)
+	}
+	long, cancelLong := context.WithTimeout(context.Background(), 10*defaultFetchTimeout)
+	defer cancelLong()
+	if got := fetchTimeout(long); got != defaultFetchTimeout {
+		t.Fatalf("a longer deadline = %v, want the default", got)
+	}
+	spent, cancelSpent := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelSpent()
+	if got := fetchTimeout(spent); got != 0 {
+		t.Fatalf("a spent deadline = %v, want none left", got)
 	}
 }

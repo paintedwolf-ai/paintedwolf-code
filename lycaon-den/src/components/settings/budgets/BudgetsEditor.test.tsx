@@ -91,6 +91,20 @@ describe("BudgetsEditor", () => {
     expect(input).toHaveProperty("value", "500");
   });
 
+  it("saves nothing while a field is emptied or holds text that is not a number yet", async () => {
+    const updateLimitsSettings = vi.fn(async (body) => ({ ...sampleLimits(), ...body }));
+    const settingsStore = createSettingsStore({ providers: [], limits: sampleLimits() });
+    render(() => <BudgetsEditor client={{ updateLimitsSettings } as never} settingsStore={settingsStore} />);
+    const input = (await screen.findByTestId("max-iterations")) as HTMLInputElement;
+    fireEvent.input(input, { target: { value: "" } });
+    Object.defineProperty(input, "validity", { configurable: true, value: { badInput: true } });
+    fireEvent.input(input, { target: { value: "" } });
+    Object.defineProperty(input, "validity", { configurable: true, value: { badInput: false } });
+    fireEvent.input(input, { target: { value: "640" } });
+    await waitFor(() => expect(updateLimitsSettings).toHaveBeenCalledWith({ max_iterations: 640 }));
+    expect(updateLimitsSettings).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the enabled ceiling unlocked while its save is acknowledged", async () => {
     let finishFirst!: (limits: SettingsLimitsResponse) => void;
     const updateLimitsSettings = vi.fn()

@@ -33,12 +33,12 @@ sizes:
                 reason: Promotion combines pending-write instructions with the complete applicable skill catalog during optional-selection fallback. Bodies remain on demand and the combined request obeys the model window.
         coordinator_tool_surfaces:
             implement_overlay_promote:
-                cap: 82000
-                reason: The integration surface lands or rejects worker overlays and verifies them, so its floor carries overlay, command, verification, terminal, secret, and scan tools.
+                cap: 44000
+                reason: The integration surface lands or rejects worker overlays and verifies them, so its floor carries overlay, command, verification, and scan tools; terminal, secret, and visual checks load on demand.
         worker_tool_surfaces:
             implement:
-                cap: 46000
-                reason: The only worker profile that runs commands; it keeps command, verification and terminal tools sticky beside summarize, survey_repo and code_rewrite, which agents use as tools.
+                cap: 44000
+                reason: The only worker profile that runs commands; it keeps command, verification, and the contract-required core terminal_open and terminal_close sticky beside summarize, survey_repo and code_rewrite, while the remaining terminal, visual, and secret tools load on demand.
         worker_personas:
             implementer:
                 cap: 36000
