@@ -23,6 +23,12 @@ var outboxTableFloor = []string{
 // outside any announcing transaction, keyed by file:function, each with the
 // reason the write needs no outbox event of its own.
 var outboxSilentMutators = map[string]string{
+	// Worker rounds settle inside job completion and cancellation, which
+	// announce the job; no event payload carries a round.
+	"lycaon/internal/workerrecords/rounds.go:AdmitRound":  "records the round an admitted job runs; the job announces its own admission and no event carries the round",
+	"lycaon/internal/workerrecords/rounds.go:SettleRound": "settles a round after its job's result is published; the job announces its terminal state and no event carries the round",
+	"lycaon/internal/workerrecords/rounds.go:StartRound":  "records the round an instruction starts and the child session's agent; the job announces its admission, and neither the round nor the agent is on an event payload",
+
 	// Path reservations.
 	"lycaon/internal/call/sql_store.go:InsertReservation":             "records one path reservation; reservations are coordination state that worker promotion releases in its own transaction",
 	"lycaon/internal/call/sql_store.go:DeleteReservation":             "releases one path reservation",
