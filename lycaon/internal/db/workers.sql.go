@@ -326,6 +326,24 @@ func (q *Queries) GetWorkerByName(ctx context.Context, arg GetWorkerByNameParams
 	return i, err
 }
 
+const getWorkerDeliveredThrough = `-- name: GetWorkerDeliveredThrough :one
+SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq
+FROM worker_message_deliveries
+WHERE worker_id = ?1 AND recipient_session_id = ?2
+`
+
+type GetWorkerDeliveredThroughParams struct {
+	WorkerID           string `json:"worker_id"`
+	RecipientSessionID string `json:"recipient_session_id"`
+}
+
+func (q *Queries) GetWorkerDeliveredThrough(ctx context.Context, arg GetWorkerDeliveredThroughParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerDeliveredThrough, arg.WorkerID, arg.RecipientSessionID)
+	var delivered_through_seq int64
+	err := row.Scan(&delivered_through_seq)
+	return delivered_through_seq, err
+}
+
 const getWorkerJobBinding = `-- name: GetWorkerJobBinding :one
 SELECT COALESCE(parent_session_id, '') AS parent_session_id, COALESCE(child_session_id, '') AS child_session_id
 FROM worker_jobs WHERE id = ?
@@ -461,6 +479,36 @@ func (q *Queries) GetWorkerResultOwner(ctx context.Context, id string) (GetWorke
 	row := q.db.QueryRowContext(ctx, getWorkerResultOwner, id)
 	var i GetWorkerResultOwnerRow
 	err := row.Scan(&i.WorkerID, &i.WorkerJobID)
+	return i, err
+}
+
+const getWorkerRound = `-- name: GetWorkerRound :one
+SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
+FROM worker_rounds WHERE worker_id = ? AND ordinal = ?
+`
+
+type GetWorkerRoundParams struct {
+	WorkerID string `json:"worker_id"`
+	Ordinal  int64  `json:"ordinal"`
+}
+
+func (q *Queries) GetWorkerRound(ctx context.Context, arg GetWorkerRoundParams) (WorkerRounds, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerRound, arg.WorkerID, arg.Ordinal)
+	var i WorkerRounds
+	err := row.Scan(
+		&i.WorkerID,
+		&i.Ordinal,
+		&i.JobID,
+		&i.InstructionFirstSeq,
+		&i.InstructionLastSeq,
+		&i.ExecutionTarget,
+		&i.ReviewSubjectJson,
+		&i.OperationID,
+		&i.CreatedAt,
+		&i.SettledAt,
+		&i.CheckpointID,
+	)
 	return i, err
 }
 
@@ -726,6 +774,58 @@ func (q *Queries) InsertWorkerWorkspacePreparation(ctx context.Context, arg Inse
 	return err
 }
 
+const listRoundInstructionsAfter = `-- name: ListRoundInstructionsAfter :many
+SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
+       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
+FROM worker_messages
+WHERE worker_id = ?1 AND round_ordinal = ?2
+  AND recipient_role = 'worker' AND seq > ?3
+ORDER BY seq
+`
+
+type ListRoundInstructionsAfterParams struct {
+	WorkerID     string        `json:"worker_id"`
+	RoundOrdinal sql.NullInt64 `json:"round_ordinal"`
+	AfterSeq     int64         `json:"after_seq"`
+}
+
+func (q *Queries) ListRoundInstructionsAfter(ctx context.Context, arg ListRoundInstructionsAfterParams) ([]WorkerMessages, error) {
+	rows, err := q.db.QueryContext(ctx, listRoundInstructionsAfter, arg.WorkerID, arg.RoundOrdinal, arg.AfterSeq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkerMessages
+	for rows.Next() {
+		var i WorkerMessages
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkerID,
+			&i.Seq,
+			&i.SenderRole,
+			&i.SenderID,
+			&i.RecipientRole,
+			&i.RoundOrdinal,
+			&i.Body,
+			&i.ArtifactRef,
+			&i.ReplyToSeq,
+			&i.NeedsReply,
+			&i.OperationID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSessionWorkers = `-- name: ListSessionWorkers :many
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
@@ -852,14 +952,16 @@ SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
 FROM worker_messages
 WHERE worker_id = ?1 AND seq > ?2 AND recipient_role = ?3
-ORDER BY seq LIMIT ?4
+  AND (?4 IS NULL OR round_ordinal = ?4)
+ORDER BY seq LIMIT ?5
 `
 
 type ListWorkerMessagesAfterParams struct {
-	WorkerID      string `json:"worker_id"`
-	AfterSeq      int64  `json:"after_seq"`
-	RecipientRole string `json:"recipient_role"`
-	PageLimit     int64  `json:"page_limit"`
+	WorkerID      string      `json:"worker_id"`
+	AfterSeq      int64       `json:"after_seq"`
+	RecipientRole string      `json:"recipient_role"`
+	RoundOrdinal  interface{} `json:"round_ordinal"`
+	PageLimit     int64       `json:"page_limit"`
 }
 
 func (q *Queries) ListWorkerMessagesAfter(ctx context.Context, arg ListWorkerMessagesAfterParams) ([]WorkerMessages, error) {
@@ -867,6 +969,7 @@ func (q *Queries) ListWorkerMessagesAfter(ctx context.Context, arg ListWorkerMes
 		arg.WorkerID,
 		arg.AfterSeq,
 		arg.RecipientRole,
+		arg.RoundOrdinal,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -1179,6 +1282,59 @@ func (q *Queries) SettleWorkerRound(ctx context.Context, arg SettleWorkerRoundPa
 		arg.CheckpointID,
 		arg.WorkerID,
 		arg.Ordinal,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateWorkerChildSessionAgent = `-- name: UpdateWorkerChildSessionAgent :execrows
+UPDATE sessions SET agent_type = ?1, updated_at = ?2
+WHERE id = ?3 AND parent_session_id = ?4
+`
+
+type UpdateWorkerChildSessionAgentParams struct {
+	AgentType       sql.NullString `json:"agent_type"`
+	UpdatedAt       string         `json:"updated_at"`
+	ID              string         `json:"id"`
+	ParentSessionID sql.NullString `json:"parent_session_id"`
+}
+
+func (q *Queries) UpdateWorkerChildSessionAgent(ctx context.Context, arg UpdateWorkerChildSessionAgentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateWorkerChildSessionAgent,
+		arg.AgentType,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.ParentSessionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateWorkerProfile = `-- name: UpdateWorkerProfile :execrows
+UPDATE workers SET agent_type = ?1, scope_mode = ?2, brief = ?3,
+    updated_at = ?4
+WHERE id = ?5 AND closed_at IS NULL
+`
+
+type UpdateWorkerProfileParams struct {
+	AgentType string `json:"agent_type"`
+	ScopeMode string `json:"scope_mode"`
+	Brief     string `json:"brief"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) UpdateWorkerProfile(ctx context.Context, arg UpdateWorkerProfileParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateWorkerProfile,
+		arg.AgentType,
+		arg.ScopeMode,
+		arg.Brief,
+		arg.UpdatedAt,
+		arg.ID,
 	)
 	if err != nil {
 		return 0, err

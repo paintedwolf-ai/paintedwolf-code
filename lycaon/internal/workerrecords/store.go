@@ -80,6 +80,8 @@ var (
 	ErrInvalidMessage      = errors.New("message needs a body or an artifact and valid roles")
 	ErrReplyUnknown        = errors.New("reply names no earlier message of this worker")
 	ErrPageStale           = errors.New("delivery page is not the outstanding page")
+	ErrNoRunningRound      = errors.New("worker has no running round to instruct")
+	ErrInvalidProfile      = errors.New("worker agent and scope mode must both be set")
 	ErrResultNotFound      = errors.New("result not found")
 	ErrAlreadyAccounted    = errors.New("result already accounted for")
 	ErrDispositionFinal    = errors.New("result changes already landed or rejected")
@@ -220,6 +222,19 @@ func loadWorker(ctx context.Context, q *db.Queries, actor Actor, workerID string
 		return db.Workers{}, sideNone, ErrWorkerNotFound
 	}
 	return w, sd, nil
+}
+
+// coordinatorWorkerAnyState returns a worker, open or closed, for its
+// coordinator; reads of a closed worker's history stay allowed.
+func coordinatorWorkerAnyState(ctx context.Context, q *db.Queries, actor Actor, workerID string) (db.Workers, error) {
+	w, sd, err := loadWorker(ctx, q, actor, workerID)
+	if err != nil {
+		return w, err
+	}
+	if sd != sideCoordinator {
+		return w, ErrCoordinatorOnly
+	}
+	return w, nil
 }
 
 // coordinatorWorker returns an open worker for its coordinator.

@@ -41,6 +41,11 @@ func newDeliveryFixture(t *testing.T) *deliveryFixture {
 	w, err := records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{Name: "parser", AgentType: "implementer", ScopeMode: "write", ChildSessionID: "child"})
 	testutil.FailErr(t, "create worker", err)
 	f.workerID = w.WorkerID
+	_, err = sqlDB.ExecContext(t.Context(), `INSERT INTO worker_jobs (id, project_id, parent_session_id, child_session_id, agent_type, status, prompt, brief, created_at)
+		VALUES ('job-1', ?, 'coord', 'child', 'implementer', 'running', 'p', 'b', ?)`, testdbseed.DefaultProjectID, now)
+	testutil.FailErr(t, "insert job", err)
+	_, err = records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit"}, w.WorkerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit round", err)
 	return f
 }
 

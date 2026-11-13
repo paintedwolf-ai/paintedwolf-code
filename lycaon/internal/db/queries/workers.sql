@@ -55,6 +55,11 @@ SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
        execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
 FROM worker_rounds WHERE worker_id = ? AND settled_at IS NULL;
 
+-- name: GetWorkerRound :one
+SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
+FROM worker_rounds WHERE worker_id = ? AND ordinal = ?;
+
 -- name: GetWorkerRoundByJob :one
 SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
        execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
@@ -82,7 +87,30 @@ SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
 FROM worker_messages
 WHERE worker_id = sqlc.arg(worker_id) AND seq > sqlc.arg(after_seq) AND recipient_role = sqlc.arg(recipient_role)
+  AND (sqlc.narg(round_ordinal) IS NULL OR round_ordinal = sqlc.narg(round_ordinal))
 ORDER BY seq LIMIT sqlc.arg(page_limit);
+
+-- name: ListRoundInstructionsAfter :many
+SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
+       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
+FROM worker_messages
+WHERE worker_id = sqlc.arg(worker_id) AND round_ordinal = sqlc.arg(round_ordinal)
+  AND recipient_role = 'worker' AND seq > sqlc.arg(after_seq)
+ORDER BY seq;
+
+-- name: GetWorkerDeliveredThrough :one
+SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq
+FROM worker_message_deliveries
+WHERE worker_id = sqlc.arg(worker_id) AND recipient_session_id = sqlc.arg(recipient_session_id);
+
+-- name: UpdateWorkerProfile :execrows
+UPDATE workers SET agent_type = sqlc.arg(agent_type), scope_mode = sqlc.arg(scope_mode), brief = sqlc.arg(brief),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND closed_at IS NULL;
+
+-- name: UpdateWorkerChildSessionAgent :execrows
+UPDATE sessions SET agent_type = sqlc.arg(agent_type), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND parent_session_id = sqlc.arg(parent_session_id);
 
 -- name: ListWorkerMessagesBefore :many
 SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
