@@ -21,6 +21,12 @@ model_thinking:
     style: effort_levels
     always_on: true
     controls: {state: supported, efforts: [low, medium, high], default_effort: medium}
+  - match: ["muse-glimmer", "muse-spark"]
+    style: effort_levels
+    controls: {state: supported, efforts: [low, medium, high], can_disable: true, default_effort: medium}
+  - match: ["mistral-large-4", "mistral-large-2610"]
+    style: effort_levels
+    controls: {state: supported, efforts: [low, medium, high], can_disable: true, default_effort: medium}
   - match: ["claude-mythos-preview"]
     style: adaptive
     continuation_policy: require_fields
@@ -627,4 +633,13 @@ providers:
     api_key_env: CEREBRAS_API_KEY
     models: []
     http_retry_profile: hosted-standard
+    prompt_cache_profile: implicit
+
+  - id: doubleword
+    kind: doubleword
+    label: Doubleword
+    base_url: https://api.doubleword.ai/v1
+    api_key_env: DOUBLEWORD_API_KEY
+    models: []
+    http_retry_profile: hosted-patient
     prompt_cache_profile: implicit

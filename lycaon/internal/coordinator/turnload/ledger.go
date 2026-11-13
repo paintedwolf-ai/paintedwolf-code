@@ -17,7 +17,9 @@ const (
 	SourcePredicted Source = "predicted"
 	// SourceRequested came from request_tools.
 	SourceRequested Source = "requested"
-	// SourceCompanion is read from standing surfaces recorded before companions retired.
+	// SourceFallback exposes a permitted tool when selection cannot run.
+	SourceFallback Source = "fallback"
+	// SourceCompanion loaded with another member of its catalog family.
 	SourceCompanion Source = "companion"
 )
 
@@ -28,7 +30,7 @@ type Load struct {
 	P      float64 `json:"p,omitempty"`
 	// Need is the request_tools text that loaded the tool.
 	Need string `json:"need,omitempty"`
-	// With is the predicted tool a recorded companion loaded with.
+	// With identifies the family member that caused this load.
 	With string `json:"with,omitempty"`
 	// Turn is the message that opened the turn the tool joined on.
 	Turn string `json:"turn,omitempty"`
@@ -39,7 +41,8 @@ type Load struct {
 // history epoch the current turn opened on. Every receipt carries it, so a
 // restart restores the surface the provider last cached.
 type Standing struct {
-	Skill *SkillPreload `json:"skill,omitempty"`
+	FullCatalog bool          `json:"full_catalog,omitempty"`
+	Skill       *SkillPreload `json:"skill,omitempty"`
 	// Pointer is the skill the turn was told about in one line.
 	Pointer *SkillRank `json:"pointer,omitempty"`
 	// ToolEvent is the loadable tool whose first call already asked for a
@@ -52,8 +55,9 @@ type Standing struct {
 }
 
 type sessionLoads struct {
-	preload *SkillPreload
-	pointer *SkillRank
+	fullCatalog bool
+	preload     *SkillPreload
+	pointer     *SkillRank
 	// request is the current turn's request in its author's words, which a
 	// tool event ranks skills against; empty after a restart.
 	request string
@@ -214,6 +218,9 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 	s := l.session(sessionID)
 	s.open(opening)
 	cold := opening.Boundary.Cold()
+	if cold && !decision.Abstained {
+		s.fullCatalog = false
+	}
 	standing := make(map[string]Load, len(s.standing)+len(decision.Tools))
 	for name, load := range s.standing {
 		if s.loadable[name] && (load.Source == SourceRequested || !cold || decision.Abstained) {
@@ -228,6 +235,7 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 			standing[tool] = Load{Tool: tool, Source: SourcePredicted, P: p, Turn: s.openingMessageID}
 		}
 	}
+	completeFamilies(standing, s.loadable, s.openingMessageID)
 	s.standing = standing
 	omitted := make(map[string]bool, len(decision.Omitted))
 	if !decision.Abstained {
@@ -239,6 +247,9 @@ func (l *Ledger) BeginTurn(sessionID string, opening TurnOpening, decision Decis
 	}
 	s.omitted = omitted
 	s.kind = decision.Kind
+	if decision.Failure.RequiresFullCatalog() || s.fullCatalog {
+		s.exposeCatalog()
+	}
 }
 
 // BeginUndecidedTurn opens a turn whose workflow takes no turn decisions. The
@@ -258,9 +269,13 @@ func (l *Ledger) BeginUndecidedTurn(sessionID string, opening TurnOpening) {
 			standing[name] = load
 		}
 	}
+	completeFamilies(standing, s.loadable, s.openingMessageID)
 	s.standing = standing
 	s.omitted = map[string]bool{}
 	s.kind = ""
+	if s.fullCatalog {
+		s.exposeCatalog()
+	}
 }
 
 // ClaimToolEvent gives one loadable tool's first call the turn's skill read.
@@ -390,7 +405,7 @@ func (s *sessionLoads) standingRecord() Standing {
 		tools = append(tools, load)
 	}
 	sort.Slice(tools, func(i, j int) bool { return tools[i].Tool < tools[j].Tool })
-	return Standing{Tools: tools, Omitted: sortedKeys(s.omitted), HistoryEpoch: s.epoch, Skill: clonePreload(s.preload), Pointer: clonePointer(s.pointer), ToolEvent: s.toolEvent}
+	return Standing{FullCatalog: s.fullCatalog, Tools: tools, Omitted: sortedKeys(s.omitted), HistoryEpoch: s.epoch, Skill: clonePreload(s.preload), Pointer: clonePointer(s.pointer), ToolEvent: s.toolEvent}
 }
 
 func sortedKeys[V any](set map[string]V) []string {
@@ -426,7 +441,7 @@ func (l *Ledger) Restore(sessionID string, recorded Standing, history []api.Mess
 	standing := make(map[string]Load, len(recorded.Tools))
 	for _, load := range recorded.Tools {
 		name := strings.TrimSpace(load.Tool)
-		if name == "" || (load.Source != SourcePredicted && load.Source != SourceRequested && load.Source != SourceCompanion) {
+		if name == "" || (load.Source != SourcePredicted && load.Source != SourceRequested && load.Source != SourceCompanion && load.Source != SourceFallback) {
 			continue
 		}
 		load.Tool = name
@@ -447,6 +462,7 @@ func (l *Ledger) Restore(sessionID string, recorded Standing, history []api.Mess
 	defer l.mu.Unlock()
 	s := l.session(sessionID)
 	s.standing = standing
+	s.fullCatalog = recorded.FullCatalog
 	s.omitted = omitted
 	s.epoch = recorded.HistoryEpoch
 	s.preload = clonePreload(recorded.Skill)
@@ -458,6 +474,7 @@ func (l *Ledger) Restore(sessionID string, recorded Standing, history []api.Mess
 
 // RequestToolsResult is the request_tools payload the ledger replays.
 type RequestToolsResult struct {
+	FullCatalog   bool       `json:"full_catalog,omitempty"`
 	Need          string     `json:"need"`
 	Discovery     *Discovery `json:"discovery,omitempty"`
 	Loaded        []string   `json:"loaded"`

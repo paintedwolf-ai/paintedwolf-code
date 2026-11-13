@@ -523,7 +523,7 @@ export function presentationFromJsonObject(
   if (!structured) {
     const markdown = workerTranscriptMarkdownSource(raw);
     if (markdown && markdown !== raw.trim()) {
-      sections.push(contentSection(markdown));
+      sections.push(contentSection(markdown, { language: "markdown" }));
       return sections;
     }
     sections.push({

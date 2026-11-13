@@ -1,9 +1,5 @@
-// Package mutation is the command frontend for redirects, tee and filesystem
-// mutations. Each utility binds argv through the catalog and calls the same
-// typed write, delete, move, copy, mkdir and chmod operations as the structured
-// tools, so scope, review, attribution, the source journal and recovery are
-// the existing owners'. Redirect publication captures every destination
-// before its producer starts and publishes only at that captured revision.
+// Package mutation binds command syntax to typed filesystem operations.
+// Redirects capture destination revisions before starting their producers.
 package mutation
 
 import (
@@ -17,13 +13,11 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-// PinRecorder retains the revisions one execution captured
-// (invocation.SQLRecorder.AppendRevisionPin). Each capture appends at the
-// execution's next position, so redirects and the utility's own captures in
-// one execution never contend for an ordinal.
+// PinRecorder assigns each revision capture a unique execution position.
 type PinRecorder interface {
 	AppendRevisionPin(ctx context.Context, executionID string, pin toolcontract.ExecutionRevision) error
 }
@@ -171,6 +165,11 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	return Prepared{Operation: o.ops[command], Mode: mutationMode(spec, bound), Argv: bound, Review: review, owners: o, program: program, request: request, spec: spec, run: utilities[command]}, nil
 }
 
+// SelectMode names the effect mode argv selects, as Prepare does.
+func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
+	return nativeutility.SelectMode(o.specs, argv, mutationMode)
+}
+
 func mutationMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
 	hasOpt := func(key string) bool {
 		_, ok := bound.Last(key)
@@ -221,7 +220,10 @@ func (p Prepared) InvokeOwner(ctx context.Context, tc tools.ToolContext, streams
 		return commandprogram.WriteCatalogHelp(p.spec, streams.Output)
 	}
 	inv := newInvocation(ctx, p, tc, streams)
-	err := p.run(inv)
+	err := inv.applySyntaxOverride()
+	if err == nil {
+		err = p.run(inv)
+	}
 	if err == nil {
 		err = ctx.Err()
 	}

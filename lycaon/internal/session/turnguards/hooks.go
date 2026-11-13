@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/session/workercontext"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -93,11 +94,12 @@ func (m *Service) BeforeFinish(
 		}
 	}()
 	if sess.IsWorkerChild() {
-		projectDir, _ := m.Workspace.ActivePath(ctx, sess)
 		return m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
-			workercompletion.ObserveImplementerFinishWithoutWrite(
-				ctx, sess, history, lastAssistant, projectDir, m.workspaceCheck, gc,
-			)
+			if invokeAllowed {
+				if _, _, accepted := workercompletion.AcceptedWorkerReport(history, workercontext.Job(ctx)); workercontext.Job(ctx) == "" || !accepted {
+					gc.Rejection.RejectObservation = "worker_report_required"
+				}
+			}
 			return nil
 		})
 	}

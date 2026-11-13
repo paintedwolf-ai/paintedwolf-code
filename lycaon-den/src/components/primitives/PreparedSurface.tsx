@@ -19,6 +19,7 @@ export function PreparedSurface(props: {
     ready: () => (props.ready?.() ?? true) && preparation.ready(),
     deferInitialReveal: true,
     notice: preparation.notice,
+    pending: preparation.pending,
   });
   const attrs = () => surfaceRevealDom(reveal);
   const waiting = createPresentationWaiting(() => !reveal.ready());

@@ -11,6 +11,7 @@ import type {
   DenReviewLensState,
 } from "../../../shared/app-state-types.ts";
 import type { AgentFileState } from "../components/agent-presence.ts";
+import type { LingerPhase } from "../../ui/linger.ts";
 import { effectObservedInCommand } from "../source/source-command-window.ts";
 import { personLabel } from "../../components/source/annotations/source-contributor-label.ts";
 
@@ -407,6 +408,7 @@ export function buildSeenRows(files: readonly SourceSeenFile[]): ReviewSeenRow[]
       presentationOrdinal: null,
       contributors,
       liveVerb: null,
+      livePhase: null,
       sandbox: false,
       added: null,
       removed: null,
@@ -429,6 +431,8 @@ export function unpresentedAgentFileCount(
 export type ReviewListRow = ReviewFileRow & {
   /** In-flight verb, or null when idle. */
   liveVerb: string | null;
+  /** Past once the work ended without landing. */
+  livePhase: LingerPhase | null;
   /** Opens read-only when drafted in a worker overlay. */
   sandbox: boolean;
   /** Line add/remove counts when known. */
@@ -453,6 +457,9 @@ export type ReviewLiveRow = {
   toolCallIds: readonly string[];
   jobIds: readonly string[];
 };
+
+/** A live row as Review shows it: past once its work ended without landing. */
+export type ShownLiveRow = ReviewLiveRow & { phase: LingerPhase };
 
 export type ReviewChangeStats = { added: number; removed: number };
 
@@ -488,10 +495,10 @@ export type LiveRowScope = {
  * only that chat's work, and a turn only that turn's, so nothing is shown that
  * the landed list would then drop.
  */
-export function liveRowsInScope(
-  rows: readonly ReviewLiveRow[],
+export function liveRowsInScope<Row extends ReviewLiveRow>(
+  rows: readonly Row[],
   view: LiveRowScope,
-): ReviewLiveRow[] {
+): Row[] {
   if (view.comparisonOff) return [...rows];
   switch (view.scope.kind) {
     case "turn":
@@ -504,7 +511,7 @@ export function liveRowsInScope(
   }
 }
 
-function liveOnlyRow(live: ReviewLiveRow): ReviewListRow {
+function liveOnlyRow(live: ShownLiveRow): ReviewListRow {
   return {
     fileId: "",
     rootId: live.rootId,
@@ -522,6 +529,7 @@ function liveOnlyRow(live: ReviewLiveRow): ReviewListRow {
     presentationOrdinal: null,
     contributors: [],
     liveVerb: LIVE_VERB[live.state],
+    livePhase: live.phase,
     sandbox: liveSandbox(live.state),
     added: null,
     removed: null,
@@ -531,7 +539,7 @@ function liveOnlyRow(live: ReviewLiveRow): ReviewListRow {
 /** Orders in-flight files before landed files; each file is one row. */
 export function buildReviewRows(
   files: readonly ReviewFileRow[],
-  live: readonly ReviewLiveRow[] = [],
+  live: readonly ShownLiveRow[] = [],
   stats: ReadonlyMap<string, ReviewChangeStats> = new Map(),
 ): ReviewListRow[] {
   const liveByKey = new Map(live.map((row) => [reviewRowKey(row.rootId, row.path), row]));
@@ -546,6 +554,7 @@ export function buildReviewRows(
     const row: ReviewListRow = {
       ...f,
       liveVerb: current ? LIVE_VERB[current.state] : null,
+      livePhase: current?.phase ?? null,
       sandbox: current ? liveSandbox(current.state) : false,
       added: stat?.added ?? null,
       removed: stat?.removed ?? null,

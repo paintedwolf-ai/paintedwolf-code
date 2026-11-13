@@ -61,7 +61,7 @@ jobs:
     with:
       profile: fast
       lane: ${{ inputs.lane || '' }}
-      affected: ${{ github.event_name == 'pull_request' }}
+      affected: true
 
   integration:
     if: ${{ github.event_name == 'merge_group' || inputs.profile == 'integration' || inputs.profile == 'check' && inputs.lane != 'platform' }}

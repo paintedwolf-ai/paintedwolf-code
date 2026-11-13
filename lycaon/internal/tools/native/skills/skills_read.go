@@ -55,7 +55,7 @@ func (t *SkillsReadTool) Run(ctx context.Context, args map[string]any, tctx tool
 		if resource != "" {
 			return "", toolrejection.RejectInvalidArguments("TOOL_ARGS_INVALID", map[string]any{"reason": "discovery continuation cannot be combined with resource"})
 		}
-		return skillDiscovery(tctx, need, cursor, "catalog", "", catalog)
+		return skillDiscovery(ctx, tctx, need, cursor, "catalog", "", catalog)
 	}
 	exact := turnload.ExactSkill(need, catalog)
 	if isSkillEntryPath(exact, resource) {
@@ -73,7 +73,7 @@ func (t *SkillsReadTool) Run(ctx context.Context, args map[string]any, tctx tool
 		if len(catalog) == 0 || outcome.Failure == "" {
 			return "", skillUnknown(need)
 		}
-		return skillDiscovery(tctx, need, "", "ranking_unavailable", outcome.Failure, catalog)
+		return skillDiscovery(ctx, tctx, need, "", "ranking_unavailable", outcome.Failure, catalog)
 	}
 	name := names[0]
 	for _, sk := range catalog {

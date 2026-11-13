@@ -218,7 +218,7 @@ func testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie(t *testing.T) {
 	testutil.FailErr(t, "save seed jar", err)
 
 	confine.SetEgressPosture(confine.PostureAsk)
-	release := confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
+	confine.SetEgressResolver(func(_ context.Context, _ confine.EgressCommand, _ egressproxy.Endpoint, _ *confine.EgressDetectionCitation) bool {
 		// While egress route admission waits, another operation injects a foreign-issuer
 		// cookie into the managed jar.
 		mutated, openErr := secrets.OpenCookieJar(t.Context(), cookieSeedRequest("mutate-during-wait"))
@@ -231,7 +231,7 @@ func testJarModifiedDuringEgressWaitCannotSendUnreviewedCookie(t *testing.T) {
 	})
 	t.Cleanup(func() {
 		confine.SetEgressPosture(confine.PostureObserve)
-		_ = release(context.Background())
+		restoreResolver()
 	})
 
 	var secretAsks atomic.Int64
@@ -367,7 +367,10 @@ func testStandingGrantRevokedAcrossWaitAndRedirect(t *testing.T) {
 	registry := tools.NewDefaultRegistry()
 	executor := toolexecution.NewExecutor(nil, registry, "implement")
 	executor.Approvals.SetCheckpointManager(t.Context(), review, authority)
-	t.Cleanup(func() { confine.SetEgressResolver(nil) })
+	t.Cleanup(func() { restoreResolver() })
+	// A chat that has read nothing external: its first contacts are audited,
+	// so the cards here are the cookie disclosures alone.
+	executor.Secrets.SetUntrustedIngestionSource(func(context.Context, string) (bool, error) { return false, nil })
 	matcher := testSecretMatcher(t)
 	executor.Secrets.SetSecretMatcher(matcher)
 

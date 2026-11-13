@@ -1,5 +1,5 @@
 tags: [workers]
-description: Cancel a pending or running worker job; running workers get a prose-only cancellation report before the leg ends
+description: Cancel a pending or running worker job; preserve accepted observations in its partial closeout report
 schema:
   type: object
   properties:

@@ -117,9 +117,10 @@ export function turnLoadRowSummary(row: TurnLoadRow): { title: string; operation
   return { title, operation: row.load.kind?.value ?? "decided", state: elapsed };
 }
 
-/** How one standing tool reads in the card: its P when a decision offered it, or the request that loaded it. */
+/** Explain the recorded reason a tool is offered. */
 export function turnLoadToolDetail(tool: TurnLoadTool): string {
   if (tool.source === "requested") return "requested";
+  if (tool.source === "fallback") return "selection unavailable";
   if (tool.source === "companion") return tool.with ? `with ${tool.with}` : "companion";
   return tool.p != null ? formatProbability(tool.p) : "";
 }

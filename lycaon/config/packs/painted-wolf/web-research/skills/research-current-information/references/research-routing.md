@@ -31,8 +31,7 @@ Prefer a source that directly establishes the fact. A high-ranking summary does 
 
 - Read the page section that contains the relevant fact, not a page dump.
 - If the first fetch returns a head and symbol map, request the relevant range with `offset` and `limit`; repeating the same unpaged request only repeats the map.
-- Use readable text mode for documentation and articles.
-- Use `mode=raw` only when exact bytes or a non-page resource are needed. Binary resources require `dest`; cite the originating URL and inspect the saved artifact using the appropriate local tool.
+{% if profile_has_command and profile_command_mutation and root_count %}- For exact bytes or downloads, use portable `curl` through `command`. Cite the source URL and inspect the artifact.{% endif %}
 - Preserve the exact observed URL. Do not invent canonical paths or cite a search-result URL when the fetched source is available.
 
 ## Coverage and stopping

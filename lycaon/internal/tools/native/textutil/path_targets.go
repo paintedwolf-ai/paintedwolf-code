@@ -4,9 +4,12 @@ import (
 	"github.com/lycaon/lycaon/internal/commandprogram"
 )
 
+// fileUtilities read or write the files their operands name, so they run in
+// the program's working directory with those paths declared for admission.
 var fileUtilities = map[string]bool{
 	"sort": true, "uniq": true, "paste": true, "join": true,
 	"comm": true, "tac": true, "sed": true, "awk": true,
+	"cut": true, "column": true, "fold": true, "rev": true, "iconv": true,
 }
 
 func PathUtility(name string) bool { return fileUtilities[name] }
@@ -25,12 +28,12 @@ func (o *Owners) pathTargets(argv commandprogram.BoundArgv, plan *preparedSed) [
 			continue
 		}
 		for _, value := range item.Option.Values {
-			add(value.Value, argv.Command == "sort" && item.Option.Key == "-o")
+			add(value.Value, (argv.Command == "sort" || argv.Command == "iconv") && item.Option.Key == "-o")
 		}
 	}
 	operands := argv.Operands().Values()
 	switch argv.Command {
-	case "sort", "paste", "join", "comm", "tac":
+	case "sort", "paste", "join", "comm", "tac", "cut", "column", "fold", "rev", "iconv":
 		for _, operand := range operands {
 			add(operand, false)
 		}

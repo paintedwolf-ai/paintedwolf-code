@@ -3,7 +3,6 @@ package delegations
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/lycaon/lycaon/internal/branchretention"
 	"github.com/lycaon/lycaon/internal/db"
@@ -11,9 +10,6 @@ import (
 	"github.com/lycaon/lycaon/internal/eventoutbox"
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
-	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/internal/tools"
-	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -115,24 +111,4 @@ func (r *Runtime) ReconcileWorkerSandboxes(ctx context.Context, roots []string) 
 		}
 	}
 	return removed, errors.Join(errs...)
-}
-
-// DecodeCompleteLeg validates and decodes complete_leg invocations.
-func (r *Runtime) DecodeCompleteLeg(ctx context.Context, args map[string]any, tctx tools.ToolContext, validateCoverage func(context.Context, *wire.WorkerTask, *wire.CoverageReview) error) (workertools.CompleteLegRecord, error) {
-	record, err := workercompletion.CompleteLegDecoder(ctx, args, tctx)
-	if err != nil || record.LegStatus != "complete" {
-		return record, err
-	}
-	if tctx.Identity.WorkerJobID == "" {
-		return record, nil
-	}
-	task, ok := r.Queue.Lookup(ctx, tctx.Identity.WorkerJobID)
-	if !ok {
-		return record, fmt.Errorf("worker job %q unavailable", tctx.Identity.WorkerJobID)
-	}
-	report, _ := workercompletion.ReportFromCompleteLegArgs(args)
-	if validateCoverage != nil {
-		return record, validateCoverage(ctx, task, report.CoverageReview)
-	}
-	return record, nil
 }

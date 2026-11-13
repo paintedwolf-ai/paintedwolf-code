@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/board"
 	"github.com/lycaon/lycaon/internal/configlayout"
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/git"
 	"github.com/lycaon/lycaon/internal/llm"
@@ -211,8 +212,10 @@ func TestCoordinatorPromptUnchanged(t *testing.T) {
 	}
 }
 
-func TestWorkerPromptKeepsCuratedSkillsOutOfStandingPrompt(t *testing.T) {
-	mgr, _, rec := setupWorkerPromptFixture(t)
+func TestWorkerPromptExposesApplicableSkillsWithoutBialy(t *testing.T) {
+	mgr, _, _ := setupWorkerPromptFixture(t)
+	ledger := turnload.NewLedger()
+	mgr.Coordinator.Loading.SetLedger(ledger)
 	wireSkillsCatalogForPromptTest(t, mgr)
 	mgr.SetWorkerContextBuilder(&stubWorkerContext{ctx: inject.WorkerLegContext{Checklist: []string{"survey"}}})
 
@@ -242,16 +245,8 @@ func TestWorkerPromptKeepsCuratedSkillsOutOfStandingPrompt(t *testing.T) {
 		testutil.FailErr(t, "mgr.Submissions.Prompt", err)
 	}
 
-	var system string
-	for _, msg := range rec.LastRequest().Messages {
-		if msg.Role == api.MessageRoleSystem {
-			system += "\n" + msg.Content
-		}
-	}
-	for name := range curated {
-		if strings.Contains(system, "- "+name) {
-			t.Fatalf("standing prompt listed skill %q", name)
-		}
+	if !ledger.FullCatalog(child.ID) {
+		t.Fatal("absent selector did not activate full permitted catalog")
 	}
 }
 

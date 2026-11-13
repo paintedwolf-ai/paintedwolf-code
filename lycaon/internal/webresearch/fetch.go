@@ -27,7 +27,6 @@ const (
 type FetchOptions struct {
 	URL     string
 	Timeout time.Duration
-	Mode    string // text (default) or raw — affects Accept header only for FetchURL/FetchRaw
 }
 
 // FetchURLResult carries the extracted body for caching and paging.
@@ -41,8 +40,8 @@ type FetchURLResult struct {
 	Markdown    bool   `json:"markdown,omitempty"`
 }
 
-// FetchRawResult is the verbatim body for mode=raw (no HTML→markdown).
-type FetchRawResult struct {
+// fetchResponse retains bytes until content classification.
+type fetchResponse struct {
 	URL         string
 	Status      int
 	ContentType string
@@ -149,7 +148,7 @@ func appendSuffix(suffix string, minSegs int) func(*url.URL) string {
 
 // FetchURL pins public-IP requests and revalidates redirects before extracting readable text.
 func FetchURL(ctx context.Context, opts FetchOptions) (FetchURLResult, error) {
-	raw, err := fetchBytes(ctx, opts, "text")
+	raw, err := fetchBytes(ctx, opts)
 	if err != nil {
 		return FetchURLResult{}, err
 	}
@@ -158,7 +157,7 @@ func FetchURL(ctx context.Context, opts FetchOptions) (FetchURLResult, error) {
 
 // fetchTextResult converts a fetched body to its text view. Image bodies never
 // pass through here; their bytes are not text.
-func fetchTextResult(raw FetchRawResult) FetchURLResult {
+func fetchTextResult(raw fetchResponse) FetchURLResult {
 	text := string(raw.Body)
 	title := ""
 	markdown := false
@@ -180,15 +179,10 @@ func fetchTextResult(raw FetchRawResult) FetchURLResult {
 	return sanitizeFetchResult(res)
 }
 
-// FetchRaw downloads a URL and returns the verbatim body (no HTML extraction).
-func FetchRaw(ctx context.Context, opts FetchOptions) (FetchRawResult, error) {
-	return fetchBytes(ctx, opts, "raw")
-}
-
-func fetchBytes(ctx context.Context, opts FetchOptions, mode string) (FetchRawResult, error) {
+func fetchBytes(ctx context.Context, opts FetchOptions) (fetchResponse, error) {
 	u, err := normalizeFetchURL(opts.URL)
 	if err != nil {
-		return FetchRawResult{}, err
+		return fetchResponse{}, err
 	}
 	timeout := opts.Timeout
 	if timeout <= 0 {
@@ -196,18 +190,18 @@ func fetchBytes(ctx context.Context, opts FetchOptions, mode string) (FetchRawRe
 	}
 	screenedURL, err := screenOutbound(ctx, secretmatch.SurfaceFetchURL, httpDestination(u), u.String())
 	if err != nil {
-		return FetchRawResult{}, err
+		return fetchResponse{}, err
 	}
 	if screenedURL != u.String() {
 		u, err = normalizeFetchURL(screenedURL)
 		if err != nil {
-			return FetchRawResult{}, err
+			return fetchResponse{}, err
 		}
 	}
 	resp, err := outboundhttp.Do(ctx, outboundhttp.Request{
 		Method: "GET", URL: u.String(), Timeout: timeout, Redirects: outboundhttp.RedirectSafe,
 		RedirectLimit: maxFetchRedirects, MaxBodyBytes: fetchBodyByteLimit,
-		HopHeaders:   []outboundhttp.Header{{Name: "User-Agent", Value: fetchUserAgent}, {Name: "Accept", Value: acceptHeaderForMode(mode)}},
+		HopHeaders:   []outboundhttp.Header{{Name: "User-Agent", Value: fetchUserAgent}, {Name: "Accept", Value: researchAcceptHeader}},
 		AllowAddress: func(addr netip.Addr, _ uint16) bool { return ipAllowed(addr) },
 		BeforeHop: func(hopCtx context.Context, hopURL *url.URL) error {
 			return egressgate.AwaitHTTPRequest(hopCtx, hopURL, "GET")
@@ -216,11 +210,11 @@ func fetchBytes(ctx context.Context, opts FetchOptions, mode string) (FetchRawRe
 	if err != nil {
 		var tooLarge *outboundhttp.BodyTooLargeError
 		if errors.As(err, &tooLarge) {
-			return FetchRawResult{}, FetchBodyTooLargeError{Limit: fetchBodyByteLimit, Actual: int64(fetchBodyByteLimit + 1)}
+			return fetchResponse{}, FetchBodyTooLargeError{Limit: fetchBodyByteLimit, Actual: int64(fetchBodyByteLimit + 1)}
 		}
-		return FetchRawResult{}, err
+		return fetchResponse{}, err
 	}
-	return FetchRawResult{
+	return fetchResponse{
 		URL:         resp.FinalURL,
 		Status:      resp.Status,
 		ContentType: resp.ContentType,

@@ -40,7 +40,11 @@ func (c attemptController) capture(ctx context.Context, sess *api.Session, sc *c
 }
 
 func (c attemptController) key(ctx context.Context, sess *api.Session, sc *compaction.SimpleCompactor) (string, error) {
-	revision, err := compaction.AttemptRevision(ctx, sc.WithConfig(c.m.compactionConfig(ctx, sess)))
+	info := compaction.SessionInfo{}
+	if c.m.Workspace != nil {
+		info.SettingsRoots = c.m.Workspace.SettingsRoots(ctx, sess)
+	}
+	revision, err := compaction.AttemptRevision(ctx, sc.WithConfig(c.m.compactionConfig(ctx, sess)), info)
 	if err != nil {
 		return "", err
 	}

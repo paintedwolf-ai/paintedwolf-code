@@ -9,11 +9,19 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
+	"github.com/lycaon/lycaon/internal/runnerbudget"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
 // DefaultProgramInlineWait bounds how long an unparked program holds the agent.
 const DefaultProgramInlineWait = 30 * time.Second
+
+// ProgramInlineWait is the foreground budget in force: the default scaled by the
+// verification runner's timeout allowance, so race instrumentation does not
+// promote programs that would finish inline uninstrumented.
+func ProgramInlineWait() time.Duration {
+	return DefaultProgramInlineWait * time.Duration(runnerbudget.TimeoutScale())
+}
 
 // RunningProgramResult identifies the original program; no statements are replayed.
 type RunningProgramResult struct {
@@ -28,7 +36,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	handle, err := r.Supervisor.Background.StartProgram(ctx, bgprocess.ProgramJobSpec{
 		SessionID: run.tc.Identity.SessionID, RootSessionID: run.tc.ChatSessionID(),
 		ProjectID: run.tc.Identity.ProjectID, Cwd: e.paths.Cwd().DisplayPath,
-		CommandLine: run.source, OriginTool: "command", ToolCallID: run.tc.Identity.ToolCallID,
+		CommandLine: run.source, OriginTool: run.tool, ToolCallID: run.tc.Identity.ToolCallID,
 		Run: func(jobCtx context.Context, stdout, stderr io.Writer) (bgprocess.ProgramJobResult, error) {
 			stop := context.AfterFunc(jobCtx, func() { r.Supervisor.Interrupt(run.root.Identity.ProgramID) })
 			defer stop()

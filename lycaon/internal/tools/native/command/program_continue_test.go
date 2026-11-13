@@ -50,7 +50,7 @@ func TestProgramContinuationPreservesSequenceAndOutput(t *testing.T) {
 				done <- callResult{s, e}
 			}()
 			<-entered
-			clock.Advance(command.DefaultProgramInlineWait - time.Second)
+			clock.Advance(command.ProgramInlineWait() - time.Second)
 			select {
 			case got := <-done:
 				t.Fatalf("returned early: %+v", got)
@@ -141,7 +141,7 @@ func TestProgramContinuationRegistrationFailureInterruptsOriginal(t *testing.T) 
 		done <- callResult{s, e}
 	}()
 	<-entered
-	clock.Advance(command.DefaultProgramInlineWait)
+	clock.Advance(command.ProgramInlineWait())
 	got := <-done
 	if got.err == nil {
 		t.Fatal("closed registry returned a running handle")
@@ -168,7 +168,7 @@ func TestProgramContinuationCallerCancellationStaysInline(t *testing.T) {
 	go func() { s, e := f.CallArgs(t, caller, map[string]any{"command": "server"}); done <- callResult{s, e} }()
 	<-entered
 	cancel()
-	clock.Advance(command.DefaultProgramInlineWait)
+	clock.Advance(command.ProgramInlineWait())
 	got := <-done
 	if strings.Contains(got.content, `"handle"`) {
 		t.Fatalf("canceled call promoted: %s", got.content)
@@ -211,7 +211,7 @@ func TestProgramContinuationRunsRemainingStatementsOnce(t *testing.T) {
 		done <- callResult{s, e}
 	}()
 	<-entered
-	clock.Advance(command.DefaultProgramInlineWait)
+	clock.Advance(command.ProgramInlineWait())
 	got := <-done
 	testutil.FailErr(t, "return continued evaluator", got.err)
 	var running command.RunningProgramResult

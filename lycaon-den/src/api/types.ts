@@ -6601,6 +6601,13 @@ export interface components {
              * @enum {string}
              */
             kind: "draft" | "attached";
+            /** @description Whether agents work in this folder. The host derives it from the standing write-root check on current facts. A folder that is not admitted stays attached for the editor only; agents, tools, subprocesses and project policy never see it. */
+            admitted: boolean;
+            /**
+             * @description Why agents do not work in this folder; null when admitted. write_root_under_secret_store: the folder is inside the engine's state, key material or a credential store. write_root_contains_control_plane: the folder contains the engine's state.
+             * @enum {string|null}
+             */
+            admission_code: "write_root_under_secret_store" | "write_root_contains_control_plane" | null;
         };
         CreateProjectRootInput: {
             path: string;
@@ -8031,6 +8038,8 @@ export interface components {
             dispatch?: components["schemas"]["WorkerDispatch"];
             /** @description Producer-stated asynchronous or lifecycle completion fact. */
             completion?: components["schemas"]["ToolCompletion"];
+            /** @description Report accepted against this worker job's observations and policy. */
+            worker_report?: components["schemas"]["WorkerReportAcceptance"];
             file_edit_preview?: components["schemas"]["FileEditPreview"];
             promotion_previews?: components["schemas"]["FileEditPreview"][];
             file_edit?: components["schemas"]["FileEditSnapshot"];
@@ -8386,10 +8395,10 @@ export interface components {
             match?: components["schemas"]["TurnLoadMatch"];
         };
         /**
-         * @description What asked the decision engine. A turn decision runs before the model's first call of a visible user turn or a worker leg; a request resolves request_tools text; a lookup resolves skills_read text; a tool_event ranks the skills against the request and the first loadable tool the turn called, and reads or points to the best one.
+         * @description What asked the decision engine. A turn decision runs before the model's first call of a visible user turn or a worker leg; a request resolves request_tools text; a lookup resolves skills_read text; a tool_event ranks the skills against the request and the first loadable tool the turn called, and reads or points to the best one. A visibility receipt records a changed continuation surface without asking the decision engine.
          * @enum {string}
          */
-        TurnLoadTrigger: "turn" | "request" | "lookup" | "tool_event";
+        TurnLoadTrigger: "turn" | "request" | "lookup" | "tool_event" | "visibility";
         /**
          * @description How a request or lookup resolved its text to names: the engine ranked the candidates, the text spelled names out, or nothing matched.
          * @enum {string}
@@ -8413,10 +8422,10 @@ export interface components {
             confidence: number;
         };
         /**
-         * @description Why a tool stands loaded: a turn decision predicted it, the model asked for it through request_tools, or it is a declared companion of a predicted tool.
+         * @description Why a tool stands loaded: a turn decision predicted it, the model asked for it through request_tools, selection failed and exposed it, or it was recorded as a companion of a predicted tool.
          * @enum {string}
          */
-        TurnLoadToolSource: "predicted" | "requested" | "companion";
+        TurnLoadToolSource: "predicted" | "requested" | "companion" | "fallback";
         /** @description One tool the chat's standing set offered beyond the surface floor when the turn opened. */
         TurnLoadTool: {
             tool: string;
@@ -10121,7 +10130,7 @@ export interface components {
          * @description Closed machine-readable error identity emitted by the private Den-sidecar API.
          * @enum {string}
          */
-        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "write_root_is_filesystem_root" | "write_root_is_home" | "write_root_not_absolute" | "write_root_under_secret_store" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "project_policy_denied" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
+        ApiErrorCode: "approval_capacity_exceeded" | "source_view_not_found" | "source_view_revision_changed" | "source_view_capacity" | "source_view_frame_too_large" | "source_view_preparing" | "trust_review_changed" | "project_inventory_unavailable" | "source_analysis_incomplete" | "source_analysis_unavailable" | "invalid_page_cursor" | "unsupported_media_type" | "method_not_allowed" | "background_process_not_found" | "body_too_large" | "prompt_text_too_large" | "diagnostics_export_failed" | "pricing_no_source" | "backup_invalid" | "backup_incomplete" | "backup_incompatible" | "backup_unavailable" | "store_incompatible" | "export_format_invalid" | "checkpoint_not_found" | "approval_grant_not_found" | "session_not_idle" | "prompt_recovery_stale" | "rewind_anchor_not_found" | "rewind_anchor_ineligible" | "rewind_blocked" | "rewind_plan_changed" | "rewind_mode_unsupported" | "clone_failed" | "folder_exists" | "folder_not_empty" | "project_mutation_in_progress" | "promotion_conflict" | "promotion_not_found" | "draft_root_immutable" | "project_busy" | "checkpoint_not_pending" | "delegation_not_found" | "delegation_leg_not_found" | "feedback_not_pending" | "feedback_response_required" | "file_briefing_disabled" | "file_briefing_not_found" | "file_briefing_unavailable" | "source_version_unavailable" | "choice_transition_not_found" | "choice_transition_actor_denied" | "choice_transition_not_armed" | "choice_transition_pending_input" | "decision_choice_invalid" | "not_choice_phase" | "git_checkout_failed" | "git_commit_failed" | "git_discard_failed" | "git_init_failed" | "git_pull_failed" | "git_push_failed" | "git_no_changes" | "git_draft_failed" | "git_repo_not_found" | "git_stash_failed" | "worktree_not_bound" | "worktree_already_bound" | "worktree_branch_exists" | "worktree_dirty" | "worktree_stale" | "worktree_land_blocked" | "internal_error" | "invalid_json" | "invalid_path" | "blueprint_content_conflict" | "idempotency_conflict" | "invalid_arguments" | "invalid_query" | "command_disabled" | "choice_source_not_found" | "choice_source_failed" | "choice_source_invalid" | "contribution_source_unavailable" | "search_source_not_found" | "contribution_search_failed" | "contribution_search_invalid" | "operation_output_invalid" | "source_mutation_diverged" | "source_history_changed" | "workflow_run_not_active" | "cursor_generation_expired" | "event_replay_unavailable" | "invalid_request" | "provider_catalog_unavailable" | "invalid_workflow_transition" | "invalid_workflow_target" | "invalid_workflow_revision" | "invalid_workflow_replacement_target" | "message_not_found" | "command_program_not_found" | "not_found" | "path_not_found" | "persist_not_confirmed" | "phase_gate_unmet" | "blueprint_not_draft" | "blueprint_not_editable" | "blueprint_not_found" | "blueprint_path_taken" | "blueprint_run_active" | "detection_pack_not_removable" | "detection_pack_id_collision" | "blueprint_launch_incompatible" | "blueprint_launch_unsupported" | "human_approval_not_ready" | "project_not_found" | "extension_suggestion_changed" | "extension_suggestion_invalid" | "overlay_format_unsupported" | "overlay_format_invalid" | "project_approvals_need_repair" | "root_not_found" | "root_busy" | "duplicate_root" | "duplicate_root_label" | "project_removal_assessment_changed" | "project_removal_operation_conflict" | "extension_state_changed" | "extension_candidate_rejected" | "contributions_unavailable" | "command_not_found" | "invocation_scope_mismatch" | "contribution_frame_changed" | "command_unavailable" | "contribution_not_authorized" | "mcp_call_failed" | "path_missing" | "trust_surface_off" | "artifact_empty" | "artifact_too_large" | "artifact_foreign" | "artifact_unavailable" | "artifact_deleted" | "artifact_not_found" | "backup_restore_pending" | "recording_duration_invalid" | "recording_start_invalid" | "user_image_not_visible" | "unsupported_attachment" | "attachment_too_large" | "attachment_undecodable" | "attachment_not_found" | "attachment_unavailable" | "reference_out_of_jail" | "attachment_scanned_no_text" | "no_project_root" | "source_path_denied" | "source_path_protected" | "source_move_incomplete" | "source_path_busy" | "source_trash_recovery_unavailable" | "source_recovery_failed" | "source_not_found" | "source_binary_denied" | "source_read_only" | "source_binary" | "unsupported_encoding" | "source_raw_not_image" | "source_raw_too_large" | "source_workspace_mismatch" | "source_write_conflict" | "source_permission_change_failed" | "editor_revision_conflict" | "editor_replica_epoch" | "editor_replica_identity" | "editor_root_detached" | "source_presentation_effect_changed" | "source_already_exists" | "source_cross_root" | "source_not_empty" | "source_inventory_pending" | "source_trash_failed" | "source_unavailable" | "provider_not_found" | "provider_in_use" | "provider_not_configured" | "provider_empty_completion" | "provider_response_interrupted" | "provider_context_too_small" | "provider_tool_calls_unsupported" | "provider_tool_calls_in_prose" | "provider_rate_limited" | "provider_overloaded" | "provider_server_error" | "thinking_override_unavailable" | "provider_request_rejected" | "provider_unreachable" | "provider_silent" | "model_refused" | "model_catalog_unreachable" | "model_catalog_refresh_failed" | "mcp_provider_unreachable" | "mcp_sync_failed" | "mcp_tool_pin_unreadable" | "mcp_id_required" | "mcp_transport_required" | "mcp_transport_conflict" | "mcp_provider_not_found" | "mcp_update_empty" | "mcp_oauth_unavailable" | "mcp_oauth_failed" | "mcp_oauth_not_supported" | "mcp_oauth_registration_required" | "mcp_recipe_not_found" | "mcp_persist_failed" | "remote_requires_https" | "invalid_url" | "project_stdio_forbidden" | "project_headers_forbidden" | "project_remote_forbidden" | "project_enable_forbidden" | "overlay_unknown_field" | "unreadable_layer" | "rate_limited" | "queue_revision_conflict" | "queue_empty" | "queue_send_pending" | "queue_send_reserved" | "queue_no_send_to_cancel" | "scan_not_complete" | "scan_not_found" | "no_scanner_available" | "invalid_entry" | "community_driver_forbidden" | "community_parser_forbidden" | "mapper_missing" | "project_fields_forbidden" | "argv_project_path_forbidden" | "argv_shell_forbidden" | "duplicate_id" | "search_query_invalid" | "search_pattern_invalid" | "search_export_invalid_format" | "search_export_sarif_scope" | "security_disabled" | "grounding_escalated" | "session_spend_ceiling_reached" | "prompt_failed" | "turn_closeout_tool_call" | "host_fault" | "worker_closeout_exhausted" | "worker_execute_failed" | "worker_workspace_disk_full" | "worker_owner_unsettled" | "worker_workspace_unavailable" | "session_archived" | "session_not_found" | "session_not_pinned" | "session_preparation_failed" | "session_preparing" | "session_stopping" | "session_workflow_not_found" | "unauthorized" | "forbidden" | "worker_not_found" | "worker_not_cancelable" | "leg_not_pending" | "decision_not_pending" | "workflow_active" | "workflow_revision_conflict" | "workflow_replacement_target_required" | "workflow_start_requires_human_approval" | "blueprint_draft_required" | "workflow_not_found" | "workflow_not_runnable" | "workflow_version_unavailable" | "workflow_run_not_found" | "report_not_found" | "managed_secret_revoked" | "managed_secret_agent_use_expired" | "presence_unavailable" | "presence_denied" | "presence_required" | "presence_not_required" | "presence_challenge_not_found" | "managed_secret_value_changed" | "managed_secret_value_unavailable" | "auth_unavailable" | "recovery_snapshot_invalid" | "source_text_too_large" | "source_content_too_large" | "source_version_changed" | "source_path_ambiguous" | "file_operation_unavailable" | "file_operation_capacity" | "file_operation_not_cancelable" | "ignore_file_changed" | "stock_pack_immutable" | "message_references_changed" | "chat_content_changed" | "history_preview_changed" | "pricing_source_invalid" | "pricing_source_unreachable" | "pricing_source_not_found" | "pricing_source_disabled" | "sandbox_socket_path_invalid" | "sandbox_socket_path_not_found" | "sandbox_socket_path_not_socket" | "sandbox_socket_path_refused" | "sandbox_socket_path_limit" | "sandbox_socket_path_changed" | "ask_user_rejected" | "workflow_validation_failed" | "managed_secret_not_found" | "source_history_not_found" | "source_presentation_not_found" | "source_pin_not_found" | "source_effect_not_found" | "source_version_not_found" | "source_commit_not_found" | "source_file_not_found" | "git_movement_not_found" | "editor_document_not_found" | "file_operation_not_found" | "research_provider_not_found" | "research_credential_not_found" | "scanner_not_found" | "scanner_catalog_entry_not_found" | "detection_pack_not_found" | "host_resource_not_found" | "ignore_entry_not_found" | "secret_review_not_found" | "extension_pack_not_found" | "extension_unit_not_found" | "extension_meta_pack_not_found" | "extension_profile_not_found" | "extension_suggestion_not_found" | "project_removal_not_found" | "chat_content_not_found" | "manual_llm_request_not_found" | "preparation_receipt_not_found" | "history_protection_not_found";
         /** @enum {string} */
         NoticeAction: "open_ai_providers" | "retry_contribution_frame" | "prompt_retry" | "prompt_keep_going" | "prompt_rewind_and_retry";
         /** @enum {string} */
@@ -10857,6 +10866,111 @@ export interface components {
             /** @description What a parked call waits on: the wait's stated reason, or the statement a parked command's program waits at (`sleep 30`, `wait %1`). Present only with state parked. */
             reason?: string;
         };
+        WorkerCoverageGap: {
+            /** @description Worker-local gap id; the host scopes it to the task. */
+            id: string;
+            subject: string;
+            reason: string;
+            paths?: string[];
+        };
+        CitationGroundingCitedEvidence: {
+            /** @description Host-minted evidence handle resolved from the session ledger. */
+            handle?: string;
+            path?: string;
+            line?: number;
+            /** @description Last line of an inclusive range starting at line. Absent for a single line. */
+            end_line?: number;
+            excerpt?: string;
+            verdict?: components["schemas"]["CitationVerdict"];
+            /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
+            openable?: boolean;
+        };
+        CoverageAssessment: {
+            id: string;
+            /** @enum {string} */
+            disposition: "satisfied" | "covered" | "immaterial" | "material_open" | "essential_open";
+            reason: string;
+            obligations?: string[];
+            cited_evidence: components["schemas"]["CitationGroundingCitedEvidence"][];
+        };
+        CoverageReview: {
+            revision: string;
+            assessments: components["schemas"]["CoverageAssessment"][];
+        };
+        /** @description The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer. */
+        CitationVerification: {
+            /** @enum {string} */
+            method: "inspection" | "targeted" | "project" | "blocked";
+            reason: string;
+        };
+        WorkerCompletionFinding: {
+            path: string;
+            evidence?: string;
+            line?: number;
+            excerpt?: string;
+            /** @description Host-resolved citation the parent can use. */
+            cite?: string;
+            note?: string;
+            claim?: string;
+            adversary?: string;
+            precondition?: string;
+            severity?: string;
+        };
+        WorkerEvidenceObligation: {
+            kind: string;
+            status: string;
+            evidence_refs?: string[];
+            reason?: string;
+        };
+        WorkerCompletionReport: {
+            coverage_gaps?: components["schemas"]["WorkerCoverageGap"][];
+            coverage_review?: components["schemas"]["CoverageReview"];
+            verification?: components["schemas"]["CitationVerification"];
+            /**
+             * @description Leg status the worker declared; leg_status is the host-graded status.
+             * @enum {string}
+             */
+            declared_leg_status?: "complete" | "partial" | "blocked";
+            /**
+             * @description Host-graded leg status.
+             * @enum {string}
+             */
+            leg_status: "complete" | "partial" | "blocked";
+            files_modified?: string[];
+            objectives_met?: string[];
+            remaining_risk?: string[];
+            suggested_next_task?: string;
+            brief?: string;
+            findings?: components["schemas"]["WorkerCompletionFinding"][];
+            cited_urls?: string[];
+            evidence_obligations?: components["schemas"]["WorkerEvidenceObligation"][];
+        };
+        /**
+         * @description Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
+         * @enum {string}
+         */
+        CitationGroundingCheckStatus: "passed" | "failed" | "advisory";
+        CitationGroundingFinding: {
+            /** @description Host-minted evidence handle resolved from the session ledger. */
+            handle?: string;
+            path?: string;
+            line?: number;
+            excerpt?: string;
+            verdict?: components["schemas"]["CitationVerdict"];
+            note?: string;
+            /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
+            openable?: boolean;
+        };
+        /** @description Host-accepted worker report retained with its successful submitting invocation. */
+        WorkerReportAcceptance: {
+            /**
+             * Format: uuid
+             * @description Worker job whose observations and coverage were validated.
+             */
+            worker_id: string;
+            report: components["schemas"]["WorkerCompletionReport"];
+            grounding: components["schemas"]["CitationGrounding"];
+        };
         FileEditReference: {
             /** Format: uuid */
             message_id: string;
@@ -10982,40 +11096,6 @@ export interface components {
             /** @description The host's view when the result was written. It never flips on exit; the session process mirror reports that. */
             running: boolean;
             termination_reason?: components["schemas"]["BackgroundProcessTerminationReason"];
-        };
-        /**
-         * @description Host-authored semantic outcome of a grounding check. Advisory checks landed but require review; they are neither passes nor failures.
-         * @enum {string}
-         */
-        CitationGroundingCheckStatus: "passed" | "failed" | "advisory";
-        CitationGroundingFinding: {
-            /** @description Host-minted evidence handle resolved from the session ledger. */
-            handle?: string;
-            path?: string;
-            line?: number;
-            excerpt?: string;
-            verdict?: components["schemas"]["CitationVerdict"];
-            note?: string;
-            /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
-            openable?: boolean;
-        };
-        CitationGroundingCitedEvidence: {
-            /** @description Host-minted evidence handle resolved from the session ledger. */
-            handle?: string;
-            path?: string;
-            line?: number;
-            /** @description Last line of an inclusive range starting at line. Absent for a single line. */
-            end_line?: number;
-            excerpt?: string;
-            verdict?: components["schemas"]["CitationVerdict"];
-            /** @description True when the cited path resolves to a regular file under the project jail; false when it is a directory, missing, or outside the jail; absent when the host did not resolve the path. Den links only when openable is not false. */
-            openable?: boolean;
-        };
-        /** @description The validation scope the closeout declared. Retained on the grounding audit because the projected prose omits the trailer. */
-        CitationVerification: {
-            /** @enum {string} */
-            method: "inspection" | "targeted" | "project" | "blocked";
-            reason: string;
         };
         /** @description A recorded review_loop verdict with its validated citation provenance. Terminal verdicts always carry grounding. */
         VerdictOutcome: {
@@ -11264,64 +11344,6 @@ export interface components {
              *     spawn rejects with OVERLAY_BASE_MISSING or OVERLAY_BASE_NOT_PENDING.
              */
             base_overlay_id?: string;
-        };
-        WorkerCoverageGap: {
-            /** @description Worker-local gap id; the host scopes it to the task. */
-            id: string;
-            subject: string;
-            reason: string;
-            paths?: string[];
-        };
-        CoverageAssessment: {
-            id: string;
-            /** @enum {string} */
-            disposition: "satisfied" | "covered" | "immaterial" | "material_open" | "essential_open";
-            reason: string;
-            obligations?: string[];
-            cited_evidence: components["schemas"]["CitationGroundingCitedEvidence"][];
-        };
-        CoverageReview: {
-            revision: string;
-            assessments: components["schemas"]["CoverageAssessment"][];
-        };
-        WorkerCompletionFinding: {
-            path: string;
-            evidence?: string;
-            line?: number;
-            excerpt?: string;
-            note?: string;
-            claim?: string;
-            adversary?: string;
-            precondition?: string;
-            severity?: string;
-        };
-        WorkerEvidenceObligation: {
-            kind: string;
-            status: string;
-            evidence_refs?: string[];
-            reason?: string;
-        };
-        WorkerCompletionReport: {
-            coverage_gaps?: components["schemas"]["WorkerCoverageGap"][];
-            coverage_review?: components["schemas"]["CoverageReview"];
-            /**
-             * @description Leg status the worker declared; leg_status is the host-graded status.
-             * @enum {string}
-             */
-            declared_leg_status?: "complete" | "partial" | "blocked";
-            /**
-             * @description Host-graded leg status.
-             * @enum {string}
-             */
-            leg_status: "complete" | "partial" | "blocked";
-            files_modified?: string[];
-            objectives_met?: string[];
-            remaining_risk?: string[];
-            suggested_next_task?: string;
-            brief?: string;
-            findings?: components["schemas"]["WorkerCompletionFinding"][];
-            cited_urls?: string[];
-            evidence_obligations?: components["schemas"]["WorkerEvidenceObligation"][];
         };
         WorkerDiffStat: {
             path: string;
@@ -11635,6 +11657,13 @@ export interface components {
             /** @description Leading screened bytes of the retained stream as UTF-8. Never the authoritative body. */
             preview: string;
             preview_truncated: boolean;
+            /** @description Last screened whole lines, at most six, when the preview does not reach the end; empty otherwise. Never the authoritative body. */
+            tail_preview: string;
+            /**
+             * Format: int64
+             * @description Lines in the complete stream. Absent while capture is incomplete.
+             */
+            line_count?: number;
         };
         /** @description Typed stale-destination fact from the destination owner. A conflict requires fresh preparation; it is never refreshed or replayed. */
         CommandRevisionConflict: {
@@ -18891,7 +18920,7 @@ export interface operations {
                     "application/json": components["schemas"]["Project"];
                 };
             };
-            /** @description Root path refused as a write jail (write_root_is_filesystem_root, write_root_is_home, write_root_not_absolute, write_root_under_secret_store) or otherwise invalid. */
+            /** @description The path is not an existing folder (invalid_path, path_not_found). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -19909,7 +19938,7 @@ export interface operations {
                     "application/json": components["schemas"]["Project"];
                 };
             };
-            /** @description Root path refused as a write jail (write_root_is_filesystem_root, write_root_is_home, write_root_not_absolute, write_root_under_secret_store) or otherwise invalid. */
+            /** @description The path is not an existing folder (invalid_path, path_not_found). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -30485,6 +30514,17 @@ export type ToolFeedback = components["schemas"]["ToolFeedback"];
 export type ToolResultUiVisibility = components["schemas"]["ToolResultUiVisibility"];
 export type WorkerDispatch = components["schemas"]["WorkerDispatch"];
 export type ToolCompletion = components["schemas"]["ToolCompletion"];
+export type WorkerCoverageGap = components["schemas"]["WorkerCoverageGap"];
+export type CitationGroundingCitedEvidence = components["schemas"]["CitationGroundingCitedEvidence"];
+export type CoverageAssessment = components["schemas"]["CoverageAssessment"];
+export type CoverageReview = components["schemas"]["CoverageReview"];
+export type CitationVerification = components["schemas"]["CitationVerification"];
+export type WorkerCompletionFinding = components["schemas"]["WorkerCompletionFinding"];
+export type WorkerEvidenceObligation = components["schemas"]["WorkerEvidenceObligation"];
+export type WorkerCompletionReport = components["schemas"]["WorkerCompletionReport"];
+export type CitationGroundingCheckStatus = components["schemas"]["CitationGroundingCheckStatus"];
+export type CitationGroundingFinding = components["schemas"]["CitationGroundingFinding"];
+export type WorkerReportAcceptance = components["schemas"]["WorkerReportAcceptance"];
 export type FileEditReference = components["schemas"]["FileEditReference"];
 export type FileEditPreview = components["schemas"]["FileEditPreview"];
 export type FileEditSnapshot = components["schemas"]["FileEditSnapshot"];
@@ -30494,10 +30534,6 @@ export type VisualArtifact = components["schemas"]["VisualArtifact"];
 export type CheckpointDecisionMeta = components["schemas"]["CheckpointDecisionMeta"];
 export type SkillActivation = components["schemas"]["SkillActivation"];
 export type ToolProcessHandle = components["schemas"]["ToolProcessHandle"];
-export type CitationGroundingCheckStatus = components["schemas"]["CitationGroundingCheckStatus"];
-export type CitationGroundingFinding = components["schemas"]["CitationGroundingFinding"];
-export type CitationGroundingCitedEvidence = components["schemas"]["CitationGroundingCitedEvidence"];
-export type CitationVerification = components["schemas"]["CitationVerification"];
 export type VerdictOutcome = components["schemas"]["VerdictOutcome"];
 export type LoopbackListenerHolder = components["schemas"]["LoopbackListenerHolder"];
 export type LoopbackPublishedContainer = components["schemas"]["LoopbackPublishedContainer"];
@@ -30522,12 +30558,6 @@ export type WorkspaceNotClonableReason = components["schemas"]["WorkspaceNotClon
 export type WorkspacePreparation = components["schemas"]["WorkspacePreparation"];
 export type TaskScopeMode = components["schemas"]["TaskScopeMode"];
 export type TaskScope = components["schemas"]["TaskScope"];
-export type WorkerCoverageGap = components["schemas"]["WorkerCoverageGap"];
-export type CoverageAssessment = components["schemas"]["CoverageAssessment"];
-export type CoverageReview = components["schemas"]["CoverageReview"];
-export type WorkerCompletionFinding = components["schemas"]["WorkerCompletionFinding"];
-export type WorkerEvidenceObligation = components["schemas"]["WorkerEvidenceObligation"];
-export type WorkerCompletionReport = components["schemas"]["WorkerCompletionReport"];
 export type WorkerDiffStat = components["schemas"]["WorkerDiffStat"];
 export type WorkerChangeReport = components["schemas"]["WorkerChangeReport"];
 export type WorkerFailure = components["schemas"]["WorkerFailure"];

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	lyexec "github.com/lycaon/lycaon/internal/exec"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -17,14 +16,14 @@ func optionInjectionRepo(t *testing.T) string {
 	t.Helper()
 	return CloneFixtureRepo(t, "option-injection", func(dir string) {
 		initCmd := exec.CommandContext(context.Background(), "git", "init", dir)
-		initCmd.Env = lyexec.LocalGitEnv()
+		initCmd.Env = SeedGitEnv()
 		if out, err := initCmd.CombinedOutput(); err != nil {
 			t.Fatalf("git init: %v %s", err, out)
 		}
 		run := func(args ...string) {
 			t.Helper()
 			cmd := exec.CommandContext(context.Background(), "git", append([]string{"-C", dir}, args...)...)
-			cmd.Env = lyexec.LocalGitEnv()
+			cmd.Env = SeedGitEnv()
 			if out, err := cmd.CombinedOutput(); err != nil {
 				t.Fatalf("git %v: %v %s", args, err, out)
 			}

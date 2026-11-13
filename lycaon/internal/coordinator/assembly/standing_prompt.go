@@ -74,7 +74,11 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 	for _, t := range in.LoadedTools {
 		loadedMap[t] = true
 	}
-	turnSurface := prompts.SurfaceTurn{Loaded: loadedMap}
+	plan, err := surface.CompileToolPlan(turnProfile, in.RootCount)
+	if err != nil {
+		return "", fmt.Errorf("compile tool plan: %w", err)
+	}
+	turnSurface := prompts.SurfaceTurn{Plan: plan, Loaded: loadedMap}
 	if in.catalogView != nil {
 		toolProfiles = in.catalogView.ToolProfiles
 		turnSurface.Schemas = in.catalogView.ToolSchemas
@@ -96,10 +100,6 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 		return "", fmt.Errorf("surface prompt vars: %w", err)
 	}
 
-	plan, err := surface.CompileToolPlan(turnProfile, in.RootCount)
-	if err != nil {
-		return "", fmt.Errorf("compile tool plan: %w", err)
-	}
 	offered, _ := surfaceVars["surface_offered"].([]string)
 	if offered == nil {
 		offered = plan.ImmediateNames()

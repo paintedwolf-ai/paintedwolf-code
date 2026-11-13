@@ -189,6 +189,7 @@ func skillSurfaceVarsInput(tctx tools.ToolContext, budget spawn.WorkerToolBudget
 		profileID = mapped
 	}
 	return prompts.SkillSurfaceVarsInput{
+		Plan:             tctx.Turn.TurnToolPlan,
 		ProfileID:        profileID,
 		SurfaceID:        strings.TrimSpace(tctx.Turn.TurnSurfaceID),
 		Offered:          tctx.Turn.TurnOfferedToolNames,
@@ -281,6 +282,9 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 		if hostResources != nil {
 			host.Executor.Network.SetHostResourceConnectionSource(hostResources.ResolveAction)
 			host.Executor.Network.SetExecutableAlternatesSource(hostResources.ExecutableAlternates)
+			mgr.ToolPolicy.SetSocketResources(func(ctx context.Context, projectID string, paths []string) []string {
+				return hostResources.ResourcesForSockets(ctx, hostresources.ProjectContext{ID: projectID}, paths)
+			})
 		}
 		host.Skills.SetSkillsCatalog(func(ctx context.Context, tctx tools.ToolContext) []skills.Skill {
 			roots := make([]string, 0, len(tctx.Source.Roots))

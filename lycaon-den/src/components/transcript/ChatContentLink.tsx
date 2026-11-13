@@ -11,6 +11,8 @@ export function ChatContentLink(props: {
   document: () => ChatContentDocument | undefined;
   testId?: string;
   searchable?: boolean;
+  /** Shows the label alone, keeping the destination in the accessible name. */
+  short?: boolean;
 }) {
   const findId = `chat-content-link:${crypto.randomUUID()}`;
   const [host, setHost] = createSignal<HTMLButtonElement>();
@@ -30,7 +32,7 @@ export function ChatContentLink(props: {
     collapsedCorpusAnchor: host,
   });
   return <button ref={setHost} type="button" class="den-chat-content-link" data-testid={props.testId ?? "chat-content-link"}
-    disabled={!props.projectId} onClick={() => open()}>
-    {props.label} in Files
+    disabled={!props.projectId} onClick={() => open()} aria-label={props.short ? `${props.label} in Files` : undefined}>
+    {props.short ? props.label : `${props.label} in Files`}
   </button>;
 }

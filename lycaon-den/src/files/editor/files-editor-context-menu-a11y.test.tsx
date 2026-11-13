@@ -190,13 +190,11 @@ describe("files editor context menu a11y", () => {
           <FilesEditorStatusDetails
             historicalActive={false}
             buffer={buffer}
-            version={null}
             secretScreenGap="truncated"
           />
           <FilesEditorStatusDetails
             historicalActive={false}
             buffer={buffer}
-            version={null}
             secretScreenGap="not_screened"
           />
           <FilesEditorContextMenus
