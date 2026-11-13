@@ -353,6 +353,24 @@ Stage the head set with `BIALY_HEADS_DIR` when building a checkout; the
 build verifies it against the committed release manifest.
 The committed release manifest binds its exact weights and option texts.
 
+## Adopting a campaign selector policy
+
+A training campaign freezes its heads and every threshold together as one
+selector policy (`p0.json`), qualified as a whole. Adopt it as it stands:
+
+```sh
+scripts/bialy/adopt_heads.py --policy p0.json --heads HEADS_DIR --release NAME \
+  --heads-revision SHA --dataset-tag TAG --dataset-revision SHA \
+  --factory-tag TAG --factory-commit SHA
+```
+
+It checks each head file against the policy's digest and that the policy was
+frozen against this `decisions.yaml` version. It then writes the three pins
+into `decision-release.json` and the policy's thresholds into `decisions.yaml`,
+keeping the comments and order. Run the parity probe for the three heads after
+it. Retune nothing in an adoption: the campaign's student segment refuses a
+host whose pins or thresholds differ from the policy.
+
 ## Tuning the shipped policy
 
 Every threshold in `decisions.yaml` was set from evidence a new head changes.
