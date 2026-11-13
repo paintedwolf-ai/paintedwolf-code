@@ -1,4 +1,7 @@
 steps:
-  - tool: "answer_decision"
+  - when: "paintedwolf.job_id != ''"
+    tool: "answer_decision"
+    args:
+      job_id: "{{ paintedwolf.job_id }}"
     say: "Answer the worker's pending question with {{ call }}; it resumes on its own."
     otherwise: "Answer the worker's pending question; it resumes on its own."

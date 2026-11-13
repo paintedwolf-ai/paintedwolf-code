@@ -47,6 +47,7 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"},
 		root:  t.TempDir(),
 	}
+	testdbseed.InsertProjectRootWithID(t, database, testdbseed.DefaultProjectID, "root-id", f.root)
 	w, err := f.records.CreateWorker(t.Context(), f.coord, workerrecords.Op{ID: "create"}, workerrecords.WorkerSpec{
 		Name: "surveyor", AgentType: "repo-researcher", ScopeMode: "read", ChildSessionID: "child",
 	})
@@ -150,6 +151,11 @@ func TestWorkerToolRejections(t *testing.T) {
 	testutil.FailErr(t, "put decision", f.decisions.Put(t.Context(), api.WorkerDecisionRequest{ChildSessionID: "child", WorkerID: job, Question: "which?"}))
 	_, err = f.run(t, InstructWorkerTool, "call-6", map[string]any{"worker": "surveyor", "instructions": "also this"})
 	wantReject(t, err, "INSTRUCT_WORKER_ASKING")
+	// The card's next step answers the question it names.
+	var reject *toolrejection.ToolReject
+	if errors.As(err, &reject) && reject.Data["job_id"] != job {
+		t.Fatalf("refusal data = %v, want job_id %s", reject.Data, job)
+	}
 }
 
 func latestJob(t *testing.T, database *db.Store) string {

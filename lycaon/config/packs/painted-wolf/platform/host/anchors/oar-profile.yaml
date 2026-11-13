@@ -1252,6 +1252,8 @@ host_facts:
    type: bool
  - name: paintedwolf.workflow_id
    type: string
+ - name: paintedwolf.workflow_work_id
+   type: string
  - name: paintedwolf.year
    type: string
  - name: paintedwolf.misplaced_fields

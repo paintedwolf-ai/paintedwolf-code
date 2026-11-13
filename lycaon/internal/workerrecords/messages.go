@@ -48,9 +48,10 @@ type MessageSpec struct {
 
 // MessageReceipt names a stored message.
 type MessageReceipt struct {
-	MessageID string `json:"message_id"`
-	WorkerID  string `json:"worker_id"`
-	Seq       int64  `json:"seq"`
+	MessageID    string `json:"message_id"`
+	WorkerID     string `json:"worker_id"`
+	Seq          int64  `json:"seq"`
+	RoundOrdinal int64  `json:"round_ordinal,omitempty"`
 }
 
 // AppendMessage stores a message on a worker. The coordinator's session
@@ -108,7 +109,7 @@ func (s *Store) AppendMessage(ctx context.Context, actor Actor, op Op, workerID 
 		}); err != nil {
 			return MessageReceipt{}, err
 		}
-		return MessageReceipt{MessageID: id, WorkerID: w.ID, Seq: seq}, nil
+		return MessageReceipt{MessageID: id, WorkerID: w.ID, Seq: seq, RoundOrdinal: round.Int64}, nil
 	})
 }
 

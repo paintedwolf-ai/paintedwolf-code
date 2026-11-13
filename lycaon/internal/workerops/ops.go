@@ -2,6 +2,7 @@ package workerops
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 
@@ -16,6 +17,32 @@ type Refusal struct {
 	View   workerstate.View
 	// AgentChange is set when an agent or scope change was refused.
 	AgentChange workerstate.AgentChange
+	// JobID is the worker's latest round's job; ChangedJobID is the job of
+	// its newest result whose changes are open, else of its newest changed
+	// result; WorkflowWorkID is a planned leg's work identity. Recovery
+	// steps are built from them.
+	JobID, ChangedJobID, WorkflowWorkID string
+}
+
+func refusal(snap Snapshot, op workerstate.Operation) *Refusal {
+	r := &Refusal{Worker: snap.Worker.Name, Op: op, View: snap.View, WorkflowWorkID: snap.Worker.WorkflowWorkID}
+	if latest, ok := snap.Latest(); ok {
+		r.JobID = latest.JobID
+	}
+	for i := len(snap.Rounds) - 1; i >= 0; i-- {
+		round := snap.Rounds[i]
+		if round.ResultID == "" || round.CheckpointID == "" {
+			continue
+		}
+		if r.ChangedJobID == "" {
+			r.ChangedJobID = round.JobID
+		}
+		if snap.Dispositions[round.ResultID].ChangeState == "" {
+			r.ChangedJobID = round.JobID
+			break
+		}
+	}
+	return r
 }
 
 func (r *Refusal) Error() string {
@@ -118,9 +145,12 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 	if err != nil {
 		return Receipt{}, err
 	}
+	if prior, ok, err := s.replay(ctx, actor, op, snap); err != nil || ok {
+		return prior, err
+	}
 	w, view := snap.Worker, snap.View
 	if !view.Admits(workerstate.OpInstruct) {
-		return Receipt{}, &Refusal{Worker: w.Name, Op: workerstate.OpInstruct, View: view}
+		return Receipt{}, refusal(snap, workerstate.OpInstruct)
 	}
 	scope := ""
 	if in.AgentType != "" && in.AgentType != w.AgentType {
@@ -133,7 +163,9 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 			scope = "write"
 		}
 		if change := workerstate.CheckAgentChange(view, snap.Facts, w.ScopeMode == "write", write); change != workerstate.AgentChangeAdmitted {
-			return Receipt{}, &Refusal{Worker: w.Name, Op: workerstate.OpInstruct, View: view, AgentChange: change}
+			r := refusal(snap, workerstate.OpInstruct)
+			r.AgentChange = change
+			return Receipt{}, r
 		}
 	} else {
 		in.AgentType = ""
@@ -174,6 +206,47 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 	return receipt, nil
 }
 
+// replay returns what an instruction already did under this operation
+// identity: the worker's state has moved on since, so it is not re-derived.
+func (s *Service) replay(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, snap Snapshot) (Receipt, bool, error) {
+	name := snap.Worker.Name
+	kind, raw, ok, err := s.Reader.Records.Operation(ctx, actor, op.ID)
+	if err != nil || !ok {
+		return Receipt{}, false, err
+	}
+	switch kind {
+	case "start_round":
+		var start workerrecords.RoundStartReceipt
+		if err := json.Unmarshal(raw, &start); err != nil {
+			return Receipt{}, false, err
+		}
+		receipt := Receipt{Worker: name, Outcome: OutcomeStarted, State: workerstate.Working, Round: start.Ordinal, JobID: start.JobID, InstructionSeq: start.InstructionSeq}
+		if akind, araw, aok, err := s.Reader.Records.Operation(ctx, actor, op.ID+":account"); err != nil {
+			return Receipt{}, false, err
+		} else if aok && akind == "account_result" {
+			var d workerrecords.Disposition
+			if err := json.Unmarshal(araw, &d); err != nil {
+				return Receipt{}, false, err
+			}
+			receipt.Accounted = d.ResultID
+		}
+		return receipt, true, nil
+	case "append_message":
+		var m workerrecords.MessageReceipt
+		if err := json.Unmarshal(raw, &m); err != nil {
+			return Receipt{}, false, err
+		}
+		receipt := Receipt{Worker: name, Outcome: OutcomeQueued, State: workerstate.Working, Round: m.RoundOrdinal, InstructionSeq: m.Seq}
+		for _, r := range snap.Rounds {
+			if r.Ordinal == m.RoundOrdinal {
+				receipt.JobID = r.JobID
+			}
+		}
+		return receipt, true, nil
+	}
+	return Receipt{}, false, workerrecords.ErrOperationConflict
+}
+
 // Shelve leaves a result's changes unlanded on purpose and accounts for it.
 func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, resultID, reason string) (workerrecords.Disposition, error) {
 	reason = strings.TrimSpace(reason)
@@ -193,7 +266,7 @@ func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op work
 		return workerrecords.Disposition{}, err
 	}
 	if !snap.View.Admits(workerstate.OpShelve) {
-		return workerrecords.Disposition{}, &Refusal{Worker: w.Name, Op: workerstate.OpShelve, View: snap.View}
+		return workerrecords.Disposition{}, refusal(snap, workerstate.OpShelve)
 	}
 	changed := false
 	for _, r := range snap.Rounds {

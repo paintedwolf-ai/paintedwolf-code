@@ -6,7 +6,7 @@ selector:
   tool:
     - instruct_worker
 requires:
-  facts: [paintedwolf.rejection_code]
+  facts: [paintedwolf.rejection_code, paintedwolf.next_steps, paintedwolf.overlay_id]
   profiles:
     - tool
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_CLOSED"
@@ -15,7 +15,7 @@ copy:
   what: The worker is closed.
   cause: It was withdrawn, or its session can no longer be used.
   why: A closed worker keeps its history but starts no new rounds.
-  fix: Start a new worker with task; use base_overlay_id to build on its result.
+  fix: '{{ paintedwolf.next_steps }}'
   instead: Branch on Code INSTRUCT_WORKER_CLOSED; do not retry the same call
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:instruct_worker
