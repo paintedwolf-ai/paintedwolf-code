@@ -19,6 +19,10 @@ type commandReachTables struct {
 	formTool map[string]string
 	forms    map[string]bool
 	retired  map[string][]string
+	// aliasForm maps a declared command alias to its canonical command name.
+	aliasForm map[string]string
+	// commandAliases maps a canonical command name to its declared aliases.
+	commandAliases map[string][]string
 }
 
 var loadCommandReachTables = sync.OnceValue(func() *commandReachTables {
@@ -31,14 +35,22 @@ var loadCommandReachTables = sync.OnceValue(func() *commandReachTables {
 		return nil
 	}
 	out := &commandReachTables{
-		commands: map[string]bool{},
-		mutating: map[string]bool{},
-		formTool: map[string]string{},
-		forms:    map[string]bool{},
-		retired:  map[string][]string{},
+		commands:       map[string]bool{},
+		mutating:       map[string]bool{},
+		formTool:       map[string]string{},
+		forms:          map[string]bool{},
+		retired:        map[string][]string{},
+		aliasForm:      map[string]string{},
+		commandAliases: map[string][]string{},
 	}
 	for _, spec := range language.Commands {
 		out.commands[spec.Name] = true
+		if len(spec.Aliases) > 0 {
+			out.commandAliases[spec.Name] = spec.Aliases
+			for _, alias := range spec.Aliases {
+				out.aliasForm[alias] = spec.Name
+			}
+		}
 		mutates := false
 		for _, effect := range spec.Effects {
 			// A wrapper whose child effects are unbound cannot promise
@@ -57,22 +69,32 @@ var loadCommandReachTables = sync.OnceValue(func() *commandReachTables {
 		case DispositionToolAndCommandForm:
 			for _, form := range disposition.CommandForms {
 				out.formTool[form] = disposition.Tool
-				out.forms[form] = true
+				out.admitForm(form)
 			}
 		case RoutineSchemaRetired:
 			out.retired[disposition.Tool] = disposition.CommandForms
 			for _, form := range disposition.CommandForms {
-				out.forms[form] = true
+				out.admitForm(form)
 			}
 		}
 	}
 	return out
 })
 
+// admitForm admits a command form and its declared aliases as hyphenated
+// command forms the scanner can see; the parser admits both spellings.
+func (t *commandReachTables) admitForm(form string) {
+	t.forms[form] = true
+	for _, alias := range t.commandAliases[form] {
+		t.forms[alias] = true
+	}
+}
+
 // CommandLanguageReachable reports whether a reader with held can run name as a
 // command program: under command, through a form the language admits, honoring
 // each form's mutation requirement and dual-state tool gate. A retired
-// operation is reached through the forms that replaced it.
+// operation is reached through the forms that replaced it, and a declared
+// command alias reaches through its canonical form.
 func CommandLanguageReachable(name string, held map[string]bool) bool {
 	lang := loadCommandReachTables()
 	if lang == nil {
@@ -85,6 +107,8 @@ func CommandLanguageReachable(name string, held map[string]bool) bool {
 			forms = []string{name}
 		case lang.formTool[name] != "":
 			forms = []string{name}
+		case lang.aliasForm[name] != "":
+			forms = []string{lang.aliasForm[name]}
 		default:
 			return false
 		}
@@ -105,17 +129,22 @@ func CommandLanguageReachable(name string, held map[string]bool) bool {
 }
 
 // CommandFormToolOf returns the dual-state tool that gates a command form, or
-// empty when no dual-state tool gates it.
+// empty when no dual-state tool gates it. A declared command alias reports the
+// gate of its canonical form.
 func CommandFormToolOf(name string) string {
 	lang := loadCommandReachTables()
 	if lang == nil {
 		return ""
 	}
-	return lang.formTool[name]
+	if tool := lang.formTool[name]; tool != "" {
+		return tool
+	}
+	return lang.formTool[lang.aliasForm[name]]
 }
 
-// HyphenatedCommandFormsIn returns the declared hyphenated command forms named
-// as backticked invocations in corpus.
+// HyphenatedCommandFormsIn returns the declared hyphenated command forms,
+// including declared aliases of those forms, named as backticked invocations in
+// corpus.
 func HyphenatedCommandFormsIn(corpus string) []string {
 	lang := loadCommandReachTables()
 	if lang == nil {

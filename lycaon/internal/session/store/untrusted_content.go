@@ -140,6 +140,32 @@ func (ev *sqlEvidence) SessionContacts(sessionID string) map[string]evidence.Con
 	return evidence.ContactsFromLedger(ledger)
 }
 
+// SessionURLStanding reports how the session's evidence knows exactly this
+// address. An unreadable ledger knows nothing.
+func (ev *memoryEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return evidence.URLUnknown
+	}
+	ledger, err := loadLedgerMemory(context.Background(), ev.core, sessionID)
+	if err != nil {
+		return evidence.URLUnknown
+	}
+	return evidence.StandingOfURL(ledger, rawURL)
+}
+
+func (ev *sqlEvidence) SessionURLStanding(sessionID, rawURL string) evidence.URLStanding {
+	sessionID = strings.TrimSpace(sessionID)
+	if sessionID == "" {
+		return evidence.URLUnknown
+	}
+	ledger, err := loadLedger(context.Background(), ev.core, ev.core.queries, sessionID)
+	if err != nil {
+		return evidence.URLUnknown
+	}
+	return evidence.StandingOfURL(ledger, rawURL)
+}
+
 // RecordContact adds an allowed dial to the chat's contacts. The record carries
 // no content tool, so it does not mark the session untrusted.
 func (ev *memoryEvidence) RecordContact(ctx context.Context, sessionID, host string, contact evidence.Contact) error {
@@ -160,8 +186,16 @@ func (ev *sqlEvidence) RecordContact(ctx context.Context, sessionID, host string
 }
 
 func contactRecord(host string, contact evidence.Contact) (evidence.Record, bool) {
-	if contact == evidence.ContactRetrieval {
+	switch contact {
+	case evidence.ContactNone:
+		// No contact: nothing was dialed, so there is no record.
+		return evidence.Record{}, false
+	case evidence.ContactRetrieval:
 		return evidence.RetrievedHostRecord(host)
+	case evidence.ContactAudited:
+		return evidence.AuditedHostRecord(host)
+	case evidence.ContactOwn:
+		return evidence.DialedHostRecord(host)
 	}
 	return evidence.DialedHostRecord(host)
 }

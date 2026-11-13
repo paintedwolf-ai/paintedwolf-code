@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/native"
+	"github.com/lycaon/lycaon/internal/tools/native/nativeutility"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
@@ -117,6 +118,24 @@ type Prepared struct {
 	run       utility
 }
 
+// SelectMode names the effect mode argv selects, as Prepare does.
+func (o *Owners) SelectMode(argv commandprogram.Fields) (string, bool) {
+	return nativeutility.SelectMode(o.specs, argv, queryMode)
+}
+
+func queryMode(spec toolcontract.CommandSpecification, bound commandprogram.BoundArgv) string {
+	if spec.Name == "yq" {
+		if _, ok := bound.Last("-i"); ok {
+			return "-i"
+		}
+		return "query"
+	}
+	if len(spec.Effects) > 0 {
+		return spec.Effects[0].Mode
+	}
+	return ""
+}
+
 // Prepare binds a reached command through the catalog option grammar. It
 // reads and writes nothing.
 func (o *Owners) Prepare(program Program, request commandprogram.OperationRequest) (Prepared, error) {
@@ -135,17 +154,7 @@ func (o *Owners) Prepare(program Program, request commandprogram.OperationReques
 	if err != nil {
 		return Prepared{}, argvRejection(err, spec)
 	}
-	mode := ""
-	if len(spec.Effects) > 0 {
-		mode = spec.Effects[0].Mode
-	}
-	if command == "yq" {
-		if _, ok := bound.Last("-i"); ok {
-			mode = "-i"
-		} else {
-			mode = "query"
-		}
-	}
+	mode := queryMode(spec, bound)
 	review := bound.Review(o.ops[command])
 	if command == "jq-edit" {
 		review.PairSinks = map[string]string{"--arg": editVarsSlot}

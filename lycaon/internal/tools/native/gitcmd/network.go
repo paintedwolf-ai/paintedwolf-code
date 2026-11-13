@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitargv"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/gitrepo"
+	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -29,15 +30,20 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	ctx, done, err := bindNetworkLaunch(ctx, p, tc, admitted)
+	ctx, launch, err := bindNetworkLaunch(ctx, p, tc, admitted)
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	failed := true
-	defer func() { done(failed) }()
+	defer func() { launch.done(failed) }()
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, p.command.args, out)
 	failed = err != nil || code != 0 || out.err != nil
-	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0})
+	read := networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0}
+	if p.command.spec.Name == "git fetch" {
+		// Fetched objects arrive in the object store, which later reads open.
+		read.trees = []string{repo.CommonDir}
+	}
+	reportNetworkRead(ctx, admitted, read)
 	if out.err != nil {
 		return settleMutationError(out.err, certainty)
 	}
@@ -54,6 +60,9 @@ func runNetwork(ctx context.Context, p Prepared, tc tools.ToolContext, dir strin
 		return settleGitError(err, stderr, effect)
 	}
 	if code != 0 {
+		if refusal := launch.refusal(p.command.spec.Name); refusal != nil {
+			return settleMutationError(refusal, effect)
+		}
 		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: effect}, nil
 	}
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: certainty}, nil
@@ -64,12 +73,12 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
-	ctx, done, err := bindNetworkLaunch(ctx, p, tc, admitted)
+	ctx, launch, err := bindNetworkLaunch(ctx, p, tc, admitted)
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	failed := true
-	defer func() { done(failed) }()
+	defer func() { launch.done(failed) }()
 	fetchArgs := []string{"fetch"}
 	if has(p.Argv, "-q") {
 		fetchArgs = append(fetchArgs, "-q")
@@ -77,7 +86,7 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	fetchArgs = append(fetchArgs, p.Argv.Operands().Values()...)
 	diagnostics, code, err := p.owners.Git.NetworkCommand(ctx, repo.Root, fetchArgs, out)
 	failed = err != nil || code != 0 || out.err != nil
-	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0})
+	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, wroteStderr: len(diagnostics) > 0, trees: []string{repo.CommonDir}})
 	if out.err != nil {
 		return settleMutationError(out.err, toolcontract.EffectUnknown)
 	}
@@ -89,6 +98,9 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 		return settleGitError(err, stderr, toolcontract.EffectUnknown)
 	}
 	if code != 0 {
+		if refusal := launch.refusal(p.command.spec.Name); refusal != nil {
+			return settleMutationError(refusal, toolcontract.EffectUnknown)
+		}
 		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.EffectUnknown}, nil
 	}
 	req := git.OperationRequest{Kind: "merge", Mode: "ff", Ref: "FETCH_HEAD"}
@@ -99,7 +111,7 @@ func runPull(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, 
 	}
 	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary}
 	res, opErr := mut.Operate(ctx, tc, req)
-	result, err := settleOperate(p, res, out, stderr, has(p.Argv, "-q"), opErr)
+	result, err := settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), opErr)
 	// The merge or rebase places fetched content in the files it changed, and
 	// its summary names them.
 	reportNetworkRead(ctx, admitted, networkRead{wroteStdout: out.written > 0, files: mergedPaths(repo.Root, res.Paths)})
@@ -134,12 +146,12 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	admitted.writes = append(admitted.writes, filepath.Dir(boundDest.Resolved.Abs))
-	ctx, done, err := bindNetworkLaunch(ctx, p, tc, admitted)
+	ctx, launch, err := bindNetworkLaunch(ctx, p, tc, admitted)
 	if err != nil {
 		return settleMutationError(err, toolcontract.NoEffect)
 	}
 	failed := true
-	defer func() { done(failed) }()
+	defer func() { launch.done(failed) }()
 	var flags []string
 	if has(p.Argv, "-q") {
 		flags = append(flags, "-q")
@@ -174,6 +186,9 @@ func runClone(ctx context.Context, p Prepared, tc tools.ToolContext, out *metere
 		return settleGitError(err, stderr, toolcontract.NoEffect)
 	}
 	if code != 0 {
+		if refusal := launch.refusal(p.command.spec.Name); refusal != nil {
+			return settleMutationError(refusal, toolcontract.NoEffect)
+		}
 		return toolcontract.ProducerResult{Status: code, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
@@ -214,20 +229,43 @@ func authorizeRepoNetwork(ctx context.Context, p Prepared, tc tools.ToolContext,
 	return admitted, nil
 }
 
+// networkLaunch is one network command's bound launch: done settles it with
+// whether Git failed.
+type networkLaunch struct {
+	done        func(failed bool)
+	credentials *gitexec.AgentCredentials
+}
+
+// refusal is the typed refusal a failed command settles with when Git asked
+// for a saved credential the person kept from its recipient.
+func (l networkLaunch) refusal(form string) error {
+	if reject := credentialDenied(form, l.credentials.Declined()); reject != nil {
+		return reject
+	}
+	return nil
+}
+
 // bindNetworkLaunch binds the command's confined launch for what was
-// admitted: a credential service scoped to its HTTP recipients, answering
-// once the call holds the credential-store grant, the local repositories it
-// may read or write, and the user's SSH agent when the call holds that socket
-// capability. done settles the launch with whether Git failed.
-func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, admitted admittedRemotes) (context.Context, func(failed bool), error) {
-	credentials, err := gitexec.StartAgentCredentials(ctx, tc.Execution.CredentialStore)
+// admitted: a credential service scoped to its HTTP recipients, which hands
+// Git a saved credential only once its release to that recipient is
+// reviewed, the local repositories it may read or write, and the user's SSH
+// agent when the call holds that socket capability.
+func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, admitted admittedRemotes) (context.Context, networkLaunch, error) {
+	// The review card belongs to this command's call.
+	reviewCtx := secretmatch.WithAskAttribution(ctx, secretmatch.AskAttribution{
+		SessionID: tc.Identity.SessionID, RootSessionID: tc.ChatSessionID(), ProjectID: tc.Identity.ProjectID,
+		ProjectDir: tc.ActiveRootPath(), ToolCallID: tc.Identity.ToolCallID,
+	})
+	credentials, err := gitexec.StartAgentCredentials(ctx, func(r gitexec.Recipient, c gitexec.Credential) bool {
+		return p.owners.releaseCredential(reviewCtx, r, c)
+	})
 	if err != nil {
-		return ctx, nil, err
+		return ctx, networkLaunch{}, err
 	}
 	service, releaseService, err := confine.ServeHostSocket(credentials.Socket())
 	if err != nil {
 		_ = credentials.Close()
-		return ctx, nil, err
+		return ctx, networkLaunch{}, err
 	}
 	launchTC := tc
 	launchTC.Files.SessionReadPaths = append(slices.Clone(tc.Files.SessionReadPaths), admitted.reads...)
@@ -236,7 +274,7 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 	if err != nil {
 		releaseService()
 		_ = credentials.Close()
-		return ctx, nil, err
+		return ctx, networkLaunch{}, err
 	}
 	agent, hasAgent := grantedSSHAgent(ctx, tc)
 	if hasAgent {
@@ -249,28 +287,23 @@ func bindNetworkLaunch(ctx context.Context, p Prepared, tc tools.ToolContext, ad
 	done := func(failed bool) {
 		outcome := tools.AgentLaunchOutcome{Failed: failed}
 		if failed {
-			outcome.Refusals = withheldAuthority(ctx, admitted.urls, credentials.Declined(), hasAgent)
+			outcome.Refusals = withheldAgent(ctx, admitted.urls, hasAgent)
 		}
 		release(context.WithoutCancel(ctx), outcome)
 		releaseService()
 		_ = credentials.Close()
 	}
-	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials}), done, nil
+	return gitexec.WithAgentLaunch(ctx, gitexec.AgentLaunch{Plan: plan, Credentials: credentials}), networkLaunch{done: done, credentials: credentials}, nil
 }
 
-// withheldAuthority is what a failed network command lacked that a grant
-// would supply: saved credentials Git asked for without the credential-store
-// grant, and the user's SSH agent for an SSH remote without its socket
-// capability. Each reads as a refusal the matching capability opens.
-func withheldAuthority(ctx context.Context, urls, declined []string, hasAgent bool) []confine.SandboxRefusal {
-	var refusals []confine.SandboxRefusal
-	for _, recipient := range declined {
-		refusals = append(refusals, confine.SandboxRefusal{Operation: "credential-read", Target: recipient, Process: "git", Count: 1, Recovery: confine.RecoverCredentialStore})
-	}
+// withheldAgent reads a failed SSH network command without the user's SSH
+// agent as the socket refusal its capability opens: confined ssh cannot read
+// the person's keys, so the agent is its only way to authenticate.
+func withheldAgent(ctx context.Context, urls []string, hasAgent bool) []confine.SandboxRefusal {
 	if agent := gitexec.HostSSHAgentSocket(ctx); agent != "" && !hasAgent && slices.ContainsFunc(urls, isSSHRemote) {
-		refusals = append(refusals, confine.SandboxRefusal{Operation: "network-outbound", Target: agent, Process: "ssh", Count: 1, Recovery: confine.RecoverSocketPath, Grant: agent})
+		return []confine.SandboxRefusal{{Operation: "network-outbound", Target: agent, Process: "ssh", Count: 1, Recovery: confine.RecoverSocketPath, Grant: agent}}
 	}
-	return refusals
+	return nil
 }
 
 func isSSHRemote(raw string) bool {
