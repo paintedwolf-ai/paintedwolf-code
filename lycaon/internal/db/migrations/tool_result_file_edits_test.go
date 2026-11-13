@@ -2,6 +2,7 @@ package migrations
 
 import (
 	"database/sql"
+	"fmt"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -94,14 +95,11 @@ func TestToolResultFileEditsRefuseAnUnknownShape(t *testing.T) {
 
 func TestToolResultFileEditsCoverEveryBatch(t *testing.T) {
 	database := fileEditMigrationFixture(t)
-	insert, err := database.Prepare(`INSERT INTO messages VALUES(?,'tool','ok',?,NULL)`)
-	testutil.FailErr(t, "prepare seed", err)
 	const rows = 600
 	for i := range rows {
-		_, err := insert.Exec(sql.Named("id", i).Value, singleEditResult)
+		_, err := database.Exec(`INSERT INTO messages VALUES(?,'tool','ok',?,NULL)`, fmt.Sprintf("m%04d", i), singleEditResult)
 		testutil.FailErr(t, "seed row", err)
 	}
-	testutil.FailErr(t, "close seed", insert.Close())
 	tx, err := applyFileEditMigration(t, database)
 	testutil.FailErr(t, "validate moved file edits", err)
 	var lists int
