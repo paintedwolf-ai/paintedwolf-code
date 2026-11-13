@@ -84,6 +84,7 @@ func (l ExternalStages) Launch(ctx context.Context, request commandprogram.Opera
 		_, _ = fmt.Fprintf(nonNilWriter(streams.Error), "bash: %s: command not found\n", argv[0])
 		return toolcontract.ProducerResult{Status: 127, Terminal: toolcontract.ProducerCompleted, Complete: true, EffectCertainty: toolcontract.NoEffect}, nil
 	}
+	opts.ServiceEnv = append([]string(nil), tctx.Host.HostResourceEnv...)
 	opts.NoTimeout, opts.SeparateStderr, opts.Stdout, opts.HostConsumer = true, true, nonNilWriter(streams.Output), true
 	opts.Child = confine.ProcessAttributes{Limits: childLimits(request.Process.Limits), IgnoreHangup: request.Process.IgnoreHangup}
 	if streams.Input != nil && !commandprogram.IsNullInput(streams.Input) {
