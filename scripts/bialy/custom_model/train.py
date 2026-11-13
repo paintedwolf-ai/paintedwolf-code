@@ -45,7 +45,7 @@ def train_owned(args):
     assert_disjoint(train_rows, validation_rows)
     assert_disjoint(train_rows, holdout_rows)
     assert_disjoint(validation_rows, holdout_rows)
-    wanted = "pw-custom-" + args.mode + "/1"
+    wanted = {"sft": "pw-training-row/1", "dpo": "pw-custom-dpo/1"}[args.mode]
     if any(r["schema"] != wanted for r in train_rows + validation_rows):
         raise ValueError("split schema does not match objective")
     random.seed(args.seed)
