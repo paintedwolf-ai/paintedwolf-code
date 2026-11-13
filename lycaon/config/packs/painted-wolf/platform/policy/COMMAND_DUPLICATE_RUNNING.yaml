@@ -1,24 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_DUPLICATE_RUNNING
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool: [command, verify]
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.handles_text, paintedwolf.next_steps]
+  tools: [command, verify]
+requires_facts: [paintedwolf.handles_text, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_DUPLICATE_RUNNING"
 effect: block
-copy:
-  what: This exact command execution is already live ({{ paintedwolf.handles_text }}).
-  cause: The host derived the same execution identity from cwd, profile, argv stages, environment, stdin, and redirects.
-  why: Replaying a live command duplicates resource use and cannot provide a newer terminal fact.
-  fix: '{{ paintedwolf.next_steps }} A stop request alone does not establish exit. Do not reissue while the job is running. After it exits, preserve completed effects and retry only work still needed.'
-  instead: Continue the existing command job
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:command_job
-x-paintedwolf-message: identical command job already running
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:command_job
+message: identical command job already running
+what: This exact command execution is already live ({{ paintedwolf.handles_text }}).
+cause: The host derived the same execution identity from cwd, profile, argv stages, environment, stdin, and redirects.
+why: Replaying a live command duplicates resource use and cannot provide a newer terminal fact.
+fix: '{{ paintedwolf.next_steps }} A stop request alone does not establish exit. Do not reissue while the job is running. After it exits, preserve completed effects and retry only work still needed.'
+instead: Continue the existing command job
+scenarios:
   - id: default
     vars:
       handles: [command-1]

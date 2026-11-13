@@ -80,7 +80,7 @@ func selectorCovers(code string, selected []string, value string) error {
 		return nil
 	}
 	for _, allowed := range selected {
-		// [OAR-SEL-1] Selector membership uses exact string equality.
+		// Selector membership uses exact string equality.
 		if allowed == value {
 			return nil
 		}

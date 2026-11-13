@@ -1,0 +1,48 @@
+{
+  "id": "fire-on-fire-survives-lost-precedence",
+  "title": "A rule that fired and was enforced applies on_fire even when its effect loses precedence",
+  "covers": [
+    "OAR-EVAL-9"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "A_NUDGE_FIRES",
+      "kind": "schema",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "nudge",
+      "emit": "rule:conformance",
+      "when": "tool == \"read\"",
+      "on_fire": [
+        "increment_breaker"
+      ]
+    },
+    {
+      "spec_version": "1.0",
+      "id": "B_BLOCKS_LATER",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "emit": "rule:conformance",
+      "when": "tool == \"read\""
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session"
+  },
+  "expected": {
+    "decision": "block",
+    "code": "B_BLOCKS_LATER",
+    "counters": {
+      "A_NUDGE_FIRES": {
+        "breaker_count": 1
+      }
+    }
+  }
+}

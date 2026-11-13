@@ -8,17 +8,14 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/oarcore"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestConcurrentEvaluationsKeepRulesSessionAndSnapshotTogether(t *testing.T) {
-	countA := &Rule{ID: "COUNT", Namespace: "publisher.a", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectAllow, Enforcement: "enforce"}
-	readA := &Rule{ID: "READ", Namespace: "publisher.a", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock, Enforcement: "enforce", When: `paintedwolf.workers_idle && fire_count_of("COUNT") == 1`}
-	countB := &Rule{ID: "COUNT", Namespace: "publisher.b", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectAllow, Enforcement: "enforce"}
-	readB := &Rule{ID: "READ", Namespace: "publisher.b", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock, Enforcement: "enforce", When: `paintedwolf.workers_idle && fire_count_of("COUNT") == 1`}
-	rulesA := NewRuleSet([]*Rule{countA, readA})
-	rulesB := NewRuleSet([]*Rule{countB, readB})
+	readA := &Rule{ID: "READ", Namespace: "publisher.a", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock, Enforcement: "enforce", When: `paintedwolf.workers_idle && paintedwolf.fire_count == 1`}
+	readB := &Rule{ID: "READ", Namespace: "publisher.b", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock, Enforcement: "enforce", When: `paintedwolf.workers_idle && paintedwolf.fire_count == 1`}
+	rulesA := NewRuleSet([]*Rule{readA})
+	rulesB := NewRuleSet([]*Rule{readB})
 	loader, err := NewLoader("")
 	testutil.FailErr(t, "create loader", err)
 	pipeline := NewGuardPipeline(rulesA, loader, NewCounterStore())
@@ -29,7 +26,7 @@ func TestConcurrentEvaluationsKeepRulesSessionAndSnapshotTogether(t *testing.T) 
 		}
 		return rulesA
 	})
-	pipeline.Counters().Increment("session-a", "publisher.a/COUNT", CounterFire, 1)
+	pipeline.Counters().Increment("session-a", "publisher.a/READ", CounterFire, 1)
 
 	var ready sync.WaitGroup
 	ready.Add(2)
@@ -76,12 +73,12 @@ func TestConcurrentEvaluationsKeepRulesSessionAndSnapshotTogether(t *testing.T) 
 func TestSelectorProviderFailureUsesRuleOnError(t *testing.T) {
 	rule := &Rule{
 		ID: "SELECT", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectBlock,
-		Enforcement: "enforce", OnError: "fail_open", Selector: Selector{"paintedwolf.profile": {"coordinator"}},
+		Enforcement: "enforce", OnError: "fail_open", Selector: Selector{"paintedwolf.session_role": {"coordinator"}},
 	}
 	pipeline := NewGuardPipeline(NewRuleSet([]*Rule{rule}), nil, nil)
 	pipeline.EnableAnchor(AnchorToolPreInvoke)
 	gc := NewGuardContext()
-	gc.RegisterProvider("paintedwolf.profile", func(*GuardContext) error { return errors.New("profile unavailable") })
+	gc.RegisterProvider("paintedwolf.session_role", func(*GuardContext) error { return errors.New("session role unavailable") })
 	res, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)
 	testutil.FailErr(t, "evaluate selector provider failure", err)
 	if res.Decision != nil || len(res.Trace.Entries) != 1 || res.Trace.Entries[0].Outcome != TraceErrored {
@@ -92,12 +89,12 @@ func TestSelectorProviderFailureUsesRuleOnError(t *testing.T) {
 func TestCopyProviderFailureUsesRuleOnError(t *testing.T) {
 	rule := &Rule{
 		ID: "COPY", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn,
-		Enforcement: "enforce", OnError: "fail_open", Copy: Copy{Title: "Profile {{ paintedwolf.profile }}"},
+		Enforcement: "enforce", OnError: "fail_open", Copy: Copy{Title: "Role {{ paintedwolf.session_role }}"},
 	}
 	pipeline := NewGuardPipeline(NewRuleSet([]*Rule{rule}), nil, nil)
 	pipeline.EnableAnchor(AnchorToolPreInvoke)
 	gc := NewGuardContext()
-	gc.RegisterProvider("paintedwolf.profile", func(*GuardContext) error { return errors.New("profile unavailable") })
+	gc.RegisterProvider("paintedwolf.session_role", func(*GuardContext) error { return errors.New("session role unavailable") })
 	res, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)
 	testutil.FailErr(t, "evaluate copy provider failure", err)
 	if res.Decision != nil || len(res.Trace.Entries) != 1 || res.Trace.Entries[0].Outcome != TraceErrored {
@@ -123,8 +120,8 @@ func TestDetectorFactsAreRuleLocal(t *testing.T) {
 	registry.Register(fixedDetector{name: "none"})
 	loader, err := NewLoader("")
 	testutil.FailErr(t, "detector loader", err)
-	first = loadDetectorTestRule(t, loader, registry, first, "jailbreak")
-	second = loadDetectorTestRule(t, loader, registry, second, "jailbreak")
+	first = loadDetectorTestRule(t, loader, registry, first, "jailbreak_score")
+	second = loadDetectorTestRule(t, loader, registry, second, "jailbreak_score")
 	pipeline := NewGuardPipeline(NewRuleSet([]*Rule{first, second}), loader, nil)
 	pipeline.SetDetectors(registry)
 	pipeline.EnableAnchor(AnchorContentOutput)
@@ -138,7 +135,8 @@ func TestDetectorFactsAreRuleLocal(t *testing.T) {
 	}
 }
 
-func TestAccumulatedTransformsKeepEachRulesDetectorFacts(t *testing.T) {
+// The first enforced transform short-circuits the occurrence ([OAR-EVAL-3]).
+func TestFirstTransformShortCircuits(t *testing.T) {
 	first := &Rule{
 		ID: "A_FIRST", Kind: KindDetector, Anchor: AnchorContentOutput, Effect: EffectTransform, Enforcement: "enforce",
 		Detector:  &DetectorRef{Ref: "detector://spans"},
@@ -164,8 +162,11 @@ func TestAccumulatedTransformsKeepEachRulesDetectorFacts(t *testing.T) {
 	if res.Content != "Xbcdef" {
 		t.Fatalf("content = %q, want Xbcdef", res.Content)
 	}
-	if len(res.Transforms) != 2 || res.Transforms[0].Target != "secret_matches" || res.Transforms[1].Target != "secret_matches" {
-		t.Fatalf("reported transforms = %#v, want original portable targets", res.Transforms)
+	if len(res.Transforms) != 1 || res.Transforms[0].Target != "secret_matches" {
+		t.Fatalf("reported transforms = %#v, want only the first rule's", res.Transforms)
+	}
+	if len(res.Trace.Entries) != 1 || res.Trace.Entries[0].Rule != "A_FIRST" {
+		t.Fatalf("trace = %#v, want only A_FIRST evaluated", res.Trace.Entries)
 	}
 }
 
@@ -179,7 +180,7 @@ func TestPublishEventFailureUsesOnErrorSubstituteCopy(t *testing.T) {
 	fallback := &Rule{ID: "FALLBACK", Namespace: "publisher", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectNudge, Enforcement: "enforce", Copy: Copy{Title: "Fallback"}}
 	primary := &Rule{ID: "PRIMARY", Namespace: "publisher", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", OnError: "FALLBACK", OnFire: []OnFireAction{OnFirePublishEvent}}
 	rules := NewRuleSet([]*Rule{primary, fallback})
-	testutil.FailErr(t, "resolve error substitute", RejectUnknownErrorSubstitutes(rules))
+	ResolveErrorSubstitutes(rules)
 	pipeline := NewGuardPipeline(rules, nil, nil)
 	pipeline.SetEventPublisher(failingEventPublisher{})
 	pipeline.EnableAnchor(AnchorToolPreInvoke)
@@ -190,20 +191,12 @@ func TestPublishEventFailureUsesOnErrorSubstituteCopy(t *testing.T) {
 	}
 }
 
-func TestCounterReferenceScannerIgnoresFunctionTextInsideStrings(t *testing.T) {
-	refs, err := oarcore.CounterReferences(`contains("fire_count_of(\"MISSING\")", "count") && fire_count_of("REAL") == 0`, "")
-	testutil.FailErr(t, "parse counter references", err)
-	if len(refs) != 1 || refs[0].Literal != "REAL" {
-		t.Fatalf("counter references = %#v, want only REAL", refs)
-	}
-}
-
 func TestSelectionObservesProviderWritesAfterAnEarlierSelector(t *testing.T) {
 	for _, failure := range []error{nil, errors.New("profile unavailable")} {
 		t.Run(fmt.Sprint(failure), func(t *testing.T) {
 			rules := NewRuleSet([]*Rule{
 				{ID: "A_READ", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"read"}}},
-				{ID: "B_PROFILE", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", OnError: "fail_open", Selector: Selector{"paintedwolf.profile": {"implement"}}},
+				{ID: "B_PROFILE", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", OnError: "fail_open", Selector: Selector{"paintedwolf.session_role": {"implement"}}},
 				{ID: "C_GREP", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"grep"}}},
 				{ID: "D_READ", Kind: KindPolicy, Anchor: AnchorToolPreInvoke, Effect: EffectWarn, Enforcement: "enforce", Selector: Selector{"tool": {"read"}}},
 			})
@@ -211,9 +204,9 @@ func TestSelectionObservesProviderWritesAfterAnEarlierSelector(t *testing.T) {
 			pipeline.EnableAnchor(AnchorToolPreInvoke)
 			gc := NewGuardContext()
 			gc.Invocation.Tool = "read"
-			gc.RegisterProvider("paintedwolf.profile", func(g *GuardContext) error {
+			gc.RegisterProvider("paintedwolf.session_role", func(g *GuardContext) error {
 				g.Invocation.Tool = "grep"
-				g.Session.Profile = "implement"
+				g.Session.Role = "implement"
 				return failure
 			})
 			for _, want := range [][]string{{"A_READ", "B_PROFILE", "C_GREP"}, {"A_READ", "B_PROFILE", "D_READ"}} {

@@ -1,34 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WRITE_PATH_DENIED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - write
-requires:
-  profiles:
-  - filesystem
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.path
+  ledger:
+    paintedwolf.operation:
+      - write
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WRITE_PATH_DENIED"
 effect: block
-copy:
-  what: Writing is denied for {{ paintedwolf.path }}.
-  cause: This path crosses a host write-protection boundary.
-  why: Write operations cannot override protected-path authority.
-  fix: Leave the protected target unchanged. Use a different path only if it is the task's actual intended target;
-    another tool or a broader write glob cannot bypass this floor.
-  instead: Branch on Code WRITE_PATH_DENIED; preserve the protected-path boundary
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:write
-x-paintedwolf-message: write path matches a hard deny glob
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: implement
-    tool: write
+category: recoverable
+emit: guard:write
+message: write path matches a hard deny glob
+what: Writing is denied for {{ paintedwolf.path }}.
+cause: This path crosses a host write-protection boundary.
+why: Write operations cannot override protected-path authority.
+fix: Leave the protected target unchanged. Use a different path only if it is the task's actual intended target; another tool or a broader write glob cannot bypass this floor.
+instead: Branch on Code WRITE_PATH_DENIED; preserve the protected-path boundary
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: implement
+      tool: write

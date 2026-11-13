@@ -1,35 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: CHMOD_BULK_DENIED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - chmod
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.operation
-  - paintedwolf.max_paths
-  - paintedwolf.requested
-  - paintedwolf.bulk_denied
+  ledger:
+    paintedwolf.operation:
+      - chmod
+requires_facts: [paintedwolf.bulk_denied, paintedwolf.max_paths, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.requested]
 when: paintedwolf.rejection_code == "CHMOD_BULK_DENIED"
 effect: block
-copy:
-  what: chmod requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.
-  cause: The explicit path batch exceeds the per-call bound.
-  why: Bounded batches keep permission changes reviewable.
-  fix: Use at most {{ paintedwolf.max_paths }} explicit paths per call, and retain the intended scope when
-    splitting the batch. Do not add targets simply to fill a batch.
-  instead: Branch on Code; reduce the explicit target batch
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:chmod
-x-paintedwolf-message: chmod requested too many paths in one call
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: chmod
+category: recoverable
+emit: guard:chmod
+message: chmod requested too many paths in one call
+what: chmod requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.
+cause: The explicit path batch exceeds the per-call bound.
+why: Bounded batches keep permission changes reviewable.
+fix: Use at most {{ paintedwolf.max_paths }} explicit paths per call, and retain the intended scope when splitting the batch. Do not add targets simply to fill a batch.
+instead: Branch on Code; reduce the explicit target batch
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: chmod

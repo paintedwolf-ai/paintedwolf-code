@@ -31,11 +31,11 @@ func (b *serveBuilder) wireOARBlockPlane() error {
 	if err := anchorcatalog.InstallBundled(); err != nil {
 		return fmt.Errorf("oar: load anchor catalog: %w", err)
 	}
-	// [OAR-FACT-24]: validate the capability document before anything is loaded
+	// : validate the capability document before anything is loaded
 	// against it, and refuse to start when it is invalid. Every load decision —
 	// which anchors resolve, which profiles a rule may require — is made from
 	// this document, so a wrong one is worse than none.
-	if err := oar.InstallCapabilityBundled(schemaDir); err != nil {
+	if err := oar.InstallEngineDeclarationBundled(schemaDir); err != nil {
 		return fmt.Errorf("oar: %w", err)
 	}
 	matcher, err := b.security.LoadMatcher(b.startup.ctx, b.startup.cfg.TestSecretMatcher)

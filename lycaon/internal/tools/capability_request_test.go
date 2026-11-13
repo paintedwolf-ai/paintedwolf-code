@@ -556,7 +556,7 @@ func TestCapabilityArgumentFailuresKeepTheirObservationKind(t *testing.T) {
 		"loopback_connect": map[string]any{"ports": []any{float64(70000)}},
 	}})
 	if reject == nil || !reject.ArgumentValidation {
-		t.Fatal("[OAR-PROF-3] failed capability argument check lost its observation kind")
+		t.Fatal("[OAR-FACT-10] failed capability argument check lost its observation kind")
 	}
 	completed := toolrejection.CompleteFailureMetadata(reject, "command", "fixture")
 	if !completed.ArgumentValidation || completed.Code != reject.Code {

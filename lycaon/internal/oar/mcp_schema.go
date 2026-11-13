@@ -42,7 +42,7 @@ func (p *GuardPipeline) maybeApplyMCPSchema(
 	if anchor != AnchorToolPost {
 		return nil
 	}
-	if gc.MCP.MCPProviderID == "" {
+	if gc.MCP.MCPServerID == "" {
 		return nil
 	}
 	if !rulesNeedMCPSchema(rules) {
@@ -70,7 +70,7 @@ func (p *GuardPipeline) maybeApplyMCPSchema(
 			return matched, out, err
 		}
 	}
-	matched, fields, err := apply(gc.MCP.MCPProviderID, gc.MCP.MCPToolName, gc.MCP.MCPResultText)
+	matched, fields, err := apply(gc.MCP.MCPServerID, gc.MCP.MCPToolName, gc.MCP.MCPResultText)
 	if err != nil {
 		return err
 	}

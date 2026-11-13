@@ -40,7 +40,7 @@ func TestProf9ConcurrentAdmissionUsesOneOrderedHistory(t *testing.T) {
 	}
 	callers.Wait()
 	if admitted.Load() != 1 || len(store.history["session"]) != 1 {
-		t.Fatalf("[OAR-PROF-9] admitted=%d history=%v", admitted.Load(), store.history["session"])
+		t.Fatalf("[OAR-FACT-10] admitted=%d history=%v", admitted.Load(), store.history["session"])
 	}
 	for _, anchor := range []string{AnchorToolHandler, AnchorToolPost, AnchorToolRejected} {
 		gc := NewGuardContext()
@@ -50,11 +50,11 @@ func TestProf9ConcurrentAdmissionUsesOneOrderedHistory(t *testing.T) {
 		testutil.FailErr(t, "evaluate later boundary", err)
 	}
 	if len(store.history["session"]) != 1 || store.history["session"][0] != "read" {
-		t.Fatalf("[OAR-PROF-9] later boundary changed history: %v", store.history)
+		t.Fatalf("[OAR-FACT-10] later boundary changed history: %v", store.history)
 	}
 	store.ForgetSession("session")
 	if len(store.occurrences) != 0 || len(store.history) != 0 || len(store.data) != 0 {
-		t.Fatalf("[OAR-FIRE-5] closed session retained state: %#v", store)
+		t.Fatalf("[OAR-FIRE-4] closed session retained state: %#v", store)
 	}
 	gc := NewGuardContext()
 	gc.Session.SessionID = "another session"
@@ -62,7 +62,7 @@ func TestProf9ConcurrentAdmissionUsesOneOrderedHistory(t *testing.T) {
 	result, err := pipeline.EvaluateBlock(t.Context(), AnchorToolPreInvoke, gc)
 	testutil.FailErr(t, "evaluate separate session", err)
 	if result.Decision != nil {
-		t.Fatalf("[OAR-FIRE-5] activity crossed sessions: %#v", result.Decision)
+		t.Fatalf("[OAR-FIRE-4] activity crossed sessions: %#v", result.Decision)
 	}
 }
 
@@ -71,6 +71,6 @@ func TestFact6NonToolOccurrenceHasNoFingerprint(t *testing.T) {
 	gc.ObserveToolCall("", nil)
 	testutil.FailErr(t, "produce absent fingerprint", gc.Ensure("tool_args_fingerprint"))
 	if gc.Invocation.ToolArgsFingerprint != "" {
-		t.Fatalf("[OAR-FACT-6] invented non-tool fingerprint %q", gc.Invocation.ToolArgsFingerprint)
+		t.Fatalf("invented non-tool fingerprint %q", gc.Invocation.ToolArgsFingerprint)
 	}
 }

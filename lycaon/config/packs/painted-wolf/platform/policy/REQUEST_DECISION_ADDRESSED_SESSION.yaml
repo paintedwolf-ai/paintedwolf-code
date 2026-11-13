@@ -1,26 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: REQUEST_DECISION_ADDRESSED_SESSION
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - request_decision
-requires:
-  facts: [paintedwolf.rejection_code, paintedwolf.next_steps]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "REQUEST_DECISION_ADDRESSED_SESSION"
 effect: block
-copy:
-  what: There is no coordinator above this session to answer a decision request.
-  cause: request_decision ran in a session the user addressed directly, not in a spawned leg.
-  why: The request parks a worker job and wakes the coordinator that dispatched it.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Branch on Code REQUEST_DECISION_ADDRESSED_SESSION; ask the user directly, do not retry here
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:request_decision
-x-paintedwolf-message: There is no coordinator above this session to answer a decision request.
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:request_decision
+message: There is no coordinator above this session to answer a decision request.
+what: There is no coordinator above this session to answer a decision request.
+cause: request_decision ran in a session the user addressed directly, not in a spawned leg.
+why: The request parks a worker job and wakes the coordinator that dispatched it.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code REQUEST_DECISION_ADDRESSED_SESSION; ask the user directly, do not retry here
+scenarios:
   - id: default
     vars:
       profile: explore

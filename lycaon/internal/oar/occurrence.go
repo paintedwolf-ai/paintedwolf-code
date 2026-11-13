@@ -1,15 +1,13 @@
 package oar
 
 import (
-	"fmt"
-
 	"github.com/lycaon/lycaon/internal/oarcore"
 )
 
-// publishOccurrenceAnchor sets the core `anchor` fact for this occurrence.
-// The fact is the core spelling when the local catalog id implements a core
-// anchor ([OAR-PROF-1], [OAR-CONF-3]); otherwise it is the local id.
-func publishOccurrenceAnchor(gc *GuardContext, local string, cap *CapabilityDocument) {
+// publishOccurrenceAnchor sets the paintedwolf.anchor fact for this
+// occurrence: the core spelling when the local catalog id implements a core
+// anchor ([OAR-PROF-1], [OAR-CONF-3]), otherwise the local id.
+func publishOccurrenceAnchor(gc *GuardContext, local string, cap *EngineDeclaration) {
 	if gc == nil {
 		return
 	}
@@ -17,7 +15,7 @@ func publishOccurrenceAnchor(gc *GuardContext, local string, cap *CapabilityDocu
 		local = gc.Anchor
 	}
 	if cap == nil {
-		cap = InstalledCapabilityDocument()
+		cap = InstalledEngineDeclaration()
 	}
 	if IsCoreAnchor(local) {
 		gc.Anchor = local
@@ -32,16 +30,19 @@ func publishOccurrenceAnchor(gc *GuardContext, local string, cap *CapabilityDocu
 	}
 }
 
-func (p *GuardPipeline) capability() *CapabilityDocument {
+func (p *GuardPipeline) declaration() *EngineDeclaration {
 	if p != nil && p.loader != nil {
-		return p.loader.capabilityDoc()
+		return p.loader.declaration()
 	}
-	return InstalledCapabilityDocument()
+	return InstalledEngineDeclaration()
 }
 
+// validateFiredTransform checks a transform rule's replacement target. A rule
+// without x-paintedwolf-transform still decides transform; it names no content
+// to replace.
 func validateFiredTransform(r *Rule, gc *GuardContext) error {
 	if r == nil || r.Transform == nil {
-		return fmt.Errorf("effect transform requires a transform object")
+		return nil
 	}
 	facts := activation(gc)
 	contentLen := 0
@@ -99,20 +100,4 @@ func applyRuleTransforms(content string, contributions []transformContribution) 
 		ruleIDs = append(ruleIDs, contribution.rule)
 	}
 	return oarcore.ApplyTransforms(content, converted, targetFacts, ruleIDs)
-}
-
-func reportTransforms(specs []*TransformSpec) []map[string]any {
-	out := make([]map[string]any, 0, len(specs))
-	for _, spec := range specs {
-		if spec == nil {
-			continue
-		}
-		out = append(out, oarcore.ReportTransform(&oarcore.TransformSpec{
-			Action:         spec.Action,
-			Target:         spec.Target,
-			Replacement:    spec.Replacement,
-			HasReplacement: spec.HasReplacement,
-		}))
-	}
-	return out
 }

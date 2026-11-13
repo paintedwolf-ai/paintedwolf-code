@@ -104,7 +104,7 @@ func TestProgramPolicyBlockSettlesBeforeRenderingEarlierEffects(t *testing.T) {
 	testutil.FailErr(t, "install policy anchors", anchorcatalog.InstallBundled())
 	guidance.SetGuidanceRenderer(prompts.NewGuidanceRenderer(prompts.NewFileTemplateEngineLayers(prompts.PromptLayers{})))
 	const code = "FIXTURE_NATIVE_POLICY_STOP"
-	rule := &oar.Rule{ID: code, Kind: oar.KindPolicy, Anchor: oar.AnchorToolPreInvoke, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool == "command" && paintedwolf.native_operation == "read" && tool_arg_string("command") == "${op} arg"`, Copy: oar.Copy{What: "Frozen actual policy occurrence", Fix: "Inspect the existing result before preparing remaining work."}}
+	rule := &oar.Rule{ID: code, Kind: oar.KindPolicy, Anchor: oar.AnchorToolPreInvoke, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool == "command" && paintedwolf.native_operation == "read" && paintedwolf.tool_arg_string("command") == "${op} arg"`, Copy: oar.Copy{What: "Frozen actual policy occurrence", Fix: "Inspect the existing result before preparing remaining work."}}
 	pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, nil)
 	pipeline.EnableAnchor(oar.AnchorToolPreInvoke)
 	executor.Rejections.SetBlockPlane(&toolfeedback.BlockPlane{Pipeline: pipeline, Renderer: oar.NewRenderer(nil, nil)})
