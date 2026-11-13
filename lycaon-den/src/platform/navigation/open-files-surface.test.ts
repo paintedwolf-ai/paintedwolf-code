@@ -54,6 +54,19 @@ describe("open-files-surface", () => {
     expect(projectFilesState("p1").order).toHaveLength(3);
   });
 
+  it("numbers each open of a tool tab without changing its identity", () => {
+    const document = { kind: "tool" as const, sessionId: "session", messageId: "message", toolCallId: "call", pane: "receipts", title: "Receipt",
+      content: { kind: "command_receipts" as const, scopes: [{ programId: "program" }] } };
+    const open = () => applyOpenFilesSurfaceRequest({ kind: "chat-content", projectId: "p1", document }, roots);
+    open();
+    const key = projectFilesState("p1").activeKey!;
+    const first = projectFilesState("p1").byKey[key]?.chatContent?.openSeq;
+    open();
+    expect(projectFilesState("p1").activeKey).toBe(key);
+    expect(projectFilesState("p1").order).toHaveLength(1);
+    expect(projectFilesState("p1").byKey[key]?.chatContent?.openSeq).toBeGreaterThan(first!);
+  });
+
   it("keeps approval documents distinct and reuses a checkpoint pane", () => {
     const document = {kind:"approval" as const,sessionId:"session",checkpointId:"checkpoint",pane:"targets",title:"Approval targets",content:{kind:"inline" as const,text:"first target"}};
     const open = (value = document) => applyOpenFilesSurfaceRequest({kind:"chat-content",projectId:"p1",document:value}, roots);

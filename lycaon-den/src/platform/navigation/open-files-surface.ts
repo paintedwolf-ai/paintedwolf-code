@@ -62,6 +62,8 @@ export function openFilesSurface(req: OpenFilesSurfaceRequest): void {
   else pending = req;
 }
 
+let chatContentOpenSeq = 0;
+
 export function applyOpenFilesSurfaceRequest(
   req: OpenFilesSurfaceRequest,
   roots: readonly ResolveProjectRoot[],
@@ -71,7 +73,7 @@ export function applyOpenFilesSurfaceRequest(
 
   if (req.kind === "chat-content") {
     openFilesBuffer(projectId, { kind: "chat", rootId: "", rootLabel: "", path: "",
-      chatContent: req.document, name: req.document.title, intent: "permanent" });
+      chatContent: { ...req.document, openSeq: ++chatContentOpenSeq }, name: req.document.title, intent: "permanent" });
     return;
   }
   if (req.kind === "diffs") {

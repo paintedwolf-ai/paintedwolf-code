@@ -1,10 +1,14 @@
-import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js";
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js";
 import type { LycaonClient } from "../../../api/client.ts";
 import type { ChatContentDocument } from "./chat-content-document.ts";
 import { createChatContentAccess, type ChatContentAccess } from "./chat-content-reader.ts";
 import { openCommandReceiptAccess } from "./command-receipt-access.ts";
 
-/** The access a chat content document reads through: retained content at once, a receipt once it opens. */
+/**
+ * The access a chat content document reads through: retained content at once,
+ * a receipt once it opens. A receipt that failed to open opens again when its
+ * link is followed again or the connection changes.
+ */
 export function useChatContentAccess(document: Accessor<ChatContentDocument>, client: Accessor<LycaonClient | null>, onError: (cause: unknown) => void): Accessor<ChatContentAccess | undefined> {
   const retainedSource = createMemo<Parameters<typeof createChatContentAccess>[0] | undefined>(() => {
     const value = document(), connection = client(), content = value.content;
@@ -26,15 +30,26 @@ export function useChatContentAccess(document: Accessor<ChatContentDocument>, cl
       previous.sessionId === next.sessionId && JSON.stringify(previous.scopes) === JSON.stringify(next.scopes),
   });
   const [receiptAccess, setReceiptAccess] = createSignal<ChatContentAccess>();
+  const [attempt, setAttempt] = createSignal(0);
+  let failedAt: number | undefined;
+  createEffect(on(() => document().openSeq, seq => {
+    if (failedAt !== undefined && seq !== failedAt) { failedAt = undefined; setAttempt(value => value + 1); }
+  }, { defer: true }));
   createEffect(() => {
     const source = receiptSource();
+    attempt();
     setReceiptAccess(undefined);
+    failedAt = undefined;
     if (!source) return;
     const abort = new AbortController();
     onCleanup(() => abort.abort());
     void openCommandReceiptAccess({ ...source, signal: abort.signal })
       .then(opened => { if (!abort.signal.aborted) setReceiptAccess(() => opened); })
-      .catch(cause => { if (!abort.signal.aborted) onError(cause); });
+      .catch(cause => {
+        if (abort.signal.aborted) return;
+        failedAt = untrack(() => document().openSeq) ?? 0;
+        onError(cause);
+      });
   });
   return createMemo<ChatContentAccess | undefined>(() => {
     const source = retainedSource();

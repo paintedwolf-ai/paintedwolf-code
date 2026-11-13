@@ -17,6 +17,8 @@ export type ChatContentDocument = {
   path?: string;
   /** The content's language where no path names it. */
   language?: string;
+  /** Advances each time a link opens the document, so a failed tab can retry. */
+  openSeq?: number;
 } & (
   | { kind: "tool"; messageId: string; toolCallId: string; content: Content }
   | { kind: "approval"; checkpointId: string; content: InlineContent }

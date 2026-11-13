@@ -39,16 +39,24 @@ export function bindChatContentFind(options: {
     const search = `${query}\0${sensitive}`;
     if (refreshedFor !== undefined && refreshedFor !== search) refreshedFor = undefined;
     const abort = new AbortController();
+    const collect = async () => {
+      const found: ChatContentMatch[] = [];
+      for (let cursor: string | undefined = undefined; ;) {
+        const page = await access.find(query, cursor, sensitive, abort.signal);
+        if (abort.signal.aborted) return undefined;
+        found.push(...page.matches);
+        if (found.length >= MAX_MATCHES || !page.next_cursor) return found;
+        cursor = page.next_cursor;
+      }
+    };
     const timer = setTimeout(() => {
       void (async () => {
-        const found: ChatContentMatch[] = [];
-        for (let cursor: string | undefined = undefined; ;) {
-          const page = await access.find(query, cursor, sensitive, abort.signal);
-          if (abort.signal.aborted) return;
-          found.push(...page.matches);
-          if (found.length >= MAX_MATCHES || !page.next_cursor) break;
-          cursor = page.next_cursor;
-        }
+        // An engine restart expires cursors; the search starts over once.
+        const found = await collect().catch(cause => {
+          if (isApiErrorCode(cause, ["cursor_generation_expired"])) return collect();
+          throw cause;
+        });
+        if (!found) return;
         setMatches(found.slice(0, MAX_MATCHES));
         untrack(refreshFindResults);
       })().catch(cause => {
