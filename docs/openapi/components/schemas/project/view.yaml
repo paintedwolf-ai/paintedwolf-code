@@ -4,31 +4,41 @@ components:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [client_id, focused]
+      required: [client_id, focused, editor, diff, folder, search, findings]
       description: >-
-        What one window of this person shows of the project right now. Send
-        only surfaces that are visible; a window that shows none of them, or is
-        hidden, sends none. Reports expire unless renewed.
+        What one window of this person shows of the project right now. Every
+        surface is present; one the window does not show is null, and a
+        window that shows none of them, or is hidden, withdraws its report.
+        Reports expire unless renewed.
       properties:
         client_id:
           type: string
           minLength: 1
           maxLength: 256
+          pattern: '^[a-zA-Z0-9:._-]+$'
         focused:
           type: boolean
           description: The window has keyboard focus.
         editor:
-          x-go-pointer: true
-          $ref: '#/components/schemas/ViewReportEditor'
+          x-go-type: "*ViewReportEditor"
+          oneOf:
+          - $ref: '#/components/schemas/ViewReportEditor'
+          - type: "null"
         diff:
-          x-go-pointer: true
-          $ref: '#/components/schemas/ViewReportPath'
+          x-go-type: "*ViewReportPath"
+          oneOf:
+          - $ref: '#/components/schemas/ViewReportPath'
+          - type: "null"
         folder:
-          x-go-pointer: true
-          $ref: '#/components/schemas/ViewReportPath'
+          x-go-type: "*ViewReportPath"
+          oneOf:
+          - $ref: '#/components/schemas/ViewReportPath'
+          - type: "null"
         search:
-          x-go-pointer: true
-          $ref: '#/components/schemas/ViewReportSearch'
+          x-go-type: "*ViewReportSearch"
+          oneOf:
+          - $ref: '#/components/schemas/ViewReportSearch'
+          - type: "null"
         findings:
           type: array
           maxItems: 8
@@ -76,7 +86,7 @@ components:
       required: [fingerprint, rule_id, level]
       properties:
         fingerprint: {type: string, minLength: 1, maxLength: 256}
-        rule_id: {type: string, minLength: 1, maxLength: 128}
+        rule_id: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-zA-Z0-9_.:/-]+$'}
         level:
           $ref: ../scan/findings.yaml#/components/schemas/FindingLevel
         location:
