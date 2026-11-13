@@ -307,4 +307,3 @@ func (s *Store) NameByJob(ctx context.Context, jobID string) (string, bool, erro
 	}
 	return name, err == nil, err
 }
-

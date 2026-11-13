@@ -253,4 +253,3 @@ func (m *Results) workerName(ctx context.Context, jobID string) string {
 	}
 	return name
 }
-

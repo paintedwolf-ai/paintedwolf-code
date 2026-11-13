@@ -142,7 +142,7 @@ func TestWorkerToolRejections(t *testing.T) {
 	_, err = f.run(t, InstructWorkerTool, "call-2", map[string]any{"worker": "surveyor", "instructions": "go", "agent_type": "no-such-agent"})
 	wantReject(t, err, "WORKER_TYPE_UNAVAILABLE")
 	_, err = f.run(t, ShelveOverlayTool, "call-3", map[string]any{"overlay_id": "result-job-1", "reason": "later"})
-	wantReject(t, err, "SHELVE_OVERLAY_NOT_ADMITTED")
+	wantReject(t, err, "RESULT_CHANGES_NOT_ADMITTED")
 	_, err = f.run(t, ShelveOverlayTool, "call-4", map[string]any{"overlay_id": "result-missing", "reason": "later"})
 	wantReject(t, err, "RESULT_HANDLE_UNKNOWN")
 
