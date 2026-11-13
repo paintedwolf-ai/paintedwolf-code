@@ -51,6 +51,8 @@ type ImplementSessionState struct {
 	// PendingOverlayPaths lists observed changes in pending overlays.
 	PendingOverlayPaths []string
 	WorkersInFlight     int
+	// WorkersDelivered counts workers whose result awaits the coordinator.
+	WorkersDelivered int
 	// BatchPhase and BatchSeq mirror the host batch state.
 	BatchPhase string
 	BatchSeq   int

@@ -90,6 +90,13 @@ func (m *Host) SetWorkerResults(results turnguards.LatestResultJobs) {
 	}
 }
 
+// SetDeliveredWorkers sets how surface selection counts delivered workers.
+func (m *Host) SetDeliveredWorkers(count workeroutcomes.DeliveredWorkers) {
+	if m != nil && m.Workers.State != nil {
+		m.Workers.State.SetDeliveredWorkers(count)
+	}
+}
+
 // SetWorkerRoster sets how a coordinator's request lists its workers.
 func (m *Host) SetWorkerRoster(roster assembly.WorkerRosterSource) {
 	if m == nil || m.Coordinator.Assembly == nil {

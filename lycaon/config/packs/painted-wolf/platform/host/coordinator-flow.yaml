@@ -19,6 +19,13 @@ rules:
       cases: { vet: observe_investigate }
       default: implement_overlay_promote
 
+  # A delivered worker's result needs the coordinator's call before new work.
+  - when: { workers_delivered: ">0" }
+    surface:
+      dispatch_on: posture
+      cases: { vet: observe_investigate }
+      default: implement_overlay_promote
+
   # The host owns the phase's pending work; the person's turns get an answer
   # until it settles, whatever surface the phase declares. Host-opened turns
   # keep the phase's surface and park at their first tool boundary.

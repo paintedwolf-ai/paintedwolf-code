@@ -16,6 +16,7 @@ type SurfaceFacts struct {
 	InvestigateDefaultEligible            bool
 	InvestigateHardBlock                  bool
 	WorkersInFlight                       int
+	WorkersDelivered                      int
 	HostCycleTurn                         bool
 	WorkerTaskFinishedTurn                bool
 	HostLoopWakeTurn                      bool
@@ -47,6 +48,7 @@ func ComputeSurfaceFacts(
 		InvestigateDefaultEligible:            workflowInvestigateEligible(runCtx),
 		InvestigateHardBlock:                  investigateHardBlockActive(runCtx, history, state),
 		WorkersInFlight:                       state.WorkersInFlight,
+		WorkersDelivered:                      state.WorkersDelivered,
 		HostCycleTurn:                         HostCycleTurn(history),
 		WorkerTaskFinishedTurn:                WorkerTaskFinishedTurn(history),
 		HostLoopWakeTurn:                      HostLoopWakeTurn(history),
@@ -74,6 +76,7 @@ func (f SurfaceFacts) AsMap() map[string]any {
 		FactInvestigateDefaultEligible:            f.InvestigateDefaultEligible,
 		FactInvestigateHardBlock:                  f.InvestigateHardBlock,
 		FactWorkersInFlight:                       f.WorkersInFlight,
+		FactWorkersDelivered:                      f.WorkersDelivered,
 		FactHostCycleTurn:                         f.HostCycleTurn,
 		FactWorkerTaskFinishedTurn:                f.WorkerTaskFinishedTurn,
 		FactHostLoopWakeTurn:                      f.HostLoopWakeTurn,

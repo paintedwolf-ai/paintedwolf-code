@@ -311,3 +311,27 @@ func TestInstructReplaysItsFirstReceipt(t *testing.T) {
 		t.Fatalf("queued = %+v, replayed = %+v", queued, replayed)
 	}
 }
+
+// A worker name resolves to the job of its latest result, and delivered
+// workers are counted; a name with no worker, or no result yet, resolves to
+// nothing.
+func TestLatestResultJobAndDeliveredCount(t *testing.T) {
+	f := newFixture(t)
+	if _, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "surveyor"); ok || err != nil {
+		t.Fatalf("before any result: ok=%v err=%v", ok, err)
+	}
+	if n, err := f.svc.Reader.CountState(t.Context(), f.coord, workerstate.Delivered); n != 0 || err != nil {
+		t.Fatalf("delivered before any result = %d, %v", n, err)
+	}
+	f.round(t, "job-1", "complete", "")
+	job, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "surveyor")
+	if !ok || err != nil || job != "job-1" {
+		t.Fatalf("latest result job = %q ok=%v err=%v", job, ok, err)
+	}
+	if n, err := f.svc.Reader.CountState(t.Context(), f.coord, workerstate.Delivered); n != 1 || err != nil {
+		t.Fatalf("delivered = %d, %v", n, err)
+	}
+	if _, ok, err := f.svc.Reader.LatestResultJob(t.Context(), f.coord, "nobody"); ok || err != nil {
+		t.Fatalf("unknown name: ok=%v err=%v", ok, err)
+	}
+}

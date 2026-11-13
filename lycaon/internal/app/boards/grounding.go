@@ -35,6 +35,7 @@ import (
 	"github.com/lycaon/lycaon/internal/workermessaging"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
+	"github.com/lycaon/lycaon/internal/workerstate"
 	"github.com/lycaon/lycaon/internal/workerroster"
 )
 
@@ -264,9 +265,14 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	}
 	r.deps.Sessions.Manager.SetWorkerRoster(roster.Template)
 	r.deps.Sessions.Manager.SetWorkerResultNotices(roster.ResultNotice)
+	coordinator := func(sessionID string) workerrecords.Actor {
+		return workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
+	}
 	r.deps.Sessions.Manager.SetWorkerResults(func(ctx context.Context, sessionID, name string) (string, bool, error) {
-		actor := workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
-		return roster.Reader.LatestResultJob(ctx, actor, name)
+		return roster.Reader.LatestResultJob(ctx, coordinator(sessionID), name)
+	})
+	r.deps.Sessions.Manager.SetDeliveredWorkers(func(ctx context.Context, sessionID string) (int, error) {
+		return roster.Reader.CountState(ctx, coordinator(sessionID), workerstate.Delivered)
 	})
 	r.ParentWaiter = worker.NewParentWorkerWaiter()
 

@@ -142,6 +142,25 @@ func (r Reader) LatestResultJob(ctx context.Context, actor workerrecords.Actor, 
 	return round.JobID, ok, nil
 }
 
+// CountState counts the actor's session's workers in state.
+func (r Reader) CountState(ctx context.Context, actor workerrecords.Actor, state workerstate.State) (int, error) {
+	workers, err := r.Records.Workers(ctx, actor)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, w := range workers {
+		snap, err := r.Read(ctx, actor, w)
+		if err != nil {
+			return 0, err
+		}
+		if snap.View.State == state {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (r Reader) job(jobID string) (api.WorkerTask, bool) {
 	if r.Jobs == nil {
 		return api.WorkerTask{}, false
