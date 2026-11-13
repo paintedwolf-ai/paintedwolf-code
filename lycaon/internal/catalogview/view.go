@@ -88,7 +88,7 @@ func (v *View) WithRules(rules *oar.RuleSet) *View {
 // WithToolProfiles returns the same catalog view with another profile set.
 func (v *View) WithToolProfiles(profiles []sandbox.ToolProfile) *View {
 	if v == nil {
-		return v
+		return nil
 	}
 	return &View{
 		Catalog:         v.Catalog,
