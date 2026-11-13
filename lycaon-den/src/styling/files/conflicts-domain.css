@@ -84,6 +84,23 @@
   transition: background-color 600ms ease;
 }
 
+/* A landed line fades over LANDED_LINE_FADE_MS once its linger time is over. */
+.cm-den-hunk--leaving {
+  animation: den-hunk-leave 600ms ease forwards;
+}
+
+@keyframes den-hunk-leave {
+  to {
+    background-color: transparent;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cm-den-hunk--leaving {
+    animation: none;
+  }
+}
+
 /* Translucent theme fills keep the selection layer visible; the change
    margin controls the row edge. */
 :is(.den-files-editor, .den-files-merge) .cm-editor.cm-merge-b .cm-changedLine {
