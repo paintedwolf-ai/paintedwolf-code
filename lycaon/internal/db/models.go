@@ -2182,6 +2182,15 @@ type WorkerDecisions struct {
 	CreatedAt      string `json:"created_at"`
 }
 
+type WorkerDependencies struct {
+	WorkerID         string         `json:"worker_id"`
+	DependencyKey    string         `json:"dependency_key"`
+	ProducerWorkerID sql.NullString `json:"producer_worker_id"`
+	BaseResultID     sql.NullString `json:"base_result_id"`
+	OperationID      string         `json:"operation_id"`
+	CreatedAt        string         `json:"created_at"`
+}
+
 type WorkerFindingDelivery struct {
 	WorkerJobID string `json:"worker_job_id"`
 	ResponseID  string `json:"response_id"`
@@ -2239,6 +2248,42 @@ type WorkerJobs struct {
 	MergeLeaseExpiresAt sql.NullString `json:"merge_lease_expires_at"`
 }
 
+type WorkerMessageDeliveries struct {
+	WorkerID            string        `json:"worker_id"`
+	RecipientSessionID  string        `json:"recipient_session_id"`
+	Generation          int64         `json:"generation"`
+	DeliveredThroughSeq int64         `json:"delivered_through_seq"`
+	PageID              string        `json:"page_id"`
+	PageFirstSeq        sql.NullInt64 `json:"page_first_seq"`
+	PageLastSeq         sql.NullInt64 `json:"page_last_seq"`
+	UpdatedAt           string        `json:"updated_at"`
+}
+
+type WorkerMessages struct {
+	ID            string        `json:"id"`
+	WorkerID      string        `json:"worker_id"`
+	Seq           int64         `json:"seq"`
+	SenderRole    string        `json:"sender_role"`
+	SenderID      string        `json:"sender_id"`
+	RecipientRole string        `json:"recipient_role"`
+	RoundOrdinal  sql.NullInt64 `json:"round_ordinal"`
+	Body          string        `json:"body"`
+	ArtifactRef   string        `json:"artifact_ref"`
+	ReplyToSeq    sql.NullInt64 `json:"reply_to_seq"`
+	NeedsReply    int64         `json:"needs_reply"`
+	OperationID   string        `json:"operation_id"`
+	CreatedAt     string        `json:"created_at"`
+}
+
+type WorkerOperations struct {
+	OperationID   string `json:"operation_id"`
+	SessionID     string `json:"session_id"`
+	Kind          string `json:"kind"`
+	RequestDigest string `json:"request_digest"`
+	ReceiptJson   string `json:"receipt_json"`
+	CreatedAt     string `json:"created_at"`
+}
+
 type WorkerOutcomeDeliveries struct {
 	WorkerJobID string `json:"worker_job_id"`
 	DeliveredAt string `json:"delivered_at"`
@@ -2247,6 +2292,18 @@ type WorkerOutcomeDeliveries struct {
 type WorkerPrerequisites struct {
 	WorkerJobID    string `json:"worker_job_id"`
 	PrerequisiteID string `json:"prerequisite_id"`
+}
+
+type WorkerResultDispositions struct {
+	ResultID             string         `json:"result_id"`
+	WorkerID             string         `json:"worker_id"`
+	AccountedOperationID string         `json:"accounted_operation_id"`
+	AccountedAt          sql.NullString `json:"accounted_at"`
+	ChangeState          string         `json:"change_state"`
+	ChangeOperationID    string         `json:"change_operation_id"`
+	LandedChangeID       sql.NullString `json:"landed_change_id"`
+	ShelveReason         string         `json:"shelve_reason"`
+	ChangedAt            sql.NullString `json:"changed_at"`
 }
 
 type WorkerResults struct {
@@ -2260,9 +2317,57 @@ type WorkerResults struct {
 	CreatedAt       string         `json:"created_at"`
 }
 
+type WorkerRounds struct {
+	WorkerID            string         `json:"worker_id"`
+	Ordinal             int64          `json:"ordinal"`
+	JobID               string         `json:"job_id"`
+	InstructionFirstSeq sql.NullInt64  `json:"instruction_first_seq"`
+	InstructionLastSeq  sql.NullInt64  `json:"instruction_last_seq"`
+	ExecutionTarget     string         `json:"execution_target"`
+	ReviewSubjectJson   string         `json:"review_subject_json"`
+	OperationID         string         `json:"operation_id"`
+	CreatedAt           string         `json:"created_at"`
+	SettledAt           sql.NullString `json:"settled_at"`
+	CheckpointID        string         `json:"checkpoint_id"`
+}
+
 type WorkerTurns struct {
 	TurnID      string `json:"turn_id"`
 	WorkerJobID string `json:"worker_job_id"`
+}
+
+type WorkerWorkspacePreparations struct {
+	WorkerID          string         `json:"worker_id"`
+	Generation        int64          `json:"generation"`
+	SourceResultID    sql.NullString `json:"source_result_id"`
+	PromotionRef      string         `json:"promotion_ref"`
+	PreparationRef    string         `json:"preparation_ref"`
+	BindingGeneration int64          `json:"binding_generation"`
+	OperationID       string         `json:"operation_id"`
+	CreatedAt         string         `json:"created_at"`
+}
+
+type Workers struct {
+	ID               string         `json:"id"`
+	ProjectID        string         `json:"project_id"`
+	SessionID        string         `json:"session_id"`
+	Name             string         `json:"name"`
+	AgentType        string         `json:"agent_type"`
+	ScopeMode        string         `json:"scope_mode"`
+	Brief            string         `json:"brief"`
+	ChildSessionID   sql.NullString `json:"child_session_id"`
+	DelegationID     sql.NullString `json:"delegation_id"`
+	LegID            sql.NullString `json:"leg_id"`
+	WorkflowRunID    sql.NullString `json:"workflow_run_id"`
+	WorkflowPhase    string         `json:"workflow_phase"`
+	WorkflowWorkID   string         `json:"workflow_work_id"`
+	ClosedAt         sql.NullString `json:"closed_at"`
+	ClosedReason     string         `json:"closed_reason"`
+	NextRoundOrdinal int64          `json:"next_round_ordinal"`
+	NextMessageSeq   int64          `json:"next_message_seq"`
+	OperationID      string         `json:"operation_id"`
+	CreatedAt        string         `json:"created_at"`
+	UpdatedAt        string         `json:"updated_at"`
 }
 
 type WorkflowCommands struct {
