@@ -289,8 +289,13 @@ func captureResponseTokens(
 		return nil, invalid(fmt.Errorf("capture_tokens requires token_jar"))
 	}
 	if len(rules) == 0 {
-		receipt := saveTokenJar(ctx, deps, req, jar, 0)
-		return receipt, nil
+		// Nothing was captured: rewriting the stored jar from this request's
+		// snapshot would only drop what a concurrent request captured. A jar
+		// not yet stored is saved so the reference exists.
+		if jar.Reference != "" {
+			return heldTokens(jar), nil
+		}
+		return saveTokenJar(ctx, deps, req, jar, 0), nil
 	}
 	captured, missing := extractTokens(resp, rules)
 	if len(missing) > 0 {

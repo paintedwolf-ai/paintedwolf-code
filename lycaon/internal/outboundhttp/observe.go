@@ -142,15 +142,17 @@ func (t *hopTracer) observation(begun, resolved time.Time, method, target string
 // dispatchObserver reports when request material leaves host custody on the
 // first hop. Headers leave on the first connection write after the transport
 // hands over a ready connection, so dial, proxy and TLS handshake bytes never
-// count. Body bytes leave when the transport first reads the body. Neither
-// event claims the recipient received anything.
+// count. Body bytes leave on the first connection write after the transport
+// reads the body: it buffers what it reads, so a read alone has sent nothing.
+// Neither event claims the recipient received anything.
 type dispatchObserver struct {
-	mu         sync.Mutex
-	connReady  bool
-	onHeaders  func()
-	onBody     func()
-	headersOut bool
-	bodyOut    bool
+	mu          sync.Mutex
+	connReady   bool
+	onHeaders   func()
+	onBody      func()
+	headersOut  bool
+	bodyPending bool
+	bodyOut     bool
 }
 
 func observeDispatch(transport *http.Transport, onHeaders, onBody func()) *dispatchObserver {
@@ -181,24 +183,27 @@ func (o *dispatchObserver) gotConn() {
 
 func (o *dispatchObserver) wrote() {
 	o.mu.Lock()
-	fire := o.connReady && !o.headersOut
-	if fire {
+	headers := o.connReady && !o.headersOut
+	if headers {
 		o.headersOut = true
 	}
+	body := o.connReady && o.bodyPending && !o.bodyOut
+	if body {
+		o.bodyOut = true
+	}
 	o.mu.Unlock()
-	if fire && o.onHeaders != nil {
+	if headers && o.onHeaders != nil {
 		o.onHeaders()
+	}
+	if body && o.onBody != nil {
+		o.onBody()
 	}
 }
 
 func (o *dispatchObserver) bodyRead() {
 	o.mu.Lock()
-	fire := !o.bodyOut
-	o.bodyOut = true
+	o.bodyPending = true
 	o.mu.Unlock()
-	if fire && o.onBody != nil {
-		o.onBody()
-	}
 }
 
 type dispatchConn struct {

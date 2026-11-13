@@ -35,7 +35,19 @@ func DialPinned(ctx context.Context, target *url.URL, network string, address ne
 	if target == nil || target.Hostname() == "" || !address.IsValid() || address.Port() == 0 || network != "tcp" && network != "tcp4" && network != "tcp6" {
 		return nil, EndpointInvalid
 	}
-	selected, err := ResolveContext(ctx, target)
+	// Loopback is a fact of the pinned address, not the name: a local
+	// connection is never proxied, and a loopback name pinned elsewhere is
+	// decided as the address it reaches.
+	if address.Addr().Unmap().IsLoopback() {
+		return (&net.Dialer{Timeout: 10 * time.Second}).DialContext(ctx, network, address.String())
+	}
+	policyTarget := target
+	if loopbackDestination(target) {
+		reached := *target
+		reached.Host = net.JoinHostPort(address.Addr().Unmap().String(), strconv.Itoa(int(address.Port())))
+		policyTarget = &reached
+	}
+	selected, err := ResolveContext(ctx, policyTarget)
 	if err != nil {
 		return nil, PolicyUnavailable
 	}

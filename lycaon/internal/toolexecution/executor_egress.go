@@ -69,9 +69,10 @@ func (e *Network) resolveEgress(ctx context.Context, cmd confine.EgressCommand, 
 			gate.ProducerLease | gate.ProducerRule | gate.ProducerDetection,
 		Containment: gate.Containment{FSJailed: true, Egress: gate.EgressProxy},
 		// First use waits on the chat's exposure and ingestion, read below.
-		Destination:      destinationFact(cmd, ep, e.configuredBy(cmd.ProjectDir, ep.Host), e.publicRegistry(ep.Host)),
-		Leased:           e.egressLeaseCovers(ctx, action) || e.loopbackLeaseCovers(ctx, cmd, ep),
-		RequestConsented: cmd.ToolName == "http_request" && egressgate.RequestConsented(ctx, ep.Host, ep.Port),
+		Destination: destinationFact(cmd, ep, e.configuredBy(cmd.ProjectDir, ep.Host), e.publicRegistry(ep.Host)),
+		Leased:      e.egressLeaseCovers(ctx, action) || e.loopbackLeaseCovers(ctx, cmd, ep),
+		// Only an HTTP hop's admission carries request consent.
+		RequestConsented: egressgate.RequestConsented(ctx, ep.Host, ep.Port),
 	}
 	if cmd.UserRule != nil {
 		facts.UserRule = &gate.UserRule{
