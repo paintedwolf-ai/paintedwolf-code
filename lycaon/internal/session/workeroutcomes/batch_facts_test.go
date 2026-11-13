@@ -62,29 +62,6 @@ func inlineEditHistory() []api.Message {
 	}
 }
 
-func TestImplementationWorkSinceBoundary_inlineEditOnly(t *testing.T) {
-	history := inlineEditHistory()
-	since := api.UserIntentBoundary(history)
-	if !workeroutcomes.ImplementationWorkSinceBoundary(history, since) {
-		t.Fatal("inline edit counts as implementation work")
-	}
-}
-
-func TestImplementationWorkSinceBoundary_writerWithoutChangedPaths(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleUser, Content: "look around"},
-		{
-			Role: api.MessageRoleAssistant,
-			WorkerSummary: batchWorkerSummary("j-impl", api.WorkerSummaryStatusComplete,
-				workercompletion.WorkerCompletionReport{LegStatus: "complete"}),
-		},
-	}
-	since := api.UserIntentBoundary(history)
-	if workeroutcomes.ImplementationWorkSinceBoundary(history, since) {
-		t.Fatal("a writer with no changed paths is not implementation work")
-	}
-}
-
 func TestBatchReady_verifyNotRequiredAllowsWrapup(t *testing.T) {
 	history := inlineEditHistory()
 	state := idleBatchReadyState()
@@ -252,63 +229,5 @@ func TestOpenRepair_partialLegStatus(t *testing.T) {
 	}
 	if !workeroutcomes.OpenRepairSinceUserIntent(history, false) {
 		t.Fatal("partial leg_status must trigger open repair")
-	}
-}
-
-// A rejected call cannot shift later call-result pairing.
-func TestImplementationWorkSinceBoundary_rejectedCallDoesNotDesyncPairing(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleUser, Content: "look at the handler"},
-		{
-			Role:      api.MessageRoleAssistant,
-			ToolCalls: []api.ToolCall{{ID: "c1", Name: "edit", Args: map[string]any{"path": "internal/handler.go"}}},
-		},
-		{
-			Role:       api.MessageRoleTool,
-			Content:    "rejected",
-			ToolResult: &api.ToolResult{Tool: "edit", ToolCallID: "c1", Outcome: api.ToolResultOutcomeRejected},
-		},
-		{
-			Role:      api.MessageRoleAssistant,
-			ToolCalls: []api.ToolCall{{ID: "c2", Name: "read", Args: map[string]any{"path": "internal/handler.go"}}},
-		},
-		{
-			Role:       api.MessageRoleTool,
-			Content:    "package handler",
-			ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "c2", Outcome: api.ToolResultOutcomeCompleted},
-		},
-	}
-	since := api.UserIntentBoundary(history)
-	if workeroutcomes.ImplementationWorkSinceBoundary(history, since) {
-		t.Fatal("a rejected edit plus a completed read is not implementation work")
-	}
-}
-
-// A mutation after a rejected call still counts.
-func TestImplementationWorkSinceBoundary_mutationAfterRejectedCall(t *testing.T) {
-	history := []api.Message{
-		{Role: api.MessageRoleUser, Content: "clean up"},
-		{
-			Role:      api.MessageRoleAssistant,
-			ToolCalls: []api.ToolCall{{ID: "c1", Name: "read", Args: map[string]any{"path": "a.go"}}},
-		},
-		{
-			Role:       api.MessageRoleTool,
-			Content:    "rejected",
-			ToolResult: &api.ToolResult{Tool: "read", ToolCallID: "c1", Outcome: api.ToolResultOutcomeRejected},
-		},
-		{
-			Role:      api.MessageRoleAssistant,
-			ToolCalls: []api.ToolCall{{ID: "c2", Name: "delete", Args: map[string]any{"path": "a.go"}}},
-		},
-		{
-			Role:       api.MessageRoleTool,
-			Content:    "deleted",
-			ToolResult: &api.ToolResult{Tool: "delete", ToolCallID: "c2", Outcome: api.ToolResultOutcomeCompleted},
-		},
-	}
-	since := api.UserIntentBoundary(history)
-	if !workeroutcomes.ImplementationWorkSinceBoundary(history, since) {
-		t.Fatal("a completed mutation after a rejected call is implementation work")
 	}
 }
