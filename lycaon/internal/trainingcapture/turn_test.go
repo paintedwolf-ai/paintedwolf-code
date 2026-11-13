@@ -153,7 +153,9 @@ func TestTrainingCaptureAdmission(t *testing.T) {
 	missing := Policy{StorageChanges: fixturePolicy(nil).StorageChanges}
 	unservable := fixturePolicy(errors.New("prompt exceeds the student's window"))
 	unsurfaced := fixturePolicy(nil)
-	unsurfaced.Surface = func(context.Context, []string) (PromptSurface, error) { return PromptSurface{}, errors.New("ledger closed") }
+	unsurfaced.Surface = func(context.Context, []string) (PromptSurface, error) {
+		return PromptSurface{}, errors.New("ledger closed")
+	}
 	for _, tc := range []admission{
 		{name: "exact", settle: true},
 		{name: "retry", retry: true, settle: true, want: "ambiguous_dispatch"},
