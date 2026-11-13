@@ -148,6 +148,13 @@ any output-read or step count after the outcome, so neither is clipped by a
 target at chat widths. The target stays in the row's accessible name, in a
 single-entry span's hint, and in Find.
 
+When one command runs several statements, each activity shows the text at its
+own spans on the submitted source. Spans on an `eval` string or a sourced script
+index those units' bytes, and a replacement mark in the submitted text shifts
+every offset after it, so either case shows the activity's subject instead, as
+does a call whose arguments were not kept inline. The command wraps to at most
+four lines; copying it copies all of it.
+
 An expanded activity uses one fixed order, omitting any part with nothing to
 show: the command; a purpose sentence when a briefing supplies one; a result
 line carrying only facts the row does not (exit status, lines of output, a host
