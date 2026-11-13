@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { LycaonApiError } from "../../../api/http.ts";
 import { openFind, resetFindControllerForTests, setFindQuery } from "../../../find/find-controller.ts";
 import { getFindRevealHost, listFindRevealHosts } from "../../../find/find-reveal.ts";
+import { bindFindableView } from "../../../find/use-findable-view.ts";
 import { bindChatContentFind } from "./chat-content-find.ts";
 import type { ChatContentAccess, ChatContentFindPage } from "./chat-content-reader.ts";
 
@@ -17,7 +18,9 @@ function bind(find: ChatContentAccess["find"], refresh?: (access: { setRevision:
   const access = { revision, find, refresh: vi.fn(async () => refresh?.({ setRevision })) } as unknown as ChatContentAccess;
   const onError = vi.fn();
   const host = document.createElement("div");
+  document.body.append(host);
   const dispose = createRoot(dispose => {
+    bindFindableView({ id: "chat-content-find-test", root: () => host, primary: true });
     bindChatContentFind({ access: () => access, host: () => host, collapsed: () => false, expand: () => () => {}, reveal: () => {}, onError });
     return dispose;
   });
@@ -25,7 +28,7 @@ function bind(find: ChatContentAccess["find"], refresh?: (access: { setRevision:
     const found = listFindRevealHosts().find(candidate => candidate.hostEl() === host);
     return found ? getFindRevealHost(found.id)?.remoteMatches?.() ?? [] : [];
   };
-  return { access, onError, dispose, matches };
+  return { access, onError, dispose: () => { dispose(); host.remove(); }, matches };
 }
 
 async function search(query: string) {
