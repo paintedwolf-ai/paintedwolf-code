@@ -362,13 +362,27 @@
   font-family: var(--den-font-mono);
   font-size: var(--text-den-hint);
 }
-.den-activity-command {
+.den-activity-target {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 8px;
   min-width: 0;
+  font-size: var(--text-den-hint);
 }
-.den-activity-command code,
+.den-activity-target__text {
+  min-width: 0;
+  flex: 1 1 auto;
+  font-family: var(--den-font-mono);
+  font-size: var(--text-den-hint);
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
 .den-activity-row code {
   min-width: 0;
   flex: 1 1 auto;
@@ -376,18 +390,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.den-activity-command__more,
+.den-activity-target__more,
 .den-activity-purpose,
 .den-activity-note,
 .den-activity-output__note,
 .den-activity-row span {
   color: var(--den-text-muted);
 }
-.den-activity-command__more {
+.den-activity-target__more {
   flex: none;
   white-space: nowrap;
+  line-height: 1.45;
 }
-.den-activity-command__copy {
+.den-activity-target__copy {
   flex: none;
   color: var(--den-text-muted);
 }

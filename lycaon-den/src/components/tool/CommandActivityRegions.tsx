@@ -1,14 +1,13 @@
-import { For, Index, Show, createMemo, createSignal, type JSX } from "solid-js";
+import { For, Index, Show, createMemo, type JSX } from "solid-js";
 import type { CommandExecutionReceipt } from "../../api/types.ts";
 import { activityStepsDiffer, commandActivityStepOutcome, type ActivityFact, type ActivityOutput } from "../../chat/tool/command-activity-details.ts";
 import type { CommandActivityView } from "../../chat/tool/command-activity-model.ts";
-import { activityCallCommand } from "../../chat/tool/command-activity-source.ts";
+import { activityCallCommand, activityTargetCommands } from "../../chat/tool/command-activity-source.ts";
 import { useToolContent } from "../../chat/tool/tool-content.tsx";
 import type { ToolPartView } from "../../chat/tool/tool-part-model.ts";
 import type { ChatContentDocument, CommandReceiptContent } from "../../chat/transcript/content/chat-content-document.ts";
 import { turnLoadRowSummary } from "../../chat/turnload/turn-load-rows.ts";
-import { writeClipboardText } from "../../utils/clipboard.ts";
-import { ThemeIcon } from "../primitives/ThemeIcon.tsx";
+import { ActivityTarget } from "./ActivityTarget.tsx";
 import { ToolContentLink } from "./ToolContentLink.tsx";
 
 const SHOWN_ROWS = 3;
@@ -16,20 +15,10 @@ const SHOWN_ROWS = 3;
 type ActivityProps = { activity: CommandActivityView; projectId?: string };
 
 export function ActivityCommand(props: ActivityProps) {
-  const commands = createMemo(() => props.activity.calls.map(activityCallCommand).filter((text): text is string => !!text));
-  const [state, setState] = createSignal("");
-  const copy = async (text: string) => {
-    try { await writeClipboardText(text); setState("Copied"); }
-    catch { setState("Could not copy command"); }
-  };
-  return <Show when={commands()[0]}>{first => <div class="den-activity-command" data-testid="activity-command">
-    <code data-tip={first()} data-tip-when-clipped="">{first()}</code>
-    <Show when={commands().length > 1}><span class="den-activity-command__more">and {(commands().length - 1).toLocaleString()} more</span></Show>
-    <button type="button" class="den-activity-command__copy den-inset-icon-btn" data-testid="copy-command" aria-label={state() === "Copied" ? "Copied" : "Copy command"} onClick={() => void copy(first())}>
-      <ThemeIcon slot={state() === "Copied" ? "check" : "copy"} size={13} />
-    </button>
-    <p class="den-visually-hidden" role="status">{state()}</p>
-  </div>}</Show>;
+  const targets = createMemo(() => activityTargetCommands(props.activity));
+  return <Show when={targets()[0]} keyed>
+    {first => <ActivityTarget target={first} extraCount={targets().length - 1} noun="command" />}
+  </Show>;
 }
 
 /** Briefing text replaces the deterministic line; neither renders when empty. */

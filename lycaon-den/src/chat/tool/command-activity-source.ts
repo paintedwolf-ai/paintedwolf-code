@@ -1,3 +1,6 @@
+import type { CommandActivitySpan, HostSecretRedactionMeta } from "../../api/types.ts";
+import { argRedactionField, spansForField } from "../transcript/content/redaction-spans.ts";
+import type { CommandActivityView } from "./command-activity-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 
 // FormTool argv builders mirror SummarizeArgv, SurveyRepoArgv and CodeRewriteArgv
@@ -42,4 +45,66 @@ export function activityCallCommand(call: ToolPartView): string | undefined {
   if (typeof call.args?.command === "string") return call.args.command;
   const build = formArgv[call.tool];
   return build ? build(call.args ?? {}).map(quoteWord).join(" ") : undefined;
+}
+
+/** What an activity ran; `redaction` locates host marks when the text is the whole submitted command. */
+export type ActivityTargetText = {
+  text: string;
+  redaction?: { meta: HostSecretRedactionMeta; field: string };
+};
+
+const utf8 = new TextEncoder();
+const utf8Decoder = new TextDecoder();
+
+/**
+ * The text at an activity's spans on one source unit. Offsets are UTF-8 bytes;
+ * spans on other units index those units' bytes, never `source`.
+ */
+export function sliceProgramSource(source: string, spans: readonly CommandActivitySpan[], sourceRef: string): string | undefined {
+  const bytes = utf8.encode(source);
+  const ranges = spans
+    .filter(span => span.source_ref === sourceRef && Number.isInteger(span.start_byte) && Number.isInteger(span.end_byte)
+      && span.start_byte >= 0 && span.start_byte < span.end_byte && span.end_byte <= bytes.length)
+    .map((span): [number, number] => [span.start_byte, span.end_byte])
+    .sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+  const merged: [number, number][] = [];
+  for (const range of ranges) {
+    const last = merged.at(-1);
+    if (last && range[0] <= last[1]) last[1] = Math.max(last[1], range[1]);
+    else merged.push(range);
+  }
+  const slices: string[] = [];
+  for (const [start, end] of merged) {
+    const text = utf8Decoder.decode(bytes.subarray(start, end)).replace(/^\n+|\n+$/g, "");
+    if (text && text !== slices.at(-1)) slices.push(text);
+  }
+  return slices.length ? slices.join("\n") : undefined;
+}
+
+function callTarget(call: ToolPartView, member: CommandActivityView["members"][number] | undefined): ActivityTargetText | undefined {
+  const full = activityCallCommand(call);
+  const subject = member?.subject ? { text: member.subject } : undefined;
+  if (!full) return subject;
+  const redaction = call.argsRedaction && typeof call.args?.command === "string"
+    ? { meta: call.argsRedaction.meta, field: argRedactionField(call.argsRedaction.fieldPrefix, "command") }
+    : undefined;
+  const program = call.commandProgram;
+  if (!program || (program.activities?.length ?? 0) <= 1 || !member) return { text: full, redaction };
+  // A replacement changes the text's length, so source byte offsets past it no longer line up.
+  if (redaction && spansForField({ host_secret_redaction: redaction.meta }, redaction.field).length) return subject;
+  const slice = sliceProgramSource(full, member.spans, program.source_ref);
+  return slice ? { text: slice } : subject;
+}
+
+/** One target per call in fold order; an activity of a compound command shows only its own statements. */
+export function activityTargetCommands(activity: CommandActivityView): ActivityTargetText[] {
+  const targets: ActivityTargetText[] = [];
+  let memberIndex = 0;
+  for (const call of activity.calls) {
+    const member = call.commandProgram ? activity.members[memberIndex++] : undefined;
+    const target = callTarget(call, member);
+    if (target && target.text !== targets.at(-1)?.text) targets.push(target);
+  }
+  if (!targets.length && activity.fact.subject) targets.push({ text: activity.fact.subject });
+  return targets;
 }
