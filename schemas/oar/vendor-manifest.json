@@ -3,8 +3,8 @@
   "oar_version": "1.0",
   "upstream": "https://openagentrules.org/spec/1.0/",
   "source": "https://openagentrules.org/spec/1.0/release-manifest.json",
-  "oar_content_sha256": "4dc4e6a192f808905f773f7b748ca6e97349c1df002a5d63bc2a082925423762",
-  "corpus_fixtures": 131,
+  "oar_content_sha256": "9b56675a486f027fe3b958f39e5d6b93f625293dada07ff16b9198bf35d46a7b",
+  "corpus_fixtures": 132,
   "files": {
     "LICENSE": {
       "sha256": "e6c759380211e29f633348236d0d2cc9f181c5d5887abb864c228dbd9599b2ee",
@@ -209,6 +209,10 @@
     "conformance/expr-grammar-derives-every-form.json": {
       "sha256": "6a08291e649949a854a9bea85528a280f4d579bbbf026c038261802352efeaae",
       "source": "conformance/expr-grammar-derives-every-form.json"
+    },
+    "conformance/expr-host-map-member-selected.json": {
+      "sha256": "6004c645940b439ac8c9b602096c2c36b027dec9fd6528d7a24c591e276ff394",
+      "source": "conformance/expr-host-map-member-selected.json"
     },
     "conformance/expr-in-tests-membership-and-keys.json": {
       "sha256": "9e96fc9a6a106df835ecb01d7f75cf0f64589c490a16636fb9c733a4589d613c",
@@ -431,7 +435,7 @@
       "source": "conformance/host-int-fact-compares-as-int.json"
     },
     "conformance/manifest.json": {
-      "sha256": "02a62e887a3ef3cddae264b25fa8ccf5cb738ba5aa595966766e72deb302dc96",
+      "sha256": "f4a5fb130b4e81680dd89ee799cd7e028df755ef8dd60a48be9b90e846a6c6f1",
       "source": "conformance/manifest.json"
     },
     "conformance/on-error-copy-omitted.json": {
@@ -551,7 +555,7 @@
       "source": "schemas/oar.schema.json"
     },
     "release-manifest.json": {
-      "sha256": "d7360f96ec487ea341086d49723d17a35c46f4fb0aab69964d0e9efb7e12339a",
+      "sha256": "f34d3c11008b8127343dbb7f24ae5bb76234e21716305c240089154a57ec767c",
       "source": "release-manifest.json"
     },
     "selector.schema.json": {

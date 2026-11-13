@@ -418,6 +418,15 @@
       ]
     },
     {
+      "id": "expr-host-map-member-selected",
+      "file": "expr-host-map-member-selected.json",
+      "title": "A reference selects a member of a host-tier map fact",
+      "covers": [
+        "OAR-EXPR-2",
+        "OAR-EXPR-13"
+      ]
+    },
+    {
       "id": "expr-in-tests-membership-and-keys",
       "file": "expr-in-tests-membership-and-keys.json",
       "title": "in tests list membership and map key presence",

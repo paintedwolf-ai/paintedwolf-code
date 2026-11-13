@@ -1,6 +1,6 @@
 {
   "oar_release_version": "1.0",
-  "content_sha256": "4dc4e6a192f808905f773f7b748ca6e97349c1df002a5d63bc2a082925423762",
+  "content_sha256": "9b56675a486f027fe3b958f39e5d6b93f625293dada07ff16b9198bf35d46a7b",
   "files": {
     "EXTENSIONS.md": "0b82c234cf4c8f3c84870c9fdf516e80d63d5b49c9dc73142f90a21ac5056438",
     "LICENSE": "e6c759380211e29f633348236d0d2cc9f181c5d5887abb864c228dbd9599b2ee",
@@ -55,6 +55,7 @@
     "conformance/expr-equality-of-aggregates-rejected.json": "bffa352195ab9fd4ad9e7652e1703e109f64fd49e88ba9b83154f7476623d317",
     "conformance/expr-equality-of-unrelated-types-rejected.json": "5e0af6d42ab8ad32ab2c13a6712077f19a0270d02edf18645110a1acb4b4f0c2",
     "conformance/expr-grammar-derives-every-form.json": "6a08291e649949a854a9bea85528a280f4d579bbbf026c038261802352efeaae",
+    "conformance/expr-host-map-member-selected.json": "6004c645940b439ac8c9b602096c2c36b027dec9fd6528d7a24c591e276ff394",
     "conformance/expr-in-tests-membership-and-keys.json": "9e96fc9a6a106df835ecb01d7f75cf0f64589c490a16636fb9c733a4589d613c",
     "conformance/expr-in-with-non-string-rejected.json": "7897e78702f2696e80100394e152f0802f8e924102f40041191543ef7dfa6ba4",
     "conformance/expr-index-rejected.json": "76a0b4d922b827867da701c0430963ad6361ea68b86e01a6448f087679ab094a",
@@ -110,7 +111,7 @@
     "conformance/hint-without-copy-rejected.json": "d98c39751f3049a6f80a5d9d737a328c09114f4330ba540d6f26616d4fc93cd1",
     "conformance/host-fact-absent-reads-zero-value.json": "88015a993c4aead17b6730aa4f90cb7877d0ec58154c5d52c37d96e85f58d342",
     "conformance/host-int-fact-compares-as-int.json": "9de1d41a5b3a4291b94c29ea59b71b25a24e798ffd4de9b63177fead28cefa89",
-    "conformance/manifest.json": "02a62e887a3ef3cddae264b25fa8ccf5cb738ba5aa595966766e72deb302dc96",
+    "conformance/manifest.json": "f4a5fb130b4e81680dd89ee799cd7e028df755ef8dd60a48be9b90e846a6c6f1",
     "conformance/on-error-copy-omitted.json": "c646def36771256b2f6c87ef6ec14b9702db026cfbac1ccf9a6ea556b5a4d455",
     "conformance/ops-applied-trace-records-passes.json": "8b3824c37dd97ef284fa519102f0a82f0252afd332ad212df1b0454fcaa1e4b2",
     "conformance/ops-detector-ref-unresolvable-rejected.json": "593fa7f761d9572ab47b5d1299af58e6e276f3415cbeb3009ac7e57ae7bd8707",
@@ -138,7 +139,7 @@
     "conformance/sel-unmodelled-clause-does-not-match.json": "c4f1b2dec2f6e58c4d1ff22af61150a6945b5df359221849825cad4f183ef84d",
     "conformance/stream-chunk-unsupported-rejected.json": "fc941344427098260de8d3335cbb3cfe781b6b0e5e882749460b2be1562eb179",
     "conformance/substitute-carries-copy.json": "8694e6b429291a9b1a2d74371864a13f2168d68b88c23478edb9a25bc2c3646f",
-    "open-agent-rules.md": "0694733d712215e666a58ef3ecd7ebcfc6668e25f9140b0ed2cef3641a60a195",
+    "open-agent-rules.md": "37b9827d79e44ab7a8bf65e147c897df444e0c9ccd4d2ec056f630942bcd3a77",
     "schemas/oar-profile.schema.json": "b6ec2b474c774bd48234f5d1f8fcb1ff8fafc2c3e87879fea87c64b5a74abfe8",
     "schemas/oar.schema.json": "4ca369a0c99f6f59202c682f46eaf3ede6962bb2763e5fa582ae5e9179a08c3e",
     "schemas/selector.schema.json": "42595c794c1046b6c0c0abf2c49ff3449b8f47c34a6020a4098b2b858cf562d0",
