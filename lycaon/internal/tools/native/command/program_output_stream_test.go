@@ -64,6 +64,28 @@ func TestProgramStreamHardLimitRetainsExactPrefix(t *testing.T) {
 	}
 }
 
+func TestProgramStreamMarksTruncatedWhenContextCanceledMidProgram(t *testing.T) {
+	account := &outputSpillAccount{}
+	ctx, cancel := context.WithCancel(t.Context())
+	stream := newProgramStream(ctx, 8, account, nil)
+	defer stream.Close()
+	_, err := stream.Write([]byte("prefix\n"))
+	testutil.FailErr(t, "write prefix", err)
+	cancel()
+	n, err := stream.Write([]byte("after cancel\n"))
+	if n != 0 || !errors.Is(err, context.Canceled) {
+		t.Fatalf("canceled write=(%d,%v)", n, err)
+	}
+	if !stream.truncated {
+		t.Fatal("canceled capture left unmarked")
+	}
+	got, err := io.ReadAll(stream.snapshot(t))
+	testutil.FailErr(t, "read retained prefix", err)
+	if string(got) != "prefix\n" {
+		t.Fatalf("retained prefix=%q", got)
+	}
+}
+
 func TestOutputWindowDoesNotSplitLongLinesAndNamesIncompleteCopy(t *testing.T) {
 	data := strings.Repeat("x", 20000) + "\nsummary\n"
 	sample, err := sampleOutput(strings.NewReader(data), 12<<10)
