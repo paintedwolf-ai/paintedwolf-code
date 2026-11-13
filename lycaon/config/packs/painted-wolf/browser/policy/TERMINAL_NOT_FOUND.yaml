@@ -1,30 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: TERMINAL_NOT_FOUND
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - terminal_send
     - terminal_read
     - terminal_snapshot
     - terminal_close
-requires:
-  profiles:
-    - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.id, paintedwolf.terminal_not_pty, paintedwolf.next_steps]
+requires_facts: [paintedwolf.id, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.terminal_not_pty]
 when: paintedwolf.rejection_code == "TERMINAL_NOT_FOUND"
 effect: block
-copy:
-  what: >-
-    {% if paintedwolf.terminal_not_pty %}Handle {{ paintedwolf.id }} belongs to a command, not a terminal.{% else %}No terminal in this session matches id {{ paintedwolf.id }}.{% endif %}
-  cause: Terminal operations require a terminal id from the same session; closed or reaped ids are no longer available.
-  why: Driving a missing handle cannot restore the process.
-  fix: '{% if paintedwolf.terminal_not_pty %}{% else %}Use a terminal id returned in this session. {% endif %}{{ paintedwolf.next_steps }} Inspect any known prior outcome before repeating work.'
-  instead: Keep command handles and terminal ids on their corresponding tools
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:terminal_session
-x-paintedwolf-message: terminal id is not a live pty handle in this session
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:terminal_session
+message: terminal id is not a live pty handle in this session
+what: >-
+  {% if paintedwolf.terminal_not_pty %}Handle {{ paintedwolf.id }} belongs to a command, not a terminal.{% else %}No terminal in this session matches id {{ paintedwolf.id }}.{% endif %}
+cause: Terminal operations require a terminal id from the same session; closed or reaped ids are no longer available.
+why: Driving a missing handle cannot restore the process.
+fix: '{% if paintedwolf.terminal_not_pty %}{% else %}Use a terminal id returned in this session. {% endif %}{{ paintedwolf.next_steps }} Inspect any known prior outcome before repeating work.'
+instead: Keep command handles and terminal ids on their corresponding tools
+scenarios:
   - id: default
     vars:
       id: missing-id

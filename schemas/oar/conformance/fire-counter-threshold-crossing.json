@@ -1,0 +1,55 @@
+{
+  "id": "fire-counter-threshold-crossing",
+  "title": "The threshold on an engine counter lives in the rule, not in the engine",
+  "covers": [
+    "OAR-FIRE-3",
+    "OAR-FIRE-4"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "BELOW_THRESHOLD",
+      "kind": "invariant",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "nudge",
+      "emit": "rule:conformance",
+      "when": "tool == \"read\"",
+      "on_fire": [
+        "increment_breaker",
+        "increment_breaker",
+        "increment_breaker"
+      ]
+    },
+    {
+      "spec_version": "1.0",
+      "id": "THRESHOLD_ARMED",
+      "kind": "invariant",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "emit": "rule:conformance",
+      "when": "breaker_count >= 3"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session"
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "BELOW_THRESHOLD",
+    "applied": [
+      "BELOW_THRESHOLD:fired",
+      "THRESHOLD_ARMED:passed"
+    ],
+    "counters": {
+      "BELOW_THRESHOLD": {
+        "breaker_count": 3
+      }
+    }
+  }
+}

@@ -14,7 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// [OAR-EVAL-8] Shared validation categories never select another failure's
+// [OAR-EVAL-6] Shared validation categories never select another failure's
 // recovery or side effects. Exercise the stock decision before renderer fallback.
 func TestCatalogIntrinsicRejectionsKeepTheirIdentity(t *testing.T) {
 	bp := stockBlockPlane(t)

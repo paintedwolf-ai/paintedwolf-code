@@ -67,7 +67,7 @@ func MergeTiered(sets ...*RuleSet) (*RuleSet, error) {
 			}
 			key := r.Identity()
 			if prev, ok := byIdentity[key]; ok {
-				return nil, fmt.Errorf("[OAR-DOC-9] duplicate rule identity %s (%s vs %s)", key, prev.Source, r.Source)
+				return nil, fmt.Errorf("[OAR-DOC-22] duplicate rule identity %s (%s vs %s)", key, prev.Source, r.Source)
 			}
 			byIdentity[key] = r
 		}

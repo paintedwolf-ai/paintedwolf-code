@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/oarcopy"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
@@ -32,7 +33,7 @@ func TestAgentVocabularyRequiresStableSignaturesAndRetirementSuccessors(t *testi
 			if tc.missing {
 				delete(after, "new")
 			}
-			err := checkVocabulary("host fact", before, after, retired)
+			err := checkVocabulary("host fact", before, after, retired, nil)
 			if tc.want == "" {
 				testutil.FailErr(t, "check fact lineage", err)
 			} else if err == nil || !strings.Contains(err.Error(), tc.want) {
@@ -40,10 +41,10 @@ func TestAgentVocabularyRequiresStableSignaturesAndRetirementSuccessors(t *testi
 			}
 		})
 	}
-	if err := checkVocabulary("rejection code", map[string]codeSignature{}, map[string]codeSignature{}, map[string]retirementSuccessors{"OLD": {}}); err == nil {
+	if err := checkVocabulary("rejection code", map[string]codeSignature{}, map[string]codeSignature{}, map[string]retirementSuccessors{"OLD": {}}, nil); err == nil {
 		t.Fatal("retirement without successor passed")
 	}
-	if err := checkVocabulary("rejection code", map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "reject"}}, map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "kick"}}, map[string]retirementSuccessors{}); err == nil || !strings.Contains(err.Error(), "signature") {
+	if err := checkVocabulary("rejection code", map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "reject"}}, map[string]codeSignature{"EXAMPLE": {Category: "gate", Emit: "kick"}}, map[string]retirementSuccessors{}, nil); err == nil || !strings.Contains(err.Error(), "signature") {
 		t.Fatalf("changed rejection code meaning passed: %v", err)
 	}
 }
@@ -90,5 +91,16 @@ func TestRetirementCatalogIsClosedAndVersioned(t *testing.T) {
 	after := treeRelease{"schemas/agent-public-retirements.json": []byte(`{"format_version":1,"vocabularies":{"host_facts":{},"rejection_codes":{},"tools":{},"workflow_terms":{},"anchors":{},"themes":{}}}`)}
 	if err := checkAgentVocabulary(before, after); err == nil || !strings.Contains(err.Error(), "released retirement") {
 		t.Fatalf("retirement removal: %v", err)
+	}
+}
+
+func TestHostFactRetiresIntoThePortableVocabulary(t *testing.T) {
+	before := map[string]factSignature{"paintedwolf.gone": {Name: "paintedwolf.gone", Type: "int"}}
+	retired := map[string]retirementSuccessors{"paintedwolf.gone": {Names: []string{"same_code_reject_run"}}}
+	if err := checkVocabulary("host fact", before, map[string]factSignature{}, retired, oarcopy.IsPortableFact); err != nil {
+		t.Fatalf("portable successor refused: %v", err)
+	}
+	if err := checkVocabulary("host fact", before, map[string]factSignature{}, retired, nil); err == nil {
+		t.Fatal("successor outside the vocabulary was accepted")
 	}
 }

@@ -1,34 +1,26 @@
-oar: '1.0'
+spec_version: "1.0"
 id: MOVE_SYMLINK_ESCAPE
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  paintedwolf.operation:
-  - move
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.path_escape
-  - paintedwolf.path
+  ledger:
+    paintedwolf.operation:
+      - move
+requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.path_escape, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "MOVE_SYMLINK_ESCAPE"
 effect: block
-copy:
-  cause: The resolved link target fails the scope check.
-  why: A rejected item does not undo earlier successful moves in the batch.
-  fix: Inspect the intended source and destination within permitted scope. Do not retarget the link or switch
-    tools to reach protected content; preserve earlier successful move receipts.
-  instead: Resolve the reported item and preserve completed move receipts
-  what: The link at {{ paintedwolf.path }} does not resolve within the allowed move scope.
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:move
-x-paintedwolf-message: move:move symlink target escapes scope
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: implement
-    tool: move
+category: recoverable
+emit: guard:move
+message: move:move symlink target escapes scope
+what: The link at {{ paintedwolf.path }} does not resolve within the allowed move scope.
+cause: The resolved link target fails the scope check.
+why: A rejected item does not undo earlier successful moves in the batch.
+fix: Inspect the intended source and destination within permitted scope. Do not retarget the link or switch tools to reach protected content; preserve earlier successful move receipts.
+instead: Resolve the reported item and preserve completed move receipts
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: implement
+      tool: move

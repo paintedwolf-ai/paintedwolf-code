@@ -21,7 +21,7 @@ func TestFactsFromDataPublishesReasonFieldAndPath(t *testing.T) {
 	}
 	for _, key := range []string{"arg_validation_errors", "arg_validation_reason", "arg_validation_field"} {
 		if _, present := got[key]; present {
-			t.Fatalf("[OAR-PROF-3] diagnostic invented argument-check fact %s", key)
+			t.Fatalf("[OAR-FACT-10] diagnostic invented argument-check fact %s", key)
 		}
 	}
 	if got["paintedwolf.path"] != "src/main.go" {
@@ -69,17 +69,17 @@ func TestCapabilityFactsRequireReceivingToolIdentity(t *testing.T) {
 
 func TestExplicitArgumentObservationsRemainSeparateFromDiagnostics(t *testing.T) {
 	got := FactsFromData(map[string]any{"reason": "connection ended", "field": "response", "arg_validation_reason": "invalid count", "arg_validation_field": "count"})
-	if got["arg_validation_reason"] != "invalid count" || got["arg_validation_field"] != "count" || got["paintedwolf.rejection_reason"] != "connection ended" || got["paintedwolf.rejection_field"] != "response" {
-		t.Fatalf("[OAR-PROF-3] observations and diagnostics were conflated: %#v", got)
+	if got["paintedwolf.arg_validation_reason"] != "invalid count" || got["paintedwolf.arg_validation_field"] != "count" || got["paintedwolf.rejection_reason"] != "connection ended" || got["paintedwolf.rejection_field"] != "response" {
+		t.Fatalf("[OAR-FACT-10] observations and diagnostics were conflated: %#v", got)
 	}
 }
 
 func TestPortableVocabularyAccessors(t *testing.T) {
-	if !slices.Contains(RequiredCoreFacts(), "anchor") || !slices.Contains(RequiredCoreFunctions(), "fire_count_of") {
+	if !slices.Contains(RequiredCoreFacts(), "breaker_count") || !slices.Contains(RequiredCoreFunctions(), "path_outside_scope") {
 		t.Fatal("missing core facts or functions")
 	}
 	profiles := StandardProfileFacts()
-	if !slices.Contains(profiles[ProfileTool], "tool") || !IsPortableFact("tool") || !IsPortableFact("anchor") || IsPortableFact("paintedwolf.path") {
+	if !slices.Contains(profiles[ProfileMCP], "mcp_server_id") || !IsPortableFact("tool") || IsPortableFact("anchor") || IsPortableFact("paintedwolf.path") {
 		t.Fatalf("unexpected portable vocabulary: %#v", profiles)
 	}
 }

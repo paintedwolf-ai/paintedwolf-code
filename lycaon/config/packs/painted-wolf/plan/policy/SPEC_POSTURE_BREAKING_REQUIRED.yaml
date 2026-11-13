@@ -1,27 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SPEC_POSTURE_BREAKING_REQUIRED
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.rejection_code]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SPEC_POSTURE_BREAKING_REQUIRED"
 effect: block
-copy:
-  cause: Breaking-change policy required before research or critic Tasks
-  why: 'Add ## Plan breaking changes or frontmatter breaking policy'
-  fix: 'Add ## Plan breaking changes or frontmatter breaking policy'
-  instead: Capture breaking policy in Phase 0
-  what: Breaking-change policy required before research or critic Tasks
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: rule:spec
-x-paintedwolf-message: Breaking-change policy required before research or critic Tasks
-x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: read
 x-paintedwolf-audience:
-- coordinator
+  - coordinator
+category: recoverable
+emit: rule:spec
+message: Breaking-change policy required before research or critic Tasks
+what: Breaking-change policy required before research or critic Tasks
+cause: Breaking-change policy required before research or critic Tasks
+why: 'Add ## Plan breaking changes or frontmatter breaking policy'
+fix: 'Add ## Plan breaking changes or frontmatter breaking policy'
+instead: Capture breaking policy in Phase 0
+scenarios:
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      profile: coordinator
+      tool: read

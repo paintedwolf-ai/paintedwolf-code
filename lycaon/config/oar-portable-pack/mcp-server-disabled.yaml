@@ -1,0 +1,16 @@
+# Uses a profile many hosts will not provide. `requires_facts` is what makes
+# that a clean load-time refusal instead of a mystery at run time ([OAR-DOC-23]):
+# a host without the `mcp` profile does not declare these facts, and the rule is
+# rejected with both names in the error.
+spec_version: "1.0"
+id: MCP_SERVER_DISABLED
+namespace: example.security
+kind: policy
+on: tool.pre_invoke
+selector: {}
+requires_facts: [mcp_server_id, mcp_server_enabled]
+when: 'mcp_server_id != "" && !mcp_server_enabled'
+effect: block
+profile: portable
+what: The call targets a bridged server that is configured but not enabled.
+fix: Enable the server in the catalogue, or route the call elsewhere.

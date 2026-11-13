@@ -1,21 +1,20 @@
-oar: '1.0'
+spec_version: "1.0"
 id: TASK_SCOPE_WRITE_REQUIRED
 kind: policy
-anchor: coordinator.pre_invoke
-requires:
-  facts: [paintedwolf.agent_type, paintedwolf.profile_mutation_capable, paintedwolf.scope_mode, paintedwolf.tool_is_task, paintedwolf.next_steps]
+on: coordinator.pre_invoke
+selector: {}
+requires_facts: [paintedwolf.agent_type, paintedwolf.next_steps, paintedwolf.profile_mutation_capable, paintedwolf.scope_mode, paintedwolf.tool_is_task]
 when: paintedwolf.tool_is_task && paintedwolf.profile_mutation_capable && paintedwolf.scope_mode != "write"
 effect: block
-copy:
-  what: '**{{ paintedwolf.agent_type }}** uses a mutation-capable tool profile and must dispatch with **`scope.mode: write`** so changes land in an isolated overlay.'
-  cause: You dispatched a mutation-capable worker with read scope or omitted scope (defaults to read).
-  why: 'Read-scoped workers survey the primary tree; mutations require a write overlay.'
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: 'Branch on Code: read-only profiles for survey; mutation-capable profiles only with write overlays.'
-x-paintedwolf-category: recoverable
-x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: mutation-capable profiles require scope.mode write
-x-paintedwolf-scenarios:
+category: recoverable
+emit: guard:coordinator
+message: mutation-capable profiles require scope.mode write
+what: '**{{ paintedwolf.agent_type }}** uses a mutation-capable tool profile and must dispatch with **`scope.mode: write`** so changes land in an isolated overlay.'
+cause: You dispatched a mutation-capable worker with read scope or omitted scope (defaults to read).
+why: 'Read-scoped workers survey the primary tree; mutations require a write overlay.'
+fix: '{{ paintedwolf.next_steps }}'
+instead: 'Branch on Code: read-only profiles for survey; mutation-capable profiles only with write overlays.'
+scenarios:
   - id: default
     vars:
       agent_type: implementer

@@ -13,16 +13,14 @@ const ProgressReconciliationRequiredCode = "PROGRESS_RECONCILIATION_REQUIRED"
 // ProgressClosureBaseline snapshots the checklist when the closure latch arms.
 // Only the reconciliation service acknowledges finished worker jobs.
 type ProgressClosureBaseline struct {
-	Closed   int    // done + n/a rows at arm time
-	Content  string // stored checklist bytes at arm time
 	Revision string
 	JobIDs   []string
 	// Settled names worker finishes for rejection details.
 	Settled []string
 }
 
-// ObserveProgressItemNotClosedBeforeDispatch publishes progress-closure facts.
-func ObserveProgressItemNotClosedBeforeDispatch(
+// ObserveProgressReconciliationBeforeDispatch publishes progress-closure facts.
+func ObserveProgressReconciliationBeforeDispatch(
 	sess *api.Session,
 	progressContent, tool string,
 	baseline ProgressClosureBaseline,
@@ -39,12 +37,8 @@ func ObserveProgressItemNotClosedBeforeDispatch(
 	if !armed || !gc.Progress.ProgressGatedTool {
 		return
 	}
-	done, pending, na := progress.CloseCounts(progressContent)
+	_, pending, _ := progress.CloseCounts(progressContent)
 	gc.Progress.ProgressOpenItems = int64(pending)
-	closed := done + na
-	gc.Progress.ProgressClosedBeyondBaseline = closed > baseline.Closed
-	// Document changes do not consume worker-finish obligations.
-	gc.Progress.ProgressReconciledSinceArm = progressContent != baseline.Content
 	gc.PutRejectData(ProgressReconciliationRequiredCode, map[string]any{
 		"tool":         strings.TrimSpace(tool),
 		"pending":      pending,
