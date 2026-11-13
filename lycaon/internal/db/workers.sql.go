@@ -1091,6 +1091,45 @@ func (q *Queries) ListShelvedWorkerJobs(ctx context.Context, sessionID string) (
 	return items, nil
 }
 
+const listWorkerAncestorPendingJobs = `-- name: ListWorkerAncestorPendingJobs :many
+SELECT prior.job_id
+FROM worker_rounds r
+JOIN worker_rounds prior ON prior.worker_id = r.worker_id AND prior.ordinal < r.ordinal
+JOIN worker_results res ON res.worker_job_id = prior.job_id
+JOIN worker_jobs j ON j.id = prior.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY prior.ordinal
+`
+
+// The earlier rounds of the worker that ran this job whose changes are still
+// pending. A worker's lane carries every undisposed earlier result into its
+// later rounds, so landing a later round lands these with it.
+func (q *Queries) ListWorkerAncestorPendingJobs(ctx context.Context, jobID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkerAncestorPendingJobs, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var job_id string
+		if err := rows.Scan(&job_id); err != nil {
+			return nil, err
+		}
+		items = append(items, job_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkerConsumerIDs = `-- name: ListWorkerConsumerIDs :many
 SELECT worker_id FROM worker_dependencies
 WHERE producer_worker_id = ? ORDER BY worker_id

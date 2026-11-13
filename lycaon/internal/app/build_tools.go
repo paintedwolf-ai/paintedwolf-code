@@ -120,6 +120,9 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		Records: b.boards.WorkerRecords,
 		State:   workerlane.NewM14State(b.delegations.Queue),
 	}
+	if b.delegations.Recovery != nil {
+		lanes.Checkpoints = b.delegations.Recovery
+	}
 	b.delegations.Queue.SetWorkerLanes(lanes)
 	workerMergeSvc := &worker.MergeService{
 		Lanes:         lanes,

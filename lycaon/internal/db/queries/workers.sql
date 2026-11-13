@@ -246,6 +246,21 @@ SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_se
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE child_session_id = ?;
 
+-- name: ListWorkerAncestorPendingJobs :many
+-- The earlier rounds of the worker that ran this job whose changes are still
+-- pending. A worker's lane carries every undisposed earlier result into its
+-- later rounds, so landing a later round lands these with it.
+SELECT prior.job_id
+FROM worker_rounds r
+JOIN worker_rounds prior ON prior.worker_id = r.worker_id AND prior.ordinal < r.ordinal
+JOIN worker_results res ON res.worker_job_id = prior.job_id
+JOIN worker_jobs j ON j.id = prior.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY prior.ordinal;
+
 -- name: DisposeWorkerResultsByJob :execrows
 -- Records how a landing or rejection resolved a worker round's changes, in
 -- the transaction that resolved them. Landed and rejected are final; a
