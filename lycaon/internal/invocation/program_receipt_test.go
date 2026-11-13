@@ -22,6 +22,7 @@ type programReceiptFixture struct {
 	recorder                       *invocation.SQLRecorder
 	database                       db.Handle
 	parent, program, root, session string
+	call                           string
 	definition                     toolcontract.OperationDefinition
 	span                           toolcontract.SourceSpan
 	sourceStart                    toolcontract.ProgramStart
@@ -37,23 +38,23 @@ func newProgramReceiptFixtureWithArgs(t *testing.T, args map[string]any) program
 	database := testdbfixture.Open(t, "programs.db")
 	session := "session-1"
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
-	return programReceiptFixtureOn(t, database, session, args)
+	return programReceiptFixtureOn(t, database, session, "actual-model-call", args)
 }
 
-// programReceiptFixtureOn begins an actual command program in an existing store.
-func programReceiptFixtureOn(t *testing.T, database db.Handle, session string, args map[string]any) programReceiptFixture {
+// programReceiptFixtureOn begins an actual command program for one model call in an existing store.
+func programReceiptFixtureOn(t *testing.T, database db.Handle, session, call string, args map[string]any) programReceiptFixture {
 	t.Helper()
 	recorder := invocation.NewSQLRecorder(database)
 	contract, ok := toolcontract.Lookup("command")
 	if !ok {
 		t.Fatal("command contract missing")
 	}
-	parent, err := recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: session, ToolCallID: "actual-model-call", ToolName: "command", Args: args, Contract: contract})
+	parent, err := recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: session, ToolCallID: call, ToolName: "command", Args: args, Contract: contract})
 	testutil.FailErr(t, "begin real model call", err)
 	read, _ := toolcontract.Lookup("read")
 	definition, err := toolcontract.ToolOperation("read", json.RawMessage(`{"type":"object"}`), read)
 	testutil.FailErr(t, "freeze native definition", err)
-	f := programReceiptFixture{recorder: recorder, database: database, parent: parent.ID, program: uuid.NewString(), root: uuid.NewString(), session: session, definition: definition, span: toolcontract.SourceSpan{StartByte: 0, EndByte: 9, Line: 1, Column: 1}}
+	f := programReceiptFixture{recorder: recorder, database: database, call: call, parent: parent.ID, program: uuid.NewString(), root: uuid.NewString(), session: session, definition: definition, span: toolcontract.SourceSpan{StartByte: 0, EndByte: 9, Line: 1, Column: 1}}
 	digest := sha256.Sum256([]byte("${op} arg"))
 	sourceDigest := hex.EncodeToString(digest[:])
 	f.sourceStart = toolcontract.ProgramStart{Version: toolcontract.ProgramVersion{ProgramID: f.program, ParentReceiptID: f.parent, RootExecutionID: f.root, LanguageVersion: toolcontract.LanguageVersion, CatalogDigest: toolcontract.LanguageCatalogDigest(), SourceUnitID: "submitted", SourceDigest: sourceDigest, SourceReference: "output:exact-program"}, PlanReference: "output:validated-plan", SourceExact: true, SyntaxValidated: true, Sources: []toolcontract.ProgramSource{{UnitID: "submitted", Pin: toolcontract.SourcePin{SourceID: "submitted-program", Revision: sourceDigest, Representation: toolcontract.UTF8SourceBytes, SHA256: sourceDigest, EndByte: 9}, DetailReference: "output:exact-program"}}, Nodes: []toolcontract.ProgramNode{{ID: "cat-node", SourceUnitID: "submitted", Span: f.span}, {ID: "untaken-node", SourceUnitID: "submitted", Span: f.span}}}
@@ -101,7 +102,7 @@ func (f programReceiptFixture) start(t *testing.T, bound toolcontract.BoundOpera
 	testutil.FailErr(t, "freeze actual lossless reviewed inputs", err)
 	defer release()
 	observer := invocation.ProgramAdmissionRecorder{Recorder: f.recorder, Inputs: inputs}
-	testutil.FailErr(t, "record before owner", observer.BeforeNativeOwner(t.Context(), bound, "actual-model-call", review))
+	testutil.FailErr(t, "record before owner", observer.BeforeNativeOwner(t.Context(), bound, f.call, review))
 	if !observer.OwnerStartRecorded {
 		t.Fatal("owner start was not acknowledged")
 	}

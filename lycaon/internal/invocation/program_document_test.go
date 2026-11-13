@@ -88,7 +88,7 @@ func TestReceiptDocumentRowOrderAndWindows(t *testing.T) {
 	f.start(t, first)
 	second := f.child(t)
 	f.start(t, second)
-	other := programReceiptFixtureOn(t, f.database, f.session, map[string]any{"command": "${op} arg"})
+	other := programReceiptFixtureOn(t, f.database, f.session, "second-model-call", map[string]any{"command": "${op} arg"})
 	for range 3 {
 		other.start(t, other.child(t))
 	}
@@ -352,9 +352,17 @@ func TestReceiptSearchBoundsRowsPerRequest(t *testing.T) {
 	if requests != 2 {
 		t.Fatalf("requests = %d", requests)
 	}
-	tail, err := f.recorder.SearchReceiptDocument(t.Context(), f.session, scopes, invocation.ReceiptSearch{Revision: page.Revision, Query: `"untaken-node"`, Cursor: cursor, CaseSensitive: true, Limit: 50})
-	testutil.FailErr(t, "search tail", err)
-	if len(tail.Matches) != 1 || tail.Matches[0].Row != page.TotalRows-1 {
-		t.Fatalf("tail matches = %+v", tail.Matches)
+	var found []wire.CommandReceiptMatch
+	cursor = ""
+	for {
+		result, err := f.recorder.SearchReceiptDocument(t.Context(), f.session, scopes, invocation.ReceiptSearch{Revision: page.Revision, Query: `"untaken-node"`, Cursor: cursor, CaseSensitive: true, Limit: 50})
+		testutil.FailErr(t, "search for the last row", err)
+		found = append(found, result.Matches...)
+		if cursor = result.NextCursor; cursor == "" {
+			break
+		}
+	}
+	if len(found) != 1 || found[0].Row != page.TotalRows-1 {
+		t.Fatalf("matches = %+v", found)
 	}
 }

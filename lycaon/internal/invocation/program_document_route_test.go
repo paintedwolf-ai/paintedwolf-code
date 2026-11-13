@@ -25,7 +25,7 @@ func TestReceiptDocumentRoutes(t *testing.T) {
 	})
 	const session = "11111111-2222-4333-8444-555555555555"
 	testdbseed.InsertSession(t, database, session, testdbseed.DefaultProjectID)
-	f := programReceiptFixtureOn(t, database, session, map[string]any{"command": "${op} arg"})
+	f := programReceiptFixtureOn(t, database, session, "actual-model-call", map[string]any{"command": "${op} arg"})
 	f.start(t, f.child(t))
 	get := func(path string, query url.Values) *httptest.ResponseRecorder {
 		t.Helper()
