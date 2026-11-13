@@ -9,6 +9,11 @@ import type { FileEditSnapshot, Message } from "../../api/types.ts";
 
 type CommandCall = { id: string; edits?: FileEditSnapshot[]; omitted?: number };
 
+/** Rows are ordered by their place in the session. */
+function at(seq: number) {
+  return { created_at: `2026-01-01T00:00:${String(seq).padStart(2, "0")}Z`, seq, ord: seq };
+}
+
 /** One assistant turn of `command` calls and their settled result rows. */
 function commandTurn(turn: string, seq: number, calls: CommandCall[]): Message[] {
   const assistant = {
@@ -16,8 +21,7 @@ function commandTurn(turn: string, seq: number, calls: CommandCall[]): Message[]
     role: "assistant", origin: "model", authority: "none", trust_tier: "trusted",
     content: "",
     tool_calls: calls.map((call) => ({ id: call.id, name: "command", args: { command: `run ${call.id}` } })),
-    created_at: "2026-01-01T00:00:00Z",
-    seq,
+    ...at(seq),
   } as Message;
   const results = calls.map((call, index) => ({
     id: `result-${call.id}`,
@@ -32,8 +36,7 @@ function commandTurn(turn: string, seq: number, calls: CommandCall[]): Message[]
       file_edit_previews: (call.edits ?? []).map(fileEditPreviewFixture),
       file_edits_omitted: call.omitted,
     },
-    created_at: "2026-01-01T00:00:01Z",
-    seq: seq + 1 + index,
+    ...at(seq + 1 + index),
   }) as Message);
   return [assistant, ...results];
 }
@@ -41,7 +44,7 @@ function commandTurn(turn: string, seq: number, calls: CommandCall[]): Message[]
 function user(id: string, seq: number): Message {
   return {
     id, role: "user", origin: "user", authority: "user", trust_tier: "trusted",
-    content: "next", created_at: "2026-01-01T00:00:00Z", seq,
+    content: "next", ...at(seq),
   } as Message;
 }
 
