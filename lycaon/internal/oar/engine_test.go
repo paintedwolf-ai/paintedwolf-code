@@ -199,8 +199,8 @@ func TestSyncRegistryThreadsReferences(t *testing.T) {
     references:
       owasp_llm: [LLM01]
       mitre_atlas: [AML.T0051]
-    emit: guard:test
-    category: recoverable
+    x-paintedwolf-emit: guard:test
+    x-paintedwolf-category: recoverable
 `
 	testutil.FailErr(t, "write", os.WriteFile(filepath.Join(dir, "DEMO_OWASP_TAG.yaml"), []byte(body), 0o600))
 	regPath := filepath.Join(t.TempDir(), "guidance_registry.json")
