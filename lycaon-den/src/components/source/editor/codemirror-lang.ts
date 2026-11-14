@@ -629,7 +629,7 @@ export const prettyStreamParserFacet = Facet.define<StreamParser<unknown> | null
 const STREAM_PARSERS = new WeakMap<Language, StreamParser<unknown>>();
 
 function defineStream<S>(parser: StreamParser<S>): StreamLanguage<S> {
-  const lang = defineStream(parser);
+  const lang = StreamLanguage.define(parser);
   STREAM_PARSERS.set(lang, parser as StreamParser<unknown>);
   return lang;
 }

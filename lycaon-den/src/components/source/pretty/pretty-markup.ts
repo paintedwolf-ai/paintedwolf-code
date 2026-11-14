@@ -155,7 +155,7 @@ export function stepMarkup(cursor: ScanCursor, pos: number, end: number): number
 
   if (m.embedded) {
     const emb = m.embedded;
-    if (!state.lexer!.inProtected()) {
+    if (!(state.lexer?.inProtected() ?? false)) {
       if (emb.closeTag === "---") {
         if (!state.hasContent && lineEnd - pos >= 3 && text.slice(pos, lineEnd).trim() === "---") {
           state.lexer = null;

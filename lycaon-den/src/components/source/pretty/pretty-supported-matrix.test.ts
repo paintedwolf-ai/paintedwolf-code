@@ -336,7 +336,7 @@ describe("bidirectional supportedLanguages matrix", () => {
 
     for (const { filePath, commentPrefix, isSexp } of modes) {
       const chunk = isSexp ? "(step alpha beta) " : "alpha(beta, gamma), ";
-      const repeatCount = Math.ceil(11_200 / chunk.length);
+      const repeatCount = Math.ceil(15_100 / chunk.length);
       const prefix = (isSexp ? "(begin " : "call(") + chunk.repeat(repeatCount);
       const stringTrap = '"trap, (x); [y] {z}"';
       const middle = isSexp ? " (after one two) " : ", after(one, two)) ";

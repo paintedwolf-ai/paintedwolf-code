@@ -435,6 +435,7 @@ export function loadedBuffer(args?: {
   overLimit?: boolean;
   kind?: "text" | "image" | "info";
   jobId?: string;
+  language?: { path: string; name: string };
 }) {
   const path = args?.path ?? "src/main.ts";
   const key = openFilesBuffer(PROJECT, {
@@ -461,6 +462,7 @@ path,
     ...(args?.overLimit || args?.kind
       ? {}
       : { sha256: args?.sha256 ?? "base-sha", encoding: "utf-8" as const }),
+    ...(args?.language ? { language: args.language } : {}),
   });
   return projectFilesState(PROJECT).byKey[key]!;
 }

@@ -354,8 +354,8 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     const buf = loadedBuffer({
       path: "bin/deploy",
       content: "def deploy(targets, dry_run): return [t for t in targets if not dry_run]\n",
+      language: { path: "bin/deploy", name: "python" },
     });
-    buf.language = { path: "bin/deploy", name: "python" };
     void saveEditorLineLayout("pretty");
     const props = editorProps(buf);
     render(() => <FilesEditor {...props} />);
