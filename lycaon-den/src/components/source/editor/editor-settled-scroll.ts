@@ -8,6 +8,11 @@ type ScrollStrategy = "nearest" | "start" | "end" | "center";
 export const SETTLED_SCROLL_REPEATS = 40;
 /** Frames checked before giving up. */
 const SETTLED_SCROLL_CHECKS = 96;
+/**
+ * Frames checked while the editor is still measuring: in a long line each
+ * drawn window changes the height estimates, moving the target as it settles.
+ */
+const SETTLED_SCROLL_MEASURING_CHECKS = 900;
 /** Consecutive frames the target must stay visible. */
 const SETTLED_SCROLL_STABLE = 2;
 
@@ -74,6 +79,7 @@ function settleScroll(
   let stable = 0;
   let scale = 1;
   let lastSign = 0;
+  let lastHeight = view.scrollDOM.scrollHeight;
   const check = (): void => {
     if (activeSettles.get(view) !== token) return;
     if (!view.dom.isConnected) return release();
@@ -82,12 +88,16 @@ function settleScroll(
       write: (offset, v) => {
         if (activeSettles.get(v) !== token) return;
         checks += 1;
+        const height = v.scrollDOM.scrollHeight;
+        const measuring = height !== lastHeight;
+        lastHeight = height;
         if (offset !== null && offset.exact && offset.top === 0 && offset.left === 0) {
           stable += 1;
           if (stable >= SETTLED_SCROLL_STABLE) return release();
         } else {
-          if (repeats >= SETTLED_SCROLL_REPEATS) return release();
-          repeats += 1;
+          // Corrections spent chasing estimates the editor is still revising do not count.
+          if (repeats >= SETTLED_SCROLL_REPEATS && !measuring) return release();
+          if (!measuring) repeats += 1;
           if (offset === null) {
             stable = 0;
             // A measure's write phase may not dispatch.
@@ -112,7 +122,7 @@ function settleScroll(
             }
           }
         }
-        if (checks < SETTLED_SCROLL_CHECKS) requestAnimationFrame(check);
+        if (checks < SETTLED_SCROLL_CHECKS || (measuring && checks < SETTLED_SCROLL_MEASURING_CHECKS)) requestAnimationFrame(check);
         else release();
       },
     });
