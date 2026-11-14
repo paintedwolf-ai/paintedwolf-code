@@ -13,12 +13,15 @@ export type LineFactRow = {
   key: string;
   title: string;
   fact: string;
+  /** Relative time, shown after the fact in the card only. */
+  when?: string;
   tool?: string;
   color?: string;
   waiting?: boolean;
   target: LineFactTarget;
 };
 export type LineFacts = { now: LineFactRow[]; changed: LineFactRow[]; findings: LineFactRow[]; count: number };
+export type LineFactsHint = { lead: LineFactRow; more: number };
 export type LineFactsInput = {
   doc: Text;
   marks: readonly PaintedAgentMark[];
@@ -87,7 +90,8 @@ export function lineFacts(line: number, input: LineFactsInput): LineFacts {
     const chat = input.activeChats?.get(author.sessionId);
     changed.push({ key: `${author.sessionId}:${author.turn}:${author.toolCallId}`,
       title: chat?.title || present?.mark.chat.title || input.sessionTitles?.[author.sessionId]?.trim() || "Chat",
-      fact: `Edited ${span(attr!.startLine, attr!.endLine)} · turn ${author.turn}${relativeTimeLabel(author.ts) ? ` · ${relativeTimeLabel(author.ts)}` : ""}`,
+      fact: `Edited ${span(attr!.startLine, attr!.endLine)} · turn ${author.turn}`,
+      when: relativeTimeLabel(author.ts) || undefined,
       color: chat?.color ?? present?.color?.caret,
       target: { kind: "chat", sessionId: author.sessionId, toolCallId: author.toolCallId },
     });
@@ -100,4 +104,14 @@ export function lineFacts(line: number, input: LineFactsInput): LineFacts {
       target: { kind: "finding", finding } });
   }
   return { now, changed, findings, count: now.length + changed.length + findings.length };
+}
+
+export function lineFactsHint(facts: LineFacts): LineFactsHint | null {
+  const lead = facts.now[0] ?? facts.changed[0] ?? facts.findings[0];
+  return lead ? { lead, more: facts.count - 1 } : null;
+}
+
+export function lineFactsHintLabel(hint: LineFactsHint): string {
+  const lead = hint.lead.target.kind === "finding" ? `${hint.lead.fact} · ${hint.lead.title}` : hint.lead.fact;
+  return hint.more > 0 ? `${lead} · ${hint.more} more` : lead;
 }

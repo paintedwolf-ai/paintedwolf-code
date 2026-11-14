@@ -87,7 +87,7 @@ export function LineFactsCard(props: Props) {
                   <span class="files-line-facts__main">
                     <span class="files-line-facts__who" data-tip={row().title} data-tip-when-clipped>{row().title}</span>
                     <span class="files-line-facts__fact" classList={{ "files-line-facts__fact--waiting": row().waiting }}>
-                      {row().fact}<Show when={row().tool}> · <span class="files-line-facts__tool">{row().tool}</span></Show>
+                      {row().fact}<Show when={row().when}>{when => ` · ${when()}`}</Show><Show when={row().tool}> · <span class="files-line-facts__tool">{row().tool}</span></Show>
                     </span>
                   </span>
                   <span class="files-line-facts__go" classList={{ "files-line-facts__go--waiting": row().waiting }}>
