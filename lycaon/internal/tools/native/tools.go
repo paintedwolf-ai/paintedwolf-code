@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
+	"github.com/lycaon/lycaon/pkg/api"
 )
 
 const coordinatorProfileID = "coordinator"
@@ -46,21 +47,32 @@ func (t *WriteTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 	return result.Receipt(), nil
 }
 
-func captureFileEdit(tctx tools.ToolContext, resolved projectpaths.Resolved, path, after string, before *string) {
-	if tctx.Effects.Out == nil || strings.TrimSpace(path) == "" {
+// textEdit is one landed change to a file's text.
+type textEdit struct {
+	before  *string
+	after   string
+	deleted bool
+}
+
+// captureFileEdit records a landed text change on the call's outputs. A file
+// under an attached root is named by that root and its path within it.
+func captureFileEdit(tctx tools.ToolContext, resolved projectpaths.Resolved, edit textEdit) {
+	if tctx.Effects.Out == nil || strings.TrimSpace(resolved.DisplayPath) == "" {
 		return
 	}
+	recorded := api.FileEditSnapshot{Path: resolved.DisplayPath, Deleted: edit.deleted}
+	if resolved.Root.ID != "" && resolved.ScopeRel != "" {
+		recorded.RootID, recorded.Path = resolved.Root.ID, resolved.ScopeRel
+	} else if root, rel, ok := tctx.SourceLocation(resolved.Abs); ok && rel != "" {
+		recorded.RootID, recorded.Path = root.ID, rel
+	}
 	// The recorded edit names each value this call resolved by its reference.
-	if before != nil {
-		referenced := tctx.Effects.Secrets.ReferenceEchoes(*before)
-		before = &referenced
+	if edit.before != nil {
+		referenced := tctx.Effects.Secrets.ReferenceEchoes(*edit.before)
+		recorded.Before = &referenced
 	}
-	tctx.Effects.Out.FileEdit = &tools.FileEditCapture{
-		Path:   path,
-		RootID: resolved.Root.ID,
-		Before: before,
-		After:  tctx.Effects.Secrets.ReferenceEchoes(after),
-	}
+	recorded.After = tctx.Effects.Secrets.ReferenceEchoes(edit.after)
+	tctx.Effects.Out.RecordFileEdit(recorded)
 }
 
 // verifyTextWriteBase compares the destination immediately before replacement.

@@ -58,6 +58,7 @@ import (
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/sourceledger"
 	"github.com/lycaon/lycaon/internal/usernotice"
+	"github.com/lycaon/lycaon/internal/viewstate"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/webindex"
 	"github.com/lycaon/lycaon/internal/webresearch"
@@ -163,6 +164,7 @@ type SourceDependencies struct {
 	FileBriefings   *filebriefing.Service
 	EditorDocuments *editordoc.Service
 	EditorClients   *editordoc.ClientLiveness
+	ProjectViews    *viewstate.Service
 	AgentPresence   *agentpresence.Tracker
 	ProjectLiveness *projectliveness.Tracker
 	ProjectRules    *rules.ProjectRulesOverlay

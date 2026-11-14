@@ -275,6 +275,7 @@ export function TranscriptItemRow(props: {
               client={props.checkpointClient}
               recovery={pending() ? undefined : props.recovery}
               ts={timestamp()}
+              viewContext={wire()?.source_context?.view}
             />
           );
         }}
@@ -377,6 +378,7 @@ export function TranscriptItemRow(props: {
         {(editItem) => (
           <FileEditFolds
             folds={editItem().folds}
+            omitted={editItem().omitted}
             layout={props.layout}
             sessionId={props.sessionId}
             projectId={props.projectId}

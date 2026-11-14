@@ -29,6 +29,7 @@ type QueryStore interface {
 	GetWorkerJobMessages(ctx context.Context, sessionID, workerJobID string) ([]api.Message, error)
 	ReadMessageWindow(context.Context, string, messageview.MessageWindow) ([]api.Message, error)
 	GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error)
+	ToolResultMessageID(ctx context.Context, sessionID, toolCallID string) (string, error)
 	// LastAssistantMessageContent and LastTurnMessageContent read one row from
 	// the transcript tail; "" when no such row exists.
 	LastAssistantMessageContent(ctx context.Context, sessionID string) (string, error)
@@ -90,6 +91,7 @@ type CommandStore interface {
 	AppendMessages(ctx context.Context, id string, msgs ...api.Message) error
 	UpdateMessage(ctx context.Context, sessionID, messageID string, msg api.Message) (api.Message, error)
 	PatchMessageNavigation(ctx context.Context, sessionID, messageID, contentHash string, expected, refs []api.NavigationReference) (api.Message, error)
+	PatchMessageViewContext(ctx context.Context, sessionID, messageID string, view api.ViewContext) (api.Message, error)
 	StampMessageScreenGeneration(ctx context.Context, sessionID, messageID string, generation uint64) error
 	PatchLiveProjection(ctx context.Context, sessionID, messageID, content string, toolCalls []api.ToolCall) error
 	TruncateMessagesFrom(ctx context.Context, sessionID, anchorMessageID string) (int, error)

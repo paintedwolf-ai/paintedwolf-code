@@ -287,9 +287,11 @@ func (r *messageRedactor) toolResult(source *api.ToolResult) *api.ToolResult {
 		}
 		out.Invocation = &invocation
 	}
-	if source.FileEdit != nil {
-		edit := r.fileEdit(*source.FileEdit, "tool_result.file_edit")
-		out.FileEdit = &edit
+	if len(source.FileEdits) > 0 {
+		out.FileEdits = make([]api.FileEditSnapshot, len(source.FileEdits))
+		for i, edit := range source.FileEdits {
+			out.FileEdits[i] = r.fileEdit(edit, atIndex("tool_result.file_edits", i))
+		}
 	}
 	if source.OverlayPromotion != nil {
 		promotion := *source.OverlayPromotion
@@ -470,6 +472,10 @@ func (r *messageRedactor) message(msg api.Message) api.Message {
 	}
 	out.Grounding = r.grounding("grounding", msg.Grounding)
 	out.SourceContext = r.sourceContext("source_context", msg.SourceContext)
+	if out.SourceContext != nil && msg.SourceContext != nil && msg.SourceContext.View != nil {
+		view := msg.SourceContext.View.MapText(func(field, value string) string { return r.text(field, "", value) })
+		out.SourceContext.View = &view
+	}
 	if len(msg.NavigationRefs) > 0 {
 		out.NavigationRefs = append([]api.NavigationReference(nil), msg.NavigationRefs...)
 		for i := range out.NavigationRefs {

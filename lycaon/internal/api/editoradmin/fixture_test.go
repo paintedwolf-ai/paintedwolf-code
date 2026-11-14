@@ -30,6 +30,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/apitestdeps"
+	"github.com/lycaon/lycaon/internal/viewstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -98,6 +99,7 @@ func newEditorFixture(t *testing.T, opts ...fixtureOption) *editorFixture {
 	h := New(&httpio.Responder{Logger: slog.New(slog.DiscardHandler)}, background, Dependencies{
 		EditorClients:   editordoc.NewClientLiveness(editordoc.PresenceGrace, nil),
 		EditorDocuments: deps.EditorDocuments,
+		ProjectViews:    viewstate.New(nil),
 		Events:          deps.Events,
 		ManagedSecrets:  deps.ManagedSecrets,
 		MutationGate:    deps.MutationGate,
@@ -134,6 +136,7 @@ func editorRouter(h *Handler) chi.Router {
 	doc := base + "/{document_id}"
 	r.Post(base, h.HandleOpenEditorDocument)
 	r.Put(base+"/retention", h.HandleReplaceEditorDocumentRetention)
+	r.Put("/v1/projects/{id}/view", h.HandleReplaceProjectView)
 	r.Post(base+"/status", h.HandleReadEditorDocumentStatuses)
 	r.Put(doc, h.HandleReplaceEditorDocument)
 	r.Post(doc+"/sync", h.HandleSyncEditorDocument)
