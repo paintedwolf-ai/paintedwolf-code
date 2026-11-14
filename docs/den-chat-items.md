@@ -157,6 +157,12 @@ facts, never from command text or output prose. Details use two text styles:
 interface text for sentences and labels, monospace for commands and output.
 Records load on demand in Files; details contain no record paging controls.
 
+The projection records each row's receipt scopes as it folds calls: a program
+and the host activity that produced the row, or the whole program when the
+activity names no executions, in first-seen order. **Receipt** appears whenever
+a row has a scope, including a program refused before it ran anything and a row
+whose execution preview failed to load.
+
 ## The two clocks
 
 | Clock | Meaning | May change on patch? | Used for ordering? |

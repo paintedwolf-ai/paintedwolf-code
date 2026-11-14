@@ -18,7 +18,7 @@ const baseFact: CommandActivity = { id: "test", group: "Running programs", phase
 function part(fact: Partial<CommandActivity> = {}): ToolPartView {
   const original: ToolPartView = { id: "assistant:call", assistantMessageId: "assistant", messageId: "result", toolCallId: "call", tool: "command", kind: "command", status: "completed", args: { command: source }, output: "agent-visible output", commandProgram: program };
   const merged = { ...baseFact, ...fact };
-  return { ...original, commandActivity: { fact: merged, members: [merged], calls: [original], programIds: [program.id] } };
+  return { ...original, commandActivity: { fact: merged, members: [merged], calls: [original], receiptScopes: [{ programId: program.id, activityId: merged.id }] } };
 }
 function receipt(extra: Partial<CommandExecutionReceipt> = {}): CommandExecutionReceipt {
   return { id: "test", program_id: "program", node_id: "node", parent_execution_id: "pipeline", owner: "processes", lifecycle: "effect_attempt", definition_digest: "definition", arguments_digest: "args", arguments_ref: "args", command: "cargo test", state: "completed", owner_started: true, owner_invoked: true, effect_certainty: "none", complete: true, publication_eligible: false, output_publishable: true, detail_ref: "detail", status_code: 0, outputs: [{ stream: "stdout", ref: "out", size_bytes: 11, complete: true, redacted: false, preview: "test output", preview_truncated: false, tail_preview: "", line_count: 1 }], ...extra };
@@ -122,12 +122,46 @@ describe("activity footer and records", () => {
     for (const id of ["p2", "p3", "p4", "p5"]) {
       value.commandActivity!.calls.push({ ...original, id, toolCallId: id, commandProgram: { ...program, id } });
       value.commandActivity!.members.push({ ...baseFact, id: `${id}:activity`, execution_ids: [`${id}:execution`] });
+      value.commandActivity!.receiptScopes.push({ programId: id, activityId: `${id}:activity` });
     }
     const get = vi.fn(async (_session: string, programId: string) => ({ ...page([{ ...receipt(), id: `${programId}:execution`, program_id: programId }]), program: { ...program, id: programId } }));
     const { view } = await opened(value, get);
     fireEvent.click(assertNamedControl(await view.findByTestId("command-activity-receipts"), "button"));
     expect(sink.mock.calls.at(-1)?.[0].document.content.programs.map((item: { id: string }) => item.id)).toEqual(["program", "p2", "p3", "p4", "p5"]);
+    expect(sink.mock.calls.at(-1)?.[0].document.language).toBe("jsonl");
     expect(get).toHaveBeenCalledTimes(3);
+  });
+
+  it("previews and opens the activity each scope names", async () => {
+    const sink = filesSink();
+    const value = part();
+    const original = value.commandActivity!.calls[0]!;
+    value.commandActivity!.calls.push({ ...original, id: "p2", toolCallId: "p2", commandProgram: { ...program, id: "p2" } }, { ...original, id: "read", toolCallId: "read", tool: "command_output", commandProgram: undefined });
+    value.commandActivity!.receiptScopes = [{ programId: "program", activityId: "test" }, { programId: "p2", activityId: "p2-activity" }];
+    const { view, get } = await opened(value);
+    expect(get.mock.calls.map(call => [call[1], call[2].activity_id])).toEqual([["program", "test"], ["p2", "p2-activity"]]);
+    fireEvent.click(assertNamedControl(await view.findByTestId("command-activity-receipts"), "button"));
+    expect(sink.mock.calls.at(-1)?.[0].document.content.programs).toEqual([{ id: "program", activityId: "test" }, { id: "p2", activityId: "p2-activity" }]);
+  });
+
+  it("offers the receipt of a program refused before any execution", async () => {
+    const value = part({ state: "refused", outcome: "Refused", execution_ids: [] });
+    value.commandActivity!.receiptScopes = [{ programId: program.id }];
+    const { view } = await opened(value, vi.fn().mockResolvedValue(page([])));
+    expect(await view.findByTestId("command-activity-receipts")).toBeTruthy();
+  });
+
+  it("offers the receipt when the execution preview fails to load", async () => {
+    const { view } = await opened(part(), vi.fn().mockRejectedValue(new Error("offline")));
+    await waitFor(() => expect(view.container.textContent).toContain("Execution details are unavailable"));
+    expect(view.getByTestId("command-activity-receipts")).toBeTruthy();
+  });
+
+  it("offers no receipt without a recorded program", async () => {
+    const value = part();
+    value.commandActivity!.receiptScopes = [];
+    const { view } = await opened(value);
+    expect(view.queryByTestId("command-activity-receipts")).toBeNull();
   });
 
   it("lists coalesced calls and reveals a later call through Find", async () => {
@@ -183,7 +217,7 @@ describe("activity footer and records", () => {
 
 function formPart(tool: string, args: Record<string, unknown>): ToolPartView {
   const original: ToolPartView = { id: "assistant:call", assistantMessageId: "assistant", messageId: "result", toolCallId: "call", tool, kind: "generic", status: "completed", args, output: "form tool output", commandProgram: program };
-  return { ...original, commandActivity: { fact: baseFact, members: [baseFact], calls: [original], programIds: [program.id] } };
+  return { ...original, commandActivity: { fact: baseFact, members: [baseFact], calls: [original], receiptScopes: [{ programId: program.id, activityId: baseFact.id }] } };
 }
 
 describe("form tool commands", () => {

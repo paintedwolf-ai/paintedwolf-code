@@ -85,7 +85,7 @@ describe("ToolPartShell open-state persistence", () => {
       },
       calls: [],
       members: [],
-      programIds: [],
+      receiptScopes: [],
     };
     const { getByText } = render(() => (
       <TranscriptViewportProvider value={controller}>
@@ -116,7 +116,7 @@ describe("ToolPartShell open-state persistence", () => {
       },
       calls: [],
       members: [],
-      programIds: [],
+      receiptScopes: [],
       outputReads: 3,
     };
     const { getByText } = render(() => (
