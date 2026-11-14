@@ -65,12 +65,3 @@ func TestProf9ConcurrentAdmissionUsesOneOrderedHistory(t *testing.T) {
 		t.Fatalf("[OAR-FIRE-4] activity crossed sessions: %#v", result.Decision)
 	}
 }
-
-func TestFact6NonToolOccurrenceHasNoFingerprint(t *testing.T) {
-	gc := NewGuardContext()
-	gc.ObserveToolCall("", nil)
-	testutil.FailErr(t, "produce absent fingerprint", gc.Ensure("tool_args_fingerprint"))
-	if gc.Invocation.ToolArgsFingerprint != "" {
-		t.Fatalf("invented non-tool fingerprint %q", gc.Invocation.ToolArgsFingerprint)
-	}
-}

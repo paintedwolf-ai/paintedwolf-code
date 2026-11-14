@@ -1,20 +1,47 @@
 spec_version: "1.0"
 id: TOOL_ACTION_IN_TEXT
 kind: invariant
-on: content.output
+on: model.output
 selector: {}
-requires_facts: [paintedwolf.offenders_sample, paintedwolf.reject_observation]
+requires_facts: [paintedwolf.next_steps, paintedwolf.offenders_sample, paintedwolf.offered_tools, paintedwolf.reject_observation, paintedwolf.text_action_callable_tools, paintedwolf.text_action_command_forms, paintedwolf.text_action_fenced, paintedwolf.text_action_loadable_tools]
 when: paintedwolf.reject_observation == "text_action_envelope"
 effect: block
-category: recoverable
-emit: guard:coordinator
-message: A reserved text action envelope did not invoke a tool
-what: 'No tool executed. The assistant response contained a text action envelope for {{ paintedwolf.offenders_sample }}.'
-cause: An action envelope in assistant text is not a native tool call.
-why: The host does not execute this reserved text format or treat it as task completion.
-fix: Resubmit the intended action through the native tool channel using an offered tool and its schema. Do not repeat the JSON in assistant text.
-instead: If explaining tool syntax or logs, use a fenced code example with an explanation.
-scenarios:
-  - id: offered_read
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
+message: A tool call written in assistant text did not run
+what: '{% if paintedwolf.text_action_fenced %}No tool ran. The response wrote a call to {{ paintedwolf.offenders_sample }} in a code fence labelled with the tool name.{% else %}No tool ran. The response wrote a call to {{ paintedwolf.offenders_sample }} as a text envelope.{% endif %}'
+cause: '{% if paintedwolf.text_action_fenced %}A code fence is assistant text, whatever its label.{% else %}An action envelope in assistant text is not a tool call.{% endif %}'
+why: 'The host runs only calls made through the tool-call channel and never treats a written call as completed work. Tools offered on this request: {% if paintedwolf.offered_tools %}{{ paintedwolf.offered_tools }}{% else %}none{% endif %}.'
+fix: '{% if paintedwolf.text_action_callable_tools %}Call {{ paintedwolf.text_action_callable_tools }} through the tool-call channel with its schema. {% endif %}{{ paintedwolf.next_steps }}{% if paintedwolf.text_action_callable_tools %}{% else %}{% if paintedwolf.text_action_command_forms %}{% else %}{% if paintedwolf.text_action_loadable_tools %}{% else %}{{ paintedwolf.offenders_sample }} cannot be called on this request. Use a tool offered now, or report the constraint.{% endif %}{% endif %}{% endif %} Do not repeat the arguments in assistant text.'
+instead: '{% if paintedwolf.text_action_fenced %}Never label a code fence with a tool name. To show syntax to the person, label the fence json or text.{% else %}To show tool syntax or logs to the person, put the example in a code fence labelled json or text, with an explanation.{% endif %}'
+x-paintedwolf-scenarios:
+  - id: fenced-callable
+    vars:
+      offenders_sample: command
+      text_action_fenced: true
+      text_action_callable_tools: [command]
+      offered_tools: [command, request_tools, update_progress]
+  - id: envelope-callable
     vars:
       offenders_sample: read
+      text_action_callable_tools: [read]
+      offered_tools: [read]
+  - id: fenced-loadable
+    vars:
+      offenders_sample: task
+      text_action_fenced: true
+      text_action_loadable_tools: [task]
+      can_request_tools: true
+      offered_tools: [command, request_tools]
+  - id: fenced-retired-to-command
+    vars:
+      offenders_sample: write
+      text_action_fenced: true
+      text_action_command_forms: [tee, edit]
+      can_command: true
+      offered_tools: [command, update_progress]
+  - id: fenced-unavailable
+    vars:
+      offenders_sample: write
+      text_action_fenced: true
+      offered_tools: [command, update_progress]

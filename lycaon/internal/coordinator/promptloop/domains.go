@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/agentpresence"
@@ -44,10 +45,12 @@ type ContextDeps struct {
 }
 
 type ContextSurfaceDeps struct {
-	ObservePrompt                   func(sessionID string) func(inject.CoordinatorTurnFrame)
-	CommitWorkerContext             func(context.Context, string, string) error
-	PrepareAgentPolicy              func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
-	ToolProcedures                  func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
+	ObservePrompt       func(sessionID string) func(inject.CoordinatorTurnFrame)
+	CommitWorkerContext func(context.Context, string, string) error
+	PrepareAgentPolicy  func(context.Context, *api.Session, []api.Message) (tools.AgentPolicyBinding, error)
+	ToolProcedures      func(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error)
+	// PromptSurface reports the host facts that selected a request's tools and units.
+	PromptSurface                   func(ctx context.Context, sess *api.Session, profileID string, offered []string) (trainingcapture.PromptSurface, error)
 	CoordinatorSurfaceActivityLabel func(surfaceID string) string
 	WebSearchEnabled                func() bool
 	CoordinatorFrame                inject.CoordinatorTurnFrameSource
@@ -97,7 +100,7 @@ type CloseoutDeps struct {
 	RejectFmt              *guidance.StaticRejectFormatter
 	HintConfig             *guidance.HintConfig
 	HintNextSteps          guidance.NextStepsResolver
-	EvaluateContentAnchor  func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool, content string, transformed bool)
+	EvaluateContentAnchor  func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (reject *guidance.Refusal, blocked bool)
 	EvaluateCloseoutBlock  func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error)
 	EvaluateMidTurnNote    func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) error
 	AssembleLedgerCloseout func(ctx context.Context, sessionID, surfaceID string, forcedBy []string, draft guidance.CloseoutDraft, retryCount int) (guidance.CoordinatorCompletionReport, *api.CitationGrounding)

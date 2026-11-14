@@ -85,6 +85,29 @@ func (v *View) WithRules(rules *oar.RuleSet) *View {
 	}
 }
 
+// WithToolProfiles returns the same catalog view with another profile set.
+func (v *View) WithToolProfiles(profiles []sandbox.ToolProfile) *View {
+	if v == nil {
+		return nil
+	}
+	return &View{
+		Catalog:         v.Catalog,
+		Policy:          v.Policy,
+		Rules:           v.Rules,
+		Anchors:         v.Anchors,
+		ToolProfiles:    profiles,
+		AgentProfiles:   v.AgentProfiles,
+		Approvals:       v.Approvals,
+		ApprovalRules:   v.ApprovalRules,
+		Playbooks:       v.Playbooks,
+		ToolSchemas:     v.ToolSchemas,
+		Bindings:        v.Bindings,
+		Contributions:   v.Contributions,
+		CredentialSlots: v.CredentialSlots,
+		VocabularyNotes: v.VocabularyNotes,
+	}
+}
+
 // Get resolves an agent profile from this catalog view.
 func (v *View) Get(id string) (agentdef.Profile, error) {
 	if v != nil {
@@ -135,10 +158,6 @@ func Build(ctx context.Context, moduleRoot string, eff *extpacks.EffectiveCatalo
 	loader.SetToolSchemas(schemas)
 	rules, err := loader.LoadEffectivePolicyEntries(policy)
 	if err != nil {
-		return nil, fmt.Errorf("catalogview rules: %w", err)
-	}
-
-	if err := oar.ValidateHostRuleSet(rules); err != nil {
 		return nil, fmt.Errorf("catalogview rules: %w", err)
 	}
 

@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CAPTURE_PROJECT_DIR_INVALID"
 effect: block
-category: recoverable
-emit: guard:visual_capture
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
 message: capture_page project_dir path could not be resolved
 what: The host could not resolve project_dir {{ paintedwolf.path }} to an absolute directory.
 cause: Directory normalization failed for the session folder.
 why: Static serve needs a concrete directory under an attached folder.
 fix: Check the supplied directory path — bare relative paths resolve in the session folder, or use @label/path; retry with an existing accessible directory.
 instead: Branch on Code CAPTURE_PROJECT_DIR_INVALID; fix project_dir
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

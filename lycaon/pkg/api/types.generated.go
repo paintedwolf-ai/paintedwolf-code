@@ -8469,9 +8469,8 @@ type TurnLoad struct {
 	// Present on a turn decision.
 	Boundary *TurnLoadBoundary `json:"boundary,omitempty"`
 	// The skill whose body the turn carries: read at the turn decision, or by the tool_event that this receipt records.
-	PreloadedSkill *TurnLoadSkill  `json:"preloaded_skill,omitempty"`
-	Guides         *TurnLoadGuides `json:"guides,omitempty"`
-	Match          *TurnLoadMatch  `json:"match,omitempty"`
+	PreloadedSkill *TurnLoadSkill `json:"preloaded_skill,omitempty"`
+	Match          *TurnLoadMatch `json:"match,omitempty"`
 }
 
 // TurnLoadBoundary Expected reuse of the standing prefix when the turn opened; history compaction does not expire this tier.
@@ -8494,12 +8493,6 @@ type TurnLoadEngine struct {
 	Head string `json:"head,omitempty"`
 	// The receipt's one-line engine label, name/model#head.
 	Label string `json:"label"`
-}
-
-// TurnLoadGuides How many loadable instruction units the turn rendered and left out of the prompt.
-type TurnLoadGuides struct {
-	Rendered int `json:"rendered"`
-	Omitted  int `json:"omitted"`
 }
 
 // TurnLoadKind The turn kind the engine chose, with its calibrated confidence.

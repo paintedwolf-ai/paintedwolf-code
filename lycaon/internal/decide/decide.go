@@ -84,12 +84,9 @@ type Answers map[string]Answer
 type Head string
 
 const (
-	// HeadTurnLoad answers turn decisions: which units a request needs and
-	// the turn kind.
+	// HeadTurnLoad answers turn decisions: which loadable tools a request
+	// needs and the turn kind.
 	HeadTurnLoad Head = "turn-load"
-	// HeadGuideLoad answers the guides question when a release ships a
-	// separate head for it; otherwise the turn-load head answers.
-	HeadGuideLoad Head = "guide-load"
 	// HeadUnitRank ranks host unit cards against a request: skills for the
 	// roster and skills_read, loadable tool schemas for request_tools.
 	HeadUnitRank Head = "unit-rank"
@@ -102,7 +99,7 @@ const (
 )
 
 // heads is the catalog of heads a shared backbone can serve.
-var heads = []Head{HeadTurnLoad, HeadGuideLoad, HeadUnitRank, HeadCodeRank, HeadWebRank, HeadRetention}
+var heads = []Head{HeadTurnLoad, HeadUnitRank, HeadCodeRank, HeadWebRank, HeadRetention}
 
 // Heads lists every head a shared backbone can serve, in catalog order.
 func Heads() []Head { return append([]Head(nil), heads...) }
@@ -145,6 +142,9 @@ type Decider interface {
 	// Rank scores each candidate's relevance to task on the engine's rubric
 	// with the named head.
 	Rank(ctx context.Context, head Head, task string, candidates []string) ([]float64, Engine, error)
+	// HoldPriority keeps lower-priority work off the engine's device until the
+	// returned release runs, so consecutive calls are not interleaved with it.
+	HoldPriority(ctx context.Context) (release func())
 	// Available reports whether an engine can answer at all.
 	Available() bool
 	// Loaded reports whether the engine serves head with trained weights.
@@ -177,6 +177,9 @@ func (Absent) Decide(context.Context, Head, any, map[string]Question) (Result, e
 func (Absent) Rank(context.Context, Head, string, []string) ([]float64, Engine, error) {
 	return nil, Engine{}, ErrUnavailable
 }
+
+// HoldPriority holds nothing.
+func (Absent) HoldPriority(context.Context) func() { return func() {} }
 
 // Available is false.
 func (Absent) Available() bool { return false }

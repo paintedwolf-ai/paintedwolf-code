@@ -1,159 +1,29 @@
 tags: [terminal]
-description: Open a live terminal for an interactive program.
+description: >-
+  Open a live terminal for an interactive program. Returns a session id and an
+  artifact_id image of the first screen; input, read, snapshot and close tools
+  attach once it is open.
 schema:
   type: object
   properties:
-    secret_use:
-      type: object
-      additionalProperties: false
-      required: [services]
-      description: >-
-        Use only when this invocation passes a managed secret reference (`{{paintedwolf-secret:…}}`) from secret input or the vault; programs using their own stored login need no `secret_use`. Request one reusable permission for the managed secrets used by this
-        process and their later use with the named HTTP services. The person
-        reviews both process access and these declared service addresses.
-        This does not claim the process or a daemon sends only to those services.
-        Put connection and socket requirements in capability_request as usual.
-      properties:
-        services:
-          type: array
-          minItems: 1
-          maxItems: 8
-          items:
-            type: string
-            maxLength: 1024
-          description: Exact HTTP origins (scheme, host, port), without paths, query parameters, or credentials.
-    command:
-      type: string
-      description: >-
-        Single argv command line — one program, no shell. A `&&`/`||`/`;`
-        sequence is rejected here: a pty holds one process.
-    cwd:
-      type: string
-      description: >-
-        Folder for this call. Empty = the session folder; `@label` or
-        `@label/sub` = any attached folder; `@scratch`/`@output` = session
-        scratch/output; absolute paths are accepted. On a write worker, resolved
-        under the private branch (subdir allowed). Must be a directory in read
-        scope.
-        Do not use `cd <directory> && <command>` — pass the directory here and
-        keep the command bare. Initial Dir for the pty; then it tracks cwd.
-    winsize:
-      type: object
-      properties:
-        cols:
-          description: "Pty column count."
-          type: integer
-          minimum: 1
-          maximum: 240
-        rows:
-          description: "Pty row count."
-          type: integer
-          minimum: 1
-          maximum: 120
-      required: [cols, rows]
-      additionalProperties: false
-      description: Optional window size; default 80x24.
-    env:
-      type: object
-      additionalProperties:
-        type: string
-      description: Optional inline env (sanitized; cannot set blocked keys).
-    observe:
-      type: string
-      enum: [ack, delta, screen]
-      default: screen
-      description: "Observation returned after opening: ack only, one output delta, or the settled VT screen."
-    socks_proxy:
-      type: boolean
-      description: >-
-        Inject ALL_PROXY for mediated non-HTTP TCP (SOCKS5h). HTTP(S) already uses
-        HTTP_PROXY under default confinement — omit this unless the client needs
-        SOCKS. Does not widen the sandbox.
+    secret_use: {type: object, additionalProperties: false, required: [services], description: "Origins for `{{paintedwolf-secret:…}}`.", properties: {services: {type: array, minItems: 1, maxItems: 8, description: Origin URLs., items: {type: string, maxLength: 1024}}}}
+    command: {type: string, description: "One program's argv; no `&&`, `||` or `;`."}
+    cwd: {type: string, description: "Folder path or `@label/...`; the terminal then tracks its own directory."}
+    winsize: {type: object, additionalProperties: false, required: [cols, rows], description: Dimensions; default 80x24., properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Columns.}, rows: {type: integer, minimum: 1, maximum: 120, description: Rows.}}}
+    env: {type: object, additionalProperties: {type: string}, description: Inline env (sanitized).}
+    observe: {type: string, enum: [ack, delta, screen], default: screen, description: "Return ack, one output delta, or the settled screen."}
+    socks_proxy: {type: boolean, description: SOCKS5h proxy.}
     capability_request:
       type: object
-      description: >-
-        Declares confinement this invocation needs. A dev server or TUI that binds
-        a named port needs local_listen on this call — the pty gets no listener
-        authority by default and the bind fails as the child's own errno. Other
-        fields: host_resources, socket_paths, loopback_connect, write_root,
-        read_path. Network destinations are not available here; run them under command.
-        Omit for ordinary execution.
-      properties:
-        host_resources:
-          type: array
-          minItems: 1
-          maxItems: 16
-          items:
-            type: string
-          description: Available host-resource ids; the host resolves their connection routes.
-        socket_paths:
-          type: array
-          minItems: 1
-          maxItems: 8
-          items:
-            type: string
-          description: >-
-            Exact AF_UNIX service paths. For an external program, use a whole
-            `{{paintedwolf-socket:/absolute/path}}` reference as an argv or
-            environment value. Clients needing a Unix URL use
-            `{{paintedwolf-socket:unix-url:/absolute/path}}`.
-            Inside code or configuration, read that environment
-            variable. macOS datagrams use
-            `{{paintedwolf-socket:unixgram:/absolute/path}}`; Linux confinement
-            refuses Unix datagrams. Native socket arguments take the ordinary path.
-        local_listen:
-          type: object
-          description: >-
-            Listener authority (bind + accept) for a dev server, watcher, or TUI
-            this terminal holds. Put it on the terminal_open that binds a named
-            port; a bind naming no port is a raw socket, not a server. Egress
-            stays mediated. Declare ports to narrow; {} asks for any local port.
-            The bind address is not bounded, so this is "a local server", not
-            "loopback only".
-          properties:
-            ports:
-              type: array
-              minItems: 1
-              maxItems: 8
-              items:
-                type: integer
-                minimum: 1
-                maximum: 65535
-              description: Exact local ports to narrow the profile to.
-          additionalProperties: false
-        loopback_connect:
-          type: object
-          description: >-
-            Authority to connect to services on this machine, without widening
-            external egress. Use with local_listen when this terminal both
-            serves and calls a port. Binding does not imply connecting.
-          properties:
-            ports:
-              type: array
-              minItems: 1
-              maxItems: 8
-              items:
-                type: integer
-                minimum: 1
-                maximum: 65535
-              description: Exact destination ports on this machine.
-          additionalProperties: false
-        write_root:
-          type: string
-          maxLength: 1024
-          description: >-
-            One absolute root this terminal must write outside its project and
-            default cache roots. Reviewed before spawn; a credential-store path
-            grants exactly that file, not sibling temp or lock names. Files
-            agents load as instructions or settings (AGENTS.md, project skills,
-            `.paintedwolf` settings) take a `command` invocation instead.
-        read_path:
-          type: string
-          maxLength: 1024
-          description: >-
-            One absolute protected path this terminal must read (SSH or signing
-            key). Reviewed before spawn; covers exactly the declared file.
       additionalProperties: false
       minProperties: 1
+      description: Extra access this terminal needs; omit for ordinary programs. A server binding a named port needs local_listen; network destinations run under command.
+      properties:
+        host_resources: {type: array, minItems: 1, maxItems: 16, description: Service IDs., items: {type: string}}
+        socket_paths: {type: array, minItems: 1, maxItems: 8, items: {type: string}, description: "Exact service path. External argv or env values use a whole `{{paintedwolf-socket:/absolute/path}}` reference. Clients needing a Unix URL use `{{paintedwolf-socket:unix-url:/absolute/path}}`. macOS datagrams use `{{paintedwolf-socket:unixgram:/absolute/path}}`; Linux confinement refuses Unix datagrams. Native socket arguments use the path."}
+        local_listen: {type: object, additionalProperties: false, description: Listen ports., properties: {ports: {type: array, minItems: 1, maxItems: 8, description: Ports., items: {type: integer, minimum: 1, maximum: 65535}}}}
+        loopback_connect: {type: object, additionalProperties: false, description: Client ports., properties: {ports: {type: array, minItems: 1, maxItems: 8, description: Ports., items: {type: integer, minimum: 1, maximum: 65535}}}}
+        write_root: {type: string, maxLength: 1024, description: "Absolute path needing write authority; protected files need the exact path. Instruction and settings files need command."}
+        read_path: {type: string, maxLength: 1024, description: Absolute protected path to read.}
   required: [command]
   additionalProperties: false

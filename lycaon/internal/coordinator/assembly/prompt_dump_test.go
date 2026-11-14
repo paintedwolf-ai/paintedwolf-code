@@ -26,9 +26,10 @@ func TestRenderPromptDumpInvestigateFixture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RenderPromptDump: %v", err)
 	}
-	summaryGuidance, err := engine.Render(context.Background(), "units/native-summarize-tool.md", map[string]any{
-		"profile_has_summarize": true,
-	})
+	plans, err := surface.CompileToolPlans(1)
+	testutil.FailErr(t, "compile surfaces", err)
+	summaryGuidance, err := engine.Render(context.Background(), "units/native-summarize-tool.md",
+		prompts.VisibleToolsNativePartialVars(plans["implement_investigate"].ImmediateNames()))
 	testutil.FailErr(t, "render summarize guidance", err)
 	if strings.TrimSpace(summaryGuidance) == "" {
 		t.Fatal("summarize guidance is empty")

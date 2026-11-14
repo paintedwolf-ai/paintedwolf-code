@@ -38,12 +38,12 @@ func (m *Closeout) Build() promptloop.CloseoutDeps {
 		RejectFmt:     m.Rejects,
 		HintConfig:    m.Hints,
 		HintNextSteps: tools.HintNextStepsResolver(m.Policy.Pipeline.Rules()),
-		EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool) {
-			reject, blocked, content, transformed, err := m.Policy.ContentBlock(ctx, sess, anchor, observation, tool, args)
+		EvaluateContentAnchor: func(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool) {
+			reject, blocked, err := m.Policy.ContentBlock(ctx, sess, anchor, observation, tool, args)
 			if err != nil {
-				return guidance.NewRefusal("", err.Error()), true, "", false
+				return guidance.NewRefusal("", err.Error()), true
 			}
-			return reject, blocked, content, transformed
+			return reject, blocked
 		},
 		EvaluateCloseoutBlock: func(ctx context.Context, sess *api.Session, gc *oar.GuardContext) (*oar.Decision, error) {
 			return m.Policy.CloseoutBlock(ctx, sess, gc)

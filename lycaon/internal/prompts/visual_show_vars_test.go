@@ -26,6 +26,12 @@ func TestMergeVisualShowVarsFollowOfferedTools(t *testing.T) {
 		t.Fatalf("command terminal_capture must advertise terminal show: %#v", terminal)
 	}
 
+	open := map[string]any{}
+	prompts.MergeVisualShowVars([]string{"command", "terminal_open", "write", "request_tools"}, []string{"terminal_send", "terminal_read", "terminal_snapshot", "terminal_close"}, open)
+	if open["visual_show_terminal"] != true || open["visual_show_terminal_needs_request"] != false {
+		t.Fatalf("terminal_open captures its first screen, and its controls attach once open: %#v", open)
+	}
+
 	held := map[string]any{}
 	prompts.MergeVisualShowVars([]string{"terminal_snapshot"}, nil, held)
 	if held["visual_show_terminal"] != true {

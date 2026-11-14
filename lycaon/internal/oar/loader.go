@@ -20,19 +20,9 @@ import (
 // oarFields are the document fields the production rule reads beyond what
 // the core engine compiles.
 type oarFields struct {
-	Title        string       `yaml:"title,omitempty" json:"title,omitempty"`
-	Detector     *DetectorRef `yaml:"detector,omitempty" json:"detector,omitempty"`
-	References   References   `yaml:"references,omitempty" json:"references,omitempty"`
-	CounterScope string       `yaml:"x-paintedwolf-counter-scope,omitempty" json:"x-paintedwolf-counter-scope,omitempty"`
-	// Transform names the content a transform rule replaces and how
-	// ([OAR-OPS-8]); the standard leaves its shape to the host.
-	Transform *transformField `yaml:"x-paintedwolf-transform,omitempty" json:"x-paintedwolf-transform,omitempty"`
-}
-
-type transformField struct {
-	Action      string  `yaml:"action"`
-	Target      string  `yaml:"target"`
-	Replacement *string `yaml:"replacement"`
+	Title      string       `yaml:"title,omitempty" json:"title,omitempty"`
+	Detector   *DetectorRef `yaml:"detector,omitempty" json:"detector,omitempty"`
+	References References   `yaml:"references,omitempty" json:"references,omitempty"`
 }
 
 // Loader validates and loads OAR rules.
@@ -212,6 +202,7 @@ func (l *Loader) compileEntries(entries []hintregistry.Entry, tier Tier, source 
 	}
 	src := strings.TrimSpace(source)
 	var rules []*Rule
+	var hints []*oarcore.Hint
 	var errs []string
 	for _, ent := range entries {
 		var node yaml.Node
@@ -223,12 +214,15 @@ func (l *Loader) compileEntries(entries []hintregistry.Entry, tier Tier, source 
 			errs = append(errs, fmt.Sprintf("%s: empty policy body", ent.Path))
 			continue
 		}
-		rule, skip, err := l.parseRuleNode(ent.Code, node.Content[0])
+		rule, hint, err := l.parseRuleNode(ent.Code, node.Content[0])
 		if err != nil {
 			errs = append(errs, fmt.Sprintf("%s %s: %v", ent.Path, ent.Code, err))
 			continue
 		}
-		if skip {
+		if hint != nil {
+			hints = append(hints, hint)
+		}
+		if rule == nil {
 			continue
 		}
 		if len(ent.NextSteps) > 0 {
@@ -253,84 +247,94 @@ func (l *Loader) compileEntries(entries []hintregistry.Entry, tier Tier, source 
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("oar load:\n%s", strings.Join(errs, "\n"))
 	}
-	return NewRuleSet(rules), nil
-}
-
-func linkRuleSet(rs *RuleSet) (*RuleSet, error) {
-	if err := RejectDuplicateIdentities(rs); err != nil {
-		return nil, err
-	}
-	ResolveErrorSubstitutes(rs)
+	rs := NewRuleSet(rules)
+	rs.hints = hints
 	return rs, nil
 }
 
-func (l *Loader) parseRule(code string, raw map[string]any) (*Rule, bool, error) {
+// linkRuleSet runs the checks that span a rule set's documents and binds
+// on_error substitutes ([OAR-DOC-27]).
+func linkRuleSet(rs *RuleSet) (*RuleSet, error) {
+	if rs == nil {
+		return nil, nil
+	}
+	docs := make([]*oarcore.Rule, 0, rs.Len())
+	for _, r := range rs.All() {
+		if r.document != nil {
+			docs = append(docs, r.document)
+		}
+	}
+	if err := oarcore.CheckRuleSet(docs, rs.hints); err != nil {
+		return nil, err
+	}
+	bindErrorSubstitutes(rs)
+	return rs, nil
+}
+
+// parseRule compiles one document. A hint returns its compiled hint and no
+// rule; a member without spec_version is not an OAR document and returns
+// neither.
+func (l *Loader) parseRule(code string, raw map[string]any) (*Rule, *oarcore.Hint, error) {
 	b, err := yaml.Marshal(raw)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	var node yaml.Node
 	if err := yaml.Unmarshal(b, &node); err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	if len(node.Content) == 0 {
-		return nil, false, fmt.Errorf("rule %q is empty", code)
+		return nil, nil, fmt.Errorf("rule %q is empty", code)
 	}
 	return l.parseRuleDecoded(code, raw, node.Content[0])
 }
 
-func (l *Loader) parseRuleNode(code string, node *yaml.Node) (*Rule, bool, error) {
+func (l *Loader) parseRuleNode(code string, node *yaml.Node) (*Rule, *oarcore.Hint, error) {
 	if node == nil {
-		return nil, false, fmt.Errorf("rule %q is empty", code)
+		return nil, nil, fmt.Errorf("rule %q is empty", code)
 	}
 	var raw map[string]any
 	if err := node.Decode(&raw); err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	return l.parseRuleDecoded(code, raw, node)
 }
 
-func (l *Loader) parseRuleDecoded(code string, raw map[string]any, node *yaml.Node) (*Rule, bool, error) {
+func (l *Loader) parseRuleDecoded(code string, raw map[string]any, node *yaml.Node) (*Rule, *oarcore.Hint, error) {
 	if _, present := raw["spec_version"]; !present {
-		return nil, true, nil
+		return nil, nil, nil
 	}
 	if l.specEnvErr != nil {
-		return nil, false, l.specEnvErr
+		return nil, nil, l.specEnvErr
 	}
 	compiled, hint, err := oarcore.LoadDocument(raw, l.specEnv)
 	if err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	if l.schema != nil {
 		if err := l.validateSchema(code, raw); err != nil {
-			return nil, false, err
+			return nil, nil, err
 		}
 	}
 	// A hint is loaded and validated like any document and never evaluated
 	// ([OAR-HINT-1]); the hint registry renders it.
 	if hint != nil {
-		return nil, true, nil
+		return nil, hint, nil
 	}
 	var entry guidance.HintEntry
 	if err := node.Decode(&entry); err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	var fields oarFields
 	if err := node.Decode(&fields); err != nil {
-		return nil, false, err
+		return nil, nil, err
 	}
 	rule := materialize(compiled, entry, fields)
 	rule.raw = raw
-	if scope := rule.CounterScope; scope != "" {
-		decl, declared := compiled.FactDeclaration(scope)
-		if !declared || decl.Type != oarcore.TypeString || !containsExact(rule.RequiresFacts, scope) {
-			return nil, false, fmt.Errorf("rule %s: x-paintedwolf-counter-scope %s must be a string fact the rule requires", rule.Qualified(), scope)
-		}
-	}
 	if rule.Detector != nil && (l.detectors == nil || l.detectors.Lookup(rule.Detector.Ref) == nil) {
-		return nil, false, fmt.Errorf("[OAR-OPS-10] rule %s references unregistered detector %s", rule.Qualified(), rule.Detector.Ref)
+		return nil, nil, fmt.Errorf("[OAR-OPS-11] rule %s references unregistered detector %s", rule.Qualified(), rule.Detector.Ref)
 	}
-	return rule, false, nil
+	return rule, nil, nil
 }
 
 // materialize builds the production rule from the compiled document and the
@@ -358,13 +362,6 @@ func materialize(doc *oarcore.Rule, entry guidance.HintEntry, fields oarFields) 
 		Detector:      fields.Detector,
 		Title:         fields.Title,
 	}
-	r.CounterScope = strings.TrimSpace(fields.CounterScope)
-	if t := fields.Transform; t != nil {
-		r.Transform = &TransformSpec{Action: t.Action, Target: t.Target, HasReplacement: t.Replacement != nil}
-		if t.Replacement != nil {
-			r.Transform.Replacement = *t.Replacement
-		}
-	}
 	if doc.When != nil {
 		r.When = strings.TrimSpace(entry.When)
 	}
@@ -380,24 +377,12 @@ func materialize(doc *oarcore.Rule, entry guidance.HintEntry, fields oarFields) 
 	return r
 }
 
-// documentSelector is the fact-keyed view of a document's selector: the core
-// fact behind each core dimension and each ledger fact, which fact assembly
-// produces before matching. Matching itself runs on the document.
+// documentSelector is the host view of a document's selector: its one clause,
+// tools ([OAR-SEL-7]). Matching itself runs on the document.
 func documentSelector(doc *oarcore.Rule) Selector {
 	out := Selector{}
 	for _, clause := range doc.Selector {
-		switch clause.Dimension {
-		case "tool", "tools":
-			out["tool"] = append(out["tool"], clause.Values...)
-		case "profiles":
-			out["profile"] = append(out["profile"], clause.Values...)
-		case "session_posture":
-			out["session_posture"] = append(out["session_posture"], clause.Values...)
-		case "ledger":
-			for name, values := range clause.Ledger {
-				out[name] = append(out[name], values...)
-			}
-		}
+		out[clause.Dimension] = append(out[clause.Dimension], clause.Values...)
 	}
 	return out
 }
@@ -451,38 +436,40 @@ func (l *Loader) LoadRuleJSON(raw json.RawMessage) (*Rule, error) {
 		return nil, err
 	}
 	id, _ := doc["id"].(string)
-	rule, skip, err := l.parseRule(id, doc)
+	rule, _, err := l.parseRule(id, doc)
 	if err != nil {
 		return nil, err
 	}
-	if skip {
+	if rule == nil {
 		return nil, fmt.Errorf("[OAR-HINT-1] %s is a hint, not a rule", id)
 	}
 	return rule, nil
 }
 
-// LoadHintJSON validates one hint document given as JSON. Hints are loaded
-// and never evaluated ([OAR-HINT-1]).
-func (l *Loader) LoadHintJSON(raw json.RawMessage) error {
+// LoadHintJSON compiles one hint document given as JSON. Hints are loaded and
+// never evaluated ([OAR-HINT-1]).
+func (l *Loader) LoadHintJSON(raw json.RawMessage) (*oarcore.Hint, error) {
 	doc, err := decodeDocumentJSON(raw)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if l.specEnvErr != nil {
-		return l.specEnvErr
+		return nil, l.specEnvErr
 	}
 	_, hint, err := oarcore.LoadDocument(doc, l.specEnv)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if hint == nil {
-		return fmt.Errorf("[OAR-HINT-1] hints list carries a rule document")
+		return nil, fmt.Errorf("[OAR-HINT-1] hints list carries a rule document")
 	}
 	if l.schema != nil {
 		id, _ := doc["id"].(string)
-		return l.validateSchema(id, doc)
+		if err := l.validateSchema(id, doc); err != nil {
+			return nil, err
+		}
 	}
-	return nil
+	return hint, nil
 }
 
 func decodeDocumentJSON(raw json.RawMessage) (map[string]any, error) {

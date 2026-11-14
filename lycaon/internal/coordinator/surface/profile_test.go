@@ -30,7 +30,7 @@ func TestSelectSurfaceInvestigateDefersOperationalTools(t *testing.T) {
 	if !found["scan_pack"] {
 		t.Fatalf("deferred missing scan_pack: %v", got)
 	}
-	for _, name := range []string{"capture_page", "page_open", "terminal_open", "terminal_snapshot"} {
+	for _, name := range []string{"capture_page", "page_open", "terminal_send", "terminal_read", "terminal_snapshot", "terminal_close"} {
 		if !found[name] {
 			t.Fatalf("deferred investigate tools missing %q: %v", name, got)
 		}
@@ -40,7 +40,10 @@ func TestSelectSurfaceInvestigateDefersOperationalTools(t *testing.T) {
 	for _, name := range sticky {
 		stickySet[name] = true
 	}
-	for _, name := range []string{"capture_page", "page_open", "terminal_open", "terminal_snapshot"} {
+	if !stickySet["command"] || !stickySet["terminal_open"] {
+		t.Fatalf("investigate floor must offer command and terminal_open: %v", sticky)
+	}
+	for _, name := range []string{"capture_page", "page_open", "terminal_snapshot"} {
 		if stickySet[name] {
 			t.Fatalf("sticky investigate schema includes deferred tool %q: %v", name, sticky)
 		}

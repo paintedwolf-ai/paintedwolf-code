@@ -127,7 +127,7 @@ func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	decision := &oar.Decision{Effect: oar.EffectNudge, Advisories: []oar.Advisory{{Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}}}
+	decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}
 	testutil.FailErr(t, "queue before renderer", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorPostTurn, decision))
 	lease := mgr.Coordinator.Runtime.Kicks().LeasePolicyFeedback(sess.ID)
 	if _, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID); err == nil {
@@ -200,7 +200,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, id := range []string{"first", "second"} {
-		decision := &oar.Decision{Effect: oar.EffectNudge, Advisories: []oar.Advisory{{Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "private-fixture"}, Data: map[string]any{"subject": map[string]any{"kind": "task", "id": id}, "observation": "private-fixture"}}}}
+		decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "private-fixture"}, Data: map[string]any{"subject": map[string]any{"kind": "task", "id": id}, "observation": "private-fixture"}}
 		testutil.FailErr(t, "queue advisory", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorCloseoutCheck, decision))
 	}
 	messages, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID)

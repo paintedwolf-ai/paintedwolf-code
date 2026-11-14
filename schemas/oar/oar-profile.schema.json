@@ -2,26 +2,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openagentrules.org/spec/1.0/oar-profile.schema.json",
   "title": "OpenAgentRulesAnchorProfile",
-  "description": "Host anchor profile map. Declares, for each of the eight core anchor ids, the local anchor that implements it or that the host does not implement it. Normative: [OAR-PROF-2], [OAR-PROF-3].",
+  "description": "Host anchor profile map. Declares, for each of the eight core anchor ids, the local anchor that implements it or that the host does not implement it. Every core anchor appears exactly once, in core or in unsupported. Normative: [OAR-PROF-2], [OAR-PROF-3].",
   "type": "object",
-  "required": ["oar_profile_version", "core", "unsupported"],
+  "required": [
+    "oar_profile_version",
+    "core",
+    "unsupported"
+  ],
   "additionalProperties": false,
   "properties": {
     "oar_profile_version": {
       "type": "string",
-      "pattern": "^[0-9]+\\.[0-9]+$",
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
       "description": "OAR spec version this profile map targets."
     },
     "core": {
       "type": "object",
       "description": "Core anchor id → local anchor id implementing it.",
-      "propertyNames": { "$ref": "#/$defs/coreAnchorId" },
-      "additionalProperties": { "type": "string", "minLength": 1 }
+      "propertyNames": {
+        "$ref": "#/$defs/coreAnchorId"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
     },
     "unsupported": {
       "type": "array",
       "description": "Core anchor ids this host does not implement. A rule targeting one is rejected at load.",
-      "items": { "$ref": "#/$defs/coreAnchorId" },
+      "items": {
+        "$ref": "#/$defs/coreAnchorId"
+      },
       "uniqueItems": true
     }
   },
@@ -39,5 +50,183 @@
         "model.tool_result"
       ]
     }
-  }
+  },
+  "allOf": [
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "core": {
+              "required": [
+                "tool.pre_invoke"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "unsupported": {
+              "contains": {
+                "const": "tool.pre_invoke"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "core": {
+              "required": [
+                "tool.handler"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "unsupported": {
+              "contains": {
+                "const": "tool.handler"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "core": {
+              "required": [
+                "tool.post_invoke"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "unsupported": {
+              "contains": {
+                "const": "tool.post_invoke"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "core": {
+              "required": [
+                "agent.post_turn"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "unsupported": {
+              "contains": {
+                "const": "agent.post_turn"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "core": {
+              "required": [
+                "agent.finalize"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "unsupported": {
+              "contains": {
+                "const": "agent.finalize"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "core": {
+              "required": [
+                "model.input"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "unsupported": {
+              "contains": {
+                "const": "model.input"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "core": {
+              "required": [
+                "model.output"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "unsupported": {
+              "contains": {
+                "const": "model.output"
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "oneOf": [
+        {
+          "properties": {
+            "core": {
+              "required": [
+                "model.tool_result"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "unsupported": {
+              "contains": {
+                "const": "model.tool_result"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
 }

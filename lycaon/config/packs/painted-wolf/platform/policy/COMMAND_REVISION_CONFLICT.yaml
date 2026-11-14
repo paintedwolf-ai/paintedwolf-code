@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.expected_revision, paintedwolf.observed_revision, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.revision_change_observed, paintedwolf.unsaved_draft]
 when: paintedwolf.rejection_code == "COMMAND_REVISION_CONFLICT"
 effect: block
-category: recoverable
-emit: guard:command_revision_pin
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_revision_pin
 message: command stopped to preserve a file revision or unsaved editor changes
 what: '{% if paintedwolf.unsaved_draft %}{{ paintedwolf.path }} has unsaved editor changes.{% else %}{% if paintedwolf.revision_change_observed %}{{ paintedwolf.path }} no longer matches its captured revision.{% else %}The captured revision could not be used{% if paintedwolf.path %} at {{ paintedwolf.path }}{% endif %}.{% endif %}{% endif %} Publication at this path was refused.'
 cause: '{% if paintedwolf.revision_change_observed %}Expected revision: {{ paintedwolf.expected_revision }}. Observed revision: {{ paintedwolf.observed_revision }}.{% endif %}'
 why: ''
 fix: '{% if paintedwolf.unsaved_draft %}Preserve the existing editor draft.{% else %}{% if paintedwolf.revision_change_observed %}Keep the current file and earlier results. Establish a current read basis before preparing another edit at this path.{% endif %}{% endif %}'
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: destination-moved
     vars:
       tool: command

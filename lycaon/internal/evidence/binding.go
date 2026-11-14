@@ -2,6 +2,7 @@ package evidence
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -225,6 +226,27 @@ func (b *Binding) ToolKindForArgs(toolName string, args map[string]any) string {
 		return MCPEvidenceKindFromTool(toolName)
 	}
 	return ""
+}
+
+// ProducibleKinds returns every evidence kind a tool can mint: its base kind
+// and each argument variant's kind.
+func (b *Binding) ProducibleKinds(toolName string) []string {
+	if b == nil {
+		return nil
+	}
+	toolName = normalizeToolName(toolName)
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	var out []string
+	if kind := b.toolKinds[toolName]; kind != "" {
+		out = append(out, kind)
+	}
+	for _, variant := range b.toolVariants[toolName] {
+		if kind := strings.TrimSpace(variant.Kind); kind != "" && !slices.Contains(out, kind) {
+			out = append(out, kind)
+		}
+	}
+	return out
 }
 
 // TranscriptDietForTool returns the diet strategy for a tool via its evidence kind.

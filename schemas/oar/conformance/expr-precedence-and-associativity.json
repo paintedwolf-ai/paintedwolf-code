@@ -1,0 +1,29 @@
+{
+  "id": "expr-precedence-and-associativity",
+  "title": "Operators group by the specified precedence",
+  "covers": [
+    "OAR-EXPR-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "1 + 2 * 3 == 7 && 10 - 4 - 3 == 3 && (true ? false : true ? true : false) == false || false"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

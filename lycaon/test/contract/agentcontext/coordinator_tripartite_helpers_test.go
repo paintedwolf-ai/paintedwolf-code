@@ -168,7 +168,7 @@ func mergeWidestUnitBlocks(t *testing.T, engine prompts.PromptTemplateEngine, su
 		contractcheck.FailErr(t, "filter loadable for root count", err)
 	}
 	offered := append(append([]string(nil), floor...), loadable...)
-	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, surface.ExecutionModeFamily(surfaceID), floor, offered, nil)
+	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, surface.ExecutionModeFamily(surfaceID), offered)
 	blocks, err := prompts.RenderUnitSlots(context.Background(), prompts.UnitRendererFor(engine), catalog, sel, vars)
 	contractcheck.FailErr(t, "render unit slots", err)
 	prompts.MergeUnitVars(vars, blocks)

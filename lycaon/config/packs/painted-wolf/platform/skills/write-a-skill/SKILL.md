@@ -39,7 +39,8 @@ A skill grants nothing. Its commands still go through the ordinary capability, a
 
 - `name`, folder, and links resolve; every referenced file exists.
 - The description reads as a ranking card: concrete nouns, no generic verb list.
-- Body and each reference fit their size limits (`wc -c SKILL.md references/*` in `command`).
+- Body and each reference fit their size limits{% if profile_has_command %} (`wc -c SKILL.md references/*` in `command`){% endif %}.
 - Render what you wrote the way the host delivers it: `pw prompts render --skill <name> --check` for the body, plus `--resource <path>` per reference, and fix every reported violation.
 {% if profile_has_skills_read %}- Read the skill back with `skills_read` and confirm it loads without a template or metadata error.{% endif %}
 - Guard a tool mention the reader may not hold: wrap it in {% verbatim %}{% if profile_has_<tool> %}{% endverbatim %} … {% verbatim %}{% endif %}{% endverbatim %}, so a surface without the tool never sees an unreachable call.
+- Guard what `command` does, not only that it is offered: file writes need `profile_command_mutation`, external programs `profile_command_external_exec`, and network requests such as `curl` `profile_command_network_egress`.

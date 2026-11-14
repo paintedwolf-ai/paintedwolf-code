@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SANDBOX_CONTROL_PLANE_DENIED"
 effect: block
-category: control-plane
-emit: guard:sandbox_control_plane
+x-paintedwolf-category: control-plane
+x-paintedwolf-emit: guard:sandbox_control_plane
 message: host control-plane access is unavailable to agents
 what: 'This operation would reach the app''s own state through {{ paintedwolf.path }}.'
 cause: File and folder approvals do not cover the app's settings, credentials, tool definitions or policy.
 why: The app uses those files to decide what tools may do.
 fix: Attach a folder outside the app's own state. If needed, ask the person to copy or export content into an attached folder. Changes to the app's configuration belong in Settings.
 instead: Continue without this path. Ask the person to export needed content or change the app settings.
-scenarios:
+x-paintedwolf-scenarios:
   - id: read_path
     vars:
       capability: read_path

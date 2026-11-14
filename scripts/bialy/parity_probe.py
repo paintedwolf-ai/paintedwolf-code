@@ -32,7 +32,7 @@ from train import forward_head, multi_item, precompute, state_text  # noqa: E402
 def torch_probs(agent, model, corpus, ex, device):
     context = int(agent.cfg.get("max_len", 512))
     head_max_len = min(int(corpus.state_spec.get("head_tokens", 512)), context - 64)
-    tools_q = corpus.multi_question("tool", ex["offered"]["loadable"])
+    tools_q = corpus.tools_question(ex["offered"]["loadable"])
     item = multi_item(agent.tok, state_text(ex["state"]), tools_q, {k: 0 for k in tools_q["options"]}, context, head_max_len, "tools")
     names = list(tools_q["options"].keys())[: len(item["markers"])]
     f = precompute(agent, [item], device)[0]

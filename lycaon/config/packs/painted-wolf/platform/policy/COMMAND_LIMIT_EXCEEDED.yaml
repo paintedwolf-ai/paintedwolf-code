@@ -9,14 +9,14 @@ selector:
 requires_facts: [paintedwolf.diagnostic_top_level, paintedwolf.limit_id, paintedwolf.limit_observation_known, paintedwolf.maximum, paintedwolf.observed, paintedwolf.rejection_code, paintedwolf.resource_unit]
 when: paintedwolf.rejection_code == "COMMAND_LIMIT_EXCEEDED"
 effect: block
-category: recoverable
-emit: guard:command_composition_redirect
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
 message: command reached a resource limit
 what: 'A command resource limit was reached{% if paintedwolf.limit_id %}: {{ paintedwolf.limit_id }}{% endif %}.{% if paintedwolf.limit_observation_known %} Observed {{ paintedwolf.observed }}{% if paintedwolf.resource_unit %} {{ paintedwolf.resource_unit }}{% endif %}; maximum {{ paintedwolf.maximum }}.{% endif %}'
 cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}The command stopped at the recorded boundary.{% endif %}'
 fix: '{% if paintedwolf.diagnostic_top_level %}Reduce the size or complexity of the submitted shell source before resubmitting it.{% endif %}'
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: captured_unit
     vars:
       tool: command

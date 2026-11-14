@@ -55,11 +55,11 @@ func TestRejectSelectorUsesExactMembership(t *testing.T) {
 	}
 }
 
-// An operation selector covers its structured tool and its bound native child
+// An operation condition covers its structured tool and its bound native child
 // beneath command, never another operation or an unbound command call.
-func TestRejectOperationSelectorFollowsBoundOperation(t *testing.T) {
+func TestRejectOperationConditionFollowsBoundOperation(t *testing.T) {
 	entry := HintEntry{}
-	entry.Selector = map[string]any{"ledger": map[string]any{"paintedwolf.operation": []any{"chmod"}}}
+	entry.When = `paintedwolf.operation == "chmod"`
 	for _, tc := range []struct {
 		name string
 		data map[string]any

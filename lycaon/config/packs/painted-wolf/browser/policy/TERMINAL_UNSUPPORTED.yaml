@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code, paintedwolf.unsupported]
 when: paintedwolf.rejection_code == "TERMINAL_UNSUPPORTED"
 effect: block
-category: recoverable
-emit: guard:terminal_session
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:terminal_session
 message: pty is unsupported on this platform
 what: This host build has no supported pseudo-terminal backend.
 cause: Interactive terminal execution is unavailable on this host.
 why: A silent no-op would pretend interactive programs were driveable.
 fix: Use a non-interactive operation only if it satisfies the task, or use a host with a supported PTY backend. Command pipes cannot establish behavior that requires a TTY.
 instead: Report the interactive execution requirement until a PTY is available
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: implement

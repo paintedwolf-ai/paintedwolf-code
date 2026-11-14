@@ -1,0 +1,26 @@
+{
+  "id": "doc-version-leading-zero-rejected",
+  "title": "A spec_version with a leading zero is not a version",
+  "covers": [
+    "OAR-DOC-3",
+    "OAR-CONF-2"
+  ],
+  "rule": {
+    "spec_version": "01.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "spec_version"
+  }
+}

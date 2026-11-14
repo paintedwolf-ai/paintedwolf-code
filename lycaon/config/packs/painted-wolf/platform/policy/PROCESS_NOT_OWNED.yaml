@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROCESS_NOT_OWNED"
 effect: block
-category: policy
-emit: guard:host_process
+x-paintedwolf-category: policy
+x-paintedwolf-emit: guard:host_process
 message: The target process was not started by this session.
 what: The target process was not started by this session.
 cause: The host signals only processes descended from this session's own launches, and no launch of this session started this one.
 why: Other processes on this computer belong to the person or to other work; approval does not make them this session's to signal.
 fix: Signal only processes this session started, using command job handles. Ask the user to stop any other process themselves.
 instead: Branch on Code; do not retry with another reference, PID, name, or command for the same process. Ask the user to stop it themselves.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {}

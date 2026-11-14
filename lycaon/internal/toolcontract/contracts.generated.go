@@ -124,12 +124,15 @@ var compiledContracts = map[string]Contract{
 }
 
 var compiledFamilies = map[string][]string{
+	"command_job": {
+		"command_output",
+		"command_stop",
+	},
 	"held_call": {
 		"held_result",
 		"held_stop",
 	},
 	"page": {
-		"page_open",
 		"page_act",
 		"page_snapshot",
 		"page_close",
@@ -139,7 +142,6 @@ var compiledFamilies = map[string][]string{
 		"process_signal",
 	},
 	"terminal": {
-		"terminal_open",
 		"terminal_send",
 		"terminal_read",
 		"terminal_snapshot",

@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROCESS_REFERENCE_STALE"
 effect: block
-category: recoverable
-emit: guard:host_process
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:host_process
 message: The process reference no longer identifies the reviewed process.
 what: The process reference no longer identifies the reviewed process.
 cause: The host could not complete the structured process operation.
 why: A process reference identifies one process instance; ordinary operating-system permissions still apply.
 fix: '{{ paintedwolf.next_steps }} Do not replace the reference with a PID or name.'
 instead: 'List processes again and review the new exact target. Do not replace the reference with a PID or name.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {}

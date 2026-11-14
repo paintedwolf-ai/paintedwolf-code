@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.navigation_url, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CAPTURE_URL_NOT_LOOPBACK"
 effect: block
-category: recoverable
-emit: guard:visual_capture
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
 message: capture_page url must be loopback
 what: The URL {{ paintedwolf.navigation_url }} is not a loopback HTTP(S) target (127.0.0.1, localhost, or ::1).
 cause: url mode only drives host-local apps; remote or LAN hosts are rejected.
 why: Capture must not open arbitrary network origins from the managed browser.
 fix: Use the app’s existing loopback URL, or project_dir for a static tree when supported by this tool. Do not move a remote target behind a proxy to bypass the origin boundary.
 instead: Branch on Code CAPTURE_URL_NOT_LOOPBACK; use loopback url or project_dir
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

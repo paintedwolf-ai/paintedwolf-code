@@ -1,8 +1,6 @@
 package oar
 
-import "github.com/lycaon/lycaon/internal/oarcore"
-
-// ObserveToolCall publishes identity and lazily fingerprints actual arguments.
+// ObserveToolCall publishes the call's identity and arguments.
 func (gc *GuardContext) ObserveToolCall(name string, arguments map[string]any) {
 	gc.Invocation.Tool = name
 	if gc.Published == nil {
@@ -10,22 +8,6 @@ func (gc *GuardContext) ObserveToolCall(name string, arguments map[string]any) {
 	}
 	gc.Published["paintedwolf.native_operation"] = ""
 	gc.Invocation.ToolArgs = arguments
-	gc.RegisterProvider("tool_args_fingerprint", func(gc *GuardContext) error {
-		if _, explicit := gc.Published["tool_args_fingerprint"]; explicit {
-			return nil
-		}
-		// A non-tool occurrence has no call fingerprint.
-		if gc.Invocation.Tool == "" {
-			gc.Invocation.ToolArgsFingerprint = ""
-			return nil
-		}
-		fingerprint, err := oarcore.ToolFingerprint(gc.Invocation.Tool, mapOrEmpty(gc.Invocation.ToolArgs))
-		if err != nil {
-			return err
-		}
-		gc.Invocation.ToolArgsFingerprint = fingerprint
-		return nil
-	})
 }
 
 // RecordAdmittedTool retains admitted tool names in occurrence order ([OAR-FACT-10]).

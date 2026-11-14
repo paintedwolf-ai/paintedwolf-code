@@ -19,7 +19,9 @@ func CommandGuidanceFactKeys() []string {
 		"command_output_files",
 		"is_coordinator",
 		"platform_os",
+		"profile_command_external_exec",
 		"profile_command_mutation",
+		"profile_command_network_egress",
 		"profile_has_capture_page",
 		"profile_has_command",
 		"profile_has_command_output",
@@ -67,7 +69,6 @@ type CommandGuidanceSnapshotInput struct {
 	IsCoordinator         bool
 	OfferedTools          []string
 	DeferredTools         []string
-	OmittedUnits          map[string]bool
 	RootCount             int
 	ProjectDir            string
 	SessionScratchDir     string
@@ -100,14 +101,10 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if in.IsCoordinator && strings.TrimSpace(in.SurfaceID) != "" {
 		floor, _ := LoadCoordinatorSurfaceFloor(in.SurfaceID)
 		vars["command_on_floor"] = slices.Contains(floor, "command")
-		ApplyCoordinatorSurfaceCommandEffects(in.SurfaceID, offered, deferred, vars)
 	} else {
 		vars["command_on_floor"] = slices.Contains(offered, "command")
-		if !ScopeAllowsCommandMutation(scopeID) {
-			ApplyReadOnlyCommandEffects(offered, deferred, vars)
-		}
 	}
-	MergeRunnerCapabilityVars(offered, vars)
+	RestrictCommandEffects(ScopeCommandEffects(scopeID), offered, deferred, vars)
 	syncCommandExternalFacts(vars)
 
 	hasCommandOffered := slices.Contains(offered, "command")
@@ -126,13 +123,13 @@ func BuildCommandGuidanceSnapshot(in CommandGuidanceSnapshotInput) ([]string, ma
 	if strings.TrimSpace(in.AgentType) == "implementer" {
 		templates = append(templates, "partials/sandbox-confinement.md")
 	}
-	if in.IsCoordinator && (cmdMutation || hasVerify || hasTerminal) && !in.OmittedUnits["coordinator-host-runner"] {
+	if in.IsCoordinator && (cmdMutation || hasVerify || hasTerminal) {
 		templates = append(templates, "units/coordinator-host-runner.md")
 	}
-	if (cmdMutation || hasTerminal) && (hasCommandOffered || hasTerminal) && !in.OmittedUnits["secure-by-default-run"] {
+	if (cmdMutation || hasTerminal) && (hasCommandOffered || hasTerminal) {
 		templates = append(templates, "units/secure-by-default-run.md")
 	}
-	if (cmdMutation || hasVerify || hasTerminal) && (hasCommandOffered || hasVerify || hasTerminal) && !in.OmittedUnits["runner-operating-procedure"] {
+	if (cmdMutation || hasVerify || hasTerminal) && (hasCommandOffered || hasVerify || hasTerminal) {
 		templates = append(templates, "units/runner-operating-procedure.md", "partials/capability-request-grammar.md")
 	}
 	return templates, ExtractCommandGuidanceFacts(vars)

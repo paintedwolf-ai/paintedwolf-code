@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "IMAGE_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:view_image
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
 message: view_image found no file at the path
 what: '{{ tool }} found no file at {{ paintedwolf.path }}.'
 cause: The path resolved inside the read scope, but nothing exists there.
 why: An image is inspected from its bytes; a missing file has none.
 fix: Locate the image with an offered file search, then pass its exact path.
 instead: Branch on Code IMAGE_NOT_FOUND; correct the path
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: assets/missing.png

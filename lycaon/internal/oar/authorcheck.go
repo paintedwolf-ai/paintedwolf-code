@@ -420,7 +420,7 @@ func hintEntryForRule(rule *Rule) guidance.HintEntry {
 		Emit:    rule.Emit,
 		Effect:  string(rule.Effect),
 		Anchor:  rule.Anchor,
-		Tools:   rule.Selector["tool"],
+		Tools:   rule.Tools(),
 		What:    rule.Copy.What,
 		Cause:   rule.Copy.Cause,
 		Why:     rule.Copy.Why,

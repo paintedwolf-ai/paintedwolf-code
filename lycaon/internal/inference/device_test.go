@@ -134,3 +134,21 @@ func TestAdmissionRejectsInvalidWork(t *testing.T) {
 		t.Fatalf("canceled admission: %v", err)
 	}
 }
+
+func TestCompletedPermitReportsItsStepOnce(t *testing.T) {
+	d := device(t, 4)
+	var steps []Step
+	d.observe = func(step Step) { steps = append(steps, step) }
+	for _, name := range []string{"begin", "advance"} {
+		q, err := d.enqueue(context.Background(), Work{Owner: "generation", Generation: 1, Priority: Background, Step: name})
+		if err != nil {
+			t.Fatalf("submit %s: %v", name, err)
+		}
+		<-q.ready
+		q.permit.Complete()
+		q.permit.Complete()
+	}
+	if len(steps) != 2 || steps[0].Work.Step != "begin" || steps[1].Work.Step != "advance" || steps[1].Work.Priority != Background {
+		t.Fatalf("steps=%+v", steps)
+	}
+}

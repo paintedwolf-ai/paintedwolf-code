@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.detail, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SOURCE_HISTORY_UNAVAILABLE"
 effect: block
-category: recoverable
-emit: guard:source_history
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_history
 message: source ledger not configured for this session
 what: source_history cannot answer — {{ paintedwolf.detail }}.
 cause: The session runs without a configured source ledger, so no recorded provenance exists to query.
 why: Absence of the ledger is stated rather than answered with an empty history, which would read as "nothing ever changed".
 fix: Treat provenance as unknown. Offered Git history tools can establish committed history; reading current bytes cannot establish authorship or prove no changes occurred.
 instead: Branch on Code; treat provenance as unknown, not empty
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: the source ledger is not configured for this session

@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_HANDOFF_FORBIDDEN"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: Handoff tools blocked until plan workflow milestones are met
 what: Handoff tools blocked until plan workflow milestones are met
 cause: Handoff tools blocked until plan workflow milestones are met
 why: Finish stub, research, expand, and human approval
 fix: Finish stub, research, expand, and human approval
 instead: Use command redirects or scoped patches for blueprint files until approval/handoff
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

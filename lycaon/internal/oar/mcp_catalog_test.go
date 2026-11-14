@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -10,6 +11,21 @@ type fakeMCPCatalog struct {
 	configured map[string]bool
 	enabled    map[string]bool
 	tools      map[string]struct{ providerID, toolName string }
+}
+
+func (f *fakeMCPCatalog) ConfiguredProviderIDs() []string { return sortedTrue(f.configured) }
+
+func (f *fakeMCPCatalog) EnabledProviderIDs() []string { return sortedTrue(f.enabled) }
+
+func sortedTrue(set map[string]bool) []string {
+	out := []string{}
+	for id, ok := range set {
+		if ok {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (f *fakeMCPCatalog) ProviderConfigured(id string) bool {
@@ -138,17 +154,17 @@ func TestMCPStructuralConditionEvaluation(t *testing.T) {
 		t.Fatal("expected fire")
 	}
 
-	testutil.FailErr(t, "validate fn", checkWhenAgainstSpec(`mcp_server_enabled_for("fixture")`, nil))
-	ok, err = EvaluateCondition(`mcp_server_enabled_for("fixture")`, gc)
-	testutil.FailErr(t, "eval fn", err)
+	testutil.FailErr(t, "validate enabled", checkWhenAgainstSpec(`"fixture" in mcp_enabled_servers`, nil))
+	ok, err = EvaluateCondition(`"fixture" in mcp_enabled_servers`, gc)
+	testutil.FailErr(t, "eval enabled", err)
 	if !ok {
-		t.Fatal("expected mcp_server_enabled_for(\"fixture\")")
+		t.Fatal("expected fixture in mcp_enabled_servers")
 	}
 
 	testutil.FailErr(t, "validate configured", checkWhenAgainstSpec(
-		`mcp_server_configured_for("fixture") && !mcp_server_configured_for("missing")`, nil,
+		`"fixture" in mcp_configured_servers && !("missing" in mcp_configured_servers)`, nil,
 	))
-	ok, err = EvaluateCondition(`mcp_server_configured_for("fixture") && !mcp_server_configured_for("missing")`, gc)
+	ok, err = EvaluateCondition(`"fixture" in mcp_configured_servers && !("missing" in mcp_configured_servers)`, gc)
 	testutil.FailErr(t, "eval configured", err)
 	if !ok {
 		t.Fatal("expected configured fn parity")

@@ -71,16 +71,13 @@ func UnitCatalogFor(eff *extpacks.EffectiveCatalog) (promptunit.Catalog, error) 
 	return promptunit.LoadCached(eff)
 }
 
-// UnitSelectionVars reads the offered tool names a render already published
-// and builds the selection for host. loadable names the tools the render
-// could load beyond its floor; floor is what it always offers.
-func UnitSelectionVars(host promptunit.Host, mode string, floor, offered []string, omitted map[string]bool) promptunit.Selection {
+// UnitSelectionVars builds the selection for host from the tool names a
+// render offers.
+func UnitSelectionVars(host promptunit.Host, mode string, offered []string) promptunit.Selection {
 	return promptunit.Selection{
 		Host:    host,
 		Mode:    strings.TrimSpace(mode),
 		Offered: toolNameSet(offered),
-		Floor:   toolNameSet(floor),
-		Omitted: omitted,
 	}
 }
 

@@ -11,11 +11,10 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
     "when": "tool == \"read\"",
     "requires_facts": [
       "tool",
-      "policy_denied"
+      "not_found"
     ]
   },
   "input": {

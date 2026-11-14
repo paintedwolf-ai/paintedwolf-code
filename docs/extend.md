@@ -53,7 +53,7 @@ Those ids cannot collide across providers and cannot be named in `own`, so coinc
 
 ### OAR policy identities
 
-OAR policy units use `policy/<namespace>/<id>`, or `policy/<id>` when the document omits `namespace`. Filenames and package names do not supply identity. Two contributing documents with the same identity are a load error, including when `own` or `disabled` would hide one. A mandatory rule cannot be disabled or replaced. All admitted policy documents link together after validation, so a reference can target a rule from another contributing pack.
+OAR policy units use `policy/<namespace>/<id>`, or `policy/<id>` when the document omits `namespace`. Filenames and package names do not supply identity. Two contributing documents with the same identity are a load error, including when `own` or `disabled` would hide one. A mandatory rule cannot be disabled or replaced. All admitted policy documents form one rule set after validation: an `on_error` substitute or counter read names a rule of its own namespace, which may come from another contributing pack.
 
 ### Dependencies and locks
 
@@ -174,7 +174,7 @@ Project content applies only when the surface is enabled and the project is enab
 
 ## Policy rule roles
 
-An Open Agent Rules unit observes typed host facts and maps a match to a bounded effect. It may inform, nudge, ask, or block only through the effect channel the host defines; it cannot execute tools or turn a model-authored statement into host fact. Approval rules are narrower still: they can refine an existing approval decision but cannot bypass confinement or mint a capability. See [Open Agent Rules](open-agent-rules.md) and [Authorization](authorization.md).
+An Open Agent Rules unit observes typed host facts and maps a match to a bounded effect. It may warn, nudge, or block only through the effect channel the host defines; it cannot execute tools or turn a model-authored statement into host fact. Approval rules are narrower still: they can refine an existing approval decision but cannot bypass confinement or mint a capability. See [Open Agent Rules](open-agent-rules.md) and [Authorization](authorization.md).
 
 ## Detection packs (`host/detection-packs/`)
 
@@ -241,7 +241,7 @@ A preloaded body rides every model call of its turn, so bundled skills keep `SKI
 
 ## Prompt units
 
-Loadable instruction text ships as units under `shared/units/<stem>.md`: a YAML front matter with a `description` of at most 60 words (the only thing the decision model reads about the unit), a `slot` (`orientation`, `conduct`, `evidence`, `execution`, or `procedures`), an optional `order`, `attaches` (tools the unit follows), `needed_with` (tools whose call in a turn shows the unit was needed, for a unit that gates nothing; it labels the unit for the decision model and never changes rendering), `modes` (execution mode families), and `hosts` (`coordinator`, `worker`), then the template body. Host templates place `{{ units.<slot> }}` once per slot and loaded units render there in catalog order. A unit attached to tools renders only while one of them is offered and follows their load decision when every one is loadable; a unit attached to a floor tool, or to nothing, carries its own decision and is omitted only with confidence, and only once its `attaches` or `needed_with` tools have given it a behavioural label. Floor prose stays an ordinary include; only the platform pack contributes always-on text, so a pack cannot make itself always-on. A malformed stock unit fails the catalog; a malformed pack unit is reported and skipped. Units participate in Resolve like any other `shared/` unit, and the catalog revision they form is recorded on every decision receipt.
+Instruction text ships as units under `shared/units/<stem>.md`: a YAML front matter with a `description` of at most 60 words saying what the unit is for, a `slot` (`orientation`, `conduct`, `evidence`, `execution`, or `procedures`), an optional `order`, `attaches` (tools the unit follows), `modes` (execution mode families), and `hosts` (`coordinator`, `worker`), then the template body. Host templates place `{{ units.<slot> }}` once per slot and units render there in catalog order. A unit attached to tools renders exactly while one of them is offered, so it arrives with a loaded tool and leaves with it; any other unit renders on every call of its hosts and modes. No decision adds or removes a unit. A `needed_with` key from extension API 1.x packs is accepted and has no effect. Floor prose stays an ordinary include; only the platform pack contributes always-on text, so a pack cannot make itself always-on. A malformed stock unit fails the catalog; a malformed pack unit is reported and skipped. Units participate in Resolve like any other `shared/` unit, and the catalog revision they form is recorded on every decision receipt.
 
 ## Invariants
 

@@ -95,6 +95,41 @@ func ConditionFactComparisons(source string) ([]FactComparison, error) {
 	return comparisons, nil
 }
 
+// ConjunctValues returns the values a condition requires fact to take: the
+// literals of `fact == "v"` and `fact in [...]` among the top-level conjuncts.
+// It is empty when no conjunct constrains fact that way.
+func ConjunctValues(source, fact string) []string {
+	if strings.TrimSpace(source) == "" {
+		return nil
+	}
+	root, err := parseCondition(source)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	var walk func(*node)
+	walk = func(n *node) {
+		if n.kind != nodeBinary {
+			return
+		}
+		switch {
+		case n.op == "&&":
+			walk(n.left)
+			walk(n.right)
+		case n.op == "==" && n.left.kind == nodeIdent && n.left.strValue == fact && n.right.kind == nodeString:
+			out = append(out, n.right.strValue)
+		case n.op == "in" && n.left.kind == nodeIdent && n.left.strValue == fact && n.right.kind == nodeList:
+			for _, item := range n.right.items {
+				if item.kind == nodeString {
+					out = append(out, item.strValue)
+				}
+			}
+		}
+	}
+	walk(root)
+	return out
+}
+
 // EvaluateCondition uses the document's checked tree and capability types.
 func (r *Rule) EvaluateCondition(facts map[string]any, functions map[string]func(any) (any, error)) (bool, error) {
 	ctx := &evalContext{facts: map[string]value{}, functions: map[string]func(value) (value, error){}}
@@ -154,85 +189,21 @@ func (r *Rule) Fact(name string, facts map[string]any) (any, error) {
 	return coerce(raw, decl.Type, name)
 }
 
-// Dimensions are the selector dimensions a host models beyond the core
-// facts, by clause name. A present key with a nil value is an unbound
-// dimension; an absent key is one the host does not model.
-type Dimensions map[string]any
-
-// coreDimensions read the core fact each clause names ([OAR-SEL-5]).
-var coreDimensions = map[string]string{
-	"tool": "tool", "tools": "tool", "profiles": "profile", "session_posture": "session_posture",
-}
-
-// MatchSelector matches every clause against the occurrence ([OAR-SEL-2]). A
-// clause over a dimension the host does not model does not match
-// ([OAR-SEL-6]).
-func (r *Rule) MatchSelector(facts map[string]any, dims Dimensions) (bool, error) {
+// MatchSelector matches the rule's selector against the occurrence: tools
+// matches when the core fact tool is one of its names, and never where no tool
+// is invoked ([OAR-SEL-2], [OAR-SEL-6]).
+func (r *Rule) MatchSelector(facts map[string]any) (bool, error) {
 	for _, clause := range r.Selector {
-		ok, err := r.matchClause(clause, facts, dims)
-		if err != nil || !ok {
-			return false, err
-		}
-	}
-	return true, nil
-}
-
-func (r *Rule) matchClause(clause SelectorClause, facts map[string]any, dims Dimensions) (bool, error) {
-	if clause.Dimension == "ledger" {
-		for name, want := range clause.Ledger {
-			if _, declared := r.environment.Facts[name]; !declared {
-				return false, nil
-			}
-			v, err := r.Fact(name, facts)
-			if err != nil {
-				return false, err
-			}
-			if !memberOf(v, want) {
-				return false, nil
-			}
-		}
-		return true, nil
-	}
-	var actual value
-	if fact, core := coreDimensions[clause.Dimension]; core {
-		v, err := r.Fact(fact, facts)
+		v, err := r.Fact("tool", facts)
 		if err != nil {
 			return false, err
 		}
-		actual = v
-	} else {
-		v, modeled := dims[clause.Dimension]
-		if !modeled {
+		tool, _ := v.(string)
+		if tool == "" || !contains(clause.Values, tool) {
 			return false, nil
 		}
-		actual = v
 	}
-	if clause.Null {
-		return actual == nil || actual == "", nil
-	}
-	return memberOf(actual, clause.Values), nil
-}
-
-// memberOf reports whether a string value is one of want, or a list value
-// shares a member with it.
-func memberOf(v value, want []string) bool {
-	switch actual := v.(type) {
-	case string:
-		for _, w := range want {
-			if actual == w {
-				return true
-			}
-		}
-	case []string:
-		for _, a := range actual {
-			for _, w := range want {
-				if a == w {
-					return true
-				}
-			}
-		}
-	}
-	return false
+	return true, nil
 }
 
 // FactDeclaration exposes the type and capability dependency for set linking.

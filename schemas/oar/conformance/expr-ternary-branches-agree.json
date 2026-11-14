@@ -1,0 +1,25 @@
+{
+  "id": "expr-ternary-branches-agree",
+  "title": "A ternary whose branches differ in type is rejected at load",
+  "covers": [
+    "OAR-EXPR-8"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "(true ? 1 : \"one\") == 1"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-8"
+  }
+}

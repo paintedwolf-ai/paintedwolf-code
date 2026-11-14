@@ -15,7 +15,7 @@ func TestCorpusExportsCallableVocabularyWithoutChangingRelease(t *testing.T) {
 	testutil.FailErr(t, "load released decision catalog", err)
 	out, err := buildCorpus()
 	testutil.FailErr(t, "build training corpus", err)
-	if out.Schema != "pw-decide-corpus/2" || len(out.Tools) == 0 || len(out.Surfaces) == 0 || len(out.Units) == 0 {
+	if out.Schema != "pw-decide-corpus/3" || out.CatalogRevision == "" || len(out.Tools) == 0 || len(out.Surfaces) == 0 {
 		t.Fatalf("incomplete versioned corpus: %+v", out)
 	}
 	tools := make(map[string]bool, len(out.Tools))

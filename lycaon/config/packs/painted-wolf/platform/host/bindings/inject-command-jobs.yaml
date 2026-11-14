@@ -7,4 +7,4 @@ when: 'true'
 invariants:
   trigger_class: assembly_inject
   fires_in:
-  - coordinator or worker assembly while command jobs are live
+  - coordinator or worker assembly while command jobs are live or exited unobserved

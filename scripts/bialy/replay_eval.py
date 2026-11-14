@@ -2,8 +2,8 @@
 """Replay labelled turns through the decision engine and score it.
 
 Reads training rows (rows.py). For every row the engine answers the question
-set the row's turn was asked (one option per loadable tool and scored
-instruction unit it offered, plus the kind choice) and a skill ranking, and
+set the row's turn was asked (one option per loadable tool it offered, plus
+the kind choice) and a skill ranking, and
 the answers are compared with the labels:
 
   tools    load precision, recall, F1 at load_at (micro, over every option),
@@ -12,8 +12,6 @@ the answers are compared with the labels:
            the share of turns whose every used tool was loaded (no round trip),
            and per-tool AUC with its mean over tools with 5 or more needed turns
            (0.5 is a score that ignores the request)
-  guides   omission precision (an omitted unit was unneeded), omission rate,
-           and recall of needed units; unknown labels are skipped
   kind     accuracy at the confidence floor, abstention rate
   skills   over the corpus's skill cards, the text the engine ranks: top-1
            hit rate against the skill the coordinator read first, the share
@@ -35,19 +33,18 @@ the answers are compared with the labels:
   sessions each coordinator session's turns replayed in order: the standing set of
            tools its preloads and needs build up, by turn, and the share of later
            turns whose needed tools were already standing
-  bytes    prompt bytes the decision saved per turn: omitted unit bodies plus
-           unloaded tool schemas, against loading everything
+  bytes    prompt bytes the decision saved per turn: unloaded tool schemas,
+           against loading everything
   latency  engine time per turn, p50 and p95
   state    the share of turns whose request reached the catalog's
            user_text_chars bound, so truncation is a measured cost
 
 Results print overall and broken down by host, surface, language, project,
-and the model that drove the session, and per pack of origin when
---holdout-pack names packs whose units were held out of training. The engine
-is a bialy launcher, from --engine or LYCAON_DECIDE_ENGINE.
+and the model that drove the session. The engine is a bialy launcher, from
+--engine or LYCAON_DECIDE_ENGINE.
 
 Usage: replay_eval.py --corpus FILE --examples FILE [--engine PATH] [--limit N]
-                      [--holdout-pack ID ...] [--tool-truth RULE] [--json OUT]
+                      [--tool-truth RULE] [--json OUT]
 """
 
 import argparse
@@ -176,16 +173,13 @@ def prf(tp, fp, fn):
     return round(prec, 3), round(rec, 3), round(f1, 3)
 
 
-def score(examples, engine, corpus, schema_bytes, unit_bytes, preload_at, tool_truth, timed=True):
+def score(examples, engine, corpus, schema_bytes, preload_at, tool_truth, timed=True):
     q = corpus.spec
     load_at = float(q["tools"]["load_at"])
-    omit_below = float(q["guides"]["omit_below"])
-    conf_floor = float(q["guides"]["confidence_floor"])
     kind_floor = float(q["kind"]["confidence_floor"])
     veto = bool(q["kind"].get("veto_tools"))
     tool_stats = collections.defaultdict(collections.Counter)
     tool_calib = collections.defaultdict(list)
-    guide_stats = collections.defaultdict(collections.Counter)
     kind_hits = kind_total = kind_abstain = 0
     skill_hits = skill_total = skill_listed = 0
     preloads = preload_hits = judged_total = judged_listed = 0
@@ -289,26 +283,6 @@ def score(examples, engine, corpus, schema_bytes, unit_bytes, preload_at, tool_t
             eligible_turns += 1
             if truth_tools <= loaded:
                 saved_turns += 1
-        guide_truth = ex["labels"]["guides"]
-        for uid in qs.get("guides", {}).get("options", {}):
-            p, conf = option_answer(answers, "guides", uid)
-            p, conf = (0.0, 0.0) if p is None else (p, conf)
-            omitted = uid in q["guides"].get("omittable", []) and p < omit_below and conf >= conf_floor
-            needed = guide_truth.get(uid)
-            if omitted:
-                saved += unit_bytes.get(uid, 0)
-            if needed is None:
-                guide_stats[uid]["unknown"] += 1
-                guide_stats[uid]["omitted_unknown"] += omitted
-                continue
-            if omitted and needed:
-                guide_stats[uid]["omitted_needed"] += 1
-            elif omitted:
-                guide_stats[uid]["omitted_unneeded"] += 1
-            elif needed:
-                guide_stats[uid]["kept_needed"] += 1
-            else:
-                guide_stats[uid]["kept_unneeded"] += 1
         bytes_saved.append(saved)
         kind_total += 1
         if float(kind.get("confidence", 0.0)) < kind_floor:
@@ -336,7 +310,7 @@ def score(examples, engine, corpus, schema_bytes, unit_bytes, preload_at, tool_t
                     preload_hits += roster[best] in judged
                 if judged and judged & set(listed):
                     judged_listed += 1
-    report = {"turns": len(examples), "tools": {}, "guides": {}, "kind": {}, "skills": {}, "requests": {}, "savings": {}, "latency_ms": {}}
+    report = {"turns": len(examples), "tools": {}, "kind": {}, "skills": {}, "requests": {}, "savings": {}, "latency_ms": {}}
     tp = fp = fn = 0
     for name, c in sorted(tool_stats.items()):
         tp += c["tp"]
@@ -352,23 +326,6 @@ def score(examples, engine, corpus, schema_bytes, unit_bytes, preload_at, tool_t
                                "macro_recall": round(statistics.mean(recalls), 3) if recalls else None,
                                "macro_auc": macro_auc(report["tools"]),
                                "loads_per_turn": round(statistics.mean(loads_per_turn), 2) if loads_per_turn else 0.0}
-    omitted_unneeded = omitted_needed = kept_needed = 0
-    for uid, c in sorted(guide_stats.items()):
-        omitted = c["omitted_needed"] + c["omitted_unneeded"]
-        report["guides"][uid] = {
-            "omission_precision": round(c["omitted_unneeded"] / omitted, 3) if omitted else None,
-            "omission_rate": round(omitted / max(sum(c.values()) - c["unknown"], 1), 3),
-            "recall": round(c["kept_needed"] / max(c["kept_needed"] + c["omitted_needed"], 1), 3),
-            "unknown": c["unknown"],
-        }
-        omitted_unneeded += c["omitted_unneeded"]
-        omitted_needed += c["omitted_needed"]
-        kept_needed += c["kept_needed"]
-    omitted = omitted_unneeded + omitted_needed
-    report["guides"]["_all"] = {
-        "omission_precision": round(omitted_unneeded / omitted, 3) if omitted else None,
-        "recall": round(kept_needed / max(kept_needed + omitted_needed, 1), 3),
-    }
     report["kind"] = {"accuracy": round(kind_hits / kind_total, 3) if kind_total else 0.0,
                       "abstained": round(kind_abstain / kind_total, 3) if kind_total else 0.0}
     report["skills"] = {"top1": round(skill_hits / skill_total, 3) if skill_total else 0.0,
@@ -400,17 +357,9 @@ def score(examples, engine, corpus, schema_bytes, unit_bytes, preload_at, tool_t
 
 
 def load_sizes(corpus):
-    """Bytes each tool schema and unit body would add to a prompt."""
-    root = corpus_root()
-    schemas = root / "lycaon/config/packs/painted-wolf/platform/tools/schemas"
-    schema_bytes = {name: (schemas / (name + ".yaml")).stat().st_size for name in corpus.tools if (schemas / (name + ".yaml")).exists()}
-    unit_bytes = {}
-    for uid, unit in corpus.units.items():
-        for pack_dir in (root / "lycaon/config/packs/painted-wolf").iterdir():
-            path = pack_dir / "shared/units" / (uid + ".md")
-            if path.exists():
-                unit_bytes[uid] = path.stat().st_size
-    return schema_bytes, unit_bytes
+    """Bytes each tool schema would add to a prompt."""
+    schemas = corpus_root() / "lycaon/config/packs/painted-wolf/platform/tools/schemas"
+    return {name: (schemas / (name + ".yaml")).stat().st_size for name in corpus.tools if (schemas / (name + ".yaml")).exists()}
 
 
 def corpus_root():
@@ -426,7 +375,6 @@ def main():
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--tool-truth", choices=rowfile.TOOL_TRUTH, default="consensus", help="how a turn's tool labels are read (rows.py)")
     ap.add_argument("--preload-at", type=float, default=None, help="skill preload threshold (default: the corpus's turn.skills.preload_at)")
-    ap.add_argument("--holdout-pack", action="append", default=[], help="pack ids whose units were held out of training; reported separately")
     ap.add_argument("--json", default="")
     args = ap.parse_args()
     if not args.engine:
@@ -436,22 +384,18 @@ def main():
     examples = rowfile.load(args.examples, corpus=corpus)
     if args.limit:
         examples = examples[: args.limit]
-    schema_bytes, unit_bytes = load_sizes(corpus)
+    schema_bytes = load_sizes(corpus)
     engine = Engine(args.engine)
     try:
         report = {"engine": engine.hello.get("engine"), "corpus": corpus.revision, "tool_truth": args.tool_truth,
-                  "overall": score(examples, engine, corpus, schema_bytes, unit_bytes, args.preload_at, args.tool_truth)}
+                  "overall": score(examples, engine, corpus, schema_bytes, args.preload_at, args.tool_truth)}
         for key, field in (("by_host", "host"), ("by_surface", "surface"), ("by_lang", "lang"), ("by_project", "project"), ("by_model", "model")):
             groups = collections.defaultdict(list)
             for ex in examples:
                 groups[ex[field]].append(ex)
             if len(groups) > 1:
-                report[key] = {name: score(exs, engine, corpus, schema_bytes, unit_bytes, args.preload_at, args.tool_truth, timed=False)
+                report[key] = {name: score(exs, engine, corpus, schema_bytes, args.preload_at, args.tool_truth, timed=False)
                                for name, exs in sorted(groups.items())}
-        if args.holdout_pack:
-            held = {uid for uid, u in corpus.units.items() if u["pack_id"] in args.holdout_pack}
-            report["holdout"] = {"packs": args.holdout_pack, "units": sorted(held),
-                                 "guides": {uid: v for uid, v in report["overall"]["guides"].items() if uid in held}}
     finally:
         engine.close()
     text = json.dumps(report, indent=2, ensure_ascii=False)

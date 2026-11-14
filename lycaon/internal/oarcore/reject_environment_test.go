@@ -93,15 +93,15 @@ func TestNewEnvironmentRejectsFaults(t *testing.T) {
 			s.HostFacts = map[string]string{"other.example.x": "string"}
 		}, "is not published under the host namespace"},
 		{"type outside vocabulary", func(s *EnvironmentSpec) {
-			s.HostFacts = map[string]string{"test.example.bad": "list<bogus>"}
+			s.HostFacts = map[string]string{"testhost.bad": "list<bogus>"}
 		}, "outside the closed type vocabulary"},
 		{"malformed detector", func(s *EnvironmentSpec) { s.Detectors = []string{"nope"} }, "malformed detector reference"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			spec := EnvironmentSpec{
-				Host:      "test.example",
-				HostFacts: map[string]string{"test.example.str": "string"},
+				Host:      "testhost",
+				HostFacts: map[string]string{"testhost.str": "string"},
 			}
 			tc.mut(&spec)
 			_, err := NewEnvironment(spec)
@@ -117,11 +117,11 @@ func TestNewEnvironmentRejectsFaults(t *testing.T) {
 
 func TestNewEnvironmentDeclaresTiers(t *testing.T) {
 	env, err := NewEnvironment(EnvironmentSpec{
-		Host:        "test.example",
+		Host:        "testhost",
 		HostAnchors: []string{"custom.anchor"},
 		HostFacts: map[string]string{
-			"test.example.str":      "string",
-			"test.example.fact_len": "(string) -> int",
+			"testhost.str":      "string",
+			"testhost.fact_len": "(string) -> int",
 		},
 		Detectors: []string{"detector://example"},
 	})
@@ -131,10 +131,10 @@ func TestNewEnvironmentDeclaresTiers(t *testing.T) {
 	if decl := env.Facts["tool"]; decl.Type != TypeString || decl.Tier != TierCore {
 		t.Fatalf("core fact: %+v", decl)
 	}
-	if decl := env.Facts["test.example.str"]; decl.Type != TypeString || decl.Tier != TierHost {
+	if decl := env.Facts["testhost.str"]; decl.Type != TypeString || decl.Tier != TierHost {
 		t.Fatalf("host fact: %+v", decl)
 	}
-	if fn := env.Functions["test.example.fact_len"]; fn.Sig.Arg != TypeString || fn.Sig.Ret != TypeInt || fn.Tier != TierHost {
+	if fn := env.Functions["testhost.fact_len"]; fn.Sig.Arg != TypeString || fn.Sig.Ret != TypeInt || fn.Tier != TierHost {
 		t.Fatalf("host function: %+v", fn)
 	}
 	if !env.Detectors["detector://example"] || !env.HostAnchors["custom.anchor"] {
@@ -219,42 +219,6 @@ func TestCoerceAcceptsValues(t *testing.T) {
 			if reflect.TypeOf(got) != reflect.TypeOf(tc.want) || !reflect.DeepEqual(got, tc.want) {
 				t.Fatalf("coerce(%v, %s) = %v, want %v", tc.raw, tc.typ, got, tc.want)
 			}
-		}
-	}
-}
-
-func TestNormalizeMemberKinds(t *testing.T) {
-	cases := []struct {
-		in   any
-		want any
-	}{
-		{3, int64(3)},
-		{int32(3), int64(3)},
-		{uint32(3), int64(3)},
-		{float32(1.5), 1.5},
-		{[]any{"a", "b"}, []string{"a", "b"}},
-		{[]any{"a", 1}, []any{"a", 1}},
-		{"s", "s"},
-		{true, true},
-	}
-	for _, tc := range cases {
-		got := normalizeMember(tc.in)
-		if strings, ok := tc.want.([]string); ok {
-			gotList, ok := got.([]string)
-			if !ok || len(gotList) != len(strings) {
-				t.Fatalf("normalizeMember(%#v) = %#v, want %#v", tc.in, got, tc.want)
-			}
-			continue
-		}
-		if items, ok := tc.want.([]any); ok {
-			gotAny, ok := got.([]any)
-			if !ok || len(gotAny) != len(items) {
-				t.Fatalf("normalizeMember(%#v) = %#v, want %#v", tc.in, got, tc.want)
-			}
-			continue
-		}
-		if got != tc.want {
-			t.Fatalf("normalizeMember(%#v) = %#v, want %#v", tc.in, got, tc.want)
 		}
 	}
 }

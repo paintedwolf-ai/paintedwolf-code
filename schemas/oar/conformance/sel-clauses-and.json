@@ -1,6 +1,6 @@
 {
   "id": "sel-clauses-and",
-  "title": "Selector clauses are conjunctive: one non-matching clause deselects the rule",
+  "title": "A selector clause that does not match deselects the rule",
   "covers": [
     "OAR-SEL-2",
     "OAR-SEL-4",
@@ -14,20 +14,15 @@
     "selector": {
       "tools": [
         "read"
-      ],
-      "profiles": [
-        "worker"
       ]
     },
     "effect": "block",
-    "emit": "rule:conformance",
     "when": "true"
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
-      "tool": "read",
-      "profile": "coordinator"
+      "tool": "write"
     }
   },
   "expected": {

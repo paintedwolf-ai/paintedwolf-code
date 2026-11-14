@@ -37,7 +37,7 @@ generate drives every task of a JSON-lines task file through its own session
         of a running sidecar, answering questions and leftover approvals from
         the unattended policy, and writes one manifest entry per task. A task
         that times out or fails is aborted and recorded; the run continues.
-stats   reports per-unit load and use counts from receipts, so a unit that
+stats   reports per-tool load and use counts from receipts, so a tool that
         always loads and is never used shows up.
 probe   runs the turn decision through the engine resolved from the
         environment (LYCAON_DECIDE_BINARY, LYCAON_DECIDE_MODEL_DIR,
@@ -93,12 +93,10 @@ func openReceiptStore(ctx context.Context, dbPath string) (*db.Queries, func(), 
 	return db.New(sqlDB), func() { _ = sqlDB.Close() }, nil
 }
 
-// unitStats is one unit's load and use counts across receipts.
-type unitStats struct {
+// toolStats is one loadable tool's load and use counts across receipts.
+type toolStats struct {
 	ID       string `json:"id"`
-	Kind     string `json:"kind"`
 	Loaded   int    `json:"loaded"`
-	Omitted  int    `json:"omitted,omitempty"`
 	Used     int    `json:"used,omitempty"`
 	Receipts int    `json:"receipts"`
 }
@@ -122,13 +120,12 @@ func runDecideStats(args []string) error {
 	if err != nil {
 		return fmt.Errorf("list receipts: %w", err)
 	}
-	stats := map[string]*unitStats{}
-	get := func(kind, id string) *unitStats {
-		key := kind + "." + id
-		if stats[key] == nil {
-			stats[key] = &unitStats{ID: id, Kind: kind}
+	stats := map[string]*toolStats{}
+	get := func(id string) *toolStats {
+		if stats[id] == nil {
+			stats[id] = &toolStats{ID: id}
 		}
-		return stats[key]
+		return stats[id]
 	}
 	messagesBySession := map[string][]db.ListSessionMessagesRow{}
 	turns := 0
@@ -154,36 +151,22 @@ func runDecideStats(args []string) error {
 		labels, _ := observedLabels(msgs, receipt.OpeningMessageID.String, nil)
 		used := nameSet(labels.Tools)
 		for _, c := range decisions.Turn.Candidates {
-			row := get(string(c.Kind), c.ID)
+			row := get(c.ID)
 			row.Receipts++
-			switch c.Kind {
-			case turnload.KindTool:
-				if _, loaded := decisions.Turn.Tools[c.ID]; loaded {
-					row.Loaded++
-				}
-				if used[c.ID] {
-					row.Used++
-				}
-			case turnload.KindGuide:
-				if _, omitted := decisions.Turn.Omitted[c.ID]; omitted {
-					row.Omitted++
-				} else {
-					row.Loaded++
-				}
+			if _, loaded := decisions.Turn.Tools[c.ID]; loaded {
+				row.Loaded++
+			}
+			if used[c.ID] {
+				row.Used++
 			}
 		}
 	}
-	rows := make([]unitStats, 0, len(stats))
+	rows := make([]toolStats, 0, len(stats))
 	for _, row := range stats {
 		rows = append(rows, *row)
 	}
-	sort.Slice(rows, func(i, j int) bool {
-		if rows[i].Kind != rows[j].Kind {
-			return rows[i].Kind < rows[j].Kind
-		}
-		return rows[i].ID < rows[j].ID
-	})
-	return writeJSON("", map[string]any{"turns": turns, "units": rows})
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
+	return writeJSON("", map[string]any{"turns": turns, "tools": rows})
 }
 
 func runDecideProbe(args []string) error {
@@ -218,12 +201,6 @@ func runDecideProbe(args []string) error {
 	for _, name := range row.Loadable {
 		cards = append(cards, turnload.ToolCard{Name: name, Description: descriptions[name]})
 	}
-	var guides []promptunit.Unit
-	for _, u := range corpus.Units {
-		if contains(row.Guides, u.ID) {
-			guides = append(guides, promptunit.Unit{ID: u.ID, Description: u.Description})
-		}
-	}
 	client := bialy.New(bialy.ConfigFromEnvironment())
 	defer func() { _ = client.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
@@ -234,7 +211,7 @@ func runDecideProbe(args []string) error {
 	spec := corpus.Questions
 	spec.DeadlineMS = 60000
 	state := turnload.State{Host: string(promptunit.HostCoordinator), User: turnload.BoundUser(*request, 900), RootCount: 1, Surface: *surfaceID}
-	decision := turnload.Decide(ctx, client, spec, state, turnload.Candidates(turnload.ToolCandidates(cards), turnload.GuideCandidates(guides)))
+	decision := turnload.Decide(ctx, client, spec, state, turnload.ToolCandidates(cards))
 	decision.Candidates = nil
 	return writeJSON("", map[string]any{"engine": client.Engine(), "state": state, "decision": decision, "elapsed_ms": decision.Elapsed.Milliseconds()})
 }

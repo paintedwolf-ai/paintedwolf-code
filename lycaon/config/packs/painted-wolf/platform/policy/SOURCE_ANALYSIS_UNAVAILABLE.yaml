@@ -6,8 +6,8 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.parse_failure, paintedwolf.parse_failure_count, paintedwolf.parse_paths, paintedwolf.path, paintedwolf.source_analysis_unavailable]
 when: paintedwolf.source_analysis_unavailable
 effect: warn
-category: informational
-emit: guard:source_analysis
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:source_analysis
 message: source analysis is unavailable for part of the result
 what: 'Some source analysis is unavailable ({{ paintedwolf.parse_failure_count }} failure(s)): {{ paintedwolf.parse_paths }}.'
 cause: 'First failure, {{ paintedwolf.path }}: {{ paintedwolf.parse_failure }}. Per-file diagnostics are retained in the result.'
@@ -15,7 +15,7 @@ why: 'Available text and completed matches remain useful, but missing symbols or
 fix: >-
   {{ paintedwolf.next_steps }} For inline content, inspect the supplied text directly. Report the host parser failure to the coordinator or user; retry structural analysis after its cause is resolved.
 instead: Keep completed results and account for the missing analysis explicitly
-scenarios:
+x-paintedwolf-scenarios:
   - id: partial_search
     vars:
       tool: grep

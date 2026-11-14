@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROCESS_REQUEST_INVALID"
 effect: block
-category: recoverable
-emit: guard:host_process
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:host_process
 message: The process request is invalid.
 what: The process request is invalid.
 cause: The host could not complete the structured process operation.
 why: A process reference identifies one process instance; ordinary operating-system permissions still apply.
 fix: Use the declared schema and a supported signal.
 instead: Branch on Code; Use the declared schema and a supported signal.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {}

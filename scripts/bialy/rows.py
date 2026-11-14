@@ -1,4 +1,4 @@
-"""Training rows: `lycaon-debug decide export` output, pw-decide-row/1.
+"""Training rows: `lycaon-debug decide export` output, pw-decide-row/2.
 
 row.schema.json beside this file describes the shape. A row is one turn
 decision: the state the engine read, the candidates the turn offered, what
@@ -9,7 +9,7 @@ corpus, so a label is always read against the options the host had.
 
 import json
 
-SCHEMA = "pw-decide-row/1"
+SCHEMA = "pw-decide-row/2"
 RETENTION_SCHEMA = "pw-retention-row/1"
 RETENTION_TRUTH = ("needed", "later")
 

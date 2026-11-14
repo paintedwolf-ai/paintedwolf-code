@@ -1,12 +1,12 @@
 ## command{% if is_coordinator %} (coordinator){% endif %}
 
-{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}`cd`, variables and `$!` last one program; job handles span calls.{% if profile_has_terminal_open and profile_has_terminal_send %} For live input, use `terminal_open` and `terminal_send`.{% endif %}
+{% if is_coordinator and command_on_floor == false %}Loaded via `request_tools` for this turn. {% endif %}`cd`, variables and `$!` last one program; job handles span calls.{% if profile_has_terminal_open and profile_has_terminal_send %} For live input, use `terminal_open` and `terminal_send`.{% elif profile_has_terminal_open %} For live input, open with `terminal_open`.{% endif %}
 
 {% if workspace_roots %}Programs start in the session folder; `pwd`, `$PWD` and `$OLDPWD` are absolute. `cd` moves between folders by `@label`. Unquoted `@label/...` and `@scratch/...` expand in arguments and redirects; quote to keep them literal.
 Only attached folders have indexing, history and undo.{% if profile_command_mutation != false %} {% if reviews_confined_writes == false %}Other paths ask the person first, except temporary and cache folders.{% else %}Other paths, including temporary folders, ask the person first.{% endif %}{% endif %}
 {% endif %}{% if session_scratch_dir %}- `@scratch`: session scratch (`$TMPDIR`, `mktemp`); literal `/tmp` is the system's own.
 {% endif %}
-{% if profile_command_mutation != false %}External programs run in a sandbox unless the person approves host access.{% if not command_external_hidden %} For a native-name collision, use `external -- NAME` or `external -p PATH -- NAME`.{% endif %}
+{% if profile_command_mutation != false %}{% if profile_command_external_exec != false %}External programs run in a sandbox unless the person approves host access.{% if not command_external_hidden %} For a native-name collision, use `external -- NAME` or `external -p PATH -- NAME`.{% endif %}{% else %}Only native programs run on this surface; external programs are refused.{% endif %}
 
 {% if command_output_files %}For long output, read the saved copy named in the result.{% endif %}
 

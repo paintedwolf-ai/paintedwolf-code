@@ -11,6 +11,7 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/inject"
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
+	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/prompts"
 	sessionlimits "github.com/lycaon/lycaon/internal/session/limits"
 	"github.com/lycaon/lycaon/internal/session/loading"
@@ -26,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workerworkspace"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/trainingcapture"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -139,13 +141,62 @@ func (m *Context) Build() promptloop.ContextDeps {
 
 	if m.Prompts != nil {
 		deps.ToolProcedures = m.ToolProcedures
+		deps.PromptSurface = m.PromptSurface
 	}
 
 	return deps
 }
 
 func (m *Context) ToolProcedures(ctx context.Context, sess *api.Session, profileID string, offered []string) (string, error) {
-	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, profileID, offered, m.Loading.Ledger.Omitted(sess.ID))
+	return inject.RenderToolProceduresBlock(ctx, prompts.NewInjectRenderer(m.Prompts), sess.ID, profileID, offered)
+}
+
+// PromptSurface reports the host facts that shaped a request offering these
+// tools: their turn-load sources, the procedure units they attached, the skill
+// the turn read and the decision in effect.
+func (m *Context) PromptSurface(ctx context.Context, sess *api.Session, profileID string, offered []string) (trainingcapture.PromptSurface, error) {
+	surface := trainingcapture.PromptSurface{Tools: []trainingcapture.OfferedTool{}, Units: []trainingcapture.RenderedUnit{}}
+	var standing turnload.Standing
+	if m.Loading != nil && m.Loading.Ledger != nil {
+		standing = m.Loading.Ledger.Standing(sess.ID)
+	}
+	loads := make(map[string]turnload.Load, len(standing.Tools))
+	for _, load := range standing.Tools {
+		loads[load.Tool] = load
+	}
+	offeredSet := make(map[string]bool, len(offered))
+	for _, name := range offered {
+		offeredSet[name] = true
+		tool := trainingcapture.OfferedTool{Tool: name, Source: "standing"}
+		if load, ok := loads[name]; ok {
+			tool.Source, tool.With = string(load.Source), load.With
+		}
+		surface.Tools = append(surface.Tools, tool)
+	}
+	units, err := inject.ToolProcedureUnits(prompts.NewInjectRenderer(m.Prompts), profileID, offered)
+	if err != nil {
+		return surface, err
+	}
+	for _, unit := range units {
+		rendered := trainingcapture.RenderedUnit{ID: unit.ID}
+		for _, tool := range unit.Attaches {
+			if offeredSet[tool] {
+				rendered.AttachedBy = append(rendered.AttachedBy, tool)
+			}
+		}
+		surface.Units = append(surface.Units, rendered)
+	}
+	if standing.Skill != nil {
+		surface.Skill = &trainingcapture.SkillRead{Name: standing.Skill.Name, Tool: standing.Skill.Tool}
+	}
+	receipt, found, err := m.Loading.LatestDecision(ctx, sess.ID)
+	if err != nil {
+		return surface, err
+	}
+	if found {
+		surface.TurnLoadReceiptID, surface.Engine, surface.CatalogRevision = receipt.ID, receipt.Engine, receipt.CatalogRevision
+	}
+	return surface, nil
 }
 
 func (m *Context) WebSearchEnabled() bool {

@@ -1,6 +1,6 @@
 # Local model questions and host thresholds.
 # Evaluator: lycaon/internal/coordinator/turnload
-version: 2
+version: 3
 
 # The fastest device that ranks the 16-candidate reference batch within
 # reference_ms serves; otherwise decisions fall back immediately.
@@ -29,15 +29,6 @@ turn:
   skills:
     preload_at: 2.8
     margin: 0.3
-  # Omit a unit when its id is in omittable, P(true) < omit_below, and
-  # confidence >= confidence_floor. Units needed by a called or requested tool
-  # are never omitted.
-  guides:
-    question: Which of this guidance does completing this request need?
-    option_words: 8
-    omittable: [native-summarize-tool, native-recall-tool]
-    omit_below: 0.3
-    confidence_floor: 0.5
   # Joint heads only: a confident answer_only kind can veto tool loading.
   kind:
     veto_tools: false
