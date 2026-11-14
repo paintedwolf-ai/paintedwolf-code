@@ -599,6 +599,7 @@ type EvidenceRecords struct {
 	Truncated         int64          `json:"truncated"`
 	Survey            int64          `json:"survey"`
 	SupersededBy      sql.NullString `json:"superseded_by"`
+	RootID            string         `json:"root_id"`
 }
 
 type ExtensionOperations struct {

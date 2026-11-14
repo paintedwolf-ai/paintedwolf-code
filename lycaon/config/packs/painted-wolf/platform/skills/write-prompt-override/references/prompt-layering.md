@@ -10,7 +10,7 @@ Maintained sources of truth: `docs/agent-prompt-template.md` (overrides and rend
 | Reusable extension | Same file at the mapped pack path (`agents/`→`agents/prompts/`, `partials/`→`shared/partials/`, `archetypes/`→`shared/archetypes/`, `guidance/`→`guidance/`) | Pack install/enable plus explicit `own:` for collisions |
 | Distribution/site | `prompt_files/` beside the distribution's `config/` (checkout builds only) | Wins over project and bundled layers |
 
-Layer order is site, then project (active root before primary root), then bundled pack templates. A `units/<stem>.md` override replaces the body only; omit front matter, which stays with the pack unit. Do not write an override to an arbitrary Markdown path; mirror the complete reference, including directories and extension.
+Layer order is site, then project (session folder before primary root), then bundled pack templates. A `units/<stem>.md` override replaces the body only; omit front matter, which stays with the pack unit. Do not write an override to an arbitrary Markdown path; mirror the complete reference, including directories and extension.
 
 ## Use the bounded syntax
 

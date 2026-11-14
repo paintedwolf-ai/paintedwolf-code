@@ -46,7 +46,7 @@ webE2e(
                 tool: "write",
                 tool_call_id: toolCallId,
                 assistant_message_id: assistantId,
-                file_edit: { path: "src/streamed.ts", ...write },
+                file_edits: [{ path: "src/streamed.ts", ...write }],
               },
               seq: seq + 1,
               ord: seq + 1,

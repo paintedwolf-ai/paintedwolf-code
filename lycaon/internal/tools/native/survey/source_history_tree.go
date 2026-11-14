@@ -58,11 +58,13 @@ func (t *SourceHistoryTool) addTreeChanges(
 	for _, row := range resp.Files {
 		recorded[row.Path] = true
 	}
-	// A rename's source is recorded too, though no row names it now.
+	// A rename's source is recorded too, though no row names it now. Effects
+	// render in the baseline key spelling (primary-relative) so they dedupe
+	// against tree changes, which carry baseline keys.
 	for _, effect := range effects {
-		recorded[projectroot.DisplayPath(roots, effect.RootID, effect.Path)] = true
+		recorded[projectroot.DisplayPath(roots, "", effect.RootID, effect.Path)] = true
 		if effect.FromPath != "" {
-			recorded[projectroot.DisplayPath(roots, effect.FromRootID, effect.FromPath)] = true
+			recorded[projectroot.DisplayPath(roots, "", effect.FromRootID, effect.FromPath)] = true
 		}
 	}
 	covered, err := coveredByMoves(compare, ledger, sourceTreeOf(tctx), recordedMoves(roots, effects), changes, recorded)
@@ -87,7 +89,11 @@ func (t *SourceHistoryTool) addTreeChanges(
 				continue
 			}
 		}
-		resp.Files = append(resp.Files, sourceHistoryOverviewFile{Path: change.Path, Op: string(changeOp(change.Kind)), Unrecorded: true})
+		rootID, rel, locErr := displayPathLocation(roots, change.Path)
+		if locErr != nil {
+			return false
+		}
+		resp.Files = append(resp.Files, sourceHistoryOverviewFile{Path: projectroot.DisplayPath(roots, tctx.Source.ActiveRootID, rootID, rel), Op: string(changeOp(change.Kind)), Unrecorded: true})
 	}
 	return true
 }
@@ -141,7 +147,8 @@ func pathHasEffect(ctx context.Context, tctx tools.ToolContext, ledger tools.Sou
 	return found, err
 }
 
-// displayPathLocation inverts projectroot.DisplayPath.
+// displayPathLocation splits a baseline key (primary-relative display spelling)
+// into its root and root-relative path.
 func displayPathLocation(roots []projectroot.RootRef, path string) (rootID, rel string, err error) {
 	for _, root := range roots {
 		if root.IsPrimary || root.Label == "" {
@@ -185,7 +192,7 @@ func (t *SourceHistoryTool) workerSessionDiff(
 	compare, cancel := t.treeContext(ctx)
 	defer cancel()
 	compared, err := awaitTree(compare, func(ctx context.Context) (workspacebaseline.PathComparison, error) {
-		return ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), projectroot.DisplayPath(tctx.Source.Roots, rootID, rel))
+		return ledger.Tree.TreePathChange(ctx, sourceTreeOf(tctx), projectroot.DisplayPath(tctx.Source.Roots, "", rootID, rel))
 	})
 	if err != nil {
 		return ledgerAnswer(overviewTreeUnknownNote)

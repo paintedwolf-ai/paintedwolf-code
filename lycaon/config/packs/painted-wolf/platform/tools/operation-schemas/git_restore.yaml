@@ -7,10 +7,10 @@ schema:
       type: array
       items:
         type: string
-      description: Repo-relative paths to restore (max 20)
+      description: "Paths relative to the session folder, `@label/path` for any attached folder, or absolute (max 20)."
     source:
       type: string
-      description: Optional source tree (for example HEAD or a commit). Defaults to the index for worktree-only restore and HEAD when staged is true.
+      description: "Optional source tree — a git revision such as HEAD or a commit, not a filesystem path. Defaults to the index for worktree-only restore and HEAD when staged is true."
     staged:
       type: boolean
       description: Restore the index. When neither staged nor worktree is true, worktree defaults to true.

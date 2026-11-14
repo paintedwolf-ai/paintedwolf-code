@@ -303,7 +303,7 @@ func TestAssembleSourceChangeBriefLeadsWithGitTransitions(t *testing.T) {
 		first.FromCommit != "aaaaaaaa" || first.At != "14:01 UTC" {
 		t.Fatalf("first git line = %+v", first)
 	}
-	if second.Kind != "commit" || second.Root != "" || second.Detail != "Fix the bug" ||
+	if second.Kind != "commit" || second.Root != "@root" || second.Detail != "Fix the bug" ||
 		second.ToCommit != "cccccccc" {
 		t.Fatalf("second git line = %+v", second)
 	}

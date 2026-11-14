@@ -1558,6 +1558,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/projects/{id}/view": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Replace what one of this person's windows shows of the project
+         * @description The host keeps each window's report briefly and tells a session's agent what the person had in view when they sent a prompt. Windows renew their report while it holds; a report that is not renewed expires.
+         */
+        put: operations["replaceProjectView"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/projects/{id}/editor-documents/status": {
         parameters: {
             query?: never;
@@ -1889,7 +1909,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/projects/{id}/source/editorconfig": {
+    "/v1/projects/{id}/source/format-settings": {
         parameters: {
             query?: never;
             header?: never;
@@ -1897,15 +1917,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Resolve the EditorConfig pairs in effect for a project path
-         * @description Resolves `.editorconfig` files from the path's directory toward its
-         *     attached root, stopping at `root = true` or at the root itself, with
-         *     nearer files and later sections winning. The host applies the same
-         *     resolution when it checks agent writes. The file itself need not exist.
-         *     Unrecognized keys and values are ignored; `unset` clears a pair from a
-         *     farther file. An absent property is not declared for this path.
+         * Resolve the formatting settings each tool declares for a project path
+         * @description Resolves each catalog tool's configuration for the path the way that
+         *     tool finds it. EditorConfig merges `.editorconfig` files from the
+         *     path's directory toward its attached root, stopping at `root = true`,
+         *     with nearer files and later sections winning; the host applies the same
+         *     resolution when it checks agent writes. Every other tool uses its
+         *     nearest configuration file between the path's directory and the root.
+         *     A nearer configuration the host cannot read, such as a JavaScript
+         *     file, means that tool declares nothing for the path. The file itself
+         *     need not exist; unrecognized keys and values are ignored.
          */
-        get: operations["getProjectSourceEditorConfig"];
+        get: operations["getProjectSourceFormatSettings"];
         put?: never;
         post?: never;
         delete?: never;
@@ -7499,6 +7522,94 @@ export interface components {
             /** Format: date-time */
             compacted_at: string;
         };
+        /** @description What the sender had in view when this prompt opened a turn, across their visible windows, most recently focused first. Recorded only when it differs from the last view still in the agent's history; empty lists and no folder or search mean nothing was in view. */
+        ViewContext: {
+            /** @description Files shown in a visible editor, with that editor's selection. */
+            editors: components["schemas"]["ViewEditor"][];
+            /** @description Files shown in a visible diff. */
+            diffs: components["schemas"]["ViewPath"][];
+            folder?: components["schemas"]["ViewPath"];
+            search?: components["schemas"]["ViewSearch"];
+            /** @description Security findings open or selected in a visible security view. */
+            findings: components["schemas"]["ViewFinding"][];
+        };
+        ViewPath: {
+            /** Format: uuid */
+            root_id: string;
+            /** @description Root-relative slash path. */
+            path: string;
+            /** @description The path as the agent was shown it, @label-qualified off the primary root. */
+            display_path: string;
+        };
+        ViewLocation: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            display_path: string;
+            line?: number;
+        };
+        ViewEditor: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            display_path: string;
+            unsaved: boolean;
+            selection?: components["schemas"]["ViewSelection"];
+        };
+        /** @description The editor's main selection. */
+        ViewSelection: {
+            start_line: number;
+            end_line: number;
+            /** @description No text is selected; start_line is the cursor's line. */
+            cursor: boolean;
+        };
+        ViewSearch: {
+            query: string;
+            hit?: components["schemas"]["ViewLocation"];
+        };
+        ViewFinding: {
+            fingerprint: string;
+            rule_id: string;
+            level: components["schemas"]["FindingLevel"];
+            location?: components["schemas"]["ViewLocation"];
+        };
+        /** @description What one window of this person shows of the project right now. Every surface is present; one the window does not show is null, and a window that shows none of them, or is hidden, withdraws its report. Reports expire unless renewed. */
+        ReplaceProjectViewRequest: {
+            client_id: string;
+            /** @description The window has keyboard focus. */
+            focused: boolean;
+            editor: components["schemas"]["ViewReportEditor"] | null;
+            diff: components["schemas"]["ViewReportPath"] | null;
+            folder: components["schemas"]["ViewReportPath"] | null;
+            search: components["schemas"]["ViewReportSearch"] | null;
+            findings: components["schemas"]["ViewReportFinding"][];
+        };
+        ViewReportPath: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+        };
+        ViewReportLocation: {
+            /** Format: uuid */
+            root_id: string;
+            path: string;
+            line?: number;
+        };
+        ViewReportSearch: {
+            query: string;
+            hit?: components["schemas"]["ViewReportLocation"];
+        };
+        ViewReportFinding: {
+            fingerprint: string;
+            rule_id: string;
+            level: components["schemas"]["FindingLevel"];
+            location?: components["schemas"]["ViewReportLocation"];
+        };
+        /** @description The document a visible editor shows; its selection is the window's editor presence. */
+        ViewReportEditor: {
+            /** Format: uuid */
+            document_id: string;
+        };
         CreateSessionRequest: {
             /** Format: uuid */
             project_id: string;
@@ -8031,9 +8142,13 @@ export interface components {
             completion?: components["schemas"]["ToolCompletion"];
             /** @description Report accepted against this worker job's observations and policy. */
             worker_report?: components["schemas"]["WorkerReportAcceptance"];
-            file_edit_preview?: components["schemas"]["FileEditPreview"];
+            /** @description Transcript reads carry one summary and reference per recorded file edit, in order, in place of the edits' text. */
+            file_edit_previews?: components["schemas"]["FileEditPreview"][];
             promotion_previews?: components["schemas"]["FileEditPreview"][];
-            file_edit?: components["schemas"]["FileEditSnapshot"];
+            /** @description Text changes the call made, one per file, from the text before its first write to the text after its last, in the order the files were first written. */
+            file_edits?: components["schemas"]["FileEditSnapshot"][];
+            /** @description Further text changes the call made that file_edits does not hold because the result reached its bound. Source history holds them. */
+            file_edits_omitted?: number;
             overlay_promotion?: components["schemas"]["OverlayPromotion"];
             visual?: components["schemas"]["VisualArtifact"];
             checkpoint_decision?: components["schemas"]["CheckpointDecisionMeta"];
@@ -8382,7 +8497,6 @@ export interface components {
             boundary?: components["schemas"]["TurnLoadBoundary"];
             /** @description The skill whose body the turn carries: read at the turn decision, or by the tool_event that this receipt records. */
             preloaded_skill?: components["schemas"]["TurnLoadSkill"];
-            guides?: components["schemas"]["TurnLoadGuides"];
             match?: components["schemas"]["TurnLoadMatch"];
         };
         /**
@@ -8457,11 +8571,6 @@ export interface components {
              * @description How long the route keeps an idle prefix; omitted when the provider documents no figure.
              */
             cold_after_ms?: number;
-        };
-        /** @description How many loadable instruction units the turn rendered and left out of the prompt. */
-        TurnLoadGuides: {
-            rendered: number;
-            omitted: number;
         };
         /** @description How a request_tools or skills_read text resolved to names. */
         TurnLoadMatch: {
@@ -10444,7 +10553,7 @@ export interface components {
             artifact_id?: string;
             /** @description Stable blob ID for a payload attachment, used to restage Edit/rewind. */
             blob_id?: string;
-            /** @description Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices). */
+            /** @description Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the canonical display path: bare relative to the session's active folder, qualified with `@label/` for any other attached folder. Absent when the part has no openable body (search_hit, user prose, host notices). */
             path?: string;
             /**
              * Format: uuid
@@ -10945,11 +11054,17 @@ export interface components {
             report: components["schemas"]["WorkerCompletionReport"];
             grounding: components["schemas"]["CitationGrounding"];
         };
+        /**
+         * @description The tool result list a file edit reference indexes. `file_edit` is file_edits; `overlay_promotion` is the promoted files.
+         * @enum {string}
+         */
+        FileEditSource: "file_edit" | "overlay_promotion";
         FileEditReference: {
             /** Format: uuid */
             message_id: string;
             tool_call_id: string;
-            /** @description Zero for file_edit; one-based index for a promotion file. */
+            source: components["schemas"]["FileEditSource"];
+            /** @description Zero-based position in that list. */
             index: number;
         };
         FileEditPreview: {
@@ -11151,10 +11266,11 @@ export interface components {
             /** Format: uuid */
             worker_id?: string;
         };
-        /** @description Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory. */
+        /** @description Host-recorded source context supplied with this message; independent of evidence and filesystem inventory. */
         SourceContext: {
             locations: components["schemas"]["NavigationTarget"][];
             truncated: boolean;
+            view?: components["schemas"]["ViewContext"];
         };
         /** @enum {string} */
         NavigationStatus: "pending" | "resolved" | "ambiguous" | "missing" | "unavailable";
@@ -13288,11 +13404,43 @@ export interface components {
             width: number;
             height: number;
         };
+        /** @enum {string} */
+        FormatTool: "editorconfig" | "prettier" | "biome" | "dprint" | "ruff" | "black" | "rustfmt" | "clang_format" | "scalafmt" | "swift_format" | "dart" | "rubocop" | "stylua" | "ocamlformat" | "fourmolu" | "julia_formatter" | "sqlfluff" | "foundry" | "taplo";
         /**
-         * @description EditorConfig pairs in effect for one root-addressed path. Every property
-         *     is omitted when no `.editorconfig` declares it.
+         * @description Settings in effect under a tool's configuration, in one vocabulary
+         *     across tools: what the configuration declares, else the tool's fixed
+         *     default. A property is omitted when neither gives a value or the tool
+         *     chooses automatically.
          */
-        SourceEditorConfig: {
+        FormatSettings: {
+            /** @description Column the tool keeps lines within. */
+            line_width?: number;
+            /** @enum {string} */
+            indent_style?: "space" | "tab";
+            /** @description Columns per indentation level; omitted when indent_size_tab is true. */
+            indent_size?: number;
+            /** @description True when a level is one tab and follows tab_width. */
+            indent_size_tab?: boolean;
+            tab_width?: number;
+            /** @enum {string} */
+            end_of_line?: "lf" | "crlf" | "cr";
+            trim_trailing_whitespace?: boolean;
+            insert_final_newline?: boolean;
+            /** @enum {string} */
+            charset?: "latin1" | "utf-8" | "utf-8-bom" | "utf-16be" | "utf-16le";
+        };
+        FormatSettingsSource: {
+            tool: components["schemas"]["FormatTool"];
+            /** @description Repo-relative configuration files that contributed, nearest first. */
+            configs: string[];
+            settings: components["schemas"]["FormatSettings"];
+        };
+        /**
+         * @description Formatting settings that each tool's configuration declares for one
+         *     root-addressed path. A tool appears only when a configuration it reads
+         *     is in effect for the path.
+         */
+        SourceFormatSettings: {
             /** @description Normalized repo-relative path (slash-separated) */
             path: string;
             /**
@@ -13300,19 +13448,13 @@ export interface components {
              * @description Attached root that holds the path
              */
             root_id: string;
-            /** @enum {string} */
-            indent_style?: "space" | "tab";
-            /** @description Columns per indentation level; omitted when indent_size_tab is true. */
-            indent_size?: number;
-            /** @description True when `indent_size = tab`, so a level follows tab_width. */
-            indent_size_tab?: boolean;
-            tab_width?: number;
-            /** @enum {string} */
-            end_of_line?: "lf" | "crlf";
-            trim_trailing_whitespace?: boolean;
-            insert_final_newline?: boolean;
-            /** @enum {string} */
-            charset?: "latin1" | "utf-8" | "utf-8-bom" | "utf-16be" | "utf-16le";
+            /** @description One entry per tool with configuration in effect, in catalog order. */
+            sources: components["schemas"]["FormatSettingsSource"][];
+            /**
+             * @description File names the resolution reads. A change to a file with one of
+             *     these names can change the settings of paths beneath it.
+             */
+            config_names: string[];
         };
         /** @description Human request to add owner-write permission to the exact file bytes shown in the editor. */
         MakeProjectSourceEditableRequest: {
@@ -15447,6 +15589,8 @@ export interface components {
             /** @description Condition the toggle reflects. With state_label the item reads state_label while it holds; without it the item carries a checkmark. */
             state?: components["schemas"]["ContributionCondition"];
             state_label?: string;
+            /** @description Title of a pull-out the item nests under. Items in one slot and group that share a title share the pull-out, ordered by order. */
+            submenu?: string;
         };
         ContributionKeybinding: {
             id: string;
@@ -20860,6 +21004,39 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
+    replaceProjectView: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplaceProjectViewRequest"];
+            };
+        };
+        responses: {
+            /** @description The window's report was replaced */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            400: components["responses"]["Error"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            413: components["responses"]["ContentTooLarge"];
+            415: components["responses"]["UnsupportedMediaType"];
+            429: components["responses"]["TooManyRequests"];
+            default: components["responses"]["Error"];
+        };
+    };
     readEditorDocumentStatuses: {
         parameters: {
             query?: never;
@@ -21765,7 +21942,7 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    getProjectSourceEditorConfig: {
+    getProjectSourceFormatSettings: {
         parameters: {
             query: {
                 /** @description Optional session whose bound checkout supplies the project roots */
@@ -21783,13 +21960,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pairs in effect for the path */
+            /** @description Settings in effect for the path */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SourceEditorConfig"];
+                    "application/json": components["schemas"]["SourceFormatSettings"];
                 };
             };
             /** @description Missing or invalid path or root_id */
@@ -30158,6 +30335,19 @@ export type CreateScannerRequest = components["schemas"]["CreateScannerRequest"]
 export type UpdateScannerRequest = components["schemas"]["UpdateScannerRequest"];
 export type UpdateProjectScannerRequest = components["schemas"]["UpdateProjectScannerRequest"];
 export type CompactedChunkMeta = components["schemas"]["CompactedChunkMeta"];
+export type ViewContext = components["schemas"]["ViewContext"];
+export type ViewPath = components["schemas"]["ViewPath"];
+export type ViewLocation = components["schemas"]["ViewLocation"];
+export type ViewEditor = components["schemas"]["ViewEditor"];
+export type ViewSelection = components["schemas"]["ViewSelection"];
+export type ViewSearch = components["schemas"]["ViewSearch"];
+export type ViewFinding = components["schemas"]["ViewFinding"];
+export type ReplaceProjectViewRequest = components["schemas"]["ReplaceProjectViewRequest"];
+export type ViewReportPath = components["schemas"]["ViewReportPath"];
+export type ViewReportLocation = components["schemas"]["ViewReportLocation"];
+export type ViewReportSearch = components["schemas"]["ViewReportSearch"];
+export type ViewReportFinding = components["schemas"]["ViewReportFinding"];
+export type ViewReportEditor = components["schemas"]["ViewReportEditor"];
 export type CreateSessionRequest = components["schemas"]["CreateSessionRequest"];
 export type Message = components["schemas"]["Message"];
 export type MessageKind = components["schemas"]["MessageKind"];
@@ -30240,7 +30430,6 @@ export type TurnLoadTool = components["schemas"]["TurnLoadTool"];
 export type TurnLoadCacheState = components["schemas"]["TurnLoadCacheState"];
 export type TurnLoadColdReason = components["schemas"]["TurnLoadColdReason"];
 export type TurnLoadBoundary = components["schemas"]["TurnLoadBoundary"];
-export type TurnLoadGuides = components["schemas"]["TurnLoadGuides"];
 export type TurnLoadMatch = components["schemas"]["TurnLoadMatch"];
 export type QueueItem = components["schemas"]["QueueItem"];
 export type QueueDraft = components["schemas"]["QueueDraft"];
@@ -30486,6 +30675,7 @@ export type WorkerCompletionReport = components["schemas"]["WorkerCompletionRepo
 export type CitationGroundingCheckStatus = components["schemas"]["CitationGroundingCheckStatus"];
 export type CitationGroundingFinding = components["schemas"]["CitationGroundingFinding"];
 export type WorkerReportAcceptance = components["schemas"]["WorkerReportAcceptance"];
+export type FileEditSource = components["schemas"]["FileEditSource"];
 export type FileEditReference = components["schemas"]["FileEditReference"];
 export type FileEditPreview = components["schemas"]["FileEditPreview"];
 export type FileEditSnapshot = components["schemas"]["FileEditSnapshot"];
@@ -30684,7 +30874,10 @@ export type SecretMarkRange = components["schemas"]["SecretMarkRange"];
 export type SecretMarkPreview = components["schemas"]["SecretMarkPreview"];
 export type SecretMarkRequest = components["schemas"]["SecretMarkRequest"];
 export type AttachmentVideoFacts = components["schemas"]["AttachmentVideoFacts"];
-export type SourceEditorConfig = components["schemas"]["SourceEditorConfig"];
+export type FormatTool = components["schemas"]["FormatTool"];
+export type FormatSettings = components["schemas"]["FormatSettings"];
+export type FormatSettingsSource = components["schemas"]["FormatSettingsSource"];
+export type SourceFormatSettings = components["schemas"]["SourceFormatSettings"];
 export type MakeProjectSourceEditableRequest = components["schemas"]["MakeProjectSourceEditableRequest"];
 export type MakeProjectSourceEditableResponse = components["schemas"]["MakeProjectSourceEditableResponse"];
 export type SourceDirEntry = components["schemas"]["SourceDirEntry"];

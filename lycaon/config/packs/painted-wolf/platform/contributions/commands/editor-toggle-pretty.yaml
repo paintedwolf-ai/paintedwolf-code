@@ -1,5 +1,5 @@
 id: painted-wolf/platform:editor-toggle-pretty
-title: "Toggle pretty display"
+title: "Toggle Pretty"
 scope: files
 category: navigation
 when:

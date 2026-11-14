@@ -572,9 +572,10 @@ requests, returned evidence, and final claims as well as aggregate token counts.
 
 `release-suite.yaml` evaluates useful answers and working changes first: an
 end-to-end existing-project CLI change with tests and a final terminal capture,
-orientation, named-file explanation, exact lookup, a false relationship premise,
-a focused repair, skill-assisted design, sandbox recovery, managed secrets, and
-recall after actual compaction. Tool preferences, extra reads, and presentation
+an interactive program shown working on request, orientation, named-file
+explanation, exact lookup, a false relationship premise, a focused repair,
+skill-assisted design, sandbox recovery, managed secrets, and recall after
+actual compaction. Tool preferences, extra reads, and presentation
 are diagnostics, not automatic failures. Grounding, permission boundaries, and
 secret confidentiality still matter to a usable outcome.
 

@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pw-training-contract/1",
+  "title": "Host training contract",
+  "description": "What a factory needs to read a host's training evidence without naming its tools or storage.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "host_commit",
+    "host_modified",
+    "bundle",
+    "capture",
+    "fact",
+    "files",
+    "sources",
+    "settlement",
+    "semantic_outcome",
+    "effect_state",
+    "offer_sources"
+  ],
+  "properties": {
+    "schema": {
+      "const": "pw-training-contract/1"
+    },
+    "host_commit": {
+      "type": "string"
+    },
+    "host_modified": {
+      "type": "boolean"
+    },
+    "bundle": {
+      "const": "pw-training-episode-bundle/1"
+    },
+    "capture": {
+      "const": "pw-training-turn/1"
+    },
+    "fact": {
+      "const": "pw-training-fact/1"
+    },
+    "files": {
+      "const": [
+        "catalog.json",
+        "sessions.jsonl",
+        "captures.jsonl",
+        "operations.jsonl",
+        "observations.jsonl",
+        "effects.jsonl",
+        "decisions.jsonl",
+        "completions.jsonl",
+        "source-inventory.json"
+      ]
+    },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "source",
+          "contract"
+        ],
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "contract": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "settlement": {
+      "const": [
+        "settled",
+        "unsettled"
+      ]
+    },
+    "semantic_outcome": {
+      "const": [
+        "success",
+        "failure",
+        "unknown"
+      ]
+    },
+    "effect_state": {
+      "const": [
+        "none",
+        "known",
+        "unknown"
+      ]
+    },
+    "offer_sources": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "contains": {
+        "const": "standing"
+      }
+    }
+  }
+}

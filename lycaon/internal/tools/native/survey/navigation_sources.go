@@ -13,8 +13,16 @@ func navigationEntryKind(kind string) api.NavigationEntryKind {
 }
 
 func recordListedSources(tctx tools.ToolContext, resp listDirResponse) {
-	tctx.RecordSourcePath(resp.Path, api.NavigationEntryKindFolder)
+	if resp.rootID != "" && resp.scopeRel != "" {
+		tctx.RecordSourceIdentity(resp.rootID, resp.scopeRel, api.NavigationEntryKindFolder)
+	} else {
+		tctx.RecordSourcePath(resp.Path, api.NavigationEntryKindFolder)
+	}
 	for _, entry := range resp.Entries {
+		if entry.rootID != "" && entry.scopeRel != "" {
+			tctx.RecordSourceIdentity(entry.rootID, entry.scopeRel, navigationEntryKind(entry.Type))
+			continue
+		}
 		tctx.RecordSourcePath(entry.Path, navigationEntryKind(entry.Type))
 	}
 	var visit func(*directoryMapNode)
@@ -22,7 +30,11 @@ func recordListedSources(tctx tools.ToolContext, resp listDirResponse) {
 		if node == nil {
 			return
 		}
-		tctx.RecordSourcePath(node.Path, navigationEntryKind(node.Type))
+		if node.rootID != "" && node.scopeRel != "" {
+			tctx.RecordSourceIdentity(node.rootID, node.scopeRel, navigationEntryKind(node.Type))
+		} else {
+			tctx.RecordSourcePath(node.Path, navigationEntryKind(node.Type))
+		}
 		for _, child := range node.Children {
 			visit(child)
 		}

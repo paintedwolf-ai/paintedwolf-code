@@ -23,8 +23,35 @@ func (*decisionReceiptStore) Get(context.Context, string) (*api.Session, error) 
 	return &api.Session{ID: "session"}, nil
 }
 func (s *decisionReceiptStore) PutTurnLoadReceipt(_ context.Context, r store.TurnLoadReceipt) (store.TurnLoadReceipt, error) {
+	r.ID = int64(len(s.receipts) + 1)
 	s.receipts = append(s.receipts, r)
 	return r, nil
+}
+func (s *decisionReceiptStore) LatestTurnLoadReceipt(context.Context, string) (store.TurnLoadReceipt, bool, error) {
+	if len(s.receipts) == 0 {
+		return store.TurnLoadReceipt{}, false, nil
+	}
+	return s.receipts[len(s.receipts)-1], true, nil
+}
+
+func TestLatestDecisionIsTheSessionsNewestReceipt(t *testing.T) {
+	if _, found, err := (*Service)(nil).LatestDecision(t.Context(), "session"); found || err != nil {
+		t.Fatalf("unconfigured service found a decision: %v", err)
+	}
+	repository := &decisionReceiptStore{}
+	s := &Service{store: repository, Ledger: turnload.NewLedger()}
+	if _, found, _ := s.LatestDecision(t.Context(), "session"); found {
+		t.Fatal("a decision was found before any was recorded")
+	}
+	for _, engine := range []string{"first", "second"} {
+		_, err := repository.PutTurnLoadReceipt(t.Context(), store.TurnLoadReceipt{SessionID: "session", Engine: engine})
+		testutil.FailErr(t, "record decision", err)
+	}
+	latest, found, err := s.LatestDecision(t.Context(), "session")
+	testutil.FailErr(t, "read latest decision", err)
+	if !found || latest.ID != 2 || latest.Engine != "second" {
+		t.Fatalf("latest = %+v", latest)
+	}
 }
 
 func TestRequestAndSkillLookupReceiptsRetainCallAndStandingSurface(t *testing.T) {

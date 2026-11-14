@@ -1,3 +1,4 @@
+import { offerSecurityViewFacet } from "./security-view-facet.ts";
 import {
   Show,
   batch,
@@ -276,6 +277,11 @@ function FolderSecurityFindingsPane(props: Props & { rootId?: string; folderPick
     if (!key) return null;
     return ledger.entries().find((entry) => ledgerEntryKey(entry) === key) ?? null;
   };
+  offerSecurityViewFacet({
+    projectId: () => props.projectId,
+    rootId: () => props.rootId,
+    finding: () => (isLedger() ? selectedLedgerEntry()?.finding : selectedRunFinding()),
+  });
 
   const clearRunSelection = () =>
     batch(() => {

@@ -146,7 +146,7 @@ var (
 	operationGetProjectSource                   = generatedOperation{ID: "getProjectSource", Method: "GET", Path: "/v1/projects/{id}/source", Params: []string{"id"}}
 	operationGetProjectSourceAttribution        = generatedOperation{ID: "getProjectSourceAttribution", Method: "GET", Path: "/v1/projects/{id}/source/attribution", Params: []string{"id"}}
 	operationGetProjectSourceComparison         = generatedOperation{ID: "getProjectSourceComparison", Method: "GET", Path: "/v1/projects/{id}/source/comparison", Params: []string{"id"}}
-	operationGetProjectSourceEditorConfig       = generatedOperation{ID: "getProjectSourceEditorConfig", Method: "GET", Path: "/v1/projects/{id}/source/editorconfig", Params: []string{"id"}}
+	operationGetProjectSourceFormatSettings     = generatedOperation{ID: "getProjectSourceFormatSettings", Method: "GET", Path: "/v1/projects/{id}/source/format-settings", Params: []string{"id"}}
 	operationGetProjectSourceGitReview          = generatedOperation{ID: "getProjectSourceGitReview", Method: "GET", Path: "/v1/projects/{id}/source/git-changes/{git_change_id}/review", Params: []string{"id", "git_change_id"}}
 	operationGetProjectSourceHistory            = generatedOperation{ID: "getProjectSourceHistory", Method: "GET", Path: "/v1/projects/{id}/source/history", Params: []string{"id"}}
 	operationGetProjectSourceIndex              = generatedOperation{ID: "getProjectSourceIndex", Method: "GET", Path: "/v1/projects/{id}/source/index", Params: []string{"id"}}
@@ -270,6 +270,7 @@ var (
 	operationReplaceEditorDocumentRetention     = generatedOperation{ID: "replaceEditorDocumentRetention", Method: "PUT", Path: "/v1/projects/{id}/editor-documents/retention", Params: []string{"id"}}
 	operationReplaceProjectManagedSecretValue   = generatedOperation{ID: "replaceProjectManagedSecretValue", Method: "PUT", Path: "/v1/projects/{id}/secrets/{secret_id}/value", Params: []string{"id", "secret_id"}, RecordsPersonAction: true}
 	operationReplaceProjectSource               = generatedOperation{ID: "replaceProjectSource", Method: "PUT", Path: "/v1/projects/{id}/source", Params: []string{"id"}, RecordsPersonAction: true}
+	operationReplaceProjectView                 = generatedOperation{ID: "replaceProjectView", Method: "PUT", Path: "/v1/projects/{id}/view", Params: []string{"id"}}
 	operationReplaceProviderCredential          = generatedOperation{ID: "replaceProviderCredential", Method: "PUT", Path: "/v1/providers/{provider_id}/credential", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationReplaceScannerSlot                 = generatedOperation{ID: "replaceScannerSlot", Method: "PUT", Path: "/v1/scanners/slots/{category}", Params: []string{"category"}, RecordsPersonAction: true}
 	operationReplaceSourceViewportInterest      = generatedOperation{ID: "replaceSourceViewportInterest", Method: "PUT", Path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}", Params: []string{"id", "view_id", "interest_id"}}
@@ -485,7 +486,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetProjectSource,
 	operationGetProjectSourceAttribution,
 	operationGetProjectSourceComparison,
-	operationGetProjectSourceEditorConfig,
+	operationGetProjectSourceFormatSettings,
 	operationGetProjectSourceGitReview,
 	operationGetProjectSourceHistory,
 	operationGetProjectSourceIndex,
@@ -609,6 +610,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationReplaceEditorDocumentRetention,
 	operationReplaceProjectManagedSecretValue,
 	operationReplaceProjectSource,
+	operationReplaceProjectView,
 	operationReplaceProviderCredential,
 	operationReplaceScannerSlot,
 	operationReplaceSourceViewportInterest,

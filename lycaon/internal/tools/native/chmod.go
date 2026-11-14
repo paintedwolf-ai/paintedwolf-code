@@ -122,7 +122,7 @@ func (t *TimesTool) SetTimes(ctx context.Context, paths []string, access, modify
 		}
 		rel := filepath.ToSlash(resolved.ScopeRel)
 		changed = append(changed, rel)
-		afterSuccessfulMutation(ctx, tctx, rel)
+		afterSuccessfulMutationResolved(ctx, tctx, resolved)
 	}
 	return changed, nil
 }

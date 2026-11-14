@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -17,6 +18,26 @@ var (
 	ErrPromotionConflict = errors.New("project promotion already exists")
 	ErrPromotionPhase    = errors.New("project promotion phase conflict")
 )
+
+// RootsChangedObserver is notified after a promotion commits with the root
+// sets before and after the commit, so the session layer can kick sessions
+// when the relabel from @Draft to the destination folder basename changes
+// what the model addresses.
+type RootsChangedObserver func(ctx context.Context, projectID string, before, after []projectroot.RootRef)
+
+// SetRootsChangedObserver registers the promotion-commit observer.
+func (r *MemoryRegistry) SetRootsChangedObserver(observer RootsChangedObserver) {
+	if r != nil {
+		r.rootsChangedObserver = observer
+	}
+}
+
+// SetRootsChangedObserver registers the promotion-commit observer.
+func (r *SQLRegistry) SetRootsChangedObserver(observer RootsChangedObserver) {
+	if r != nil {
+		r.rootsChangedObserver = observer
+	}
+}
 
 func (r *MemoryRegistry) CreatePromotion(
 	ctx context.Context,
@@ -126,6 +147,14 @@ func (r *MemoryRegistry) CommitPromotion(ctx context.Context, projectID string) 
 		return nil, err
 	}
 	r.mu.Lock()
+	var beforeRefs, afterRefs []projectroot.RootRef
+	// Registered before the unlock defer so the observer runs after the
+	// registry is unlocked, once the commit is visible.
+	defer func() {
+		if beforeRefs != nil && r.rootsChangedObserver != nil {
+			r.rootsChangedObserver(ctx, projectID, beforeRefs, afterRefs)
+		}
+	}()
 	defer r.mu.Unlock()
 	p, ok := r.projects[projectID]
 	if !ok {
@@ -145,6 +174,7 @@ func (r *MemoryRegistry) CommitPromotion(ctx context.Context, projectID string) 
 	if root.ID != promotion.RootID || !SamePath(root.Path, promotion.SourcePath) {
 		return nil, ErrDraftRootInvariant
 	}
+	beforeRefs = RootRefsFrom(p)
 	p.Roots[0].Path = promotion.DestinationPath
 	p.Roots[0].Label = deriveUniqueRootLabel(nil, promotion.DestinationPath)
 	p.Roots[0].Kind = RootKindAttached
@@ -157,6 +187,7 @@ func (r *MemoryRegistry) CommitPromotion(ctx context.Context, projectID string) 
 	promotion.LastError = ""
 	promotion.UpdatedAt = time.Now().UTC()
 	p.Promotion = clonePromotion(promotion)
+	afterRefs = RootRefsFrom(p)
 	return cloneProject(p), nil
 }
 
@@ -420,6 +451,9 @@ func (r *SQLRegistry) CommitPromotion(ctx context.Context, projectID string) (*P
 		return nil, err
 	}
 	r.notifyProjectEvents()
+	if r.rootsChangedObserver != nil {
+		r.rootsChangedObserver(ctx, projectID, RootRefsFrom(p), RootRefsFrom(after))
+	}
 	return after, nil
 }
 

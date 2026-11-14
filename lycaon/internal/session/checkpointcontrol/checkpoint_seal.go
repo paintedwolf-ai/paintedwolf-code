@@ -8,6 +8,7 @@ import (
 
 	sessioncheckpoint "github.com/lycaon/lycaon/internal/session/checkpoint"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/tools"
 )
 
 // ErrCheckpointRootUnset identifies missing host checkpoint storage.
@@ -63,7 +64,9 @@ func (m *Capture) SealPromptCheckpoint(ctx context.Context, sessionID, anchorMes
 }
 
 // RecordPrimaryMutation captures a path's pre-turn state once per anchor.
-func (m *Capture) RecordPrimaryMutation(ctx context.Context, sessionID, relPath string) {
+// projectRootID is the attached project root the path belongs to; empty for
+// session artifacts such as blueprints.
+func (m *Capture) RecordPrimaryMutation(ctx context.Context, sessionID, projectRootID, relPath string) {
 	if m == nil {
 		return
 	}
@@ -77,7 +80,7 @@ func (m *Capture) RecordPrimaryMutation(ctx context.Context, sessionID, relPath 
 	if err != nil || store == nil {
 		return
 	}
-	m.Capture.RecordPath(ctx, store, rootID, relPath)
+	m.Capture.RecordPath(ctx, store, rootID, strings.TrimSpace(projectRootID), relPath)
 }
 
 // RecordBlueprintBinding stores the pre-turn bound blueprint path on the open checkpoint.
@@ -99,9 +102,9 @@ func (m *Capture) RecordBlueprintBinding(ctx context.Context, sessionID, path st
 }
 
 // RecordPromotedPrimaryPaths captures primary paths before overlay promotion.
-func (m *Capture) RecordPromotedPrimaryPaths(ctx context.Context, sessionID string, paths []string) {
+func (m *Capture) RecordPromotedPrimaryPaths(ctx context.Context, sessionID string, paths []tools.PrimaryMutation) {
 	for _, p := range paths {
-		m.RecordPrimaryMutation(ctx, sessionID, p)
+		m.RecordPrimaryMutation(ctx, sessionID, p.RootID, p.RelPath)
 	}
 }
 

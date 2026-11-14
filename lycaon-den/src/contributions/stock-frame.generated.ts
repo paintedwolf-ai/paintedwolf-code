@@ -476,6 +476,22 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "result_treatment": "effect"
     },
     {
+      "id": "painted-wolf/platform:editor-line-layout-off",
+      "provider": "painted-wolf/platform",
+      "title": "Line layout: Off",
+      "category": "navigation",
+      "scope": "files",
+      "icon": "play",
+      "executor": "den",
+      "invocation": "den",
+      "action_kind": "native_ui",
+      "handler_id": "editor.lineLayoutOff",
+      "when": {
+        "fact": "files_stage_active"
+      },
+      "result_treatment": "effect"
+    },
+    {
       "id": "painted-wolf/platform:editor-move-line-down",
       "provider": "painted-wolf/platform",
       "title": "Move line down",
@@ -917,7 +933,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "id": "painted-wolf/platform:editor-toggle-pretty",
       "provider": "painted-wolf/platform",
-      "title": "Toggle pretty display",
+      "title": "Toggle Pretty",
       "category": "navigation",
       "scope": "files",
       "icon": "play",
@@ -949,7 +965,7 @@ export const STOCK_FRAME: ContributionFrameResponse = {
     {
       "id": "painted-wolf/platform:editor-toggle-wrap",
       "provider": "painted-wolf/platform",
-      "title": "Toggle word wrap",
+      "title": "Toggle wrap",
       "category": "navigation",
       "scope": "files",
       "icon": "play",
@@ -4472,28 +4488,51 @@ export const STOCK_FRAME: ContributionFrameResponse = {
       "order": 4
     },
     {
+      "id": "painted-wolf/platform:app-menu-view-editor-line-layout-off",
+      "slot": "app_menu.view",
+      "command": "painted-wolf/platform:editor-line-layout-off",
+      "group": "2",
+      "order": 1,
+      "label": "Off",
+      "state": {
+        "fact": "line_layout",
+        "is": "off"
+      },
+      "submenu": "Line layout"
+    },
+    {
+      "id": "painted-wolf/platform:app-menu-view-editor-line-layout-pretty",
+      "slot": "app_menu.view",
+      "command": "painted-wolf/platform:editor-toggle-pretty",
+      "group": "2",
+      "order": 3,
+      "label": "Pretty",
+      "state": {
+        "fact": "line_layout",
+        "is": "pretty"
+      },
+      "submenu": "Line layout"
+    },
+    {
+      "id": "painted-wolf/platform:app-menu-view-editor-line-layout-wrap",
+      "slot": "app_menu.view",
+      "command": "painted-wolf/platform:editor-toggle-wrap",
+      "group": "2",
+      "order": 2,
+      "label": "Wrap",
+      "state": {
+        "fact": "line_layout",
+        "is": "wrap"
+      },
+      "submenu": "Line layout"
+    },
+    {
       "id": "painted-wolf/platform:app-menu-view-editor-toggle-line-numbers",
       "slot": "app_menu.view",
       "command": "painted-wolf/platform:editor-toggle-line-numbers",
       "group": "2",
       "order": 8,
       "label": "Toggle line numbers"
-    },
-    {
-      "id": "painted-wolf/platform:app-menu-view-editor-toggle-pretty",
-      "slot": "app_menu.view",
-      "command": "painted-wolf/platform:editor-toggle-pretty",
-      "group": "2",
-      "order": 7,
-      "label": "Toggle pretty display"
-    },
-    {
-      "id": "painted-wolf/platform:app-menu-view-editor-toggle-wrap",
-      "slot": "app_menu.view",
-      "command": "painted-wolf/platform:editor-toggle-wrap",
-      "group": "2",
-      "order": 7,
-      "label": "Toggle word wrap"
     },
     {
       "id": "painted-wolf/platform:app-menu-view-files-open-files-list",

@@ -7,13 +7,13 @@ import (
 )
 
 // Pagination discards skipped matches without retaining them.
-func (s *grepSearch) scanPaginatedText(rel string, content []byte, bytesTruncated bool) error {
+func (s *grepSearch) scanPaginatedText(rel string, ident grepFileIdentity, content []byte, bytesTruncated bool) error {
 	s.textScanned++
 	if bytesTruncated {
 		s.filesBytesTruncated++
 	}
 	var consumeErr error
-	err := s.forEachTextMatch(rel, content, func(match grepMatch) bool {
+	err := s.forEachTextMatch(rel, ident, content, func(match grepMatch) bool {
 		consumeErr = s.acceptMatch(match)
 		return consumeErr == nil
 	})
@@ -23,9 +23,9 @@ func (s *grepSearch) scanPaginatedText(rel string, content []byte, bytesTruncate
 	return consumeErr
 }
 
-func (s *grepSearch) collectMatches(rel string, content []byte) ([]grepMatch, error) {
+func (s *grepSearch) collectMatches(rel string, ident grepFileIdentity, content []byte) ([]grepMatch, error) {
 	var matches []grepMatch
-	err := s.forEachTextMatch(rel, content, func(match grepMatch) bool {
+	err := s.forEachTextMatch(rel, ident, content, func(match grepMatch) bool {
 		matches = append(matches, match)
 		return s.maxMatches <= 0 || len(matches) < s.offset+s.maxMatches
 	})
@@ -34,10 +34,10 @@ func (s *grepSearch) collectMatches(rel string, content []byte) ([]grepMatch, er
 
 // forEachTextMatch runs the shared line scan with the tool's RE2 contract.
 // Only matching lines allocate surrounding context.
-func (s *grepSearch) forEachTextMatch(rel string, content []byte, yield func(grepMatch) bool) error {
+func (s *grepSearch) forEachTextMatch(rel string, ident grepFileIdentity, content []byte, yield func(grepMatch) bool) error {
 	_, err := textsearch.ScanReader(s.ctx, bytes.NewReader(content), 0, nil, textsearch.RegexpSelector{Re: s.re}, textsearch.ScanOptions{MaxSelected: -1, TrimCR: true}, func(line textsearch.Line) error {
 		record := content[line.Start:line.End]
-		entry := grepMatch{Path: rel, Line: line.Number, Content: string(record), Match: string(record[line.Span.Start:line.Span.End])}
+		entry := grepMatch{Path: rel, Line: line.Number, Content: string(record), Match: string(record[line.Span.Start:line.Span.End]), rootID: ident.rootID, scopeRel: ident.scopeRel}
 		if s.contextLines > 0 {
 			entry.ContextBefore, entry.ContextAfter = grepLineContext(content, line.Start, grepLineEnd(content, line.Start), s.contextLines)
 		}

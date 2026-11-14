@@ -136,12 +136,8 @@ func (e *turnContextAssembler) prependTransitionInject(
 		return "", false
 	}
 	surfaceVars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, ok := e.surface.workspaceRootsForTurn(ctx, sess, turn); ok {
-		surfaceVars["root_count"] = count
-		surfaceVars["workspace_roots"] = roots
-		if activePath != "" {
-			surfaceVars["project_dir"] = activePath
-		}
+	if roots, count, activePath, omitted, ok := e.surface.workspaceRootsForTurn(ctx, sess, turn); ok {
+		mergeWorkspaceRootTurnVars(surfaceVars, roots, count, activePath, omitted)
 	}
 	var toolProfiles []sandbox.ToolProfile
 	turnSurface := prompts.SurfaceTurn{Loaded: e.surface.loadedTools(sess)}

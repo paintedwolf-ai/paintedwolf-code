@@ -240,7 +240,7 @@ func MergeCoordinatorSurfacePathVars(surfaceID string, profiles []sandbox.ToolPr
 	}
 	into["is_coordinator"] = true
 	into["command_on_floor"] = slices.Contains(floor, "command")
-	ApplyCoordinatorSurfaceCommandEffects(surfaceID, offered, requestable, into)
+	RestrictCommandEffects(coordinatorSurfaceCommandEffects(surfaceID, profiles), offered, requestable, into)
 	syncCommandExternalFacts(into)
 	roster, err := RequestableTools(requestable, turn.Schemas)
 	if err != nil {

@@ -45,16 +45,17 @@ func prefixStabilityEngine(t *testing.T) *AssemblyEngine {
 }
 
 func prefixStabilityWorkspaceRoots() WorkspaceRootsLoader {
-	return func(_ context.Context, sess *api.Session) ([]map[string]any, int, string) {
+	return func(_ context.Context, sess *api.Session) ([]map[string]any, int, string, int) {
 		if sess == nil || strings.TrimSpace(sess.WorkspacePath) == "" {
-			return nil, 0, ""
+			return nil, 0, "", 0
 		}
 		path := sess.WorkspacePath
 		return []map[string]any{{
 			"label":      "main",
 			"path":       path,
 			"is_primary": true,
-		}}, 1, path
+			"is_active":  true,
+		}}, 1, path, 0
 	}
 }
 
@@ -137,7 +138,7 @@ func TestPromptTurnReadsWorkspaceRootsOnce(t *testing.T) {
 	deps := eng.deps()
 	reads := 0
 	base := deps.WorkspaceRoots
-	deps.WorkspaceRoots = func(ctx context.Context, sess *api.Session) ([]map[string]any, int, string) {
+	deps.WorkspaceRoots = func(ctx context.Context, sess *api.Session) ([]map[string]any, int, string, int) {
 		reads++
 		return base(ctx, sess)
 	}
@@ -210,7 +211,6 @@ func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
 		EffectiveAgents:  []string{"agent-1"},
 		WebSearchEnabled: true,
 		LoadedTools:      []string{"tool-1"},
-		OmittedUnits:     []string{"unit-1"},
 		ExecutionMode:    "mode-1",
 		VerifyCommand:    "verify-cmd",
 	}
@@ -232,7 +232,6 @@ func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
 		{"EffectiveAgents", func(in *standingPromptInputs) { in.EffectiveAgents = []string{"agent-2"} }},
 		{"WebSearchEnabled", func(in *standingPromptInputs) { in.WebSearchEnabled = false }},
 		{"LoadedTools", func(in *standingPromptInputs) { in.LoadedTools = []string{"tool-2"} }},
-		{"OmittedUnits", func(in *standingPromptInputs) { in.OmittedUnits = []string{"unit-2"} }},
 		{"ExecutionMode", func(in *standingPromptInputs) { in.ExecutionMode = "mode-2" }},
 		{"VerifyCommand", func(in *standingPromptInputs) { in.VerifyCommand = "verify-cmd-2" }},
 	}
@@ -244,7 +243,6 @@ func TestStandingPromptInputsKeyDerivationCoversEveryField(t *testing.T) {
 			mutated.Vars = map[string]any{"v1": "val1"}
 			mutated.EffectiveAgents = append([]string(nil), base.EffectiveAgents...)
 			mutated.LoadedTools = append([]string(nil), base.LoadedTools...)
-			mutated.OmittedUnits = append([]string(nil), base.OmittedUnits...)
 
 			mc.mutate(&mutated)
 			mutKey, err := mutated.cacheKey()

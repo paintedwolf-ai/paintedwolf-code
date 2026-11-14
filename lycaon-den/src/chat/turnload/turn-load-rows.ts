@@ -110,11 +110,7 @@ export function turnLoadRowSummary(row: TurnLoadRow): { title: string; operation
   if (subjects.length > 0) {
     return { title: subjects.join(", "), operation: tools.length > 0 ? "offered" : "preloaded", state: elapsed };
   }
-  const omitted = row.load.guides?.omitted ?? 0;
-  const title = omitted > 0
-    ? `floor only · ${omitted} ${omitted === 1 ? "guide" : "guides"} left out`
-    : "floor only";
-  return { title, operation: row.load.kind?.value ?? "decided", state: elapsed };
+  return { title: "floor only", operation: row.load.kind?.value ?? "decided", state: elapsed };
 }
 
 /** Explain the recorded reason a tool is offered. */

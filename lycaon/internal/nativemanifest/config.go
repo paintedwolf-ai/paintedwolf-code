@@ -349,11 +349,59 @@ func (c Config) ValidateFamilies() error {
 			}
 		}
 	}
+	faults = append(faults, resourceControlFaults(c.ResourceImplied, memberFamily, c.Families)...)
 	if len(faults) > 0 {
 		sort.Strings(faults)
 		return fmt.Errorf("invalid families: %s", strings.Join(faults, "; "))
 	}
 	return nil
+}
+
+// resourceControlFaults requires each resource's own controls to be exactly
+// one family, so loading any control loads them all and never the launcher.
+func resourceControlFaults(implied map[string][]string, memberFamily map[string]string, families map[string][]string) []string {
+	var faults []string
+	for fact, controls := range ExclusiveImplied(implied) {
+		owner := memberFamily[controls[0]]
+		if owner == "" || len(families[owner]) != len(controls) {
+			faults = append(faults, "resource_implied "+fact+" controls "+strings.Join(controls, ",")+" are not exactly one family")
+			continue
+		}
+		for _, tool := range controls[1:] {
+			if memberFamily[tool] != owner {
+				faults = append(faults, "resource_implied "+fact+" controls "+strings.Join(controls, ",")+" are not exactly one family")
+				break
+			}
+		}
+	}
+	return faults
+}
+
+// ExclusiveImplied returns, per resource fact, the sorted tools no other fact
+// implies. Tools shared across resources, such as wait, are not controls.
+func ExclusiveImplied(implied map[string][]string) map[string][]string {
+	count := map[string]int{}
+	for _, tools := range implied {
+		for _, tool := range tools {
+			count[strings.TrimSpace(tool)]++
+		}
+	}
+	out := map[string][]string{}
+	for fact, tools := range implied {
+		for _, tool := range tools {
+			tool = strings.TrimSpace(tool)
+			if tool != "" && count[tool] == 1 {
+				out[fact] = append(out[fact], tool)
+			}
+		}
+		sort.Strings(out[fact])
+	}
+	for fact, tools := range out {
+		if len(tools) == 0 {
+			delete(out, fact)
+		}
+	}
+	return out
 }
 
 func validExecutionCapability(value string) bool {

@@ -3856,6 +3856,43 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
+  /v1/projects/{id}/view:
+    put:
+      tags:
+        - projects
+      operationId: replaceProjectView
+      x-person-action: none
+      summary: Replace what one of this person's windows shows of the project
+      description: The host keeps each window's report briefly and tells a session's agent what the person had in view when they sent a prompt. Windows renew their report while it holds; a report that is not renewed expires.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceProjectViewRequest'
+      responses:
+        '204':
+          description: The window's report was replaced
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/projects/{id}/editor-documents/status:
     post:
       tags:
@@ -4865,19 +4902,22 @@ paths:
                 $ref: '#/components/schemas/Error'
         default:
           $ref: '#/components/responses/Error'
-  /v1/projects/{id}/source/editorconfig:
+  /v1/projects/{id}/source/format-settings:
     get:
       tags:
         - projects
-      operationId: getProjectSourceEditorConfig
-      summary: Resolve the EditorConfig pairs in effect for a project path
+      operationId: getProjectSourceFormatSettings
+      summary: Resolve the formatting settings each tool declares for a project path
       description: |
-        Resolves `.editorconfig` files from the path's directory toward its
-        attached root, stopping at `root = true` or at the root itself, with
-        nearer files and later sections winning. The host applies the same
-        resolution when it checks agent writes. The file itself need not exist.
-        Unrecognized keys and values are ignored; `unset` clears a pair from a
-        farther file. An absent property is not declared for this path.
+        Resolves each catalog tool's configuration for the path the way that
+        tool finds it. EditorConfig merges `.editorconfig` files from the
+        path's directory toward its attached root, stopping at `root = true`,
+        with nearer files and later sections winning; the host applies the same
+        resolution when it checks agent writes. Every other tool uses its
+        nearest configuration file between the path's directory and the root.
+        A nearer configuration the host cannot read, such as a JavaScript
+        file, means that tool declares nothing for the path. The file itself
+        need not exist; unrecognized keys and values are ignored.
       parameters:
         - $ref: '#/components/parameters/ProjectId'
         - $ref: '#/components/parameters/SourceSessionIdQuery'
@@ -4897,11 +4937,11 @@ paths:
             format: uuid
       responses:
         '200':
-          description: Pairs in effect for the path
+          description: Settings in effect for the path
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SourceEditorConfig'
+                $ref: '#/components/schemas/SourceFormatSettings'
         '400':
           description: Missing or invalid path or root_id
           content:
@@ -19663,6 +19703,289 @@ components:
         compacted_at:
           type: string
           format: date-time
+    ViewContext:
+      x-go-generate: true
+      type: object
+      required:
+        - editors
+        - diffs
+        - findings
+      additionalProperties: false
+      description: What the sender had in view when this prompt opened a turn, across their visible windows, most recently focused first. Recorded only when it differs from the last view still in the agent's history; empty lists and no folder or search mean nothing was in view.
+      properties:
+        editors:
+          type: array
+          maxItems: 8
+          description: Files shown in a visible editor, with that editor's selection.
+          items:
+            $ref: '#/components/schemas/ViewEditor'
+        diffs:
+          type: array
+          maxItems: 8
+          description: Files shown in a visible diff.
+          items:
+            $ref: '#/components/schemas/ViewPath'
+        folder:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewPath'
+        search:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewSearch'
+        findings:
+          type: array
+          maxItems: 8
+          description: Security findings open or selected in a visible security view.
+          items:
+            $ref: '#/components/schemas/ViewFinding'
+    ViewPath:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - display_path
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+          description: Root-relative slash path.
+        display_path:
+          type: string
+          minLength: 1
+          description: The path as the agent was shown it, @label-qualified off the primary root.
+    ViewLocation:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - display_path
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+        display_path:
+          type: string
+          minLength: 1
+        line:
+          type: integer
+          minimum: 1
+    ViewEditor:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - display_path
+        - unsaved
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+        display_path:
+          type: string
+          minLength: 1
+        unsaved:
+          type: boolean
+        selection:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewSelection'
+    ViewSelection:
+      x-go-generate: true
+      type: object
+      required:
+        - start_line
+        - end_line
+        - cursor
+      additionalProperties: false
+      description: The editor's main selection.
+      properties:
+        start_line:
+          type: integer
+          minimum: 1
+        end_line:
+          type: integer
+          minimum: 1
+        cursor:
+          type: boolean
+          description: No text is selected; start_line is the cursor's line.
+    ViewSearch:
+      x-go-generate: true
+      type: object
+      required:
+        - query
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        hit:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewLocation'
+    ViewFinding:
+      x-go-generate: true
+      type: object
+      required:
+        - fingerprint
+        - rule_id
+        - level
+      additionalProperties: false
+      properties:
+        fingerprint:
+          type: string
+          minLength: 1
+          maxLength: 256
+        rule_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-zA-Z0-9_.:/-]+$
+        level:
+          $ref: '#/components/schemas/FindingLevel'
+        location:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewLocation'
+    ReplaceProjectViewRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - client_id
+        - focused
+        - editor
+        - diff
+        - folder
+        - search
+        - findings
+      description: What one window of this person shows of the project right now. Every surface is present; one the window does not show is null, and a window that shows none of them, or is hidden, withdraws its report. Reports expire unless renewed.
+      properties:
+        client_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: ^[a-zA-Z0-9:._-]+$
+        focused:
+          type: boolean
+          description: The window has keyboard focus.
+        editor:
+          x-go-type: '*ViewReportEditor'
+          oneOf:
+            - $ref: '#/components/schemas/ViewReportEditor'
+            - type: 'null'
+        diff:
+          x-go-type: '*ViewReportPath'
+          oneOf:
+            - $ref: '#/components/schemas/ViewReportPath'
+            - type: 'null'
+        folder:
+          x-go-type: '*ViewReportPath'
+          oneOf:
+            - $ref: '#/components/schemas/ViewReportPath'
+            - type: 'null'
+        search:
+          x-go-type: '*ViewReportSearch'
+          oneOf:
+            - $ref: '#/components/schemas/ViewReportSearch'
+            - type: 'null'
+        findings:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/ViewReportFinding'
+    ViewReportPath:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - root_id
+        - path
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+    ViewReportLocation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - root_id
+        - path
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        line:
+          type: integer
+          minimum: 1
+    ViewReportSearch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        hit:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewReportLocation'
+    ViewReportFinding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - fingerprint
+        - rule_id
+        - level
+      properties:
+        fingerprint:
+          type: string
+          minLength: 1
+          maxLength: 256
+        rule_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-zA-Z0-9_.:/-]+$
+        level:
+          $ref: '#/components/schemas/FindingLevel'
+        location:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewReportLocation'
+    ViewReportEditor:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - document_id
+      description: The document a visible editor shows; its selection is the window's editor presence.
+      properties:
+        document_id:
+          type: string
+          format: uuid
     CreateSessionRequest:
       x-go-generate: true
       type: object
@@ -20866,16 +21189,25 @@ components:
           x-go-pointer: true
           $ref: '#/components/schemas/WorkerReportAcceptance'
           description: Report accepted against this worker job's observations and policy.
-        file_edit_preview:
-          x-go-pointer: true
-          $ref: '#/components/schemas/FileEditPreview'
+        file_edit_previews:
+          type: array
+          description: Transcript reads carry one summary and reference per recorded file edit, in order, in place of the edits' text.
+          items:
+            $ref: '#/components/schemas/FileEditPreview'
         promotion_previews:
           type: array
           items:
             $ref: '#/components/schemas/FileEditPreview'
-        file_edit:
-          x-go-pointer: true
-          $ref: '#/components/schemas/FileEditSnapshot'
+        file_edits:
+          type: array
+          maxItems: 64
+          description: Text changes the call made, one per file, from the text before its first write to the text after its last, in the order the files were first written.
+          items:
+            $ref: '#/components/schemas/FileEditSnapshot'
+        file_edits_omitted:
+          type: integer
+          minimum: 0
+          description: Further text changes the call made that file_edits does not hold because the result reached its bound. Source history holds them.
         overlay_promotion:
           x-go-pointer: true
           $ref: '#/components/schemas/OverlayPromotion'
@@ -21666,9 +21998,6 @@ components:
           x-go-pointer: true
           $ref: '#/components/schemas/TurnLoadSkill'
           description: 'The skill whose body the turn carries: read at the turn decision, or by the tool_event that this receipt records.'
-        guides:
-          x-go-pointer: true
-          $ref: '#/components/schemas/TurnLoadGuides'
         match:
           x-go-pointer: true
           $ref: '#/components/schemas/TurnLoadMatch'
@@ -21801,19 +22130,6 @@ components:
           description: How long the route keeps an idle prefix; omitted when the provider documents no figure.
       required:
         - cache
-    TurnLoadGuides:
-      x-go-generate: true
-      type: object
-      additionalProperties: false
-      description: How many loadable instruction units the turn rendered and left out of the prompt.
-      properties:
-        rendered:
-          type: integer
-        omitted:
-          type: integer
-      required:
-        - rendered
-        - omitted
     TurnLoadMatch:
       x-go-generate: true
       type: object
@@ -27003,7 +27319,7 @@ components:
         path:
           type: string
           description: |
-            Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices).
+            Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the canonical display path: bare relative to the session's active folder, qualified with `@label/` for any other attached folder. Absent when the part has no openable body (search_hit, user prose, host notices).
         root_id:
           type: string
           format: uuid
@@ -28201,6 +28517,12 @@ components:
           x-go-pointer: true
           $ref: '#/components/schemas/CitationGrounding'
       description: Host-accepted worker report retained with its successful submitting invocation.
+    FileEditSource:
+      type: string
+      enum:
+        - file_edit
+        - overlay_promotion
+      description: The tool result list a file edit reference indexes. `file_edit` is file_edits; `overlay_promotion` is the promoted files.
     FileEditReference:
       x-go-generate: true
       type: object
@@ -28208,6 +28530,7 @@ components:
       required:
         - message_id
         - tool_call_id
+        - source
         - index
       properties:
         message_id:
@@ -28216,10 +28539,12 @@ components:
         tool_call_id:
           type: string
           pattern: ^[A-Za-z0-9_.:-]+$
+        source:
+          $ref: '#/components/schemas/FileEditSource'
         index:
           type: integer
           minimum: 0
-          description: Zero for file_edit; one-based index for a promotion file.
+          description: Zero-based position in that list.
     FileEditPreview:
       x-go-generate: true
       type: object
@@ -28669,7 +28994,7 @@ components:
       required:
         - locations
         - truncated
-      description: Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory.
+      description: Host-recorded source context supplied with this message; independent of evidence and filesystem inventory.
       properties:
         locations:
           type: array
@@ -28678,6 +29003,9 @@ components:
             $ref: '#/components/schemas/NavigationTarget'
         truncated:
           type: boolean
+        view:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewContext'
     NavigationStatus:
       type: string
       enum:
@@ -33498,24 +33826,43 @@ components:
         height:
           type: integer
           minimum: 1
-    SourceEditorConfig:
+    FormatTool:
+      type: string
+      enum:
+        - editorconfig
+        - prettier
+        - biome
+        - dprint
+        - ruff
+        - black
+        - rustfmt
+        - clang_format
+        - scalafmt
+        - swift_format
+        - dart
+        - rubocop
+        - stylua
+        - ocamlformat
+        - fourmolu
+        - julia_formatter
+        - sqlfluff
+        - foundry
+        - taplo
+    FormatSettings:
       x-go-generate: true
       type: object
-      required:
-        - path
-        - root_id
       additionalProperties: false
       description: |
-        EditorConfig pairs in effect for one root-addressed path. Every property
-        is omitted when no `.editorconfig` declares it.
+        Settings in effect under a tool's configuration, in one vocabulary
+        across tools: what the configuration declares, else the tool's fixed
+        default. A property is omitted when neither gives a value or the tool
+        chooses automatically.
       properties:
-        path:
-          type: string
-          description: Normalized repo-relative path (slash-separated)
-        root_id:
-          type: string
-          format: uuid
-          description: Attached root that holds the path
+        line_width:
+          type: integer
+          minimum: 1
+          maximum: 10000
+          description: Column the tool keeps lines within.
         indent_style:
           type: string
           enum:
@@ -33528,7 +33875,7 @@ components:
           description: Columns per indentation level; omitted when indent_size_tab is true.
         indent_size_tab:
           type: boolean
-          description: True when `indent_size = tab`, so a level follows tab_width.
+          description: True when a level is one tab and follows tab_width.
         tab_width:
           type: integer
           minimum: 1
@@ -33538,6 +33885,7 @@ components:
           enum:
             - lf
             - crlf
+            - cr
         trim_trailing_whitespace:
           x-go-pointer: true
           type: boolean
@@ -33552,6 +33900,57 @@ components:
             - utf-8-bom
             - utf-16be
             - utf-16le
+    FormatSettingsSource:
+      x-go-generate: true
+      type: object
+      required:
+        - tool
+        - configs
+        - settings
+      additionalProperties: false
+      properties:
+        tool:
+          $ref: '#/components/schemas/FormatTool'
+        configs:
+          type: array
+          description: Repo-relative configuration files that contributed, nearest first.
+          items:
+            type: string
+        settings:
+          $ref: '#/components/schemas/FormatSettings'
+    SourceFormatSettings:
+      x-go-generate: true
+      type: object
+      required:
+        - path
+        - root_id
+        - sources
+        - config_names
+      additionalProperties: false
+      description: |
+        Formatting settings that each tool's configuration declares for one
+        root-addressed path. A tool appears only when a configuration it reads
+        is in effect for the path.
+      properties:
+        path:
+          type: string
+          description: Normalized repo-relative path (slash-separated)
+        root_id:
+          type: string
+          format: uuid
+          description: Attached root that holds the path
+        sources:
+          type: array
+          description: One entry per tool with configuration in effect, in catalog order.
+          items:
+            $ref: '#/components/schemas/FormatSettingsSource'
+        config_names:
+          type: array
+          description: |
+            File names the resolution reads. A change to a file with one of
+            these names can change the settings of paths beneath it.
+          items:
+            type: string
     MakeProjectSourceEditableRequest:
       x-go-generate: true
       type: object
@@ -38497,6 +38896,9 @@ components:
           $ref: '#/components/schemas/ContributionCondition'
         state_label:
           type: string
+        submenu:
+          type: string
+          description: Title of a pull-out the item nests under. Items in one slot and group that share a title share the pull-out, ordered by order.
     ContributionKeybinding:
       x-go-generate: true
       type: object

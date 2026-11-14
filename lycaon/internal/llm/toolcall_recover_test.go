@@ -1,6 +1,7 @@
 package llm
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm/failure"
@@ -42,7 +43,7 @@ func TestClassifyToolResponseRecoversProse(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			c := &modelcall.Completion{Content: tc.content}
-			out, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), c, "p", "m")
+			out, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), nil, c, "p", "m")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -64,7 +65,7 @@ func TestClassifyToolResponseRecoversProse(t *testing.T) {
 
 func TestClassifyToolResponseLeavesProseAnswer(t *testing.T) {
 	c := &modelcall.Completion{Content: "Here is a summary of the changes you asked about."}
-	out, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), c, "p", "m")
+	out, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), nil, c, "p", "m")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -76,7 +77,7 @@ func TestClassifyToolResponseLeavesProseAnswer(t *testing.T) {
 func TestClassifyToolResponseUnparseableErrors(t *testing.T) {
 	content := `<tool_call>{name: read, arguments: not-json}</tool_call>`
 
-	if _, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), &modelcall.Completion{Content: content}, "p", "m"); err == nil {
+	if _, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), nil, &modelcall.Completion{Content: content}, "p", "m"); err == nil {
 		t.Fatal("expected ProviderToolCallsInProse error for unparseable attempt")
 	} else if _, ok := failure.AsProviderToolCallsInProse(err); !ok {
 		t.Fatalf("error = %v, want ProviderToolCallsInProse", err)
@@ -84,7 +85,7 @@ func TestClassifyToolResponseUnparseableErrors(t *testing.T) {
 
 	noToolProfile := providerprofile.OpenAI()
 	noToolProfile.ToolCalls = providerprofile.ToolCallsNone
-	if _, err := ClassifyToolResponse(noToolProfile, toolReq(), &modelcall.Completion{Content: content}, "p", "m"); err == nil {
+	if _, err := ClassifyToolResponse(noToolProfile, toolReq(), nil, &modelcall.Completion{Content: content}, "p", "m"); err == nil {
 		t.Fatal("expected ProviderToolCallsUnsupported error")
 	} else if _, ok := failure.AsProviderToolCallsUnsupported(err); !ok {
 		t.Fatalf("error = %v, want ProviderToolCallsUnsupported", err)
@@ -93,7 +94,7 @@ func TestClassifyToolResponseUnparseableErrors(t *testing.T) {
 
 func TestClassifyToolResponseNoopWhenNoTools(t *testing.T) {
 	c := &modelcall.Completion{Content: `<tool_call>{"name":"read","arguments":{}}</tool_call>`}
-	out, err := ClassifyToolResponse(providerprofile.OpenAI(), modelcall.CompletionRequest{}, c, "p", "m")
+	out, err := ClassifyToolResponse(providerprofile.OpenAI(), modelcall.CompletionRequest{}, nil, c, "p", "m")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestClassifyToolResponseRequiresDeclaredTextProtocol(t *testing.T) {
 	profile := providerprofile.OpenAI()
 	profile.TextToolCallGrammars = 0
 	content := `<tool_call>{"name":"read","arguments":{"path":"main.go"}}</tool_call>`
-	out, err := ClassifyToolResponse(profile, toolReq(), &modelcall.Completion{Content: content}, "p", "m")
+	out, err := ClassifyToolResponse(profile, toolReq(), nil, &modelcall.Completion{Content: content}, "p", "m")
 	if err == nil || out != nil {
 		t.Fatalf("unsupported selected protocol accepted: %+v %v", out, err)
 	}
@@ -116,13 +117,13 @@ func TestClassifyToolResponseRequiresDeclaredHarmonyProtocol(t *testing.T) {
 	content := `assistantcommentary to=functions.read json{"path":"main.go"}`
 	profile := providerprofile.OpenAI()
 	profile.TextToolCallGrammars = providerprofile.TextToolCallGrammarBoundedEnvelope
-	out, err := ClassifyToolResponse(profile, harmonyToolReq(), &modelcall.Completion{Content: content}, "p", "m")
+	out, err := ClassifyToolResponse(profile, harmonyToolReq(), nil, &modelcall.Completion{Content: content}, "p", "m")
 	if err == nil || out != nil {
 		t.Fatalf("unsupported selected protocol accepted: %+v %v", out, err)
 	}
 
 	profile.TextToolCallGrammars = providerprofile.TextToolCallGrammarHarmony
-	out, err = ClassifyToolResponse(profile, harmonyToolReq(), &modelcall.Completion{Content: content}, "p", "m")
+	out, err = ClassifyToolResponse(profile, harmonyToolReq(), nil, &modelcall.Completion{Content: content}, "p", "m")
 	if err != nil {
 		t.Fatalf("unexpected declared-protocol error: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestClassifyToolResponseValidatesOfferedToolAndSchema(t *testing.T) {
 		`<tool_call>{"name":"write","arguments":{"path":"main.go"}}</tool_call>`,
 		`<tool_call>{"name":"read","arguments":{"path":7}}</tool_call>`,
 	} {
-		_, err := ClassifyToolResponse(providerprofile.OpenAI(), req, &modelcall.Completion{Content: content}, "p", "m")
+		_, err := ClassifyToolResponse(providerprofile.OpenAI(), req, nil, &modelcall.Completion{Content: content}, "p", "m")
 		if _, ok := failure.AsProviderToolCallsInProse(err); !ok {
 			t.Fatalf("content %q: error = %v, want validated prose-call rejection", content, err)
 		}
@@ -170,7 +171,7 @@ func TestClassifyToolResponseRejectsMalformedBatch(t *testing.T) {
 			"[TOOL_CALLS][" + valid + "," + invalid + "]",
 		} {
 			c := &modelcall.Completion{Content: content}
-			out, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), c, "p", "m")
+			out, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), nil, c, "p", "m")
 			if _, ok := failure.AsProviderToolCallsInProse(err); !ok || out != nil {
 				t.Fatalf("content %q: got %#v, %v; want batch rejection", content, out, err)
 			}
@@ -187,7 +188,7 @@ func TestClassifyToolResponseRecoversEmptyArguments(t *testing.T) {
 		`<tool_call>{"name":"read","parameters":{}}</tool_call>`,
 		`<tool_call>{"name":"read","arguments":"{}"}</tool_call>`,
 	} {
-		out, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), &modelcall.Completion{Content: content}, "p", "m")
+		out, err := ClassifyToolResponse(providerprofile.OpenAI(), toolReq(), nil, &modelcall.Completion{Content: content}, "p", "m")
 		if err != nil || out == nil || len(out.Completion.ToolCalls) != 1 || out.Completion.ToolCalls[0].Args == nil {
 			t.Fatalf("content %q: got %#v, %v; want empty object arguments", content, out, err)
 		}
@@ -204,7 +205,7 @@ func TestClassifyToolResponseValidatesHarmonyCalls(t *testing.T) {
 		`assistantcommentary to=functions.read json{"unexpected":true}`,
 	} {
 		c := &modelcall.Completion{Content: content}
-		out, err := ClassifyToolResponse(profile, req, c, "p", "m")
+		out, err := ClassifyToolResponse(profile, req, nil, c, "p", "m")
 		if _, ok := failure.AsProviderToolCallsInProse(err); !ok || out != nil {
 			t.Fatalf("content %q: got %#v, %v; want validated Harmony rejection", content, out, err)
 		}
@@ -218,7 +219,7 @@ func TestClassifyToolResponseDoesNotPromotePartialHarmony(t *testing.T) {
 	profile := providerprofile.OpenAI()
 	profile.TextToolCallGrammars = providerprofile.TextToolCallGrammarHarmony
 	content := `assistantcommentary to=functions.read json{}assistantcommentary to=functions.read missing-json-header{}`
-	out, err := ClassifyToolResponse(profile, harmonyToolReq(), &modelcall.Completion{Content: content}, "p", "m")
+	out, err := ClassifyToolResponse(profile, harmonyToolReq(), nil, &modelcall.Completion{Content: content}, "p", "m")
 	if err != nil || out == nil || len(out.Completion.ToolCalls) != 0 || out.Completion.Content != content {
 		t.Fatalf("malformed Harmony promoted partial calls: %#v, %v", out, err)
 	}
@@ -228,12 +229,15 @@ func TestClassifyToolResponseKeepsProseWhenToolUseForbidden(t *testing.T) {
 	req := toolReq()
 	req.ToolUse = modelcall.ToolUseForbidden
 	content := `<tool_call>{"name": "read", "arguments": {"path": "main.go"}}</tool_call>`
-	out, err := ClassifyToolResponse(providerprofile.OpenAI(), req, &modelcall.Completion{Content: content}, "p", "m")
+	out, err := ClassifyToolResponse(providerprofile.OpenAI(), req, nil, &modelcall.Completion{Content: content}, "p", "m")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(out.Completion.ToolCalls) != 0 || out.Completion.Content != content {
 		t.Fatalf("a forbidden turn recovered %d tool calls from prose", len(out.Completion.ToolCalls))
+	}
+	if !slices.Equal(out.TextAction.Tools, []string{"read"}) {
+		t.Fatalf("forbidden turn did not observe written call: %+v", out.TextAction)
 	}
 }
 
@@ -252,16 +256,16 @@ func TestNativeRequestDoesNotExecuteTextExamples(t *testing.T) {
 		for _, protocol := range []modelcall.ToolCallProtocol{modelcall.ToolProtocolNative, modelcall.ToolProtocolEnvelope} {
 			req := toolReq()
 			req.ToolProtocol = protocol
-			out, err := ClassifyToolResponse(providerprofile.OpenAI(), req, &modelcall.Completion{Content: content}, "p", "m")
-			if err != nil || out == nil || len(out.Completion.ToolCalls) > 0 || len(out.TextActionTools) > 0 || out.Completion.Content != content {
+			out, err := ClassifyToolResponse(providerprofile.OpenAI(), req, nil, &modelcall.Completion{Content: content}, "p", "m")
+			if err != nil || out == nil || len(out.Completion.ToolCalls) > 0 || len(out.TextAction.Tools) > 0 || out.Completion.Content != content {
 				t.Fatalf("example changed: out=%+v err=%v", out, err)
 			}
 		}
 	}
 	req := toolReq()
 	req.ToolProtocol = modelcall.ToolProtocolNative
-	out, err := ClassifyToolResponse(providerprofile.OpenAI(), req, &modelcall.Completion{Content: `{"name":"read","arguments":{"path":"x"}}`}, "p", "m")
-	if err != nil || len(out.Completion.ToolCalls) > 0 || len(out.TextActionTools) != 1 || out.TextActionTools[0] != "read" {
+	out, err := ClassifyToolResponse(providerprofile.OpenAI(), req, nil, &modelcall.Completion{Content: `{"name":"read","arguments":{"path":"x"}}`}, "p", "m")
+	if err != nil || len(out.Completion.ToolCalls) > 0 || len(out.TextAction.Tools) != 1 || out.TextAction.Tools[0] != "read" {
 		t.Fatalf("plain text must request repair: %+v %v", out, err)
 	}
 }
@@ -284,22 +288,22 @@ func TestClassifyToolResponseDetectsAndRecoversXMLAndDeferredToolCalls(t *testin
 			{Name: "update_progress"},
 		},
 	}
-	out, err := ClassifyToolResponse(providerprofile.OpenAI(), investigateReq, &modelcall.Completion{Content: leakedWrite}, "p", "m")
+	out, err := ClassifyToolResponse(providerprofile.OpenAI(), investigateReq, nil, &modelcall.Completion{Content: leakedWrite}, "p", "m")
 	if err != nil {
 		t.Fatalf("unexpected error classifying native leaked XML tool call: %v", err)
 	}
 	if len(out.Completion.ToolCalls) != 0 {
 		t.Fatalf("native protocol must not execute text tool calls, got %+v", out.Completion.ToolCalls)
 	}
-	if len(out.TextActionTools) != 1 || out.TextActionTools[0] != "write" {
-		t.Fatalf("TextActionTools = %v, want [write]", out.TextActionTools)
+	if len(out.TextAction.Tools) != 1 || out.TextAction.Tools[0] != "write" {
+		t.Fatalf("TextAction.Tools = %v, want [write]", out.TextAction.Tools)
 	}
 
 	envelopeReq := modelcall.CompletionRequest{
 		ToolProtocol: modelcall.ToolProtocolEnvelope,
 		Tools:        []tools.ToolMeta{{Name: "read"}, {Name: "write"}},
 	}
-	recovered, err := ClassifyToolResponse(providerprofile.OpenAI(), envelopeReq, &modelcall.Completion{Content: leakedWrite}, "p", "m")
+	recovered, err := ClassifyToolResponse(providerprofile.OpenAI(), envelopeReq, nil, &modelcall.Completion{Content: leakedWrite}, "p", "m")
 	if err != nil {
 		t.Fatalf("unexpected error recovering XML tool call: %v", err)
 	}
@@ -319,5 +323,54 @@ func TestClassifyToolResponseDetectsAndRecoversXMLAndDeferredToolCalls(t *testin
 	}
 	if recovered.Completion.Content != "" {
 		t.Fatalf("recovered content not blanked: %q", recovered.Completion.Content)
+	}
+}
+
+// A call written in a fence named for the tool is observed on every protocol
+// and executed on none.
+func TestToolNamedFenceIsObservedNeverExecuted(t *testing.T) {
+	content := "I will start by exploring the repository.\n\n```command\n{\n  \"command\": \"find . -maxdepth 2 -type d\"\n}\n```"
+	command := tools.ToolMeta{Name: "command", ArgsSchema: map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"command": map[string]any{"type": "string"}},
+		"required":   []any{"command"},
+	}}
+	harmony := providerprofile.OpenAI()
+	harmony.TextToolCallGrammars = providerprofile.TextToolCallGrammarHarmony
+	for _, tc := range []struct {
+		protocol modelcall.ToolCallProtocol
+		profile  providerprofile.Profile
+	}{
+		{modelcall.ToolProtocolNative, providerprofile.OpenAI()},
+		{modelcall.ToolProtocolEnvelope, providerprofile.OpenAI()},
+		{modelcall.ToolProtocolHarmony, harmony},
+	} {
+		req := modelcall.CompletionRequest{ToolProtocol: tc.protocol, Tools: []tools.ToolMeta{command, {Name: "request_tools"}}}
+		out, err := ClassifyToolResponse(tc.profile, req, []string{"task"}, &modelcall.Completion{Content: content}, "p", "m")
+		if err != nil {
+			t.Fatalf("protocol %q: %v", tc.protocol, err)
+		}
+		if len(out.Completion.ToolCalls) != 0 {
+			t.Fatalf("protocol %q executed a fenced call: %+v", tc.protocol, out.Completion.ToolCalls)
+		}
+		if !slices.Equal(out.TextAction.Tools, []string{"command"}) || !out.TextAction.Fenced {
+			t.Fatalf("protocol %q: observation=%+v", tc.protocol, out.TextAction)
+		}
+	}
+}
+
+// Loadable and command-replaced tools are named by the request, not offered.
+func TestToolNamedFenceForUnofferedTool(t *testing.T) {
+	req := modelcall.CompletionRequest{Tools: []tools.ToolMeta{{Name: "command"}, {Name: "request_tools"}}}
+	for name, deferred := range map[string][]string{"task": {"task"}, "write": nil} {
+		content := "```" + name + "\n{\"argument\": \"value\"}\n```"
+		out, err := ClassifyToolResponse(providerprofile.OpenAI(), req, deferred, &modelcall.Completion{Content: content}, "p", "m")
+		if err != nil || !slices.Equal(out.TextAction.Tools, []string{name}) || !out.TextAction.Fenced {
+			t.Fatalf("%s: observation=%+v err=%v", name, out, err)
+		}
+	}
+	out, err := ClassifyToolResponse(providerprofile.OpenAI(), req, nil, &modelcall.Completion{Content: "```task\n{\"argument\": \"value\"}\n```"}, "p", "m")
+	if err != nil || len(out.TextAction.Tools) != 0 {
+		t.Fatalf("unreachable tool observed: %+v err=%v", out, err)
 	}
 }

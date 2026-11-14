@@ -38,18 +38,24 @@ type listDirEntry struct {
 	Modified      string  `json:"modified"`
 	IsSymlink     bool    `json:"is_symlink"`
 	SymlinkTarget *string `json:"symlink_target,omitempty"`
+	// Structured identity of the entry under its project root; never serialized.
+	rootID   string `json:"-"`
+	scopeRel string `json:"-"`
 }
 
 type listDirResponse struct {
-	Coverage         *mapCoverage           `json:"coverage,omitempty"`
-	NextActions      []summarize.NextAction `json:"next_actions,omitempty"`
-	Path             string                 `json:"path"`
-	Entries          []listDirEntry         `json:"entries,omitempty"`
-	Offset           int                    `json:"offset,omitempty"`
-	TotalEntries     int                    `json:"total_entries,omitempty"`
-	Truncated        bool                   `json:"truncated"`
-	NextOffset       *int                   `json:"next_offset,omitempty"`
-	TruncationBanner string                 `json:"truncation_banner,omitempty"`
+	Coverage     *mapCoverage           `json:"coverage,omitempty"`
+	NextActions  []summarize.NextAction `json:"next_actions,omitempty"`
+	Path         string                 `json:"path"`
+	Entries      []listDirEntry         `json:"entries,omitempty"`
+	Offset       int                    `json:"offset,omitempty"`
+	TotalEntries int                    `json:"total_entries,omitempty"`
+	Truncated    bool                   `json:"truncated"`
+	NextOffset   *int                   `json:"next_offset,omitempty"`
+	// Structured identity of the listed directory under its project root; never serialized.
+	rootID           string `json:"-"`
+	scopeRel         string `json:"-"`
+	TruncationBanner string `json:"truncation_banner,omitempty"`
 
 	View             string               `json:"view,omitempty"`
 	Tree             *directoryMapNode    `json:"tree,omitempty"`
@@ -108,6 +114,7 @@ func (t *ListDirTool) runLiteralListing(ctx context.Context, args map[string]any
 	maxEntries := entriesArg.Effective
 
 	var all []listDirEntry
+	var listedRootID, listedScopeRel string
 	if projectroot.IsUnionDiscoveryPath(relPath) {
 		roots, err := projectpaths.UnionDiscoveryRoots(ctx, tctx, relPath)
 		if err != nil {
@@ -141,6 +148,7 @@ func (t *ListDirTool) runLiteralListing(ctx context.Context, args map[string]any
 			return "", fmt.Errorf("list_dir failed: %w", err)
 		}
 		relPath = resolved.DisplayPath
+		listedRootID, listedScopeRel = resolved.Root.ID, resolved.ScopeRel
 	}
 
 	page, total, truncated, nextOffset := paginate.Slice(all, offset, maxEntries)
@@ -151,6 +159,8 @@ func (t *ListDirTool) runLiteralListing(ctx context.Context, args map[string]any
 		TotalEntries: total,
 		Truncated:    truncated,
 		NextOffset:   nextOffset,
+		rootID:       listedRootID,
+		scopeRel:     listedScopeRel,
 	}
 	if total == 0 {
 		resp.Note = "Empty — 0 entries at this level, hidden included."

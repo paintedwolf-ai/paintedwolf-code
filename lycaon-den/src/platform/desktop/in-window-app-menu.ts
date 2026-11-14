@@ -31,7 +31,10 @@ export function requestAppMenuOpen(): void {
   setOpenRequests((count) => count + 1);
 }
 
-function contributedItem(item: AppMenuItemSpec): ContextMenuEntry {
+function contributedItem(item: AppMenuItemSpec): ContextMenuItem {
+  if (item.submenu) {
+    return { label: item.title, submenu: item.submenu.map(contributedItem), disabled: !item.enabled, testId: `app-menu-submenu-${item.title.toLowerCase().replace(/\s+/g, "-")}` };
+  }
   return {
     label: item.title,
     shortcut: item.binding ? displayBinding(item.binding) : undefined,
@@ -42,15 +45,15 @@ function contributedItem(item: AppMenuItemSpec): ContextMenuEntry {
   };
 }
 
-function contributedGroups(section: AppMenuSpec | undefined): ContextMenuEntry[][] {
+function contributedGroups(section: AppMenuSpec | undefined): ContextMenuItem[][] {
   return (section?.groups ?? [])
     .filter((group) => group.length > 0)
     .map((group) => group.map(contributedItem));
 }
 
 /** Groups joined by separators; empty groups add none. */
-function joinGroups(groups: ContextMenuEntry[][]): ContextMenuEntry[] {
-  const items: ContextMenuEntry[] = [];
+function joinGroups(groups: ContextMenuItem[][]): ContextMenuItem[] {
+  const items: ContextMenuItem[] = [];
   for (const group of groups) {
     if (group.length === 0) continue;
     if (items.length > 0) items.push({ separator: true });
@@ -141,7 +144,7 @@ function fullscreenItem(): ContextMenuEntry[] {
  */
 export function inWindowAppMenuItems(): ContextMenuItem[] {
   const sections = new Map(buildAppMenuSpec().map((section) => [section.menu, section]));
-  const section = (menu: AppMenuSpec["menu"], groups: ContextMenuEntry[][]): ContextMenuItem[] => {
+  const section = (menu: AppMenuSpec["menu"], groups: ContextMenuItem[][]): ContextMenuItem[] => {
     const items = joinGroups(groups);
     if (items.length === 0) return [];
     const spec = sections.get(menu);

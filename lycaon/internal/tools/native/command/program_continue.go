@@ -10,6 +10,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/runnerbudget"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
 
@@ -47,6 +48,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 			}
 			<-ending.done
 			r.recordParkedRun(context.WithoutCancel(ctx), run)
+			r.recordDetachedEffects(context.WithoutCancel(ctx), run)
 			var outcome ProgramOutcome
 			decodeErr := json.Unmarshal([]byte(ending.result), &outcome)
 			status := outcome.Status
@@ -72,6 +74,7 @@ func (r *ProgramRuntime) continueProgram(ctx context.Context, e *programEvaluati
 	}
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
+		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
 		if projection, err := r.Recorder.ProjectProgram(ctx, run.tc.Identity.SessionID, run.root.Identity.ProgramID, 1); err == nil {
 			out.CommandProgram = &projection.Program
 		}

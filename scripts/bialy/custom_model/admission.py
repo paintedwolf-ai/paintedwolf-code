@@ -8,6 +8,7 @@ import stat
 
 from common import digest
 from checkpoint import atomic_json
+from contracts import check
 
 
 ALLOWED_SOURCES = {"synthetic", "permitted_repository", "factory_capture", "factory_review"}
@@ -74,7 +75,9 @@ def seal(paths, approved, sources, authority, out, key_path=None):
             raise ValueError("duplicate source manifest filename")
         files[path.name] = {"sha256": hashlib.sha256(raw).hexdigest(), "rows": bindings}
     payload = {"schema": "pw-training-source/1", "authority": authority, "sources": sources, "files": files}
-    atomic_json(out, {"payload": payload, "signature": signature(payload, key_bytes(key_path))})
+    envelope = {"payload": payload, "signature": signature(payload, key_bytes(key_path))}
+    check("source-manifest", envelope)
+    atomic_json(out, envelope)
     return payload
 
 
@@ -82,6 +85,7 @@ def verify_file(path, manifest_path=None, key_path=None, expected_partition=None
     path = Path(path)
     manifest_path = Path(manifest_path or os.environ.get("PW_TRAINING_SOURCE_MANIFEST") or path.parent / "source.json")
     envelope = json.loads(manifest_path.read_text())
+    check("source-manifest", envelope)
     payload = envelope["payload"]
     if payload.get("schema") != "pw-training-source/1" or not hmac.compare_digest(envelope["signature"], signature(payload, key_bytes(key_path))):
         raise ValueError("source manifest authentication failed")

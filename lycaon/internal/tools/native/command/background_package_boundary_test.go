@@ -20,13 +20,12 @@ func TestBackgroundOutputPreservesRemotePackageBoundaryAndRecovery(t *testing.T)
 			Effects:  tools.InvocationEffects{Out: outFacts},
 		},
 		commandOutput{Handle: "process", Running: false},
-		boundary,
-		confine.SpawnFacts{
+		bgprocess.SpawnConfinement(boundary, confine.SpawnFacts{
 			Report: report,
 			Network: func() []confine.EgressHost {
 				return []confine.EgressHost{{Host: "gitea.example.com", Port: 443, Allowed: false}}
 			},
-		},
+		}),
 		"",
 	)
 	if payload.RemotePackageExecution == nil ||
@@ -58,8 +57,7 @@ func TestBackgroundOutputDoesNotClassifyOrdinaryLiveOutputAsRefusal(t *testing.T
 			Running: true,
 			Chunks:  []bgprocess.OutputChunk{{Text: "permission denied by the remote service"}},
 		},
-		boundary,
-		confine.SpawnFacts{Report: confine.ReportOf(boundary)},
+		bgprocess.SpawnConfinement(boundary, confine.SpawnFacts{Report: confine.ReportOf(boundary)}),
 		"",
 	)
 	if payload.BoundaryRefusal != "" {
@@ -73,7 +71,7 @@ func TestBackgroundOutputDoesNotClassifyOrdinaryLiveOutputAsRefusal(t *testing.T
 func TestBackgroundOutputPreservesTerminationWithoutRepeatingFailure(t *testing.T) {
 	for _, reason := range []bgprocess.TerminationReason{bgprocess.TerminationTimedOut, bgprocess.TerminationStoppedByAgent, bgprocess.TerminationStoppedByUser, bgprocess.TerminationExited, ""} {
 		outFacts := &tools.ToolInvocationOut{}
-		observeBackgroundOutput(tools.ToolContext{Effects: tools.InvocationEffects{Out: outFacts}}, commandOutput{}, confine.Boundary{Applied: true}, confine.SpawnFacts{}, reason)
+		observeBackgroundOutput(tools.ToolContext{Effects: tools.InvocationEffects{Out: outFacts}}, commandOutput{}, bgprocess.SpawnConfinement(confine.Boundary{Applied: true}, confine.SpawnFacts{}), reason)
 		obs := outFacts.Facts.Confine
 		if obs.TerminationReason != string(reason) || len(obs.FailedStages) != 0 {
 			t.Fatalf("output polling changed termination or repeated failure: %+v", obs)

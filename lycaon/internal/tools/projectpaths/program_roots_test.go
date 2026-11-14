@@ -230,10 +230,10 @@ func TestStaleRootSpellingsRefuseWithCurrentFolders(t *testing.T) {
 	for _, spelling := range []string{filepath.Join(f.web.Path, "index.html"), f.web.Path} {
 		_, err := q.Bind(t.Context(), spelling, false)
 		reject := toolrejection.AsToolReject(err)
-		if reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_label"] != "web" || reject.Data["former_path"] != f.web.Path {
+		if reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_label"] != "web" {
 			t.Fatalf("%s = %v", spelling, err)
 		}
-		if folders := reject.Data["attached_folders"].([]string); len(folders) != 2 || folders[0] != "api → "+f.api.Path {
+		if folders := reject.Data["attached_folders"].([]string); len(folders) != 2 || folders[0] != "@api (session folder)" || folders[1] != "@scratch" {
 			t.Fatalf("%s folders = %v", spelling, folders)
 		}
 	}
@@ -259,7 +259,7 @@ func TestMovedAndRenamedRootsRefuseOldSpellings(t *testing.T) {
 	p, err := projectpaths.NewProgramPaths(t.Context(), nil, next, "")
 	testutil.FailErr(t, "bind after move", err)
 	_, err = p.Bind(t.Context(), filepath.Join(f.web.Path, "index.html"), false)
-	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_status"] != "moved" || reject.Data["current_path"] != movedPath {
+	if reject := toolrejection.AsToolReject(err); reject == nil || reject.Code != tools.RootNotAttachedCode || reject.Data["root_status"] != "moved" {
 		t.Fatalf("old path = %v", err)
 	}
 	_, _, err = p.Address(t.Context(), "web")

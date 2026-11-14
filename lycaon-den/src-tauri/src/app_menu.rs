@@ -21,6 +21,9 @@ pub struct MenuItemSpec {
     pub enabled: bool,
     /// Present for stateful menu toggles.
     pub checked: Option<bool>,
+    /// A pull-out of these items; the item itself runs nothing.
+    #[serde(default)]
+    pub submenu: Option<Vec<MenuItemSpec>>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -30,6 +33,34 @@ pub struct MenuSectionSpec {
     pub title: String,
     /// Groups render in order with a separator between them.
     pub groups: Vec<Vec<MenuItemSpec>>,
+}
+
+fn append_item<'a, R: Runtime>(
+    app: &AppHandle<R>,
+    builder: SubmenuBuilder<'a, R, AppHandle<R>>,
+    item: &MenuItemSpec,
+) -> tauri::Result<SubmenuBuilder<'a, R, AppHandle<R>>> {
+    if let Some(children) = &item.submenu {
+        let mut nested = SubmenuBuilder::with_id(app, item.id.clone(), &item.title).enabled(item.enabled);
+        for child in children {
+            nested = append_item(app, nested, child)?;
+        }
+        return Ok(builder.item(&nested.build()?));
+    }
+    if let Some(checked) = item.checked {
+        let mut entry = CheckMenuItemBuilder::with_id(item.id.clone(), &item.title)
+            .enabled(item.enabled)
+            .checked(checked);
+        if let Some(accelerator) = item.accelerator.as_deref() {
+            entry = entry.accelerator(accelerator);
+        }
+        return Ok(builder.item(&entry.build(app)?));
+    }
+    let mut entry = MenuItemBuilder::with_id(item.id.clone(), &item.title).enabled(item.enabled);
+    if let Some(accelerator) = item.accelerator.as_deref() {
+        entry = entry.accelerator(accelerator);
+    }
+    Ok(builder.item(&entry.build(app)?))
 }
 
 fn append_groups<'a, R: Runtime>(
@@ -46,22 +77,7 @@ fn append_groups<'a, R: Runtime>(
             builder = builder.separator();
         }
         for item in group {
-            if let Some(checked) = item.checked {
-                let mut entry = CheckMenuItemBuilder::with_id(item.id.clone(), &item.title)
-                    .enabled(item.enabled)
-                    .checked(checked);
-                if let Some(accelerator) = item.accelerator.as_deref() {
-                    entry = entry.accelerator(accelerator);
-                }
-                builder = builder.item(&entry.build(app)?);
-                continue;
-            }
-            let mut entry =
-                MenuItemBuilder::with_id(item.id.clone(), &item.title).enabled(item.enabled);
-            if let Some(accelerator) = item.accelerator.as_deref() {
-                entry = entry.accelerator(accelerator);
-            }
-            builder = builder.item(&entry.build(app)?);
+            builder = append_item(app, builder, item)?;
         }
     }
     Ok(builder)
@@ -269,6 +285,7 @@ mod tests {
                     accelerator: None,
                     enabled: true,
                     checked: None,
+                    submenu: None,
                 })
                 .collect()],
         }
@@ -292,6 +309,20 @@ mod tests {
         assert!(!has_items(&empty.groups));
         assert!(has_items(&spec("selection", &["editor.join"]).groups));
         assert!(!has_items(groups_of(&[], "help")));
+    }
+
+    #[test]
+    fn a_pull_out_reads_its_items_from_the_spec() {
+        let section: MenuSectionSpec = serde_json::from_str(
+            r#"{"menu":"view","title":"View","groups":[[{"id":"submenu:view:2:Line layout","title":"Line layout",
+            "accelerator":null,"enabled":true,"submenu":[{"id":"off","title":"Off","accelerator":null,"enabled":true,"checked":true}]}]]}"#,
+        )
+        .expect("spec");
+        let pull_out = &section.groups[0][0];
+        let items = pull_out.submenu.as_ref().expect("pull-out items");
+        assert_eq!(items[0].title, "Off");
+        assert_eq!(items[0].checked, Some(true));
+        assert!(items[0].submenu.is_none());
     }
 
     #[test]

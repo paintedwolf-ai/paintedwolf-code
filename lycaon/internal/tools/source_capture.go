@@ -43,13 +43,9 @@ func (tc ToolContext) ResolveSourceCapture(sourceID string) (SourceCaptureLocati
 	if !ok {
 		return SourceCaptureLocation{}, false
 	}
-	primary, err := projectroot.PrimaryRoot(tc.Source.Roots)
-	if err != nil {
-		return SourceCaptureLocation{}, false
-	}
 	return SourceCaptureLocation{
 		Disk:   fseffect.Location{Root: diskRoot, Rel: filepath.FromSlash(rel)},
 		RootID: root.ID, Path: path,
-		DisplayPath: projectroot.Qualify(primary, root, filepath.Join(root.Path, filepath.FromSlash(path))),
+		DisplayPath: projectroot.Qualify(tc.Source.Roots, tc.Source.ActiveRootID, root, filepath.Join(root.Path, filepath.FromSlash(path))),
 	}, true
 }

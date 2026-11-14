@@ -54,11 +54,11 @@ func writeModelOutputBlob(ctx context.Context, s *sqlCore, q *db.Queries, projec
 
 // readModelOutputBlob reverses writeModelOutputBlob. An empty sha means the
 // output carried no body — all three fields are zero values.
-func readModelOutputBlob(s *sqlCore, projectID, sha string) (content, toolCallsJSON, reasoningJSON string, err error) {
+func readModelOutputBlob(dataDir, projectID, sha string) (content, toolCallsJSON, reasoningJSON string, err error) {
 	if sha == "" {
 		return "", "", "", nil
 	}
-	blobStore := contentblob.StoreFor(s.dataDir, projectID)
+	blobStore := contentblob.StoreFor(dataDir, projectID)
 	raw, err := contentblob.Read(blobStore, sha)
 	if err != nil {
 		return "", "", "", fmt.Errorf("read model output blob: %w", err)
@@ -70,8 +70,8 @@ func readModelOutputBlob(s *sqlCore, projectID, sha string) (content, toolCallsJ
 	return body.Content, string(body.ToolCallsJSON), string(body.ReasoningJSON), nil
 }
 
-func modelOutputFromDB(s *sqlCore, row db.ModelOutputs) (ModelOutput, error) {
-	content, toolCallsJSON, reasoningJSON, err := readModelOutputBlob(s, row.ProjectID, row.ContentBlobSha256)
+func modelOutputFromDB(dataDir string, row db.ModelOutputs) (ModelOutput, error) {
+	content, toolCallsJSON, reasoningJSON, err := readModelOutputBlob(dataDir, row.ProjectID, row.ContentBlobSha256)
 	if err != nil {
 		return ModelOutput{}, err
 	}
@@ -87,6 +87,24 @@ func modelOutputFromDB(s *sqlCore, row db.ModelOutputs) (ModelOutput, error) {
 	}
 	out.SettledAt, err = db.ParseTime(row.SettledAt)
 	return out, err
+}
+
+// ReadModelOutputs returns a session's settled outputs with their bodies, read
+// from a store whose data directory is dataDir.
+func ReadModelOutputs(ctx context.Context, q *db.Queries, dataDir, sessionID string) ([]ModelOutput, error) {
+	rows, err := q.ListSessionModelOutputs(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ModelOutput, 0, len(rows))
+	for _, row := range rows {
+		output, err := modelOutputFromDB(dataDir, row)
+		if err != nil {
+			return nil, fmt.Errorf("model output %s: %w", row.ID, err)
+		}
+		out = append(out, output)
+	}
+	return out, nil
 }
 
 // sameSettledModelOutputRow compares by content digest, which covers text, tool

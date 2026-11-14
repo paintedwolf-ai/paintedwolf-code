@@ -64,7 +64,7 @@ describe("Pretty presentation", () => {
   });
 
   it("is inactive for a language without a layout rule", () => {
-    const view = open("package main\nfunc main() { println(1, 2) }\n", true, "main.go");
+    const view = open("echo {a,b} | tr , ' '\n", true, "run.sh");
     expect(view.state.facet(prettyLayoutActive)).toBe(false);
   });
 

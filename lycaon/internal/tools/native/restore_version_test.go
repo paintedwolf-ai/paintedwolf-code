@@ -249,6 +249,7 @@ func TestRestoreVersionRestoresAbsentState(t *testing.T) {
 
 	tool := &RestoreVersionTool{Boundary: nativefixture.Boundary(t)}
 	tctx := provenanceCtx(dir, ledger)
+	tctx.Effects.Out = &tools.ToolInvocationOut{}
 
 	out, err := tool.Run(context.Background(), map[string]any{
 		"path": "newfile.txt",
@@ -262,6 +263,10 @@ func TestRestoreVersionRestoresAbsentState(t *testing.T) {
 	// Verify file is removed from disk
 	if _, statErr := os.Stat(filepath.Join(dir, "newfile.txt")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected newfile.txt to be removed, stat err = %v", statErr)
+	}
+	edits := tctx.Effects.Out.FileEdits
+	if len(edits) != 1 || !edits[0].Deleted || edits[0].After != "" || edits[0].Before == nil || *edits[0].Before != "created in turn\n" {
+		t.Fatalf("restoring an absent state recorded %+v, want a deletion of the prior text", edits)
 	}
 }
 

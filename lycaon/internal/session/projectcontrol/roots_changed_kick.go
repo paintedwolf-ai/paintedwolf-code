@@ -24,7 +24,10 @@ type droppableAnchors interface {
 // notice per open session of the project for its next turn boundary. If
 // another change arrives before that turn runs, the pending notice is
 // extended from the session's pre-change baseline rather than adding a
-// second. An unchanged root set records and notifies nothing.
+// second. The notice fires when and only when the (id, label) root set the
+// model addresses folders by changes, or the session's active folder
+// changes; a host path move under an unchanged ID and label records history
+// and notifies nothing. An unchanged root set records and notifies nothing.
 func (m *Service) EnqueueRootsChangedKick(ctx context.Context, projectID string, before, after []projectroot.RootRef) {
 	if m == nil {
 		return
@@ -67,7 +70,12 @@ func (m *Service) EnqueueRootsChangedKick(ctx context.Context, projectID string,
 			sessionChange = projectroot.DiffRoots(baseline, after)
 			sessionChange.Generation = change.Generation
 		}
-		if sessionChange.Empty() {
+		prevFolder, prevOK := sessionFolder(baseline, sess.WorkspaceRootID)
+		newFolder, newOK := sessionFolder(after, sess.WorkspaceRootID)
+		folderChanged := prevOK != newOK ||
+			prevFolder.ID != newFolder.ID ||
+			prevFolder.Label != newFolder.Label
+		if !sessionChange.ModelVisible() && !folderChanged {
 			m.pendingRootBaselines.Delete(sess.ID)
 			if drop, ok := m.anchors.(droppableAnchors); ok {
 				drop.Drop(sess.ID, anchor.ProjectRootsChanged)
@@ -75,8 +83,24 @@ func (m *Service) EnqueueRootsChangedKick(ctx context.Context, projectID string,
 			continue
 		}
 		data := prompts.RootsChangedKickData(sessionChange, after, sess.WorkspaceRootID)
+		if folderChanged && newOK {
+			data["session_folder_changed"] = map[string]any{"label": newFolder.Label}
+		}
 		m.anchors.Emit(ctx, sess.ID, anchor.ProjectRootsChanged, anchor.Envelope{Vars: data})
 	}
+}
+
+// sessionFolder resolves the session's active folder by ID, falling back to
+// the primary root when the ID is empty or no longer attached. The second
+// return reports whether any folder resolves at all.
+func sessionFolder(roots []projectroot.RootRef, activeRootID string) (projectroot.RootRef, bool) {
+	if r, err := projectroot.ActiveRoot(roots, activeRootID); err == nil {
+		return r, true
+	}
+	if r, err := projectroot.PrimaryRoot(roots); err == nil {
+		return r, true
+	}
+	return projectroot.RootRef{}, false
 }
 
 // ObserveSessionPosture records a session's effective approval posture and

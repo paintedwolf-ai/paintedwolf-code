@@ -12,6 +12,7 @@ import type {
   ResolveEditorDocumentRequest,
   SubmitEditorDocumentUpdateRequest,
   UpdateEditorDocumentPresenceRequest,
+  ReplaceProjectViewRequest,
   PinEditorDocumentRequest,
   LeaveEditorDocumentRequest,
   SaveEditorDocumentRequest,
@@ -23,6 +24,7 @@ import type {
 
 export interface DocumentsClient {
   replaceEditorDocumentRetention(projectId: string, clientId: string, documentIds: string[], retainedClients?: string[]): Promise<void>;
+  replaceProjectView(projectId: string, req: ReplaceProjectViewRequest): Promise<void>;
   readEditorDocumentStatuses(projectId: string, documentIds: string[]): Promise<import("../types.ts").EditorDocumentStatuses>;
   openEditorDocument(projectId: string, req: OpenEditorDocumentRequest, sessionId?: string): Promise<EditorDocument>;
   replaceEditorDocument(projectId: string, documentId: string, req: ReplaceEditorDocumentRequest): Promise<EditorDocument>;
@@ -57,6 +59,8 @@ export function createDocumentsClient(j: JsonRequester): DocumentsClient {
   return {
     replaceEditorDocumentRetention: (projectId, clientId, documentIds, retainedClients) =>
       j(`/v1/projects/${projectId}/editor-documents/retention`, { ...jsonRequest("PUT", { client_id: clientId, document_ids: documentIds, retained_clients: retainedClients }), signal: AbortSignal.timeout(30_000) }),
+    replaceProjectView: (projectId, req) =>
+      j(`/v1/projects/${projectId}/view`, { ...jsonRequest("PUT", req), keepalive: true, signal: AbortSignal.timeout(30_000) }),
     readEditorDocumentStatuses: (projectId, documentIds) =>
       j(`/v1/projects/${projectId}/editor-documents/status`, { ...jsonRequest("POST", { document_ids: documentIds }), signal: AbortSignal.timeout(30_000) }),
     openEditorDocument: (projectId, req, sessionId) =>

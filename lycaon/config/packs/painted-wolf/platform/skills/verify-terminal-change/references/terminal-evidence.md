@@ -8,10 +8,10 @@ Maintained sources of truth: `docs/tools.md` (Interactive exec) and `docs/ground
 |---|---|---|
 | Exit status, bounded stdout/stderr, non-interactive tests | `command` / `verify` | Command result; not a terminal-screen claim |
 | One-shot terminal picture, including direct-network CLI output | `command` with `terminal_capture` | `tui#` terminal screen evidence plus optional visual `artifact_id` |
-| Prompt, keyboard interaction, TTY-gated formatting, full-screen UI | `terminal_open` plus handle tools | `tui#` terminal screen evidence from the virtual screen |
-| Picture of a held terminal state | `terminal_snapshot` | `tui#` terminal screen evidence plus optional visual `artifact_id` |
+| Prompt, keyboard interaction, TTY-gated formatting, full-screen UI | `terminal_open` plus handle tools | `terminal_session#` terminal screen evidence from the virtual screen |
+| Picture of a held terminal state | `terminal_snapshot` | `terminal_session#` terminal screen evidence plus optional visual `artifact_id` |
 
-`terminal_capture` runs the exact one-shot process inside a sealed PTY; it is not a pipe or a replay. Piping or redirecting a TUI through ordinary `command` removes the controlling terminal and cannot establish what its screen rendered. Do not use expect-style shell scripts as a substitute for the PTY tools.
+`terminal_capture` runs the exact one-shot process inside a sealed PTY; it is not a pipe or a replay. Piping or redirecting a TUI through ordinary `command` removes the controlling terminal and cannot establish what its screen rendered. Do not use expect-style shell scripts, or patch the program's input inside its own runtime, as a substitute for the PTY tools.
 
 ## Capture a sealed screen
 

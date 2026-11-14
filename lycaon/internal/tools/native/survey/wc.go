@@ -38,6 +38,9 @@ type wcResult struct {
 	Truncated bool `json:"truncated,omitempty"`
 	// InEditor marks counts taken from unsaved editor text.
 	InEditor bool `json:"in_editor,omitempty"`
+	// Structured identity of the counted path under its project root; never serialized.
+	rootID   string `json:"-"`
+	scopeRel string `json:"-"`
 }
 
 type wcResponse struct {
@@ -85,6 +88,7 @@ func (t *WcTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCo
 			if err != nil {
 				return "", err
 			}
+			entry.rootID, entry.scopeRel = resolved.Root.ID, resolved.ScopeRel
 			resp.Results = append(resp.Results, entry)
 			continue
 		}
@@ -92,6 +96,7 @@ func (t *WcTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCo
 		if err != nil {
 			return "", err
 		}
+		entry.rootID, entry.scopeRel = resolved.Root.ID, resolved.ScopeRel
 		resp.Results = append(resp.Results, entry)
 	}
 	resp.Inventory = inventoryFactsFrom(ctx)
@@ -110,6 +115,10 @@ func (t *WcTool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCo
 		kind := api.NavigationEntryKindFile
 		if result.Files != nil {
 			kind = api.NavigationEntryKindFolder
+		}
+		if result.rootID != "" && result.scopeRel != "" {
+			tctx.RecordSourceIdentity(result.rootID, result.scopeRel, kind)
+			continue
 		}
 		tctx.RecordSourcePath(result.Path, kind)
 	}

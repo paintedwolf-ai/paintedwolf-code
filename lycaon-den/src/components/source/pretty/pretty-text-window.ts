@@ -1,15 +1,19 @@
 import type { Text } from "@codemirror/state";
+import type { PrettyTokenSource } from "./pretty-tokens.ts";
 
 const CHUNK = 8192;
 
-/** Character access over a document by absolute position, reading it in chunks. */
+/**
+ * Character access over a document by absolute position, read in chunks,
+ * with its syntax tokens where a rule reads them.
+ */
 export class TextWindow {
   private from = 0;
   private text = "";
   /** Characters read from the document, for work bounds. */
   read = 0;
 
-  constructor(readonly doc: Text) {}
+  constructor(readonly doc: Text, readonly tokens: PrettyTokenSource | null = null) {}
 
   at(pos: number): number {
     if (pos < this.from || pos >= this.from + this.text.length) this.load(pos);

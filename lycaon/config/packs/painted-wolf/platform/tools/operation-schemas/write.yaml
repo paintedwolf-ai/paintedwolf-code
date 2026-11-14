@@ -5,7 +5,7 @@ schema:
   properties:
     path:
       type: string
-      description: Repo-relative file path
+      description: File path relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute
     content:
       type: string
       description: Full file contents to write (or the chunk to append)

@@ -271,7 +271,7 @@ describe("worker-transcript", () => {
             content: "wrote",
             tool_result: {
               content: "wrote",
-              file_edit_preview: fileEditPreviewFixture({ path: "README.md", after: "new" }),
+              file_edit_previews: [fileEditPreviewFixture({ path: "README.md", after: "new" })],
             },
             created_at: "t",
           },
@@ -398,7 +398,7 @@ describe("worker-transcript", () => {
             content: "wrote",
             tool_result: {
               content: "wrote",
-              file_edit_preview: fileEditPreviewFixture({ path: "README.md", after: "new" }),
+              file_edit_previews: [fileEditPreviewFixture({ path: "README.md", after: "new" })],
             },
             created_at: "t",
           },

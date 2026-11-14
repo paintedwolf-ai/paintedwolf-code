@@ -133,6 +133,11 @@ type JobSnapshot struct {
 	StartedAt  time.Time
 	Timeout    time.Duration
 	Stages     []hostcmd.StageResult
+	// Exited marks a job that ended on its own before the agent observed it.
+	Exited   bool
+	ExitCode int
+	// Refusals counts what the sandbox refused the job.
+	Refusals int
 }
 
 // RootProcess identifies one live background process running under a workspace root.

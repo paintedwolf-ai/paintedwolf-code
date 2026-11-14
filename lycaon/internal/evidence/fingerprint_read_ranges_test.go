@@ -47,7 +47,7 @@ func TestPopulateReadRecordCoversEachReturnedLineSpan(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			rec := &Record{}
-			populateReadRecord("", rec, map[string]any{"path": "a.go"}, tc.content)
+			populateReadRecord(CitationRoots{}, rec, map[string]any{"path": "a.go"}, tc.content)
 			if !slices.Equal(rec.LineRanges, tc.want) {
 				t.Fatalf("line ranges = %+v, want %+v", rec.LineRanges, tc.want)
 			}

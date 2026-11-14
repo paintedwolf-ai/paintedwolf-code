@@ -5,9 +5,9 @@ import (
 )
 
 func TestPredictedFamiliesFollowStandingLifetime(t *testing.T) {
-	for _, selected := range []string{"web_search", "fetch_url", "page_open", "terminal_open"} {
+	for _, selected := range []string{"web_search", "fetch_url", "page_act", "terminal_read"} {
 		t.Run(selected, func(t *testing.T) {
-			all := []string{"web_search", "fetch_url", "page_open", "page_act", "terminal_open", "terminal_read", "command"}
+			all := []string{"web_search", "fetch_url", "page_open", "page_act", "page_snapshot", "terminal_open", "terminal_read", "terminal_send", "command"}
 			l := NewLedger()
 			l.BeginTurn("s", opening("u1", cold, all...), predict(selected))
 			if len(l.Active("s")) != 2 || !l.Active("s")[selected] {
@@ -61,5 +61,15 @@ func TestRequestedFamilySurvivesColdRestartAndUndecidedTurns(t *testing.T) {
 	restored.BeginTurn("s", opening("u2", cold, "web_search"), predict())
 	if got := standingNames(restored, "s"); got != "web_search" {
 		t.Fatalf("revoked family member persisted: %s", got)
+	}
+}
+
+func TestPredictedLauncherLoadsWithoutItsControls(t *testing.T) {
+	for _, launcher := range []string{"terminal_open", "page_open"} {
+		l := NewLedger()
+		l.BeginTurn("s", opening("u1", cold, "page_open", "page_act", "terminal_open", "terminal_read"), predict(launcher))
+		if got := standingNames(l, "s"); got != launcher {
+			t.Fatalf("%s loaded %s", launcher, got)
+		}
 	}
 }

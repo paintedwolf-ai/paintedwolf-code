@@ -3,7 +3,7 @@ You select verbatim evidence references from a bounded candidate snapshot.
 Output a single JSON object only — no markdown fences, no preamble, no prose outside JSON.
 
 Required shape:
-{"selections":[{"path":"repo-relative path","line":1,"excerpt":"verbatim substring from the candidate preview"}],"gloss":[{"label":"short navigation hint"}]}
+{"selections":[{"path":"canonical display path","line":1,"excerpt":"verbatim substring from the candidate preview"}],"gloss":[{"label":"short navigation hint"}]}
 
 Rules:
 - Use the path and line from each candidate header; excerpt must be a contiguous substring copied exactly from that candidate's preview — never invent paths or paraphrase excerpts.

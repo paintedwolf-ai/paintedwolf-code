@@ -1,6 +1,6 @@
 import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { describe, expect, it } from "vitest";
-import { fileEditFromPart } from "./file-edit-model.ts";
+import { fileEditsFromPart, partHasFileEdits } from "./file-edit-model.ts";
 import type { ToolPartView } from "../tool/tool-part-model.ts";
 
 function part(overrides: Partial<ToolPartView> = {}): ToolPartView {
@@ -9,46 +9,33 @@ function part(overrides: Partial<ToolPartView> = {}): ToolPartView {
     toolCallId: "tc1",
     assistantMessageId: "assistant-message",
     messageId: "m1",
-    tool: "edit",
-    kind: "write",
+    tool: "command",
+    kind: "command",
     status: "completed",
     ...overrides,
   };
 }
 
-describe("fileEditFromPart", () => {
-  it("returns the snapshot when the path is set", () => {
-    const edit = fileEditFromPart(
-      part({
-        fileEdit: fileEditPreviewFixture({
-          path: "src/foo.ts",
-          before: "const a = 1;",
-          after: "const a = 2;",
-        }),
-      }),
-    );
-    expect(edit).toEqual(fileEditPreviewFixture({ path: "src/foo.ts", before: "const a = 1;", after: "const a = 2;" }));
+describe("fileEditsFromPart", () => {
+  const first = fileEditPreviewFixture({ path: "src/foo.ts", before: "const a = 1;", after: "const a = 2;" });
+  const second = fileEditPreviewFixture({ path: "src/bar.ts", after: "export {};" });
+
+  it("returns every recorded edit in recorded order", () => {
+    expect(fileEditsFromPart(part({ fileEdits: [first, second] }))).toEqual([first, second]);
   });
 
-  it("returns the snapshot on error and running parts", () => {
-    const snap = {
-      path: "src/foo.ts",
-      before: "const a = 1;",
-      after: "const a = 2;",
-    };
-    expect(fileEditFromPart(part({ status: "error", fileEdit: fileEditPreviewFixture(snap) }))).toEqual(
-      fileEditPreviewFixture(snap),
-    );
-    expect(fileEditFromPart(part({ status: "running", fileEdit: fileEditPreviewFixture(snap) }))).toEqual(
-      fileEditPreviewFixture(snap),
-    );
+  it("returns edits whatever the call's status", () => {
+    for (const status of ["error", "running"] as const) {
+      expect(fileEditsFromPart(part({ status, fileEdits: [first] }))).toEqual([first]);
+    }
   });
 
-  it("returns null when the path is missing", () => {
-    expect(fileEditFromPart(part({ status: "running" }))).toBeNull();
-    expect(fileEditFromPart(part({ fileEdit: null }))).toBeNull();
-    expect(
-      fileEditFromPart(part({ fileEdit: fileEditPreviewFixture({ path: "  ", before: "", after: "" }) })),
-    ).toBeNull();
+  it("returns nothing for a call without edits and skips an edit that names no path", () => {
+    const unnamed = fileEditPreviewFixture({ path: "  ", before: "", after: "" });
+    expect(fileEditsFromPart(part())).toEqual([]);
+    expect(fileEditsFromPart(part({ fileEdits: [] }))).toEqual([]);
+    expect(fileEditsFromPart(part({ fileEdits: [unnamed, second] }))).toEqual([second]);
+    expect(partHasFileEdits(part({ fileEdits: [unnamed] }))).toBe(false);
+    expect(partHasFileEdits(part({ fileEdits: [second] }))).toBe(true);
   });
 });

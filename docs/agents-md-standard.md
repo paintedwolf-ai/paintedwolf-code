@@ -60,8 +60,8 @@ Human AGENTS.md edits are not gated by the surface enable: the Files editor trea
 
 At session create, or when a project directory is set, the sidecar warms an `AGENTS.md` index via `governance.ListIndex` (`WarmAgentsMD`). Coordinator and worker turn assembly then prepend applicable guidance:
 
-1. **Session start** — `BuildIndexInject` names the discovered regular `AGENTS.md` files under the active workspace root without opening their bodies. The walk prunes engine/VCS dirs (`.git`, the project overlay), dot-prefixed directories, and index-only omits (`testdata`, `node_modules`; `ListIndexOmitDir`). Index omit is not the survey walk prune set: a file inside an omitted or hidden tree is still applied by chain resolution when work goes there.
-2. **Working scopes** — resolved source observations and reached operations select their attached physical workspaces. `BuildScopedInject` supplies current policy bodies with explicit jurisdiction, ancestors first and the applicable root overlay last. Shared policy files appear once. Human edits take effect on the next completion; reached mutations also check freshness before their effect. A worker with no narrower scope receives its actual workspace root chain.
+1. **Session start** — `BuildIndexInject` names the discovered regular `AGENTS.md` files under the session folder without opening their bodies. The walk prunes engine/VCS dirs (`.git`, the project overlay), dot-prefixed directories, and index-only omits (`testdata`, `node_modules`; `ListIndexOmitDir`). Index omit is not the survey walk prune set: a file inside an omitted or hidden tree is still applied by chain resolution when work goes there.
+2. **Working scopes** — resolved source observations and reached operations select their attached physical workspaces. `BuildScopedInject` supplies current policy bodies with explicit jurisdiction, ancestors first and the applicable root overlay last. Shared policy files appear once. Human edits take effect on the next completion; reached mutations also check freshness before their effect. A worker with no narrower scope receives its actual attached-root chain.
 3. **Transcript compaction** — AGENTS guidance is assembled outside persisted transcript history and rebuilt from source for every completion. Compaction never summarizes or selectively preserves repository policy.
 
 ### Resolved command scopes
@@ -125,16 +125,16 @@ The host stamps repository policy with project origin, developer authority, and 
 | Full read for the digest | The on-disk read is bounded by a separate structural ceiling (`AgentsMDReadMaxBytes`, 4 MiB) so the digest sees headings across the whole document |
 | Order | Sanitize **then** cap: stripping removes bytes, so capping first could cut mid-sequence |
 | Not applied to reads | The `read` tool stays byte-faithful; a read/edit round-trip never rewrites a file that legitimately contains these codepoints |
-| Filesystem boundary | Discovery accepts regular files only. Body reads use the active-root capability and reject symlinks or paths that leave that root; the read limit is enforced before source bytes enter memory |
+| Filesystem boundary | Discovery accepts regular files only. Body reads use the session-folder capability and reject symlinks or paths that leave that root; the read limit is enforced before source bytes enter memory |
 
 ## Multi-root
 
-Inject is single-root: it resolves against the session's active workspace root, not every attached root.
+Inject is single-root: it resolves against the session folder, not every attached root.
 
 | Case | Behavior |
 |------|----------|
 | One root | Index and inject under that root |
-| N roots | Session `workspace_path` / active root only |
+| N roots | Session `workspace_path` / session folder only |
 | Path outside all roots | No project AGENTS.md inject |
 | No-folder project (0 roots) | No filesystem discovery; refreshes when a root attaches |
 

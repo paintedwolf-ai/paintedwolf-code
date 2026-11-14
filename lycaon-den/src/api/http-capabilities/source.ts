@@ -3,7 +3,7 @@ import { formatQuery, lycaonBlob, type JsonRequester, jsonRequest } from "../htt
 import type { BackendConnection } from "../../platform/connection/backend.ts";
 import type {
   ProjectSourceReadResponse,
-  SourceEditorConfig,
+  SourceFormatSettings,
   ProjectSourceWriteResponse,
   SourceWorkspace,
   PutProjectSourceRequest,
@@ -45,12 +45,12 @@ export interface SourceClient {
       includeDeleted?: boolean;
     },
   ): Promise<ProjectSourceReadResponse>;
-  getProjectSourceEditorConfig(
+  getProjectSourceFormatSettings(
     projectId: string,
     path: string,
     rootId: string,
     sessionId?: string,
-  ): Promise<SourceEditorConfig>;
+  ): Promise<SourceFormatSettings>;
   getProjectSourceRaw(
     projectId: string,
     path: string,
@@ -152,9 +152,9 @@ export function createSourceClient(j: JsonRequester, connection: BackendConnecti
           include_deleted: opts?.includeDeleted,
         })}`,
       ),
-    getProjectSourceEditorConfig: (projectId, path, rootId, sessionId) =>
+    getProjectSourceFormatSettings: (projectId, path, rootId, sessionId) =>
       j(
-        `/v1/projects/${projectId}/source/editorconfig${formatQuery({
+        `/v1/projects/${projectId}/source/format-settings${formatQuery({
           path,
           root_id: rootId,
           session_id: sessionId,

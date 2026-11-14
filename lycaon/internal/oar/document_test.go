@@ -245,7 +245,7 @@ func TestLintPortability(t *testing.T) {
 
 	core, _, err := l.parseRule("PORTABLE_RULE", ruleDoc(t, map[string]any{
 		"id": "PORTABLE_RULE", "on": "agent.post_turn",
-		"when": `policy_denied && tool == "read"`,
+		"when": `tool == "read" && same_call_run >= 2`,
 	}))
 	testutil.FailErr(t, "parse portable rule", err)
 	if rep := LintPortability(core); !rep.Portable {

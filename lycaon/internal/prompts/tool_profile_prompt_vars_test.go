@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 func TestHTTPActionVarsFollowOfferedTools(t *testing.T) {
@@ -395,7 +396,9 @@ func TestCommandProgressGuidanceFollowsOfferedEffects(t *testing.T) {
 	if got := vars["progress_gated_tools"]; !reflect.DeepEqual(got, []string{"command", "restore_version", "task"}) {
 		t.Fatalf("offered progress guidance = %v", got)
 	}
-	prompts.ApplyReadOnlyCommandEffects(offered, nil, vars)
+	readOnly, err := toolcontract.NewCommandEffects(toolcontract.CommandReadOnly)
+	testutil.FailErr(t, "read-only effects", err)
+	prompts.RestrictCommandEffects(readOnly, offered, nil, vars)
 	if got := vars["progress_gated_tools"]; !reflect.DeepEqual(got, []string{"restore_version", "task"}) {
 		t.Fatalf("read-only command progress guidance = %v", got)
 	}

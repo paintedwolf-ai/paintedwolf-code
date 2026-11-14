@@ -106,9 +106,9 @@ type Catalog struct {
 	Engine   EngineRequirement
 }
 
-// catalogVersion is the decisions.yaml format this package and
-// internal/coordinator/turnload share.
-const catalogVersion = 2
+// CatalogVersion is the decisions.yaml format this package and
+// internal/coordinator/turnload read.
+const CatalogVersion = 3
 
 type engineRow struct {
 	ReferenceMS int `yaml:"reference_ms"`
@@ -143,8 +143,8 @@ func ParseCatalog(data []byte) (Catalog, error) {
 		return Catalog{}, fmt.Errorf("parse decisions: %w", err)
 	}
 	var faults []string
-	if file.Version != catalogVersion {
-		faults = append(faults, fmt.Sprintf("version %d is not %d", file.Version, catalogVersion))
+	if file.Version != CatalogVersion {
+		faults = append(faults, fmt.Sprintf("version %d is not %d", file.Version, CatalogVersion))
 	}
 	engine := EngineRequirement{Reference: time.Duration(file.Engine.ReferenceMS) * time.Millisecond}
 	if engine.Reference <= 0 {

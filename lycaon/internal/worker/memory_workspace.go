@@ -253,6 +253,7 @@ func TaskRootRefs(ctx context.Context, task *api.WorkerTask, projects ProjectSto
 	}
 	return []projectroot.RootRef{{
 		ID:        rootID,
+		Label:     filepath.Base(filepath.Clean(path)),
 		Path:      path,
 		IsPrimary: true,
 	}}

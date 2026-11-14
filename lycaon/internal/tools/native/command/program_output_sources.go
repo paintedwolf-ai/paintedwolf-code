@@ -208,27 +208,20 @@ func (r *ProgramRuntime) commitSourceDelivery(ctx context.Context, run *programR
 	settlement, commitErr := r.Recorder.CommitProgramSourceDelivery(ctx, delivery, observer, r.sessionResources(run.tc.Identity.SessionID))
 	if commitErr == nil {
 		tagDelivery(run, settlement.SourceOwnerReference, relPath, obs)
+		recordDeliveredRead(run, first.Source, obs)
 	}
 }
 
 // tagDelivery prints a delivery's handle and coverage on the call's result.
 func tagDelivery(run *programRun, reference, path string, obs evidence.DeliveredSourceObservation) {
 	handle := strings.TrimSpace(reference)
-	if handle == "" || run.tc.Effects.Out == nil {
+	if handle == "" {
 		return
 	}
-	for _, seen := range run.tc.Effects.Out.SourceDeliveries {
-		if seen.Handle == handle {
-			return
-		}
-	}
-	if len(run.tc.Effects.Out.SourceDeliveries) < maxPrintedDeliveryTags {
-		rec := obs.Record()
-		fact := rec.SourceDelivery
-		run.tc.Effects.Out.SourceDeliveries = append(run.tc.Effects.Out.SourceDeliveries, tools.SourceDeliveryTag{
-			Handle: handle, Coverage: hostmarker.FormatEvidenceCoverage(path, fact.StartLine, fact.EndLine),
-		})
-	}
+	fact := obs.Record().SourceDelivery
+	run.tc.Effects.Out.AddSourceDelivery(tools.SourceDeliveryTag{
+		Handle: handle, Coverage: hostmarker.FormatEvidenceCoverage(path, fact.StartLine, fact.EndLine),
+	})
 }
 
 // commitProgramWindows records the windows operations returned, from their own results.
@@ -268,10 +261,6 @@ func outputRangesContain(parts []deliveredOutputPart, encoded []byte) bool {
 	}
 	return false
 }
-
-// maxPrintedDeliveryTags bounds a result's tags. A wide search would otherwise print
-// one for every match; its records stay citable by path.
-const maxPrintedDeliveryTags = 16
 
 // Capturing source for optional read credit never makes a successful output fail.
 // Admission covers the raw buffer, decoder expansion/copies, and delivered lines.

@@ -20,14 +20,15 @@ and [Laya notices](../licensing/texts/laya-multilingual-notices.md) for provenan
 
 Every coordinator request and worker assignment uses local-model turn
 optimization. Workflows declare their phases, tools, and required instructions;
-the host selects optional additions and omissions within that surface. There is
+the host selects optional tool and skill additions within that surface. There is
 no workflow-specific enablement flag. Model-invoked retrieval also uses the
 engine: `request_tools` and `skills_read` resolve their text through it, and
 rerank sites such as `summarize` blend its scores.
 
 `LYCAON_DECIDE_DISABLED=1` disables the engine for troubleshooting. An absent,
-disabled, or failed engine leaves applicable guidance in place and tools
-requestable. The decision never suppresses required workflow instructions.
+disabled, or failed engine leaves tools requestable. Guidance never depends on
+the engine: an instruction unit renders from host facts and the tools a call
+offers.
 
 A decision serves a human request, not a transcript row. The request's first
 turn that reaches a model call decides, with the request's own text: a user
@@ -43,23 +44,21 @@ The engine chooses only among what a surface already permits. It never widens
 a surface, changes a permission floor, or answers an approval. Each decision
 errs toward the failure the model can recover from: a tool loads with
 confidence and is otherwise requestable through `request_tools`; the call
-names only the capabilities that can still load, never the tools; an instruction
-unit is omitted with confidence only when its id is listed in
-`turn.guides.omittable` for the installed head, and otherwise renders. An empty
-list keeps all guidance. Calibration must report label coverage per unit; an
-unknown label never establishes that a unit is safe to omit. Below a threshold,
-past the deadline, or without an engine, a decision abstains and the turn
-runs as it would with no model. The answer-only veto exists in the catalog
-and ships off; an independent head answers no kind question at all.
+names only the capabilities that can still load, never the tools. Below a
+threshold, past the deadline, or without an engine, a decision abstains and
+the turn runs as it would with no model. The answer-only veto exists in the
+catalog and ships off; an independent head answers no kind question at all.
 
-The tools and guides questions share one encoding. An independent head reads
-every tool and every guide option on its own row, so a unit's answer never
-depends on the rest of the roster and a pack can add units without moving
-another unit's score. A unit's label comes from the tools its turn called:
-the tools it `attaches` to, or the tools it declares itself `needed_with`
-when it gates nothing (the evidence rules are needed by a turn that captured
-a page; the read ladder by a turn that oriented itself). A unit that names
-neither has no behavioural label and is never omitted.
+No decision adds or removes instructions. A missing instruction is a miss the
+model cannot see or ask for, so guidance stays out of the engine's reach: an
+instruction unit renders on the hosts and modes it declares, and a unit that
+`attaches` to tools renders exactly while one of them is offered. A tool the
+engine preloads therefore brings its procedures with it, and a tool loaded by
+`request_tools` does the same on the next call.
+
+An independent head reads every tool option on its own row, so a tool's answer
+never depends on the rest of the roster and a pack can add tools without moving
+another tool's score.
 
 ## Skills: preload, lookup, and the first tool call
 
@@ -214,7 +213,7 @@ and the app never sends them off the device ([Privacy](privacy.md#the-local-deci
 | Host client, checkpoint pin, provisioning, preflight | `lycaon/internal/decide/bialy` |
 | Turn decisions, cache boundaries, and the standing-surface ledger | `lycaon/internal/coordinator/turnload` |
 | Reranking sites | `lycaon/internal/decide/rerank.go` and each site's blend |
-| Heads (training artifacts) | `engine-root/decide/heads/<name>.safetensors`, pinned by `lycaon/config/packs/painted-wolf/platform/host/decision-release.json`: `turn-load` (tools), `guide-load` (guides, when shipped), `unit-rank`, `code-rank` |
+| Heads (training artifacts) | `engine-root/decide/heads/<name>.safetensors`, pinned by `lycaon/config/packs/painted-wolf/platform/host/decision-release.json`: `turn-load` (tools), `unit-rank` (skills and requested tools), `code-rank` |
 
 The packaged app ships the checkpoint, the heads, and MLX's Metal library
 under its engine root; a development checkout builds the engine with
@@ -269,10 +268,10 @@ instead of paying for a launch that will fail the same way, and the
 `decision_engine` preflight probe reports `unusable`. A handshake that
 succeeds clears the hold.
 
-Bialy retains the `pw-decide-row/1`, `pw-decide-head/1`, and
-`pw-decide-anchor/1` artifact identifiers so existing training data, trained
-heads, and release checksums remain valid. These identify saved formats, not
-the engine or repository name.
+The `pw-decide-row/2`, `pw-decide-head/1`, and `pw-decide-anchor/1` artifact
+identifiers name saved formats, not the engine or repository: trained heads and
+release checksums stay valid across releases, and a row format change advances
+its version so a trainer never reads one shape as another.
 
 ## Retraining
 
@@ -283,7 +282,7 @@ Heads are retrained, the backbone is not. The loop, with commands, lives in
 1. **Export rows from receipts.** Every decided turn, coordinator or worker,
    leaves a receipt with the state the engine read and the candidates the
    turn offered, even when the engine was off. `lycaon-debug decide export`
-   turns receipts into `pw-decide-row/1` training rows labeled by what the
+   turns receipts into `pw-decide-row/2` training rows labeled by what the
    session then called, read, and needed; a turn that did not complete keeps
    only its `request_tools` needs. A turn the engine answered carried the
    engine's own choices, so its tool labels train only the rank head.
@@ -317,7 +316,7 @@ Heads are retrained, the backbone is not. The loop, with commands, lives in
    Apache-2.0; heads trained on the factory's open dataset can ship with it.
 
 The bars, the shipped heads' data, results, and known limits are in
-[`scripts/bialy/README.md`](../scripts/bialy/README.md#shipped-heads-b5-tools-b7g-guides-e4-skills-open1-code),
+[`scripts/bialy/README.md`](../scripts/bialy/README.md#shipped-heads-b5-tools-e4-skills-open1-code),
 next to the scripts that produced them, and
 [Tuning the shipped policy](../scripts/bialy/README.md#tuning-the-shipped-policy)
 says how each threshold was set and how to set it again for a new head.

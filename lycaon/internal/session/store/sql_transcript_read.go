@@ -53,6 +53,18 @@ func (s *sqlTranscript) GetWorkerJobMessages(ctx context.Context, sessionID, wor
 }
 
 // GetMessage reads one transcript projection.
+// ToolResultMessageID names the stored result row of a tool call, or
+// ErrMessageNotFound while the call's result is not stored.
+func (s *sqlTranscript) ToolResultMessageID(ctx context.Context, sessionID, toolCallID string) (string, error) {
+	id, err := s.core.queries.GetToolResultMessageID(ctx, db.GetToolResultMessageIDParams{
+		SessionID: sessionID, ToolCallID: db.NullString(toolCallID),
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrMessageNotFound
+	}
+	return id, err
+}
+
 func (s *sqlTranscript) GetMessage(ctx context.Context, sessionID, messageID string) (api.Message, error) {
 	if err := ctx.Err(); err != nil {
 		return api.Message{}, err

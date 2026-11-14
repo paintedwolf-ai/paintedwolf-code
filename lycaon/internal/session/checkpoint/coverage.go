@@ -42,23 +42,29 @@ func CheckCoverage(ctx context.Context, repository store.CheckpointRepository, p
 				break
 			}
 		}
-		issue := func(path, code string) {
-			issues = append(issues, sourceledger.RewindIssue{RootID: rootID, Path: path, Code: code})
+		issue := func(root, path, code string) {
+			issues = append(issues, sourceledger.RewindIssue{RootID: root, Path: path, Code: code})
 		}
 		if man.BlueprintPath != "" {
-			issue(man.BlueprintPath, "workflow_binding_changed")
+			issue(rootID, man.BlueprintPath, "workflow_binding_changed")
 		}
 		if man.Truncated {
-			issue("", "capture_incomplete")
+			issue(rootID, "", "capture_incomplete")
 		}
 		for _, path := range man.Skipped {
 			if !rewindCoversPath(op, man.ProjectDir, path) {
-				issue(path, "unrecorded_change")
+				issue(rootID, path, "unrecorded_change")
 			}
 		}
 		for path, entry := range man.Paths {
-			if rootID == "" {
-				issue(path, "workspace_unavailable")
+			// Entries recorded with root identity attribute directly; legacy
+			// manifests fall back to the manifest's project directory match.
+			entryRoot := rootID
+			if entry.RootID != "" {
+				entryRoot = entry.RootID
+			}
+			if entryRoot == "" {
+				issue("", path, "workspace_unavailable")
 				continue
 			}
 			if rewindCoversPath(op, man.ProjectDir, path) {
@@ -72,7 +78,7 @@ func CheckCoverage(ctx context.Context, repository store.CheckpointRepository, p
 				continue
 			}
 			if !checkpointPathUnchanged(man.ProjectDir, path, entry) {
-				issue(path, "unrecorded_change")
+				issue(entryRoot, path, "unrecorded_change")
 			}
 		}
 	}

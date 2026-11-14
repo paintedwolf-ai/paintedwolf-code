@@ -26,6 +26,7 @@ func (m *Service) AppendPlain(ctx context.Context, sessionID string, msgs ...api
 		return err
 	}
 	m.PublishAppends(ctx, sessionID, stamped...)
+	m.applyHeldProgramEdits(ctx, sessionID, stamped)
 	return nil
 }
 

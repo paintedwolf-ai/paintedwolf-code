@@ -2,9 +2,8 @@ import {
   SKILL_CHICKLET_NAME,
   isSkillToolPart,
 } from "../skill/skill-card-model.ts";
-import { fileEditFromPart } from "../file-edit/file-edit-model.ts";
-import { foldFileEdits } from "../file-edit/file-edit-fold.ts";
-import type { FileEditFold, FileEditStep } from "../file-edit/file-edit-fold.ts";
+import { partHasFileEdits } from "../file-edit/file-edit-model.ts";
+import { collectSegmentFolds } from "../file-edit/file-edit-fold.ts";
 import { indexWarmingChickletTitle } from "../transcript/projection/index-warming-copy.ts";
 import {
   isLoopbackTarget,
@@ -318,63 +317,8 @@ function emitWorkerRun(
 function candidateIsFileEdit(candidate: ActivityCandidate): boolean {
   return (
     candidate.entry.kind === "tool" &&
-    fileEditFromPart(candidate.entry.part) != null
+    partHasFileEdits(candidate.entry.part)
   );
-}
-
-/** Groups one turn's writes by path and first write. */
-type SegmentFolds = {
-  folds: FileEditFold[];
-  /** First writes anchor each path's diff card. */
-  anchorPartIds: Set<string>;
-  anchorMessageIdByPartId: Map<string, string>;
-};
-
-/** Repeated writes share a card anchored at the first write. */
-function collectSegmentFolds(
-  items: readonly RawTranscriptItem[],
-): SegmentFolds[] {
-  const segments: SegmentFolds[] = [];
-  let steps: FileEditStep[] = [];
-  let anchorPartIds = new Set<string>();
-  let anchorMessageIdByPartId = new Map<string, string>();
-  let seenPaths = new Set<string>();
-
-  const closeSegment = () => {
-    segments.push({
-      folds: foldFileEdits(steps),
-      anchorPartIds,
-      anchorMessageIdByPartId,
-    });
-    steps = [];
-    anchorPartIds = new Set();
-    anchorMessageIdByPartId = new Map();
-    seenPaths = new Set();
-  };
-
-  for (const item of items) {
-    if (item.kind === "user") {
-      closeSegment();
-      continue;
-    }
-    if (item.kind !== "tool") continue;
-    const snapshot = fileEditFromPart(item.part);
-    if (!snapshot) continue;
-    steps.push({
-      key: item.part.id,
-      toolCallId: item.part.toolCallId,
-      messageId: item.part.messageId,
-      snapshot,
-      tool: item.part.tool,
-    });
-    if (!seenPaths.has(snapshot.path)) {
-      seenPaths.add(snapshot.path);
-      anchorPartIds.add(item.part.id);
-      anchorMessageIdByPartId.set(item.part.id, item.part.messageId);
-    }
-  }
-  closeSegment();
-  return segments;
 }
 
 /** Project raw activity rows into scoped spans and turn-folded diff rows. */
@@ -389,22 +333,25 @@ export function projectActivitySpans(
   const out: DisplayTranscriptItem[] = [];
   let scope: string | null = null;
   let run: ActivityCandidate[] = [];
-  /** First writes in this run that anchor a segment's diff cards. */
-  let runAnchorPartIds: string[] = [];
+  /** Calls in this run that anchor a segment's diff cards, with their result rows. */
+  let runAnchors: { partId: string; messageId: string }[] = [];
   let workerRun: Extract<RawTranscriptItem, { kind: "tool" }>[] = [];
 
   const emitAnchoredFolds = () => {
-    if (runAnchorPartIds.length === 0 || !segment) return;
-    const anchored = new Set(runAnchorPartIds);
+    const anchor = runAnchors[0];
+    if (!anchor || !segment) return;
+    const { anchorFoldKeysByPartId, omittedByPartId } = segment;
+    const anchored = new Set(runAnchors.flatMap(({ partId }) => anchorFoldKeysByPartId.get(partId) ?? []));
     const folds = segment.folds.filter((fold) => anchored.has(fold.key));
-    if (folds.length === 0) return;
-    const first = folds[0]!;
+    const omitted = runAnchors.reduce((sum, { partId }) => sum + (omittedByPartId.get(partId) ?? 0), 0);
+    if (folds.length === 0 && omitted === 0) return;
+    const first = folds[0];
     out.push({
       kind: "file_edit",
-      key: `file-edit:${first.key}`,
+      key: `file-edit:${first?.key ?? anchor.partId}`,
       folds,
-      anchorMessageId:
-        segment.anchorMessageIdByPartId.get(first.key) ?? first.key,
+      ...(omitted > 0 ? { omitted } : {}),
+      anchorMessageId: first?.steps[0]?.messageId ?? anchor.messageId,
     });
   };
 
@@ -419,7 +366,7 @@ export function projectActivitySpans(
     }
     scope = null;
     run = [];
-    runAnchorPartIds = [];
+    runAnchors = [];
   };
 
   const flushWorkerRun = () => {
@@ -456,17 +403,17 @@ export function projectActivitySpans(
     if (
       scope !== null &&
       ((scope !== candidate.scope && !commandRun) ||
-        (runAnchorPartIds.length > 0 && !candidateIsFileEdit(candidate)))
+        (runAnchors.length > 0 && !candidateIsFileEdit(candidate)))
     ) {
       flushRun();
     }
     scope = candidate.scope;
     run.push(candidate);
-    if (
-      candidate.entry.kind === "tool" &&
-      segment?.anchorPartIds.has(candidate.entry.part.id)
-    ) {
-      runAnchorPartIds.push(candidate.entry.part.id);
+    if (candidate.entry.kind === "tool") {
+      const { id, messageId } = candidate.entry.part;
+      if (segment?.anchorFoldKeysByPartId.has(id) || segment?.omittedByPartId.has(id)) {
+        runAnchors.push({ partId: id, messageId });
+      }
     }
   }
   flushRun();

@@ -1,0 +1,10 @@
+id: painted-wolf/platform:app-menu-view-editor-line-layout-off
+slot: "app_menu.view"
+command: painted-wolf/platform:editor-line-layout-off
+group: "2"
+order: 1
+submenu: "Line layout"
+label: "Off"
+state:
+  fact: "line_layout"
+  is: "off"

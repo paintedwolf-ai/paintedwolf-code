@@ -12,7 +12,7 @@ Maintained sources of truth: `docs/coordinator-ask-user.md`{% if profile_has_ask
 | Review visual(s) | `prompt`, `artifacts: [refs]` (1–4), optional `response_type: text` | Confusing review with comparison |
 | Compare variants | `prompt`, `purpose: compare`, `artifacts: [refA, refB, …]` (2–4) | More than four variants |
 
-Do not include Other on clarify choice cards — the composer accepts off-menu answers (`off_menu: true`). Artifact refs may be producer UUIDs or session-tree evidence handles such as `render#N` / `page#N`. Review synthesizes Approve / Request changes / Reject (or accepts open text when `response_type: text`). Comparison synthesizes variant choices A/B/C/D. Human approval is preference evidence, not proof that console, geometry, or runtime behavior is correct.
+Do not include Other on clarify choice cards — the composer accepts off-menu answers (`off_menu: true`). Artifact refs may be producer UUIDs{% if mints.render or mints.page %} or session-tree evidence handles such as {% if mints.render %}`render#N`{% endif %}{% if mints.render and mints.page %} / {% endif %}{% if mints.page %}`page#N`{% endif %}{% endif %}. Review synthesizes Approve / Request changes / Reject (or accepts open text when `response_type: text`). Comparison synthesizes variant choices A/B/C/D. Human approval is preference evidence, not proof that console, geometry, or runtime behavior is correct.
 
 ## Timing and blockers
 

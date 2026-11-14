@@ -25,7 +25,6 @@ func (l *Ledger) ExposeCatalog(sessionID string, failure RankingFailure) {
 
 func (s *sessionLoads) exposeCatalog() {
 	s.fullCatalog = true
-	s.omitted = map[string]bool{}
 	for name := range s.loadable {
 		if _, exists := s.standing[name]; !exists {
 			s.standing[name] = Load{Tool: name, Source: SourceFallback, Turn: s.openingMessageID}

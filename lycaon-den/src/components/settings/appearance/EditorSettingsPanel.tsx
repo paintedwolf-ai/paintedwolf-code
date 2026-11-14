@@ -24,7 +24,7 @@ import {
   editorScrollbarTickKindsPref,
   editorScrollbarTicksPref,
   editorWhitespacePref,
-  editorWordWrapPref,
+  editorLineLayoutPref,
   editorRevealInTreePref,
   editorTreeVisibleLevelsPref,
   saveEditorTreeVisibleLevels,
@@ -47,7 +47,7 @@ import {
   saveEditorScrollbarTickKind,
   saveEditorScrollbarTicks,
   saveEditorWhitespace,
-  saveEditorWordWrap,
+  saveEditorLineLayout,
   saveEditorRevealInTree,
   saveEditorVersionComparison,
   syncEditorPrefsFromSnapshot,
@@ -376,24 +376,29 @@ export function EditorSettingsPanel() {
           />
         </div>
 
-        <div class="den-settings-pref-row" {...settingAnchor("editor-word-wrap")}>
+        <div class="den-settings-pref-row" {...settingAnchor("editor-line-layout")}>
           <div class="den-settings-pref-copy">
-            <span class="den-settings-pref-label">{settingLabel("editor-word-wrap")}</span>
+            <span class="den-settings-pref-label">{settingLabel("editor-line-layout")}</span>
             <p class="den-settings-hint">
-              Wrap long lines in the in-app file viewer instead of horizontal
-              scroll.
+              Wrap long lines, or show Pretty layout: long lines broken at
+              their structure and indented. Files Pretty can't lay out wrap.
             </p>
           </div>
-          <DenCheckbox
-            checked={editorWordWrapPref()}
+          <BrowseSegmented
+            class="den-settings-segmented"
+            testId="editor-line-layout"
+            ariaLabel={settingLabel("editor-line-layout")}
             disabled={!ready()}
-            data-testid="editor-word-wrap"
-            onChange={(e) => {
-              void saveEditorWordWrap(e.currentTarget.checked);
+            value={editorLineLayoutPref()}
+            onChange={id => {
+              if (id === "off" || id === "wrap" || id === "pretty") void saveEditorLineLayout(id);
             }}
-          >
-            <span class="sr-only">{settingLabel("editor-word-wrap")}</span>
-          </DenCheckbox>
+            options={[
+              { id: "off", label: "Off", testId: "editor-line-layout-off" },
+              { id: "wrap", label: "Wrap", testId: "editor-line-layout-wrap" },
+              { id: "pretty", label: "Pretty", testId: "editor-line-layout-pretty" },
+            ]}
+          />
         </div>
 
         <div class="den-settings-pref-row" {...settingAnchor("line-numbers")}>
@@ -570,7 +575,7 @@ export function EditorSettingsPanel() {
             <span class="den-settings-pref-label">{settingLabel("show-whitespace")}</span>
             <p class="den-settings-hint">
               Highlight spaces and tabs. Trailing whitespace is always marked
-              while editing.
+              while editing, and tabs in indentation while Pretty is on.
             </p>
           </div>
           <DenCheckbox

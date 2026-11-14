@@ -140,6 +140,43 @@ func TestResolveReadDisplaysStableMultiRootBranchPathByLabel(t *testing.T) {
 	}
 }
 
+func TestResolveReadWorkerBranchDisplaysActiveFolderBare(t *testing.T) {
+	base := t.TempDir()
+	primary := filepath.Join(base, "primary")
+	secondary := filepath.Join(base, "secondary")
+	branch := filepath.Join(base, "branch")
+	testutil.FailErr(t, "mkdir primary", os.MkdirAll(primary, 0o755))
+	testutil.FailErr(t, "mkdir secondary", os.MkdirAll(secondary, 0o755))
+	primaryDir, err := projectroot.BranchDirForID("primary-id")
+	testutil.FailErr(t, "primary branch directory", err)
+	secondaryDir, err := projectroot.BranchDirForID("secondary-id")
+	testutil.FailErr(t, "secondary branch directory", err)
+	for _, dir := range []string{primaryDir, secondaryDir} {
+		target := filepath.Join(branch, dir, "notes..draft.md")
+		testutil.FailErr(t, "mkdir target", os.MkdirAll(filepath.Dir(target), 0o755))
+		testutil.FailErr(t, "write target", os.WriteFile(target, []byte("draft\n"), 0o644))
+	}
+	tctx := tools.ToolContext{
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{
+			{ID: "primary-id", Label: "app", Path: primary, IsPrimary: true},
+			{ID: "secondary-id", Label: "docs", Path: secondary},
+		},
+			ActiveRootID:     "secondary-id",
+			WorkerBranchRoot: branch,
+			BranchWorkspace:  testutil.CompleteBranchWorkspace{}},
+	}
+	resolved, err := projectpaths.ResolveRead(context.Background(), nil, tctx, filepath.Join(branch, secondaryDir, "notes..draft.md"))
+	testutil.FailErr(t, "resolve active branch path", err)
+	if resolved.DisplayPath != "notes..draft.md" {
+		t.Fatalf("active folder branch display = %q", resolved.DisplayPath)
+	}
+	resolved, err = projectpaths.ResolveRead(context.Background(), nil, tctx, filepath.Join(branch, primaryDir, "notes..draft.md"))
+	testutil.FailErr(t, "resolve primary branch path", err)
+	if resolved.DisplayPath != "@app/notes..draft.md" {
+		t.Fatalf("primary branch display = %q", resolved.DisplayPath)
+	}
+}
+
 func TestResolveWriteWorkerWithoutBranchRejected(t *testing.T) {
 	base := t.TempDir()
 	testutil.FailErr(t, "mkdir pkg", os.MkdirAll(filepath.Join(base, "pkg"), 0o755))

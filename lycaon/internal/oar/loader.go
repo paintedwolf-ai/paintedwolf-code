@@ -256,7 +256,7 @@ func (l *Loader) compileEntries(entries []hintregistry.Entry, tier Tier, source 
 // on_error substitutes ([OAR-DOC-27]).
 func linkRuleSet(rs *RuleSet) (*RuleSet, error) {
 	if rs == nil {
-		return rs, nil
+		return nil, nil
 	}
 	docs := make([]*oarcore.Rule, 0, rs.Len())
 	for _, r := range rs.All() {

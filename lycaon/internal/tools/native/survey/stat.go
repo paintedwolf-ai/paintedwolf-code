@@ -36,6 +36,9 @@ type statResult struct {
 	IsSymlink     bool    `json:"is_symlink"`
 	SymlinkTarget *string `json:"symlink_target,omitempty"`
 	EntryCount    *int    `json:"entry_count,omitempty"`
+	// Structured identity of the stat'ed path under its project root; never serialized.
+	rootID   string `json:"-"`
+	scopeRel string `json:"-"`
 }
 
 type statResponse struct {
@@ -51,6 +54,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		return "", err
 	}
 	resp := statResponse{Results: []statResult{}}
+	firstDisplay := ""
 	for _, relPath := range paths {
 		if err := ctx.Err(); err != nil {
 			return "", err
@@ -59,6 +63,9 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		if err != nil {
 			return "", err
 		}
+		if firstDisplay == "" {
+			firstDisplay = resolved.DisplayPath
+		}
 		fullPath := resolved.Abs
 		relSlash := filepath.ToSlash(resolved.DisplayPath)
 		info, err := os.Lstat(fullPath)
@@ -66,6 +73,7 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 			return "", fmt.Errorf("stat %s: %w", relPath, err)
 		}
 		entry := statEntryFromInfo(relSlash, info)
+		entry.rootID, entry.scopeRel = resolved.Root.ID, resolved.ScopeRel
 		if info.IsDir() {
 			counted := false
 			if t.Catalog != nil {
@@ -106,12 +114,16 @@ func (t *StatTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	}
 	root := "."
 	if len(paths) == 1 {
-		root = paths[0]
+		root = firstDisplay
 	}
 	for _, result := range resp.Results {
 		kind := api.NavigationEntryKindFile
 		if result.IsDir {
 			kind = api.NavigationEntryKindFolder
+		}
+		if result.rootID != "" && result.scopeRel != "" {
+			tctx.RecordSourceIdentity(result.rootID, result.scopeRel, kind)
+			continue
 		}
 		tctx.RecordSourcePath(result.Path, kind)
 	}

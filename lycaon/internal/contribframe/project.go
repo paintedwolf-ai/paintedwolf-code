@@ -43,6 +43,7 @@ func Project(f *Frame) api.ContributionFrameResponse {
 			When:       projectCondition(menu.When),
 			State:      projectCondition(menu.State),
 			StateLabel: menu.StateLabel,
+			Submenu:    menu.Submenu,
 		})
 	}
 

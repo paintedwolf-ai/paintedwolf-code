@@ -34,9 +34,9 @@ class MLXFixture(unittest.TestCase):
         self.core.array = lambda value: np.asarray(value)
         self.core.eval = lambda *values: None
         self.core.quantize = lambda value, group_size, bits: (
-            np.zeros((value.shape[0], value.shape[1] * bits // 32), dtype=np.uint32),
-            np.ones((value.shape[0], value.shape[1] // group_size), dtype=np.float16),
-            np.zeros((value.shape[0], value.shape[1] // group_size), dtype=np.float16),
+            np.zeros((*value.shape[:-1], value.shape[-1] * bits // 32), dtype=np.uint32),
+            np.ones((*value.shape[:-1], value.shape[-1] // group_size), dtype=np.float16),
+            np.zeros((*value.shape[:-1], value.shape[-1] // group_size), dtype=np.float16),
         )
         self.core.dequantize = lambda packed, _scales, _biases, **_: np.zeros(
             (packed.shape[0], packed.shape[1] * 32 // 4), dtype=np.float16)
@@ -79,6 +79,133 @@ class MLXFixture(unittest.TestCase):
         path.write_bytes(struct.pack("<Q", len(encoded)) + encoded + b"".join(chunks))
 
 
+
+# Tiny stand-ins for the pinned students: an E4B-like model with per-layer embeddings and
+# KV-shared layers, and a mixture-of-experts model with fused expert projections.
+TINY = {
+    "tiny-shared": {"num_hidden_layers": 4, "hidden_size": 128, "hidden_size_per_layer_input": 64, "num_kv_shared_layers": 2,
+                    "enable_moe_block": False},
+    "tiny-moe": {"num_hidden_layers": 2, "hidden_size": 128, "hidden_size_per_layer_input": 0, "num_kv_shared_layers": 0,
+                 "enable_moe_block": True, "num_experts": 4},
+}
+
+
+def tiny_source(fixture, root, profile, tensors, shards=None, prefix="model.language_model."):
+    """A checkpoint directory for `profile` holding `tensors` (relative name: array) under
+    `prefix`, in one file or in `shards` shard files with an index."""
+    source = root / "source"
+    source.mkdir()
+    (source / "config.json").write_text(json.dumps({"text_config": dict(TINY[profile])}))
+    for name in ("tokenizer.json", "tokenizer_config.json", "chat_template.jinja", "generation_config.json"):
+        (source / name).write_text("{}")
+    named = {prefix + name: ("F32", array) for name, array in tensors.items()}
+    if not shards:
+        fixture.write_tensors(source / "model.safetensors", named)
+        return source
+    groups = [dict(list(named.items())[n::shards]) for n in range(shards)]
+    weight_map = {}
+    for n, group in enumerate(groups, 1):
+        shard = "model-%05d-of-%05d.safetensors" % (n, shards)
+        fixture.write_tensors(source / shard, group)
+        weight_map.update({name: shard for name in group})
+    (source / "model.safetensors.index.json").write_text(json.dumps({"metadata": {}, "weight_map": weight_map}))
+    return source
+
+
+def converted_header(output):
+    raw = (output / "model.safetensors").read_bytes()
+    size, = struct.unpack("<Q", raw[:8])
+    return json.loads(raw[8:8 + size])
+
+
+class StudentLayoutTests(MLXFixture):
+    def test_fused_experts_split_into_switch_glu_and_routers_keep_eight_bits(self):
+        converter = self.load("convert_mlx")
+        experts, intermediate, hidden = 4, 128, 128
+        with tempfile.TemporaryDirectory() as temporary:
+            source = tiny_source(self, Path(temporary), "tiny-moe", {
+                "layers.0.experts.gate_up_proj": np.ones((experts, 2 * intermediate, hidden), dtype=np.float32),
+                "layers.0.experts.down_proj": np.ones((experts, hidden, intermediate), dtype=np.float32),
+                "layers.0.router.proj.weight": np.ones((experts, hidden), dtype=np.float32),
+                "layers.0.router.per_expert_scale": np.ones((experts,), dtype=np.float32),
+            }, shards=2)
+            output = Path(temporary) / "converted"
+            record = converter.convert(source, output, converter.source_identity(source), profiles=TINY)
+            header = converted_header(output)
+            base = "language_model.model.layers.0.experts.switch_glu."
+            self.assertEqual(header[base + "gate_proj.weight"]["shape"], [experts, intermediate, hidden * 4 // 32])
+            self.assertEqual(header[base + "up_proj.scales"]["shape"], [experts, intermediate, hidden // 64])
+            self.assertEqual(header[base + "down_proj.weight"]["shape"], [experts, hidden, intermediate * 4 // 32])
+            self.assertEqual(header["language_model.model.layers.0.router.proj.weight"]["shape"], [experts, hidden * 8 // 32])
+            self.assertEqual(header["language_model.model.layers.0.router.per_expert_scale"]["dtype"], "F16")
+            quantization = json.loads((output / "config.json").read_text())["quantization"]
+            self.assertEqual(quantization["language_model.model.layers.0.router.proj"]["bits"], 8)
+            self.assertEqual(quantization["bits"], 4)
+            self.assertEqual(record["profile"], "tiny-moe")
+
+    def test_kv_shared_layers_lose_their_kv_projections_and_towers_are_dropped(self):
+        converter = self.load("convert_mlx")
+        with tempfile.TemporaryDirectory() as temporary:
+            tensors = {"layers.%d.self_attn.%s.weight" % (layer, part): np.ones((64, 128), dtype=np.float32)
+                       for layer in range(4) for part in ("q_proj", "k_proj", "v_proj")}
+            source = tiny_source(self, Path(temporary), "tiny-shared", tensors)
+            extra = {"model.language_model." + k: ("F32", v) for k, v in tensors.items()}
+            extra["model.vision_tower.patch.weight"] = ("F32", np.ones((64, 64), dtype=np.float32))
+            self.write_tensors(source / "model.safetensors", extra)
+            output = Path(temporary) / "converted"
+            converter.convert(source, output, converter.source_identity(source), profiles=TINY)
+            names = set(converted_header(output))
+            for layer in range(4):
+                kept = layer < 2
+                self.assertEqual("language_model.model.layers.%d.self_attn.k_proj.weight" % layer in names, kept)
+                self.assertEqual("language_model.model.layers.%d.self_attn.v_proj.weight" % layer in names, kept)
+                self.assertIn("language_model.model.layers.%d.self_attn.q_proj.weight" % layer, names)
+            self.assertFalse(any("vision" in name for name in names))
+
+    def test_a_text_only_checkpoint_converts_to_the_same_names(self):
+        converter = self.load("convert_mlx")
+        with tempfile.TemporaryDirectory() as temporary:
+            source = tiny_source(self, Path(temporary), "tiny-shared", {"embed_tokens.weight": np.ones((4, 128), dtype=np.float32)},
+                                 prefix="model.")
+            output = Path(temporary) / "converted"
+            converter.convert(source, output, converter.source_identity(source), profiles=TINY)
+            self.assertIn("language_model.model.embed_tokens.scales", converted_header(output))
+
+    def test_sharded_identity_covers_every_shard(self):
+        converter = self.load("convert_mlx")
+        with tempfile.TemporaryDirectory() as temporary:
+            source = tiny_source(self, Path(temporary), "tiny-moe",
+                                 {"layers.0.input_layernorm.weight": np.ones((128,), dtype=np.float32),
+                                  "norm.weight": np.ones((128,), dtype=np.float32)}, shards=2)
+            identity = converter.source_identity(source)
+            shard = source / "model-00002-of-00002.safetensors"
+            shard.write_bytes(shard.read_bytes() + b" ")
+            self.assertNotEqual(converter.source_identity(source), identity)
+            with self.assertRaisesRegex(ValueError, "digest mismatch"):
+                converter.convert(source, Path(temporary) / "converted", identity, profiles=TINY)
+
+    def test_unknown_architectures_and_malformed_checkpoints_are_refused(self):
+        converter = self.load("convert_mlx")
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = tiny_source(self, root, "tiny-moe", {"layers.0.experts.gate_up_proj": np.ones((4, 3, 128), dtype=np.float32)})
+            with self.assertRaisesRegex(ValueError, "fused expert projection"):
+                converter.convert(source, root / "a", converter.source_identity(source), profiles=TINY)
+            with self.assertRaisesRegex(ValueError, "pinned student architecture"):
+                converter.convert(source, root / "b", converter.source_identity(source))
+            self.write_tensors(source / "model.safetensors", {"lm_head.weight": ("F32", np.ones((4, 128), dtype=np.float32))})
+            with self.assertRaisesRegex(ValueError, "outside the model"):
+                converter.convert(source, root / "c", converter.source_identity(source), profiles=TINY)
+            (source / "model.safetensors").unlink()
+            with self.assertRaisesRegex(ValueError, "neither"):
+                converter.source_identity(source)
+            index = {"weight_map": {"model.norm.weight": "model-00001-of-00002.safetensors"}}
+            (source / "model.safetensors.index.json").write_text(json.dumps(index))
+            self.write_tensors(source / "model-00001-of-00002.safetensors", {"model.other.weight": ("F32", np.ones((1, 64), dtype=np.float32))})
+            with self.assertRaisesRegex(ValueError, "not in the shard"):
+                converter.convert(source, root / "d", converter.source_identity(source), profiles=TINY)
+
+
 class ConversionTests(MLXFixture):
     def test_conversion_writes_bounded_quantized_artifact(self):
         converter = self.load("convert_mlx")
@@ -103,7 +230,8 @@ class ConversionTests(MLXFixture):
             converted = (output / "model.safetensors").read_bytes()
             header_size, = struct.unpack("<Q", converted[:8])
             tensors = json.loads(converted[8:8 + header_size])
-            self.assertEqual(record["schema"], "paintedwolf-mlx-conversion/1")
+            self.assertEqual(record["schema"], "paintedwolf-mlx-conversion/2")
+            self.assertEqual(record["profile"], "e4b")
             self.assertEqual(json.loads((output / "config.json").read_text())["dtype"], "float16")
             self.assertIn("language_model.model.embed_tokens_per_layer.scales", tensors)
             self.assertEqual(record["precision"]["ple_bits"], 4)
@@ -128,6 +256,8 @@ class ConversionTests(MLXFixture):
             output = root / "converted"
             with self.assertRaisesRegex(ValueError, "precision requires"):
                 converter.convert(source, output, "0" * 64, {"weight_bits": 5})
+            with self.assertRaisesRegex(ValueError, "precision requires"):
+                converter.convert(source, output, "0" * 64, {"bias_bits": 4})
             with self.assertRaisesRegex(ValueError, "digest mismatch"):
                 converter.convert(source, output, "0" * 64)
             with self.assertRaisesRegex(ValueError, "non-finite"):

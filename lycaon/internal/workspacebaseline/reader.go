@@ -1,4 +1,3 @@
-// Package workspacebaseline stores immutable worker branch manifests and lazy merge inputs.
 package workspacebaseline
 
 import (
@@ -9,7 +8,9 @@ import (
 	"fmt"
 	"net/url"
 	"path/filepath"
+	"strings"
 
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/sourceblob"
 	"github.com/lycaon/lycaon/internal/textfile"
 	_ "modernc.org/sqlite"
@@ -38,9 +39,19 @@ type File struct {
 	Deleted bool
 }
 
+// Entry is one manifest row with its structured identity. RootID and ScopeRel
+// key the entry; Path is the display spelling kept for legacy readers.
+type Entry struct {
+	RootID   string
+	ScopeRel string
+	Path     string
+	File     File
+}
+
 type Reader struct {
-	db    *sql.DB
-	blobs *sourceblob.Store
+	db     *sql.DB
+	blobs  *sourceblob.Store
+	format int
 }
 
 func Open(ctx context.Context, path string, blobs *sourceblob.Store) (*Reader, error) {
@@ -63,21 +74,30 @@ func Open(ctx context.Context, path string, blobs *sourceblob.Store) (*Reader, e
 		_ = d.Close()
 		return nil, fmt.Errorf("open workspace baseline: %w", err)
 	}
-	if format != 1 {
+	// Format 1 manifests key entries by display path; format 2 keys them by
+	// (root_id, scope_rel). Both stay readable for in-flight references.
+	if format != 1 && format != 2 {
 		_ = d.Close()
 		return nil, fmt.Errorf("unsupported workspace manifest format %d", format)
 	}
-	err = d.QueryRowContext(ctx, "SELECT path,"+fileColumns+" FROM files LIMIT 0").Scan()
+	columns := legacyKeyColumns
+	if format == 2 {
+		columns = identityKeyColumns
+	}
+	err = d.QueryRowContext(ctx, "SELECT "+columns+","+fileColumns+" FROM files LIMIT 0").Scan()
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		_ = d.Close()
 		return nil, fmt.Errorf("invalid workspace manifest shape: %w", err)
 	}
-	return &Reader{db: d, blobs: blobs}, nil
+	return &Reader{db: d, blobs: blobs, format: format}, nil
 }
 
 func (r *Reader) Close() error { return r.db.Close() }
 
 const fileColumns = "size, mtime_ns, sha256, opaque, mode, link_target, deleted"
+
+const legacyKeyColumns = "path"
+const identityKeyColumns = "root_id, scope_rel, path"
 
 func scanFile(scan func(dest ...any) error, f *File) error {
 	return scan(&f.Size, &f.MtimeNano, &f.SHA256, &f.Opaque, &f.Mode, &f.LinkTarget, &f.Deleted)
@@ -93,7 +113,32 @@ func (r *Reader) Lookup(ctx context.Context, path string) (File, bool, error) {
 	return f, err == nil, err
 }
 
-// Each visits every manifest row in path order, tombstones included.
+// LookupIdentity fetches one entry by its structured identity. Format 1
+// manifests only recorded display spellings, so the identity is spelled back
+// out the way capture wrote it.
+func (r *Reader) LookupIdentity(ctx context.Context, roots []projectroot.RootRef, rootID, scopeRel string) (File, bool, error) {
+	if r.format == 2 {
+		var f File
+		row := r.db.QueryRowContext(ctx, "SELECT "+fileColumns+" FROM files WHERE root_id = ? AND scope_rel = ?", rootID, scopeRel)
+		err := scanFile(row.Scan, &f)
+		if errors.Is(err, sql.ErrNoRows) {
+			// Capture and read can disagree about root attribution, so fall
+			// back to the display spelling the way format 1 rows are read.
+			if display, derr := displayPathFor(roots, rootID, scopeRel); derr == nil {
+				return r.Lookup(ctx, display)
+			}
+			return File{}, false, nil
+		}
+		return f, err == nil, err
+	}
+	display, err := displayPathFor(roots, rootID, scopeRel)
+	if err != nil {
+		return File{}, false, err
+	}
+	return r.Lookup(ctx, display)
+}
+
+// Each visits every manifest row in display-path order, tombstones included.
 func (r *Reader) Each(ctx context.Context, visit func(string, File) error) error {
 	rows, err := r.db.QueryContext(ctx, "SELECT path, "+fileColumns+" FROM files ORDER BY path")
 	if err != nil {
@@ -111,6 +156,44 @@ func (r *Reader) Each(ctx context.Context, visit func(string, File) error) error
 		}
 	}
 	return rows.Err()
+}
+
+// EachIdentity visits every manifest row with its structured identity, in
+// identity order for format 2 and display order for format 1.
+func (r *Reader) EachIdentity(ctx context.Context, roots []projectroot.RootRef, visit func(Entry) error) error {
+	if r.format == 2 {
+		rows, err := r.db.QueryContext(ctx, "SELECT "+identityKeyColumns+","+fileColumns+" FROM files ORDER BY root_id, scope_rel")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = rows.Close() }()
+		for rows.Next() {
+			var entry Entry
+			if err := rows.Scan(&entry.RootID, &entry.ScopeRel, &entry.Path, &entry.File.Size, &entry.File.MtimeNano, &entry.File.SHA256, &entry.File.Opaque, &entry.File.Mode, &entry.File.LinkTarget, &entry.File.Deleted); err != nil {
+				return err
+			}
+			if entry.RootID == "" && len(roots) > 0 {
+				// Rows captured without root identity are read the way format
+				// 1 rows are: their display path names the root they belong to.
+				rootID, scopeRel, err := parseDisplayPath(roots, entry.Path)
+				if err != nil {
+					return err
+				}
+				entry.RootID, entry.ScopeRel = rootID, scopeRel
+			}
+			if err := visit(entry); err != nil {
+				return err
+			}
+		}
+		return rows.Err()
+	}
+	return r.Each(ctx, func(path string, f File) error {
+		rootID, scopeRel, err := parseDisplayPath(roots, path)
+		if err != nil {
+			return err
+		}
+		return visit(Entry{RootID: rootID, ScopeRel: scopeRel, Path: path, File: f})
+	})
 }
 
 // Content distinguishes an absent file from an unreadable or opaque baseline.
@@ -134,6 +217,59 @@ func (r *Reader) Content(ctx context.Context, path string) (string, bool, error)
 		return "", true, err
 	}
 	return doc.Text(), true, nil
+}
+
+// parseDisplayPath splits a legacy display spelling into the root holding it
+// and the path relative to that root. Bare paths are primary-relative; other
+// roots are qualified with @label. Unlabeled roots spelled bare are ambiguous
+// by construction; format 1 recorded them under the primary.
+func parseDisplayPath(roots []projectroot.RootRef, path string) (rootID, scopeRel string, err error) {
+	if len(roots) > 1 {
+		primary, err := projectroot.PrimaryRoot(roots)
+		if err != nil {
+			return "", "", err
+		}
+		if strings.HasPrefix(path, "@") {
+			label, rel, ok := strings.Cut(path[1:], "/")
+			if !ok {
+				return "", "", fmt.Errorf("invalid qualified baseline path")
+			}
+			for _, root := range roots {
+				if strings.EqualFold(root.Label, label) {
+					return root.ID, rel, nil
+				}
+			}
+			return "", "", fmt.Errorf("unknown baseline root")
+		}
+		return primary.ID, path, nil
+	}
+	if len(roots) == 1 {
+		return roots[0].ID, path, nil
+	}
+	return "", path, nil
+}
+
+// displayPathFor spells an identity the way format 1 capture wrote it.
+func displayPathFor(roots []projectroot.RootRef, rootID, scopeRel string) (string, error) {
+	if len(roots) <= 1 {
+		return scopeRel, nil
+	}
+	primary, err := projectroot.PrimaryRoot(roots)
+	if err != nil {
+		return "", err
+	}
+	if rootID == primary.ID {
+		return scopeRel, nil
+	}
+	for _, root := range roots {
+		if root.ID == rootID {
+			if root.Label == "" {
+				return scopeRel, nil
+			}
+			return "@" + root.Label + "/" + scopeRel, nil
+		}
+	}
+	return "", fmt.Errorf("unknown baseline root")
 }
 
 type boundedBody struct{ bytes.Buffer }

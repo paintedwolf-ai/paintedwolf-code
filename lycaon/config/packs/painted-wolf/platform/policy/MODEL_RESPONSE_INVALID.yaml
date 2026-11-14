@@ -1,7 +1,7 @@
 spec_version: "1.0"
 id: MODEL_RESPONSE_INVALID
 kind: invariant
-on: content.output
+on: model.output
 selector: {}
 requires_facts: [paintedwolf.reject_observation]
 when: paintedwolf.reject_observation == "provider_response_invalid"

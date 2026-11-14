@@ -26,13 +26,13 @@ func TestPromptReferencesNameEditorOnlyRootsByAbsolutePath(t *testing.T) {
 		ids[root.Path] = root.ID
 	}
 
-	rel, target, err := refs.resolveReferencePath(t.Context(), p.ID, ids[facts.Work], "notes.txt")
+	rel, target, err := refs.resolveReferencePath(t.Context(), p.ID, ids[facts.Work], "notes.txt", "")
 	testutil.FailErr(t, "resolve admitted reference", err)
 	if rel != "notes.txt" || target.RootID != ids[facts.Work] || target.Path != "notes.txt" {
 		t.Fatalf("admitted reference = %q %+v", rel, target)
 	}
 
-	rel, target, err = refs.resolveReferencePath(t.Context(), p.ID, ids[facts.KeyMaterial], "config")
+	rel, target, err = refs.resolveReferencePath(t.Context(), p.ID, ids[facts.KeyMaterial], "config", "")
 	testutil.FailErr(t, "resolve editor-only reference", err)
 	if want := filepath.Join(facts.KeyMaterial, "config"); rel != want {
 		t.Fatalf("editor-only reference = %q, want absolute %q", rel, want)

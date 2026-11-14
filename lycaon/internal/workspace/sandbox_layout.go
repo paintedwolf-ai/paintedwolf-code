@@ -30,7 +30,7 @@ func validateLayout(layout SandboxLayout) error {
 		if strings.TrimSpace(root.Path) == "" {
 			return fmt.Errorf("sandbox layout root %d missing path", i)
 		}
-		if len(layout.Roots) > 1 && (root.Label == "" || root.Label != strings.TrimSpace(root.Label)) {
+		if root.Label == "" || root.Label != strings.TrimSpace(root.Label) {
 			return fmt.Errorf("sandbox layout root %q missing label", root.ID)
 		}
 		if len(layout.Roots) > 1 {

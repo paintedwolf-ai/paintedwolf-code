@@ -4,7 +4,7 @@ import { onCleanup } from "solid-js";
 import { unwrap } from "solid-js/store";
 import { LycaonApiError } from "../../api/http.ts";
 import { BackendTransportError } from "../../platform/connection/request-connectivity.ts";
-import { loadEditorConfigForBuffer } from "../../components/source/editor/editorconfig-load.ts";
+import { loadFormatSettingsForBuffer } from "../../components/source/editor/format-settings-load.ts";
 import { sourceSaveErrorMessage } from "../../components/source/editor/source-editor-model.ts";
 import { evictEditorDocument } from "../documents/editor-document.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
@@ -124,7 +124,7 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
         if (!isCurrent()) return;
         const forConfig = projectFilesState(projectId()).byKey[settledKey];
         if (forConfig && c) {
-          await loadEditorConfigForBuffer({
+          await loadFormatSettingsForBuffer({
             client: c,
             projectId: projectId(),
             key: settledKey,
@@ -233,7 +233,7 @@ export function createBufferLoading({ projectId, client, sourceSessionId, dropFi
         settledKey = applyFilesBufferLoad(projectId(), bufferKey, res);
         const loaded = projectFilesState(projectId()).byKey[settledKey];
         if (loaded) {
-          void loadEditorConfigForBuffer({ client: c, projectId: projectId(), key: settledKey, buffer: loaded, sessionId: sourceSessionId() });
+          void loadFormatSettingsForBuffer({ client: c, projectId: projectId(), key: settledKey, buffer: loaded, sessionId: sourceSessionId() });
         }
       } catch (err: unknown) {
         if (!isCurrent()) return;

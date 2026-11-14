@@ -5,7 +5,7 @@ schema:
   properties:
     path:
       type: string
-      description: Repo-relative file path (required)
+      description: "File path relative to the session folder, `@label/path` for any attached folder, or absolute (required)."
     start_line:
       type: integer
       description: Optional start line (default 1)

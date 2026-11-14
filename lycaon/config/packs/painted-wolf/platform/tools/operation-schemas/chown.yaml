@@ -8,7 +8,7 @@ schema:
       items:
         type: string
       maxItems: 20
-      description: Repo-relative paths (max 20; no recursive chown)
+      description: "Paths relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute (max 20; no recursive chown)."
     owner:
       type: string
       description: "current, numeric uid, or username — must resolve to the uid this host runs as"

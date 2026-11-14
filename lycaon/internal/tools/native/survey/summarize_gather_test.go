@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/decide"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/summarize"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	nativefixture "github.com/lycaon/lycaon/internal/tools/native/internal/testfixture"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"os"
 	"path/filepath"
 	"strings"
@@ -376,6 +379,40 @@ func TestSummarizeGatherSinglePathMissing(t *testing.T) {
 	}
 }
 
+// Missing-path rejections carry canonical session-folder display paths: bare
+// off the session folder, `@label/rel` off any other attached root.
+func TestSummarizeGatherMultiRootMissingDisplaysLabels(t *testing.T) {
+	base := t.TempDir()
+	app, den := filepath.Join(base, "app"), filepath.Join(base, "den")
+	testutil.FailErr(t, "mkdir app", os.MkdirAll(app, 0o750))
+	testutil.FailErr(t, "mkdir den", os.MkdirAll(den, 0o750))
+	writeFile(t, app, "README.md", "# app\n")
+	writeFile(t, den, "README.md", "# den\n")
+	tctx := nativefixture.Context(den)
+	tctx.Source.Roots = []projectroot.RootRef{
+		{ID: "app", Label: "app", Path: app, IsPrimary: true},
+		{ID: "den", Label: "den", Path: den},
+	}
+	tctx.Source.ActiveRootID = "den"
+	boundary := nativefixture.Boundary(t)
+	reads := projectpaths.NewReadSession(boundary, tctx)
+	g := newSummarizeGatherer(boundary, reads, summarize.DefaultCaps(), tctx, nil, decide.Reranker{})
+	t.Cleanup(g.trees.closeTrees)
+	t.Cleanup(reads.Close)
+
+	_, err := g.Gather(context.Background(), summarize.Request{
+		Paths: []string{"@app/ghost.go", "ghost-in-den.go"},
+	})
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != "SUMMARIZE_PATHS_MISSING" {
+		t.Fatalf("err = %v, want SUMMARIZE_PATHS_MISSING", err)
+	}
+	missing, _ := reject.Data["missing_paths"].([]string)
+	if len(missing) != 2 || missing[0] != "@app/ghost.go" || missing[1] != "ghost-in-den.go" {
+		t.Fatalf("missing = %v, want [@app/ghost.go ghost-in-den.go]", missing)
+	}
+}
+
 func TestSummarizeGatherPackageJSONNestedKeys(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "package.json", `{
@@ -502,7 +539,7 @@ func TestSummarizeStreamsFileStructureInBoundedChunks(t *testing.T) {
 	caps := summarize.DefaultCaps()
 	caps.Gather.FileChunkBytes = 1024
 	g := testSummarizeGatherer(t, dir, caps)
-	sc, _, ok := g.sources.structureFromAbs(context.Background(), largePath, "large.go")
+	sc, _, ok := g.sources.structureFromAbs(context.Background(), largePath, "large.go", "", "")
 	if !ok {
 		t.Fatal("streamed structure was unavailable")
 	}

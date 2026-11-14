@@ -152,6 +152,15 @@ func TestMenuStateLabelNeedsState(t *testing.T) {
 	}
 }
 
+func TestMenuSubmenuTitleIsTrimmed(t *testing.T) {
+	unit := input(KindMenu, "acme/a", "x",
+		"id: acme/a:x\nslot: app_menu.view\ncommand: acme/a:c\nsubmenu: \" Line layout\"\n")
+	fault := singleFault(t, CompileInput{Units: []Input{unit}}, FaultSchema)
+	if !strings.Contains(fault.Message, "submenu") {
+		t.Fatalf("fault = %+v", fault)
+	}
+}
+
 func TestClosedVocabulariesReject(t *testing.T) {
 	cases := []struct {
 		name string
@@ -202,6 +211,8 @@ func TestConditionTyping(t *testing.T) {
 		{"missing operand", "when:\n  fact: editor_language\n", false},
 		{"unknown language", "when:\n  fact: editor_language\n  is: cobol\n", false},
 		{"unknown shell view", "when:\n  fact: active_view\n  is: dashboard\n", false},
+		{"line layout", "when:\n  fact: line_layout\n  is: pretty\n", true},
+		{"unknown line layout", "when:\n  fact: line_layout\n  is: folded\n", false},
 		{"mixed node", "when:\n  fact: editor_active\n  all:\n    - fact: project_open\n", false},
 		{"empty node", "when: {}\n", false},
 	}

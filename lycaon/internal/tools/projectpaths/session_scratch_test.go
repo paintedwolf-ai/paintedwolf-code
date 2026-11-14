@@ -20,7 +20,7 @@ type mockMutationRecorder struct {
 	mutations []string
 }
 
-func (m *mockMutationRecorder) RecordPrimaryMutation(_ context.Context, _ string, relPath string) {
+func (m *mockMutationRecorder) RecordPrimaryMutation(_ context.Context, _, _ string, relPath string) {
 	m.mutations = append(m.mutations, relPath)
 }
 

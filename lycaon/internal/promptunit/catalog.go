@@ -157,13 +157,9 @@ type Selection struct {
 	Mode string
 	// Offered is every tool on this call: floor plus loaded.
 	Offered map[string]bool
-	// Floor is the subset of Offered a surface carries on every call.
-	Floor map[string]bool
-	// Omitted names units the turn decision left out with confidence.
-	Omitted map[string]bool
 }
 
-// applies reports whether a unit belongs to this render before omissions.
+// applies reports whether a unit belongs to this render.
 func (c Catalog) applies(u Unit, sel Selection) bool {
 	if !u.HostsFor(sel.Host) || !u.ModeFits(sel.Mode) {
 		return false
@@ -178,33 +174,10 @@ func (c Catalog) applies(u Unit, sel Selection) bool {
 func (c Catalog) Rendered(sel Selection) map[Slot][]Unit {
 	out := make(map[Slot][]Unit, len(Slots()))
 	for _, u := range c.units {
-		if !c.applies(u, sel) || sel.Omitted[u.ID] {
+		if !c.applies(u, sel) {
 			continue
 		}
 		out[u.Slot] = append(out[u.Slot], u)
-	}
-	return out
-}
-
-// Candidates returns the units the turn decision scores: those that apply to
-// the render and do not simply follow a loadable tool. Offered here is the
-// widest set the turn could offer (floor plus every loadable tool), so a unit
-// attached only to loadable tools is excluded as following them.
-func (c Catalog) Candidates(host Host, mode string, floor, loadable map[string]bool) []Unit {
-	widest := make(map[string]bool, len(floor)+len(loadable))
-	for name := range floor {
-		widest[name] = true
-	}
-	for name := range loadable {
-		widest[name] = true
-	}
-	sel := Selection{Host: host, Mode: mode, Offered: widest, Floor: floor}
-	var out []Unit
-	for _, u := range c.units {
-		if !c.applies(u, sel) || u.Follows(floor) {
-			continue
-		}
-		out = append(out, u)
 	}
 	return out
 }

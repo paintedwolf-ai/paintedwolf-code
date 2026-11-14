@@ -169,7 +169,7 @@ func deliverComparison(ctx context.Context, tctx tools.ToolContext, comp sourcel
 		if side.Content == "" {
 			continue
 		}
-		path := projectroot.DisplayPath(tctx.Source.Roots, side.RootID, side.Path)
+		path := projectroot.DisplayPath(tctx.Source.Roots, tctx.Source.ActiveRootID, side.RootID, side.Path)
 		if err := tctx.ObserveCredentialDelivery(ctx, path, path, side.Content); err != nil {
 			return fmt.Errorf("record credential file read: %w", err)
 		}

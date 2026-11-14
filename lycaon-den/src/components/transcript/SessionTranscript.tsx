@@ -72,6 +72,8 @@ type Props = {
   projectDir?: string;
   projectId?: string;
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
+  /** Session's active root; bare paths in this transcript resolve against it. */
+  activeRootId?: string;
   branchJobId?: string;
   exploreContext?: CitationExploreContext;
   onExploreInSearch?: (query: string) => void;
@@ -525,6 +527,7 @@ export function SessionTranscript(props: Props) {
               checkpointAppStore={props.checkpointAppStore}
               projectId={props.projectId}
               rootRefs={props.rootRefs}
+              activeRootId={props.activeRootId}
               projectDir={props.projectDir}
               exploreContext={exploreContext()}
               onExploreInSearch={props.onExploreInSearch}
@@ -650,6 +653,7 @@ export function SessionTranscript(props: Props) {
                                     checkpointAppStore={props.checkpointAppStore}
                                     projectId={props.projectId}
                                     rootRefs={props.rootRefs}
+                                    activeRootId={props.activeRootId}
                                     branchJobId={props.branchJobId}
                                     projectDir={props.projectDir}
                                     exploreContext={exploreContext()}

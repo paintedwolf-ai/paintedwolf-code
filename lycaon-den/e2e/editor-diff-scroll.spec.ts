@@ -22,8 +22,8 @@ for (const scenario of ["scattered replacements", "dense replacements", "whole-f
     await page.getByTestId("files-tree-file").filter({ hasText: "changes.js" }).click();
     const host = page.getByTestId("files-editor-host").filter({ visible: true });
     await expect(host.locator(".cm-content")).toContainText("value0");
-    const wrap = page.getByTestId("files-editor-wrap-toggle").filter({ visible: true });
-    if (await wrap.getAttribute("aria-pressed") !== "true") await wrap.click();
+    const wrap = page.getByTestId("files-editor-layout-wrap").filter({ visible: true });
+    await wrap.click();
     await expect(wrap).toHaveAttribute("aria-pressed", "true");
     await host.locator(".cm-content").evaluate(async (node, scenario) => {
       const moduleUrl = "/src/components/source/diff/scope-diff.ts";

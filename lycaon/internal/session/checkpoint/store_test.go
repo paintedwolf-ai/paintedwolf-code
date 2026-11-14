@@ -47,10 +47,10 @@ func TestCheckpointCapturesPreImageOnFirstTouchOnly(t *testing.T) {
 
 	_, err := store.Open(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
-	testutil.FailErr(t, "capture first touch", store.CapturePreImage(t.Context(), "sess", "anchor", "src/foo.go"))
+	testutil.FailErr(t, "capture first touch", store.CapturePreImage(t.Context(), "sess", "anchor", "src/foo.go", ""))
 
 	writeProjectFile(t, dir, "src/foo.go", "after")
-	testutil.FailErr(t, "capture second touch", store.CapturePreImage(t.Context(), "sess", "anchor", "src/foo.go"))
+	testutil.FailErr(t, "capture second touch", store.CapturePreImage(t.Context(), "sess", "anchor", "src/foo.go", ""))
 
 	man, err := store.Load(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "load manifest", err)
@@ -75,7 +75,7 @@ func TestCheckpointRecordsAbsentForPathsCreatedByTheTurn(t *testing.T) {
 	store, _ := newTestCheckpointStore(t)
 	_, err := store.Open(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
-	testutil.FailErr(t, "capture create", store.CapturePreImage(t.Context(), "sess", "anchor", "src/new.go"))
+	testutil.FailErr(t, "capture create", store.CapturePreImage(t.Context(), "sess", "anchor", "src/new.go", ""))
 
 	man, err := store.Load(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "load manifest", err)
@@ -96,8 +96,8 @@ func TestCheckpointCoversTheProjectOverlay(t *testing.T) {
 
 	_, err := store.Open(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
-	testutil.FailErr(t, "capture blueprint", store.CapturePreImage(t.Context(), "sess", "anchor", blueprint))
-	testutil.FailErr(t, "capture new suppression", store.CapturePreImage(t.Context(), "sess", "anchor", suppressions))
+	testutil.FailErr(t, "capture blueprint", store.CapturePreImage(t.Context(), "sess", "anchor", blueprint, ""))
+	testutil.FailErr(t, "capture new suppression", store.CapturePreImage(t.Context(), "sess", "anchor", suppressions, ""))
 
 	man, err := store.Load(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "load manifest", err)
@@ -128,7 +128,7 @@ func TestCheckpointWritesNothingIntoTheProjectTree(t *testing.T) {
 
 	_, err := store.Open(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
-	testutil.FailErr(t, "capture gitignored secret", store.CapturePreImage(t.Context(), "sess", "anchor", ".env"))
+	testutil.FailErr(t, "capture gitignored secret", store.CapturePreImage(t.Context(), "sess", "anchor", ".env", ""))
 	testutil.FailErr(t, "write turn result", os.WriteFile(filepath.Join(dir, ".env"), []byte("API_KEY=rotated"), 0o644))
 
 	man, err := store.Load(t.Context(), "sess", "anchor")
@@ -193,7 +193,7 @@ func TestCheckpointSkipsOversizeFileRatherThanMarkingItAbsent(t *testing.T) {
 	writeProjectFile(t, dir, "big.bin", strings.Repeat("x", checkpointMaxFileBytes+1))
 	_, err := store.Open(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
-	testutil.FailErr(t, "capture oversize", store.CapturePreImage(t.Context(), "sess", "anchor", "big.bin"))
+	testutil.FailErr(t, "capture oversize", store.CapturePreImage(t.Context(), "sess", "anchor", "big.bin", ""))
 
 	man, err := store.Load(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "load manifest", err)
@@ -214,7 +214,7 @@ func TestCheckpointCapturesAFileAtTheRetentionBound(t *testing.T) {
 	writeProjectFile(t, dir, "bound.txt", body)
 	_, err := store.Open(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "open checkpoint", err)
-	testutil.FailErr(t, "capture at bound", store.CapturePreImage(t.Context(), "sess", "anchor", "bound.txt"))
+	testutil.FailErr(t, "capture at bound", store.CapturePreImage(t.Context(), "sess", "anchor", "bound.txt", ""))
 
 	man, err := store.Load(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "load manifest", err)
@@ -239,20 +239,20 @@ func TestCheckpointCapEnforcedAndFlaggedTruncated(t *testing.T) {
 	}
 	testutil.FailErr(t, "seed near-cap checkpoint", store.write(t.Context(), man))
 	writeProjectFile(t, dir, "last.go", "body")
-	testutil.FailErr(t, "capture at limit", store.CapturePreImage(t.Context(), "sess", "anchor", "last.go"))
+	testutil.FailErr(t, "capture at limit", store.CapturePreImage(t.Context(), "sess", "anchor", "last.go", ""))
 	man, err = store.Load(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "load exact-limit manifest", err)
 	if len(man.Paths) != MaxPaths || man.Truncated || man.Paths["last.go"].Op != OpSnapshot {
 		t.Fatalf("exact-limit checkpoint: paths=%d truncated=%t last=%+v", len(man.Paths), man.Truncated, man.Paths["last.go"])
 	}
-	testutil.FailErr(t, "recapture at limit", store.CapturePreImage(t.Context(), "sess", "anchor", "last.go"))
+	testutil.FailErr(t, "recapture at limit", store.CapturePreImage(t.Context(), "sess", "anchor", "last.go", ""))
 	man, err = store.Load(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "load recaptured manifest", err)
 	if man.Truncated {
 		t.Fatal("recapturing an existing path marked the checkpoint truncated")
 	}
 	for _, rel := range []string{"overflow.go", "another.go"} {
-		testutil.FailErr(t, "capture over limit", store.CapturePreImage(t.Context(), "sess", "anchor", rel))
+		testutil.FailErr(t, "capture over limit", store.CapturePreImage(t.Context(), "sess", "anchor", rel, ""))
 	}
 	man, err = store.Load(t.Context(), "sess", "anchor")
 	testutil.FailErr(t, "load truncated manifest", err)

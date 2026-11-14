@@ -132,8 +132,9 @@ func Build(ctx context.Context, deps Dependencies, registerRecovery func(bootrec
 			return
 		}
 		if deps.SessionManager != nil {
-			deps.SessionManager.Chats.Captures.RecordPrimaryMutation(c, run.SessionID, from)
-			deps.SessionManager.Chats.Captures.RecordPrimaryMutation(c, run.SessionID, to)
+			// Blueprint paths are session artifacts, not project-root files.
+			deps.SessionManager.Chats.Captures.RecordPrimaryMutation(c, run.SessionID, "", from)
+			deps.SessionManager.Chats.Captures.RecordPrimaryMutation(c, run.SessionID, "", to)
 			deps.SessionManager.Chats.Captures.RecordBlueprintBinding(c, run.SessionID, from)
 		}
 	}

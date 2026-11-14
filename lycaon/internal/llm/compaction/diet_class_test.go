@@ -119,8 +119,8 @@ func TestWorkerChildEligibleForDiet(t *testing.T) {
 	aged := strings.Repeat("z", 9000)
 	msgs := []compaction.ContextMessage{
 		{Role: string(api.MessageRoleUser), Content: "survey"},
-		{Role: string(api.MessageRoleAssistant), Content: "call", ToolCalls: []api.ToolCall{{ID: "tc1", Name: "command"}}},
-		{Role: string(api.MessageRoleTool), ToolCallID: "tc1", ToolName: "command", Content: aged},
+		{Role: string(api.MessageRoleAssistant), Content: "call", ToolCalls: []api.ToolCall{{ID: "tc1", Name: "git_diff"}}},
+		{Role: string(api.MessageRoleTool), ToolCallID: "tc1", ToolName: "git_diff", Content: aged},
 		{Role: string(api.MessageRoleAssistant), Content: "next"},
 	}
 	class := compaction.ClassifyMessageDiet(compaction.ClassifyMessageDietInput{

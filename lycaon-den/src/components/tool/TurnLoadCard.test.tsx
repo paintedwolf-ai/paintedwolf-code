@@ -11,7 +11,6 @@ const load: TurnLoad = {
   kind: { value: "change", confidence: 0.86 },
   floor: ["grep", "read"],
   tools: [{ tool: "git_commit", source: "predicted", p: 0.88, carried: false }, { tool: "git_status", source: "predicted", p: 0.91, carried: false }],
-  guides: { rendered: 6, omitted: 9 },
 };
 const toolsRow: TurnLoadRow = { key: "turn-load:u1:turn::tools", role: "tools", load, assistantMessageId: "a1", anchorMessageId: "a1", sub: 8 };
 
@@ -33,7 +32,6 @@ describe("TurnLoadCard", () => {
     fireEvent.click(disclosureToggle(card));
     expect(getByTestId("turn-load-kind").textContent).toBe("change · .86");
     expect(getByTestId("turn-load-tools").textContent).toContain("git_commit .88");
-    expect(getByTestId("turn-load-guides").textContent).toBe("6 rendered · 9 left out of the prompt");
     expect(getByTestId("turn-load-floor").textContent).toBe("2 always offered: grep, read");
     expect(getByTestId("turn-load-engine").textContent).toBe("Bialy · 438 ms");
   });

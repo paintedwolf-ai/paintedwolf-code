@@ -1,6 +1,6 @@
 /** EditorConfig pairs the host resolved for a buffer. */
 
-import type { SourceEditorConfig } from "../../../api/types.ts";
+import type { FormatSettings } from "../../../api/types.ts";
 import type { IndentInfo } from "./indent-detect.ts";
 import type { EolKind } from "./eol.ts";
 
@@ -18,10 +18,11 @@ export type EditorConfigProps = {
   charset?: string;
 };
 
-/** Maps the host resolution onto buffer props; undefined when nothing is declared. */
+/** Maps the host's EditorConfig settings onto buffer props; undefined when nothing is declared. */
 export function editorConfigPropsFromHost(
-  resolved: SourceEditorConfig,
+  resolved: FormatSettings | undefined,
 ): EditorConfigProps | undefined {
+  if (!resolved) return undefined;
   const props: EditorConfigProps = {};
   if (resolved.indent_style === "space") props.indentStyle = "spaces";
   if (resolved.indent_style === "tab") props.indentStyle = "tabs";
@@ -31,7 +32,7 @@ export function editorConfigPropsFromHost(
     props.indentSizeIsTab = false;
   }
   if (resolved.tab_width != null) props.tabWidth = resolved.tab_width;
-  if (resolved.end_of_line) props.endOfLine = resolved.end_of_line;
+  if (resolved.end_of_line === "lf" || resolved.end_of_line === "crlf") props.endOfLine = resolved.end_of_line;
   if (resolved.trim_trailing_whitespace != null) {
     props.trimTrailingWhitespace = resolved.trim_trailing_whitespace;
   }

@@ -91,7 +91,7 @@ describe("EditorSettingsPanel — in-app prefs", () => {
       "editor-font-family",
       "editor-font-size",
       "editor-line-height",
-      "editor-word-wrap",
+      "editor-line-layout",
       "editor-reveal-in-tree",
       "editor-tree-visible-levels",
       "editor-line-numbers",

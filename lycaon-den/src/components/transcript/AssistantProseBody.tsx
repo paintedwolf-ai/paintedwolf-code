@@ -46,6 +46,8 @@ type Props = {
   navigation?: ProseNavigationIndex;
   /** Project roots for path context menus. */
   rootRefs?: readonly ResolveProjectRoot[];
+  /** Session's active root; bare prose paths resolve against it. */
+  activeRootId?: string;
   /** Host-stamped offsets into the unchanged message content. */
   redactionSpans?: readonly RedactedSpan[];
 };
@@ -94,7 +96,7 @@ export function AssistantProseBody(props: Props) {
         return;
       }
     }
-    onMarkdownProjectPathLinkClick(event, props.projectId);
+    onMarkdownProjectPathLinkClick(event, props.projectId, props.activeRootId);
   };
 
   // Render synchronously so the first transcript measurement includes prose.
@@ -127,6 +129,7 @@ export function AssistantProseBody(props: Props) {
           const next = markdownProjectPathLinkContextMenu(e, {
             projectId: props.projectId,
             rootRefs: props.rootRefs,
+            activeRootId: props.activeRootId,
             chatDestination: chatDestination(),
             onReferenceAction: (anchor, referenceId, action) => void referenceActions.activate(anchor, referenceId, action),
           });
@@ -135,6 +138,7 @@ export function AssistantProseBody(props: Props) {
       />
       <Show when={referenceActions.displayedChooser()} keyed>{(state) => <NavigationChooser
         action={state.action} anchor={state.anchor} reference={state.reference} error={state.error} busy={state.busy} roots={props.rootRefs}
+        activeRootId={props.activeRootId}
         onDismiss={referenceActions.dismiss}
         onRetry={() => void referenceActions.activate(state.anchor, state.referenceId, state.action)}
         onOpen={(target) => void referenceActions.choose(target)}

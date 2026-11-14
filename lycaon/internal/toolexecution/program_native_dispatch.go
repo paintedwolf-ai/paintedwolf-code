@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 
 	"github.com/lycaon/lycaon/internal/approvaloutcome"
 	"github.com/lycaon/lycaon/internal/capabilityrequest"
@@ -117,9 +116,11 @@ func (e *Executor) InvokeNative(ctx context.Context, frame ProgramFrame, surface
 	child := &tools.ToolInvocationOut{}
 	tc.Effects.Out = child
 	defer func() {
-		if err == nil {
-			forwardChildFeedback(program, child)
+		scope := tools.MergeStageOK
+		if err != nil {
+			scope = tools.MergeStageFailed
 		}
+		program.MergeChild(child, scope)
 	}()
 	tc.Effects.CheckMutationProgress = func(ctx context.Context, rootID, path string) error {
 		return checkReachedMutationProgress(ctx, progressFacts, definition, invocation, rootID, path)
@@ -469,22 +470,4 @@ func validateNativeArguments(facts toolcontract.OperationFacts, argv *commandpro
 		return reject
 	}
 	return nil
-}
-
-// childFeedback serializes advisories from children of concurrent pipeline stages.
-var childFeedback sync.Mutex
-
-// forwardChildFeedback states a completed child's advisories on the program's
-// result, the only tool result its reader sees.
-func forwardChildFeedback(program, child *tools.ToolInvocationOut) {
-	if program == nil || (len(child.Facts.Feedback) == 0 && !child.Facts.Confine.Applied) {
-		return
-	}
-	childFeedback.Lock()
-	defer childFeedback.Unlock()
-	for _, item := range child.Facts.Feedback {
-		program.Facts = program.Facts.WithFeedback(item.Code, item.Details, item.Subject)
-	}
-	// A native owner's own confined launch reports like an external stage.
-	program.Facts.Confine = program.Facts.Confine.Merge(child.Facts.Confine)
 }

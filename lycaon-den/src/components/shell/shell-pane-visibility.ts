@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, untrack } from "solid-js";
+import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js";
 import type { ContextNavItemId } from "../../../shared/app-state-types.ts";
 import { widenWindowBy, windowGeometryClaimPending } from "../../platform/windows/window-chrome.ts";
 import type { WindowSubject } from "../../platform/windows/window-subject.ts";
@@ -25,6 +25,7 @@ import { createWindowClaim } from "../../shell/window-claim.ts";
 import { workspacePaneOrder } from "../../shell/workspace-pane-order.ts";
 import { CHAT_COL_MIN, DEFAULT_SPLIT_COMPANION } from "../../shell/stage-placement.ts";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
+import { setStageShown, startViewReporter } from "../../shell/view-report.ts";
 import type { ChatTabRailProps } from "../nav/ChatTabRail.tsx";
 import type { StageEdgePanes } from "../nav/StageEdgeControls.tsx";
 import { stageLabelFor } from "../stage/stage-registry.tsx";
@@ -178,6 +179,8 @@ export function createShellPaneVisibility({ windowSubject, splitLive, presentedS
   const hideContext = () => splitVisibility.hide("stage");
   const toggleContext = () => splitVisibility.toggle("stage");
   const contextHidden = () => presentedSplitLive() && hiddenSplitPanePref() === "stage";
+  createEffect(() => setStageShown(stageColumnOccupied() && !contextHidden()));
+  onCleanup(startViewReporter());
 
   // Both seam controls share one claim, and therefore its refusals.
   const splitFitClaim = createWindowClaim({

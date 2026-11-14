@@ -53,10 +53,8 @@ func inlineEditHistory() []api.Message {
 			Role:    api.MessageRoleTool,
 			Content: "ok",
 			ToolResult: &api.ToolResult{
-				Outcome: api.ToolResultOutcomeCompleted,
-				FileEdit: &api.FileEditSnapshot{
-					Path: "internal/handler.go",
-				},
+				Outcome:   api.ToolResultOutcomeCompleted,
+				FileEdits: []api.FileEditSnapshot{{Path: "internal/handler.go"}},
 			},
 		},
 	}

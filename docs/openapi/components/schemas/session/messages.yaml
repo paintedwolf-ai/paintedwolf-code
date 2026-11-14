@@ -32,6 +32,165 @@ components:
         compacted_at:
           type: string
           format: date-time
+    ViewContext:
+      x-go-generate: true
+      type: object
+      required:
+      - editors
+      - diffs
+      - findings
+      additionalProperties: false
+      description: >-
+        What the sender had in view when this prompt opened a turn, across
+        their visible windows, most recently focused first. Recorded only when
+        it differs from the last view still in the agent's history; empty lists
+        and no folder or search mean nothing was in view.
+      properties:
+        editors:
+          type: array
+          maxItems: 8
+          description: Files shown in a visible editor, with that editor's selection.
+          items:
+            $ref: "#/components/schemas/ViewEditor"
+        diffs:
+          type: array
+          maxItems: 8
+          description: Files shown in a visible diff.
+          items:
+            $ref: "#/components/schemas/ViewPath"
+        folder:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ViewPath"
+        search:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ViewSearch"
+        findings:
+          type: array
+          maxItems: 8
+          description: Security findings open or selected in a visible security view.
+          items:
+            $ref: "#/components/schemas/ViewFinding"
+    ViewPath:
+      x-go-generate: true
+      type: object
+      required:
+      - root_id
+      - path
+      - display_path
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+          description: Root-relative slash path.
+        display_path:
+          type: string
+          minLength: 1
+          description: The path as the agent was shown it, @label-qualified off the primary root.
+    ViewLocation:
+      x-go-generate: true
+      type: object
+      required:
+      - root_id
+      - path
+      - display_path
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+        display_path:
+          type: string
+          minLength: 1
+        line:
+          type: integer
+          minimum: 1
+    ViewEditor:
+      x-go-generate: true
+      type: object
+      required:
+      - root_id
+      - path
+      - display_path
+      - unsaved
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+        display_path:
+          type: string
+          minLength: 1
+        unsaved:
+          type: boolean
+        selection:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ViewSelection"
+    ViewSelection:
+      x-go-generate: true
+      type: object
+      required:
+      - start_line
+      - end_line
+      - cursor
+      additionalProperties: false
+      description: The editor's main selection.
+      properties:
+        start_line:
+          type: integer
+          minimum: 1
+        end_line:
+          type: integer
+          minimum: 1
+        cursor:
+          type: boolean
+          description: No text is selected; start_line is the cursor's line.
+    ViewSearch:
+      x-go-generate: true
+      type: object
+      required:
+      - query
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        hit:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ViewLocation"
+    ViewFinding:
+      x-go-generate: true
+      type: object
+      required:
+      - fingerprint
+      - rule_id
+      - level
+      additionalProperties: false
+      properties:
+        fingerprint:
+          type: string
+          minLength: 1
+          maxLength: 256
+        rule_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: '^[a-zA-Z0-9_.:/-]+$'
+        level:
+          $ref: ../scan/findings.yaml#/components/schemas/FindingLevel
+        location:
+          x-go-pointer: true
+          $ref: "#/components/schemas/ViewLocation"
     Message:
       type: object
       required:
@@ -254,10 +413,10 @@ components:
           description: >
             Host-stamped locator the agent can open. Payload attachments use a
             host-data-relative path (`prompt-attachments/{blob_id}/{name}`).
-            path_file / path_folder retrieval parts use the path relative to
-            `root_id`, qualified with `@label/` when that root is not primary.
-            Absent when the part has no openable body (search_hit, user prose,
-            host notices).
+            path_file / path_folder retrieval parts use the canonical display
+            path: bare relative to the session's active folder, qualified with
+            `@label/` for any other attached folder. Absent when the part has
+            no openable body (search_hit, user prose, host notices).
         root_id:
           type: string
           format: uuid

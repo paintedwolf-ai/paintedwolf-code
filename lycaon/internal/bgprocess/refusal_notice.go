@@ -50,8 +50,9 @@ func (r *Output) refusalObserved(ctx context.Context, proc *Process) {
 func (r *Output) publishRefusals(ctx context.Context, proc *Process) {
 	r.jobs.mu.Lock()
 	proc.refusalNotice = nil
+	refusals := proc.confinementLocked().Refusals()
 	r.jobs.mu.Unlock()
-	r.publishRefusalSnapshot(ctx, proc, proc.facts.Refusals())
+	r.publishRefusalSnapshot(ctx, proc, refusals)
 }
 
 func (r *Output) publishRefusalSnapshot(ctx context.Context, proc *Process, refusals confine.SandboxRefusals) {
@@ -68,11 +69,11 @@ func (r *Output) publishRefusalSnapshot(ctx context.Context, proc *Process, refu
 		Unshown: len(refusals.Refusals) - proc.refusalsShown,
 	}
 	proc.refusalsShown = len(refusals.Refusals)
-	boundary, facts, publish := proc.boundary, proc.facts, r.refused
+	confinement, publish := proc.confinementLocked(), r.refused
 	r.jobs.mu.Unlock()
-	notice.Observation = confine.StampRefusal(notice.OriginTool, notice.SessionID, boundary, confine.RefusalContext{
-		MediatedNetwork:        facts.MediatedNetwork(),
-		RemotePackageExecution: facts.Report.RemotePackageExecution,
+	notice.Observation = confine.StampRefusal(notice.OriginTool, notice.SessionID, confinement.Boundary, confine.RefusalContext{
+		MediatedNetwork:        confinement.Network(),
+		RemotePackageExecution: confinement.Report.RemotePackageExecution,
 		Running:                true,
 		Refusals:               refusals,
 	}).Observation

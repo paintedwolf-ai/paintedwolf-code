@@ -8,11 +8,13 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/zstdcodec"
 )
 
 type spillAdmissionFunc func(context.Context, int64) (func(), error)
@@ -83,6 +85,45 @@ func TestScreenedStreamSpillKeepsCompleteBinarySeparateFromPreview(t *testing.T)
 	}
 	if _, err := out.Open(t.Context()); err == nil {
 		t.Fatal("released spill permitted new reads")
+	}
+}
+
+// A stored body that decodes to fewer bytes than staging recorded must fail the
+// read loudly instead of delivering a silently shortened complete stream.
+func TestStreamSpillOpenRejectsShortenedReadback(t *testing.T) {
+	want := bytes.Repeat([]byte(`{"outline":[1,2,3]}`), 400)
+	root := t.TempDir()
+	out, err := RetainScreenedStream(t.Context(), ScreenedReader(io.NopCloser(bytes.NewReader(want))), StreamSpillOptions{
+		Store: blobstore.Store{Root: root}, ClaimID: "fixture-shortened-readback", MaximumBytes: int64(len(want)), PreviewBytes: 16,
+		RetainedState: fixtureStreamMemory{}, WorkingMemory: fixtureStreamMemory{}, Admission: spillAdmissionFunc(func(context.Context, int64) (func(), error) { return func() {}, nil }),
+	})
+	testutil.FailErr(t, "retain screened stream", err)
+	defer out.Close()
+	reader, err := out.Open(t.Context())
+	testutil.FailErr(t, "open intact stream", err)
+	got, err := io.ReadAll(reader)
+	testutil.FailErr(t, "read intact stream", err)
+	testutil.FailErr(t, "close intact stream", reader.Close())
+	if !bytes.Equal(got, want) {
+		t.Fatalf("intact read-back diverged: got %d bytes, want %d", len(got), len(want))
+	}
+
+	// Replace the stored body with a complete frame over a shorter prefix: the
+	// read-back then ends cleanly before the staged length.
+	var shortened bytes.Buffer
+	testutil.FailErr(t, "compress shortened prefix", zstdcodec.CompressTo(&shortened, bytes.NewReader(want[:len(want)/2])))
+	testutil.FailErr(t, "overwrite stored body", os.WriteFile(filepath.Join(root, out.Blob.Rel), shortened.Bytes(), 0o600))
+
+	reader, err = out.Open(t.Context())
+	testutil.FailErr(t, "open shortened stream", err)
+	_, err = io.ReadAll(reader)
+	testutil.FailErr(t, "close shortened stream", reader.Close())
+	var mismatch *StreamReadbackMismatchError
+	if err == nil || !errors.As(err, &mismatch) {
+		t.Fatalf("shortened read-back delivered as complete: err=%v", err)
+	}
+	if mismatch.ReceivedBytes != int64(len(want)/2) || mismatch.ExpectedBytes != int64(len(want)) {
+		t.Fatalf("unexpected mismatch accounting: %+v", mismatch)
 	}
 }
 

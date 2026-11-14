@@ -46,9 +46,10 @@ func (t *CommandOutputTool) Run(ctx context.Context, args map[string]any, tctx t
 		}
 		return "", err
 	}
+	t.Registry.Observe(tctx.Identity.SessionID, handle)
 	out := commandOutputOf(snapshot.Output, snapshot.TerminationReason)
 	capBackgroundOutput(&out, 0)
-	payload := observeBackgroundOutput(tctx, out, snapshot.Boundary, snapshot.Facts, snapshot.TerminationReason)
+	payload := observeBackgroundOutput(tctx, out, snapshot.Confinement, snapshot.TerminationReason)
 	payload.ExecFailure = snapshot.Failure
 	t.Registry.Output.NoteRefusalsShown(tctx.Identity.SessionID, handle, len(payload.SandboxRefusals))
 	encoded, err := surveyjson.Marshal(payload)
@@ -97,16 +98,15 @@ type commandOutputResult struct {
 func observeBackgroundOutput(
 	tctx tools.ToolContext,
 	out commandOutput,
-	boundary confine.Boundary,
-	facts confine.SpawnFacts,
+	confinement bgprocess.JobConfinement,
 	terminationReason bgprocess.TerminationReason,
 ) commandOutputResult {
-	report := facts.Report
-	network := facts.MediatedNetwork()
-	refusals := facts.Refusals()
-	if boundary.Applied {
+	report := confinement.Report
+	network := confinement.Network()
+	refusals := confinement.Refusals()
+	if confinement.Boundary.Applied {
 		stamped := confine.StampRefusal(
-			"command_output", tctx.Identity.SessionID, boundary,
+			"command_output", tctx.Identity.SessionID, confinement.Boundary,
 			confine.RefusalContext{
 				MediatedNetwork:        network,
 				RemotePackageExecution: report.RemotePackageExecution,
@@ -217,7 +217,7 @@ func runCommandBackground(
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return "", err
 	}
-	if tr := rejectPwdEnvMismatch(args, canonicalCommandKey(tctx, args), cwd); tr != nil {
+	if tr := rejectPwdEnvMismatch(tctx, args, canonicalCommandKey(tctx, args), cwd, cwdDisplay); tr != nil {
 		return "", tr
 	}
 	confReq, tr := tools.ConfineRequestForSpawn(ctx, tctx, extraWriteRoots)
@@ -325,7 +325,7 @@ func runCommandBackground(
 				tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 			}
 		}
-		result.Tail = tail
+		result.Tail = rewriteTailDisplayPaths(tctx, tail)
 	}
 	result.Network = observedNetwork
 	result.Report = CommandConfinementReport(confine.BoundaryOf(confinement),
@@ -361,6 +361,8 @@ func awaitBackgroundEarlyExit(
 		}
 		out := snapshot.Output
 		if !out.Running && out.ExitCode != nil {
+			// The launch result reports this exit.
+			registry.Observe(sessionID, handle)
 			var text strings.Builder
 			for _, chunk := range out.Chunks {
 				text.WriteString(chunk.Text)

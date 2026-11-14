@@ -17,7 +17,10 @@ import (
 )
 
 func TestOrdinaryOutsideReadGrantsTheContainingFolder(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		testutil.FailErr(t, "create directory", err)
+	}
 	file := filepath.Join(dir, "release.go")
 
 	action := hitl.ProposedAction{
@@ -97,7 +100,10 @@ func TestHomeFileReadOffersHomeAndAncestors(t *testing.T) {
 }
 
 func TestTaskReadGrantSilencesLaterReadsInTheFolder(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		testutil.FailErr(t, "create directory", err)
+	}
 	first := filepath.Join(dir, "release.go")
 	sibling := filepath.Join(dir, "client.go")
 	outside := filepath.Join(filepath.Dir(dir), "other.go")
@@ -220,7 +226,10 @@ func TestOutsideReadAsksWithFileAccessAtEveryPosture(t *testing.T) {
 }
 
 func TestTreeGrantDoesNotCoverSensitiveChildren(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		testutil.FailErr(t, "create directory", err)
+	}
 	ordinary := filepath.Join(dir, "main.go")
 	secret := filepath.Join(dir, ".env")
 
@@ -308,7 +317,10 @@ func TestOrdinaryOutsideWriteStaysExact(t *testing.T) {
 }
 
 func TestDurableTreeGrantSurvivesReloadAndSilencesReads(t *testing.T) {
-	dir := filepath.Join(filepath.VolumeName(os.TempDir())+string(filepath.Separator), "unattached", t.Name())
+	dir := filepath.Join(outsideScratchDir(t), "unattached", t.Name())
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		testutil.FailErr(t, "create directory", err)
+	}
 	first := filepath.Join(dir, "release.go")
 	sibling := filepath.Join(dir, "client.go")
 
@@ -384,5 +396,20 @@ func canonDir(t *testing.T, dir string) string {
 	t.Helper()
 	resolved, err := filepath.EvalSymlinks(dir)
 	testutil.FailErr(t, "resolve temp dir", err)
+	return resolved
+}
+
+// outsideScratchDir creates a unique folder under the user home, outside the
+// attached roots and the shared scratch boundary, where an ordinary read
+// still crosses into outside-root review.
+func outsideScratchDir(t *testing.T) string {
+	t.Helper()
+	home, err := os.UserHomeDir()
+	testutil.FailErr(t, "resolve user home", err)
+	base, err := os.MkdirTemp(home, "paintedwolf-fixture-") //nolint:usetesting // Fixture must be outside the temp scratch roots.
+	testutil.FailErr(t, "create outside fixture folder", err)
+	t.Cleanup(func() { os.RemoveAll(base) })
+	resolved, err := filepath.EvalSymlinks(base)
+	testutil.FailErr(t, "resolve outside fixture folder", err)
 	return resolved
 }

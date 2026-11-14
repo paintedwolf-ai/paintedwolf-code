@@ -58,20 +58,20 @@ func TestRewindClosesTheCaptureInterval(t *testing.T) {
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "the ask")
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 
 	_, err = rewindTest(t, mgr, ctx, uuid.NewString(), sessionID, anchor)
 	testutil.FailErr(t, "rewind", err)
 
 	checkpoint := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 	if _, err := checkpoint.Load(ctx, sessionID, anchor); !errors.Is(err, sessionstore.ErrCheckpointMissing) {
 		t.Fatalf("capture recreated the rewound anchor: %v", err)
 	}
 	_, err = mgr.Submissions.Prompt(ctx, sessionID, "the next ask")
 	testutil.FailErr(t, "start next capture interval", err)
 	nextAnchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 	captured, err := checkpoint.Load(ctx, sessionID, nextAnchor)
 	testutil.FailErr(t, "load next capture interval", err)
 	if _, ok := captured.Paths["foo.go"]; !ok {
@@ -95,11 +95,11 @@ func TestRewindUndoesTurnChangesToTheProjectOverlay(t *testing.T) {
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, blueprint)
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", blueprint)
 	testutil.FailErr(t, "turn rewrites the plan", os.WriteFile(abs(blueprint), []byte("# agent plan\n"), 0o644))
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, formatMarker)
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", formatMarker)
 	testutil.FailErr(t, "publish ignore format", settingsoverlay.EnsureCurrentFormat(dir))
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, ignores)
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", ignores)
 	testutil.FailErr(t, "turn accepts a finding",
 		os.WriteFile(abs(ignores), []byte("version: 1\nfindings:\n  - path: test/**\n    reason: reviewed fixture\n"), 0o644))
 	testutil.FailErr(t, "validate current overlay", settingsoverlay.CheckFormat(dir))

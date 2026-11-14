@@ -752,7 +752,7 @@ describe("ActivitySpanCard", () => {
           args: { path: "a.go" },
           output: "ok",
           error: null,
-          fileEdit: fileEditPreviewFixture({ path: "a.go", before: "", after: "a" }),
+          fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "", after: "a" })],
         },
       },
       {
@@ -769,7 +769,7 @@ describe("ActivitySpanCard", () => {
           args: { path: "c.go" },
           output: "ok",
           error: null,
-          fileEdit: fileEditPreviewFixture({ path: "c.go", before: "x", after: "y" }),
+          fileEdits: [fileEditPreviewFixture({ path: "c.go", before: "x", after: "y" })],
         },
       },
     ];
@@ -806,7 +806,7 @@ describe("ActivitySpanCard", () => {
       args: { path, content: "{}" },
       output: "ok",
       error: null,
-      fileEdit: fileEditPreviewFixture({ path, before: null, after: "{}" }),
+      fileEdits: [fileEditPreviewFixture({ path, before: null, after: "{}" })],
     }));
     const store = createTranscriptDisclosureStore();
     const { container } = render(() => (

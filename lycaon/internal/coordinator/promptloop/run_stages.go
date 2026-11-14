@@ -266,6 +266,10 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		if blocked {
 			// With no further turn the refusal cannot be answered; the answer still can be.
 			if lastTurn {
+				// Text the output gate blocked is never the answer.
+				if st.output.rejection != nil && refusal == st.output.rejection {
+					return l.Closeout.endWithClosing(ctx, sess, sessionID, userPrompt, surfaceID, st)
+				}
 				return l.Closeout.applyAssembledFinalTurn(ctx, sess, sessionID, userPrompt, surfaceID, st, read.Draft, assistantMsg.Content, refusal)
 			}
 			if refusal != nil && !sess.IsWorkerChild() && st.noteBlockedBatch(refusal.Code(), "") {

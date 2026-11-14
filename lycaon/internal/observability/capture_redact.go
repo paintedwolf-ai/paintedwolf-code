@@ -184,15 +184,18 @@ func redactCaptureToolResult(source *api.ToolResult) *api.ToolResult {
 		visual.Caption = RedactCaptureText(visual.Caption)
 		result.Visual = &visual
 	}
-	if result.FileEdit != nil {
-		edit := *result.FileEdit
-		edit.Path = RedactCaptureText(edit.Path)
-		edit.After = RedactCaptureText(edit.After)
-		if edit.Before != nil {
-			before := RedactCaptureText(*edit.Before)
-			edit.Before = &before
+	if len(result.FileEdits) > 0 {
+		edits := make([]api.FileEditSnapshot, len(result.FileEdits))
+		for i, edit := range result.FileEdits {
+			edit.Path = RedactCaptureText(edit.Path)
+			edit.After = RedactCaptureText(edit.After)
+			if edit.Before != nil {
+				before := RedactCaptureText(*edit.Before)
+				edit.Before = &before
+			}
+			edits[i] = edit
 		}
-		result.FileEdit = &edit
+		result.FileEdits = edits
 	}
 	if result.CheckpointDecision != nil {
 		decision := *result.CheckpointDecision
@@ -288,6 +291,12 @@ func redactMessageContent(msg api.Message) api.Message {
 			progress.Changes[i].PrevLabel = RedactCaptureText(progress.Changes[i].PrevLabel)
 		}
 		msg.ProgressUpdate = &progress
+	}
+	if msg.SourceContext != nil && msg.SourceContext.View != nil {
+		source := *msg.SourceContext
+		view := source.View.MapText(func(_, value string) string { return RedactCaptureText(value) })
+		source.View = &view
+		msg.SourceContext = &source
 	}
 	if msg.IndexWarming != nil {
 		warming := *msg.IndexWarming

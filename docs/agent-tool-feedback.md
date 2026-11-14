@@ -356,17 +356,26 @@ tool produce a non-executable observation. Recognized field pairs are
 also accepts leading `${`, `[TOOL_CALLS]`, and `<tool_call>` markers. Leading
 whitespace and trailing explanation are allowed. Parsing is bounded to 64 KiB
 and three container levels. Argument validity is left to native resubmission.
-Fenced examples, prose before an envelope, unknown tools, and tool names inside
+A code fence labelled with a tool the request offers or can reach, whose body is
+that tool's arguments, is a written call on every tool protocol. An offered
+tool's body must use only its declared properties; a loadable or
+command-replaced tool's body must be a non-empty JSON object. Other fenced
+examples, prose before a bare envelope, unknown tools, and tool names inside
 argument values do not trigger repair. Requests forbidding tools do not request
 resubmission. Native calls accompanying text take precedence over recognition.
 
-The structured observation enters the existing `content.output` OAR occurrence
+The structured observation enters the existing `model.output` OAR occurrence
 for coordinators and workers. `TOOL_ACTION_IN_TEXT` requests native-channel repair;
 the existing rejected-draft and bounded no-progress lifecycle preserves the
-attempt and delivers feedback. OAR never reparses or executes the text. This
+attempt and delivers feedback. The occurrence carries the frozen request, so the
+feedback names only calls the reader can make: an offered tool is called
+directly, a deferred one is loaded first, one native programs replaced runs
+through `command` when the surface admits a form, and any other is reported as
+unavailable. When no turn remains for the repair, the turn ends with the host
+closing; the blocked text is never assembled into the answer. OAR never reparses or executes the text. This
 recovery adds no standing instruction or Bialy instruction unit. A requested raw
-JSON answer with the reserved action shape can also trigger repair; use a fenced
-example to present that shape as content.
+JSON answer with the reserved action shape can also trigger repair; present that
+shape as content in a fence labelled `json` or `text`.
 
 Terminal responses without usable assistant content or native calls may use an
 already-admitted provider retry for `MODEL_RESPONSE_EMPTY` feedback at
@@ -388,7 +397,7 @@ without the tool name or arguments. On a callable-tool request without
 structured output, the adapter types an error matching the kind's declared
 [rejection grammar](providers.md#parser-dropped-tool-calls) as a dropped call. The prompt
 loop settles the prose the model streamed before it, and `TOOL_CALL_UNPARSED`
-enters the same `content.output` occurrence and rejected-draft lifecycle. The
+enters the same `model.output` occurrence and rejected-draft lifecycle. The
 feedback asks the model to resubmit the call with valid JSON arguments. No call
 is reconstructed, so nothing executes. The separate response-recovery policy shares at most two consecutive replacements
 with malformed response envelopes; a third failure returns the original error.

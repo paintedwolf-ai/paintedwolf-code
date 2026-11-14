@@ -1,0 +1,47 @@
+# FormatTool names a formatter or editor convention whose configuration the
+# host reads for a path's formatting settings.
+name: FormatTool
+go_const_prefix: FormatTool
+values:
+  - id: editorconfig
+    go: EditorConfig
+    comment: EditorConfig `.editorconfig` files.
+  - id: prettier
+    comment: Prettier configuration files and the `prettier` key of `package.json`.
+  - id: biome
+    comment: Biome `biome.json` and `biome.jsonc`.
+  - id: dprint
+    comment: dprint configuration files.
+  - id: ruff
+    comment: Ruff `ruff.toml`, `.ruff.toml` and `[tool.ruff]` in `pyproject.toml`.
+  - id: black
+    comment: Black `[tool.black]` in `pyproject.toml`.
+  - id: rustfmt
+    comment: rustfmt `rustfmt.toml` and `.rustfmt.toml`.
+  - id: clang_format
+    go: ClangFormat
+    comment: clang-format `.clang-format` and `_clang-format`.
+  - id: scalafmt
+    comment: scalafmt `.scalafmt.conf`.
+  - id: swift_format
+    go: SwiftFormat
+    comment: swift-format `.swift-format`.
+  - id: dart
+    comment: The Dart formatter section of `analysis_options.yaml`.
+  - id: rubocop
+    comment: RuboCop `.rubocop.yml`.
+  - id: stylua
+    comment: StyLua `stylua.toml` and `.stylua.toml`.
+  - id: ocamlformat
+    comment: ocamlformat `.ocamlformat`.
+  - id: fourmolu
+    comment: Fourmolu `fourmolu.yaml`.
+  - id: julia_formatter
+    go: JuliaFormatter
+    comment: JuliaFormatter `.JuliaFormatter.toml`.
+  - id: sqlfluff
+    comment: SQLFluff `.sqlfluff`.
+  - id: foundry
+    comment: The `[fmt]` section of Foundry's `foundry.toml`.
+  - id: taplo
+    comment: Taplo `taplo.toml` and `.taplo.toml`.

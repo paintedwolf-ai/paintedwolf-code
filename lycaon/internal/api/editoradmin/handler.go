@@ -11,11 +11,13 @@ import (
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/viewstate"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
 type Dependencies struct {
 	EditorClients   *editordoc.ClientLiveness
+	ProjectViews    *viewstate.Service
 	EditorDocuments *editordoc.Service
 	Events          events.ReplayHub
 	ManagedSecrets  *secretcap.Service
@@ -27,6 +29,7 @@ type Dependencies struct {
 }
 type Handler struct {
 	EditorClients   *editordoc.ClientLiveness
+	ProjectViews    *viewstate.Service
 	EditorDocuments *editordoc.Service
 	Events          events.ReplayHub
 	ManagedSecrets  *secretcap.Service
@@ -41,7 +44,7 @@ type Handler struct {
 }
 
 func New(responses *httpio.Responder, background *taskgroup.Group, deps Dependencies) *Handler {
-	return &Handler{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion, responses: responses, background: background}
+	return &Handler{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion, responses: responses, background: background}
 }
 func (s *Handler) EditorScreen(documentID, digest string) (*wire.SecretScreen, bool) {
 	return s.editorScreens.get(documentID, digest)

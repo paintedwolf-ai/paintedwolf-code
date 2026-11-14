@@ -28,6 +28,37 @@ the same callable roster. Native operation schemas describe execution contracts;
 they do not introduce additional tool choices. Retired public tool names name
 `command` as their successor and retain their recorded historical meanings.
 
+## Path addressing
+
+Every path-taking tool resolves and displays paths through one addressing rule,
+keyed to the session's attached roots. The model-facing grammar:
+
+- **Bare relative paths** (`src/main.go`) and an empty `cwd` resolve in the
+  **session folder** — the attached root the session currently addresses
+  unqualified paths against.
+- **`@<label>/relative/path`** addresses any attached folder, including the
+  session folder, at any root count. Every root carries a label — draft
+  projects label their scratch root `Draft`, and single-root projects still
+  carry a mandatory label — so the grammar is uniform across layouts.
+- **`.` or an empty path in discovery operations** (`find`, `grep`, `ls` in
+  `command`, `survey_repo`) walks **every attached folder**; bare file operands
+  and `cwd` still resolve in the session folder.
+- **`@scratch/<path>`** addresses the session's temporary scratch directory and
+  **`@output/<path>`** addresses retained command/tool output spills. These
+  virtual labels are host-owned; no attached root may carry a virtual label.
+- **Absolute paths are accepted on input** and canonicalize to display form in
+  tool receipts — bare off the session folder, `@label/rel` off any other
+  attached root. Prompts never print host absolute paths.
+
+The prompt partials teach the same rule
+([`workspace-roots.md`](../lycaon/config/packs/painted-wolf/platform/shared/partials/workspace-roots.md)
+lists every attached folder as an `@<label>` row with `(session folder)` on the
+active one), and [Compatibility](compatibility.md#agent-public-vocabulary)
+records the grammar as agent-public vocabulary. Git operations are the one
+deliberate exception: their pathspecs stay repository-relative on the session
+folder rather than root-labelled, because they name Git revisions and index
+entries ([Git](git.md)).
+
 ## Portable command language version 1
 
 The versioned catalog defines the program language and native utility contracts.
@@ -794,7 +825,7 @@ Worker plans start from the profile-filtered capabilities rather than the coordi
 
 Invocation is bound to the schemas actually offered on that request. An unoffered call receives `TOOL_NOT_OFFERED` without running the handler; the call and rejection stay in the transcript so the model can load the deferred schema and retry.
 
-On a surface, `floor` is offered on every call and `loadable` names the tools the turn may add. A loadable tool is immediate when the session's load ledger holds it (predicted by the turn decision, asked for through `request_tools`, or already used in the chat) and requestable otherwise. `request_tools` takes a description of the need: names the text spells out load directly, the decision engine ranks the rest of the loadable set against the text, and an unavailable ranker returns a paginated catalog of available names and descriptions. The model can select an exact name without ranking. Fallback results provide `discovery.next_need` to pass unchanged as `need` for the next page; healthy calls and standing schemas carry no discovery instructions. When the engine answers but no tool reaches `request.load_at`, its `nearest_loads` closest tools load anyway and the result lists them under `nearest`, so an answered request is never a dead end. Surface placement takes precedence over a profile's default deferral, while confinement, approval, and the profile's allowed-tool policy still apply at execution. Enabled MCP tools are deferred by default in the compiled plan and load as needed through `request_tools`, unless the provider is explicitly configured to always load. Catalog loading rejects ambiguous placement, duplicate or empty names, and loadable sets on surfaces that do not carry `request_tools` on the floor. Resource families expand the addressable surface before the plan is consumed, but requesting one member does not activate the others. A tool's declared `companions` in `native-tools.yaml` do load with it when a request selects it, bounded by the surface: the file-mutation tools declare one another, because a need to create or change files ranks them near one another and a turn that does one soon does the rest. Live resources supply their required controls through structured resource facts. The decision engine, its data, and its offline evaluation live under [`scripts/bialy/`](../scripts/bialy/README.md).
+On a surface, `floor` is offered on every call and `loadable` names the tools the turn may add. A loadable tool is immediate when the session's load ledger holds it (predicted by the turn decision, asked for through `request_tools`, or already used in the chat) and requestable otherwise. `request_tools` takes a description of the need: names the text spells out load directly, the decision engine ranks the rest of the loadable set against the text, and an unavailable ranker returns a paginated catalog of available names and descriptions. The model can select an exact name without ranking. Fallback results provide `discovery.next_need` to pass unchanged as `need` for the next page; healthy calls and standing schemas carry no discovery instructions. When the engine answers but no tool reaches `request.load_at`, its `nearest_loads` closest tools load anyway and the result lists them under `nearest`, so an answered request is never a dead end. Surface placement takes precedence over a profile's default deferral, while confinement, approval, and the profile's allowed-tool policy still apply at execution. Enabled MCP tools are deferred by default in the compiled plan and load as needed through `request_tools`, unless the provider is explicitly configured to always load. Catalog loading rejects ambiguous placement, duplicate or empty names, and loadable sets on surfaces that do not carry `request_tools` on the floor. Families expand the addressable surface before the plan is consumed, and requesting one member loads the others. A live resource's controls form one family that its launcher stays outside, so a launcher such as `terminal_open` can sit on a floor while its controls arrive with the live resource; those controls are never listed as a requestable capability. A tool's declared `companions` in `native-tools.yaml` do load with it when a request selects it, bounded by the surface: the file-mutation tools declare one another, because a need to create or change files ranks them near one another and a turn that does one soon does the rest. Live resources supply their required controls through structured resource facts. The decision engine, its data, and its offline evaluation live under [`scripts/bialy/`](../scripts/bialy/README.md).
 
 ### Session scope
 

@@ -60,11 +60,10 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		EffectiveAgents:  roster.Effective,
 		WebSearchEnabled: webSearchEnabled,
 		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
-		OmittedUnits:     sortedLoadedSet(e.omittedUnits(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
-		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
+	in = in.withCatalogView(e.sessionCatalogView(ctx, sess))
 	stableKey, err := in.cacheKey()
 	if err != nil {
 		return "", err
@@ -142,11 +141,10 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 		EffectiveAgents:  roster.Effective,
 		WebSearchEnabled: webSearchEnabled,
 		LoadedTools:      sortedLoadedSet(e.loadedTools(sess)),
-		OmittedUnits:     sortedLoadedSet(e.omittedUnits(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
-		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
+	in = in.withCatalogView(e.sessionCatalogView(ctx, sess))
 	rendered, err := renderStandingPrompt(ctx, pe, in)
 	if err != nil {
 		return "", profile, transition, err

@@ -35,7 +35,7 @@ func (c *Capture) Reset(rootID string) {
 	c.mutations.Clear(rootID)
 }
 
-func (c *Capture) RecordPath(ctx context.Context, store *Store, rootID, path string) {
+func (c *Capture) RecordPath(ctx context.Context, store *Store, rootID, projectRootID, path string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	anchor, _ := c.anchors.Load(rootID)
@@ -48,7 +48,7 @@ func (c *Capture) RecordPath(ctx context.Context, store *Store, rootID, path str
 		return
 	}
 	if first {
-		_ = store.CapturePreImage(ctx, rootID, anchor, path)
+		_ = store.CapturePreImage(ctx, rootID, anchor, path, projectRootID)
 	}
 }
 

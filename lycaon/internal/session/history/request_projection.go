@@ -1,12 +1,9 @@
 package history
 
 import (
-	"strings"
-
+	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/pkg/api"
 )
-
-const sourceBriefPrefix = "host-source-changes-"
 
 func isCompactionSummaryOrCheckpoint(row api.Message) bool {
 	return row.CompactionCheckpoint || len(row.ContentParts) == 1 && row.ContentParts[0].Source == "compaction_summary"
@@ -80,13 +77,10 @@ func projectRequest(messages, history []api.Message) requestProjection {
 		if p.ids[row.ID] {
 			continue
 		}
-		if i < firstHistIdx && !strings.HasPrefix(row.ID, sourceBriefPrefix) {
+		anchorID, anchored := hostmarker.PromptBlockAnchor(row.ID)
+		if i < firstHistIdx && !anchored {
 			p.prefixFrame = append(p.prefixFrame, row)
 			continue
-		}
-		anchorID := strings.TrimPrefix(row.ID, sourceBriefPrefix)
-		if anchorID == row.ID {
-			anchorID = ""
 		}
 		after := make(map[string]bool)
 		for j := i + 1; j <= lastHistIdx; j++ {

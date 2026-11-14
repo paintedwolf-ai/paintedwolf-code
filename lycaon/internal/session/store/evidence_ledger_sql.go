@@ -17,21 +17,24 @@ import (
 )
 
 type storedLineRangesPayload struct {
-	Version          int                       `json:"v"`
-	SourceDelivery   *evidence.SourceDelivery  `json:"source_delivery,omitempty"`
-	Ranges           []evidence.LineRange      `json:"ranges,omitempty"`
-	PathsTouched     []string                  `json:"paths_touched,omitempty"`
-	URLsTouched      []string                  `json:"urls_touched,omitempty"`
-	URLTitles        map[string]string         `json:"url_titles,omitempty"`
-	URLsShown        []string                  `json:"urls_shown,omitempty"`
-	GrepLines        map[string]map[int]string `json:"grep_lines,omitempty"`
-	PathTiers        map[string]string         `json:"path_tiers,omitempty"`
-	Surface          string                    `json:"surface,omitempty"`
-	ArtifactID       string                    `json:"artifact_id,omitempty"`
-	FrameIndex       int                       `json:"frame_index,omitempty"`
-	UntrustedContent bool                      `json:"untrusted_content,omitempty"`
-	ExternalCustody  bool                      `json:"external_custody,omitempty"`
-	CustodySeq       int                       `json:"custody_seq,omitempty"`
+	Version        int                       `json:"v"`
+	SourceDelivery *evidence.SourceDelivery  `json:"source_delivery,omitempty"`
+	Ranges         []evidence.LineRange      `json:"ranges,omitempty"`
+	PathsTouched   []string                  `json:"paths_touched,omitempty"`
+	URLsTouched    []string                  `json:"urls_touched,omitempty"`
+	URLTitles      map[string]string         `json:"url_titles,omitempty"`
+	URLsShown      []string                  `json:"urls_shown,omitempty"`
+	GrepLines      map[string]map[int]string `json:"grep_lines,omitempty"`
+	PathTiers      map[string]string         `json:"path_tiers,omitempty"`
+	// PathRoots maps a stored path key to its owning root ID.
+	// Empty values mark legacy keys that resolve under no attached root.
+	PathRoots        map[string]string `json:"path_roots,omitempty"`
+	Surface          string            `json:"surface,omitempty"`
+	ArtifactID       string            `json:"artifact_id,omitempty"`
+	FrameIndex       int               `json:"frame_index,omitempty"`
+	UntrustedContent bool              `json:"untrusted_content,omitempty"`
+	ExternalCustody  bool              `json:"external_custody,omitempty"`
+	CustodySeq       int               `json:"custody_seq,omitempty"`
 }
 
 func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
@@ -46,6 +49,7 @@ func marshalEvidenceLineRanges(rec evidence.Record) (string, error) {
 		URLsShown:        aux.URLsShown,
 		GrepLines:        aux.GrepLines,
 		PathTiers:        aux.PathTiers,
+		PathRoots:        aux.PathRoots,
 		Surface:          rec.Surface,
 		ArtifactID:       rec.ArtifactID,
 		FrameIndex:       rec.FrameIndex,
@@ -69,6 +73,7 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
 		return err
 	}
+	// v1 payloads predate durable root identity; v2 adds path_roots.
 	if payload.Version != 1 {
 		return fmt.Errorf("unsupported evidence record payload version %d", payload.Version)
 	}
@@ -81,6 +86,7 @@ func unmarshalEvidenceLineRanges(raw string, rec *evidence.Record) error {
 		URLsShown:        payload.URLsShown,
 		GrepLines:        payload.GrepLines,
 		PathTiers:        payload.PathTiers,
+		PathRoots:        payload.PathRoots,
 		UntrustedContent: payload.UntrustedContent,
 		ExternalCustody:  payload.ExternalCustody,
 		CustodySeq:       payload.CustodySeq,
@@ -134,6 +140,10 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 	if err != nil {
 		return evidence.Ledger{}, fmt.Errorf("load evidence ledger: %w", err)
 	}
+	roots, err := evidenceCitationRoots(ctx, q, sessionID)
+	if err != nil {
+		return evidence.Ledger{}, fmt.Errorf("load evidence ledger: %w", err)
+	}
 	records := make([]evidence.Record, 0, len(rows))
 	for _, r := range rows {
 		rec := evidence.Record{
@@ -144,6 +154,7 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 			Fidelity:     r.Fidelity,
 			SourceTool:   r.SourceTool,
 			Path:         r.Path,
+			RootID:       r.RootID,
 			URL:          r.Url,
 			Truncated:    r.Truncated != 0,
 			Survey:       r.Survey != 0,
@@ -154,6 +165,7 @@ func loadLedger(ctx context.Context, s *sqlCore, q *db.Queries, sessionID string
 		if err := s.unmarshalEvidenceBody(r.ProjectID, r.ContentBlobSha256, &rec); err != nil {
 			return evidence.Ledger{}, fmt.Errorf("decode body for %s: %w", rec.Handle, err)
 		}
+		evidence.StampDisplayKeys(roots, &rec)
 		records = append(records, rec)
 	}
 	return evidence.AssembleLedger(records), nil

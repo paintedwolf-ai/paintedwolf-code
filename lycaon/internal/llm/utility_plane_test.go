@@ -548,3 +548,25 @@ func TestCompactionHealthRequiresRepeatedEndpointFailures(t *testing.T) {
 		t.Fatal("latency reported an outage")
 	}
 }
+
+func TestUtilityClassUrgency(t *testing.T) {
+	for class, want := range map[UtilityClass]modelcall.RequestUrgency{
+		UtilityClassBackground: modelcall.UrgencyBackground,
+		UtilityClassGift:       modelcall.UrgencyBackground,
+		UtilityClassOverlay:    modelcall.UrgencyBackground,
+		UtilityClassQuality:    modelcall.UrgencyInteractive,
+		UtilityClassRequested:  modelcall.UrgencyInteractive,
+	} {
+		if got := class.urgency(); got != want {
+			t.Fatalf("%s urgency=%d want %d", class, got, want)
+		}
+	}
+	summarizer := &RegistrySummarizer{Purpose: "compaction", Class: UtilityClassBackground}
+	if req := summarizer.utilityRequest(t.Context(), modelcall.CompletionRequest{}); req.Urgency != modelcall.UrgencyBackground || req.Composition != modelcall.CompositionHostUtility {
+		t.Fatalf("background utility request=%+v", req)
+	}
+	requested := &RegistrySummarizer{Purpose: "commit_draft"}
+	if req := requested.utilityRequest(t.Context(), modelcall.CompletionRequest{}); req.Urgency != modelcall.UrgencyInteractive {
+		t.Fatalf("requested utility request urgency=%d", req.Urgency)
+	}
+}

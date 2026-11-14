@@ -15,6 +15,7 @@ import (
 	"github.com/lycaon/lycaon/internal/gitrepo"
 	"github.com/lycaon/lycaon/internal/observability"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repomap"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/sourcecatalog"
@@ -37,6 +38,9 @@ type directoryMapNode struct {
 	DescendantFiles   *int                `json:"descendant_files,omitempty"`
 	Children          []*directoryMapNode `json:"children,omitempty"`
 	ZoomIn            bool                `json:"zoom_in,omitempty"`
+	// Structured identity of the node under its project root; never serialized.
+	rootID   string `json:"-"`
+	scopeRel string `json:"-"`
 }
 
 type mapCoverage struct {
@@ -79,8 +83,8 @@ func buildListDirZoomedMapResponse(ctx context.Context, t *ListDirTool, tctx too
 			_ = reader.Close()
 		}
 	}()
-	resp := listDirResponse{Path: display, View: "map", Tree: &directoryMapNode{Path: display, Type: "dir"},
-		Coverage: &mapCoverage{CatalogState: string(status.State)}}
+	resp := listDirResponse{Path: display, View: "map", Tree: &directoryMapNode{Path: display, Type: "dir", rootID: resolved.Root.ID, scopeRel: resolved.ScopeRel},
+		Coverage: &mapCoverage{CatalogState: string(status.State)}, rootID: resolved.Root.ID, scopeRel: resolved.ScopeRel}
 	if t.UnionBrief != nil {
 		resp.OrientationBrief, err = t.UnionBrief(ctx, tctx, subpath)
 		if len(resp.OrientationBrief) > 1024 {
@@ -108,7 +112,7 @@ func buildListDirZoomedMapResponse(ctx context.Context, t *ListDirTool, tctx too
 		err = coldDirectoryMap(ctx, t, tctx, resolved, &resp, &work)
 	} else {
 		key := fmt.Sprintf("%x", sha256.Sum256([]byte(resolved.Root.ID+"\x00"+resolved.Root.Path+"\x00"+scope.Key+"\x00"+display)))
-		err = indexedDirectoryMap(ctx, reader, key, cursor, &resp)
+		err = indexedDirectoryMap(ctx, reader, key, cursor, resolved, &resp)
 		work.MetadataRows = reader.RowsRead
 	}
 	if err != nil {
@@ -121,7 +125,7 @@ func buildListDirZoomedMapResponse(ctx context.Context, t *ListDirTool, tctx too
 	return resp, nil
 }
 
-func indexedDirectoryMap(ctx context.Context, reader *sourcecatalog.SummaryReader, scope, cursor string, resp *listDirResponse) error {
+func indexedDirectoryMap(ctx context.Context, reader *sourcecatalog.SummaryReader, scope, cursor string, resolved projectpaths.Resolved, resp *listDirResponse) error {
 	position := directoryMapCursor{Scope: scope, Revision: reader.Status.Revision}
 	if cursor != "" {
 		pos, err := directoryMapCursors.Decode(cursor, scope)
@@ -149,7 +153,7 @@ func indexedDirectoryMap(ctx context.Context, reader *sourcecatalog.SummaryReade
 			break
 		}
 		child := page.Nodes[0]
-		row := &directoryMapNode{Path: child.Path, Type: "file"}
+		row := &directoryMapNode{Path: child.Path, Type: "file", rootID: resolved.Root.ID, scopeRel: child.Path}
 		if child.IsSymlink {
 			row.Type = "symlink"
 		}
@@ -247,7 +251,7 @@ func coldDirectoryMap(ctx context.Context, t *ListDirTool, tctx tools.ToolContex
 		if e.Type()&os.ModeSymlink != 0 {
 			kind = "symlink"
 		}
-		resp.Tree.Children = append(resp.Tree.Children, &directoryMapNode{Path: path, Type: kind, ZoomIn: e.IsDir()})
+		resp.Tree.Children = append(resp.Tree.Children, &directoryMapNode{Path: path, Type: kind, ZoomIn: e.IsDir(), rootID: child.Root.ID, scopeRel: projectroot.ScopeRel(child.Root, child.Abs)})
 		raw, marshalErr := surveyjson.Marshal(resp)
 		if marshalErr != nil {
 			return marshalErr

@@ -203,3 +203,53 @@ func TestPreparedApprovalAnswerBindsExactSubject(t *testing.T) {
 		t.Fatalf("preparation did not suspend the review: %v", err)
 	}
 }
+
+// A missing outside-root target leads the card with its absence; an existing
+// target leads with nothing.
+func TestMissingTargetLeadsTheApprovalCard(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		cited    []gate.Fact
+		wantLead string
+	}{
+		{
+			name: "missing",
+			cited: []gate.Fact{
+				{Gate: api.GateOutsideRootsRead, Key: "file.path", Value: "/mnt/data/notes.md", Source: "boundary"},
+				{Gate: api.GateOutsideRootsRead, Key: "file.exists", Value: "this path doesn't exist", Source: "boundary"},
+			},
+			wantLead: "This path doesn't exist",
+		},
+		{
+			name: "existing",
+			cited: []gate.Fact{
+				{Gate: api.GateOutsideRootsRead, Key: "file.path", Value: "/mnt/data/notes.md", Source: "boundary"},
+			},
+			wantLead: "",
+		},
+	} {
+		decision := &gate.Decision{Primary: api.GateOutsideRootsRead, Posture: gate.PostureLight, Cited: tc.cited}
+		action := ProposedAction{
+			Invocation: ActionInvocation{Tool: "read", Args: map[string]any{"path": "/mnt/data/notes.md"}, ActionID: "call"},
+			Scope:      ActionScope{SessionID: "session", ProjectID: "project"},
+		}
+		grant := ApprovalGrant{
+			ID: "grant_read", Scope: ApprovalGrantScopeChat, ChatSessionID: "session", ProjectID: "project",
+			Predicate: ApprovalGrantPredicate{Category: ApprovalGrantCategoryReadPath, Pattern: "/mnt/data/notes.md"},
+			Title:     TitleAllowForThisChat, Coverage: "/mnt/data/notes.md", GrantedAt: time.Now().UTC(),
+			ExpiresWhen: ExpiresWhenChatDeleted, ReaskWhen: ReaskWhenDifferentPath,
+		}
+		plan, err := CompileCheckpointApprovalPlan(CheckpointRequest{
+			SessionID: "session", ToolCallID: "call", ProjectID: "project",
+			ProposedAction: &action, Decision: decision,
+			GrantOffers: []ApprovalGrantOffer{{
+				ID: grant.ID, Rung: ApprovalRungChat, Scope: grant.Scope, Title: grant.Title,
+				Coverage: grant.Coverage, ExpiresWhen: grant.ExpiresWhen, ReaskWhen: grant.ReaskWhen, Grant: grant,
+			}},
+		})
+		testutil.FailErr(t, "compile approval plan", err)
+		if plan.Presentation.Lead != tc.wantLead {
+			t.Fatalf("%s: lead = %q, want %q", tc.name, plan.Presentation.Lead, tc.wantLead)
+		}
+	}
+}

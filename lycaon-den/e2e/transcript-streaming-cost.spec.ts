@@ -112,7 +112,7 @@ webE2e("streaming rows into a long transcript: main-thread cost and request coun
           id: crypto.randomUUID(), role: "tool" as const, content: "wrote src/streamed.ts",
           tool_result: {
             content: "wrote src/streamed.ts", tool: "write", tool_call_id: toolCallId, assistant_message_id: assistantId,
-            file_edit: { path: "src/streamed.ts", ...write },
+            file_edits: [{ path: "src/streamed.ts", ...write }],
           },
           created_at: "2026-09-30T10:01:01Z", seq: seq + 1, ord: seq + 1,
         },

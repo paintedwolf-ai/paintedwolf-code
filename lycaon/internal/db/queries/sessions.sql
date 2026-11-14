@@ -300,6 +300,12 @@ WHERE session_id = ? AND id = ?;
 -- name: GetMessageOrdAndTS :one
 SELECT ord, ts, worker_job_id, tool_result_json, author_person_id FROM messages WHERE session_id = ? AND id = ?;
 
+-- name: GetToolResultMessageID :one
+SELECT id FROM messages
+WHERE session_id = sqlc.arg(session_id) AND tool_result_call_id = sqlc.arg(tool_call_id)
+ORDER BY ord
+LIMIT 1;
+
 -- name: UpsertCompactionView :exec
 INSERT INTO compaction_views (session_id, generation, view_json, covered_through_ord, covered_through_message_id, source_seq, tokens_before, tokens_after, created_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)

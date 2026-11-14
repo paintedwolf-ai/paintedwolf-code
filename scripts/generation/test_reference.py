@@ -66,7 +66,7 @@ class ReferenceTests(unittest.TestCase):
                 self.assertEqual(config["quantization"]["bits"], 4)
                 self.assertEqual(config["quantization"][self.prefix]["bits"], bits)
                 record = json.loads((destination / "conversion.json").read_text())
-                self.assertEqual(record["precision"], precision)
+                self.assertEqual(record["precision"], dict(precision, router_bits=8))
 
     def test_mapped_lookup_rejects_unbounded_and_invalid_tokens(self):
         mapped = self.converted()

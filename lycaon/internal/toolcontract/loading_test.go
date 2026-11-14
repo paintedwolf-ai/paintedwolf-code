@@ -12,10 +12,12 @@ func TestLoadFamiliesRespectsAvailability(t *testing.T) {
 		name                      string
 		selected, available, want []string
 	}{
-		{"terminal", []string{"terminal_open"}, []string{"terminal_open", "terminal_read", "terminal_close"}, []string{"terminal_open", "terminal_read", "terminal_close"}},
-		{"page", []string{"page_act"}, []string{"page_open", "page_act", "page_snapshot"}, []string{"page_act", "page_open", "page_snapshot"}},
+		{"terminal launcher", []string{"terminal_open"}, []string{"terminal_open", "terminal_read", "terminal_close"}, []string{"terminal_open"}},
+		{"terminal controls", []string{"terminal_read"}, []string{"terminal_open", "terminal_read", "terminal_close"}, []string{"terminal_read", "terminal_close"}},
+		{"page", []string{"page_act"}, []string{"page_open", "page_act", "page_snapshot"}, []string{"page_act", "page_snapshot"}},
 		{"unavailable seed", []string{"page_open"}, []string{"page_act"}, nil},
 		{"unrelated", []string{"command", "command", "mcp_example"}, []string{"command", "command_output", "mcp_example"}, []string{"command", "mcp_example"}},
+		{"command job", []string{"command_stop"}, []string{"command", "command_output", "command_stop"}, []string{"command_stop", "command_output"}},
 		{"closed", []string{"terminal_open"}, nil, nil},
 	}
 	for _, tc := range cases {

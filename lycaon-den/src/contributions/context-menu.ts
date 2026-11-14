@@ -1,5 +1,5 @@
 import { bindContextAction } from "../components/context-actions.ts";
-import type { ContextMenuItem } from "../components/ContextMenu.tsx";
+import type { ContextMenuEntry, ContextMenuItem } from "../components/ContextMenu.tsx";
 import { contributionFrame } from "./contribution-store.ts";
 import { evaluateCondition } from "./conditions.ts";
 import { liveShellFactLookup } from "./shell-facts.ts";
@@ -13,6 +13,7 @@ export function contributionContextMenuItems(slots: readonly string[]): ContextM
   if (!frame || !lookup) return [];
   const items: ContextMenuItem[] = [];
   let previousGroup: string | null = null;
+  const pullOuts = new Map<string, ContextMenuEntry[]>();
   const placements = frame.menus.filter((menu) => slots.includes(menu.slot))
     .sort((a, b) => slots.indexOf(a.slot) - slots.indexOf(b.slot) ||
       (a.group ?? "").localeCompare(b.group ?? "") || (a.order ?? 0) - (b.order ?? 0));
@@ -23,11 +24,24 @@ export function contributionContextMenuItems(slots: readonly string[]): ContextM
     if (previousGroup != null && previousGroup !== group) items.push({ separator: true });
     previousGroup = group;
     const state = menu.state ? evaluateCondition(menu.state, lookup) : null;
-    items.push(bindContextAction({
+    const item = bindContextAction({
       label: state && menu.state_label ? menu.state_label : menu.label || command.title,
       ...(state != null && !menu.state_label ? { checked: state } : {}),
       onSelect: () => invokeHostCommand(command.id),
-    }, () => contributionCommandAvailable(command.id)));
+    }, () => contributionCommandAvailable(command.id));
+    if (!menu.submenu) {
+      items.push(item);
+      continue;
+    }
+    const title = menu.submenu;
+    const pullOut = pullOuts.get(`${group}\0${title}`);
+    if (pullOut) {
+      pullOut.push(item);
+      continue;
+    }
+    const entries: ContextMenuEntry[] = [item];
+    pullOuts.set(`${group}\0${title}`, entries);
+    items.push({ label: title, submenu: entries });
   }
   return items;
 }

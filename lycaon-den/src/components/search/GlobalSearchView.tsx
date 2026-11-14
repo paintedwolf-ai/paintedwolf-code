@@ -1,3 +1,4 @@
+import { offerSearchViewFacet } from "./search-view-facet.ts";
 import { createSearchExport } from "./search-export-controller.ts";
 import { createSearchQueryControls } from "./search-query-controls.ts";
 import { createSearchResultsPresentation } from "./search-results-presentation.tsx";
@@ -111,6 +112,7 @@ export function GlobalSearchView(props: Props) {
     updateRecent: () => setRecent(listRecentQueries()),
     reportError: (error) => searchReporter().reportError(error),
   });
+  offerSearchViewFacet({ projectId: () => props.originProjectId ?? undefined, query, selectedHit });
 
   const { replacePreview, setReplacePreview, reviewedRequest, replaceSelection, setReplaceSelection,
     replaceApplying, replaceSummary, setReplaceSummary, previewPreparing, previewNotice,

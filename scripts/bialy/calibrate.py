@@ -9,10 +9,6 @@ meet the experiment's bars, printing a decisions.yaml fragment:
                              preloaded tool stays in the chat's standing set
                              and costs every later call, while a missed one
                              costs a single request_tools round trip
-  turn.guides.omit_below and turn.guides.confidence_floor
-                             the pair that omits the most units while keeping
-                             omission precision at or above --omission-precision
-                             (an omitted unit that was needed is a silent drop)
   request.load_at, max_loads, nearest_loads
                              the unit-rank score, cap, and fallback count
                              that maximize F-beta (--request-beta) over the
@@ -33,12 +29,11 @@ legs), so a host that would want a different threshold shows up. Rows are
 training rows (rows.py) and every question is the one the row's turn offered.
 
 Usage: calibrate.py --corpus C --examples FILE [--engine PATH]
-                    [--tool-beta 0.5] [--request-beta 1.0] [--omission-precision 0.97]
+                    [--tool-beta 0.5] [--request-beta 1.0]
                     [--preload-precision 0.9] [--tool-truth RULE]
 """
 
 import argparse
-import collections
 import os
 import sys
 
@@ -65,7 +60,6 @@ def main():
     ap.add_argument("--tool-beta", type=float, default=0.5)
     ap.add_argument("--request-beta", type=float, default=1.0)
     ap.add_argument("--tool-truth", choices=rowfile.TOOL_TRUTH, default="consensus", help="how a turn's tool labels are read (rows.py)")
-    ap.add_argument("--omission-precision", type=float, default=0.97)
     ap.add_argument("--preload-precision", type=float, default=0.9)
     args = ap.parse_args()
     if not args.engine:
@@ -74,7 +68,6 @@ def main():
     corpus = Corpus.load(args.corpus)
     examples = rowfile.load(args.examples, corpus=corpus)
     tool_pairs = []
-    guide_pairs = []
     skill_tops = []
     request_pairs = []
     tool_cards = corpus.tool_cards()
@@ -102,13 +95,6 @@ def main():
                     continue
                 p, _ = option_answer(answers, "tools", name)
                 tool_pairs.append((0.0 if p is None else p, targets.get(name, 0) == 1, ex["host"]))
-            guides = ex["labels"]["guides"]
-            for uid in qs.get("guides", {}).get("options", {}):
-                needed = guides.get(uid)
-                if needed is None:
-                    continue
-                p, conf = option_answer(answers, "guides", uid)
-                guide_pairs.append((0.0 if p is None else p, 0.0 if conf is None else conf, bool(needed)))
             judged = rowfile.skill_pairs(ex)
             if roster and judged:
                 scores = engine.call({"method": "rank", "head": "unit-rank", "task": ex["state"]["user"], "candidates": [cards[name] for name in roster]})["scores"]
@@ -136,24 +122,6 @@ def main():
         pairs = [pair for pair in tool_pairs if pair[2] == host]
         score, thr = best_load_at(pairs)
         print("    # %s alone: load_at %.2f, F%g=%.3f, support=%d" % (host, thr, args.tool_beta, score, sum(1 for _, y, _ in pairs if y)))
-
-    chosen = None
-    for omit in range(5, 51):
-        for floor in range(50, 100, 5):
-            o, f = omit / 100, floor / 100
-            omitted = [(needed) for p, c, needed in guide_pairs if p < o and c >= f]
-            if not omitted:
-                continue
-            precision = sum(1 for needed in omitted if not needed) / len(omitted)
-            if precision >= args.omission_precision and (chosen is None or len(omitted) > chosen[0]):
-                chosen = (len(omitted), o, f, precision)
-    if chosen is None:
-        print("  guides:\n    # no threshold pair reaches omission precision %.2f on %d judged units; keep every unit until the head improves" % (args.omission_precision, len(guide_pairs)))
-    else:
-        print("  guides:\n    omit_below: %.2f\n    confidence_floor: %.2f  # omits %d of %d judged units at precision %.3f" % (
-            chosen[1], chosen[2], chosen[0], len(guide_pairs), chosen[3]))
-    counts = collections.Counter(needed for _, _, needed in guide_pairs)
-    print("# judged units: needed=%d unneeded=%d" % (counts[True], counts[False]))
 
     ranked = [sorted(pairs, key=lambda x: -x[0]) for pairs in request_pairs]
     best = None

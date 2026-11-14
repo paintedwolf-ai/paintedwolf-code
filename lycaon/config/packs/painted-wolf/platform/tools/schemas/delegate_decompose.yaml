@@ -3,6 +3,6 @@ schema:
   type: object
   properties:
     blueprint_path:
-      description: "Repo-relative path of the approved blueprint."
+      description: "Plan-store key of the approved blueprint (not a filesystem path)."
       type: string
   required: [blueprint_path]

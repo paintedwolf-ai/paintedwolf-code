@@ -147,6 +147,7 @@ function parseEditor(value: unknown): DenEditorPrefs | undefined {
   }
   if (typeof row.revealInTree === "boolean") editor.revealInTree = row.revealInTree;
   if (typeof row.wordWrap === "boolean") editor.wordWrap = row.wordWrap;
+  if (typeof row.pretty === "boolean") editor.pretty = row.pretty;
   if (typeof row.lineNumbers === "boolean") editor.lineNumbers = row.lineNumbers;
   if (
     typeof row.fontSize === "number" &&

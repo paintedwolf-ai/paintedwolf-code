@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -87,4 +88,51 @@ func TestBialyCancellationRetainsSharedAdmissionUntilReaped(t *testing.T) {
 	permit, err := device.Acquire(t.Context(), inference.Work{Owner: "generation", Generation: 1, Priority: inference.Foreground})
 	testutil.FailErr(t, "generation after reap", err)
 	permit.Complete()
+}
+
+func TestHoldPriorityKeepsGenerationOffTheDeviceUntilReleased(t *testing.T) {
+	cfg := fakeConfig(t)
+	cfg.Resources = sharedResources(t)
+	device, err := cfg.Resources.Devices.Bind(inference.PhysicalDevice{Kind: "pci", Address: "0000:03:00.0"})
+	testutil.FailErr(t, "bind generation adapter", err)
+	body := strings.Replace(fakeEngine, `"engine":{`, `"physical_device":{"kind":"pci","address":"0000:03:00.0"},"engine":{`, 1)
+	testutil.FailErr(t, "install engine", os.WriteFile(cfg.Binary, []byte(body), 0o755))
+	client := bialy.New(cfg)
+	t.Cleanup(func() { _ = client.Close() })
+
+	release := client.HoldPriority(t.Context())
+	admitted := make(chan *inference.Permit, 1)
+	go func() {
+		permit, err := device.Acquire(context.Background(), inference.Work{Owner: "generation", Generation: 1, Priority: inference.Foreground, Step: "advance"})
+		if err != nil {
+			t.Errorf("acquire generation step: %v", err)
+		}
+		admitted <- permit
+	}()
+	for device.Snapshot().Queued == 0 {
+		select {
+		case <-admitted:
+			t.Fatal("a generation step ran under a decision hold")
+		default:
+			runtime.Gosched()
+		}
+	}
+	if _, _, err := client.Rank(t.Context(), decide.HeadCodeRank, "task", []string{"a", "b"}); err != nil {
+		t.Fatalf("rank under hold: %v", err)
+	}
+	if snapshot := device.Snapshot(); snapshot.Active != nil || snapshot.Queued != 1 {
+		t.Fatalf("generation crossed the hold: %+v", snapshot)
+	}
+	release()
+	if permit := <-admitted; permit != nil {
+		permit.Complete()
+	}
+}
+
+func TestHoldPriorityWithoutAnEngineHoldsNothing(t *testing.T) {
+	cfg := fakeConfig(t)
+	cfg.Disabled = true
+	client := bialy.New(cfg)
+	release := client.HoldPriority(t.Context())
+	release()
 }

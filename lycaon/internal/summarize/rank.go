@@ -191,6 +191,7 @@ func buildDefinitionPile(structure []StructureCandidate) []DefinitionItem {
 				ParseHealth: parseHealthOK, Head: strings.Join(c.RollupRows, "\n"),
 				StartLine: 1, ContentHash: c.ContentHash,
 				Language: c.Language, OutlineSource: c.OutlineSource,
+				RootID: c.RootID, ScopeRel: c.ScopeRel,
 			})
 			continue
 		}
@@ -208,6 +209,7 @@ func buildDefinitionPile(structure []StructureCandidate) []DefinitionItem {
 				Head: c.Head, StartLine: c.StartLine, ContentHash: c.ContentHash,
 				Language: c.Language, OutlineSource: c.OutlineSource, Parses: c.Parses,
 				Errors: c.Errors, ErrorKind: c.ErrorKind, LogDigest: c.LogDigest, ImportPath: c.ImportPath,
+				RootID: c.RootID, ScopeRel: c.ScopeRel,
 			})
 		}
 	}

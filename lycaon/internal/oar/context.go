@@ -3,14 +3,16 @@ package oar
 import (
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/llm/actionenvelope"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolreach"
 )
 
 // ContentObservation combines attributed content with response protocol facts.
 type ContentObservation struct {
-	Segments        []ContentSegment
-	TextActionTools []string
+	Segments []ContentSegment
+	// TextAction is a tool call the response wrote as text.
+	TextAction      actionenvelope.Observation
 	EmptyResponse   *EmptyResponseObservation
 	InvalidResponse bool
 	// ToolCallUnparsed records a native call the provider dropped as invalid JSON.
@@ -36,11 +38,11 @@ func (gc *GuardContext) SetContentObservation(observation ContentObservation) {
 	}
 	if observation.ToolCallUnparsed {
 		gc.Rejection.RejectObservation = "provider_tool_call_unparsed"
-		gc.ObservationData = map[string]any{"reason": observation.ToolCallDiagnostic}
+		gc.setObservationFact("reason", observation.ToolCallDiagnostic)
 	}
-	if len(observation.TextActionTools) > 0 {
+	if len(observation.TextAction.Tools) > 0 {
 		gc.Rejection.RejectObservation = "text_action_envelope"
-		gc.ObservationData = map[string]any{"offenders_sample": strings.Join(observation.TextActionTools, ", ")}
+		gc.setTextActionFacts(observation.TextAction)
 	}
 }
 

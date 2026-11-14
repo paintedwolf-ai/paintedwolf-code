@@ -213,7 +213,10 @@ describe("menu item ids", () => {
       spec.groups.flat(),
     );
     expect(items.length).toBeGreaterThan(0);
-    for (const item of items) {
+    const leaves = items.flatMap((item) => item.submenu ?? [item]);
+    expect(leaves.length).toBeGreaterThan(items.length - 1);
+    for (const item of leaves) {
+      expect(item.submenu).toBeUndefined();
       expect(contributionCommand(item.id)).not.toBeNull();
     }
   });

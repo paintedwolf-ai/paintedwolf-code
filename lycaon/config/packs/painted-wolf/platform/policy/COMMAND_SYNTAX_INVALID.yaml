@@ -16,7 +16,7 @@ what: 'Shell syntax error{% if paintedwolf.source_line %} at {{ paintedwolf.sour
 cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}{% if paintedwolf.diagnostic_pre_evaluation %}This source unit did not execute. Earlier parent operations may have run.{% else %}The source unit was refused; earlier parent effects remain recorded.{% endif %}{% endif %}'
 why: '{% if paintedwolf.source_excerpt %}Source excerpt at {{ paintedwolf.source_excerpt_line }}:{{ paintedwolf.source_excerpt_column }}: {{ paintedwolf.source_excerpt }}{% endif %}'
 fix: >-
-  {% if paintedwolf.parser_unclosed_quote %}Close the quoted string{% if paintedwolf.parser_expected %} with `{{ paintedwolf.parser_expected }}`{% endif %}. {% if paintedwolf.parser_single_quote %}Single-quoted strings cannot contain a literal apostrophe. For multiline literal data, use a quoted heredoc to avoid nested quoting.{% else %}Review literal quote characters and escapes around this span.{% endif %} {% else %}{% if paintedwolf.parser_unclosed_heredoc %}End the heredoc with {% if paintedwolf.parser_expected %}{{ paintedwolf.parser_expected }}{% else %}its delimiter{% endif %} alone on its own line. {% else %}{% if paintedwolf.parser_expected_closer %}Complete the open shell construct{% if paintedwolf.parser_expected %} with {{ paintedwolf.parser_expected }}{% endif %}. {% else %}{% if paintedwolf.parser_expected_following %}Complete the construct with {% if paintedwolf.parser_expected %}{{ paintedwolf.parser_expected }}{% else %}the required shell expression{% endif %} at the reported location. {% else %}{% if paintedwolf.parser_utf8_bom %}Remove the leading byte-order mark; keep the source as UTF-8. {% else %}{% if paintedwolf.parser_nul_byte %}Remove the NUL byte from the shell source. Pass binary input as data rather than source. {% else %}{% if paintedwolf.parser_invalid_utf8 %}Encode the shell source as valid UTF-8. {% else %}Correct the shell syntax at the reported location. Preserve the operation and its literal contents.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
+  {% if paintedwolf.parser_unclosed_quote %}Close the quoted string{% if paintedwolf.parser_expected %} with `{{ paintedwolf.parser_expected }}`{% endif %}. {% if paintedwolf.parser_single_quote %}Single-quoted strings cannot contain a literal apostrophe.{% else %}Review literal quote characters and escapes around this span.{% endif %} For multiline literal data, use a quoted heredoc to avoid nested quoting. {% else %}{% if paintedwolf.parser_unclosed_heredoc %}End the heredoc with {% if paintedwolf.parser_expected %}{{ paintedwolf.parser_expected }}{% else %}its delimiter{% endif %} alone on its own line. {% else %}{% if paintedwolf.parser_expected_closer %}Complete the open shell construct{% if paintedwolf.parser_expected %} with {{ paintedwolf.parser_expected }}{% endif %}. {% else %}{% if paintedwolf.parser_expected_following %}Complete the construct with {% if paintedwolf.parser_expected %}{{ paintedwolf.parser_expected }}{% else %}the required shell expression{% endif %} at the reported location. {% else %}{% if paintedwolf.parser_utf8_bom %}Remove the leading byte-order mark; keep the source as UTF-8. {% else %}{% if paintedwolf.parser_nul_byte %}Remove the NUL byte from the shell source. Pass binary input as data rather than source. {% else %}{% if paintedwolf.parser_invalid_utf8 %}Encode the shell source as valid UTF-8. {% else %}Correct the shell syntax at the reported location. Preserve the operation and its literal contents.{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}{% endif %}
 instead: '{% if paintedwolf.diagnostic_top_level %}Resubmit the complete corrected command.{% else %}Inspect completed and uncertain operations before submitting the remaining work.{% endif %}'
 x-paintedwolf-scenarios:
   - id: captured_unit
@@ -25,3 +25,21 @@ x-paintedwolf-scenarios:
       source_line: 3
       source_column: 7
       expected_form: supported syntax
+  - id: unclosed_single_quote
+    vars:
+      tool: command
+      source_line: 12
+      source_column: 9
+      parser_message: reached EOF without closing quote "'"
+      parser_unclosed_quote: true
+      parser_single_quote: true
+      parser_expected: "'"
+  - id: unclosed_double_quote
+    vars:
+      tool: command
+      source_line: 179
+      source_column: 22
+      parser_message: reached EOF without closing quote '"'
+      parser_unclosed_quote: true
+      parser_single_quote: false
+      parser_expected: '"'

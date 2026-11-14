@@ -1,9 +1,9 @@
-"""The unit corpus the turn decision scores, as the host exports it.
+"""The corpus the turn decision scores, as the host exports it.
 
 `lycaon-debug decide corpus` is the single source: every coordinator surface's
 floor and loadable tools, every tool's option text and request card, every
-instruction unit with its front matter, every loaded skill with the card the
-engine ranks, the question templates, and the turn kinds. Offline tooling
+loaded skill with the card the engine ranks, the question templates, and the
+turn kinds. Offline tooling
 reads that JSON instead of parsing the packs, so labels are always the host's
 own vocabulary. A training row carries the candidates its turn offered;
 `row_questions` asks exactly those.
@@ -34,7 +34,7 @@ def decide_dir():
 
 DEFAULT_PATH = decide_dir() / "corpus.json"
 
-SCHEMA = "pw-decide-corpus/2"
+SCHEMA = "pw-decide-corpus/3"
 
 KINDS = ("answer_only", "inspect", "change", "run", "delegate")
 
@@ -53,7 +53,6 @@ class Corpus:
         if set(self.tool_options) != set(self.tools):
             raise ValueError("corpus tool options must match the callable tool roster")
         self.state_spec = data.get("state", {})
-        self.units = {row["id"]: row for row in data["units"]}
         self.skills = {row["name"]: row for row in data.get("skills") or []}
 
     @classmethod
@@ -75,17 +74,12 @@ class Corpus:
         """Every loaded skill's card, the exact text the host's engine ranks."""
         return {name: row["card"] for name, row in self.skills.items()}
 
-    def multi_question(self, kind, ids):
-        """The host's multi question over candidate ids: every known candidate is an option.
-        Option order is the sorted id order the engine reads, as the host's map encodes it."""
-        spec = self.spec["tools"] if kind == "tool" else self.spec["guides"]
-        known = self.tool_options if kind == "tool" else self.units
-        self.require_candidates(kind, ids, known)
-        if kind == "tool":
-            options = {name: self.tool_options[name] for name in ids}
-        else:
-            options = {uid: self.units[uid].get("option", "") for uid in ids}
-        question = {"type": "multi", "instructions": spec["question"], "options": dict(sorted(options.items()))}
+    def tools_question(self, ids):
+        """The host's tools question over candidate ids: every known tool is an option.
+        Option order is the sorted name order the engine reads, as the host's map encodes it."""
+        self.require_candidates("tool", ids, self.tool_options)
+        options = {name: self.tool_options[name] for name in ids}
+        question = {"type": "multi", "instructions": self.spec["tools"]["question"], "options": dict(sorted(options.items()))}
         if self.independent():
             question["independent"] = True
         return question
@@ -101,11 +95,9 @@ class Corpus:
         offered, labels = row["offered"], row["labels"]
         for field in ("floor", "loadable"):
             self.require_candidates("offered." + field, offered[field], self.tools)
-        self.require_candidates("offered.guides", offered["guides"], self.units)
         loadable = offered["loadable"]
         for field in ("tools", "tool_scores"):
             self.require_candidates("labels." + field, labels.get(field), loadable)
-        self.require_candidates("labels.guides", labels.get("guides"), offered["guides"])
         for field in ("skills", "skill_scores"):
             self.require_candidates("labels." + field, labels.get(field), self.skills)
         second = labels.get("second_scores") or {}
@@ -118,18 +110,16 @@ class Corpus:
             self.require_candidates("second_scores.requests", scores, loadable)
 
     def independent(self):
-        """Whether the turn's multi questions encode one option per row. The tools
-        setting governs every multi question, so tools and guides share one encoding."""
+        """Whether the tools question encodes one option per row."""
         return bool(self.spec["tools"].get("independent"))
 
-    def questions(self, loadable, guides):
-        """The whole turn set the host asks over these candidates: tools and guides, and
+    def questions(self, loadable):
+        """The whole turn set the host asks over these candidates: the tools question, and
         the kind choice for a joint head (an independent head reads no roster)."""
         qs = {}
-        for kind, qid, ids in (("tool", "tools", loadable), ("guide", "guides", guides)):
-            q = self.multi_question(kind, ids)
-            if q["options"]:
-                qs[qid] = q
+        q = self.tools_question(loadable)
+        if q["options"]:
+            qs["tools"] = q
         if not self.independent():
             qs["kind"] = self.kind_question()
         return qs
@@ -137,28 +127,15 @@ class Corpus:
     def row_questions(self, row):
         """The turn set a training row's turn was asked: the candidates it offered."""
         self.validate_row(row)
-        return self.questions(row["offered"]["loadable"], row["offered"]["guides"])
+        return self.questions(row["offered"]["loadable"])
 
     def surface_questions(self, surface_id):
         """The turn set of a coordinator surface as the corpus declares it."""
         surface = self.surface(surface_id)
-        return self.questions(surface["loadable"], surface["guides"])
-
-    def question_id(self, kind, name):
-        return "%s.%s" % (kind, name)
+        return self.questions(surface["loadable"])
 
     def kind_question(self):
         return {"type": "choice", "instructions": self.spec["kind"]["instructions"], "options": self.spec["kind"]["options"]}
-
-    def guides_attached(self, tool):
-        """Instruction units that follow a tool: needed whenever the tool is."""
-        return sorted(uid for uid, u in self.units.items() if tool in (u.get("attaches") or []))
-
-    def unit_pack(self, uid):
-        return self.units[uid]["pack_id"]
-
-    def packs(self):
-        return sorted({u["pack_id"] for u in self.units.values()})
 
 
 def export(out_path):
@@ -178,8 +155,8 @@ def main():
     args = ap.parse_args()
     path = export(args.out)
     corpus = Corpus.load(path)
-    sys.stderr.write("corpus %s: %d surfaces, %d tools, %d units, %d skills from packs %s\n" % (
-        corpus.revision, len(corpus.surfaces), len(corpus.tools), len(corpus.units), len(corpus.skills), ", ".join(corpus.packs())))
+    sys.stderr.write("corpus %s: %d surfaces, %d tools, %d skills\n" % (
+        corpus.revision, len(corpus.surfaces), len(corpus.tools), len(corpus.skills)))
 
 
 if __name__ == "__main__":
