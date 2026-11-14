@@ -197,6 +197,56 @@ components:
         executions_omitted: {type: integer}
         nodes_omitted: {type: integer}
         next_cursor: {type: string}
+    CommandReceiptRow:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [index, text]
+      properties:
+        index: {type: integer, minimum: 0}
+        text:
+          type: string
+          description: >-
+            One JSON record without its line break. type is program, execution or node. A program
+            record holds program, progress when recorded, activity for an activity scope,
+            execution_count and node_count. An execution record holds program_id, activity_id for
+            an activity scope, and execution. A node record holds program_id and node.
+    CommandReceiptDocumentPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [revision, total_rows, settled, offset, end_offset, complete, rows]
+      properties:
+        revision: {type: string, pattern: '^[0-9a-f]{64}$', description: Snapshot these rows belong to.}
+        total_rows: {type: integer, minimum: 1}
+        settled: {type: boolean, description: 'True when no scoped program is still running or waiting, so the revision is final.'}
+        offset: {type: integer, minimum: 0}
+        end_offset: {type: integer, minimum: 0, description: Row just past this window; total_rows at the end of the document.}
+        complete: {type: boolean, description: True when this window reaches the end of the document.}
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandReceiptRow'
+    CommandReceiptMatch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [row, column, length]
+      properties:
+        row: {type: integer, minimum: 0}
+        column: {type: integer, minimum: 0, description: Rune offset of the match within its row.}
+        length: {type: integer, minimum: 1, description: Match length in runes.}
+    CommandReceiptSearchPage:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [matches]
+      properties:
+        matches:
+          type: array
+          items:
+            $ref: '#/components/schemas/CommandReceiptMatch'
+        next_cursor: {type: string, description: Opaque cursor for the next search page; absent when the search reached the end of the document.}
     CommandProgramProgressReceipt:
       x-go-generate: true
       type: object

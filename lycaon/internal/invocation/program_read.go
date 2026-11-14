@@ -25,6 +25,8 @@ var programPages = pagecursor.For[programPosition]("invocation-program-receipts"
 type ProgramReader interface {
 	ReadProgramPage(context.Context, string, string, string, int) (api.CommandProgramReceiptPage, error)
 	ReadProgramActivityPage(context.Context, string, string, string, string, int) (api.CommandProgramReceiptPage, error)
+	ReadReceiptDocument(context.Context, string, []ReceiptScope, string, int, int) (api.CommandReceiptDocumentPage, error)
+	SearchReceiptDocument(context.Context, string, []ReceiptScope, ReceiptSearch) (api.CommandReceiptSearchPage, error)
 }
 
 // ProgramForReceipt returns the program an invocation receipt launched, or
@@ -90,7 +92,7 @@ func (r *SQLRecorder) readProgramPage(ctx context.Context, sessionID, programID,
 		return out, err
 	}
 	next := position
-	out.Executions, next.Execution, err = readExecutions(ctx, tx, programID, position.Execution, limit, selection)
+	out.Executions, next.Execution, err = readExecutions(ctx, tx, programID, position.Execution, 0, limit, selection)
 	if err != nil {
 		return out, err
 	}

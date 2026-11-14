@@ -217,6 +217,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/sessions/{id}/program-receipt-document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read a row window of a command receipt document
+         * @description The document is JSON Lines written by the host from durable program records. For each scope in order it holds one program row, then the scope's execution rows by ordinal, then the program's node rows by node id. Reads that name a revision answer chat_content_changed once the records behind it change.
+         */
+        get: operations["getCommandReceiptDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/sessions/{id}/program-receipt-document/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search a command receipt document without reading its rows
+         * @description Each request scans a bounded number of rows, so a page may hold no matches and still carry next_cursor.
+         */
+        get: operations["searchCommandReceiptDocument"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/v1/sessions/{id}/invocations": {
         parameters: {
             query?: never;
@@ -11867,6 +11907,36 @@ export interface components {
             nodes_omitted: number;
             next_cursor?: string;
         };
+        CommandReceiptRow: {
+            index: number;
+            /** @description One JSON record without its line break. type is program, execution or node. A program record holds program, progress when recorded, activity for an activity scope, execution_count and node_count. An execution record holds program_id, activity_id for an activity scope, and execution. A node record holds program_id and node. */
+            text: string;
+        };
+        CommandReceiptDocumentPage: {
+            /** @description Snapshot these rows belong to. */
+            revision: string;
+            total_rows: number;
+            /** @description True when no scoped program is still running or waiting, so the revision is final. */
+            settled: boolean;
+            offset: number;
+            /** @description Row just past this window; total_rows at the end of the document. */
+            end_offset: number;
+            /** @description True when this window reaches the end of the document. */
+            complete: boolean;
+            rows: components["schemas"]["CommandReceiptRow"][];
+        };
+        CommandReceiptMatch: {
+            row: number;
+            /** @description Rune offset of the match within its row. */
+            column: number;
+            /** @description Match length in runes. */
+            length: number;
+        };
+        CommandReceiptSearchPage: {
+            matches: components["schemas"]["CommandReceiptMatch"][];
+            /** @description Opaque cursor for the next search page; absent when the search reached the end of the document. */
+            next_cursor?: string;
+        };
         InvocationReceiptList: {
             invocations: components["schemas"]["InvocationReceipt"][];
             next_cursor?: string;
@@ -17497,6 +17567,8 @@ export interface components {
     };
     parameters: {
         SessionId: string;
+        /** @description Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity. */
+        CommandReceiptScopes: string[];
         /** @description Stable coordinator draft message id for the turn */
         DraftSlotId: string;
         ProjectId: string;
@@ -17944,6 +18016,76 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommandProgramReceiptPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    getCommandReceiptDocument: {
+        parameters: {
+            query: {
+                /** @description Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity. */
+                scopes: components["parameters"]["CommandReceiptScopes"];
+                /** @description Snapshot to read. Omit it to read the current snapshot. */
+                revision?: string;
+                /** @description Zero-based row to start at. */
+                offset?: number;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rows from one snapshot of the receipt document */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandReceiptDocumentPage"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            default: components["responses"]["Error"];
+        };
+    };
+    searchCommandReceiptDocument: {
+        parameters: {
+            query: {
+                /** @description Ordered scopes of the document. A scope is a program id, for all of its executions, or program_id:activity_id, for the executions that host activity selects. A scope may not repeat, and a program may not appear both whole and by activity. */
+                scopes: components["parameters"]["CommandReceiptScopes"];
+                revision: string;
+                q: string;
+                case_sensitive?: boolean;
+                cursor?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                id: components["parameters"]["SessionId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Matches by row and rune column in the named snapshot */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommandReceiptSearchPage"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -30786,6 +30928,10 @@ export type CommandRevisionConflict = components["schemas"]["CommandRevisionConf
 export type CommandExecutionReceipt = components["schemas"]["CommandExecutionReceipt"];
 export type CommandProgramNode = components["schemas"]["CommandProgramNode"];
 export type CommandProgramReceiptPage = components["schemas"]["CommandProgramReceiptPage"];
+export type CommandReceiptRow = components["schemas"]["CommandReceiptRow"];
+export type CommandReceiptDocumentPage = components["schemas"]["CommandReceiptDocumentPage"];
+export type CommandReceiptMatch = components["schemas"]["CommandReceiptMatch"];
+export type CommandReceiptSearchPage = components["schemas"]["CommandReceiptSearchPage"];
 export type InvocationReceiptList = components["schemas"]["InvocationReceiptList"];
 export type PromptRecovery = components["schemas"]["PromptRecovery"];
 export type PromptReferencePathFile = components["schemas"]["PromptReferencePathFile"];

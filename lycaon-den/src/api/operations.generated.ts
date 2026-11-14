@@ -105,6 +105,7 @@ export const API_OPERATIONS = {
   getChatVault: { method: "GET", path: "/v1/sessions/{id}/vault" },
   getCodeScan: { method: "GET", path: "/v1/projects/{id}/scans/{scan_id}" },
   getCommandProgramReceipt: { method: "GET", path: "/v1/sessions/{id}/program-receipts/{program_id}" },
+  getCommandReceiptDocument: { method: "GET", path: "/v1/sessions/{id}/program-receipt-document" },
   getContributions: { method: "GET", path: "/v1/contributions" },
   getCoordinatorContext: { method: "GET", path: "/v1/sessions/{id}/coordinator-context" },
   getCostSummary: { method: "GET", path: "/v1/cost/summary" },
@@ -292,6 +293,7 @@ export const API_OPERATIONS = {
   saveEditorDocument: { method: "POST", path: "/v1/projects/{id}/editor-documents/{document_id}/save" },
   search: { method: "POST", path: "/v1/search" },
   searchChatContent: { method: "GET", path: "/v1/sessions/{id}/messages/{message_id}/content/search" },
+  searchCommandReceiptDocument: { method: "GET", path: "/v1/sessions/{id}/program-receipt-document/search" },
   searchContributionSource: { method: "POST", path: "/v1/projects/{id}/contribution-search/{source_id}" },
   searchProjectSource: { method: "GET", path: "/v1/projects/{id}/source/search" },
   searchSourceView: { method: "GET", path: "/v1/projects/{id}/source/views/{view_id}/presentations/{presentation_id}/search" },
@@ -452,6 +454,7 @@ export type OperationPathParameters = {
   getChatVault: { id: string | number; };
   getCodeScan: { id: string | number; scan_id: string | number; };
   getCommandProgramReceipt: { id: string | number; program_id: string | number; };
+  getCommandReceiptDocument: { id: string | number; };
   getContributions: Record<string, never>;
   getCoordinatorContext: { id: string | number; };
   getCostSummary: Record<string, never>;
@@ -639,6 +642,7 @@ export type OperationPathParameters = {
   saveEditorDocument: { id: string | number; document_id: string | number; };
   search: Record<string, never>;
   searchChatContent: { id: string | number; message_id: string | number; };
+  searchCommandReceiptDocument: { id: string | number; };
   searchContributionSource: { id: string | number; source_id: string | number; };
   searchProjectSource: { id: string | number; };
   searchSourceView: { id: string | number; view_id: string | number; presentation_id: string | number; };
