@@ -96,10 +96,19 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	if err := worker.RegisterTaskTool(b.execution.Host.Registry, taskDeps); err != nil {
 		return fmt.Errorf("task tool: %w", err)
 	}
+	waits := &awaitstore.Store{DB: b.storage.Database}
 	workerOps := &workerops.Service{
 		Reader:    workerops.Reader{Records: b.boards.WorkerRecords, Jobs: b.delegations.Queue, Decisions: b.sessions.Decisions},
 		Agents:    prompts.AgentMutationCapable,
 		Accounted: b.boards.ReleaseAccounted,
+		WakeParked: func(ctx context.Context, jobID string) error {
+			settled, err := waits.SettleWorkerWait(ctx, jobID, awaitstore.Condition{Kind: "instruction", Outcome: "received"})
+			if err != nil || !settled {
+				return err
+			}
+			_, err = b.delegations.Queue.ResumeReadyWaits(ctx)
+			return err
+		},
 	}
 	if err := worker.RegisterAnswerDecisionTool(b.execution.Host.Registry, worker.AnswerDecisionToolDeps{
 		Answer:  b.boards.AnswerDecision,

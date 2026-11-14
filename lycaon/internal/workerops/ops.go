@@ -111,6 +111,9 @@ type Service struct {
 	// Accounted hears of results an operation accounted for, by job, so the
 	// checklist latch can release them.
 	Accounted func(sessionID string, jobIDs []string)
+	// WakeParked settles a parked round's wait because an instruction
+	// arrived; the worker resumes and reads it at its next model call.
+	WakeParked func(ctx context.Context, jobID string) error
 }
 
 func (s *Service) accounted(sessionID, jobID string) {
@@ -177,6 +180,11 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 			return Receipt{}, err
 		}
 		latest, _ := snap.Latest()
+		if snap.Facts.Latest != nil && snap.Facts.Latest.Parked {
+			if err := s.WakeParked(ctx, latest.JobID); err != nil {
+				return Receipt{}, err
+			}
+		}
 		return Receipt{Worker: w.Name, Outcome: OutcomeQueued, State: view.State, Round: latest.Ordinal, JobID: latest.JobID, InstructionSeq: m.Seq}, nil
 	}
 	jobID, target, err := enqueue(ctx, RoundJob{Worker: w, Instructions: in.Instructions, Brief: in.Brief, AgentType: in.AgentType, ScopeMode: scope})

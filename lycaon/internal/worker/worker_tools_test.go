@@ -59,8 +59,9 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 	testutil.FailErr(t, "create worker", err)
 	f.workerID = w.WorkerID
 	f.ops = &workerops.Service{
-		Reader: workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
-		Agents: prompts.AgentMutationCapable,
+		Reader:     workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
+		Agents:     prompts.AgentMutationCapable,
+		WakeParked: func(context.Context, string) error { return nil },
 	}
 	testutil.FailErr(t, "register", RegisterWorkerTools(f.reg, WorkerToolDeps{Ops: f.ops, Queue: f.queue}))
 	return f
