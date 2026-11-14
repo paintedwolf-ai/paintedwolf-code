@@ -74,7 +74,7 @@ func TestCancelServiceReturnsChangeReportAndEnvelope(t *testing.T) {
 	if result.WorkerSummary.Status != api.WorkerSummaryStatusCanceled {
 		t.Fatalf("worker_summary.status = %q", result.WorkerSummary.Status)
 	}
-	if !strings.Contains(result.WorkerSummary.Envelope, "state=\"canceled\"") || !strings.Contains(result.WorkerSummary.Envelope, jobID) {
+	if !strings.Contains(result.WorkerSummary.Envelope, "state=\"canceled\"") || strings.Contains(result.WorkerSummary.Envelope, jobID) {
 		t.Fatalf("tool envelope = %q", result.WorkerSummary.Envelope)
 	}
 }

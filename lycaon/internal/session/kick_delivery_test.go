@@ -177,10 +177,10 @@ func TestAppendWorkerSummaryDoesNotEchoEnvelopeInAssistantProse(t *testing.T) {
 		if msg.Role != api.MessageRoleTool {
 			continue
 		}
-		if !strings.Contains(msg.Content, `<task job_id="`+jobID+`"`) {
-			t.Fatalf("tool body must carry the completion envelope, got %q", msg.Content)
+		if !strings.Contains(msg.Content, `<task `) || strings.Contains(msg.Content, jobID) {
+			t.Fatalf("tool body must carry the completion envelope without the job, got %q", msg.Content)
 		}
-		if msg.WorkerSummary != nil && strings.Contains(msg.WorkerSummary.Envelope, `<task job_id="`+jobID+`"`) {
+		if msg.WorkerSummary != nil && msg.WorkerSummary.WorkerID == jobID && strings.Contains(msg.WorkerSummary.Envelope, `<task `) {
 			if msg.WorkerSummary.ChildSessionID != child.ID {
 				t.Fatalf("worker_summary child_session_id = %q want %q", msg.WorkerSummary.ChildSessionID, child.ID)
 			}
@@ -227,12 +227,12 @@ func TestAppendWorkerSummaryProjectsEnvelopeToModel(t *testing.T) {
 	projected := transcript.Project(msgs)
 	var body string
 	for _, msg := range projected {
-		if msg.Role == api.MessageRoleTool && strings.Contains(msg.Content, jobID) {
+		if msg.Role == api.MessageRoleTool && strings.Contains(msg.Content, "<task ") {
 			body = msg.Content
 		}
 	}
 	if body == "" {
-		t.Fatal("no projected tool message carried the worker job")
+		t.Fatal("no projected tool message carried the worker completion")
 	}
 	if !strings.Contains(body, finding) {
 		t.Fatalf("projected worker result dropped the summary; body = %q", body)

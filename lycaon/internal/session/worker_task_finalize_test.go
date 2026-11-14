@@ -279,7 +279,7 @@ func TestProjectWorkerCardRejectsInvalidSummaryContract(t *testing.T) {
 	}
 
 	mismatchedEnvelope := workerSummaryFixture(jobID, "child-1", "implementer", api.WorkerSummaryStatusComplete)
-	mismatchedEnvelope.ChildSessionID = "child-2"
+	mismatchedEnvelope.AgentType = "reviewer"
 	if err := mgr.Workers.Cards.Project(ctx, parent.ID, jobID, mismatchedEnvelope); err == nil {
 		t.Fatal("mismatched envelope identity accepted")
 	}

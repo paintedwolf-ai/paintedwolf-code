@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -48,7 +49,7 @@ func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T
 		if snapshot.ScopeSessionID != "root" || snapshot.InitializationRequired || snapshot.Content != expected.Content || snapshot.Revision != expected.Revision || current.ProgressOpenCount != 2 || current.ProgressMissing {
 			t.Fatalf("stored facts were lost: %+v / %+v", snapshot, current)
 		}
-		if snapshot.Reconciliation == nil || snapshot.Reconciliation.Token != closure.Reconciliation("root").Token || len(snapshot.Reconciliation.Jobs) != 1 || snapshot.Reconciliation.Jobs[0] != "worker-one" {
+		if snapshot.Reconciliation == nil || snapshot.Reconciliation.Token != closure.Reconciliation("root").Token || strings.Contains(current.ProgressSnapshot, "worker-one") {
 			t.Fatalf("wrong root finish set: %+v", snapshot)
 		}
 		if previousRevision != "" && previousRevision == snapshot.Revision {

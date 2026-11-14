@@ -7,12 +7,12 @@ import (
 	"testing"
 )
 
-// The completion envelope and digest carry the worker's name and keep the job
-// id as host identity; a round with no worker names nothing.
+// The completion envelope and digest carry the worker's name; the job stays
+// host identity outside the block. A round with no worker names nothing.
 func TestEnvelopeNamesTheWorker(t *testing.T) {
 	out := FormatWorkerCompletionEnvelope(WorkerCompletionEnvelope{Worker: "parser-fix", JobID: "job-1", AgentType: "implementer", State: "complete"})
 	env, ok := ParseWorkerCompletionEnvelope(out)
-	if !ok || env.Worker != "parser-fix" || env.JobID != "job-1" {
+	if !ok || env.Worker != "parser-fix" || env.JobID != "" || strings.Contains(out, "job-1") {
 		t.Fatalf("round trip = %+v ok=%v\n%s", env, ok, out)
 	}
 	if digest := FormatWorkerDigest("implementer", "parser-fix", "complete", "", WorkerCompletionProof{}, WorkerCompletionReport{}); !strings.Contains(digest, "parser-fix") {
