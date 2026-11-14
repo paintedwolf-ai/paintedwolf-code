@@ -37,7 +37,7 @@ describe("CONTAINERS fallback and log recognition", () => {
       doc: "Just plain prose without any JSON containers.\n",
       extensions: [createPrettyExtension({ enabled: true, path: "notes.txt" })],
     });
-    expect(prettyOutcomeOf(txtProseState).kind).toBe("unavailable");
+    expect(decorationCount(txtProseState)).toBe(0);
   });
 
   it("extracts multiple containers on an anchored log line and skips trailing metadata", () => {
