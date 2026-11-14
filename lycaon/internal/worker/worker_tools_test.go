@@ -93,26 +93,39 @@ func (f *workerToolsFixture) deliverWith(t *testing.T, jobID, checkpoint string)
 
 func (f *workerToolsFixture) run(t *testing.T, tool, call string, args map[string]any) (string, error) {
 	t.Helper()
-	return f.reg.Run(t.Context(), tool, args, tools.ToolContext{
+	out, _, err := f.runOut(t, tool, call, args)
+	return out, err
+}
+
+func (f *workerToolsFixture) runOut(t *testing.T, tool, call string, args map[string]any) (string, *tools.ToolInvocationOut, error) {
+	t.Helper()
+	effects := &tools.ToolInvocationOut{}
+	out, err := f.reg.Run(t.Context(), tool, args, tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "coord", ProjectID: testdbseed.DefaultProjectID, ToolCallID: call},
 		Source:   tools.InvocationSource{ActiveRootID: "root-id", Roots: []projectroot.RootRef{{ID: "root-id", Path: f.root, IsPrimary: true}}},
+		Effects:  tools.InvocationEffects{Out: effects},
 	})
+	return out, effects, err
 }
 
 // One instruction turns the delivered surveyor into the implementer on the
-// same child session; replaying the call enqueues nothing new.
+// same child session, and its result is where the new round completes; the
+// model sees the worker, not the job. Replaying the call enqueues nothing new.
 func TestInstructWorkerStartsTheNextRoundOnce(t *testing.T) {
 	f := newWorkerToolsFixture(t)
 	f.deliver(t, "job-1")
 	args := map[string]any{"worker": "surveyor", "instructions": "implement the fix you found", "agent_type": "implementer"}
-	out, err := f.run(t, InstructWorkerTool, "call-1", args)
+	out, effects, err := f.runOut(t, InstructWorkerTool, "call-1", args)
 	testutil.FailErr(t, "instruct", err)
-	var receipt workerops.Receipt
+	var receipt map[string]any
 	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &receipt))
-	if receipt.Outcome != workerops.OutcomeStarted || receipt.Round != 2 || receipt.Accounted != "result-job-1" {
+	if receipt["outcome"] != string(workerops.OutcomeStarted) || receipt["round"] != float64(2) || receipt["accounted"] != "result-job-1" || receipt["job_id"] != nil {
 		t.Fatalf("receipt = %s", out)
 	}
-	job, ok := f.queue.Get(receipt.JobID)
+	if effects.Dispatch == nil || effects.Dispatch.ChildSessionID != "child" || effects.Dispatch.AgentType != "implementer" {
+		t.Fatalf("dispatch = %+v", effects.Dispatch)
+	}
+	job, ok := f.queue.Get(effects.Dispatch.WorkerID)
 	if !ok || job.ChildSessionID != "child" || job.AgentType != "implementer" || job.EffectiveScope().Mode != api.TaskScopeModeWrite || job.Prompt != "implement the fix you found" {
 		t.Fatalf("job = %+v", job)
 	}

@@ -47,6 +47,40 @@ func TestCardsRetainDispatchIdentityAcrossCompletionRetries(t *testing.T) {
 	}
 }
 
+// A round an instruction started completes onto that instruction's result;
+// an instruction that reached a running round started nothing to complete.
+func TestInstructedRoundCompletesOntoItsInstruction(t *testing.T) {
+	messages := store.NewMemory()
+	parent, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
+	testutil.FailErr(t, "create parent", err)
+	instruct := func(callID string, dispatch *api.WorkerDispatch) []api.Message {
+		return []api.Message{
+			{ID: callID + "-a", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: callID, Name: "instruct_worker"}}},
+			{ID: callID + "-t", Role: api.MessageRoleTool, Content: `{"worker":"fixer","outcome":"started"}`,
+				ToolResult: &api.ToolResult{Tool: "instruct_worker", ToolCallID: callID, Dispatch: dispatch}},
+		}
+	}
+	testutil.FailErr(t, "append", messages.AppendMessages(t.Context(), parent.ID, append(
+		instruct("queued", nil), instruct("started", &api.WorkerDispatch{WorkerID: "round-2", ChildSessionID: "child", AgentType: "implementer"})...)...))
+	queue := fakeTaskLookup{"round-2": {ID: "round-2", ChildSessionID: "child", AgentType: "implementer", SourceToolCallID: "started"}}
+	cards := NewCards(messages, memoryTranscript{messages}, queue, nil)
+	envelope := workercompletion.FormatWorkerCompletionEnvelope(workercompletion.WorkerCompletionEnvelope{JobID: "round-2", ChildSessionID: "child", AgentType: "implementer", State: "complete", Summary: "Added Count"})
+	summary := &api.WorkerSummaryMeta{WorkerID: "round-2", ChildSessionID: "child", AgentType: "implementer", Status: api.WorkerSummaryStatusComplete, Envelope: envelope}
+	testutil.FailErr(t, "project completion", cards.Project(t.Context(), parent.ID, "round-2", summary))
+	after, err := messages.GetMessages(t.Context(), parent.ID)
+	testutil.FailErr(t, "read", err)
+	if len(after) != 4 || after[3].Content != envelope || after[3].WorkerSummary == nil || after[1].WorkerSummary != nil {
+		t.Fatalf("completion did not land on the starting instruction: %+v", after)
+	}
+}
+
+type fakeTaskLookup map[string]*api.WorkerTask
+
+func (f fakeTaskLookup) Get(id string) (*api.WorkerTask, bool) {
+	task, ok := f[id]
+	return task, ok
+}
+
 func TestCardsRejectMismatchedEnvelopeBeforeChangingTranscript(t *testing.T) {
 	messages := store.NewMemory()
 	parent, err := messages.Create(t.Context(), api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
