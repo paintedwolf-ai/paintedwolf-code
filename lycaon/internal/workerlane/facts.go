@@ -84,12 +84,16 @@ func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Che
 }
 
 // priorUnlandedCheckpoint is the latest earlier checkpoint in the current
-// lane generation whose result was neither landed nor rejected.
+// lane generation whose result was neither landed nor rejected. Rounds run one
+// at a time and a lane switches only when a round's job is claimed, after the
+// previous round settled; so a round belongs to the generation when it settled
+// after the generation was prepared. Admission order says nothing: a round is
+// admitted before the claim that prepares its lane.
 func priorUnlandedCheckpoint(earlier []workerrecords.Round, changes map[string]string, prep workerrecords.PreparationRecord) string {
 	switched, _ := db.ParseTime(prep.CreatedAt)
 	for i := len(earlier) - 1; i >= 0; i-- {
 		r := earlier[i]
-		if created, err := db.ParseTime(r.CreatedAt); err == nil && created.Before(switched) {
+		if settled, err := db.ParseTime(r.SettledAt); err == nil && settled.Before(switched) {
 			return ""
 		}
 		state := ChangeState(changes[r.ResultID])
