@@ -13,7 +13,7 @@ import { clearTranscriptEntryMemory, noteTranscriptEntryBaseline, transcriptEntr
 import { clearVisualArtifactSessionMemory, noteVisualArtifactIntroBaseline } from "../chat/visual/visual-artifact-reveal.ts";
 import { mergeTranscriptBaseline } from "../chat/transcript/projection/transcript-baseline-merge.ts";
 import { transcriptReaderReach } from "../chat/transcript/history/transcript-reader-reach.ts";
-import { TRANSCRIPT_PAGE_BUDGET, appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, transcriptWindowPage, trimOldestPages } from "../chat/transcript/layout/transcript-window.ts";
+import { TRANSCRIPT_RESIDENT_ORD_BUDGET, appendToTail, applyTranscriptPage, copyTranscriptWindow, emptyTranscriptWindow, installTailWindow, materializeTranscriptWindow, mergeIntoTail, patchRowInWindow, precedesLiveTail, refreshTailWindow, resetOlderPages, residentPageOrds, transcriptWindowPage, trimOldestPages } from "../chat/transcript/layout/transcript-window.ts";
 import { clearDraftVersionCache } from "../chat/draft/draft-version-cache.ts";
 import { clearChatContentCache } from "../chat/transcript/content/chat-content-reader.ts";
 import { messagesEqual } from "../chat/transcript/projection/messages-equal.ts";
@@ -375,7 +375,7 @@ export function createAppStore(
     },
     trimTranscriptPages() {
       const sessionId = state.transcriptSessionId?.trim();
-      if (Object.keys(state.transcript.pages).length <= TRANSCRIPT_PAGE_BUDGET) return;
+      if (residentPageOrds(state.transcript.pages) <= TRANSCRIPT_RESIDENT_ORD_BUDGET) return;
       setState(
         produce((draft) => {
           const next = trimOldestPages(draft.transcript, residencyPolicy(sessionId));
