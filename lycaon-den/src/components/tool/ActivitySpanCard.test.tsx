@@ -77,23 +77,17 @@ afterEach(() => {
 });
 
 describe("ActivitySpanCard live layout", () => {
-  it("keeps composition and output links mounted when entries are rebuilt", () => {
+  it("keeps output links mounted when entries are rebuilt", () => {
     const [current, setCurrent] = createSignal(entries);
     const { container } = render(() => (
       <ActivitySpanCard label="read" entries={current()} layout="chat" />
     ));
-    const composition = container.querySelector(".den-activity-span-cmd");
     fireEvent.click(container.querySelector(".den-activity-span > .den-transcript-disclosure-header")!);
     fireEvent.click(container.querySelector(".den-tool-part > .den-transcript-disclosure-header")!);
     const output = container.querySelector('[data-testid="tool-content-link"]');
-    expect(composition).not.toBeNull();
     expect(output).not.toBeNull();
     setCurrent(parts.map((part) => ({ kind: "tool", part: { ...part } })));
-    expect(container.querySelector(".den-activity-span-cmd")).toBe(composition);
     expect(container.querySelector('[data-testid="tool-content-link"]')).toBe(output);
-    setCurrent([{ kind: "tool", part: { ...parts[0]! } }]);
-    expect(container.querySelector(".den-activity-span-cmd")).toBe(composition);
-    expect(composition?.querySelector(".den-activity-span-cmd-count")).toBeNull();
   });
 });
 
@@ -172,10 +166,9 @@ describe("ActivitySpanCard", () => {
     expect(span?.querySelector(".den-activity-span-hint")?.textContent).toBe(
       "main.go, +1",
     );
-    expect(container.querySelector(".den-activity-span-composition")).toBeTruthy();
   });
 
-  it("keys composition chips by operation label for non-command entries", () => {
+  it("leaves the hint empty when every title repeats the operation", () => {
     const repeated: ActivitySpanEntry[] = parts.map((part) => ({
       kind: "tool",
       part: { ...part, title: "read", args: { path: "read" } },
@@ -187,13 +180,6 @@ describe("ActivitySpanCard", () => {
     expect(
       container.querySelector(".den-activity-span-hint")?.textContent,
     ).toBe("");
-    const chips = [...container.querySelectorAll(".den-activity-span-cmd")].map(
-      (c) => ({
-        name: c.querySelector(".den-activity-span-cmd-name")?.textContent,
-        count: c.querySelector(".den-activity-span-cmd-count")?.textContent,
-      }),
-    );
-    expect(chips).toEqual([{ name: "Read", count: undefined }]);
   });
 
   it("renders a singleton through the same span without a redundant count", () => {
@@ -277,65 +263,9 @@ describe("ActivitySpanCard", () => {
     ));
     const span = container.querySelector('[data-testid="activity-span-card"]');
     expect(span?.getAttribute("data-count")).toBe("4");
-    const chips = [...container.querySelectorAll(".den-activity-span-cmd")].map(
-      (c) => ({
-        name: c.querySelector(".den-activity-span-cmd-name")?.textContent,
-        count: c.querySelector(".den-activity-span-cmd-count")?.textContent,
-      }),
+    expect(disclosureToggle(span).getAttribute("aria-label")).toBe(
+      "Investigating, done, 4 actions",
     );
-    expect(chips).toEqual([
-      { name: "Read", count: undefined },
-      { name: "Grep", count: undefined },
-    ]);
-  });
-
-  it("breaks down a mixed terminal span too", () => {
-    const terminal: ActivitySpanEntry[] = [
-      {
-        kind: "tool",
-        part: {
-          id: "o1",
-          toolCallId: "o1",
-          assistantMessageId: "assistant-message",
-          messageId: "m1",
-          tool: "terminal_open",
-          kind: "generic",
-          status: "completed",
-          title: "command",
-          args: { command: "command" },
-          output: "ok",
-          error: null,
-        },
-      },
-      {
-        kind: "tool",
-        part: {
-          id: "s1",
-          toolCallId: "s1",
-          assistantMessageId: "assistant-message",
-          messageId: "m1",
-          tool: "terminal_send",
-          kind: "generic",
-          status: "completed",
-          title: "ls",
-          args: { id: "pty-1", data: "ls\n" },
-          output: "ok",
-          error: null,
-        },
-      },
-    ];
-    const { container } = render(() => (
-      <ActivitySpanCard
-        label="terminal"
-        entries={terminal}
-        layout="chat"
-      />
-    ));
-    expect(
-      [...container.querySelectorAll(".den-activity-span-cmd-name")].map(
-        (el) => el.textContent,
-      ),
-    ).toEqual(["Terminal open", "Terminal send"]);
   });
 
   it("keeps span arrival state independent from nested rows", () => {
@@ -719,7 +649,6 @@ describe("ActivitySpanCard", () => {
       '[data-testid="activity-span-card"]',
     ) as HTMLElement;
     expect(span.getAttribute("data-count")).toBe("4");
-    expect(container.querySelectorAll(".den-activity-span-cmd")).toHaveLength(2);
     span.setAttribute("open", "open");
 
     const rows = [
