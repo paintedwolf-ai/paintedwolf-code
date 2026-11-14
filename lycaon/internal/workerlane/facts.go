@@ -54,9 +54,11 @@ func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Che
 	if err != nil {
 		return Facts{}, err
 	}
+	// Rounds without changes leave the lane as it was, so the latest round
+	// with a checkpoint decides it.
 	last := -1
 	for i := len(rounds) - 1; i >= 0; i-- {
-		if rounds[i].SettledAt != "" && rounds[i].ResultID != "" {
+		if rounds[i].SettledAt != "" && rounds[i].ResultID != "" && rounds[i].CheckpointID != "" {
 			last = i
 			break
 		}
