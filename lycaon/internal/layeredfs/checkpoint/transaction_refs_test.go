@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -80,8 +79,7 @@ func TestTransactionRefUndoPreservesExternalRefs(t *testing.T) {
 	}
 }
 
-// A non-primary root's refs import into that root's own repository and roll back from it, inside a
-// tool call.
+// A non-primary root's refs import into that root's own repository and roll back from it.
 func TestTransactionImportsAndRestoresRefsPerRoot(t *testing.T) {
 	roots := map[string]string{"primary": t.TempDir(), "second": t.TempDir(), "plain": t.TempDir()}
 	for _, id := range []string{"primary", "second"} {
@@ -111,7 +109,7 @@ func TestTransactionImportsAndRestoresRefsPerRoot(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "tx")
 	txn, err := BeginTransaction(TransactionConfig{Dir: dir, ID: "refs"})
 	testutil.FailErr(t, "begin", err)
-	rec, err := txn.ApplyCheckpoint(gitexec.AgentEntry(t.Context()), promoter, ApplyRequest{Preview: preview, ImportGitRefs: true})
+	rec, err := txn.ApplyCheckpoint(t.Context(), promoter, ApplyRequest{Preview: preview, ImportGitRefs: true})
 	testutil.FailErr(t, "apply", err)
 	ref := filepath.Join(roots["second"], ".git/refs/lycaon/workers/worker/heads/feature")
 	body, err := os.ReadFile(ref)

@@ -12,9 +12,9 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// PromoteOverlay implements session.OverlayPromoter for the worker merge service.
 // PromoteOverlay lands an overlay's changes.
 func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
+	ctx = mergeGit(ctx)
 	out, err := s.promoteOverlay(ctx, sessionID, overlayID, in)
 	s.nameOverlaps(ctx, &out)
 	return out, err

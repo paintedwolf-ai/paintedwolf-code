@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/editordoc"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
@@ -30,6 +31,12 @@ const (
 	OverlayPromoteResolutionsRequiredCode = "OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED"
 	OverlayPromoteSyntaxUnhealthyCode     = "OVERLAY_PROMOTE_SYNTAX_UNHEALTHY"
 )
+
+// mergeGit names the host purpose of a merge operation's Git. The coordinator
+// chose the operation inside its tool call, not the commands that carry it out.
+func mergeGit(ctx context.Context) context.Context {
+	return gitexec.WithHostPurpose(ctx, "worker_merge")
+}
 
 // MergeQueue loads worker jobs and materializes their branches.
 type MergeQueue interface {
@@ -129,6 +136,7 @@ type MergeService struct {
 
 // PreviewForSession assesses one overlay without changing state.
 func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, detail string, paths []string) (api.WorkerMergeResult, error) {
+	ctx = mergeGit(ctx)
 	out, err := s.previewForSession(ctx, sessionID, jobID, detail, paths)
 	s.nameOverlaps(ctx, &out)
 	return out, err
