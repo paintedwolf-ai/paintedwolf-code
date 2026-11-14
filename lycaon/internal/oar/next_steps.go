@@ -88,10 +88,6 @@ func (l *Loader) validateNextSteps(r *Rule) error {
 		}
 	}
 	if r.NextSteps == nil {
-		// Copy that displays next steps would render without a remedy.
-		if bindsNextSteps(r) {
-			return fmt.Errorf("rule %s displays %s but has no next-steps entry", r.ID, NextStepsFact)
-		}
 		return nil
 	}
 	known := ruleFactRefs(r)
