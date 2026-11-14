@@ -487,6 +487,14 @@
       "paintedwolf.suggested_resume_max": {
         "content_contract": "paintedwolf.worker_round_without_ceiling",
         "version": 1
+      },
+      "paintedwolf.current_max": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      },
+      "paintedwolf.host_max": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
       }
     },
     "rejection_codes": {
