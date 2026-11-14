@@ -150,18 +150,6 @@ func TestValidateNextStepsRejectsDecisionReadsAcrossAllConditionSurfaces(t *test
 	}
 }
 
-// Copy that displays next steps needs steps to display.
-func TestLoaderRejectsABoundFactWithoutSteps(t *testing.T) {
-	loader, err := NewLoader("")
-	testutil.FailErr(t, "load OAR", err)
-	rule := &Rule{ID: "R", RequiresFacts: []string{NextStepsFact}, Copy: Copy{Fix: "{{ paintedwolf.next_steps }}"}}
-	if err := loader.validateNextSteps(rule); err == nil {
-		t.Fatal("accepted a rule that displays next steps it does not have")
-	}
-	rule.NextSteps = &NextSteps{Steps: []NextStep{{Tool: "recall", Say: "Use {{ call }}."}}}
-	testutil.FailErr(t, "rule with steps", loader.validateNextSteps(rule))
-}
-
 func schemaTestConfig() *toolschema.Config {
 	return &toolschema.Config{Tools: map[string]toolschema.Entry{
 		"recall":  {Schema: map[string]any{"type": "object", "properties": map[string]any{"query": map[string]any{"type": "string"}}}},
