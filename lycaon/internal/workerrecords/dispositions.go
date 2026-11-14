@@ -181,3 +181,29 @@ func (s *Store) Result(ctx context.Context, actor Actor, resultID string) (Resul
 	}
 	return ref, nil
 }
+
+// AccountJobs records that the coordinator accounted for the results of the
+// named jobs' rounds, as a checklist acknowledgement does. Jobs that run no
+// worker round are skipped, and a result already accounted for keeps its
+// first accounting.
+func (s *Store) AccountJobs(ctx context.Context, jobIDs []string) error {
+	tx, err := s.handle.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := s.q.WithTx(tx)
+	now := s.stamp()
+	for _, id := range jobIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, err := q.AccountWorkerResultsByJob(ctx, db.AccountWorkerResultsByJobParams{
+			OperationID: "progress_acknowledgement:" + id, AccountedAt: nullString(now), JobID: id,
+		}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}

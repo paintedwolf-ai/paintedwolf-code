@@ -92,6 +92,7 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.deps.Sessions.Manager.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
 	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
+	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetAccounts(r.WorkerRecords)
 	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{
 		Records:    r.WorkerRecords,
 		NeedsReply: r.deps.Sessions.Manager.Coordinator.Workers.MessageNeedsReply,
@@ -289,4 +290,11 @@ type sessionRootResolver struct {
 
 func (s sessionRootResolver) RootSessionID(ctx context.Context, sessionID string) string {
 	return sessiontree.RootID(ctx, s.store, sessionID)
+}
+
+// ReleaseAccounted lets the checklist latch release worker finishes whose
+// results an operation accounted for.
+func (r *Runtime) ReleaseAccounted(sessionID string, jobIDs []string) {
+	ctx := context.Background()
+	r.deps.Sessions.Manager.Coordinator.ProgressClosure.Release(r.rootSessionKey(ctx, sessionID), jobIDs)
 }

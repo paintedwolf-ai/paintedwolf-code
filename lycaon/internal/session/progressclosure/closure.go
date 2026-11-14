@@ -22,12 +22,22 @@ type Service struct {
 	mu        sync.Mutex
 	progress  Progress
 	tasks     Tasks
+	accounts  Accounts
 	baselines scopedstore.LRU[guard.ProgressClosureBaseline]
+}
+
+// Accounts records that the coordinator accounted for the results of the
+// acknowledged worker finishes.
+type Accounts interface {
+	AccountJobs(ctx context.Context, jobIDs []string) error
 }
 
 func New() *Service                       { return &Service{} }
 func (m *Service) SetProgress(p Progress) { m.progress = p }
 func (m *Service) SetTasks(p Tasks)       { m.tasks = p }
+
+// SetAccounts wires durable accounting of acknowledged results.
+func (m *Service) SetAccounts(a Accounts) { m.accounts = a }
 func (m *Service) Forget(id string)       { m.mu.Lock(); defer m.mu.Unlock(); m.baselines.Delete(id) }
 
 // Arm records a successful worker finish against the current checklist.
@@ -61,6 +71,40 @@ func (m *Service) Arm(ctx context.Context, rootID, jobID string) {
 	if jobID != "" && !slices.Contains(baseline.JobIDs, jobID) {
 		baseline.JobIDs = append(slices.Clone(baseline.JobIDs), jobID)
 	}
+	m.baselines.Store(rootID, baseline)
+}
+
+// Release removes finishes from the latch once an operation accounted for
+// their results on the record: an instruction to the worker that delivered
+// it, a rejection or a shelving. The latch clears with its last finish.
+func (m *Service) Release(rootID string, jobIDs []string) {
+	if m == nil {
+		return
+	}
+	rootID = strings.TrimSpace(rootID)
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	baseline, armed := m.baselines.Load(rootID)
+	if !armed {
+		return
+	}
+	kept := make([]string, 0, len(baseline.JobIDs))
+	for _, id := range baseline.JobIDs {
+		if !slices.Contains(jobIDs, id) {
+			kept = append(kept, id)
+		}
+	}
+	if len(kept) == 0 {
+		m.baselines.Delete(rootID)
+		return
+	}
+	settled := make([]string, 0, len(baseline.Settled))
+	for _, entry := range baseline.Settled {
+		if !slices.ContainsFunc(jobIDs, func(id string) bool { return entry == m.settledWorkEntry(id) }) {
+			settled = append(settled, entry)
+		}
+	}
+	baseline.JobIDs, baseline.Settled = kept, settled
 	m.baselines.Store(rootID, baseline)
 }
 

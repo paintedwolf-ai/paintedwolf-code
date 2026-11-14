@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: INSTRUCT_WORKER_RECOVERING
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - instruct_worker
+requires_facts: [paintedwolf.rejection_code]
+when: paintedwolf.rejection_code == "INSTRUCT_WORKER_RECOVERING"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
+message: 'The worker''s workspace needs recovery first.'
+what: 'The worker''s workspace needs recovery first.'
+cause: Settlement, landing or workspace preparation left a blocker that must be resolved.
+why: A new round on an unrecovered workspace could lose or mix work.
+fix: Resolve the recovery the roster names, then instruct the worker.
+instead: Branch on Code INSTRUCT_WORKER_RECOVERING; do not retry the same call
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: instruct_worker

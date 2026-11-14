@@ -51,6 +51,10 @@ fallback_title_keys:
   - refs
 
 tools:
+  instruct_worker:
+    running_label: "Instructing a worker…"
+    title_keys: [worker]
+    activity: {headline: "directing workers", salience: defining, role: coordination}
   process_list:
     title_keys: []
     running_label: "Inspecting processes…"
@@ -172,6 +176,10 @@ tools:
     title_keys: [path]
     running_label: "Loading blame…"
     activity: {headline: "inspecting Git", salience: supporting, role: investigation}
+  shelve_overlay:
+    running_label: "Shelving changes…"
+    title_keys: [reason]
+    activity: {headline: "managing worker changes", salience: defining, role: coordination}
   source_history:
     title_keys: [path]
     title_fallback: "Session changes"
@@ -469,6 +477,10 @@ tools:
     title_keys: [reason]
     activity: {headline: "delegating work", salience: primary, role: coordination}
     title_fallback: "Worker task"
+  worker_history:
+    running_label: "Reading worker history…"
+    title_keys: [worker]
+    activity: {headline: "reviewing workers", salience: supporting, role: investigation}
   workflow_advance:
     running_label: "Moving to the next phase…"
     title_keys: []

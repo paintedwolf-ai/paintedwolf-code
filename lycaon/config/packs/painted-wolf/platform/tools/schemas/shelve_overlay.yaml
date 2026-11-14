@@ -1,0 +1,13 @@
+tags: [workers]
+description: Leave a worker result's changes unlanded on purpose, with the reason. This accounts for the result and discards nothing; the changes can still be previewed, landed or rejected later, and shelving ends when the worker starts another round.
+schema:
+  type: object
+  properties:
+    overlay_id:
+      type: string
+      description: The result handle whose changes stay unlanded.
+    reason:
+      type: string
+      description: Why the changes wait, such as a pending decision or a later release.
+  required: [overlay_id, reason]
+  additionalProperties: false

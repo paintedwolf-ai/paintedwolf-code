@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/lycaon/lycaon/internal/db"
 )
 
@@ -170,4 +171,129 @@ func (s *Store) Rounds(ctx context.Context, actor Actor, workerID string) ([]Rou
 		out = append(out, round)
 	}
 	return out, nil
+}
+
+// RoundStart starts a stopped worker's next round on an enqueued job with the
+// instruction that starts it. A non-empty Brief replaces the standing brief;
+// a non-empty AgentType changes the worker's agent and scope mode, and the
+// child session's agent with them, so every reader of either sees the new
+// agent from the round's first call.
+type RoundStart struct {
+	JobID           string          `json:"job_id"`
+	ExecutionTarget string          `json:"execution_target"`
+	ReviewSubject   json.RawMessage `json:"review_subject,omitempty"`
+	Instruction     string          `json:"instruction"`
+	Brief           string          `json:"brief,omitempty"`
+	AgentType       string          `json:"agent_type,omitempty"`
+	ScopeMode       string          `json:"scope_mode,omitempty"`
+}
+
+// RoundStartReceipt names the round and its starting instruction.
+type RoundStartReceipt struct {
+	RoundReceipt
+	InstructionSeq int64 `json:"instruction_seq"`
+}
+
+// StartRound admits the round, records its starting instruction as the
+// round's instruction range, and applies any brief or agent change, in one
+// transaction.
+func (s *Store) StartRound(ctx context.Context, actor Actor, op Op, workerID string, start RoundStart) (RoundStartReceipt, error) {
+	start.JobID = strings.TrimSpace(start.JobID)
+	start.Instruction = strings.TrimSpace(start.Instruction)
+	start.Brief = strings.TrimSpace(start.Brief)
+	start.AgentType = strings.TrimSpace(start.AgentType)
+	if start.JobID == "" || start.Instruction == "" || (start.ExecutionTarget != "local" && start.ExecutionTarget != "runner") ||
+		(len(start.ReviewSubject) > 0 && !json.Valid(start.ReviewSubject)) {
+		return RoundStartReceipt{}, ErrInvalidRound
+	}
+	if (start.AgentType == "") != (start.ScopeMode == "") || (start.ScopeMode != "" && start.ScopeMode != "read" && start.ScopeMode != "write") {
+		return RoundStartReceipt{}, ErrInvalidProfile
+	}
+	return run(ctx, s, actor, op, "start_round", []any{workerID, start}, func(q *db.Queries, _ *sql.Tx) (RoundStartReceipt, error) {
+		w, err := coordinatorWorker(ctx, q, actor, workerID)
+		if err != nil {
+			return RoundStartReceipt{}, err
+		}
+		if _, err := q.GetUnsettledWorkerRound(ctx, w.ID); err == nil {
+			return RoundStartReceipt{}, ErrRoundUnsettled
+		} else if !db.IsNoRows(err) {
+			return RoundStartReceipt{}, err
+		}
+		job, err := q.GetWorkerJobBinding(ctx, start.JobID)
+		if db.IsNoRows(err) {
+			return RoundStartReceipt{}, ErrJobBinding
+		}
+		if err != nil {
+			return RoundStartReceipt{}, err
+		}
+		if job.ParentSessionID != w.SessionID || !w.ChildSessionID.Valid || (job.ChildSessionID != "" && job.ChildSessionID != w.ChildSessionID.String) {
+			return RoundStartReceipt{}, ErrJobBinding
+		}
+		if _, err := q.GetWorkerRoundByJob(ctx, start.JobID); err == nil {
+			return RoundStartReceipt{}, ErrJobBinding
+		} else if !db.IsNoRows(err) {
+			return RoundStartReceipt{}, err
+		}
+		now := s.stamp()
+		if start.Brief != "" || start.AgentType != "" {
+			agent, mode, brief := w.AgentType, w.ScopeMode, w.Brief
+			if start.AgentType != "" {
+				agent, mode = start.AgentType, start.ScopeMode
+			}
+			if start.Brief != "" {
+				brief = start.Brief
+			}
+			if _, err := q.UpdateWorkerProfile(ctx, db.UpdateWorkerProfileParams{AgentType: agent, ScopeMode: mode, Brief: brief, UpdatedAt: now, ID: w.ID}); err != nil {
+				return RoundStartReceipt{}, err
+			}
+			if start.AgentType != "" && start.AgentType != w.AgentType {
+				n, err := q.UpdateWorkerChildSessionAgent(ctx, db.UpdateWorkerChildSessionAgentParams{
+					AgentType: nullString(agent), UpdatedAt: now, ID: w.ChildSessionID.String, ParentSessionID: nullString(w.SessionID),
+				})
+				if err != nil {
+					return RoundStartReceipt{}, err
+				}
+				if n != 1 {
+					return RoundStartReceipt{}, ErrJobBinding
+				}
+			}
+		}
+		seq, err := q.AllocateWorkerMessageSeq(ctx, db.AllocateWorkerMessageSeqParams{UpdatedAt: now, ID: w.ID})
+		if err != nil {
+			return RoundStartReceipt{}, err
+		}
+		ordinal, err := q.AllocateWorkerRoundOrdinal(ctx, db.AllocateWorkerRoundOrdinalParams{UpdatedAt: now, ID: w.ID})
+		if err != nil {
+			return RoundStartReceipt{}, err
+		}
+		if err := q.InsertWorkerRound(ctx, db.InsertWorkerRoundParams{
+			WorkerID: w.ID, Ordinal: ordinal, JobID: start.JobID,
+			InstructionFirstSeq: nullInt(seq), InstructionLastSeq: nullInt(seq),
+			ExecutionTarget: start.ExecutionTarget, ReviewSubjectJson: string(start.ReviewSubject),
+			OperationID: op.ID, CreatedAt: now,
+		}); err != nil {
+			return RoundStartReceipt{}, err
+		}
+		if err := q.InsertWorkerMessage(ctx, db.InsertWorkerMessageParams{
+			ID: uuid.Must(uuid.NewV7()).String(), WorkerID: w.ID, Seq: seq, SenderRole: string(actor.Role), SenderID: actor.PrincipalID,
+			RecipientRole: string(RoleWorker), RoundOrdinal: sql.NullInt64{Int64: ordinal, Valid: true}, Body: start.Instruction,
+			OperationID: op.ID, CreatedAt: now,
+		}); err != nil {
+			return RoundStartReceipt{}, err
+		}
+		return RoundStartReceipt{RoundReceipt: RoundReceipt{WorkerID: w.ID, Ordinal: ordinal, JobID: start.JobID}, InstructionSeq: seq}, nil
+	})
+}
+
+// RoundByJob finds the round a job runs, for the host paths that run and
+// settle jobs. ok is false for a job that runs no worker round.
+func (s *Store) RoundByJob(ctx context.Context, jobID string) (Round, bool, error) {
+	r, err := s.q.GetWorkerRoundByJob(ctx, strings.TrimSpace(jobID))
+	if db.IsNoRows(err) {
+		return Round{}, false, nil
+	}
+	if err != nil {
+		return Round{}, false, err
+	}
+	return roundFromRow(r), true, nil
 }

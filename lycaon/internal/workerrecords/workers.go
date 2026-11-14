@@ -329,3 +329,22 @@ func (s *Store) Self(ctx context.Context, actor Actor) (Worker, error) {
 	}
 	return workerFromRow(w), nil
 }
+
+// SetBrief replaces a worker's standing brief.
+func (s *Store) SetBrief(ctx context.Context, actor Actor, op Op, workerID, brief string) (Worker, error) {
+	brief = strings.TrimSpace(brief)
+	if brief == "" {
+		return Worker{}, ErrInvalidProfile
+	}
+	return run(ctx, s, actor, op, "set_brief", []string{workerID, brief}, func(q *db.Queries, _ *sql.Tx) (Worker, error) {
+		w, err := coordinatorWorker(ctx, q, actor, workerID)
+		if err != nil {
+			return Worker{}, err
+		}
+		if _, err := q.UpdateWorkerProfile(ctx, db.UpdateWorkerProfileParams{AgentType: w.AgentType, ScopeMode: w.ScopeMode, Brief: brief, UpdatedAt: s.stamp(), ID: w.ID}); err != nil {
+			return Worker{}, err
+		}
+		w.Brief = brief
+		return workerFromRow(w), nil
+	})
+}

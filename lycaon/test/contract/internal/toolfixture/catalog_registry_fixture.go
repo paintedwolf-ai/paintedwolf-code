@@ -50,6 +50,7 @@ import (
 	workertools "github.com/lycaon/lycaon/internal/tools/native/workercontrol"
 	"github.com/lycaon/lycaon/internal/webresearch"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workflow"
 	workflowcatalog "github.com/lycaon/lycaon/internal/workflow/catalog"
 	workflowcomposition "github.com/lycaon/lycaon/internal/workflow/composition"
@@ -95,6 +96,13 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := native.RegisterMessageCoordinatorTool(reg, workertools.MessageCoordinatorDeps{}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterMessageCoordinatorTool failed", err)
+	}
+	if err := worker.RegisterWorkerTools(reg, worker.WorkerToolDeps{
+		Ops:     &workerops.Service{},
+		Queue:   worker.NewInMemoryQueue(2),
+		Workers: worker.DefaultWorkersConfig(),
+	}); err != nil {
+		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
 	}
 	if err := native.RegisterUpdateProgressTool(reg, progress.NewMemoryStore(), func(_ context.Context, id string) string {
 		return id
@@ -206,6 +214,13 @@ func ContractServeBootRegistry(t *testing.T) *tools.DefaultRegistry {
 		Workers: worker.DefaultWorkersConfig(),
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if err := worker.RegisterWorkerTools(rt.Registry, worker.WorkerToolDeps{
+		Ops:     &workerops.Service{},
+		Queue:   worker.NewInMemoryQueue(2),
+		Workers: worker.DefaultWorkersConfig(),
+	}); err != nil {
+		contractcheck.FailErr(t, "worker.RegisterWorkerTools failed", err)
 	}
 	if err := loopwake.RegisterWaitTool(rt.Registry, loopwake.NewLoopEngine().Subscriptions, loopwake.WaitToolDeps{}); err != nil {
 		contractcheck.FailErr(t, "loopwake.RegisterWaitTool failed", err)

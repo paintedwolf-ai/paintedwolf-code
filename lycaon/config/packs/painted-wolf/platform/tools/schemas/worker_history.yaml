@@ -1,0 +1,19 @@
+tags: [workers]
+description: Read one worker's story, newest first, a page at a time - its rounds and result handles and the messages between you. Reading accounts for and resolves nothing.
+schema:
+  type: object
+  properties:
+    worker:
+      type: string
+      description: The worker's name.
+    before:
+      type: integer
+      minimum: 1
+      description: Continue with messages older than this sequence, from the previous page's before.
+    limit:
+      type: integer
+      minimum: 1
+      maximum: 63
+      description: Messages per page.
+  required: [worker]
+  additionalProperties: false

@@ -1,0 +1,23 @@
+spec_version: "1.0"
+id: INSTRUCT_WORKER_PLANNED
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - instruct_worker
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.workflow_work_id]
+when: paintedwolf.rejection_code == "INSTRUCT_WORKER_PLANNED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
+message: The worker is a planned leg that has not started.
+what: The worker is a planned leg that has not started.
+cause: Planned legs start with task and their work identity.
+why: 'A planned leg''s agent, scope and brief come from the plan.'
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code INSTRUCT_WORKER_PLANNED; do not retry the same call
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      profile: coordinator
+      tool: instruct_worker

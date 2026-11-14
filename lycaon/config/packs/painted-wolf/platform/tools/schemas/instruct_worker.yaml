@@ -1,0 +1,19 @@
+tags: [workers]
+description: Direct a worker you already started. A working worker gets the instruction before its next model call; a worker that delivered, finished or failed starts one new round in the same conversation, with what it already knows. Send related follow-up work here rather than starting a new worker. A worker that is asking a question needs answer_decision instead.
+schema:
+  type: object
+  properties:
+    worker:
+      type: string
+      description: The worker's name.
+    instructions:
+      type: string
+      description: What to do next. Corrections need no restated brief.
+    brief:
+      type: string
+      description: A new standing goal, only when the goal itself changes.
+    agent_type:
+      type: string
+      description: Change the worker's agent between rounds, such as a surveyor becoming the implementer. Scope follows the agent. Refused while it works, for reviewers and plan-bound workers, and from write to read while its changes are open.
+  required: [worker, instructions]
+  additionalProperties: false

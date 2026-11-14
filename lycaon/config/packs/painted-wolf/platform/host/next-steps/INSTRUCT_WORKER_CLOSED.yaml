@@ -1,0 +1,13 @@
+steps:
+  - when: "paintedwolf.overlay_id != ''"
+    tool: "task"
+    args:
+      scope:
+        mode: "write"
+        base_overlay_id: "{{ paintedwolf.overlay_id }}"
+    say: "To build on its last changes, start a new worker on them with {{ call }}."
+    otherwise: "A closed worker takes no instructions; its history stays readable."
+  - when: "paintedwolf.overlay_id == ''"
+    tool: "task"
+    say: "Start a new worker with {{ call }}."
+    otherwise: "A closed worker takes no instructions; its history stays readable."

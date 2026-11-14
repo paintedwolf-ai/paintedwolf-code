@@ -38,6 +38,33 @@ func (q *Queries) AccountWorkerResult(ctx context.Context, arg AccountWorkerResu
 	return result.RowsAffected()
 }
 
+const accountWorkerResultsByJob = `-- name: AccountWorkerResultsByJob :execrows
+INSERT INTO worker_result_dispositions (result_id, worker_id, accounted_operation_id, accounted_at)
+SELECT res.id, r.worker_id, ?1, ?2
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.worker_job_id = ?3
+ON CONFLICT (result_id) DO UPDATE SET
+    accounted_operation_id = excluded.accounted_operation_id,
+    accounted_at = excluded.accounted_at
+WHERE worker_result_dispositions.accounted_at IS NULL
+`
+
+type AccountWorkerResultsByJobParams struct {
+	OperationID string         `json:"operation_id"`
+	AccountedAt sql.NullString `json:"accounted_at"`
+	JobID       string         `json:"job_id"`
+}
+
+// Records that the coordinator accounted for a worker round's result, from
+// a checklist acknowledgement that named its job.
+func (q *Queries) AccountWorkerResultsByJob(ctx context.Context, arg AccountWorkerResultsByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, accountWorkerResultsByJob, arg.OperationID, arg.AccountedAt, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const allocateWorkerMessageSeq = `-- name: AllocateWorkerMessageSeq :one
 UPDATE workers SET next_message_seq = next_message_seq + 1, updated_at = ?1
 WHERE id = ?2
@@ -156,6 +183,56 @@ func (q *Queries) CountSessionWorkersByAgent(ctx context.Context, arg CountSessi
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const disposeWorkerResultsByJob = `-- name: DisposeWorkerResultsByJob :execrows
+INSERT INTO worker_result_dispositions (
+    result_id, worker_id, accounted_operation_id, accounted_at,
+    change_state, change_operation_id, landed_change_id, changed_at
+)
+SELECT res.id, r.worker_id,
+       CASE WHEN ?1 IS NOT NULL THEN ?2 ELSE '' END,
+       ?1,
+       ?3, ?2, ?4, ?5
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.worker_job_id = ?6
+ON CONFLICT (result_id) DO UPDATE SET
+    change_state = excluded.change_state,
+    change_operation_id = excluded.change_operation_id,
+    landed_change_id = excluded.landed_change_id,
+    shelve_reason = '',
+    changed_at = excluded.changed_at,
+    accounted_operation_id = CASE WHEN worker_result_dispositions.accounted_at IS NULL
+        THEN excluded.accounted_operation_id ELSE worker_result_dispositions.accounted_operation_id END,
+    accounted_at = COALESCE(worker_result_dispositions.accounted_at, excluded.accounted_at)
+WHERE worker_result_dispositions.change_state IN ('', 'shelved')
+`
+
+type DisposeWorkerResultsByJobParams struct {
+	AccountedAt    sql.NullString `json:"accounted_at"`
+	OperationID    string         `json:"operation_id"`
+	ChangeState    string         `json:"change_state"`
+	LandedChangeID sql.NullString `json:"landed_change_id"`
+	ChangedAt      sql.NullString `json:"changed_at"`
+	JobID          string         `json:"job_id"`
+}
+
+// Records how a landing or rejection resolved a worker round's changes, in
+// the transaction that resolved them. Landed and rejected are final; a
+// rejection may also account for the result it concerns.
+func (q *Queries) DisposeWorkerResultsByJob(ctx context.Context, arg DisposeWorkerResultsByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, disposeWorkerResultsByJob,
+		arg.AccountedAt,
+		arg.OperationID,
+		arg.ChangeState,
+		arg.LandedChangeID,
+		arg.ChangedAt,
+		arg.JobID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const getLandedChangeJobID = `-- name: GetLandedChangeJobID :one
@@ -326,6 +403,24 @@ func (q *Queries) GetWorkerByName(ctx context.Context, arg GetWorkerByNameParams
 	return i, err
 }
 
+const getWorkerDeliveredThrough = `-- name: GetWorkerDeliveredThrough :one
+SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq
+FROM worker_message_deliveries
+WHERE worker_id = ?1 AND recipient_session_id = ?2
+`
+
+type GetWorkerDeliveredThroughParams struct {
+	WorkerID           string `json:"worker_id"`
+	RecipientSessionID string `json:"recipient_session_id"`
+}
+
+func (q *Queries) GetWorkerDeliveredThrough(ctx context.Context, arg GetWorkerDeliveredThroughParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerDeliveredThrough, arg.WorkerID, arg.RecipientSessionID)
+	var delivered_through_seq int64
+	err := row.Scan(&delivered_through_seq)
+	return delivered_through_seq, err
+}
+
 const getWorkerJobBinding = `-- name: GetWorkerJobBinding :one
 SELECT COALESCE(parent_session_id, '') AS parent_session_id, COALESCE(child_session_id, '') AS child_session_id
 FROM worker_jobs WHERE id = ?
@@ -461,6 +556,36 @@ func (q *Queries) GetWorkerResultOwner(ctx context.Context, id string) (GetWorke
 	row := q.db.QueryRowContext(ctx, getWorkerResultOwner, id)
 	var i GetWorkerResultOwnerRow
 	err := row.Scan(&i.WorkerID, &i.WorkerJobID)
+	return i, err
+}
+
+const getWorkerRound = `-- name: GetWorkerRound :one
+SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
+FROM worker_rounds WHERE worker_id = ? AND ordinal = ?
+`
+
+type GetWorkerRoundParams struct {
+	WorkerID string `json:"worker_id"`
+	Ordinal  int64  `json:"ordinal"`
+}
+
+func (q *Queries) GetWorkerRound(ctx context.Context, arg GetWorkerRoundParams) (WorkerRounds, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerRound, arg.WorkerID, arg.Ordinal)
+	var i WorkerRounds
+	err := row.Scan(
+		&i.WorkerID,
+		&i.Ordinal,
+		&i.JobID,
+		&i.InstructionFirstSeq,
+		&i.InstructionLastSeq,
+		&i.ExecutionTarget,
+		&i.ReviewSubjectJson,
+		&i.OperationID,
+		&i.CreatedAt,
+		&i.SettledAt,
+		&i.CheckpointID,
+	)
 	return i, err
 }
 
@@ -726,6 +851,73 @@ func (q *Queries) InsertWorkerWorkspacePreparation(ctx context.Context, arg Inse
 	return err
 }
 
+const latestRoundJobForJob = `-- name: LatestRoundJobForJob :one
+SELECT CAST(COALESCE((SELECT latest.job_id FROM worker_rounds origin
+    JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+    WHERE origin.job_id = ?1 ORDER BY latest.ordinal DESC LIMIT 1), ?1) AS TEXT) AS job_id
+`
+
+// The job of the latest round of the worker that ran this job, or the job
+// itself when it ran no worker round.
+func (q *Queries) LatestRoundJobForJob(ctx context.Context, jobID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, latestRoundJobForJob, jobID)
+	var job_id string
+	err := row.Scan(&job_id)
+	return job_id, err
+}
+
+const listRoundInstructionsAfter = `-- name: ListRoundInstructionsAfter :many
+SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
+       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
+FROM worker_messages
+WHERE worker_id = ?1 AND round_ordinal = ?2
+  AND recipient_role = 'worker' AND seq > ?3
+ORDER BY seq
+`
+
+type ListRoundInstructionsAfterParams struct {
+	WorkerID     string        `json:"worker_id"`
+	RoundOrdinal sql.NullInt64 `json:"round_ordinal"`
+	AfterSeq     int64         `json:"after_seq"`
+}
+
+func (q *Queries) ListRoundInstructionsAfter(ctx context.Context, arg ListRoundInstructionsAfterParams) ([]WorkerMessages, error) {
+	rows, err := q.db.QueryContext(ctx, listRoundInstructionsAfter, arg.WorkerID, arg.RoundOrdinal, arg.AfterSeq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkerMessages
+	for rows.Next() {
+		var i WorkerMessages
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkerID,
+			&i.Seq,
+			&i.SenderRole,
+			&i.SenderID,
+			&i.RecipientRole,
+			&i.RoundOrdinal,
+			&i.Body,
+			&i.ArtifactRef,
+			&i.ReplyToSeq,
+			&i.NeedsReply,
+			&i.OperationID,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listSessionWorkers = `-- name: ListSessionWorkers :many
 SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_session_id,
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
@@ -767,6 +959,40 @@ func (q *Queries) ListSessionWorkers(ctx context.Context, sessionID string) ([]W
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listShelvedWorkerJobs = `-- name: ListShelvedWorkerJobs :many
+SELECT r.job_id
+FROM worker_result_dispositions d
+JOIN worker_results res ON res.id = d.result_id
+JOIN worker_rounds r ON r.job_id = res.worker_job_id
+JOIN workers w ON w.id = r.worker_id
+WHERE w.session_id = ?1 AND d.change_state = 'shelved'
+`
+
+// Jobs whose round results the coordinator shelved: their changes stay
+// unlanded on purpose and ask for no promotion.
+func (q *Queries) ListShelvedWorkerJobs(ctx context.Context, sessionID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listShelvedWorkerJobs, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var job_id string
+		if err := rows.Scan(&job_id); err != nil {
+			return nil, err
+		}
+		items = append(items, job_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -852,14 +1078,16 @@ SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
 FROM worker_messages
 WHERE worker_id = ?1 AND seq > ?2 AND recipient_role = ?3
-ORDER BY seq LIMIT ?4
+  AND (?4 IS NULL OR round_ordinal = ?4)
+ORDER BY seq LIMIT ?5
 `
 
 type ListWorkerMessagesAfterParams struct {
-	WorkerID      string `json:"worker_id"`
-	AfterSeq      int64  `json:"after_seq"`
-	RecipientRole string `json:"recipient_role"`
-	PageLimit     int64  `json:"page_limit"`
+	WorkerID      string      `json:"worker_id"`
+	AfterSeq      int64       `json:"after_seq"`
+	RecipientRole string      `json:"recipient_role"`
+	RoundOrdinal  interface{} `json:"round_ordinal"`
+	PageLimit     int64       `json:"page_limit"`
 }
 
 func (q *Queries) ListWorkerMessagesAfter(ctx context.Context, arg ListWorkerMessagesAfterParams) ([]WorkerMessages, error) {
@@ -867,6 +1095,7 @@ func (q *Queries) ListWorkerMessagesAfter(ctx context.Context, arg ListWorkerMes
 		arg.WorkerID,
 		arg.AfterSeq,
 		arg.RecipientRole,
+		arg.RoundOrdinal,
 		arg.PageLimit,
 	)
 	if err != nil {
@@ -1179,6 +1408,78 @@ func (q *Queries) SettleWorkerRound(ctx context.Context, arg SettleWorkerRoundPa
 		arg.CheckpointID,
 		arg.WorkerID,
 		arg.Ordinal,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const settleWorkerRoundByJob = `-- name: SettleWorkerRoundByJob :execrows
+UPDATE worker_rounds SET settled_at = ?1, checkpoint_id = ?2
+WHERE job_id = ?3 AND settled_at IS NULL
+`
+
+type SettleWorkerRoundByJobParams struct {
+	SettledAt    sql.NullString `json:"settled_at"`
+	CheckpointID string         `json:"checkpoint_id"`
+	JobID        string         `json:"job_id"`
+}
+
+func (q *Queries) SettleWorkerRoundByJob(ctx context.Context, arg SettleWorkerRoundByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, settleWorkerRoundByJob, arg.SettledAt, arg.CheckpointID, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateWorkerChildSessionAgent = `-- name: UpdateWorkerChildSessionAgent :execrows
+UPDATE sessions SET agent_type = ?1, updated_at = ?2
+WHERE id = ?3 AND parent_session_id = ?4
+`
+
+type UpdateWorkerChildSessionAgentParams struct {
+	AgentType       sql.NullString `json:"agent_type"`
+	UpdatedAt       string         `json:"updated_at"`
+	ID              string         `json:"id"`
+	ParentSessionID sql.NullString `json:"parent_session_id"`
+}
+
+func (q *Queries) UpdateWorkerChildSessionAgent(ctx context.Context, arg UpdateWorkerChildSessionAgentParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateWorkerChildSessionAgent,
+		arg.AgentType,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.ParentSessionID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const updateWorkerProfile = `-- name: UpdateWorkerProfile :execrows
+UPDATE workers SET agent_type = ?1, scope_mode = ?2, brief = ?3,
+    updated_at = ?4
+WHERE id = ?5 AND closed_at IS NULL
+`
+
+type UpdateWorkerProfileParams struct {
+	AgentType string `json:"agent_type"`
+	ScopeMode string `json:"scope_mode"`
+	Brief     string `json:"brief"`
+	UpdatedAt string `json:"updated_at"`
+	ID        string `json:"id"`
+}
+
+func (q *Queries) UpdateWorkerProfile(ctx context.Context, arg UpdateWorkerProfileParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, updateWorkerProfile,
+		arg.AgentType,
+		arg.ScopeMode,
+		arg.Brief,
+		arg.UpdatedAt,
+		arg.ID,
 	)
 	if err != nil {
 		return 0, err

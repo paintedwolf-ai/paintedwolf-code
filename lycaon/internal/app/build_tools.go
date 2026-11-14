@@ -18,6 +18,7 @@ import (
 	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/parse"
 	"github.com/lycaon/lycaon/internal/projectcontrib"
+	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/secretcap"
 	"github.com/lycaon/lycaon/internal/secretspan"
@@ -25,6 +26,8 @@ import (
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerlane"
+	"github.com/lycaon/lycaon/internal/workerops"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -98,8 +101,26 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}); err != nil {
 		return fmt.Errorf("answer_decision tool: %w", err)
 	}
+	if err := worker.RegisterWorkerTools(b.execution.Host.Registry, worker.WorkerToolDeps{
+		Ops: &workerops.Service{
+			Reader:    workerops.Reader{Records: b.boards.WorkerRecords, Jobs: b.delegations.Queue, Decisions: b.sessions.Decisions},
+			Agents:    prompts.AgentMutationCapable,
+			Accounted: b.boards.ReleaseAccounted,
+		},
+		Queue:   b.delegations.Queue,
+		Workers: b.worker.cfg,
+	}); err != nil {
+		return fmt.Errorf("worker tools: %w", err)
+	}
 	b.execution.Host.Boundary.SetMergeReconcileAllowlister(b.sessions.Manager.Promotion)
+	lanes := &worker.WorkerLanes{
+		Lanes:   workerlane.New(b.delegations.Workspace, b.boards.WorkerRecords),
+		Records: b.boards.WorkerRecords,
+		State:   workerlane.NewM14State(b.delegations.Queue),
+	}
+	b.delegations.Queue.SetWorkerLanes(lanes)
 	workerMergeSvc := &worker.MergeService{
+		Lanes:         lanes,
 		Queue:         b.delegations.Queue,
 		Store:         b.delegations.Queue,
 		Workspace:     b.delegations.Workspace,
@@ -114,6 +135,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		SourceLedger:  b.storage.SourceLedger,
 		SourceHistory: b.storage.SourceLedger.Walk,
 		DataDir:       b.storage.Directory,
+		Accounted:     b.boards.ReleaseAccounted,
 		Reports: worker.ChangeReportDeps{
 			SourceRuns: b.sessions.Manager.Verification.WorkerSourceRuns,
 			Messages: func(ctx context.Context, childSessionID string) ([]wire.Message, error) {

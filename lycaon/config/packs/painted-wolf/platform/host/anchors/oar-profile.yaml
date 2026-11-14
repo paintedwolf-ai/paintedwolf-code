@@ -1324,3 +1324,7 @@ host_facts:
    type: bool
  - name: paintedwolf.missing_capability_write_root
    type: bool
+ - name: paintedwolf.worker
+   type: string
+ - name: paintedwolf.workflow_work_id
+   type: string

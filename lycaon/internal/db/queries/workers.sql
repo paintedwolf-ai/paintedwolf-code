@@ -55,6 +55,11 @@ SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
        execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
 FROM worker_rounds WHERE worker_id = ? AND settled_at IS NULL;
 
+-- name: GetWorkerRound :one
+SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
+       execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
+FROM worker_rounds WHERE worker_id = ? AND ordinal = ?;
+
 -- name: GetWorkerRoundByJob :one
 SELECT worker_id, ordinal, job_id, instruction_first_seq, instruction_last_seq,
        execution_target, review_subject_json, operation_id, created_at, settled_at, checkpoint_id
@@ -66,6 +71,10 @@ SELECT r.worker_id, r.ordinal, r.job_id, r.instruction_first_seq, r.instruction_
        COALESCE(res.id, '') AS result_id
 FROM worker_rounds r LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
 WHERE r.worker_id = ? ORDER BY r.ordinal;
+
+-- name: SettleWorkerRoundByJob :execrows
+UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
+WHERE job_id = sqlc.arg(job_id) AND settled_at IS NULL;
 
 -- name: SettleWorkerRound :execrows
 UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
@@ -82,7 +91,30 @@ SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
 FROM worker_messages
 WHERE worker_id = sqlc.arg(worker_id) AND seq > sqlc.arg(after_seq) AND recipient_role = sqlc.arg(recipient_role)
+  AND (sqlc.narg(round_ordinal) IS NULL OR round_ordinal = sqlc.narg(round_ordinal))
 ORDER BY seq LIMIT sqlc.arg(page_limit);
+
+-- name: ListRoundInstructionsAfter :many
+SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
+       body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
+FROM worker_messages
+WHERE worker_id = sqlc.arg(worker_id) AND round_ordinal = sqlc.arg(round_ordinal)
+  AND recipient_role = 'worker' AND seq > sqlc.arg(after_seq)
+ORDER BY seq;
+
+-- name: GetWorkerDeliveredThrough :one
+SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq
+FROM worker_message_deliveries
+WHERE worker_id = sqlc.arg(worker_id) AND recipient_session_id = sqlc.arg(recipient_session_id);
+
+-- name: UpdateWorkerProfile :execrows
+UPDATE workers SET agent_type = sqlc.arg(agent_type), scope_mode = sqlc.arg(scope_mode), brief = sqlc.arg(brief),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND closed_at IS NULL;
+
+-- name: UpdateWorkerChildSessionAgent :execrows
+UPDATE sessions SET agent_type = sqlc.arg(agent_type), updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND parent_session_id = sqlc.arg(parent_session_id);
 
 -- name: ListWorkerMessagesBefore :many
 SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
@@ -213,3 +245,58 @@ SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_se
        delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE child_session_id = ?;
+
+-- name: DisposeWorkerResultsByJob :execrows
+-- Records how a landing or rejection resolved a worker round's changes, in
+-- the transaction that resolved them. Landed and rejected are final; a
+-- rejection may also account for the result it concerns.
+INSERT INTO worker_result_dispositions (
+    result_id, worker_id, accounted_operation_id, accounted_at,
+    change_state, change_operation_id, landed_change_id, changed_at
+)
+SELECT res.id, r.worker_id,
+       CASE WHEN sqlc.narg(accounted_at) IS NOT NULL THEN sqlc.arg(operation_id) ELSE '' END,
+       sqlc.narg(accounted_at),
+       sqlc.arg(change_state), sqlc.arg(operation_id), sqlc.narg(landed_change_id), sqlc.arg(changed_at)
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.worker_job_id = sqlc.arg(job_id)
+ON CONFLICT (result_id) DO UPDATE SET
+    change_state = excluded.change_state,
+    change_operation_id = excluded.change_operation_id,
+    landed_change_id = excluded.landed_change_id,
+    shelve_reason = '',
+    changed_at = excluded.changed_at,
+    accounted_operation_id = CASE WHEN worker_result_dispositions.accounted_at IS NULL
+        THEN excluded.accounted_operation_id ELSE worker_result_dispositions.accounted_operation_id END,
+    accounted_at = COALESCE(worker_result_dispositions.accounted_at, excluded.accounted_at)
+WHERE worker_result_dispositions.change_state IN ('', 'shelved');
+
+-- name: AccountWorkerResultsByJob :execrows
+-- Records that the coordinator accounted for a worker round's result, from
+-- a checklist acknowledgement that named its job.
+INSERT INTO worker_result_dispositions (result_id, worker_id, accounted_operation_id, accounted_at)
+SELECT res.id, r.worker_id, sqlc.arg(operation_id), sqlc.arg(accounted_at)
+FROM worker_results res JOIN worker_rounds r ON r.job_id = res.worker_job_id
+WHERE res.worker_job_id = sqlc.arg(job_id)
+ON CONFLICT (result_id) DO UPDATE SET
+    accounted_operation_id = excluded.accounted_operation_id,
+    accounted_at = excluded.accounted_at
+WHERE worker_result_dispositions.accounted_at IS NULL;
+
+-- name: ListShelvedWorkerJobs :many
+-- Jobs whose round results the coordinator shelved: their changes stay
+-- unlanded on purpose and ask for no promotion.
+SELECT r.job_id
+FROM worker_result_dispositions d
+JOIN worker_results res ON res.id = d.result_id
+JOIN worker_rounds r ON r.job_id = res.worker_job_id
+JOIN workers w ON w.id = r.worker_id
+WHERE w.session_id = sqlc.arg(session_id) AND d.change_state = 'shelved';
+
+-- name: LatestRoundJobForJob :one
+-- The job of the latest round of the worker that ran this job, or the job
+-- itself when it ran no worker round.
+SELECT CAST(COALESCE((SELECT latest.job_id FROM worker_rounds origin
+    JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
+    WHERE origin.job_id = sqlc.arg(job_id) ORDER BY latest.ordinal DESC LIMIT 1), sqlc.arg(job_id)) AS TEXT) AS job_id;
+

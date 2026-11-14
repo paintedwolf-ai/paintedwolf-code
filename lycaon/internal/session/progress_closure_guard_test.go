@@ -137,7 +137,7 @@ func TestProgressClosureAllowsDispatchAfterAcknowledgement(t *testing.T) {
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [x] step b\n- [ ] step c")
 	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
-	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+	if !mgr.Coordinator.ProgressClosure.Acknowledge(t.Context(), "root-1", view.Token) {
 		t.Fatal("current finishes were not acknowledged")
 	}
 
@@ -157,7 +157,7 @@ func TestProgressClosureAcknowledgesAlreadyRepresentedFinish(t *testing.T) {
 	sess := &api.Session{ID: "root-1"}
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
-	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+	if !mgr.Coordinator.ProgressClosure.Acknowledge(t.Context(), "root-1", view.Token) {
 		t.Fatal("current worker finish was not acknowledged")
 	}
 	block, err := closureGuardPreInvoke(t, mgr, sess, "root-1", "task")
@@ -177,7 +177,7 @@ func TestProgressClosureAcknowledgesFinishAfterDocumentCloses(t *testing.T) {
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [x] step a\n- [>] note")
 	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
-	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+	if !mgr.Coordinator.ProgressClosure.Acknowledge(t.Context(), "root-1", view.Token) {
 		t.Fatal("current finishes were not acknowledged")
 	}
 
@@ -231,7 +231,7 @@ func TestProgressClosureAcknowledgesFinishAfterDescope(t *testing.T) {
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	store.Set("root-1", "## Progress\n- [~] step a\n- [ ] step b\n- [ ] step c")
 	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
-	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+	if !mgr.Coordinator.ProgressClosure.Acknowledge(t.Context(), "root-1", view.Token) {
 		t.Fatal("current finishes were not acknowledged")
 	}
 
@@ -254,7 +254,7 @@ func TestProgressClosureReArmKeepsOriginalBaseline(t *testing.T) {
 	// Repeated finishes retain the original acknowledgement set.
 	mgr.Coordinator.ProgressClosure.Arm(t.Context(), "root-1", "job-1")
 	view := mgr.Coordinator.ProgressClosure.Reconciliation("root-1")
-	if !mgr.Coordinator.ProgressClosure.Acknowledge("root-1", view.Token) {
+	if !mgr.Coordinator.ProgressClosure.Acknowledge(t.Context(), "root-1", view.Token) {
 		t.Fatal("current finishes were not acknowledged")
 	}
 

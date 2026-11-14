@@ -80,6 +80,8 @@ var (
 	ErrInvalidMessage      = errors.New("message needs a body or an artifact and valid roles")
 	ErrReplyUnknown        = errors.New("reply names no earlier message of this worker")
 	ErrPageStale           = errors.New("delivery page is not the outstanding page")
+	ErrNoRunningRound      = errors.New("worker has no running round to instruct")
+	ErrInvalidProfile      = errors.New("worker agent and scope mode must both be set")
 	ErrResultNotFound      = errors.New("result not found")
 	ErrAlreadyAccounted    = errors.New("result already accounted for")
 	ErrDispositionFinal    = errors.New("result changes already landed or rejected")
@@ -222,6 +224,19 @@ func loadWorker(ctx context.Context, q *db.Queries, actor Actor, workerID string
 	return w, sd, nil
 }
 
+// coordinatorWorkerAnyState returns a worker, open or closed, for its
+// coordinator; reads of a closed worker's history stay allowed.
+func coordinatorWorkerAnyState(ctx context.Context, q *db.Queries, actor Actor, workerID string) (db.Workers, error) {
+	w, sd, err := loadWorker(ctx, q, actor, workerID)
+	if err != nil {
+		return w, err
+	}
+	if sd != sideCoordinator {
+		return w, ErrCoordinatorOnly
+	}
+	return w, nil
+}
+
 // coordinatorWorker returns an open worker for its coordinator.
 func coordinatorWorker(ctx context.Context, q *db.Queries, actor Actor, workerID string) (db.Workers, error) {
 	w, sd, err := loadWorker(ctx, q, actor, workerID)
@@ -243,3 +258,23 @@ func nullString(s string) sql.NullString {
 }
 
 func nullInt(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: v > 0} }
+
+// Operation returns the receipt an operation identity already recorded for
+// this session, so a caller composing several operations can replay its
+// first outcome. ok is false for an identity not used yet.
+func (s *Store) Operation(ctx context.Context, actor Actor, opID string) (kind string, receipt json.RawMessage, ok bool, err error) {
+	if err := actor.check(); err != nil {
+		return "", nil, false, err
+	}
+	prior, err := s.q.GetWorkerOperation(ctx, strings.TrimSpace(opID))
+	if db.IsNoRows(err) {
+		return "", nil, false, nil
+	}
+	if err != nil {
+		return "", nil, false, err
+	}
+	if prior.SessionID != actor.SessionID {
+		return "", nil, false, ErrOperationConflict
+	}
+	return prior.Kind, json.RawMessage(prior.ReceiptJson), true, nil
+}

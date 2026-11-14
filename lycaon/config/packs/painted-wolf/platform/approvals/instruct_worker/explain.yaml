@@ -1,0 +1,16 @@
+# instruct_worker — approval explanation registry entry.
+# Enriched by ./task codegen:approval-explanations
+
+approval_explanations:
+    instruct_worker:
+        tool: instruct_worker
+        tier_hint: irreversible
+        what_changes: Run {{ tool }} with the proposed arguments.
+        who_affected: This project or connected systems the action can reach.
+        if_wrong: May be difficult to undo — review before allowing.
+        allow_line: this action
+        scenarios:
+            - id: default
+              vars:
+                project: my-app
+                tool: custom_tool
