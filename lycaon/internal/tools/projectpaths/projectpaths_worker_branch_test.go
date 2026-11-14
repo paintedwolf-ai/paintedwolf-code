@@ -236,7 +236,8 @@ func TestReviewerReadsItsViewAndWritesNothing(t *testing.T) {
 	}
 	// The fact is the invocation's, not the worker's: any read-only
 	// invocation is refused the same way.
-	coordinator := tools.ToolContext{Source: tools.InvocationSource{Roots: tctx.Source.Roots, ActiveRootID: "p", ReadOnly: true}}
+	project := t.TempDir()
+	coordinator := tools.ToolContext{Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: project, IsPrimary: true}}, ActiveRootID: "p", ReadOnly: true}}
 	if _, err := projectpaths.ResolveWrite(context.Background(), nil, coordinator, "pkg/x.go"); !errors.As(err, &reject) || reject.Code != projectpaths.ReadOnlyWriteDeniedCode {
 		t.Fatalf("read-only invocation write = %v", err)
 	}
