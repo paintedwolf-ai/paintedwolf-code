@@ -1,0 +1,14 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/layeredfs/checkpoint/checkpoint.Manifest",
+  "kind": "data_record",
+  "workstream": "immutable-worker-checkpoints",
+  "disposition": "retain",
+  "reason": "Retain the 15-field immutable checkpoint record. Worker identity, source generation, roots, observations, entries and private refs form the single publication and recovery contract; there is no new authority service.",
+  "reviewed_commit": "993e0d03c92f08f921f1367754e04fb2fc779e19",
+  "ceiling": 15,
+  "boundaries": {
+    "lycaon/internal/layeredfs/checkpoint/checkpoint_test.go": "05c5d651fffc5236e5e757f3c1b670ac96924301e947d1cfbadcbed24713f88f"
+  },
+  "reviewed_shape": "3bf3a07318696c4f765e0e69e0d78329db0adbef85306989f0e8cd150d49728f"
+}

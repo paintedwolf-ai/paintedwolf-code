@@ -8,9 +8,58 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/sandbox"
 )
+
+type layeredSurveyDirEntry struct {
+	name string
+	mode fs.FileMode
+	size int64
+	mod  time.Time
+}
+
+func (d layeredSurveyDirEntry) Name() string               { return d.name }
+func (d layeredSurveyDirEntry) IsDir() bool                { return d.mode.IsDir() }
+func (d layeredSurveyDirEntry) Type() fs.FileMode          { return d.mode.Type() }
+func (d layeredSurveyDirEntry) Info() (fs.FileInfo, error) { return d, nil }
+func (d layeredSurveyDirEntry) Size() int64                { return d.size }
+func (d layeredSurveyDirEntry) Mode() fs.FileMode          { return d.mode }
+func (d layeredSurveyDirEntry) ModTime() time.Time         { return d.mod }
+func (d layeredSurveyDirEntry) Sys() any                   { return nil }
+
+// OverlayWorkspaceDivergencePaths returns workspace divergence paths without a baseline: O(changed)
+// from a mounted view's consumer.Engine, and from a materialized view's stat manifest, which
+// reads only files whose stat differs.
+func OverlayWorkspaceDivergencePaths(ctx context.Context, branchRoot string) ([]string, bool, error) {
+	eng, ok := consumer.LookupBranchEngine(branchRoot)
+	if !ok || eng == nil {
+		return materializedDivergencePaths(ctx, branchRoot)
+	}
+	paths, err := eng.DivergenceRelativePaths(ctx, "")
+	return paths, true, err
+}
+
+func inventoryItemToSurveyEntry(branchRoot, childRel string, item consumer.InventoryEntry) sandbox.SurveyEntry {
+	name := filepath.Base(filepath.FromSlash(childRel))
+	mode := item.Mode
+	switch item.Kind {
+	case layeredfs.EntryDirectory:
+		mode |= fs.ModeDir
+	case layeredfs.EntrySymlink:
+		mode |= fs.ModeSymlink
+	default:
+	}
+	return sandbox.SurveyEntry{
+		Rel: childRel, Abs: filepath.Join(branchRoot, filepath.FromSlash(childRel)),
+		Depth: strings.Count(childRel, "/") + 1, IsDir: item.Kind == layeredfs.EntryDirectory,
+		IsSymlink: item.Kind == layeredfs.EntrySymlink,
+		DirEntry:  layeredSurveyDirEntry{name: name, mode: mode, size: item.Size, mod: item.ModTime},
+	}
+}
 
 // OverlaySurveyReadDir lists one branch directory.
 func OverlaySurveyReadDir(branchRoot, rel string, opts sandbox.SurveyOptions) ([]sandbox.SurveyEntry, error) {
@@ -24,6 +73,26 @@ func OverlaySurveyReadDir(branchRoot, rel string, opts sandbox.SurveyOptions) ([
 		return nil, fmt.Errorf("invalid branch path %q", rel)
 	}
 	rel = strings.Trim(filepath.ToSlash(rel), "/")
+	if eng, rootID, scopedRel, ok := consumer.ResolveBranchEnginePath(branchRoot, rel); ok && eng != nil {
+		items, err := eng.ListDirectory(context.Background(), layeredfs.QualifiedPath{RootID: rootID, Rel: scopedRel}, "")
+		if err != nil {
+			return nil, err
+		}
+		out := make([]sandbox.SurveyEntry, 0, len(items))
+		for _, item := range items {
+			name := filepath.Base(filepath.FromSlash(item.Path.Rel))
+			childRel := name
+			if rel != "" && rel != "." {
+				childRel = rel + "/" + name
+			}
+			se := inventoryItemToSurveyEntry(branchRoot, childRel, item)
+			if (!opts.IncludeHidden && sandbox.IsHiddenName(name)) || (se.IsDir && surveySkipsOverlayDir(name, opts)) {
+				continue
+			}
+			out = append(out, se)
+		}
+		return out, nil
+	}
 	branchDir := branchRoot
 	if rel != "" && rel != "." {
 		branchDir = filepath.Join(branchRoot, filepath.FromSlash(rel))
@@ -36,7 +105,7 @@ func OverlaySurveyReadDir(branchRoot, rel string, opts sandbox.SurveyOptions) ([
 	out := make([]sandbox.SurveyEntry, 0, len(entries))
 	for _, e := range entries {
 		name := e.Name()
-		if !opts.IncludeHidden && sandbox.IsHiddenName(name) {
+		if (!opts.IncludeHidden && sandbox.IsHiddenName(name)) || (e.IsDir() && surveySkipsOverlayDir(name, opts)) {
 			continue
 		}
 		childRel := name
@@ -44,39 +113,63 @@ func OverlaySurveyReadDir(branchRoot, rel string, opts sandbox.SurveyOptions) ([
 			childRel = rel + "/" + name
 		}
 		abs := filepath.Join(branchDir, name)
-		if e.IsDir() {
-			if surveySkipsOverlayDir(name, opts) {
-				continue
-			}
-		} else if !opts.IncludeVCSMetadata && sandbox.IsGitlinkDirEntry(name, abs, e) {
+		if !e.IsDir() && !opts.IncludeVCSMetadata && sandbox.IsGitlinkDirEntry(name, abs, e) {
 			continue
 		}
 		out = append(out, sandbox.SurveyEntry{
-			Rel:       childRel,
-			Abs:       abs,
-			Depth:     strings.Count(childRel, "/") + 1,
-			IsDir:     e.IsDir(),
-			IsSymlink: e.Type()&fs.ModeSymlink != 0,
-			DirEntry:  e,
+			Rel: childRel, Abs: abs, Depth: strings.Count(childRel, "/") + 1,
+			IsDir: e.IsDir(), IsSymlink: e.Type()&fs.ModeSymlink != 0, DirEntry: e,
 		})
 	}
 	return out, nil
 }
 
-// OverlaySurveyWalk walks a branch.
-func OverlaySurveyWalk(
-	ctx context.Context,
-	branchRoot string,
-	opts sandbox.SurveyOptions,
-	fn func(sandbox.SurveyEntry) (sandbox.SurveyAction, error),
-) error {
+// OverlaySurveyWalk walks a branch, using the indexed consumer overlay when available.
+func OverlaySurveyWalk(ctx context.Context, branchRoot string, opts sandbox.SurveyOptions, fn func(sandbox.SurveyEntry) (sandbox.SurveyAction, error)) error {
 	branchRoot = filepath.Clean(strings.TrimSpace(branchRoot))
+	if eng, rootID, scopedRel, ok := consumer.ResolveBranchEnginePath(branchRoot, "."); ok && eng != nil && eng.HasIndex() {
+		prefix := strings.TrimPrefix(scopedRel, ".")
+		res, err := eng.SurveyBranch(ctx, consumer.SurveyOptions{RootIDs: []string{rootID}, PathPrefix: prefix})
+		if err != nil {
+			return err
+		}
+		var skipped []string
+		for _, item := range res.Entries {
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			rel := item.Path.Rel
+			if prefix != "" {
+				rel = strings.TrimPrefix(rel, prefix+"/")
+			}
+			if rel == "" || rel == "." || hasAnySkippedPrefix(rel, skipped) {
+				continue
+			}
+			entry := inventoryItemToSurveyEntry(branchRoot, rel, item)
+			name := entry.DirEntry.Name()
+			if (!opts.IncludeHidden && sandbox.IsHiddenName(name)) || (entry.IsDir && surveySkipsOverlayDir(name, opts)) {
+				continue
+			}
+			if (opts.Admit != nil && !opts.Admit(entry.Rel, entry.Abs, entry.IsDir)) || (opts.MaxDepth > 0 && entry.Depth > opts.MaxDepth) {
+				continue
+			}
+			action, err := fn(entry)
+			if err != nil || action == sandbox.SurveyStop {
+				return err
+			}
+			if action == sandbox.SurveySkipDir && entry.IsDir {
+				skipped = append(skipped, rel)
+			}
+		}
+		return nil
+	}
+
 	var walk func(rel string) error
 	walk = func(rel string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		entries, err := OverlaySurveyReadDir(branchRoot, rel, opts)
+		entries, err := OverlaySurveyReadDir(branchRoot, rel, opts) //nolint:contextcheck // The view listing reads the core, which takes no context.
 		if err != nil {
 			if os.IsNotExist(err) && rel != "." {
 				return nil
@@ -84,27 +177,17 @@ func OverlaySurveyWalk(
 			return err
 		}
 		for _, entry := range entries {
-			if opts.Admit != nil && !opts.Admit(entry.Rel, entry.Abs, entry.IsDir) {
-				continue
-			}
-			if opts.MaxDepth > 0 && entry.Depth > opts.MaxDepth {
+			if (opts.Admit != nil && !opts.Admit(entry.Rel, entry.Abs, entry.IsDir)) || (opts.MaxDepth > 0 && entry.Depth > opts.MaxDepth) {
 				continue
 			}
 			action, err := fn(entry)
-			if err != nil {
+			if err != nil || action == sandbox.SurveyStop {
 				return err
 			}
-			switch action {
-			case sandbox.SurveyStop:
-				return nil
-			case sandbox.SurveySkipDir:
+			if action == sandbox.SurveySkipDir {
 				continue
-			case sandbox.SurveyContinue:
 			}
-			if entry.IsDir && !entry.IsSymlink {
-				if opts.MaxDepth > 0 && entry.Depth >= opts.MaxDepth {
-					continue
-				}
+			if entry.IsDir && !entry.IsSymlink && (opts.MaxDepth <= 0 || entry.Depth < opts.MaxDepth) {
 				if err := walk(entry.Rel); err != nil {
 					return err
 				}
@@ -115,12 +198,16 @@ func OverlaySurveyWalk(
 	return walk(".")
 }
 
-func surveySkipsOverlayDir(name string, opts sandbox.SurveyOptions) bool {
-	if !opts.IncludeVCSMetadata && sandbox.IsVCSDirBaseName(name) {
-		return true
-	}
-	if !opts.IncludeEngineOverlay && sandbox.IsEngineOverlayBaseName(name) {
-		return true
+func hasAnySkippedPrefix(rel string, skipped []string) bool {
+	for _, sp := range skipped {
+		if strings.HasPrefix(rel, sp+"/") {
+			return true
+		}
 	}
 	return false
+}
+
+func surveySkipsOverlayDir(name string, opts sandbox.SurveyOptions) bool {
+	return (!opts.IncludeVCSMetadata && sandbox.IsVCSDirBaseName(name)) ||
+		(!opts.IncludeEngineOverlay && sandbox.IsEngineOverlayBaseName(name))
 }

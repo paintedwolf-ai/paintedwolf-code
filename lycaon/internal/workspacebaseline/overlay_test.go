@@ -3,6 +3,7 @@ package workspacebaseline_test
 import (
 	"bytes"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sort"
@@ -151,6 +152,50 @@ func TestOverlayCaptureKeepsRootQualifiedPaths(t *testing.T) {
 	_, err = workspacebaseline.Materialize(t.Context(), baseline, captured.Path, workspacebaseline.ContentStore(baseline), roots, branch, func(string) string { return "" })
 	testutil.FailErr(t, "materialize", err)
 	assertBody(t, filepath.Join(branch, sharedDir, "file.txt"), "changed\n")
+}
+
+func TestEachChangeLocatesPathsInEveryRootAndAPathBelowAFile(t *testing.T) {
+	root := t.TempDir()
+	branch := t.TempDir()
+	roots := []projectroot.RootRef{{ID: "p", Label: "app", Path: t.TempDir(), IsPrimary: true}, {ID: "s", Label: "shared", Path: t.TempDir()}}
+	primaryDir, err := projectroot.BranchDirForID("p")
+	testutil.FailErr(t, "primary dir", err)
+	sharedDir, err := projectroot.BranchDirForID("s")
+	testutil.FailErr(t, "shared dir", err)
+	writeFile(t, filepath.Join(branch, primaryDir, "dir", "inner.txt"), []byte("base\n"), 0o644)
+	writeFile(t, filepath.Join(branch, sharedDir, "file.txt"), []byte("base\n"), 0o644)
+	store := workspacebaseline.New(nil, sourceblob.New(filepath.Join(root, "source-content")), filepath.Join(root, "manifests"))
+	baseline, err := store.Capture(t.Context(), "job", workspacebaseline.Branch(roots, branch))
+	testutil.FailErr(t, "capture baseline", err)
+	testutil.FailErr(t, "drop dir", os.RemoveAll(filepath.Join(branch, primaryDir, "dir")))
+	writeFile(t, filepath.Join(branch, primaryDir, "dir"), []byte("a file now\n"), 0o644)
+	writeFile(t, filepath.Join(branch, sharedDir, "file.txt"), []byte("changed\n"), 0o644)
+
+	reader, err := workspacebaseline.Open(t.Context(), baseline, workspacebaseline.ContentStore(baseline))
+	testutil.FailErr(t, "open baseline", err)
+	defer func() { _ = reader.Close() }()
+	got := map[string]workspacebaseline.BranchLocation{}
+	testutil.FailErr(t, "each change", reader.EachChange(t.Context(), roots, branch, func(path string) error {
+		location, err := workspacebaseline.LocateInBranch(roots, branch, path)
+		got[path] = location
+		return err
+	}))
+	want := map[string]workspacebaseline.BranchLocation{
+		"dir/inner.txt":    {RootID: "p", Rel: "dir/inner.txt", Abs: filepath.Join(branch, primaryDir, "dir", "inner.txt")},
+		"dir":              {RootID: "p", Rel: "dir", Abs: filepath.Join(branch, primaryDir, "dir")},
+		"@shared/file.txt": {RootID: "s", Rel: "file.txt", Abs: filepath.Join(branch, sharedDir, "file.txt")},
+	}
+	if !maps.Equal(got, want) {
+		t.Fatalf("changes %+v, want %+v", got, want)
+	}
+	if _, err := workspacebaseline.LocateInBranch(roots, branch, "@missing/file.txt"); err == nil {
+		t.Fatal("an unknown root must not locate")
+	}
+	single, err := workspacebaseline.LocateInBranch(roots[:1], branch, "file.txt")
+	testutil.FailErr(t, "single root", err)
+	if single.RootID != "p" || single.Rel != "file.txt" || single.Abs != filepath.Join(branch, "file.txt") {
+		t.Fatalf("single root %+v", single)
+	}
 }
 
 func changedPaths(t *testing.T, baselinePath, branch string) []string {

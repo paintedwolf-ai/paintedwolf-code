@@ -3,36 +3,88 @@ package workspace
 import (
 	"context"
 	"errors"
-	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-// ReconcileSandboxRoots removes unreferenced branches and seeds of detached roots.
+// ResolveDispatchWorkspaceSelection validates an explicit adapter.WorkspaceSelection against attached
+// project roots, narrowing the materialized/visible roots and subroots while keeping informational
+// taskPathHints separate.
+func ResolveDispatchWorkspaceSelection(
+	attached []projectroot.RootRef,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+) ([]adapter.RootGrant, []projectroot.RootRef, error) {
+	_ = taskPathHints // Informational hints never change workspace authority or materialization.
+	grants := make([]adapter.RootGrant, 0, len(attached))
+	for _, r := range attached {
+		grants = append(grants, adapter.RootGrant{
+			RootID:     r.ID,
+			Label:      r.Label,
+			SourcePath: r.Path,
+			IsPrimary:  r.IsPrimary,
+		})
+	}
+	narrowedGrants, err := adapter.ValidateWorkspaceSelection(grants, selection)
+	if err != nil {
+		return nil, nil, err
+	}
+	narrowedRefs := make([]projectroot.RootRef, 0, len(narrowedGrants))
+	for _, g := range narrowedGrants {
+		narrowedRefs = append(narrowedRefs, projectroot.RootRef{
+			ID:        g.RootID,
+			Label:     g.Label,
+			Path:      g.SourcePath,
+			IsPrimary: g.IsPrimary,
+		})
+	}
+	return narrowedGrants, narrowedRefs, nil
+}
+
+// ReconcileSelectedSandboxRoots validates an explicit WorkspaceSelection against attached project roots
+// and reconciles branches against the narrowed root set while keeping taskPathHints separate.
+func ReconcileSelectedSandboxRoots(
+	ctx context.Context,
+	branchRoot string,
+	attached []projectroot.RootRef,
+	selection adapter.WorkspaceSelection,
+	taskPathHints []string,
+	settle SandboxSettler,
+	loadRetainedJobs func(context.Context) (map[string]struct{}, error),
+) (int, error) {
+	_, narrowedRefs, err := ResolveDispatchWorkspaceSelection(attached, selection, taskPathHints)
+	if err != nil {
+		return 0, err
+	}
+	liveDirs := make([]string, 0, len(narrowedRefs))
+	for _, r := range narrowedRefs {
+		liveDirs = append(liveDirs, r.Path)
+	}
+	return ReconcileSandboxRoots(ctx, branchRoot, liveDirs, settle, loadRetainedJobs)
+}
+
+// ReconcileSandboxRoots removes unreferenced branches of detached roots.
 // Retained job trees and topology remain available after a project root moves.
-func ReconcileSandboxRoots(ctx context.Context, branchRoot, seedRoot string, liveProjectDirs []string, loadRetainedJobs func(context.Context) (map[string]struct{}, error)) (removed int, err error) {
+func ReconcileSandboxRoots(ctx context.Context, branchRoot string, liveProjectDirs []string, settle SandboxSettler, loadRetainedJobs func(context.Context) (map[string]struct{}, error)) (removed int, err error) {
 	live := make(map[string]struct{}, len(liveProjectDirs))
 	for _, dir := range liveProjectDirs {
 		if strings.TrimSpace(dir) != "" {
 			live[enginepaths.ProjectKey(dir)] = struct{}{}
 		}
 	}
+	stateRoot := filepath.Dir(strings.TrimSpace(branchRoot))
 	var errs []error
-	for _, base := range branchBases(filepath.Dir(strings.TrimSpace(branchRoot)), branchRoot) {
-		branches, branchErr := reconcileBranchRoots(ctx, base, filepath.Dir(strings.TrimSpace(branchRoot)), live, loadRetainedJobs)
+	for _, base := range branchBases(stateRoot, branchRoot) {
+		branches, branchErr := reconcileBranchRoots(ctx, base, stateRoot, live, settle, loadRetainedJobs)
 		removed += branches
 		if branchErr != nil {
 			errs = append(errs, branchErr)
 		}
-	}
-	seeds, seedErr := reconcileSeedRoots(ctx, seedRoot, live)
-	removed += seeds
-	if seedErr != nil {
-		errs = append(errs, seedErr)
 	}
 	return removed, errors.Join(errs...)
 }
@@ -58,7 +110,7 @@ func detachedBranchCandidates(ctx context.Context, branchRoot string, live map[s
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if !entry.IsDir() || !validSeedKey(entry.Name()) {
+		if !entry.IsDir() || !validProjectKey(entry.Name()) {
 			continue
 		}
 		if _, ok := live[entry.Name()]; ok {
@@ -87,7 +139,7 @@ func detachedBranchCandidates(ctx context.Context, branchRoot string, live map[s
 	return candidates, nil
 }
 
-func reconcileBranchRoots(ctx context.Context, branchRoot, stateRoot string, live map[string]struct{}, loadRetainedJobs func(context.Context) (map[string]struct{}, error)) (int, error) {
+func reconcileBranchRoots(ctx context.Context, branchRoot, stateRoot string, live map[string]struct{}, settle SandboxSettler, loadRetainedJobs func(context.Context) (map[string]struct{}, error)) (int, error) {
 	if loadRetainedJobs == nil {
 		return 0, nil
 	}
@@ -103,7 +155,7 @@ func reconcileBranchRoots(ctx context.Context, branchRoot, stateRoot string, liv
 	}
 	removed := 0
 	for _, bucket := range candidates {
-		changed, err := reconcileDetachedBranchBucket(ctx, stateRoot, bucket, retainedJobs)
+		changed, err := reconcileDetachedBranchBucket(ctx, stateRoot, bucket, settle, retainedJobs)
 		if err != nil {
 			return removed, err
 		}
@@ -114,8 +166,9 @@ func reconcileBranchRoots(ctx context.Context, branchRoot, stateRoot string, liv
 	return removed, nil
 }
 
-func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket detachedBranchBucket, retainedJobs map[string]struct{}) (bool, error) {
+func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket detachedBranchBucket, settle SandboxSettler, retainedJobs map[string]struct{}) (bool, error) {
 	changed := false
+	var blocked []error
 	for jobID := range bucket.jobs {
 		if err := ctx.Err(); err != nil {
 			return changed, err
@@ -127,9 +180,13 @@ func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket
 		if placedBranchAbsent(stateRoot, root) {
 			continue
 		}
+		if err := settleBeforeRemoval(ctx, settle, jobID, root); err != nil {
+			blocked = append(blocked, err)
+			continue
+		}
 		removed, err := removeUnownedBranch(ctx, root)
 		if err != nil {
-			return changed, err
+			return changed, errors.Join(append(blocked, err)...)
 		}
 		if removed {
 			if err := forgetPlacedBranch(ctx, stateRoot, root); err != nil {
@@ -140,12 +197,12 @@ func reconcileDetachedBranchBucket(ctx context.Context, stateRoot string, bucket
 	}
 	entries, err := os.ReadDir(bucket.path)
 	if err != nil {
-		return changed, err
+		return changed, errors.Join(append(blocked, err)...)
 	}
 	if len(entries) == 0 {
 		return true, os.Remove(bucket.path)
 	}
-	return changed, nil
+	return changed, errors.Join(blocked...)
 }
 
 func removeUnownedBranch(ctx context.Context, root string) (bool, error) {
@@ -169,32 +226,4 @@ func removeUnownedBranch(ctx context.Context, root string) (bool, error) {
 		return false, err
 	}
 	return true, removeJobSandbox(root)
-}
-
-func reconcileSeedRoots(ctx context.Context, seedRoot string, live map[string]struct{}) (int, error) {
-	seedRoot = strings.TrimSpace(seedRoot)
-	if seedRoot == "" {
-		return 0, nil
-	}
-	candidates, err := seedEvictionCandidates(seedRoot, "")
-	if err != nil {
-		return 0, fmt.Errorf("read worker seeds: %w", err)
-	}
-	removed := 0
-	var errs []error
-	for _, candidate := range candidates {
-		if err := ctx.Err(); err != nil {
-			return removed, err
-		}
-		if _, ok := live[candidate.key]; ok {
-			continue
-		}
-		if err := RemoveSeedByID(ctx, seedRoot, candidate.key); err != nil {
-			errs = append(errs, fmt.Errorf("remove orphan worker seed %s: %w", candidate.key, err))
-			continue
-		}
-		removed++
-		slog.InfoContext(ctx, "removed worker seed of an unregistered project", "path", candidate.path)
-	}
-	return removed, errors.Join(errs...)
 }

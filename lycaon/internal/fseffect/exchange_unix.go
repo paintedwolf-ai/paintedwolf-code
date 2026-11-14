@@ -32,7 +32,7 @@ func ExchangeGuarded(root, first, second, firstIdentity, secondIdentity string) 
 		if err != nil {
 			return err
 		}
-		if identity != check.identity {
+		if !fspath.SameEntryAcrossRestart(check.identity, identity) {
 			return ErrPostcondition
 		}
 		if err := refuseSymlinkTarget(check.parent); err != nil {

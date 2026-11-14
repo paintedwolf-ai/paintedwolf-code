@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/pkgmanifest"
 	"golang.org/x/sys/unix"
 )
@@ -197,7 +198,7 @@ func syncDirectory(path string) error {
 	if err != nil {
 		return err
 	}
-	return errors.Join(directory.Sync(), directory.Close())
+	return errors.Join(fssync.File(directory), directory.Close())
 }
 
 func copyEntry(source, target *os.Root, entry pkgmanifest.PayloadEntry, owner uint32) error {
@@ -249,7 +250,7 @@ func copyEntry(source, target *os.Root, entry pkgmanifest.PayloadEntry, owner ui
 		if err := output.Chmod(os.FileMode(entry.Mode)); err != nil {
 			return err
 		}
-		return output.Sync()
+		return fssync.File(output)
 	}
 	return errors.New("native generation: unsupported payload object")
 }

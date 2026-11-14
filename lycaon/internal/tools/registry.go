@@ -114,6 +114,22 @@ type WorkerWriteCoordinator interface {
 	EnsureBranch(ctx context.Context, tctx ToolContext) (ToolContext, error)
 }
 
+// WorkerFileObservationFacts carries structured file identity, layer, and digest
+// facts captured directly at the read or write operation boundary.
+type WorkerFileObservationFacts struct {
+	RootID, RelPath, AbsPath, SHA256, Layer string
+	Size, ModTimeNS                         int64
+	Ino, Dev                                uint64
+	Complete                                bool
+}
+
+// WorkerObservationCoordinator receives structured read/write observation facts
+// for isolated worker workspaces without re-reading files from disk.
+type WorkerObservationCoordinator interface {
+	ObserveWorkerRead(ctx context.Context, tctx ToolContext, facts WorkerFileObservationFacts)
+	ObserveWorkerWrite(ctx context.Context, tctx ToolContext, facts WorkerFileObservationFacts)
+}
+
 // PrimaryMutation identifies one primary-tree path for rewind checkpoints.
 type PrimaryMutation struct {
 	RootID  string
@@ -183,6 +199,10 @@ type InvocationSource struct {
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
+	// RecordViewProcess durably names a process started in the worker's view, so recovery can settle it.
+	RecordViewProcess func(pid int) error
+	// WorkerViewBoundary reads what a process of this worker must not reach, as of its launch.
+	WorkerViewBoundary func() confine.ViewBoundary
 	// WorkerBaselinePath is the manifest sealed when the branch was prepared.
 	WorkerBaselinePath string
 	// WorkerSourceRoots are primary roots captured into the private branch.

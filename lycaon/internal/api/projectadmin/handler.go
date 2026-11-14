@@ -23,6 +23,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workspace"
 )
 
 type Deps struct {
@@ -42,8 +43,7 @@ type Deps struct {
 	Store          session.Store
 	Sessions       *session.Host
 	Settings       *settings.Service
-	// WorkerSeedRoot and WorkerBranchRoot hold host-only worker storage.
-	WorkerSeedRoot   string
+	// WorkerBranchRoot holds host-only worker storage.
 	WorkerBranchRoot string
 	Workers          worker.WorkerQueue
 	Sources          *sourceapi.Handler
@@ -100,7 +100,6 @@ type Removal struct {
 	Roots          *Roots
 	Sessions       *session.Host
 	Settings       *settings.Service
-	WorkerSeedRoot string
 	responses      *httpio.Responder
 	sourceViews    *sourceapi.Views
 	sourceWatch    *sourceapi.Watch
@@ -119,7 +118,6 @@ type Roots struct {
 	Settings        *settings.Service
 	Store           session.Store
 	Verification    *Verification
-	WorkerSeedRoot  string
 	background      *taskgroup.Group
 	responses       *httpio.Responder
 	sourceEditor    *editoradmin.Handler
@@ -133,6 +131,7 @@ type Sandboxes struct {
 	Sessions                *session.Host
 	WorkerBranchRoot        string
 	Workers                 worker.WorkerQueue
+	SettleWorker            workspace.SandboxSettler
 	background              *taskgroup.Group
 	sandboxReconcileLast    map[string]time.Time
 	sandboxReconcileMu      sync.Mutex
@@ -181,8 +180,8 @@ func New(responses *httpio.Responder, background *taskgroup.Group, deps Deps) Ha
 	h := Handler{}
 	h.Projects = &Projects{Events: deps.Events, Extensions: deps.Extensions.Mutations, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, responses: responses, sourceWorkspace: deps.Sources.Workspace}
 	h.Promotion = &Promotion{Git: deps.Git, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, responses: responses, sourceViews: deps.Sources.Views}
-	h.Removal = &Removal{background: background, DataDir: deps.DataDir, Database: deps.Database, Extensions: deps.Extensions.Mutations, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, WorkerSeedRoot: deps.WorkerSeedRoot, responses: responses, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch}
-	h.Roots = &Roots{DataDir: deps.DataDir, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRules: deps.ProjectRules, Registry: deps.Registry, ScanCadence: deps.ScanCadence, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, WorkerSeedRoot: deps.WorkerSeedRoot, background: background, responses: responses, sourceEditor: deps.Sources.Editor, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
+	h.Removal = &Removal{background: background, DataDir: deps.DataDir, Database: deps.Database, Extensions: deps.Extensions.Mutations, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, Registry: deps.Registry, Sessions: deps.Sessions, Settings: deps.Settings, responses: responses, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch}
+	h.Roots = &Roots{DataDir: deps.DataDir, Git: deps.Git, MutationGate: deps.MutationGate, ProjectRules: deps.ProjectRules, Registry: deps.Registry, ScanCadence: deps.ScanCadence, Sessions: deps.Sessions, Settings: deps.Settings, Store: deps.Store, background: background, responses: responses, sourceEditor: deps.Sources.Editor, sourceViews: deps.Sources.Views, sourceWatch: deps.Sources.Watch, sourceWorkspace: deps.Sources.Workspace}
 	h.Sandboxes = &Sandboxes{Board: deps.Board, Sessions: deps.Sessions, WorkerBranchRoot: deps.WorkerBranchRoot, Workers: deps.Workers, background: background}
 	h.Secrets = &Secrets{ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, Registry: deps.Registry, SecretIgnores: deps.SecretIgnores, responses: responses}
 	h.Trust = &Trust{Events: deps.Events, Extensions: deps.Extensions.Mutations, Registry: deps.Registry, Settings: deps.Settings, responses: responses}

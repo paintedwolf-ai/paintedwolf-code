@@ -19,14 +19,13 @@ func TestSandboxReconciliationPreservesDetachedDurableWorker(t *testing.T) {
 	database := testdbfixture.Open(t, "reconcile.db")
 	testdbseed.InsertSession(t, database, "parent", testdbseed.DefaultProjectID)
 	runtime := New(database, nil, worker.WorkersConfig{})
-	runtime.BranchRoot, runtime.SeedRoot = t.TempDir(), t.TempDir()
+	runtime.BranchRoot = t.TempDir()
 	detached, current := t.TempDir(), t.TempDir()
 	id, err := runtime.Queue.EnqueueWithProjectID(t.Context(), testdbseed.DefaultProjectID, api.WorkerTask{ParentSessionID: "parent", AgentType: "implementer", Prompt: "Inspect source", Brief: "Inspect source", ExecutionTarget: api.ExecutionTargetLocal})
 	testutil.FailErr(t, "enqueue retained worker", err)
 	retained := enginepaths.JobBranchDir(runtime.BranchRoot, detached, id)
 	orphan := enginepaths.JobBranchDir(runtime.BranchRoot, detached, "orphan")
-	seed := filepath.Join(runtime.SeedRoot, enginepaths.ProjectKey(detached), "generations", "g1")
-	for _, dir := range []string{retained, orphan, seed} {
+	for _, dir := range []string{retained, orphan} {
 		testutil.FailErr(t, "create sandbox", os.MkdirAll(dir, 0755))
 		testutil.FailErr(t, "write sandbox evidence", os.WriteFile(filepath.Join(dir, "evidence.txt"), []byte("worker evidence"), 0600))
 	}
@@ -36,7 +35,7 @@ func TestSandboxReconciliationPreservesDetachedDurableWorker(t *testing.T) {
 	if _, err := runtime.ReconcileWorkerSandboxes(canceled, []string{detached}); !errors.Is(err, context.Canceled) {
 		t.Fatalf("canceled reconciliation returned %v", err)
 	}
-	for _, dir := range []string{retained, orphan, seed} {
+	for _, dir := range []string{retained, orphan} {
 		if _, err := os.Stat(dir); err != nil {
 			t.Fatalf("failed reconciliation removed %s: %v", dir, err)
 		}
@@ -51,7 +50,7 @@ func TestSandboxReconciliationPreservesDetachedDurableWorker(t *testing.T) {
 	if string(content) != "worker evidence" {
 		t.Fatalf("retained evidence changed: %q", content)
 	}
-	for _, dir := range []string{orphan, seed} {
+	for _, dir := range []string{orphan} {
 		if _, err := os.Stat(dir); !os.IsNotExist(err) {
 			t.Fatalf("detached orphan remains at %s: %v", dir, err)
 		}

@@ -101,7 +101,10 @@ func openRootFlags(path string, accessFlags int) (*openedRoot, error) {
 				}
 				rootCache.mu.RUnlock()
 				if canonical != "" {
-					return &openedRoot{path: canonical, fd: fd, dev: deviceID(&st), ino: st.Ino}, nil
+					var canonSt unix.Stat_t
+					if canonical == clean || (unix.Fstatat(unix.AT_FDCWD, canonical, &canonSt, unix.AT_SYMLINK_NOFOLLOW) == nil && deviceID(&canonSt) == deviceID(&st) && canonSt.Ino == st.Ino) {
+						return &openedRoot{path: canonical, fd: fd, dev: deviceID(&st), ino: st.Ino}, nil
+					}
 				}
 			}
 			_ = unix.Close(fd)

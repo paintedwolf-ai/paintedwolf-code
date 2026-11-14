@@ -22,15 +22,21 @@ var kernelPathBufPool = sync.Pool{
 
 // canonicalizeExisting resolves aliases without opening file contents.
 func canonicalizeExisting(path string) (string, bool) {
-	if resolved, errno, ok := kernelPathErrno(path); ok {
+	resolved, errno, ok := kernelPathErrno(path)
+	if ok {
 		return resolved, true
-	} else if errno == unix.ENOENT || errno == unix.ENOTDIR || errno == unix.ELOOP {
+	}
+	if errno == unix.ENOENT || errno == unix.ENOTDIR || errno == unix.ELOOP {
 		return "", false
 	}
 	// Missing tails are resolved by CanonicalPath's parent walk. Rewalking
 	// every existing ancestor here repeats that work for each missing component.
-	if _, err := os.Lstat(path); os.IsNotExist(err) {
-		return "", false
+	// Volume types without ATTR_CMN_FULLPATH (e.g. NFS) return ENOTSUP/EOPNOTSUPP
+	// only after resolving an existing vnode.
+	if errno != unix.ENOTSUP && errno != unix.EOPNOTSUPP {
+		if _, err := os.Lstat(path); os.IsNotExist(err) {
+			return "", false
+		}
 	}
 	linked, err := filepath.EvalSymlinks(path)
 	if err != nil {

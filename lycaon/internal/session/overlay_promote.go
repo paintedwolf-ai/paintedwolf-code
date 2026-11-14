@@ -4,15 +4,59 @@ import (
 	"context"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
 )
+
+// CheckpointStoreDirForTask names the recovery store holding the checkpoint a task's branch published.
+func CheckpointStoreDirForTask(task *api.WorkerTask) string {
+	if task == nil {
+		return ""
+	}
+	dir, _, _ := taskBranchCheckpoint(task)
+	return dir
+}
+
+// taskBranchCheckpoint names the checkpoint a task's mounted branch published. A sealed overlay is
+// newer: a view rebuilt as a materialized tree after that checkpoint captures its result there.
+func taskBranchCheckpoint(task *api.WorkerTask) (storeDir, checkpointID string, ok bool) {
+	if strings.TrimSpace(task.WorkspaceOverlayPath) != "" {
+		return "", "", false
+	}
+	return workspace.BranchCheckpoint(task.WorkspaceRoot)
+}
+
+// OpenTaskCheckpointStore loads the reviewed checkpoint, or latest when no preview is bound.
+func OpenTaskCheckpointStore(task *api.WorkerTask) (*checkpoint.Store, checkpoint.Manifest, bool, error) {
+	dir := CheckpointStoreDirForTask(task)
+	if dir == "" {
+		return nil, checkpoint.Manifest{}, false, nil
+	}
+	store, err := checkpoint.NewStore(dir)
+	if err != nil {
+		return nil, checkpoint.Manifest{}, true, err
+	}
+	// The store is shared across workers, so only the branch's own record can name its checkpoint.
+	checkpointID := boundTaskCheckpointID(task.ID)
+	if checkpointID == "" {
+		_, checkpointID, _ = taskBranchCheckpoint(task)
+	}
+	manifest, err := store.LoadManifest(checkpointID)
+	if err != nil {
+		return nil, checkpoint.Manifest{}, true, err
+	}
+	return store, manifest, true, nil
+}
 
 // OverlayWorkspaceChangedPaths returns overlay changes since the leg started.
 func OverlayWorkspaceChangedPaths(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) []string {
@@ -25,10 +69,30 @@ func OverlayWorkspaceChangedPaths(ctx context.Context, task *api.WorkerTask, roo
 	return paths
 }
 
-// InspectOverlayChanges returns overlay changes and any baseline read error.
+// InspectOverlayChanges returns overlay changes and any baseline or checkpoint read error.
 func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef) ([]string, error) {
-	if task == nil || task.WorkspaceRoot == "" || !OverlayWorkspaceAvailable(task) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if task == nil || !OverlayWorkspaceAvailable(task) {
 		return nil, nil
+	}
+	if _, manifest, hasCheckpoint, err := OpenTaskCheckpointStore(task); err != nil {
+		return nil, err
+	} else if hasCheckpoint {
+		return checkpointManifestChangedPaths(manifest, roots), nil
+	}
+	if task.WorkspaceRoot == "" {
+		return nil, nil
+	}
+	if paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(ctx, task.WorkspaceRoot); handled {
+		if err != nil {
+			return nil, err
+		}
+		if len(roots) > 0 {
+			return FilterOverlayPromoteCandidatePathsForRoots(roots, paths), nil
+		}
+		return promotionstate.FilterOverlayPromoteCandidatePaths(paths), nil
 	}
 	baseline, err := workspacebaseline.Open(ctx, task.WorkspaceBaselinePath, workspacebaseline.ContentStore(task.WorkspaceBaselinePath))
 	if err != nil {
@@ -45,12 +109,19 @@ func InspectOverlayChanges(ctx context.Context, task *api.WorkerTask, roots []pr
 	return promotionstate.FilterOverlayPromoteCandidatePaths(changed), nil
 }
 
-// OverlayTree compares a running worker's branch with its baseline for its own
-// tools, over the paths promotion would consider.
+// OverlayTree compares a running worker's branch with its base for its own tools, over the paths
+// promotion would consider. A layered branch answers from its view; a branch of an earlier format
+// answers from the baseline sealed when its leg began.
 type OverlayTree struct{}
 
 // TreeChanges returns the promotion candidates and how each changed.
 func (OverlayTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]workspacebaseline.Change, error) {
+	if changes, ok, err := workspace.BranchTreeChanges(ctx, tree.BranchRoot, tree.Roots); ok {
+		if err != nil {
+			return nil, err
+		}
+		return admittedChanges(tree.Roots, changes), nil
+	}
 	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
 	if err != nil {
 		return nil, err
@@ -60,19 +131,26 @@ func (OverlayTree) TreeChanges(ctx context.Context, tree tools.SourceTree) ([]wo
 	if err != nil {
 		return nil, err
 	}
+	return admittedChanges(tree.Roots, changes), nil
+}
+
+func admittedChanges(roots []projectroot.RootRef, changes []workspacebaseline.Change) []workspacebaseline.Change {
 	out := changes[:0]
 	for _, change := range changes {
-		if overlayTreeAdmits(tree.Roots, change.Path) {
+		if overlayTreeAdmits(roots, change.Path) {
 			out = append(out, change)
 		}
 	}
-	return out, nil
+	return out
 }
 
 // TreePathChange compares one path. A path promotion omits reads as unchanged.
 func (OverlayTree) TreePathChange(ctx context.Context, tree tools.SourceTree, path string) (workspacebaseline.PathComparison, error) {
 	if !overlayTreeAdmits(tree.Roots, path) {
 		return workspacebaseline.PathComparison{}, nil
+	}
+	if comparison, ok, err := workspace.BranchPathChange(ctx, tree.BranchRoot, tree.Roots, path); ok {
+		return comparison, err
 	}
 	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
 	if err != nil {
@@ -82,8 +160,11 @@ func (OverlayTree) TreePathChange(ctx context.Context, tree tools.SourceTree, pa
 	return baseline.ComparePath(ctx, tree.Roots, tree.BranchRoot, path)
 }
 
-// TreeMovesUnchanged compares content hashes, so one baseline stays open for all of them.
+// TreeMovesUnchanged compares content hashes; a baseline stays open for all of them.
 func (OverlayTree) TreeMovesUnchanged(ctx context.Context, tree tools.SourceTree, moves []workspacebaseline.PathMove) (map[workspacebaseline.PathMove]bool, error) {
+	if unchanged, ok, err := workspace.BranchMovesUnchanged(ctx, tree.BranchRoot, tree.Roots, moves); ok {
+		return unchanged, err
+	}
 	baseline, err := workspacebaseline.Open(ctx, tree.BaselinePath, workspacebaseline.ContentStore(tree.BaselinePath))
 	if err != nil {
 		return nil, err
@@ -106,17 +187,24 @@ func overlayTreeAdmits(roots []projectroot.RootRef, path string) bool {
 	return len(FilterOverlayPromoteCandidatePathsForRoots(roots, []string{path})) == 1
 }
 
-// OverlayWorkspaceAvailable reports whether the task's overlay root is a real directory.
+// OverlayWorkspaceAvailable reports whether the task's overlay root is a real directory or has a
+// published checkpoint store.
 func OverlayWorkspaceAvailable(task *api.WorkerTask) bool {
 	if task == nil {
 		return false
 	}
 	root := strings.TrimSpace(task.WorkspaceRoot)
-	if root == "" {
-		return false
+	if root != "" {
+		st, err := os.Lstat(root)
+		if err != nil {
+			return CheckpointStoreDirForTask(task) != ""
+		}
+		if st.Mode()&os.ModeSymlink != 0 || !st.IsDir() {
+			return false
+		}
+		return true
 	}
-	st, err := os.Lstat(root)
-	return err == nil && st.IsDir() && st.Mode()&os.ModeSymlink == 0
+	return CheckpointStoreDirForTask(task) != ""
 }
 
 // OverlayAwaitingPromote keeps changed or unreadable write overlays open.
@@ -133,14 +221,23 @@ func OverlayAwaitingPromote(ctx context.Context, task *api.WorkerTask) bool {
 	return err != nil || len(paths) > 0
 }
 
-// OverlayWorkspaceDivergencePaths compares the overlay with the live project.
+// OverlayWorkspaceDivergencePaths compares the overlay or published checkpoint with the live project.
 func OverlayWorkspaceDivergencePaths(task *api.WorkerTask, roots []projectroot.RootRef) []string {
 	if task == nil || !task.EffectiveScope().IsWrite() {
 		return nil
 	}
+	if _, manifest, hasCheckpoint, err := OpenTaskCheckpointStore(task); err == nil && hasCheckpoint {
+		return checkpointManifestChangedPaths(manifest, roots)
+	}
 	overlay := strings.TrimSpace(task.WorkspaceRoot)
 	if overlay == "" || !OverlayWorkspaceAvailable(task) {
 		return nil
+	}
+	if paths, handled, err := workspace.OverlayWorkspaceDivergencePaths(context.Background(), overlay); handled && err == nil {
+		if len(roots) > 1 {
+			return FilterOverlayPromoteCandidatePathsForRoots(roots, paths)
+		}
+		return promotionstate.FilterOverlayPromoteCandidatePaths(paths)
 	}
 	if len(roots) > 1 {
 		projSnap, err := SnapshotWorkspaceFromRoots(roots)
@@ -160,7 +257,6 @@ func OverlayWorkspaceDivergencePaths(task *api.WorkerTask, roots []projectroot.R
 	}
 	var changed []string
 	if len(projSnap) == 0 {
-		// Empty live tree: every overlay file is new work to preserve.
 		overlaySnap, err := SnapshotWorkspace(overlay)
 		if err != nil {
 			return nil
@@ -184,4 +280,33 @@ func ResolveWorkerSummaryStatus(ctx context.Context, status api.WorkerSummarySta
 		return status
 	}
 	return api.WorkerSummaryStatusOpen
+}
+
+// QualifyCheckpointPath formats a checkpoint path as a qualified promote path across multi-root scopes.
+func QualifyCheckpointPath(qpath layeredfs.QualifiedPath, roots []projectroot.RootRef) string {
+	rel := filepath.ToSlash(filepath.Clean(strings.TrimSpace(qpath.Rel)))
+	if rel == "" || rel == "." {
+		return ""
+	}
+	if len(roots) > 1 {
+		for _, r := range roots {
+			if r.ID == qpath.RootID || ((qpath.RootID == "primary" || qpath.RootID == "root-0" || qpath.RootID == "") && r.IsPrimary) {
+				return projectroot.BaselineDisplayPath(roots, r.ID, rel)
+			}
+		}
+	}
+	return rel
+}
+
+func checkpointManifestChangedPaths(manifest checkpoint.Manifest, roots []projectroot.RootRef) []string {
+	changed := make([]string, 0, len(manifest.Entries))
+	for _, e := range manifest.Entries {
+		if rel := QualifyCheckpointPath(e.Path, roots); rel != "" {
+			changed = append(changed, rel)
+		}
+	}
+	if len(roots) > 0 {
+		return FilterOverlayPromoteCandidatePathsForRoots(roots, changed)
+	}
+	return promotionstate.FilterOverlayPromoteCandidatePaths(changed)
 }

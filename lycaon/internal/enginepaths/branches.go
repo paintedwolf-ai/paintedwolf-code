@@ -10,9 +10,9 @@ import (
 // WorkerBranchesDirName holds worker branch copies outside project roots.
 const WorkerBranchesDirName = "worker-branches"
 
-// WorkerSeedsDirName holds rebuildable bridge generations only when central
-// storage enables copy-on-write worker branches.
-const WorkerSeedsDirName = "worker-seeds"
+// WorkerRecoveryDirName holds worker lifecycle journals, retained checkpoints and
+// quarantined interrupted work outside any tree a worker can reach.
+const WorkerRecoveryDirName = "worker-recovery"
 
 // WorkerBranchPathSegment is the layout marker in every absolute worker-branch path.
 // The config-root leaf is omitted so every engine state root matches.
@@ -23,14 +23,9 @@ func WorkerBranchesRootUnder(stateRoot string) string {
 	return filepath.Join(strings.TrimSpace(stateRoot), WorkerBranchesDirName)
 }
 
-// WorkerSeedsRootUnder returns the central worker-seed base under an engine state root.
-func WorkerSeedsRootUnder(stateRoot string) string {
-	return filepath.Join(strings.TrimSpace(stateRoot), WorkerSeedsDirName)
-}
-
-// ProjectSeedDir returns the central seed directory for one source root.
-func ProjectSeedDir(seedRoot, projectDir string) string {
-	return filepath.Join(strings.TrimSpace(seedRoot), ProjectKey(projectDir))
+// WorkerRecoveryRootUnder returns the worker recovery base under an engine state root.
+func WorkerRecoveryRootUnder(stateRoot string) string {
+	return filepath.Join(strings.TrimSpace(stateRoot), WorkerRecoveryDirName)
 }
 
 // ProjectBranchDir returns the branch parent keyed by one source root.
@@ -74,6 +69,32 @@ func NormalizeRepoRel(path string) string {
 		path = strings.TrimPrefix(path, "./")
 	}
 	return strings.TrimPrefix(path, "/")
+}
+
+// PrivateGitDirUnder is the private Git storage beneath a worker-branch base.
+func PrivateGitDirUnder(branchesRoot string) string {
+	return filepath.Join(strings.TrimSpace(branchesRoot), ".adapter", "privategit")
+}
+
+// PristineTreeForBranchRoot is a materialized workspace's exact base. It sits beside the working tree
+// rather than in it, and a worker reads it and never writes it.
+func PristineTreeForBranchRoot(branchTreeRoot string) string {
+	return filepath.Join(MetaDirForBranchRoot(branchTreeRoot), "pristine")
+}
+
+// StatManifestForBranchRoot is the stat manifest of a materialized workspace's working tree.
+func StatManifestForBranchRoot(branchTreeRoot string) string {
+	return filepath.Join(MetaDirForBranchRoot(branchTreeRoot), "stat-manifest")
+}
+
+// WorkerBranchesRootOf returns the worker-branch base holding path, wherever its state root or
+// placement folder is, or "" for a path outside every base.
+func WorkerBranchesRootOf(path string) string {
+	before, _, ok := strings.Cut(filepath.ToSlash(strings.TrimSpace(path)), WorkerBranchPathSegment)
+	if !ok {
+		return ""
+	}
+	return filepath.FromSlash(before + "/" + WorkerBranchesDirName)
 }
 
 // IsWorkerBranchPath reports a path under an engine worker-branch copy.

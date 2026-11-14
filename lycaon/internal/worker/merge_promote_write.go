@@ -9,9 +9,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/idset"
+	"github.com/lycaon/lycaon/internal/layeredfs/checkpoint"
+	"github.com/lycaon/lycaon/internal/layeredfs/recovery"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/scan/obligation"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/promotionstate"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/textfile"
@@ -51,7 +55,10 @@ func (s mergeEngine) clearReconcilePaths(sessionID string) {
 	s.Reconcile.ClearMergeReconcilePaths(sessionID)
 }
 
-func prepareMergeMutations(task *api.WorkerTask, assessment PromoteAssessment) ([]promoteMutation, error) {
+func prepareMergeMutations(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, assessment PromoteAssessment) ([]promoteMutation, error) {
+	if err := session.RevalidateTaskCheckpointPreview(ctx, task, roots); err != nil {
+		return nil, err
+	}
 	byPath := map[string]PromoteMergeResult{}
 	for _, mr := range assessment.MergeResults {
 		byPath[mr.Path] = mr
@@ -81,7 +88,11 @@ func prepareMergeMutations(task *api.WorkerTask, assessment PromoteAssessment) (
 		target, err := textfile.EncodeBounded(result.Content, result.Encoding,
 			textfile.LimitsForRaw(promoteConflictMaxFileBytes))
 		if err != nil {
-			return nil, err
+			if assessment.checkpointID != "" && (errors.Is(err, textfile.ErrBinary) || errors.Is(err, textfile.ErrUnsupported)) {
+				target = []byte(result.Content)
+			} else {
+				return nil, err
+			}
 		}
 		plan.target = target
 		plan.targetExists = true
@@ -149,72 +160,6 @@ func promoteRecoveryChoices(assessment PromoteAssessment) []map[string]any {
 		choices = append(choices, map[string]any{"path": item.Path, "action": item.Action, "needs_review": item.NeedsReview, "conflict_tier": item.ConflictTier})
 	}
 	return choices
-}
-
-// recoverInterruptedPromote rolls back an expired promotion.
-func (s mergeEngine) recoverInterruptedPromote(ctx context.Context, task *api.WorkerTask, jobID string) error {
-	reclaimed, err := s.reclaimOrphanedApply(ctx, task, jobID)
-	if err != nil {
-		return err
-	}
-	if !reclaimed {
-		return s.reject(OverlayPromoteNotPendingCode, map[string]any{
-			"job_id": jobID,
-			"reason": "another promote is applying this overlay",
-		})
-	}
-	return nil
-}
-
-// reclaimOrphanedApply restores one expired promotion.
-func (s mergeEngine) reclaimOrphanedApply(ctx context.Context, task *api.WorkerTask, jobID string) (bool, error) {
-	if s.Store == nil {
-		return false, fmt.Errorf("recover interrupted promote: merge store not configured")
-	}
-	token, ok, err := s.Store.ReclaimExpiredMergeApply(ctx, jobID)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return false, nil
-	}
-	roots := s.taskRootRefs(ctx, task)
-	promote := PromoteRootsForTask(task, roots)
-	found, err := recoverPromoteTransaction(s.hostDataDirFor(task), jobID, promote, task)
-	if err != nil {
-		return true, fmt.Errorf("recover interrupted promote: %w", err)
-	}
-	cleanupCtx, cancel := promoteCleanupContext(ctx)
-	err = s.Store.ReleaseMergeApply(cleanupCtx, jobID, token)
-	cancel()
-	if err != nil {
-		return true, fmt.Errorf("recover interrupted promote status: %w", err)
-	}
-	if found {
-		if err := removePromoteTransaction(promoteTransactionPath(s.hostDataDirFor(task), jobID)); err != nil {
-			slog.WarnContext(ctx, "recovered promote journal cleanup deferred", "job_id", jobID, "err", err)
-		}
-	}
-	return true, nil
-}
-
-func (s mergeEngine) failPromoteTransaction(tx *promoteTransaction, promote PromoteRoots, task *api.WorkerTask, revertPending func() error, cause error) error {
-	var unstarted *promoteTransactionUnstartedError
-	if errors.As(cause, &unstarted) {
-		return errors.Join(cause, tx.close(), revertPending())
-	}
-	rollbackErr := tx.rollback(promote, task)
-	if rollbackErr != nil {
-		return errors.Join(cause, rollbackErr)
-	}
-	closeErr := tx.close()
-	return errors.Join(cause, closeErr, revertPending())
-}
-
-func (s mergeEngine) closeCommittedPromoteTransaction(ctx context.Context, tx *promoteTransaction, jobID string) {
-	if err := tx.close(); err != nil {
-		slog.WarnContext(ctx, "committed promote journal cleanup deferred", "job_id", jobID, "err", err)
-	}
 }
 
 type promoteFinishInput struct {
@@ -316,4 +261,178 @@ func deletedPromotionPaths(changes []sourcefeed.Change) []string {
 
 func promoteCleanupContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+}
+
+func assessCheckpointTask(ctx context.Context, svc *MergeService, sessionID string, task *api.WorkerTask, mergePaths []string) (PromoteAssessment, bool, error) {
+	var roots []projectroot.RootRef
+	if svc != nil {
+		roots = svc.taskRootRefs(ctx, task)
+	}
+	store, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots)
+	if err != nil || !ok {
+		return PromoteAssessment{}, ok, err
+	}
+	cpPreview, err := taskCheckpointPreview(ctx, svc, task, roots, manifest, promoter)
+	if err != nil {
+		return PromoteAssessment{}, true, err
+	}
+
+	wanted := make(map[string]struct{}, len(mergePaths))
+	for _, p := range mergePaths {
+		wanted[filepath.ToSlash(filepath.Clean(strings.TrimSpace(p)))] = struct{}{}
+	}
+	promote := PromoteRootsForTask(task, roots)
+	out := PromoteAssessment{checkpointID: manifest.CheckpointID, primary: make(map[string]promotePrimarySnapshot, len(mergePaths))}
+	for _, rel := range mergePaths {
+		if primaryAbs, _, fErr := promote.fileAbs(task, rel); fErr == nil {
+			b, ex, mode, _ := readOptionalPromoteFile(primaryAbs)
+			out.primary[rel] = promotePrimarySnapshot{content: b, exists: ex, mode: mode}
+		}
+	}
+	seen := make(map[string]bool, len(mergePaths))
+	for _, ch := range cpPreview.PlannedChanges {
+		rel := session.QualifyCheckpointPath(ch.Path, roots)
+		if rel == "" {
+			continue
+		}
+		if len(wanted) > 0 {
+			if _, match := wanted[rel]; !match {
+				continue
+			}
+		}
+		seen[rel] = true
+		out.CleanPaths = append(out.CleanPaths, rel)
+		switch ch.Action {
+		case checkpoint.ActionDelete:
+			out.DeletedPaths = append(out.DeletedPaths, rel)
+		case checkpoint.ActionWriteRegular, checkpoint.ActionReplaceDirWithRegular:
+			out.MergeResults = append(out.MergeResults, PromoteMergeResult{Path: rel, Content: string(ch.MergedBytes), Encoding: textfile.UTF8})
+		default:
+		}
+	}
+	for _, conf := range cpPreview.Conflicts {
+		rel := session.QualifyCheckpointPath(conf.Path, roots)
+		if rel == "" {
+			continue
+		}
+		if len(wanted) > 0 {
+			if _, match := wanted[rel]; !match {
+				continue
+			}
+		}
+		seen[rel] = true
+		pc := convertCheckpointConflict(store, out.primary[rel], conf, rel)
+		if svc != nil {
+			pc.OverlapJobIDs = svc.overlapJobsForPath(ctx, sessionID, rel, task.ID)
+			out.OverlapJobIDs = idset.UnionSorted(out.OverlapJobIDs, pc.OverlapJobIDs)
+		}
+		out.Conflicts = append(out.Conflicts, pc)
+	}
+	for _, raw := range mergePaths {
+		rel := filepath.ToSlash(filepath.Clean(strings.TrimSpace(raw)))
+		if rel != "" && !seen[rel] {
+			seen[rel] = true
+			out.CleanPaths = append(out.CleanPaths, rel)
+		}
+	}
+	enrichAssessmentPromoteOrders(ctx, svc, sessionID, task, &out)
+	return out, true, nil
+}
+
+func convertCheckpointConflict(store *checkpoint.Store, prim promotePrimarySnapshot, conf checkpoint.PromotionConflict, rel string) PromoteConflict {
+	var baseStr, branchStr string
+	if conf.Base.Kind == "regular" && conf.Base.SHA256 != "" {
+		if b, err := store.ReadBlob(conf.Base.SHA256); err == nil {
+			baseStr = string(b)
+		}
+	}
+	if conf.WorkerFinal.SHA256 != "" {
+		if b, err := store.ReadBlob(conf.WorkerFinal.SHA256); err == nil {
+			branchStr = string(b)
+		}
+	}
+	return PromoteConflict{
+		Path: rel, Reason: api.WorkerPromoteReasonThreeWayUnresolved,
+		Base: baseStr, Primary: string(prim.content), Branch: branchStr,
+		Summary: []string{fmt.Sprintf("%s: %s", conf.Kind, conf.Message)},
+	}
+}
+
+// taskCheckpointPreview previews what promoting a task's checkpoint would do. A stacked checkpoint
+// is previewed as its composed chain: its own bases are its parent's content, not the target's.
+func taskCheckpointPreview(ctx context.Context, svc *MergeService, task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter) (*checkpoint.PromotionPreview, error) {
+	if len(manifest.ParentCheckpoints) > 0 {
+		plan, _, err := svc.stackedPromotionPlan(ctx, task, roots, manifest, promoter)
+		if err != nil {
+			return nil, err
+		}
+		return plan.Preview, nil
+	}
+	preview, err := promoter.Preview(ctx, checkpoint.PreviewRequest{
+		CheckpointID: manifest.CheckpointID, ExpectedWorkerID: manifest.WorkerID, ExpectedProjectID: task.ProjectID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	session.MaybeBindTaskCheckpointPreview(task.ID, preview)
+	return preview, nil
+}
+
+func (s *MergeService) stackedPromotionRequest(task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter, resolvedPaths []string) (*recovery.Coordinator, recovery.StackedPromotionRequest, error) {
+	if s == nil || s.Workspace == nil {
+		return nil, recovery.StackedPromotionRequest{}, fmt.Errorf("stacked promotion requires the recovery coordinator")
+	}
+	coordinator, err := s.Workspace.CheckpointCoordinator()
+	if err != nil {
+		return nil, recovery.StackedPromotionRequest{}, err
+	}
+	targetRoots, err := session.TargetRootsForTaskCheckpoint(task, roots, manifest)
+	if err != nil {
+		return nil, recovery.StackedPromotionRequest{}, err
+	}
+	resolutions := session.CheckpointKeepTargetResolutions(task, manifest, roots, resolvedPaths)
+	return coordinator, recovery.StackedPromotionRequest{
+		ChildCheckpointID: manifest.CheckpointID,
+		TargetRoots:       targetRoots,
+		Promoter:          promoter,
+		Resolutions:       resolutions,
+		ImportGitRefs:     true,
+	}, nil
+}
+
+func (s *MergeService) stackedPromotionPlan(ctx context.Context, task *api.WorkerTask, roots []projectroot.RootRef, manifest checkpoint.Manifest, promoter *checkpoint.Promoter) (*recovery.StackedPromotionPlan, *recovery.Coordinator, error) {
+	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	plan, err := coordinator.ResolveStackedPromotionPlan(ctx, request)
+	return plan, coordinator, err
+}
+
+// applyTaskCheckpoint joins a task's checkpoint effects to its promotion transaction, stacked or not.
+func applyTaskCheckpoint(ctx context.Context, s *MergeService, tx *promoteTransaction, task *api.WorkerTask, resolvedPaths []string) error {
+	if task == nil {
+		return nil
+	}
+	var roots []projectroot.RootRef
+	if s != nil {
+		roots = s.taskRootRefs(ctx, task)
+	}
+	_, manifest, promoter, ok, err := session.NewTaskCheckpointPromoter(task, roots)
+	if err != nil {
+		return errors.Join(err, tx.txn.Rollback(context.WithoutCancel(ctx)))
+	}
+	if !ok || len(manifest.ParentCheckpoints) == 0 {
+		return session.ApplyTaskCheckpoint(ctx, tx.txn, task, roots, resolvedPaths...)
+	}
+	coordinator, request, err := s.stackedPromotionRequest(task, roots, manifest, promoter, resolvedPaths)
+	if err != nil {
+		return errors.Join(err, tx.txn.Rollback(context.WithoutCancel(ctx)))
+	}
+	request.Transaction = tx.txn
+	if _, err := coordinator.PromoteStackedCheckpoint(ctx, request); err != nil {
+		return err
+	}
+	tx.afterCommit = func() error { return coordinator.SettleStackedPromotion(manifest.CheckpointID) }
+	return nil
 }

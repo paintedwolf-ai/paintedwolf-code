@@ -1,0 +1,274 @@
+//go:build linux
+
+package fuselinux
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"time"
+
+	execpkg "github.com/lycaon/lycaon/internal/exec"
+	"github.com/lycaon/lycaon/internal/fssync"
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
+)
+
+// InvalidatePath sends an explicit FUSE kernel cache invalidation for qpath on viewID.
+func (a *Adapter) InvalidatePath(viewID string, qpath layeredfs.QualifiedPath) error {
+	a.mu.RLock()
+	st, ok := a.views[viewID]
+	a.mu.RUnlock()
+	if !ok || st == nil {
+		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "invalidate_path", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: viewID}
+	}
+	rootID := qpath.RootID
+	if rootID == "" {
+		rootID = st.primaryRoot
+	}
+	m := st.mounts[rootID]
+	if m == nil || m.server == nil {
+		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: "invalidate_path", ReasonCode: adapter.ReasonViewNotFound, Diagnostic: rootID}
+	}
+	m.server.InvalidateRelPath(qpath.Rel)
+	return nil
+}
+
+func verifyMountAndServerForBarrier(st *viewState, viewID, rootID string, m *rootMount, op string) error {
+	if err := checkServerAlive(m); err != nil {
+		if st.privateGitMgr != nil {
+			st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
+		}
+		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: op, ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: err.Error(), Cause: err}
+	}
+	if !isMountOwnedAndActive(m, true) {
+		if st.privateGitMgr != nil {
+			st.privateGitMgr.RevokeMountedViewBinding(viewID, rootID)
+		}
+		return &adapter.AdapterError{AdapterID: adapter.AdapterFUSELinux, Op: op, ReasonCode: adapter.ReasonBarrierFailed, Diagnostic: "mount ownership lost on " + m.mountPath}
+	}
+	return nil
+}
+
+func classifyBarrierError(err error) adapter.ReasonCode {
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return adapter.ReasonContextCanceled
+	}
+	return adapter.ReasonBarrierFailed
+}
+
+// TrackDirtyClientPath registers a relative path under (viewID, rootID) in the bounded client flush set.
+func (a *Adapter) TrackDirtyClientPath(viewID, rootID, relPath string) {
+	a.mu.RLock()
+	st := a.views[viewID]
+	a.mu.RUnlock()
+	if st == nil {
+		return
+	}
+	if rootID == "" {
+		rootID = st.primaryRoot
+	}
+	clean := cleanFuseRel(relPath)
+	st.dirtyMu.Lock()
+	if st.dirtyPaths[rootID] == nil {
+		st.dirtyPaths[rootID] = make(map[string]struct{})
+	}
+	st.dirtyPaths[rootID][clean] = struct{}{}
+	st.dirtyMu.Unlock()
+}
+
+// LastFlushStatsForView returns the bounded count of regular files and directories synced
+// during the most recent FlushClientData or CheckpointBarrier for viewID.
+func (a *Adapter) LastFlushStatsForView(viewID string) (filesSynced, dirsSynced int) {
+	a.mu.RLock()
+	st := a.views[viewID]
+	a.mu.RUnlock()
+	if st == nil {
+		return 0, 0
+	}
+	st.dirtyMu.Lock()
+	defer st.dirtyMu.Unlock()
+	return st.lastFilesSynced, st.lastDirsSynced
+}
+
+// syncClientPath flushes one path through the mount so kernel dirty pages reach the server.
+// A worker's own file modes can make a path unopenable, which must not wedge checkpoints; the
+// whole mount is written back instead, and the path's data is then covered by the server flush.
+func (a *Adapter) syncClientPath(ctx context.Context, mountRoot, targetPath string) (isDir bool, synced bool, err error) {
+	if cErr := ctx.Err(); cErr != nil {
+		return false, false, cErr
+	}
+	info, err := os.Lstat(targetPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, false, nil
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return false, false, syncMountedFilesystem(mountRoot)
+		}
+		return false, false, err
+	}
+	mode := info.Mode()
+	if mode&(os.ModeSymlink|os.ModeNamedPipe|os.ModeSocket|os.ModeDevice|os.ModeCharDevice) != 0 {
+		return false, false, nil
+	}
+	if !mode.IsRegular() && !mode.IsDir() {
+		return false, false, nil
+	}
+	a.mu.RLock()
+	fn := a.cfg.ClientSyncFn
+	a.mu.RUnlock()
+	if fn != nil {
+		if fnErr := fn(targetPath); fnErr != nil {
+			return mode.IsDir(), false, fnErr
+		}
+	}
+	openFlag := os.O_RDONLY
+	if mode.IsRegular() && mode&0o400 == 0 && mode&0o200 != 0 {
+		openFlag = os.O_WRONLY
+	}
+	f, err := os.OpenFile(targetPath, openFlag, 0)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, false, nil
+		}
+		if errors.Is(err, os.ErrPermission) {
+			return mode.IsDir(), false, syncMountedFilesystem(mountRoot)
+		}
+		return mode.IsDir(), false, err
+	}
+	syncErr := fssync.Always(f)
+	closeErr := f.Close()
+	if syncErr != nil {
+		return mode.IsDir(), false, syncErr
+	}
+	if closeErr != nil {
+		return mode.IsDir(), false, closeErr
+	}
+	return mode.IsDir(), true, nil
+}
+
+func (a *Adapter) syncMountedRootFiles(ctx context.Context, st *viewState, rootID string, m *rootMount) (filesSynced, dirsSynced int, err error) {
+	paths, err := collectBoundedFlushPaths(st, rootID, m)
+	if err != nil {
+		return 0, 0, err
+	}
+	a.mu.RLock()
+	fn := a.cfg.ClientSyncFn
+	a.mu.RUnlock()
+	if fn == nil {
+		return runFuseBarrierFlushSubprocess(ctx, a, st, m.mountPath, paths)
+	}
+	for _, p := range paths {
+		isDir, synced, sErr := a.syncClientPath(ctx, m.mountPath, p)
+		if sErr != nil {
+			return filesSynced, dirsSynced, sErr
+		}
+		if synced {
+			if isDir {
+				dirsSynced++
+			} else {
+				filesSynced++
+			}
+		}
+	}
+	return filesSynced, dirsSynced, nil
+}
+
+// removeRuntimeDir refuses while anything is still mounted below path: recursive removal would
+// otherwise delete a live view's or another filesystem's contents through the mount.
+func (a *Adapter) removeRuntimeDir(path string) error {
+	remaining, err := mountPathsWithin(path)
+	if err != nil {
+		return err
+	}
+	if len(remaining) > 0 {
+		return fmt.Errorf("mounts remain below runtime dir: %s", strings.Join(remaining, ", "))
+	}
+	a.mu.RLock()
+	fn := a.cfg.RemoveAllFn
+	a.mu.RUnlock()
+	if fn != nil {
+		return fn(path)
+	}
+	return os.RemoveAll(path)
+}
+
+func checkServerAlive(m *rootMount) error {
+	if m == nil || m.server == nil {
+		return errors.New("fuselinux: nil server")
+	}
+	if m.serverDead.Load() || !m.server.IsAlive() {
+		m.serverDead.Store(true)
+		return errors.New("fuselinux: FUSE server stopped or killed")
+	}
+	return nil
+}
+
+func isMountOwnedAndActive(m *rootMount, _ bool) bool {
+	if m == nil || m.mountPath == "" {
+		return false
+	}
+	found, matchesSource := checkKernelMountTable(m.mountPath, m.facts.FSName, m.facts.DevMajorMinor)
+	return found && matchesSource
+}
+
+func runFusermountUnmount(ctx context.Context, fusermountBin, mountPath string, lazy bool) error {
+	args := []string{"-u"}
+	if lazy {
+		args = append(args, "-z")
+	}
+	args = append(args, "--", mountPath)
+	out, exitCode, err := execpkg.Run(ctx, fusermountBin, args, execpkg.ExecOpts{Launch: execpkg.HostLaunch("fuse_unmount")})
+	if err != nil {
+		return fmt.Errorf("fusermount3 %v: %w (%s)", args, err, strings.TrimSpace(string(out)))
+	}
+	if exitCode != 0 {
+		return fmt.Errorf("fusermount3 %v: exit %d (%s)", args, exitCode, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// detachUnserved removes a mount a failing Prepare will not serve. A helper can fail or be killed after
+// the kernel attached it, and no server ever takes that connection.
+func (a *Adapter) detachUnserved(ctx context.Context, mountPath, fsName string) error {
+	return a.unmountOwnedRoot(ctx, &rootMount{mountPath: mountPath, facts: MountFacts{FSName: fsName}}, false)
+}
+
+func (a *Adapter) unmountOwnedRoot(ctx context.Context, m *rootMount, serverAlive bool) error {
+	if m == nil || m.mountPath == "" || !isMountOwnedAndActive(m, serverAlive) {
+		return nil
+	}
+	a.mu.RLock()
+	fusermountBin := a.cfg.FusermountBin
+	a.mu.RUnlock()
+	// An unmount finishes after the caller gives up, so it keeps the caller's values but not its end.
+	uCtx := ctx
+	if uCtx.Err() != nil {
+		uCtx = context.WithoutCancel(ctx)
+	}
+	var firstErr error
+	if serverAlive {
+		tCtx, cancel := context.WithTimeout(uCtx, 3*time.Second)
+		firstErr = runFusermountUnmount(tCtx, fusermountBin, m.mountPath, false)
+		cancel()
+		if !isMountOwnedAndActive(m, false) {
+			return nil
+		}
+	}
+	fCtx, fCancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	lazyErr := runFusermountUnmount(fCtx, fusermountBin, m.mountPath, true)
+	fCancel()
+	if !isMountOwnedAndActive(m, false) {
+		return nil
+	}
+	return &adapter.AdapterError{
+		AdapterID:  adapter.AdapterFUSELinux,
+		Op:         "release",
+		ReasonCode: adapter.ReasonCleanupFailed,
+		Diagnostic: fmt.Sprintf("unmount %s failed: standard=%v lazy=%v", m.mountPath, firstErr, lazyErr),
+		Cause:      errors.Join(firstErr, lazyErr),
+	}
+}

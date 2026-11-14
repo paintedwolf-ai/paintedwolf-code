@@ -40,7 +40,7 @@ func TestHarnessPreparesOverlaysThroughAuthenticatedApplicationRoute(t *testing.
 	ledger := sourceledger.New(database, filepath.Join(testbaseline.DataDir(t, database), "source-content"))
 	queue.SetBaselineStore(ledger.Baselines)
 	queue.SetProjectStore(projects)
-	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches"), t.TempDir()))
+	queue.SetWorkerWorkspaceManager(workspace.NewManager(filepath.Join(testbaseline.DataDir(t, database), "worker-branches")))
 	server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{Core: hostapi.CoreDependencies{Store: sessions, Projects: projects}, Workflow: hostapi.WorkflowDependencies{Workers: queue}}), nil, hostapi.TestAPIToken)
 	payload, err := json.Marshal(harnessfixture.Request{SessionID: parent.ID, Setup: harnessfixture.Setup{Overlays: []harnessfixture.Overlay{
 		{Label: "one", Files: map[string]string{"app.py": "value = 1\n"}},

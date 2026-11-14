@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/workspace"
 	"github.com/lycaon/lycaon/internal/workspacebaseline"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -34,6 +35,28 @@ func (l *BranchLease) Release() {
 	}
 	l.release()
 	l.release = nil
+}
+
+// CheckpointBranchRebuilder reconstructs a tree from its worker's retained checkpoint, and
+// reports false when no checkpoint applies.
+type CheckpointBranchRebuilder interface {
+	RebuildRecoveredBranch(ctx context.Context, root, jobID string) (bool, error)
+}
+
+// BranchEvictor is the eviction path for every retention caller: a queue whose workspace manager
+// knows the recovery rules applies them, and anything else evicts on the sealed record.
+func BranchEvictor(queue WorkerQueue) func(ctx context.Context, branchRoot string) error {
+	if sql, ok := queue.(*SQLQueue); ok {
+		sql.mu.Lock()
+		ws := sql.workerWorkspace
+		sql.mu.Unlock()
+		if evictor, ok := ws.(interface {
+			EvictWorkerBranch(ctx context.Context, branchRoot string) error
+		}); ok {
+			return evictor.EvictWorkerBranch
+		}
+	}
+	return workspace.EvictJobTree
 }
 
 // WorkerBranches materializes a job's branch tree on demand. A tree that
@@ -62,6 +85,16 @@ func ensureWorkerBranch(ctx context.Context, task *api.WorkerTask, ws WorkerWork
 	if workspace.BranchTreePresent(root) {
 		workspace.TouchBranchUse(root)
 		return &BranchLease{Root: root, release: release}, nil
+	}
+	if rebuilder, ok := ws.(CheckpointBranchRebuilder); ok {
+		rebuilt, err := rebuilder.RebuildRecoveredBranch(ctx, root, task.ID)
+		if err != nil {
+			release()
+			return nil, fmt.Errorf("rebuild worker branch %s from checkpoint: %w", task.ID, err)
+		}
+		if rebuilt {
+			return &BranchLease{Root: root, release: release}, nil
+		}
 	}
 	if strings.TrimSpace(task.WorkspaceOverlayPath) == "" || ws == nil {
 		release()
@@ -121,8 +154,13 @@ type BranchJob struct {
 	Sealed bool
 }
 
-func branchJobSealed(status api.WorkerStatus, mergeStatus api.WorkerMergeStatus, overlayPath string) bool {
-	if strings.TrimSpace(overlayPath) == "" || status != api.WorkerStatusComplete {
+func branchHasPublishedCheckpoint(branchRoot string) bool {
+	_, _, ok := workspace.BranchCheckpoint(branchRoot)
+	return ok
+}
+
+func branchJobSealed(status api.WorkerStatus, mergeStatus api.WorkerMergeStatus, overlayPath, branchRoot string) bool {
+	if status != api.WorkerStatusComplete || (strings.TrimSpace(overlayPath) == "" && !branchHasPublishedCheckpoint(branchRoot)) {
 		return false
 	}
 	switch mergeStatus {
@@ -140,6 +178,7 @@ func (s *MergeService) RecoverOrphanedMergeApplies(ctx context.Context) error {
 		return fmt.Errorf("merge apply sweep requires queue and store")
 	}
 	eng := s.engine()
+	settleCommittedPromotes(ctx, s.Queue, s.DataDir)
 	for {
 		ids, err := s.Store.ListMergeApplying(ctx)
 		if err != nil {
@@ -261,9 +300,19 @@ func (s mergeEngine) teardownBranch(ctx context.Context, task *api.WorkerTask) e
 // holdBranch leases the overlay's branch tree for a merge read, rebuilding a
 // reclaimed tree. A tree that cannot be rebuilt rejects as not pending.
 func (s mergeEngine) holdBranch(ctx context.Context, jobID string) (*BranchLease, error) {
+	task, exists := s.Queue.Get(jobID)
+	checkpointed := exists && task != nil && session.CheckpointStoreDirForTask(task) != ""
+	if checkpointed {
+		if err := session.SyncTaskCheckpointToWorkspace(task, s.taskRootRefs(ctx, task)); err != nil {
+			return nil, fmt.Errorf("rehydrate checkpoint branch: %w", err)
+		}
+	}
 	_, lease, err := s.Queue.EnsureWorkerBranch(ctx, jobID)
 	if err != nil {
 		if errors.Is(err, ErrWorkerBranchUnavailable) {
+			if checkpointed {
+				return LeaseExistingBranch(ctx, task)
+			}
 			return nil, s.reject(OverlayPromoteNotPendingCode, map[string]any{
 				"job_id": jobID, "reason": "overlay workspace unavailable",
 			})

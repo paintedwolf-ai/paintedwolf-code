@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testvolume"
@@ -41,7 +42,7 @@ func placementFixtureAt(t *testing.T, state string) placementFixture {
 	})
 	return placementFixture{
 		state: state,
-		mgr:   NewManager(enginepaths.WorkerBranchesRootUnder(state), enginepaths.WorkerSeedsRootUnder(state)),
+		mgr:   NewManager(enginepaths.WorkerBranchesRootUnder(state)),
 	}
 }
 
@@ -130,12 +131,13 @@ func TestSecondVolumeSourceClonesWithZeroCopiedBytes(t *testing.T) {
 		if !binding.Preparation.Clonable || binding.Preparation.NotClonableReason != "" {
 			t.Fatalf("preparation = %+v", binding.Preparation)
 		}
-		prepared := binding.Preparation.Roots[0]
-		if prepared.CopiedBytes != 0 || prepared.ClonedBytes != want || prepared.ClonedFiles != int64(len(projectFiles)) {
-			t.Fatalf("not a clone: %+v, want %d cloned bytes", prepared, want)
+		// Both trees clone: the working tree and the pristine base.
+		prepared := binding.Preparation.Materialized
+		if prepared.CopiedBytes != 0 || prepared.ClonedBytes != 2*want || prepared.ClonedFiles != 2*int64(len(projectFiles)) {
+			t.Fatalf("not a clone: %+v, want %d cloned bytes", prepared, 2*want)
 		}
-		if prepared.Strategy != ProvisionDirectCoW {
-			t.Fatalf("strategy = %s", prepared.Strategy)
+		if strategy := preparationStrategy(binding.Selection.Selection); strategy != ProvisionDirectCoW {
+			t.Fatalf("strategy = %s", strategy)
 		}
 		if !enginepaths.IsWorkerBranchPath(binding.Root) {
 			t.Fatalf("placed branch lost the path segment: %s", binding.Root)
@@ -236,7 +238,7 @@ func TestHomeOnSecondVolumePlacesAtVolumeRoot(t *testing.T) {
 	second, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), home, "job-2")
 	testutil.FailErr(t, "second", err)
 	assertOutside(t, first.Root, home)
-	if first.Preparation.PlacementFolder == "" || first.Preparation.Roots[0].CopiedBytes != 0 {
+	if first.Preparation.PlacementFolder == "" || first.Preparation.Materialized.CopiedBytes != 0 {
 		t.Fatalf("preparation = %+v", first.Preparation)
 	}
 	if a, b := entryCount(t, first.Root), entryCount(t, second.Root); a != b {
@@ -303,7 +305,6 @@ func TestSourceThatCannotCloneDeclaresCostBeforeCopying(t *testing.T) {
 	project := volume.Dir(t, "project")
 	want := writeTree(t, project, projectFiles)
 	fixture := newPlacementFixture(t)
-	fixture.mgr.seedRoot = ""
 	wantEntries := int64(entryCount(t, project))
 
 	var declared atomic.Pointer[PreparationProgress]
@@ -335,9 +336,14 @@ func TestSourceThatCannotCloneDeclaresCostBeforeCopying(t *testing.T) {
 	if filesAtDeclaration.Load() != 0 || branchAtDeclaration.Load() != 0 {
 		t.Fatalf("copying began before the declaration: %d files, %d entries", filesAtDeclaration.Load(), branchAtDeclaration.Load())
 	}
-	prepared := binding.Preparation.Roots[0]
-	if prepared.Strategy != ProvisionDirectCopy || prepared.CopiedBytes != want || prepared.DeclaredBytes != want || prepared.DeclaredEntries != wantEntries {
-		t.Fatalf("prepared = %+v", prepared)
+	// Every source byte is copied; the pristine tree clones from the working tree where the branch's
+	// own volume allows it.
+	declaredCost := binding.Selection.Selection.DeclaredCost
+	materialized := binding.Preparation.Materialized
+	if strategy := preparationStrategy(binding.Selection.Selection); strategy != ProvisionDirectCopy ||
+		materialized.CopiedBytes < want || materialized.CopiedBytes+materialized.ClonedBytes != 2*want ||
+		declaredCost.UncloneableBytes != want || declaredCost.Entries != wantEntries {
+		t.Fatalf("selection = %+v, materialized = %+v", binding.Selection.Selection, materialized)
 	}
 	if _, err := os.Lstat(filepath.Join(volume.Root, enginepaths.WorkerPlacementDirName(os.Getuid(), fixture.state))); !os.IsNotExist(err) {
 		t.Fatalf("placement folder left on a volume that cannot clone: %v", err)
@@ -352,17 +358,17 @@ func TestDiskThatCannotHoldTheCopyRefusesWithTheNumbers(t *testing.T) {
 	project := volume.Dir(t, "project")
 	want := writeTree(t, project, projectFiles)
 	fixture := newPlacementFixture(t)
-	fixture.mgr.seedRoot = ""
 	previous := queryAvailableStorageBytes
 	queryAvailableStorageBytes = func(string) (uint64, bool, error) { return 16, true, nil }
 	t.Cleanup(func() { queryAvailableStorageBytes = previous })
 
 	_, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
-	var capacity *CapacityError
+	var capacity *adapter.WorkspaceCapacityError
 	if !errors.As(err, &capacity) || !errors.Is(err, ErrWorkspaceStorageExhausted) {
 		t.Fatalf("err = %v", err)
 	}
-	if capacity.Required != uint64(want) || capacity.Available != 16 {
+	// A copy holds its bytes twice: the working tree and the pristine base.
+	if capacity.Required < 2*uint64(want) || capacity.Available != 16 {
 		t.Fatalf("capacity = %+v", capacity)
 	}
 	if _, statErr := os.Lstat(fixture.mgr.jobRoot(project, "job")); !os.IsNotExist(statErr) {
@@ -378,7 +384,6 @@ func TestCancelledCopyReleasesOnlyItsOwnPreparation(t *testing.T) {
 	project := volume.Dir(t, "project")
 	writeTree(t, project, projectFiles)
 	fixture := newPlacementFixture(t)
-	fixture.mgr.seedRoot = ""
 	kept, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "kept")
 	testutil.FailErr(t, "create kept", err)
 	keptEntries := entryCount(t, kept.Root)
@@ -447,7 +452,7 @@ func TestEjectedVolumeKeepsRecordsAndTheWorkerRecoversOnRemount(t *testing.T) {
 		[]projectroot.RootRef{{ID: "primary", Label: "primary", Path: project, IsPrimary: true}}, "primary", "job"); !errors.Is(err, ErrBranchVolumeUnavailable) {
 		t.Fatalf("reclaim err = %v", err)
 	}
-	removed, err := ReconcileStaleSandboxes(t.Context(), fixture.mgr.branchRoot, project, func(context.Context) (map[string]struct{}, error) {
+	removed, err := ReconcileStaleSandboxes(t.Context(), fixture.mgr.branchRoot, project, nil, func(context.Context) (map[string]struct{}, error) {
 		return map[string]struct{}{}, nil
 	})
 	testutil.FailErr(t, "reconcile while ejected", err)
@@ -516,7 +521,7 @@ func TestPlacedBranchIsFoundByRetentionAndLifecycle(t *testing.T) {
 	if !restored {
 		t.Fatal("restore did not run")
 	}
-	removed, err := ReconcileStaleSandboxes(t.Context(), fixture.mgr.branchRoot, project, func(context.Context) (map[string]struct{}, error) {
+	removed, err := ReconcileStaleSandboxes(t.Context(), fixture.mgr.branchRoot, project, nil, func(context.Context) (map[string]struct{}, error) {
 		return map[string]struct{}{}, nil
 	})
 	testutil.FailErr(t, "reconcile", err)
@@ -558,7 +563,7 @@ func TestStateFolderTreeWinsOverAStaleRecordAfterRestore(t *testing.T) {
 	if physical != restored {
 		t.Fatalf("physical = %s, want the restored tree %s", physical, restored)
 	}
-	removed, err := ReconcileStaleSandboxes(t.Context(), fixture.mgr.branchRoot, project, func(context.Context) (map[string]struct{}, error) {
+	removed, err := ReconcileStaleSandboxes(t.Context(), fixture.mgr.branchRoot, project, nil, func(context.Context) (map[string]struct{}, error) {
 		return map[string]struct{}{"job": {}}, nil
 	})
 	testutil.FailErr(t, "reconcile", err)
@@ -605,7 +610,7 @@ func TestUnreadableEntriesAreCountedAndAbsent(t *testing.T) {
 
 	binding, err := fixture.mgr.CreateWorkerWorkspace(t.Context(), project, "job")
 	testutil.FailErr(t, "create", err)
-	if got := binding.Preparation.Roots[0].UnreadableEntries; got != 2 {
+	if got := binding.Preparation.Materialized.UnreadableEntries; got != 2 {
 		t.Fatalf("unreadable entries = %d", got)
 	}
 	if _, err := os.Lstat(filepath.Join(binding.Root, "kept.txt")); err != nil {

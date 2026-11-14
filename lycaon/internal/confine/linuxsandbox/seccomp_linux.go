@@ -62,13 +62,20 @@ var isolatedSocketFamilies = []uint32{unix.AF_INET, unix.AF_INET6, unix.AF_NETLI
 // own descriptor for the socket with its own copy of the address.
 var notifiedSyscalls = []uint32{unix.SYS_CONNECT, unix.SYS_BIND, unix.SYS_LISTEN}
 
-// pathCreators create, link, or move a name; the supervisor decides each one
-// against the protected names and performs it inside the sandbox. openat2
-// carries its flags in memory, so every call goes; openat and open go only
-// when they would create.
+// openWriteFlags are the open flags that create, write, or truncate a file.
+const openWriteFlags = unix.O_CREAT | unix.O_WRONLY | unix.O_RDWR | unix.O_TRUNC
+
+// oTmpfileBit is the __O_TMPFILE bit without O_DIRECTORY; an unnamed temporary
+// inode names nothing until linkat attaches it.
+const oTmpfileBit = unix.O_TMPFILE &^ unix.O_DIRECTORY
+
+// pathCreators create, mutate, link, move, or remove a name; the supervisor
+// decides each one against the protected names and performs it inside the
+// sandbox. openat2 carries its flags in memory, so every call goes; openat and
+// open go when they would create, write, or truncate.
 var pathCreators = []uint32{
 	unix.SYS_OPENAT2, unix.SYS_MKDIRAT, unix.SYS_MKNODAT, unix.SYS_SYMLINKAT,
-	unix.SYS_LINKAT, unix.SYS_RENAMEAT, unix.SYS_RENAMEAT2,
+	unix.SYS_LINKAT, unix.SYS_RENAMEAT, unix.SYS_RENAMEAT2, unix.SYS_UNLINKAT, unix.SYS_TRUNCATE,
 }
 
 // fastOpenSends are the send calls that could start a connection through
@@ -181,9 +188,10 @@ func seccompProgram() ([]bpf.RawInstruction, error) {
 			continue
 		}
 		insts = append(insts,
-			bpf.JumpIf{Cond: bpf.JumpEqual, Val: open.nr, SkipFalse: 4},
+			bpf.JumpIf{Cond: bpf.JumpEqual, Val: open.nr, SkipFalse: 5},
 			bpf.LoadAbsolute{Off: seccompArgLow(open.flagsArg), Size: 4},
-			bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: unix.O_CREAT, SkipFalse: 1},
+			bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: oTmpfileBit, SkipTrue: 2},
+			bpf.JumpIf{Cond: bpf.JumpBitsSet, Val: openWriteFlags, SkipFalse: 1},
 			bpf.RetConstant{Val: notify},
 			bpf.RetConstant{Val: unix.SECCOMP_RET_ALLOW},
 		)

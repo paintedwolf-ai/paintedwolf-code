@@ -27,7 +27,7 @@ func RemoveTreeGuarded(loc Location, expected string) error {
 	if err != nil {
 		return err
 	}
-	if expected == "" || identity != expected {
+	if !fspath.SameEntryAcrossRestart(expected, identity) {
 		return ErrPostcondition
 	}
 	if err := removeWindowsTree(handle); err != nil {

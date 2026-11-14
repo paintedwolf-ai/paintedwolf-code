@@ -706,7 +706,7 @@ func countNotices(h *midTurnHarness, code string) int {
 
 // The fallback notice belongs to a debt, not to each wait. It survives a restart
 // because it derives from durable rows.
-func TestWaitFallbackNoticeFiresOncePerDebt(t *testing.T) {
+func TestWaitWorkspaceNoticeFiresOncePerDebt(t *testing.T) {
 	h := newMidTurnHarness(t, publishingSurface)
 	h.ledger.records = []evidence.Record{{Handle: "read#3", Kind: "read", Shape: evidence.ShapeFileRegion, Path: "a.go", LineRanges: []evidence.LineRange{{Start: 1, End: 9}}}}
 	history := []api.Message{midTurnUser(), {ID: "t0", Role: api.MessageRoleTool, EvidenceHandles: []string{"read#3"}, ToolResult: &api.ToolResult{Tool: "read"}}}

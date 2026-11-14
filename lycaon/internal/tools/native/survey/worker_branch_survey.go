@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/layeredfs"
+	"github.com/lycaon/lycaon/internal/layeredfs/consumer"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workspace"
@@ -48,7 +50,7 @@ func workerBranchReadDir(
 	if err := tctx.Source.BranchWorkspace.ValidateMeta(ctx); err != nil {
 		return nil, true, err
 	}
-	entries, err := workspace.OverlaySurveyReadDir(branch, rel, opts)
+	entries, err := workspace.OverlaySurveyReadDir(branch, rel, opts) //nolint:contextcheck // The view listing reads the core, which takes no context.
 	return entries, true, err
 }
 
@@ -81,7 +83,8 @@ func workerBranchSurveyWalk(
 }
 
 func ensureBranchFileForRead(ctx context.Context, tctx tools.ToolContext, abs string) error {
-	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
+	branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot)
+	if branch == "" {
 		return nil
 	}
 	if err := tools.RequireBranchWorkspace(tctx); err != nil {
@@ -89,6 +92,19 @@ func ensureBranchFileForRead(ctx context.Context, tctx tools.ToolContext, abs st
 	}
 	if err := tctx.Source.BranchWorkspace.ValidateMeta(ctx); err != nil {
 		return err
+	}
+	if eng, ok := consumer.LookupBranchEngine(branch); ok && eng != nil {
+		if rel, inBranch := branchRelUnderWorker(branch, abs); inBranch {
+			if _, rootID, scopedRel, resolved := consumer.ResolveBranchEnginePath(branch, rel); resolved {
+				if err := eng.GuardLiveConsumerPath(rootID, abs); err != nil {
+					return err
+				}
+				_, err := eng.LookupPath(ctx, layeredfs.QualifiedPath{RootID: rootID, Rel: scopedRel})
+				return err
+			}
+		} else if err := eng.GuardLiveConsumerPath(eng.PrimaryRootID(), abs); err != nil {
+			return err
+		}
 	}
 	_, err := os.Lstat(abs)
 	return err

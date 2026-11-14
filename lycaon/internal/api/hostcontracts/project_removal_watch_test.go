@@ -60,7 +60,7 @@ func TestProjectRemovalStopsWatchBeforeDeletionAndRestartsOnFailure(t *testing.T
 			}
 			server := hostapi.NewServer(contractfixture.RequiredTestDeps(t, hostapi.Dependencies{
 				Core:    hostapi.CoreDependencies{Database: database, Store: sessionstore.NewSQL(database), Projects: wrapped},
-				Storage: hostapi.StorageDependencies{DataDir: t.TempDir(), WorkerSeedRoot: t.TempDir()},
+				Storage: hostapi.StorageDependencies{DataDir: t.TempDir()},
 			}), nil, hostapi.TestAPIToken)
 			sourcefeed.EnsureProjectWatch(t.Context(), nil, p.ID, "", []sourcefeed.RootSpec{{ID: p.Roots[0].ID, WorkspaceID: p.WorkspaceID(), Path: root}}, nil)
 			t.Cleanup(func() { sourcefeed.StopProjectWatch(context.Background(), p.ID) })

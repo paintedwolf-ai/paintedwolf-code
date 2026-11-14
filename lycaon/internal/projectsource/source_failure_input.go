@@ -47,7 +47,7 @@ func sourceFailureLeavesInput(plan *sourceMutationPlan) bool {
 			return false
 		}
 		identity, err := fspath.EntryIdentity(plan.FromAbs)
-		if err != nil || identity != plan.EntryIdentity {
+		if err != nil || !fspath.SameEntryAcrossRestart(plan.EntryIdentity, identity) {
 			return false
 		}
 		_, err = os.Lstat(plan.ToAbs)

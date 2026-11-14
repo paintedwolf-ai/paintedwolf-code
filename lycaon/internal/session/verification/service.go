@@ -3,9 +3,11 @@ package verification
 import (
 	"context"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/inspector"
+	"github.com/lycaon/lycaon/internal/layeredfs/observation"
 	"github.com/lycaon/lycaon/internal/session/closeoutevidence"
 	sessionscope "github.com/lycaon/lycaon/internal/session/scope"
 	"github.com/lycaon/lycaon/internal/session/transcript"
@@ -25,8 +27,26 @@ type Workflow interface {
 	ActivePhaseRequiresEvidence(ctx context.Context, sessionID, evidenceType string) bool
 }
 
+// WorkspaceTrackerProvider resolves worker-workspace-scoped observation trackers and check bindings.
+type WorkspaceTrackerProvider interface {
+	TrackerForSession(jobID, sessionID, workspaceRoot, workspacePath string) (*observation.Tracker, string)
+	BindingForCheck(jobID, sessionID, workspaceRoot, checkID string) (observation.VerificationBinding, bool)
+	BindVerificationReceipt(jobID, childSessionID, workspacePath, branchRoot, checkID, checkpointID string, scopeRoots []string) (observation.VerificationBinding, bool)
+}
+
+// ObservationBindings manages session- and workspace-scoped observation trackers and check bindings.
+type ObservationBindings struct {
+	svc               *Service
+	workspaceTrackers WorkspaceTrackerProvider
+	obsMu             sync.RWMutex
+	obsTrackers       map[string]*observation.Tracker
+	obsBindings       map[string]observation.VerificationBinding
+	obsCheckpoints    map[string]string
+}
+
 // Service binds terminal verification evidence to the current source revision.
 type Service struct {
+	ObservationBindings
 	Evidence           *closeoutevidence.Service
 	store              Store
 	workspace          *sessionscope.Service
@@ -41,7 +61,9 @@ type Service struct {
 }
 
 func New(store Store, workspace *sessionscope.Service, transcript *transcript.Service) *Service {
-	return &Service{store: store, workspace: workspace, transcript: transcript}
+	s := &Service{store: store, workspace: workspace, transcript: transcript}
+	s.svc = s
+	return s
 }
 func (m *Service) SetDataDir(dir string)         { m.dataDir = strings.TrimSpace(dir) }
 func (m *Service) SetWorkers(workers Workers)    { m.workerQueue = workers }
@@ -52,6 +74,7 @@ func (m *Service) SetSourceObservations(source *sourceledger.Inventory) {
 func (m *Service) SetRevisionSource(source func(context.Context, string) (string, string)) {
 	m.verificationSource = source
 }
+func (m *Service) SetWorkspaceTrackers(p WorkspaceTrackerProvider) { m.workspaceTrackers = p }
 func (m *Service) ReadSourceRecords(ctx context.Context, sess *api.Session) ([]evidence.Record, error) {
 	if m == nil || m.evidenceStore == nil || sess == nil {
 		return nil, nil

@@ -27,7 +27,10 @@ const (
 // ExecOpts configures a bounded subprocess invocation.
 type ExecOpts struct {
 	// Launch is mandatory authority and attribution for the subprocess.
-	Launch         LaunchPlan
+	Launch LaunchPlan
+	// Dir is pinned and entered by the launch helper after exec, never by a child of the engine. That
+	// is the one way a process enters a worker view: a mounted view is served inside this process, so
+	// touching it between fork and exec could wait on a server that a pending stop-the-world has parked.
 	Dir            string
 	Timeout        time.Duration
 	MaxOutputBytes int

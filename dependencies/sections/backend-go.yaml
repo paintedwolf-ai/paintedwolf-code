@@ -46,6 +46,9 @@ groups:
       github.com/benhoyt/goawk:
         notes: |
           Replaced by the vendored copy; see the vendored catalogs section.
+      github.com/willscott/go-nfs:
+        notes: |
+          Replaced by the vendored copy; see the vendored catalogs section.
 
   - title: Protocols, providers, and security engines
     packages:

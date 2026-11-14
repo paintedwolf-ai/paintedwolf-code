@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/lycaon/lycaon/internal/fssync"
 	"github.com/lycaon/lycaon/internal/vaultidentity"
 )
 
@@ -75,7 +76,7 @@ func (s *Store) Create(uid int, account string, value []byte) error {
 	defer func() { _ = os.Remove(temp) }()
 	_, err = file.Write(value)
 	if err == nil {
-		err = file.Sync()
+		err = fssync.File(file)
 	}
 	if closeErr := file.Close(); err == nil {
 		err = closeErr
@@ -110,6 +111,6 @@ func syncDir(dir string) error {
 	}
 	defer func() { _ = handle.Close() }()
 	// Some filesystems refuse directory sync; the link itself is durable enough.
-	_ = handle.Sync()
+	_ = fssync.File(handle)
 	return nil
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/hitl"
 	"github.com/lycaon/lycaon/internal/hostcmd"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/nativemanifest"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -52,6 +53,8 @@ type RuntimeConfig struct {
 	SkillLookup tools.SkillLookup
 	// Rerank blends the decision engine into task-ranked tool results.
 	Rerank decide.Reranker
+	// PrivateGit is the manager worker Git tools run their prepared views through.
+	PrivateGit *privategit.Manager
 }
 
 // NewRuntime loads sandbox, profiles, native tools, and constructs the executor chain.
@@ -97,6 +100,7 @@ func NewRuntime(cfg RuntimeConfig) (*Runtime, error) {
 	registry, mutationTools, err := buildNativeRegistry(buildDeps{
 		boundary:      boundary,
 		git:           gitMgr,
+		privateGit:    cfg.PrivateGit,
 		statusCache:   statusPointer,
 		command:       commandRunner,
 		nativeConfig:  nativeCfg,
