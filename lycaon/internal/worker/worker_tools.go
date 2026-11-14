@@ -83,22 +83,27 @@ func instructWorkerHandler(deps WorkerToolDeps) tools.ToolHandler {
 		if in.Worker == "" || in.Instructions == "" {
 			return "", fmt.Errorf("worker and instructions are required")
 		}
-		receipt, err := deps.Ops.Instruct(ctx, coordinatorActor(tctx), op, in, roundEnqueuer(deps, tctx, args))
+		var started api.WorkerTask
+		receipt, err := deps.Ops.Instruct(ctx, coordinatorActor(tctx), op, in, roundEnqueuer(deps, tctx, args, &started))
 		if err != nil {
 			return "", workerToolReject(InstructWorkerTool, in.Worker, in.AgentType, err)
 		}
 		if tctx.Effects.Out != nil && receipt.JobID != "" {
 			tctx.Effects.Out.OwnerRef = receipt.JobID
+			// The new round's completion lands on this result, as a task's does.
+			if receipt.Outcome == workerops.OutcomeStarted {
+				tctx.Effects.Out.Dispatch = &api.WorkerDispatch{WorkerID: receipt.JobID, ChildSessionID: started.ChildSessionID, AgentType: started.AgentType}
+			}
 		}
 		raw, err := json.Marshal(receipt)
 		return string(raw), err
 	}
 }
 
-// roundEnqueuer enqueues a new round's job on the worker's own child session.
-// The job's prompt is the instruction, with the new brief when the goal
-// changed; the conversation carries everything else.
-func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]any) workerops.Enqueuer {
+// roundEnqueuer enqueues a new round's job on the worker's own child session
+// and records it in started. The job's prompt is the instruction, with the new
+// brief when the goal changed; the conversation carries everything else.
+func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]any, started *api.WorkerTask) workerops.Enqueuer {
 	return func(ctx context.Context, job workerops.RoundJob) (string, string, error) {
 		w := job.Worker
 		agent, mode := w.AgentType, w.ScopeMode
@@ -144,6 +149,8 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 		if err != nil {
 			return "", "", err
 		}
+		task.ID = id
+		*started = task
 		return id, string(task.ExecutionTarget), nil
 	}
 }
