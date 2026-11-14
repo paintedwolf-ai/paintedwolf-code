@@ -14,11 +14,6 @@ type ReviewSubject struct {
 	CheckpointID string `json:"checkpoint_id"`
 }
 
-// Encode is the subject as a round stores it.
-func (s ReviewSubject) Encode() (json.RawMessage, error) {
-	return json.Marshal(s)
-}
-
 // Subject reads the review subject a reviewer's round carries.
 func (r Round) Subject() (ReviewSubject, bool) {
 	if strings.TrimSpace(r.ReviewSubject) == "" {

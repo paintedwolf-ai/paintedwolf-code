@@ -91,7 +91,7 @@ func startWorkerRound(ctx context.Context, deps TaskToolDeps, tctx tools.ToolCon
 	}
 	spec := workerrecords.RoundSpec{JobID: task.ID, ExecutionTarget: target}
 	if subject != nil {
-		if spec.ReviewSubject, err = subject.Encode(); err != nil {
+		if spec.ReviewSubject, err = json.Marshal(subject); err != nil {
 			return "", err
 		}
 	}
