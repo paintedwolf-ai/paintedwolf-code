@@ -178,3 +178,57 @@ describe("JSON-like unknown content", () => {
     }
   });
 });
+
+describe("after-block breaks, PowerShell, and SQL predicates/CASE", () => {
+  it("breaks between adjacent brace blocks in Rust, Go, Java, C++, C#, HCL, and Protobuf while keeping continuations attached", () => {
+    const pad = "x".repeat(220);
+    const fixtures: Array<[string, string, string]> = [
+      ["lib.rs", `fn a() { let s = "${pad}"; } fn b() { call(); }`, "fn b()"],
+      ["main.go", `package p\nfunc a() { s := "${pad}" } func b() { call() }`, "func b()"],
+      ["Main.java", `class A { void a() { String s = "${pad}"; } void b() { call(); } }`, "void b()"],
+      ["main.cpp", `void a() { const char* s = "${pad}"; } void b() { call(); }`, "void b()"],
+      ["Program.cs", `class A { void a() { var s = "${pad}"; } void b() { call(); } }`, "void b()"],
+      ["main.tf", `resource "a" "b" { k = "${pad}" } resource "c" "d" { k = "v" }`, 'resource "c"'],
+      ["api.proto", `message A { string s = 1; /* ${pad} */ } message B { int32 id = 1; }`, "message B"],
+    ];
+    for (const [path, src, needle] of fixtures) {
+      const state = open(src, path);
+      expect(breaks(state), `${path} should break before ${needle}`).toContain(src.indexOf(needle));
+      expect(breaks(open(writtenOut(state), path)), `${path} pass 2`).toEqual([]);
+    }
+
+    const cont = `if (ok) { let s = "${pad}"; } else { run(); } try { let s = "${pad}"; } catch (e) { handle(e); }`;
+    const contState = open(cont, "Main.java");
+    const contBreaks = breaks(contState);
+    expect(contBreaks).not.toContain(cont.indexOf("else"));
+    expect(contBreaks).not.toContain(cont.indexOf("catch"));
+  });
+
+  it("lays out PowerShell (.ps1, .psm1, .psd1) with protected comments and strings", () => {
+    const pad = "v".repeat(210);
+    const ps = `function Invoke-Task { param([string]$a, [string]$b) $cfg = @{ k = "${pad}"; n = 2 }; Write-Host "# not comment" } # end\n`;
+    for (const path of ["deploy.ps1", "module.psm1", "manifest.psd1"]) {
+      const state = open(ps, path);
+      expect(breaks(state).length, `${path} breaks`).toBeGreaterThan(0);
+      expect(breaks(open(writtenOut(state), path)), `${path} pass 2`).toEqual([]);
+    }
+    expect(breaks(open("param($x)\nWrite-Host $x\n", "ok.ps1"))).toEqual([]);
+  });
+
+  it("breaks SQL JOIN ON, AND/OR predicates (preserving BETWEEN), and CASE expressions", () => {
+    const pad = "col_".repeat(45);
+    const sql =
+      `SELECT ${pad}u.id, CASE WHEN u.active = 1 THEN 'yes' WHEN u.active = 0 THEN 'no' ELSE 'unknown' END FROM users u LEFT JOIN orders o ON o.user_id = u.id AND o.total > 100 WHERE u.age BETWEEN 18 AND 65 AND u.country = 'US' OR u.vip = 1`;
+    const state = open(sql, "query.sql");
+    const positions = breaks(state);
+    expect(positions).toContain(sql.indexOf("ON o.user_id"));
+    expect(positions).toContain(sql.indexOf("AND o.total"));
+    expect(positions).not.toContain(sql.indexOf("AND 65"));
+    expect(positions).toContain(sql.indexOf("AND u.country"));
+    expect(positions).toContain(sql.indexOf("OR u.vip"));
+    expect(positions).toContain(sql.indexOf("WHEN u.active = 1"));
+    expect(positions).toContain(sql.indexOf("ELSE 'unknown'"));
+    expect(positions).toContain(sql.indexOf("END FROM"));
+    expect(breaks(open(writtenOut(state), "query.sql"))).toEqual([]);
+  });
+});

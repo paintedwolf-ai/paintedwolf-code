@@ -23,7 +23,8 @@ const BACKTICK = 0x60;
 
 /** Words after `}` that continue a statement rather than start one. */
 const CONTINUATIONS = new Set([
-  "else", "catch", "finally", "while", "from", "as", "satisfies", "of", "in", "instanceof",
+  "else", "elseif", "elif", "catch", "finally", "while", "until", "where", "except",
+  "from", "as", "satisfies", "of", "in", "instanceof",
 ]);
 
 function closerOf(opener: number): number {
@@ -203,10 +204,11 @@ function breaksAfterBlock(cursor: ScanCursor, rule: BracketRule, pos: number): b
   const c = text.at(next);
   if (c === QUOTE || c === APOS || c === BACKTICK || c === SLASH) return false;
   if (rule.afterBlock === "style") return c !== CLOSE_BRACE && c !== COMMA && c !== SEMICOLON;
+  if (rule.afterBlock === "block" && (c === 0x40 || c === 0x23)) return true;
   if (!isWordStart(c)) return false;
   let wordEnd = next + 1;
   while (wordEnd < state.lineEnd && wordEnd - next < 12 && isWordCode(text.at(wordEnd))) wordEnd += 1;
-  return !CONTINUATIONS.has(text.slice(next, wordEnd));
+  return !CONTINUATIONS.has(text.slice(next, wordEnd).toLowerCase());
 }
 
 function nonEmptyAt(cursor: ScanCursor, pos: number): boolean {

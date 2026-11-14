@@ -28,7 +28,7 @@ export interface BracketRule {
   /** `;` separates statements. */
   readonly statements: boolean;
   /** Which tokens after a `}` start a new visual line. */
-  readonly afterBlock: "script" | "style" | null;
+  readonly afterBlock: "script" | "style" | "block" | null;
   /** Each line is its own record; containers never span lines. */
   readonly records: boolean;
   /** Protected text comes from the editor's syntax tree, so only parsed text is laid out. */
@@ -111,6 +111,9 @@ export class ScanState {
   markup: MarkupState;
   /** Group depth whose commas break as a SQL clause list, or -1. */
   listDepth = -1;
+  predicateDepth = -1;
+  betweenPending = false;
+  caseStack: Array<{ readonly depth: number; readonly expanded: boolean }> = [];
   fence: Fence | null = null;
   inLine = false;
   /** The current source line is laid out. */

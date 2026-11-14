@@ -285,7 +285,12 @@ export class PrettyScanner implements ScanCursor {
     s.visualFrom = -1;
     if (rule.kind === "bracket" && rule.records) s.containers = null;
     if (rule.kind === "markup") s.markup = startMarkupLine(s.markup);
-    if (rule.kind === "clause") s.listDepth = -1;
+    if (rule.kind === "clause") {
+      s.listDepth = -1;
+      s.predicateDepth = -1;
+      s.betweenPending = false;
+      s.caseStack = [];
+    }
     return start;
   }
 

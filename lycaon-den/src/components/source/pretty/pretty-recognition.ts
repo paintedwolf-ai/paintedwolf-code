@@ -44,7 +44,8 @@ const BRACKET_RULE: BracketRule = {
   kind: "bracket", data: false, statements: false, afterBlock: null, records: false, parsed: true,
   lexer: () => new TreeLexer(),
 };
-const BRACKET_STATEMENTS_RULE: BracketRule = { ...BRACKET_RULE, statements: true };
+const BRACKET_BLOCKS_RULE: BracketRule = { ...BRACKET_RULE, afterBlock: "block" };
+const BRACKET_STATEMENTS_RULE: BracketRule = { ...BRACKET_RULE, statements: true, afterBlock: "block" };
 const CLAUSE_RULE: ClauseRule = { kind: "clause" };
 
 /** The rule that applies a declared layout, or null where no rule exists. */
@@ -53,7 +54,7 @@ function ruleFor(layout: PrettyLayout): PrettyRule | null {
     case "data": return layout.records ? RECORDS_RULE : layout.comments ? COMMENTED_DATA_RULE : DATA_RULE;
     case "markup": return MARKUP_RULE;
     case "code": return layout.dialect === "script" ? SCRIPT_RULE : layout.dialect === "style" ? STYLE_RULE : LINE_COMMENT_STYLE_RULE;
-    case "bracket": return layout.statements ? BRACKET_STATEMENTS_RULE : BRACKET_RULE;
+    case "bracket": return layout.statements ? BRACKET_STATEMENTS_RULE : layout.blocks ? BRACKET_BLOCKS_RULE : BRACKET_RULE;
     case "clause": return CLAUSE_RULE;
     case "fenced":
     case "containers":
