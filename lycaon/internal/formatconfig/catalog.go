@@ -232,10 +232,9 @@ var catalog = []tool{
 		files: files(formatYAML, ".golangci.yml", ".golangci.yaml"),
 		settings: func(d document) Settings {
 			for _, path := range [][]string{
-				{"linters-settings", "golines", "max-len"},
-				{"linters-settings", "lll", "line-length"},
-				{"linters", "settings", "golines", "max-len"},
+				{"formatters", "settings", "golines", "max-len"},
 				{"linters", "settings", "lll", "line-length"},
+				{"linters-settings", "lll", "line-length"},
 			} {
 				if n := positive(d, path...); n > 0 {
 					return Settings{LineWidth: n}
@@ -253,16 +252,6 @@ var catalog = []tool{
 		},
 	},
 	{
-		id:    api.FormatToolPint,
-		files: files(formatJSON, "pint.json"),
-		settings: func(d document) Settings {
-			if n := positive(d, "line_length"); n > 0 {
-				return Settings{LineWidth: n}
-			}
-			return Settings{LineWidth: positive(d, "rules", "line_length_limit", "max")}
-		},
-	},
-	{
 		id:    api.FormatToolPhpcs,
 		files: files(formatXMLPhpcs, "phpcs.xml", ".phpcs.xml", "phpcs.xml.dist", ".phpcs.xml.dist"),
 		settings: func(d document) Settings {
@@ -270,24 +259,8 @@ var catalog = []tool{
 		},
 	},
 	{
-		id:    api.FormatToolCljfmt,
-		files: files(formatEDNCljfmt, ".cljfmt.edn", "cljfmt.edn", ".cljfmt.clj"),
-		settings: func(d document) Settings {
-			if wrap, ok := d.bool("wrap-lines?"); ok && !wrap {
-				return Settings{}
-			}
-			if n := positive(d, "max-line-width"); n > 0 {
-				return Settings{LineWidth: n}
-			}
-			if wrap, ok := d.bool("wrap-lines?"); ok && wrap {
-				return Settings{LineWidth: 80}
-			}
-			return Settings{}
-		},
-	},
-	{
 		id:    api.FormatToolCheckstyle,
-		files: files(formatXMLCheckstyle, "checkstyle.xml"),
+		files: files(formatXMLCheckstyle, "checkstyle.xml", "config/checkstyle/checkstyle.xml"),
 		settings: func(d document) Settings {
 			return Settings{LineWidth: positive(d, "max")}
 		},

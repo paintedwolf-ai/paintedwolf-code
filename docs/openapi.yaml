@@ -33956,9 +33956,7 @@ components:
         - taplo
         - golangci
         - mix_format
-        - pint
         - phpcs
-        - cljfmt
         - checkstyle
     FormatSettings:
       x-go-generate: true

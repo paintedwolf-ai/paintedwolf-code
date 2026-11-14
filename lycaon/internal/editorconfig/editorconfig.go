@@ -126,6 +126,9 @@ func resolveContributors(path string, configs []File) (Properties, []string) {
 	isKotlin := strings.HasSuffix(lowerFile, ".kt") || strings.HasSuffix(lowerFile, ".kts")
 	var props Properties
 	var dirs []string
+	var maxLineSet bool
+	var ijKotlinWidth int
+	var ktlintDisabled bool
 	for _, config := range configs {
 		dir := strings.TrimSuffix(config.Dir, "/")
 		rel := file
@@ -138,13 +141,32 @@ func resolveContributors(path string, configs []File) (Properties, []string) {
 				continue
 			}
 			props = props.merge(section.Pairs)
+			if v, ok := section.Pairs["max_line_length"]; ok {
+				switch {
+				case isUnset(v):
+					maxLineSet = false
+				case strings.EqualFold(v, "off"):
+					maxLineSet = true
+				default:
+					if _, valid := boundedInt(v, 10_000); valid {
+						maxLineSet = true
+					}
+				}
+			}
 			if isKotlin {
-				props = props.mergeKotlinLineLength(section.Pairs)
+				ijKotlinWidth, ktlintDisabled = mergeKotlinLineState(ijKotlinWidth, ktlintDisabled, section.Pairs)
 			}
 			matched = true
 		}
 		if matched {
 			dirs = append([]string{config.Dir}, dirs...)
+		}
+	}
+	if isKotlin {
+		if ktlintDisabled {
+			props.MaxLineLength = 0
+		} else if !maxLineSet {
+			props.MaxLineLength = ijKotlinWidth
 		}
 	}
 	return props, dirs
@@ -218,22 +240,24 @@ func (p Properties) merge(raw map[string]string) Properties {
 	return next
 }
 
-func (p Properties) mergeKotlinLineLength(raw map[string]string) Properties {
-	if _, hasMax := raw["max_line_length"]; hasMax {
-		return p
-	}
-	for _, key := range []string{"ij_kotlin_max_line_length", "ktlint_standard_max-line-length"} {
-		v, ok := raw[key]
-		if !ok {
-			continue
-		}
+// mergeKotlinLineState updates IntelliJ's fallback width and ktlint's rule toggle.
+func mergeKotlinLineState(ijWidth int, ktlintDisabled bool, raw map[string]string) (int, bool) {
+	if v, ok := raw["ij_kotlin_max_line_length"]; ok {
 		if isUnset(v) || strings.EqualFold(v, "off") {
-			p.MaxLineLength = 0
-		} else if n, ok := boundedInt(v, 10_000); ok {
-			p.MaxLineLength = n
+			ijWidth = 0
+		} else if n, valid := boundedInt(v, 10_000); valid {
+			ijWidth = n
 		}
 	}
-	return p
+	if v, ok := raw["ktlint_standard_max-line-length"]; ok {
+		switch strings.ToLower(v) {
+		case "disabled":
+			ktlintDisabled = true
+		case "enabled", "unset":
+			ktlintDisabled = false
+		}
+	}
+	return ijWidth, ktlintDisabled
 }
 
 func mergeBool(current *bool, raw string) *bool {

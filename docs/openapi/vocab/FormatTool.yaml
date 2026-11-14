@@ -49,11 +49,7 @@ values:
     comment: golangci-lint `.golangci.yml` and `.golangci.yaml`.
   - id: mix_format
     comment: Elixir `mix format` `.formatter.exs`.
-  - id: pint
-    comment: Laravel Pint `pint.json`.
   - id: phpcs
     comment: PHP_CodeSniffer `phpcs.xml`, `.phpcs.xml`, `phpcs.xml.dist`, and `.phpcs.xml.dist`.
-  - id: cljfmt
-    comment: cljfmt `.cljfmt.edn`, `cljfmt.edn`, and `.cljfmt.clj`.
   - id: checkstyle
-    comment: Checkstyle `checkstyle.xml`.
+    comment: Checkstyle `checkstyle.xml` and `config/checkstyle/checkstyle.xml`.

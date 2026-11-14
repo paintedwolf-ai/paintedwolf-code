@@ -51,14 +51,11 @@ const (
 	FormatToolGolangci FormatTool = "golangci"
 	// FormatToolMixFormat Elixir `mix format` `.formatter.exs`.
 	FormatToolMixFormat FormatTool = "mix_format"
-	// FormatToolPint Laravel Pint `pint.json`.
-	FormatToolPint FormatTool = "pint"
 	// FormatToolPhpcs PHP_CodeSniffer `phpcs.xml`, `.phpcs.xml`, `phpcs.xml.dist`,
 	// and `.phpcs.xml.dist`.
 	FormatToolPhpcs FormatTool = "phpcs"
-	// FormatToolCljfmt cljfmt `.cljfmt.edn`, `cljfmt.edn`, and `.cljfmt.clj`.
-	FormatToolCljfmt FormatTool = "cljfmt"
-	// FormatToolCheckstyle Checkstyle `checkstyle.xml`.
+	// FormatToolCheckstyle Checkstyle `checkstyle.xml` and
+	// `config/checkstyle/checkstyle.xml`.
 	FormatToolCheckstyle FormatTool = "checkstyle"
 )
 
@@ -84,9 +81,7 @@ var allFormatToolValues = []FormatTool{
 	FormatToolTaplo,
 	FormatToolGolangci,
 	FormatToolMixFormat,
-	FormatToolPint,
 	FormatToolPhpcs,
-	FormatToolCljfmt,
 	FormatToolCheckstyle,
 }
 

@@ -29,7 +29,6 @@ const (
 	// formatKeyValue is one `key = value` or `key: value` pair per line.
 	formatKeyValue
 	formatElixirFormatter
-	formatEDNCljfmt
 	formatXMLPhpcs
 	formatXMLCheckstyle
 )
@@ -63,8 +62,6 @@ func decode(f format, body []byte) (document, bool) {
 		doc = decodeKeyValue(body)
 	case formatElixirFormatter:
 		return decodeElixirFormatter(body)
-	case formatEDNCljfmt:
-		return decodeEDNCljfmt(body)
 	case formatXMLPhpcs:
 		return decodeXMLProperty(body, "rule", "ref", "Generic.Files.LineLength", "lineLimit")
 	case formatXMLCheckstyle:

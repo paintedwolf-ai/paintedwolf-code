@@ -2,8 +2,10 @@ package formatconfig
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/editorconfig"
@@ -54,10 +56,16 @@ func TestCatalogNamesEveryWireToolOnce(t *testing.T) {
 		t.Fatalf("catalog has %d tools, wire has %d", len(seen), len(api.AllFormatToolValues()))
 	}
 	names := ConfigNames()
+	for _, n := range names {
+		if strings.Contains(n, "/") {
+			t.Fatalf("config name %q contains slash; want basename", n)
+		}
+	}
 	for _, tool := range catalog {
 		for _, f := range tool.files {
-			if !slices.Contains(names, f.name) {
-				t.Fatalf("config names miss %s", f.name)
+			base := path.Base(f.name)
+			if !slices.Contains(names, base) {
+				t.Fatalf("config names miss %s", base)
 			}
 		}
 	}
@@ -136,28 +144,28 @@ func TestEachFormatIsRead(t *testing.T) {
 			"a.swift", api.FormatToolSwiftFormat, Settings{LineWidth: 120, IndentStyle: editorconfig.IndentTab, IndentSizeTab: true}},
 		{map[string]string{"taplo.toml": "[formatting]\ncolumn_width = 100\nindent_string = \"    \"\ncrlf = true\n"},
 			"Cargo.toml", api.FormatToolTaplo, Settings{LineWidth: 100, IndentStyle: editorconfig.IndentSpace, IndentSize: 4, EndOfLine: "crlf"}},
-		{map[string]string{".golangci.yml": "linters-settings:\n  golines:\n    max-len: 120\n"},
+		{map[string]string{".golangci.yml": "version: \"2\"\nformatters:\n  settings:\n    golines:\n      max-len: 120\n"},
 			"a.go", api.FormatToolGolangci, Settings{LineWidth: 120}},
-		{map[string]string{".golangci.yaml": "linters:\n  settings:\n    lll:\n      line-length: 140\n"},
+		{map[string]string{".golangci.yaml": "version: \"2\"\nlinters:\n  settings:\n    lll:\n      line-length: 140\n"},
 			"a.go", api.FormatToolGolangci, Settings{LineWidth: 140}},
+		{map[string]string{".golangci.yml": "linters-settings:\n  lll:\n    line-length: 130\n"},
+			"a.go", api.FormatToolGolangci, Settings{LineWidth: 130}},
+		{map[string]string{".golangci.yml": "linters:\n  enable:\n    - govet\n"},
+			"a.go", api.FormatToolGolangci, Settings{}},
 		{map[string]string{".formatter.exs": "# line_length: 40\n[inputs: [\"{mix,.formatter}.exs\"], line_length: 110, note: \"line_length: 50\"]\n"},
 			"lib/a.ex", api.FormatToolMixFormat, Settings{LineWidth: 110}},
 		{map[string]string{".formatter.exs": "[inputs: [\"{mix,.formatter}.exs\"]]\n"},
 			"lib/a.ex", api.FormatToolMixFormat, Settings{LineWidth: 98}},
-		{map[string]string{"pint.json": `{"line_length": 100}`},
-			"app/A.php", api.FormatToolPint, Settings{LineWidth: 100}},
-		{map[string]string{"pint.json": `{"rules":{"line_length_limit":{"max":120}}}`},
-			"app/A.php", api.FormatToolPint, Settings{LineWidth: 120}},
 		{map[string]string{"phpcs.xml": `<ruleset><rule ref="Generic.Files.LineLength"><properties><property name="lineLimit" value="120"/></properties></rule></ruleset>`},
 			"app/A.php", api.FormatToolPhpcs, Settings{LineWidth: 120}},
-		{map[string]string{".cljfmt.edn": "; :max-line-width 50\n{:indents {} :note \":max-line-width 60\" :max-line-width 100}\n"},
-			"src/a.clj", api.FormatToolCljfmt, Settings{LineWidth: 100}},
-		{map[string]string{"cljfmt.edn": "{:wrap-lines? true}"},
-			"src/a.clj", api.FormatToolCljfmt, Settings{LineWidth: 80}},
-		{map[string]string{".cljfmt.clj": "{:wrap-lines? false :max-line-width 100}"},
-			"src/a.clj", api.FormatToolCljfmt, Settings{}},
-		{map[string]string{"checkstyle.xml": `<module name="Checker"><module name="TreeWalker"><module name="LineLength"><property name="max" value="120"/></module></module></module>`},
+		{map[string]string{".phpcs.xml.dist": `<ruleset><rule ref="PSR12"/></ruleset>`},
+			"app/A.php", api.FormatToolPhpcs, Settings{}},
+		{map[string]string{"checkstyle.xml": `<?xml version="1.0"?><!DOCTYPE module PUBLIC "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN" "https://checkstyle.org/dtds/configuration_1_3.dtd"><module name="Checker"><module name="TreeWalker"><module name="LineLength"><property name="max" value="120"/></module></module></module>`},
 			"A.java", api.FormatToolCheckstyle, Settings{LineWidth: 120}},
+		{map[string]string{"config/checkstyle/checkstyle.xml": `<module name="Checker"><module name="LineLength"><property name="max" value="110"/></module></module>`},
+			"app/src/main/java/com/example/A.java", api.FormatToolCheckstyle, Settings{LineWidth: 110}},
+		{map[string]string{"checkstyle.xml": `<module name="Checker"><module name="TreeWalker"/></module>`},
+			"A.java", api.FormatToolCheckstyle, Settings{}},
 	}
 	for _, c := range cases {
 		got, ok := resolveTool(t, c.files, c.path, c.tool)
@@ -173,10 +181,10 @@ func TestMalformedNewConfigsStopUpwardSearch(t *testing.T) {
 		path  string
 		tool  api.FormatTool
 	}{
+		{map[string]string{".golangci.yml": "linters-settings:\n  lll:\n    line-length: 120\n", "sub/.golangci.yml": "linters: [unclosed"}, "sub/a.go", api.FormatToolGolangci},
 		{map[string]string{".formatter.exs": "[line_length: 100]", "sub/.formatter.exs": "[unclosed"}, "sub/a.ex", api.FormatToolMixFormat},
-		{map[string]string{".cljfmt.edn": "{:max-line-width 100}", "sub/.cljfmt.edn": "{:unclosed"}, "sub/a.clj", api.FormatToolCljfmt},
 		{map[string]string{"phpcs.xml": `<ruleset><rule ref="Generic.Files.LineLength"><properties><property name="lineLimit" value="120"/></properties></rule></ruleset>`, "sub/phpcs.xml": `<ruleset><unclosed`}, "sub/a.php", api.FormatToolPhpcs},
-		{map[string]string{"checkstyle.xml": `<module name="Checker"><module name="LineLength"><property name="max" value="120"/></module></module>`, "sub/checkstyle.xml": `<module><unclosed`}, "sub/A.java", api.FormatToolCheckstyle},
+		{map[string]string{"config/checkstyle/checkstyle.xml": `<module name="Checker"><module name="LineLength"><property name="max" value="120"/></module></module>`, "sub/config/checkstyle/checkstyle.xml": `<module><unclosed`}, "sub/src/A.java", api.FormatToolCheckstyle},
 	}
 	for _, c := range cases {
 		if got, ok := resolveTool(t, c.files, c.path, c.tool); ok {

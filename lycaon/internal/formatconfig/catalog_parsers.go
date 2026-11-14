@@ -7,7 +7,6 @@ import (
 	"io"
 	"strconv"
 	"strings"
-	"unicode"
 )
 
 // decodeXMLProperty scans an XML config for a named element and extracts a
@@ -115,88 +114,6 @@ func decodeElixirFormatter(body []byte) (document, bool) {
 		}
 	}
 	if len(stack) != 0 {
-		return nil, false
-	}
-	return doc, true
-}
-
-// decodeEDNCljfmt scans a Clojure/EDN map outside `;` comments and strings for
-// `:max-line-width` and `:wrap-lines?`.
-func decodeEDNCljfmt(body []byte) (document, bool) {
-	src := string(body)
-	doc := document{}
-	var stack []byte
-	seenMap := false
-	var prevKey string
-	i := 0
-	for i < len(src) {
-		ch := src[i]
-		switch {
-		case ch == ';':
-			for i < len(src) && src[i] != '\n' {
-				i++
-			}
-		case unicode.IsSpace(rune(ch)) || ch == ',':
-			i++
-		case ch == '"':
-			next, ok := skipQuoted(src, i, '"')
-			if !ok {
-				return nil, false
-			}
-			prevKey = ""
-			i = next
-		case ch == '{' || ch == '[' || ch == '(':
-			if len(stack) == 0 {
-				if ch != '{' {
-					return nil, false
-				}
-				seenMap = true
-			}
-			stack = append(stack, matchingClose(ch))
-			prevKey = ""
-			i++
-		case ch == '}' || ch == ']' || ch == ')':
-			if len(stack) == 0 || stack[len(stack)-1] != ch {
-				return nil, false
-			}
-			stack = stack[:len(stack)-1]
-			prevKey = ""
-			i++
-		default:
-			if len(stack) == 0 {
-				return nil, false
-			}
-			start := i
-			for i < len(src) && !unicode.IsSpace(rune(src[i])) && !strings.ContainsRune(",;\"{}[]()", rune(src[i])) {
-				i++
-			}
-			tok := src[start:i]
-			if len(stack) == 1 {
-				switch prevKey {
-				case ":max-line-width":
-					if n, err := strconv.Atoi(tok); err == nil {
-						doc["max-line-width"] = n
-					}
-					prevKey = ""
-				case ":wrap-lines?":
-					switch tok {
-					case "true":
-						doc["wrap-lines?"] = true
-					case "false":
-						doc["wrap-lines?"] = false
-					}
-					prevKey = ""
-				default:
-					if tok == ":max-line-width" || tok == ":wrap-lines?" {
-						prevKey = tok
-					} else {
-						prevKey = ""
-					}
-				}
-			}
-		}
-	}
-	if len(stack) != 0 || !seenMap {
 		return nil, false
 	}
 	return doc, true
