@@ -6,7 +6,7 @@ schema:
       description: "Human-readable delegation task summary."
       type: string
     blueprint_path:
-      description: "Optional blueprint path tied to the delegation."
+      description: "Optional plan-store key of the blueprint tied to the delegation (not a filesystem path)."
       type: string
     strategy:
       description: "Optional decomposition strategy label."

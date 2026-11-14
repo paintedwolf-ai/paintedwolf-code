@@ -69,8 +69,8 @@ func (q *Queries) HasUntrustedEvidence(ctx context.Context, sessionID string) (i
 const insertEvidenceRecordIfAbsent = `-- name: InsertEvidenceRecordIfAbsent :execrows
 INSERT INTO evidence_records (
     session_id, project_id, handle, ordinal, kind, shape, fidelity, source_tool, marks_untrusted,
-    path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    path, root_id, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
 ON CONFLICT(session_id, handle) DO NOTHING
 `
 
@@ -85,6 +85,7 @@ type InsertEvidenceRecordIfAbsentParams struct {
 	SourceTool        string `json:"source_tool"`
 	MarksUntrusted    int64  `json:"marks_untrusted"`
 	Path              string `json:"path"`
+	RootID            string `json:"root_id"`
 	Url               string `json:"url"`
 	LineRanges        string `json:"line_ranges"`
 	ContentBlobSha256 string `json:"content_blob_sha256"`
@@ -106,6 +107,7 @@ func (q *Queries) InsertEvidenceRecordIfAbsent(ctx context.Context, arg InsertEv
 		arg.SourceTool,
 		arg.MarksUntrusted,
 		arg.Path,
+		arg.RootID,
 		arg.Url,
 		arg.LineRanges,
 		arg.ContentBlobSha256,
@@ -120,7 +122,7 @@ func (q *Queries) InsertEvidenceRecordIfAbsent(ctx context.Context, arg InsertEv
 
 const listEvidenceRecords = `-- name: ListEvidenceRecords :many
 
-SELECT project_id, handle, kind, shape, fidelity, source_tool, path, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
+SELECT project_id, handle, kind, shape, fidelity, source_tool, path, root_id, url, line_ranges, content_blob_sha256, truncated, survey, superseded_by
 FROM evidence_records
 WHERE session_id = ?
 ORDER BY ordinal ASC
@@ -134,6 +136,7 @@ type ListEvidenceRecordsRow struct {
 	Fidelity          string         `json:"fidelity"`
 	SourceTool        string         `json:"source_tool"`
 	Path              string         `json:"path"`
+	RootID            string         `json:"root_id"`
 	Url               string         `json:"url"`
 	LineRanges        string         `json:"line_ranges"`
 	ContentBlobSha256 string         `json:"content_blob_sha256"`
@@ -160,6 +163,7 @@ func (q *Queries) ListEvidenceRecords(ctx context.Context, sessionID string) ([]
 			&i.Fidelity,
 			&i.SourceTool,
 			&i.Path,
+			&i.RootID,
 			&i.Url,
 			&i.LineRanges,
 			&i.ContentBlobSha256,

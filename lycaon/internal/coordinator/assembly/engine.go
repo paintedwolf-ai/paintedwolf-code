@@ -63,7 +63,7 @@ type BoardOrientReadyRecorder interface {
 }
 
 // WorkspaceRootsLoader supplies prompt workspace root rows for a session.
-type WorkspaceRootsLoader func(ctx context.Context, sess *api.Session) (roots []map[string]any, rootCount int, activePath string)
+type WorkspaceRootsLoader func(ctx context.Context, sess *api.Session) (roots []map[string]any, rootCount int, activePath string, omittedCount int)
 
 // ProjectOverlayRootPaths resolves ordered overlay root paths for prompt/rules warm.
 type ProjectOverlayRootPaths func(ctx context.Context, sess *api.Session) []string

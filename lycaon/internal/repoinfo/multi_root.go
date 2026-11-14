@@ -280,12 +280,14 @@ func (m *MultiRootBrief) RenderedBytes() int {
 	return total
 }
 
-func sectionHeader(label string, primary bool) string {
-	if primary {
+// sectionHeader names a board section the way display paths spell that root:
+// the board's default folder (primary) bare, others @-prefixed.
+func sectionHeader(label string, active bool) string {
+	if active {
 		if label == "" {
-			return "## (primary)"
+			return "## (active)"
 		}
-		return "## " + label + " (primary)"
+		return "## " + label
 	}
 	if label == "" {
 		return "## @root"

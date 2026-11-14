@@ -42,6 +42,8 @@ export type WorkerTranscriptListProps = {
   checkpointAppStore?: AppStore;
   projectId?: string;
   rootRefs?: readonly ResolveProjectRoot[];
+  /** Session's active root; bare paths in these rows resolve against it. */
+  activeRootId?: string;
   projectDir?: string;
   exploreContext: CitationExploreContext;
   onExploreInSearch?: (query: string) => void;

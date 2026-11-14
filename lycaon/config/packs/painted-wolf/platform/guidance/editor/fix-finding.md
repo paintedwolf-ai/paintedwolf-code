@@ -1,4 +1,4 @@
-Fix the finding on {{ path }} lines {{ start_line }}–{{ end_line }}.
+Fix the finding on {{ path_display }} lines {{ start_line }}–{{ end_line }}.
 
 Finding id: {{ finding_id }}
 Rule: {{ finding_rule }}

@@ -62,7 +62,7 @@ func (s *ReadSession) resolveBeneathRoot(ctx context.Context, modelPath string) 
 	if !s.admitted || s.hostAddressed(modelPath) {
 		return Resolved{}, false, nil
 	}
-	abs, root, primary, placed := s.placeBeneathRoot(modelPath)
+	abs, root, placed := s.placeBeneathRoot(modelPath)
 	if !placed {
 		return Resolved{}, false, nil
 	}
@@ -74,7 +74,7 @@ func (s *ReadSession) resolveBeneathRoot(ctx context.Context, modelPath string) 
 	}
 	return Resolved{
 		Abs:         abs,
-		DisplayPath: projectroot.Qualify(primary, root, abs),
+		DisplayPath: projectroot.Qualify(s.tctx.Source.Roots, s.tctx.Source.ActiveRootID, root, abs),
 		ScopeRel:    scopeRel,
 		Root:        root,
 	}, true, nil
@@ -82,16 +82,12 @@ func (s *ReadSession) resolveBeneathRoot(ctx context.Context, modelPath string) 
 
 // placeBeneathRoot resolves modelPath against the attached roots. A path the
 // roots cannot place is left to the general resolver, which reports why.
-func (s *ReadSession) placeBeneathRoot(modelPath string) (abs string, root, primary projectroot.RootRef, ok bool) {
+func (s *ReadSession) placeBeneathRoot(modelPath string) (abs string, root projectroot.RootRef, ok bool) {
 	abs, root, err := projectroot.ResolveAbs(s.tctx.Source.Roots, s.tctx.Source.ActiveRootID, modelPath)
 	if err != nil {
-		return "", projectroot.RootRef{}, projectroot.RootRef{}, false
+		return "", projectroot.RootRef{}, false
 	}
-	primary, err = projectroot.PrimaryRoot(s.tctx.Source.Roots)
-	if err != nil {
-		return "", projectroot.RootRef{}, projectroot.RootRef{}, false
-	}
-	return abs, root, primary, true
+	return abs, root, true
 }
 
 // hostAddressed reports a path the host's own namespaces answer before any

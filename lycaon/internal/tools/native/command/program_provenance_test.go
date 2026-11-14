@@ -137,6 +137,19 @@ func TestProgramRunProjectDirAndPathNormalization(t *testing.T) {
 	if got := rooted.normalizeProvenancePath("root-unknown", filepath.Join(dirB, "sub", "file.txt")); got != "sub/file.txt" {
 		t.Fatalf("unknown-root normalization = %q, want sub/file.txt", got)
 	}
+	twoRoots := &programRun{tc: tools.ToolContext{Source: tools.InvocationSource{
+		Roots: []projectroot.RootRef{
+			{ID: "root-a", Label: "app", Path: dirA, IsPrimary: true},
+			{ID: "root-b", Label: "vendor", Path: dirB},
+		},
+		ActiveRootID: "root-a",
+	}}}
+	if got := twoRoots.normalizeProvenancePath("root-b", "pkg/file.txt"); got != "@vendor/pkg/file.txt" {
+		t.Fatalf("other-folder normalization = %q, want @vendor/pkg/file.txt", got)
+	}
+	if got := twoRoots.normalizeProvenancePath("root-a", "pkg/file.txt"); got != "pkg/file.txt" {
+		t.Fatalf("session-folder normalization = %q, want pkg/file.txt", got)
+	}
 	if got := rooted.normalizeProvenancePath("", "outside.txt"); got != "outside.txt" {
 		t.Fatalf("relative path normalization = %q, want outside.txt", got)
 	}

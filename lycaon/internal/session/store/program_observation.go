@@ -71,12 +71,12 @@ func (ev *memoryEvidence) CommitProgramObservation(ctx context.Context, sessionI
 // programProvenanceRecords are the records one command program's network
 // reads produce, in custody order: what it received, the directories it
 // filled, and the external-custody paths it replaced locally.
-func programProvenanceRecords(projectDir string, prov evidence.ProgramHTTPProvenance) []evidence.Record {
+func programProvenanceRecords(roots evidence.CitationRoots, prov evidence.ProgramHTTPProvenance) []evidence.Record {
 	var recs []evidence.Record
 	for _, rec := range []evidence.Record{
-		evidence.BuildProgramHTTPRecord(projectDir, prov),
-		evidence.BuildProgramTreeRecord(projectDir, prov),
-		evidence.BuildProgramCustodyReplacementRecord(projectDir, prov),
+		evidence.BuildProgramHTTPRecord(roots, prov),
+		evidence.BuildProgramTreeRecord(roots, prov),
+		evidence.BuildProgramCustodyReplacementRecord(roots, prov),
 	} {
 		if rec.Kind != "" {
 			recs = append(recs, rec)
@@ -88,8 +88,7 @@ func programProvenanceRecords(projectDir string, prov evidence.ProgramHTTPProven
 // CommitProgramHTTPProvenance persists what a command program received from
 // the network, the directories it filled, and the custody it replaced.
 func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionID, projectDir string, prov evidence.ProgramHTTPProvenance) (string, error) {
-	recs := programProvenanceRecords(projectDir, prov)
-	if len(recs) == 0 {
+	if len(programProvenanceRecords(evidence.CitationRoots{ProjectDir: projectDir}, prov)) == 0 {
 		return "", nil
 	}
 	s := ev.core
@@ -103,6 +102,11 @@ func (ev *sqlEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessionI
 	}
 	defer func() { _ = tx.Rollback() }()
 	q := s.queries.WithTx(tx)
+	roots, err := sessionCitationRoots(ctx, q, sessionID, projectDir)
+	if err != nil {
+		return "", err
+	}
+	recs := programProvenanceRecords(roots, prov)
 	projectID, err := q.GetSessionProjectID(ctx, sessionID)
 	if err != nil {
 		return "", err
@@ -150,7 +154,7 @@ func (ev *memoryEvidence) CommitProgramHTTPProvenance(ctx context.Context, sessi
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	recs := programProvenanceRecords(projectDir, prov)
+	recs := programProvenanceRecords(evidence.CitationRoots{ProjectDir: projectDir}, prov)
 	if len(recs) == 0 {
 		return "", nil
 	}
@@ -175,19 +179,15 @@ func (ev *sqlEvidence) ExternalCustodyURLsForPaths(ctx context.Context, sessionI
 	if len(paths) == 0 {
 		return nil, nil
 	}
-	metaLedger, err := loadMetadataLedger(ctx, ev.core.queries, sessionID)
+	roots, err := sessionCitationRoots(ctx, ev.core.queries, sessionID, projectDir)
 	if err != nil {
 		return nil, err
 	}
-	normalized := make([]string, 0, len(paths))
-	for _, p := range paths {
-		if rel, ok := evidence.NormalizeCitationPath(projectDir, p); ok {
-			normalized = append(normalized, rel)
-		} else {
-			normalized = append(normalized, evidence.NormalizeLedgerPath(p))
-		}
+	metaLedger, err := loadMetadataLedger(ctx, ev.core.queries, sessionID, roots)
+	if err != nil {
+		return nil, err
 	}
-	return evidence.ExternalCustodyURLs(metaLedger, normalized), nil
+	return evidence.ExternalCustodyURLs(metaLedger, custodyQueryKeys(roots, paths)), nil
 }
 
 func (ev *memoryEvidence) ExternalCustodyURLsForPaths(ctx context.Context, sessionID, projectDir string, paths []string) ([]string, error) {
@@ -198,13 +198,15 @@ func (ev *memoryEvidence) ExternalCustodyURLsForPaths(ctx context.Context, sessi
 	if err != nil {
 		return nil, err
 	}
-	normalized := make([]string, 0, len(paths))
+	return evidence.ExternalCustodyURLs(ledger, custodyQueryKeys(evidence.CitationRoots{ProjectDir: projectDir}, paths)), nil
+}
+
+// custodyQueryKeys maps path tokens to the keys custody is indexed under, so
+// each spelling of a path finds its own folder's custody and no other's.
+func custodyQueryKeys(roots evidence.CitationRoots, paths []string) []string {
+	keys := make([]string, 0, len(paths))
 	for _, p := range paths {
-		if rel, ok := evidence.NormalizeCitationPath(projectDir, p); ok {
-			normalized = append(normalized, rel)
-		} else {
-			normalized = append(normalized, evidence.NormalizeLedgerPath(p))
-		}
+		keys = append(keys, evidence.CustodyKey(roots, p))
 	}
-	return evidence.ExternalCustodyURLs(ledger, normalized), nil
+	return keys
 }

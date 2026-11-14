@@ -8,7 +8,7 @@ schema:
       description: Git ref (default HEAD)
     path:
       type: string
-      description: Optional repo-relative path for HEAD:path blob view
+      description: Optional session-folder-relative path for HEAD:path blob view
     max_bytes:
       type: integer
       description: Max output bytes (default 256 KiB)

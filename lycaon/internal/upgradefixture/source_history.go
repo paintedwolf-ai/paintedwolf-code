@@ -77,7 +77,7 @@ func SeedSourceHistory(ctx context.Context, database db.Handle, dataDir, project
 	if _, err := checkpoints.Open(ctx, sessionID, evidence.CheckpointAnchorID); err != nil {
 		return SourceEvidence{}, fmt.Errorf("open fixture checkpoint: %w", err)
 	}
-	if err := checkpoints.CapturePreImage(ctx, sessionID, evidence.CheckpointAnchorID, sourceHistoryPath); err != nil {
+	if err := checkpoints.CapturePreImage(ctx, sessionID, evidence.CheckpointAnchorID, sourceHistoryPath, ""); err != nil {
 		return SourceEvidence{}, fmt.Errorf("capture fixture checkpoint: %w", err)
 	}
 	changed := []byte(currentSourceBody)

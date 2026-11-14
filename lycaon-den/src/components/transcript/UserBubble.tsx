@@ -39,6 +39,8 @@ export function UserBubble(props: {
   sessionId?: string | null;
   projectId?: string;
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
+  /** Session's active root; bare chip paths resolve against it when the part pins none. */
+  activeRootId?: string;
   entryKey?: string;
   rowId?: string;
   client?: import("../../api/client.ts").LycaonClient | null;
@@ -72,6 +74,7 @@ export function UserBubble(props: {
       intent: "permanent",
       projectId,
       rootId: target.rootId,
+      activeRootId: props.activeRootId,
       path: target.path,
       entryKind: target.entryKind,
       line: target.startLine,
@@ -175,6 +178,7 @@ export function UserBubble(props: {
                     onContextMenu={(event) => {
                       const next = markdownProjectPathLinkContextMenu(event, {
                         projectId: props.projectId, rootRefs: props.rootRefs,
+                        activeRootId: props.activeRootId,
                         chatDestination: chatDestination(),
                       });
                       if (next) setPathMenu(next);

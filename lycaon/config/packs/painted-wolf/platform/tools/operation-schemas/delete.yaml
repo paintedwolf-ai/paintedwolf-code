@@ -8,7 +8,7 @@ schema:
       items:
         type: string
       maxItems: 20
-      description: Repo-relative paths (max 20; no recursive directory delete)
+      description: "Paths relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute (max 20; no recursive directory delete)."
     files_only:
       type: boolean
       description: Reject directories, including empty ones. Exact rm translation sets this true.

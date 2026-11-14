@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	scanbase "github.com/lycaon/lycaon/internal/scan"
 	scancatalog "github.com/lycaon/lycaon/internal/scan/catalog"
 	"github.com/lycaon/lycaon/internal/settings"
@@ -53,7 +54,7 @@ func runScanPack(
 			Code: "SCAN_PACK_NO_HOST_ENGINE",
 			Data: map[string]any{
 				"categories":       categoryStrings(categories),
-				"project_dir":      projectDir,
+				"project_dir":      scanRootDisplay(tctx),
 				"engines":          strings.Join(RegistryScannerIDs(scannerReg), ", "),
 				"scan_no_engines":  len(RegistryScannerIDs(scannerReg)) == 0,
 				"valid_categories": packCategoryHintList(scannerReg),
@@ -91,6 +92,17 @@ func runScanPack(
 		return FullPassReceipt(ctx, coord, pass, ReceiptOptions{})
 	}
 	return waitForFullPassReceipt(ctx, coord, pass, scanPackWaitDuration(args["timeout_ms"]))
+}
+
+// scanRootDisplay renders the scan root the way the model addresses the
+// folder it resolved from: an @label token for the session folder, never the
+// host path.
+func scanRootDisplay(tctx tools.ToolContext) string {
+	active, err := projectroot.ActiveRoot(tctx.Source.Roots, tctx.Source.ActiveRootID)
+	if err != nil || active.Label == "" {
+		return "."
+	}
+	return "@" + active.Label
 }
 
 func waitForFullPassReceipt(ctx context.Context, coord scanbase.ScanCoordinator, pass scanbase.FullPass, timeout time.Duration) (string, error) {

@@ -34,6 +34,10 @@ type PromptDumpLine struct {
 	Content string
 }
 
+// promptDumpFixtureRootID is the fixture root's ID, so the dump's workspace
+// rows mark the fixture root active by ID like live assembly does.
+const promptDumpFixtureRootID = "prompt-dump-fixture"
+
 // RenderPromptDump produces an annotated markdown trace of steady + transition layers.
 func RenderPromptDump(
 	ctx context.Context,
@@ -71,9 +75,9 @@ func RenderPromptDump(
 	base := map[string]any{"project_dir": sess.WorkspacePath}
 	var roots []projectroot.RootRef
 	if sess.WorkspacePath != "" {
-		roots = []projectroot.RootRef{{Path: sess.WorkspacePath, Label: "Fixture", IsPrimary: true}}
+		roots = []projectroot.RootRef{{ID: promptDumpFixtureRootID, Path: sess.WorkspacePath, Label: "Fixture", IsPrimary: true}}
 	}
-	prompts.MergeWorkspaceRootsVars(base, roots, sess.WorkspacePath)
+	prompts.MergeWorkspaceRootsVars(base, roots, promptDumpFixtureRootID)
 	rootCount, _ := base["root_count"].(int)
 	roster := inject.ResolveAgentRoster(profile.SurfaceID, spawn.AmbientAllowedAgents(), rootCount, false, true)
 	if err := capability.MergeForTurn(base, profile, rootCount, roster.Effective, true); err != nil {

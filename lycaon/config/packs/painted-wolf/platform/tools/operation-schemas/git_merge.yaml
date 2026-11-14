@@ -12,7 +12,7 @@ schema:
       type: array
       maxItems: 500
       items: {type: string, minLength: 1}
-      description: "Explicit resolved paths to stage when continuing a merge."
+      description: "Explicit paths to stage when continuing a merge: relative to the session folder, `@label/path` for any attached folder, or absolute."
   allOf:
     - if: {properties: {action: {const: start}}}
       then:

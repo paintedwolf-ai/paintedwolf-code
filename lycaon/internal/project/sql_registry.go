@@ -16,9 +16,10 @@ import (
 
 // SQLRegistry persists projects in SQLite.
 type SQLRegistry struct {
-	db      db.Handle
-	queries *db.Queries
-	outbox  projectEventOutbox
+	db                   db.Handle
+	queries              *db.Queries
+	outbox               projectEventOutbox
+	rootsChangedObserver RootsChangedObserver
 }
 
 func NewSQLRegistry(database db.Handle) *SQLRegistry {

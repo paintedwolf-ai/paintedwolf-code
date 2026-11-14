@@ -3,5 +3,5 @@ schema:
   type: object
   properties:
     path:
-      description: "Optional dotted scaffold path to read (omit for whole run summary)."
+      description: "Optional dotted scaffold path to read (a model-data key, not a filesystem path; omit for whole run summary)."
       type: string

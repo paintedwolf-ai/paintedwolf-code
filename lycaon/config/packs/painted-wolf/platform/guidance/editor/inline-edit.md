@@ -1,4 +1,4 @@
-Inline edit the file at {{ path }} lines {{ start_line }}–{{ end_line }}.
+Inline edit the file at {{ path_display }} lines {{ start_line }}–{{ end_line }}.
 
 Instruction from the human:
 {{ instruction }}

@@ -5,9 +5,9 @@ schema:
   properties:
     path:
       type: string
-      description: Repo-relative archive path (.zip or .tar.gz only)
+      description: "Archive path relative to the session folder, `@label/path` for any attached folder, `@output/path` for session output, or absolute (.zip or .tar.gz only)."
     dest:
       type: string
-      description: Repo-relative destination directory (created when missing; must be under write scope)
+      description: "Destination directory relative to the session folder, `@label/path` for any attached folder, or `@scratch/path` for session scratch (created when missing; must be under write scope)."
   required: [path, dest]
   additionalProperties: false

@@ -65,7 +65,7 @@ type promptProjection interface {
 	sessionCatalogView(context.Context, *api.Session) *catalogview.View
 	sourceHistoryOffered(context.Context, *api.Session, inject.CoordinatorTurnFrame, []api.Message, *TurnAssemblyScratch) bool
 	taskOffered(*api.Session, string, int) bool
-	workspaceRootsForTurn(context.Context, *api.Session, *TurnAssemblyScratch) ([]map[string]any, int, string, bool)
+	workspaceRootsForTurn(context.Context, *api.Session, *TurnAssemblyScratch) ([]map[string]any, int, string, int, bool)
 }
 
 func newAssemblyDomains(snapshot AssemblyDeps, cache *SessionPromptCache) (*promptSurface, *turnContextAssembler) {

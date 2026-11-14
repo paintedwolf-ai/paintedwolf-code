@@ -12,6 +12,10 @@ type RecordAux struct {
 	ExternalCustody  bool
 	CustodyTree      bool
 	CustodySeq       int
+	// PathRoots maps a stored path key to its owning root ID for keys whose
+	// root differs from the record's primary RootID; empty values mark
+	// legacy tokens.
+	PathRoots map[string]string
 }
 
 // CloneRecordForStore copies auxiliary index fields for persistence.
@@ -26,6 +30,7 @@ func CloneRecordForStore(rec Record) RecordAux {
 		ExternalCustody:  cloned.Custody.External,
 		CustodyTree:      cloned.Custody.Tree,
 		CustodySeq:       cloned.Custody.Seq,
+		PathRoots:        cloned.rooted.owners,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -72,6 +77,12 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		rec.pathTiers = make(map[string]string, len(aux.PathTiers))
 		for path, tier := range aux.PathTiers {
 			rec.pathTiers[NormalizeLedgerPath(path)] = tier
+		}
+	}
+	if aux.PathRoots != nil {
+		rec.rooted.owners = make(map[string]string, len(aux.PathRoots))
+		for path, rootID := range aux.PathRoots {
+			rec.rooted.owners[NormalizeLedgerPath(path)] = rootID
 		}
 	}
 	if aux.UntrustedContent {

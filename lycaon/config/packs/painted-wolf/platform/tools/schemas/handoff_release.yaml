@@ -9,7 +9,7 @@ schema:
       description: "Worker job id or agent id (defaults to caller binding)."
       type: string
     paths:
-      description: "Repo-relative paths to release."
+      description: "Session-folder-relative reservation keys to release (must match reserved keys; not addressed paths)."
       type: array
       items:
         type: string

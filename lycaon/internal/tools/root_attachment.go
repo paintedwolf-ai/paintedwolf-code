@@ -11,18 +11,24 @@ import (
 // project no longer has attached, or no longer has at that path.
 const RootNotAttachedCode = "ROOT_NOT_ATTACHED"
 
-// AttachedFolders lists the call's folders as "label → path" lines, then
-// session scratch, for refusals that name what the model can use instead.
+// AttachedFolders lists the call's folders as @label tokens — the session
+// folder marked — then the session's virtual folders, for refusals that name
+// what the model can use instead. Host paths never appear here.
 func AttachedFolders(tctx ToolContext) []string {
 	out := make([]string, 0, len(tctx.Source.Roots)+2)
+	active, activeErr := projectroot.ActiveRoot(tctx.Source.Roots, tctx.Source.ActiveRootID)
 	for _, r := range tctx.Source.Roots {
-		out = append(out, r.Label+" → "+filepath.Clean(r.Path))
+		token := "@" + r.Label
+		if activeErr == nil && r.ID == active.ID {
+			token += " (session folder)"
+		}
+		out = append(out, token)
 	}
-	if dir := tctx.Host.SessionScratchDir; dir != "" {
-		out = append(out, projectroot.VirtualScratchLabel+" → "+filepath.Clean(dir))
+	if tctx.Host.SessionScratchDir != "" {
+		out = append(out, "@"+projectroot.VirtualScratchLabel)
 	}
-	if dir := tctx.Host.SessionOutputDir; dir != "" {
-		out = append(out, projectroot.VirtualOutputLabel+" → "+filepath.Clean(dir))
+	if tctx.Host.SessionOutputDir != "" {
+		out = append(out, "@"+projectroot.VirtualOutputLabel)
 	}
 	return out
 }
@@ -34,11 +40,10 @@ func RootNotAttachedReject(tctx ToolContext, path string, retired projectroot.Re
 		"path":             filepath.ToSlash(path),
 		"root_label":       retired.Root.Label,
 		"root_status":      string(retired.Reason),
-		"former_path":      filepath.Clean(retired.Root.Path),
 		"attached_folders": AttachedFolders(tctx),
 	}
 	if retired.Reason != projectroot.RootDetached {
-		data["current_label"], data["current_path"] = retired.Successor.Label, filepath.Clean(retired.Successor.Path)
+		data["current_label"] = retired.Successor.Label
 	}
 	return &toolrejection.ToolReject{Code: RootNotAttachedCode, Data: data}
 }
@@ -49,8 +54,17 @@ func RootNotAttachedReject(tctx ToolContext, path string, retired projectroot.Re
 func ValidateRootsCurrent(tctx ToolContext) *toolrejection.ToolReject {
 	for _, root := range tctx.Source.Roots {
 		if retired, ok := tctx.Source.RootHistory.RetiredSince(root); ok {
-			return RootNotAttachedReject(tctx, root.Path, retired)
+			return RootNotAttachedReject(tctx, rootDisplaySpelling(root), retired)
 		}
 	}
 	return nil
+}
+
+// rootDisplaySpelling renders a root the way the model addresses it: its
+// @label, falling back to the host path only for an unlabeled root.
+func rootDisplaySpelling(root projectroot.RootRef) string {
+	if root.Label != "" {
+		return "@" + root.Label
+	}
+	return root.Path
 }

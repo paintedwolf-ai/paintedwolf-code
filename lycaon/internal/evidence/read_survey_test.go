@@ -34,7 +34,7 @@ func TestReadEvidenceSurvey_escalatedLiteralNonSurvey(t *testing.T) {
 
 func TestReadHighlightRecords_mintsFromHighlights(t *testing.T) {
 	content := `{"mode":"outline","highlights":[{"path":"src/a.go","line":10,"content":"10| func entry() {}"}]}`
-	recs := evidence.ReadHighlightRecords("", content)
+	recs := evidence.ReadHighlightRecords(evidence.CitationRoots{}, content)
 	if len(recs) != 1 {
 		t.Fatalf("records = %d want 1", len(recs))
 	}
@@ -64,7 +64,7 @@ func TestSummarizeAnchorRecordsPerAnchor(t *testing.T) {
 		{"path":"src/b.go","line":20,"excerpt":"package b"},
 		{"path":"src/c.go","line":30,"excerpt":"import x"}
 	]}`
-	recs := evidence.SummarizeAnchorHighlightRecords("", content)
+	recs := evidence.SummarizeAnchorHighlightRecords(evidence.CitationRoots{}, content)
 	if len(recs) != 3 {
 		t.Fatalf("records = %d want 3", len(recs))
 	}
@@ -86,7 +86,7 @@ func TestSummarizeAnchorRecords_skipsInvalid(t *testing.T) {
 		{"path":"a.go","line":1,"excerpt":""},
 		{"path":"ok.go","line":2,"excerpt":"valid"}
 	]}`
-	recs := evidence.SummarizeAnchorHighlightRecords("", content)
+	recs := evidence.SummarizeAnchorHighlightRecords(evidence.CitationRoots{}, content)
 	if len(recs) != 1 || recs[0].Path != "ok.go" {
 		t.Fatalf("records = %+v want one valid anchor", recs)
 	}
@@ -94,7 +94,7 @@ func TestSummarizeAnchorRecords_skipsInvalid(t *testing.T) {
 
 func TestSummarizeNoAnchorsFallsBackToPack(t *testing.T) {
 	content := `{"task":"Overview","pack":{"identity":[{"path":"pkg","kind":"dir_map"}]}}`
-	recs := evidence.SummarizeAnchorHighlightRecords("", content)
+	recs := evidence.SummarizeAnchorHighlightRecords(evidence.CitationRoots{}, content)
 	if len(recs) != 1 || recs[0].Body[0] != "Overview" {
 		t.Fatalf("records = %+v want pack task highlight", recs)
 	}
@@ -141,7 +141,7 @@ func TestPatchReadHighlightHandles_preservesHostBanner(t *testing.T) {
 func TestSummarizeAnchorHighlightRecords_fromSpillBanner(t *testing.T) {
 	in := "[compacted tool_result — original ~100 tokens; map + verbatim head/tail below are the working set]\n\nverbatim head/tail:\n" +
 		`{"task":"t","anchors":[{"path":"a.go","line":1,"excerpt":"package a"}],"brief":["ok"]}`
-	recs := evidence.SummarizeAnchorHighlightRecords("", in)
+	recs := evidence.SummarizeAnchorHighlightRecords(evidence.CitationRoots{}, in)
 	if len(recs) != 1 {
 		t.Fatalf("records = %d want 1", len(recs))
 	}
@@ -157,7 +157,7 @@ func TestSummarizeAnchorHighlightRecordsRequiresDeclaredEnvelope(t *testing.T) {
 		"verbatim head/tail:\n" + payload,
 		"[compacted tool_result]\nverbatim head/tail:\nSource text " + payload,
 	} {
-		if records := evidence.SummarizeAnchorHighlightRecords("", input); len(records) != 0 {
+		if records := evidence.SummarizeAnchorHighlightRecords(evidence.CitationRoots{}, input); len(records) != 0 {
 			t.Errorf("ordinary output minted %d anchors: %q", len(records), input)
 		}
 	}
@@ -165,7 +165,7 @@ func TestSummarizeAnchorHighlightRecordsRequiresDeclaredEnvelope(t *testing.T) {
 		"[root:child:summarize#1]\n",
 		"[compacted tool_result]\nverbatim head/tail:\n[root:child:summarize#1]\n",
 	} {
-		if records := evidence.SummarizeAnchorHighlightRecords("", prefix+payload); len(records) != 1 {
+		if records := evidence.SummarizeAnchorHighlightRecords(evidence.CitationRoots{}, prefix+payload); len(records) != 1 {
 			t.Errorf("declared envelope minted %d anchors: %q", len(records), prefix)
 		}
 	}

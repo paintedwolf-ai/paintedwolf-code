@@ -217,7 +217,7 @@ func runCommandBackground(
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return "", err
 	}
-	if tr := rejectPwdEnvMismatch(args, canonicalCommandKey(tctx, args), cwd); tr != nil {
+	if tr := rejectPwdEnvMismatch(tctx, args, canonicalCommandKey(tctx, args), cwd, cwdDisplay); tr != nil {
 		return "", tr
 	}
 	confReq, tr := tools.ConfineRequestForSpawn(ctx, tctx, extraWriteRoots)
@@ -325,7 +325,7 @@ func runCommandBackground(
 				tctx.Effects.Out.Facts = tools.ApplyRefusalFacts(tctx.Effects.Out.Facts, stamped)
 			}
 		}
-		result.Tail = tail
+		result.Tail = rewriteTailDisplayPaths(tctx, tail)
 	}
 	result.Network = observedNetwork
 	result.Report = CommandConfinementReport(confine.BoundaryOf(confinement),

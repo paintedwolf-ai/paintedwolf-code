@@ -88,7 +88,7 @@ schema:
         The resume keeps the child's agent_type, scope mode, and planned leg;
         restating a different agent_type or scope mode is rejected.
     files:
-      description: "Optional repo-relative files to emphasize for the worker."
+      description: "Optional files to emphasize for the worker, resolved in the worker's session: bare = worker's session folder, `@label/path` = a worker-attached folder."
       type: array
       maxItems: 12
       items:
@@ -112,8 +112,10 @@ schema:
             minLength: 1
             maxLength: 240
           description: >-
-            Optional repo-relative paths or slash globs that guide the worker's
-            focus. They do not grant, restrict, or filter tool access, mutations,
+            Optional paths or slash globs that guide the worker's
+            focus, resolved in the worker's session (bare = worker's session
+            folder, `@label/path` = a worker-attached folder). They do not
+            grant, restrict, or filter tool access, mutations,
             verification, or promotion.
         base_overlay_id:
           type: string

@@ -29,7 +29,7 @@ schema:
             type: string
             minLength: 1
           path:
-            description: Repo-relative file path.
+            description: Session-folder-relative file path as shown by the cited receipt.
             type: string
             minLength: 1
           line:

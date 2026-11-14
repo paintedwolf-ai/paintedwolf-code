@@ -171,7 +171,7 @@ func validateWorkerManifests(ctx context.Context, snapshot db.DBTX, files map[st
 			return err
 		}
 		source, ok := files[rel]
-		if !ok || source.kind != fileKindRegular || version != 1 || len(digest) != 64 {
+		if !ok || source.kind != fileKindRegular || (version != 1 && version != 2) || len(digest) != 64 {
 			return &InvalidError{Detail: "worker manifest is missing, unsealed or unsupported: " + id}
 		}
 		actual, err := workspacebaseline.Digest(ctx, source.path)

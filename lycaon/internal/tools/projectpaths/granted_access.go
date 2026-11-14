@@ -79,7 +79,7 @@ func resolveGranted(tctx tools.ToolContext, modelPath string, op sandbox.PathOp)
 		Abs:         abs,
 		DisplayPath: abs,
 		ScopeRel:    filepath.ToSlash(scopeRel),
-		Root:        projectroot.RootRef{Path: anchor},
+		Root:        projectroot.RootRef{Path: anchor, External: true},
 		External:    true,
 	}, true
 }

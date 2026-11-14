@@ -28,6 +28,37 @@ the same callable roster. Native operation schemas describe execution contracts;
 they do not introduce additional tool choices. Retired public tool names name
 `command` as their successor and retain their recorded historical meanings.
 
+## Path addressing
+
+Every path-taking tool resolves and displays paths through one addressing rule,
+keyed to the session's attached roots. The model-facing grammar:
+
+- **Bare relative paths** (`src/main.go`) and an empty `cwd` resolve in the
+  **session folder** — the attached root the session currently addresses
+  unqualified paths against.
+- **`@<label>/relative/path`** addresses any attached folder, including the
+  session folder, at any root count. Every root carries a label — draft
+  projects label their scratch root `Draft`, and single-root projects still
+  carry a mandatory label — so the grammar is uniform across layouts.
+- **`.` or an empty path in discovery operations** (`find`, `grep`, `ls` in
+  `command`, `survey_repo`) walks **every attached folder**; bare file operands
+  and `cwd` still resolve in the session folder.
+- **`@scratch/<path>`** addresses the session's temporary scratch directory and
+  **`@output/<path>`** addresses retained command/tool output spills. These
+  virtual labels are host-owned; no attached root may carry a virtual label.
+- **Absolute paths are accepted on input** and canonicalize to display form in
+  tool receipts — bare off the session folder, `@label/rel` off any other
+  attached root. Prompts never print host absolute paths.
+
+The prompt partials teach the same rule
+([`workspace-roots.md`](../lycaon/config/packs/painted-wolf/platform/shared/partials/workspace-roots.md)
+lists every attached folder as an `@<label>` row with `(session folder)` on the
+active one), and [Compatibility](compatibility.md#agent-public-vocabulary)
+records the grammar as agent-public vocabulary. Git operations are the one
+deliberate exception: their pathspecs stay repository-relative on the session
+folder rather than root-labelled, because they name Git revisions and index
+entries ([Git](git.md)).
+
 ## Portable command language version 1
 
 The versioned catalog defines the program language and native utility contracts.

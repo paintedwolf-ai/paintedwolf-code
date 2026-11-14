@@ -12,6 +12,7 @@ import (
 	"github.com/lycaon/lycaon/internal/textfile"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/readcaps"
 )
 
@@ -45,7 +46,7 @@ func (t *WriteTool) Run(ctx context.Context, args map[string]any, tctx tools.Too
 	return result.Receipt(), nil
 }
 
-func captureFileEdit(tctx tools.ToolContext, path, after string, before *string) {
+func captureFileEdit(tctx tools.ToolContext, resolved projectpaths.Resolved, path, after string, before *string) {
 	if tctx.Effects.Out == nil || strings.TrimSpace(path) == "" {
 		return
 	}
@@ -56,6 +57,7 @@ func captureFileEdit(tctx tools.ToolContext, path, after string, before *string)
 	}
 	tctx.Effects.Out.FileEdit = &tools.FileEditCapture{
 		Path:   path,
+		RootID: resolved.Root.ID,
 		Before: before,
 		After:  tctx.Effects.Secrets.ReferenceEchoes(after),
 	}

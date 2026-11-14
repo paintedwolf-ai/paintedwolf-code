@@ -49,7 +49,7 @@ func AssembleLedger(records []Record) Ledger {
 			continue
 		}
 		for _, path := range IndexedPathsForRecord(rec) {
-			relPath := NormalizeLedgerPath(path)
+			relPath := NormalizeLedgerPath(recordDisplayKey(rec, path))
 			if relPath != "" {
 				ev.byPathOrder[relPath] = append(ev.byPathOrder[relPath], rec.Handle)
 			}
