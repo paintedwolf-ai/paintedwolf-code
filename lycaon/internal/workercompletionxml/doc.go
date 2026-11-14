@@ -6,12 +6,12 @@ import (
 	"strings"
 )
 
-// Doc is the XML document marshaled into parent tool-result content.
+// Doc is the XML document marshaled into parent tool-result content. The
+// coordinator reads it, so it names the worker; the job and child session are
+// host identity carried by the message's worker summary.
 type Doc struct {
 	XMLName             xml.Name `xml:"task"`
 	Worker              string   `xml:"worker,attr,omitempty"`
-	JobID               string   `xml:"job_id,attr"`
-	ChildSessionID      string   `xml:"child_session_id,attr,omitempty"`
 	AgentType           string   `xml:"agent_type,attr,omitempty"`
 	State               string   `xml:"state,attr"`
 	MergeStatus         string   `xml:"merge_status,attr,omitempty"`

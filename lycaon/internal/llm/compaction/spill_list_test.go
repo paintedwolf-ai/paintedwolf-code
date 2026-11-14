@@ -127,12 +127,11 @@ func TestCompactSpillIndexTaskEnvelopeIsLinePageable(t *testing.T) {
 	}, "", "  ")
 	testutil.FailErr(t, "marshal report_json", err)
 	xmlBytes, err := xml.MarshalIndent(workercompletionxml.Doc{
-		JobID:          "92a8068b-b369-401a-8251-6d614ca549f4",
-		ChildSessionID: "82a167f8-cffc-48bd-b3a6-630f3d4930ee",
-		AgentType:      "repo-researcher",
-		State:          "complete",
-		Summary:        "surveyed handlers",
-		ReportJSON:     string(reportJSON),
+		Worker:     "surveyor",
+		AgentType:  "repo-researcher",
+		State:      "complete",
+		Summary:    "surveyed handlers",
+		ReportJSON: string(reportJSON),
 	}, "", "  ")
 	testutil.FailErr(t, "marshal task XML", err)
 	content := strings.ReplaceAll(string(xmlBytes), "&#xA;", "\n")

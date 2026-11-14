@@ -151,7 +151,11 @@ func ParseMessageWorkerEnvelope(msg api.Message) (workercompletion.WorkerComplet
 	if msg.WorkerSummary == nil {
 		return workercompletion.WorkerCompletionEnvelope{}, false
 	}
-	return workercompletion.ParseWorkerCompletionEnvelope(msg.WorkerSummary.Envelope)
+	env, ok := workercompletion.ParseWorkerCompletionEnvelope(msg.WorkerSummary.Envelope)
+	if ok {
+		env.JobID, env.ChildSessionID = msg.WorkerSummary.WorkerID, msg.WorkerSummary.ChildSessionID
+	}
+	return env, ok
 }
 
 func EnvelopeLegStatus(env workercompletion.WorkerCompletionEnvelope) string {

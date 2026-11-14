@@ -100,6 +100,7 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	}
 	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
 	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetAccounts(r.WorkerRecords)
+	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetNames(r.WorkerRecords)
 	r.deps.Sessions.Manager.SetWorkerNames(r.WorkerRecords.NameByJob)
 	r.deps.Sessions.Manager.SetJobNames(r.WorkerRecords)
 	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{

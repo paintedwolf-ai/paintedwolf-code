@@ -45,8 +45,6 @@ func FormatWorkerCompletionEnvelope(env WorkerCompletionEnvelope) string {
 	decisionJSON := marshalEnvelopeJSON(env.DecisionRequest)
 	doc := workercompletionxml.Doc{
 		Worker:              strings.TrimSpace(env.Worker),
-		JobID:               strings.TrimSpace(env.JobID),
-		ChildSessionID:      strings.TrimSpace(env.ChildSessionID),
 		AgentType:           strings.TrimSpace(env.AgentType),
 		State:               state,
 		MergeStatus:         strings.TrimSpace(env.MergeStatus),
@@ -99,7 +97,8 @@ func marshalEnvelopeJSON(v any) string {
 	return s
 }
 
-// ParseWorkerCompletionEnvelope reads a parent <task> block.
+// ParseWorkerCompletionEnvelope reads a parent <task> block. The block carries
+// no job or child session; callers take them from the worker summary.
 func ParseWorkerCompletionEnvelope(content string) (WorkerCompletionEnvelope, bool) {
 	doc, ok := workercompletionxml.Unmarshal(content)
 	if !ok {
@@ -107,8 +106,6 @@ func ParseWorkerCompletionEnvelope(content string) (WorkerCompletionEnvelope, bo
 	}
 	env := WorkerCompletionEnvelope{
 		Worker:         strings.TrimSpace(doc.Worker),
-		JobID:          strings.TrimSpace(doc.JobID),
-		ChildSessionID: strings.TrimSpace(doc.ChildSessionID),
 		AgentType:      strings.TrimSpace(doc.AgentType),
 		State:          NormalizeWorkerCompletionState(doc.State),
 		MergeStatus:    strings.TrimSpace(doc.MergeStatus),
@@ -134,7 +131,7 @@ func ParseWorkerCompletionEnvelope(content string) (WorkerCompletionEnvelope, bo
 			env.DecisionRequest = &dec
 		}
 	}
-	if env.JobID == "" && env.State == "" && env.AgentType == "" {
+	if env.State == "" && env.AgentType == "" {
 		return WorkerCompletionEnvelope{}, false
 	}
 	return env, true

@@ -249,7 +249,7 @@ func validateWorkerSummary(jobID string, ws *api.WorkerSummaryMeta) error {
 	if !ok {
 		return fmt.Errorf("worker summary envelope invalid")
 	}
-	if env.JobID != ws.WorkerID || env.ChildSessionID != ws.ChildSessionID || env.AgentType != ws.AgentType || workercompletion.NormalizeWorkerCompletionState(env.State) != workercompletion.NormalizeWorkerCompletionState(string(ws.Status)) {
+	if env.AgentType != ws.AgentType || workercompletion.NormalizeWorkerCompletionState(env.State) != workercompletion.NormalizeWorkerCompletionState(string(ws.Status)) {
 		return fmt.Errorf("worker summary envelope identity mismatch")
 	}
 	return nil
