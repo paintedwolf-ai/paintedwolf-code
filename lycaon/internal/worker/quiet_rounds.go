@@ -21,6 +21,9 @@ type QuietRounds struct {
 	AwaitingApproval func(ctx context.Context, childSessionID string) bool
 	// Waiting reports a pending job held on a prerequisite, which is not quiet.
 	Waiting func(ctx context.Context, task *api.WorkerTask) bool
+	// PauseEnded is when a workflow run last resumed from a pause; zero when
+	// it never paused.
+	PauseEnded func(ctx context.Context, runID string) time.Time
 	// Notify delivers a round notice to the worker's coordinator.
 	Notify func(ctx context.Context, parentID string, facts kick.WorkerRoundNoticeFacts)
 	After  time.Duration
@@ -60,7 +63,7 @@ func (q *QuietRounds) Check(ctx context.Context) {
 		}
 		since := q.quietSince(ctx, task)
 		if spawn.ThresholdCrossed(int64(prev.Sub(since)), int64(now.Sub(since)), int64(after)) {
-			q.Notify(ctx, task.ParentSessionID, quietFacts(task, now.Sub(since)))
+			q.Notify(ctx, task.ParentSessionID, quietFacts(task, now, now.Sub(since)))
 		}
 	}
 }
@@ -82,12 +85,18 @@ func (q *QuietRounds) working(ctx context.Context, task *api.WorkerTask) bool {
 	}
 }
 
-// quietSince is the later of the round's latest durable progress, its start
-// and this host's start, so time the host was down does not count.
+// quietSince is the later of the round's latest durable progress, its start,
+// the end of its run's latest pause and this host's start, so time the host was
+// down or the run was paused does not count.
 func (q *QuietRounds) quietSince(ctx context.Context, task *api.WorkerTask) time.Time {
 	since := q.started
 	if started := roundStartTime(task); started.After(since) {
 		since = started
+	}
+	if run := strings.TrimSpace(task.WorkflowRunID); run != "" && q.PauseEnded != nil {
+		if resumed := q.PauseEnded(ctx, run); resumed.After(since) {
+			since = resumed
+		}
 	}
 	if child := strings.TrimSpace(task.ChildSessionID); child != "" && q.Progress != nil {
 		if progressed, err := q.Progress(ctx, child); err == nil && progressed.After(since) {
@@ -111,7 +120,7 @@ func roundStartTime(task *api.WorkerTask) time.Time {
 	return task.CreatedAt
 }
 
-func quietFacts(task *api.WorkerTask, quiet time.Duration) kick.WorkerRoundNoticeFacts {
+func quietFacts(task *api.WorkerTask, now time.Time, quiet time.Duration) kick.WorkerRoundNoticeFacts {
 	facts := kick.WorkerRoundNoticeFacts{
 		JobID: task.ID, AgentType: task.AgentType, Kind: kick.RoundNoticeQuiet,
 		ModelCalls: task.ToolLoopsUsed, QuietFor: quiet,
@@ -122,6 +131,10 @@ func quietFacts(task *api.WorkerTask, quiet time.Duration) kick.WorkerRoundNotic
 	case task.TurnToolCalls > task.TurnToolsDone:
 		facts.InFlight = kick.RoundInFlightTools
 		facts.ToolCalls, facts.ToolsDone = task.TurnToolCalls, task.TurnToolsDone
+		facts.Tools = task.TurnTools
+		if task.TurnStartedAt != nil {
+			facts.ToolsFor = now.Sub(*task.TurnStartedAt)
+		}
 	default:
 		facts.InFlight = kick.RoundInFlightModelCall
 	}

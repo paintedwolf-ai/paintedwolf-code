@@ -9761,6 +9761,13 @@ export interface components {
             turn_tool_calls?: number;
             /** @description Calls already settled in that in-flight batch; never exceeds turn_tool_calls */
             turn_tools_done?: number;
+            /** @description Distinct tool names in the in-flight batch, in call order; empty between turns */
+            turn_tools?: string[];
+            /**
+             * Format: date-time
+             * @description When the in-flight batch began; absent between turns
+             */
+            turn_started_at?: string;
             /** @description Live per-worker context occupancy for the Den worker-card ring; absent until the first turn completes */
             context_usage?: components["schemas"]["WorkerContextUsage"];
             /** @description Ephemeral progress while an isolated write workspace is being prepared */

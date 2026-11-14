@@ -374,3 +374,8 @@ SELECT CAST(COALESCE((SELECT latest.job_id FROM worker_rounds origin
     JOIN worker_rounds latest ON latest.worker_id = origin.worker_id
     WHERE origin.job_id = sqlc.arg(job_id) ORDER BY latest.ordinal DESC LIMIT 1), sqlc.arg(job_id)) AS TEXT) AS job_id;
 
+
+-- name: GetLatestWorkerSentSeqByJob :one
+SELECT CAST(COALESCE(MAX(m.seq), 0) AS INTEGER) AS seq
+FROM worker_messages m JOIN worker_rounds r ON r.worker_id = m.worker_id
+WHERE r.job_id = ? AND m.sender_role = 'worker' AND m.recipient_role = 'coordinator';

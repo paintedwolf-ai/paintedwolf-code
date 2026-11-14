@@ -103,6 +103,9 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetAccounts(r.WorkerRecords)
 	r.deps.Sessions.Manager.Coordinator.ProgressClosure.SetNames(r.WorkerRecords)
 	r.deps.Sessions.Manager.SetWorkerNames(r.WorkerRecords.NameByJob)
+	if workers := r.deps.Sessions.Manager.Coordinator.Workers; workers != nil {
+		workers.LatestSent = r.WorkerRecords.LatestSentSeq
+	}
 	r.deps.Sessions.Manager.SetJobNames(r.WorkerRecords)
 	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{
 		Records:    r.WorkerRecords,

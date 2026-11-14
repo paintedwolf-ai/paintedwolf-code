@@ -152,3 +152,24 @@ func TestRoundFrameCarriesTheRoundsStartingPoint(t *testing.T) {
 		t.Fatalf("earlier results = %v", earlier)
 	}
 }
+
+func TestLatestSentSeqIsTheWorkersLatestMessageToItsCoordinator(t *testing.T) {
+	f := newFixture(t)
+	w, child := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	seq, err := f.store.LatestSentSeq(t.Context(), "job-1")
+	testutil.FailErr(t, "latest before any message", err)
+	if seq != 0 {
+		t.Fatalf("seq = %d before the worker sent anything", seq)
+	}
+	_, err = f.store.AppendMessage(t.Context(), f.coord, op("instruct-1"), w.WorkerID, workerrecords.MessageSpec{Body: "start with the parser"})
+	testutil.FailErr(t, "instruct", err)
+	sent, err := f.store.AppendMessage(t.Context(), child, op("report-1"), w.WorkerID, workerrecords.MessageSpec{Body: "the parser drops trailing commas"})
+	testutil.FailErr(t, "worker message", err)
+	_, err = f.store.AppendMessage(t.Context(), f.coord, op("instruct-2"), w.WorkerID, workerrecords.MessageSpec{Body: "fix it"})
+	testutil.FailErr(t, "later instruction", err)
+	seq, err = f.store.LatestSentSeq(t.Context(), "job-1")
+	testutil.FailErr(t, "latest", err)
+	if seq != sent.Seq {
+		t.Fatalf("seq = %d, want the worker's message %d", seq, sent.Seq)
+	}
+}

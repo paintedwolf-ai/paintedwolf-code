@@ -4,7 +4,9 @@
 package workerprogress
 
 import (
+	"slices"
 	"sync"
+	"time"
 
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -15,6 +17,9 @@ type Snapshot struct {
 	ToolCallsUsed int
 	TurnToolCalls int
 	TurnToolsDone int
+	// TurnTools and TurnStartedAt name the in-flight batch and when it began.
+	TurnTools     []string
+	TurnStartedAt time.Time
 	ContextUsage  *api.WorkerContextUsage
 }
 
@@ -41,8 +46,7 @@ type Tracker struct {
 
 // NewTracker starts from a seed — the persisted row on resume, zero on a first run.
 func NewTracker(seed Snapshot) *Tracker {
-	seed.TurnToolCalls = 0
-	seed.TurnToolsDone = 0
+	seed.clearBatch()
 	return &Tracker{snap: seed}
 }
 
@@ -75,20 +79,27 @@ func (t *Tracker) CompleteRound(used int, usage *api.WorkerContextUsage) Snapsho
 	if usage != nil {
 		t.snap.ContextUsage = usage
 	}
-	t.snap.TurnToolCalls = 0
-	t.snap.TurnToolsDone = 0
+	t.snap.clearBatch()
 	return t.snap
 }
 
-// BeginBatch opens the tool batch this round will execute.
-func (t *Tracker) BeginBatch(calls int) Snapshot {
+// BeginBatch opens the tool batch this round will execute: one call per name,
+// started at startedAt.
+func (t *Tracker) BeginBatch(names []string, startedAt time.Time) Snapshot {
 	if t == nil {
 		return Snapshot{}
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.snap.TurnToolCalls = max(calls, 0)
+	t.snap.TurnToolCalls = len(names)
 	t.snap.TurnToolsDone = 0
+	t.snap.TurnTools = nil
+	for _, name := range names {
+		if !slices.Contains(t.snap.TurnTools, name) {
+			t.snap.TurnTools = append(t.snap.TurnTools, name)
+		}
+	}
+	t.snap.TurnStartedAt = startedAt
 	return t.snap
 }
 
@@ -117,9 +128,13 @@ func (t *Tracker) EndBatch() Snapshot {
 	}
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.snap.TurnToolCalls = 0
-	t.snap.TurnToolsDone = 0
+	t.snap.clearBatch()
 	return t.snap
+}
+
+func (s *Snapshot) clearBatch() {
+	s.TurnToolCalls, s.TurnToolsDone = 0, 0
+	s.TurnTools, s.TurnStartedAt = nil, time.Time{}
 }
 
 // Apply merges an edge without decreasing lifetime counters.
@@ -136,6 +151,12 @@ func Apply(task *api.WorkerTask, snap Snapshot) {
 	}
 	task.TurnToolCalls = snap.TurnToolCalls
 	task.TurnToolsDone = snap.TurnToolsDone
+	task.TurnTools = slices.Clone(snap.TurnTools)
+	task.TurnStartedAt = nil
+	if !snap.TurnStartedAt.IsZero() {
+		at := snap.TurnStartedAt
+		task.TurnStartedAt = &at
+	}
 	if snap.ContextUsage != nil {
 		task.ContextUsage = snap.ContextUsage
 	}

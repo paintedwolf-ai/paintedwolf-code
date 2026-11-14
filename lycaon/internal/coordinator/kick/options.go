@@ -241,11 +241,17 @@ type WorkerRoundNoticeFacts struct {
 	Tokens       int
 	SpendNanoUSD int64
 	SpendPriced  bool
-	// QuietFor and InFlight describe a quiet round.
+	// QuietFor and InFlight describe a quiet round; Tools and ToolsFor name
+	// its in-flight batch and how long it has run.
 	QuietFor  time.Duration
 	InFlight  string
 	ToolCalls int
 	ToolsDone int
+	Tools     []string
+	ToolsFor  time.Duration
+	// LatestMessageSeq is the seq of the worker's latest message; zero when
+	// it has sent none.
+	LatestMessageSeq int64
 }
 
 // WithWorkerRoundNotice passes one round notice's measurements into its kick.
@@ -265,6 +271,7 @@ func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
 	data["notice_kind"] = f.Kind
 	data["model_calls"] = f.ModelCalls
 	data["tokens"] = f.Tokens
+	data["latest_message_seq"] = f.LatestMessageSeq
 	// A priced round that cost nothing has no spend to report; one under a
 	// cent would round to a misleading $0.00.
 	switch {
@@ -279,6 +286,8 @@ func (f WorkerRoundNoticeFacts) renderData(data map[string]any) {
 		data["in_flight"] = f.InFlight
 		data["tool_calls"] = f.ToolCalls
 		data["tools_done"] = f.ToolsDone
+		data["tools"] = f.Tools
+		data["tools_minutes"] = int(f.ToolsFor / time.Minute)
 	}
 }
 

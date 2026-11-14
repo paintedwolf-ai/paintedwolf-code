@@ -241,6 +241,9 @@ anchors:
         in_flight: { type: string }
         tool_calls: { type: int }
         tools_done: { type: int }
+        tools: { type: "string[]" }
+        tools_minutes: { type: int }
+        latest_message_seq: { type: int }
 
   - id: worker.prerequisite.blocked
     title: Worker prerequisite blocked
