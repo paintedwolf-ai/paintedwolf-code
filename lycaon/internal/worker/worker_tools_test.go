@@ -424,7 +424,7 @@ func TestTaskStartsANamedWorker(t *testing.T) {
 func TestAnswerDecisionByWorkerName(t *testing.T) {
 	f := newWorkerToolsFixture(t)
 	resolver := &answerStubResolver{decisions: f.decisions}
-	answers := &AnswerDecisionService{Queue: f.queue, Decisions: f.decisions, Resolver: resolver}
+	answers := &AnswerDecisionService{Queue: f.queue, Decisions: f.decisions, Resolver: resolver, Shown: &shownOnce{taken: map[string]bool{}, hidden: map[string]bool{}}}
 	testutil.FailErr(t, "register", RegisterAnswerDecisionTool(f.reg, AnswerDecisionToolDeps{Answer: answers, Workers: f.ops}))
 	f.deliver(t, "job-1")
 	_, err := f.run(t, "answer_decision", "call-0", map[string]any{"worker": "surveyor", "answer": "utf-8"})

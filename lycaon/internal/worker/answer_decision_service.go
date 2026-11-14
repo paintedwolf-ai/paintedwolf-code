@@ -23,7 +23,15 @@ type AnswerDecisionService struct {
 	Decisions sessiondecisions.Store
 	Resolver  DecisionResolver
 	Reject    *guidance.StaticRejectFormatter
+	// Shown takes the question a coordinator request showed for a job.
+	Shown interface {
+		Take(sessionID, jobID string, req api.WorkerDecisionRequest) bool
+	}
 }
+
+// DecisionNotShownCode refuses an answer to a question the coordinator's
+// request did not show, or showed and already had answered.
+const DecisionNotShownCode = "DECISION_NOT_SHOWN"
 
 // AnswerDecisionResult identifies the resolved choice.
 type AnswerDecisionResult struct {
@@ -47,7 +55,7 @@ func (s *AnswerDecisionService) AnswerJob(ctx context.Context, sessionID, worker
 	default:
 		return AnswerDecisionResult{}, fmt.Errorf("resolved_by must be coordinator or user")
 	}
-	if s == nil || s.Queue == nil || s.Decisions == nil || s.Resolver == nil {
+	if s == nil || s.Queue == nil || s.Decisions == nil || s.Resolver == nil || s.Shown == nil {
 		return AnswerDecisionResult{}, fmt.Errorf("answer decision not configured")
 	}
 	if jobID == "" {
@@ -74,13 +82,14 @@ func (s *AnswerDecisionService) AnswerJob(ctx context.Context, sessionID, worker
 	if !ok || dec.WorkerID != jobID {
 		return AnswerDecisionResult{}, s.reject(DecisionNotFoundCode, map[string]any{"worker": worker})
 	}
-	// An open question takes the answer as written.
+	if !s.Shown.Take(sessionID, jobID, dec) {
+		return AnswerDecisionResult{}, s.reject(DecisionNotShownCode, map[string]any{"worker": worker})
+	}
+	// An offered option is chosen by its text or number; any other answer is
+	// taken as written.
 	chosen := option
-	if len(dec.Options) > 0 {
-		var ok bool
-		if chosen, ok = resolveDecisionOption(option, dec.Options); !ok {
-			return AnswerDecisionResult{}, fmt.Errorf("option %q is not one of the offered options: %s", option, strings.Join(dec.Options, " | "))
-		}
+	if picked, ok := resolveDecisionOption(option, dec.Options); ok {
+		chosen = picked
 	}
 	err = s.Resolver.Resolve(ctx, dec, DecisionAnswerMessage(chosen, resolvedBy))
 	if err != nil {

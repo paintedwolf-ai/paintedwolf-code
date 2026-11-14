@@ -41,6 +41,21 @@ func (r *answerStubResolver) Resolve(ctx context.Context, decision api.WorkerDec
 	return nil
 }
 
+// shownOnce lets each job's question be answered once, as a request that
+// showed it would; hidden jobs were never shown.
+type shownOnce struct {
+	taken  map[string]bool
+	hidden map[string]bool
+}
+
+func (s *shownOnce) Take(_, jobID string, _ api.WorkerDecisionRequest) bool {
+	if s.hidden[jobID] || s.taken[jobID] {
+		return false
+	}
+	s.taken[jobID] = true
+	return true
+}
+
 func answerDecisionService(t *testing.T, q *answerStubQueue, decisions sessiondecisions.Store) (*AnswerDecisionService, *answerStubResolver) {
 	t.Helper()
 	resolver := &answerStubResolver{decisions: decisions}
@@ -48,7 +63,30 @@ func answerDecisionService(t *testing.T, q *answerStubQueue, decisions sessionde
 		Queue:     q,
 		Decisions: decisions,
 		Resolver:  resolver,
+		Shown:     &shownOnce{taken: map[string]bool{}, hidden: map[string]bool{}},
 	}, resolver
+}
+
+// An answer to a question its request never showed, or a second answer to
+// one it did, is refused before the worker is touched.
+func TestAnswerDecisionNeedsAShownQuestion(t *testing.T) {
+	q := &answerStubQueue{task: &api.WorkerTask{ID: "job-1", ParentSessionID: "parent-1", ChildSessionID: "child-1"}}
+	decisions := sessiondecisions.NewMemory()
+	testutil.FailErr(t, "store decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
+		ChildSessionID: "child-1", WorkerID: "job-1", Question: "q", BlockerClass: api.WorkerBlockerDecision,
+	}))
+	svc, resolver := answerDecisionService(t, q, decisions)
+	svc.Shown.(*shownOnce).hidden["job-1"] = true
+	_, err := svc.AnswerJob(context.Background(), "parent-1", "fixer", "job-1", "yes", "")
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != DecisionNotShownCode || len(resolver.appended) != 0 {
+		t.Fatalf("unshown answer = %v appended = %d", err, len(resolver.appended))
+	}
+	delete(svc.Shown.(*shownOnce).hidden, "job-1")
+	svc.Shown.(*shownOnce).taken["job-1"] = true
+	if _, err := svc.AnswerJob(context.Background(), "parent-1", "fixer", "job-1", "yes", ""); !errors.As(err, &reject) || reject.Code != DecisionNotShownCode {
+		t.Fatalf("second answer = %v", err)
+	}
 }
 
 func TestAnswerDecisionResumesWorker(t *testing.T) {
@@ -75,8 +113,9 @@ func TestAnswerDecisionResumesWorker(t *testing.T) {
 	}
 }
 
-// A decision that offers options takes one of them; one that names another
-// job is no pending decision of that worker.
+// A decision that offers options takes one by text or number, or any other
+// answer as written; one that names another job is no pending decision of
+// that worker.
 func TestAnswerDecisionValidation(t *testing.T) {
 	q := &answerStubQueue{task: &api.WorkerTask{ID: "job-1", ParentSessionID: "parent-1", ChildSessionID: "child-1"}}
 	decisions := sessiondecisions.NewMemory()
@@ -92,8 +131,10 @@ func TestAnswerDecisionValidation(t *testing.T) {
 	testutil.FailErr(t, "store matching decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "q", Options: []string{"a", "b"}, BlockerClass: api.WorkerBlockerDecision,
 	}))
-	if _, err := svc.AnswerJob(context.Background(), "parent-1", "fixer", "job-1", "zzz", ""); err == nil || !strings.Contains(err.Error(), "not one of") {
-		t.Fatalf("bad-option err = %v", err)
+	out, err := svc.AnswerJob(context.Background(), "parent-1", "fixer", "job-1", "neither: keep both paths", "")
+	testutil.FailErr(t, "free-text answer", err)
+	if out.Option != "neither: keep both paths" {
+		t.Fatalf("free-text answer = %+v", out)
 	}
 }
 

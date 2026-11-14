@@ -51,7 +51,7 @@ func newFixture(t *testing.T) *fixture {
 	testdbseed.InsertSession(t, sqlDB, "coord", testdbseed.DefaultProjectID)
 	f := &fixture{db: sqlDB, records: workerrecords.New(sqlDB), jobs: jobs{}, dec: decisions{}, touches: touches{},
 		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"}}
-	f.source = workerroster.Source{Reader: workerops.Reader{Records: f.records, Jobs: f.jobs, Decisions: f.dec}, Touches: f.touches}
+	f.source = workerroster.Source{Reader: workerops.Reader{Records: f.records, Jobs: f.jobs, Decisions: f.dec}, Touches: f.touches, Shown: workerroster.NewShownQuestions()}
 	return f
 }
 
@@ -231,5 +231,31 @@ func TestBoardListsEveryOpenWorker(t *testing.T) {
 	if b.Name != "builder" || b.State != api.WorkerStateDelivered || b.ResultHandle != "result-job-b1" ||
 		b.ResultDisposition != api.WorkerResultOpen || !slices.Equal(b.ChangedPaths, []string{"src/a.go"}) {
 		t.Fatalf("builder board row = %+v", b)
+	}
+}
+
+// A question counts as shown once a request frame renders it, and only that
+// question; it can be taken once.
+func TestShownQuestionsFollowTheRenderedFrame(t *testing.T) {
+	f := newFixture(t)
+	asker := f.worker(t, "asker", "implementer")
+	f.admit(t, asker, "job-a1", api.WorkerStatusRunning)
+	question := api.WorkerDecisionRequest{WorkerID: "job-a1", Question: "Which parser?"}
+	if f.source.Shown.Take("coord", "job-a1", question) {
+		t.Fatal("a question was taken before any frame showed it")
+	}
+	f.dec["child-asker"] = question
+	_, _, err := f.source.Template(t.Context(), "coord")
+	testutil.FailErr(t, "render frame", err)
+	changed := question
+	changed.Question = "Which lexer?"
+	if f.source.Shown.Take("coord", "job-a1", changed) {
+		t.Fatal("a different question was taken")
+	}
+	if !f.source.Shown.Take("coord", "job-a1", question) {
+		t.Fatal("the shown question was not taken")
+	}
+	if f.source.Shown.Take("coord", "job-a1", question) {
+		t.Fatal("the question was taken twice")
 	}
 }

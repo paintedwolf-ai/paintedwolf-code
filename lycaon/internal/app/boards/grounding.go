@@ -233,11 +233,13 @@ func (r *Runtime) wireVisualAndRenderTools(ctx context.Context) error {
 func (r *Runtime) wireDecisionAndCallTools() error {
 	r.deps.Sessions.Decisions = decisions.NewSQL(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetDecisionStore(r.deps.Sessions.Decisions)
+	shown := workerroster.NewShownQuestions()
 	r.AnswerDecision = &worker.AnswerDecisionService{
 		Queue:     r.deps.Delegations.Queue,
 		Decisions: r.deps.Sessions.Decisions,
 		Resolver:  worker.NewSQLDecisionResolver(r.deps.Storage.Sessions, r.deps.Delegations.Queue),
 		Reject:    r.deps.Execution.Rejections,
+		Shown:     shown,
 	}
 	if err := native.RegisterRequestDecisionTool(r.deps.Execution.Host.Registry, workertools.RequestDecisionDeps{
 		Recorder:      r.deps.Sessions.Decisions,
@@ -268,6 +270,7 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	roster := workerroster.Source{
 		Reader:  r.WorkerReader(),
 		Touches: r.deps.Sessions.Manager.Workers.Workspaces.Touches,
+		Shown:   shown,
 	}
 	r.deps.Sessions.Manager.SetWorkerRoster(roster.Template)
 	r.deps.Sessions.Manager.Promotion.SetLatestResults(roster.LatestResults)

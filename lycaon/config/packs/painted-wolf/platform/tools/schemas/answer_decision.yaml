@@ -8,7 +8,7 @@ schema:
       description: The asking worker's name
     answer:
       type: string
-      description: Your answer — an offered option's number or text, or free text when the question offered no options
+      description: Your answer — an offered option's number or text, or your own words
     resolved_by:
       type: string
       enum: [coordinator, user]

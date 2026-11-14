@@ -38,6 +38,9 @@ type Row struct {
 	Result   *Result
 	Read     Paths
 	Changed  Paths
+
+	asked    *api.WorkerDecisionRequest
+	askedJob string
 }
 
 // Result is the worker's latest result and what became of it.
@@ -69,6 +72,8 @@ type Touches interface {
 type Source struct {
 	Reader  workerops.Reader
 	Touches Touches
+	// Shown records the questions each request frame shows.
+	Shown *ShownQuestions
 }
 
 // Build returns the roster for a coordinator session, bounded to MaxRows.
@@ -194,6 +199,9 @@ func (s Source) row(ctx context.Context, actor workerrecords.Actor, snap workero
 		}
 		if ok {
 			row.Question = clip(req.Question)
+			if latest, has := snap.Latest(); has {
+				row.asked, row.askedJob = &req, latest.JobID
+			}
 		}
 	}
 	if round, ok := snap.LatestResult(); ok {
@@ -301,6 +309,7 @@ func (s Source) Template(ctx context.Context, sessionID string) ([]map[string]an
 	if err != nil {
 		return nil, 0, err
 	}
+	s.Shown.record(sessionID, r.Rows)
 	return r.Vars(), r.Omitted, nil
 }
 
