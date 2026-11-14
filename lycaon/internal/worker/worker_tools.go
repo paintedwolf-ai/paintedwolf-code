@@ -65,11 +65,6 @@ func toolOp(tool string, tctx tools.ToolContext) (workerrecords.Op, error) {
 	return workerrecords.Op{ID: tool + ":" + strings.TrimSpace(tctx.Identity.SessionID) + ":" + call}, nil
 }
 
-func stringArgOf(args map[string]any, key string) string {
-	v, _ := args[key].(string)
-	return strings.TrimSpace(v)
-}
-
 func instructWorkerHandler(deps WorkerToolDeps) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		op, err := toolOp(InstructWorkerTool, tctx)
@@ -77,8 +72,8 @@ func instructWorkerHandler(deps WorkerToolDeps) tools.ToolHandler {
 			return "", err
 		}
 		in := workerops.Instruction{
-			Worker: stringArgOf(args, "worker"), Instructions: stringArgOf(args, "instructions"),
-			Brief: stringArgOf(args, "brief"), AgentType: stringArgOf(args, "agent_type"),
+			Worker: strings.TrimSpace(stringArg(args["worker"])), Instructions: strings.TrimSpace(stringArg(args["instructions"])),
+			Brief: strings.TrimSpace(stringArg(args["brief"])), AgentType: strings.TrimSpace(stringArg(args["agent_type"])),
 		}
 		if in.Worker == "" || in.Instructions == "" {
 			return "", fmt.Errorf("worker and instructions are required")
@@ -174,7 +169,7 @@ func shelveOverlayHandler(deps WorkerToolDeps) tools.ToolHandler {
 		if err != nil {
 			return "", err
 		}
-		handle, reason := stringArgOf(args, "overlay_id"), stringArgOf(args, "reason")
+		handle, reason := strings.TrimSpace(stringArg(args["overlay_id"])), strings.TrimSpace(stringArg(args["reason"]))
 		if handle == "" || reason == "" {
 			return "", fmt.Errorf("overlay_id and reason are required")
 		}
@@ -189,7 +184,7 @@ func shelveOverlayHandler(deps WorkerToolDeps) tools.ToolHandler {
 
 func workerHistoryHandler(deps WorkerToolDeps) tools.ToolHandler {
 	return func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		name := stringArgOf(args, "worker")
+		name := strings.TrimSpace(stringArg(args["worker"]))
 		if name == "" {
 			return "", fmt.Errorf("worker is required")
 		}
