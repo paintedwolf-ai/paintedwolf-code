@@ -1,7 +1,6 @@
 package workerlane_test
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,14 +10,13 @@ import (
 	"github.com/lycaon/lycaon/internal/workerlane"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workspace"
-	"github.com/lycaon/lycaon/pkg/api"
 )
 
 // realLane wires a lane service to a Milestone 14 workspace manager over a
 // one-file project.
-func realLane(t *testing.T) (*landingFixture, []projectroot.RootRef) {
+func realLane(t *testing.T) (*roundFixture, []projectroot.RootRef) {
 	t.Helper()
-	f := newLandingFixture(t)
+	f := newRoundFixture(t)
 	mgr := workspace.NewManager(t.TempDir())
 	f.lanes = workerlane.New(mgr, f.records)
 	project := t.TempDir()
@@ -62,23 +60,16 @@ func TestLaneKeepsWorkAcrossRoundsOnARealBranch(t *testing.T) {
 		t.Fatalf("work did not survive the correction round: %v", err)
 	}
 
-	runtime := workerlane.ManagerRuntime{State: workerlane.NewM14State(jobLookup{})}
-	f.openRound(t, "job-2")
-	settled, err := f.lanes.Settle(t.Context(), runtime, workerlane.SettleRequest{
-		Actor: f.actor, Op: workerrecords.Op{ID: "settle-real"}, WorkerID: f.workerID, JobID: "job-2",
-		Publish: func(context.Context, string) error { return nil },
-	})
-	testutil.FailErr(t, "settle on a real branch", err)
-	if settled.Ordinal != 2 {
-		t.Fatalf("settled = %+v", settled)
-	}
-
-	out, err := f.lanes.Land(t.Context(), f.promoter, workerlane.Change{Actor: f.actor, Op: workerrecords.Op{ID: "land-real"}, ResultID: "result-1", Roots: roots, ActiveRootID: "primary"}, api.PromoteOverlayInput{})
+	f.round(t, "job-2", "result-2", "")
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO landed_changes (id, worker_job_id, canonical_path, created_at) VALUES ('landed-job-1', 'job-1', '/repo', '2026-11-12T00:00:00Z')`)
+	testutil.FailErr(t, "landing receipt", err)
+	_, err = f.records.SetChange(t.Context(), f.actor, workerrecords.Op{ID: "land-real"}, "result-1", workerrecords.Change{State: workerrecords.ChangeLanded, LandedChangeID: "landed-job-1"})
 	testutil.FailErr(t, "land", err)
-	if out.LaneErr != nil || out.Lane.Root == first.Root {
-		t.Fatalf("landing lane = %+v", out)
+	refreshed := admit("real-3", workerlane.Facts{Write: true, HasLane: true, LastChange: workerlane.ChangeLanded, LastResultID: "result-1"})
+	if refreshed.Root == first.Root || refreshed.Action != workerlane.ActionRefresh {
+		t.Fatalf("landing lane = %+v", refreshed)
 	}
-	fresh := primaryPath(t, out.Lane.Root)
+	fresh := primaryPath(t, refreshed.Root)
 	if _, err := os.Stat(filepath.Join(fresh, "notes.txt")); !os.IsNotExist(err) {
 		t.Fatalf("fresh lane replayed the old tree: %v", err)
 	}
