@@ -5,7 +5,22 @@ import type { ToolPartView } from "./tool-part-model.ts";
 import { liveCommandProgram } from "./command-activity-live.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
 
-/** Retained transcripts resolve their activity projection before mounting its rows. */
+export function commandProgramActive(program: CommandProgramReceipt): boolean {
+  return program.state === "running" || program.state === "waiting";
+}
+
+/** The newer of the persisted program and an observed one; ties go to the observation. */
+export function preferredCommandProgram(canonical: CommandProgramReceipt | null | undefined, observed: CommandProgramReceipt | undefined): CommandProgramReceipt | undefined {
+  if (!observed) return canonical ?? undefined;
+  if (!canonical) return observed;
+  return (observed.activity_revision ?? 0) >= (canonical.activity_revision ?? 0) ? observed : canonical;
+}
+
+/**
+ * Retained transcripts resolve their activity projection before mounting its rows.
+ * A persisted program needs the host's receipt unless a live event already
+ * supersedes it or it settled with its steps recorded.
+ */
 export function useCommandActivitySnapshots(entries: () => readonly ActivitySpanEntry[], sessionId: () => string | undefined) {
   const requests = createMemo(() => {
     const session = sessionId();
@@ -14,7 +29,8 @@ export function useCommandActivitySnapshots(entries: () => readonly ActivitySpan
     const programs = [...new Map(entries().flatMap(entry => {
       if (entry.kind !== "tool") return [];
       const program = entry.part.commandProgram;
-      if (!program || program.state === "running" || program.state === "waiting" || program.activities?.some(fact => fact.steps !== undefined)) return [];
+      if (!program || liveCommandProgram(session, entry.part.toolCallId)) return [];
+      if (!commandProgramActive(program) && program.activities?.some(fact => fact.steps !== undefined)) return [];
       return [[program.id, program] as const];
     })).values()];
     return programs.length ? { session, client, programs, key: programs.map(program => program.id).join(":") } : undefined;
@@ -37,6 +53,8 @@ export function useCommandActivitySnapshots(entries: () => readonly ActivitySpan
     if (snapshots.state === "errored") return { ...program, activities: undefined };
     const retained = snapshots.latest?.get(program.id);
     if (retained) return retained;
-    return requests()?.programs.some(value => value.id === program.id) ? { ...program, activities: [] } : undefined;
+    if (!requests()?.programs.some(value => value.id === program.id)) return undefined;
+    // An unsettled program keeps its recorded rows until the receipt arrives.
+    return commandProgramActive(program) ? program : { ...program, activities: [] };
   };
 }

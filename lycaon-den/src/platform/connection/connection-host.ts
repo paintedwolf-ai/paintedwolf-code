@@ -1,12 +1,16 @@
+import { createSignal } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import { createLycaonClient } from "../../api/client-impl.ts";
 import type { BackendConnection } from "./backend.ts";
 import { noteHostInfo, type HostInfoNote } from "./host-identity.ts";
 
 export class ConnectionHost {
-  private currentClient: LycaonClient | null = null;
+  // Reactive so views that read the client before connecting re-run once it binds.
+  private readonly clientSignal = createSignal<LycaonClient | null>(null);
   private currentConnection: BackendConnection | null = null;
   private currentGeneration = 0;
+  private get currentClient(): LycaonClient | null { return this.clientSignal[0](); }
+  private set currentClient(client: LycaonClient | null) { this.clientSignal[1](() => client); }
   get client(): LycaonClient | null { return this.currentClient; }
   get connection(): BackendConnection | null { return this.currentConnection; }
   get generation(): number { return this.currentGeneration; }

@@ -2,6 +2,7 @@ import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts"
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
 import { formatSentenceCase } from "../../format/format-sentence-case.ts";
+import { preferredCommandProgram } from "./command-activity-snapshots.ts";
 
 export type CommandActivityView = {
   fact: CommandActivity;
@@ -68,9 +69,7 @@ export function createCommandActivityProjection() {
       if (entry.kind === "turn_load") { decisions.push(entry); lastRow = undefined; continue; }
       if (entry.kind !== "tool") { result.push(entry); continue; }
       if (!FORM_PROGRAM_TOOLS.has(entry.part.tool) || !entry.part.commandProgram) lastRow = undefined;
-      const canonical = entry.part.commandProgram;
-      const observed = live(entry.part);
-      let program = observed && (!canonical || (observed.activity_revision ?? 0) >= (canonical.activity_revision ?? 0)) ? observed : canonical;
+      let program = preferredCommandProgram(entry.part.commandProgram, live(entry.part));
       const previous = remembered.get(entry.part.toolCallId);
       if (program && previous?.id === program.id && !program.activities && previous.activities?.length) {
         program = { ...program, activities: previous.activities.map(fact =>
