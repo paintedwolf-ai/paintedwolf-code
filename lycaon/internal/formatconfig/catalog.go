@@ -227,79 +227,69 @@ var catalog = []tool{
 			return s
 		},
 	},
-}
-
-// positive reads a whole number in [1, 10000]; anything else is undeclared.
-func positive(d document, path ...string) int {
-	n, ok := d.int(path...)
-	if !ok || n < 1 || n > 10_000 {
-		return 0
-	}
-	return n
-}
-
-func tabsIf(d document, path ...string) editorconfig.IndentStyle {
-	tabs, ok := d.bool(path...)
-	if !ok {
-		return ""
-	}
-	if tabs {
-		return editorconfig.IndentTab
-	}
-	return editorconfig.IndentSpace
-}
-
-func style(d document, path ...string) editorconfig.IndentStyle {
-	word, ok := d.str(path...)
-	if !ok {
-		return ""
-	}
-	return styleWord(word)
-}
-
-// styleWord reads the tab or space words tools spell differently.
-func styleWord(word string) editorconfig.IndentStyle {
-	switch strings.ToLower(strings.TrimSpace(word)) {
-	case "tab", "tabs":
-		return editorconfig.IndentTab
-	case "space", "spaces":
-		return editorconfig.IndentSpace
-	}
-	return ""
-}
-
-// eol maps each tool's line ending words; automatic choices are undeclared.
-func eol(d document, path ...string) string {
-	word, ok := d.str(path...)
-	if !ok {
-		return ""
-	}
-	switch strings.ToLower(strings.ReplaceAll(strings.ReplaceAll(word, "-", ""), "_", "")) {
-	case "lf", "unix":
-		return "lf"
-	case "crlf", "windows":
-		return "crlf"
-	case "cr":
-		return "cr"
-	}
-	return ""
-}
-
-// clangStyleColumns are the column limits of clang-format's predefined styles.
-var clangStyleColumns = map[string]int{
-	"llvm": 80, "google": 80, "chromium": 80, "mozilla": 80, "microsoft": 120, "gnu": 79,
-}
-
-// clangColumns reads ColumnLimit, else the limit of BasedOnStyle; 0 means no limit.
-func clangColumns(d document) int {
-	if n, ok := d.int("ColumnLimit"); ok {
-		if n < 1 || n > 10_000 {
-			return 0
-		}
-		return n
-	}
-	if based, ok := d.str("BasedOnStyle"); ok {
-		return clangStyleColumns[strings.ToLower(based)]
-	}
-	return clangStyleColumns["llvm"]
+	{
+		id:    api.FormatToolGolangci,
+		files: files(formatYAML, ".golangci.yml", ".golangci.yaml"),
+		settings: func(d document) Settings {
+			for _, path := range [][]string{
+				{"linters-settings", "golines", "max-len"},
+				{"linters-settings", "lll", "line-length"},
+				{"linters", "settings", "golines", "max-len"},
+				{"linters", "settings", "lll", "line-length"},
+			} {
+				if n := positive(d, path...); n > 0 {
+					return Settings{LineWidth: n}
+				}
+			}
+			return Settings{}
+		},
+	},
+	{
+		id:       api.FormatToolMixFormat,
+		files:    files(formatElixirFormatter, ".formatter.exs"),
+		defaults: Settings{LineWidth: 98},
+		settings: func(d document) Settings {
+			return Settings{LineWidth: positive(d, "line_length")}
+		},
+	},
+	{
+		id:    api.FormatToolPint,
+		files: files(formatJSON, "pint.json"),
+		settings: func(d document) Settings {
+			if n := positive(d, "line_length"); n > 0 {
+				return Settings{LineWidth: n}
+			}
+			return Settings{LineWidth: positive(d, "rules", "line_length_limit", "max")}
+		},
+	},
+	{
+		id:    api.FormatToolPhpcs,
+		files: files(formatXMLPhpcs, "phpcs.xml", ".phpcs.xml", "phpcs.xml.dist", ".phpcs.xml.dist"),
+		settings: func(d document) Settings {
+			return Settings{LineWidth: positive(d, "lineLimit")}
+		},
+	},
+	{
+		id:    api.FormatToolCljfmt,
+		files: files(formatEDNCljfmt, ".cljfmt.edn", "cljfmt.edn", ".cljfmt.clj"),
+		settings: func(d document) Settings {
+			if wrap, ok := d.bool("wrap-lines?"); ok && !wrap {
+				return Settings{}
+			}
+			if n := positive(d, "max-line-width"); n > 0 {
+				return Settings{LineWidth: n}
+			}
+			if wrap, ok := d.bool("wrap-lines?"); ok && wrap {
+				return Settings{LineWidth: 80}
+			}
+			return Settings{}
+		},
+	},
+	{
+		id:    api.FormatToolCheckstyle,
+		files: files(formatXMLCheckstyle, "checkstyle.xml"),
+		settings: func(d document) Settings {
+			return Settings{LineWidth: positive(d, "max")}
+		},
+	},
 }

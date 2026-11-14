@@ -154,3 +154,20 @@ func TestLoadRefusesOversizedConfig(t *testing.T) {
 		t.Fatal("an oversized config should fail to load")
 	}
 }
+
+func TestKotlinLineLengthFallback(t *testing.T) {
+	cfg := Parse("", "[*]\nmax_line_length = 100\nij_kotlin_max_line_length = 120\n[*.kts]\nktlint_standard_max-line-length = 140\n")
+	if got := Resolve("src/Main.kt", []File{cfg}); got.MaxLineLength != 100 {
+		t.Fatalf("explicit max_line_length should win over Kotlin fallback, got %d", got.MaxLineLength)
+	}
+	if got := Resolve("build.gradle.kts", []File{cfg}); got.MaxLineLength != 140 {
+		t.Fatalf("ktlint fallback in matching section should win, got %d", got.MaxLineLength)
+	}
+	onlyKotlin := Parse("", "[*]\nij_kotlin_max_line_length = 120\n")
+	if got := Resolve("src/Main.kt", []File{onlyKotlin}); got.MaxLineLength != 120 {
+		t.Fatalf("expected Kotlin fallback 120, got %d", got.MaxLineLength)
+	}
+	if got := Resolve("src/Main.java", []File{onlyKotlin}); got.MaxLineLength != 0 {
+		t.Fatalf("non-Kotlin file should ignore Kotlin fallback, got %d", got.MaxLineLength)
+	}
+}

@@ -122,6 +122,8 @@ func Resolve(path string, configs []File) Properties {
 // matched, nearest first.
 func resolveContributors(path string, configs []File) (Properties, []string) {
 	file := strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "./")
+	lowerFile := strings.ToLower(file)
+	isKotlin := strings.HasSuffix(lowerFile, ".kt") || strings.HasSuffix(lowerFile, ".kts")
 	var props Properties
 	var dirs []string
 	for _, config := range configs {
@@ -136,6 +138,9 @@ func resolveContributors(path string, configs []File) (Properties, []string) {
 				continue
 			}
 			props = props.merge(section.Pairs)
+			if isKotlin {
+				props = props.mergeKotlinLineLength(section.Pairs)
+			}
 			matched = true
 		}
 		if matched {
@@ -211,6 +216,24 @@ func (p Properties) merge(raw map[string]string) Properties {
 		}
 	}
 	return next
+}
+
+func (p Properties) mergeKotlinLineLength(raw map[string]string) Properties {
+	if _, hasMax := raw["max_line_length"]; hasMax {
+		return p
+	}
+	for _, key := range []string{"ij_kotlin_max_line_length", "ktlint_standard_max-line-length"} {
+		v, ok := raw[key]
+		if !ok {
+			continue
+		}
+		if isUnset(v) || strings.EqualFold(v, "off") {
+			p.MaxLineLength = 0
+		} else if n, ok := boundedInt(v, 10_000); ok {
+			p.MaxLineLength = n
+		}
+	}
+	return p
 }
 
 func mergeBool(current *bool, raw string) *bool {

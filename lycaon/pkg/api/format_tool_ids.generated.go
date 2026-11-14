@@ -47,6 +47,19 @@ const (
 	FormatToolFoundry FormatTool = "foundry"
 	// FormatToolTaplo Taplo `taplo.toml` and `.taplo.toml`.
 	FormatToolTaplo FormatTool = "taplo"
+	// FormatToolGolangci golangci-lint `.golangci.yml` and `.golangci.yaml`.
+	FormatToolGolangci FormatTool = "golangci"
+	// FormatToolMixFormat Elixir `mix format` `.formatter.exs`.
+	FormatToolMixFormat FormatTool = "mix_format"
+	// FormatToolPint Laravel Pint `pint.json`.
+	FormatToolPint FormatTool = "pint"
+	// FormatToolPhpcs PHP_CodeSniffer `phpcs.xml`, `.phpcs.xml`, `phpcs.xml.dist`,
+	// and `.phpcs.xml.dist`.
+	FormatToolPhpcs FormatTool = "phpcs"
+	// FormatToolCljfmt cljfmt `.cljfmt.edn`, `cljfmt.edn`, and `.cljfmt.clj`.
+	FormatToolCljfmt FormatTool = "cljfmt"
+	// FormatToolCheckstyle Checkstyle `checkstyle.xml`.
+	FormatToolCheckstyle FormatTool = "checkstyle"
 )
 
 var allFormatToolValues = []FormatTool{
@@ -69,6 +82,12 @@ var allFormatToolValues = []FormatTool{
 	FormatToolSqlfluff,
 	FormatToolFoundry,
 	FormatToolTaplo,
+	FormatToolGolangci,
+	FormatToolMixFormat,
+	FormatToolPint,
+	FormatToolPhpcs,
+	FormatToolCljfmt,
+	FormatToolCheckstyle,
 }
 
 // AllFormatToolValues returns every FormatTool in vocab order.

@@ -28,6 +28,10 @@ const (
 	formatINI
 	// formatKeyValue is one `key = value` or `key: value` pair per line.
 	formatKeyValue
+	formatElixirFormatter
+	formatEDNCljfmt
+	formatXMLPhpcs
+	formatXMLCheckstyle
 )
 
 // document is a decoded configuration tree.
@@ -57,6 +61,14 @@ func decode(f format, body []byte) (document, bool) {
 		doc = decodeINI(body)
 	case formatKeyValue:
 		doc = decodeKeyValue(body)
+	case formatElixirFormatter:
+		return decodeElixirFormatter(body)
+	case formatEDNCljfmt:
+		return decodeEDNCljfmt(body)
+	case formatXMLPhpcs:
+		return decodeXMLProperty(body, "rule", "ref", "Generic.Files.LineLength", "lineLimit")
+	case formatXMLCheckstyle:
+		return decodeXMLProperty(body, "module", "name", "LineLength", "max")
 	}
 	if err != nil {
 		return nil, false
