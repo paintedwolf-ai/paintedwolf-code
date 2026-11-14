@@ -75,8 +75,12 @@ function createScrollbarFixture(model?: ScrollbarAxisModel) {
 }
 
 describe("overlay scrollbar input", () => {
-  it("keeps the thumb fraction when extent changes under a held pointer", () => {
-    vi.stubGlobal("requestAnimationFrame", undefined);
+  it("rebases a held thumb gesture when extent changes without committing", () => {
+    const frames: FrameRequestCallback[] = [];
+    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+      frames.push(callback);
+      return frames.length;
+    });
     let offset = 0, extent = 5_500;
     const targets: number[] = [];
     const { host, vertical, stop, refreshGeometry } = createScrollbarFixture({
@@ -85,13 +89,23 @@ describe("overlay scrollbar input", () => {
     });
     vertical.handle.dispatchEvent(pointer("pointerdown", { clientY: 100 }));
     vertical.handle.dispatchEvent(pointer("pointermove", { clientY: 325 }));
+    frames.shift()!(0);
+    expect(targets).toEqual([2_500]);
+
+    // Queue a pointer move before the extent change; refreshGeometry must rebase on lastAppliedPointer (325)
+    // and applyPosition must pick up the repainted handle height.
+    vertical.handle.dispatchEvent(pointer("pointermove", { clientY: 370 }));
     extent = 10_500;
     expect(refreshGeometry()).toBe(true);
     expect(refreshGeometry()).toBe(false);
-    extent = 2_500;
+    extent = 4_500;
     expect(refreshGeometry()).toBe(true);
-    expect(targets).toEqual([2_500, 5_000, 1_000]);
-    vertical.handle.dispatchEvent(pointer("pointerup", { clientY: 325 }));
+    setSize(vertical.handle, "clientHeight", 100);
+    expect(targets).toEqual([2_500]);
+
+    frames.shift()!(0);
+    expect(targets).toEqual([2_500, 2_950]);
+    vertical.handle.dispatchEvent(pointer("pointerup", { clientY: 370 }));
     extent = 20_500;
     expect(refreshGeometry()).toBe(false);
     stop();
