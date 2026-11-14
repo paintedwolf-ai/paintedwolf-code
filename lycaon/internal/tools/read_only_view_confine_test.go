@@ -9,13 +9,13 @@ import (
 
 // A read-only view is read back, never written: processes write only the
 // session's scratch, and the view's sources stay denied as for any branch.
-func TestReadOnlyViewConfinesProcessesToScratch(t *testing.T) {
+func TestReadOnlyConfinesProcessesToScratch(t *testing.T) {
 	tctx := ToolContext{
 		Identity: InvocationIdentity{WorkerJobID: "review-job"},
 		Host:     InvocationHost{SessionScratchDir: "/scratch/session"},
 		Source: InvocationSource{
 			WorkerBranchRoot:  "/views/review",
-			ReadOnlyView:      true,
+			ReadOnly:      true,
 			WorkerSourceRoots: []string{"/src/project"},
 			Roots:             []projectroot.RootRef{{ID: "root", Path: "/src/project", IsPrimary: true}},
 		},

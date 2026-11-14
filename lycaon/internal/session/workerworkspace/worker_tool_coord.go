@@ -80,7 +80,7 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
 		tctx.Source.Roots = layout.Roots
 		tctx.Source.WorkerBranchRoot = root
-		tctx.Source.ReadOnlyView = !task.EffectiveScope().IsWrite()
+		tctx.Source.ReadOnly = !task.EffectiveScope().IsWrite()
 		tctx.Source.RecordViewProcess = workspace.BranchProcessRecorder(root)
 		tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
 		tctx.Source.WorkerBaselinePath = task.WorkspaceBaselinePath
@@ -89,7 +89,7 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 			return tctx, err
 		}
 		tctx.Source.BranchWorkspace = branchState
-		if !tctx.Source.ReadOnlyView {
+		if !tctx.Source.ReadOnly {
 			_, _ = m.BindPreparedBranch(root, task.ID, sess.ID)
 		}
 	}

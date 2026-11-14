@@ -213,7 +213,7 @@ func TestReviewerReadsItsViewAndWritesNothing(t *testing.T) {
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "code-reviewer", WorkerJobID: "review-job"},
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
-			ActiveRootID: "p", WorkerBranchRoot: view, ReadOnlyView: true, BranchWorkspace: testutil.CompleteBranchWorkspace{}},
+			ActiveRootID: "p", WorkerBranchRoot: view, ReadOnly: true, BranchWorkspace: testutil.CompleteBranchWorkspace{}},
 	}
 	res, err := projectpaths.ResolveRead(context.Background(), nil, tctx, "pkg/x.go")
 	testutil.FailErr(t, "ResolveRead", err)
@@ -230,7 +230,14 @@ func TestReviewerReadsItsViewAndWritesNothing(t *testing.T) {
 	if len(roots) != 1 || roots[0].Path != view {
 		t.Fatalf("discovery roots = %+v", roots)
 	}
-	if _, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, "pkg/x.go"); err == nil {
-		t.Fatal("a reviewer resolved a write")
+	var reject *toolrejection.ToolReject
+	if _, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, "pkg/x.go"); !errors.As(err, &reject) || reject.Code != projectpaths.ReadOnlyWriteDeniedCode {
+		t.Fatalf("reviewer write = %v", err)
+	}
+	// The fact is the invocation's, not the worker's: any read-only
+	// invocation is refused the same way.
+	coordinator := tools.ToolContext{Source: tools.InvocationSource{Roots: tctx.Source.Roots, ActiveRootID: "p", ReadOnly: true}}
+	if _, err := projectpaths.ResolveWrite(context.Background(), nil, coordinator, "pkg/x.go"); !errors.As(err, &reject) || reject.Code != projectpaths.ReadOnlyWriteDeniedCode {
+		t.Fatalf("read-only invocation write = %v", err)
 	}
 }

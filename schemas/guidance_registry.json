@@ -2043,6 +2043,12 @@
       "emit": "guard:read",
       "summary": "read offset {{ paintedwolf.offset }} exceeds file length ({{ paintedwolf.total_lines }} lines) for {{ paintedwolf.path }}."
     },
+    "READ_ONLY_WRITE_DENIED": {
+      "branch_instruction": "Report the change you would make",
+      "category": "recoverable",
+      "emit": "guard:worker_write",
+      "summary": "Writing **{{ paintedwolf.path }}** is not allowed: this work is read-only."
+    },
     "READ_PATH_NOT_FOUND": {
       "branch_instruction": "Correct the path from observed evidence, or report the missing input",
       "category": "recoverable",

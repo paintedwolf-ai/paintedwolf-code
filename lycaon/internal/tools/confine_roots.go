@@ -20,8 +20,8 @@ func HostWriteRoot(tctx ToolContext) string {
 
 // ConfineRootsForAction shares write authority between policy and confinement.
 func ConfineRootsForAction(tctx ToolContext) []string {
-	if tctx.Source.ReadOnlyView {
-		// A read-only view is read back below; processes write only scratch.
+	if tctx.Source.ReadOnly {
+		// Project files stay readable; processes write only scratch.
 		if scratch := strings.TrimSpace(tctx.Host.SessionScratchDir); scratch != "" {
 			return []string{scratch}
 		}

@@ -197,8 +197,11 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		}
 		return scratchResolved, nil
 	}
-	// A worker writes only its own branch: never without one, never a read-only view.
-	if op != sandbox.PathOpRead && strings.TrimSpace(tctx.Identity.WorkerJobID) != "" && (strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" || tctx.Source.ReadOnlyView) {
+	if op != sandbox.PathOpRead && tctx.Source.ReadOnly {
+		return Resolved{}, readOnlyWriteReject(modelPath)
+	}
+	// A worker writes only its own branch, never without one.
+	if op != sandbox.PathOpRead && strings.TrimSpace(tctx.Identity.WorkerJobID) != "" && strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
 		return Resolved{}, workerWriteWithoutBranchReject(modelPath)
 	}
 	// No root, branch, or grant may answer for the control plane.
@@ -340,6 +343,14 @@ func noRootsReject() error {
 
 func workerWriteWithoutBranchReject(path string) error {
 	return &toolrejection.ToolReject{Code: "WORKER_WRITE_WITHOUT_BRANCH", Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))}}
+}
+
+// ReadOnlyWriteDeniedCode refuses a write by an invocation that may not
+// change project files.
+const ReadOnlyWriteDeniedCode = "READ_ONLY_WRITE_DENIED"
+
+func readOnlyWriteReject(path string) error {
+	return &toolrejection.ToolReject{Code: ReadOnlyWriteDeniedCode, Data: map[string]any{"path": filepath.ToSlash(strings.TrimSpace(path))}}
 }
 
 // UnionDiscoveryRoots returns roots for a union walk when modelPath is a union sentinel.

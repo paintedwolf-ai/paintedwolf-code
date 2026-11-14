@@ -337,6 +337,7 @@ var rejectCodeObservation = map[string]string{
 	"WORKER_COMPLETION_REPORT_MISSING":          "missing",
 	"WORKER_SUMMARY_TOO_LONG":                   "summary_too_long",
 	"WORKER_WRITE_WITHOUT_BRANCH":               "write_without_branch",
+	"READ_ONLY_WRITE_DENIED":                    "read_only_write_denied",
 	"WORKFLOW_ADVANCE_INACTIVE":                 "advance_inactive",
 	"WORKFLOW_DELEGATION_NOT_READY":             "delegation_not_ready",
 	"WORKFLOW_TRANSITION_INACTIVE":              "transition_inactive",
