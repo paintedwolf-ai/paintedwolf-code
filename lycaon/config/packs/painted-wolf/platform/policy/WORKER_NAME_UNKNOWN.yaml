@@ -20,5 +20,5 @@ instead: Branch on Code WORKER_NAME_UNKNOWN; do not retry the same call
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
       tool: instruct_worker

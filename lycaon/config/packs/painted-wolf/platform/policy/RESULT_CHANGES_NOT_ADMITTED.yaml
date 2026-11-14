@@ -22,6 +22,7 @@ instead: Branch on Code RESULT_CHANGES_NOT_ADMITTED; do not retry until the work
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
+      worker: parser-fix
       tool: promote_overlay
       state: working

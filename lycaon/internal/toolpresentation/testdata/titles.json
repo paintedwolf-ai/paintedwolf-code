@@ -53,8 +53,8 @@
   {
     "tool": "answer_decision",
     "args": {
-      "job_id": "job",
-      "option": "Use local data"
+      "worker": "parser-fix",
+      "answer": "Use local data"
     },
     "title": "Use local data"
   },

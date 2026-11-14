@@ -19,5 +19,7 @@ instead: Branch on Code INSTRUCT_WORKER_AGENT_CHANGES_OPEN; do not retry the sam
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
+      worker: parser-fix
+      overlay_id: result-1
       tool: instruct_worker

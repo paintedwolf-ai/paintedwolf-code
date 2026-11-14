@@ -19,5 +19,5 @@ instead: Branch on Code SHELVE_OVERLAY_NO_CHANGES; do not retry the same call
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
       tool: shelve_overlay

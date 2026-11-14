@@ -19,5 +19,5 @@ instead: Branch on Code INSTRUCT_WORKER_AGENT_BETWEEN_ROUNDS; do not retry the s
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
       tool: instruct_worker

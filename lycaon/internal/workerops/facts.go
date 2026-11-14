@@ -182,16 +182,6 @@ func (r Reader) round(ctx context.Context, w workerrecords.Worker, latest worker
 		}
 		return out, nil
 	}
-	if found {
-		switch job.Status {
-		case api.WorkerStatusHeld:
-			out.Held = true
-		case api.WorkerStatusPending:
-			out.Queued = true
-		case api.WorkerStatusWaiting:
-			out.Parked = true
-		}
-	}
 	child := w.ChildSessionID
 	if child != "" && r.Decisions != nil {
 		dec, ok, err := r.Decisions.Get(ctx, child)
@@ -199,6 +189,18 @@ func (r Reader) round(ctx context.Context, w workerrecords.Worker, latest worker
 			return nil, err
 		}
 		out.DecisionPending = ok && dec.WorkerID == latest.JobID
+	}
+	if found {
+		switch job.Status {
+		case api.WorkerStatusHeld:
+			// A job suspended on its decision is held too; it waits on the
+			// coordinator's answer, not on a prerequisite.
+			out.Held = !out.DecisionPending
+		case api.WorkerStatusPending:
+			out.Queued = true
+		case api.WorkerStatusWaiting:
+			out.Parked = true
+		}
 	}
 	if child != "" && r.ApprovalWait != nil {
 		out.ApprovalWait = r.ApprovalWait(ctx, child)

@@ -199,8 +199,9 @@ func TestClosedWorkerKeepsHistoryAndRefusesWork(t *testing.T) {
 // and closed workers' lanes are not listed.
 func TestOpenLaneRootsListCurrentLanesOfOpenWorkers(t *testing.T) {
 	f := newFixture(t)
-	open := f.createWorker(t, "create-open", workerrecords.WorkerSpec{Name: "open", ChildSessionID: "child-open"})
-	closed := f.createWorker(t, "create-closed", workerrecords.WorkerSpec{Name: "closed", ChildSessionID: "child-closed"})
+	open, _ := f.workerWithRound(t, "open", "child-1", "job-1")
+	closed, _ := f.workerWithRound(t, "closed", "child-2", "job-2")
+	f.settle(t, closed.WorkerID, "job-2")
 	for i, ref := range []string{"/lanes/open.1", "/lanes/open.2"} {
 		_, err := f.store.RecordPreparation(t.Context(), f.coord, op("prep-open-"+strconv.Itoa(i)), open.WorkerID, workerrecords.Preparation{PreparationRef: ref, BindingGeneration: int64(i + 1)})
 		testutil.FailErr(t, "record open lane", err)

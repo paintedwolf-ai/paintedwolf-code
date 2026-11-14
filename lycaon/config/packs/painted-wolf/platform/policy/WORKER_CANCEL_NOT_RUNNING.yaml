@@ -19,6 +19,6 @@ instead: Branch on Code WORKER_CANCEL_NOT_RUNNING; do not retry
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
       tool: worker_cancel
       state: idle
