@@ -12,6 +12,7 @@ import (
 
 type outboundRequest struct {
 	beforeCookieHop func(context.Context, outboundhttp.HopRequest) error
+	classification  map[secretmatch.SecretFingerprint]bool
 	url             string
 	hostHeader      string
 	headers         []outboundhttp.Header
@@ -101,6 +102,7 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 	classification := deps.SecretMatcher.ClassificationSnapshot(ctx)
 	ctx = deps.SecretMatcher.WithClassifications(ctx, classification)
 	sending := requestWire(spec, args, tc.Effects.Secrets)
+	sending.classification = classification
 	evidence, err := requestArgumentEvidence(ctx, deps.SecretMatcher, args, tc.Effects.Secrets)
 	if err != nil {
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageScreenUnwired)
@@ -174,6 +176,7 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageRedactUnsupported)
 	}
 	tc.Effects.Secrets.Redacted(spec.outgoing)
+	rewritten.classification = classification
 	rewritten.redacted, rewritten.receipt = true, resolution.ReceiptToken
 	return rewritten, nil
 }

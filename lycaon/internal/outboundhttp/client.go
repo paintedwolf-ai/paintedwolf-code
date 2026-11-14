@@ -112,6 +112,10 @@ type Request struct {
 	BeforeHop        func(context.Context, *url.URL) error
 	BeforeHopRequest func(context.Context, HopRequest) error
 	OnFirstHopConn   func(local, remote netip.AddrPort)
+	// OnFirstHopHeadersDispatched and OnFirstHopBodyDispatched fire once when
+	// that part of the first hop's request leaves host custody.
+	OnFirstHopHeadersDispatched func()
+	OnFirstHopBodyDispatched    func()
 }
 
 // HopRequest describes one HTTP hop presented to BeforeHopRequest before
@@ -291,9 +295,12 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 		if in.WireHeaders && (current.Scheme == "http" || in.UnixSocket != "") {
 			wire = captureWire(transport)
 		}
-		client := in.clientForHop(remaining, transport)
+		var dispatch *dispatchObserver
 		var onConn func(local, remote netip.AddrPort)
 		if hop == 0 {
+			if in.OnFirstHopHeadersDispatched != nil || in.OnFirstHopBodyDispatched != nil {
+				dispatch = observeDispatch(transport, in.OnFirstHopHeadersDispatched, in.OnFirstHopBodyDispatched)
+			}
 			onConn = func(local, remote netip.AddrPort) {
 				firstHopLocal = local
 				firstHopPeer = remote
@@ -302,27 +309,18 @@ func Do(ctx context.Context, in Request) (out Response, err error) {
 				}
 			}
 		}
-		tracer, trace := newHopTracer(onConn)
+		client := in.clientForHop(remaining, transport)
+		tracer, trace := newHopTracer(onConn, dispatch.gotConn)
 		req, err := http.NewRequestWithContext(httptrace.WithClientTrace(ioCtx, trace), method, current.String(), bytes.NewReader(body))
 		if err != nil {
 			transport.CloseIdleConnections()
 			ioCancel()
 			return Response{}, err
 		}
-		if hostHeader != "" {
-			req.Host = hostHeader
+		if dispatch != nil && req.Body != nil && req.Body != http.NoBody {
+			req.Body = &dispatchBody{ReadCloser: req.Body, obs: dispatch}
 		}
-		for _, h := range hopHeaders {
-			req.Header.Add(h.Name, h.Value)
-		}
-		for _, h := range originHeaders {
-			req.Header.Add(h.Name, h.Value)
-		}
-		for _, c := range hopCookies {
-			if c != nil {
-				req.AddCookie(c)
-			}
-		}
+		addHopHeaders(req, hostHeader, hopHeaders, originHeaders, hopCookies)
 		progress.RequestsStarted++
 		resp, err := client.Do(req)
 		if resp != nil {
@@ -822,5 +820,23 @@ func boundConnect(transport *http.Transport, timeout time.Duration) {
 		dialCtx, cancel := context.WithTimeout(ctx, timeout)
 		defer cancel()
 		return dial(dialCtx, network, address)
+	}
+}
+
+// addHopHeaders sets one hop's Host override, headers and frozen cookies.
+func addHopHeaders(req *http.Request, hostHeader string, hopHeaders, originHeaders []Header, cookies []*http.Cookie) {
+	if hostHeader != "" {
+		req.Host = hostHeader
+	}
+	for _, h := range hopHeaders {
+		req.Header.Add(h.Name, h.Value)
+	}
+	for _, h := range originHeaders {
+		req.Header.Add(h.Name, h.Value)
+	}
+	for _, c := range cookies {
+		if c != nil {
+			req.AddCookie(c)
+		}
 	}
 }

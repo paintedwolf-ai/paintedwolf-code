@@ -7,6 +7,9 @@ import (
 )
 
 func HeldHandOffReject(surface string, err error) *ToolReject {
+	if reject, ok := SecretCapabilityReject(err); ok {
+		return reject
+	}
 	stage := secretmatch.FaultStageHeldUnreleased
 	if errors.Is(err, secretcap.ErrVaultLocked) {
 		stage = secretmatch.FaultStageVaultLocked

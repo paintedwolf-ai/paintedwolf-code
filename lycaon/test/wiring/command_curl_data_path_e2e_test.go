@@ -27,6 +27,7 @@ import (
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
+	"github.com/lycaon/lycaon/internal/projectignore"
 	"github.com/lycaon/lycaon/internal/secretmatch"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools/native/command"
@@ -574,7 +575,7 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 		t.Fatalf("step 1 refusal feedback misrepresented completed initial hop: %q", outDeny.Refusal.Feedback)
 	}
 
-	// 2. Unknown post-send outcome on Hop 1 through the real native curl adapter settles with
+	// An unknown second-hop outcome stays uncertain and is never replayed.
 	// UncertainEffects==1 and ReplayAvailable==false, without auto-replaying Hop 0 or Hop 1.
 	originHits.Store(0)
 	targetHits.Store(0)
@@ -593,7 +594,7 @@ func TestCommandProgramCurlRedirectDenialUnknownHopAndRecoveryRealAdapter(t *tes
 			outUnknown, originHits.Load(), targetHits.Load())
 	}
 
-	// 3. Explicit caller retry after Hop 1 is healthy and authorized succeeds cleanly and quiet-repeats under
+	// An explicit retry succeeds quietly once the second hop is healthy.
 	// the fixture session grant resolver.
 	originHits.Store(0)
 	targetHits.Store(0)
@@ -776,7 +777,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		return card, done
 	}
 
-	// 1. Selected cookie in cookies.txt raises a secret approval card naming originHost; approving with
+	// A selected secret cookie asks once; the recommended option stores a standing grant.
 	// RecommendedOptionID installs a persistent secret grant in s.h.Settings.Approvals.
 	card1, done1 := waitCheckpoint("step 1 approve origin cookie")
 	if originHits.Load() != 0 {
@@ -840,7 +841,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 2 quiet repeat outcome = %+v originHits=%d cookie=%q", out2, originHits.Load(), lastOriginCookie.Load())
 	}
 
-	// 3. Redirect (-L) from covered origin to uncovered target.cookie.example completes Hop 0 with the secret
+	// A redirect to an uncovered target asks before the second hop.
 	// cookie and then raises a secret approval card for target.cookie.example before Hop 1; rejecting withholds
 	// only the secret cookie on Hop 1 while preserving benign cookies and completing the redirect.
 	originHits.Store(0)
@@ -870,7 +871,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 3 final hits/cookies: origin=%d target=%d targetCookie=%q, want 1/1 and \"theme=dark\" without secret", originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
 	}
 
-	// 4. Changing recipient override (--connect-to localhost instead of 127.0.0.1) is not covered by the
+	// A changed --connect-to route asks before dialing; rejecting withholds only the cookie.
 	// existing grant and asks before Hop 0 dials; rejecting withholds only the secret cookie on Hop 0 while
 	// preserving benign cookies.
 	originHits.Store(0)
@@ -887,7 +888,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 4 connect-to secret withhold outcome = %+v / refusal=%+v originHits=%d originCookie=%q", out4, out4.Refusal, originHits.Load(), lastOriginCookie.Load())
 	}
 
-	// 5. Standing grant revocation mid-redirect in the real approval store: install a standing grant for
+	// Revoking the target's grant during the first hop makes the second hop ask again.
 	// target.cookie.example, then revoke it while Hop 0 (/redirect) is served; Hop 1 must query the live
 	// approval store, raise a checkpoint before targetHits increments, and withhold the secret cookie on
 	// rejection while completing the redirect.
@@ -934,7 +935,7 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 		t.Fatalf("step 5b outcome = %+v origin=%d target=%d targetCookie=%q, want completed 1/1 and \"theme=dark\"", out5b, originHits.Load(), targetHits.Load(), lastTargetCookie.Load())
 	}
 
-	// 6. Revoke origin.cookie.example's standing grant in the real approval store: explicit "once" approval
+	// A once approval covers one operation and does not persist.
 	// covers only that single admitted operation and does not persist to the next operation.
 	for _, id := range originGrantIDs {
 		removed, revokeErr := s.h.Server.Admin.Capabilities.Access.Gate.RevokeGrant(id)
@@ -972,5 +973,136 @@ func TestCommandProgramCurlCookieJarSecretAuthorityAndPersistentGrantRealAdapter
 	out6b := s.outcome(t, "program-6b")
 	if out6b.State != "completed" || out6b.Status != 0 || strings.TrimSpace(out6b.Stdout) != "origin-cookie-ok" || originHits.Load() != 1 || lastOriginCookie.Load().(string) != "theme=dark" {
 		t.Fatalf("step 6b withhold after once expiry outcome = %+v originHits=%d cookie=%q, want 1 and \"theme=dark\"", out6b, originHits.Load(), lastOriginCookie.Load())
+	}
+}
+
+func TestCommandProgramCurlSecretDeliveryTimingAndUnlockLifecycle(t *testing.T) {
+	const (
+		ignoredHeaderSecret = "AKIAQYJK5TXV4NZR7SGB"
+		cookieSecret        = "ghp_Kg5FiiXSE4tj3gDONnze6GMypjsxsCu09Aq3"
+	)
+
+	var hits atomic.Int32
+	var seenAuth, seenCookie atomic.Value
+	seenAuth.Store("")
+	seenCookie.Store("")
+	proxy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		seenAuth.Store(r.Header.Get("X-Ignored-Key"))
+		seenCookie.Store(r.Header.Get("Cookie"))
+		_, _ = io.WriteString(w, "timing-e2e-ok\n")
+	}))
+	defer proxy.Close()
+
+	proxyURL, err := url.Parse(proxy.URL)
+	testutil.FailErr(t, "parse proxy listener", err)
+	portStr := proxyURL.Port()
+	port, err := strconv.ParseUint(portStr, 10, 16)
+	testutil.FailErr(t, "proxy port", err)
+	host := "timing.secret.example:" + portStr
+	resolveHost := host + ":127.0.0.1"
+
+	cmdCookieAndHeader := "curl -s -b cookies.txt -H 'X-Ignored-Key: " + ignoredHeaderSecret + "' --resolve '" + resolveHost + "' 'http://" + host + "/deploy'"
+
+	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
+		{
+			Pattern:      "step 1 withdraw classification while paused on cookie checkpoint",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": cmdCookieAndHeader}}},
+			FollowUpText: "Classification withdrawn during checkpoint.",
+		},
+		{
+			Pattern:      "step 2 cookie withhold continues with active classification",
+			ToolCalls:    []llm.MockToolCall{{ID: "program-2", Name: "command", Args: map[string]any{"command": cmdCookieAndHeader}}},
+			FollowUpText: "Completed without denied cookie.",
+		},
+	}})
+	approvals := "  - category: tool\n    pattern: http_request\n    effect: allow\n  - category: network_recipient\n    pattern: '*'\n    effect: allow\n  - category: file\n    pattern: '*'\n    effect: allow\n"
+	s := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, approvals, gate.PostureBalanced)
+	s.h.SeedProgress(t, t.Context(), s.session)
+	if !s.h.Server.Admin.Capabilities.Installation.Loopback.GrantChat(s.session, []uint16{uint16(port)}, "curl-timing-e2e", "curl-fixture", nil) {
+		t.Fatal("listener grant failed")
+	}
+
+	var ignoreActive atomic.Bool
+	ignoreActive.Store(true)
+	s.h.Server.Admin.Project.Secrets.SecretIgnores.Trusted = func(context.Context, string) bool {
+		return ignoreActive.Load()
+	}
+	s.h.Server.Admin.Project.Secrets.SecretIgnores.Roots = func(context.Context, string) ([]projectignore.Root, error) {
+		return []projectignore.Root{{ID: "r1", Path: s.dir}}, nil
+	}
+	testutil.FailErr(t, "add secret ignore", s.h.Server.Admin.Project.Secrets.SecretIgnores.Add(t.Context(), s.project, "r1", projectignore.SecretEntry{
+		ID:     "fa40d86b-836e-4006-b74b-63c88c889eef",
+		Value:  ignoredHeaderSecret,
+		Reason: "public test key",
+	}))
+
+	cookieJarText := strings.Join([]string{
+		".secret.example\tTRUE\t/\tFALSE\t0\tsession\t" + cookieSecret,
+		".secret.example\tTRUE\t/\tFALSE\t0\ttheme\tdark",
+	}, "\n") + "\n"
+	testutil.FailErr(t, "write cookies.txt", os.WriteFile(filepath.Join(s.dir, "cookies.txt"), []byte(cookieJarText), 0o600))
+
+	waitCookieCard := func(promptText string) (wire.CheckpointEvent, <-chan error) {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() {
+			_, promptErr := s.h.Sessions.Manager.Submissions.Prompt(t.Context(), s.session, promptText)
+			done <- promptErr
+		}()
+		kind := wire.CheckpointKindToolApproval
+		var card wire.CheckpointEvent
+		testutil.WaitFor(t, func() bool {
+			select {
+			case promptErr := <-done:
+				testutil.FailErr(t, promptText, promptErr)
+				t.Fatalf("prompt %q ended without raising a tool_approval checkpoint", promptText)
+			default:
+			}
+			pending, listErr := s.h.Sessions.Checkpoints.ListPending(t.Context(), s.session, &kind)
+			if listErr != nil || len(pending) == 0 {
+				return false
+			}
+			card = pending[0]
+			return true
+		})
+		return card, done
+	}
+
+	owner := s.h.OwnerCtx(t, t.Context())
+
+	// Withdrawing the classification during the first hop's cookie review
+	// refuses before any dial.
+	cookieCard1, done1 := waitCookieCard("step 1 withdraw classification while paused on cookie checkpoint")
+	if hits.Load() != 0 {
+		t.Fatalf("step 1 hit server before cookie checkpoint resolution: %d", hits.Load())
+	}
+	ignoreActive.Store(false)
+	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, cookieCard1.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
+	testutil.FailErr(t, "withhold cookie on card1", err)
+	testutil.FailErr(t, "step 1 prompt", <-done1)
+	out1 := s.outcome(t, "program-1")
+	if out1.State != "rejected" || out1.Refusal == nil || out1.Refusal.Code != "OUTBOUND_SECRET_SCREEN_FAILED" {
+		t.Fatalf("step 1 classification-withdrawn-during-wait outcome = %+v / refusal=%+v, want rejected OUTBOUND_SECRET_SCREEN_FAILED", out1, out1.Refusal)
+	}
+	if hits.Load() != 0 {
+		t.Fatalf("step 1 server hits = %d, want 0", hits.Load())
+	}
+
+	// Withholding the secret cookie sends the request without it.
+	ignoreActive.Store(true)
+	hits.Store(0)
+	seenAuth.Store("")
+	seenCookie.Store("")
+	cookieCard2, done2 := waitCookieCard("step 2 cookie withhold continues with active classification")
+	_, err = s.h.Sessions.Checkpoints.ResolveCheckpoint(owner, s.session, cookieCard2.ID, wire.CheckpointKindToolApproval, &hitl.DecisionResult{Approved: false}, nil)
+	testutil.FailErr(t, "withhold cookie on step 2", err)
+	testutil.FailErr(t, "step 2 prompt", <-done2)
+	out2 := s.outcome(t, "program-2")
+	if out2.State != "completed" || out2.Status != 0 || strings.TrimSpace(out2.Stdout) != "timing-e2e-ok" {
+		t.Fatalf("step 2 outcome = %+v / refusal=%+v, want completed timing-e2e-ok", out2, out2.Refusal)
+	}
+	if hits.Load() != 1 || seenAuth.Load().(string) != ignoredHeaderSecret || seenCookie.Load().(string) != "theme=dark" {
+		t.Fatalf("step 2 hits=%d header=%q cookie=%q, want 1, %s, theme=dark", hits.Load(), seenAuth.Load(), seenCookie.Load(), ignoredHeaderSecret)
 	}
 }
