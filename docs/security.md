@@ -291,7 +291,7 @@ On Linux the supervisor that performs every `connect`, `bind`, and `listen` a co
 |---|---|
 | A filesystem path | The layer's reviewed recovery (`write_root`, `read_path`), `credential_store` for an OS credential store path (`~/Library/Keychains`, `~/.local/share/keyrings`, `~/.local/share/kwalletd`, or Windows Credential Manager directories), or none for a floor no approval opens |
 | A connection to a local socket | `credential_store` for the session D-Bus socket (`/run/user/<uid>/bus`), or `socket_paths` for any other socket |
-| A listener or a direct connection | `local_listen`, or `loopback_connect` / `direct_ip`; the kernel names a refused connection only by port |
+| A listener or a direct connection | `local_listen`, or `loopback_connect` / `direct_ip`; a refused connection is reported only by port |
 | A signal outside the boundary | `process_control` |
 | A query for interface state: `system-info`, or a routing or kernel control socket | None: the kernel redacts the answer or the program continues without it |
 | Anything no sandbox capability admits, such as a unix-socket listener or a device | `host_execution` |

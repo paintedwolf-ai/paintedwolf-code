@@ -23,7 +23,7 @@ func TestPortablePackIsPortable(t *testing.T) {
 	var profileMap AnchorProfileMap
 	testutil.FailErr(t, "decode profile map", yaml.Unmarshal(profileRaw, &profileMap))
 	decl := &EngineDeclaration{
-		Host: "example", ProfileMap: profileMap, Profiles: []string{ProfileContentSafety, ProfileMCP},
+		Host: "example", ProfileMap: profileMap, Profiles: []string{ProfileFilesystem, ProfileContentSafety, ProfileMCP},
 		Window: 16, ExpressionNodesMax: 256,
 		Detectors: []string{"detector://noop", "detector://error", "detector://fixture"},
 	}
@@ -86,11 +86,11 @@ func (l *Loader) loadPortableYAML(raw []byte) ([]*Rule, error) {
 		if strings.TrimSpace(id) == "" {
 			continue
 		}
-		rule, skip, err := l.parseRule(id, doc)
+		rule, _, err := l.parseRule(id, doc)
 		if err != nil {
 			return nil, err
 		}
-		if skip || rule == nil {
+		if rule == nil {
 			continue
 		}
 		out = append(out, rule)

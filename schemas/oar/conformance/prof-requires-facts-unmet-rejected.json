@@ -2,7 +2,7 @@
   "id": "prof-requires-facts-unmet-rejected",
   "title": "A rule requiring a fact the host does not provide is rejected at load, naming both",
   "covers": [
-    "OAR-DOC-23",
+    "OAR-DOC-22",
     "OAR-PROF-6",
     "OAR-CONF-4"
   ],
@@ -13,7 +13,6 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
     "when": "true",
     "requires_facts": [
       "ghost_fact"

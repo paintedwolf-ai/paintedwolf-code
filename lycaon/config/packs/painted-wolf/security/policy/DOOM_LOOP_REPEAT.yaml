@@ -3,20 +3,20 @@ id: DOOM_LOOP_REPEAT
 kind: invariant
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.code, paintedwolf.count, paintedwolf.deferred_unactivated, paintedwolf.handle, paintedwolf.next_steps, paintedwolf.repeat_count, paintedwolf.worker_leg]
-when: paintedwolf.repeat_count >= 8 || same_code_reject_run >= 2
+requires_facts: [paintedwolf.code, paintedwolf.count, paintedwolf.deferred_unactivated, paintedwolf.handle, paintedwolf.next_steps, paintedwolf.repeat_count, paintedwolf.repeated_rejection_code, paintedwolf.worker_leg]
+when: paintedwolf.repeat_count >= 8 || paintedwolf.repeated_rejection_code != ""
 effect: block
 on_fire:
   - increment_counter
-category: recoverable
-emit: guard:doom_loop
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:doom_loop
 message: 'Identical {{ tool }} call blocked{% if paintedwolf.code %} — the previous attempts all rejected with Code: {{ paintedwolf.code }}, so unchanged retries remain blocked{% else %} after {{ paintedwolf.count }} repeats{% endif %}.'
 what: 'Identical {{ tool }} call blocked{% if paintedwolf.code %} — the previous attempts all rejected with Code: {{ paintedwolf.code }}, so unchanged retries remain blocked{% else %} after {{ paintedwolf.count }} repeats{% endif %}.'
 cause: The same tool+args invocation keeps repeating without a changed outcome
 why: Replaying or cosmetically varying a call with no new outcome burns budget without advancing the current objective.
 fix: '{% if paintedwolf.handle %}Do not read this handle with the same cursor again. {% else %}{% if paintedwolf.code %}Follow the original rejection: correct invalid arguments or complete its named prerequisite before retrying. If that prerequisite is available, take it now; the corrected call remains available. {% else %}Reuse the returned result; do not repeat this unchanged invocation. {% endif %}{% if paintedwolf.worker_leg %}Answer the leg from existing evidence. {% else %}Follow the active workflow Phase exit or current next action; use another tool when it supplies the named prerequisite or missing fact. {% endif %}{% endif %}{{ paintedwolf.next_steps }}'
 instead: '{% if paintedwolf.handle %}Wait on handle `{{ paintedwolf.handle }}`; after wake, continue from its terminal envelope or the last returned `next_cursor`. {% else %}{% if paintedwolf.worker_leg %}A partial leg with cited evidence is a result; more calls against this block are not.{% else %}Resume the current next action. {% if paintedwolf.code %}Correct the arguments or complete the named prerequisite before retrying.{% else %}Reuse the completed result. If all work is complete, send the final answer with no tool calls.{% endif %} {% endif %}{% endif %}'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

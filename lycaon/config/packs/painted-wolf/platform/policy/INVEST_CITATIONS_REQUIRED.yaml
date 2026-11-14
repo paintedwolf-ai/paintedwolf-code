@@ -6,18 +6,18 @@ selector: {}
 requires_facts: [paintedwolf.observed_handles_sample, paintedwolf.observed_paths_count, paintedwolf.observed_paths_omitted, paintedwolf.observed_paths_sample, paintedwolf.observed_urls_count, paintedwolf.observed_urls_sample, paintedwolf.reject_observation, paintedwolf.surface]
 when: paintedwolf.surface == "implement_investigate" && paintedwolf.reject_observation == "citations_required"
 effect: warn
-category: recoverable
-emit: guard:coordinator_investigate
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_investigate
 message: Investigate closeout cited nothing — host binds observed evidence
 what: The report has no citations although recorded tool observations are available.
 cause: The report cited none of the tool evidence observed this turn.
 why: 'Observed sample: {% if paintedwolf.observed_paths_sample %}{{ paintedwolf.observed_paths_sample }}{% if paintedwolf.observed_paths_omitted %} +{{ paintedwolf.observed_paths_omitted }} more path(s){% endif %}{% if paintedwolf.observed_urls_sample %}; URLs: {{ paintedwolf.observed_urls_sample }}{% endif %}{% else %}{% if paintedwolf.observed_handles_sample %}{{ paintedwolf.observed_handles_sample }}{% if paintedwolf.observed_urls_sample %}; URLs: {{ paintedwolf.observed_urls_sample }}{% endif %}{% else %}{{ paintedwolf.observed_urls_sample }}{% endif %}{% endif %}'
 fix: The host preserves the report and attaches a bounded sample of observed paths, handles, or URLs when available, without requesting another model turn.
 instead: The preserved report remains untraced and marked host_assembled. Attached observations do not establish that they support its claims.
-evidence:
+x-paintedwolf-evidence:
   ui_label: Typed citations
   ui_check_id: typed_citations
-scenarios:
+x-paintedwolf-scenarios:
   - id: missing_citations
     vars:
       observed_paths_count: 3

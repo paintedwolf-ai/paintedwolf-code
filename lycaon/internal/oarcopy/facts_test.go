@@ -75,11 +75,11 @@ func TestExplicitArgumentObservationsRemainSeparateFromDiagnostics(t *testing.T)
 }
 
 func TestPortableVocabularyAccessors(t *testing.T) {
-	if !slices.Contains(RequiredCoreFacts(), "breaker_count") || !slices.Contains(RequiredCoreFunctions(), "path_outside_scope") {
+	if !slices.Contains(RequiredCoreFacts(), "breaker_count") || !slices.Contains(RequiredCoreFunctions(), "fire_count_of") {
 		t.Fatal("missing core facts or functions")
 	}
 	profiles := StandardProfileFacts()
-	if !slices.Contains(profiles[ProfileMCP], "mcp_server_id") || !IsPortableFact("tool") || IsPortableFact("anchor") || IsPortableFact("paintedwolf.path") {
+	if !slices.Contains(profiles[ProfileMCP], "mcp_server_id") || !slices.Contains(profiles[ProfileFilesystem], "path_outside_scope") || !IsPortableFact("tool") || IsPortableFact("anchor") || IsPortableFact("paintedwolf.path") {
 		t.Fatalf("unexpected portable vocabulary: %#v", profiles)
 	}
 }
@@ -148,5 +148,15 @@ func TestCommandRecoveryUsesInvocationIdentity(t *testing.T) {
 		if facts["paintedwolf.command_surface"] != (tool == "command") {
 			t.Fatalf("wrong recovery surface for %q: %v", tool, facts)
 		}
+	}
+}
+
+func TestFactsFromDataPublishesTheToolProfile(t *testing.T) {
+	got := FactsFromData(map[string]any{"profile": "plan_write_only"})
+	if got["paintedwolf.tool_profile"] != "plan_write_only" {
+		t.Fatalf("tool profile fact = %#v", got["paintedwolf.tool_profile"])
+	}
+	if _, retired := got["paintedwolf.profile"]; retired {
+		t.Fatal("published the retired paintedwolf.profile")
 	}
 }

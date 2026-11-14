@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "RECALL_UNAVAILABLE"
 effect: block
-category: recoverable
-emit: guard:recall
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:recall
 message: The recorded index could not be read.
 what: The recorded index could not be read.
 cause: The store projection is unavailable for this call.
 why: A failed lookup is not an empty one. Reading this as "nothing was observed" would produce a confident claim about the past on no evidence at all.
 fix: Do not conclude the record is empty. Continue from available evidence and report the failed lookup. Fresh observation requires tools and scope actually offered here; a worker cannot assume it can dispatch another leg.
 instead: Branch on Code RECALL_UNAVAILABLE; never read it as absence
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: coordinator

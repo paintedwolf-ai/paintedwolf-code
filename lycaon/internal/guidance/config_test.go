@@ -52,23 +52,23 @@ x-paintedwolf-status: deprecated
 x-paintedwolf-successor: REPLACEMENT
 selector:
   tools: [command, verify]
-  ledger:
-    paintedwolf.operation: [write]
+requires_facts: [paintedwolf.operation]
+when: paintedwolf.operation == "write"
 what: Action needs review
 cause: Approval is pending
 why: The action crosses a boundary
 fix: Resolve the approval
 instead: Wait for the approval result
-emit: guard:tool
-category: recoverable
+x-paintedwolf-emit: guard:tool
+x-paintedwolf-category: recoverable
 message: Review action
-evidence:
+x-paintedwolf-evidence:
   ui_label: Source
   ui_check_id: source
   in_session_retry: true
-context_schema:
+x-paintedwolf-context-schema:
   type: object
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
 `
 	var entry guidance.HintEntry

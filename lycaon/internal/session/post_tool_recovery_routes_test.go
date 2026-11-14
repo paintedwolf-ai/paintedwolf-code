@@ -100,8 +100,8 @@ func TestInterfaceStateRefusalsNeverRecommendHostExecution(t *testing.T) {
 					obs.FailedStages = []string{"python3 -m http.server 8765"}
 				}
 				_, facts := mgr.ToolPolicy.AfterTool(tools.WithCallReach(t.Context(), toolreach.Offered([]string{"command"})), &api.Session{ID: t.Name()}, "command", map[string]any{}, "{}", 1, guidance.ToolResultFacts{Confine: obs})
-				if facts.HasCode("SANDBOX_TRY_HOST_EXECUTION") {
-					t.Errorf("probes %b listener=%v running=%v: host execution recommended", mask, withListener, running)
+				if facts.HasCode("SANDBOX_TRY_HOST_EXECUTION") || facts.HasCode("SANDBOX_TRY_CAPABILITIES") {
+					t.Errorf("probes %b listener=%v running=%v: host execution or a multi-capability recovery delivered", mask, withListener, running)
 				}
 				if facts.HasCode("SANDBOX_TRY_LOCAL_NETWORK") != withListener {
 					t.Errorf("probes %b listener=%v running=%v: listen recovery delivered=%v", mask, withListener, running, !withListener)

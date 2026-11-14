@@ -9,9 +9,8 @@
   "rule": [
     {
       "spec_version": "1.0",
-      "namespace": "example.security",
-      "emit": "example:pack",
       "id": "DELETE_REFUSED",
+      "namespace": "example.security",
       "kind": "policy",
       "on": "tool.pre_invoke",
       "selector": {
@@ -20,13 +19,14 @@
         ]
       },
       "effect": "block",
-      "profile": "portable"
+      "profile": "portable",
+      "what": "This tool destroys state the session cannot restore.",
+      "fix": "Move the files to a holding path instead of deleting them."
     },
     {
       "spec_version": "1.0",
-      "namespace": "example.security",
-      "emit": "example:pack",
       "id": "DESTRUCTIVE_TOOL_WARN",
+      "namespace": "example.security",
       "kind": "policy",
       "on": "tool.pre_invoke",
       "selector": {
@@ -37,7 +37,8 @@
         ]
       },
       "effect": "warn",
-      "profile": "portable"
+      "profile": "portable",
+      "what": "This tool changes state that is awkward to restore."
     }
   ],
   "input": {
@@ -50,7 +51,7 @@
     "decision": "warn",
     "code": "DESTRUCTIVE_TOOL_WARN",
     "applied": [
-      "DESTRUCTIVE_TOOL_WARN:fired"
+      "example.security/DESTRUCTIVE_TOOL_WARN:fired"
     ]
   }
 }

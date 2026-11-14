@@ -3,25 +3,22 @@ id: TRIAGE_LITE_WRITE_FORBIDDEN
 title: Triage Lite is read-only
 kind: policy
 on: tool.pre_invoke
-selector:
-  ledger:
-    paintedwolf.operation:
-      - write
-      - edit
+selector: {}
 requires_facts:
   - paintedwolf.operation
-when: session_posture == "spec"
+  - paintedwolf.session_posture
+when: paintedwolf.operation in ["write", "edit"] && paintedwolf.session_posture == "spec"
 effect: block
 enforcement: enforce
 on_error: fail_closed
-emit: rule:triage_lite
+x-paintedwolf-emit: rule:triage_lite
 message: Triage Lite is a read-only workflow.
 what: A write tool was called during triage.
 cause: The triage-lite workflow reports findings; it does not change files.
 why: Triage runs in the spec posture, where the project tree stays untouched.
 fix: Record the finding in your write-up, then leave triage before editing.
 instead: Branch on Code TRIAGE_LITE_WRITE_FORBIDDEN and report instead of writing
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: write

@@ -2,7 +2,7 @@
   "id": "detector-threshold-not-crossed",
   "title": "The same detector score below the rule's threshold produces no decision",
   "covers": [
-    "OAR-OPS-9"
+    "OAR-OPS-10"
   ],
   "rule": {
     "spec_version": "1.0",
@@ -11,11 +11,13 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
     "when": "prompt_injection_score > 0.8",
     "detector": {
       "ref": "detector://fixture"
-    }
+    },
+    "requires_facts": [
+      "prompt_injection_score"
+    ]
   },
   "input": {
     "anchor": "tool.pre_invoke",

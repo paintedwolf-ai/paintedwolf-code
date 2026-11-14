@@ -2,20 +2,18 @@ spec_version: "1.0"
 id: HTTP_REQUEST_RESPONSE_PATH_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation: [http_request]
+selector: {}
 requires_facts: [paintedwolf.http_last_status, paintedwolf.http_responses_received, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "HTTP_REQUEST_RESPONSE_PATH_DENIED"
+when: paintedwolf.operation == "http_request" && paintedwolf.rejection_code == "HTTP_REQUEST_RESPONSE_PATH_DENIED"
 effect: block
-category: recoverable
-emit: guard:http_request
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
 message: http_request response_path is not writable
 what: 'http_request could not store the response at {{ paintedwolf.path }}.{% if paintedwolf.http_responses_received %} The exchange already received a response with status {{ paintedwolf.http_last_status }}.{% endif %}'
 cause: The path escaped the attached folders, matched a deny glob, or failed write-scope checks for this profile.
 why: The response is stored through the normal write boundary after the HTTP exchange. A storage failure does not undo remote effects.
 fix: Preserve the completed exchange outcome. Inspect server state or another retained response artifact before retrying. For a new request known to be safe to repeat, choose an in-scope response_path or omit it; never repeat a mutation just to change the output path.
 instead: Recover evidence without duplicating the remote operation
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {path: .git/objects/pack, tool: http_request}

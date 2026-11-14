@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "DECISION_CHANGED"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: The pending decision for worker {{ paintedwolf.job_id }} changed.
 what: The pending decision for worker {{ paintedwolf.job_id }} changed.
 cause: The offered decision no longer matches the stored question and options.
 why: A decision answer must resume the same suspended worker and answer the current question.
 fix: '{{ paintedwolf.next_steps }}'
 instead: Inspect the current worker state before retrying.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       job_id: worker-1

@@ -8,15 +8,15 @@ when: 'paintedwolf.worker_artifact_measured && !paintedwolf.worker_artifact_pres
 effect: block
 x-paintedwolf-status: deprecated
 x-paintedwolf-successor: WORKER_SUMMARY_NO_ARTIFACT
-category: recoverable
-emit: guard:worker
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker
 message: Implementer finished the turn without writing or editing files
 what: An attempted file mutation has no confirmed artifact in this worker's completion evidence.
 cause: The mutation was attempted, but no successful mutation result or workspace change established an artifact.
 why: An attempted operation alone cannot support a claim that the intended file change is complete.
 fix: 'Inspect the mutation result and workspace. If work remains, make the intended change with an available mutation tool, then report it with grounded evidence. {{ paintedwolf.next_steps }}'
 instead: Preserve any retained work and report what is established; do not claim completion from a failed attempt or replay a change without inspecting its result.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

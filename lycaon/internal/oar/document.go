@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"sort"
 	"strings"
 )
@@ -47,10 +48,22 @@ func (id RuleIdentity) String() string {
 	return id.Namespace + "/" + id.ID
 }
 
-// Qualified returns the rule's qualified identifier, which is what a counter is
-// keyed by ([OAR-FIRE-4]) and what evaluation order sorts on ([OAR-EVAL-1]).
+// Qualified returns the rule's identity as one string, which counters and the
+// trace are keyed by ([OAR-FIRE-4]).
 func (r *Rule) Qualified() string {
 	return r.Identity().String()
+}
+
+// Tools are the tool names the rule's selector admits; empty admits every tool.
+func (r *Rule) Tools() []string {
+	return r.Selector["tools"]
+}
+
+// Operations are the paintedwolf.operation values the rule's condition
+// requires: the native operation beneath command, or the structured tool of
+// that name.
+func (r *Rule) Operations() []string {
+	return oarcore.ConjunctValues(r.When, "paintedwolf.operation")
 }
 
 // RequiresFor derives requires_facts: every fact a condition, flow and

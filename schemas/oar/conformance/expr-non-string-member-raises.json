@@ -1,0 +1,32 @@
+{
+  "id": "expr-non-string-member-raises",
+  "title": "A present member that is not a string raises",
+  "covers": [
+    "OAR-EXPR-13"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool_args.count == \"2\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "tool_args": {
+        "count": 2
+      }
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:errored"
+    ]
+  }
+}

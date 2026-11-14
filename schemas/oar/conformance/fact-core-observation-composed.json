@@ -12,14 +12,17 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
-    "when": "policy_denied && !is_directory && tool == \"read\""
+    "when": "not_found && !is_directory && tool == \"read\"",
+    "requires_facts": [
+      "is_directory",
+      "not_found"
+    ]
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
       "tool": "read",
-      "policy_denied": true,
+      "not_found": true,
       "is_directory": false
     }
   },

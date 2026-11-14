@@ -51,7 +51,7 @@ func TestFact21RejectionMetadataCannotReplaceOccurrenceIdentity(t *testing.T) {
 	})
 	facts := activation(gc)
 	for name, want := range map[string]string{
-		"tool": "mcp_provider_action", "paintedwolf.principal": "person", "profile": "restricted", "paintedwolf.rejection_code": "ORIGINAL_FAILURE",
+		"tool": "mcp_provider_action", "paintedwolf.principal": "person", "paintedwolf.tool_profile": "restricted", "paintedwolf.rejection_code": "ORIGINAL_FAILURE",
 	} {
 		if facts[name] != want {
 			t.Errorf("[OAR-PROF-2] metadata replaced %s: got %v, want %s", name, facts[name], want)

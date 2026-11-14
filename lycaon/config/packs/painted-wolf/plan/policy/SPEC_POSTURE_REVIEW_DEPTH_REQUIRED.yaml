@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_REVIEW_DEPTH_REQUIRED"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: '## Plan review depth required before critic Tasks'
 what: '## Plan review depth required before critic Tasks'
 cause: '## Plan review depth required before critic Tasks'
 why: 'Add ## Plan review depth to the blueprint file'
 fix: 'Add ## Plan review depth to the blueprint file'
 instead: Complete Phase 4 review depth before critics
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

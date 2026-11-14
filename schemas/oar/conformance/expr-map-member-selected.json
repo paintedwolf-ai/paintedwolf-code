@@ -1,0 +1,33 @@
+{
+  "id": "expr-map-member-selected",
+  "title": "A dotted reference selects a member of a map fact",
+  "covers": [
+    "OAR-EXPR-2",
+    "OAR-EXPR-13"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool_args.path == \"/etc\" && tool_args.missing == \"\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "tool_args": {
+        "path": "/etc"
+      }
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

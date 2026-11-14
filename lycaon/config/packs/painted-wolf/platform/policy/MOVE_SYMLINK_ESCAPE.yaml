@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: MOVE_SYMLINK_ESCAPE
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - move
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.path_escape, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "MOVE_SYMLINK_ESCAPE"
+when: paintedwolf.operation == "move" && paintedwolf.rejection_code == "MOVE_SYMLINK_ESCAPE"
 effect: block
-category: recoverable
-emit: guard:move
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:move
 message: move:move symlink target escapes scope
 what: The link at {{ paintedwolf.path }} does not resolve within the allowed move scope.
 cause: The resolved link target fails the scope check.
 why: A rejected item does not undo earlier successful moves in the batch.
 fix: Inspect the intended source and destination within permitted scope. Do not retarget the link or switch tools to reach protected content; preserve earlier successful move receipts.
 instead: Resolve the reported item and preserve completed move receipts
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

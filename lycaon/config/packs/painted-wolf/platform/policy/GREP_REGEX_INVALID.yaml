@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: GREP_REGEX_INVALID
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - grep
+selector: {}
 requires_facts: [paintedwolf.detail, paintedwolf.native_operation, paintedwolf.operation, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "GREP_REGEX_INVALID"
+when: paintedwolf.operation == "grep" && paintedwolf.rejection_code == "GREP_REGEX_INVALID"
 effect: block
-category: recoverable
-emit: guard:grep
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grep
 message: grep regex pattern is invalid
 what: 'grep received an invalid regex pattern: {{ paintedwolf.detail }}.'
 cause: Use RE2 syntax (Go regexp). For literal dots or brackets, escape them{% if paintedwolf.native_operation %}, or pass -F for a literal substring search{% else %}, or set regex false for substring search{% endif %}.
 why: An unmatched metacharacter makes the whole pattern unparseable, so no search can run until the pattern is repaired.
 fix: '{% if paintedwolf.native_operation %}Fix the pattern and retry grep; pass -F for a plain substring search.{% else %}Fix the pattern and retry grep with regex true, or use regex false for a plain substring search.{% endif %}'
 instead: Branch on Code; fix pattern or search literally
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

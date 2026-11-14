@@ -13,13 +13,15 @@
     "on": "agent.post_turn",
     "selector": {},
     "effect": "nudge",
-    "emit": "rule:conformance",
-    "when": "policy_denied"
+    "when": "not_found",
+    "requires_facts": [
+      "not_found"
+    ]
   },
   "input": {
     "anchor": "agent.post_turn",
     "facts": {
-      "policy_denied": true
+      "not_found": true
     }
   },
   "expected": {

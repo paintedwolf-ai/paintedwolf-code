@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "COORDINATOR_READ_OUTSIDE_SCOPE"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Coordinator read outside allowed read scope
 what: Coordinator {{ tool }} on {{ paintedwolf.path }} is outside allowed read scope
 cause: Narrow the path to your read_globs — coordinator may sync-read product paths within scope
 why: Narrow the path to your read_globs — coordinator may sync-read product paths within scope
 fix: '{{ paintedwolf.next_steps }} Never tell the user source is unreadable.'
 instead: 'Use paths within read_globs and survey inline first; delegate repo-wide discovery.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

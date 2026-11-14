@@ -9,6 +9,8 @@ import (
 type MCPCatalogView interface {
 	ProviderConfigured(id string) bool
 	ProviderEnabled(id string) bool
+	ConfiguredProviderIDs() []string
+	EnabledProviderIDs() []string
 	ResolveQualifiedTool(qualified string) (providerID, toolName string, ok bool)
 }
 
@@ -55,20 +57,20 @@ func ObserveMCPStructuralPost(gc *GuardContext, tool string, catalog MCPCatalogV
 	gc.MCP.MCPFields = nil
 }
 
-// EvalMCPServerConfigured is the parameterized observation mcp_server_configured_for(id).
-func EvalMCPServerConfigured(gc *GuardContext, id string) bool {
-	if gc == nil || id == "" || gc.MCP.MCPCatalog == nil {
-		return false
+// configuredServers is mcp_configured_servers: every catalogue server id.
+func (m *MCPFacts) configuredServers() []string {
+	if m == nil || m.MCPCatalog == nil {
+		return []string{}
 	}
-	return gc.MCP.MCPCatalog.ProviderConfigured(id)
+	return strList(m.MCPCatalog.ConfiguredProviderIDs())
 }
 
-// EvalMCPServerEnabled is the parameterized observation mcp_server_enabled_for(id).
-func EvalMCPServerEnabled(gc *GuardContext, id string) bool {
-	if gc == nil || id == "" || gc.MCP.MCPCatalog == nil {
-		return false
+// enabledServers is mcp_enabled_servers: every enabled catalogue server id.
+func (m *MCPFacts) enabledServers() []string {
+	if m == nil || m.MCPCatalog == nil {
+		return []string{}
 	}
-	return gc.MCP.MCPCatalog.ProviderEnabled(id)
+	return strList(m.MCPCatalog.EnabledProviderIDs())
 }
 
 // MCPMachineErrorCode returns the declared protocol code, or an empty string.

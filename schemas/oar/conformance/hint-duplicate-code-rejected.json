@@ -1,0 +1,32 @@
+{
+  "id": "hint-duplicate-code-rejected",
+  "title": "Two hints with one code are rejected at load, whatever their namespace",
+  "covers": [
+    "OAR-HINT-2"
+  ],
+  "hints": [
+    {
+      "spec_version": "1.0",
+      "id": "CAPPED",
+      "kind": "hint",
+      "namespace": "example.a",
+      "what": "a"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "CAPPED",
+      "kind": "hint",
+      "namespace": "example.b",
+      "what": "b"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-HINT-2"
+  }
+}

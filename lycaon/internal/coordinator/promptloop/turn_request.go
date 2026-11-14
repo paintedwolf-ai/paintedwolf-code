@@ -84,10 +84,8 @@ func (l *modelTurn) buildTurnRequest(
 	if err != nil {
 		return coordinatorTurnRequest{}, err
 	}
-	if reject, blocked, _, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oar.ContentObservation{Segments: oarContentSegments(messages)}, "", nil); blocked {
+	if reject, blocked := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentInput, oar.ContentObservation{Segments: oarContentSegments(messages)}, "", nil); blocked {
 		return coordinatorTurnRequest{}, reject
-	} else if changed {
-		return coordinatorTurnRequest{}, fmt.Errorf("model.input transform cannot preserve message roles and provenance")
 	}
 	if l.Inbox.Deps.TakePolicyFeedback != nil {
 		feedback, err := l.Inbox.Deps.TakePolicyFeedback(ctx, sessionID)

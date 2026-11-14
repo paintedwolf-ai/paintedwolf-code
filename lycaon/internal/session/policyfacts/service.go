@@ -33,6 +33,7 @@ type Service struct {
 	ignoredCredentialCandidate func(context.Context, string, string) bool
 	credentialSlots            func(context.Context, *api.Session) *secretmint.Inspector
 	socketResources            func(ctx context.Context, projectID string, paths []string) []string
+	credentialDecisions        credentialDecisions
 }
 
 // observeSocketResources names the host resources whose local service each

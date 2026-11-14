@@ -11,20 +11,23 @@
     "selector": {},
     "effect": "block",
     "when": "tool == \"read\"",
-    "what": "tool={{tool}} profile={{ profile  }}."
+    "what": "tool={{tool}} not_found={{ not_found  }}.",
+    "requires_facts": [
+      "not_found"
+    ]
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
       "tool": "read",
-      "profile": "conformance"
+      "not_found": true
     }
   },
   "expected": {
     "decision": "block",
     "code": "WS",
     "copy": {
-      "what": "tool=read profile=conformance."
+      "what": "tool=read not_found=true."
     }
   },
   "id": "copy-whitespace-insignificant"

@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COORDINATOR_TOOL_DENIED"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: That tool is not available in the active mode
 what: That tool is not available in the active mode
 cause: The tool is unknown or denied for the active profile/surface
 why: Each mode exposes a specific tool set; this call is outside it
 fix: Use a tool the active mode allows (the offered tool schema lists them)
 instead: Branch on Code; pick a tool the active mode allows
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

@@ -8,7 +8,7 @@ selector: {}
 requires_facts: [paintedwolf.command, paintedwolf.rejection_code, paintedwolf.rule_category, paintedwolf.rule_pack_id, paintedwolf.rule_pattern, paintedwolf.rule_scope, paintedwolf.rule_unit_id]
 when: paintedwolf.rejection_code == "APPROVAL_RULE_DENIED"
 effect: block
-category: blocked
+x-paintedwolf-category: blocked
 message: Approval rule denied this action
 what: >-
   {% if paintedwolf.command %}`{{ paintedwolf.command }}`{% else %}This {{ tool }} call{% endif %} was refused by an approval rule before it ran.
@@ -20,7 +20,7 @@ fix: >-
   Do not retry this call, and do not reach for a different tool to do the same thing. Report that the action is denied by policy and name the rule. If the work genuinely needs it, ask the user to change the rule.
 instead: >-
   Branch on Code APPROVAL_RULE_DENIED. Say what was denied and which rule denied it, then continue with the part of the task that does not need this action.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: command

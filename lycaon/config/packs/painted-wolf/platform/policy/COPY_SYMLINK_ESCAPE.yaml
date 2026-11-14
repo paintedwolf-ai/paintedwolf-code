@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: COPY_SYMLINK_ESCAPE
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - copy
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.path_escape, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "COPY_SYMLINK_ESCAPE"
+when: paintedwolf.operation == "copy" && paintedwolf.rejection_code == "COPY_SYMLINK_ESCAPE"
 effect: block
-category: recoverable
-emit: guard:copy
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
 message: copy:copy symlink target escapes scope
 what: The copy source link {{ paintedwolf.path }} resolves outside the permitted scope.
 cause: The resolved target does not have the required path authority.
 why: A link cannot grant access to its destination.
 fix: Use an intended in-scope source only; do not replace or retarget the link to evade the boundary. Preserve any earlier completed copies.
 instead: Respect resolved-source authority
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

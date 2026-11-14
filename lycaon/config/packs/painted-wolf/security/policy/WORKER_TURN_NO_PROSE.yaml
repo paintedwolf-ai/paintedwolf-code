@@ -10,15 +10,15 @@ effect: block
 # whose tools the fix names.
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: guard:worker_summary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
 message: 'Worker result has no usable parent-visible brief'
 what: 'The worker result has no usable parent-visible brief.'
 cause: 'The completion report did not supply a nonempty brief for the parent.'
 why: 'A missing brief is separate from the status of the underlying work or retained tool observations.'
 fix: 'Inspect the retained worker result and observations. If a worker report turn is resumed, request a concise completion report with honest status. Dispatch new work only for an identified gap, using an eligible profile from the current catalog.'
 instead: 'Preserve existing results and report the missing brief without claiming that all worker work must be repeated.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

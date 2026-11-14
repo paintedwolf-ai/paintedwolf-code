@@ -275,29 +275,19 @@ func TestQueueCoordinatorGuidanceAdvisoriesStacksDistinctCodes(t *testing.T) {
 	}
 }
 
-func TestRenderOARResultConcatenatesWarnAdvisories(t *testing.T) {
+func TestRenderOARResultDeliversTheWarnDecision(t *testing.T) {
 	mgr := advisoryTestManager(t)
 	res := &oar.PipelineResult{
 		Enforced: true,
-		Decision: &oar.Decision{
-			Effect: oar.EffectWarn,
-			Code:   "DOOM_LOOP_REPEAT_WARN",
-			Advisories: []oar.Advisory{
-				{Code: "DOOM_LOOP_REPEAT_WARN"},
-				{Code: "DOOM_LOOP_FRUITLESS_SEARCH"},
-			},
-		},
+		Decision: &oar.Decision{Effect: oar.EffectWarn, Code: "DOOM_LOOP_REPEAT_WARN"},
 	}
 	refuse, blocked, err := mgr.Coordinator.Feedback.RenderResult(context.Background(), oar.AnchorToolPost, res)
 	testutil.FailErr(t, "renderOARResult", err)
 	if blocked || refuse == nil {
 		t.Fatalf("blocked=%v refuse=%v", blocked, refuse)
 	}
-	if refuse.Code() != "DOOM_LOOP_REPEAT_WARN" {
-		t.Fatalf("envelope code = %q, want first advisory", refuse.Code())
-	}
-	if !strings.Contains(refuse.Body, "DOOM_LOOP_REPEAT_WARN") || !strings.Contains(refuse.Body, "DOOM_LOOP_FRUITLESS_SEARCH") {
-		t.Fatalf("body dropped a warn advisory: %q", refuse.Body)
+	if !strings.Contains(refuse.Body, "DOOM_LOOP_REPEAT_WARN") {
+		t.Fatalf("body dropped the warn decision: %q", refuse.Body)
 	}
 }
 

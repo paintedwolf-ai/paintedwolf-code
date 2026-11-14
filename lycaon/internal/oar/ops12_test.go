@@ -32,16 +32,16 @@ func TestLoaderRejectsUnresolvableDetectorRef(t *testing.T) {
 		"detector": map[string]any{
 			"ref": "detector://not-registered",
 		},
-		"emit": "guard:detector",
+		"x-paintedwolf-emit": "guard:detector",
 	}
-	_, skip, err := l.parseRule("UNKNOWN_DETECTOR", doc)
-	if skip {
-		t.Fatal("detector rule must not be skipped as ineligible")
+	_, hint, err := l.parseRule("UNKNOWN_DETECTOR", doc)
+	if hint != nil {
+		t.Fatal("detector rule must not load as a hint")
 	}
 	if err == nil {
 		t.Fatal("expected load rejection for unresolvable detector")
 	}
-	if !strings.Contains(err.Error(), "OAR-OPS-10") || !strings.Contains(err.Error(), "detector://not-registered") {
-		t.Fatalf("error = %q, want [OAR-OPS-10] naming the ref", err)
+	if !strings.Contains(err.Error(), "OAR-OPS-11") || !strings.Contains(err.Error(), "detector://not-registered") {
+		t.Fatalf("error = %q, want [OAR-OPS-11] naming the ref", err)
 	}
 }

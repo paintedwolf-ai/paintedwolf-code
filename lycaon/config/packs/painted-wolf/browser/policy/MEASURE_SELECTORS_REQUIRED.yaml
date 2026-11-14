@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "MEASURE_SELECTORS_REQUIRED"
 effect: block
-category: recoverable
-emit: guard:visual_capture
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
 message: measure_page requires a non-empty selectors list
 what: No CSS selectors were provided for the geometry probe.
 cause: selectors was missing or empty after trim.
 why: The host needs one or more selectors to call querySelectorAll before reading geometry.
 fix: Pass selectors as a non-empty array of CSS selectors that each resolve to exactly one node.
 instead: Branch on Code MEASURE_SELECTORS_REQUIRED; supply selectors
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: measure_page

@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: COPY_SIZE_EXCEEDED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - copy
+selector: {}
 requires_facts: [paintedwolf.max_file_bytes, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.resource_limit, paintedwolf.size]
-when: paintedwolf.rejection_code == "COPY_SIZE_EXCEEDED"
+when: paintedwolf.operation == "copy" && paintedwolf.rejection_code == "COPY_SIZE_EXCEEDED"
 effect: block
-category: recoverable
-emit: guard:copy
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
 message: copy:copy file exceeds max_file_bytes
 what: A copy source exceeded max_file_bytes {{ paintedwolf.max_file_bytes }}; this attempt observed {{ paintedwolf.size }} bytes.
 cause: The input exceeded the effective per-file cap before or during staging.
 why: A capped attempt must not publish a silently truncated destination.
 fix: Review the intended source and byte budget. Increase max_file_bytes only if the full intended copy is warranted and the current schema permits it. Preserve earlier completed pairs and retry only unfinished work; never truncate the source to hide this refusal.
 instead: Resolve the full-file byte budget before retrying the unfinished pair
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

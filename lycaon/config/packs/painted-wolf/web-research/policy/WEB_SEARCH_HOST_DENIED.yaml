@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.host, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WEB_SEARCH_HOST_DENIED"
 effect: block
-category: recoverable
-emit: guard:web_search_host
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:web_search_host
 message: the user declined outbound access to this host
 what: A web tool tried to reach {{ paintedwolf.host }}, and the user declined that host for this session.
 cause: This host is not available for web tools this session.
 why: Retrying the same host loops on the same denial.
 fix: Use a different public URL or provider only if it serves the intended research, is allowed, and respects any direction the user attached. Do not re-request the denied host or route around the denial.
 instead: Respect the denied host and user direction; report the dependency when no allowed source suffices
-scenarios:
+x-paintedwolf-scenarios:
   - id: web_search_host_denied
     vars:
       host: api.example-search.test

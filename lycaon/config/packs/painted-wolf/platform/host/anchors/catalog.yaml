@@ -736,7 +736,7 @@ anchors:
       vars:
         summaries: { type: "object[]" }
 
-  # ── Block / transform plane (OAR) ───────────────────────────────────────────
+  # ── Block plane (OAR) ───────────────────────────────────────────────────────
 
   - id: tool.pre_invoke
     title: Tool pre-invoke
@@ -804,7 +804,7 @@ anchors:
     description: One literal credential assignment observed on a completed tool call. Rules decide quality policy from measured material and provenance.
     trigger_class: post_tool
     surface: coordinator
-    planes: [block, transform]
+    planes: [block]
     envelope:
       vars:
         tool: { type: string }
@@ -871,7 +871,7 @@ anchors:
     description: Model response before shown or acted on (content-safety; core model.output).
     trigger_class: output
     surface: coordinator
-    planes: [block, transform]
+    planes: [block]
     envelope:
       vars:
         content: { type: string }
@@ -881,7 +881,7 @@ anchors:
     description: Tool/RAG content before the model consumes it (content-safety; core model.tool_result).
     trigger_class: tool_result
     surface: coordinator
-    planes: [block, transform]
+    planes: [block]
     envelope:
       vars:
         content: { type: string }

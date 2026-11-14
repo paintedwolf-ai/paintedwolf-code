@@ -2,9 +2,10 @@
   "id": "detector-threshold-in-when",
   "title": "A detector supplies a score and the rule owns the threshold",
   "covers": [
-    "OAR-OPS-9",
+    "OAR-OPS-10",
     "OAR-FACT-9",
-    "OAR-CONF-18"
+    "OAR-CONF-18",
+    "OAR-FACT-6"
   ],
   "rule": {
     "spec_version": "1.0",
@@ -13,11 +14,13 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
     "when": "prompt_injection_score > 0.8",
     "detector": {
       "ref": "detector://fixture"
-    }
+    },
+    "requires_facts": [
+      "prompt_injection_score"
+    ]
   },
   "input": {
     "anchor": "tool.pre_invoke",

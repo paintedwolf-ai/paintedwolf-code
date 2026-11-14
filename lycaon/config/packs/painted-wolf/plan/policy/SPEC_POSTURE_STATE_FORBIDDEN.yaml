@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_STATE_FORBIDDEN"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: State tracking tools are forbidden in spec posture
 what: State tracking tools are forbidden in spec posture
 cause: State tracking tools are forbidden in spec posture
 why: Use command redirects or scoped patches on the blueprint file only; state tracking is build-only
 fix: Use command redirects or scoped patches on the blueprint file only; state tracking is build-only
 instead: Use command redirects or scoped patches on the blueprint file; state tracking tools are build-only
-scenarios:
+x-paintedwolf-scenarios:
   - id: spec_posture_state_smoke
     tool: state_start
     vars:

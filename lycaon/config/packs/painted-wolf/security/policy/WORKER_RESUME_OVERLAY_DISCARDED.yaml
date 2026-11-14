@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.child_session_id, paintedwolf.merge_status, paintedwolf.next_steps, paintedwolf.prior_job_id, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKER_RESUME_OVERLAY_DISCARDED"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Cannot resume child_session_id {{ paintedwolf.child_session_id }} — its last write leg {{ paintedwolf.prior_job_id }} ended {{ paintedwolf.merge_status }} and its overlay was destroyed
 what: This child session's most recent write leg ({{ paintedwolf.prior_job_id }}) is {{ paintedwolf.merge_status }}; rejecting or aborting an overlay tears down its sandbox, so resuming reuses an empty overlay and lands no work.
 cause: reject_overlay / abort is terminal — it destroys the leg's isolated sandbox. A `task(child_session_id=…)` resume after that point starts from primary with nothing to build on, so the worker reports progress against files that no longer exist in its overlay.
 why: A resumed leg with a destroyed overlay has no branch changes to promote, so the next preview has no deliverable.
 fix: '{{ paintedwolf.next_steps }} To fix a partial without losing work, resume the live (pending) overlay instead of rejecting it first.'
 instead: Branch on Code; dispatch a fresh worker leg without child_session_id rather than resuming a discarded overlay
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       child_session_id: c4888a67

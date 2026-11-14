@@ -11,19 +11,19 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "when": "paintedwolf.attempts >= 3",
+    "when": "example.attempts >= 3",
     "requires_facts": [
-      "paintedwolf.attempts"
+      "example.attempts"
     ],
-    "what": "The call has been attempted {{ paintedwolf.attempts }} times."
+    "what": "The call has been attempted {{ example.attempts }} times."
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
-      "paintedwolf.attempts": 3
+      "example.attempts": 3
     },
     "host_facts": {
-      "paintedwolf.attempts": "int"
+      "example.attempts": "int"
     }
   },
   "expected": {
