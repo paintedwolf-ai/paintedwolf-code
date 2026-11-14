@@ -125,6 +125,24 @@ describe("keeping a position in view", () => {
     expect(corrections).toBeLessThanOrEqual(SETTLED_SCROLL_REPEATS + 1);
   });
 
+  it("keeps correcting while the editor is still measuring, within a frame cap", () => {
+    let corrections = 0;
+    let last = -1;
+    const probe = fakeView((scrollTop) => {
+      if (scrollTop !== last) corrections += 1;
+      last = scrollTop;
+      return scrollTop + 5_000;
+    });
+    // Each frame's measurement revises the document height.
+    let height = 10_000;
+    Object.defineProperty(probe.scrollDOM, "scrollHeight", { get: () => (height += 100) });
+    keepPositionInView(probe.view, () => 0);
+    const run = settle(probe, 2_000);
+    expect(corrections).toBeGreaterThan(SETTLED_SCROLL_REPEATS + 1);
+    expect(frames).toHaveLength(0);
+    expect(run).toBeLessThan(2_000);
+  });
+
   it("does nothing once the view is gone", () => {
     const fake = fakeView(() => 100_000);
     (fake.view.dom as { isConnected: boolean }).isConnected = false;
