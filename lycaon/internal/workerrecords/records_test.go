@@ -24,7 +24,7 @@ func TestDeliveryPagesReplayUntilCommitted(t *testing.T) {
 	_, err := f.store.AppendMessage(t.Context(), child, op("out-1"), w.WorkerID, workerrecords.MessageSpec{Body: "question", NeedsReply: true})
 	testutil.FailErr(t, "append worker message", err)
 
-	first, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0)
+	first, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "open page", err)
 	if len(first.Messages) != workerrecords.MaxPageMessages || first.Messages[0].Seq != 1 {
 		t.Fatalf("first page = %d messages from seq %d", len(first.Messages), first.Messages[0].Seq)
@@ -35,7 +35,7 @@ func TestDeliveryPagesReplayUntilCommitted(t *testing.T) {
 		}
 	}
 	// The provider request failed: the same page comes back.
-	replay, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0)
+	replay, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "reopen page", err)
 	if replay.ID != first.ID || len(replay.Messages) != len(first.Messages) {
 		t.Fatalf("replayed page %s (%d) != %s (%d)", replay.ID, len(replay.Messages), first.ID, len(first.Messages))
@@ -47,22 +47,35 @@ func TestDeliveryPagesReplayUntilCommitted(t *testing.T) {
 	testutil.FailErr(t, "commit", f.store.CommitPage(t.Context(), child, w.WorkerID, 0, first.ID))
 	testutil.FailErr(t, "commit again", f.store.CommitPage(t.Context(), child, w.WorkerID, 0, first.ID))
 
-	second, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0)
+	second, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "second page", err)
 	if len(second.Messages) != 6 || second.ID == first.ID {
 		t.Fatalf("second page = %d messages, id %s", len(second.Messages), second.ID)
 	}
 	// A new session generation is shown everything again.
-	fresh, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 1)
+	fresh, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 1, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "next generation", err)
 	if len(fresh.Messages) != workerrecords.MaxPageMessages || fresh.Messages[0].Seq != 1 {
 		t.Fatalf("generation 1 page = %d from %d", len(fresh.Messages), fresh.Messages[0].Seq)
 	}
 
-	coordPage, err := f.store.OpenPage(t.Context(), f.coord, w.WorkerID, 0)
+	coordPage, err := f.store.OpenPage(t.Context(), f.coord, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "coordinator page", err)
 	if len(coordPage.Messages) != 1 || !coordPage.Messages[0].NeedsReply || coordPage.Messages[0].RoundOrdinal != 1 || coordPage.Messages[0].SenderID != "child-1" {
 		t.Fatalf("coordinator page = %+v", coordPage.Messages)
+	}
+	// A coordinator's compaction does not replay what it was already shown.
+	testutil.FailErr(t, "commit coordinator page", f.store.CommitPage(t.Context(), f.coord, w.WorkerID, 0, coordPage.ID))
+	compacted, err := f.store.OpenPage(t.Context(), f.coord, w.WorkerID, 1, workerrecords.MaxPageMessages)
+	testutil.FailErr(t, "coordinator after compaction", err)
+	if len(compacted.Messages) != 0 {
+		t.Fatalf("compaction replayed %d messages to the coordinator", len(compacted.Messages))
+	}
+	// A page honors the room the request has left.
+	limited, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 2, 3)
+	testutil.FailErr(t, "limited page", err)
+	if len(limited.Messages) != 3 {
+		t.Fatalf("limited page = %d messages", len(limited.Messages))
 	}
 	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_messages SET body = 'edited' WHERE seq = 1`)
 	if err == nil {

@@ -32,7 +32,7 @@ func TestRoundsCarryOnlyTheirOwnInstructions(t *testing.T) {
 	if len(missed) != 1 || missed[0].Body != "check the encoder too" {
 		t.Fatalf("not applied = %+v", missed)
 	}
-	page, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0)
+	page, err := f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "page between rounds", err)
 	if len(page.Messages) != 0 {
 		t.Fatalf("stopped worker got a page: %+v", page.Messages)
@@ -46,7 +46,7 @@ func TestRoundsCarryOnlyTheirOwnInstructions(t *testing.T) {
 	}
 	_, err = f.store.AppendMessage(t.Context(), f.coord, op("follow-up"), w.WorkerID, workerrecords.MessageSpec{Body: "keep the old test name"})
 	testutil.FailErr(t, "queue follow-up", err)
-	page, err = f.store.OpenPage(t.Context(), child, w.WorkerID, 0)
+	page, err = f.store.OpenPage(t.Context(), child, w.WorkerID, 0, workerrecords.MaxPageMessages)
 	testutil.FailErr(t, "round 2 page", err)
 	if len(page.Messages) != 1 || page.Messages[0].Body != "keep the old test name" || page.Messages[0].RoundOrdinal != 2 {
 		t.Fatalf("round 2 page = %+v", page.Messages)

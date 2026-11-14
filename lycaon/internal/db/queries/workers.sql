@@ -130,6 +130,11 @@ SELECT worker_id, recipient_session_id, generation, delivered_through_seq,
 FROM worker_message_deliveries
 WHERE worker_id = ? AND recipient_session_id = ? AND generation = ?;
 
+-- name: GetWorkerMessageDeliveredThrough :one
+-- How far any earlier generation delivered a worker's messages to a session.
+SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq
+FROM worker_message_deliveries WHERE worker_id = ? AND recipient_session_id = ?;
+
 -- name: OpenWorkerMessagePage :execrows
 INSERT INTO worker_message_deliveries (
     worker_id, recipient_session_id, generation, delivered_through_seq,

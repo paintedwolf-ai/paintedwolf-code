@@ -530,6 +530,24 @@ func (q *Queries) GetWorkerMessage(ctx context.Context, arg GetWorkerMessagePara
 	return i, err
 }
 
+const getWorkerMessageDeliveredThrough = `-- name: GetWorkerMessageDeliveredThrough :one
+SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq
+FROM worker_message_deliveries WHERE worker_id = ? AND recipient_session_id = ?
+`
+
+type GetWorkerMessageDeliveredThroughParams struct {
+	WorkerID           string `json:"worker_id"`
+	RecipientSessionID string `json:"recipient_session_id"`
+}
+
+// How far any earlier generation delivered a worker's messages to a session.
+func (q *Queries) GetWorkerMessageDeliveredThrough(ctx context.Context, arg GetWorkerMessageDeliveredThroughParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerMessageDeliveredThrough, arg.WorkerID, arg.RecipientSessionID)
+	var delivered_through_seq int64
+	err := row.Scan(&delivered_through_seq)
+	return delivered_through_seq, err
+}
+
 const getWorkerMessageDelivery = `-- name: GetWorkerMessageDelivery :one
 SELECT worker_id, recipient_session_id, generation, delivered_through_seq,
        page_id, page_first_seq, page_last_seq, updated_at
