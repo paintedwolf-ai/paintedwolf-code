@@ -52,4 +52,17 @@ describe("layout over the parsed range", () => {
       parent.remove();
     }
   });
+
+  it("waits for syntaxTree on fenced Markdown instead of scanning with Tree.empty", () => {
+    const doc = [
+      "```python",
+      `msg = "${"x".repeat(120)}, ${"y".repeat(120)}"`,
+      "```",
+    ].join("\n");
+    const state = EditorState.create({
+      doc,
+      extensions: [indentUnit.of("  "), createPrettyExtension({ enabled: true, path: "notes.md" })],
+    });
+    expect(lastDecoration(new EditorView({ state }))).toBe(-1);
+  });
 });

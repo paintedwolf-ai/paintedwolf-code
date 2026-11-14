@@ -1,3 +1,4 @@
+import { prettyStreamParserFacet } from "../editor/codemirror-lang.ts";
 import { getIndentUnit, syntaxTree } from "@codemirror/language";
 import {
   type EditorState,
@@ -167,12 +168,17 @@ function layoutEnd(state: EditorState, plan: PrettyPlan): number {
   const doc = state.doc;
   if (!planReadsTree(plan)) return doc.length;
   const tree = syntaxTree(state);
-  if (plan.kind === "fenced" && tree === Tree.empty) return doc.length;
   return tree.length >= doc.length ? doc.length : doc.lineAt(tree.length).from;
 }
 
 function tokensFor(state: EditorState, plan: PrettyPlan): TreeTokens | null {
-  return planReadsTree(plan) ? new TreeTokens(syntaxTree(state)) : null;
+  if (!planReadsTree(plan)) return null;
+  return new TreeTokens(
+    syntaxTree(state),
+    state.doc,
+    state.facet(prettyStreamParserFacet),
+    getIndentUnit(state),
+  );
 }
 
 function collect(added: Range<Decoration>[]): PrettySink {
