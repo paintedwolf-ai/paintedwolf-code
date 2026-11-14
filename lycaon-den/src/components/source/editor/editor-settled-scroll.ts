@@ -31,7 +31,28 @@ export function isSettlingScroll(view: EditorView): boolean {
  * A null reading means the target has no coordinates yet; `fallback` asks the
  * editor to scroll to it.
  */
-type SettleOffset = { top: number; left: number };
+/** Distance to correct; `exact` is false while the target is not drawn and its place is estimated. */
+type SettleOffset = { top: number; left: number; exact: boolean };
+
+type PositionRect = { top: number; left: number | null; exact: boolean };
+
+/**
+ * Where a position is drawn, or, while it is not, where its line's height
+ * estimate puts it. The editor reports text it has not drawn at the top of
+ * its line block, which for a long wrapped line can be far from the text, so
+ * that report is replaced with a place interpolated through the block. The
+ * horizontal place of undrawn text is unknown.
+ */
+export function positionRect(view: EditorView, pos: number): PositionRect | null {
+  const { from, to } = view.viewport;
+  if (pos >= from && pos <= to) {
+    const rect = view.coordsAtPos(pos);
+    return rect ? { top: rect.top, left: rect.left, exact: true } : null;
+  }
+  const block = view.lineBlockAt(pos);
+  const share = block.length > 0 ? (pos - block.from) / block.length : 0;
+  return { top: view.documentTop + block.top + block.height * share, left: null, exact: false };
+}
 
 function settleScroll(
   view: EditorView,
@@ -61,7 +82,7 @@ function settleScroll(
       write: (offset, v) => {
         if (activeSettles.get(v) !== token) return;
         checks += 1;
-        if (offset !== null && offset.top === 0 && offset.left === 0) {
+        if (offset !== null && offset.exact && offset.top === 0 && offset.left === 0) {
           stable += 1;
           if (stable >= SETTLED_SCROLL_STABLE) return release();
         } else {
@@ -83,7 +104,7 @@ function settleScroll(
             }
             if (offset.left !== 0) v.scrollDOM.scrollLeft = before.left + offset.left;
             // At a scroll bound the offset cannot shrink further; that is as close as it gets.
-            if (v.scrollDOM.scrollTop === before.top && v.scrollDOM.scrollLeft === before.left) {
+            if (offset.exact && v.scrollDOM.scrollTop === before.top && v.scrollDOM.scrollLeft === before.left) {
               stable += 1;
               if (stable >= SETTLED_SCROLL_STABLE) return release();
             } else {
@@ -112,12 +133,12 @@ export function keepPositionInView(
   settleScroll(
     view,
     (v) => {
-      const rect = v.coordsAtPos(target(v.state));
+      const rect = positionRect(v, target(v.state));
       if (!rect) return null;
       const port = v.scrollDOM.getBoundingClientRect();
-      if (rect.bottom > port.top && rect.top < port.bottom) return { top: 0, left: 0 };
+      if (rect.exact && rect.top + v.defaultLineHeight > port.top && rect.top < port.bottom) return { top: 0, left: 0, exact: true };
       const anchor = port.top + port.height * (y === "center" ? 0.5 : y === "end" ? 0.8 : 0.25);
-      return { top: rect.top - anchor, left: 0 };
+      return { top: rect.top - anchor, left: 0, exact: rect.exact };
     },
     (v) => EditorView.scrollIntoView(target(v.state), { y }),
   );
@@ -162,12 +183,12 @@ export function restoreScrollAnchor(view: EditorView, anchor: ScrollAnchor): voi
   settleScroll(
     view,
     (v) => {
-      const rect = v.coordsAtPos(pos(v));
+      const rect = positionRect(v, pos(v));
       if (!rect) return null;
       const port = v.scrollDOM.getBoundingClientRect();
       const top = rect.top - port.top - anchor.offset;
-      const left = rect.left - port.left - anchor.left;
-      return { top: Math.abs(top) < 1 ? 0 : top, left: Math.abs(left) < 1 ? 0 : left };
+      const left = rect.left === null ? 0 : rect.left - port.left - anchor.left;
+      return { top: Math.abs(top) < 1 ? 0 : top, left: Math.abs(left) < 1 ? 0 : left, exact: rect.exact };
     },
     (v) => EditorView.scrollIntoView(pos(v), { y: "start", yMargin: Math.max(0, anchor.offset) }),
     () => { if (heldAnchors.get(view) === anchor) heldAnchors.delete(view); },

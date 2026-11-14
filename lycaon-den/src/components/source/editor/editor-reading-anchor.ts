@@ -1,6 +1,6 @@
 import { ViewPlugin, type EditorView, type ViewUpdate } from "@codemirror/view";
 import { setEditorScrollTop } from "./editor-scroll-position.ts";
-import { isSettlingScroll } from "./editor-settled-scroll.ts";
+import { isSettlingScroll, positionRect } from "./editor-settled-scroll.ts";
 
 type Anchor = { pos: number; offset: number };
 
@@ -41,7 +41,7 @@ export const editorReadingAnchor = ViewPlugin.fromClass(class {
     update.view.requestMeasure<number | null>({
       key: this.correction,
       read: (view) => {
-        const rect = view.coordsAtPos(Math.min(anchor.pos, view.state.doc.length));
+        const rect = positionRect(view, Math.min(anchor.pos, view.state.doc.length));
         return rect ? rect.top - view.scrollDOM.getBoundingClientRect().top - anchor.offset : null;
       },
       write: (delta, view) => {
