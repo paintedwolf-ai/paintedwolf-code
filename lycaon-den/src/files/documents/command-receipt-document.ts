@@ -2,6 +2,8 @@ import { createEffect, createSignal, onCleanup } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ChatContentDocument, CommandReceiptContent } from "../../chat/transcript/content/chat-content-document.ts";
 
+const COMMAND_RECEIPT_PAGE_LIMIT = 100;
+
 export async function readCommandReceiptDocument(client: LycaonClient, session: string, content: CommandReceiptContent, signal: AbortSignal): Promise<string> {
   const lines = [content.context];
   for (const program of content.programs) {
@@ -10,7 +12,12 @@ export async function readCommandReceiptDocument(client: LycaonClient, session: 
     const cursors = new Set<string>();
     do {
       signal.throwIfAborted();
-      const page = await client.getCommandProgramReceipt(session, program.id, { limit: 200, cursor, activity_id: program.activityId, signal });
+      const page = await client.getCommandProgramReceipt(session, program.id, {
+        limit: COMMAND_RECEIPT_PAGE_LIMIT,
+        cursor,
+        activity_id: program.activityId,
+        signal,
+      });
       signal.throwIfAborted();
       if (remaining === undefined) {
         remaining = page.executions.length + page.executions_omitted;
