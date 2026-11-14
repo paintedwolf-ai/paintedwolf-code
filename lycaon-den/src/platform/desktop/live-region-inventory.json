@@ -89,7 +89,7 @@
   "components/source/secrets/MarkSecretDialog.tsx": 2,
   "components/SpendCeilingApproachingNudge.tsx": 1,
   "components/SpendCeilingReachedNudge.tsx": 1,
-  "components/tool/CommandActivityRegions.tsx": 1,
+  "components/tool/ActivityTarget.tsx": 1,
   "components/transcript/ChatSpanBlocks.tsx": 3,
   "components/transcript/LiveToolRecordingPlayer.tsx": 2,
   "components/transcript/NavigationChooser.tsx": 1,

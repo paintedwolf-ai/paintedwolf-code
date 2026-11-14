@@ -145,6 +145,13 @@ Activity grouping does not add a disclosure level. Rows show the action, target
 and outcome; row targets ellipsize without displacing status or disclosure
 controls.
 
+When one command runs several statements, each activity shows the text at its
+own spans on the submitted source. Spans on an `eval` string or a sourced script
+index those units' bytes, and a replacement mark in the submitted text shifts
+every offset after it, so either case shows the activity's subject instead, as
+does a call whose arguments were not kept inline. The command wraps to at most
+four lines; copying it copies all of it.
+
 An expanded activity uses one fixed order, omitting any part with nothing to
 show: the command; a purpose sentence when a briefing supplies one; a result
 line carrying only facts the row does not (exit status, lines of output, a host

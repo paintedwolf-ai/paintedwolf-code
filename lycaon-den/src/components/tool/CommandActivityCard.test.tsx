@@ -56,7 +56,7 @@ describe("activity detail layout", () => {
   it("renders only the regions a clean success has", async () => {
     const { view } = await opened(part({ phase: "mutate", execution_count: 1 }));
     await waitFor(() => expect(region(view.container, "activity-output")).toBeTruthy());
-    expect(region(view.container, "activity-command")?.textContent).toContain(source);
+    expect(region(view.container, "activity-target")?.textContent).toContain(source);
     for (const absent of ["activity-result", "activity-steps", "activity-calls", "activity-exceptions", "activity-purpose"]) expect(region(view.container, absent)).toBeNull();
     expect(region(view.container, "activity-footer")).toBeTruthy();
   });
@@ -85,11 +85,46 @@ describe("activity detail layout", () => {
     expect(view.container.querySelectorAll('[data-testid="activity-purpose"]')).toHaveLength(1);
   });
 
+  it("shows and copies only the activity's own statements from a compound command", async () => {
+    const heredoc = Array.from({ length: 12 }, (_, line) => `line ${line}`).join("\n");
+    const compound = `cat > notes.txt <<'EOF'\n${heredoc}\nEOF\ncargo test`;
+    const write = `cat > notes.txt <<'EOF'\n${heredoc}\nEOF`;
+    const byteSpan = (needle: string) => {
+      const start = new TextEncoder().encode(compound.slice(0, compound.indexOf(needle))).length;
+      return { source_ref: "source", start_byte: start, end_byte: start + new TextEncoder().encode(needle).length };
+    };
+    const writing: CommandActivity = { ...baseFact, id: "write", label: "Write file", subject: "notes.txt", spans: [byteSpan(write)] };
+    const testing: CommandActivity = { ...baseFact, spans: [byteSpan("cargo test")] };
+    const receipt = { ...program, activities: [writing, testing] };
+    const call: ToolPartView = { id: "assistant:call", assistantMessageId: "assistant", messageId: "result", toolCallId: "call", tool: "command", kind: "command", status: "completed", args: { command: compound }, commandProgram: receipt };
+    const { view } = await opened({ ...call, commandActivity: { fact: writing, members: [writing], calls: [call], programIds: [program.id] } });
+    expect(region(view.container, "activity-target")?.querySelector("code")?.textContent).toBe(write);
+    fireEvent.click(view.getByTestId("activity-target-copy"));
+    await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith(write));
+  });
+
+  it("counts further distinct commands folded into one activity", async () => {
+    const calls = ["go test ./a", "go test ./b", "go test ./c"].map((command, index): ToolPartView => ({ id: `assistant:${index}`, assistantMessageId: "assistant", messageId: `result-${index}`, toolCallId: `call-${index}`, tool: "command", kind: "command", status: "completed", args: { command }, commandProgram: program }));
+    const { view } = await opened({ ...calls[0]!, commandActivity: { fact: baseFact, members: [baseFact, baseFact, baseFact], calls, programIds: [program.id] } });
+    expect(region(view.container, "activity-target")?.querySelector("code")?.textContent).toBe("go test ./a");
+    expect(region(view.container, "activity-target")?.querySelector(".den-activity-target__more")?.textContent).toContain((calls.length - 1).toLocaleString());
+  });
+
   it("copies the submitted command and announces the result", async () => {
     const { view } = await opened(part());
-    fireEvent.click(assertNamedControl(view.getByTestId("copy-command"), "button"));
+    fireEvent.click(assertNamedControl(view.getByTestId("activity-target-copy"), "button"));
     await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith(source));
     await waitFor(() => expect(view.getByRole("status").textContent).not.toBe(""));
+  });
+
+  it("announces a failed copy without claiming success", async () => {
+    vi.mocked(writeClipboardText).mockRejectedValueOnce(new Error("denied"));
+    const { view } = await opened(part());
+    const copy = view.getByTestId("activity-target-copy");
+    const label = copy.getAttribute("aria-label");
+    fireEvent.click(copy);
+    await waitFor(() => expect(view.getByRole("status").textContent).not.toBe(""));
+    expect(copy.getAttribute("aria-label")).toBe(label);
   });
 
   it("keeps the recorded row when detail loading fails", async () => {
@@ -106,12 +141,12 @@ describe("activity detail layout", () => {
     const view = render(() => <CommandActivityCard part={value()} layout="chat" sessionId="activity-card-test" client={stub} />);
     fireEvent.click(disclosureToggle(view.container.querySelector('[data-testid="tool-part-card"]')));
     await waitFor(() => expect(region(view.container, "command-activity-details")).toBeTruthy());
-    const copy = view.getByTestId("copy-command");
+    const copy = view.getByTestId("activity-target-copy");
     const next = part(); next.commandActivity!.fact = { ...next.commandActivity!.fact };
     setValue(next);
     await Promise.resolve();
     expect(get).toHaveBeenCalledOnce();
-    expect(view.getByTestId("copy-command")).toBe(copy);
+    expect(view.getByTestId("activity-target-copy")).toBe(copy);
   });
 });
 
@@ -196,7 +231,7 @@ describe("form tool commands", () => {
     it(`synthesizes and copies the ${tool} command`, async () => {
       const sink = filesSink();
       const { view } = await opened(formPart(tool, args));
-      fireEvent.click(assertNamedControl(view.getByTestId("copy-command"), "button"));
+      fireEvent.click(assertNamedControl(view.getByTestId("activity-target-copy"), "button"));
       await waitFor(() => expect(writeClipboardText).toHaveBeenCalledWith(command));
       fireEvent.click(assertNamedControl(view.getByTestId("activity-input"), "button"));
       expect(sink.mock.calls.at(-1)?.[0].document.content).toEqual({ kind: "inline", text: JSON.stringify(args) });
