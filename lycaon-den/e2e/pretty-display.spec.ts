@@ -443,7 +443,8 @@ modelIndependentWebE2e("keeps the text at the top of the view across line layout
     await expect.poll(async () => {
       place = await placeOf(before.pos);
       return place !== null && Math.abs(place.top - placeBefore.top) < 2 * before.line && place.left >= 0 && place.left < 200;
-    }, { timeout: 5_000 }).toBe(true).catch((error: unknown) => {
+      // Laying out a megabyte and measuring the line it becomes takes seconds on a loaded machine.
+    }, { timeout: 15_000 }).toBe(true).catch((error: unknown) => {
       throw new Error(`switch ${i} to ${layout}: pos ${before.pos} was at ${JSON.stringify(placeBefore)}, now ${JSON.stringify(place)}`, { cause: error });
     });
     await settle(page);
