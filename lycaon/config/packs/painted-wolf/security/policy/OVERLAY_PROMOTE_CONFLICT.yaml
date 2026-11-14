@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.conflict_count, paintedwolf.next_steps, paintedwolf.overlap_overlay_ids, paintedwolf.overlay_id, paintedwolf.paths, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_CONFLICT"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} cannot land: {{ paintedwolf.conflict_count }} path(s) have unresolved three-way hunks on {{ paintedwolf.paths }}'
 what: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} has {{ paintedwolf.conflict_count }} unresolved path conflict(s): {{ paintedwolf.paths }}.'
 cause: '{% if paintedwolf.overlap_overlay_ids %}Pending sibling results {{ paintedwolf.overlap_overlay_ids }} also touch these paths. {% endif %}The current merge assessment requires explicit reconciliation.'
 why: Blind overwrite would destroy reconciled primary work — inspect hunks and reconcile
 fix: '{{ paintedwolf.next_steps }} Inspect the actual hunks and preserve intended primary and branch changes; choose only a resolution supported by the current preview. A conflict tier guides inspection but does not establish that a full-file overwrite is correct. Resolve sibling ordering on shared paths before promotion.'
 instead: Reconcile current conflict paths explicitly and preserve already accepted work
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       conflict_count: 1

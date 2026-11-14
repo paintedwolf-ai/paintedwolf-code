@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.detail, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "CAPTURE_SERVE_FAILED"
 effect: block
-category: recoverable
-emit: guard:visual_capture
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_capture
 message: Host could not attach the capture Fetch hijack
 what: The host could not prepare browser request interception for {{ tool }}.
 cause: '{% if paintedwolf.rejection_reason %}Browser setup stage: {{ paintedwolf.rejection_reason }}.{% endif %}{% if paintedwolf.detail %} {{ paintedwolf.detail }}{% endif %}'
 why: project_dir and hermetic font substitutes serve through CDP Fetch (no TCP listen); the hijack must attach before navigate.
 fix: 'Retry the requested browser operation after its setup problem is resolved. {{ paintedwolf.next_steps }} Do not start a local http.server to repair request interception.'
 instead: Branch on Code CAPTURE_SERVE_FAILED; repair browser setup without substituting a TCP server
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

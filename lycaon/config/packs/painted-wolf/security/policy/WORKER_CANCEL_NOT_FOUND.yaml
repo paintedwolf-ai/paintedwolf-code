@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "WORKER_CANCEL_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} has no job to cancel'
 what: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} has no job in this session to cancel.'
 cause: 'The worker''s job no longer exists.'
 why: 'There is nothing to stop.'
 fix: 'Check the worker on the roster before cancelling.'
 instead: 'Cancel only a worker the roster shows working, waiting or asking.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       worker: parser-fix

@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.rejection_code, paintedwolf.remaining_overlay_paths, paintedwolf.worker]
 when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_NO_PATHS"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} has no paths to land'
 what: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} has no applicable paths for this operation.'
 cause: '{% if paintedwolf.remaining_overlay_paths %}Changes remain at {{ paintedwolf.remaining_overlay_paths }}, but this operation selected no paths to apply.{% else %}The current overlay inspection found no remaining changes.{% endif %}'
 why: 'An empty path selection does not establish that the worker''s work is complete or that its changes should be discarded.'
 fix: '{% if paintedwolf.remaining_overlay_paths %}Keep the changes. {% else %}Inspect the worker''s report and existing primary work. {% endif %}{{ paintedwolf.next_steps }}'
 instead: Do not repeat the unchanged promotion or discard remaining work merely to clear the error.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       overlay_id: result-empty

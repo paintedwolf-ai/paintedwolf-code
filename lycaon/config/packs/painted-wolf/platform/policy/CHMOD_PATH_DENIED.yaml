@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: CHMOD_PATH_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - chmod
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "CHMOD_PATH_DENIED"
+when: paintedwolf.operation == "chmod" && paintedwolf.rejection_code == "CHMOD_PATH_DENIED"
 effect: block
-category: recoverable
-emit: guard:chmod
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chmod
 message: chmod path matches a hard deny glob
 what: Permission changes are denied for {{ paintedwolf.path }}.
 cause: The target crosses a host write-protection boundary.
 why: Permission changes cannot bypass protected-path authority.
 fix: Leave the protected target unchanged. A different path is appropriate only if it is the task’s actual intended target; another tool or matching write glob cannot override this floor.
 instead: Branch on Code CHMOD_PATH_DENIED; preserve the protected-path boundary
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_ASKING"
 effect: block
-category: recoverable
-emit: guard:instruct_worker
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
 message: The worker is waiting on its question.
 what: The worker is waiting on its question.
 cause: The worker asked a blocking question and is suspended until it is answered.
 why: An instruction cannot reach a suspended round; the answer resumes it.
 fix: '{{ paintedwolf.next_steps }}'
 instead: Branch on Code INSTRUCT_WORKER_ASKING; do not retry the same call
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: coordinator

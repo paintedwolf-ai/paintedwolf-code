@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_JOB_UNKNOWN"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: the job reference names no job of this session
 what: The job reference did not resolve in this invocation's job scope.
 cause: Shell job references do not identify arbitrary host processes.
 why: ''
 fix: Use `jobs` to inspect current job references. Select only the job matching the intended work; an unknown reference does not identify a replacement process to signal.
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: command

@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.pending_overlay_promote, paintedwolf.reject_observation, paintedwolf.worker]
 when: paintedwolf.pending_overlay_promote && paintedwolf.reject_observation == "closeout_pending_overlays"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: 'A worker result requires a decision before closeout'
 what: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}A worker{% endif %} finished, but its changes{% if paintedwolf.overlay_id %} (result `{{ paintedwolf.overlay_id }}`){% endif %} still await a decision.'
 cause: Worker completion does not apply its changes to the primary tree.
 why: A completion report cannot settle changes that were never landed.
 fix: '{{ paintedwolf.next_steps }} Resolve any promotion conflicts, then reconcile progress against the actual result.'
 instead: 'Use native tool calls for the decision. Do not repeat the completion claim, mark pending delivery done, or dispatch replacement work merely to close out. If a human decision is required, ask once through the channel this request offers.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: pending_overlay
     vars:
       worker: parser-fix

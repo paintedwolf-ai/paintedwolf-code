@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.detail, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SOURCE_VERSION_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:source_history
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_history
 message: source version was not found
 what: Source version not found — {{ paintedwolf.detail }}.
 cause: The requested version id does not exist in this project's source ledger.
 why: Version lookups are scoped to the current project and validated against recorded history.
 fix: '{{ paintedwolf.next_steps }}'
 instead: 'Branch on Code.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: version v_missing was not found

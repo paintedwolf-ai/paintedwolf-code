@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: DIFF_FILE_TOO_LARGE
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - diff
+selector: {}
 requires_facts: [paintedwolf.max_path_bytes, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit, paintedwolf.size]
-when: paintedwolf.rejection_code == "DIFF_FILE_TOO_LARGE"
+when: paintedwolf.operation == "diff" && paintedwolf.rejection_code == "DIFF_FILE_TOO_LARGE"
 effect: block
-category: recoverable
-emit: guard:diff
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:diff
 message: diff input file exceeds max_path_bytes
 what: diff path {{ paintedwolf.path }} exceeds max_path_bytes {{ paintedwolf.max_path_bytes }} (size {{ paintedwolf.size }}).
 cause: An input exceeds the host’s per-file diff budget.
 why: The host bounds input memory and comparison cost at {{ paintedwolf.max_path_bytes }} bytes per file.
 fix: Use an offered bounded read to inspect the relevant text, or compare smaller intended inputs. A partial read is not a full-file diff; report that limit instead of claiming a complete comparison.
 instead: Branch on Code
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

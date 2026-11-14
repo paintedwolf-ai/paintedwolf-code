@@ -11,8 +11,10 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
-    "when": "path_outside_scope(\"read\")"
+    "when": "path_outside_scope",
+    "requires_facts": [
+      "path_outside_scope"
+    ]
   },
   "input": {
     "anchor": "tool.pre_invoke",

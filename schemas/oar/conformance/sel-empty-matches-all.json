@@ -14,7 +14,6 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
     "when": "tool == \"write\""
   },
   "input": {

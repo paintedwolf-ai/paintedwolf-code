@@ -10,15 +10,15 @@ selector:
 requires_facts: [paintedwolf.merge_status, paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.worker]
 when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_NOT_PENDING"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} has no pending changes{% if paintedwolf.merge_status %} (merge_status={{ paintedwolf.merge_status }}){% endif %}{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}'
 what: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} has no pending changes{% if paintedwolf.merge_status %} (merge_status={{ paintedwolf.merge_status }}){% endif %}{% if paintedwolf.rejection_reason %}: {{ paintedwolf.rejection_reason }}{% endif %}'
 cause: 'Its changes were already landed, rejected, orphaned or aborted, or the round never had an isolated workspace.'
 why: 'Landing changes that are not pending would either do nothing or fail partway through.'
 fix: 'Check the workers latest result on the roster. Landed changes are done; for orphaned changes, decide between rebasing onto primary and rejecting. {{ paintedwolf.next_steps }}'
 instead: 'Branch on Code; check the result''s disposition before retrying'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       overlay_id: result-landed

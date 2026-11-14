@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "DECISION_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Worker {{ paintedwolf.worker }} has no pending decision to answer.
 what: Worker {{ paintedwolf.worker }} has no pending decision to answer.
 cause: The worker has not asked a decision question, or no worker has that name.
 why: An answer resumes the worker that asked.
 fix: '{{ paintedwolf.next_steps }}'
 instead: Answer only a worker the roster shows as asking.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       worker: parser-fix

@@ -6,17 +6,17 @@ selector: {}
 requires_facts: [paintedwolf.can_recall, paintedwolf.next_steps, paintedwolf.page_measure_ungrounded, paintedwolf.session_role]
 when: paintedwolf.session_role == "worker" && paintedwolf.page_measure_ungrounded
 effect: block
-category: recoverable
-emit: guard:worker_summary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
 message: Quantitative layout claim lacks page_geometry evidence
 what: 'A quantitative layout or style finding lacks matching page_geometry evidence.'
 cause: 'The cited evidence does not establish the asserted measurement.'
 why: A page capture grounds qualitative observed-runtime claims; quantitative layout/style facts require a page_geometry measurement report.
 fix: 'Cite an existing page_geometry evidence handle with its verbatim measurement excerpt. {{ paintedwolf.next_steps }} If the needed observation is absent, remove the unsupported quantitative claim or obtain it using an offered measurement tool before completing the leg.'
 instead: 'Return a partial result and name the missing measurement in remaining_risk when observation is unavailable; do not estimate it from a raster.'
-evidence:
+x-paintedwolf-evidence:
   in_session_retry: true
-scenarios:
+x-paintedwolf-scenarios:
   - id: recall_callable
     vars:
       offender_count: 1

@@ -1,0 +1,25 @@
+{
+  "id": "expr-equality-of-unrelated-types-rejected",
+  "title": "Equality between unrelated types is rejected at load",
+  "covers": [
+    "OAR-EXPR-11"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == 1"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-11"
+  }
+}

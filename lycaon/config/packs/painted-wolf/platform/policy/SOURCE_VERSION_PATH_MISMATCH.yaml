@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.detail, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SOURCE_VERSION_PATH_MISMATCH"
 effect: block
-category: recoverable
-emit: guard:source_history
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:source_history
 message: version id belongs to a different path
 what: Source version path mismatch for {{ paintedwolf.path }} — {{ paintedwolf.detail }}.
 cause: The provided version id does not match the target path requested.
 why: Historical versions are bound to specific file paths within the project tree.
 fix: Pass the correct path corresponding to the recorded version id.
 instead: Branch on Code; match path to version_id
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: version v1 belongs to main.go, not other.go

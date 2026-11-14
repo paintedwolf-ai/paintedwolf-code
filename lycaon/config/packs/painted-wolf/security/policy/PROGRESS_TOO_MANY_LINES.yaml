@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.line_count, paintedwolf.max_lines, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROGRESS_TOO_MANY_LINES"
 effect: block
-category: recoverable
-emit: guard:update_progress
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:update_progress
 message: Progress checklist has too many checklist lines
 what: update_progress had {{ paintedwolf.line_count }} checklist lines; the limit is {{ paintedwolf.max_lines }}.
 cause: The submitted checklist exceeds the current row bound.
 why: The progress checklist stays bounded to user-facing results
 fix: Represent all required results within {{ paintedwolf.max_lines }} top-level - [ ]/- [x]/- [~]/- [>] rows, grouping related results without dropping unresolved work or changing its status.
 instead: Branch on Code; shorten to ≤ {{ paintedwolf.max_lines }} top-level lines and retry update_progress
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       line_count: 9

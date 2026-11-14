@@ -15,9 +15,6 @@ func TestRendererFrozenCopyKeepsAdvisoryDisposition(t *testing.T) {
 		t.Run(string(effect), func(t *testing.T) {
 			copy := map[string]string{"what": "Observed state", "cause": "Measured cause", "why": "Policy invariant", "fix": "Reachable recovery", "instead": "Bounded next action"}
 			d := &Decision{Effect: effect, Code: "FIXTURE", Copy: copy}
-			if effect != EffectBlock {
-				d.Advisories = []Advisory{{Code: d.Code, Copy: copy}}
-			}
 			rendered, err := NewRenderer(nil, nil).Render(t.Context(), StagePostTool, d)
 			testutil.FailErr(t, "render frozen decision", err)
 			if len(rendered) != 1 {

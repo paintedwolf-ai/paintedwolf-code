@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.command, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:command_composition_redirect
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
 message: Executable not found on PATH
 what: '{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}`{% else %}An executable{% endif %} could not be resolved for this invocation.'
 cause: The launcher did not start this executable.
 why: The requested executable did not start. Earlier operations may have run.
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       command: missing-tool

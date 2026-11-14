@@ -6,13 +6,13 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED"
 effect: block
-category: recoverable
-emit: guard:workflow
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
 message: A question reassessment requires a fresh worker workspace.
 what: A question reassessment requires a fresh worker workspace.
 cause: Investigation outputs must be propagated before the reviewer starts.
 fix: Dispatch the same workflow_work_id without scope.base_overlay_id. Preserve any after_workers prerequisites.
 instead: Start a new reviewer with the registered work ID; retain earlier reviews as evidence.
-scenarios:
+x-paintedwolf-scenarios:
   - id: rejected
     vars: {}

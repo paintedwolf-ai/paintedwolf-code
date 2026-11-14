@@ -10,12 +10,12 @@ import (
 
 // activation publishes occurrence facts under their rule-visible names.
 // occurrenceIdentityFacts are host facts the occurrence itself establishes —
-// rejection identity, caller, role, anchor, and counters — which occurrence
-// data never replaces.
+// rejection identity, caller, role, profile, posture, anchor, and counters —
+// which occurrence data never replaces.
 var occurrenceIdentityFacts = map[string]bool{
 	"paintedwolf.rejection_code": true, "paintedwolf.principal": true, "paintedwolf.principal_roles": true,
-	"paintedwolf.session_role": true, "paintedwolf.anchor": true, "paintedwolf.fire_count": true,
-	"paintedwolf.scoped_fire_count": true,
+	"paintedwolf.session_role": true, "paintedwolf.tool_profile": true, "paintedwolf.session_posture": true,
+	"paintedwolf.anchor": true, "paintedwolf.credential_decisions": true,
 }
 
 func activation(gc *GuardContext) map[string]any {
@@ -69,8 +69,10 @@ func activation(gc *GuardContext) map[string]any {
 			oarcopy.PublishSocketReferences(out, gc.Refusals.RefusedSocketPaths)
 		}
 
-		out["paintedwolf.fire_count"], out["breaker_count"], out["paintedwolf.anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
-		out["paintedwolf.scoped_fire_count"] = gc.Counters.ScopedFireCount
+		// Occurrence data never replaces the counts the engine maintains.
+		out["fire_count"], out["breaker_count"], out["paintedwolf.anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
+		out["same_code_reject_run"], out["same_call_run"] = gc.Counters.SameCodeRejectRun, gc.Counters.SameCallRun
+		out["paintedwolf.credential_decisions"] = gc.Counters.CredentialDecisions
 	}
 	return out
 }
@@ -146,7 +148,6 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"worktree_stale_paths":                strList(gc.Source.WorktreeStalePaths),
 		"worktree_leftover_paths":             strList(gc.Source.WorktreeLeftoverPaths),
 		"worktree_conflict_paths":             strList(gc.Source.WorktreeConflictPaths),
-		"tool_args_fingerprint":               gc.Invocation.ToolArgsFingerprint,
 		"tool_is_state":                       gc.Invocation.ToolIsState,
 		"tool_is_delegation":                  gc.Invocation.ToolIsDelegation,
 		"tool_is_task":                        gc.Invocation.ToolIsTask,
@@ -164,6 +165,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"fruitless_search_run":                gc.Counters.FruitlessSearchRun,
 		"breaker_count":                       gc.Counters.BreakerCount,
 		"same_code_reject_run":                gc.Counters.SameCodeRejectRun,
+		"same_call_run":                       gc.Counters.SameCallRun,
+		"repeated_rejection_code":             gc.Counters.RepeatedRejectCode,
 		"code_reject_responses":               gc.Counters.CodeRejectResponses,
 		"deferred_unactivated":                gc.Counters.DeferredUnactivated,
 		"worker_attempted_mutation":           gc.Workers.WorkerAttemptedMutation,
@@ -200,6 +203,9 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"mcp_qualified_tool":                  gc.MCP.MCPQualifiedTool,
 		"mcp_server_configured":               gc.MCP.MCPServerConfigured,
 		"mcp_server_enabled":                  gc.MCP.MCPServerEnabled,
+		"mcp_configured_servers":              gc.MCP.configuredServers(),
+		"mcp_enabled_servers":                 gc.MCP.enabledServers(),
+		"mcp_result":                          mapOrEmpty(gc.MCP.MCPFields),
 		"mcp_call_ok":                         gc.MCP.MCPCallOK,
 		"mcp_error_code":                      gc.MCP.MCPErrorCode,
 		"mcp_schema_matched":                  gc.MCP.MCPSchemaMatched,
@@ -223,6 +229,7 @@ func rejectObservationActivation(gc *GuardContext) map[string]any {
 		"command_not_argv":   gc.Invocation.CommandNotArgv,
 		"is_directory":       gc.Rejection.IsDirectory,
 		"not_found":          gc.Rejection.NotFound,
+		"path_outside_scope": EvalPathOutsideScope(gc, gc.Invocation.Tool),
 		"path_denied":        gc.Rejection.PathDenied,
 		"bulk_denied":        gc.Rejection.BulkDenied,
 		"binary_denied":      gc.Rejection.BinaryDenied,
@@ -267,8 +274,8 @@ func sessionActivation(gc *GuardContext) map[string]any {
 	return map[string]any{
 		"anchor":                     gc.Anchor,
 		"fire_count":                 gc.Counters.FireCount,
-		"scoped_fire_count":          gc.Counters.ScopedFireCount,
-		"profile":                    gc.Session.PermissionProfile,
+		"credential_decisions":       gc.Counters.CredentialDecisions,
+		"tool_profile":               gc.Session.PermissionProfile,
 		"principal":                  gc.Session.Principal,
 		"principal_roles":            strList(gc.Session.PrincipalRoles),
 		"content_length":             gc.Content.ContentLength,

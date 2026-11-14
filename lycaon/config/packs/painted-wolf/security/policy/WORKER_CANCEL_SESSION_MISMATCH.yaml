@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "WORKER_CANCEL_SESSION_MISMATCH"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} belongs to another coordinator session'
 what: '{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}This worker{% endif %} belongs to another coordinator session and cannot be cancelled from here.'
 cause: 'The worker was started from another session.'
 why: 'Only the coordinator that started a worker may stop it.'
 fix: 'Cancel only workers on this session''s roster.'
 instead: 'Act only on workers from this session''s roster.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       worker: parser-fix

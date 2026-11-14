@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "REQUEST_DECISION_ARTIFACT_FOREIGN"
 effect: block
-category: recoverable
-emit: guard:request_decision
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_decision
 message: artifact is outside this session tree
 what: request_decision referenced an artifact outside this session tree.
 cause: The artifact belongs to another session tree.
 why: A worker decision may attach only in-tree artifacts.
 fix: Pass an artifact produced in this session tree.
 instead: Branch on Code REQUEST_DECISION_ARTIFACT_FOREIGN; pass an in-tree artifact UUID
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: stub

@@ -1,0 +1,25 @@
+{
+  "id": "expr-chained-relation-rejected",
+  "title": "A relation holding two relational operators is rejected at load",
+  "covers": [
+    "OAR-EXPR-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "1 < 2 < 3"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-4"
+  }
+}

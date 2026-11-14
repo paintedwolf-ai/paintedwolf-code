@@ -8,15 +8,15 @@ when: paintedwolf.session_role == "worker" && paintedwolf.agent_is_implementer &
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: guard:worker_summary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
 message: Worker finished without disk proof of implementation
 what: 'Worker finished without disk proof of implementation (no successful file mutation or workspace change)'
 cause: The completion report has no observed artifact evidence; its prose alone does not establish an applied implementation.
 why: An implementation claim must be supported by the worker's recorded changes or inspected workspace, not inferred from the report's wording.
 fix: 'Inspect the worker outcome and any existing overlay first. {{ paintedwolf.next_steps }} If no change was necessary, preserve that outcome and report the evidence rather than inventing a mutation.'
 instead: Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

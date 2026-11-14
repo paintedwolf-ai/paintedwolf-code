@@ -9,8 +9,8 @@ selector: {}
 requires_facts: [paintedwolf.editorconfig_lines, paintedwolf.editorconfig_mismatch, paintedwolf.editorconfig_rules, paintedwolf.path]
 when: paintedwolf.editorconfig_mismatch
 effect: warn
-category: informational
-emit: guard:editorconfig
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:editorconfig
 message: written text breaks declared EditorConfig rules
 what: >-
   lines written to {{ paintedwolf.path }} break the project's EditorConfig rules ({{ paintedwolf.editorconfig_rules }}).
@@ -22,7 +22,7 @@ fix: >-
   Correct the listed lines in your next edit. trim_trailing_whitespace forbids spaces or tabs at line end, including on blank lines; indent_style names the character that indents a line; end_of_line names the line terminator; insert_final_newline says whether the file ends with a newline.
 instead: >-
   Leave the lines as written only when the whitespace is content the rule cannot know about, such as a string literal or a Markdown hard break
-scenarios:
+x-paintedwolf-scenarios:
   - id: blank_line_indent
     vars:
       tool: write

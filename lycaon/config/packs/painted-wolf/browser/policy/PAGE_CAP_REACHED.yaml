@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.max_pages, paintedwolf.next_steps, paintedwolf.page_live_ids, paintedwolf.rejection_code, paintedwolf.resource_limit]
 when: paintedwolf.rejection_code == "PAGE_CAP_REACHED"
 effect: block
-category: recoverable
-emit: guard:visual_page_session
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_page_session
 message: Live page cap reached for session
 what: 'The session reached its {{ paintedwolf.max_pages }} held-page limit. IDs at admission: {{ paintedwolf.page_live_ids }}.'
 cause: Per-session page cap prevents unbounded held Chromium pages.
 why: Held pages keep cookies and CDP targets alive; the cap keeps memory bounded.
 fix: '{{ paintedwolf.next_steps }} Do not close an unrelated page merely to clear the limit.'
 instead: Preserve needed page state while resolving the capacity limit
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       max_pages: 2

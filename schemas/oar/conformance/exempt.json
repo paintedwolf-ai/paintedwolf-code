@@ -7,16 +7,6 @@
    "check": "packages/oar-ref/src/load.ts (stream defaults to buffered), spec/oar/1.0/conformance/stream-chunk-unsupported-rejected.json"
   },
   {
-   "clause_id": "OAR-DOC-29",
-   "reason": "An informational-field clause: `emit` is provenance metadata an engine MUST accept and MUST NOT interpret. Acceptance is enforced by the published schema (oar.schema.json) and by every fixture, whose rules carry `emit` and resolve normally; non-interpretation is a negative requirement on engine internals that no single fixture can isolate, because a fixture asserts outcomes, and an engine that ignored `emit` and one that read it produce the same outcomes on every fixture that does not depend on the difference.",
-   "check": "spec/oar/1.0/schemas/oar.schema.json, packages/oar-ref/src/load.ts (emit parsed and never read)"
-  },
-  {
-   "clause_id": "OAR-DOC-30",
-   "reason": "An informational-field clause: `category`, `context_schema`, `scenarios`, and `evidence` are publisher metadata an engine MUST accept and MUST NOT derive behaviour from. Acceptance is enforced by the published schema; non-derivation is a negative requirement on engine internals, and a fixture cannot distinguish an engine that ignores the fields from one that reads them without a fixture whose outcome depends on them — which would contradict the clause.",
-   "check": "spec/oar/1.0/schemas/oar.schema.json, packages/oar-ref/src/load.ts (fields accepted, never read)"
-  },
-  {
    "clause_id": "OAR-SEL-5",
    "reason": "A negative requirement on selector semantics: an engine MUST NOT match selector clauses against natural-language text or infer values from prose shape. A fixture can only assert what an engine does, not what it refrains from doing internally; every selector fixture asserts the machine-observable matching that is required, and the closed selector-clause vocabulary is enforced by the published schema and the loader.",
    "check": "spec/oar/1.0/schemas/oar.schema.json, packages/oar-ref/src/load.ts (readSelector closes the clause set)"
@@ -42,19 +32,9 @@
    "check": "packages/oar-ref/src/env.ts (CORE_FACTS transcribed from section 5.2), packages/oar-ref/test/env.test.ts"
   },
   {
-   "clause_id": "OAR-FACT-13",
-   "reason": "A completeness claim on standard profiles, symmetric with [OAR-FACT-12]: an engine claiming a profile MUST provide all of its facts and functions. The reference environment declares the full content-safety and mcp tables of section 5.4; the corpus exercises profile facts through the detector fixtures. A fixture cannot assert the completeness of a bundle, only the behaviour of the members a rule names.",
-   "check": "packages/oar-ref/src/env.ts (STANDARD_FACTS transcribed from section 5.4), packages/oar-ref/test/env.test.ts"
-  },
-  {
    "clause_id": "OAR-FACT-14",
    "reason": "A negative requirement on the engine's declared environment: an engine MUST NOT redefine the name, type, or meaning of a core or standard fact. The reference environment is a single immutable table; the host-fact loader rejects a declaration colliding with any declared fact or function name, which is the one path a redefinition could take at load.",
    "check": "packages/oar-ref/src/env.ts (withHostFacts collision rejection), packages/oar-ref/test/env.test.ts"
-  },
-  {
-   "clause_id": "OAR-FACT-20",
-   "reason": "A digest-stability requirement: `tool_args_fingerprint` MUST be stable across sessions for the same tool and arguments and differ otherwise. Stability is a property over many occurrences and sessions; a single-occurrence fixture can observe one value but cannot assert equality or inequality it has no second occurrence to compare against, and the fixture contract has no cross-fixture state.",
-   "check": "packages/oar-ref/src/env.ts (fingerprint observation), packages/oar-ref/test/env.test.ts"
   },
   {
    "clause_id": "OAR-FACT-21",
@@ -102,19 +82,29 @@
    "check": "scripts/check-coverage.mjs, spec/oar/1.0/conformance/"
   },
   {
-   "clause_id": "OAR-DOC-26",
+   "clause_id": "OAR-DOC-24",
    "reason": "A versioning-policy clause binding future revisions of the specification, not engine behaviour at an occurrence: a minor revision MUST be additive. No fixture can exercise a revision that has not been published; the policy is enforced by review of each revision against the change log (Appendix A) and by the schema version gate, which pins documents to the major they declare.",
    "check": "spec/oar/1.0/open-agent-rules.md (Appendix A), packages/oar-ref/src/load.ts (version gate)"
   },
   {
-   "clause_id": "OAR-DOC-27",
-   "reason": "A versioning-policy clause binding future revisions: a breaking change MUST bump the major version. Like [OAR-DOC-26] it constrains how the specification may evolve, not how an engine evaluates an occurrence; the major-version gate (doc-unsupported-major-rejected) is the enforceable edge and is fixtured.",
+   "clause_id": "OAR-DOC-25",
+   "reason": "A versioning-policy clause binding future revisions: a breaking change MUST bump the major version. Like [OAR-DOC-24] it constrains how the specification may evolve, not how an engine evaluates an occurrence; the major-version gate (doc-unsupported-major-rejected) is the enforceable edge and is fixtured.",
    "check": "spec/oar/1.0/conformance/doc-unsupported-major-rejected.json"
   },
   {
-   "clause_id": "OAR-DOC-28",
+   "clause_id": "OAR-DOC-26",
    "reason": "A publication-policy clause: a published version is immutable and corrections ship as new versions. It binds the specification's own release process; there is no engine behaviour to fixture, and the version gate plus the change log are the mechanisms that keep published versions distinct.",
    "check": "spec/oar/1.0/open-agent-rules.md (Appendix A), packages/oar-ref/src/load.ts (version gate)"
+  },
+  {
+   "clause_id": "OAR-EVAL-11",
+   "reason": "Binds the host applying a returned decision, not the engine producing it. A fixture asserts the decision an engine returns; what the host then does with the action is outside the occurrence the fixture describes. The decision side of each effect is fixtured under [OAR-EVAL-4] and [OAR-EVAL-10].",
+   "check": "spec/oar/1.0/conformance/eval-first-of-winning-effect-decides.json, spec/oar/1.0/conformance/eval-precedence-block-wins.json"
+  },
+  {
+   "clause_id": "OAR-EXPR-20",
+   "reason": "Termination is structural: the grammar of Appendix C has no loop, no recursion, and no user-defined function, so every derivable condition evaluates in time bounded by its size. A fixture can only show that a given condition terminates, which every fixture already does.",
+   "check": "spec/oar/1.0/open-agent-rules.md Appendix C.1, packages/oar-ref/src/parse.ts"
   }
  ],
  "partial": []

@@ -3,13 +3,13 @@ id: WRITE_SCOPE_DENIED
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.path, paintedwolf.patterns_list, paintedwolf.redirect, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.path, paintedwolf.patterns_list, paintedwolf.redirect, paintedwolf.rejection_code, paintedwolf.tool_profile]
 when: paintedwolf.rejection_code == "WRITE_SCOPE_DENIED"
 effect: block
-category: recoverable
-emit: guard:write_scope
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:write_scope
 message: path outside profile write scope
-what: '{{ tool }} path {{ paintedwolf.path }} is outside profile {{ profile }} write scope.'
+what: '{{ tool }} path {{ paintedwolf.path }} is outside profile {{ paintedwolf.tool_profile }} write scope.'
 cause: The path must match at least one allowed write glob for this profile.
 why: All mutations and file redirects must stay within the active write contract.
 fix: 'Allowed write globs for this profile:
@@ -18,7 +18,7 @@ fix: 'Allowed write globs for this profile:
 
   {% if paintedwolf.redirect %}If saving output was optional, omit the output-file destination and inspect the bounded result tail. If a file is required, its destination must both serve the intended task and be in scope.{% else %}Use an in-scope path only when it is the intended destination. Otherwise report the scope dependency; changing mutation tools does not expand authority.{% endif %}'
 instead: Preserve the intended destination and respect the active write scope
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

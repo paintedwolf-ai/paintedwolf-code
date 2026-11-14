@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "RENDER_MARKUP_INVALID"
 effect: block
-category: recoverable
-emit: guard:visual_render
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
 message: render_view markup or mime is invalid
 what: 'render_view could not prepare the document: {{ paintedwolf.rejection_reason }}.'
 cause: Input shape, viewport, or document preparation failed. A brand stylesheet or kit-document failure is not necessarily an argument error.
 why: The host validates authored markup before launching the browser.
 fix: Inspect the reported preparation stage. Correct an invalid input according to the current schema; for project stylesheet or kit failures, repair that source before retrying. Preserve intended content.
 instead: Branch on Code RENDER_MARKUP_INVALID; fix render_view arguments
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

@@ -445,7 +445,7 @@ The shared secret scanner inspects argument values for recognizable credential p
 
 `WEAK_CREDENTIAL_LITERAL` warns when a possible credential has weak measured structure or appears on the common-password list. `CREDENTIAL_LITERAL` warns about other literal candidates without claiming they are weak. Neither establishes that a value is a credential or was invented by the model. Matches do not protect bytes, block operations, or establish permission; misses never prove safety.
 
-The host emits one `credential.assignment` occurrence per candidate after a completed tool invocation, supplying length, word/run measurements, common-password membership, a device HMAC fingerprint, and root-session harvest membership lazily. OAR YAML owns thresholds and counters, scoped by fingerprint. Managed references and shell indirection are excluded; harvested values keep their provenance.
+The host emits one `credential.assignment` occurrence per candidate after a completed tool invocation, supplying length, word/run measurements, common-password membership, a device HMAC fingerprint, how many earlier occurrences delivered a decision for that fingerprint, and root-session harvest membership lazily. OAR YAML owns the thresholds and warns once per fingerprint. Managed references and shell indirection are excluded; harvested values keep their provenance.
 
 The slot catalog is intentionally incomplete. It does not interpret arbitrary prose, opaque nested shell strings, encoded or split values, or interactive password prompts. Authored-content inspection is bounded to 512 KiB and 8,192 lines. Pagination-token exceptions and parser surfaces live in the same YAML catalog as credential names, not in Go policy lists.
 

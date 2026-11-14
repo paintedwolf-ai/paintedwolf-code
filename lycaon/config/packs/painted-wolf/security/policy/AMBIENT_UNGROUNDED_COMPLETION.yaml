@@ -8,15 +8,15 @@ when: paintedwolf.last_audit_ungrounded && size(paintedwolf.unobserved_cited_han
 effect: nudge
 on_fire:
   - increment_breaker
-category: recoverable
-emit: guard:ambient_grounding
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:ambient_grounding
 message: Worker completion criteria not satisfied on parent session
 what: '{% if paintedwolf.missing_summary_count %}Finished worker rounds without a summary on this session: {{ paintedwolf.missing_summary_count }}{% if paintedwolf.missing_summary_workers %} ({{ paintedwolf.missing_summary_workers }}){% endif %}.{% else %}The last citation audit did not trace every cited reference to observed evidence.{% endif %}'
 cause: '{% if paintedwolf.missing_summary_count %}Those rounds finished without their completion notice reaching this session.{% else %}The retained audit reports an evidence gap; it does not establish missing worker work.{% endif %}'
 why: Completion claims need observed evidence and any required worker summaries.
 fix: '{% if paintedwolf.missing_summary_count %}Check those workers on the roster and wait for their completion notices without dispatching the finished work again.{% else %}Check the retained audit and the cited references. Correct unsupported claims or acquire the specific missing evidence through an available tool. {{ paintedwolf.next_steps }}{% endif %}'
 instead: Keep working from observed evidence; this post-turn feedback does not retract the delivered turn.
-scenarios:
+x-paintedwolf-scenarios:
   - id: recall_callable
     vars:
       can_recall: true

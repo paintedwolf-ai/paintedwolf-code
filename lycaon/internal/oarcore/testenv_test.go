@@ -8,21 +8,20 @@ import "testing"
 func sharedTestEnv(t *testing.T, mut func(*EnvironmentSpec)) *Environment {
 	t.Helper()
 	spec := EnvironmentSpec{
-		Host:              "test.example",
-		HostAnchors:       []string{"custom.anchor"},
-		ActivityWindow:    10,
-		Detectors:         []string{"detector://example"},
-		SupportsTransform: true,
-		SupportsChunk:     true,
+		Host:           "testhost",
+		HostAnchors:    []string{"custom.anchor"},
+		ActivityWindow: 10,
+		Detectors:      []string{"detector://example"},
+		SupportsChunk:  true,
 		HostFacts: map[string]string{
-			"test.example.str":      "string",
-			"test.example.num":      "int",
-			"test.example.ratio":    "double",
-			"test.example.flag":     "bool",
-			"test.example.paths":    "list<string>",
-			"test.example.spans":    "list<map<string, dyn>>",
-			"test.example.attrs":    "map<string, dyn>",
-			"test.example.fact_len": "(string) -> int",
+			"testhost.str":      "string",
+			"testhost.num":      "int",
+			"testhost.ratio":    "double",
+			"testhost.flag":     "bool",
+			"testhost.paths":    "list<string>",
+			"testhost.spans":    "list<map<string, dyn>>",
+			"testhost.attrs":    "map<string, dyn>",
+			"testhost.fact_len": "(string) -> int",
 		},
 	}
 	if mut != nil {

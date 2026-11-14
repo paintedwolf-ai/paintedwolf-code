@@ -63,10 +63,12 @@ type acceptPublisher struct{}
 
 func (acceptPublisher) Publish(context.Context, OnFireEvent) error { return nil }
 
-// ExecuteOnFire runs declared side effects.
-func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher, event OnFireEvent, code string, actions []OnFireAction) ([]OnFireAction, error) {
+// ExecuteOnFire runs declared side effects and returns the ones applied. An
+// event the publisher refuses is not applied and changes nothing else
+// ([OAR-FIRE-7]).
+func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher, event OnFireEvent, code string, actions []OnFireAction) []OnFireAction {
 	if len(actions) == 0 {
-		return nil, nil
+		return nil
 	}
 	if store == nil {
 		store = NewCounterStore()
@@ -87,12 +89,12 @@ func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher,
 			store.Reset(event.SessionID, code, CounterBreaker)
 		case OnFirePublishEvent:
 			if err := pub.Publish(ctx, event); err != nil {
-				return applied, err
+				continue
 			}
 		}
 		applied = append(applied, a)
 	}
-	return applied, nil
+	return applied
 }
 
 // applyScopedCounter applies a rule's counter actions to the additional

@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: HTTP_REQUEST_TOKEN_CAPTURE_FAILED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - http_request
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "HTTP_REQUEST_TOKEN_CAPTURE_FAILED"
+when: paintedwolf.operation == "http_request" && paintedwolf.rejection_code == "HTTP_REQUEST_TOKEN_CAPTURE_FAILED"
 effect: block
-category: recoverable
-emit: guard:http_request
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:http_request
 message: http_request token capture failed
 what: Token capture rules failed to extract tokens from the response.
 cause: The response headers or JSON body did not contain the fields specified in capture_tokens. The rejection data lists the jar and missing token names.
 why: Automated capture prevents credentials from leaking into model context; failing fast when expected tokens are absent prevents subsequent requests from failing mysteriously.
 fix: Verify the response format and check that the json:path or header:name matches the server's actual response structure.
 instead: Branch on Code HTTP_REQUEST_TOKEN_CAPTURE_FAILED; inspect endpoint response structure and correct capture_tokens rules
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       jar: auth_api

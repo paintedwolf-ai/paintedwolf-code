@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code, paintedwolf.review_expected_call, paintedwolf.review_uncited_reviewers]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_REVIEWER_UNCITED"
 effect: block
-category: recoverable
-emit: guard:workflow
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
 message: Terminal verdict does not cite every owed reviewer.
 what: "The verdict does not cite these required reviewer envelopes: {{ paintedwolf.review_uncited_reviewers }}."
 cause: "The submitted citations resolve, but do not cover every owed reviewer."
 why: "Every owed reviewer must contribute traceable evidence to the terminal ruling."
 fix: "Add an observed handle, path or URL from each named reviewer envelope without removing already valid citations. Current call shape: {{ paintedwolf.review_expected_call }}."
 instead: "Repair the citation metadata using existing envelopes; do not dispatch another review merely to obtain citations."
-scenarios:
+x-paintedwolf-scenarios:
   - id: skeptic
     vars: {review_uncited_reviewers: [skeptic]}

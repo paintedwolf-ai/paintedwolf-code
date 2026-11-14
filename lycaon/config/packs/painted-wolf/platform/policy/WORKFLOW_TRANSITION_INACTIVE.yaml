@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_TRANSITION_INACTIVE"
 effect: block
-category: recoverable
-emit: rule:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:coordinator
 message: workflow_transition requires an active running workflow run
 what: "workflow_transition has no active running workflow to advance."
 cause: workflow_transition requires an active running workflow run
 why: "A transition applies only to the current active run and cannot create or resume one implicitly."
 fix: "Inspect the current session workflow state. If the task calls for a new workflow, use its proposal and human approval path; do not start a replacement merely to make this transition available."
 instead: "Preserve completed or paused workflow state and use the current task's available actions."
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

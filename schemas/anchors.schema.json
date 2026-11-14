@@ -77,8 +77,7 @@
             "type": "string",
             "enum": [
               "inform",
-              "block",
-              "transform"
+              "block"
             ]
           },
           "uniqueItems": true,

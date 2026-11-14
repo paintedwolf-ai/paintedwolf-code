@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_PHASE_SKIPPED"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: Tier skipped this phase — do not spawn agents for skipped work
 what: Tier skipped this phase — do not spawn agents for skipped work
 cause: Tier skipped this phase — do not spawn agents for skipped work
 why: Advance per tier path without dispatching skipped phase agents
 fix: Advance per tier path without dispatching skipped phase agents
 instead: Respect phase_skipped.* host vars
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

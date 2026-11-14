@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.review_verdict_gate_open, paintedwolf.verdict_delay_count, paintedwolf.workers_idle]
 when: paintedwolf.workers_idle && paintedwolf.review_verdict_gate_open && paintedwolf.verdict_delay_count < 2
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Close out blocked — this review phase has no recorded verdict yet
 what: Tried to deliver the closing synthesis while the active review_loop phase's evidence gate is still open.
 cause: No terminal verdict has been recorded for this review phase — prose cannot record one.
 why: 'A review phase only leaves through its verdict; closing out without it strands the workflow with the review still pending.'
 fix: '{{ paintedwolf.next_steps }} Choose a terminal value only when the evidence supports it; preserve unresolved findings and user limits. Other gates and advancement rules still apply.'
 instead: "If the required review cannot be completed, report the specific blocker through the available decision channel rather than fabricating a terminal verdict."
-scenarios:
+x-paintedwolf-scenarios:
   - id: verdict_missing
     vars: {}

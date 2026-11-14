@@ -12,27 +12,25 @@ kind: policy
 on: tool.pre_invoke
 selector:
   tools: [command]
-  ledger:
-    paintedwolf.operation: [write]
-requires_facts: [paintedwolf.operation]
-when: session_posture == "spec"
+requires_facts: [paintedwolf.operation, paintedwolf.session_posture]
+when: paintedwolf.operation == "write" && paintedwolf.session_posture == "spec"
 effect: block
-emit: rule:example
+x-paintedwolf-emit: rule:example
 what: Writes are refused in spec posture.
 cause: The observed machine condition matched.
 fix: Take the supported alternative.
 instead: Describe the change in the spec instead.
 ```
 
-Place the document directly under `policy/` (subdirectories are not policy units). Identity is `namespace/id`, or the bare `id` without a namespace, not the filename; still name the file `<id>.yaml` so a single-file `pw rules test` selects it. Fields come from the current schema.
+Place the document directly under `policy/` (subdirectories are not policy units). Identity is `namespace/id`, or the bare `id` without a namespace, not the filename, and it orders evaluation after `kind`; still name the file `<id>.yaml` so a single-file `pw rules test` selects it. Fields come from the current schema.
 
-New identities may use any implemented anchor. Duplicate qualified identities are refused across all contributing packs; pack ownership cannot replace a rule or disable a mandatory rule. Pre-invoke and handler blocks prevent dispatch. `tool.rejected` observes an intrinsic typed failure before feedback delivery. Transforms are accepted only at boundaries that can deliver rewritten content.
+New identities may use any implemented anchor. Duplicate identities are refused across all contributing packs; pack ownership cannot replace a rule or disable a mandatory rule. An `on_error` substitute, `fire_count_of`, and `breaker_count_of` name a rule of the same namespace by bare id. Pre-invoke and handler blocks prevent dispatch. `tool.rejected` observes an intrinsic typed failure before feedback delivery. Each occurrence delivers one decision: a block, else the first firing nudge, else the first firing warn.
 
-Every non-core fact the rule reads in `when`, copy, or a `ledger` clause belongs in `requires_facts`. A fact the host does not provide fails at load; a rule must not treat absence as permission.
+Every non-core fact the rule reads in `when` or copy belongs in `requires_facts`. A fact the host does not provide fails at load; a rule must not treat absence as permission.
 
 ## Portability
 
-Prefer the eight OAR core anchors, core facts, and the standard `content-safety` and `mcp` profiles for portable rules. A documented host anchor, `paintedwolf.*` fact, or `x-paintedwolf-*` field is legal only when host-specific behavior is intentional. Presentation copy cannot substitute for selector or condition logic.
+Prefer the eight OAR core anchors, core facts, and the standard `filesystem`, `content-safety`, and `mcp` profiles for portable rules. A documented host anchor, `paintedwolf.*` fact, or `x-paintedwolf-*` field is legal only when host-specific behavior is intentional. Presentation copy cannot substitute for selector or condition logic.
 
 Do not add a natural-language classifier, program-name floor, cloud-action list in Go, or an `allow` rule that clears containment or structured boundary authority. Detection overlays remain additive.
 
@@ -46,7 +44,7 @@ Feedback copy must not name its own remedies. Bind the host fact `paintedwolf.ne
 
 ## Conformance fixtures
 
-Place JSON fixtures at `<pack>/conformance/*.json`, sibling to `<pack>/policy/` (one object or an array per file). Each fixture carries an `id` equal to its file stem, a `covers` list, a JSON copy of the rule document in `rule` (the runner evaluates that copy, so keep it identical to the YAML), an observation `input` with `anchor`, `facts`, and `host_facts` naming each `paintedwolf.*` fact it supplies with its type, and `expected` with any of `decision` (`block`, `warn`, `nudge`, `transform`, or `none`), `code`, `on_fire`, `applied`, `counters`, or `error`, and optionally the rendered copy members the decision carries. Any other `expected` key is refused. Include firing and non-firing cases for the boundary material to the rule.
+Place JSON fixtures at `<pack>/conformance/*.json`, sibling to `<pack>/policy/` (one object or an array per file). Each fixture carries an `id` equal to its file stem, a `covers` list, a JSON copy of the rule document in `rule` (the runner evaluates that copy, so keep it identical to the YAML), an observation `input` with `anchor`, `facts`, `host_facts` naming each `paintedwolf.*` fact it supplies with its type, and optional `session_id` with `occurrences` that run first in the same session, and `expected` about the last occurrence with any of `decision` (`block`, `warn`, `nudge`, or `none`), `code`, `on_fire`, `applied`, `counters`, or `error`, and optionally the rendered copy members the decision carries. Any other `expected` key is refused, and so is a fixture that supplies a count the engine maintains (`fire_count`, `breaker_count`, `same_code_reject_run`, `same_call_run`); produce those with earlier occurrences. Include firing and non-firing cases for the boundary material to the rule.
 
 Run:
 
@@ -58,7 +56,7 @@ pw rules test <pack>/policy --json
 |---|---|
 | `schema_invalid` | The document violates the OAR schema |
 | `condition_invalid` | `when` is invalid against the declared fact environment |
-| `scenario_mismatch` | A conformance fixture produced another outcome, or a `scenarios` render missed an `expect_contains` string |
+| `scenario_mismatch` | A conformance fixture produced another outcome, or an `x-paintedwolf-scenarios` render missed an `expect_contains` string |
 | `load_error` | The rule or a fact it requires could not load |
 
 The command is read-only. It exits 1 when a rule fails and 2 when the run itself cannot proceed, such as unreadable fixture JSON. Test success covers checked documents and discovered fixtures only.

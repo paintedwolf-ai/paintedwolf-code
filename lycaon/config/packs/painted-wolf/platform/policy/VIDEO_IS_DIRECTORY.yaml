@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "VIDEO_IS_DIRECTORY"
 effect: block
-category: recoverable
-emit: guard:view_video
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_video
 message: view_video path is a directory
 what: '{{ tool }} was given the directory {{ paintedwolf.path }}, not a video file.'
 cause: The path names a directory.
 why: One view draws frames from one recording.
 fix: List the directory and pass the recording's file path.
 instead: Branch on Code VIDEO_IS_DIRECTORY; pass a file path
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: recordings

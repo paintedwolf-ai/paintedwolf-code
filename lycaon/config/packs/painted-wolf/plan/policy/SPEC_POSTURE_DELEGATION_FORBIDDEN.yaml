@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_DELEGATION_FORBIDDEN"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: Delegation/implement tools are forbidden until the plan workflow is complete
 what: Delegation/implement tools are forbidden until the plan workflow is complete
 cause: Delegation/implement tools are forbidden until the plan workflow is complete
 why: Complete plan phases before delegate_dispatch or delegate_init
 fix: Complete plan phases before delegate_dispatch or delegate_init
 instead: Finish plan workflow before delegation tools
-scenarios:
+x-paintedwolf-scenarios:
   - id: spec_posture_delegation_smoke
     tool: delegate_dispatch
     vars:

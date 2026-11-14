@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.overlay_id, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} needs resolutions{% if paintedwolf.path %} on `{{ paintedwolf.path }}`{% endif %}: at least one conflict path is missing merged content'
 what: '{% if paintedwolf.overlay_id %}Result `{{ paintedwolf.overlay_id }}`{% else %}This result{% endif %}{% if paintedwolf.worker %} from worker `{{ paintedwolf.worker }}`{% endif %} needs resolutions{% if paintedwolf.path %} for `{{ paintedwolf.path }}`{% endif %}'
 cause: 'Landing was asked for on conflicting changes without resolutions, or a conflict path was left out.'
 why: The host cannot guess merged content — the coordinator must supply explicit primary patches after reading preview hunks or spill_path
 fix: '{{ paintedwolf.next_steps }} For overlapping_edit pass resolutions=[{path, hunks}] back-to-front; for line_shift pass [{path, content}] from primary + branch_delta / spill.'
 instead: 'Preview first, then give tier-appropriate resolutions for every conflict path, then promote.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       overlay_id: result-resolve

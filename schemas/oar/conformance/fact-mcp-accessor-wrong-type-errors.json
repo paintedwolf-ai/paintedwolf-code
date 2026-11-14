@@ -1,0 +1,35 @@
+{
+  "title": "A typed mcp accessor reading a member of another type is a fact-provider failure",
+  "covers": [
+    "OAR-FACT-23"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.post_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "mcp_field_int(\"count\") > 0",
+    "on_error": "fail_open",
+    "requires_facts": [
+      "mcp_field_int"
+    ]
+  },
+  "input": {
+    "anchor": "tool.post_invoke",
+    "facts": {
+      "tool": "x_search",
+      "mcp_result": {
+        "count": "three"
+      }
+    }
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "R:errored"
+    ]
+  },
+  "id": "fact-mcp-accessor-wrong-type-errors"
+}

@@ -12,18 +12,18 @@
     "effect": "block",
     "when": "tool == \"read\"",
     "requires_facts": [
-      "paintedwolf.score"
+      "example.score"
     ],
-    "what": "score {{ paintedwolf.score }}."
+    "what": "score {{ example.score }}."
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
       "tool": "read",
-      "paintedwolf.score": 1e-07
+      "example.score": 1e-07
     },
     "host_facts": {
-      "paintedwolf.score": "double"
+      "example.score": "double"
     }
   },
   "expected": {

@@ -10,15 +10,15 @@ selector:
 requires_facts: [paintedwolf.cwd, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CWD_NOT_DIRECTORY"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: '`command`/`terminal_open` cwd is not a directory'
 what: The requested cwd {{ paintedwolf.cwd }} could not be resolved to an existing directory for {{ tool }}.
 cause: The working directory must resolve to an existing directory within the permitted scope.
 why: The process needs an existing working directory.
 fix: Use an existing directory within this invocation's permitted scope.
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       cwd: README.md

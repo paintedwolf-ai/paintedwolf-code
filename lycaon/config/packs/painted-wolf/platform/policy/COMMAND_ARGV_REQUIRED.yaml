@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_ARGV_REQUIRED"
 effect: block
-category: recoverable
-emit: guard:command_composition_redirect
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
 message: command() needs explicit command text
 what: '`{{ tool }}` requires explicit `command` text.'
 cause: This invocation supplied no command text.
 why: ''
 fix: Supply the intended program or executable in `command`.
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: command
