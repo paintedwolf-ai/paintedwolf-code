@@ -2,6 +2,7 @@ import { EDITOR_STANDARD_COMMANDS } from "./editor-standard-commands.ts";
 import { editorEditingStyle } from "./editor-editing-style.ts";
 import { sourceEditorThemeRules } from "./editor-theme-rules.ts";
 import { editorScrollPosition } from "./editor-scroll-position.ts";
+import { editorReadingAnchor } from "./editor-reading-anchor.ts";
 import {
   EditorView,
   Decoration,
@@ -286,6 +287,7 @@ function denCodeMirrorTheme(surface: EditorSurface): Extension {
   if (held) return held;
   const theme: Extension = [
     editorScrollPosition,
+    editorReadingAnchor,
     denScrollbars,
     editorScrollLifecycle(surface),
     denEditorTheme,
