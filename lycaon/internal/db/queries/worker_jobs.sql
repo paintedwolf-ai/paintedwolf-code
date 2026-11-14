@@ -67,7 +67,7 @@ ORDER BY created_at, id LIMIT 1;
 -- Admission holds the session gate before the claim transaction starts.
 -- name: ClaimWorkerJob :one
 UPDATE worker_jobs
-SET status = 'running', started_at = sqlc.arg(started_at), claimed_by = sqlc.arg(claimed_by),
+SET status = 'running', started_at = COALESCE(started_at, sqlc.arg(started_at)), claimed_by = sqlc.arg(claimed_by),
     claim_token = sqlc.arg(claim_token), attempt = attempt + 1,
     heartbeat_at = sqlc.arg(heartbeat_at), lease_expires_at = sqlc.arg(lease_expires_at)
 WHERE worker_jobs.id = sqlc.arg(id) AND status = 'pending' AND cancel_requested_at IS NULL

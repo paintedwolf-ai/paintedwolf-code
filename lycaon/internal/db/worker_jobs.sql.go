@@ -94,7 +94,7 @@ func (q *Queries) CancelWorkerWaitLeases(ctx context.Context, arg CancelWorkerWa
 
 const claimWorkerJob = `-- name: ClaimWorkerJob :one
 UPDATE worker_jobs
-SET status = 'running', started_at = ?1, claimed_by = ?2,
+SET status = 'running', started_at = COALESCE(started_at, ?1), claimed_by = ?2,
     claim_token = ?3, attempt = attempt + 1,
     heartbeat_at = ?4, lease_expires_at = ?5
 WHERE worker_jobs.id = ?6 AND status = 'pending' AND cancel_requested_at IS NULL
