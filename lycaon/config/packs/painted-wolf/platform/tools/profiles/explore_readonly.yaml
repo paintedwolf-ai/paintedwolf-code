@@ -48,4 +48,4 @@ deny_tools:
   - delegate_*
   - state_*
   - handoff_*
-wait_conditions: [http_ready, port_ready]
+wait_conditions: [process_done, http_ready, port_ready]

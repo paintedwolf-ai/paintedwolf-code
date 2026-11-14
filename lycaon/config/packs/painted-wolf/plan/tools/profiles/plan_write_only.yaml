@@ -23,4 +23,4 @@ deny_tools:
   - state_*
   - handoff_*
 write_scope: plan_write
-wait_conditions: [http_ready, port_ready]
+wait_conditions: [process_done, http_ready, port_ready]
