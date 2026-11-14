@@ -215,7 +215,7 @@ func TestTurnDecisionHoldsEnginePriorityAcrossBothCalls(t *testing.T) {
 		catalog: turnload.Catalog{Turn: turnload.TurnSpec{DeadlineMS: 500, Skills: turnload.SkillPreloadSpec{PreloadAt: 3.4, Margin: 0.3}}},
 		floor:   []string{"command"},
 	}
-	candidates := turnload.Candidates(turnload.ToolCandidates([]turnload.ToolCard{{Name: "edit", Description: "Edit a file."}}), nil)
+	candidates := turnload.ToolCandidates([]turnload.ToolCard{{Name: "edit", Description: "Edit a file."}})
 	m.decideTurn(t.Context(), &api.Session{ID: "s1"}, "coordinator", "custom project workflow", decision, candidates)
 	want := []string{"hold", "decide", "rank", "release"}
 	if len(fake.Calls) != len(want) {
