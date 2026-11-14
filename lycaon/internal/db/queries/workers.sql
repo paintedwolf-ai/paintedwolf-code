@@ -261,6 +261,26 @@ WHERE r.job_id = ?
   AND COALESCE(d.change_state, '') IN ('', 'shelved')
 ORDER BY prior.ordinal;
 
+-- name: ListWorkerLaterPendingJobs :many
+-- The later rounds of the worker that ran this job whose changes are still
+-- pending. Their lanes carried this job's changes, so rejecting it rejects
+-- these with it.
+SELECT later.job_id
+FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+JOIN worker_results res ON res.worker_job_id = later.job_id
+JOIN worker_jobs j ON j.id = later.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY later.ordinal;
+
+-- name: CountWorkerLaterUnsettledRounds :one
+SELECT COUNT(*) FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+WHERE r.job_id = ? AND later.settled_at IS NULL;
+
 -- name: DisposeWorkerResultsByJob :execrows
 -- Records how a landing or rejection resolved a worker round's changes, in
 -- the transaction that resolved them. Landed and rejected are final; a

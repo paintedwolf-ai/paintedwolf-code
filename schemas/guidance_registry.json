@@ -1827,6 +1827,12 @@
       "severity": "warning",
       "summary": "Overlay {{ paintedwolf.overlay_id }} (stacked on {{ paintedwolf.base_overlay_id }}) has {{ paintedwolf.conflict_count }} path(s) in conflict after rebasing onto the just-promoted parent{% if paintedwolf.conflict_paths %}: {{ paintedwolf.conflict_paths }}{% endif %}"
     },
+    "OVERLAY_REJECT_WORKER_WORKING": {
+      "branch_instruction": "Branch on Code; reject once the worker has no round running",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "{% if paintedwolf.worker %}Worker `{{ paintedwolf.worker }}`{% else %}The worker{% endif %} is working on a later round that builds on {% if paintedwolf.overlay_id %}result `{{ paintedwolf.overlay_id }}`{% else %}this result{% endif %}"
+    },
     "PAGE_CAP_REACHED": {
       "branch_instruction": "Preserve needed page state while resolving the capacity limit",
       "category": "recoverable",

@@ -140,8 +140,9 @@ func (s *SQLStore) CompleteJob(ctx context.Context, id string, result api.Worker
 	return JobCompletion{Committed: true, Suspended: suspended}, nil
 }
 
-// FailJob atomically fails the active claim.
-func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg string, failure *api.WorkerFailure) (bool, error) {
+// FailJob atomically fails the active claim. A non-empty keptCheckpoint is
+// the checkpoint the round's branch published; its changes stay pending.
+func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg string, failure *api.WorkerFailure, keptCheckpoint string) (bool, error) {
 	if claimed == nil || strings.TrimSpace(claimed.ID) == "" || strings.TrimSpace(claimed.ClaimToken) == "" {
 		return false, fmt.Errorf("claimed worker task required")
 	}
@@ -160,6 +161,7 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 		Error:       db.NullString(errMsg),
 		FailureJson: failureJSON,
 		CompletedAt: sql.NullString{String: completedAt, Valid: true},
+		KeptCheckpoint: keptCheckpoint,
 		ID:          claimed.ID,
 		ClaimToken:  db.NullString(claimed.ClaimToken),
 	})
@@ -184,7 +186,7 @@ func (s *SQLStore) FailJob(ctx context.Context, claimed *api.WorkerTask, errMsg 
 	}); err != nil {
 		return false, err
 	}
-	if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(completedAt), JobID: claimed.ID}); err != nil {
+	if _, err := q.SettleWorkerRoundByJob(ctx, db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(completedAt), CheckpointID: keptCheckpoint, JobID: claimed.ID}); err != nil {
 		return false, err
 	}
 	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, claimed.ID); err != nil {

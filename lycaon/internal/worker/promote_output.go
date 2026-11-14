@@ -146,6 +146,17 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 			"overlay_id": overlayID, "merge_status": string(task.MergeStatus),
 		})
 	}
+	var later []string
+	if s.Store != nil {
+		pending, working, err := s.Store.LaterRounds(ctx, overlayID)
+		if err != nil {
+			return api.OverlayRejectOutcome{}, err
+		}
+		if working {
+			return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayRejectWorkerWorkingCode, map[string]any{"overlay_id": overlayID})
+		}
+		later = pending
+	}
 	out := api.OverlayRejectOutcome{
 		OverlayID: overlayID,
 		Reason:    strings.TrimSpace(reason),
@@ -156,7 +167,18 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 		return out, err
 	}
 	updates := []MergeStatusUpdate{{JobID: overlayID, Status: api.WorkerMergeStatusRejected}}
+	seen := map[string]bool{overlayID: true}
+	// Later rounds of the worker carried these changes in its lane.
+	for _, id := range later {
+		seen[id] = true
+		updates = append(updates, MergeStatusUpdate{JobID: id, Status: api.WorkerMergeStatusRejected})
+		out.Later = append(out.Later, id)
+	}
 	for _, child := range children {
+		if seen[child.ID] {
+			continue
+		}
+		seen[child.ID] = true
 		updates = append(updates, MergeStatusUpdate{JobID: child.ID, Status: api.WorkerMergeStatusOrphaned})
 		out.Orphaned = append(out.Orphaned, child.ID)
 	}

@@ -150,12 +150,14 @@ SET status = 'held', result_json = sqlc.arg(result_json), error = NULL, failure_
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
 
+-- A failed write round with changes keeps them pending on its branch.
 -- name: FailWorkerJob :execrows
 UPDATE worker_jobs
 SET status = 'failed', error = sqlc.arg(error), failure_json = sqlc.arg(failure_json),
     completed_at = COALESCE(completed_at, sqlc.arg(completed_at)),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
@@ -168,12 +170,14 @@ SET status = 'pending', error = sqlc.arg(error), failure_json = sqlc.arg(failure
 WHERE id = sqlc.arg(id) AND status = 'running'
   AND claim_token = sqlc.arg(claim_token) AND cancel_requested_at IS NULL;
 
+-- A stopped write round with changes keeps them pending on its branch.
 -- name: CancelWorkerJob :execrows
 UPDATE worker_jobs
 SET status = 'canceled', result_json = sqlc.arg(result_json), error = NULL, failure_json = NULL,
     completed_at = COALESCE(completed_at, sqlc.arg(completed_at)),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(sqlc.arg(kept_checkpoint) AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
 WHERE id = sqlc.arg(id) AND status IN ('pending', 'running', 'waiting', 'held');
 

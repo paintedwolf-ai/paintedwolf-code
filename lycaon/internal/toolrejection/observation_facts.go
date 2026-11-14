@@ -204,6 +204,7 @@ var rejectCodeObservation = map[string]string{
 	"OVERLAY_PROMOTE_SYNTAX_UNHEALTHY":          "promote_syntax_unhealthy",
 	"OVERLAY_PROMOTE_SESSION_MISMATCH":          "promote_session_mismatch",
 	"OVERLAY_REBASE_CONFLICT":                   "rebase_conflict",
+	"OVERLAY_REJECT_WORKER_WORKING":             "worker_working",
 	"PAGE_CAP_REACHED":                          "resource_limit",
 	"PAGE_ID_REQUIRED":                          "id_required",
 	"PAGE_NOT_FOUND":                            "not_found",

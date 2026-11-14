@@ -44,19 +44,27 @@ UPDATE worker_jobs
 SET status = 'canceled', result_json = ?1, error = NULL, failure_json = NULL,
     completed_at = COALESCE(completed_at, ?2),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(?3 AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(?3 AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
-WHERE id = ?3 AND status IN ('pending', 'running', 'waiting', 'held')
+WHERE id = ?4 AND status IN ('pending', 'running', 'waiting', 'held')
 `
 
 type CancelWorkerJobParams struct {
-	ResultJson  sql.NullString `json:"result_json"`
-	CompletedAt sql.NullString `json:"completed_at"`
-	ID          string         `json:"id"`
+	ResultJson     sql.NullString `json:"result_json"`
+	CompletedAt    sql.NullString `json:"completed_at"`
+	KeptCheckpoint string         `json:"kept_checkpoint"`
+	ID             string         `json:"id"`
 }
 
+// A stopped write round with changes keeps them pending on its branch.
 func (q *Queries) CancelWorkerJob(ctx context.Context, arg CancelWorkerJobParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, cancelWorkerJob, arg.ResultJson, arg.CompletedAt, arg.ID)
+	result, err := q.db.ExecContext(ctx, cancelWorkerJob,
+		arg.ResultJson,
+		arg.CompletedAt,
+		arg.KeptCheckpoint,
+		arg.ID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -253,25 +261,29 @@ UPDATE worker_jobs
 SET status = 'failed', error = ?1, failure_json = ?2,
     completed_at = COALESCE(completed_at, ?3),
     claim_token = NULL, heartbeat_at = NULL, lease_expires_at = NULL,
-    merge_status = 'aborted', workspace_relpath = NULL,
+    merge_status = CASE WHEN CAST(?4 AS TEXT) != '' THEN 'pending' ELSE 'aborted' END,
+    workspace_relpath = CASE WHEN CAST(?4 AS TEXT) != '' THEN workspace_relpath ELSE NULL END,
     merge_claim_token = NULL, merge_heartbeat_at = NULL, merge_lease_expires_at = NULL
-WHERE id = ?4 AND status = 'running'
-  AND claim_token = ?5 AND cancel_requested_at IS NULL
+WHERE id = ?5 AND status = 'running'
+  AND claim_token = ?6 AND cancel_requested_at IS NULL
 `
 
 type FailWorkerJobParams struct {
-	Error       sql.NullString `json:"error"`
-	FailureJson sql.NullString `json:"failure_json"`
-	CompletedAt sql.NullString `json:"completed_at"`
-	ID          string         `json:"id"`
-	ClaimToken  sql.NullString `json:"claim_token"`
+	Error          sql.NullString `json:"error"`
+	FailureJson    sql.NullString `json:"failure_json"`
+	CompletedAt    sql.NullString `json:"completed_at"`
+	KeptCheckpoint string         `json:"kept_checkpoint"`
+	ID             string         `json:"id"`
+	ClaimToken     sql.NullString `json:"claim_token"`
 }
 
+// A failed write round with changes keeps them pending on its branch.
 func (q *Queries) FailWorkerJob(ctx context.Context, arg FailWorkerJobParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, failWorkerJob,
 		arg.Error,
 		arg.FailureJson,
 		arg.CompletedAt,
+		arg.KeptCheckpoint,
 		arg.ID,
 		arg.ClaimToken,
 	)

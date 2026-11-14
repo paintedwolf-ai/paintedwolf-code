@@ -122,7 +122,6 @@ func (m *Service) BeforeWorkerWrite(ctx context.Context, tctx tools.ToolContext,
 						"path":       relPath,
 						"agent_type": strings.TrimSpace(task.AgentType),
 						"scope_mode": string(scope.Mode),
-						"job_id":     strings.TrimSpace(task.ID),
 					},
 				}
 			}

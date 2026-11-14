@@ -207,6 +207,19 @@ func (q *Queries) CountSessionWorkersByAgent(ctx context.Context, arg CountSessi
 	return count, err
 }
 
+const countWorkerLaterUnsettledRounds = `-- name: CountWorkerLaterUnsettledRounds :one
+SELECT COUNT(*) FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+WHERE r.job_id = ? AND later.settled_at IS NULL
+`
+
+func (q *Queries) CountWorkerLaterUnsettledRounds(ctx context.Context, jobID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkerLaterUnsettledRounds, jobID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const disposeWorkerResultsByJob = `-- name: DisposeWorkerResultsByJob :execrows
 INSERT INTO worker_result_dispositions (
     result_id, worker_id, accounted_operation_id, accounted_at,
@@ -1194,6 +1207,45 @@ func (q *Queries) ListWorkerDependencies(ctx context.Context, workerID string) (
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkerLaterPendingJobs = `-- name: ListWorkerLaterPendingJobs :many
+SELECT later.job_id
+FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+JOIN worker_results res ON res.worker_job_id = later.job_id
+JOIN worker_jobs j ON j.id = later.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY later.ordinal
+`
+
+// The later rounds of the worker that ran this job whose changes are still
+// pending. Their lanes carried this job's changes, so rejecting it rejects
+// these with it.
+func (q *Queries) ListWorkerLaterPendingJobs(ctx context.Context, jobID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkerLaterPendingJobs, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var job_id string
+		if err := rows.Scan(&job_id); err != nil {
+			return nil, err
+		}
+		items = append(items, job_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

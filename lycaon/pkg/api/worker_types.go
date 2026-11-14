@@ -278,11 +278,15 @@ type WorkerMergeResult struct {
 }
 
 // OverlayRejectOutcome reports the result of explicitly rejecting an overlay,
-// including any stacked children that were orphaned by the rejection.
+// with the later results and stacked children the rejection reached.
 type OverlayRejectOutcome struct {
-	OverlayID string   `json:"overlay_id"`
-	Reason    string   `json:"reason,omitempty"`
-	Orphaned  []string `json:"orphaned_job_ids,omitempty"`
+	OverlayID string `json:"overlay_id"`
+	Reason    string `json:"reason,omitempty"`
+	// Later names the worker's later results rejected with it, whose rounds
+	// carried these changes.
+	Later []string `json:"later_overlay_ids,omitempty"`
+	// Orphaned names the stacked results the rejection orphaned.
+	Orphaned []string `json:"orphaned_overlay_ids,omitempty"`
 }
 
 // WorkspaceNotClonableReason says why a worker branch cannot clone its source.
