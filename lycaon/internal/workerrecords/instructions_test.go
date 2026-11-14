@@ -101,9 +101,7 @@ func TestNamesByJobFollowsTheRound(t *testing.T) {
 		t.Fatalf("running names = %+v ok=%v", names, ok)
 	}
 	f.insertResult(t, "result-1", "job-1")
-	w, err := f.store.Resolve(t.Context(), f.coord, "fixer")
-	testutil.FailErr(t, "resolve", err)
-	f.settle(t, w.ID, "job-1")
+	f.settle(t, "job-1", "")
 	names, ok, err = f.store.NamesByJob(t.Context(), "job-1")
 	testutil.FailErr(t, "names once settled", err)
 	if !ok || names.Worker != "fixer" || names.Handle != "result-1" {
