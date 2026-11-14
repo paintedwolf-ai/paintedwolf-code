@@ -1,0 +1,25 @@
+spec_version: "1.0"
+id: REVIEW_OF_NOT_ADMITTED
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - task
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.state, paintedwolf.worker]
+when: paintedwolf.rejection_code == "REVIEW_OF_NOT_ADMITTED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:task
+message: The worker that delivered this result does not admit a review now.
+what: 'Worker `{{ paintedwolf.worker }}` is {{ paintedwolf.state }}, which does not admit a review of its result now.'
+cause: A review binds to a result its worker has delivered and the coordinator has not yet dealt with.
+why: A reviewer reads one sealed result; a worker still working has none, and a result already landed, rejected or shelved needs no review.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code REVIEW_OF_NOT_ADMITTED; do not retry until the worker's state changes
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      session_role: coordinator
+      worker: parser-fix
+      tool: task
+      state: working

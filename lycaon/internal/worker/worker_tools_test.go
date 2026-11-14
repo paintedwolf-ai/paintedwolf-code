@@ -506,19 +506,110 @@ func TestStackedLaneStartsOnTheBaseResult(t *testing.T) {
 	stacked := func(base string) *api.WorkerTask {
 		return &api.WorkerTask{ID: "job-2", Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite, BaseOverlayID: base}}
 	}
-	if a, err := lanes.assignment(t.Context(), stacked("")); err != nil || a.BaseResultID != "" || !a.Write {
+	if a, err := lanes.assignment(t.Context(), stacked(""), workerrecords.Round{}); err != nil || a.BaseResultID != "" || !a.Write {
 		t.Fatalf("unstacked = %+v, %v", a, err)
 	}
-	if _, err := lanes.assignment(t.Context(), stacked("job-1")); !errors.Is(err, ErrStackedBaseUnavailable) {
+	if _, err := lanes.assignment(t.Context(), stacked("job-1"), workerrecords.Round{}); !errors.Is(err, ErrStackedBaseUnavailable) {
 		t.Fatalf("without a checkpoint store: %v", err)
 	}
 	lanes.Checkpoints = reconstructible{}
-	a, err := lanes.assignment(t.Context(), stacked("job-1"))
+	a, err := lanes.assignment(t.Context(), stacked("job-1"), workerrecords.Round{})
 	testutil.FailErr(t, "stacked", err)
 	if a.BaseResultID != "result-job-1" {
 		t.Fatalf("stacked = %+v", a)
 	}
-	if _, err := lanes.assignment(t.Context(), stacked("job-unknown")); !errors.Is(err, ErrStackedBaseUnavailable) {
+	if _, err := lanes.assignment(t.Context(), stacked("job-unknown"), workerrecords.Round{}); !errors.Is(err, ErrStackedBaseUnavailable) {
 		t.Fatalf("unknown base: %v", err)
 	}
+}
+
+// settleRound completes a running job and settles its round, changing nothing.
+func (f *workerToolsFixture) settleRound(t *testing.T, workerID, jobID string) {
+	t.Helper()
+	report, _ := json.Marshal(api.WorkerResult{Status: "complete", CompletionReport: &api.WorkerCompletionReport{LegStatus: "complete"}})
+	now := db.FormatTime(time.Now().UTC())
+	_, err := f.db.ExecContext(t.Context(), `UPDATE worker_jobs SET status = 'complete', result_json = ?, completed_at = ? WHERE id = ?`, string(report), now, jobID)
+	testutil.FailErr(t, "complete job", err)
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO worker_results (id, worker_job_id, status, created_at) VALUES (?, ?, 'complete', ?)`, "result-"+jobID, jobID, now)
+	testutil.FailErr(t, "insert result", err)
+	_, err = f.records.SettleRound(t.Context(), f.coord, workerrecords.Op{ID: "settle-" + jobID}, workerID, jobID, "")
+	testutil.FailErr(t, "settle", err)
+}
+
+// A review binds the exact result it names and accounts for it; only a
+// delivered result with changes can be reviewed, and the reviewer's later
+// rounds keep that subject while its agent stays sealed.
+func TestTaskStartsAReviewerOnASealedResult(t *testing.T) {
+	f := newWorkerToolsFixture(t)
+	var accounted []string
+	f.ops.Accounted = func(_ string, jobs []string) { accounted = append(accounted, jobs...) }
+	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
+		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(),
+		WorkerRecords: f.records, Reviews: f.ops,
+	}))
+	review := func(call, handle string, extra map[string]any) error {
+		args := map[string]any{"agent_type": "repo-researcher", "name": "checker-" + call, "scope": map[string]any{"mode": "read"},
+			"review_of": handle, "brief": map[string]any{"goal": "Review the change", "done_when": []any{"Findings reported"}}}
+		for k, v := range extra {
+			args[k] = v
+		}
+		_, err := f.run(t, "task", call, args)
+		return err
+	}
+
+	f.deliver(t, "job-0")
+	wantReject(t, review("no-changes", "result-job-0", nil), ReviewOfNoChangesCode)
+	f.deliverWith(t, "job-1", "cp-1")
+	wantReject(t, review("unknown", "result-missing", nil), "RESULT_HANDLE_UNKNOWN")
+	wantReject(t, review("write", "result-job-1", map[string]any{"agent_type": "implementer", "scope": map[string]any{"mode": "write"}}), "TOOL_ARGS_INVALID")
+	wantReject(t, review("stacked", "result-job-1", map[string]any{"scope": map[string]any{"mode": "read", "base_overlay_id": "result-job-1"}}), "TOOL_ARGS_INVALID")
+	if n := countJobs(t, f.db); n != 2 {
+		t.Fatalf("a refused review enqueued work: %d jobs", n)
+	}
+
+	testutil.FailErr(t, "review", review("ok", "result-job-1", nil))
+	reviewer, err := f.records.Resolve(t.Context(), f.coord, "checker-ok")
+	testutil.FailErr(t, "resolve reviewer", err)
+	rounds, err := f.records.Rounds(t.Context(), f.coord, reviewer.ID)
+	testutil.FailErr(t, "reviewer rounds", err)
+	subject, ok := rounds[0].Subject()
+	if !ok || subject != (workerrecords.ReviewSubject{ResultID: "result-job-1", WorkerID: f.workerID, JobID: "job-1", CheckpointID: "cp-1"}) {
+		t.Fatalf("subject = %+v ok=%v", subject, ok)
+	}
+	ds, err := f.records.Dispositions(t.Context(), f.coord, f.workerID)
+	testutil.FailErr(t, "dispositions", err)
+	reviewedAccounted := false
+	for _, d := range ds {
+		reviewedAccounted = reviewedAccounted || (d.ResultID == "result-job-1" && d.AccountedAt != "")
+	}
+	if !reviewedAccounted || len(accounted) != 1 || accounted[0] != "job-1" {
+		t.Fatalf("review did not account for its subject: %+v %v", ds, accounted)
+	}
+
+	// The reviewer's next round reads the same result; its agent is sealed.
+	now := db.FormatTime(time.Now().UTC())
+	_, err = f.db.ExecContext(t.Context(), `INSERT INTO sessions (id, project_id, owner_person_id, posture, status, parent_session_id, agent_type, created_at, activity_at, updated_at)
+		VALUES ('checker-child', ?, (SELECT id FROM people WHERE role = 'owner'), 'build', 'idle', 'coord', 'repo-researcher', ?, ?, ?)`, testdbseed.DefaultProjectID, now, now, now)
+	testutil.FailErr(t, "insert reviewer child", err)
+	testutil.FailErr(t, "spawn reviewer child", f.queue.store.SetChildSessionID(t.Context(), rounds[0].JobID, "checker-child"))
+	f.settleRound(t, reviewer.ID, rounds[0].JobID)
+	_, err = f.run(t, InstructWorkerTool, "again", map[string]any{"worker": "checker-ok", "instructions": "check the tests too"})
+	testutil.FailErr(t, "instruct reviewer", err)
+	rounds, err = f.records.Rounds(t.Context(), f.coord, reviewer.ID)
+	testutil.FailErr(t, "reviewer rounds", err)
+	if next, ok := rounds[len(rounds)-1].Subject(); len(rounds) != 2 || !ok || next != subject {
+		t.Fatalf("second round subject = %+v", rounds)
+	}
+	f.settleRound(t, reviewer.ID, rounds[1].JobID)
+	_, err = f.run(t, InstructWorkerTool, "become", map[string]any{"worker": "checker-ok", "instructions": "fix it", "agent_type": "implementer"})
+	wantReject(t, err, "INSTRUCT_WORKER_AGENT_SEALED")
+
+	// A worker still working has no result to review.
+	testutil.FailErr(t, "insert job", f.queue.store.InsertTask(t.Context(), api.WorkerTask{
+		ID: "job-2", ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "coord", ChildSessionID: "child",
+		AgentType: "repo-researcher", Status: api.WorkerStatusRunning, ExecutionTarget: api.ExecutionTargetLocal, Prompt: "more", Brief: "more",
+	}))
+	_, err = f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit-job-2"}, f.workerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	wantReject(t, review("working", "result-job-1", nil), ReviewOfNotAdmittedCode)
 }

@@ -205,6 +205,17 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	if reject := controlPlaneReject(tctx, modelPath, op); reject != nil {
 		return Resolved{}, reject
 	}
+	// A reviewer reads its view of the subject; writing it was refused above.
+	if view := strings.TrimSpace(tctx.Source.ReviewViewRoot); view != "" {
+		resolved, err := resolveUnderBranch(ctx, b, tctx, view, modelPath, op)
+		if err == nil {
+			return resolved, nil
+		}
+		if granted, ok := resolveGranted(tctx, modelPath, op); ok {
+			return granted, nil
+		}
+		return Resolved{}, err
+	}
 	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		resolved, err := resolveUnderBranch(ctx, b, tctx, branch, modelPath, op)
 		if err == nil {
@@ -273,8 +284,8 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 }
 
 func actionRootPaths(tctx tools.ToolContext) []string {
-	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
-		return []string{branch}
+	if view := tools.WorkerViewRoot(tctx); view != "" {
+		return []string{view}
 	}
 	return workspaceRoots(tctx)
 }
@@ -351,7 +362,7 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 		return nil, noRootsReject()
 	}
 	if projectroot.IsUnionDiscoveryPath(modelPath) {
-		if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
+		if branch := tools.WorkerViewRoot(tctx); branch != "" {
 			if len(tctx.Source.Roots) > 1 {
 				refs := make([]projectroot.RootRef, 0, len(tctx.Source.Roots))
 				for _, r := range tctx.Source.Roots {
@@ -396,8 +407,8 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	if area, _, _, session := sessionRel(tctx, cwdClean); session && area == projectroot.VirtualScratchLabel {
 		return commandCwdInScratch(ctx, tctx, cwdClean)
 	}
-	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
-		return commandCwdUnderBranch(ctx, tctx, branch, cwdArg)
+	if view := tools.WorkerViewRoot(tctx); view != "" {
+		return commandCwdUnderBranch(ctx, tctx, view, cwdArg)
 	}
 	if len(tctx.Source.Roots) == 0 {
 		return "", "", noRootsReject()

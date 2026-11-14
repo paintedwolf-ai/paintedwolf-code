@@ -18,6 +18,8 @@ type WorkerCycleLister interface {
 	ListPendingOutcomes(ctx context.Context) ([]api.WorkerTask, error)
 	Get(jobID string) (*api.WorkerTask, bool)
 	ClaimWorkerBranch(ctx context.Context, jobID string) (*api.WorkerTask, error)
+	// ReviewsWorker reports a read job that reviews a sealed result.
+	ReviewsWorker(ctx context.Context, task *api.WorkerTask) bool
 }
 
 // SetWorkerRounds sets the policy that bounds worker rounds and their notices.

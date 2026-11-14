@@ -36,6 +36,15 @@ type TaskToolDeps struct {
 	TaskReceipt  func(context.Context, string, string) (*api.WorkerTask, error)
 	// WorkerRecords records the worker each task starts and its first round.
 	WorkerRecords *workerrecords.Store
+	// Reviews binds a reviewer to the sealed result it reads.
+	Reviews ReviewBinder
+}
+
+// ReviewBinder names a review's subject and accounts for it once the
+// reviewer's round is admitted.
+type ReviewBinder interface {
+	Review(ctx context.Context, actor workerrecords.Actor, resultID string) (workerrecords.ReviewSubject, error)
+	ReviewStarted(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, subject workerrecords.ReviewSubject) error
 }
 
 // IdentityResolver supplies the same plan source to task admission and execution.
@@ -66,8 +75,11 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 					return "", err
 				}
 				scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
-				name, err := startWorkerRound(ctx, deps, tctx, *prior)
+				name, err := startWorkerRound(ctx, deps, tctx, *prior, nil)
 				if err != nil {
+					return "", err
+				}
+				if err := accountReplayedReview(ctx, deps, tctx, prior.ID); err != nil {
 					return "", err
 				}
 				return taskEnqueueOutput(tctx, scope, *prior, name)
@@ -103,6 +115,10 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 		}
 		normalizedScope := identity.Scope
 		scopePtr := &normalizedScope
+		subject, err := bindReviewSubject(ctx, deps, tctx, args, identity.WorkflowWorkID, after, normalizedScope)
+		if err != nil {
+			return "", err
+		}
 		if after, err = resolveTaskAddresses(ctx, deps, tctx, after, scopePtr); err != nil {
 			return "", err
 		}
@@ -174,9 +190,14 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			return "", err
 		}
 		task.ID = enqueuedID
-		workerName, err := startWorkerRound(ctx, deps, tctx, task)
+		workerName, err := startWorkerRound(ctx, deps, tctx, task, subject)
 		if err != nil {
 			return "", err
+		}
+		if subject != nil {
+			if err := deps.Reviews.ReviewStarted(ctx, taskActor(tctx), taskWorkerOp(tctx, "review"), *subject); err != nil {
+				return "", err
+			}
 		}
 		return taskEnqueueOutput(tctx, projScope, task, workerName)
 	})

@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/enginepaths"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -196,5 +197,40 @@ func TestResolveWorkerBranchGrantedExternalAccess(t *testing.T) {
 
 	if _, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, extFile); err == nil {
 		t.Fatal("worker write escaped its branch through an external grant")
+	}
+}
+
+// A reviewer reads, lists and runs in its view of the subject, which lives
+// among the engine's worker views, and every write is refused.
+func TestReviewerReadsItsViewAndWritesNothing(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("LYCAON_CONFIG_DIR", base)
+	primary := filepath.Join(base, "proj")
+	view := filepath.Join(enginepaths.WorkerBranchesRootUnder(base), "reviewer.1")
+	testutil.FailErr(t, "mkdir primary", os.MkdirAll(filepath.Join(primary, "pkg"), 0o755))
+	testutil.FailErr(t, "mkdir view", os.MkdirAll(filepath.Join(view, "pkg"), 0o755))
+	testutil.FailErr(t, "write view", os.WriteFile(filepath.Join(view, "pkg", "x.go"), []byte("reviewed"), 0o644))
+	tctx := tools.ToolContext{
+		Identity: tools.InvocationIdentity{Agent: "code-reviewer", WorkerJobID: "review-job"},
+		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
+			ActiveRootID: "p", ReviewViewRoot: view, BranchWorkspace: testutil.CompleteBranchWorkspace{}},
+	}
+	res, err := projectpaths.ResolveRead(context.Background(), nil, tctx, "pkg/x.go")
+	testutil.FailErr(t, "ResolveRead", err)
+	if res.Abs != filepath.Join(view, "pkg", "x.go") {
+		t.Fatalf("read resolved to %q", res.Abs)
+	}
+	cwd, _, err := projectpaths.CommandCwd(context.Background(), tctx, "")
+	testutil.FailErr(t, "CommandCwd", err)
+	if cwd != view {
+		t.Fatalf("command cwd = %q", cwd)
+	}
+	roots, err := projectpaths.UnionDiscoveryRoots(context.Background(), tctx, ".")
+	testutil.FailErr(t, "UnionDiscoveryRoots", err)
+	if len(roots) != 1 || roots[0].Path != view {
+		t.Fatalf("discovery roots = %+v", roots)
+	}
+	if _, err := projectpaths.ResolveWrite(context.Background(), nil, tctx, "pkg/x.go"); err == nil {
+		t.Fatal("a reviewer resolved a write")
 	}
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/profiles"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	workflowruntime "github.com/lycaon/lycaon/internal/workflow/runtime"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -135,11 +136,33 @@ func (r *Runtime) wireWorkerContext(deps Dependencies) error {
 			return strings.TrimSpace(workflowID)
 		},
 	}
+	records := workerrecords.New(deps.Storage.Database)
 	deps.Sessions.Manager.SetWorkerContextBuilder(&delegation.CompositeWorkerContext{
 		Delegation: r.ContextLoader,
 		Tools:      legToolLister,
 		AgentsFor:  agentsForSession,
 		MatcherFor: playbooksForSession,
+		ReviewSubject: func(ctx context.Context, jobID string) (string, string, bool, error) {
+			return reviewSubjectNames(ctx, records, jobID)
+		},
 	})
 	return nil
+}
+
+// reviewSubjectNames names the result a reviewer's job reads and the worker
+// that delivered it.
+func reviewSubjectNames(ctx context.Context, records *workerrecords.Store, jobID string) (string, string, bool, error) {
+	round, ok, err := records.RoundByJob(ctx, jobID)
+	if err != nil || !ok {
+		return "", "", false, err
+	}
+	subject, reviewer := round.Subject()
+	if !reviewer {
+		return "", "", false, nil
+	}
+	names, _, err := records.NamesByJob(ctx, subject.JobID)
+	if err != nil {
+		return "", "", false, err
+	}
+	return names.Worker, subject.ResultID, true, nil
 }
