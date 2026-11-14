@@ -174,6 +174,8 @@ function reflowingView(head: number, scrollTop: number, scrollLeft = 0) {
   };
   view.posAtCoords = ({ x, y }: { x: number; y: number }) =>
     x < PORT.left ? 0 : Math.floor((y + fake.scrollDOM.scrollTop) / layout.height);
+  Object.defineProperty(view, "documentTop", { get: () => PORT.top - fake.scrollDOM.scrollTop, configurable: true });
+  view.lineBlockAtHeight = (h: number) => ({ top: Math.floor(h / layout.height) * layout.height, height: layout.height });
   const at = (pos: number) => layout.height * pos - fake.scrollDOM.scrollTop;
   return { ...fake, layout, at };
 }
@@ -289,7 +291,6 @@ describe("preserving the reader's place across a reflow", () => {
       return { from: Math.floor(top / 20), to: Math.ceil((top + 600) / 20) };
     };
     Object.defineProperty(view, "viewport", { get: drawn });
-    view.documentTop = -fake.scrollDOM.scrollTop;
     Object.defineProperty(view, "documentTop", { get: () => -fake.scrollDOM.scrollTop });
     view.lineBlockAt = () => ({ from: 0, length: 100, top: 0, height: 100 * fake.layout.height });
     const coords = view.coordsAtPos as (pos: number) => { top: number };
