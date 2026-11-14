@@ -1,6 +1,6 @@
 import { ViewPlugin, type EditorView, type ViewUpdate } from "@codemirror/view";
 import { setEditorScrollTop } from "./editor-scroll-position.ts";
-import { isSettlingScroll, positionRect, topEdgePoint } from "./editor-settled-scroll.ts";
+import { isSettlingScroll, positionRect, settleGeneration, topEdgePoint } from "./editor-settled-scroll.ts";
 
 type Anchor = { pos: number; offset: number; left: number };
 type Drift = { top: number; left: number };
@@ -28,8 +28,8 @@ export function readReadingAnchor(view: EditorView): Anchor | null {
 /** Keeps the reader's text in place while the editor revises the size of a long line. */
 export const editorReadingAnchor = ViewPlugin.fromClass(class {
   anchor: Anchor | null = null;
-  // Set when geometry changed; a scroll the editor makes meanwhile is not the reader's.
-  pending = false;
+  // Where this anchor last scrolled to: that scroll is its own, every other one is the reader's place.
+  wrote: { top: number; left: number } | null = null;
   readonly correction = {};
   constructor(readonly view: EditorView) { this.capture(); }
 
@@ -40,8 +40,9 @@ export const editorReadingAnchor = ViewPlugin.fromClass(class {
   update(update: ViewUpdate): void {
     if (this.anchor && update.docChanged) this.anchor = { ...this.anchor, pos: update.changes.mapPos(this.anchor.pos) };
     if (!this.anchor || !(update.heightChanged || update.geometryChanged) || isSettlingScroll(update.view)) return;
-    this.pending = true;
     const anchor = this.anchor;
+    // A layout change that starts a settle replaces this correction: the anchor is from before it.
+    const generation = settleGeneration(update.view);
     update.view.requestMeasure<Drift | null>({
       key: this.correction,
       read: (view) => {
@@ -51,11 +52,23 @@ export const editorReadingAnchor = ViewPlugin.fromClass(class {
         return { top: rect.top - port.top - anchor.offset, left: rect.left === null ? 0 : rect.left - port.left - anchor.left };
       },
       write: (drift, view) => {
-        this.pending = false;
-        if (!drift) return;
-        if (Math.abs(drift.top) >= 1) setEditorScrollTop(view, view.scrollDOM.scrollTop + drift.top);
-        if (Math.abs(drift.left) >= 1) view.scrollDOM.scrollLeft += drift.left;
+        // The reader moved since this anchor was taken; their place is the new one.
+        if (!drift || this.anchor !== anchor) return;
+        if (isSettlingScroll(view) || settleGeneration(view) !== generation) return;
+        const scroller = view.scrollDOM;
+        if (Math.abs(drift.top) < 1 && Math.abs(drift.left) < 1) return;
+        if (Math.abs(drift.top) >= 1) setEditorScrollTop(view, scroller.scrollTop + drift.top);
+        if (Math.abs(drift.left) >= 1) scroller.scrollLeft += drift.left;
+        this.wrote = { top: scroller.scrollTop, left: scroller.scrollLeft };
       },
     });
   }
-}, { eventHandlers: { scroll() { if (!this.pending) this.capture(); } } });
+
+  onScroll(): void {
+    const wrote = this.wrote;
+    const scroller = this.view.scrollDOM;
+    if (wrote && Math.abs(scroller.scrollTop - wrote.top) < 1 && Math.abs(scroller.scrollLeft - wrote.left) < 1) return;
+    this.wrote = null;
+    this.capture();
+  }
+}, { eventHandlers: { scroll() { this.onScroll(); } } });
