@@ -23,9 +23,17 @@ const heldAnchors = new WeakMap<EditorView, ScrollAnchor>();
 /** Reader input that ends automatic corrections. */
 const READER_INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
+// Counts settle loops started per view, so work measured before one began can tell.
+const settleStarts = new WeakMap<EditorView, number>();
+
 /** Whether a settle loop is correcting this view's scroll offset. */
 export function isSettlingScroll(view: EditorView): boolean {
   return activeSettles.has(view);
+}
+
+/** How many settle loops this view has started; changes whenever one begins. */
+export function settleGeneration(view: EditorView): number {
+  return settleStarts.get(view) ?? 0;
 }
 
 /**
@@ -67,6 +75,7 @@ function settleScroll(
 ): void {
   const token = {};
   activeSettles.set(view, token);
+  settleStarts.set(view, settleGeneration(view) + 1);
   const release = (): void => {
     for (const type of READER_INPUT) view.scrollDOM.removeEventListener(type, release, true);
     if (activeSettles.get(view) !== token) return;
