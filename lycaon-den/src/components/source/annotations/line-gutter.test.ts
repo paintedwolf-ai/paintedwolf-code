@@ -743,7 +743,7 @@ describe("line gutter — line facts activation", () => {
       glyphs(v)[0],
       links(v)[0],
       restores(v)[0],
-      cuts(v)[0],
+      v.dom.querySelector("[data-testid='files-line-gutter-cut']"),
     ].every(Boolean)).toBe(true);
 
     const liveTargets = (cardOpen: boolean): HTMLElement[] => {
