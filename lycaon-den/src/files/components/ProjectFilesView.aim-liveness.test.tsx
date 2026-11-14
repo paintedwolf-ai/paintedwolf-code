@@ -27,6 +27,7 @@ import { ProjectFilesView } from "./ProjectFilesView.tsx";
 import { openSourceInFilesStage } from "./project-files-open.ts";
 import { closeFilesBuffer, openFilesBuffer, setFilesActiveBuffer } from "../documents/project-files-buffers.ts";
 import { projectFilesState } from "../documents/files-buffer-state.ts";
+import { refreshFileDocumentMetadata } from "../documents/files-document-metadata.ts";
 import { fileBufferKey, type FileBufferKey } from "./project-files-model.ts";
 import { selectedFileVersion } from "../history/files-version-selection.ts";
 import { takeFilesPresentationLivenessViolations } from "./files-presentation-liveness.ts";
@@ -234,6 +235,38 @@ describe("ProjectFilesView aim liveness matrix", () => {
 
     await expectPresented(readKey("b.ts"));
     expect(projectFilesState(PROJECT).order).toHaveLength(2);
+  });
+
+  it("a restored tab whose unsaved edits the host reports before its text arrives still presents", async () => {
+    const held = { ...joinedDocument("a.ts"), dirty: true, content_changed: true };
+    setAppStateSnapshot({
+      version: 1,
+      recents: [],
+      filesHotExit: {
+        byProject: {
+          [PROJECT]: {
+            buffers: [{ rootId: "r1", path: "a.ts", rootLabel: "repo", kind: "text", documentId: held.id }],
+            activeIndex: 0,
+          },
+        },
+      },
+    });
+    const gate: ReadGate = new Map([["a.ts", deferred<ReturnType<typeof sourceRead>>()]]);
+    const { client, reads } = listingClient({
+      gate,
+      overrides: { readEditorDocumentStatuses: vi.fn(async () => ({ documents: [held], missing: [] })) },
+    });
+    mount(client);
+    await waitFor(() => expect(reads).toContain("a.ts"));
+
+    await refreshFileDocumentMetadata(PROJECT);
+    const cold = Object.values(projectFilesState(PROJECT).byKey).find((buffer) => buffer.path === "a.ts");
+    expect(cold?.dirty).toBe(true);
+    expect(cold?.content.state).toBe("unloaded");
+
+    gate.get("a.ts")!.resolve(sourceRead("a.ts"));
+    await expectPresented(readKey("a.ts"));
+    expect(projectFilesState(PROJECT).byKey[readKey("a.ts")]?.content.state).not.toBe("unloaded");
   });
 
   it("an aim held by workspace resolution loads once the workspace settles", async () => {
