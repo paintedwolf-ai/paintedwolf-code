@@ -40,7 +40,7 @@ func (s *ReadSession) Observe(observer ReadObserver) {
 
 // NewReadSession admits tctx's attached roots for the reads of one call.
 func NewReadSession(b *sandbox.Boundary, tctx tools.ToolContext) *ReadSession {
-	admitted := strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" && len(tctx.Source.Roots) > 0 &&
+	admitted := tools.WorkerViewRoot(tctx) == "" && len(tctx.Source.Roots) > 0 &&
 		tools.ValidateAttachedRootsForAction(actionRootPaths(tctx)) == nil
 	return &ReadSession{boundary: b, tctx: tctx, admitted: admitted, roots: map[string]*fseffect.ReadRoot{}}
 }
