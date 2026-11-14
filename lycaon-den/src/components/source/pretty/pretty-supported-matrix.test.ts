@@ -238,7 +238,8 @@ function fixtureForPath(filePath: string): FixturePair {
     };
   }
   if (ext === "yaml") {
-    const head = `value: [${items.slice(0, 12).join(", ")}, [${items.slice(12, 22).join(", ")}], `;
+    const longItems = Array.from({ length: 36 }, (_, i) => `item${i}`);
+    const head = `value: [${longItems.slice(0, 16).join(", ")}, [${longItems.slice(16, 36).join(", ")}], `;
     const dense = `${head}${strLit}] ${commentLit}`;
     return {
       dense,

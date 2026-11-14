@@ -166,7 +166,9 @@ function planReadsTree(plan: PrettyPlan): boolean {
 function layoutEnd(state: EditorState, plan: PrettyPlan): number {
   const doc = state.doc;
   if (!planReadsTree(plan)) return doc.length;
+  if (state.facet(prettyStreamParserFacet) !== null) return doc.length;
   const tree = syntaxTree(state);
+  if (plan.kind === "fenced" && tree.length === 0) return doc.length;
   return tree.length >= doc.length ? doc.length : doc.lineAt(tree.length).from;
 }
 

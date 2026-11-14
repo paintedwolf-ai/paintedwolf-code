@@ -65,7 +65,7 @@ describe("embedded markup regions and start-tag attribute wrapping", () => {
   });
 
   it("wraps wide start-tag attributes and passes second-pass idempotence", () => {
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-large" aria-hidden="true"></svg>`;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="icon icon-large icon-primary icon-outline" aria-hidden="true" data-slot="icon"></svg>`;
     const state = open(svg, "icon.svg");
     const pos = breaks(state);
     expect(pos.length).toBeGreaterThan(0);

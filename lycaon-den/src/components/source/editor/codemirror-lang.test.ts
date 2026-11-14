@@ -216,12 +216,15 @@ describe("codemirror-lang", () => {
     const declared: Record<string, string> = {
       "data": "json jsonc json5 jsonl ndjson webmanifest har avsc jsonnet libsonnet",
       "markup": "xml svg html htm vue svelte astro",
-      "code": "ts tsx js jsx mjs cjs css scss less",
-      "bracket statements": "c h cc cpp cxx hpp hh hxx java cs scala kt kts dart rs swift groovy gradle d php hack sol move cairo circom cls trigger ql qll proto hcl tf tfvars",
-      "bracket": "go py pyi yaml yml toml rb cr ex exs lua r jl hs elm ml mli erl hrl al perl ph pl plx pm psgi t promql sass",
+      "code": "ts mts cts tsx js mjs cjs jsx css scss less",
+      "bracket statements": "c h cc cpp cxx hpp hh hxx java cs csx cake scala kt kts dart rs swift groovy gradle gvy d php hack sol move cairo circom cls trigger ql qll proto hcl tf tfvars tofu nomad ps1 psm1 psd1",
+      "bracket": "go py pyi yaml yml toml rb cr ex exs lua r jl hs elm ml mli erl hrl al perl ph pl plx pm psgi t promql sass bzl",
       "clause": "sql",
+      "sexp": "clj cljs cljc edn scm ss lisp cl lsp",
+      "chain": "sh bash zsh dockerfile",
       "fenced": "md mdx",
-      "none": "sh bash zsh ps1 psm1 psd1 dockerfile diff patch properties ini env cfg cmake tcl f f90 f95 f03 pas clj cljs cljc edn scm ss lisp cl lsp txt",
+      "containers": "log out txt",
+      "none": "diff patch properties ini env cfg cmake tcl f f90 f95 f03 pas",
     };
     const outcome = (ext: string) => {
       const layout = prettyLayoutForPath(`file.${ext}`);
@@ -257,7 +260,7 @@ describe("codemirror-lang", () => {
     }
 
     for (const cfg of ["tsconfig.json", "tsconfig.node.json", "jsconfig.json", "devcontainer.json", ".devcontainer.json"]) {
-      expect(prettyLayoutForPath(cfg)).toEqual({ kind: "code", mode: "data", comments: true });
+      expect(prettyLayoutForPath(cfg)).toEqual({ kind: "data", comments: true });
     }
     expect(languageExtensionForPath("src/index.mts")).not.toBeNull();
     expect(languageExtensionForPath("src/index.cts")).not.toBeNull();

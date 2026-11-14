@@ -435,7 +435,7 @@ export function loadedBuffer(args?: {
   overLimit?: boolean;
   kind?: "text" | "image" | "info";
   jobId?: string;
-  language?: { path: string; name: string };
+  language?: string;
 }) {
   const path = args?.path ?? "src/main.ts";
   const key = openFilesBuffer(PROJECT, {

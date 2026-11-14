@@ -174,6 +174,12 @@ export class PrettyScanner implements ScanCursor {
       const end = Math.min(lineEnd, stop);
       while (pos < end && !s.failure) pos = this.step(pos, end);
       if (pos >= lineEnd) {
+        if (this.spanEnd >= 0 && this.spanEnd < s.lineEnd) {
+          this.spanIndex += 1;
+          this.endLine();
+          pos = lineEnd;
+          continue;
+        }
         this.endLine();
         if (s.lineEnd >= doc.length) return doc.length;
         pos = s.lineEnd + 1;

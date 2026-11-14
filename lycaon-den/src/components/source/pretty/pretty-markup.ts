@@ -139,7 +139,7 @@ function attrWidth(cursor: ScanCursor, from: number, lineEnd: number): number {
 
 export function stepMarkup(cursor: ScanCursor, pos: number, end: number): number {
   const { text, state } = cursor;
-  const m = state.markup;
+  let m = state.markup;
   const lineEnd = state.lineEnd;
 
   // Astro leading `---` frontmatter at offset 0.
@@ -176,6 +176,7 @@ export function stepMarkup(cursor: ScanCursor, pos: number, end: number): number
         state.containers = null;
         state.jsxState = INITIAL_JSX_STATE;
         state.markup = { ...m, embedded: null };
+        m = state.markup;
       }
     }
     if (state.markup.embedded) {

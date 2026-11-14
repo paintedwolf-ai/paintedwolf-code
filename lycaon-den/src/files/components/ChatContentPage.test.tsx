@@ -339,8 +339,8 @@ describe("chat content Files pane", () => {
     const py = `def f(a, b): return {"k": "${pad}, inside", "n": 1}\n`;
     const client = {
       getProjectSourceFormatSettings: async () => ({
-        config_names: [".editorconfig"],
-        sources: [{ tool: "editorconfig", configs: [".editorconfig"], settings: { line_width: 80 } }],
+        config_names: ["pyproject.toml"],
+        sources: [{ tool: "ruff", configs: ["pyproject.toml"], settings: { line_width: 80 } }],
       }),
     } as never;
     const view = render(() => (

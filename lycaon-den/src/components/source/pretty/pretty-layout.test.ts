@@ -237,8 +237,9 @@ describe("recognition", () => {
   });
 
   it("uses a known path or language and refuses a path without a layout", () => {
-    expect(prettyOutcomeOf(open('{"a":[1,2]}', { path: "notes.txt" })).kind).toBe("unavailable");
-    expect(prettyOutcomeOf(open("echo {a,b}\n", { path: "run.sh" })).kind).toBe("unavailable");
+    expect(prettyOutcomeOf(open("a=1\n", { path: "app.ini" })).kind).toBe("unavailable");
+    expect(prettyOutcomeOf(open('{"a":[1,2]}', { path: "notes.txt" })).kind).toBe("active");
+    expect(prettyOutcomeOf(open("echo a && echo b\n", { path: "run.sh" })).kind).toBe("active");
     expect(laidOut('{"a":[1,2]}', { languageHint: "json" })).toBe(true);
     expect(laidOut('x {"a":[1,2]}', { languageHint: "shell" })).toBe(false);
   });

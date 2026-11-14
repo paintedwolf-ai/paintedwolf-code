@@ -47,7 +47,7 @@ const LITERALS: Record<string, { string: string; comment: string }> = {
   percent: { string: '"s, (t); [u]"', comment: "% c, (d); [e]" },
   ml: { string: '"s, (t); [u]"', comment: "(* c, (d); [e] *)" },
 };
-const HASH = new Set(["py", "pyi", "yaml", "yml", "toml", "rb", "cr", "ex", "exs", "r", "jl", "al", "perl", "ph", "pl", "plx", "pm", "psgi", "t", "promql", "sass"]);
+const HASH = new Set(["py", "pyi", "yaml", "yml", "toml", "rb", "cr", "ex", "exs", "r", "jl", "al", "perl", "ph", "pl", "plx", "pm", "psgi", "t", "promql", "sass", "ps1", "psm1", "psd1"]);
 const DASH = new Set(["lua", "hs", "elm"]);
 const PERCENT = new Set(["erl", "hrl"]);
 const ML = new Set(["ml", "mli"]);
@@ -131,7 +131,8 @@ describe("SQL clause layout", () => {
       "  count(s.id) AS session_count,",
       "  max(s.updated_at) AS last_active",
       "FROM users u",
-      "LEFT JOIN sessions s ON s.user_id = u.id AND s.archived = false",
+      "LEFT JOIN sessions s",
+      "  ON s.user_id = u.id AND s.archived = false",
       "WHERE u.created_at > $1 AND u.email NOT LIKE '%@example.test'",
       "GROUP BY u.id, u.email, u.display_name",
       "ORDER BY last_active DESC",
@@ -218,14 +219,14 @@ describe("after-block breaks, PowerShell, and SQL predicates/CASE", () => {
   it("breaks SQL JOIN ON, AND/OR predicates (preserving BETWEEN), and CASE expressions", () => {
     const pad = "col_".repeat(45);
     const sql =
-      `SELECT ${pad}u.id, CASE WHEN u.active = 1 THEN 'yes' WHEN u.active = 0 THEN 'no' ELSE 'unknown' END FROM users u LEFT JOIN orders o ON o.user_id = u.id AND o.total > 100 WHERE u.age BETWEEN 18 AND 65 AND u.country = 'US' OR u.vip = 1`;
+      `SELECT ${pad}u.id, CASE WHEN u.active = 1 THEN 'yes' WHEN u.active = 0 THEN 'no' ELSE 'unknown' END FROM users u LEFT JOIN orders o ON o.user_id = u.id AND o.total_amount_cents > 10000 AND o.currency_code = 'USD' WHERE u.age BETWEEN 18 AND 65 AND u.country_iso_code = 'US' AND u.account_tier = 'enterprise' OR u.vip_override_flag = 1`;
     const state = open(sql, "query.sql");
     const positions = breaks(state);
     expect(positions).toContain(sql.indexOf("ON o.user_id"));
-    expect(positions).toContain(sql.indexOf("AND o.total"));
+    expect(positions).toContain(sql.indexOf("AND o.total_amount_cents"));
     expect(positions).not.toContain(sql.indexOf("AND 65"));
-    expect(positions).toContain(sql.indexOf("AND u.country"));
-    expect(positions).toContain(sql.indexOf("OR u.vip"));
+    expect(positions).toContain(sql.indexOf("AND u.country_iso_code"));
+    expect(positions).toContain(sql.indexOf("OR u.vip_override_flag"));
     expect(positions).toContain(sql.indexOf("WHEN u.active = 1"));
     expect(positions).toContain(sql.indexOf("ELSE 'unknown'"));
     expect(positions).toContain(sql.indexOf("END FROM"));
