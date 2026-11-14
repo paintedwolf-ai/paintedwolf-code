@@ -1,4 +1,4 @@
-import type { FormatTool } from "../../../api/types.ts";
+import type { PrettyFormatTool } from "./format-settings.ts";
 import { javascript } from "@codemirror/lang-javascript";
 import { go } from "@codemirror/lang-go";
 import { rust } from "@codemirror/lang-rust";
@@ -281,30 +281,37 @@ const WORD_LANG_SPECS = {
 } satisfies Record<string, WordLangSpec>;
 
 /** Formatters whose configuration sets a language's line width, in priority order. */
-const WEB_FORMATTERS = ["prettier", "biome", "dprint"] as const satisfies readonly FormatTool[];
-const MARKUP_FORMATTERS = ["prettier", "dprint"] as const satisfies readonly FormatTool[];
-const PYTHON_FORMATTERS = ["ruff", "black"] as const satisfies readonly FormatTool[];
-const RUST_FORMATTERS = ["rustfmt"] as const satisfies readonly FormatTool[];
-const CLANG_FORMATTERS = ["clang_format"] as const satisfies readonly FormatTool[];
-const SCALA_FORMATTERS = ["scalafmt"] as const satisfies readonly FormatTool[];
-const SWIFT_FORMATTERS = ["swift_format"] as const satisfies readonly FormatTool[];
-const DART_FORMATTERS = ["dart"] as const satisfies readonly FormatTool[];
-const RUBY_FORMATTERS = ["rubocop"] as const satisfies readonly FormatTool[];
-const LUA_FORMATTERS = ["stylua"] as const satisfies readonly FormatTool[];
-const OCAML_FORMATTERS = ["ocamlformat"] as const satisfies readonly FormatTool[];
-const HASKELL_FORMATTERS = ["fourmolu"] as const satisfies readonly FormatTool[];
-const JULIA_FORMATTERS = ["julia_formatter"] as const satisfies readonly FormatTool[];
-const SQL_FORMATTERS = ["sqlfluff"] as const satisfies readonly FormatTool[];
-const SOLIDITY_FORMATTERS = ["foundry", "prettier"] as const satisfies readonly FormatTool[];
-const TOML_FORMATTERS = ["taplo", "dprint"] as const satisfies readonly FormatTool[];
-const NO_FORMATTERS = [] as const satisfies readonly FormatTool[];
+const WEB_FORMATTERS = ["prettier", "biome", "dprint"] as const satisfies readonly PrettyFormatTool[];
+const MARKUP_FORMATTERS = ["prettier", "dprint"] as const satisfies readonly PrettyFormatTool[];
+const PYTHON_FORMATTERS = ["ruff", "black"] as const satisfies readonly PrettyFormatTool[];
+const GO_FORMATTERS = ["golangci"] as const satisfies readonly PrettyFormatTool[];
+const RUST_FORMATTERS = ["rustfmt"] as const satisfies readonly PrettyFormatTool[];
+const CLANG_FORMATTERS = ["clang_format"] as const satisfies readonly PrettyFormatTool[];
+const JAVA_FORMATTERS = ["checkstyle", "clang_format"] as const satisfies readonly PrettyFormatTool[];
+const SCALA_FORMATTERS = ["scalafmt"] as const satisfies readonly PrettyFormatTool[];
+const SWIFT_FORMATTERS = ["swift_format"] as const satisfies readonly PrettyFormatTool[];
+const DART_FORMATTERS = ["dart"] as const satisfies readonly PrettyFormatTool[];
+const RUBY_FORMATTERS = ["rubocop"] as const satisfies readonly PrettyFormatTool[];
+const PHP_FORMATTERS = ["pint", "phpcs", "prettier"] as const satisfies readonly PrettyFormatTool[];
+const ELIXIR_FORMATTERS = ["mix_format"] as const satisfies readonly PrettyFormatTool[];
+const CLOJURE_FORMATTERS = ["cljfmt"] as const satisfies readonly PrettyFormatTool[];
+const LUA_FORMATTERS = ["stylua"] as const satisfies readonly PrettyFormatTool[];
+const OCAML_FORMATTERS = ["ocamlformat"] as const satisfies readonly PrettyFormatTool[];
+const HASKELL_FORMATTERS = ["fourmolu"] as const satisfies readonly PrettyFormatTool[];
+const JULIA_FORMATTERS = ["julia_formatter"] as const satisfies readonly PrettyFormatTool[];
+const SQL_FORMATTERS = ["sqlfluff"] as const satisfies readonly PrettyFormatTool[];
+const SOLIDITY_FORMATTERS = ["foundry", "prettier"] as const satisfies readonly PrettyFormatTool[];
+const TOML_FORMATTERS = ["taplo", "dprint"] as const satisfies readonly PrettyFormatTool[];
+const NO_FORMATTERS = [] as const satisfies readonly PrettyFormatTool[];
+
+export const PLAIN_TEXT_LABEL = "Plain text";
 
 /** Each catalog entry: its grammar (null for plain text), its label, how Pretty lays it out, and its formatters. */
 interface CatalogEntry {
   readonly grammar: (() => LanguageSupport | Language) | null;
   readonly label: string;
   readonly pretty: PrettyLayout;
-  readonly formatters: readonly FormatTool[];
+  readonly formatters: readonly PrettyFormatTool[];
 }
 
 const CATALOG = {
@@ -314,7 +321,9 @@ const CATALOG = {
   jsx: { grammar: () => javascript({ jsx: true }), label: "JSX", pretty: SCRIPT, formatters: WEB_FORMATTERS },
   mjs: { grammar: () => javascript(), label: "JavaScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },
   cjs: { grammar: () => javascript(), label: "JavaScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },
-  go: { grammar: () => go(), label: "Go", pretty: BRACKET, formatters: NO_FORMATTERS },
+  mts: { grammar: () => javascript({ typescript: true }), label: "TypeScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },
+  cts: { grammar: () => javascript({ typescript: true }), label: "TypeScript", pretty: SCRIPT, formatters: WEB_FORMATTERS },
+  go: { grammar: () => go(), label: "Go", pretty: BRACKET, formatters: GO_FORMATTERS },
   rs: { grammar: () => rust(), label: "Rust", pretty: BRACKET_STATEMENTS, formatters: RUST_FORMATTERS },
   py: { grammar: () => python(), label: "Python", pretty: BRACKET, formatters: PYTHON_FORMATTERS },
   pyi: { grammar: () => python(), label: "Python", pretty: BRACKET, formatters: PYTHON_FORMATTERS },
@@ -326,6 +335,10 @@ const CATALOG = {
   webmanifest: { grammar: () => json(), label: "Web app manifest", pretty: DATA, formatters: WEB_FORMATTERS },
   har: { grammar: () => json(), label: "HAR", pretty: DATA, formatters: WEB_FORMATTERS },
   avsc: { grammar: () => json(), label: "Avro schema", pretty: DATA, formatters: WEB_FORMATTERS },
+  geojson: { grammar: () => json(), label: "GeoJSON", pretty: DATA, formatters: WEB_FORMATTERS },
+  topojson: { grammar: () => json(), label: "TopoJSON", pretty: DATA, formatters: WEB_FORMATTERS },
+  sarif: { grammar: () => json(), label: "SARIF", pretty: DATA, formatters: WEB_FORMATTERS },
+  tfstate: { grammar: () => json(), label: "Terraform state", pretty: DATA, formatters: NO_FORMATTERS },
   yaml: { grammar: () => yaml(), label: "YAML", pretty: BRACKET, formatters: MARKUP_FORMATTERS },
   yml: { grammar: () => yaml(), label: "YAML", pretty: BRACKET, formatters: MARKUP_FORMATTERS },
   md: { grammar: () => markdown({ codeLanguages: languageForInfoString }), label: "Markdown", pretty: FENCED, formatters: MARKUP_FORMATTERS },
@@ -341,8 +354,10 @@ const CATALOG = {
   hpp: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS, formatters: CLANG_FORMATTERS },
   hh: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS, formatters: CLANG_FORMATTERS },
   hxx: { grammar: () => StreamLanguage.define(cpp), label: "C++", pretty: BRACKET_STATEMENTS, formatters: CLANG_FORMATTERS },
-  java: { grammar: () => StreamLanguage.define(java), label: "Java", pretty: BRACKET_STATEMENTS, formatters: CLANG_FORMATTERS },
+  java: { grammar: () => StreamLanguage.define(java), label: "Java", pretty: BRACKET_STATEMENTS, formatters: JAVA_FORMATTERS },
   cs: { grammar: () => StreamLanguage.define(csharp), label: "C#", pretty: BRACKET_STATEMENTS, formatters: CLANG_FORMATTERS },
+  csx: { grammar: () => StreamLanguage.define(csharp), label: "C#", pretty: BRACKET_STATEMENTS, formatters: CLANG_FORMATTERS },
+  cake: { grammar: () => StreamLanguage.define(csharp), label: "C#", pretty: BRACKET_STATEMENTS, formatters: CLANG_FORMATTERS },
   scala: { grammar: () => StreamLanguage.define(scala), label: "Scala", pretty: BRACKET_STATEMENTS, formatters: SCALA_FORMATTERS },
   kt: { grammar: () => StreamLanguage.define(kotlin), label: "Kotlin", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
   kts: { grammar: () => StreamLanguage.define(kotlin), label: "Kotlin", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
@@ -351,10 +366,10 @@ const CATALOG = {
   lua: { grammar: () => StreamLanguage.define(lua), label: "Lua", pretty: BRACKET, formatters: LUA_FORMATTERS },
   r: { grammar: () => StreamLanguage.define(r), label: "R", pretty: BRACKET, formatters: NO_FORMATTERS },
   jl: { grammar: () => StreamLanguage.define(julia), label: "Julia", pretty: BRACKET, formatters: JULIA_FORMATTERS },
-  clj: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
-  cljs: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
-  cljc: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
-  edn: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
+  clj: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT, formatters: CLOJURE_FORMATTERS },
+  cljs: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT, formatters: CLOJURE_FORMATTERS },
+  cljc: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT, formatters: CLOJURE_FORMATTERS },
+  edn: { grammar: () => StreamLanguage.define(clojure), label: "Clojure", pretty: NO_LAYOUT, formatters: CLOJURE_FORMATTERS },
   scm: { grammar: () => StreamLanguage.define(scheme), label: "Scheme", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
   ss: { grammar: () => StreamLanguage.define(scheme), label: "Scheme", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
   lisp: { grammar: () => StreamLanguage.define(commonLisp), label: "Common Lisp", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
@@ -364,8 +379,19 @@ const CATALOG = {
   mli: { grammar: () => StreamLanguage.define(oCaml), label: "OCaml", pretty: BRACKET, formatters: OCAML_FORMATTERS },
   proto: { grammar: () => StreamLanguage.define(protobuf), label: "Protobuf", pretty: BRACKET_STATEMENTS, formatters: CLANG_FORMATTERS },
   dockerfile: { grammar: () => StreamLanguage.define(dockerFile), label: "Dockerfile", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
-  xml: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: NO_FORMATTERS },
-  svg: { grammar: () => StreamLanguage.define(xml), label: "SVG", pretty: MARKUP, formatters: NO_FORMATTERS },
+  xml: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  svg: { grammar: () => StreamLanguage.define(xml), label: "SVG", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  csproj: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  vbproj: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  fsproj: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  vcxproj: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  props: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  targets: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  nuspec: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  xaml: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  plist: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  xsd: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
+  wsdl: { grammar: () => StreamLanguage.define(xml), label: "XML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
   // The HTML parser applies embedded JavaScript and CSS grammars to component files.
   html: { grammar: () => html(), label: "HTML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
   htm: { grammar: () => html(), label: "HTML", pretty: MARKUP, formatters: MARKUP_FORMATTERS },
@@ -394,8 +420,9 @@ const CATALOG = {
   erl: { grammar: () => StreamLanguage.define(erlang), label: "Erlang", pretty: BRACKET, formatters: NO_FORMATTERS },
   hrl: { grammar: () => StreamLanguage.define(erlang), label: "Erlang", pretty: BRACKET, formatters: NO_FORMATTERS },
   elm: { grammar: () => StreamLanguage.define(elm), label: "Elm", pretty: BRACKET, formatters: NO_FORMATTERS },
-  groovy: { grammar: () => StreamLanguage.define(groovy), label: "Groovy", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
-  gradle: { grammar: () => StreamLanguage.define(groovy), label: "Gradle", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
+  groovy: { grammar: () => StreamLanguage.define(groovy), label: "Groovy", pretty: BRACKET_STATEMENTS, formatters: JAVA_FORMATTERS },
+  gradle: { grammar: () => StreamLanguage.define(groovy), label: "Gradle", pretty: BRACKET_STATEMENTS, formatters: JAVA_FORMATTERS },
+  gvy: { grammar: () => StreamLanguage.define(groovy), label: "Groovy", pretty: BRACKET_STATEMENTS, formatters: JAVA_FORMATTERS },
   diff: { grammar: () => StreamLanguage.define(diff), label: "Diff", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
   patch: { grammar: () => StreamLanguage.define(diff), label: "Diff", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
   properties: { grammar: () => StreamLanguage.define(properties), label: "Properties", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
@@ -413,13 +440,16 @@ const CATALOG = {
   pas: { grammar: () => StreamLanguage.define(pascal), label: "Pascal", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
   dart: { grammar: () => StreamLanguage.define(dart), label: "Dart", pretty: BRACKET_STATEMENTS, formatters: DART_FORMATTERS },
   sass: { grammar: () => StreamLanguage.define(sass), label: "Sass", pretty: BRACKET, formatters: NO_FORMATTERS },
-  php: { grammar: () => wordLanguage(WORD_LANG_SPECS.php), label: "PHP", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
-  hack: { grammar: () => wordLanguage(WORD_LANG_SPECS.hack), label: "Hack", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
-  ex: { grammar: () => wordLanguage(WORD_LANG_SPECS.elixir), label: "Elixir", pretty: BRACKET, formatters: NO_FORMATTERS },
-  exs: { grammar: () => wordLanguage(WORD_LANG_SPECS.elixir), label: "Elixir", pretty: BRACKET, formatters: NO_FORMATTERS },
+  php: { grammar: () => wordLanguage(WORD_LANG_SPECS.php), label: "PHP", pretty: BRACKET_STATEMENTS, formatters: PHP_FORMATTERS },
+  hack: { grammar: () => wordLanguage(WORD_LANG_SPECS.hack), label: "Hack", pretty: BRACKET_STATEMENTS, formatters: PHP_FORMATTERS },
+  ex: { grammar: () => wordLanguage(WORD_LANG_SPECS.elixir), label: "Elixir", pretty: BRACKET, formatters: ELIXIR_FORMATTERS },
+  exs: { grammar: () => wordLanguage(WORD_LANG_SPECS.elixir), label: "Elixir", pretty: BRACKET, formatters: ELIXIR_FORMATTERS },
   hcl: { grammar: () => wordLanguage(WORD_LANG_SPECS.hcl), label: "HCL", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
   tf: { grammar: () => wordLanguage(WORD_LANG_SPECS.hcl), label: "Terraform", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
   tfvars: { grammar: () => wordLanguage(WORD_LANG_SPECS.hcl), label: "Terraform", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
+  tofu: { grammar: () => wordLanguage(WORD_LANG_SPECS.hcl), label: "OpenTofu", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
+  nomad: { grammar: () => wordLanguage(WORD_LANG_SPECS.hcl), label: "HCL", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
+  bzl: { grammar: () => python(), label: "Starlark", pretty: BRACKET, formatters: NO_FORMATTERS },
   sol: { grammar: () => wordLanguage(WORD_LANG_SPECS.solidity), label: "Solidity", pretty: BRACKET_STATEMENTS, formatters: SOLIDITY_FORMATTERS },
   move: { grammar: () => wordLanguage(WORD_LANG_SPECS.move), label: "Move", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
   cairo: { grammar: () => wordLanguage(WORD_LANG_SPECS.cairo), label: "Cairo", pretty: BRACKET_STATEMENTS, formatters: NO_FORMATTERS },
@@ -431,7 +461,9 @@ const CATALOG = {
   jsonnet: { grammar: () => wordLanguage(WORD_LANG_SPECS.jsonnet), label: "Jsonnet", pretty: DATA_WITH_COMMENTS, formatters: NO_FORMATTERS },
   libsonnet: { grammar: () => wordLanguage(WORD_LANG_SPECS.jsonnet), label: "Jsonnet", pretty: DATA_WITH_COMMENTS, formatters: NO_FORMATTERS },
   promql: { grammar: () => wordLanguage(WORD_LANG_SPECS.promql), label: "PromQL", pretty: BRACKET, formatters: NO_FORMATTERS },
-  txt: { grammar: null, label: "Plain text", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
+  log: { grammar: null, label: "Log", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
+  out: { grammar: null, label: "Log", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
+  txt: { grammar: null, label: PLAIN_TEXT_LABEL, pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
 } satisfies Record<string, CatalogEntry>;
 
 type CatalogKey = keyof typeof CATALOG;
@@ -440,50 +472,60 @@ function catalogEntry(ext: string): CatalogEntry | undefined {
   return Object.hasOwn(CATALOG, ext) ? CATALOG[ext as CatalogKey] : undefined;
 }
 
-/** Well-known extensionless, dot-prefixed, or extension-ambiguous filenames. */
-const BASENAME_TO_EXT: Record<string, string> = {
-  dockerfile: "dockerfile",
-  containerfile: "dockerfile",
-  "cmakelists.txt": "cmake",
-  ".env": "env",
-  ".gitignore": "properties",
-  ".gitattributes": "properties",
-  ".gitmodules": "properties",
-  ".gitconfig": "properties",
-  ".editorconfig": "properties",
-  ".npmrc": "properties",
-  gemfile: "rb",
-  rakefile: "rb",
-  vagrantfile: "rb",
-  ".latexmkrc": "pl",
-  ack: "pl",
-  cpanfile: "pl",
-  latexmkrc: "pl",
-  rexfile: "pl",
-};
+interface BasenameSpec {
+  readonly ext?: CatalogKey;
+  readonly label: string;
+}
 
-const BASENAME_TO_LABEL: Record<string, string> = {
-  dockerfile: "Dockerfile",
-  containerfile: "Dockerfile",
-  "cmakelists.txt": "CMake",
-  ".env": "Dotenv",
-  ".gitignore": "Git ignore",
-  ".gitattributes": "Git attributes",
-  ".gitmodules": "Git modules",
-  ".gitconfig": "Git config",
-  ".latexmkrc": "Perl",
-  ack: "Perl",
-  cpanfile: "Perl",
-  latexmkrc: "Perl",
-  rexfile: "Perl",
-  ".editorconfig": "EditorConfig",
-  ".npmrc": "npm config",
-  gemfile: "Ruby",
-  rakefile: "Ruby",
-  vagrantfile: "Ruby",
-  makefile: "Makefile",
-  "go.mod": "Go module",
-  "go.sum": "Go checksums",
+/** Well-known extensionless, dot-prefixed, or extension-ambiguous filenames. */
+const BASENAMES: Record<string, BasenameSpec> = {
+  dockerfile: { ext: "dockerfile", label: "Dockerfile" },
+  containerfile: { ext: "dockerfile", label: "Dockerfile" },
+  "cmakelists.txt": { ext: "cmake", label: "CMake" },
+  ".env": { ext: "env", label: "Dotenv" },
+  ".gitignore": { ext: "properties", label: "Git ignore" },
+  ".gitattributes": { ext: "properties", label: "Git attributes" },
+  ".gitmodules": { ext: "properties", label: "Git modules" },
+  ".gitconfig": { ext: "properties", label: "Git config" },
+  ".editorconfig": { ext: "properties", label: "EditorConfig" },
+  ".npmrc": { ext: "properties", label: "npm config" },
+  ".clang-format": { ext: "yaml", label: "YAML" },
+  ".clang-tidy": { ext: "yaml", label: "YAML" },
+  ".clangd": { ext: "yaml", label: "YAML" },
+  gemfile: { ext: "rb", label: "Ruby" },
+  rakefile: { ext: "rb", label: "Ruby" },
+  vagrantfile: { ext: "rb", label: "Ruby" },
+  podfile: { ext: "rb", label: "Ruby" },
+  fastfile: { ext: "rb", label: "Ruby" },
+  brewfile: { ext: "rb", label: "Ruby" },
+  jenkinsfile: { ext: "groovy", label: "Groovy" },
+  build: { ext: "bzl", label: "Starlark" },
+  "build.bazel": { ext: "bzl", label: "Starlark" },
+  workspace: { ext: "bzl", label: "Starlark" },
+  "workspace.bazel": { ext: "bzl", label: "Starlark" },
+  ".latexmkrc": { ext: "pl", label: "Perl" },
+  ack: { ext: "pl", label: "Perl" },
+  cpanfile: { ext: "pl", label: "Perl" },
+  latexmkrc: { ext: "pl", label: "Perl" },
+  rexfile: { ext: "pl", label: "Perl" },
+  "tsconfig.json": { ext: "jsonc", label: "JSON" },
+  "jsconfig.json": { ext: "jsonc", label: "JSON" },
+  "devcontainer.json": { ext: "jsonc", label: "JSON" },
+  ".devcontainer.json": { ext: "jsonc", label: "JSON" },
+  "composer.lock": { ext: "json", label: "JSON" },
+  "flake.lock": { ext: "json", label: "JSON" },
+  "deno.lock": { ext: "json", label: "JSON" },
+  "pipfile.lock": { ext: "json", label: "JSON" },
+  "package.resolved": { ext: "json", label: "JSON" },
+  "cargo.lock": { ext: "toml", label: "TOML" },
+  "poetry.lock": { ext: "toml", label: "TOML" },
+  "uv.lock": { ext: "toml", label: "TOML" },
+  "pdm.lock": { ext: "toml", label: "TOML" },
+  pipfile: { ext: "toml", label: "TOML" },
+  "gopkg.lock": { ext: "toml", label: "TOML" },
+  makefile: { label: "Makefile" },
+  "go.mod": { label: "Go module" },
+  "go.sum": { label: "Go checksums" },
 };
 
 const DETECTED_LANGUAGE_TO_LABEL: Record<string, string> = {
@@ -497,11 +539,30 @@ const DETECTED_LANGUAGE_TO_LABEL: Record<string, string> = {
   vimdoc: "Vim help",
 };
 
+const DETECTED_LANGUAGE_TO_EXT: Record<string, CatalogKey> = {
+  c_sharp: "cs",
+  commonlisp: "lisp",
+  csharp: "cs",
+  golang: "go",
+  py3: "py",
+  python3: "py",
+  postgres: "sql",
+  postgresql: "sql",
+  mysql: "sql",
+  sqlite: "sql",
+  shell: "sh",
+  console: "sh",
+  jsonlines: "jsonl",
+  tf: "tf",
+  opentofu: "tofu",
+};
+
 export function languageLabelForPath(path: string): string {
   const base = basenameOf(path);
   const ext = extensionOf(base);
-  const byName = BASENAME_TO_LABEL[base];
-  if (byName) return byName;
+  const byName = BASENAMES[base];
+  if (byName) return byName.label;
+  if (isCommentedJsonConfig(base)) return "JSON";
   const entry = ext ? catalogEntry(ext) : undefined;
   if (entry) return entry.label;
   return ext || "text";
@@ -515,7 +576,7 @@ export function languageLabelForDetectedLanguage(
   const key = language.trim().toLowerCase();
   if (!key) return languageLabelForPath(path);
   if (key === "vimdoc" && extensionOf(basenameOf(path)) === "txt") {
-    return "Plain text";
+    return PLAIN_TEXT_LABEL;
   }
   const known = DETECTED_LANGUAGE_TO_LABEL[key] ?? catalogEntry(key)?.label;
   if (known) return known;
@@ -523,44 +584,79 @@ export function languageLabelForDetectedLanguage(
 }
 
 /** Maps fenced-code labels to the viewer's language grammars. */
-const INFO_TO_EXT: ReadonlyMap<string, string> = (() => {
-  const map = new Map<string, string>();
-  for (const ext of Object.keys(CATALOG)) map.set(ext, ext);
-  for (const [ext, entry] of Object.entries(CATALOG) as [string, CatalogEntry][]) {
+const INFO_TO_EXT: ReadonlyMap<string, CatalogKey> = (() => {
+  const map = new Map<string, CatalogKey>();
+  for (const ext of Object.keys(CATALOG) as CatalogKey[]) map.set(ext, ext);
+  for (const [ext, entry] of Object.entries(CATALOG) as [CatalogKey, CatalogEntry][]) {
     const key = entry.label.toLowerCase();
     if (!map.has(key) && entry.grammar) map.set(key, ext);
+  }
+  for (const [alias, ext] of Object.entries(DETECTED_LANGUAGE_TO_EXT)) {
+    if (!map.has(alias)) map.set(alias, ext);
   }
   return map;
 })();
 
+function normalizeLanguageToken(name: string): CatalogKey | undefined {
+  const trimmed = name.trim().toLowerCase().replace(/^\./, "");
+  if (!trimmed) return undefined;
+  const exact = INFO_TO_EXT.get(trimmed);
+  if (exact) return exact;
+  const first = (trimmed.split(/\s+/, 1)[0] ?? "").replace(/^\./, "");
+  return first ? INFO_TO_EXT.get(first) : undefined;
+}
+
 /** The `Language` a fence's info string names, or null to leave it plain. */
 export function languageForInfoString(info: string): Language | null {
-  // Fences carry attributes after the language (```ts title="x"); only the
-  // first token names the grammar.
-  const token = info.trim().split(/\s+/, 1)[0] ?? "";
-  const name = token.replace(/^\./, "").toLowerCase();
-  if (!name) return null;
-  const ext = INFO_TO_EXT.get(name);
+  const ext = normalizeLanguageToken(info);
   const factory = ext ? catalogEntry(ext)?.grammar : undefined;
   if (!factory) return null;
   const value = factory();
   return value instanceof LanguageSupport ? value.language : value;
 }
 
-export function languageExtensionForPath(path: string): Extension | null {
-  const factory = catalogEntryForPath(path)?.grammar;
+function extensionForEntry(entry: CatalogEntry | undefined): Extension | null {
+  const factory = entry?.grammar;
   if (!factory) return null;
   const value = factory();
   // Stream languages use indentation because they provide no syntax fold ranges.
   return value instanceof StreamLanguage ? [value, indentFoldService] : value;
 }
 
+export function languageExtensionForPath(path: string): Extension | null {
+  return extensionForEntry(catalogEntryForPath(path));
+}
+
+export function languageExtensionForBuffer(path: string, detectedLanguage?: string): Extension | null {
+  return extensionForEntry(catalogEntryForBuffer(path, detectedLanguage));
+}
+
+function isCommentedJsonConfig(base: string): boolean {
+  return (
+    (base.startsWith("tsconfig.") || base.startsWith("jsconfig.")) &&
+    base.endsWith(".json")
+  );
+}
+
 function catalogEntryForPath(path: string): CatalogEntry | undefined {
   const base = basenameOf(path);
   const ext = extensionOf(base);
   // Well-known names win over their extension, as `CMakeLists.txt` does over `.txt`.
-  const named = BASENAME_TO_EXT[base];
-  return named ? catalogEntry(named) : ext ? catalogEntry(ext) : undefined;
+  const named = BASENAMES[base]?.ext;
+  if (named) return catalogEntry(named);
+  if (isCommentedJsonConfig(base)) return CATALOG.jsonc;
+  return ext ? catalogEntry(ext) : undefined;
+}
+
+function catalogEntryForBuffer(path: string, detectedLanguage?: string): CatalogEntry | undefined {
+  const byPath = catalogEntryForPath(path);
+  if (byPath && byPath !== CATALOG.txt) return byPath;
+  if (detectedLanguage) {
+    const ext = normalizeLanguageToken(detectedLanguage);
+    const detected = ext ? catalogEntry(ext) : undefined;
+    if (detected && detected !== CATALOG.txt) return detected;
+  }
+  return byPath;
 }
 
 /** How Pretty lays out a file; a file outside the catalog has no layout. */
@@ -568,15 +664,22 @@ export function prettyLayoutForPath(path: string): PrettyLayout {
   return catalogEntryForPath(path)?.pretty ?? NO_LAYOUT;
 }
 
+export function prettyLayoutForBuffer(path: string, detectedLanguage?: string): PrettyLayout {
+  return catalogEntryForBuffer(path, detectedLanguage)?.pretty ?? NO_LAYOUT;
+}
+
 /** Formatters whose configuration can set the file's line width, in priority order. */
-export function formattersForPath(path: string): readonly FormatTool[] {
+export function formattersForPath(path: string): readonly PrettyFormatTool[] {
   return catalogEntryForPath(path)?.formatters ?? NO_FORMATTERS;
+}
+
+export function formattersForBuffer(path: string, detectedLanguage?: string): readonly PrettyFormatTool[] {
+  return catalogEntryForBuffer(path, detectedLanguage)?.formatters ?? NO_FORMATTERS;
 }
 
 /** How Pretty lays out text named by a language, label or fence info string. */
 export function prettyLayoutForLanguage(name: string): PrettyLayout {
-  const token = (name.trim().split(/\s+/, 1)[0] ?? "").replace(/^\./, "").toLowerCase();
-  const ext = INFO_TO_EXT.get(token);
+  const ext = normalizeLanguageToken(name);
   return (ext ? catalogEntry(ext)?.pretty : undefined) ?? NO_LAYOUT;
 }
 

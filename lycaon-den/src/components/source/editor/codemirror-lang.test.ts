@@ -1,12 +1,18 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { EditorState } from "@codemirror/state";
 import { ensureSyntaxTree } from "@codemirror/language";
 import {
+  formattersForBuffer,
+  formattersForPath,
+  languageExtensionForBuffer,
   languageExtensionForPath,
   languageLabelForDetectedLanguage,
   languageForInfoString,
   languageLabelForPath,
   prettyLayoutCatalog,
+  prettyLayoutForBuffer,
   prettyLayoutForLanguage,
   prettyLayoutForPath,
 } from "./codemirror-lang.ts";
@@ -234,5 +240,40 @@ describe("codemirror-lang", () => {
     expect(prettyLayoutForLanguage("Markdown").kind).toBe("fenced");
     expect(prettyLayoutForLanguage("TypeScript title=x").kind).toBe("code");
     expect(prettyLayoutForLanguage("no-such-language").kind).toBe("none");
+  });
+
+  it("maps all 44 host supportedLanguages, commented JSON configs, extensions, and fence aliases", () => {
+    const supportedSrc = readFileSync(
+      resolve(__dirname, "../../../../../lycaon/internal/filekind/supported.go"),
+      "utf8",
+    );
+    const match = supportedSrc.match(/supportedLanguages\s*=\s*\[\]string\{([\s\S]*?)\}/);
+    expect(match).not.toBeNull();
+    const langs = [...match![1]!.matchAll(/"([^"]+)"/g)].map((m) => m[1]!);
+    expect(langs).toHaveLength(44);
+    for (const lang of langs) {
+      expect(languageForInfoString(lang), `grammar for ${lang}`).not.toBeNull();
+      expect(languageExtensionForBuffer("bin/unknown", lang), `buffer ext for ${lang}`).not.toBeNull();
+    }
+
+    for (const cfg of ["tsconfig.json", "tsconfig.node.json", "jsconfig.json", "devcontainer.json", ".devcontainer.json"]) {
+      expect(prettyLayoutForPath(cfg)).toEqual({ kind: "code", mode: "data", comments: true });
+    }
+    expect(languageExtensionForPath("src/index.mts")).not.toBeNull();
+    expect(languageExtensionForPath("src/index.cts")).not.toBeNull();
+    expect(languageLabelForPath("Jenkinsfile")).toBe("Groovy");
+    expect(languageLabelForPath("App.csproj")).toBe("XML");
+    expect(languageLabelForPath("Cargo.lock")).toBe("TOML");
+    expect(formattersForPath("main.go")).toEqual(["golangci"]);
+    expect(formattersForPath("lib/app.ex")).toEqual(["mix_format"]);
+    expect(formattersForPath("app/User.php")).toEqual(["pint", "phpcs", "prettier"]);
+    expect(formattersForPath("src/core.clj")).toEqual(["cljfmt"]);
+    expect(formattersForPath("src/Main.java")).toEqual(["checkstyle", "clang_format"]);
+    expect(languageForInfoString("csharp")).not.toBeNull();
+    expect(languageForInfoString("Common Lisp")).not.toBeNull();
+    expect(languageForInfoString("golang")).not.toBeNull();
+    expect(languageForInfoString("postgresql")).not.toBeNull();
+    expect(prettyLayoutForBuffer("bin/deploy", "python")).toEqual(prettyLayoutForPath("deploy.py"));
+    expect(formattersForBuffer("bin/deploy", "python")).toEqual(["ruff", "black"]);
   });
 });

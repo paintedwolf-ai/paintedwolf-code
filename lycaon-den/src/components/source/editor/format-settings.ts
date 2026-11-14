@@ -4,6 +4,15 @@ import type { FormatSettings, FormatSettingsSource, FormatTool } from "../../../
 
 export type FormatSources = readonly FormatSettingsSource[];
 
+export type PrettyFormatTool =
+  | FormatTool
+  | "golangci"
+  | "mix_format"
+  | "pint"
+  | "phpcs"
+  | "cljfmt"
+  | "checkstyle";
+
 const EDITORCONFIG = ".editorconfig";
 
 export function editorConfigSettings(sources: FormatSources): FormatSettings | undefined {
@@ -19,11 +28,11 @@ function configDepth(source: FormatSettingsSource): number {
  * The line width a file is formatted to: the nearest configured formatter of
  * its language, else EditorConfig. Formatters at the same depth keep `tools` order.
  */
-export function declaredLineWidth(sources: FormatSources | undefined, tools: readonly FormatTool[]): number | undefined {
+export function declaredLineWidth(sources: FormatSources | undefined, tools: readonly PrettyFormatTool[]): number | undefined {
   if (!sources) return undefined;
   let best: FormatSettingsSource | undefined;
   for (const tool of tools) {
-    const source = sources.find((s) => s.tool === tool && s.settings.line_width);
+    const source = sources.find((s) => (s.tool as string) === tool && s.settings.line_width);
     if (source && (!best || configDepth(source) > configDepth(best))) best = source;
   }
   return best?.settings.line_width ?? editorConfigSettings(sources)?.line_width;

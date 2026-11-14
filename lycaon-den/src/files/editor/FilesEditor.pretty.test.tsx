@@ -349,4 +349,17 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     await copyTextToClipboard(view.state.doc.toString());
     expect(filesBufferText(buf)).toBe(rawJsonl);
   });
+
+  it("activates highlighting and Pretty layout from host buf.language on extensionless scripts", () => {
+    const buf = loadedBuffer({
+      path: "bin/deploy",
+      content: "def deploy(targets, dry_run): return [t for t in targets if not dry_run]\n",
+      language: { path: "bin/deploy", name: "python" },
+    });
+    void saveEditorLineLayout("pretty");
+    const props = editorProps(buf);
+    render(() => <FilesEditor {...props} />);
+    const view = getFilesEditorView(PROJECT, buf.key)!;
+    expect(prettyOutcomeOf(view.state).kind).toBe("active");
+  });
 });
