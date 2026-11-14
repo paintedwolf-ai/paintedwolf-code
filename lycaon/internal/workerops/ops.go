@@ -91,7 +91,7 @@ type Receipt struct {
 	Outcome        Outcome           `json:"outcome"`
 	State          workerstate.State `json:"state"`
 	Round          int64             `json:"round,omitempty"`
-	JobID          string            `json:"job_id,omitempty"`
+	JobID          string            `json:"-"`
 	InstructionSeq int64             `json:"instruction_seq"`
 	// Accounted names the result this instruction accounted for.
 	Accounted string `json:"accounted,omitempty"`

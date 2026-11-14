@@ -263,7 +263,7 @@ func EnqueuedTaskToolMessageForJob(msgs []api.Message, jobID string) (*api.Messa
 	}
 	for i := range msgs {
 		msg := &msgs[i]
-		if !isCanonicalTaskDispatchRow(msg) {
+		if !isRoundDispatchRow(msg) {
 			continue
 		}
 		if strings.TrimSpace(msg.ToolResult.Dispatch.WorkerID) == jobID {
@@ -291,7 +291,9 @@ func assistantOwnsToolCall(msgs []api.Message, toolCallID string) bool {
 	return false
 }
 
-func isCanonicalTaskDispatchRow(msg *api.Message) bool {
+// isRoundDispatchRow reports a tool result that started a worker round: a
+// task dispatch, or an instruction that admitted a new round.
+func isRoundDispatchRow(msg *api.Message) bool {
 	if msg == nil || msg.Role != api.MessageRoleTool || msg.ToolResult == nil || msg.ToolResult.Dispatch == nil {
 		return false
 	}
@@ -299,7 +301,7 @@ func isCanonicalTaskDispatchRow(msg *api.Message) bool {
 		return false
 	}
 	switch strings.TrimSpace(strings.ToLower(msg.ToolResult.Tool)) {
-	case "task", "delegate_dispatch":
+	case "task", "delegate_dispatch", "instruct_worker":
 		return true
 	default:
 		return false
