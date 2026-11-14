@@ -29,7 +29,7 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 	_, err = supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
 		retained = runCtx
 		var startErr error
-		handle, startErr = supervisor.StartJob(runCtx, root, func(jobCtx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		handle, startErr = startJob(runCtx, supervisor, root, func(jobCtx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			noteJobNative(jobCtx, []string{"controlled native fixture"})
 			<-jobCtx.Done()
 			return toolcontract.ProducerResult{Status: 130, Terminal: toolcontract.ProducerInterrupted}, jobCtx.Err()
@@ -57,7 +57,7 @@ func TestProgramSessionDisposalDrainsAndRefusesRetainedAdmission(t *testing.T) {
 	if !testutil.Receive(t, "stopped program settlement", settled) || registry.HasRunning("owned") {
 		t.Fatal("disposal did not drain and settle the held job")
 	}
-	if _, err := supervisor.StartJob(retained, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	if _, err := startJob(retained, supervisor, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		t.Error("retained child reached its owner after disposal")
 		return toolcontract.ProducerResult{}, nil
 	}); !errors.Is(err, ErrProgramStopped) {
@@ -96,7 +96,7 @@ func TestProgramRetainsFinishedRawHandleUntilRegistryEviction(t *testing.T) {
 		var handle string
 		_, err = supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
 			var startErr error
-			handle, startErr = supervisor.StartJob(runCtx, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
+			handle, startErr = startJob(runCtx, supervisor, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
 				return toolcontract.ProducerResult{Status: status, Terminal: toolcontract.ProducerCompleted}, nil
 			})
 			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
@@ -154,7 +154,7 @@ func TestProgramSessionDisposalRetryWaitsForHeldJob(t *testing.T) {
 	t.Cleanup(finish)
 	root := toolcontract.OperationInvocation{SessionID: "owned", Identity: toolcontract.ExecutionIdentity{ProgramID: "retry-program", ExecutionID: "root"}}
 	_, err = supervisor.RunProgram(admitted, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
-		_, startErr := supervisor.StartJob(runCtx, root, func(jobCtx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		_, startErr := startJob(runCtx, supervisor, root, func(jobCtx context.Context, _ string, _ commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			noteJobNative(jobCtx, []string{"controlled native fixture"})
 			close(started)
 			<-jobCtx.Done()
@@ -218,7 +218,7 @@ func TestProgramJobsKeepOriginAcrossLaterAdmission(t *testing.T) {
 	testutil.FailErr(t, "bind later program", err)
 	root := toolcontract.OperationInvocation{SessionID: "child", Identity: toolcontract.ExecutionIdentity{ProgramID: "first-program", ExecutionID: "root"}}
 	_, err = supervisor.RunProgram(first, root, func(runCtx context.Context) (toolcontract.ProducerResult, error) {
-		_, startErr := supervisor.StartJob(runCtx, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
+		_, startErr := startJob(runCtx, supervisor, root, func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error) {
 			return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, nil
 		})
 		return toolcontract.ProducerResult{Terminal: toolcontract.ProducerCompleted}, startErr
@@ -232,4 +232,10 @@ func TestProgramJobsKeepOriginAcrossLaterAdmission(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("job did not complete")
 	}
+}
+
+// startJob starts a supervised job and returns the ID $! would name.
+func startJob(ctx context.Context, s *ProgramSupervisor, root toolcontract.OperationInvocation, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
+	started, err := s.StartJob(ctx, root, "background job", run)
+	return started.ID, err
 }

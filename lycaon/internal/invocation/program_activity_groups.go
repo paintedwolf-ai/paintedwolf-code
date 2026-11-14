@@ -161,8 +161,29 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 			primary[i] = true
 		}
 	}
+	// A background job's work belongs to the activity that launched it.
+	launched := make(map[int]int)
+	subjects := make(map[int]string)
+	for i, g := range groups {
+		launch, ok := launchOf(g, groups, byKey)
+		if !ok || activityPresentation(g.input).role == "container" {
+			continue
+		}
+		launched[i] = launch
+		// The job is named by the first process it runs.
+		if _, named := subjects[launch]; !named && primary[i] && activityPresentation(g.input).phase == "execute" {
+			if subject := activitySubject(g.input); subject != "" {
+				subjects[launch] = subject
+			}
+		}
+		delete(primary, i)
+	}
 	assignments := make(map[int]int, len(groups))
 	for i, g := range groups {
+		if launch, ok := launched[i]; ok {
+			assignments[i] = launch
+			continue
+		}
 		if primary[i] {
 			assignments[i] = i
 			continue
@@ -215,18 +236,23 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	}
 	var result []api.CommandActivity
 	positions := map[int]int{}
-	active := -1
+	// The row sequential primaries fold into, and the group that opened it.
+	activeRow, activeGroup := -1, activityGroup{}
 	for i, g := range groups {
 		if !primary[i] {
 			continue
 		}
-		if active >= 0 && activityFolds(groups[active], g) {
-			positions[i] = positions[active]
+		if activeRow >= 0 && activityFolds(activeGroup, g) {
+			positions[i] = activeRow
 			continue
 		}
 		positions[i] = len(result)
-		result = append(result, groupActivity(g))
-		active = i
+		activity := groupActivity(g)
+		if activity.Subject == "" {
+			activity.Subject = subjects[i]
+		}
+		result = append(result, activity)
+		activeRow, activeGroup = positions[i], g
 	}
 	for i, g := range groups {
 		if owner, ok := assignments[i]; ok {
@@ -240,6 +266,15 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 				appendActivityStep(&a, g)
 				result = append(result, a)
 			}
+		}
+	}
+	for i, g := range groups {
+		if !primary[i] || g.input.operation != "program &" {
+			continue
+		}
+		// A launch whose job already ran reports the job's outcome, not its start.
+		if a := &result[positions[i]]; a.State == "completed" && len(a.Steps) > 1 {
+			a.Outcome = activityStateOutcome(a.State)
 		}
 	}
 	for i := range result {
@@ -259,6 +294,23 @@ func activityFolds(active, g activityGroup) bool {
 	}
 	return active.input.operation != "program &" && g.input.operation != "program &" &&
 		active.input.receipt.JobHandle == "" && g.input.receipt.JobHandle == ""
+}
+
+// launchOf finds the & launch whose job recorded g.
+func launchOf(g activityGroup, groups []activityGroup, byKey map[activityKey]int) (int, bool) {
+	seen := map[activityKey]bool{g.key: true}
+	for parent := g.parent; parent != (activityKey{}) && !seen[parent]; {
+		seen[parent] = true
+		p, ok := byKey[parent]
+		if !ok {
+			return 0, false
+		}
+		if parent.launch != "" {
+			return p, true
+		}
+		parent = groups[p].parent
+	}
+	return 0, false
 }
 
 func groupDescendsFrom(g activityGroup, parent activityKey, groups []activityGroup, byKey map[activityKey]int) bool {

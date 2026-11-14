@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
@@ -62,10 +63,11 @@ func (s *ProgramSupervisor) Jobs(sessionID, projectID string) *SessionJobs {
 	return jobs
 }
 
-// StartJob supervises one statement-trailing & job in the session registry.
-func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontract.OperationInvocation, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (string, error) {
+// StartJob supervises one statement-trailing & job in the session registry
+// under commandLine, the statement as the model wrote it.
+func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontract.OperationInvocation, commandLine string, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (commandprogram.StartedJob, error) {
 	if s == nil || s.Background == nil {
-		return "", fmt.Errorf("program jobs require the session process registry")
+		return commandprogram.StartedJob{}, fmt.Errorf("program jobs require the session process registry")
 	}
 	id, _ := ctx.Value(supervisedKey{}).(string)
 	s.mu.Lock()
@@ -76,11 +78,31 @@ func (s *ProgramSupervisor) StartJob(ctx context.Context, invocation toolcontrac
 	}
 	s.mu.Unlock()
 	if jobs == nil {
-		return "", ErrProgramStopped
+		return commandprogram.StartedJob{}, ErrProgramStopped
 	}
-	return jobs.start(ctx, "background job "+invocation.Identity.ExecutionID, func(jobCtx context.Context, handle string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
+	return jobs.start(ctx, commandLine, func(jobCtx context.Context, handle string, streams commandprogram.Streams) (toolcontract.ProducerResult, error) {
 		return run(hitl.WithStopContext(jobCtx, jobCtx), handle, streams)
 	})
+}
+
+// runSupervision is one run's supervision port; it names each & job by the
+// statement's own source.
+type runSupervision struct {
+	*ProgramSupervisor
+	run *programRun
+}
+
+func (s runSupervision) StartJob(ctx context.Context, invocation toolcontract.OperationInvocation, run func(context.Context, string, commandprogram.Streams) (toolcontract.ProducerResult, error)) (commandprogram.StartedJob, error) {
+	return s.ProgramSupervisor.StartJob(ctx, invocation, jobCommandLine(s.run.sourceText(invocation.SourceUnitID), invocation.Span), run)
+}
+
+func jobCommandLine(source string, span toolcontract.SourceSpan) string {
+	if span.StartByte >= 0 && span.StartByte < span.EndByte && span.EndByte <= len(source) {
+		if text := strings.TrimSpace(source[span.StartByte:span.EndByte]); text != "" {
+			return text
+		}
+	}
+	return "background job"
 }
 
 type supervisedProgram struct {
@@ -98,7 +120,7 @@ type supervisedProgram struct {
 
 type supervisedKey struct{}
 
-var _ commandprogram.ProgramSupervision = (*ProgramSupervisor)(nil)
+var _ commandprogram.ProgramSupervision = runSupervision{}
 
 // RunProgram supervises one program to its aggregate outcome. A stop or loss
 // overrides the evaluator's status with the typed host stop; children keep the
