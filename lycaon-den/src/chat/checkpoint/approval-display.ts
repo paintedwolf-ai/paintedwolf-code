@@ -23,7 +23,7 @@ export function enrichCheckpointDecision(
   let subject = meta.subject?.trim() || undefined;
   if (!subject) {
     subject =
-      toolResult?.file_edit_preview?.path?.trim() ||
+      toolResult?.file_edit_previews?.[0]?.path?.trim() ||
       (call ? approvalArgsPreview(call.args) : "") ||
       undefined;
   }

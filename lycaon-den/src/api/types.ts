@@ -8148,9 +8148,13 @@ export interface components {
             completion?: components["schemas"]["ToolCompletion"];
             /** @description Report accepted against this worker job's observations and policy. */
             worker_report?: components["schemas"]["WorkerReportAcceptance"];
-            file_edit_preview?: components["schemas"]["FileEditPreview"];
+            /** @description Transcript reads carry one summary and reference per recorded file edit, in order, in place of the edits' text. */
+            file_edit_previews?: components["schemas"]["FileEditPreview"][];
             promotion_previews?: components["schemas"]["FileEditPreview"][];
-            file_edit?: components["schemas"]["FileEditSnapshot"];
+            /** @description Text changes the call made, one per file, from the text before its first write to the text after its last, in the order the files were first written. */
+            file_edits?: components["schemas"]["FileEditSnapshot"][];
+            /** @description Further text changes the call made that file_edits does not hold because the result reached its bound. Source history holds them. */
+            file_edits_omitted?: number;
             overlay_promotion?: components["schemas"]["OverlayPromotion"];
             visual?: components["schemas"]["VisualArtifact"];
             checkpoint_decision?: components["schemas"]["CheckpointDecisionMeta"];
@@ -11073,11 +11077,17 @@ export interface components {
             report: components["schemas"]["WorkerCompletionReport"];
             grounding: components["schemas"]["CitationGrounding"];
         };
+        /**
+         * @description The tool result list a file edit reference indexes. `file_edit` is file_edits; `overlay_promotion` is the promoted files.
+         * @enum {string}
+         */
+        FileEditSource: "file_edit" | "overlay_promotion";
         FileEditReference: {
             /** Format: uuid */
             message_id: string;
             tool_call_id: string;
-            /** @description Zero for file_edit; one-based index for a promotion file. */
+            source: components["schemas"]["FileEditSource"];
+            /** @description Zero-based position in that list. */
             index: number;
         };
         FileEditPreview: {
@@ -30673,6 +30683,7 @@ export type WorkerCompletionReport = components["schemas"]["WorkerCompletionRepo
 export type CitationGroundingCheckStatus = components["schemas"]["CitationGroundingCheckStatus"];
 export type CitationGroundingFinding = components["schemas"]["CitationGroundingFinding"];
 export type WorkerReportAcceptance = components["schemas"]["WorkerReportAcceptance"];
+export type FileEditSource = components["schemas"]["FileEditSource"];
 export type FileEditReference = components["schemas"]["FileEditReference"];
 export type FileEditPreview = components["schemas"]["FileEditPreview"];
 export type FileEditSnapshot = components["schemas"]["FileEditSnapshot"];

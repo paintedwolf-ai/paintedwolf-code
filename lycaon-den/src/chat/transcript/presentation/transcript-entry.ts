@@ -1,6 +1,6 @@
 import { createEffect, createSignal, onCleanup } from "solid-js";
 import type { Message, TurnLoad } from "../../../api/types.ts";
-import { fileEditFromPart } from "../../file-edit/file-edit-model.ts";
+import { partHasFileEdits } from "../../file-edit/file-edit-model.ts";
 import { citationGroundingHadTraceableWork } from "../../grounding/citation-grounding-model.ts";
 import { activitySpanToolParts } from "../../tool/activity-span-model.ts";
 import {
@@ -72,7 +72,7 @@ function collectToolPartEntryKeys(
   keys: Set<string>,
 ): void {
   keys.add(part.id);
-  if (fileEditFromPart(part)) {
+  if (partHasFileEdits(part)) {
     keys.add(`${part.id}:file-edit`);
   }
   const visual = visualFromPart(part);

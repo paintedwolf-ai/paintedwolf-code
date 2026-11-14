@@ -29,18 +29,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// FileEditCapture is one text change a call made, for the result's diff.
-type FileEditCapture struct {
-	// RootID is the attached root holding Path; empty for a path outside the roots.
-	RootID string
-	Path   string
-	// Before is nil when the call created the file.
-	Before *string
-	After  string
-	// Deleted means the call removed the file; After is empty.
-	Deleted bool
-}
-
 // VisualCapture is optional visual artifact bytes for store-backed projection.
 type VisualCapture struct {
 	Mime     string
@@ -90,7 +78,10 @@ type ToolInvocationOut struct {
 	WorkerReport     *api.WorkerReportAcceptance
 	Completion       *api.ToolCompletion
 	OverlayPromotion *api.OverlayPromotion
-	FileEdit         *FileEditCapture
+	// FileEdits holds the call's text changes, one per file.
+	FileEdits []api.FileEditSnapshot
+	// FileEditsOmitted counts text changes past the bounds of FileEdits.
+	FileEditsOmitted int
 	Visual           *VisualCapture
 	// ExternalAccess is Den UI metadata for exceptional external-access on this result.
 	ExternalAccess *api.ExternalAccess

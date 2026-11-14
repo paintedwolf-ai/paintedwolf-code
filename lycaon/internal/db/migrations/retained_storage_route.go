@@ -19,8 +19,9 @@ func (p Plan) reviewedRetainedRoute() bool {
 	}
 	// The manifest writer bounds its re-derivable memos and maintains target
 	// indexes during insertion. Receipt index rebuilds use the measured receipt
-	// tree. The evidence root backfill bounds its record rewrites and index sync
-	// through its declared Writes estimate, adding no sorters or rebuilds.
+	// tree. The evidence root backfill and single-to-plural file edit rewrite
+	// bound their row rewrites and index sync through declared Writes estimates,
+	// adding no sorters or rebuilds.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "d00cfaf2891790bbc43d50816f238481d646db4fcde484d2a9f5515af9b299d5"
+		p.steps[0].Checksum == "c5c2979a6e4b34c0e52a5538c5171c01fc022ddd48f6c13b3d605254abe8744f"
 }

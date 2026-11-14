@@ -264,9 +264,9 @@ func TestRestoreVersionRestoresAbsentState(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(dir, "newfile.txt")); !os.IsNotExist(statErr) {
 		t.Fatalf("expected newfile.txt to be removed, stat err = %v", statErr)
 	}
-	edit := tctx.Effects.Out.FileEdit
-	if edit == nil || !edit.Deleted || edit.After != "" || edit.Before == nil || *edit.Before != "created in turn\n" {
-		t.Fatalf("restoring an absent state recorded %+v, want a deletion of the prior text", edit)
+	edits := tctx.Effects.Out.FileEdits
+	if len(edits) != 1 || !edits[0].Deleted || edits[0].After != "" || edits[0].Before == nil || *edits[0].Before != "created in turn\n" {
+		t.Fatalf("restoring an absent state recorded %+v, want a deletion of the prior text", edits)
 	}
 }
 

@@ -20,20 +20,25 @@ func projectFileEdits(msg api.Message) api.Message {
 		return out
 	}
 	result := *msg.ToolResult
-	if result.FileEdit != nil {
+	if len(result.FileEdits) > 0 {
 		result.ToolArgs = sourcePresentationArgs(result.ToolArgs)
-		preview := fileEditPreview(*result.FileEdit, api.FileEditReference{MessageID: msg.ID, ToolCallID: result.ToolCallID})
-		result.FileEditPreview = &preview
-		result.FileEdit = nil
+		result.FileEditPreviews = previews(msg.ID, result.ToolCallID, api.FileEditSourceFileEdit, result.FileEdits)
+		result.FileEdits = nil
 	}
 	if result.OverlayPromotion != nil {
-		result.PromotionPreviews = make([]api.FileEditPreview, 0, len(result.OverlayPromotion.Files))
-		for j, edit := range result.OverlayPromotion.Files {
-			result.PromotionPreviews = append(result.PromotionPreviews, fileEditPreview(edit, api.FileEditReference{MessageID: msg.ID, ToolCallID: result.ToolCallID, Index: j + 1}))
-		}
+		result.PromotionPreviews = previews(msg.ID, result.ToolCallID, api.FileEditSourceOverlayPromotion, result.OverlayPromotion.Files)
 		result.OverlayPromotion = nil
 	}
 	out.ToolResult = &result
+	return out
+}
+
+// previews summarizes one list of a tool result's edits, each addressed by its place in that list.
+func previews(messageID, toolCallID string, source api.FileEditSource, edits []api.FileEditSnapshot) []api.FileEditPreview {
+	out := make([]api.FileEditPreview, 0, len(edits))
+	for i, edit := range edits {
+		out = append(out, fileEditPreview(edit, api.FileEditReference{MessageID: messageID, ToolCallID: toolCallID, Source: source, Index: i}))
+	}
 	return out
 }
 

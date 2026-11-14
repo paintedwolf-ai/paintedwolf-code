@@ -43,7 +43,7 @@ func EditFollowUpRepeat(history []api.Message) bool {
 			segmentHasEdit = false
 			continue
 		}
-		if msg.ToolResult != nil && msg.ToolResult.FileEdit != nil {
+		if msg.ToolResult != nil && len(msg.ToolResult.FileEdits) > 0 {
 			segmentHasEdit = true
 		}
 	}

@@ -54,7 +54,7 @@ describe("transcript row content revision", () => {
       { kind: "pending_user", key: "pu", text: "pending", pending: {} as never },
       { kind: "fallback", key: "fb", text: "fallback", role: "system" },
       { kind: "draft", key: "d", text: "draft", draftStatus: "live", draftVersionCount: 2 },
-      { kind: "tool", key: "t", part: part("t", { error: "err", fileEdit: { path: "a", added: 1, removed: 2 } as never }) },
+      { kind: "tool", key: "t", part: part("t", { error: "err", fileEdits: [{ path: "a", added: 1, removed: 2 } as never] }) },
       {
         kind: "activity_span",
         key: "as",

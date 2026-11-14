@@ -3226,9 +3226,10 @@ type FileEditPreview struct {
 
 // FileEditReference
 type FileEditReference struct {
-	MessageID  string `json:"message_id"`
-	ToolCallID string `json:"tool_call_id"`
-	// Zero for file_edit; one-based index for a promotion file.
+	MessageID  string         `json:"message_id"`
+	ToolCallID string         `json:"tool_call_id"`
+	Source     FileEditSource `json:"source"`
+	// Zero-based position in that list.
 	Index int `json:"index"`
 }
 
@@ -8363,10 +8364,14 @@ type ToolResult struct {
 	// Producer-stated asynchronous or lifecycle completion fact.
 	Completion *ToolCompletion `json:"completion,omitempty"`
 	// Report accepted against this worker job's observations and policy.
-	WorkerReport       *WorkerReportAcceptance `json:"worker_report,omitempty"`
-	FileEditPreview    *FileEditPreview        `json:"file_edit_preview,omitempty"`
-	PromotionPreviews  []FileEditPreview       `json:"promotion_previews,omitempty"`
-	FileEdit           *FileEditSnapshot       `json:"file_edit,omitempty"`
+	WorkerReport *WorkerReportAcceptance `json:"worker_report,omitempty"`
+	// Transcript reads carry one summary and reference per recorded file edit, in order, in place of the edits' text.
+	FileEditPreviews  []FileEditPreview `json:"file_edit_previews,omitempty"`
+	PromotionPreviews []FileEditPreview `json:"promotion_previews,omitempty"`
+	// Text changes the call made, one per file, from the text before its first write to the text after its last, in the order the files were first written.
+	FileEdits []FileEditSnapshot `json:"file_edits,omitempty"`
+	// Further text changes the call made that file_edits does not hold because the result reached its bound. Source history holds them.
+	FileEditsOmitted   int                     `json:"file_edits_omitted,omitempty"`
 	OverlayPromotion   *OverlayPromotion       `json:"overlay_promotion,omitempty"`
 	Visual             *VisualArtifact         `json:"visual,omitempty"`
 	CheckpointDecision *CheckpointDecisionMeta `json:"checkpoint_decision,omitempty"`

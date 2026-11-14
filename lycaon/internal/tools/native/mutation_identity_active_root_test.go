@@ -62,11 +62,11 @@ func TestWriteToolRecordsMutationIdentityAgainstTheActiveRoot(t *testing.T) {
 			t.Fatalf("rewind key = %+v, want the active root identity", got)
 		}
 	}
-	edit := tctx.Effects.Out.FileEdit
-	if edit == nil {
-		t.Fatal("write lost its file edit capture")
+	edits := tctx.Effects.Out.FileEdits
+	if len(edits) != 1 {
+		t.Fatalf("write file edits = %+v, want 1 edit", edits)
 	}
-	if edit.RootID != "active" || edit.Path != "notes.txt" {
-		t.Fatalf("file edit = %+v, want the active root identity", edit)
+	if edits[0].RootID != "active" || edits[0].Path != "notes.txt" {
+		t.Fatalf("file edit = %+v, want the active root identity", edits[0])
 	}
 }

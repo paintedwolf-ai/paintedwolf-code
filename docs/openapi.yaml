@@ -21208,16 +21208,25 @@ components:
           x-go-pointer: true
           $ref: '#/components/schemas/WorkerReportAcceptance'
           description: Report accepted against this worker job's observations and policy.
-        file_edit_preview:
-          x-go-pointer: true
-          $ref: '#/components/schemas/FileEditPreview'
+        file_edit_previews:
+          type: array
+          description: Transcript reads carry one summary and reference per recorded file edit, in order, in place of the edits' text.
+          items:
+            $ref: '#/components/schemas/FileEditPreview'
         promotion_previews:
           type: array
           items:
             $ref: '#/components/schemas/FileEditPreview'
-        file_edit:
-          x-go-pointer: true
-          $ref: '#/components/schemas/FileEditSnapshot'
+        file_edits:
+          type: array
+          maxItems: 64
+          description: Text changes the call made, one per file, from the text before its first write to the text after its last, in the order the files were first written.
+          items:
+            $ref: '#/components/schemas/FileEditSnapshot'
+        file_edits_omitted:
+          type: integer
+          minimum: 0
+          description: Further text changes the call made that file_edits does not hold because the result reached its bound. Source history holds them.
         overlay_promotion:
           x-go-pointer: true
           $ref: '#/components/schemas/OverlayPromotion'
@@ -28576,6 +28585,12 @@ components:
           x-go-pointer: true
           $ref: '#/components/schemas/CitationGrounding'
       description: Host-accepted worker report retained with its successful submitting invocation.
+    FileEditSource:
+      type: string
+      enum:
+        - file_edit
+        - overlay_promotion
+      description: The tool result list a file edit reference indexes. `file_edit` is file_edits; `overlay_promotion` is the promoted files.
     FileEditReference:
       x-go-generate: true
       type: object
@@ -28583,6 +28598,7 @@ components:
       required:
         - message_id
         - tool_call_id
+        - source
         - index
       properties:
         message_id:
@@ -28591,10 +28607,12 @@ components:
         tool_call_id:
           type: string
           pattern: ^[A-Za-z0-9_.:-]+$
+        source:
+          $ref: '#/components/schemas/FileEditSource'
         index:
           type: integer
           minimum: 0
-          description: Zero for file_edit; one-based index for a promotion file.
+          description: Zero-based position in that list.
     FileEditPreview:
       x-go-generate: true
       type: object
