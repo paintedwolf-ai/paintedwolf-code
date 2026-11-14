@@ -296,10 +296,5 @@ func isRoundDispatchRow(msg *api.Message) bool {
 	if strings.TrimSpace(msg.ToolResult.Dispatch.WorkerID) == "" {
 		return false
 	}
-	switch strings.TrimSpace(strings.ToLower(msg.ToolResult.Tool)) {
-	case "task", "delegate_dispatch", "instruct_worker":
-		return true
-	default:
-		return false
-	}
+	return guidance.StartsWorkerRound(msg.ToolResult.Tool)
 }
