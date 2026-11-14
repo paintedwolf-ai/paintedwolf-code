@@ -1,0 +1,12 @@
+# Inform Binding — assembly-only view context.
+'on': inject.view_context
+selector:
+  surface: coordinator
+effect: inform
+render: view-context
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - coordinator assembly before a prompt that recorded what its sender had in view

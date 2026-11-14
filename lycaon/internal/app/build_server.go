@@ -38,6 +38,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourcerewind"
 	"github.com/lycaon/lycaon/internal/usernotice"
+	"github.com/lycaon/lycaon/internal/viewstate"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workernotice"
 	wire "github.com/lycaon/lycaon/pkg/api"
@@ -333,6 +334,9 @@ func wireSourceEditing(b *serveBuilder, deps *api.Dependencies) error {
 	})
 	// A file the person has open is the document, for reads and writes alike.
 	b.sessions.Manager.ToolContext.SetEditorDocuments(editorDocumentsAdapter{service: editorDocuments})
+	projectViews := viewstate.New(nil)
+	deps.Source.ProjectViews = projectViews
+	b.sessions.Manager.ViewContexts.SetSources(projectViews, visibleEditorsAdapter{service: editorDocuments})
 	b.sessions.Manager.Chats.Rewinds.SetSourceRewinds(&sourcerewind.Service{Planner: b.storage.SourceLedger.Comparisons, Mutations: sourceMutations, Documents: editorDocuments})
 	// Contribution dispatch uses durable receipts and policy-derived authority.
 	deps.Extensions.Contributions = extensionadmin.ContributionRuntime{

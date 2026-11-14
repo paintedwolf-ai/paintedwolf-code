@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
+	"github.com/lycaon/lycaon/internal/session/viewcontext"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
@@ -133,6 +134,22 @@ func measureCoordinatorInjectBlock(
 			})
 		}
 		return inject.RenderSourceChangesBlock(ctx, renderer, "sess-inject-test", brief, true)
+	case "view_context":
+		long := func(kind string, i int) string {
+			return fmt.Sprintf("@secondary/src/components/project/%s/%02d/ReviewDiffViewLongName.tsx", kind, i)
+		}
+		view := api.ViewContext{
+			Folder: &api.ViewPath{DisplayPath: long("folder", 0)},
+			Search: &api.ViewSearch{Query: strings.Repeat("q", 1024), Hit: &api.ViewLocation{DisplayPath: long("hit", 0), Line: 99999}},
+		}
+		for i := 0; i < viewcontext.MaxItems; i++ {
+			view.Editors = append(view.Editors, api.ViewEditor{DisplayPath: long("editor", i), Unsaved: true,
+				Selection: &api.ViewSelection{StartLine: 10000 + i, EndLine: 20000 + i}})
+			view.Diffs = append(view.Diffs, api.ViewPath{DisplayPath: long("diff", i)})
+			view.Findings = append(view.Findings, api.ViewFinding{RuleID: strings.Repeat("r", 128), Level: api.FindingLevelCritical,
+				Location: &api.ViewLocation{DisplayPath: long("finding", i), Line: 99999}})
+		}
+		return inject.RenderViewContextBlock(ctx, renderer, "sess-inject-test", view, true)
 	case "implement_spawn":
 		block, err := inject.RenderImplementSpawnInject(
 			ctx, renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, spawn.SurfaceImplementSynthesis, 1, false, true,

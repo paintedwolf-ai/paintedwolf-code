@@ -1,0 +1,94 @@
+components:
+  schemas:
+    ReplaceProjectViewRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [client_id, focused, editor, diff, folder, search, findings]
+      description: >-
+        What one window of this person shows of the project right now. Every
+        surface is present; one the window does not show is null, and a
+        window that shows none of them, or is hidden, withdraws its report.
+        Reports expire unless renewed.
+      properties:
+        client_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: '^[a-zA-Z0-9:._-]+$'
+        focused:
+          type: boolean
+          description: The window has keyboard focus.
+        editor:
+          x-go-type: "*ViewReportEditor"
+          oneOf:
+          - $ref: '#/components/schemas/ViewReportEditor'
+          - type: "null"
+        diff:
+          x-go-type: "*ViewReportPath"
+          oneOf:
+          - $ref: '#/components/schemas/ViewReportPath'
+          - type: "null"
+        folder:
+          x-go-type: "*ViewReportPath"
+          oneOf:
+          - $ref: '#/components/schemas/ViewReportPath'
+          - type: "null"
+        search:
+          x-go-type: "*ViewReportSearch"
+          oneOf:
+          - $ref: '#/components/schemas/ViewReportSearch'
+          - type: "null"
+        findings:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/ViewReportFinding'
+    ViewReportEditor:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [document_id]
+      description: The document a visible editor shows; its selection is the window's editor presence.
+      properties:
+        document_id: {type: string, format: uuid}
+    ViewReportPath:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_id, path]
+      properties:
+        root_id: {type: string, format: uuid}
+        path: {type: string, minLength: 1, maxLength: 4096}
+    ViewReportLocation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [root_id, path]
+      properties:
+        root_id: {type: string, format: uuid}
+        path: {type: string, minLength: 1, maxLength: 4096}
+        line: {type: integer, minimum: 1}
+    ViewReportSearch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [query]
+      properties:
+        query: {type: string, minLength: 1, maxLength: 1024}
+        hit:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewReportLocation'
+    ViewReportFinding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required: [fingerprint, rule_id, level]
+      properties:
+        fingerprint: {type: string, minLength: 1, maxLength: 256}
+        rule_id: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-zA-Z0-9_.:/-]+$'}
+        level:
+          $ref: ../scan/findings.yaml#/components/schemas/FindingLevel
+        location:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewReportLocation'

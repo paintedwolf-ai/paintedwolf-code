@@ -3856,6 +3856,43 @@ paths:
           $ref: '#/components/responses/TooManyRequests'
         default:
           $ref: '#/components/responses/Error'
+  /v1/projects/{id}/view:
+    put:
+      tags:
+        - projects
+      operationId: replaceProjectView
+      x-person-action: none
+      summary: Replace what one of this person's windows shows of the project
+      description: The host keeps each window's report briefly and tells a session's agent what the person had in view when they sent a prompt. Windows renew their report while it holds; a report that is not renewed expires.
+      parameters:
+        - $ref: '#/components/parameters/ProjectId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReplaceProjectViewRequest'
+      responses:
+        '204':
+          description: The window's report was replaced
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/ContentTooLarge'
+        '415':
+          $ref: '#/components/responses/UnsupportedMediaType'
+        '429':
+          $ref: '#/components/responses/TooManyRequests'
+        default:
+          $ref: '#/components/responses/Error'
   /v1/projects/{id}/editor-documents/status:
     post:
       tags:
@@ -19679,6 +19716,289 @@ components:
         compacted_at:
           type: string
           format: date-time
+    ViewContext:
+      x-go-generate: true
+      type: object
+      required:
+        - editors
+        - diffs
+        - findings
+      additionalProperties: false
+      description: What the sender had in view when this prompt opened a turn, across their visible windows, most recently focused first. Recorded only when it differs from the last view still in the agent's history; empty lists and no folder or search mean nothing was in view.
+      properties:
+        editors:
+          type: array
+          maxItems: 8
+          description: Files shown in a visible editor, with that editor's selection.
+          items:
+            $ref: '#/components/schemas/ViewEditor'
+        diffs:
+          type: array
+          maxItems: 8
+          description: Files shown in a visible diff.
+          items:
+            $ref: '#/components/schemas/ViewPath'
+        folder:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewPath'
+        search:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewSearch'
+        findings:
+          type: array
+          maxItems: 8
+          description: Security findings open or selected in a visible security view.
+          items:
+            $ref: '#/components/schemas/ViewFinding'
+    ViewPath:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - display_path
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+          description: Root-relative slash path.
+        display_path:
+          type: string
+          minLength: 1
+          description: The path as the agent was shown it, @label-qualified off the primary root.
+    ViewLocation:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - display_path
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+        display_path:
+          type: string
+          minLength: 1
+        line:
+          type: integer
+          minimum: 1
+    ViewEditor:
+      x-go-generate: true
+      type: object
+      required:
+        - root_id
+        - path
+        - display_path
+        - unsaved
+      additionalProperties: false
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+        display_path:
+          type: string
+          minLength: 1
+        unsaved:
+          type: boolean
+        selection:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewSelection'
+    ViewSelection:
+      x-go-generate: true
+      type: object
+      required:
+        - start_line
+        - end_line
+        - cursor
+      additionalProperties: false
+      description: The editor's main selection.
+      properties:
+        start_line:
+          type: integer
+          minimum: 1
+        end_line:
+          type: integer
+          minimum: 1
+        cursor:
+          type: boolean
+          description: No text is selected; start_line is the cursor's line.
+    ViewSearch:
+      x-go-generate: true
+      type: object
+      required:
+        - query
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        hit:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewLocation'
+    ViewFinding:
+      x-go-generate: true
+      type: object
+      required:
+        - fingerprint
+        - rule_id
+        - level
+      additionalProperties: false
+      properties:
+        fingerprint:
+          type: string
+          minLength: 1
+          maxLength: 256
+        rule_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-zA-Z0-9_.:/-]+$
+        level:
+          $ref: '#/components/schemas/FindingLevel'
+        location:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewLocation'
+    ReplaceProjectViewRequest:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - client_id
+        - focused
+        - editor
+        - diff
+        - folder
+        - search
+        - findings
+      description: What one window of this person shows of the project right now. Every surface is present; one the window does not show is null, and a window that shows none of them, or is hidden, withdraws its report. Reports expire unless renewed.
+      properties:
+        client_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          pattern: ^[a-zA-Z0-9:._-]+$
+        focused:
+          type: boolean
+          description: The window has keyboard focus.
+        editor:
+          x-go-type: '*ViewReportEditor'
+          oneOf:
+            - $ref: '#/components/schemas/ViewReportEditor'
+            - type: 'null'
+        diff:
+          x-go-type: '*ViewReportPath'
+          oneOf:
+            - $ref: '#/components/schemas/ViewReportPath'
+            - type: 'null'
+        folder:
+          x-go-type: '*ViewReportPath'
+          oneOf:
+            - $ref: '#/components/schemas/ViewReportPath'
+            - type: 'null'
+        search:
+          x-go-type: '*ViewReportSearch'
+          oneOf:
+            - $ref: '#/components/schemas/ViewReportSearch'
+            - type: 'null'
+        findings:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/ViewReportFinding'
+    ViewReportPath:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - root_id
+        - path
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+    ViewReportLocation:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - root_id
+        - path
+      properties:
+        root_id:
+          type: string
+          format: uuid
+        path:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        line:
+          type: integer
+          minimum: 1
+    ViewReportSearch:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - query
+      properties:
+        query:
+          type: string
+          minLength: 1
+          maxLength: 1024
+        hit:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewReportLocation'
+    ViewReportFinding:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - fingerprint
+        - rule_id
+        - level
+      properties:
+        fingerprint:
+          type: string
+          minLength: 1
+          maxLength: 256
+        rule_id:
+          type: string
+          minLength: 1
+          maxLength: 128
+          pattern: ^[a-zA-Z0-9_.:/-]+$
+        level:
+          $ref: '#/components/schemas/FindingLevel'
+        location:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewReportLocation'
+    ViewReportEditor:
+      x-go-generate: true
+      type: object
+      additionalProperties: false
+      required:
+        - document_id
+      description: The document a visible editor shows; its selection is the window's editor presence.
+      properties:
+        document_id:
+          type: string
+          format: uuid
     CreateSessionRequest:
       x-go-generate: true
       type: object
@@ -28724,7 +29044,7 @@ components:
       required:
         - locations
         - truncated
-      description: Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory.
+      description: Host-recorded source context supplied with this message; independent of evidence and filesystem inventory.
       properties:
         locations:
           type: array
@@ -28733,6 +29053,9 @@ components:
             $ref: '#/components/schemas/NavigationTarget'
         truncated:
           type: boolean
+        view:
+          x-go-pointer: true
+          $ref: '#/components/schemas/ViewContext'
     NavigationStatus:
       type: string
       enum:

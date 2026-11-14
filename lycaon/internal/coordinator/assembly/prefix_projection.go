@@ -78,6 +78,7 @@ func (e *AssemblyEngine) BuildKnownPrefix(ctx context.Context, sess *api.Session
 	}
 	if coordinator {
 		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
+		messages = contextAssembler.interleaveViewContexts(ctx, sess, frame, history, turn, messages)
 	}
 	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, messages)
 	// Pending scan guidance is delivered only by a real turn.
