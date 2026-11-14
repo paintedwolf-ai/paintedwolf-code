@@ -46,6 +46,13 @@ WHEN NEW.child_session_id IS NOT NULL AND NOT EXISTS (
 BEGIN SELECT RAISE(ABORT, 'worker child session belongs to another session'); END;
 CREATE TRIGGER workers_identity_immutable BEFORE UPDATE OF id, project_id, session_id, name, operation_id, created_at ON workers
 BEGIN SELECT RAISE(ABORT, 'worker identity is immutable'); END;
+-- A deleted workflow run unbinds its workers whole: run, phase and work
+-- together, which the binding check requires.
+CREATE TRIGGER workers_workflow_run_deleted BEFORE DELETE ON workflow_runs
+BEGIN
+    UPDATE workers SET workflow_run_id = NULL, workflow_phase = '', workflow_work_id = ''
+    WHERE workflow_run_id = OLD.id;
+END;
 
 -- One job per round. A round is unsettled until its job settles; a suspended
 -- decision job is unsettled.
@@ -172,7 +179,6 @@ CREATE TABLE worker_workspace_preparations (
     worker_id TEXT NOT NULL REFERENCES workers(id) ON DELETE CASCADE,
     generation INTEGER NOT NULL CHECK (generation > 0),
     source_result_id TEXT REFERENCES worker_results(id) ON DELETE SET NULL,
-    promotion_ref TEXT NOT NULL DEFAULT '',
     preparation_ref TEXT NOT NULL DEFAULT '',
     binding_generation INTEGER NOT NULL CHECK (binding_generation >= 0),
     operation_id TEXT NOT NULL CHECK (operation_id != ''),

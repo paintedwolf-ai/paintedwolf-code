@@ -38,20 +38,9 @@ func (l *WorkerLanes) Prepare(ctx context.Context, task *api.WorkerTask, roots [
 	if err != nil {
 		return "", true, err
 	}
-	source := ""
-	rounds, err := l.Records.Rounds(ctx, actor, round.WorkerID)
-	if err != nil {
-		return "", true, err
-	}
-	for i := len(rounds) - 1; i >= 0; i-- {
-		if rounds[i].SettledAt != "" && rounds[i].ResultID != "" {
-			source = rounds[i].ResultID
-			break
-		}
-	}
 	binding, err := l.Lanes.Admit(ctx, workerlane.Request{
 		Actor: actor, Op: workerrecords.Op{ID: "lane:" + task.ID}, WorkerID: round.WorkerID, Facts: facts,
-		Roots: roots, ActiveRootID: strings.TrimSpace(task.WorkspaceRootID), SourceResultID: source,
+		Roots: roots, ActiveRootID: strings.TrimSpace(task.WorkspaceRootID),
 	})
 	if err != nil {
 		return "", true, err

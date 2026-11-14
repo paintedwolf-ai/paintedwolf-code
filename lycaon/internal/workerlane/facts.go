@@ -54,9 +54,11 @@ func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Che
 	if err != nil {
 		return Facts{}, err
 	}
+	// Rounds without changes leave the lane as it was, so the latest round
+	// with a checkpoint decides it.
 	last := -1
 	for i := len(rounds) - 1; i >= 0; i-- {
-		if rounds[i].SettledAt != "" && rounds[i].ResultID != "" {
+		if rounds[i].SettledAt != "" && rounds[i].ResultID != "" && rounds[i].CheckpointID != "" {
 			last = i
 			break
 		}
@@ -65,6 +67,7 @@ func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Che
 		return f, nil
 	}
 	lastRound := rounds[last]
+	f.LastResultID = lastRound.ResultID
 	f.LastChange = ChangeState(changes[lastRound.ResultID])
 	if f.PromotionUnsettled, err = state.PromotionUnsettled(ctx, lastRound.JobID); err != nil {
 		return Facts{}, err
@@ -84,12 +87,16 @@ func (s *Service) FactsFor(ctx context.Context, state LaneState, checkpoints Che
 }
 
 // priorUnlandedCheckpoint is the latest earlier checkpoint in the current
-// lane generation whose result was neither landed nor rejected.
+// lane generation whose result was neither landed nor rejected. Rounds run one
+// at a time and a lane switches only when a round's job is claimed, after the
+// previous round settled; so a round belongs to the generation when it settled
+// after the generation was prepared. Admission order says nothing: a round is
+// admitted before the claim that prepares its lane.
 func priorUnlandedCheckpoint(earlier []workerrecords.Round, changes map[string]string, prep workerrecords.PreparationRecord) string {
 	switched, _ := db.ParseTime(prep.CreatedAt)
 	for i := len(earlier) - 1; i >= 0; i-- {
 		r := earlier[i]
-		if created, err := db.ParseTime(r.CreatedAt); err == nil && created.Before(switched) {
+		if settled, err := db.ParseTime(r.SettledAt); err == nil && settled.Before(switched) {
 			return ""
 		}
 		state := ChangeState(changes[r.ResultID])

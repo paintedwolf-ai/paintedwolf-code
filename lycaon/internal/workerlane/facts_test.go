@@ -25,7 +25,7 @@ func (s fakeState) Readiness(context.Context, string) (bool, bool, error) {
 	return s.recovery, s.holders, nil
 }
 
-func (f *landingFixture) facts(t *testing.T, state fakeState, a workerlane.Assignment) workerlane.Facts {
+func (f *roundFixture) facts(t *testing.T, state fakeState, a workerlane.Assignment) workerlane.Facts {
 	t.Helper()
 	facts, err := f.lanes.FactsFor(t.Context(), state, fakeCheckpoints{"cp-job-1": true, "cp-job-2": true}, f.actor, f.workerID, a)
 	testutil.FailErr(t, "facts", err)
@@ -33,7 +33,7 @@ func (f *landingFixture) facts(t *testing.T, state fakeState, a workerlane.Assig
 }
 
 func TestFactsFollowTheLastResult(t *testing.T) {
-	f := newLandingFixture(t)
+	f := newRoundFixture(t)
 	write := workerlane.Assignment{Write: true}
 	if got := workerlane.Select(f.facts(t, fakeState{}, write)); got.Action != workerlane.ActionKeep {
 		t.Fatalf("after a delivered result = %+v", got)
@@ -47,7 +47,7 @@ func TestFactsFollowTheLastResult(t *testing.T) {
 
 	// A second result is rejected without its reset running: the next round
 	// resets to the first result's checkpoint.
-	f.round(t, "job-2", "result-2", true)
+	f.round(t, "job-2", "result-2", "cp-job-2")
 	_, err := f.records.SetChange(t.Context(), f.actor, workerrecords.Op{ID: "reject-2"}, "result-2", workerrecords.Change{State: workerrecords.ChangeRejected})
 	testutil.FailErr(t, "reject", err)
 	got := f.facts(t, fakeState{}, write)
@@ -60,9 +60,19 @@ func TestFactsFollowTheLastResult(t *testing.T) {
 }
 
 func TestFactsAfterALandingThatRefreshed(t *testing.T) {
-	f := newLandingFixture(t)
-	_, err := f.lanes.Land(t.Context(), f.promoter, f.change("land"), api.PromoteOverlayInput{})
+	f := newRoundFixture(t)
+	_, err := f.db.ExecContext(t.Context(), `INSERT INTO landed_changes (id, worker_job_id, canonical_path, created_at) VALUES ('landed-job-1', 'job-1', '/repo', '2026-11-12T00:00:00Z')`)
+	testutil.FailErr(t, "landing receipt", err)
+	_, err = f.records.SetChange(t.Context(), f.actor, workerrecords.Op{ID: "land"}, "result-1", workerrecords.Change{State: workerrecords.ChangeLanded, LandedChangeID: "landed-job-1"})
 	testutil.FailErr(t, "land", err)
+	landed := f.facts(t, fakeState{}, workerlane.Assignment{Write: true})
+	if sel := workerlane.Select(landed); sel.Action != workerlane.ActionRefresh || landed.LastResultID != "result-1" {
+		t.Fatalf("after landing = %+v, selection %+v", landed, sel)
+	}
+	_, err = f.lanes.Admit(t.Context(), workerlane.Request{Actor: f.actor, Op: workerrecords.Op{ID: "refresh"}, WorkerID: f.workerID, Facts: landed})
+	testutil.FailErr(t, "refresh", err)
+	// A later round without changes leaves the refreshed lane decided.
+	f.round(t, "job-2", "result-2", "")
 	got := f.facts(t, fakeState{}, workerlane.Assignment{Write: true})
 	if got.LastChange != workerlane.ChangeLanded || !got.RefreshDone {
 		t.Fatalf("after landing = %+v", got)
@@ -106,3 +116,19 @@ func TestM14StateReadsMergeAndClaimState(t *testing.T) {
 type jobLookup map[string]*api.WorkerTask
 
 func (j jobLookup) Get(id string) (*api.WorkerTask, bool) { t, ok := j[id]; return t, ok }
+
+// A round without changes leaves the lane as it was: a rejection of the
+// earlier result still decides the next round's lane.
+func TestRoundsWithoutChangesDoNotHideARejection(t *testing.T) {
+	f := newRoundFixture(t)
+	f.round(t, "job-2", "result-2", "")
+	_, err := f.records.SetChange(t.Context(), f.actor, workerrecords.Op{ID: "reject-1"}, "result-1", workerrecords.Change{State: workerrecords.ChangeRejected})
+	testutil.FailErr(t, "reject", err)
+	got := f.facts(t, fakeState{}, workerlane.Assignment{Write: true})
+	if got.LastChange != workerlane.ChangeRejected {
+		t.Fatalf("after rejecting under a round without changes = %+v", got)
+	}
+	if sel := workerlane.Select(got); sel.Action == workerlane.ActionKeep {
+		t.Fatalf("a rejected lane was kept: %+v", sel)
+	}
+}

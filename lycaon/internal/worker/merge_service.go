@@ -32,11 +32,9 @@ const (
 	OverlayPromoteSyntaxUnhealthyCode     = "OVERLAY_PROMOTE_SYNTAX_UNHEALTHY"
 )
 
-// mergeGit names the host purpose of a merge operation's Git. The coordinator
+// mergeHostPurpose names the Git a merge operation runs: the coordinator
 // chose the operation inside its tool call, not the commands that carry it out.
-func mergeGit(ctx context.Context) context.Context {
-	return gitexec.WithHostPurpose(ctx, "worker_merge")
-}
+const mergeHostPurpose = "worker_merge"
 
 // MergeQueue loads worker jobs and materializes their branches.
 type MergeQueue interface {
@@ -134,7 +132,7 @@ type MergeService struct {
 
 // PreviewForSession assesses one overlay without changing state.
 func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, detail string, paths []string) (api.WorkerMergeResult, error) {
-	ctx = mergeGit(ctx)
+	ctx = gitexec.WithHostPurpose(ctx, mergeHostPurpose)
 	sessionID = strings.TrimSpace(sessionID)
 	jobID = strings.TrimSpace(jobID)
 	if s == nil || s.Queue == nil {

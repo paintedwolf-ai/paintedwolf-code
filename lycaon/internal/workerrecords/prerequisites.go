@@ -84,7 +84,19 @@ func (s *Store) AddPrerequisites(ctx context.Context, actor Actor, op Op, worker
 			if err := q.InsertWorkerDependency(ctx, db.InsertWorkerDependencyParams{
 				WorkerID: w.ID, BaseResultID: nullString(pre.BaseResultID), OperationID: op.ID, CreatedAt: now,
 			}); err != nil {
-				return PrerequisiteReceipt{}, err
+				if !db.IsUniqueConstraint(err) {
+					return PrerequisiteReceipt{}, err
+				}
+				// A repeated base is accepted; a different one is refused.
+				deps, err := q.ListWorkerDependencies(ctx, w.ID)
+				if err != nil {
+					return PrerequisiteReceipt{}, err
+				}
+				for _, d := range deps {
+					if d.BaseResultID.Valid && d.BaseResultID.String != pre.BaseResultID {
+						return PrerequisiteReceipt{}, ErrBaseResultSet
+					}
+				}
 			}
 		}
 		return receipt, nil
