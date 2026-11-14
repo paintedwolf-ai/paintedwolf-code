@@ -170,7 +170,7 @@ func (q *Queries) GetLandedChangeJobID(ctx context.Context, id string) (string, 
 }
 
 const getLatestWorkerWorkspacePreparation = `-- name: GetLatestWorkerWorkspacePreparation :one
-SELECT worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+SELECT worker_id, generation, source_result_id, preparation_ref,
        binding_generation, operation_id, created_at
 FROM worker_workspace_preparations WHERE worker_id = ? ORDER BY generation DESC LIMIT 1
 `
@@ -182,7 +182,6 @@ func (q *Queries) GetLatestWorkerWorkspacePreparation(ctx context.Context, worke
 		&i.WorkerID,
 		&i.Generation,
 		&i.SourceResultID,
-		&i.PromotionRef,
 		&i.PreparationRef,
 		&i.BindingGeneration,
 		&i.OperationID,
@@ -696,16 +695,15 @@ func (q *Queries) InsertWorkerRound(ctx context.Context, arg InsertWorkerRoundPa
 
 const insertWorkerWorkspacePreparation = `-- name: InsertWorkerWorkspacePreparation :exec
 INSERT INTO worker_workspace_preparations (
-    worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+    worker_id, generation, source_result_id, preparation_ref,
     binding_generation, operation_id, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertWorkerWorkspacePreparationParams struct {
 	WorkerID          string         `json:"worker_id"`
 	Generation        int64          `json:"generation"`
 	SourceResultID    sql.NullString `json:"source_result_id"`
-	PromotionRef      string         `json:"promotion_ref"`
 	PreparationRef    string         `json:"preparation_ref"`
 	BindingGeneration int64          `json:"binding_generation"`
 	OperationID       string         `json:"operation_id"`
@@ -717,7 +715,6 @@ func (q *Queries) InsertWorkerWorkspacePreparation(ctx context.Context, arg Inse
 		arg.WorkerID,
 		arg.Generation,
 		arg.SourceResultID,
-		arg.PromotionRef,
 		arg.PreparationRef,
 		arg.BindingGeneration,
 		arg.OperationID,
@@ -1161,25 +1158,19 @@ func (q *Queries) SetWorkerResultChangeState(ctx context.Context, arg SetWorkerR
 	return result.RowsAffected()
 }
 
-const settleWorkerRound = `-- name: SettleWorkerRound :execrows
+const settleWorkerRoundByJob = `-- name: SettleWorkerRoundByJob :execrows
 UPDATE worker_rounds SET settled_at = ?1, checkpoint_id = ?2
-WHERE worker_id = ?3 AND ordinal = ?4 AND settled_at IS NULL
+WHERE job_id = ?3 AND settled_at IS NULL
 `
 
-type SettleWorkerRoundParams struct {
+type SettleWorkerRoundByJobParams struct {
 	SettledAt    sql.NullString `json:"settled_at"`
 	CheckpointID string         `json:"checkpoint_id"`
-	WorkerID     string         `json:"worker_id"`
-	Ordinal      int64          `json:"ordinal"`
+	JobID        string         `json:"job_id"`
 }
 
-func (q *Queries) SettleWorkerRound(ctx context.Context, arg SettleWorkerRoundParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, settleWorkerRound,
-		arg.SettledAt,
-		arg.CheckpointID,
-		arg.WorkerID,
-		arg.Ordinal,
-	)
+func (q *Queries) SettleWorkerRoundByJob(ctx context.Context, arg SettleWorkerRoundByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, settleWorkerRoundByJob, arg.SettledAt, arg.CheckpointID, arg.JobID)
 	if err != nil {
 		return 0, err
 	}

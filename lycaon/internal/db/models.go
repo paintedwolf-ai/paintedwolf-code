@@ -2340,7 +2340,6 @@ type WorkerWorkspacePreparations struct {
 	WorkerID          string         `json:"worker_id"`
 	Generation        int64          `json:"generation"`
 	SourceResultID    sql.NullString `json:"source_result_id"`
-	PromotionRef      string         `json:"promotion_ref"`
 	PreparationRef    string         `json:"preparation_ref"`
 	BindingGeneration int64          `json:"binding_generation"`
 	OperationID       string         `json:"operation_id"`
