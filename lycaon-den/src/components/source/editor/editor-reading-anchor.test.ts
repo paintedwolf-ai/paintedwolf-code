@@ -10,6 +10,7 @@ function view(blockHeight: number, scrollTop: number, contentLeft = 40): EditorV
     scrollDOM: { clientHeight: 600, scrollTop, getBoundingClientRect: () => PORT },
     contentDOM: { getBoundingClientRect: () => ({ left: contentLeft }) },
     lineBlockAtHeight: () => ({ height: blockHeight }),
+    viewport: { from: 0, to: 1_000_000 },
     posAtCoords: ({ x, y }: { x: number; y: number }) => (x < PORT.left ? -1 : Math.floor((y - PORT.top + scrollTop) / 10)),
     coordsAtPos: (pos: number) => ({ top: PORT.top + 10 * pos - scrollTop, bottom: PORT.top + 10 * pos - scrollTop + 10 }),
   } as unknown as EditorView;

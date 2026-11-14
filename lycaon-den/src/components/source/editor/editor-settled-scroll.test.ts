@@ -27,6 +27,9 @@ function fakeView(targetAt: (scrollTop: number) => number | null) {
   const view = {
     state: EditorState.create({ doc: "x".repeat(100) }),
     dom: { isConnected: true },
+    // Every position is drawn unless a test narrows this.
+    viewport: { from: 0, to: 100 },
+    defaultLineHeight: 20,
     scrollDOM,
     plugin: () => null,
     requestMeasure: (measure: Measure) => void measures.push(measure),
@@ -256,6 +259,29 @@ describe("preserving the reader's place across a reflow", () => {
     const top = fake.scrollDOM.scrollTop;
     settle(fake);
     expect(fake.scrollDOM.scrollTop).toBe(top);
+  });
+
+  it("navigates to an undrawn position by its block's height estimate", () => {
+    // One 100-position line block, 2,000px tall. The editor reports undrawn text
+    // at the block's top; the anchor at position 50 belongs at 1,000px.
+    const fake = reflowingView(50, 900);
+    const view = fake.view as unknown as Record<string, unknown>;
+    const drawn = () => {
+      const top = fake.scrollDOM.scrollTop;
+      return { from: Math.floor(top / 20), to: Math.ceil((top + 600) / 20) };
+    };
+    Object.defineProperty(view, "viewport", { get: drawn });
+    view.documentTop = -fake.scrollDOM.scrollTop;
+    Object.defineProperty(view, "documentTop", { get: () => -fake.scrollDOM.scrollTop });
+    view.lineBlockAt = () => ({ from: 0, length: 100, top: 0, height: 100 * fake.layout.height });
+    const coords = view.coordsAtPos as (pos: number) => { top: number };
+    view.coordsAtPos = (pos: number) => {
+      const { from, to } = drawn();
+      return pos >= from && pos <= to ? coords(pos) : { top: -fake.scrollDOM.scrollTop, bottom: 20 - fake.scrollDOM.scrollTop, left: 40, right: 50 };
+    };
+    preserveScrollAnchor(fake.view, () => { fake.scrollDOM.scrollTop = 0; });
+    settle(fake);
+    expect(Math.abs(fake.at(50) - 100)).toBeLessThan(1);
   });
 
   it("leaves a view at the top where it is", () => {
