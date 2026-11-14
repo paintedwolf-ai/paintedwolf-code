@@ -16,19 +16,27 @@ SELECT m.id, m.ord,
        CAST(COALESCE(length(CAST(m.reasoning_json AS BLOB)), 0) AS INTEGER) AS reasoning_bytes,
        CAST(CASE WHEN m.reasoning_json IS NOT NULL AND length(CAST(m.reasoning_json AS BLOB)) <= CAST(?2 AS INTEGER)
             THEN m.reasoning_json ELSE '' END AS TEXT) AS reasoning_payload,
-       CAST(json_array_length(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) AS INTEGER) AS call_count
+       CAST(json_array_length(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) AS INTEGER) AS call_count,
+       CAST(COALESCE((
+           SELECT json_extract(c.value, '$.name') FROM json_each(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) c
+           WHERE json_extract(c.value, '$.id') = CAST(?3 AS TEXT)
+       ), '') AS TEXT) AS call_name,
+       CAST(substr(COALESCE((
+           SELECT json_extract(c.value, '$.args') FROM json_each(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) c
+           WHERE json_extract(c.value, '$.id') = CAST(?3 AS TEXT)
+       ), ''), 1, CAST(?4 AS INTEGER)) AS TEXT) AS call_args
 FROM messages AS m
-WHERE m.session_id = ?3 AND m.role = 'assistant' AND m.ord < ?4
-  AND (CAST(?5 AS TEXT) = '' OR m.worker_job_id = CAST(?5 AS TEXT))
+WHERE m.session_id = ?5 AND m.role = 'assistant' AND m.ord < ?6
+  AND (CAST(?7 AS TEXT) = '' OR m.worker_job_id = CAST(?7 AS TEXT))
   AND m.ord >= COALESCE((
       SELECT floor.ord FROM messages AS floor
-      WHERE floor.session_id = ?3 AND floor.role = 'assistant' AND floor.ord < ?4
+      WHERE floor.session_id = ?5 AND floor.role = 'assistant' AND floor.ord < ?6
       ORDER BY floor.ord DESC
       LIMIT 1 OFFSET 63
   ), -1)
   AND EXISTS (
       SELECT 1 FROM json_each(CASE WHEN m.tool_calls_json IS NULL OR m.tool_calls_json = '' THEN '[]' ELSE m.tool_calls_json END) k
-      WHERE json_extract(k.value, '$.id') = CAST(?6 AS TEXT)
+      WHERE json_extract(k.value, '$.id') = CAST(?3 AS TEXT)
   )
 ORDER BY m.ord DESC
 LIMIT 1
@@ -37,10 +45,11 @@ LIMIT 1
 type BriefingActionOutputParams struct {
 	ProseBytes   int64  `json:"prose_bytes"`
 	ReasoningCap int64  `json:"reasoning_cap"`
+	ToolCallID   string `json:"tool_call_id"`
+	ArgsBytes    int64  `json:"args_bytes"`
 	SessionID    string `json:"session_id"`
 	BeforeOrd    int64  `json:"before_ord"`
 	WorkerJobID  string `json:"worker_job_id"`
-	ToolCallID   string `json:"tool_call_id"`
 }
 
 type BriefingActionOutputRow struct {
@@ -50,6 +59,8 @@ type BriefingActionOutputRow struct {
 	ReasoningBytes   int64  `json:"reasoning_bytes"`
 	ReasoningPayload string `json:"reasoning_payload"`
 	CallCount        int64  `json:"call_count"`
+	CallName         string `json:"call_name"`
+	CallArgs         string `json:"call_args"`
 }
 
 // Only the 64 latest assistant rows before the bound are searched for the call.
@@ -57,10 +68,11 @@ func (q *Queries) BriefingActionOutput(ctx context.Context, arg BriefingActionOu
 	row := q.db.QueryRowContext(ctx, briefingActionOutput,
 		arg.ProseBytes,
 		arg.ReasoningCap,
+		arg.ToolCallID,
+		arg.ArgsBytes,
 		arg.SessionID,
 		arg.BeforeOrd,
 		arg.WorkerJobID,
-		arg.ToolCallID,
 	)
 	var i BriefingActionOutputRow
 	err := row.Scan(
@@ -70,6 +82,45 @@ func (q *Queries) BriefingActionOutput(ctx context.Context, arg BriefingActionOu
 		&i.ReasoningBytes,
 		&i.ReasoningPayload,
 		&i.CallCount,
+		&i.CallName,
+		&i.CallArgs,
+	)
+	return i, err
+}
+
+const briefingCallResult = `-- name: BriefingCallResult :one
+SELECT id,
+       CAST(COALESCE(json_extract(tool_result_json, '$.tool'), '') AS TEXT) AS tool,
+       CAST(COALESCE(json_extract(tool_result_json, '$.outcome'), '') AS TEXT) AS outcome,
+       CAST(substr(COALESCE(json_extract(tool_result_json, '$.content'), ''), 1, CAST(?1 AS INTEGER)) AS TEXT) AS content
+FROM messages
+WHERE session_id = ?2 AND tool_result_call_id = ?3
+  AND tool_result_json IS NOT NULL AND tool_result_json <> ''
+ORDER BY ord
+LIMIT 1
+`
+
+type BriefingCallResultParams struct {
+	ContentBytes int64          `json:"content_bytes"`
+	SessionID    string         `json:"session_id"`
+	ToolCallID   sql.NullString `json:"tool_call_id"`
+}
+
+type BriefingCallResultRow struct {
+	ID      string `json:"id"`
+	Tool    string `json:"tool"`
+	Outcome string `json:"outcome"`
+	Content string `json:"content"`
+}
+
+func (q *Queries) BriefingCallResult(ctx context.Context, arg BriefingCallResultParams) (BriefingCallResultRow, error) {
+	row := q.db.QueryRowContext(ctx, briefingCallResult, arg.ContentBytes, arg.SessionID, arg.ToolCallID)
+	var i BriefingCallResultRow
+	err := row.Scan(
+		&i.ID,
+		&i.Tool,
+		&i.Outcome,
+		&i.Content,
 	)
 	return i, err
 }

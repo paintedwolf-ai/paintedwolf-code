@@ -41,6 +41,17 @@ func holdStaging(directory, name string) stagingHold {
 	return stagingHold{name: name, entry: entry}
 }
 
+// HoldStagingBeside registers an entry a promotion stages in dir, so observers treat it as they treat
+// this door's own. The returned function starts its retention window once the entry is gone. A
+// directory that cannot be identified holds nothing; an observer then only sees one more change.
+func HoldStagingBeside(dir, name string) func() {
+	identity, err := fspath.EntryIdentity(dir + string(os.PathSeparator) + ".")
+	if err != nil {
+		return func() {}
+	}
+	return holdStaging(identity, name).retire
+}
+
 // abandon drops a hold whose name the door never created.
 func (h stagingHold) abandon() {
 	staging.Lock()

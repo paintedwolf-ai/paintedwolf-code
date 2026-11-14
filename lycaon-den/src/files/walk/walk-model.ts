@@ -4,8 +4,7 @@ import type {
   SourceGitChange,
   SourceWalkEffect,
   SourceWalkFile,
-  SourceWalkTurn,
-} from "../../api/types.ts";
+  SourceWalkTurn, SourceStepBriefingTarget } from "../../api/types.ts";
 import { relativeTimeLabel } from "../../time/time-copy.ts";
 import { buildWalkChapters, type WalkChapter } from "./walk-chapters.ts";
 import {
@@ -65,6 +64,8 @@ export type Walk = {
   baseline: string;
   steps: readonly WalkStep[];
   chapters: readonly WalkChapter[];
+  /** Host explanation targets by rail key; absent for a step that has none. */
+  briefingTargets?: ReadonlyMap<string, SourceStepBriefingTarget>;
 };
 
 export type WalkFileTarget = {

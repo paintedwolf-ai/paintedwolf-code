@@ -2492,7 +2492,7 @@
     "SANDBOX_TRY_LOCAL_NETWORK": {
       "category": "recoverable",
       "emit": "guard:sandbox",
-      "summary": "In `{{ tool }}`, the sandbox refused{% if paintedwolf.refused_listen_ports %} a listener on port {{ paintedwolf.refused_listen_ports }}{% if paintedwolf.refused_connect_ports %} and{% endif %}{% endif %}{% if paintedwolf.refused_connect_ports %} a direct connection to port {{ paintedwolf.refused_connect_ports }}{% endif %}."
+      "summary": "In `{{ tool }}`, the sandbox withheld{% if paintedwolf.refused_listen_ports %} a listener on port {{ paintedwolf.refused_listen_ports }}{% if paintedwolf.refused_connect_ports %} and{% endif %}{% endif %}{% if paintedwolf.refused_connect_ports %} a direct connection to port {{ paintedwolf.refused_connect_ports }}{% endif %}."
     },
     "SANDBOX_TRY_LOOPBACK_CONNECT": {
       "category": "recoverable",

@@ -21,12 +21,12 @@ type fixtureTree struct {
 
 func plantTrees(t *testing.T, branchRoot, project string, trees []fixtureTree) map[string]string {
 	t.Helper()
-	mgr := workspace.NewManager(branchRoot, t.TempDir())
+	mgr := workspace.NewManager(branchRoot)
 	roots := []projectroot.RootRef{{ID: "primary", Label: "primary", Path: project, IsPrimary: true}}
 	paths := map[string]string{}
 	for _, tree := range trees {
 		testutil.FailErr(t, "seed project", os.WriteFile(filepath.Join(project, "payload.bin"), make([]byte, tree.bytes), 0o644))
-		binding, _, err := mgr.CreateWorkerWorkspaceFromSources(context.Background(), roots, roots, "primary", tree.jobID)
+		binding, _, err := mgr.CreateWorkerBranch(context.Background(), roots, "primary", tree.jobID)
 		testutil.FailErr(t, "create "+tree.jobID, err)
 		workspace.TouchBranchUse(binding.Root)
 		stamp := filepath.Join(enginepaths.MetaDirForBranchRoot(binding.Root), "LAST_USED")
@@ -34,6 +34,17 @@ func plantTrees(t *testing.T, branchRoot, project string, trees []fixtureTree) m
 		paths[tree.jobID] = binding.Root
 	}
 	return paths
+}
+
+func allocatedByJob(t *testing.T, branchRoot string) map[string]int64 {
+	t.Helper()
+	trees, err := workspace.ListJobTrees(t.Context(), branchRoot)
+	testutil.FailErr(t, "list trees", err)
+	out := map[string]int64{}
+	for _, tree := range trees {
+		out[tree.JobID] = tree.AllocatedBytes
+	}
+	return out
 }
 
 func TestSweepReclaimsIdleThenBudgetOldestFirst(t *testing.T) {
@@ -61,9 +72,11 @@ func TestSweepReclaimsIdleThenBudgetOldestFirst(t *testing.T) {
 		},
 		Now: func() time.Time { return now },
 	}
-	// Budget admits the two fresh trees but not the idle ones on top; the
-	// idle unsealed tree is never a candidate.
-	cfg := Config{IdleAge: 7 * 24 * time.Hour, BudgetBytes: 400 << 10, SweepInterval: time.Hour}
+	// The budget holds the trees that stay with room to spare, and not the oldest fresh tree on top;
+	// the idle unsealed tree is never a candidate.
+	allocated := allocatedByJob(t, branchRoot)
+	budget := allocated["idle-unsealed"] + allocated["fresh-new"] + allocated["fresh-old"]/2
+	cfg := Config{IdleAge: 7 * 24 * time.Hour, BudgetBytes: budget, SweepInterval: time.Hour}
 	report, err := Sweep(context.Background(), deps, cfg)
 	testutil.FailErr(t, "sweep", err)
 	if report.EvictedIdle != 1 || report.EvictedBudget != 1 {

@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 	"github.com/lycaon/lycaon/internal/pagecursor"
+	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -87,6 +88,25 @@ type SessionProjectionRecoveryRecorder interface {
 type SQLRecorder struct {
 	database db.Handle
 	queries  *db.Queries
+	// roots lists a session's project roots for displaying recorded paths.
+	roots func(ctx context.Context, sessionID string) ([]projectroot.RootRef, string)
+}
+
+// SetRoots names how a session's recorded host paths are displayed.
+func (r *SQLRecorder) SetRoots(roots func(ctx context.Context, sessionID string) ([]projectroot.RootRef, string)) {
+	r.roots = roots
+}
+
+// pathDisplay renders recorded absolute paths as the session's workspace paths.
+func (r *SQLRecorder) pathDisplay(ctx context.Context, sessionID string) func(string) string {
+	if r == nil || r.roots == nil {
+		return nil
+	}
+	roots, active := r.roots(ctx, sessionID)
+	if len(roots) == 0 {
+		return nil
+	}
+	return func(path string) string { return projectroot.DisplayAbsolute(roots, active, path) }
 }
 
 // NewSQLRecorder builds a durable recorder.

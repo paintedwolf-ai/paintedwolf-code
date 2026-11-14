@@ -373,12 +373,19 @@ type ProgressAdmission interface {
 // ProgramSupervision is implemented at the existing process supervision boundary.
 // It settles one aggregate and preserves already-settled child owner facts.
 // StartJob supervises a statement-trailing & job: run receives the job's own
-// lifetime context and the bounded output streams the supervisor owns for it;
-// cwd and environment are already captured. The returned handle is the
-// session-scoped job identity that $! and wait/kill address.
+// lifetime context, its registry handle and the bounded output streams the
+// supervisor owns for it; cwd and environment are already captured.
 type ProgramSupervision interface {
 	RunProgram(context.Context, toolcontract.OperationInvocation, func(context.Context) (toolcontract.ProducerResult, error)) (toolcontract.ProducerResult, error)
-	StartJob(context.Context, toolcontract.OperationInvocation, func(context.Context, string, Streams) (toolcontract.ProducerResult, error)) (string, error)
+	StartJob(context.Context, toolcontract.OperationInvocation, func(context.Context, string, Streams) (toolcontract.ProducerResult, error)) (StartedJob, error)
+}
+
+// StartedJob names one & job in the shell's and the host's address spaces.
+type StartedJob struct {
+	// ID is the numeric job ID $! expands to; wait and kill resolve it.
+	ID string
+	// Handle is the session registry handle receipts, command_output and Den address.
+	Handle string
 }
 
 // Dispatch reaches operation owners and confined launch from one directory

@@ -51,7 +51,7 @@ func CheckStoreHealth(path string) error {
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return storeIncompatible(RecoveryReasonIntegrityFailed, 0, fmt.Sprintf("identify quarantined store: %v", err))
 	}
-	if err == nil && identity == record.Identity {
+	if err == nil && fspath.SameEntryAcrossRestart(record.Identity, identity) {
 		return storeIncompatible(RecoveryReasonIntegrityFailed, 0, record.Detail)
 	}
 	if err := os.Remove(recordPath); err != nil && !errors.Is(err, os.ErrNotExist) { // #nosec G703

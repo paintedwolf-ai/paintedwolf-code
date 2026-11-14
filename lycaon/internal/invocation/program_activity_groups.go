@@ -48,21 +48,21 @@ func readActivityCounts(ctx context.Context, tx *sql.Tx, program string) (groups
 	return groups, rows.Err()
 }
 
-func readActivityGroups(ctx context.Context, tx *sql.Tx, program string) ([]activityGroup, error) {
+func readActivityGroups(ctx context.Context, tx *sql.Tx, program string, display func(string) string) ([]activityGroup, error) {
 	groups, err := readActivityCounts(ctx, tx, program)
 	if err != nil {
 		return nil, err
 	}
 	for i := range groups {
 		g := &groups[i]
-		receipts, _, err := readExecutions(ctx, tx, program, g.ordinal-1, 1, executionSelection{})
+		receipts, _, err := readExecutions(ctx, tx, program, g.ordinal-1, 0, 1, executionSelection{})
 		if err != nil {
 			return nil, err
 		}
 		if len(receipts) != 1 {
 			return nil, fmt.Errorf("activity representative is unavailable")
 		}
-		g.input, err = readActivityInput(ctx, tx, receipts[0])
+		g.input, err = readActivityInput(ctx, tx, receipts[0], display)
 		if err != nil {
 			return nil, err
 		}
@@ -161,13 +161,40 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 			primary[i] = true
 		}
 	}
+	// A background job's work belongs to the activity that launched it.
+	launched := make(map[int]int)
+	subjects := make(map[int]string)
+	for i, g := range groups {
+		launch, ok := launchOf(g, groups, byKey)
+		if !ok || activityPresentation(g.input).role == "container" {
+			continue
+		}
+		launched[i] = launch
+		// The job is named by the first process it runs.
+		if _, named := subjects[launch]; !named && primary[i] && activityPresentation(g.input).phase == "execute" {
+			if subject := activitySubject(g.input); subject != "" {
+				subjects[launch] = subject
+			}
+		}
+		delete(primary, i)
+	}
 	assignments := make(map[int]int, len(groups))
 	for i, g := range groups {
+		if launch, ok := launched[i]; ok {
+			assignments[i] = launch
+			continue
+		}
 		if primary[i] {
 			assignments[i] = i
 			continue
 		}
 		if activityPresentation(g.input).role == "container" {
+			continue
+		}
+		// A redirected producer supports the write its own statement made: the
+		// redirect whose source span lies within the producer's statement.
+		if j := statementRedirect(groups, primary, g); j >= 0 {
+			assignments[i] = j
 			continue
 		}
 		parent := g.parent
@@ -215,18 +242,33 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 	}
 	var result []api.CommandActivity
 	positions := map[int]int{}
-	active := -1
+	// written collects the write targets of each row's folded primaries.
+	written := map[int][]string{}
+	// The row sequential primaries fold into, and the group that opened it.
+	activeRow, activeGroup := -1, activityGroup{}
 	for i, g := range groups {
 		if !primary[i] {
 			continue
 		}
-		if active >= 0 && activityFolds(groups[active], g) {
-			positions[i] = positions[active]
+		if activeRow >= 0 && activityFolds(activeGroup, g) {
+			positions[i] = activeRow
+			written[activeRow] = append(written[activeRow], activityPaths(g.input.arguments, "write")...)
 			continue
 		}
 		positions[i] = len(result)
-		result = append(result, groupActivity(g))
-		active = i
+		written[len(result)] = activityPaths(g.input.arguments, "write")
+		activity := groupActivity(g)
+		if activity.Subject == "" {
+			activity.Subject = subjects[i]
+		}
+		result = append(result, activity)
+		activeRow, activeGroup = positions[i], g
+	}
+	for row, paths := range written {
+		// Folded writes name every file they wrote, not only the first.
+		if distinct := uniqueInOrder(paths); len(distinct) > 1 {
+			result[row].Subject = boundedActivityText(pathSummary(distinct))
+		}
 	}
 	for i, g := range groups {
 		if owner, ok := assignments[i]; ok {
@@ -240,6 +282,15 @@ func composeActivityGroups(groups []activityGroup, settled bool) []api.CommandAc
 				appendActivityStep(&a, g)
 				result = append(result, a)
 			}
+		}
+	}
+	for i, g := range groups {
+		if !primary[i] || g.input.operation != "program &" {
+			continue
+		}
+		// A launch whose job already ran reports the job's outcome, not its start.
+		if a := &result[positions[i]]; a.State == "completed" && len(a.Steps) > 1 {
+			a.Outcome = activityStateOutcome(a.State)
 		}
 	}
 	for i := range result {
@@ -261,6 +312,23 @@ func activityFolds(active, g activityGroup) bool {
 		active.input.receipt.JobHandle == "" && g.input.receipt.JobHandle == ""
 }
 
+// launchOf finds the & launch whose job recorded g.
+func launchOf(g activityGroup, groups []activityGroup, byKey map[activityKey]int) (int, bool) {
+	seen := map[activityKey]bool{g.key: true}
+	for parent := g.parent; parent != (activityKey{}) && !seen[parent]; {
+		seen[parent] = true
+		p, ok := byKey[parent]
+		if !ok {
+			return 0, false
+		}
+		if parent.launch != "" {
+			return p, true
+		}
+		parent = groups[p].parent
+	}
+	return 0, false
+}
+
 func groupDescendsFrom(g activityGroup, parent activityKey, groups []activityGroup, byKey map[activityKey]int) bool {
 	seen := map[activityKey]bool{g.key: true}
 	for g.parent != (activityKey{}) && !seen[g.parent] {
@@ -275,4 +343,32 @@ func groupDescendsFrom(g activityGroup, parent activityKey, groups []activityGro
 		g = groups[p]
 	}
 	return false
+}
+
+func uniqueInOrder(values []string) []string {
+	seen := make(map[string]bool, len(values))
+	out := values[:0:0]
+	for _, value := range values {
+		if !seen[value] {
+			seen[value] = true
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+// statementRedirect is the anchored redirect inside g's statement, or -1.
+func statementRedirect(groups []activityGroup, primary map[int]bool, g activityGroup) int {
+	for j, other := range groups {
+		if primary[j] && activityRedirect(other.input) && spanWithin(other.input.span, g.input.span) {
+			return j
+		}
+	}
+	return -1
+}
+
+// spanWithin reports whether inner lies inside outer in the same source.
+func spanWithin(inner, outer api.CommandActivitySpan) bool {
+	return inner.SourceRef != "" && inner.SourceRef == outer.SourceRef &&
+		outer.StartByte <= inner.StartByte && inner.EndByte <= outer.EndByte && outer.StartByte < outer.EndByte
 }

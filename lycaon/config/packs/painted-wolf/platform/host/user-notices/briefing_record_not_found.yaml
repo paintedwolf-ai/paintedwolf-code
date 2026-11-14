@@ -1,0 +1,8 @@
+surfaces: [http]
+notification: { tier: non_catastrophic, scope: project }
+title: Evidence record not found
+message: That briefing evidence record is no longer stored for this project.
+suggested_action: Refresh the briefing to open its current evidence record.
+scenarios:
+  - id: default
+    vars: {}

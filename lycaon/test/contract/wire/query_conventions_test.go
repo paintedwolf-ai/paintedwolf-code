@@ -159,11 +159,12 @@ func TestSearchEndpointsEnforceCanonicalQParameter(t *testing.T) {
 	contractcheck.FailErr(t, "loadOpenAPIRouteQueries failed", err)
 
 	qEndpoints := map[string]bool{
-		"getProjectCostReport": true,
-		"searchSourceView":     true,
-		"searchProjectSource":  true,
-		"searchProjectSymbols": true,
-		"searchChatContent":    true,
+		"getProjectCostReport":         true,
+		"searchSourceView":             true,
+		"searchProjectSource":          true,
+		"searchProjectSymbols":         true,
+		"searchChatContent":            true,
+		"searchCommandReceiptDocument": true,
 	}
 
 	for _, route := range routes {

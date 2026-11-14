@@ -8,6 +8,7 @@ import type {
   AttentionView,
   BackgroundProcessEvent,
   BoardEvent,
+  BriefingEvent,
   CLIOpenEvent,
   ChatVault,
   CheckpointEvent,
@@ -70,6 +71,7 @@ export type EventPayloadMap = {
   source_changed: SourceChangesEvent;
   source_operation: SourceOperationEvent;
   file_briefing: FileBriefingEvent;
+  briefing: BriefingEvent;
   artifact: ArtifactEvent;
   agent_presence: AgentPresenceEvent;
   editor_document: EditorDocumentEvent;

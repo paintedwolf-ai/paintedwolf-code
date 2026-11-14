@@ -29,21 +29,21 @@ func TestHelperAppliesProcessAttributesToTheTarget(t *testing.T) {
 	self, err := os.Executable()
 	testutil.FailErr(t, "helper binary", err)
 	probe := []string{"-c", `ulimit -n; kill -HUP $$; echo survived`}
-	// Without IgnoreHangup the target keeps the disposition this test inherited,
-	// which is already ignored under nohup and some agent shells.
-	unprotected := "48\n"
-	if signal.Ignored(syscall.SIGHUP) {
-		unprotected = "48\nsurvived\n"
-	}
 	for _, tc := range []struct {
-		name       string
-		attributes confine.ProcessAttributes
-		want       string
+		name         string
+		ignoreParent bool
+		attributes   confine.ProcessAttributes
+		want         string
 	}{
-		{"limit and ignored hangup", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 64, Hard: nofile.Hard}}, IgnoreHangup: true}, "64\nsurvived\n"},
-		{"limit only", confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, unprotected},
+		{"limit and ignored hangup", false, confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 64, Hard: nofile.Hard}}, IgnoreHangup: true}, "64\nsurvived\n"},
+		{"limit only", false, confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, "48\n"},
+		{"limit only with inherited ignored hangup", true, confine.ProcessAttributes{Limits: []confine.ResourceLimit{{Resource: "nofile", Soft: 48, Hard: nofile.Hard}}}, "48\n"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			if tc.ignoreParent {
+				signal.Ignore(syscall.SIGHUP)
+				defer signal.Reset(syscall.SIGHUP)
+			}
 			boundary := *c
 			boundary.Process = tc.attributes
 			command, cleanup, err := confine.Command(t.Context(), self, "/bin/sh", probe, boundary)

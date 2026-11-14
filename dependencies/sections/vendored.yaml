@@ -36,6 +36,22 @@ rows:
       allocation budget. The rationale and update procedure are in
       [`third_party/README.md`](../../third_party/README.md).
 
+  - id: go-nfs
+    name: '`third_party/go-nfs`'
+    pins:
+      - go-require lycaon/go.mod github.com/willscott/go-nfs
+    upstream:
+      - go-module github.com/willscott/go-nfs
+    urgency: high
+    urgency_reason: |
+      NFSv3 and MOUNTv3 protocol types and XDR helpers for the engine layered-filesystem server
+      (`internal/layeredfs/nfsserver`).
+    friction: moderate
+    friction_reason: |
+      Vendored at `third_party/go-nfs` (`v0.0.4`, commit `209a01f82ba9283bb36ec312d3908210b0b1cc89`)
+      with RFC 1813 `LINK3args` and RPC error big-endian marshaling fixes. The rationale and
+      provenance are in [`third_party/README.md`](../../third_party/README.md).
+
   - id: vulndb
     name: Go vulnerability database (`lycaon/vulndb`)
     pins:

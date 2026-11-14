@@ -2,16 +2,18 @@ package httpaction
 
 import (
 	"context"
-	"github.com/lycaon/lycaon/internal/toolrejection"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/egressgate"
 	"github.com/lycaon/lycaon/internal/outboundhttp"
 	"github.com/lycaon/lycaon/internal/secretmatch"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
 type outboundRequest struct {
 	beforeCookieHop func(context.Context, outboundhttp.HopRequest) error
+	classification  map[secretmatch.SecretFingerprint]bool
 	url             string
 	hostHeader      string
 	headers         []outboundhttp.Header
@@ -101,6 +103,7 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 	classification := deps.SecretMatcher.ClassificationSnapshot(ctx)
 	ctx = deps.SecretMatcher.WithClassifications(ctx, classification)
 	sending := requestWire(spec, args, tc.Effects.Secrets)
+	sending.classification = classification
 	evidence, err := requestArgumentEvidence(ctx, deps.SecretMatcher, args, tc.Effects.Secrets)
 	if err != nil {
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageScreenUnwired)
@@ -174,6 +177,24 @@ func screenRequest(ctx context.Context, deps Deps, spec requestSpec, args map[st
 		return outboundRequest{}, screenFaultReject(secretmatch.FaultStageRedactUnsupported)
 	}
 	tc.Effects.Secrets.Redacted(spec.outgoing)
+	rewritten.classification = classification
 	rewritten.redacted, rewritten.receipt = true, resolution.ReceiptToken
 	return rewritten, nil
+}
+
+// recordReviewedRecipient makes every release review in one exchange record
+// its recipient: a card names the recipient, and sending to it, whole or
+// redacted, is the person's choice, so the connection to it needs no card of
+// its own.
+func recordReviewedRecipient(ask secretmatch.AskFunc) secretmatch.AskFunc {
+	if ask == nil {
+		return nil
+	}
+	return func(ctx context.Context, alert secretmatch.Alert) (secretmatch.Resolution, error) {
+		resolution, err := ask(ctx, alert)
+		if err == nil && !resolution.Decision.Blocks() {
+			egressgate.ApproveRecipient(ctx, alert.DestinationID)
+		}
+		return resolution, err
+	}
 }

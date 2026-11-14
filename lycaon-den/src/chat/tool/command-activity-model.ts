@@ -1,13 +1,15 @@
 import type { CommandActivity, CommandProgramReceipt } from "../../api/types.ts";
 import type { ActivitySpanEntry } from "../transcript/projection/transcript-item-model.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
-import { formatSentenceCase } from "../../format/format-sentence-case.ts";
+import { preferredCommandProgram } from "./command-activity-snapshots.ts";
+import type { CommandReceiptScope } from "../transcript/content/chat-content-document.ts";
 
 export type CommandActivityView = {
   fact: CommandActivity;
   calls: ToolPartView[];
   members: CommandActivity[];
-  programIds: string[];
+  /** Receipt scopes of the row's recorded programs, in first-seen order. */
+  receiptScopes: CommandReceiptScope[];
   outputReads?: number;
   decisions?: Extract<ActivitySpanEntry, { kind: "turn_load" }>[];
 };
@@ -45,6 +47,22 @@ function activityFacts(entries: readonly ActivitySpanEntry[]): CommandActivity[]
   return entries.flatMap(entry => entry.kind === "tool" && entry.part.commandActivity ? [entry.part.commandActivity.fact] : []);
 }
 
+/** The receipt scope of one activity fact: its own executions, or the whole program when it names none. */
+function receiptScope(program: string, fact?: CommandActivity): CommandReceiptScope {
+  return fact?.execution_ids.length ? { programId: program, activityId: fact.id } : { programId: program };
+}
+
+/** A whole-program scope covers, and replaces, that program's activity scopes. */
+function addReceiptScope(scopes: CommandReceiptScope[], scope: CommandReceiptScope): void {
+  const at = scopes.findIndex(known => known.programId === scope.programId);
+  if (at < 0) { scopes.push(scope); return; }
+  if (scopes.some(known => known.programId === scope.programId && (known.activityId === undefined || known.activityId === scope.activityId))) return;
+  if (scope.activityId !== undefined) { scopes.push(scope); return; }
+  const kept = scopes.filter(known => known.programId !== scope.programId);
+  kept.splice(at, 0, scope);
+  scopes.splice(0, scopes.length, ...kept);
+}
+
 function status(fact: CommandActivity): ToolPartView["status"] {
   if (fact.state === "running" || fact.state === "waiting") return "running";
   if (fact.state === "failed" || fact.state === "refused" || fact.state === "interrupted" || (fact.status_code ?? 0) !== 0) return "error";
@@ -68,9 +86,7 @@ export function createCommandActivityProjection() {
       if (entry.kind === "turn_load") { decisions.push(entry); lastRow = undefined; continue; }
       if (entry.kind !== "tool") { result.push(entry); continue; }
       if (!FORM_PROGRAM_TOOLS.has(entry.part.tool) || !entry.part.commandProgram) lastRow = undefined;
-      const canonical = entry.part.commandProgram;
-      const observed = live(entry.part);
-      let program = observed && (!canonical || (observed.activity_revision ?? 0) >= (canonical.activity_revision ?? 0)) ? observed : canonical;
+      let program = preferredCommandProgram(entry.part.commandProgram, live(entry.part));
       const previous = remembered.get(entry.part.toolCallId);
       if (program && previous?.id === program.id && !program.activities && previous.activities?.length) {
         program = { ...program, activities: previous.activities.map(fact =>
@@ -94,6 +110,7 @@ export function createCommandActivityProjection() {
         const established = assigned ? rows.get(assigned) : undefined;
         if (established?.commandActivity) {
           established.commandActivity.calls.push(entry.part);
+          if (entry.part.commandProgram) addReceiptScope(established.commandActivity.receiptScopes, receiptScope(entry.part.commandProgram.id));
           established.commandActivity.outputReads = (established.commandActivity.outputReads ?? 0) + 1;
           if (entry.part.process?.handle === handle) established.process = entry.part.process;
           if (entry.part.status === "error") {
@@ -104,7 +121,7 @@ export function createCommandActivityProjection() {
         }
         if (handle) {
           const fact: CommandActivity = { id: entry.part.id, group: "Following a running program", label: "Read process output", subject: handle, job_handle: handle, phase: "execute", state: entry.part.status === "running" ? "running" : entry.part.status === "error" ? "failed" : "completed", outcome: entry.part.status === "running" ? "Reading" : entry.part.status === "error" ? "Read failed" : "Completed", execution_ids: [], spans: [] };
-          const row: ToolPartView = { ...entry.part, commandActivity: { fact, calls: [entry.part], members: [fact], programIds: entry.part.commandProgram ? [entry.part.commandProgram.id] : [], outputReads: 1 } };
+          const row: ToolPartView = { ...entry.part, commandActivity: { fact, calls: [entry.part], members: [fact], receiptScopes: entry.part.commandProgram ? [receiptScope(entry.part.commandProgram.id)] : [], outputReads: 1 } };
           rows.set(row.id, row); result.push({ ...entry, part: row });
           continue;
         }
@@ -130,7 +147,7 @@ export function createCommandActivityProjection() {
           established.fact = { ...established.fact,
             steps: [...(established.fact.steps ?? []), ...(fact.steps ?? [])],
             execution_count: (established.fact.execution_count ?? 0) + (fact.execution_count ?? 0) };
-          if (!established.programIds.includes(program.id)) established.programIds.push(program.id);
+          addReceiptScope(established.receiptScopes, receiptScope(program.id, fact));
           if (status(fact) === "error") target.status = "error";
           continue;
         }
@@ -144,7 +161,7 @@ export function createCommandActivityProjection() {
         const row: ToolPartView = { ...entry.part, id: assigned.key, title: frozen.subject, commandProgram: program,
           status: status(fact), process: entry.part.process?.handle === fact.job_handle ? entry.part.process : undefined,
           invocation: undefined, error: null,
-          commandActivity: { fact: frozen, calls: [{ ...entry.part, commandProgram: program }], members: [fact], programIds: [program.id], decisions } };
+          commandActivity: { fact: frozen, calls: [{ ...entry.part, commandProgram: program }], members: [fact], receiptScopes: [receiptScope(program.id, fact)], decisions } };
         decisions = [];
         rows.set(row.id, row);
         result.push({ ...entry, part: row });
@@ -185,30 +202,10 @@ export function commandActivityHeadline(entries: readonly ActivitySpanEntry[], f
  return headline;
 }
 
-export type CommandActivityProgressionChip = { group: string; steps: number };
-export type CommandActivityProgression = { groups: string[]; chips: CommandActivityProgressionChip[] };
-
-/** First-appearance group order with consecutive chip runs and their step counts. */
-export function commandActivityProgression(entries: readonly ActivitySpanEntry[]): CommandActivityProgression {
-  const groups: string[] = [];
-  const chips: CommandActivityProgressionChip[] = [];
-  for (const entry of entries) {
-    if (entry.kind !== "tool") continue;
-    const fact = entry.part.commandActivity?.fact;
-    const key = fact ? fact.group : entry.part.tool.trim().toLowerCase() || "tool activity";
-    const steps = fact?.steps?.length ?? 0;
-    if (fact && !groups.includes(fact.group)) groups.push(fact.group);
-    const last = chips[chips.length - 1];
-    if (last?.group === key) last.steps += steps;
-    else chips.push({ group: key, steps });
-  }
-  return { groups, chips };
+/** Activity groups in first-appearance order. */
+export function commandActivityGroups(entries: readonly ActivitySpanEntry[]): string[] {
+  return [...new Set(activityFacts(entries).map(fact => fact.group))];
 }
-
-export function formatCommandActivityProgression(progression: CommandActivityProgression): string {
-  return progression.chips.map(chip => `${formatSentenceCase(chip.group)} · ${chip.steps} ${chip.steps === 1 ? "step" : "steps"}`).join(" · ");
-}
-
 
 /** Receipts without an activity snapshot use the same card and retain all operations. */
 export function commandActivityPart(part: ToolPartView): ToolPartView {
@@ -217,5 +214,5 @@ export function commandActivityPart(part: ToolPartView): ToolPartView {
  const state = program.state === "rejected" ? "refused" : program.state;
  const outcome = state === "completed" && program.status_code !== undefined ? `Exited ${program.status_code}` : ({ running:"Running",waiting:"Waiting",refused:"Refused",failed:"Failed",interrupted:"Interrupted",completed:"Completed" }[state]);
  const fact: CommandActivity = { id:`${program.id}:result`, group:"Running commands", label:"Run command", subject:program.stop_code ?? part.title ?? "Recorded command", phase:"execute", state, outcome, status_code:program.status_code, execution_ids:[], spans:[] };
- return {...part,commandActivity:{fact,calls:[part],members:[fact],programIds:[program.id]}};
+ return {...part,commandActivity:{fact,calls:[part],members:[fact],receiptScopes:[receiptScope(program.id)]}};
 }

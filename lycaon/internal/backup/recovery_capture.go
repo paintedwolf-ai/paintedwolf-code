@@ -101,7 +101,7 @@ func captureRecoveryDirectory(ctx context.Context, opts CreateOpts, destination 
 	if err != nil {
 		return Manifest{}, usage, err
 	}
-	referenceErr := validateArchiveReferences(ctx, captured, files)
+	referenceErr := validateArchiveReferences(ctx, captured, files, placedOnDevice(opts.ConfigDir))
 	if err := errors.Join(referenceErr, captured.Close()); err != nil {
 		return Manifest{}, usage, err
 	}

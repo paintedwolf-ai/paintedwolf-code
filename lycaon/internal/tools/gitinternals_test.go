@@ -1,8 +1,10 @@
 package tools_test
 
 import (
+	"errors"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
@@ -87,6 +89,41 @@ func TestGitInternalsNarrow(t *testing.T) {
 	} {
 		if _, denied := tools.IsGitInternalsWritePath(path); denied {
 			t.Errorf("%q must not be denied", path)
+		}
+	}
+}
+
+func TestCheckNativeGitMetadataPathWriteConfinement(t *testing.T) {
+	deniedCases := []struct {
+		path      string
+		wantClass string
+	}{
+		{".git", "metadata"},
+		{".git/index", "metadata"},
+		{".git/HEAD", "metadata"},
+		{".git/refs/heads/main", "metadata"},
+		{".git/objects/aa/bbcc", "metadata"},
+		{"sub/.git/index", "metadata"},
+		{"@web/.git/HEAD", "metadata"},
+		{".git/hooks/pre-commit", "hooks"},
+		{"sub/.git/hooks/post-checkout", "hooks"},
+		{".git/config", "config"},
+		{".git/worktrees/wt/config.worktree", "config"},
+	}
+	for _, tc := range deniedCases {
+		class, denied, err := tools.CheckNativeGitMetadataPath(tc.path, true)
+		if !denied || class != tc.wantClass || !errors.Is(err, privategit.ErrNativeToolGitMutationForbidden) {
+			t.Fatalf("CheckNativeGitMetadataPath(%q, true) = (%q, %v, %v), want (%q, true, ErrNativeToolGitMutationForbidden)", tc.path, class, denied, err, tc.wantClass)
+		}
+		// Read intent on the same path must not be blocked as a native write mutation.
+		if _, readDenied, readErr := tools.CheckNativeGitMetadataPath(tc.path, false); readDenied || readErr != nil {
+			t.Fatalf("CheckNativeGitMetadataPath(%q, false) = (%v, %v), want allowed", tc.path, readDenied, readErr)
+		}
+	}
+
+	for _, allowed := range []string{"README.md", "src/.gitignore", "sub/.gitmodules", "", ".", "@web"} {
+		if class, denied, err := tools.CheckNativeGitMetadataPath(allowed, true); denied || err != nil {
+			t.Fatalf("CheckNativeGitMetadataPath(%q, true) = (%q, %v, %v), want allowed", allowed, class, denied, err)
 		}
 	}
 }

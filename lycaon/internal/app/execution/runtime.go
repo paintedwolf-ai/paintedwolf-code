@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/extpacks"
 	"github.com/lycaon/lycaon/internal/guidance"
+	"github.com/lycaon/lycaon/internal/layeredfs/privategit"
 	"github.com/lycaon/lycaon/internal/settings"
 	"github.com/lycaon/lycaon/internal/toolhost"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -14,7 +15,9 @@ import (
 )
 
 type Runtime struct {
-	Host        *toolhost.Runtime
+	Host *toolhost.Runtime
+	// PrivateGit is the one manager worker Git tools and worker workspaces share.
+	PrivateGit  *privategit.Manager
 	Registry    *tools.ExecutorRegistry
 	TurnLoads   *turnload.Ledger
 	TurnSources *TurnSources
@@ -22,12 +25,12 @@ type Runtime struct {
 	Rejections  *guidance.StaticRejectFormatter
 }
 
-func Build(settings *settings.Service, moduleRoot string, catalog *extpacks.EffectiveCatalog, rerank decide.Reranker) (Runtime, error) {
-	var runtime Runtime
+func Build(settings *settings.Service, moduleRoot string, catalog *extpacks.EffectiveCatalog, rerank decide.Reranker, privateGit *privategit.Manager) (Runtime, error) {
+	runtime := Runtime{PrivateGit: privateGit}
 	runtime.TurnLoads = turnload.NewLedger()
 	runtime.TurnSources = &TurnSources{}
 	var err error
-	runtime.Host, err = loadToolRuntime(settings, moduleRoot, catalog, runtime.TurnLoads, runtime.TurnSources, rerank)
+	runtime.Host, err = loadToolRuntime(settings, moduleRoot, catalog, runtime.TurnLoads, runtime.TurnSources, rerank, privateGit)
 	if err != nil {
 		return runtime, fmt.Errorf("tool runtime: %w", err)
 	}
@@ -51,8 +54,8 @@ func (runtime *Runtime) LoadGuidance() error {
 	runtime.Registry = tools.NewExecutorRegistry(runtime.Host.Executor, runtime.Host.Registry)
 	return nil
 }
-func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *extpacks.EffectiveCatalog, activation tools.SchemaActivation, sources *TurnSources, rerank decide.Reranker) (*toolhost.Runtime, error) {
-	cfg := toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: catalog, Activation: activation, Rerank: rerank, RequestResolver: sources.resolve, RequestObserver: sources.record, SkillLookup: sources.lookup}
+func loadToolRuntime(settingsSvc *settings.Service, configRoot string, catalog *extpacks.EffectiveCatalog, activation tools.SchemaActivation, sources *TurnSources, rerank decide.Reranker, privateGit *privategit.Manager) (*toolhost.Runtime, error) {
+	cfg := toolhost.RuntimeConfig{ConfigRoot: configRoot, Catalog: catalog, Activation: activation, Rerank: rerank, RequestResolver: sources.resolve, RequestObserver: sources.record, SkillLookup: sources.lookup, PrivateGit: privateGit}
 	if settingsSvc != nil {
 		cfg.Approvals = settingsSvc.Approvals
 	}

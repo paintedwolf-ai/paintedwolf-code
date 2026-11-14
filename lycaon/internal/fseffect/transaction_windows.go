@@ -547,7 +547,7 @@ func relocateEntry(source, destination Location, replace bool, expected string) 
 		if err != nil {
 			return err
 		}
-		if identity != expected {
+		if !fspath.SameEntryAcrossRestart(expected, identity) {
 			return ErrPostcondition
 		}
 	}

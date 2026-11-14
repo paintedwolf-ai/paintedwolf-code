@@ -49,7 +49,7 @@ def checked_archive(fixture):
         if identity != metadata["schema_identity"] or identity["revision"] != metadata["schema_version"]:
             raise ValueError("fixture archive schema identity differs")
         if (manifest["app_version"] != metadata["app_version"]
-                or type(manifest["format_version"]) is not int or manifest["format_version"] not in {1, 2}):
+                or type(manifest["format_version"]) is not int or manifest["format_version"] not in {1, 2, 3}):
             raise ValueError("fixture archive provenance or format differs")
         entries = {}
         for item in manifest["files"]:

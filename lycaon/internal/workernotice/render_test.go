@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/coordinator/promptloop"
+	"github.com/lycaon/lycaon/internal/layeredfs/adapter"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/usernotice"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -75,7 +76,7 @@ func TestRenderExecuteFailureWorkspaceCapacityDetails(t *testing.T) {
 	err := errors.Join(
 		worker.ErrWorkerBranchClaimFailed,
 		workspace.ErrWorkspaceStorageExhausted,
-		&workspace.CapacityError{Path: "/data", Required: 30 << 30, Available: 12 << 30},
+		&adapter.WorkspaceCapacityError{Path: "/data", Required: 30 << 30, Available: 12 << 30},
 	)
 	out := renderer.RenderExecuteFailure(err)
 	if !strings.Contains(out.Message, "30.0 GiB") || !strings.Contains(out.Message, "12.0 GiB") {

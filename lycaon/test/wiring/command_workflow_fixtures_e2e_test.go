@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -484,6 +485,10 @@ func TestWorkflowBackgroundBuildWaitAndStatusCheck(t *testing.T) {
 	if out2.State != "completed" || out2.Status != 0 || out2.Stdout != "build-log:ok\nartifact:v1\n" {
 		t.Fatalf("artifact check outcome = %+v", out2)
 	}
+	jobID, err := strconv.Atoi(observedHandle)
+	if err != nil || jobID <= 0 {
+		t.Fatalf("observed $! = %q, want a positive numeric job ID", observedHandle)
+	}
 	progs := f.programs(t)
 	exec1 := f.executions(t, progs[0].id)
 	var handleInReceipt string
@@ -492,8 +497,8 @@ func TestWorkflowBackgroundBuildWaitAndStatusCheck(t *testing.T) {
 			handleInReceipt = row.jobHandle
 		}
 	}
-	if handleInReceipt == "" || handleInReceipt != observedHandle || !hasExec(exec1, "jobs", "completed") || !hasExec(exec1, "wait", "completed") || !hasExec(exec1, "write", "completed") {
-		t.Fatalf("bg executions = %+v (handle=%q want %q)", exec1, handleInReceipt, observedHandle)
+	if handleInReceipt == "" || handleInReceipt == observedHandle || !hasExec(exec1, "jobs", "completed") || !hasExec(exec1, "wait", "completed") || !hasExec(exec1, "write", "completed") {
+		t.Fatalf("bg executions = %+v (receiptHandle=%q shellJobID=%q)", exec1, handleInReceipt, observedHandle)
 	}
 	pins2 := f.pins(t, progs[1].id)
 	if !hasPin(pins2, "source", "published_disk", "dist/build.log", sha256Hex("build-log:ok\n")) || !hasPin(pins2, "source", "published_disk", "dist/app.bin", sha256Hex("artifact:v1\n")) {

@@ -300,7 +300,7 @@ func (r *applyRun) stage(sections []*applySection) error {
 		paths[i] = entry.Path
 	}
 	tc := withRepoRoot(r.tc, r.repo.Root)
-	result, err := native.GitMutations{Git: r.p.owners.Git, Boundary: r.p.owners.Boundary}.Operate(r.ctx, tc, git.OperationRequest{Kind: "stage", Entries: entries, Paths: paths})
+	result, err := native.GitMutations{Git: r.p.owners.Git, Boundary: r.p.owners.Boundary, PrivateGit: r.p.owners.PrivateGit}.Operate(r.ctx, tc, git.OperationRequest{Kind: "stage", Entries: entries, Paths: paths})
 	if result.Attempted {
 		r.effects++
 	}

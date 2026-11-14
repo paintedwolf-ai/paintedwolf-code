@@ -135,7 +135,7 @@ func RestoreWith(ctx context.Context, receipt Receipt, destination fseffect.Loca
 	if err != nil {
 		return err
 	}
-	if identity != receipt.Identity {
+	if !fspath.SameEntryAcrossRestart(receipt.Identity, identity) {
 		return ErrUnavailable
 	}
 	if relocate != nil {
