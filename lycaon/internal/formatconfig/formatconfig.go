@@ -66,15 +66,16 @@ func Resolve(root, rel string) ([]Source, error) {
 	return sources, nil
 }
 
-// ConfigNames lists every file name Resolve reads.
+// ConfigNames lists every file basename Resolve reads.
 func ConfigNames() []string {
 	seen := map[string]bool{editorconfig.FileName: true}
 	names := []string{editorconfig.FileName}
 	for _, t := range catalog {
 		for _, f := range t.files {
-			if !seen[f.name] {
-				seen[f.name] = true
-				names = append(names, f.name)
+			base := path.Base(f.name)
+			if !seen[base] {
+				seen[base] = true
+				names = append(names, base)
 			}
 		}
 	}
