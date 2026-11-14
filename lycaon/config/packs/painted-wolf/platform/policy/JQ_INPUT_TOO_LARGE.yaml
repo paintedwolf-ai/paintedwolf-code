@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: JQ_INPUT_TOO_LARGE
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - jq
+selector: {}
 requires_facts: [paintedwolf.bytes, paintedwolf.max_bytes, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit]
-when: paintedwolf.rejection_code == "JQ_INPUT_TOO_LARGE"
+when: paintedwolf.operation == "jq" && paintedwolf.rejection_code == "JQ_INPUT_TOO_LARGE"
 effect: block
-category: recoverable
-emit: guard:jq
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:jq
 message: jq document exceeds the input size cap
 what: 'jq: input limit exceeded for {{ paintedwolf.path }} (maximum {{ paintedwolf.max_bytes }} bytes).{% if paintedwolf.bytes %} Input is at least {{ paintedwolf.bytes }} bytes.{% endif %}'
 cause: The input exceeded its byte limit before the query could finish.
 why: A narrower query or result page does not reduce the bytes consumed from the source.
 fix: Reduce the input while preserving valid syntax, then retry the query.
 instead: Use a streaming filter to select a smaller input first.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       bytes: '26214400'

@@ -2,7 +2,7 @@
   "id": "content-safety-escalation",
   "title": "A high jailbreak score blocks after the injection flag fires",
   "covers": [
-    "OAR-OPS-9",
+    "OAR-OPS-10",
     "OAR-EVAL-1",
     "OAR-EVAL-3",
     "OAR-EVAL-4"
@@ -10,9 +10,8 @@
   "rule": [
     {
       "spec_version": "1.0",
-      "namespace": "example.security",
-      "emit": "example:pack",
       "id": "INJECTION_FLAGGED",
+      "namespace": "example.security",
       "kind": "detector",
       "on": "model.output",
       "selector": {},
@@ -24,13 +23,14 @@
       },
       "when": "prompt_injection_score > 0.5",
       "effect": "warn",
-      "profile": "portable"
+      "profile": "portable",
+      "what": "The content scored as a probable injection attempt.",
+      "fix": "Treat the surrounding content as untrusted before acting on it."
     },
     {
       "spec_version": "1.0",
-      "namespace": "example.security",
-      "emit": "example:pack",
       "id": "JAILBREAK_REFUSED",
+      "namespace": "example.security",
       "kind": "detector",
       "on": "model.output",
       "selector": {},
@@ -42,7 +42,9 @@
       },
       "when": "jailbreak_score > 0.8",
       "effect": "block",
-      "profile": "portable"
+      "profile": "portable",
+      "what": "The content scored as a jailbreak attempt, so it is not delivered.",
+      "fix": "Re-source the content; do not replay it with the guardrail relaxed."
     }
   ],
   "input": {
@@ -56,8 +58,8 @@
     "decision": "block",
     "code": "JAILBREAK_REFUSED",
     "applied": [
-      "INJECTION_FLAGGED:fired",
-      "JAILBREAK_REFUSED:fired"
+      "example.security/INJECTION_FLAGGED:fired",
+      "example.security/JAILBREAK_REFUSED:fired"
     ]
   }
 }

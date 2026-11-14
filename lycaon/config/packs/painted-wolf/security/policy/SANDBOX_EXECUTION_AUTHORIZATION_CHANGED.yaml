@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SANDBOX_EXECUTION_AUTHORIZATION_CHANGED"
 effect: block
-category: recoverable
-emit: guard:execution_capability
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:execution_capability
 message: An execution authorization was no longer valid at spawn.
 what: An execution authorization was no longer valid at spawn.
 cause: The current-call permit was missing, already consumed, or did not match the approved action and confinement boundary.
 why: Execution authority must remain bound to the exact action through the moment of spawn.
 fix: Re-request the capability for the current action.
 instead: Branch on Code; re-request the capability for the current action.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Train decision heads from the host's exported corpus and labeled observations.
 
-Turn families use pw-decide-row/1. The optional retention family trains alone
+Turn families use pw-decide-row/2. The optional retention family trains alone
 from pw-retention-row/1 with verified positive and negative labels. Unknown
 labels remain masked; loading a retention checkpoint is optional at runtime.
 """
@@ -78,11 +78,11 @@ def multi_item(tok, state, question, truth, max_len, head_max_len, family, host=
             "request_kept": kept}
 
 
-FAMILIES = ("tools", "guides", "kind", "skills", "requests")
+FAMILIES = ("tools", "kind", "skills", "requests")
 RANK_FAMILIES = {"skills", "requests"}
 # The families whose answers change what a turn carries; their validation loss picks
 # the checkpoint. Kind only reports, and the rank families train their own head.
-SELECT = ("tools", "guides", "retention")
+SELECT = ("tools", "retention")
 
 
 def build_retention_items(examples, corpus, tok, max_len, head_max_len, truth, turn_rows):
@@ -179,12 +179,11 @@ def independent_items(tok, state, question, truth, max_len, head_max_len, family
     return items
 
 
-def build_items(examples, corpus, held_units, rng, tok, max_len, head_max_len, families, skill_scored, skill_zeros, turn_rows, pos, tool_truth, observed, tool_negatives=0):
+def build_items(examples, corpus, rng, tok, max_len, head_max_len, families, skill_scored, skill_zeros, turn_rows, pos, tool_truth, observed, tool_negatives=0):
     """One training item per (state, question) for the families trained. A joint head
-    trains tools and guides as two multi-label items per turn and the kind as one choice;
-    an independent head trains one item per tool or guide option, with `tool_negatives`
-    sampled negative tools per turn (every guide option trains). Skills and needs are
-    score pairs."""
+    trains tools as one multi-label item per turn and the kind as one choice; an
+    independent head trains one item per tool option, with `tool_negatives` sampled
+    negative tools per turn. Skills and needs are score pairs."""
     # Choice options in the engine's order: it keys them by name, sorted.
     kind_q = {"t": "choice", "ins": corpus.spec["kind"]["instructions"], "crit": dict(sorted(corpus.spec["kind"]["options"].items()))}
     kinds = list(kind_q["crit"])
@@ -199,7 +198,7 @@ def build_items(examples, corpus, held_units, rng, tok, max_len, head_max_len, f
         if ex["partial"]:
             families_here = tuple(f for f in families_here if f == "requests")
         targets = rowfile.tool_targets(ex, tool_truth)
-        tools_q = corpus.multi_question("tool", ex["offered"]["loadable"])
+        tools_q = corpus.tools_question(ex["offered"]["loadable"])
         if "tools" in families_here and tools_q["options"]:
             truth = {n: targets.get(n) for n in tools_q["options"]}
             if tools_q.get("independent"):
@@ -209,14 +208,6 @@ def build_items(examples, corpus, held_units, rng, tok, max_len, head_max_len, f
                 items.extend(independent_items(tok, state, tools_q, truth, max_len, head_max_len, "tools", host, pos, kept, weight))
             else:
                 items.append(multi_item(tok, state, tools_q, truth, max_len, head_max_len, "tools", host, pos))
-        guides = ex["labels"]["guides"]
-        guides_q = corpus.multi_question("guide", ex["offered"]["guides"])
-        if "guides" in families_here and guides_q["options"]:
-            truth = {uid: (None if uid in held_units else guides.get(uid)) for uid in guides_q["options"]}
-            if guides_q.get("independent"):
-                items.extend(independent_items(tok, state, guides_q, truth, max_len, head_max_len, "guides", host))
-            elif any(v is not None for v in truth.values()):
-                items.append(multi_item(tok, state, guides_q, truth, max_len, head_max_len, "guides", host))
         kind = ex["labels"].get("kind")
         if "kind" in families_here and kind in kinds and not corpus.independent():
             ids, markers = build_sequence(tok, state, kind_q, max_len=max_len)
@@ -352,9 +343,8 @@ def row_losses(logits, b, device):
 
 def pooled_loss(rows, options):
     """The loss a batch of rows trains on: single-answer rows add their cross-entropy;
-    multi rows add their mean per option, pooled over the batch, once per row. A tool
-    row with sixty options therefore weighs its options, not its row, against a guide
-    row with six."""
+    multi rows add their mean per option, pooled over the batch, once per row, so a tool
+    row with sixty options weighs its options, not its row."""
     multi = options > 0
     loss = rows[~multi].sum()
     if multi.any():
@@ -371,7 +361,7 @@ def evaluate(model, loader, device, select):
     """Loss per family (per option for multi families, per row otherwise) and the pooled
     loss over the `select` families, which picks the checkpoint; accuracy per kind, where a multi
     row counts each known option as its own yes/no decision, with precision and recall
-    of the positives per family (tools, guides) and the share of skill levels within one
+    of the positives per family and the share of skill levels within one
     of the judged level."""
     model.eval()
     n = correct = 0
@@ -441,7 +431,6 @@ def main():
     ap.add_argument("--val", default="")
     ap.add_argument("--out", default="")
     ap.add_argument("--model", default=DEFAULT_MODEL)
-    ap.add_argument("--holdout-pack", action="append", default=[])
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--patience", type=int, default=12, help="stop after this many epochs without a better selection loss")
     ap.add_argument("--batch-size", type=int, default=32)
@@ -449,7 +438,7 @@ def main():
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--label", default="")
     ap.add_argument("--pos-weight", type=float, default=POS_WEIGHT, help="weight on positive options in the multi-label loss")
-    ap.add_argument("--families", default=",".join(FAMILIES), help="comma-separated subset of tools,guides,kind,skills to train")
+    ap.add_argument("--families", default=",".join(FAMILIES), help="comma-separated subset of tools,kind,skills,requests to train")
     ap.add_argument("--skill-scored", type=int, default=2, help="judged skills or tools kept per turn or need, highest scores first")
     ap.add_argument("--skill-zeros", type=int, default=2, help="judged zero-score skills or tools sampled per turn or need")
     ap.add_argument("--turn-rows", choices=("engine-off", "all"), default="engine-off", help="rows the turn families train on")
@@ -479,9 +468,6 @@ def main():
     torch.manual_seed(args.seed)
     device = os.environ.get("LYCAON_DECIDE_DEVICE") or ("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
     corpus = Corpus.load(args.corpus)
-    held = {uid for uid, u in corpus.units.items() if u["pack_id"] in args.holdout_pack}
-    if held:
-        sys.stderr.write("holding out %d units from %s\n" % (len(held), ", ".join(args.holdout_pack)))
 
     schema = rowfile.RETENTION_SCHEMA if retention else rowfile.SCHEMA
     train = rowfile.load(args.train, schema, corpus=corpus)
@@ -504,8 +490,8 @@ def main():
         val_items = build_retention_items(val, corpus, tok, max_len, head_max_len, args.retention_truth, args.turn_rows)
     else:
         pos = tool_weights(train, args.tool_weight, args.tool_truth)
-        train_items = build_items(train, corpus, held, rng, tok, max_len, head_max_len, families, args.skill_scored, args.skill_zeros, args.turn_rows, pos, args.tool_truth, observed_levels(args.rank_levels), args.tool_negatives)
-        val_items = build_items(val, corpus, held, rng, tok, max_len, head_max_len, families, args.skill_scored, args.skill_zeros, args.turn_rows, None, args.tool_truth, observed_levels(args.rank_levels))
+        train_items = build_items(train, corpus, rng, tok, max_len, head_max_len, families, args.skill_scored, args.skill_zeros, args.turn_rows, pos, args.tool_truth, observed_levels(args.rank_levels), args.tool_negatives)
+        val_items = build_items(val, corpus, rng, tok, max_len, head_max_len, families, args.skill_scored, args.skill_zeros, args.turn_rows, None, args.tool_truth, observed_levels(args.rank_levels))
     sys.stderr.write("items: train=%d val=%d\n" % (len(train_items), len(val_items)))
     state_tokens = state_room(train_items)
     print("state tokens after the options: %s" % state_tokens, flush=True)
@@ -546,7 +532,7 @@ def main():
             best = loss
             label = args.label or (head_name + "@" + args.model.rsplit("/", 1)[-1] + "+" + corpus.revision)
             headfile.save(out, model, label, args.model, {
-                "corpus": corpus.revision, "holdout": sorted(held), "val_loss": loss, "val_acc": acc, "by_type": by_type,
+                "corpus": corpus.revision, "val_loss": loss, "val_acc": acc, "by_type": by_type,
                 "train_rows": len(train), "turn_rows": args.turn_rows, "tool_weight": args.tool_weight, "tool_truth": args.tool_truth, "rank_levels": args.rank_levels, "seed": args.seed,
                 "max_len": max_len, "head_max_len": head_max_len, "pos_weight": POS_WEIGHT, "state_tokens": state_tokens,
                 "tool_encoding": "independent" if retention or corpus.independent() else "joint", "tool_negatives": args.tool_negatives,

@@ -120,6 +120,47 @@ func TestNativeOwnersDoNotFmtMissingArg(t *testing.T) {
 	contractcheck.FailErr(t, "walk native", err)
 }
 
+// A fence named for a tool that carries that tool's own arguments is an action
+// when the request offers the tool or can reach it, for every shipped schema.
+func TestToolNamedFenceRecognitionTracksWholeToolCatalog(t *testing.T) {
+	schemas, err := toolschema.LoadSchemaDir(filepath.Join(contractcheck.RepoRoot(t), "lycaon/config/packs/painted-wolf/platform/tools/schemas"))
+	contractcheck.FailErr(t, "load schemas", err)
+	if len(schemas.Tools) == 0 {
+		t.Fatal("empty tool catalog")
+	}
+	other := []actionenvelope.Tool{{Name: "not-offered"}}
+	for name, entry := range schemas.Tools {
+		t.Run(name, func(t *testing.T) {
+			args := map[string]any{"argument": "value"}
+			if properties, _ := entry.Schema["properties"].(map[string]any); len(properties) > 0 {
+				args = map[string]any{}
+				for property := range properties {
+					args[property] = "value"
+				}
+			}
+			raw, err := json.Marshal(args)
+			contractcheck.FailErr(t, "encode arguments", err)
+			for _, fence := range []string{"```", "~~~"} {
+				text := "I will do that now.\n\n" + fence + name + "\n" + string(raw) + "\n" + fence
+				want := actionenvelope.Observation{Tools: []string{name}, Fenced: true}
+				if got := actionenvelope.Detect(text, []actionenvelope.Tool{{Name: name, ArgsSchema: entry.Schema}}, nil); !slices.Equal(got.Tools, want.Tools) || !got.Fenced {
+					t.Fatalf("offered fence not recognized: %s => %+v", text, got)
+				}
+				if got := actionenvelope.Detect(text, other, []string{name}); !slices.Equal(got.Tools, want.Tools) || !got.Fenced {
+					t.Fatalf("reachable fence not recognized: %s => %+v", text, got)
+				}
+				if got := actionenvelope.Detect(text, other, nil); len(got.Tools) != 0 || got.Fenced {
+					t.Fatalf("unreachable fence recognized: %s => %+v", text, got)
+				}
+				example := fence + "json\n" + string(raw) + "\n" + fence
+				if got := actionenvelope.Detect(example, []actionenvelope.Tool{{Name: name, ArgsSchema: entry.Schema}}, nil); len(got.Tools) != 0 {
+					t.Fatalf("neutral example became action: %s => %+v", example, got)
+				}
+			}
+		})
+	}
+}
+
 // Recognition depends on the frozen offer, never a tool-specific allowlist or
 // argument contents. Exercise every shipped schema, including future additions.
 func TestTextActionRecognitionTracksWholeToolCatalog(t *testing.T) {
@@ -137,17 +178,17 @@ func TestTextActionRecognitionTracksWholeToolCatalog(t *testing.T) {
 						raw, err := json.Marshal(envelope)
 						contractcheck.FailErr(t, "encode envelope", err)
 						text := string(raw)
-						if got := actionenvelope.Names(text, []string{name}); !slices.Equal(got, []string{name}) {
-							t.Fatalf("catalog action not recognized exactly once: %s => %v", text, got)
+						if got := actionenvelope.Detect(text, []actionenvelope.Tool{{Name: name}}, nil); !slices.Equal(got.Tools, []string{name}) || got.Fenced {
+							t.Fatalf("catalog action not recognized exactly once: %s => %+v", text, got)
 						}
-						for _, offered := range [][]string{nil, {}, {"not-offered"}} {
-							if got := actionenvelope.Names(text, offered); len(got) != 0 {
-								t.Fatalf("unoffered action recognized: %v", got)
+						for _, offered := range [][]actionenvelope.Tool{nil, {}, {{Name: "not-offered"}}} {
+							if got := actionenvelope.Detect(text, offered, nil); len(got.Tools) != 0 {
+								t.Fatalf("unoffered action recognized: %+v", got)
 							}
 						}
 						for _, example := range []string{"Example: " + text, "```json\n" + text + "\n```", `{"data":` + text + `}`, `{"tool":"not-offered","args":` + text + `}`} {
-							if got := actionenvelope.Names(example, []string{name}); len(got) != 0 {
-								t.Fatalf("example or argument data became action: %s => %v", example, got)
+							if got := actionenvelope.Detect(example, []actionenvelope.Tool{{Name: name}}, nil); len(got.Tools) != 0 {
+								t.Fatalf("example or argument data became action: %s => %+v", example, got)
 							}
 						}
 					}

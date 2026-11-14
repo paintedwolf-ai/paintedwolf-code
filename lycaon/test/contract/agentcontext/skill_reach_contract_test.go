@@ -123,6 +123,7 @@ func forEachStockSkillRender(t *testing.T, check func(t *testing.T, sk skills.Sk
 					vars, err := prompts.SkillSurfaceTemplateVars(prompts.SkillSurfaceVarsInput{
 						ProfileID:        prompts.CoordinatorProfileID,
 						SurfaceID:        id,
+						Plan:             plan,
 						Offered:          reachable,
 						HasGit:           rootCount > 0,
 						RootCount:        rootCount,

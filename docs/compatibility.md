@@ -357,6 +357,15 @@ including that unit directly, so its tool and surface eligibility still applies.
 Overrides of `guidance/coordinator-report-document.md` must consume its structured
 issue and retained-document variables instead of `drafted_synthesis`.
 
+Command capability is three variables: `profile_command_mutation`,
+`profile_command_external_exec`, and `profile_command_network_egress`. Each
+states what the executor admits on that call: the tool profile under the
+session posture, narrowed by the coordinator surface. An override that gated
+external-program or network text on `profile_command_mutation` must use the
+matching variable. `profile_has_terminal_capture` follows external execution,
+and `shared/units/coordinator-progress-procedure.md` renders only while
+`update_progress` is offered.
+
 ## Agent-public vocabulary
 
 Structured tool names, `Code:` meanings, rule effects, theme tokens, and other model- or extension-authored ids are contracts because external text or content can name them. Virtual root prefixes such as `@scratch` are likewise agent-public path vocabulary, and no attached root may carry a virtual root's label.

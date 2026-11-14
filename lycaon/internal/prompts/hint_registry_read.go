@@ -2,6 +2,7 @@ package prompts
 
 import (
 	"fmt"
+	"github.com/lycaon/lycaon/internal/oarcore"
 
 	"github.com/lycaon/lycaon/internal/hintregistry"
 	"gopkg.in/yaml.v3"
@@ -9,18 +10,18 @@ import (
 
 // hintCodeRow projects policy data for tool-surface rendering.
 type hintCodeRow struct {
-	Emit     string   `yaml:"emit"`
-	Category string   `yaml:"category"`
-	Tools    []string `yaml:"tools"`
-	Instead  string   `yaml:"instead"`
+	SpecVersion string   `yaml:"spec_version"`
+	Emit        string   `yaml:"x-paintedwolf-emit"`
+	Category    string   `yaml:"x-paintedwolf-category"`
+	Tools       []string `yaml:"tools"`
+	Instead     string   `yaml:"instead"`
+	When        string   `yaml:"when"`
 
-	Selector  hintCodeSelector `yaml:"selector"`
-	XCategory string           `yaml:"x-paintedwolf-category"`
+	Selector hintCodeSelector `yaml:"selector"`
 }
 
 type hintCodeSelector struct {
-	Tools  []string            `yaml:"tools"`
-	Ledger map[string][]string `yaml:"ledger"`
+	Tools []string `yaml:"tools"`
 }
 
 func (r *hintCodeRow) UnmarshalYAML(node *yaml.Node) error {
@@ -30,15 +31,23 @@ func (r *hintCodeRow) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 	*r = hintCodeRow(raw)
-	if r.Category == "" {
-		r.Category = r.XCategory
+	// A copy-only unit is not an OAR document and keeps plain metadata names.
+	if r.SpecVersion == "" {
+		var flat struct {
+			Emit     string `yaml:"emit"`
+			Category string `yaml:"category"`
+		}
+		if err := node.Decode(&flat); err != nil {
+			return err
+		}
+		r.Emit, r.Category = flat.Emit, flat.Category
 	}
 	if len(r.Tools) == 0 {
 		r.Tools = append([]string(nil), r.Selector.Tools...)
 	}
 	// An operation selector applies where that operation's structured tool is offered.
 	if len(r.Tools) == 0 {
-		r.Tools = append([]string(nil), r.Selector.Ledger["paintedwolf.operation"]...)
+		r.Tools = oarcore.ConjunctValues(r.When, "paintedwolf.operation")
 	}
 	return nil
 }

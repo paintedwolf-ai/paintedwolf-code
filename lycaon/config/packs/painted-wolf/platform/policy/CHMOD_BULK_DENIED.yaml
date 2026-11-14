@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: CHMOD_BULK_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - chmod
+selector: {}
 requires_facts: [paintedwolf.bulk_denied, paintedwolf.max_paths, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.requested]
-when: paintedwolf.rejection_code == "CHMOD_BULK_DENIED"
+when: paintedwolf.operation == "chmod" && paintedwolf.rejection_code == "CHMOD_BULK_DENIED"
 effect: block
-category: recoverable
-emit: guard:chmod
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chmod
 message: chmod requested too many paths in one call
 what: chmod requested {{ paintedwolf.requested }} paths but the cap is {{ paintedwolf.max_paths }} per call.
 cause: The explicit path batch exceeds the per-call bound.
 why: Bounded batches keep permission changes reviewable.
 fix: Use at most {{ paintedwolf.max_paths }} explicit paths per call, and retain the intended scope when splitting the batch. Do not add targets simply to fill a batch.
 instead: Branch on Code; reduce the explicit target batch
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

@@ -1,0 +1,26 @@
+{
+  "id": "expr-least-int-literal",
+  "title": "The least int is written as unary minus over 9223372036854775808",
+  "covers": [
+    "OAR-EXPR-15"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "-9223372036854775808 < 0 && -9223372036854775807 - 1 == -9223372036854775808"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R"
+  }
+}

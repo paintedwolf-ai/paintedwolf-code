@@ -46,8 +46,8 @@ func TestPolicyRuleAtAGatingAnchorLoads(t *testing.T) {
 	}
 }
 
-func TestProf10UnsupportedTransformIsolatesOnlyItsPack(t *testing.T) {
-	broken := fixturePack(t, "acme/guard", map[string]string{"policy/ACME_NEW_CODE.yaml": strings.Replace(invocationRule, "effect: block", "effect: transform\nx-paintedwolf-transform:\n  action: replace\n  target: content\n  replacement: replacement", 1)})
+func TestRefusedPolicyDocumentIsolatesOnlyItsPack(t *testing.T) {
+	broken := fixturePack(t, "acme/guard", map[string]string{"policy/ACME_NEW_CODE.yaml": strings.Replace(invocationRule, "effect: block", "effect: rewrite", 1)})
 	fine := fixturePack(t, "acme/fine", map[string]string{
 		"contributions/commands/ok.yaml": "id: acme/fine:ok\ntitle: OK\naction:\n  kind: navigate\n  destination: home\n",
 	})

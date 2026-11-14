@@ -23,7 +23,7 @@ func TestProf10HandlerRulePreventsActualToolExecution(t *testing.T) {
 		t.Fatalf("install anchor catalogue: %v", err)
 	}
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "arbitrary-file.yaml"), []byte("spec_version: '1.0'\nid: STOP\nkind: policy\non: tool.handler\nselector: {}\nrequires_facts: [paintedwolf.principal]\nwhen: paintedwolf.principal == \"owner\" && session_posture == \"build\" && profile == \"implement\"\neffect: block\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "arbitrary-file.yaml"), []byte("spec_version: '1.0'\nid: STOP\nkind: policy\non: tool.handler\nselector: {}\nrequires_facts: [paintedwolf.principal, paintedwolf.session_posture, paintedwolf.tool_profile]\nwhen: paintedwolf.principal == \"owner\" && paintedwolf.session_posture == \"build\" && paintedwolf.tool_profile == \"implement\"\neffect: block\n"), 0o600); err != nil {
 		t.Fatalf("write policy fixture: %v", err)
 	}
 	loader, err := oar.NewLoader("")

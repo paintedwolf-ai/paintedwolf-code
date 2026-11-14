@@ -129,7 +129,7 @@ func (p *rpcProcess) call(ctx context.Context, request command, kind string, pri
 		if p.device == nil {
 			return errors.New("native generation: device admission is unavailable")
 		}
-		permit, err := p.device.Acquire(ctx, inference.Work{Owner: p.owner, Generation: p.generation, Priority: priority})
+		permit, err := p.device.Acquire(ctx, inference.Work{Owner: p.owner, Generation: p.generation, Priority: priority, Step: request.Method})
 		if err != nil {
 			return err
 		}

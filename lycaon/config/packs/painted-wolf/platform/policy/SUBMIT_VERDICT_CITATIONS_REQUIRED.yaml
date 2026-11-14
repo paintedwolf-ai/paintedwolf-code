@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.can_recall, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.review_expected_call, paintedwolf.review_observed_handles]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_CITATIONS_REQUIRED"
 effect: block
-category: recoverable
-emit: guard:workflow
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
 message: Terminal verdict requires top-level cited_evidence or cited_urls from observed tool results.
 what: "The terminal verdict carried no usable top-level citations."
 cause: "cited_evidence and cited_urls were empty or absent."
 why: "Terminal adjudication must trace to observed evidence and every owed reviewer."
 fix: 'Use the current call shape: {{ paintedwolf.review_expected_call }}. Evidence-handle objects use handle. Available observed sample: {{ paintedwolf.review_observed_handles }}. {{ paintedwolf.next_steps }}'
 instead: "Add citations from retained review evidence and resubmit; do not invent tokens or repeat completed reviews merely to cite them."
-scenarios:
+x-paintedwolf-scenarios:
   - id: recall_callable
     vars:
       can_recall: true

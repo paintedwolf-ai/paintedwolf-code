@@ -1,0 +1,26 @@
+{
+  "id": "ops-on-error-unknown-substitute-rejected",
+  "title": "An on_error naming no rule of the rule set is rejected at load",
+  "covers": [
+    "OAR-OPS-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true",
+    "on_error": "NOT_LOADED"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-OPS-4"
+  }
+}

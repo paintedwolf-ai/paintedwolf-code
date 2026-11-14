@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/sandbox"
 	"github.com/lycaon/lycaon/internal/spawn"
+	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
 type standingProfileInputs struct {
@@ -33,13 +34,31 @@ type standingPromptInputs struct {
 	EffectiveAgents  []string               `json:"effective_agents,omitempty"`
 	WebSearchEnabled bool                   `json:"web_search_enabled"`
 	LoadedTools      []string               `json:"loaded_tools,omitempty"`
-	OmittedUnits     []string               `json:"omitted_units,omitempty"`
 	ExecutionMode    string                 `json:"execution_mode,omitempty"`
 	VerifyCommand    string                 `json:"verify_command,omitempty"`
 	WorkerToolBudget spawn.WorkerToolBudget `json:"worker_tool_budget"`
+	// CommandEffects is what the session posture leaves the coordinator's command.
+	CommandEffects []toolcontract.CommandEffectClass `json:"command_effects,omitempty"`
 
 	// Unexported catalog view is bound to PromptRevision, which covers catalog.Revision.
 	catalogView *catalogview.View
+}
+
+// withCatalogView binds the session's catalog and keys the prompt on the
+// command effects its posture leaves the coordinator, which the catalog
+// revision does not cover.
+func (in standingPromptInputs) withCatalogView(view *catalogview.View) standingPromptInputs {
+	in.catalogView = view
+	in.CommandEffects = nil
+	if view == nil {
+		return in
+	}
+	for _, profile := range view.ToolProfiles {
+		if profile.ID == prompts.CoordinatorProfileID {
+			in.CommandEffects = profile.CommandEffects.Classes()
+		}
+	}
+	return in
 }
 
 func (in standingPromptInputs) cacheKey() (string, error) {
@@ -112,11 +131,7 @@ func renderStandingPrompt(ctx context.Context, pe prompts.PromptTemplateEngine, 
 	if err != nil {
 		return "", fmt.Errorf("unit catalog: %w", err)
 	}
-	omittedMap := make(map[string]bool, len(in.OmittedUnits))
-	for _, u := range in.OmittedUnits {
-		omittedMap[u] = true
-	}
-	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, surface.ExecutionModeFamily(in.Profile.SurfaceID), plan.ImmediateNames(), offered, omittedMap)
+	sel := prompts.UnitSelectionVars(promptunit.HostCoordinator, surface.ExecutionModeFamily(in.Profile.SurfaceID), offered)
 	blocks, err := prompts.RenderUnitSlots(ctx, prompts.UnitRendererFor(pe), catalog, sel, surfaceVars)
 	if err != nil {
 		return "", fmt.Errorf("unit blocks: %w", err)

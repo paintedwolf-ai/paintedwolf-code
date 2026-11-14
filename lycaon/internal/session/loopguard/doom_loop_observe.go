@@ -40,9 +40,7 @@ func ObserveDoomLoopRepeat(gc *oar.GuardContext, count int, tool, repeatedCode s
 	gc.Invocation.Tool = tool
 	gc.DeriveToolClassFacts()
 	gc.SetRepeatCount(int64(count))
-	if repeatedCode != "" {
-		gc.Counters.SameCodeRejectRun = int64(DoomLoopMaxSameCodeRejects)
-	}
+	gc.Counters.RepeatedRejectCode = repeatedCode
 	data := map[string]any{
 		"count":                count,
 		"tool":                 tool,

@@ -60,6 +60,7 @@ func (r *RegistrySummarizer) beginUtilityCall(ctx context.Context, p modelcall.P
 func (r *RegistrySummarizer) utilityRequest(ctx context.Context, req modelcall.CompletionRequest) modelcall.CompletionRequest {
 	req.Think = modelcall.ThinkOff
 	req.Composition = modelcall.CompositionHostUtility
+	req.Urgency = r.utilityClass().urgency()
 	if strings.TrimSpace(req.Debug.Purpose) == "" && r != nil {
 		req.Debug.Purpose = r.Purpose
 	}

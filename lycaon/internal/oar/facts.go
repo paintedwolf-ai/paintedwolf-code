@@ -131,22 +131,15 @@ func RuleFactsReferenced(r *Rule) []string {
 	for _, name := range FactsReferenced(r.When, r.Flow) {
 		add(name)
 	}
-	for _, name := range r.Selector.Clauses() {
-		add(name)
-	}
-	if r.Transform != nil && r.Transform.Target != "content" {
-		add(r.Transform.Target)
+	if len(r.Selector) > 0 {
+		add("tool")
 	}
 	for _, name := range copyRefs(r.Copy) {
 		add(name)
 	}
 	if len(r.OnFire) > 0 {
-		add("paintedwolf.fire_count")
+		add("fire_count")
 		add("breaker_count")
-	}
-	if r.CounterScope != "" {
-		add(r.CounterScope)
-		add("paintedwolf.scoped_fire_count")
 	}
 	return out
 }

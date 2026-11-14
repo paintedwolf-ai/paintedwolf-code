@@ -9,14 +9,14 @@ selector:
 requires_facts: [paintedwolf.diagnostic_pre_evaluation, paintedwolf.diagnostic_top_level, paintedwolf.expected_form, paintedwolf.parser_message, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line]
 when: paintedwolf.rejection_code == "COMMAND_SYNTAX_UNSUPPORTED"
 effect: block
-category: recoverable
-emit: guard:command_composition_redirect
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
 message: command syntax unit was not admitted
 what: 'Unsupported shell form{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %}{% if paintedwolf.parser_message %}: {{ paintedwolf.parser_message }}{% else %}{% if paintedwolf.expected_form %}: {{ paintedwolf.expected_form }}{% endif %}{% endif %}.'
 cause: '{% if paintedwolf.diagnostic_top_level %}The submitted source was refused before evaluation.{% else %}{% if paintedwolf.diagnostic_pre_evaluation %}This source unit did not execute. Earlier commands that finished still count.{% else %}Earlier commands that finished still count.{% endif %}{% endif %}'
 fix: '{% if paintedwolf.expected_form %}Supported form: {{ paintedwolf.expected_form }}. Preserve the intended operation and earlier effects.{% endif %}'
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: captured_unit
     vars:
       tool: command

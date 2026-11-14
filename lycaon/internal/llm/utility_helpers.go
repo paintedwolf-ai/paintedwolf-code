@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/llm/failure"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 	"github.com/lycaon/lycaon/internal/llm/providerprofile"
 	"strings"
 	"sync"
@@ -56,6 +57,17 @@ const (
 	// unchanged and may retry later; it never spends the coordinator.
 	UtilityClassBackground UtilityClass = "background"
 )
+
+// urgency is background for classes nothing waits on.
+func (c UtilityClass) urgency() modelcall.RequestUrgency {
+	switch c {
+	case UtilityClassBackground, UtilityClassGift, UtilityClassOverlay:
+		return modelcall.UrgencyBackground
+	case UtilityClassQuality, UtilityClassRequested:
+		return modelcall.UrgencyInteractive
+	}
+	return modelcall.UrgencyInteractive
+}
 
 // ClassForPurpose maps a capture-row purpose onto its product class.
 func ClassForPurpose(purpose string) UtilityClass {

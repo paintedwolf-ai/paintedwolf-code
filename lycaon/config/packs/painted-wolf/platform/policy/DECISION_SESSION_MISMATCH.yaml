@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.job_id, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "DECISION_SESSION_MISMATCH"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Worker {{ paintedwolf.job_id }} was not dispatched from this session.
 what: Worker {{ paintedwolf.job_id }} was not dispatched from this session.
 cause: Only the session that dispatched a worker can answer its decision.
 why: A decision answer steers the worker, so it stays with the coordinator that owns the work.
 fix: Answer decisions only for job_ids from needs_decision envelopes in this session.
 instead: Leave another session's worker to that session.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       job_id: worker-1

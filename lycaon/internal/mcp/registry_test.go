@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -188,5 +189,20 @@ func TestMCPPeerDiagnosticIsBoundedWithoutLosingOriginal(t *testing.T) {
 	}
 	if reject.Data["peer_detail"] != diagnostic {
 		t.Fatal("original peer diagnostic was discarded")
+	}
+}
+
+func TestMCPConfiguredProviderIDsListsSortedCatalog(t *testing.T) {
+	var nilCatalog *mcp.ProviderCatalog
+	if got := nilCatalog.ConfiguredProviderIDs(); got != nil {
+		t.Fatalf("nil ConfiguredProviderIDs = %v, want nil", got)
+	}
+	reg := newTestRegistry(t, nil, "svcb", "svca")
+	testutil.FailErr(t, "enable svca", reg.Administration.SetProviderEnabled(t.Context(), mcp.CallScope{}, "svca", true, ""))
+	if got := reg.Catalog.ConfiguredProviderIDs(); !slices.Equal(got, []string{"svca", "svcb"}) {
+		t.Fatalf("ConfiguredProviderIDs = %v, want [svca svcb]", got)
+	}
+	if got := reg.Catalog.EnabledProviderIDs(); !slices.Equal(got, []string{"svca"}) {
+		t.Fatalf("EnabledProviderIDs = %v, want [svca]", got)
 	}
 }

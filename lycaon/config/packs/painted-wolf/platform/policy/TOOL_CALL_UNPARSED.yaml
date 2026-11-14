@@ -1,13 +1,13 @@
 spec_version: "1.0"
 id: TOOL_CALL_UNPARSED
 kind: invariant
-on: content.output
+on: model.output
 selector: {}
 requires_facts: [paintedwolf.json_invalid_escape, paintedwolf.json_unescaped_newline, paintedwolf.json_unexpected_end, paintedwolf.reject_observation]
 when: paintedwolf.reject_observation == "provider_tool_call_unparsed"
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: The provider dropped a tool call whose arguments were not valid JSON
 what: No tool executed. The model provider could not parse the arguments of your last tool call as JSON and dropped the call.
 cause: >-
@@ -16,7 +16,7 @@ why: The host received no call to run.
 fix: >-
   {% if paintedwolf.json_unescaped_newline %}Inside JSON string values, encode each line break as `\n` rather than a literal newline. For example, `{"content":"first line\nsecond line\n"}` decodes to two lines. Preserve the intended content after decoding; do not remove its line breaks. {% endif %}{% if paintedwolf.json_unexpected_end %}Resubmit the complete argument object; check that string values and containers are closed. {% endif %}{% if paintedwolf.json_invalid_escape %}Encode a literal backslash as `\\`; JSON escapes are `\"`, `\\`, `\/`, `\b`, `\f`, `\n`, `\r`, `\t`, and `\u` followed by four hexadecimal digits. Apostrophes need no JSON escape. {% endif %}Submit the tool call again through the native tool channel with valid JSON arguments. Escape double quotes, backslashes, and line breaks inside string values.
 instead: Do not assume the dropped call ran.
-scenarios:
+x-paintedwolf-scenarios:
   - id: dropped_call
     vars: {}
   - id: unescaped_newline

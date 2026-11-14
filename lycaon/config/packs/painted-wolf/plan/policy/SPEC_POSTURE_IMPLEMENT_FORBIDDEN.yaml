@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "SPEC_POSTURE_IMPLEMENT_FORBIDDEN"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: rule:spec
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: rule:spec
 message: Implementer Task forbidden before planning handoff
 what: Implementer Task forbidden before planning handoff
 cause: Implementer Task forbidden before planning handoff
 why: Complete plan critics and handoff before implementer Task
 fix: Complete plan critics and handoff before implementer Task
 instead: Stay in spec posture phases until the plan is approved and handed off
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

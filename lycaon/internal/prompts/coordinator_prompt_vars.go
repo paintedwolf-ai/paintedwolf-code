@@ -43,16 +43,17 @@ func MergeCoordinatorPromptVars(
 	}
 	into["is_coordinator"] = true
 	into["command_on_floor"] = slices.Contains(floor, "command")
-	ApplyCoordinatorSurfaceCommandEffects(surfaceID, offered, requestable, into)
+	RestrictCommandEffects(ScopeCommandEffects(surfaceID), offered, requestable, into)
+	commandMutates := currentCommandEffectFlags(into, offeredSet["command"]).mutation
 	card, err := LoadCoordinatorSurfaceCard(surfaceID)
 	if err != nil {
 		return err
 	}
 	runOffered := offered
-	if !CoordinatorSurfaceAllowsCommandMutation(surfaceID) {
+	if !commandMutates {
 		runOffered = filterToolName(offered, "command")
 	}
-	for k, v := range CoordinatorSurfaceCardVars(card, offered, requestable, CoordinatorSurfaceAllowsCommandMutation(surfaceID)).TemplateVars() {
+	for k, v := range CoordinatorSurfaceCardVars(card, offered, requestable, commandMutates).TemplateVars() {
 		into[k] = v
 	}
 	MergeVisualShowVars(runOffered, requestable, into)

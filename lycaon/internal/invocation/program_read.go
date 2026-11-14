@@ -27,6 +27,22 @@ type ProgramReader interface {
 	ReadProgramActivityPage(context.Context, string, string, string, string, int) (api.CommandProgramReceiptPage, error)
 }
 
+// ProgramForReceipt returns the program an invocation receipt launched, or
+// ErrProgramNotFound when the receipt launched none.
+func (r *SQLRecorder) ProgramForReceipt(ctx context.Context, sessionID, receiptID string) (string, error) {
+	tx, err := r.beginProgramRead(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var id string
+	err = tx.QueryRowContext(ctx, `SELECT p.id FROM invocation_programs p JOIN invocation_receipts r ON r.id=p.parent_receipt_id WHERE p.parent_receipt_id=? AND r.session_id=?`, receiptID, sessionID).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", ErrProgramNotFound
+	}
+	return id, err
+}
+
 func (r *SQLRecorder) ReadProgramPage(ctx context.Context, sessionID, programID, cursor string, limit int) (api.CommandProgramReceiptPage, error) {
 	return r.readProgramPage(ctx, sessionID, programID, "", cursor, limit)
 }

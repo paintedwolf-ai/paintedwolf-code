@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "GIT_COMMIT_PATH_DENIED"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: git_commit path denied
 what: '{{ tool }} refused path {{ paintedwolf.path }}.'
 cause: The reviewed Git path is outside the operation’s permitted scope or crosses a host policy boundary.
 why: Repository operations must preserve the same path authority as their file changes.
 fix: Inspect the intended path and operation. Correct an erroneous path only within existing authority; do not switch Git operations or widen scope to bypass a protected target.
 instead: Preserve path authority before retrying the intended Git operation
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: src/main.go

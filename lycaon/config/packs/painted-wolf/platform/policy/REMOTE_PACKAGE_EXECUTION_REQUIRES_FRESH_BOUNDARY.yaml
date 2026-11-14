@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.command, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "REMOTE_PACKAGE_EXECUTION_REQUIRES_FRESH_BOUNDARY"
 effect: block
-category: recoverable
-emit: guard:command_composition_redirect
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
 message: downloaded package code needs a fresh boundary
 what: 'the package action `{{ paintedwolf.command }}` needs a fresh remote-package execution boundary.'
 cause: 'an already-running terminal cannot remove inherited secrets or narrow file and network access after it starts.'
 why: 'downloaded package code must pass the package identity card and start inside the reviewed boundary.'
 fix: 'Run the same action with command instead of sending it into this terminal.'
 instead: 'Use command for this package action; keep the terminal for already-installed local programs'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       command: npx create-vite app

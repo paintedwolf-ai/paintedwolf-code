@@ -10,7 +10,6 @@
     "kind": "policy",
     "on": "tool.pre_invoke",
     "selector": {},
-    "emit": "rule:conformance",
     "when": "true"
   },
   "input": {

@@ -8,15 +8,15 @@ when: paintedwolf.reject_observation == "budget_exhausted"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: guard:worker_summary
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:worker_summary
 message: Worker exhausted tool budget at {{ paintedwolf.tool_loops_used }}/{{ paintedwolf.max_tool_loops }} — resume on child {{ paintedwolf.child_session_id }}
 what: Worker hit iteration_cap closeout without a verified completion report
 cause: Job {{ paintedwolf.job_id }} used {{ paintedwolf.tool_loops_used }}/{{ paintedwolf.max_tool_loops }} tool rounds and finished partial
 why: Coordinators resume exhausted workers on the preserved child session instead of respawning
 fix: '{{ paintedwolf.next_steps }}'
 instead: 'Resume the same child with suggested_resume_max when the host reports the worker finished.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       child_session_id: child-1

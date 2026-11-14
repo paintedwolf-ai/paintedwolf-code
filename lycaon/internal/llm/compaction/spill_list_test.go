@@ -263,7 +263,7 @@ func TestGrowingCompactionMarkerDoesNotSuppressRetry(t *testing.T) {
 func TestCompactionHonorsSpillLimitAndRetriesWhenRaised(t *testing.T) {
 	guidance.SetGuidanceRenderer(promptstest.GuidanceRenderer(t))
 	for _, tc := range []struct{ tool, content string }{
-		{"command", strings.Repeat("observed output\n", 2000) + "original tail"},
+		{"grep", strings.Repeat("observed output\n", 2000) + "original tail"},
 		{"git_diff", `{"files":[{"path":"a.go","diff":"` + strings.Repeat("x", 20000) + `"}]}`},
 	} {
 		for _, mode := range []string{"wire", "transcript"} {

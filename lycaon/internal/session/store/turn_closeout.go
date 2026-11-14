@@ -73,7 +73,7 @@ func (t *sqlTurns) ListPendingModelOutputProjections(ctx context.Context) ([]Pen
 	}
 	var out []PendingModelOutputProjection
 	for _, row := range rows {
-		output, convertErr := modelOutputFromDB(s, row)
+		output, convertErr := modelOutputFromDB(s.dataDir, row)
 		if convertErr != nil {
 			return nil, convertErr
 		}

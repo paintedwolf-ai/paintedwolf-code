@@ -17,8 +17,8 @@
 # paintedwolf.has_completion_report (paintedwolf.closeout_has_answer);
 # paintedwolf.high_risk_tool (compose paintedwolf.tool_is_state, tool_is_delegation,
 # tool_is_handoff and tool_is_task in when);
-# paintedwolf.profile (core profile for the tool profile in force; paintedwolf.session_role
-# for whether the occurrence belongs to a coordinator or a worker).
+# paintedwolf.profile (paintedwolf.tool_profile for the tool profile in force;
+# paintedwolf.session_role for whether the occurrence belongs to a coordinator or a worker).
 
 host: paintedwolf
 
@@ -51,6 +51,7 @@ host_anchors:
   - tool.rejected
 
 profiles:
+  - filesystem
   - content-safety
   - mcp
 
@@ -60,19 +61,32 @@ activity_window: 16
 detectors:
   - detector://secretmatch
 
-# Content mutation is implemented through x-paintedwolf-transform ([OAR-OPS-8]).
-supports_transform: true
-
 expression_nodes_max: 256
 
 host_facts:
  - name: paintedwolf.anchor
    type: string
- - name: paintedwolf.fire_count
+ - name: paintedwolf.tool_profile
+   type: string
+   observation: The tool profile in force for the agent that made the occurrence.
+ - name: paintedwolf.session_posture
+   type: string
+   observation: The session's posture name.
+ - name: paintedwolf.arg_validation_errors
+   type: list<string>
+   observation: Schema validation errors for the call's arguments, in host order; empty when they validate.
+ - name: paintedwolf.path_denied
+   type: bool
+   observation: Whether confinement refused a path the call names.
+ - name: paintedwolf.policy_denied
+   type: bool
+   observation: Whether host policy refused the call before it ran.
+ - name: paintedwolf.repeated_rejection_code
+   type: string
+   observation: The rejection code the loop guard saw repeat across the session's recent calls; empty when none repeats.
+ - name: paintedwolf.credential_decisions
    type: int
- - name: paintedwolf.scoped_fire_count
-   type: int
-   observation: Fires of this rule in this session for the value of the fact its x-paintedwolf-counter-scope names.
+   observation: Earlier credential.assignment occurrences in this session that delivered a decision for the candidate's fingerprint.
  - name: paintedwolf.principal
    type: string
  - name: paintedwolf.principal_roles
@@ -1040,6 +1054,14 @@ host_facts:
    type: list<string>
  - name: paintedwolf.offenders_sample
    type: string
+ - name: paintedwolf.text_action_fenced
+   type: bool
+ - name: paintedwolf.text_action_callable_tools
+   type: list<string>
+ - name: paintedwolf.text_action_loadable_tools
+   type: list<string>
+ - name: paintedwolf.text_action_command_forms
+   type: list<string>
  - name: paintedwolf.unaccounted_group_ids
    type: list<string>
  - name: paintedwolf.unaccounted_omitted

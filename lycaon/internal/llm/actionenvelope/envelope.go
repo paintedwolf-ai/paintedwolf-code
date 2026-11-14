@@ -14,36 +14,64 @@ var (
 	inlineXMLToolCall = regexp.MustCompile(`(?is)<tool_call>\s*<function=([a-zA-Z0-9_-]+)>`)
 )
 
-// Names recognizes a text action envelope naming a tool. Bare JSON must lead
-// the response and name an offered tool; explicit <tool_call> and [TOOL_CALLS]
-// delimiters are recognized even after leading prose or for deferred tools.
-// Trailing prose and argument validity do not matter: recognition requests
-// repair, not execution.
-func Names(content string, offered []string) []string {
+// Tool is one offered tool: its name and argument schema on the request.
+type Tool struct {
+	Name       string
+	ArgsSchema map[string]any
+}
+
+// Observation lists the tools a response invoked in text instead of calling.
+type Observation struct {
+	// Tools holds distinct names in discovery order.
+	Tools []string
+	// Fenced reports that a fence named for a tool carried a call.
+	Fenced bool
+}
+
+// Detect recognizes tool calls written as text. A fence whose info string
+// names a tool counts when its body is that tool's arguments; every other
+// fence is prose. <tool_call> and [TOOL_CALLS] delimiters count after leading
+// prose and for any tool; bare JSON must lead the response and name an
+// offered tool. unoffered names tools the request can reach but does not
+// offer. Recognition requests repair, never execution.
+func Detect(content string, offered []Tool, unoffered []string) Observation {
 	if len(offered) == 0 {
-		return nil
+		return Observation{}
 	}
 	content = strings.TrimSpace(content)
 	if content == "" {
-		return nil
+		return Observation{}
 	}
-	var names []string
-	collectTaggedEnvelopes(content, &names)
-	if len(names) > 0 {
-		return names
+	schemas := make(map[string]Tool, len(offered))
+	names := make([]string, 0, len(offered))
+	for _, tool := range offered {
+		schemas[tool.Name] = tool
+		names = append(names, tool.Name)
+	}
+	known := append(slices.Clone(names), unoffered...)
+	unfenced, fences := splitFences(content, func(name string) bool { return slices.Contains(known, name) })
+	var obs Observation
+	for _, block := range fences {
+		for _, name := range fencedAction(block, schemas, known) {
+			appendName(&obs.Tools, name)
+			obs.Fenced = true
+		}
+	}
+	collectTaggedEnvelopes(unfenced, &obs.Tools)
+	if len(obs.Tools) > 0 {
+		return obs
 	}
 	if strings.HasPrefix(content, "${") {
 		content = content[1:]
 	}
 	if content == "" || (content[0] != '{' && content[0] != '[') {
-		return nil
+		return obs
 	}
-	decodeJSONNames(content, offered, false, &names)
-	return names
+	decodeJSONNames(content, names, false, &obs.Tools)
+	return obs
 }
 
-func collectTaggedEnvelopes(content string, names *[]string) {
-	unfenced := stripCodeFences(content)
+func collectTaggedEnvelopes(unfenced string, names *[]string) {
 	for _, payload := range extractTaggedPayloads(unfenced) {
 		if matches := xmlFunctionRE.FindAllStringSubmatch(payload, -1); len(matches) > 0 {
 			for _, m := range matches {
@@ -56,29 +84,6 @@ func collectTaggedEnvelopes(content string, names *[]string) {
 	for _, m := range inlineXMLToolCall.FindAllStringSubmatch(unfenced, -1) {
 		appendName(names, m[1])
 	}
-}
-
-func stripCodeFences(content string) string {
-	var b strings.Builder
-	inFence := false
-	inToolCall := false
-	for _, line := range strings.SplitAfter(content, "\n") {
-		trimmed := strings.TrimLeft(line, " \t")
-		if !inToolCall && strings.HasPrefix(trimmed, "```") {
-			inFence = !inFence
-			continue
-		}
-		if inFence {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "<tool_call>") && !strings.Contains(trimmed, "</tool_call>") {
-			inToolCall = true
-		} else if inToolCall && strings.Contains(trimmed, "</tool_call>") {
-			inToolCall = false
-		}
-		b.WriteString(line)
-	}
-	return b.String()
 }
 
 func extractTaggedPayloads(s string) []string {
@@ -123,7 +128,7 @@ func decodeJSONNames(content string, offered []string, tagged bool, names *[]str
 		return
 	}
 	var value any
-	decoder := json.NewDecoder(io.LimitReader(strings.NewReader(content), 65536))
+	decoder := json.NewDecoder(io.LimitReader(strings.NewReader(content), maxActionBytes))
 	if decoder.Decode(&value) != nil {
 		return
 	}

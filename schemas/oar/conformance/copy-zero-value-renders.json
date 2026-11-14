@@ -13,28 +13,29 @@
     "selector": {},
     "effect": "block",
     "when": "tool == \"\"",
-    "what": "n={{ paintedwolf.attempts }} errors={{ arg_validation_errors }} dir={{ is_directory }}.",
+    "what": "n={{ example.attempts }} labels={{ example.labels }} name={{ example.name }}.",
     "requires_facts": [
-      "paintedwolf.attempts"
+      "example.attempts",
+      "example.labels",
+      "example.name"
     ]
   },
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
-      "tool": "",
-      "paintedwolf.attempts": 0,
-      "arg_validation_errors": [],
-      "is_directory": false
+      "tool": ""
     },
     "host_facts": {
-      "paintedwolf.attempts": "int"
+      "example.attempts": "int",
+      "example.labels": "list<string>",
+      "example.name": "string"
     }
   },
   "expected": {
     "decision": "block",
     "code": "ZEROES",
     "copy": {
-      "what": "n=0 errors= dir=false."
+      "what": "n=0 labels= name=."
     }
   },
   "id": "copy-zero-value-renders"

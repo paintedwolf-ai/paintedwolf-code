@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "REQUEST_DECISION_ARTIFACT_SHAPE"
 effect: block
-category: recoverable
-emit: guard:request_decision
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_decision
 message: decision has conflicting artifact fields
 what: 'request_decision received an invalid attachment shape: {{ paintedwolf.rejection_reason }}.'
 cause: A decision can attach one nonempty artifact_id or a compare list of distinct nonempty artifact UUIDs.
 why: The card has one visual decision shape.
 fix: Use exactly one attachment field with valid IDs from actual results. Correct malformed entries explicitly; do not silently discard required evidence.
 instead: Branch on Code REQUEST_DECISION_ARTIFACT_SHAPE; use one artifact field
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: stub

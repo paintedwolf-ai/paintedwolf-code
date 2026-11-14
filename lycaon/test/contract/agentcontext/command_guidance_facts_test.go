@@ -163,6 +163,17 @@ func TestCommandGuidanceFactsMatchExecutionSurface(t *testing.T) {
 	})
 }
 
+// terminalDemonstrationTemplates gate on the terminal tools a call offers, so
+// each renders in every offered-route state.
+var terminalDemonstrationTemplates = []string{
+	"units/claim-evidence.md",
+	"units/coordinator-progress-procedure.md",
+	"units/runner-operating-procedure.md",
+	"partials/command-surface.md",
+	"partials/coordinator-final-report.md",
+	"partials/coordinator-verify-before-close.md",
+}
+
 func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 	engine := contractcheck.BundledPromptEngineForRoot(t)
 	for _, tc := range []struct {
@@ -175,7 +186,7 @@ func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 		{name: "none"},
 		{name: "command", tools: []string{"command"}, terminal: true, capture: true},
 		{name: "page", tools: []string{"capture_page"}, page: true},
-		{name: "open only", tools: []string{"terminal_open"}, open: true},
+		{name: "open only", tools: []string{"terminal_open"}, terminal: true, open: true},
 		{name: "snapshot only", tools: []string{"terminal_snapshot"}, terminal: true, snapshot: true},
 		{name: "held terminal", tools: []string{"terminal_open", "terminal_read", "terminal_send", "terminal_snapshot"}, terminal: true, open: true, read: true, send: true, snapshot: true},
 		{name: "partial terminal", tools: []string{"terminal_open", "terminal_snapshot"}, terminal: true, open: true, snapshot: true},
@@ -198,11 +209,9 @@ func TestCommandVisualGuidanceUsesOfferedCaptureRoutes(t *testing.T) {
 			}
 			rendered, err := engine.Render(t.Context(), "units/visual-show-the-design.md", vars)
 			contractcheck.FailErr(t, "render offered visual routes", err)
-			if strings.Contains(rendered, "write any script in a prior step") {
-				t.Fatalf("visual-show-the-design must not instruct writing wrapper scripts: %s", rendered)
-			}
-			if tc.name == "command and terminal_open" && !strings.Contains(rendered, "start the program with `terminal_open` instead of writing a driver script") {
-				t.Fatalf("command + terminal_open must guide opening the terminal session before session tools attach: %s", rendered)
+			for _, name := range terminalDemonstrationTemplates {
+				_, err := engine.Render(t.Context(), name, vars)
+				contractcheck.FailErr(t, "render "+name, err)
 			}
 			t.Logf("VISUAL_ROUTE_SAMPLE [%s]\n%s", tc.name, rendered)
 		})

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://openagentrules.org/spec/1.0/oar.schema.json",
   "title": "OpenAgentRulesDocument",
-  "description": "Open Agent Rules (OAR) document: either a rule (kind schema|policy|invariant|detector, [OAR-DOC-2]) or a hint (kind hint, [OAR-HINT-1]). The document world is closed: any key the matching branch does not declare is rejected, except x- extensions ([OAR-DOC-20]). Normative spec: https://openagentrules.org/spec/1.0/.",
+  "description": "Open Agent Rules (OAR) document: either a rule (kind schema|policy|invariant|detector, [OAR-DOC-2]) or a hint (kind hint, [OAR-HINT-1]). The document world is closed: any key the matching branch does not declare is rejected, except x- extensions ([OAR-DOC-19]). Normative spec: https://openagentrules.org/spec/1.0/.",
   "type": "object",
   "allOf": [
     {
@@ -38,8 +38,8 @@
       "properties": {
         "spec_version": {
           "type": "string",
-          "pattern": "^[0-9]+\\.[0-9]+$",
-          "description": "OAR spec version this document targets. An engine rejects a major it does not support, before any other processing ([OAR-DOC-3])."
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "description": "OAR spec version this document targets. An engine implementing M.n accepts major M at minor n or below, and rejects any other ([OAR-DOC-3])."
         },
         "id": {
           "type": "string",
@@ -49,7 +49,7 @@
         "namespace": {
           "type": "string",
           "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
-          "description": "Publisher scope. Rule identity is (namespace, id); absent means the loading host's own scope. The rendered Code: line stays the bare id ([OAR-DOC-21], [OAR-DOC-22])."
+          "description": "Publisher scope. Rule identity is (namespace, id); absent means the loading host's own scope. The rendered Code: line stays the bare id ([OAR-DOC-20], [OAR-DOC-21])."
         },
         "title": {
           "type": "string",
@@ -89,8 +89,7 @@
             "block",
             "warn",
             "nudge",
-            "allow",
-            "transform"
+            "allow"
           ],
           "description": "The decision effect when the rule fires ([OAR-DOC-8])."
         },
@@ -118,7 +117,7 @@
         "mandatory": {
           "type": "boolean",
           "default": false,
-          "description": "When true, the rule cannot be disabled by overlay, pack, or caller ([OAR-DOC-12])."
+          "description": "When true, the rule is enforced whenever selected and no host mechanism may disable it ([OAR-DOC-12], [OAR-OPS-5]). A mandatory rule cannot be monitored ([OAR-OPS-9])."
         },
         "on_error": {
           "description": "Behaviour when a fact provider or detector errors: fail_closed, fail_open, or a rule identifier to substitute ([OAR-DOC-13]).",
@@ -160,10 +159,6 @@
           "default": "buffered",
           "description": "Streaming evaluation mode for output and tool_result anchors ([OAR-DOC-15])."
         },
-        "emit": {
-          "type": "string",
-          "description": "Provenance channel naming the pipeline stage that published the document ([OAR-DOC-29])."
-        },
         "references": {
           "$ref": "#/$defs/references"
         },
@@ -194,14 +189,6 @@
           "type": "string",
           "description": "Presentation copy: the one-line message ([OAR-DOC-18], Appendix B)."
         },
-        "tools": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "description": "Deprecated top-level tool filter — prefer selector.tools. Still accepted and treated as selector.tools when that is absent ([OAR-DOC-19]).",
-          "deprecated": true
-        },
         "requires_facts": {
           "type": "array",
           "items": {
@@ -209,7 +196,7 @@
             "minLength": 1
           },
           "uniqueItems": true,
-          "description": "Facts this rule needs. A host that does not provide one rejects the rule at load, naming both ([OAR-DOC-23], [OAR-PROF-6])."
+          "description": "Facts this rule needs. A host that does not provide one rejects the rule at load, naming both ([OAR-DOC-22], [OAR-PROF-6])."
         },
         "profile": {
           "type": "string",
@@ -217,29 +204,7 @@
             "portable",
             "host"
           ],
-          "description": "Informational record of the author's intent. Carries no behaviour — portability is determined by the anchor and the facts ([OAR-DOC-24])."
-        },
-        "category": {
-          "type": "string",
-          "description": "Informational publisher tag classifying the rule ([OAR-DOC-30])."
-        },
-        "context_schema": {
-          "type": "object",
-          "additionalProperties": true,
-          "description": "Informational object a publisher may use to describe host context ([OAR-DOC-30])."
-        },
-        "scenarios": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "description": "Informational list of objects, each recording example values for the rule's facts ([OAR-DOC-30])."
-        },
-        "evidence": {
-          "type": "object",
-          "additionalProperties": true,
-          "description": "Informational object carrying the publisher's supporting material ([OAR-DOC-30])."
+          "description": "Informational record of the author's intent. Carries no behaviour — portability is determined by the anchor and the facts ([OAR-DOC-23])."
         }
       },
       "allOf": [
@@ -282,11 +247,35 @@
               ]
             }
           }
+        },
+        {
+          "if": {
+            "properties": {
+              "mandatory": {
+                "const": true
+              }
+            },
+            "required": [
+              "mandatory"
+            ]
+          },
+          "then": {
+            "not": {
+              "properties": {
+                "enforcement": {
+                  "const": "monitor"
+                }
+              },
+              "required": [
+                "enforcement"
+              ]
+            }
+          }
         }
       ],
       "patternProperties": {
-        "^x-": {
-          "description": "Implementation extension. Ignored by other implementations ([OAR-DOC-20])."
+        "^x-[a-z0-9]+(-[a-z0-9]+)*$": {
+          "description": "Implementation extension. Ignored by other implementations ([OAR-DOC-19])."
         }
       },
       "unevaluatedProperties": false
@@ -301,8 +290,8 @@
       "properties": {
         "spec_version": {
           "type": "string",
-          "pattern": "^[0-9]+\\.[0-9]+$",
-          "description": "OAR spec version this document targets ([OAR-DOC-3])."
+          "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$",
+          "description": "OAR spec version this document targets. An engine implementing M.n accepts major M at minor n or below, and rejects any other ([OAR-DOC-3])."
         },
         "id": {
           "type": "string",
@@ -312,7 +301,7 @@
         "namespace": {
           "type": "string",
           "pattern": "^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$",
-          "description": "Publisher scope ([OAR-DOC-21])."
+          "description": "Publisher scope ([OAR-DOC-20])."
         },
         "title": {
           "type": "string",
@@ -332,36 +321,50 @@
           ],
           "description": "Telemetry and presentation only ([OAR-DOC-7])."
         },
-        "emit": {
-          "type": "string",
-          "description": "Provenance channel naming the pipeline stage that published the document ([OAR-DOC-29])."
-        },
         "references": {
           "$ref": "#/$defs/references"
         },
         "what": {
           "type": "string",
-          "description": "Static presentation copy: what happened ([OAR-HINT-3])."
+          "description": "Static presentation copy: what happened ([OAR-HINT-3]).",
+          "not": {
+            "pattern": "\\{\\{|\\{%"
+          }
         },
         "cause": {
           "type": "string",
-          "description": "Static presentation copy: what caused it ([OAR-HINT-3])."
+          "description": "Static presentation copy: what caused it ([OAR-HINT-3]).",
+          "not": {
+            "pattern": "\\{\\{|\\{%"
+          }
         },
         "why": {
           "type": "string",
-          "description": "Static presentation copy: why it matters ([OAR-HINT-3])."
+          "description": "Static presentation copy: why it matters ([OAR-HINT-3]).",
+          "not": {
+            "pattern": "\\{\\{|\\{%"
+          }
         },
         "fix": {
           "type": "string",
-          "description": "Static presentation copy: how to fix it ([OAR-HINT-3])."
+          "description": "Static presentation copy: how to fix it ([OAR-HINT-3]).",
+          "not": {
+            "pattern": "\\{\\{|\\{%"
+          }
         },
         "instead": {
           "type": "string",
-          "description": "Static presentation copy: what to do instead ([OAR-HINT-3])."
+          "description": "Static presentation copy: what to do instead ([OAR-HINT-3]).",
+          "not": {
+            "pattern": "\\{\\{|\\{%"
+          }
         },
         "message": {
           "type": "string",
-          "description": "Static presentation copy: the one-line message ([OAR-HINT-3])."
+          "description": "Static presentation copy: the one-line message ([OAR-HINT-3]).",
+          "not": {
+            "pattern": "\\{\\{|\\{%"
+          }
         }
       },
       "anyOf": [
@@ -397,8 +400,8 @@
         }
       ],
       "patternProperties": {
-        "^x-": {
-          "description": "Implementation extension. Ignored by other implementations ([OAR-DOC-20])."
+        "^x-[a-z0-9]+(-[a-z0-9]+)*$": {
+          "description": "Implementation extension. Ignored by other implementations ([OAR-DOC-19])."
         }
       },
       "unevaluatedProperties": false

@@ -14,9 +14,9 @@
     "effect": "block",
     "when": "tool == \"read\"",
     "requires_facts": [
-      "paintedwolf.breaker_open"
+      "example.breaker_open"
     ],
-    "fix": "{% if paintedwolf.breaker_open %}The host's circuit breaker is open; wait for it to reset.{% else %}Change the approach before calling again.{% endif %}"
+    "fix": "{% if example.breaker_open %}The host's circuit breaker is open; wait for it to reset.{% else %}Change the approach before calling again.{% endif %}"
   },
   "input": {
     "anchor": "tool.pre_invoke",
@@ -24,7 +24,7 @@
       "tool": "read"
     },
     "host_facts": {
-      "paintedwolf.breaker_open": "bool"
+      "example.breaker_open": "bool"
     }
   },
   "expected": {

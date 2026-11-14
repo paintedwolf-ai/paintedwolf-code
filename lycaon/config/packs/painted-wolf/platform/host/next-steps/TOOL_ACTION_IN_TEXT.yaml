@@ -1,0 +1,12 @@
+steps:
+  - when: "size(paintedwolf.text_action_command_forms) > 0"
+    tool: "command"
+    say: "Native programs now do this work: run {{ paintedwolf.text_action_command_forms }} through {{ call }}. Native `--help` lists supported options."
+    otherwise: "This request cannot run that native program; use an offered tool or report the missing capability."
+  - when: "size(paintedwolf.text_action_loadable_tools) > 0"
+    tool: "request_tools"
+    pick:
+      need: "paintedwolf.text_action_loadable_tools"
+    complete: true
+    say: "Call {{ call }}. Its schema arrives on the next model call; then make the call with that schema. Loading grants no additional permissions."
+    otherwise: "Choose an available tool that can perform the work, or report the missing capability."

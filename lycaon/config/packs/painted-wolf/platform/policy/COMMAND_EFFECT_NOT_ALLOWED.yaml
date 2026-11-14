@@ -3,18 +3,18 @@ id: COMMAND_EFFECT_NOT_ALLOWED
 kind: policy
 on: tool.rejected
 selector: {}
-requires_facts: [paintedwolf.expected_form, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line]
+requires_facts: [paintedwolf.expected_form, paintedwolf.rejection_code, paintedwolf.source_column, paintedwolf.source_line, paintedwolf.tool_profile]
 when: paintedwolf.rejection_code == "COMMAND_EFFECT_NOT_ALLOWED"
 effect: block
-category: recoverable
-emit: guard:command_effect_admission
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_effect_admission
 message: bound command effects are outside the active profile
-what: 'This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if profile %}profile **{{ profile }}**{% else %}the active permission profile{% endif %}.'
+what: 'This operation{% if paintedwolf.source_line %} at {{ paintedwolf.source_line }}:{{ paintedwolf.source_column }}{% endif %} is outside {% if paintedwolf.tool_profile %}profile **{{ paintedwolf.tool_profile }}**{% else %}the active permission profile{% endif %}.'
 cause: Its bound effect set is not permitted by the active command surface.
 why: Discovering a command or receiving an outer approval does not authorize its child effects. Earlier completed operations remain authoritative.
 fix: '{% if paintedwolf.expected_form %}Available forms on this surface: {{ paintedwolf.expected_form }}.{% else %}This operation has no available form on the active surface.{% endif %}'
 instead: Branch on Code; preserve earlier outcomes and use an operation permitted by the current profile. Do not retry through external execution or replay the whole program.
-scenarios:
+x-paintedwolf-scenarios:
   - id: read-only-write
     vars:
       tool: command

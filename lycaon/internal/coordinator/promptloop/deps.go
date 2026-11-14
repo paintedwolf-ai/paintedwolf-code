@@ -42,10 +42,15 @@ func (l *modelTurn) sessionRoutingClient(sess *api.Session) modelcall.LLMClient 
 
 // trainingCapturePolicy gives an opted-in collection turn the durable
 // transcript policy and the provider registry's offline request rendering.
-func (l *modelTurn) trainingCapturePolicy(ctx context.Context) trainingcapture.Policy {
+func (l *modelTurn) trainingCapturePolicy(ctx context.Context, sess *api.Session, procedureProfile string) trainingcapture.Policy {
 	policy := trainingcapture.Policy{StorageChanges: func(msg api.Message) bool { return l.Projection.storageChanges(ctx, msg) }}
 	if l.Deps.LLMService != nil && l.Deps.LLMService.Registry != nil {
 		policy.Render = l.Deps.LLMService.Registry.RenderRequest
+	}
+	if surface := l.Context.Deps.PromptSurface; surface != nil {
+		policy.Surface = func(ctx context.Context, offered []string) (trainingcapture.PromptSurface, error) {
+			return surface(ctx, sess, procedureProfile, offered)
+		}
 	}
 	return policy
 }

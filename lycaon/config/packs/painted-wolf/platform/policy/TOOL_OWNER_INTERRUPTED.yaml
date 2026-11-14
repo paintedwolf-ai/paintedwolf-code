@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "TOOL_OWNER_INTERRUPTED"
 effect: block
-category: recoverable
-emit: guard:tool_owner
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool_owner
 message: Subsystem owner interrupted the action before settlement
 what: The operation was interrupted.
 cause: '{{ paintedwolf.rejection_reason }}'
 why: An interruption does not establish completion.
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: implement

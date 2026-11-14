@@ -15,6 +15,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/bgprocess"
 	"github.com/lycaon/lycaon/internal/commandprogram"
+	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/lineage"
 	"github.com/lycaon/lycaon/internal/toolcontract"
@@ -91,6 +92,8 @@ type jobProcessTracker struct {
 	once     sync.Once
 	ready    chan struct{}
 	onRecord func(jobProcess)
+	// attachStage counts an external stage's confinement toward the job.
+	attachStage func(bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost)
 }
 
 func noteJobProcess(ctx context.Context, pid int, args []string) {
@@ -115,6 +118,16 @@ func noteJobProcess(ctx context.Context, pid int, args []string) {
 
 func noteJobNative(ctx context.Context, args []string) {
 	noteJobProcess(ctx, 0, args)
+}
+
+// attachJobStage counts an external stage launched inside a & job toward that
+// job's confinement. The returned func records the stage's settled reports.
+func attachJobStage(ctx context.Context, stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost) {
+	t, _ := ctx.Value(jobProcessKey{}).(*jobProcessTracker)
+	if t == nil || t.attachStage == nil {
+		return func(confine.SandboxRefusals, []confine.EgressHost) {}
+	}
+	return t.attachStage(stage)
 }
 
 // BeginProgram prunes finished jobs from prior programs before a new program
@@ -230,6 +243,9 @@ func (j *SessionJobs) start(ctx context.Context, commandLine string, run func(co
 	j.mu.Unlock()
 	tracker.onRecord = func(process jobProcess) {
 		j.recordProcess(handle, process)
+	}
+	tracker.attachStage = func(stage bgprocess.ProgramStage) func(confine.SandboxRefusals, []confine.EgressHost) {
+		return j.Registry.AttachProgramStage(context.WithoutCancel(jobCtx), j.SessionID, handle, stage)
 	}
 	close(ready)
 	select {
@@ -429,6 +445,9 @@ func (j *SessionJobs) Wait(ctx context.Context, reference string, activity *comm
 		}()
 	}
 	_, _, waitErr := j.Registry.Lifecycle.Wait(ctx, j.SessionID, handle)
+	if waitErr == nil {
+		j.Registry.Observe(j.SessionID, handle)
+	}
 	j.mu.Lock()
 	outcome, ok := j.results[handle]
 	j.mu.Unlock()

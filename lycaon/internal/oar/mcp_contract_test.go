@@ -43,16 +43,11 @@ func TestMCPCatalogueConditionParity(t *testing.T) {
 			t.Fatalf("condition catalogue missing %q: %v", name, err)
 		}
 	}
-	if err := checkWhenAgainstSpec(`mcp_server_configured_for("x")`, nil); err != nil {
-		t.Fatalf("mcp_server_configured fn: %v", err)
-	}
-	if err := checkWhenAgainstSpec(`mcp_server_enabled_for("x")`, nil); err != nil {
-		t.Fatalf("mcp_server_enabled fn: %v", err)
-	}
 	for _, expr := range []string{
-		`mcp_has_field("k")`,
+		`"x" in mcp_configured_servers`,
+		`"x" in mcp_enabled_servers`,
 		`mcp_field_bool("k")`,
-		`mcp_field_string("k") == ""`,
+		`mcp_result.k == ""`,
 		`mcp_field_int("k") == 0`,
 	} {
 		if err := checkWhenAgainstSpec(expr, nil); err != nil {

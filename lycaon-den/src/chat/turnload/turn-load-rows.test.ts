@@ -23,7 +23,6 @@ const turn = (opening: string, patch: Partial<TurnLoad> = {}): TurnLoad => ({
   kind: { value: "change", confidence: 0.86 },
   floor: ["read"],
   tools: [{ tool: "git_commit", source: "predicted", p: 0.88, carried: false }, { tool: "git_status", source: "predicted", p: 0.91, carried: false }],
-  guides: { rendered: 6, omitted: 9 },
   ...patch,
 });
 
@@ -61,7 +60,7 @@ describe("turn load rows", () => {
     const [floor] = turnLoadRows([user("u1", 1), assistant("a1", 2, [["c1", "read"]])], {
       u1: [turn("u1", { tools: [], kind: { value: "inspect", confidence: 0.9 } })],
     });
-    expect(turnLoadRowSummary(floor!)).toEqual({ title: "floor only · 9 guides left out", operation: "inspect", state: "438 ms" });
+    expect(turnLoadRowSummary(floor!)).toEqual({ title: "floor only", operation: "inspect", state: "438 ms" });
   });
 });
 

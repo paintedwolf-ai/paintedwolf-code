@@ -29,13 +29,9 @@ func TestTurnLoadWireProjectsATurnDecision(t *testing.T) {
 	engine := decide.Engine{Name: "Bialy", Model: "mmbert-base", Head: "turn-load"}
 	decision := turnload.Decision{
 		Kind: "change", KindConfidence: 0.86,
-		Tools:   map[string]float64{"git_commit": 0.88, "edit": 0.62},
-		Omitted: map[string]turnload.Verdict{"web-research": {P: 0.06, Confidence: 0.94}},
-		Candidates: []turnload.Candidate{
-			{Kind: turnload.KindTool, ID: "git_commit"}, {Kind: turnload.KindTool, ID: "edit"},
-			{Kind: turnload.KindGuide, ID: "web-research"}, {Kind: turnload.KindGuide, ID: "git-consent"}, {Kind: turnload.KindGuide, ID: "edit-ladder"},
-		},
-		Engine: engine,
+		Tools:      map[string]float64{"git_commit": 0.88, "edit": 0.62},
+		Candidates: []turnload.Candidate{{ID: "git_commit"}, {ID: "edit"}},
+		Engine:     engine,
 	}
 	boundary := turnload.Boundary{Cache: turnload.CacheWarm, IdleMS: 95_000, ColdAfterMS: 360_000}
 	standing := turnload.Standing{
@@ -44,7 +40,6 @@ func TestTurnLoadWireProjectsATurnDecision(t *testing.T) {
 			{Tool: "edit", Source: turnload.SourcePredicted, P: 0.62, Turn: "user-0"},
 			{Tool: "web_search", Source: turnload.SourceRequested, Need: "look it up", Turn: "user-0"},
 		},
-		Omitted: []string{"web-research"},
 	}
 	receipt := store.TurnLoadReceipt{
 		ID: 7, SessionID: "s1", Trigger: store.TurnLoadTriggerTurn, OpeningMessageID: "user-1",
@@ -80,22 +75,19 @@ func TestTurnLoadWireProjectsATurnDecision(t *testing.T) {
 	if got.Boundary == nil || got.Boundary.Cache != api.TurnLoadCacheStateWarm || got.Boundary.IdleMs != 95_000 || got.Boundary.ColdAfterMs != 360_000 {
 		t.Fatalf("boundary = %+v", got.Boundary)
 	}
-	if got.Guides == nil || got.Guides.Rendered != 2 || got.Guides.Omitted != 1 {
-		t.Fatalf("guides = %+v, want 2 rendered of 3 with 1 omitted", got.Guides)
-	}
 	if got.Match != nil || got.ElapsedMs != 438 {
 		t.Fatalf("turn receipt carries a match or lost its timing: %+v", got)
 	}
 }
 
-func TestTurnLoadWireAbstainedTurnCarriesNoEngineOrGuides(t *testing.T) {
-	decision := turnload.Decision{Abstained: true, Reason: "engine unavailable", Candidates: []turnload.Candidate{{Kind: turnload.KindGuide, ID: "web-research"}}}
+func TestTurnLoadWireAbstainedTurnCarriesNoEngineOrKind(t *testing.T) {
+	decision := turnload.Decision{Abstained: true, Reason: "engine unavailable", Candidates: []turnload.Candidate{{ID: "git_commit"}}}
 	receipt := store.TurnLoadReceipt{
 		SessionID: "s1", Trigger: store.TurnLoadTriggerTurn, OpeningMessageID: "user-1", Abstained: true, Reason: "engine unavailable",
 		Decisions: decisionsJSON(t, map[string]any{"turn": decision}),
 	}
 	got := transcript.TurnLoadWire(receipt)
-	if !got.Abstained || got.Reason != "engine unavailable" || got.Engine != nil || got.Guides != nil || got.Kind != nil {
+	if !got.Abstained || got.Reason != "engine unavailable" || got.Engine != nil || got.Kind != nil {
 		t.Fatalf("abstained projection = %+v", got)
 	}
 	if got.Tools == nil || len(got.Tools) != 0 || got.Floor == nil {

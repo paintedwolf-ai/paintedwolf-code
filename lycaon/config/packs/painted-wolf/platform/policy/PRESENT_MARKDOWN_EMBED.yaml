@@ -8,19 +8,19 @@ selector: {}
 requires_facts: [paintedwolf.offender_count, paintedwolf.offenders_omitted, paintedwolf.offenders_sample, paintedwolf.reject_observation]
 when: paintedwolf.reject_observation == "present_markdown_embed"
 effect: block
-category: recoverable
-emit: guard:coordinator_synthesis
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator_synthesis
 message: Synthesis embedded visual artifact id(s) as markdown images
 what: The answer used markdown image syntax with {{ paintedwolf.offender_count }} visual artifact id(s) as the URL. Bare UUIDs in markdown are not resolved — that renders as a broken image.
 cause: Images are presented with an `[artifact:<id>]` directive, not ![…](uuid) inside prose
 why: '{{ paintedwolf.offenders_sample }}{% if paintedwolf.offenders_omitted %} +{{ paintedwolf.offenders_omitted }} more{% endif %}'
 fix: Send the whole answer again without the image syntax; it replaces the retained answer. Write `[artifact:<id>]` for IDs this session has seen, from any turn or an attachment, and describe in prose what each shows. Preserve the answer and its valid formatting; omit an image whose artifact ID was never observed.
 instead: Use `[artifact:<id>]` for observed artifacts; do not use a bare artifact UUID as an image URL
-evidence:
+x-paintedwolf-evidence:
   ui_label: Visual present
   ui_check_id: visual_present
   in_session_retry: true
-scenarios:
+x-paintedwolf-scenarios:
   - id: bare_uuid_markdown
     vars:
       offender_count: 1

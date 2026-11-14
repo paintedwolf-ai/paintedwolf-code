@@ -8,14 +8,14 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKFLOW_FEEDBACK_PENDING"
 effect: block
-category: expected_behavior
-emit: guard:workflow
+x-paintedwolf-category: expected_behavior
+x-paintedwolf-emit: guard:workflow
 message: The workflow is waiting for an existing feedback or decision card.
 what: The workflow is waiting for an existing feedback or decision card.
 cause: Pending user input has not been resolved.
 why: The recorded card response is authoritative; coordinator prose cannot supply it.
 fix: Read the pending input in the current workflow state and wait for the user to resolve that card. Do not create another question or dispatch around the pending choice.
 instead: Continue after the host records the response and updates workflow readiness.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars: {tool: workflow_transition, phase: clarify}

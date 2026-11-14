@@ -1,9 +1,10 @@
 {
   "id": "fire-counter-threshold-crossing",
-  "title": "The threshold on an engine counter lives in the rule, not in the engine",
+  "title": "A rule reads another rule's counter on a later occurrence",
   "covers": [
     "OAR-FIRE-3",
-    "OAR-FIRE-4"
+    "OAR-FIRE-4",
+    "OAR-FIRE-6"
   ],
   "rule": [
     {
@@ -13,7 +14,6 @@
       "on": "tool.pre_invoke",
       "selector": {},
       "effect": "nudge",
-      "emit": "rule:conformance",
       "when": "tool == \"read\"",
       "on_fire": [
         "increment_breaker",
@@ -28,8 +28,7 @@
       "on": "tool.pre_invoke",
       "selector": {},
       "effect": "block",
-      "emit": "rule:conformance",
-      "when": "breaker_count >= 3"
+      "when": "breaker_count_of(\"BELOW_THRESHOLD\") >= 3"
     }
   ],
   "input": {
@@ -37,18 +36,26 @@
     "facts": {
       "tool": "read"
     },
-    "session_id": "fixture-session"
+    "session_id": "fixture-session",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "read"
+        }
+      }
+    ]
   },
   "expected": {
-    "decision": "nudge",
-    "code": "BELOW_THRESHOLD",
+    "decision": "block",
+    "code": "THRESHOLD_ARMED",
     "applied": [
       "BELOW_THRESHOLD:fired",
-      "THRESHOLD_ARMED:passed"
+      "THRESHOLD_ARMED:fired"
     ],
     "counters": {
       "BELOW_THRESHOLD": {
-        "breaker_count": 3
+        "breaker_count": 6
       }
     }
   }

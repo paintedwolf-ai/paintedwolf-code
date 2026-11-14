@@ -13,7 +13,6 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "nudge",
-    "emit": "rule:conformance",
     "when": "tool == \"read\"",
     "on_fire": [
       "increment_breaker"

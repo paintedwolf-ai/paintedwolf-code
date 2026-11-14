@@ -31,11 +31,10 @@ var kindOrder = map[Kind]int{
 type Effect string
 
 const (
-	EffectBlock     Effect = "block"
-	EffectWarn      Effect = "warn"
-	EffectNudge     Effect = "nudge"
-	EffectAllow     Effect = "allow"
-	EffectTransform Effect = "transform"
+	EffectBlock Effect = "block"
+	EffectWarn  Effect = "warn"
+	EffectNudge Effect = "nudge"
+	EffectAllow Effect = "allow"
 )
 
 // OnFireAction is the closed declared-effect vocabulary (schema SSOT).
@@ -111,16 +110,13 @@ type Copy struct {
 type Rule struct {
 	document *oarcore.Rule
 	raw      map[string]any // the authored document
-	// CounterScope names a string fact whose value keys an additional fire
-	// counter ([OAR-FIRE-4]); empty when the rule declares none.
-	CounterScope string
 	// Disabled is set by operator configuration, never by the document.
 	Disabled    bool
 	SpecVersion string // the document's spec_version ([OAR-DOC-3])
 	ID          string
 	Namespace   string // publisher scope; empty means the loading host's own
-	// RequiresFacts are the facts the rule needs beyond the core tier
-	// ([OAR-DOC-23]).
+	// RequiresFacts are the facts and functions the rule reads beyond the core
+	// tier ([OAR-DOC-22]).
 	RequiresFacts []string
 	Severity      string
 	Title         string
@@ -140,8 +136,6 @@ type Rule struct {
 	References  References
 	Detector    *DetectorRef
 	Copy        Copy
-	// Transform is present if and only if Effect is transform ([OAR-OPS-8]).
-	Transform *TransformSpec
 
 	// Audience narrows the tool profiles that can receive this rule when the
 	// anchor and selector are broader than its `when` condition. Empty means
@@ -158,25 +152,6 @@ type Rule struct {
 	Source string // path or pack name
 }
 
-// TransformSpec describes a content mutation ([OAR-OPS-8]).
-type TransformSpec struct {
-	Action      string
-	Target      string
-	Replacement string
-	// HasReplacement distinguishes an absent replacement from an empty one.
-	HasReplacement bool
-}
-
-// Advisory is one enforced same-effect fire on a nudge or warn decision.
-// Copy is rendered independently of the others.
-// Data is this host's per-code reject payload for envelope rendering.
-type Advisory struct {
-	Code string
-	Rule string
-	Copy map[string]string
-	Data map[string]any
-}
-
 // Decision is the engine outcome for one occurrence ([OAR-EVAL-6]).
 type Decision struct {
 	Effect Effect
@@ -186,10 +161,6 @@ type Decision struct {
 	Rule   string
 	Data   map[string]any
 	OnFire []OnFireAction
-	// Advisories is every enforced rule that fired with the winning advisory
-	// effect, in evaluation order. Empty when the decision is block, transform,
-	// or none. The first item is the named decision.
-	Advisories []Advisory
 	// Copy is the rendered copy of the rule whose identifiers this decision
 	// carries ([OAR-COPY-7]). Substitution does not change the decision
 	// ([OAR-COPY-6], [OAR-DOC-18]).
@@ -201,6 +172,9 @@ type RuleSet struct {
 	byID    map[string]*Rule
 	byOn    map[string][]*Rule
 	ordered []*Rule
+	// hints are the rule set's hint documents, loaded and never evaluated
+	// ([OAR-HINT-1]).
+	hints []*oarcore.Hint
 }
 
 // NewRuleSet indexes rules by id and on-anchor with Emit ordering.
@@ -216,10 +190,12 @@ func NewRuleSet(rules []*Rule) *RuleSet {
 		if oa != ob {
 			return oa < ob
 		}
-		// [OAR-EVAL-1] ties break on the *qualified* identifier, compared by
-		// Unicode code point. Sorting on the bare id would let two publishers'
-		// rules interleave differently on two engines.
-		return a.Qualified() < b.Qualified()
+		// [OAR-EVAL-1] then id, then namespace with an absent namespace first,
+		// compared by code point (UTF-8 byte order agrees).
+		if a.ID != b.ID {
+			return a.ID < b.ID
+		}
+		return a.Namespace < b.Namespace
 	})
 	for _, r := range ordered {
 		rs.byID[r.Qualified()] = r
@@ -239,43 +215,14 @@ func (rs *RuleSet) Get(id string) (*Rule, bool) {
 }
 
 // RejectDuplicateIdentities refuses a set that contains two rules with the
-// same qualified identifier ([OAR-DOC-22]).
-func RejectDuplicateIdentities(rs *RuleSet) error {
-	if rs == nil {
-		return nil
-	}
-	seen := make(map[string]bool, rs.Len())
+// bindErrorSubstitutes binds each on_error substitute to the rule it names in
+// the same namespace, whose copy the substituted block carries ([OAR-OPS-4]).
+// The rule-set check has already refused a substitute that names no rule.
+func bindErrorSubstitutes(rs *RuleSet) {
 	for _, r := range rs.All() {
-		if r == nil {
-			continue
-		}
-		q := r.Qualified()
-		if seen[q] {
-			return fmt.Errorf("[OAR-DOC-22] rule set contains two rules with qualified identifier %s", q)
-		}
-		seen[q] = true
-	}
-	return nil
-}
-
-// ResolveErrorSubstitutes binds each on_error substitute to the loaded rule
-// it names, whose copy the substituted block then carries. A substitute that
-// names no loaded rule still replaces the identifier ([OAR-OPS-4]).
-func ResolveErrorSubstitutes(rs *RuleSet) {
-	if rs == nil {
-		return
-	}
-	for _, r := range rs.All() {
-		if r == nil {
-			continue
-		}
 		r.errorTarget = nil
-		want := errorSubstitute(r)
-		if want == "" {
-			continue
-		}
-		if target, ok := rs.Get(want); ok && target.Qualified() == want {
-			r.errorTarget = target
+		if want := errorSubstitute(r); want != "" {
+			r.errorTarget, _ = rs.Get(want)
 		}
 	}
 }
@@ -288,10 +235,7 @@ func errorSubstitute(r *Rule) string {
 	case "", "fail_closed", "fail_open":
 		return ""
 	}
-	if !strings.Contains(want, "/") && r.Namespace != "" {
-		want = r.Namespace + "/" + want
-	}
-	return want
+	return oarcore.Identity(r.Namespace, want)
 }
 
 // OnAnchor returns rules bound to anchor id in Emit order.

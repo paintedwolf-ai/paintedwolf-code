@@ -27,10 +27,6 @@
       "sha256": "550f30b94d5c6a8680d2cb2a607ebc9ee33e709c7679f72606d1e9fda17f2e90",
       "label": "open1-turn-load-B5-release-independent"
     },
-    "guide-load": {
-      "sha256": "e0305aa8b62ddc144774785f2e0d3710604af65cd21015662428870f8d34b76e",
-      "label": "open1-turn-load-B7G-release-independent"
-    },
     "unit-rank": {
       "sha256": "c62674993eabba94660eccfafbb6e04d1549adc7335656c0ddefa7f068fa58f7",
       "label": "open1-unit-rank-e4-dense1"

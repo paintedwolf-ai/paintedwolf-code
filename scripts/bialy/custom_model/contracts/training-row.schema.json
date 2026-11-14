@@ -1,0 +1,281 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pw-training-row/1",
+  "title": "Admitted training row",
+  "description": "A candidate with the factory's admission: eligibility, category, the truthful turn outcome and, for a diagnostic, its witness check. Training reads only eligible rows with a passing quality review.",
+  "type": "object",
+  "required": [
+    "schema",
+    "session",
+    "message_id",
+    "prompt",
+    "target",
+    "request_capture",
+    "execution",
+    "response_sha256",
+    "admission",
+    "quality",
+    "source",
+    "split_group"
+  ],
+  "properties": {
+    "schema": {
+      "const": "pw-training-row/1"
+    },
+    "session": {
+      "type": "string",
+      "minLength": 1
+    },
+    "message_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "prompt": {
+      "type": "array",
+      "minItems": 1
+    },
+    "target": {
+      "type": "object",
+      "required": [
+        "role",
+        "text",
+        "tool_calls"
+      ],
+      "properties": {
+        "role": {
+          "const": "assistant"
+        },
+        "text": {
+          "type": "string"
+        },
+        "tool_calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "name",
+              "arguments"
+            ],
+            "properties": {
+              "arguments": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "request_capture": {
+      "type": "object",
+      "required": [
+        "schema",
+        "request_id",
+        "session_id",
+        "message_id",
+        "host_revision",
+        "epoch",
+        "contract_sha256",
+        "catalog_sha256",
+        "student_provider",
+        "student_kind",
+        "student_model",
+        "dispatch_sha256",
+        "state_sha256",
+        "messages",
+        "tools",
+        "controls",
+        "sha256"
+      ],
+      "properties": {
+        "schema": {
+          "const": "pw-model-request-capture/3"
+        },
+        "contract_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "messages": {
+          "type": "array",
+          "minItems": 1
+        },
+        "tools": {
+          "type": "array"
+        },
+        "controls": {
+          "type": "object"
+        },
+        "sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "response_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "source": {
+      "type": "object",
+      "required": [
+        "bundle_sha256",
+        "capture_sha256"
+      ],
+      "properties": {
+        "bundle_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "capture_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      }
+    },
+    "split_group": {
+      "type": "string",
+      "minLength": 1
+    },
+    "execution": {
+      "type": "object",
+      "required": [
+        "receipt_id",
+        "settled_at",
+        "calls",
+        "committed"
+      ],
+      "properties": {
+        "receipt_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "call_id",
+              "tool",
+              "offered",
+              "recorded"
+            ],
+            "properties": {
+              "call_id": {
+                "type": "string",
+                "minLength": 1
+              },
+              "tool": {
+                "type": "string",
+                "minLength": 1
+              },
+              "offered": {
+                "type": "boolean"
+              },
+              "recorded": {
+                "type": "boolean"
+              },
+              "operation_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              },
+              "settlement": {
+                "enum": [
+                  "settled",
+                  "unsettled"
+                ]
+              },
+              "semantic_outcome": {
+                "enum": [
+                  "success",
+                  "failure",
+                  "unknown"
+                ]
+              },
+              "effect_state": {
+                "enum": [
+                  "none",
+                  "known",
+                  "unknown"
+                ]
+              },
+              "replays_unknown_effects": {
+                "type": "boolean"
+              }
+            }
+          }
+        },
+        "committed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "admission": {
+      "type": "object",
+      "required": [
+        "eligibility",
+        "category",
+        "semantic_outcome"
+      ],
+      "properties": {
+        "eligibility": {
+          "const": "eligible"
+        },
+        "category": {
+          "enum": [
+            "ordinary",
+            "diagnostic",
+            "recovery",
+            "closeout"
+          ]
+        },
+        "semantic_outcome": {
+          "enum": [
+            "success",
+            "failure",
+            "unknown"
+          ]
+        },
+        "witness": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "quality": {
+      "type": "object",
+      "required": [
+        "verdict",
+        "evidence_ids",
+        "request_sha256",
+        "response_sha256",
+        "method"
+      ],
+      "properties": {
+        "verdict": {
+          "const": "pass"
+        },
+        "evidence_ids": {
+          "type": "array",
+          "minItems": 1
+        },
+        "request_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "response_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        },
+        "method": {
+          "enum": [
+            "model_judge",
+            "deterministic"
+          ]
+        }
+      }
+    }
+  }
+}

@@ -2,14 +2,13 @@
   "id": "mcp-server-disabled-blocked",
   "title": "A call to a configured but disabled bridged server is blocked",
   "covers": [
-    "OAR-DOC-23",
+    "OAR-DOC-22",
     "OAR-FACT-13"
   ],
   "rule": {
     "spec_version": "1.0",
-    "namespace": "example.security",
-    "emit": "example:pack",
     "id": "MCP_SERVER_DISABLED",
+    "namespace": "example.security",
     "kind": "policy",
     "on": "tool.pre_invoke",
     "selector": {},
@@ -19,7 +18,9 @@
     ],
     "when": "mcp_server_id != \"\" && !mcp_server_enabled",
     "effect": "block",
-    "profile": "portable"
+    "profile": "portable",
+    "what": "The call targets a bridged server that is configured but not enabled.",
+    "fix": "Enable the server in the catalogue, or route the call elsewhere."
   },
   "input": {
     "anchor": "tool.pre_invoke",
@@ -32,7 +33,7 @@
     "decision": "block",
     "code": "MCP_SERVER_DISABLED",
     "applied": [
-      "MCP_SERVER_DISABLED:fired"
+      "example.security/MCP_SERVER_DISABLED:fired"
     ]
   }
 }

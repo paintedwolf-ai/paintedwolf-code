@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "WORKFLOW_ADVANCE_INACTIVE"
 effect: block
-category: expected_behavior
-emit: rule:coordinator
+x-paintedwolf-category: expected_behavior
+x-paintedwolf-emit: rule:coordinator
 message: workflow_advance requires an active running workflow run
 what: workflow_advance has no active running workflow to advance.
 cause: '{{ paintedwolf.rejection_reason }}'
 why: Advancing a phase cannot create or resume a workflow implicitly.
 fix: Inspect the current session workflow state and preserve accepted results. If the task needs a new workflow, use its proposal and human approval path; do not replace a paused or completed run merely to make this call available.
 instead: Follow the current workflow state and task intent
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

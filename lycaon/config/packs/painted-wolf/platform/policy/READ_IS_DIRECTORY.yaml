@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "READ_IS_DIRECTORY"
 effect: block
-category: recoverable
-emit: guard:read
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:read
 message: read path is a directory
 what: '{{ tool }} needs a file path; {{ paintedwolf.path }} is a directory.'
 cause: This operation consumes file contents. A symbol lookup also requires a concrete file path.
 why: Separating file read from directory listing keeps survey JSON structured and capped.
 fix: '{{ paintedwolf.next_steps }} If no listing is available, use an already observed file path or report the missing path information to the caller.'
 instead: Choose the actual file needed for the operation; do not repeat the directory request or assume a missing tool can be called.
-scenarios:
+x-paintedwolf-scenarios:
   - id: root
     vars:
       path: .
