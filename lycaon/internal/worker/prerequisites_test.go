@@ -87,7 +87,7 @@ func TestPrerequisitesWaitForPromotedSuccessfulOutput(t *testing.T) {
 				// coordinator to replace or withdraw them; nothing cancels them.
 				_, err = q.RecoverExpiredClaims(t.Context())
 				testutil.FailErr(t, "recover", err)
-				if claim, err := q.ClaimNext(t.Context(), ClaimRequest{}); err != nil || claim != nil {
+				if claim, err := q.ClaimNext(t.Context(), ClaimRequest{}); !errors.Is(err, ErrNoPendingJobs) || claim != nil {
 					t.Fatalf("claimed a blocked consumer: %+v, %v", claim, err)
 				}
 				for _, blocked := range []string{first, second} {

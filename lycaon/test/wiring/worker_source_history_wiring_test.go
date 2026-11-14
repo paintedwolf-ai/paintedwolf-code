@@ -194,10 +194,12 @@ func TestSourceHistoryACOV15WorkerWithNothingToShow(t *testing.T) {
 			historyCall("overview", map[string]any{}),
 			historyCall("diff", map[string]any{"path": "main.go", "mode": "diff"}),
 		)
+		// Every round starts from a checkpoint, so even a read worker on the
+		// trunk has a recorded window; it holds nothing.
 		for _, call := range []string{"overview", "diff"} {
 			result := decodeWorkerHistory(t, results, call)
-			if result.Recorded || len(result.Files) != 0 || result.Note == "" || result.Since != nil {
-				t.Fatalf("%s = %+v, want an unknown window with a note", call, result)
+			if !result.Recorded || len(result.Files) != 0 || result.Since == nil {
+				t.Fatalf("%s = %+v, want a recorded window with nothing in it", call, result)
 			}
 		}
 	})
