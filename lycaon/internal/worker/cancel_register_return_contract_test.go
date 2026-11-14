@@ -128,8 +128,8 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	jobID := setupRunningWorker(t, queue, child)
 
 	reqCtx, reqCancel := context.WithCancel(context.Background())
-	out, err := svc.CancelJob(reqCtx, jobID, "user-aborted")
-	testutil.FailErr(t, "CancelJob", err)
+	out, err := svc.CancelForSession(reqCtx, "parent-1", jobID, "coordinator stop")
+	testutil.FailErr(t, "CancelForSession", err)
 	if out.Status != api.WorkerStatusRunning {
 		t.Fatalf("interim status = %q want running (register-and-return)", out.Status)
 	}
@@ -148,7 +148,7 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	if !ok {
 		t.Fatal("registration cleared by request cancellation; cancel must outlive the request")
 	}
-	if reg.jobID != jobID || reg.reason != "user-aborted" {
+	if reg.jobID != jobID || reg.reason != "coordinator stop" {
 		t.Fatalf("registration = %+v", reg)
 	}
 
@@ -168,6 +168,21 @@ func TestCancelRunningGracefulOutlivesRequest(t *testing.T) {
 	}
 }
 
+// A person's stop fences a running worker at once: no closeout turn is
+// registered for it.
+func TestPersonStopRunsNoCloseout(t *testing.T) {
+	queue := NewInMemoryQueue(2)
+	mock := newMockGracefulCancelSession()
+	svc := &CancelService{Queue: queue, Events: mock, Cancellations: mock, Graceful: mock}
+	const child = "child-person"
+	jobID := setupRunningWorker(t, queue, child)
+	_, err := svc.CancelJob(t.Context(), jobID, "person stopped")
+	testutil.FailErr(t, "CancelJob", err)
+	if _, ok := mock.pending(child); ok {
+		t.Fatal("a person's stop registered a closeout turn")
+	}
+}
+
 func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
 	queue := NewInMemoryQueue(2)
 	mock := newMockGracefulCancelSession()
@@ -178,8 +193,8 @@ func TestCancelRunningGracefulNonBlockingUnderSlowCloseout(t *testing.T) {
 
 	deadlineCtx, cancel := context.WithTimeout(context.Background(), testutil.Timeout(time.Minute))
 	defer cancel()
-	out, err := svc.CancelJob(deadlineCtx, jobID, "slow-closeout")
-	testutil.FailErr(t, "CancelJob", err)
+	out, err := svc.CancelForSession(deadlineCtx, "parent-1", jobID, "slow-closeout")
+	testutil.FailErr(t, "CancelForSession", err)
 	if out.Status != api.WorkerStatusRunning {
 		t.Fatalf("interim status = %q want running", out.Status)
 	}

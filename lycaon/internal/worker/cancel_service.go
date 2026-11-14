@@ -46,7 +46,8 @@ type CancelService struct {
 	Names JobNamer
 }
 
-// CancelJob cancels by job id with a graceful closeout (HTTP worker pane).
+// CancelJob is a person's stop from the worker pane: it fences at once with
+// no model call.
 func (s *CancelService) CancelJob(ctx context.Context, jobID, reason string) (api.WorkerCancelResult, error) {
 	jobID = strings.TrimSpace(jobID)
 	if s == nil || s.Queue == nil {
@@ -56,7 +57,7 @@ func (s *CancelService) CancelJob(ctx context.Context, jobID, reason string) (ap
 	if !ok {
 		return api.WorkerCancelResult{}, s.reject(ctx, WorkerCancelNotFoundCode, map[string]any{"job_id": jobID})
 	}
-	return s.cancelTask(ctx, task, strings.TrimSpace(task.ParentSessionID), reason, CancelGraceful)
+	return s.cancelTask(ctx, task, strings.TrimSpace(task.ParentSessionID), reason, CancelImmediate)
 }
 
 // CancelForSession cancels jobID when it belongs to sessionID (coordinator worker_cancel tool).
