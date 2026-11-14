@@ -98,7 +98,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 	}
 	waits := &awaitstore.Store{DB: b.storage.Database}
 	workerOps := &workerops.Service{
-		Reader:    workerops.Reader{Records: b.boards.WorkerRecords, Jobs: b.delegations.Queue, Decisions: b.sessions.Decisions},
+		Reader:    b.boards.WorkerReader(),
 		Agents:    prompts.AgentMutationCapable,
 		Accounted: b.boards.ReleaseAccounted,
 		WakeParked: func(ctx context.Context, jobID string) error {

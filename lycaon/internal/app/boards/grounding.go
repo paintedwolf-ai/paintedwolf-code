@@ -34,7 +34,6 @@ import (
 	"github.com/lycaon/lycaon/internal/visualscreen"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workermessaging"
-	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workerroster"
 	"github.com/lycaon/lycaon/internal/workerstate"
@@ -267,7 +266,7 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	r.deps.Sessions.Manager.SetWorkerRounds(r.deps.WorkersCfg.RoundPolicy())
 	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Delegations.Cancel)
 	roster := workerroster.Source{
-		Reader:  workerops.Reader{Records: r.WorkerRecords, Jobs: r.deps.Delegations.Queue, Decisions: r.deps.Sessions.Decisions},
+		Reader:  r.WorkerReader(),
 		Touches: r.deps.Sessions.Manager.Workers.Workspaces.Touches,
 	}
 	r.deps.Sessions.Manager.SetWorkerRoster(roster.Template)

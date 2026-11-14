@@ -108,6 +108,12 @@ func (r Reader) Read(ctx context.Context, actor workerrecords.Actor, w workerrec
 			}
 		}
 	}
+	// A worker that has run but lost its child session cannot work again.
+	if !f.Closed && w.ChildSessionID == "" {
+		for _, round := range rounds {
+			f.SessionUnusable = f.SessionUnusable || round.SettledAt != ""
+		}
+	}
 	if latest, ok := snap.Latest(); ok {
 		f.Latest, err = r.round(ctx, w, latest)
 		if err != nil {

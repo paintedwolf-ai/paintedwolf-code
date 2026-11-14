@@ -380,3 +380,18 @@ func TestRoundSuspendedOnItsDecisionIsAsking(t *testing.T) {
 		t.Fatalf("held on its decision = %+v", v)
 	}
 }
+
+// A worker that has run and then lost its child session reads as closed
+// because its session is unusable.
+func TestLostChildSessionMakesTheWorkerUnusable(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	if v := f.state(t); v.Reason == workerstate.ReasonSessionUnusable {
+		t.Fatalf("a worker with its session was unusable: %+v", v)
+	}
+	_, err := f.db.ExecContext(t.Context(), `UPDATE workers SET child_session_id = NULL WHERE id = ?`, f.workerID)
+	testutil.FailErr(t, "lose child", err)
+	if v := f.state(t); v.State != workerstate.Closed || v.Reason != workerstate.ReasonSessionUnusable {
+		t.Fatalf("after losing the child session: %+v", v)
+	}
+}
