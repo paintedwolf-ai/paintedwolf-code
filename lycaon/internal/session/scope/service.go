@@ -126,22 +126,23 @@ func (m *Service) Roots(ctx context.Context, sess *api.Session) ([]projectroot.R
 	return project.SubstituteWorktreeRoots(refs, binding), nil
 }
 
-// DisplayRoots are the roots a session's recorded paths display against: its
-// project roots, with a bound worktree in their place. It reads without
-// validating the worktree, so receipts render even when it went stale.
-func (m *Service) DisplayRoots(ctx context.Context, sessionID string) []projectroot.RootRef {
+// DisplayRoots are the roots a session's recorded paths display against, and
+// its active folder: its project roots, with a bound worktree in their place.
+// It reads without validating the worktree, so receipts render even when it
+// went stale.
+func (m *Service) DisplayRoots(ctx context.Context, sessionID string) ([]projectroot.RootRef, string) {
 	if m == nil || m.store == nil {
-		return nil
+		return nil, ""
 	}
 	sess, err := m.store.Get(ctx, sessionID)
 	if err != nil || sess == nil {
-		return nil
+		return nil, ""
 	}
 	refs := m.ProjectRoots(ctx, sess.ProjectID)
 	if binding, bound, err := m.Binding(ctx, sess); err == nil && bound {
-		return project.SubstituteWorktreeRoots(refs, binding)
+		refs = project.SubstituteWorktreeRoots(refs, binding)
 	}
-	return refs
+	return refs, sess.WorkspaceRootID
 }
 
 func (m *Service) Paths(ctx context.Context, sess *api.Session) ([]string, error) {

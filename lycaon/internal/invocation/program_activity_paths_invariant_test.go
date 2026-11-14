@@ -20,10 +20,34 @@ func TestEveryCommandPresentsWorkspacePaths(t *testing.T) {
 	catalog, err := toolcontract.ReadOnlyLanguageV1()
 	testutil.FailErr(t, "read the command catalog", err)
 	primary, docs := t.TempDir(), t.TempDir()
-	roots := []projectroot.RootRef{{ID: "primary", Path: primary, IsPrimary: true}, {ID: "docs", Label: "docs", Path: docs}}
-	display := func(path string) string { return projectroot.DisplayAbsolute(roots, path) }
-	reads := [][2]string{{filepath.Join(primary, "src", "a.go"), "src/a.go"}, {filepath.Join(docs, "guide.md"), "@docs/guide.md"}}
-	writes := [][2]string{{filepath.Join(primary, "out", "b.txt"), "out/b.txt"}, {filepath.Join(primary), "."}}
+	roots := []projectroot.RootRef{{ID: "primary", Label: "app", Path: primary, IsPrimary: true}, {ID: "docs", Label: "docs", Path: docs}}
+	checked := 0
+	// The session's active folder decides which root's paths display bare.
+	for _, active := range []struct{ id, primary, docs string }{
+		{"", "", "@docs/"},
+		{"primary", "", "@docs/"},
+		{"docs", "@app/", ""},
+	} {
+		display := func(path string) string { return projectroot.DisplayAbsolute(roots, active.id, path) }
+		primaryRoot := "."
+		if active.primary != "" {
+			primaryRoot = "@app"
+		}
+		reads := [][2]string{{filepath.Join(primary, "src", "a.go"), active.primary + "src/a.go"}, {filepath.Join(docs, "guide.md"), active.docs + "guide.md"}}
+		writes := [][2]string{{filepath.Join(primary, "out", "b.txt"), active.primary + "out/b.txt"}, {filepath.Join(primary), primaryRoot}}
+		checked += checkCatalogPresentsWorkspacePaths(t, catalog, display, reads, writes)
+		outside := filepath.Join(t.TempDir(), "elsewhere")
+		if display(outside) != outside {
+			t.Fatalf("a path outside every root was rewritten to %q", display(outside))
+		}
+	}
+	if checked == 0 {
+		t.Fatal("catalog offered no commands")
+	}
+}
+
+func checkCatalogPresentsWorkspacePaths(t *testing.T, catalog toolcontract.LanguageCatalog, display func(string) string, reads, writes [][2]string) int {
+	t.Helper()
 	recorded := func(name, family string, classes []string, pick int) activityInput {
 		in := activityFixture(name, "root", name, name, 0)
 		in.family, in.receipt.EffectClasses = family, classes
@@ -60,13 +84,7 @@ func TestEveryCommandPresentsWorkspacePaths(t *testing.T) {
 			}
 		}
 	}
-	if checked == 0 {
-		t.Fatal("catalog offered no commands")
-	}
-	outside := filepath.Join(t.TempDir(), "elsewhere")
-	if display(outside) != outside {
-		t.Fatalf("a path outside every root was rewritten to %q", display(outside))
-	}
+	return checked
 }
 
 // For any program of redirected writes, with foreground work between them:

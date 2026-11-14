@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/project"
-	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/store"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -49,7 +48,7 @@ func TestDisplayRootsFollowTheSessionsWorkingRoots(t *testing.T) {
 	}}}
 	sessions := map[string]*api.Session{
 		"plain": {ID: "plain", ProjectID: "p1"},
-		"bound": {ID: "bound", ProjectID: "p1"},
+		"bound": {ID: "bound", ProjectID: "p1", WorkspaceRootID: "r2"},
 	}
 	bindings := map[string]*store.WorktreeBinding{
 		"bound": {WorktreeID: "w1", SessionID: "bound", Toplevel: top, WorktreePath: stale, Branch: "work"},
@@ -60,10 +59,13 @@ func TestDisplayRootsFollowTheSessionsWorkingRoots(t *testing.T) {
 	if len(projectRoots) != 2 {
 		t.Fatalf("fixture roots not admitted: %+v", projectRoots)
 	}
-	if got := svc.DisplayRoots(t.Context(), "plain"); !slices.Equal(got, projectRoots) {
-		t.Errorf("unbound session displays against %+v, want project roots %+v", got, projectRoots)
+	if got, active := svc.DisplayRoots(t.Context(), "plain"); !slices.Equal(got, projectRoots) || active != "" {
+		t.Errorf("unbound session displays against %+v active %q, want project roots %+v and the primary", got, active, projectRoots)
 	}
-	got := svc.DisplayRoots(t.Context(), "bound")
+	got, active := svc.DisplayRoots(t.Context(), "bound")
+	if active != "r2" {
+		t.Errorf("bound session's active folder is %q, want its own r2", active)
+	}
 	want := project.SubstituteWorktreeRoots(projectRoots, project.Binding{ID: "w1", Toplevel: top, WorktreePath: stale, Branch: "work"})
 	if !slices.Equal(got, want) || slices.Equal(got, projectRoots) {
 		t.Errorf("bound session displays against %+v, want its worktree roots %+v", got, want)
@@ -71,14 +73,18 @@ func TestDisplayRootsFollowTheSessionsWorkingRoots(t *testing.T) {
 	if _, err := svc.Roots(t.Context(), sessions["bound"]); !errors.Is(err, ErrWorktreeStale) {
 		t.Fatalf("fixture worktree is not stale: %v", err)
 	}
-	for name, roots := range map[string][]projectroot.RootRef{
-		"unknown session": svc.DisplayRoots(t.Context(), "missing"),
-		"store failure":   (&Service{store: fakeScopeStore{failGet: true}, projects: projects}).DisplayRoots(t.Context(), "plain"),
-		"no store":        (&Service{projects: projects}).DisplayRoots(t.Context(), "plain"),
-		"no service":      (*Service)(nil).DisplayRoots(t.Context(), "plain"),
+	for name, svc := range map[string]*Service{
+		"unknown session": svc,
+		"store failure":   {store: fakeScopeStore{failGet: true}, projects: projects},
+		"no store":        {projects: projects},
+		"no service":      nil,
 	} {
-		if roots != nil {
-			t.Errorf("%s displays against %+v, want none", name, roots)
+		session := "plain"
+		if name == "unknown session" {
+			session = "missing"
+		}
+		if roots, active := svc.DisplayRoots(t.Context(), session); roots != nil || active != "" {
+			t.Errorf("%s displays against %+v active %q, want none", name, roots, active)
 		}
 	}
 }
