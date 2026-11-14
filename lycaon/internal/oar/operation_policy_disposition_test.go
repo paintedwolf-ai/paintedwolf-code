@@ -27,15 +27,15 @@ func nativeOperationIdentities(t *testing.T) map[string]bool {
 	return out
 }
 
-// Each bundled unit selects a native operation through the operation selector or
-// names none. Prose selection by tool name is refused.
+// Each bundled unit scopes a native operation through a paintedwolf.operation
+// condition or names none. Selection by tool name is refused.
 func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 	native := nativeOperationIdentities(t)
 	rs := loadStockRules(t)
 	counts := map[string]int{}
 	for _, rule := range rs.All() {
 		var named []string
-		for _, tool := range rule.Selector["tool"] {
+		for _, tool := range rule.Tools() {
 			if native[tool] {
 				named = append(named, tool)
 			}
@@ -43,17 +43,17 @@ func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 		for op := range native {
 			for _, spelling := range []string{`tool == "` + op + `"`, `tool=="` + op + `"`} {
 				if strings.Contains(rule.When, spelling) {
-					t.Errorf("%s selects native operation %s by tool comparison; use the paintedwolf.operation selector", rule.ID, op)
+					t.Errorf("%s selects native operation %s by tool comparison; test paintedwolf.operation", rule.ID, op)
 				}
 			}
 		}
 		switch {
 		case len(named) > 0:
-			t.Errorf("%s selects native operations %v by structured tool only; translate it to the paintedwolf.operation selector", rule.ID, named)
-		case len(rule.Selector["paintedwolf.operation"]) > 0:
-			for _, op := range rule.Selector["paintedwolf.operation"] {
+			t.Errorf("%s selects native operations %v by structured tool only; test paintedwolf.operation instead", rule.ID, named)
+		case len(rule.Operations()) > 0:
+			for _, op := range rule.Operations() {
 				if _, known := toolcontract.Lookup(op); !known {
-					t.Errorf("%s operation selector names unknown operation %q", rule.ID, op)
+					t.Errorf("%s operation condition names unknown operation %q", rule.ID, op)
 				}
 			}
 			counts["translated"]++
@@ -67,8 +67,10 @@ func TestBundledPolicyDispositionsForNativeOperations(t *testing.T) {
 	t.Logf("bundled unit dispositions: %v", counts)
 }
 
-// Operation selection uses bound identity and explicit selector alternatives.
-func TestOperationSelectorsReachBoundNativeOperations(t *testing.T) {
+// paintedwolf.operation reads the bound native operation beneath command, never
+// diagnostic data, so each rule's operation condition reaches exactly its
+// operations.
+func TestOperationConditionsReachBoundNativeOperations(t *testing.T) {
 	native := nativeOperationIdentities(t)
 	operations := make([]string, 0, len(native))
 	for op := range native {
@@ -104,7 +106,7 @@ func TestOperationSelectorsReachBoundNativeOperations(t *testing.T) {
 	}
 	translated := 0
 	for _, rule := range loadStockRules(t).All() {
-		selected := rule.Selector["paintedwolf.operation"]
+		selected := rule.Operations()
 		if len(selected) == 0 {
 			continue
 		}
@@ -117,9 +119,9 @@ func TestOperationSelectorsReachBoundNativeOperations(t *testing.T) {
 			}
 		}
 		for _, op := range selected {
+			condition := `paintedwolf.operation in ["` + strings.Join(selected, `", "`) + `"]`
 			matches := func(gc *GuardContext) bool {
-				facts := selectorFacts{context: gc}
-				ok, err := facts.match(rule)
+				ok, err := EvaluateCondition(condition, gc)
 				testutil.FailErr(t, "match "+rule.ID, err)
 				return ok
 			}
@@ -144,6 +146,6 @@ func TestOperationSelectorsReachBoundNativeOperations(t *testing.T) {
 		}
 	}
 	if translated == 0 {
-		t.Fatal("no translated operation selectors")
+		t.Fatal("no rule tests paintedwolf.operation")
 	}
 }

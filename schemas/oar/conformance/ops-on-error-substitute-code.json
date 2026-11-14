@@ -1,0 +1,46 @@
+{
+  "id": "ops-on-error-substitute-code",
+  "title": "A named on_error substitutes the decision identifier, not the effect",
+  "covers": [
+    "OAR-OPS-4",
+    "OAR-CONF-18"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "DETECTOR_SUBSTITUTES",
+      "kind": "detector",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "prompt_injection_score > 0.8",
+      "on_error": "SAFETY_CHECK_UNAVAILABLE",
+      "detector": {
+        "ref": "detector://error"
+      },
+      "requires_facts": [
+        "prompt_injection_score"
+      ]
+    },
+    {
+      "spec_version": "1.0",
+      "id": "SAFETY_CHECK_UNAVAILABLE",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "false",
+      "what": "The safety check could not run."
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "SAFETY_CHECK_UNAVAILABLE"
+  }
+}

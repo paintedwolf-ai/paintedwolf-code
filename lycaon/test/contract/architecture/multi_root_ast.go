@@ -18,6 +18,7 @@ type multiRootASTScan struct {
 	ActiveRootPathJoins  []string
 	DuplicateAddressing  []string
 	PromptWithoutPartial []string
+	HostPathTemplateVars []string
 }
 
 // multiRootJoinAllowlist applies only to scanned tool files.
@@ -82,6 +83,7 @@ func buildMultiRootAST(lycaonRoot string) (*multiRootASTScan, error) {
 	sort.Strings(out.ActiveRootPathJoins)
 	sort.Strings(out.DuplicateAddressing)
 	sort.Strings(out.PromptWithoutPartial)
+	sort.Strings(out.HostPathTemplateVars)
 	return out, nil
 }
 
@@ -116,6 +118,20 @@ func scanMultiRootToolFile(corp *testcorpus.GoCorpus, gf testcorpus.GoFile, out 
 	})
 }
 
+// multiRootHostPathVar matches output expressions that render a host absolute
+// path: the workspace-root, scratch, and worker-workspace vars, and member
+// accesses on root-change data. Curator evidence rows keep c.path — a
+// normalized display path, not a host path.
+var multiRootHostPathVar = regexp.MustCompile(`\b(?:project_dir|session_scratch_dir|worker_workspace_path|(?:r|c|root|new_primary|active_root)\.path|c\.old_path)\b`)
+
+// multiRootTemplateOutput extracts {{ ... }} output expressions. Statement
+// tags ({% if %} guards) never render a value, so they are not host paths.
+var multiRootTemplateOutput = regexp.MustCompile(`\{\{([^}]*)\}\}`)
+
+// multiRootCoordinatorKick matches the coordinator kick guidance files, where
+// a bare {{ path }} rendered the detached root's host path.
+var multiRootCoordinatorKick = regexp.MustCompile(`config/packs/painted-wolf/platform/guidance/coordinator-[^/]*\.md`)
+
 func scanMultiRootTemplateData(rel, text string, out *multiRootASTScan) {
 	if multiRootAddressingSSOT.MatchString(text) {
 		if rel != "config/packs/painted-wolf/platform/shared/partials/multi-root-addressing.md" &&
@@ -128,6 +144,19 @@ func scanMultiRootTemplateData(rel, text string, out *multiRootASTScan) {
 	if strings.Contains(text, "Working directory:") && !strings.Contains(text, "workspace-roots.md") && !strings.Contains(text, `include "partials/workspace-roots.md"`) {
 		if rel != "config/packs/painted-wolf/platform/shared/partials/workspace-roots.md" {
 			out.PromptWithoutPartial = append(out.PromptWithoutPartial, rel+": Working directory:")
+		}
+	}
+	for _, m := range multiRootTemplateOutput.FindAllStringSubmatch(text, -1) {
+		expr := strings.TrimSpace(m[1])
+		if hit := multiRootHostPathVar.FindString(expr); hit != "" {
+			if hit == "c.path" && rel == "config/packs/painted-wolf/platform/guidance/curator/user.md" {
+				continue
+			}
+			out.HostPathTemplateVars = append(out.HostPathTemplateVars, rel+": {{"+expr+"}}")
+			continue
+		}
+		if expr == "path" && multiRootCoordinatorKick.MatchString(rel) {
+			out.HostPathTemplateVars = append(out.HostPathTemplateVars, rel+": {{"+expr+"}}")
 		}
 	}
 }

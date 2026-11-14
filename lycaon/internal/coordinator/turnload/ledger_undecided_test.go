@@ -5,15 +5,12 @@ import "testing"
 func TestLedgerUndecidedTurnKeepsOnlyRequestedLoads(t *testing.T) {
 	l := NewLedger()
 	all := []string{"command", "edit", "web_search"}
-	l.BeginTurn("s1", opening("u1", Boundary{Cache: CacheCold, Reason: ColdFirstTurn}, all...), omit(predict("edit", "command"), "unit:tests"))
+	l.BeginTurn("s1", opening("u1", Boundary{Cache: CacheCold, Reason: ColdFirstTurn}, all...), predict("edit", "command"))
 	l.Activate("s1", []string{"web_search"}, "look it up")
 
 	l.BeginUndecidedTurn("s1", TurnOpening{OpeningMessageID: "u2", Loadable: all, HistoryEpoch: "e2"})
 	if got := standingNames(l, "s1"); got != "web_search" {
 		t.Fatalf("undecided standing = %s, want only the requested tool", got)
-	}
-	if omitted := l.Omitted("s1"); len(omitted) != 0 {
-		t.Fatalf("undecided turn omits %v, want every unit rendered", omitted)
 	}
 	if l.TurnMessageID("s1") != "u2" || l.Standing("s1").HistoryEpoch != "e2" {
 		t.Fatalf("undecided turn opening %q, epoch %q", l.TurnMessageID("s1"), l.Standing("s1").HistoryEpoch)

@@ -6,12 +6,13 @@ import (
 	"os"
 )
 
-const evalUsage = `usage: lycaon-debug eval {tool-usage|evidence|cost} [flags]
+const evalUsage = `usage: lycaon-debug eval {tool-usage|training-contract|training-bundle|cost} [flags]
 
 Outcome review and tool-usage economics. Live modes spend real tokens and are opt-in.
 
-Evidence export (no model calls):
-  evidence --capture DIR --session ID [--project DELIVERED_DIR]
+Training evidence (no model calls):
+  training-contract --out DIR
+  training-bundle --capture DIR --captures DIR --session ID [--project DELIVERED_DIR] --out DIR
   cost --capture DIR
 
 Tool-usage modes:
@@ -48,8 +49,10 @@ func runEval(args []string) error {
 	switch args[0] {
 	case "cost":
 		return runEvalCost(args[1:])
-	case "evidence":
-		return runEvalEvidence(args[1:])
+	case "training-contract":
+		return runEvalTrainingContract(args[1:])
+	case "training-bundle":
+		return runEvalTrainingBundle(args[1:])
 	case "tool-usage":
 		return runEvalToolUsage(args[1:])
 	default:

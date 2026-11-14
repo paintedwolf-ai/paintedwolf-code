@@ -2,7 +2,7 @@
 import type { Text } from "@codemirror/state";
 import type { SecurityFinding } from "../../../api/types.ts";
 import { relativeTimeLabel } from "../../../time/time-copy.ts";
-import type { PaintedAgentMark } from "../../../files/documents/document-agent-presence.ts";
+import type { PaintedAgentMark } from "../../../files/documents/agent-paint-lifetime.ts";
 import { attributionForLine, findingLevelLabel, type AttributionMark, type FindingLineMark } from "./knowing-gutter-model.ts";
 
 export type LineFactTarget =

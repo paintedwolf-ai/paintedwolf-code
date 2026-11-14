@@ -38,6 +38,9 @@ type findResult struct {
 	Path string `json:"path"`
 	Type string `json:"type"`
 	Size *int64 `json:"size,omitempty"`
+	// Structured identity of the entry under its project root; never serialized.
+	rootID   string `json:"-"`
+	scopeRel string `json:"-"`
 }
 
 type findResponse struct {
@@ -100,6 +103,7 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	deeperPathsOmitted := false
 
 	union := projectroot.IsUnionDiscoveryPath(relRoot)
+	receiptRoot := relRoot
 	if union {
 		for _, root := range roots {
 			if err := t.runFindRoot(ctx, tctx, root, root.Path, projectpaths.QualifyAbs(tctx, root, root.Path),
@@ -113,6 +117,7 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 		if err != nil {
 			return "", err
 		}
+		receiptRoot = resolved.DisplayPath
 		if err := t.runFindRoot(ctx, tctx, resolved.Root, resolved.Abs, resolved.DisplayPath,
 			maxDepth, maxResults, offset, nameGlob, entryType, includeIgnored, nil, &resp,
 			&skipped, &matchedTotal, &truncated, &deeperPathsOmitted); err != nil {
@@ -147,12 +152,16 @@ func (t *FindTool) Run(ctx context.Context, args map[string]any, tctx tools.Tool
 	}
 	resp.Inventory = inventoryFactsFrom(ctx)
 	for _, result := range resp.Results {
+		if result.rootID != "" && result.scopeRel != "" {
+			tctx.RecordSourceIdentity(result.rootID, result.scopeRel, navigationEntryKind(result.Type))
+			continue
+		}
 		tctx.RecordSourcePath(result.Path, navigationEntryKind(result.Type))
 	}
 	for _, hit := range resp.Highlights {
 		tctx.RecordSourcePath(hit.Path, api.NavigationEntryKindFile)
 	}
-	return t.encodeFindResponse(relRoot, resp)
+	return t.encodeFindResponse(receiptRoot, resp)
 }
 
 // findDepthUnbounded walks every depth below the find root.
@@ -198,7 +207,7 @@ func (t *FindTool) runFindRoot(
 		scopeRel := projectroot.ScopeRel(root, fullRoot)
 		if t.matchesEntry(scopeRel, nameFilter, entryType, info) {
 			*matchedTotal++
-			result := makeFindResult(displayRoot, info)
+			result := makeFindResult(root.ID, scopeRel, displayRoot, info)
 			if onMatch != nil {
 				onMatch(result)
 				return nil
@@ -279,10 +288,12 @@ func findTruncationBanner(resp findResponse, depthArg, resultsArg toolkit.Bounde
 	return toolkit.TruncationBanner(strings.Join(parts, "; "))
 }
 
-func makeFindResult(relSlash string, info fs.FileInfo) findResult {
+func makeFindResult(rootID, scopeRel, relSlash string, info fs.FileInfo) findResult {
 	entry := findResult{
-		Path: relSlash,
-		Type: "file",
+		Path:     relSlash,
+		Type:     "file",
+		rootID:   rootID,
+		scopeRel: scopeRel,
 	}
 	if info.IsDir() {
 		entry.Type = "dir"

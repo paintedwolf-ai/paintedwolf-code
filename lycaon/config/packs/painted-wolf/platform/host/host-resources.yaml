@@ -106,6 +106,7 @@ resources:
           - mode: local_service
             transport: unix_socket
             target_from: daemon_socket
+            client_env: DOCKER_HOST
         write_roots:
           - "{home}/.docker/buildx"
       - platforms: [windows]
@@ -310,6 +311,7 @@ resources:
           - mode: local_service
             transport: unix_socket
             target_from: daemon_socket
+            client_env: CONTAINER_HOST
       - platforms: [windows]
         discover:
           executable:

@@ -1,21 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: HTTP_REQUEST_WEB_PAGE
 kind: policy
-anchor: tool.post_invoke
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.http_request_web_page, paintedwolf.host, paintedwolf.bytes, paintedwolf.content_type, paintedwolf.next_steps]
+on: tool.post_invoke
+selector: {}
+requires_facts: [paintedwolf.bytes, paintedwolf.content_type, paintedwolf.host, paintedwolf.http_request_web_page, paintedwolf.next_steps]
 when: paintedwolf.http_request_web_page
 effect: warn
-copy:
-  what: 'curl returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup.'
-  cause: 'The response is {{ paintedwolf.content_type }}; curl returns bodies verbatim, including scripts, styles, and navigation.'
-  why: 'Raw markup spends context on page structure instead of the text you need.'
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Keep native curl when you need the exact markup, headers, or status of this endpoint
 x-paintedwolf-category: informational
 x-paintedwolf-emit: guard:http_request
-x-paintedwolf-message: http_request delivered a web page as raw HTML
+message: http_request delivered a web page as raw HTML
+what: 'curl returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup.'
+cause: 'The response is {{ paintedwolf.content_type }}; curl returns bodies verbatim, including scripts, styles, and navigation.'
+why: 'Raw markup spends context on page structure instead of the text you need.'
+fix: '{{ paintedwolf.next_steps }}'
+instead: Keep native curl when you need the exact markup, headers, or status of this endpoint
 x-paintedwolf-scenarios:
   - id: loaded
     vars:

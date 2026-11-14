@@ -1,0 +1,25 @@
+{
+  "id": "expr-undeclared-function-rejected",
+  "title": "A call to a function that is neither built-in nor declared is rejected at load",
+  "covers": [
+    "OAR-EXPR-17"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "matches(tool, \"r.*\")"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-16"
+  }
+}

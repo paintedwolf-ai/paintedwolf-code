@@ -197,3 +197,15 @@ func TestSharedVaultIsolatesIncompatibleCustodyAndCoordinatesLocks(t *testing.T)
 		t.Fatal("vault instances on the same path do not share lock coordination")
 	}
 }
+
+func TestSharedVaultWithoutProviderIsNeverCached(t *testing.T) {
+	path := filepath.Join(t.TempDir(), VaultBasename)
+	first := sharedVault(path, nil)
+	second := sharedVault(path, nil)
+	if first == second {
+		t.Fatal("providerless vaults were cached as one shareable instance")
+	}
+	if first.path != filepath.Clean(path) || first.provider != nil || second.provider != nil {
+		t.Fatalf("providerless vault = %+v / %+v", first, second)
+	}
+}

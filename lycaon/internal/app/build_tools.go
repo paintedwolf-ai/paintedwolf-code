@@ -49,6 +49,7 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	}
 	if commands := b.execution.Host.Commands; commands != nil {
 		commands.SetProgramParking(loopwake.ProgramParking{Subscriptions: subscriptions})
+		commands.SetProgramEffects(b.sessions.Manager.Runner.Transcript)
 		subscriptions.SetLostProgramResult(commands.ProgramReceiptResult)
 	}
 	if err := b.registerRecovery(bootrecovery.Entry{

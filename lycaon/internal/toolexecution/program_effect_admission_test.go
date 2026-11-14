@@ -51,7 +51,7 @@ func TestBoundProgramModePreservesProfileAndSourceInEffectRefusal(t *testing.T) 
 			writeMode := write.Operation.Facts().Commands[0].Effects[0].Mode
 			err = surface.ValidateBound(write.Operation, invocation, "tee", writeMode, nil)
 			var rejected *toolrejection.ToolReject
-			if !errors.As(err, &rejected) || rejected.Code != "COMMAND_EFFECT_NOT_ALLOWED" || rejected.OwnerRef != write.Contract.Owner || rejected.Data["permission_profile"] != profile || rejected.Data["source_start_byte"] != 4 {
+			if !errors.As(err, &rejected) || rejected.Code != "COMMAND_EFFECT_NOT_ALLOWED" || rejected.OwnerRef != write.Contract.Owner || rejected.Data["profile"] != profile || rejected.Data["source_start_byte"] != 4 {
 				t.Fatalf("lost operation/profile/source refusal: %+v", err)
 			}
 			if err := surface.ValidateBound(write.Operation, invocation, "tee", "invented-mode", nil); err == nil {

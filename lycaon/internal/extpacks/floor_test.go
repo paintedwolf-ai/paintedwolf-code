@@ -69,7 +69,7 @@ func TestProjectCanDisableSharedUnits(t *testing.T) {
 
 func TestProjectCannotDisableDeviceResolvedAdditiveUnit(t *testing.T) {
 	pack := fixtureFloorPack(t, map[string]string{
-		"policy/HOUSE.yaml": "oar: '1.0'\nid: HOUSE\nkind: policy\nanchor: tool.pre_invoke\neffect: warn\n",
+		"policy/HOUSE.yaml": "spec_version: '1.0'\nid: HOUSE\nkind: policy\non: tool.pre_invoke\neffect: warn\n",
 	})
 	desired := desiredWithExtensionPacks(pack.Pack.ID)
 	merged, prov := MergeDesired(desired, []string{"policy/HOUSE"})

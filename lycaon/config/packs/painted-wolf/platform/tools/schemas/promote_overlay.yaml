@@ -14,7 +14,7 @@ schema:
         additionalProperties: false
         properties:
           path:
-            description: "Repo-relative conflict path."
+            description: "Session-folder-relative conflict path (key matching the overlay's changed paths, not an addressed path)."
             type: string
           action:
             type: string

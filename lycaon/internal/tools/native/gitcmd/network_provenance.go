@@ -8,6 +8,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/egress"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/gitrepo"
 )
 
 // networkRead is what one Git transfer brought in from its network remotes.
@@ -67,4 +68,35 @@ func mergedPaths(repoRoot string, paths []string) []string {
 		}
 	}
 	return out
+}
+
+type flowRepositoryKey struct{}
+
+// objectWriters place committed content from the object store in the work
+// tree.
+var objectWriters = map[string]bool{
+	"git merge": true, "git rebase": true, "git cherry-pick": true, "git revert": true, "git checkout": true,
+	"git switch": true, "git restore": true, "git reset": true, "git stash": true,
+}
+
+// reportRepositoryRead tells the program's provenance that the command reads
+// the repository's object store, which a network transfer may have filled,
+// and keeps the repository for the files a mutation then places.
+func reportRepositoryRead(ctx context.Context, dir string) context.Context {
+	repo, ok := gitrepo.Discover(dir)
+	if !ok || repo.CommonDir == "" {
+		return ctx
+	}
+	evidence.ReportContentFlow(ctx, evidence.ContentFlow{Source: repo.CommonDir})
+	return context.WithValue(ctx, flowRepositoryKey{}, repo)
+}
+
+// reportObjectFlow records the work-tree files a mutation filled from the
+// object store as content derived from it.
+func reportObjectFlow(ctx context.Context, p Prepared, paths []string) {
+	repo, ok := ctx.Value(flowRepositoryKey{}).(gitrepo.Repo)
+	if !ok || !objectWriters[p.command.spec.Name] || len(paths) == 0 {
+		return
+	}
+	evidence.ReportContentFlow(ctx, evidence.ContentFlow{Source: repo.CommonDir, Files: mergedPaths(repo.Root, paths)})
 }

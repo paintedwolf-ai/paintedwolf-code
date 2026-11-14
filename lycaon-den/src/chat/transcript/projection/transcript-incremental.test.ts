@@ -76,7 +76,7 @@ describe("incremental transcript projection", () => {
     const user: Message = { ...message("u", "change it", 1), role: "user", origin: "user", authority: "user" };
     const write: Message = { ...message("w", "", 2), tool_calls: [{ id: "call", name: "write", args: { path: "a.go" } }] };
     const result = toolResult("result", "w", "call", "write", 3, {
-      file_edit_preview: fileEditPreviewFixture({ path: "a.go", before: "x\n", after: "y\n" }),
+      file_edit_previews: [fileEditPreviewFixture({ path: "a.go", before: "x\n", after: "y\n" })],
     });
     const live = message("live", "Done", 4);
     const diffRow = (rows: readonly { kind: string }[]) => rows.find((row) => row.kind === "file_edit");

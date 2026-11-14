@@ -148,6 +148,7 @@ func (r *Registry) StartPipeline(ctx context.Context, spec PipelineSpec) (string
 		MaxOutputBytes: r.ringBufferBytes,
 		InlineEnv:      req.InlineEnv,
 		PathExtra:      req.PathExtra,
+		ServiceEnv:     req.ServiceEnv,
 		Stdin:          req.Stdin,
 		Redirect:       req.Redirect,
 		Started: func(pid int) {

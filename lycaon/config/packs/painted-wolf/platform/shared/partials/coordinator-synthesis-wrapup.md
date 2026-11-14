@@ -4,9 +4,9 @@ Your only job is **one user-facing report backed by tool results** — then end 
 
 Before the first draft:
 
-1. Reconcile progress once: close or explicitly descope every open row; never draft first and repair the checklist later.
-2. Build the claim set from accepted worker **`findings[]`** and your own tool results — not the brief or `objectives_met`.
-3. Give every path-named factual claim an inline citation. If a desirable claim exists only in the assignment, omit it or state the coverage gap; do not start a new evidence hunt after drafting.
+{% if profile_has_update_progress %}1. Reconcile progress once: close or explicitly descope every open row; never draft first and repair the checklist later.
+{% endif %}{% if profile_has_update_progress %}2{% else %}1{% endif %}. Build the claim set from accepted worker **`findings[]`** and your own tool results — not the brief or `objectives_met`.
+{% if profile_has_update_progress %}3{% else %}2{% endif %}. Give every path-named factual claim an inline citation. If a desirable claim exists only in the assignment, omit it or state the coverage gap; do not start a new evidence hunt after drafting.
 
 Then draft once.
 
@@ -23,8 +23,8 @@ Then draft once.
 | Product mutations | Done on investigate or dispatch through workers |
 | Execution checks | Done before wrapup |
 | Delegation and orchestration | Workers are idle |
-| `update_progress` (new `- [ ]`) | Reconcile only here — close rows in place |
-| Overlay integration | Not on this report turn |
+{% if profile_has_update_progress %}| `update_progress` (new `- [ ]`) | Reconcile only here — close rows in place |
+{% endif %}| Overlay integration | Not on this report turn |
 | Worker lifecycle | Workers are idle |
 
 **Do not narrate fixes.** Do not say "I'll edit…", "I'll dispatch…", or loop searches hoping to fix code — those tools are absent. If tests or code are still broken, stop; the host mis-routed you.

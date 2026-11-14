@@ -1,0 +1,10 @@
+id: painted-wolf/platform:app-menu-view-editor-line-layout-pretty
+slot: "app_menu.view"
+command: painted-wolf/platform:editor-toggle-pretty
+group: "2"
+order: 3
+submenu: "Line layout"
+label: "Pretty"
+state:
+  fact: "line_layout"
+  is: "pretty"

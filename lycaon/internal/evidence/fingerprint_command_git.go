@@ -16,16 +16,16 @@ var (
 )
 
 // populateCommandRecord captures output and indexes path-like tokens.
-func populateCommandRecord(projectDir string, rec *Record, content string) {
+func populateCommandRecord(roots CitationRoots, rec *Record, content string) {
 	if rec == nil {
 		return
 	}
 	body := captureRecordBody(rec, content)
 	if obj, ok := jsonToolPayload(body); ok && isCommandResultPayload(obj) {
-		populateCommandJSONRecord(projectDir, rec, obj)
+		populateCommandJSONRecord(roots, rec, obj)
 		return
 	}
-	scanCommandPaths(projectDir, rec, body, nil)
+	scanCommandPaths(roots, rec, body, nil)
 }
 
 func isCommandResultPayload(obj map[string]any) bool {
@@ -39,17 +39,17 @@ func isCommandResultPayload(obj map[string]any) bool {
 	return ok && len(stages) > 0
 }
 
-func populateCommandJSONRecord(projectDir string, rec *Record, obj map[string]any) {
+func populateCommandJSONRecord(roots CitationRoots, rec *Record, obj map[string]any) {
 	cmd := commandFromResult(obj)
 	tail, _ := obj["tail"].(string)
 	for _, p := range pathsFromShellCommand(cmd) {
-		addRecordPath(projectDir, rec, p, FidelityScraped)
+		addRecordPath(roots, rec, p, FidelityScraped)
 	}
 	if p := pathFromFileCommandTail(tail); p != "" {
-		addRecordPath(projectDir, rec, p, FidelityScraped)
+		addRecordPath(roots, rec, p, FidelityScraped)
 	}
 	if strings.TrimSpace(tail) != "" {
-		scanCommandPaths(projectDir, rec, tail, nil)
+		scanCommandPaths(roots, rec, tail, nil)
 	}
 }
 
@@ -124,28 +124,28 @@ func pathFromFileCommandTail(tail string) string {
 }
 
 // populateGitRecord indexes paths from Git receipts and embedded diffs.
-func populateGitRecord(projectDir string, rec *Record, content string) {
+func populateGitRecord(roots CitationRoots, rec *Record, content string) {
 	if rec == nil {
 		return
 	}
 	body := captureRecordBody(rec, content)
 	for _, p := range gitPathsFromOutput(body) {
-		addRecordPath(projectDir, rec, p, FidelityStructured)
+		addRecordPath(roots, rec, p, FidelityStructured)
 	}
 }
 
-func populateSurveyRepoRecord(projectDir string, rec *Record, args map[string]any, content string) {
+func populateSurveyRepoRecord(roots CitationRoots, rec *Record, args map[string]any, content string) {
 	if rec == nil {
 		return
 	}
 	captureRecordBody(rec, content)
-	addRecordPath(projectDir, rec, stringArg(args, "path"), FidelityStructured)
+	addRecordPath(roots, rec, stringArg(args, "path"), FidelityStructured)
 	obj, ok := jsonToolPayload(content)
 	if !ok {
 		return
 	}
 	if p, ok := obj["path"].(string); ok {
-		addRecordPath(projectDir, rec, p, FidelityStructured)
+		addRecordPath(roots, rec, p, FidelityStructured)
 	}
 	raw, ok := obj["snapshot"].([]any)
 	if !ok {
@@ -157,7 +157,7 @@ func populateSurveyRepoRecord(projectDir string, rec *Record, args map[string]an
 			continue
 		}
 		if p, ok := m["path"].(string); ok {
-			addRecordPath(projectDir, rec, p, FidelityStructured)
+			addRecordPath(roots, rec, p, FidelityStructured)
 		}
 	}
 }
@@ -209,7 +209,7 @@ func gitPathsFromOutput(body string) []string {
 }
 
 // scanCommandPaths indexes path tokens after an optional prefix transformation.
-func scanCommandPaths(projectDir string, rec *Record, text string, transform func(string) string) {
+func scanCommandPaths(roots CitationRoots, rec *Record, text string, transform func(string) string) {
 	if rec == nil || strings.TrimSpace(text) == "" {
 		return
 	}
@@ -226,7 +226,7 @@ func scanCommandPaths(projectDir string, rec *Record, text string, transform fun
 			continue
 		}
 		seen[field] = struct{}{}
-		addRecordPath(projectDir, rec, field, FidelityScraped)
+		addRecordPath(roots, rec, field, FidelityScraped)
 	}
 }
 

@@ -198,3 +198,32 @@ func TestRenderSkillPreloadKeepsProjectSkillLiteral(t *testing.T) {
 		t.Fatalf("project skill body was evaluated: %#v", got)
 	}
 }
+
+func TestTurnDecisionHoldsEnginePriorityAcrossBothCalls(t *testing.T) {
+	fake := &decidetest.Fake{Scores: []float64{3.8}}
+	m := &Service{
+		Ledger:  turnload.NewLedger(),
+		decider: fake,
+		skills: func(context.Context, *api.Session, string, []string) ([]skills.Skill, []extpacks.Diagnostic) {
+			return []skills.Skill{{Name: "user-skill", Description: "Custom project skill.", Body: "Do the work.", UserProvided: true}}, nil
+		},
+	}
+	m.SetSkillBodyRenderer(func(_ context.Context, _ tools.ToolContext, sk skills.Skill) (string, error) {
+		return sk.Body, nil
+	})
+	decision := &Decision{
+		catalog: turnload.Catalog{Turn: turnload.TurnSpec{DeadlineMS: 500, Skills: turnload.SkillPreloadSpec{PreloadAt: 3.4, Margin: 0.3}}},
+		floor:   []string{"command"},
+	}
+	candidates := turnload.ToolCandidates([]turnload.ToolCard{{Name: "edit", Description: "Edit a file."}})
+	m.decideTurn(t.Context(), &api.Session{ID: "s1"}, "coordinator", "custom project workflow", decision, candidates)
+	want := []string{"hold", "decide", "rank", "release"}
+	if len(fake.Calls) != len(want) {
+		t.Fatalf("calls=%v want %v", fake.Calls, want)
+	}
+	for i, call := range want {
+		if fake.Calls[i] != call {
+			t.Fatalf("calls=%v want %v", fake.Calls, want)
+		}
+	}
+}

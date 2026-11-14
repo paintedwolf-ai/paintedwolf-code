@@ -21,7 +21,9 @@ import (
 var pathTokenRE = regexp.MustCompile(`[-\p{L}\p{N}_@./\\]+(?::[0-9]+(?:-[0-9]+)?)?(?:#L?[0-9]+(?:-L?[0-9]+)?)?`)
 
 // BuildProjectPathReferences binds mentions to supplied context without checking availability.
-func BuildProjectPathReferences(p *project.Project, prose string, context *api.SourceContext) []api.NavigationReference {
+// Bare anchored paths bind to the session folder: the root identified by activeRootID when
+// known, otherwise the primary root.
+func BuildProjectPathReferences(p *project.Project, prose string, context *api.SourceContext, activeRootID string) []api.NavigationReference {
 	if p == nil || p.ID == "" {
 		return []api.NavigationReference{}
 	}
@@ -36,7 +38,7 @@ func BuildProjectPathReferences(p *project.Project, prose string, context *api.S
 		if !explicit && !strings.ContainsAny(raw, "./\\:@") && (syntax == "text" || len(index[raw]) == 0) {
 			return
 		}
-		ref, ok := parseReference(p, raw, explicit, standalone)
+		ref, ok := parseReference(p, raw, explicit, standalone, activeRootID)
 		if !ok {
 			return
 		}
@@ -95,7 +97,7 @@ func codeSpanText(node *ast.CodeSpan, source []byte) string {
 	return value.String()
 }
 
-func parseReference(p *project.Project, raw string, explicit, standalone bool) (api.NavigationReference, bool) {
+func parseReference(p *project.Project, raw string, explicit, standalone bool, activeRootID string) (api.NavigationReference, bool) {
 	ref := api.NavigationReference{Mention: raw, ProjectID: p.ID, Status: api.NavigationPending, Explicit: explicit}
 	// A qualified form binds to the primary root when nothing names one.
 	anchored := explicit
@@ -174,7 +176,7 @@ func parseReference(p *project.Project, raw string, explicit, standalone bool) (
 			return ref, false
 		}
 		for _, root := range p.Roots {
-			if root.Label == label {
+			if strings.EqualFold(root.Label, label) {
 				if ref.RootID != "" && ref.RootID != root.ID {
 					return ref, false
 				}
@@ -202,12 +204,25 @@ func parseReference(p *project.Project, raw string, explicit, standalone bool) (
 	}
 	ref.Path = value
 	if anchored && ref.RootID == "" && ref.Status != api.NavigationUnavailable {
-		for _, root := range p.Roots {
-			if root.IsPrimary {
-				ref.RootID = root.ID
-				break
+		ref.RootID = sessionFolderRootID(p.Roots, activeRootID)
+	}
+	return ref, true
+}
+
+// sessionFolderRootID picks the root bare anchored paths bind to: the session's
+// active root when known, otherwise the primary root.
+func sessionFolderRootID(roots []project.Root, activeRootID string) string {
+	if activeRootID != "" {
+		for _, root := range roots {
+			if root.ID == activeRootID {
+				return root.ID
 			}
 		}
 	}
-	return ref, true
+	for _, root := range roots {
+		if root.IsPrimary {
+			return root.ID
+		}
+	}
+	return ""
 }

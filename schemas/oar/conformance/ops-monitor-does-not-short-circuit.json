@@ -1,0 +1,42 @@
+{
+  "id": "ops-monitor-does-not-short-circuit",
+  "title": "A monitored rule that would have blocked does not stop later rules",
+  "covers": [
+    "OAR-EVAL-8"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "A_MONITORED_BLOCK",
+      "kind": "schema",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "tool == \"read\"",
+      "enforcement": "monitor"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "B_STILL_EVALUATED",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "tool == \"read\""
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "B_STILL_EVALUATED",
+    "applied": [
+      "A_MONITORED_BLOCK:monitor",
+      "B_STILL_EVALUATED:fired"
+    ]
+  }
+}

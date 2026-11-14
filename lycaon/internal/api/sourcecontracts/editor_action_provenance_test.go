@@ -50,6 +50,7 @@ func TestEditorActionsPreserveInstructionAndUntrustedSource(t *testing.T) {
 			status, response, accepted := srv.Admin.Extensions.Execution.ExecuteEditorAction(recorder,
 				contractfixture.NewAuthedRequest(http.MethodPost, "/", nil),
 				&sess,
+				project,
 				wire.CommandInvokeRequest{OperationID: uuid.NewString()}, input)
 			if !accepted || status != http.StatusAccepted {
 				t.Fatalf("editor action status=%d accepted=%v body=%s", status, accepted, recorder.Body.String())

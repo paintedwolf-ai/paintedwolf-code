@@ -39,20 +39,17 @@ func TestParseReadsFrontMatterAndBody(t *testing.T) {
 	}
 }
 
-func TestParseReadsNeededWithAsLabelsOnly(t *testing.T) {
+func TestParseAcceptsNeededWithFromExtensionPacksAndIgnoresIt(t *testing.T) {
 	const unit = "---\ndescription: claims and receipts\nslot: evidence\nneeded_with: [capture_page, verify]\n---\nbody\n"
 	u, err := Parse("claim-evidence", []byte(unit))
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
-	if len(u.NeededWith) != 2 || len(u.Attaches) != 0 || !u.Labelled() {
+	if len(u.Attaches) != 0 {
 		t.Fatalf("unit = %+v", u)
 	}
-	if u.Follows(map[string]bool{}) {
-		t.Fatal("a needed_with unit carries its own decision; it never follows tools")
-	}
-	if !u.NeededBy(map[string]bool{"verify": true}) || u.NeededBy(map[string]bool{"read": true}) {
-		t.Fatal("NeededBy must read the needed_with tools")
+	if got := FromUnits([]Unit{u}).Rendered(Selection{Host: HostCoordinator}); len(got[SlotEvidence]) != 1 {
+		t.Fatalf("a needed_with unit must render without its tools: %v", got)
 	}
 }
 
@@ -66,7 +63,6 @@ func TestParseRejectsBadHeaders(t *testing.T) {
 		"unknown field": "---\ndescription: x\nslot: conduct\ncolour: red\n---\nbody\n",
 		"long desc":     "---\ndescription: " + strings.Repeat("word ", DescriptionMaxWords+1) + "\nslot: conduct\n---\nbody\n",
 		"dup attach":    "---\ndescription: x\nslot: conduct\nattaches: [read, read]\n---\nbody\n",
-		"needed twice":  "---\ndescription: x\nslot: conduct\nattaches: [read]\nneeded_with: [read]\n---\nbody\n",
 	}
 	for name, content := range cases {
 		if _, err := Parse("unit-a", []byte(content)); err == nil {
@@ -109,8 +105,7 @@ func ids(units []Unit) []string {
 
 func TestRenderedFollowsOfferedToolsHostAndMode(t *testing.T) {
 	cat := fixtureCatalog()
-	floor := map[string]bool{"read": true}
-	sel := Selection{Host: HostCoordinator, Mode: "investigate", Offered: map[string]bool{"read": true, "task": true}, Floor: floor}
+	sel := Selection{Host: HostCoordinator, Mode: "investigate", Offered: map[string]bool{"read": true, "task": true}}
 	got := cat.Rendered(sel)
 	if want := []string{"survey-ladder", "read-tool"}; strings.Join(ids(got[SlotOrientation]), ",") != strings.Join(want, ",") {
 		t.Fatalf("orientation = %v", ids(got[SlotOrientation]))
@@ -136,26 +131,10 @@ func TestRenderedFollowsOfferedToolsHostAndMode(t *testing.T) {
 	if len(got[SlotExecution]) != 0 || len(got[SlotProcedures]) != 1 {
 		t.Fatalf("worker render = %v / %v", ids(got[SlotExecution]), ids(got[SlotProcedures]))
 	}
-	// Omissions drop units the turn decided against.
-	sel = Selection{Host: HostCoordinator, Offered: map[string]bool{"read": true}, Omitted: map[string]bool{"read-tool": true}}
+	// A unit attached to tools renders exactly while one of them is offered.
+	sel = Selection{Host: HostCoordinator, Offered: map[string]bool{"task": true}}
 	if got := cat.Rendered(sel); strings.Join(ids(got[SlotOrientation]), ",") != "survey-ladder" {
-		t.Fatalf("omitted render = %v", ids(got[SlotOrientation]))
-	}
-}
-
-func TestCandidatesScoreFloorAndUnattachedUnitsOnly(t *testing.T) {
-	cat := fixtureCatalog()
-	floor := map[string]bool{"read": true}
-	loadable := map[string]bool{"task": true, "git_commit": true, "git_status": true, "command": true}
-	got := ids(cat.Candidates(HostCoordinator, "investigate", floor, loadable))
-	if want := "survey-ladder,read-tool,pack-unit"; strings.Join(got, ",") != want {
-		t.Fatalf("candidates = %v, want %s", got, want)
-	}
-	// A unit attached only to loadable tools follows them and is never scored.
-	for _, id := range got {
-		if id == "delegation" || id == "git-consent" || id == "runner" {
-			t.Fatalf("%s should follow its tools", id)
-		}
+		t.Fatalf("render without read = %v", ids(got[SlotOrientation]))
 	}
 }
 

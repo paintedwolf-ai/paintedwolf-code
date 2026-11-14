@@ -14,7 +14,7 @@ import (
 
 func TestOutputNamespaceExpansionAndNativeBindingKeepQuotedNamesLiteral(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
-	testutil.FailErr(t, "host output", scratch.PublishCommandOutput(f.OutputDir, "program", "stdout", strings.NewReader("retained\n")))
+	testutil.FailErr(t, "host output", scratch.PublishCommandOutput(f.OutputDir, scratch.CommandOutput{ProgramID: "program", Stream: "stdout"}, strings.NewReader("retained\n")))
 	for _, name := range []string{"@output", "@scratch", "@root"} {
 		testutil.FailErr(t, "literal namespace directory", os.Mkdir(filepath.Join(f.Dir, name), 0700))
 		testutil.FailErr(t, "literal namespace file", os.WriteFile(filepath.Join(f.Dir, name, "program.stdout"), []byte(name+" literal\n"), 0600))
@@ -41,7 +41,7 @@ func TestOutputNamespaceExpansionAndNativeBindingKeepQuotedNamesLiteral(t *testi
 
 func TestOutputGlobExpandsOnlyTheUnquotedAddress(t *testing.T) {
 	f := newOutputDeliveryFixture(t)
-	testutil.FailErr(t, "host output", scratch.PublishCommandOutput(f.OutputDir, "program", "stdout", strings.NewReader("saved\n")))
+	testutil.FailErr(t, "host output", scratch.PublishCommandOutput(f.OutputDir, scratch.CommandOutput{ProgramID: "program", Stream: "stdout"}, strings.NewReader("saved\n")))
 	testutil.FailErr(t, "literal directory", os.Mkdir(filepath.Join(f.Dir, "@output"), 0700))
 	testutil.FailErr(t, "literal matching file", os.WriteFile(filepath.Join(f.Dir, "@output", "literal.stdout"), []byte("literal\n"), 0600))
 	raw, err := f.Call(t, t.Context(), `printf '%s\n' @output/*.stdout '@output/'*.stdout`)

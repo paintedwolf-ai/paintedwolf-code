@@ -82,7 +82,7 @@ func TestForgetSessionClearsEveryReleasedStore(t *testing.T) {
 
 	m.Resources.Dispose(t.Context(), sid)
 
-	m.Chats.Captures.Capture.RecordPath(t.Context(), checkpoints, sid, "after.go")
+	m.Chats.Captures.Capture.RecordPath(t.Context(), checkpoints, sid, "", "after.go")
 	manifest, err := checkpoints.Load(t.Context(), sid, "anchor")
 	testutil.FailErr(t, "load released checkpoint", err)
 	if len(manifest.Paths) != 0 {

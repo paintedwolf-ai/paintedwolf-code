@@ -14,7 +14,10 @@ type ResourcePresence struct {
 	HeldCalls   bool
 }
 
-var familyOf = map[string]string{}
+var (
+	familyOf        = map[string]string{}
+	resourceControl = map[string]bool{}
+)
 
 func init() {
 	for id, members := range compiledFamilies {
@@ -22,6 +25,17 @@ func init() {
 			familyOf[member] = id
 		}
 	}
+	for _, controls := range nativemanifest.ExclusiveImplied(compiledResourceImplied) {
+		for _, name := range controls {
+			resourceControl[name] = true
+		}
+	}
+}
+
+// ResourceControl reports a tool that acts only on one kind of live resource
+// and arrives with it, such as terminal_send for an open terminal.
+func ResourceControl(name string) bool {
+	return resourceControl[strings.TrimSpace(name)]
 }
 
 // IsCatalog reports whether name has a compiled stock contract.

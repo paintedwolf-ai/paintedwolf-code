@@ -9,10 +9,10 @@ schema:
   properties:
     project_dir:
       type: string
-      description: Sandboxed file-tree probe (same as capture_page). Mount the site root, not a leaf page.
+      description: "Folder to serve: bare = the session folder, `@label/path` = any attached folder, absolute accepted (same as capture_page). Mount the site root, not a leaf page."
     path:
       type: string
-      description: Optional site-relative path within project_dir (same as capture_page).
+      description: Optional site-relative path within project_dir, a URL path not a filesystem path (same as capture_page).
     url:
       type: string
       description: Loopback http(s) URL (same as capture_page).
@@ -49,7 +49,7 @@ schema:
           method: {type: string, description: "Method to match; default any."}
           status: {type: integer, minimum: 100, maximum: 599, description: "Response status; default 200 when a body is given."}
           body: {type: string, description: "Response body text."}
-          body_path: {type: string, description: "Workspace file served as the body."}
+          body_path: {type: string, description: "File served as the body: relative to the session folder, `@label/path` for any attached folder, `@output/path` for session output, or absolute."}
           content_type: {type: string, description: "Response Content-Type; default from body_path's extension, else application/json."}
           headers: {type: object, additionalProperties: {type: string}, description: "Extra response headers."}
           delay_ms: {type: integer, minimum: 0, maximum: 30000, description: "Wait before answering; given alone, it slows a request that still reaches the network."}

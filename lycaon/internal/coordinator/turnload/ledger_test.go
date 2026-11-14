@@ -1,10 +1,12 @@
 package turnload
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -18,16 +20,9 @@ func opening(id string, boundary Boundary, loadable ...string) TurnOpening {
 }
 
 func predict(tools ...string) Decision {
-	d := Decision{Tools: map[string]float64{}, Omitted: map[string]Verdict{}}
+	d := Decision{Tools: map[string]float64{}}
 	for _, tool := range tools {
 		d.Tools[tool] = 0.8
-	}
-	return d
-}
-
-func omit(d Decision, ids ...string) Decision {
-	for _, id := range ids {
-		d.Omitted[id] = Verdict{P: 0.1, Confidence: 0.9}
 	}
 	return d
 }
@@ -116,33 +111,6 @@ func TestLedgerBeginTurnKeepsRequestedToolsAcrossColdIdleBoundaries(t *testing.T
 	}
 }
 
-func TestLedgerOmissionsNarrowWhileWarmAndResetWhenCold(t *testing.T) {
-	l := NewLedger()
-	l.BeginTurn("s1", opening("u1", Boundary{Cache: CacheCold, Reason: ColdFirstTurn}), omit(predict(), "a", "b"))
-	if got := l.Omitted("s1"); !got["a"] || !got["b"] {
-		t.Fatalf("a cold turn omits what the decision omits: %v", got)
-	}
-	// Warm: b comes back, and c cannot start being omitted.
-	l.BeginTurn("s1", opening("u2", warm), omit(predict(), "a", "c"))
-	if got := l.Omitted("s1"); !got["a"] || got["b"] || got["c"] {
-		t.Fatalf("a warm turn only narrows: %v", got)
-	}
-	// Abstained renders everything.
-	l.BeginTurn("s1", opening("u3", warm), Decision{Abstained: true})
-	if got := l.Omitted("s1"); len(got) != 0 {
-		t.Fatalf("abstention renders every unit: %v", got)
-	}
-	l.BeginTurn("s1", opening("u4", warm), omit(predict(), "a"))
-	if got := l.Omitted("s1"); len(got) != 0 {
-		t.Fatalf("a warm turn widened an omission: %v", got)
-	}
-	// Cold: the decision decides again.
-	l.BeginTurn("s1", opening("u5", cold), omit(predict(), "a", "c"))
-	if got := l.Omitted("s1"); !got["a"] || !got["c"] {
-		t.Fatalf("a cold turn re-decides omissions: %v", got)
-	}
-}
-
 func TestRestoreBringsBackTheRecordedStandingSurface(t *testing.T) {
 	history := []api.Message{
 		{ID: "a1", Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{ID: "c1", Name: "request_tools"}, {ID: "c2", Name: "git_status"}}},
@@ -155,7 +123,7 @@ func TestRestoreBringsBackTheRecordedStandingSurface(t *testing.T) {
 		{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{ToolCallID: "c9", AssistantMessageID: "a9", Tool: "write", Outcome: api.ToolResultOutcomeCompleted}},
 	}
 	l := NewLedger()
-	l.BeginTurn("s1", TurnOpening{OpeningMessageID: "u1", Loadable: []string{"edit", "git_compare"}, Boundary: cold, HistoryEpoch: "1:m9"}, omit(predict("edit"), "survey"))
+	l.BeginTurn("s1", TurnOpening{OpeningMessageID: "u1", Loadable: []string{"edit", "git_compare"}, Boundary: cold, HistoryEpoch: "1:m9"}, predict("edit"))
 	l.Activate("s1", []string{"git_compare"}, "compare branches")
 	recorded := l.Standing("s1")
 
@@ -165,8 +133,8 @@ func TestRestoreBringsBackTheRecordedStandingSurface(t *testing.T) {
 	if got := standingNames(restarted, "s1"); got != "edit,git_compare" {
 		t.Fatalf("restored standing = %s", got)
 	}
-	if !restarted.Omitted("s1")["survey"] || snap.HistoryEpoch != "1:m9" {
-		t.Fatalf("restored omissions %v epoch %q", restarted.Omitted("s1"), snap.HistoryEpoch)
+	if snap.HistoryEpoch != "1:m9" {
+		t.Fatalf("restored epoch %q", snap.HistoryEpoch)
 	}
 	// History replays what the chat needed; an unmatched result does not.
 	if got := strings.Join(restarted.Needed("s1"), ","); got != "git_compare,git_status" {
@@ -223,7 +191,7 @@ func TestCompactionPreservesStandingSurfaceAcrossRestart(t *testing.T) {
 	ledger := NewLedger()
 	first := opening("u1", cold, "edit", "git_compare")
 	first.HistoryEpoch = "1:old"
-	ledger.BeginTurn("session", first, omit(predict("edit"), "survey"))
+	ledger.BeginTurn("session", first, predict("edit"))
 	restored := NewLedger()
 	restored.Restore("session", ledger.Standing("session"), nil)
 	now := time.Now()
@@ -233,12 +201,9 @@ func TestCompactionPreservesStandingSurfaceAcrossRestart(t *testing.T) {
 	})
 	next := opening("u2", boundary, "edit", "git_compare")
 	next.HistoryEpoch = "2:new"
-	restored.BeginTurn("session", next, omit(predict("git_compare"), "survey", "extra"))
+	restored.BeginTurn("session", next, predict("git_compare"))
 	if got := standingNames(restored, "session"); got != "edit,git_compare" {
 		t.Fatalf("compaction dropped standing tools: %s", got)
-	}
-	if !restored.Omitted("session")["survey"] || restored.Omitted("session")["extra"] {
-		t.Fatalf("compaction replaced standing omissions: %v", restored.Omitted("session"))
 	}
 	if restored.Standing("session").HistoryEpoch != "2:new" {
 		t.Fatal("receipt lost history provenance")
@@ -250,5 +215,21 @@ func TestLedgerNeverPromotesPredictionOutsideLoadableSurface(t *testing.T) {
 	l.BeginTurn("session", opening("u1", cold, "read"), predict("read", "command"))
 	if got := standingNames(l, "session"); got != "read" {
 		t.Fatalf("off-surface prediction loaded: %s", got)
+	}
+}
+
+func TestRestoreReadsAStandingRecordThatCarriesOmittedUnits(t *testing.T) {
+	var recorded Standing
+	raw := `{"tools":[{"tool":"edit","source":"predicted","p":0.8,"turn":"u1"}],"omitted":["native-recall-tool"],"history_epoch":"1:m9"}`
+	testutil.FailErr(t, "decode standing", json.Unmarshal([]byte(raw), &recorded))
+	l := NewLedger()
+	l.Restore("s1", recorded, nil)
+	if got := standingNames(l, "s1"); got != "edit" {
+		t.Fatalf("restored standing = %s", got)
+	}
+	encoded, err := json.Marshal(l.Standing("s1"))
+	testutil.FailErr(t, "encode standing", err)
+	if strings.Contains(string(encoded), "omitted") {
+		t.Fatalf("restored standing kept the omitted units: %s", encoded)
 	}
 }

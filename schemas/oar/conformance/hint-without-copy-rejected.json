@@ -1,0 +1,21 @@
+{
+  "title": "A hint that publishes no copy is not a hint",
+  "covers": [
+    "OAR-HINT-2"
+  ],
+  "hints": [
+    {
+      "spec_version": "1.0",
+      "id": "H",
+      "kind": "hint"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {}
+  },
+  "expected": {
+    "error": "OAR-HINT-2"
+  },
+  "id": "hint-without-copy-rejected"
+}

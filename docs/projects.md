@@ -14,7 +14,7 @@ A conversation may begin before the human chooses a filesystem location, and one
 |---------|------|
 | Project | Stable UUID, display name, root set, sessions, and project-scoped settings |
 | Project root | Filesystem tree with stable root identity and display label: human-attached, or the host-created draft scratch root |
-| Active root | The root that supplies unqualified path context for the current session |
+| Session folder | The root that supplies unqualified path context for the current session |
 | Project overlay | Commit-worthy configuration under `.paintedwolf/` |
 | Host project data | Non-repository attachments, spills, indexes, and other engine-managed state |
 
@@ -90,7 +90,7 @@ Detach and delete also offer a forced route, which is not a bypass: the API boun
 
 ## Root model
 
-Each root has a stable id, canonical filesystem location, display label, and position. The first root is primary; a session may select another active root for unqualified paths.
+Each root has a stable id, canonical filesystem location, display label, and position. The first root is primary; a session may select another root as the session folder that unqualified paths resolve against.
 
 | Rule | Reason |
 |------|--------|
@@ -98,6 +98,7 @@ Each root has a stable id, canonical filesystem location, display label, and pos
 | Secondary-root display paths are qualified | Evidence and navigation remain unambiguous |
 | Every root has one canonical label | Den, prompts, and `@label` resolution render the same host-owned fact; automatic labels preserve the folder basename and receive a bounded suffix on collision |
 | Root mutations advance a generation | Cached policy, trust inventory, and source inventory must not survive a changed boundary unnoticed |
+| The roots-changed kick follows labels, not host paths | Sessions address folders by `@label`: a label rename, an added or removed root, a primary change, a session's active folder change, or draft promotion relabeling `@Draft` to the folder basename each kick open sessions, while a host path move under the same id and label changes nothing the model can see and kicks nothing |
 | Attaching a folder (`RootKindAttached`, including promotion) and detaching any root are human-only | Project scope is authority, not agent preference |
 | The draft scratch root (`RootKindDraft`) is the one root kind the host creates on its own | A fresh conversation needs a live file surface before a human has chosen a folder |
 | Symlink traversal is descriptor-relative and jailed | A lexical child path must not escape the approved tree |

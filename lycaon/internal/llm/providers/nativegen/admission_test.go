@@ -3,7 +3,24 @@ package nativegen
 import (
 	"context"
 	"testing"
+
+	"github.com/lycaon/lycaon/internal/inference"
+	"github.com/lycaon/lycaon/internal/llm/modelcall"
 )
+
+func TestRequestPriorityFollowsUrgency(t *testing.T) {
+	if got := requestPriority(modelcall.CompletionRequest{}); got != inference.Foreground {
+		t.Fatalf("interactive request priority=%v", got)
+	}
+	utility := modelcall.CompletionRequest{Composition: modelcall.CompositionHostUtility}
+	if got := requestPriority(utility); got != inference.Foreground {
+		t.Fatalf("awaited utility request priority=%v", got)
+	}
+	utility.Urgency = modelcall.UrgencyBackground
+	if got := requestPriority(utility); got != inference.Background {
+		t.Fatalf("background request priority=%v", got)
+	}
+}
 
 func TestForegroundPreemptsPreparationAndRetainsRuntime(t *testing.T) {
 	runtime := NewRuntime(RuntimeConfig{})

@@ -17,7 +17,8 @@ import (
 type vocabularyDoc struct {
 	OAR  string `yaml:"oar"`
 	Core struct {
-		Facts []vocabularyFact `yaml:"facts"`
+		Facts     []vocabularyFact `yaml:"facts"`
+		Functions []vocabularyFact `yaml:"functions"`
 	} `yaml:"core"`
 	Profiles []struct {
 		Name  string           `yaml:"name"`
@@ -82,12 +83,12 @@ func TestVocabularyMatchesPublished(t *testing.T) {
 		t.Errorf("vocabulary oar = %q, this engine implements %q", doc.OAR, want)
 	}
 
-	// Core tier ([OAR-FACT-15], [OAR-FIRE-11]).
-	publishedCoreFacts, publishedCoreFns := splitFactsAndFunctions(t, doc.Core.Facts)
+	// Core tier ([OAR-FACT-12], section 5.2 and 5.3).
+	publishedCoreFacts, publishedCoreFns := splitFactsAndFunctions(t, append(append([]vocabularyFact(nil), doc.Core.Facts...), doc.Core.Functions...))
 	compareFactMaps(t, "core", publishedCoreFacts, coreFacts)
 	compareFunctionMaps(t, "core", publishedCoreFns, coreFunctions)
 
-	// Profiles ([OAR-FACT-16]): same set of profiles, and each provided whole.
+	// Standard profiles ([OAR-FACT-13]): same set, each provided whole.
 	publishedProfiles := map[string]bool{}
 	for _, p := range doc.Profiles {
 		publishedProfiles[p.Name] = true
@@ -117,7 +118,7 @@ func TestVocabularyMatchesPublished(t *testing.T) {
 		}
 	}
 
-	// Reserved detectors ([OAR-CONF-25]).
+	// Reserved detectors ([OAR-CONF-18]).
 	published := map[string]bool{}
 	for _, d := range doc.Detectors {
 		published[d.Ref] = true

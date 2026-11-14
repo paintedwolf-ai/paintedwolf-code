@@ -21,6 +21,12 @@ func publishSocketReferences(facts, data map[string]any) {
 			paths = append(append([]string(nil), paths...), path)
 		}
 	}
+	PublishSocketReferences(facts, paths)
+}
+
+// PublishSocketReferences states the whole endpoint references an external
+// client uses for each socket path.
+func PublishSocketReferences(facts map[string]any, paths []string) {
 	var refs, urls []string
 	for _, path := range paths {
 		ref, url := confine.SocketEndpointReferences(path)

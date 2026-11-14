@@ -1,29 +1,22 @@
 # Deprecated rejection identity; raw transfers use portable curl.
-oar: '1.0'
+spec_version: "1.0"
 id: FETCH_URL_MODE_INVALID
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - fetch_url
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.next_steps
-    - paintedwolf.rejection_code
-    - paintedwolf.mode
+requires_facts: [paintedwolf.mode, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "FETCH_URL_MODE_INVALID"
 effect: block
-copy:
-  what: The recorded fetch_url request used unsupported mode {{ paintedwolf.mode }}.
-  cause: That invocation required text or raw; the mode argument is now retired.
-  why: The current source reader has no transfer mode.
-  fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
-  instead: Follow the current schema and access boundaries.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: recorded fetch_url mode was invalid
+message: recorded fetch_url mode was invalid
+what: The recorded fetch_url request used unsupported mode {{ paintedwolf.mode }}.
+cause: That invocation required text or raw; the mode argument is now retired.
+why: The current source reader has no transfer mode.
+fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
+instead: Follow the current schema and access boundaries.
 x-paintedwolf-scenarios:
   - id: default
     vars:

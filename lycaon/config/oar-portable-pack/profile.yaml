@@ -1,0 +1,19 @@
+# The host these rules assume, as an anchor profile map ([OAR-PROF-2],
+# [OAR-PROF-3]): which core anchors this host implements, and which it does not.
+# A rule targeting an unsupported anchor is refused at load.
+#
+# The facts a rule may name are declared by the engine's fact environment
+# (section 5), and a rule that needs a fact the host lacks names it in
+# `requires_facts` ([OAR-DOC-22]).
+
+oar_profile_version: "1.0"
+core:
+  tool.pre_invoke: tool.pre_invoke
+  tool.handler: tool.handler
+  tool.post_invoke: tool.post_invoke
+  model.input: model.input
+  model.output: model.output
+  model.tool_result: model.tool_result
+unsupported:
+  - agent.post_turn
+  - agent.finalize

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/google/uuid"
@@ -45,11 +46,14 @@ func (s *MergeService) snapshotPromoteTargets(
 		if p == "" {
 			continue
 		}
-		abs, root, err := projectroot.ResolveAbs(roots, task.WorkspaceRootID, p)
-		if err != nil {
+		// Requested paths are baseline spellings; resolve them to their
+		// structured identity instead of re-resolving against the active root.
+		root, scopeRel, ok := projectroot.ParseBaselinePath(roots, p)
+		if !ok || scopeRel == "" || scopeRel == "." {
 			continue
 		}
-		t := promoteTarget{rootID: root.ID, relPath: projectroot.ScopeRel(root, abs), abs: abs}
+		abs := filepath.Join(root.Path, filepath.FromSlash(scopeRel))
+		t := promoteTarget{rootID: root.ID, relPath: scopeRel, abs: abs}
 		info, statErr := os.Stat(abs)
 		switch {
 		case statErr == nil && !info.IsDir():

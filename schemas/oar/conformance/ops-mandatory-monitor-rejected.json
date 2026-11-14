@@ -1,0 +1,27 @@
+{
+  "id": "ops-mandatory-monitor-rejected",
+  "title": "A mandatory rule cannot be monitored",
+  "covers": [
+    "OAR-OPS-9"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true",
+    "mandatory": true,
+    "enforcement": "monitor"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "mandatory"
+  }
+}

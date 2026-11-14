@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -51,7 +52,7 @@ type RuleCheckOptions struct {
 //
 // The result set is one row per rule plus one row per fixture that names a
 // rule no checked file provided.
-func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, error) {
+func CheckRuleFiles(ctx context.Context, paths []string, opts RuleCheckOptions) ([]RuleCheckResult, error) {
 	if len(paths) == 0 {
 		return nil, fmt.Errorf("no rule paths given")
 	}
@@ -63,7 +64,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 	} else if err := anchorcatalog.InstallBundled(); err != nil {
 		return nil, fmt.Errorf("install bundled anchor catalog: %w", err)
 	}
-	if err := InstallCapabilityBundled(strings.TrimSpace(opts.SchemaDir)); err != nil {
+	if err := InstallEngineDeclarationBundled(strings.TrimSpace(opts.SchemaDir)); err != nil {
 		return nil, err
 	}
 	ruleDirs, fixtureFiles, err := classifyRulePaths(paths)
@@ -75,7 +76,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 	if err != nil {
 		return nil, fmt.Errorf("oar loader: %w", err)
 	}
-	runner, err := NewConformanceRunner(opts.SchemaDir)
+	runner, err := NewHostConformanceRunner(opts.SchemaDir, InstalledEngineDeclaration())
 	if err != nil {
 		return nil, fmt.Errorf("conformance runner: %w", err)
 	}
@@ -113,13 +114,13 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 			res := RuleCheckResult{RuleID: rule.ID, Path: ruleSourcePath(rule, dir.label)}
 			for _, fx := range fixturesByRule[rule.ID] {
 				res.Scenarios++
-				if err := runner.RunFixture(fx); err != nil {
+				if err := runner.RunFixture(ctx, fx); err != nil {
 					res.Code = RuleCheckScenarioMismatch
 					res.Detail = fmt.Sprintf("%s: %v", fixtureName(fx), err)
 					break
 				}
 			}
-			// x-paintedwolf-scenarios are the copy contract: render this Code with
+			// Scenarios are the copy contract: render this Code with
 			// these vars and it says these things.
 			if res.Code == "" {
 				rendered, mismatch := checkRenderScenarios(rule)
@@ -139,7 +140,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 		}
 		for _, fx := range fxs {
 			res := RuleCheckResult{RuleID: id, Path: fixtureName(fx), Scenarios: 1}
-			if err := runner.RunFixture(fx); err != nil {
+			if err := runner.RunFixture(ctx, fx); err != nil {
 				res.Code = RuleCheckScenarioMismatch
 				res.Detail = err.Error()
 			}
@@ -148,7 +149,7 @@ func CheckRuleFiles(paths []string, opts RuleCheckOptions) ([]RuleCheckResult, e
 	}
 	for _, fx := range orphanFixtures {
 		res := RuleCheckResult{Path: fixtureName(fx), Scenarios: 1}
-		if err := runner.RunFixture(fx); err != nil {
+		if err := runner.RunFixture(ctx, fx); err != nil {
 			res.Code = RuleCheckScenarioMismatch
 			res.Detail = err.Error()
 		}
@@ -335,23 +336,29 @@ func loadFixtureFile(path string) ([]ConformanceFixture, error) {
 	}
 	trimmed := strings.TrimSpace(string(raw))
 	if strings.HasPrefix(trimmed, "[") {
-		var list []ConformanceFixture
-		if err := json.Unmarshal(raw, &list); err != nil {
+		var items []json.RawMessage
+		if err := json.Unmarshal(raw, &items); err != nil {
 			return nil, fmt.Errorf("%s: %w", path, err)
 		}
-		for i := range list {
-			if strings.TrimSpace(list[i].Name) == "" {
-				list[i].Name = fmt.Sprintf("%s[%d]", filepath.Base(path), i)
+		list := make([]ConformanceFixture, 0, len(items))
+		for i, item := range items {
+			fx, err := decodeFixture(item)
+			if err != nil {
+				return nil, fmt.Errorf("%s[%d]: %w", path, i, err)
 			}
+			if strings.TrimSpace(fx.ID) == "" {
+				fx.ID = fmt.Sprintf("%s[%d]", filepath.Base(path), i)
+			}
+			list = append(list, fx)
 		}
 		return list, nil
 	}
-	var fx ConformanceFixture
-	if err := json.Unmarshal(raw, &fx); err != nil {
+	fx, err := decodeFixture(raw)
+	if err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	if strings.TrimSpace(fx.Name) == "" {
-		fx.Name = strings.TrimSuffix(filepath.Base(path), ".json")
+	if strings.TrimSpace(fx.ID) == "" {
+		fx.ID = strings.TrimSuffix(filepath.Base(path), ".json")
 	}
 	return []ConformanceFixture{fx}, nil
 }
@@ -368,7 +375,7 @@ func fixtureRuleID(fx ConformanceFixture) string {
 }
 
 func fixtureName(fx ConformanceFixture) string {
-	if name := strings.TrimSpace(fx.Name); name != "" {
+	if name := strings.TrimSpace(fx.ID); name != "" {
 		return name
 	}
 	return "(unnamed fixture)"
@@ -413,11 +420,11 @@ func hintEntryForRule(rule *Rule) guidance.HintEntry {
 		Emit:    rule.Emit,
 		Effect:  string(rule.Effect),
 		Anchor:  rule.Anchor,
-		Tools:   rule.Selector["tool"],
+		Tools:   rule.Tools(),
 		What:    rule.Copy.What,
 		Cause:   rule.Copy.Cause,
 		Why:     rule.Copy.Why,
-		Fix:     rule.Fix,
+		Fix:     rule.Copy.Fix,
 		Instead: rule.Copy.Instead,
 	}
 }

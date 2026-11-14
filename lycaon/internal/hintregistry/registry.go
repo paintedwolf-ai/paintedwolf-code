@@ -148,7 +148,7 @@ func parseEffectiveEntries(catalog *extpacks.EffectiveCatalog) ([]Entry, error) 
 		if err != nil {
 			return nil, err
 		}
-		// [OAR-DOC-9] Effective entries retain unique document identities.
+		// [OAR-DOC-22] Effective entries retain unique document identities.
 		if seen[code] {
 			return nil, fmt.Errorf("%s: duplicate policy code %q", at, code)
 		}

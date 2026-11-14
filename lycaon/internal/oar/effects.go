@@ -12,14 +12,11 @@ const (
 	TraceFired   TraceOutcome = "fired"
 	TracePassed  TraceOutcome = "passed"
 	TraceErrored TraceOutcome = "errored"
-	// Monitor outcomes preserve the observed result ([OAR-OPS-9]).
+	// Monitor outcomes preserve the observed result ([OAR-OPS-7]).
 	TraceMonitoredFired  TraceOutcome = "monitored_fired"
 	TraceMonitoredPassed TraceOutcome = "monitored_passed"
-	// TraceMonitoredErrored records a raised monitor rule ([OAR-EVAL-10]).
+	// TraceMonitoredErrored records a raised monitor rule ([OAR-OPS-1]).
 	TraceMonitoredErrored TraceOutcome = "monitored_errored"
-	// TraceSuppressed records a rule another rule's overrides withdrew for this
-	// occurrence: no decision, no side-effect, but still traced ([OAR-EVAL-14]).
-	TraceSuppressed TraceOutcome = "suppressed"
 )
 
 // TraceEntry records one rule evaluation for telemetry.
@@ -66,10 +63,12 @@ type acceptPublisher struct{}
 
 func (acceptPublisher) Publish(context.Context, OnFireEvent) error { return nil }
 
-// ExecuteOnFire runs declared side effects.
-func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher, event OnFireEvent, code string, actions []OnFireAction) ([]OnFireAction, error) {
+// ExecuteOnFire runs declared side effects and returns the ones applied. An
+// event the publisher refuses is not applied and changes nothing else
+// ([OAR-FIRE-7]).
+func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher, event OnFireEvent, code string, actions []OnFireAction) []OnFireAction {
 	if len(actions) == 0 {
-		return nil, nil
+		return nil
 	}
 	if store == nil {
 		store = NewCounterStore()
@@ -90,10 +89,10 @@ func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher,
 			store.Reset(event.SessionID, code, CounterBreaker)
 		case OnFirePublishEvent:
 			if err := pub.Publish(ctx, event); err != nil {
-				return applied, err
+				continue
 			}
 		}
 		applied = append(applied, a)
 	}
-	return applied, nil
+	return applied
 }

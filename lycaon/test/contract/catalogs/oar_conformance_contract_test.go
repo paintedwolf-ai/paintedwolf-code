@@ -27,7 +27,7 @@ func TestOARConformanceSeededFromWhenRules(t *testing.T) {
 	if err := oar.SeedFixturesFromScenarios("", out, codes); err != nil {
 		contractcheck.FailErr(t, "seed fixtures", err)
 	}
-	cr, err := oar.NewConformanceRunner(filepath.Join(root, "schemas"))
+	cr, err := oar.NewHostConformanceRunner(filepath.Join(root, "schemas"), oar.InstalledEngineDeclaration())
 	contractcheck.FailErr(t, "conformance runner", err)
 	fxs, err := oar.LoadFixturesDir(out)
 	contractcheck.FailErr(t, "load fixtures", err)
@@ -35,8 +35,8 @@ func TestOARConformanceSeededFromWhenRules(t *testing.T) {
 		t.Fatalf("expected %d fixtures, got %d", len(codes), len(fxs))
 	}
 	for _, fx := range fxs {
-		if err := cr.RunFixture(fx); err != nil {
-			t.Errorf("%s: %v", fx.Name, err)
+		if err := cr.RunFixture(context.Background(), fx); err != nil {
+			t.Errorf("%s: %v", fx.ID, err)
 		}
 	}
 }

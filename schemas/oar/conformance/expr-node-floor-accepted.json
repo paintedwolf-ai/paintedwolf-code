@@ -1,0 +1,29 @@
+{
+  "id": "expr-node-floor-accepted",
+  "title": "A condition of 256 nodes is accepted",
+  "covers": [
+    "OAR-EXPR-19"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\" || tool == \"a\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "a"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

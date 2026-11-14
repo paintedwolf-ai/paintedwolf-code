@@ -1,0 +1,28 @@
+{
+  "id": "ops-mandatory-not-disableable",
+  "title": "A mandatory rule is evaluated and fires like any other",
+  "covers": [
+    "OAR-DOC-11",
+    "OAR-OPS-5"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "MANDATORY_RULE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "mandatory": true
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "MANDATORY_RULE"
+  }
+}

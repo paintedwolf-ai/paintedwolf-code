@@ -537,7 +537,7 @@ func mergeAuthorUnits(ctx context.Context, engine *FileTemplateEngine, vars map[
 		}
 	}
 	mode, _ := vars["execution_mode"].(string)
-	sel := UnitSelectionVars(promptunit.HostCoordinator, mode, offered, offered, nil)
+	sel := UnitSelectionVars(promptunit.HostCoordinator, mode, offered)
 	blocks, err := RenderUnitSlots(ctx, UnitRendererFor(engine), catalog, sel, vars)
 	if err != nil {
 		return err

@@ -1,5 +1,5 @@
 id: painted-wolf/platform:editor-toggle-wrap
-title: "Toggle word wrap"
+title: "Toggle wrap"
 scope: files
 category: navigation
 when:

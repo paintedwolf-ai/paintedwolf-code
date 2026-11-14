@@ -22,8 +22,8 @@ func TestConfiguredRuleSetDisablesAndDowngrades(t *testing.T) {
 	}}, rs)
 	testutil.FailErr(t, "apply", err)
 	warn, _ := configured.Get("WARN_ME")
-	if warn.Enforcement != "off" {
-		t.Fatalf("WARN_ME enforcement = %q, want off", warn.Enforcement)
+	if !warn.Disabled || warn.Enforcement != "enforce" {
+		t.Fatalf("WARN_ME disabled=%v enforcement=%q, want disabled", warn.Disabled, warn.Enforcement)
 	}
 	block, _ := configured.Get("BLOCK_ME")
 	if block.Enforcement != "monitor" {
@@ -55,8 +55,8 @@ func TestConfiguredRuleSetDoesNotMutateSharedCatalog(t *testing.T) {
 	testutil.FailErr(t, "configure immutable rule set", err)
 	sharedRule, _ := shared.Get("RULE")
 	configuredRule, _ := configured.Get("RULE")
-	if sharedRule.Enforcement != "enforce" || configuredRule.Enforcement != "off" {
-		t.Fatalf("shared/configured enforcement = %q/%q, want enforce/off", sharedRule.Enforcement, configuredRule.Enforcement)
+	if sharedRule.Disabled || !configuredRule.Disabled {
+		t.Fatalf("shared/configured disabled = %v/%v, want false/true", sharedRule.Disabled, configuredRule.Disabled)
 	}
 }
 
@@ -86,11 +86,11 @@ func TestConfiguredProjectRuleSetReadsOverlayWithoutMutation(t *testing.T) {
 	configured, err := ConfiguredProjectRuleSet(rs, dir)
 	testutil.FailErr(t, "apply overlay", err)
 	keep, _ := configured.Get("KEEP")
-	if keep.Enforcement != "off" {
-		t.Fatalf("enforcement = %q, want off", keep.Enforcement)
+	if !keep.Disabled {
+		t.Fatalf("disabled = %v, want true", keep.Disabled)
 	}
 	shared, _ := rs.Get("KEEP")
-	if shared.Enforcement != "enforce" {
-		t.Fatalf("shared enforcement = %q, want enforce", shared.Enforcement)
+	if shared.Disabled {
+		t.Fatalf("shared rule was disabled")
 	}
 }

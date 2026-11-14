@@ -1,0 +1,129 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "pw-training-source/1",
+  "title": "Authenticated dataset source manifest",
+  "description": "The signed ancestry every training file and row is checked against before decoding.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "payload",
+    "signature"
+  ],
+  "properties": {
+    "signature": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "payload": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "authority",
+        "sources",
+        "files"
+      ],
+      "properties": {
+        "schema": {
+          "const": "pw-training-source/1"
+        },
+        "authority": {
+          "type": "object",
+          "required": [
+            "run_id",
+            "lineage_sha256",
+            "host_commit"
+          ],
+          "properties": {
+            "run_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "lineage_sha256": {
+              "type": "string",
+              "minLength": 1
+            },
+            "host_commit": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        },
+        "sources": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "source_class",
+              "training_allowed"
+            ],
+            "properties": {
+              "source_class": {
+                "enum": [
+                  "synthetic",
+                  "permitted_repository",
+                  "factory_capture",
+                  "factory_review"
+                ]
+              },
+              "training_allowed": {
+                "type": "boolean"
+              },
+              "parents": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        },
+        "files": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "object",
+            "required": [
+              "sha256",
+              "rows"
+            ],
+            "properties": {
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              },
+              "rows": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "object",
+                  "required": [
+                    "root",
+                    "partition",
+                    "sources"
+                  ],
+                  "properties": {
+                    "partition": {
+                      "enum": [
+                        "train",
+                        "validation",
+                        "development",
+                        "system_test"
+                      ]
+                    },
+                    "sources": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -85,11 +85,6 @@ func evaluateHasCode(t *testing.T, gc *oar.GuardContext, code string, anchors ..
 		if res.Decision.Code == code {
 			return true
 		}
-		for _, a := range res.Decision.Advisories {
-			if a.Code == code {
-				return true
-			}
-		}
 	}
 	return false
 }

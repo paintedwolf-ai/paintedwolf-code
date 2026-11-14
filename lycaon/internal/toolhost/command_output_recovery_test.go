@@ -3,6 +3,7 @@ package toolhost
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/zstdcodec"
@@ -18,8 +19,8 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/native/survey"
 )
 
-func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T) {
-	for _, mode := range []string{"modified", "deleted", "hard-link"} {
+func TestOutputViewHostReadRepairsCopiesAndRejectsEscapingSymlink(t *testing.T) {
+	for _, mode := range []string{"modified", "deleted", "hard-link", "symlink"} {
 		t.Run(mode, func(t *testing.T) {
 			f := newOutputDeliveryFixture(t)
 			var tc tools.ToolContext
@@ -48,6 +49,12 @@ func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T
 					testutil.FailErr(t, "plant alias", os.Link(target, alias))
 					writePath = alias
 				}
+				if mode == "symlink" {
+					testutil.FailErr(t, "create alias target", os.WriteFile(alias, []byte(original), 0600))
+					testutil.FailErr(t, "remove original view", os.Remove(target))
+					testutil.FailErr(t, "plant view symlink", os.Symlink(alias, target))
+					writePath = alias
+				}
 				testutil.FailErr(t, "change view mode", os.Chmod(writePath, 0600))
 				testutil.FailErr(t, "change view bytes", os.WriteFile(writePath, []byte(strings.Repeat("x", len(original))), 0600))
 			}
@@ -59,6 +66,18 @@ func TestOutputViewHostReadRepairsChangedDeletedAndHardlinkedCopies(t *testing.T
 			}
 			read := &survey.ReadTool{Boundary: f.Runtime.Boundary, OutputViews: f.Runtime}
 			host, err := read.Run(t.Context(), map[string]any{"path": path, "limit": 3}, tc)
+			if mode == "symlink" {
+				var reject *toolrejection.ToolReject
+				if !errors.As(err, &reject) || reject.Code != "SURVEY_PATH_ESCAPE" {
+					t.Fatalf("escaping output alias = %v", err)
+				}
+				prior, readErr := os.ReadFile(alias)
+				testutil.FailErr(t, "read refused alias target", readErr)
+				if string(prior) != strings.Repeat("x", len(original)) {
+					t.Fatal("refused read changed the alias target")
+				}
+				return
+			}
 			testutil.FailErr(t, "read authoritative host output", err)
 			if !strings.Contains(host, "original source line") || strings.Contains(host, "xxxxxxxx") {
 				t.Fatalf("host served changed view: %q", host)
@@ -153,5 +172,48 @@ func TestOutputViewHostReadRejectsRetainedDigestMismatchBeforePublication(t *tes
 	}
 	if _, err = os.Stat(target); !os.IsNotExist(err) {
 		t.Fatalf("unverified blob published: %v", err)
+	}
+}
+
+func TestFailedChildOutputCanBeReadAndRepairedWithoutRerunning(t *testing.T) {
+	f := newOutputDeliveryFixture(t)
+	var tc tools.ToolContext
+	f.Context = func(_ string, current *tools.ToolContext) { tc = *current }
+	raw, err := f.Call(t, t.Context(), "external -- /bin/sh -c 'printf diagnostic; exit 7' > report.txt; printf reported")
+	testutil.FailErr(t, "run failed redirected producer", err)
+	out := decodeProgramOutcome(t, raw)
+	var outputPath string
+	for _, child := range out.NonzeroExecutions {
+		if child.StatusCode != nil && *child.StatusCode == 7 && len(child.Outputs) == 1 {
+			outputPath = child.Outputs[0].OutputPath
+		}
+	}
+	if outputPath == "" {
+		t.Fatalf("no readable child output: %s", raw)
+	}
+	programs := len(f.Programs(t))
+	raw, err = f.Call(t, t.Context(), "cat "+outputPath)
+	testutil.FailErr(t, "read child diagnostic with portable command", err)
+	readOutcome := decodeProgramOutcome(t, raw)
+	if readOutcome.Status != 0 || readOutcome.Stdout != "diagnostic" || len(f.Programs(t)) != programs+1 {
+		t.Fatalf("diagnostic read = %s", raw)
+	}
+	target := filepath.Join(f.OutputDir, filepath.FromSlash(strings.TrimPrefix(outputPath, "@output/")))
+	testutil.FailErr(t, "remove diagnostic view", os.Remove(target))
+	read := &survey.ReadTool{Boundary: f.Runtime.Boundary, OutputViews: f.Runtime}
+	body, err := read.Run(t.Context(), map[string]any{"path": outputPath}, tc)
+	testutil.FailErr(t, "repair diagnostic view from retained bytes", err)
+	if !strings.Contains(body, "diagnostic") {
+		t.Fatalf("repaired read = %q", body)
+	}
+	data, err := os.ReadFile(target)
+	testutil.FailErr(t, "read repaired file", err)
+	if string(data) != "diagnostic" || len(f.Programs(t)) != programs+1 {
+		t.Fatal("repair changed bytes or reran a program")
+	}
+	foreign := tc
+	foreign.Identity.SessionID = "another-session"
+	if _, err := read.Run(t.Context(), map[string]any{"path": outputPath}, foreign); err == nil {
+		t.Fatal("child diagnostic crossed session identity")
 	}
 }

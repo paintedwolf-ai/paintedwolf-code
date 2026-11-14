@@ -1,0 +1,34 @@
+{
+  "id": "doc-references-do-not-affect-decision",
+  "title": "Interoperability taxonomy tags are telemetry and change nothing",
+  "covers": [
+    "OAR-DOC-16"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "TAGGED_RULE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "references": {
+      "owasp_llm": [
+        "LLM01"
+      ],
+      "mitre_atlas": [
+        "AML.T0051"
+      ]
+    }
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "TAGGED_RULE"
+  }
+}

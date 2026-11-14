@@ -249,6 +249,7 @@ export function FilesOpenList(props: Props) {
                           }}
                           data-file-change={row.change?.kind}
                           style={row.agent?.name ? agentNameStyle(row.agent.name.chat) : undefined}
+                          data-agent-phase={row.agent?.name?.phase}
                         >
                           {row.buffer.name}
                         </span>

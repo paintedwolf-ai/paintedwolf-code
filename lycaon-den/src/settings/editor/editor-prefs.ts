@@ -23,6 +23,7 @@ import {
 } from "../../fonts/font-catalog.ts";
 
 const DEFAULT_EDITOR_WORD_WRAP = false;
+const DEFAULT_EDITOR_PRETTY = false;
 const DEFAULT_EDITOR_LINE_NUMBERS = true;
 const DEFAULT_EDITOR_FONT_SIZE = 13;
 const DEFAULT_EDITOR_INDENT_GUIDES = true;
@@ -60,6 +61,7 @@ export const DEN_EDITOR_PREF_KEYS = [
   "keymap",
   "tabMovesFocus",
   "wordWrap",
+  "pretty",
   "revealInTree",
   "treeVisibleLevels",
   "lineNumbers",
@@ -120,6 +122,7 @@ export async function saveEditorTabMovesFocus(value: boolean): Promise<void> {
   await patchEditor({ tabMovesFocus: value });
 }
 const [wordWrap, setWordWrap] = createSignal(DEFAULT_EDITOR_WORD_WRAP);
+const [pretty, setPretty] = createSignal(DEFAULT_EDITOR_PRETTY);
 const [lineNumbers, setLineNumbers] = createSignal(DEFAULT_EDITOR_LINE_NUMBERS);
 const [fontSize, setFontSize] = createSignal(DEFAULT_EDITOR_FONT_SIZE);
 const [indentGuides, setIndentGuides] = createSignal(DEFAULT_EDITOR_INDENT_GUIDES);
@@ -166,6 +169,14 @@ export function editorRevealInTreePref(): boolean {
 }
 export function editorWordWrapPref(): boolean {
   return wordWrap();
+}
+export function editorPrettyPref(): boolean {
+  return pretty();
+}
+/** Off, Wrap or Pretty; Pretty wraps text it cannot lay out. */
+export type EditorLineLayout = "off" | "wrap" | "pretty";
+export function editorLineLayoutPref(): EditorLineLayout {
+  return pretty() ? "pretty" : wordWrap() ? "wrap" : "off";
 }
 export function editorLineNumbersPref(): boolean {
   return lineNumbers();
@@ -217,6 +228,9 @@ export function editorShownAgentActivity(): AgentActivityKinds {
 
 export function resolveEditorWordWrap(prefs?: DenEditorPrefs): boolean {
   return prefs?.wordWrap ?? DEFAULT_EDITOR_WORD_WRAP;
+}
+export function resolveEditorPretty(prefs?: DenEditorPrefs): boolean {
+  return prefs?.pretty ?? DEFAULT_EDITOR_PRETTY;
 }
 export function resolveEditorLineNumbers(prefs?: DenEditorPrefs): boolean {
   return prefs?.lineNumbers ?? DEFAULT_EDITOR_LINE_NUMBERS;
@@ -311,6 +325,7 @@ export function syncEditorPrefsFromSnapshot(): void {
   setEditorKeymapPref(chosenEditorKeymap(editor));
   setEditorTabMovesFocusPref(editor?.tabMovesFocus ?? false);
   setWordWrap(resolveEditorWordWrap(editor));
+  setPretty(resolveEditorPretty(editor));
   setLineNumbers(resolveEditorLineNumbers(editor));
   setFontSize(resolveEditorFontSize(editor));
   setIndentGuides(resolveEditorIndentGuides(editor));
@@ -342,9 +357,15 @@ export async function saveEditorRevealInTree(value: boolean): Promise<void> {
   await patchEditor({ revealInTree: value });
 }
 
-export async function saveEditorWordWrap(value: boolean): Promise<void> {
-  setWordWrap(value);
-  await patchEditor({ wordWrap: value });
+/** Pretty keeps the stored Wrap choice, so turning Pretty off returns to it. */
+export async function saveEditorLineLayout(value: EditorLineLayout): Promise<void> {
+  setPretty(value === "pretty");
+  if (value === "pretty") {
+    await patchEditor({ pretty: true });
+    return;
+  }
+  setWordWrap(value === "wrap");
+  await patchEditor({ pretty: false, wordWrap: value === "wrap" });
 }
 export async function saveEditorLineNumbers(value: boolean): Promise<void> {
   setLineNumbers(value);
@@ -422,6 +443,7 @@ export function resetEditorPrefsForTests(prefs?: DenEditorPrefs): void {
   setEditorKeymapPref(chosenEditorKeymap(prefs));
   setEditorTabMovesFocusPref(prefs?.tabMovesFocus ?? false);
   setWordWrap(resolveEditorWordWrap(prefs));
+  setPretty(resolveEditorPretty(prefs));
   setLineNumbers(resolveEditorLineNumbers(prefs));
   setFontSize(resolveEditorFontSize(prefs));
   setIndentGuides(resolveEditorIndentGuides(prefs));

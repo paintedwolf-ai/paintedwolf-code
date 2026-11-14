@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"github.com/lycaon/lycaon/internal/oar"
@@ -32,7 +33,7 @@ func main() {
 	if code := auditDeclarationReferences(os.Stderr, oar.AuditDeclarationReferences); code != 0 {
 		os.Exit(code)
 	}
-	outcomes, err := oar.RunCorpusDir(dir)
+	outcomes, err := oar.RunCorpusDir(context.Background(), dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "oar-conformance: %v\n", err)
 		os.Exit(2)

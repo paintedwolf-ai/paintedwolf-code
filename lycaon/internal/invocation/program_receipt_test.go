@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -154,5 +155,23 @@ func TestProgramHostLossKeepsCompletedWriteAndUnknownAttemptSeparate(t *testing.
 	testutil.FailErr(t, "inspect owner outcomes after host loss", err)
 	if len(page.Executions) != 2 || page.Executions[0].EffectCertainty != "completed" || page.Executions[0].RecoveryRef != "journal:fixture-write" || page.Executions[1].EffectCertainty != "unknown" || page.Executions[1].StatusCode != nil || page.Nodes[1].State != "not_started" {
 		t.Fatalf("host loss rewrote known/unknown/not-started facts: %+v", page)
+	}
+}
+
+func TestProgramForReceiptFindsOnlyTheProgramThatReceiptLaunched(t *testing.T) {
+	f := newProgramReceiptFixture(t)
+	got, err := f.recorder.ProgramForReceipt(t.Context(), f.session, f.parent)
+	testutil.FailErr(t, "find launched program", err)
+	if got != f.program {
+		t.Fatalf("program = %q, want %q", got, f.program)
+	}
+	if _, err := f.recorder.ProgramForReceipt(t.Context(), "another-session", f.parent); !errors.Is(err, invocation.ErrProgramNotFound) {
+		t.Fatalf("another session's receipt: %v", err)
+	}
+	read, _ := toolcontract.Lookup("read")
+	plain, err := f.recorder.Begin(t.Context(), invocation.Start{ProjectID: testdbseed.DefaultProjectID, SessionID: f.session, ToolCallID: "plain-call", ToolName: "read", Contract: read})
+	testutil.FailErr(t, "begin plain receipt", err)
+	if _, err := f.recorder.ProgramForReceipt(t.Context(), f.session, plain.ID); !errors.Is(err, invocation.ErrProgramNotFound) {
+		t.Fatalf("receipt without a program: %v", err)
 	}
 }

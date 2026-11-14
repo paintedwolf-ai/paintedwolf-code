@@ -73,7 +73,7 @@ func ConfirmDeliveredSource(path string, pin toolcontract.SourcePin, captured, d
 	last := first + len(lines) - 1
 	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceStartByte: start, SourceEndByte: end, StartLine: first, EndLine: last,
 		LineNumbered: first == last && mapping.PrintedLine == int64(first)}
-	out.record = Record{Kind: "read", Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
+	out.record = Record{Kind: SourceDeliveryKind, Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
 	return out, nil
 }
 
@@ -144,7 +144,7 @@ func ConfirmNumberedWindow(path, numbered, responseID, deliveryID string) (Deliv
 	pin := toolcontract.SourcePin{SourceID: "window:" + path, Revision: hex.EncodeToString(digest[:]), SHA256: hex.EncodeToString(digest[:]), Representation: toolcontract.LogicalUTF8LF, EndByte: size}
 	last := first + len(lines) - 1
 	fact := SourceDelivery{ResponseID: responseID, DeliveryID: deliveryID, Source: pin, SourceEndByte: size, StartLine: first, EndLine: last, LineNumbered: true}
-	out.record = Record{Kind: "read", Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
+	out.record = Record{Kind: SourceDeliveryKind, Shape: ShapeFileRegion, Fidelity: FidelityStructured, SourceTool: "command", Path: path, LineRanges: []LineRange{{Start: first, End: last}}, Body: lines, SourceDelivery: &fact}
 	return out, nil
 }
 

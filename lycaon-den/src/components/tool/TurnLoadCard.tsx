@@ -34,7 +34,6 @@ export function turnLoadToolPart(row: TurnLoadRow): ToolPartView {
 
 function ToolsBody(props: { row: TurnLoadRow }) {
   const load = () => props.row.load;
-  const guides = () => load().guides;
   const addedTools = () => load().tools.filter((tool) => !tool.carried);
   const keptTools = () => load().tools.filter((tool) => tool.carried);
   return (
@@ -96,16 +95,6 @@ function ToolsBody(props: { row: TurnLoadRow }) {
                 {load().floor.length} always offered: {load().floor.join(", ")}
               </dd>
             </div>
-          </Show>
-          <Show when={guides()} keyed>
-            {(counts) => (
-              <div class="den-tool-part-card-facts--wide">
-                <dt>Guides</dt>
-                <dd data-testid="turn-load-guides">
-                  {counts.rendered} rendered · {counts.omitted} left out of the prompt
-                </dd>
-              </div>
-            )}
           </Show>
           <Show when={load().preloaded_skill} keyed>
             {(skill) => (

@@ -55,12 +55,12 @@ func PolicyDocumentIdentity(data []byte) (identity string, mandatory, oar bool, 
 	if err = yaml.Unmarshal(data, &doc); err != nil {
 		return
 	}
-	if _, oar = doc["oar"]; !oar {
+	if _, oar = doc["spec_version"]; !oar {
 		return
 	}
 	id, _ := doc["id"].(string)
 	if id == "" {
-		err = fmt.Errorf("[OAR-DOC-6] policy document requires id")
+		err = fmt.Errorf("[OAR-DOC-4] policy document requires id")
 		return
 	}
 	namespace, _ := doc["namespace"].(string)
@@ -95,11 +95,11 @@ func (e *EffectiveCatalog) ValidateOARPolicies() error {
 				continue
 			}
 			if previous, exists := seen[identity]; exists {
-				return fmt.Errorf("[OAR-DOC-9] duplicate rule identity %s (%s and %s)", identity, previous, source.Path)
+				return fmt.Errorf("[OAR-DOC-22] duplicate rule identity %s (%s and %s)", identity, previous, source.Path)
 			}
 			seen[identity] = source.Path
 			if mandatory && unit.Status == UnitStatusDisabled {
-				return fmt.Errorf("[OAR-OPS-7] mandatory rule %s cannot be disabled", identity)
+				return fmt.Errorf("[OAR-OPS-5] mandatory rule %s cannot be disabled", identity)
 			}
 		}
 	}

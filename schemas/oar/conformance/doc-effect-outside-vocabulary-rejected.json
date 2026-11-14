@@ -1,0 +1,25 @@
+{
+  "id": "doc-effect-outside-vocabulary-rejected",
+  "title": "An effect outside the four this version defines is rejected at load",
+  "covers": [
+    "OAR-DOC-8"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "transform",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "effect"
+  }
+}

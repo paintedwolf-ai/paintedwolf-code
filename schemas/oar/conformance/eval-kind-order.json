@@ -1,0 +1,53 @@
+{
+  "id": "eval-kind-order",
+  "title": "Rules evaluate schema before policy before invariant, then by id",
+  "covers": [
+    "OAR-EVAL-1",
+    "OAR-EVAL-2",
+    "OAR-CONF-10"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "Z_SCHEMA_FIRST",
+      "kind": "schema",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "tool == \"read\""
+    },
+    {
+      "spec_version": "1.0",
+      "id": "A_POLICY_SECOND",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "tool == \"read\""
+    },
+    {
+      "spec_version": "1.0",
+      "id": "A_INVARIANT_THIRD",
+      "kind": "invariant",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "tool == \"read\""
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "Z_SCHEMA_FIRST",
+    "applied": [
+      "Z_SCHEMA_FIRST:fired",
+      "A_POLICY_SECOND:fired",
+      "A_INVARIANT_THIRD:fired"
+    ]
+  }
+}

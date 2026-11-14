@@ -4,8 +4,8 @@ package oarcore
 // This file transcribes the vendored schemas/oar/vocabulary.yaml;
 // TestVocabularyMatchesPublished fails when the two drift.
 
-// FactType is a declarable fact type ([OAR-FACT-22]). An engine MUST NOT declare
-// a fact of any other type.
+// FactType is a declarable fact type. The vocabulary is closed
+// ([OAR-FACT-16]): an engine MUST NOT declare a fact of any other type.
 type FactType string
 
 // The complete set of declarable fact types.
@@ -15,14 +15,13 @@ const (
 	TypeDouble     FactType = "double"
 	TypeString     FactType = "string"
 	TypeListString FactType = "list<string>"
-	TypeMapString  FactType = "map<string,string>"
-	TypeListMap    FactType = "list<map>"
-	TypeMap        FactType = "map"
+	// TypeMap holds dynamically typed members ([OAR-FACT-22]).
+	TypeMap     FactType = "map<string, dyn>"
+	TypeListMap FactType = "list<map<string, dyn>>"
 )
 
 var factTypes = []FactType{
-	TypeBool, TypeInt, TypeDouble, TypeString,
-	TypeListString, TypeMapString, TypeListMap, TypeMap,
+	TypeBool, TypeInt, TypeDouble, TypeString, TypeListString, TypeMap, TypeListMap,
 }
 
 func isFactType(s string) bool {
@@ -35,7 +34,7 @@ func isFactType(s string) bool {
 }
 
 // FunctionSig is an observation function: one argument, one result
-// ([OAR-FACT-9]).
+// ([OAR-FACT-7]).
 type FunctionSig struct {
 	Arg FactType
 	Ret FactType
@@ -64,35 +63,39 @@ func IsCoreAnchor(name string) bool {
 	return false
 }
 
-// coreFacts is the core tier ([OAR-FACT-15]): small, holding only
-// what is meaningful at every anchor of every host — the moment itself, and the
-// engine's own counters.
-//
-// fire_count counts declared increments, not firings: a rule that fires at every
-// occurrence and declares no on_fire has a fire_count of zero.
+// coreFacts is the core tier ([OAR-FACT-12], section 5.2): what every
+// conforming engine provides at every anchor.
 var coreFacts = map[string]FactType{
-	"anchor":        TypeString,
-	"fire_count":    TypeInt,
-	"breaker_count": TypeInt,
+	"tool":                 TypeString,
+	"tool_args":            TypeMap,
+	"fire_count":           TypeInt,
+	"breaker_count":        TypeInt,
+	"same_code_reject_run": TypeInt,
+	"same_call_run":        TypeInt,
 }
 
-// coreFunctions are the two core-tier observation functions that read the
-// counters of *another* rule ([OAR-FIRE-11]). They are core, so a rule reaches
-// them without naming anything in requires.
+// engineMaintained are the core facts the engine computes per session itself;
+// no fact provider supplies them ([OAR-FIRE-10]).
+var engineMaintained = []string{"fire_count", "breaker_count", "same_code_reject_run", "same_call_run"}
+
+// IsEngineMaintained reports whether name is a fact the engine maintains.
+func IsEngineMaintained(name string) bool { return contains(engineMaintained, name) }
+
+// coreFunctions are the core observation functions (section 5.3). Each reads
+// another rule's counter, named by a string literal ([OAR-FIRE-6]).
 var coreFunctions = map[string]FunctionSig{
 	"fire_count_of":    {Arg: TypeString, Ret: TypeInt},
 	"breaker_count_of": {Arg: TypeString, Ret: TypeInt},
 }
 
-// counterReaders maps each core counter-reading function to the counter it reads
-// ([OAR-FIRE-3]).
+// counterReaders maps each core counter reader to the counter it reads.
 var counterReaders = map[string]string{
 	"fire_count_of":    "fire_count",
 	"breaker_count_of": "breaker_count",
 }
 
-// reservedWords are the three words that are never an identifier
-// ([OAR-EXPR-24]). An engine MUST NOT declare a fact or an observation function
+// reservedWords are the three words that are never an identifier.
+// An engine MUST NOT declare a fact or an observation function
 // under one of them.
 var reservedWords = []string{"true", "false", "in"}
 
@@ -105,9 +108,15 @@ func isReservedWord(name string) bool {
 	return false
 }
 
-// stringBuiltins are the three (string, string) -> bool built-ins
-// ([OAR-EXPR-22]).
+// stringBuiltins are the three (string, string) -> bool built-ins.
 var stringBuiltins = []string{"starts_with", "ends_with", "contains"}
+
+// builtins are the four built-ins of Appendix C; no fact or function may take
+// one of their names ([OAR-EXPR-17]).
+var builtins = []string{"size", "starts_with", "ends_with", "contains"}
+
+// IsReservedName reports whether a fact or function may not use name.
+func IsReservedName(name string) bool { return isReservedWord(name) || contains(builtins, name) }
 
 func isStringBuiltin(name string) bool {
 	for _, b := range stringBuiltins {
@@ -119,104 +128,51 @@ func isStringBuiltin(name string) bool {
 }
 
 // ProfileDef is one named capability profile. A profile is provided whole or not
-// at all ([OAR-FACT-16]).
+// at all ([OAR-FACT-13]).
 type ProfileDef struct {
 	Facts     map[string]FactType
 	Functions map[string]FunctionSig
 }
 
-// profiles is the standard profile vocabulary of section 5.4.
+// profiles is the standard profile vocabulary of section 5.4. A profile is
+// provided whole or not at all ([OAR-FACT-13]).
 var profiles = map[string]ProfileDef{
-	"tool": {
-		Facts: map[string]FactType{
-			"tool":                  TypeString,
-			"tool_args":             TypeMap,
-			"tool_args_fingerprint": TypeString,
-			"arg_validation_errors": TypeListString,
-			"arg_validation_reason": TypeString,
-			"arg_validation_field":  TypeString,
-			"permission_profile":    TypeString,
-			"policy_denied":         TypeBool,
-		},
-		// tool_args is an unparameterised map and may not be indexed
-		// ([OAR-EXPR-19]); its members are reached through these typed accessors,
-		// so a condition over them stays statically checkable.
-		Functions: map[string]FunctionSig{
-			"tool_arg_string": {Arg: TypeString, Ret: TypeString},
-			"tool_arg_int":    {Arg: TypeString, Ret: TypeInt},
-			"tool_arg_bool":   {Arg: TypeString, Ret: TypeBool},
-		},
-	},
-	"session": {
-		Facts: map[string]FactType{
-			"session_posture": TypeString,
-			"principal":       TypeString,
-			"principal_roles": TypeListString,
-		},
-		Functions: map[string]FunctionSig{},
-	},
 	"filesystem": {
 		Facts: map[string]FactType{
-			"is_directory": TypeBool,
-			"not_found":    TypeBool,
-			"path_denied":  TypeBool,
-		},
-		Functions: map[string]FunctionSig{
-			"path_outside_scope": {Arg: TypeString, Ret: TypeBool},
-		},
-	},
-	// A host that preserves structured content segments and their provenance.
-	// The five list facts are positionally aligned with one another and with
-	// content_segment_count, so a condition may read a segment's role beside its
-	// origin without a second lookup.
-	"content-provenance": {
-		Facts: map[string]FactType{
-			"content_roles":              TypeListString,
-			"content_origins":            TypeListString,
-			"content_authorities":        TypeListString,
-			"content_trust_tiers":        TypeListString,
-			"content_sources":            TypeListString,
-			"content_segment_count":      TypeInt,
-			"content_contains_untrusted": TypeBool,
+			"is_directory":       TypeBool,
+			"not_found":          TypeBool,
+			"path_outside_scope": TypeBool,
 		},
 		Functions: map[string]FunctionSig{},
 	},
-	"content":          {Facts: map[string]FactType{"content_length": TypeInt}, Functions: map[string]FunctionSig{}},
-	"secrets":          {Facts: map[string]FactType{"secret_matches": TypeListMap}, Functions: map[string]FunctionSig{}},
-	"pii":              {Facts: map[string]FactType{"pii_entities": TypeListMap}, Functions: map[string]FunctionSig{}},
-	"prompt-injection": {Facts: map[string]FactType{"prompt_injection_score": TypeDouble}, Functions: map[string]FunctionSig{}},
-	"jailbreak":        {Facts: map[string]FactType{"jailbreak_score": TypeDouble}, Functions: map[string]FunctionSig{}},
-	"moderation": {
+	"content-safety": {
 		Facts: map[string]FactType{
-			"moderation_categories": TypeListString,
+			"prompt_injection_score": TypeDouble,
+			"jailbreak_score":        TypeDouble,
+			"pii_entities":           TypeListMap,
+			"secret_matches":         TypeListMap,
 		},
-		// A classifier scores content against named categories; the score for one
-		// is reached through a declared function rather than by indexing, so the
-		// condition stays statically checkable ([OAR-EXPR-19]).
-		Functions: map[string]FunctionSig{
-			"moderation_score": {Arg: TypeString, Ret: TypeDouble},
-		},
+		Functions: map[string]FunctionSig{},
 	},
 	"mcp": {
 		Facts: map[string]FactType{
-			"mcp_provider_id":         TypeString,
-			"mcp_tool_name":           TypeString,
-			"mcp_qualified_tool":      TypeString,
-			"mcp_provider_configured": TypeBool,
-			"mcp_provider_enabled":    TypeBool,
-			"mcp_call_ok":             TypeBool,
-			"mcp_error_code":          TypeString,
-			"mcp_schema_matched":      TypeBool,
+			"mcp_server_id":          TypeString,
+			"mcp_tool_name":          TypeString,
+			"mcp_qualified_tool":     TypeString,
+			"mcp_server_configured":  TypeBool,
+			"mcp_server_enabled":     TypeBool,
+			"mcp_configured_servers": TypeListString,
+			"mcp_enabled_servers":    TypeListString,
+			"mcp_call_ok":            TypeBool,
+			"mcp_error_code":         TypeString,
+			"mcp_schema_matched":     TypeBool,
+			"mcp_result":             TypeMap,
 		},
-		// The parameterized forms carry the _for suffix because a fact and a
-		// function may not share a name ([OAR-FACT-2]).
+		// The accessors reach the members of mcp_result that selection cannot
+		// type; a string member is read by selection.
 		Functions: map[string]FunctionSig{
-			"mcp_provider_configured_for": {Arg: TypeString, Ret: TypeBool},
-			"mcp_provider_enabled_for":    {Arg: TypeString, Ret: TypeBool},
-			"mcp_has_field":               {Arg: TypeString, Ret: TypeBool},
-			"mcp_field_bool":              {Arg: TypeString, Ret: TypeBool},
-			"mcp_field_string":            {Arg: TypeString, Ret: TypeString},
-			"mcp_field_int":               {Arg: TypeString, Ret: TypeInt},
+			"mcp_field_bool": {Arg: TypeString, Ret: TypeBool},
+			"mcp_field_int":  {Arg: TypeString, Ret: TypeInt},
 		},
 	},
 }
@@ -241,7 +197,7 @@ var onFireWrites = map[string]string{
 }
 
 // reservedDetectors are the three detector references the corpus reserves
-// ([OAR-CONF-25]). None of them requires a model or a network.
+// ([OAR-CONF-18]). None of them requires a model or a network.
 var reservedDetectors = []string{
 	"detector://noop",
 	"detector://error",
@@ -251,11 +207,8 @@ var reservedDetectors = []string{
 var kinds = []string{"schema", "policy", "invariant", "detector"}
 
 var (
-	effects          = []string{"block", "warn", "nudge", "allow", "transform"}
-	enforcements     = []string{"enforce", "monitor", "off"}
-	statuses         = []string{"experimental", "test", "stable", "deprecated"}
-	relatedTypes     = []string{"derived", "obsolete", "merged", "renamed", "similar"}
-	transformActions = []string{"redact", "replace", "annotate"}
+	effects      = []string{"block", "warn", "nudge", "allow"}
+	enforcements = []string{"enforce", "monitor"}
 )
 
 // The format version this implementation supports.
@@ -271,4 +224,38 @@ func contains(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// CoreFacts returns the core fact names and types.
+func CoreFacts() map[string]FactType {
+	out := make(map[string]FactType, len(coreFacts))
+	for name, typ := range coreFacts {
+		out[name] = typ
+	}
+	return out
+}
+
+// CoreFunctions returns the core observation functions.
+func CoreFunctions() map[string]FunctionSig {
+	out := make(map[string]FunctionSig, len(coreFunctions))
+	for name, sig := range coreFunctions {
+		out[name] = sig
+	}
+	return out
+}
+
+// StandardProfiles returns each standard profile's facts and functions.
+func StandardProfiles() map[string]ProfileDef {
+	out := make(map[string]ProfileDef, len(profiles))
+	for name, def := range profiles {
+		copied := ProfileDef{Facts: map[string]FactType{}, Functions: map[string]FunctionSig{}}
+		for fact, typ := range def.Facts {
+			copied.Facts[fact] = typ
+		}
+		for fn, sig := range def.Functions {
+			copied.Functions[fn] = sig
+		}
+		out[name] = copied
+	}
+	return out
 }

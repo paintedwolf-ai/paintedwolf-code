@@ -4,6 +4,7 @@ package tools
 import (
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"sync"
 	"sync/atomic"
 
 	"context"
@@ -28,13 +29,6 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-// FileEditCapture is optional Den UI metadata for completed file mutation tools.
-type FileEditCapture struct {
-	Path   string
-	Before *string
-	After  string
-}
-
 // VisualCapture is optional visual artifact bytes for store-backed projection.
 type VisualCapture struct {
 	Mime     string
@@ -53,6 +47,7 @@ type VisualCapture struct {
 
 // SourceRunCapture is a settled source run.
 type SourceRunCapture struct {
+	ProgramID        string
 	CheckID          string
 	IsCheck          bool
 	Command          string
@@ -66,7 +61,9 @@ type SourceRunCapture struct {
 // ToolInvocationOut collects host-side invocation outputs.
 type ToolInvocationOut struct {
 	// DisplaySubject names the resolved target before durable secret screening.
-	DisplaySubject  string
+	DisplaySubject string
+	// mu guards a value that several goroutines write, such as a program's.
+	mu              sync.Mutex
 	sourceLocations map[string]struct{}
 	SourceContext   *api.SourceContext
 	// OwnerInvoked is set at the handler boundary.
@@ -81,7 +78,10 @@ type ToolInvocationOut struct {
 	WorkerReport     *api.WorkerReportAcceptance
 	Completion       *api.ToolCompletion
 	OverlayPromotion *api.OverlayPromotion
-	FileEdit         *FileEditCapture
+	// FileEdits holds the call's text changes, one per file.
+	FileEdits []api.FileEditSnapshot
+	// FileEditsOmitted counts text changes past the bounds of FileEdits.
+	FileEditsOmitted int
 	Visual           *VisualCapture
 	// ExternalAccess is Den UI metadata for exceptional external-access on this result.
 	ExternalAccess *api.ExternalAccess
@@ -114,9 +114,15 @@ type WorkerWriteCoordinator interface {
 	EnsureBranch(ctx context.Context, tctx ToolContext) (ToolContext, error)
 }
 
+// PrimaryMutation identifies one primary-tree path for rewind checkpoints.
+type PrimaryMutation struct {
+	RootID  string
+	RelPath string
+}
+
 // PrimaryMutationRecorder records primary-tree paths for rewind checkpoints.
 type PrimaryMutationRecorder interface {
-	RecordPrimaryMutation(ctx context.Context, sessionID, relPath string)
+	RecordPrimaryMutation(ctx context.Context, sessionID, rootID, relPath string)
 }
 
 // LoopbackEndpointObserver attributes a loopback destination to its active listener(s).
@@ -261,6 +267,8 @@ type InvocationHost struct {
 	HostResourceAsk []string
 	// HostResourcePathExtra appends helper directories to the child PATH.
 	HostResourcePathExtra []string
+	// HostResourceEnv points a declared resource's client at its reviewed endpoint.
+	HostResourceEnv []string
 	// ExecutableAlternates names the resolvable catalog equivalents of an executable.
 	ExecutableAlternates func(name string) []string
 	// RealizationWriteRoots extend this spawn's confinement overlay.

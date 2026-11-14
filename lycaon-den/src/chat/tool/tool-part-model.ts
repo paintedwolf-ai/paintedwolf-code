@@ -85,7 +85,10 @@ export interface ToolPartView {
   error?: string | null;
   jobId?: string;
   childSessionId?: string;
-  fileEdit?: FileEditPreview | null;
+  /** Text changes the call made, one per file. */
+  fileEdits?: readonly FileEditPreview[];
+  /** Further text changes the result does not hold. */
+  fileEditsOmitted?: number;
   visual?: VisualArtifact | null;
   /** Host-stamped exceptional external-access detail for the transcript chicklet. */
   externalAccess?: ExternalAccess | null;
@@ -257,7 +260,8 @@ function toolTranscriptVisibility(
   if (layout === "worker") return "visible";
   if (isLifecycleVisibleTool(toolName)) return "visible";
   if (!resultMsg) return "verbose_only";
-  if (resultMsg.tool_result?.file_edit_preview?.path?.trim()) return "visible";
+  const result = resultMsg.tool_result;
+  if (result?.file_edit_previews?.some((edit) => edit.path.trim() !== "") || (result?.file_edits_omitted ?? 0) > 0) return "visible";
   return isBenignToolResult(resultMsg) ? "verbose_only" : "visible";
 }
 
@@ -344,7 +348,8 @@ export function toolPartFromCall(
     error: status === "error" ? output : null,
     jobId,
     childSessionId: resultMsg?.tool_result?.dispatch?.child_session_id?.trim(),
-    fileEdit: resultMsg?.tool_result?.file_edit_preview ?? null,
+    fileEdits: resultMsg?.tool_result?.file_edit_previews ?? [],
+    fileEditsOmitted: resultMsg?.tool_result?.file_edits_omitted ?? 0,
     visual: resultMsg?.tool_result?.visual ?? null,
     externalAccess: resultMsg?.tool_result?.external_access ?? null,
     externallyAuthored: EXTERNALLY_AUTHORED_ORIGINS.has(resultMsg?.origin ?? ""),

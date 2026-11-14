@@ -18,16 +18,12 @@ const (
 	FactTierHost     FactTier = "host"     // published under the host namespace
 )
 
-// Standard profile names. A profile is all-or-nothing: a host either provides
-// every member or declares none of them ([OAR-FACT-16]).
+// Standard profile names. A profile is provided whole or not at all
+// ([OAR-FACT-13]).
 const (
-	ProfileTool              = oarcopy.ProfileTool
-	ProfileSession           = oarcopy.ProfileSession
-	ProfileFilesystem        = oarcopy.ProfileFilesystem
-	ProfileContentProvenance = oarcopy.ProfileContentProvenance
-	ProfileContent           = oarcopy.ProfileContent
-	ProfileSecrets           = oarcopy.ProfileSecrets
-	ProfileMCP               = oarcopy.ProfileMCP
+	ProfileFilesystem    = oarcopy.ProfileFilesystem
+	ProfileContentSafety = oarcopy.ProfileContentSafety
+	ProfileMCP           = oarcopy.ProfileMCP
 )
 
 // factDecl is one typed fact in the closed environment.
@@ -40,25 +36,28 @@ type factDecl struct {
 
 // factDecls is the closed fact set in documentation order.
 var factDecls = []factDecl{
-	// Core facts defined by OAR-FACT-15.
-	{"anchor", oarcore.TypeString, FactTierCore, ""},
+	// The counts the engine maintains per session ([OAR-FIRE-10]).
 	{"fire_count", oarcore.TypeInt, FactTierCore, ""},
+	{"breaker_count", oarcore.TypeInt, FactTierCore, ""},
+	{"same_code_reject_run", oarcore.TypeInt, FactTierCore, ""},
+	{"same_call_run", oarcore.TypeInt, FactTierCore, ""},
 
-	// Standard profile facts defined by OAR-FACT-16.
-	{"permission_profile", oarcore.TypeString, FactTierStandard, ProfileTool},
-	{"principal", oarcore.TypeString, FactTierStandard, ProfileSession},
-	{"principal_roles", oarcore.TypeListString, FactTierStandard, ProfileSession},
-	{"content_length", oarcore.TypeInt, FactTierStandard, ProfileContent},
-	{"content_roles", oarcore.TypeListString, FactTierStandard, ProfileContentProvenance},
-	{"content_origins", oarcore.TypeListString, FactTierStandard, ProfileContentProvenance},
-	{"content_authorities", oarcore.TypeListString, FactTierStandard, ProfileContentProvenance},
-	{"content_trust_tiers", oarcore.TypeListString, FactTierStandard, ProfileContentProvenance},
-	{"content_sources", oarcore.TypeListString, FactTierStandard, ProfileContentProvenance},
-	{"content_segment_count", oarcore.TypeInt, FactTierStandard, ProfileContentProvenance},
-	{"content_contains_untrusted", oarcore.TypeBool, FactTierStandard, ProfileContentProvenance},
+	{"anchor", oarcore.TypeString, FactTierHost, ""},
+	{"credential_decisions", oarcore.TypeInt, FactTierHost, ""},
+	{"tool_profile", oarcore.TypeString, FactTierHost, ""},
+	{"principal", oarcore.TypeString, FactTierHost, ""},
+	{"principal_roles", oarcore.TypeListString, FactTierHost, ""},
+	{"content_length", oarcore.TypeInt, FactTierHost, ""},
+	{"content_roles", oarcore.TypeListString, FactTierHost, ""},
+	{"content_origins", oarcore.TypeListString, FactTierHost, ""},
+	{"content_authorities", oarcore.TypeListString, FactTierHost, ""},
+	{"content_trust_tiers", oarcore.TypeListString, FactTierHost, ""},
+	{"content_sources", oarcore.TypeListString, FactTierHost, ""},
+	{"content_segment_count", oarcore.TypeInt, FactTierHost, ""},
+	{"content_contains_untrusted", oarcore.TypeBool, FactTierHost, ""},
 
-	{"tool", oarcore.TypeString, FactTierStandard, ProfileTool},
-	{"tool_args", oarcore.TypeMap, FactTierStandard, ProfileTool},
+	{"tool", oarcore.TypeString, FactTierCore, ""},
+	{"tool_args", oarcore.TypeMap, FactTierCore, ""},
 	{"native_operation", oarcore.TypeString, FactTierHost, ""},
 	{"operation", oarcore.TypeString, FactTierHost, ""},
 	{"command_form", oarcore.TypeString, FactTierHost, ""},
@@ -72,9 +71,9 @@ var factDecls = []factDecl{
 	{"mid_turn_evidence_unreadable", oarcore.TypeBool, FactTierHost, ""},
 	{"last_assistant", oarcore.TypeString, FactTierHost, ""},
 	{"turn_tools", oarcore.TypeListString, FactTierHost, ""},
-	{"session_posture", oarcore.TypeString, FactTierStandard, ProfileSession},
+	{"session_posture", oarcore.TypeString, FactTierHost, ""},
 	{"surface", oarcore.TypeString, FactTierHost, ""},
-	{"profile", oarcore.TypeString, FactTierHost, ""},
+	{"session_role", oarcore.TypeString, FactTierHost, ""},
 	{"phase", oarcore.TypeString, FactTierHost, ""},
 	{"workers_idle", oarcore.TypeBool, FactTierHost, ""},
 	{"worker_spawn_blocked", oarcore.TypeBool, FactTierHost, ""},
@@ -101,14 +100,12 @@ var factDecls = []factDecl{
 	{"path_is_worker_branch", oarcore.TypeBool, FactTierHost, ""},
 	{"verify_has_command", oarcore.TypeBool, FactTierHost, ""},
 	{"verify_declared", oarcore.TypeBool, FactTierHost, ""},
-	{"progress_closed_beyond_baseline", oarcore.TypeBool, FactTierHost, ""},
-	{"progress_reconciled_since_arm", oarcore.TypeBool, FactTierHost, ""},
 	{"pending_user_input", oarcore.TypeBool, FactTierHost, ""},
 	{"stub_valid", oarcore.TypeBool, FactTierHost, ""},
 	{"pattern_parse_ok", oarcore.TypeBool, FactTierHost, ""},
-	{"arg_validation_errors", oarcore.TypeListString, FactTierStandard, ProfileTool},
-	{"arg_validation_reason", oarcore.TypeString, FactTierStandard, ProfileTool},
-	{"arg_validation_field", oarcore.TypeString, FactTierStandard, ProfileTool},
+	{"arg_validation_errors", oarcore.TypeListString, FactTierHost, ""},
+	{"arg_validation_reason", oarcore.TypeString, FactTierHost, ""},
+	{"arg_validation_field", oarcore.TypeString, FactTierHost, ""},
 	{"action_host_resource_denials", oarcore.TypeListString, FactTierHost, ""},
 	{"confine_applied", oarcore.TypeBool, FactTierHost, ""},
 	{"network_mode", oarcore.TypeString, FactTierHost, ""},
@@ -127,6 +124,7 @@ var factDecls = []factDecl{
 	{"socket_path_references", oarcore.TypeString, FactTierHost, ""},
 	{"socket_url_references", oarcore.TypeString, FactTierHost, ""},
 	{"refused_socket_paths", oarcore.TypeListString, FactTierHost, ""},
+	{"refused_socket_host_resources", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_connect_ports", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_listen_ports", oarcore.TypeListString, FactTierHost, ""},
 	{"refused_signals", oarcore.TypeListString, FactTierHost, ""},
@@ -134,7 +132,6 @@ var factDecls = []factDecl{
 	{"worktree_stale_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"worktree_leftover_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"worktree_conflict_paths", oarcore.TypeListString, FactTierHost, ""},
-	{"tool_args_fingerprint", oarcore.TypeString, FactTierStandard, ProfileTool},
 	{"tool_is_state", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_delegation", oarcore.TypeBool, FactTierHost, ""},
 	{"tool_is_task", oarcore.TypeBool, FactTierHost, ""},
@@ -150,8 +147,7 @@ var factDecls = []factDecl{
 	{"worker_artifact_measured", oarcore.TypeBool, FactTierHost, ""},
 	{"repeat_count", oarcore.TypeInt, FactTierHost, ""},
 	{"fruitless_search_run", oarcore.TypeInt, FactTierHost, ""},
-	{"breaker_count", oarcore.TypeInt, FactTierCore, ""},
-	{"same_code_reject_run", oarcore.TypeInt, FactTierHost, ""},
+	{"repeated_rejection_code", oarcore.TypeString, FactTierHost, ""},
 	{"code_reject_responses", oarcore.TypeInt, FactTierHost, ""},
 	{"deferred_unactivated", oarcore.TypeInt, FactTierHost, ""},
 	{"worker_attempted_mutation", oarcore.TypeBool, FactTierHost, ""},
@@ -189,7 +185,8 @@ var factDecls = []factDecl{
 	{"command_not_argv", oarcore.TypeBool, FactTierHost, ""},
 	{"is_directory", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
 	{"not_found", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
-	{"path_denied", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
+	{"path_outside_scope", oarcore.TypeBool, FactTierStandard, ProfileFilesystem},
+	{"path_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"bulk_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"binary_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"mode_denied", oarcore.TypeBool, FactTierHost, ""},
@@ -201,7 +198,7 @@ var factDecls = []factDecl{
 	{"conflict", oarcore.TypeBool, FactTierHost, ""},
 	{"path_required", oarcore.TypeBool, FactTierHost, ""},
 	{"id_required", oarcore.TypeBool, FactTierHost, ""},
-	{"policy_denied", oarcore.TypeBool, FactTierStandard, ProfileTool},
+	{"policy_denied", oarcore.TypeBool, FactTierHost, ""},
 	{"unknown_target", oarcore.TypeBool, FactTierHost, ""},
 	{"missing", oarcore.TypeBool, FactTierHost, ""},
 	{"forbidden", oarcore.TypeBool, FactTierHost, ""},
@@ -209,15 +206,21 @@ var factDecls = []factDecl{
 	{"selector_ambiguous", oarcore.TypeBool, FactTierHost, ""},
 	{"reject_observation", oarcore.TypeString, FactTierHost, ""},
 	{"rejection_code", oarcore.TypeString, FactTierHost, ""},
-	{"secret_matches", oarcore.TypeListMap, FactTierStandard, ProfileSecrets},
-	{"mcp_provider_id", oarcore.TypeString, FactTierStandard, ProfileMCP},
+	{"prompt_injection_score", oarcore.TypeDouble, FactTierStandard, ProfileContentSafety},
+	{"jailbreak_score", oarcore.TypeDouble, FactTierStandard, ProfileContentSafety},
+	{"pii_entities", oarcore.TypeListMap, FactTierStandard, ProfileContentSafety},
+	{"secret_matches", oarcore.TypeListMap, FactTierStandard, ProfileContentSafety},
+	{"mcp_server_id", oarcore.TypeString, FactTierStandard, ProfileMCP},
 	{"mcp_tool_name", oarcore.TypeString, FactTierStandard, ProfileMCP},
 	{"mcp_qualified_tool", oarcore.TypeString, FactTierStandard, ProfileMCP},
-	{"mcp_provider_configured", oarcore.TypeBool, FactTierStandard, ProfileMCP},
-	{"mcp_provider_enabled", oarcore.TypeBool, FactTierStandard, ProfileMCP},
+	{"mcp_server_configured", oarcore.TypeBool, FactTierStandard, ProfileMCP},
+	{"mcp_server_enabled", oarcore.TypeBool, FactTierStandard, ProfileMCP},
+	{"mcp_configured_servers", oarcore.TypeListString, FactTierStandard, ProfileMCP},
+	{"mcp_enabled_servers", oarcore.TypeListString, FactTierStandard, ProfileMCP},
 	{"mcp_call_ok", oarcore.TypeBool, FactTierStandard, ProfileMCP},
 	{"mcp_error_code", oarcore.TypeString, FactTierStandard, ProfileMCP},
 	{"mcp_schema_matched", oarcore.TypeBool, FactTierStandard, ProfileMCP},
+	{"mcp_result", oarcore.TypeMap, FactTierStandard, ProfileMCP},
 	{"credential_length", oarcore.TypeInt, FactTierHost, ""},
 	{"credential_distinct_words", oarcore.TypeInt, FactTierHost, ""},
 	{"credential_longest_run", oarcore.TypeInt, FactTierHost, ""},
@@ -239,52 +242,42 @@ type observationFn struct {
 	ret     oarcore.FactType
 	tier    FactTier
 	profile string // standard profile name; empty unless tier is standard
-	bind    func(h *evalHolder, s string) any
+	bind    func(h *evalHolder, s string) (any, error)
 }
 
 var observationFns = []observationFn{
-	// Counter references resolve during rule-set validation ([OAR-FIRE-11]).
-	{"fire_count_of", oarcore.TypeInt, FactTierCore, "", nil},
-	{"breaker_count_of", oarcore.TypeInt, FactTierCore, "", nil},
-	{"path_outside_scope", oarcore.TypeBool, FactTierStandard, ProfileFilesystem, func(h *evalHolder, s string) any {
-		return EvalPathOutsideScope(h.get(), s)
+	// Another rule's counters, named by id in the reading rule's namespace
+	// ([OAR-FIRE-6]).
+	{"fire_count_of", oarcore.TypeInt, FactTierCore, "", func(h *evalHolder, s string) (any, error) {
+		return h.counterOf(s, CounterFire), nil
 	}},
-	// Typed accessors expose heterogeneous tool arguments ([OAR-EXPR-19]).
-	{"tool_arg_string", oarcore.TypeString, FactTierStandard, ProfileTool, func(h *evalHolder, s string) any {
-		return EvalToolArgString(h.get(), s)
+	{"breaker_count_of", oarcore.TypeInt, FactTierCore, "", func(h *evalHolder, s string) (any, error) {
+		return h.counterOf(s, CounterBreaker), nil
 	}},
-	{"tool_arg_int", oarcore.TypeInt, FactTierStandard, ProfileTool, func(h *evalHolder, s string) any {
-		return EvalToolArgInt(h.get(), s)
+	// Typed accessors expose heterogeneous tool arguments.
+	{"tool_arg_string", oarcore.TypeString, FactTierHost, "", func(h *evalHolder, s string) (any, error) {
+		return EvalToolArgString(h.get(), s), nil
 	}},
-	{"tool_arg_bool", oarcore.TypeBool, FactTierStandard, ProfileTool, func(h *evalHolder, s string) any {
-		return EvalToolArgBool(h.get(), s)
+	{"tool_arg_int", oarcore.TypeInt, FactTierHost, "", func(h *evalHolder, s string) (any, error) {
+		return EvalToolArgInt(h.get(), s), nil
 	}},
-	// The _for suffix distinguishes functions from facts ([OAR-FACT-2]).
-	{"mcp_provider_configured_for", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPProviderConfigured(h.get(), s)
+	{"tool_arg_bool", oarcore.TypeBool, FactTierHost, "", func(h *evalHolder, s string) (any, error) {
+		return EvalToolArgBool(h.get(), s), nil
 	}},
-	{"mcp_provider_enabled_for", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPProviderEnabled(h.get(), s)
+	// The members of mcp_result that selection cannot type.
+	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) (any, error) {
+		return mcpMember[bool](h.get(), s)
 	}},
-	{"mcp_has_field", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPHasField(h.get(), s)
-	}},
-	{"mcp_field_bool", oarcore.TypeBool, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPFieldBool(h.get(), s)
-	}},
-	{"mcp_field_string", oarcore.TypeString, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPFieldString(h.get(), s)
-	}},
-	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) any {
-		return EvalMCPFieldInt(h.get(), s)
+	{"mcp_field_int", oarcore.TypeInt, FactTierStandard, ProfileMCP, func(h *evalHolder, s string) (any, error) {
+		return mcpMember[int64](h.get(), s)
 	}},
 }
 
 // Fact classes identify counter, detector, lazy-provider, and structural sources.
 var engineCounterFacts = map[string]struct{}{
-	"paintedwolf.repeat_count": {}, "breaker_count": {}, "fire_count": {},
-	"paintedwolf.same_code_reject_run": {}, "paintedwolf.fruitless_search_run": {},
-	"paintedwolf.code_reject_responses": {},
+	"fire_count": {}, "breaker_count": {}, "same_code_reject_run": {}, "same_call_run": {},
+	"paintedwolf.repeat_count": {}, "paintedwolf.fruitless_search_run": {},
+	"paintedwolf.code_reject_responses": {}, "paintedwolf.credential_decisions": {},
 }
 
 var detectorFacts = map[string]struct{}{
@@ -344,7 +337,7 @@ func ObservationFunctionCatalogue() []FunctionInfo {
 
 func factClass(name string) string {
 	// expensiveFacts and engineCounterFacts are keyed by the published name,
-	// which is the name a rule writes ([OAR-FACT-18]).
+	// which is the name a rule writes ([OAR-FACT-15]).
 	name = PublishedFactName(name)
 	if _, ok := engineCounterFacts[name]; ok {
 		return "engine_counter"
@@ -376,7 +369,7 @@ func buildFactTiers() map[string]FactTier {
 	return out
 }
 
-// PublishedFactName namespaces host facts and leaves standard names bare ([OAR-FACT-18]).
+// PublishedFactName namespaces host facts and leaves standard names bare ([OAR-FACT-15]).
 func PublishedFactName(name string) string {
 	if published := publishedHostName(name, bareFactTiers[name]); published != "" {
 		return published

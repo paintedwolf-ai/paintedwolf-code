@@ -136,7 +136,7 @@ export const API_OPERATIONS = {
   getProjectSource: { method: "GET", path: "/v1/projects/{id}/source" },
   getProjectSourceAttribution: { method: "GET", path: "/v1/projects/{id}/source/attribution" },
   getProjectSourceComparison: { method: "GET", path: "/v1/projects/{id}/source/comparison" },
-  getProjectSourceEditorConfig: { method: "GET", path: "/v1/projects/{id}/source/editorconfig" },
+  getProjectSourceFormatSettings: { method: "GET", path: "/v1/projects/{id}/source/format-settings" },
   getProjectSourceGitReview: { method: "GET", path: "/v1/projects/{id}/source/git-changes/{git_change_id}/review" },
   getProjectSourceHistory: { method: "GET", path: "/v1/projects/{id}/source/history" },
   getProjectSourceIndex: { method: "GET", path: "/v1/projects/{id}/source/index" },
@@ -260,6 +260,7 @@ export const API_OPERATIONS = {
   replaceEditorDocumentRetention: { method: "PUT", path: "/v1/projects/{id}/editor-documents/retention" },
   replaceProjectManagedSecretValue: { method: "PUT", path: "/v1/projects/{id}/secrets/{secret_id}/value" },
   replaceProjectSource: { method: "PUT", path: "/v1/projects/{id}/source" },
+  replaceProjectView: { method: "PUT", path: "/v1/projects/{id}/view" },
   replaceProviderCredential: { method: "PUT", path: "/v1/providers/{provider_id}/credential" },
   replaceScannerSlot: { method: "PUT", path: "/v1/scanners/slots/{category}" },
   replaceSourceViewportInterest: { method: "PUT", path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}" },
@@ -482,7 +483,7 @@ export type OperationPathParameters = {
   getProjectSource: { id: string | number; };
   getProjectSourceAttribution: { id: string | number; };
   getProjectSourceComparison: { id: string | number; };
-  getProjectSourceEditorConfig: { id: string | number; };
+  getProjectSourceFormatSettings: { id: string | number; };
   getProjectSourceGitReview: { id: string | number; git_change_id: string | number; };
   getProjectSourceHistory: { id: string | number; };
   getProjectSourceIndex: { id: string | number; };
@@ -606,6 +607,7 @@ export type OperationPathParameters = {
   replaceEditorDocumentRetention: { id: string | number; };
   replaceProjectManagedSecretValue: { id: string | number; secret_id: string | number; };
   replaceProjectSource: { id: string | number; };
+  replaceProjectView: { id: string | number; };
   replaceProviderCredential: { provider_id: string | number; };
   replaceScannerSlot: { category: string | number; };
   replaceSourceViewportInterest: { id: string | number; view_id: string | number; interest_id: string | number; };

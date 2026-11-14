@@ -252,23 +252,24 @@ execution_capabilities:
   code_rewrite: [file_change]
 
 # Listing one family member on a surface grants the rest. resource_implied
-# names the control tools made available by a live resource; command's job
-# controls arrive only with a live command job.
+# names the controls a live resource makes available. A launcher is never in
+# its controls' family, so controls arrive only once the resource exists.
 families:
   web_research:
     - web_search
     - fetch_url
+  command_job:
+    - command_output
+    - command_stop
   held_call:
     - held_result
     - held_stop
   terminal:
-    - terminal_open
     - terminal_send
     - terminal_read
     - terminal_snapshot
     - terminal_close
   page:
-    - page_open
     - page_act
     - page_snapshot
     - page_close

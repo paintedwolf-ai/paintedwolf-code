@@ -74,7 +74,7 @@ var doorExemptions = map[string]string{
 
 	// Maintenance commands write generated checkout artifacts.
 	"lycaon/internal/approvalregistry/registry.go": "generated registry artifact written by ./task codegen:approval-explanations",
-	"lycaon/internal/oar/conformance.go":           "seeds the conformance fixture corpus into a caller-named output directory",
+	"lycaon/internal/oar/corpus.go":                "seeds the conformance fixture corpus into a caller-named output directory",
 	"lycaon/internal/oar/integrity.go":             "generated guidance registry written by ./task codegen:guidance-registry",
 
 	// CLI output failures are returned to the operator.

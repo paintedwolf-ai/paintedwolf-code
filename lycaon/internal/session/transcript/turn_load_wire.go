@@ -57,7 +57,6 @@ func TurnLoadWire(r store.TurnLoadReceipt) api.TurnLoad {
 		}
 		if d := decisions.Turn; d != nil {
 			out.Kind = wireKind(*d)
-			out.Guides = wireGuides(*d, len(standing.Omitted))
 		}
 		if b := decisions.Boundary; b != nil {
 			out.Boundary = &api.TurnLoadBoundary{
@@ -138,22 +137,6 @@ func wireTools(standing turnload.Standing, openingMessageID string) []api.TurnLo
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Tool < out[j].Tool })
 	return out
-}
-
-// wireGuides counts the loadable instruction units the turn scored: omitted
-// counts the units the standing prompt left out once the decision applied,
-// and the rest rendered.
-func wireGuides(d turnload.Decision, omitted int) *api.TurnLoadGuides {
-	if d.Abstained {
-		return nil
-	}
-	guides := 0
-	for _, c := range d.Candidates {
-		if c.Kind == turnload.KindGuide {
-			guides++
-		}
-	}
-	return &api.TurnLoadGuides{Rendered: max(guides-omitted, 0), Omitted: omitted}
 }
 
 func requestMatchBy(o turnload.RequestOutcome) api.TurnLoadMatchBy {

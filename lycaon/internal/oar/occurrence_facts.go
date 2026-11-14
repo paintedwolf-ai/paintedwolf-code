@@ -5,7 +5,7 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-// Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-27]).
+// Occurrence facts describe host metadata and are available to every rule consumer ([OAR-FACT-11]).
 var occurrenceFactDecls = buildOccurrenceFactDecls()
 
 func buildOccurrenceFactDecls() []factDecl {
@@ -334,6 +334,10 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"observed_handles_sample", oarcore.TypeString, FactTierHost, ""},
 	{"remaining_overlay_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"offenders_sample", oarcore.TypeString, FactTierHost, ""},
+	{"text_action_fenced", oarcore.TypeBool, FactTierHost, ""},
+	{"text_action_callable_tools", oarcore.TypeListString, FactTierHost, ""},
+	{"text_action_loadable_tools", oarcore.TypeListString, FactTierHost, ""},
+	{"text_action_command_forms", oarcore.TypeListString, FactTierHost, ""},
 	{"unaccounted_group_ids", oarcore.TypeListString, FactTierHost, ""},
 	{"unaccounted_omitted", oarcore.TypeInt, FactTierHost, ""},
 	{"regressed_group_ids", oarcore.TypeListString, FactTierHost, ""},
@@ -372,7 +376,6 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"path", oarcore.TypeString, FactTierHost, ""},
 	{"root_label", oarcore.TypeString, FactTierHost, ""},
 	{"root_status", oarcore.TypeString, FactTierHost, ""},
-	{"former_path", oarcore.TypeString, FactTierHost, ""},
 	{"attached_folders", oarcore.TypeListString, FactTierHost, ""},
 	{"port", oarcore.TypeString, FactTierHost, ""},
 	{"paths", oarcore.TypeListString, FactTierHost, ""},

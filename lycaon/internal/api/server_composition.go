@@ -69,7 +69,7 @@ func NewServer(deps Dependencies, logger *slog.Logger, token string) *Server {
 	s.Sources = sourceapi.New(&s.responses, &s.background, sourceOperations, sourceapi.Deps{
 		Git: &s.Admin.Git, MutationGate: deps.Core.MutationGate,
 		CatalogSnapshot: deps.Source.CatalogSnapshot, WatchNeedsSeed: deps.Source.WatchNeedsSeed,
-		EditorClients: deps.Source.EditorClients, EditorDocuments: deps.Source.EditorDocuments, Events: deps.Host.Events,
+		EditorClients: deps.Source.EditorClients, EditorDocuments: deps.Source.EditorDocuments, ProjectViews: deps.Source.ProjectViews, Events: deps.Host.Events,
 		FileBriefings: deps.Source.FileBriefings, FileOperations: deps.Source.FileOperations, ManagedSecrets: deps.Approvals.ManagedSecrets,
 		ProjectRegistry: deps.Core.Projects, ScanCadence: deps.Scans.ScanCadence,
 		SecretSpans: deps.Approvals.SecretSpans, SessionStore: deps.Core.Store, SourceInventory: deps.Source.SourceInventory,

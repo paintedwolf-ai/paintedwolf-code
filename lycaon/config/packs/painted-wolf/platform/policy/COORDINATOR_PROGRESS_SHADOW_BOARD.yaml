@@ -1,26 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COORDINATOR_PROGRESS_SHADOW_BOARD
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.path, paintedwolf.next_steps]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COORDINATOR_PROGRESS_SHADOW_BOARD"
 effect: block
-copy:
-  what: Coordinator {{ tool }} on {{ paintedwolf.path }} targets a parallel progress board.
-  cause: Progress lives in `session_progress`; blueprints live under `${overlay_dir}/blueprints/**`.
-  why: Parallel board files diverge from host progress state.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: 'Keep the checklist in the progress record.'
+x-paintedwolf-audience:
+  - coordinator
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Coordinator progress must not use a file-board path
+message: Coordinator progress must not use a file-board path
+what: Coordinator {{ tool }} on {{ paintedwolf.path }} targets a parallel progress board.
+cause: Progress lives in `session_progress`; blueprints live under `${overlay_dir}/blueprints/**`.
+why: Parallel board files diverge from host progress state.
+fix: '{{ paintedwolf.next_steps }}'
+instead: 'Keep the checklist in the progress record.'
 x-paintedwolf-scenarios:
-- id: plans_board
-  vars:
-    path: ${overlay_dir}/plans/board.md
-    tool: write
-x-paintedwolf-audience:
-- coordinator
+  - id: plans_board
+    vars:
+      path: ${overlay_dir}/plans/board.md
+      tool: write

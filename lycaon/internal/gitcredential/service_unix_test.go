@@ -193,8 +193,9 @@ func TestServicePeerVerificationReadsKernelFacts(t *testing.T) {
 	}
 }
 
-// A scoped service answers get only for admitted recipients, and never lets
-// the helper write or remove the user's saved credentials.
+// A scoped service answers get only for admitted recipients whose found
+// credential its release let go, asks only when something was found, and
+// never lets the helper write or remove the user's saved credentials.
 func TestScopedServiceAnswersOnlyAdmittedRecipients(t *testing.T) {
 	store := developmentVault(t)
 	for _, host := range []string{"admitted.example", "other.example"} {
@@ -202,7 +203,14 @@ func TestScopedServiceAnswersOnlyAdmittedRecipients(t *testing.T) {
 	}
 	self, err := os.Executable()
 	testutil.FailErr(t, "resolve test binary", err)
-	scope := &Scope{}
+	release, asked := false, 0
+	scope := &Scope{Release: func(r Recipient, c Credential) bool {
+		asked++
+		if r.Host != "admitted.example" || c.Password != "secret-admitted.example" {
+			t.Errorf("release reviewed %+v with %q", r, c.Password)
+		}
+		return release
+	}}
 	service, err := Serve(t.Context(), ServeOptions{GitBinary: self, Store: store, Scope: scope})
 	testutil.FailErr(t, "serve", err)
 	t.Cleanup(func() { _ = service.Close() })
@@ -213,11 +221,20 @@ func TestScopedServiceAnswersOnlyAdmittedRecipients(t *testing.T) {
 	}
 	scope.Admit(Recipient{Protocol: "https", Host: "admitted.example", Username: "alice"})
 	if out := helperChild(t, service.Path(), "admitted.example"); strings.Contains(out, "password=") || len(scope.Declined()) != 1 {
-		t.Fatalf("answered an admitted recipient before credential use was granted: %q, declined %v", out, scope.Declined())
+		t.Fatalf("answered an admitted recipient its release declined: %q, declined %v", out, scope.Declined())
 	}
-	scope.Grant()
-	if out := helperChild(t, service.Path(), "admitted.example"); !strings.Contains(out, "password=secret-admitted.example") {
-		t.Fatalf("admitted recipient = %q", out)
+	release = true
+	for range 2 {
+		if out := helperChild(t, service.Path(), "admitted.example"); !strings.Contains(out, "password=secret-admitted.example") {
+			t.Fatalf("admitted recipient = %q", out)
+		}
+	}
+	scope.Admit(Recipient{Protocol: "https", Host: "unsaved.example"})
+	if out := helperChild(t, service.Path(), "unsaved.example"); strings.Contains(out, "password=") {
+		t.Fatalf("answered a recipient with nothing saved: %q", out)
+	}
+	if asked != 2 {
+		t.Fatalf("release asked %d times; want one decline and one release reused by the retry, none for nothing saved", asked)
 	}
 	if out := helperChild(t, service.Path(), "other.example"); strings.Contains(out, "password=") {
 		t.Fatalf("recipient outside the scope answered: %q", out)

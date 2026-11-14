@@ -1,54 +1,36 @@
-oar: '1.0'
+spec_version: "1.0"
 id: REPLACE_LINES_BEYOND_EOF
 kind: schema
-anchor: tool.rejected
-selector:
-  paintedwolf.operation:
-  - replace_lines
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.operation
-  - paintedwolf.rejection_code
-  - paintedwolf.end_line
-  - paintedwolf.path
-  - paintedwolf.start_line
-  - paintedwolf.total_lines
-  - paintedwolf.beyond_eof
-  - paintedwolf.can_command
-when: paintedwolf.rejection_code == "REPLACE_LINES_BEYOND_EOF"
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.beyond_eof, paintedwolf.can_command, paintedwolf.end_line, paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.start_line, paintedwolf.total_lines]
+when: paintedwolf.operation == "replace_lines" && paintedwolf.rejection_code == "REPLACE_LINES_BEYOND_EOF"
 effect: block
-copy:
-  what: The line-range replacement on {{ paintedwolf.path }} range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line
-    }} exceeds file length ({{ paintedwolf.total_lines }} lines).
-  cause: Line numbers must fall within the file; check the file's line count before replacing a range.
-  why: Splicing past EOF would corrupt file structure — narrow the range from a fresh read.
-  fix: '{% if paintedwolf.can_command %}Check the current line count with `wc -l {{ paintedwolf.path }}` (0
-    also handles an empty file){% else %}Re-read {{ paintedwolf.path }} to get its current line count (an empty
-    file has none){% endif %} and select the intended replacement within it. Do not retry at the rejected
-    out-of-range start or use zero as a line number.'
-  instead: Branch on Code; lower the line range or re-read total_lines
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:replace_lines
-x-paintedwolf-message: replace_lines range past end of file
+message: replace_lines range past end of file
+what: The line-range replacement on {{ paintedwolf.path }} range {{ paintedwolf.start_line }}–{{ paintedwolf.end_line }} exceeds file length ({{ paintedwolf.total_lines }} lines).
+cause: Line numbers must fall within the file; check the file's line count before replacing a range.
+why: Splicing past EOF would corrupt file structure — narrow the range from a fresh read.
+fix: '{% if paintedwolf.can_command %}Check the current line count with `wc -l {{ paintedwolf.path }}` (0 also handles an empty file){% else %}Re-read {{ paintedwolf.path }} to get its current line count (an empty file has none){% endif %} and select the intended replacement within it. Do not retry at the rejected out-of-range start or use zero as a line number.'
+instead: Branch on Code; lower the line range or re-read total_lines
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    end_line: 200
-    path: internal/foo.go
-    profile: implement
-    start_line: 150
-    tool: replace_lines
-    total_lines: 120
-- id: command-leg
-  vars:
-    can_command: true
-    end_line: 200
-    path: internal/foo.go
-    profile: implement
-    start_line: 150
-    tool: replace_lines
-    total_lines: 120
-  expect_contains:
-  - '`wc -l'
+  - id: default
+    vars:
+      end_line: 200
+      path: internal/foo.go
+      profile: implement
+      start_line: 150
+      tool: replace_lines
+      total_lines: 120
+  - id: command-leg
+    vars:
+      can_command: true
+      end_line: 200
+      path: internal/foo.go
+      profile: implement
+      start_line: 150
+      tool: replace_lines
+      total_lines: 120
+    expect_contains:
+      - '`wc -l'

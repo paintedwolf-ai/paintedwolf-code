@@ -133,6 +133,11 @@ type JobSnapshot struct {
 	StartedAt  time.Time
 	Timeout    time.Duration
 	Stages     []hostcmd.StageResult
+	// Exited marks a job that ended on its own before the agent observed it.
+	Exited   bool
+	ExitCode int
+	// Refusals counts what the sandbox refused the job.
+	Refusals int
 }
 
 // RootProcess identifies one live background process running under a workspace root.
@@ -162,20 +167,22 @@ type Completion struct {
 	// UnsavedDocumentPaths records held drafts encountered by a program job.
 	UnsavedDocumentPaths []string
 	// ReleaseNotices returns admission after the completion consumer finishes.
-	ReleaseNotices    func()
-	IsCheck           bool
-	SourceRevision    string
-	SourceRootDigest  string
-	Cwd               string
-	Handle            string
-	SessionID         string
-	ProjectID         string
-	OriginTool        string
-	ToolCallID        string
-	RunID             string
-	Mode              JobMode
-	StartedAt         time.Time
-	FinishedAt        time.Time
+	ReleaseNotices   func()
+	IsCheck          bool
+	SourceRevision   string
+	SourceRootDigest string
+	Cwd              string
+	Handle           string
+	SessionID        string
+	ProjectID        string
+	OriginTool       string
+	ToolCallID       string
+	RunID            string
+	Mode             JobMode
+	StartedAt        time.Time
+	FinishedAt       time.Time
+	// PersonWait is the part of Elapsed spent waiting on a person.
+	PersonWait        time.Duration
 	TerminationReason TerminationReason
 	ExitCode          int
 	// Failure is the run error the exit status does not carry.
@@ -197,4 +204,9 @@ func (c Completion) Elapsed() time.Duration {
 		return 0
 	}
 	return c.FinishedAt.Sub(c.StartedAt)
+}
+
+// RunTime is Elapsed less the time the job waited on a person.
+func (c Completion) RunTime() time.Duration {
+	return max(c.Elapsed()-c.PersonWait, 0)
 }

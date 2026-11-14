@@ -16,10 +16,11 @@ import (
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 )
 
-func settleOperate(p Prepared, res git.OperationResult, out *meteredOutput, stderr io.Writer, quiet bool, err error) (toolcontract.ProducerResult, error) {
+func settleOperate(ctx context.Context, p Prepared, res git.OperationResult, out *meteredOutput, stderr io.Writer, quiet bool, err error) (toolcontract.ProducerResult, error) {
 	if err != nil {
 		return settleGitError(err, stderr, toolcontract.NoEffect)
 	}
+	reportObjectFlow(ctx, p, res.Paths)
 	diag := strings.TrimSpace(res.Diagnostics)
 	diagnostics := io.Writer(out)
 	if p.command.spec.Name == "git add" {

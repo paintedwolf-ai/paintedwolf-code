@@ -551,7 +551,7 @@ func (l *toolBatch) executeOneToolCall(
 	if ingestion.IsRetrievalTool(tc.Name) {
 		toolOrigin = api.MessageOriginRetrieval
 	}
-	if reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentToolResult, oar.ContentObservation{Segments: []oar.ContentSegment{
+	if reject, blocked := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentToolResult, oar.ContentObservation{Segments: []oar.ContentSegment{
 		oarContentSegment(run.content, api.MessageRoleTool, toolOrigin, api.ContentAuthorityNone, api.ContentTrustTierUntrusted, tc.Name),
 	}}, tc.Name, tc.Args); blocked {
 		run.failure = rejectionFailure(reject.Code(), "content_policy_rejection", invocationFailureOwner(run.contract, run.captures), reject.Facts.FeedbackFor(reject.Code()).Details)
@@ -560,8 +560,6 @@ func (l *toolBatch) executeOneToolCall(
 			return l.settlementHostFault(tc, assistantMessageID, run, settleErr)
 		}
 		return attachRejectReceipt(l.refuseToolCall(tc, assistantMessageID, reject), settled.receipt)
-	} else if changed {
-		run.replaceContent(transformed)
 	}
 
 	toolMsg := l.Tools.composeToolResultMessage(ctx, sess, sessionID, tc, assistantMessageID, toolOrigin, &run)

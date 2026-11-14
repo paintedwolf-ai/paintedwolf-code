@@ -15,7 +15,7 @@ schema:
           reason: {type: string, minLength: 1, description: Why it remains open.}
           paths:
             type: array
-            description: Affected paths, when known.
+            description: Affected paths as reported by the worker (display metadata, not addressed paths).
             items: {type: string}
     coverage_review:
       type: object
@@ -59,7 +59,7 @@ schema:
                       description: Tool result handle that observed the evidence.
                     path:
                       type: string
-                      description: Repo-relative file path where evidence was observed.
+                      description: Session-folder-relative file path where evidence was observed, as shown by the cited receipt.
                     line:
                       type: integer
                       description: 1-based line number in the cited file.
@@ -103,7 +103,7 @@ schema:
         properties:
           path:
             type: string
-            description: Repo-relative source path observed by the cited read or grep. Omit for scanner-only and web findings.
+            description: Source path observed by the cited read or grep, as shown in its receipt (bare for the session folder, `@label/rel` for other folders). Omit for scanner-only and web findings.
           line:
             type: integer
             description: 1-based line when citing file content.

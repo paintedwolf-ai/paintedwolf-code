@@ -52,6 +52,19 @@ func TestWorkflowCapabilitiesRequireTheirAPIEpoch(t *testing.T) {
 	}
 }
 
+func TestPolicyDocumentsRequireTheOAR1API(t *testing.T) {
+	root := t.TempDir()
+	testutil.FailErr(t, "create policy", os.Mkdir(filepath.Join(root, "policy"), 0o750))
+	for api, admitted := range map[string]bool{"^1.0.0": false, "^1.1.0": false, "^" + policyDocumentsAPI: true} {
+		err := checkPackAPI(root, extpacks.Manifest{ID: "acme/kit", Compatibility: extpacks.ManifestCompatibility{ExtensionAPI: api}})
+		if admitted {
+			testutil.FailErr(t, "check sufficient API", err)
+		} else if err == nil || !strings.Contains(err.Error(), "needs extension API "+policyDocumentsAPI) {
+			t.Fatalf("%s admitted policy documents: %v", api, err)
+		}
+	}
+}
+
 func TestPackAPICheckRefusesInvalidInputs(t *testing.T) {
 	root := t.TempDir()
 	var report bytes.Buffer

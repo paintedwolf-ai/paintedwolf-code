@@ -680,6 +680,25 @@ func (q *Queries) GetSessionUserTurnOrdinal(ctx context.Context, sessionID strin
 	return column_1, err
 }
 
+const getToolResultMessageID = `-- name: GetToolResultMessageID :one
+SELECT id FROM messages
+WHERE session_id = ?1 AND tool_result_call_id = ?2
+ORDER BY ord
+LIMIT 1
+`
+
+type GetToolResultMessageIDParams struct {
+	SessionID  string         `json:"session_id"`
+	ToolCallID sql.NullString `json:"tool_call_id"`
+}
+
+func (q *Queries) GetToolResultMessageID(ctx context.Context, arg GetToolResultMessageIDParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, getToolResultMessageID, arg.SessionID, arg.ToolCallID)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
 const getUserTurnOpeningMessageID = `-- name: GetUserTurnOpeningMessageID :one
 SELECT opening_message_id FROM session_source_turns WHERE session_id = ? AND turn = ?
 `

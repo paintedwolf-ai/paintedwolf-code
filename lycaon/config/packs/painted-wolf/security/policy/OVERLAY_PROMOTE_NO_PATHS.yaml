@@ -1,35 +1,28 @@
-oar: '1.0'
+spec_version: "1.0"
 id: OVERLAY_PROMOTE_NO_PATHS
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.job_id, paintedwolf.remaining_overlay_paths, paintedwolf.next_steps]
+on: tool.rejected
+selector:
+  tools:
+    - preview_overlay
+    - promote_overlay
+requires_facts: [paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.remaining_overlay_paths]
 when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_NO_PATHS"
 effect: block
-copy:
-  what: Overlay {{ paintedwolf.job_id }} has no applicable paths for this operation.
-  cause: '{% if paintedwolf.remaining_overlay_paths %}Changes remain at {{ paintedwolf.remaining_overlay_paths
-    }}, but this operation selected no paths to apply.{% else %}The current overlay inspection found no
-    remaining changes.{% endif %}'
-  why: An empty path selection does not establish that the leg’s work is complete or that its overlay
-    should be discarded.
-  fix: '{% if paintedwolf.remaining_overlay_paths %}Preserve the overlay. {% else %}Inspect the leg''s result and existing primary work. {% endif %}{{ paintedwolf.next_steps }}'
-  instead: Do not repeat the unchanged promotion or discard remaining work merely to clear the error.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Overlay {{ paintedwolf.job_id }} has no paths to promote
+message: Overlay {{ paintedwolf.job_id }} has no paths to promote
+what: Overlay {{ paintedwolf.job_id }} has no applicable paths for this operation.
+cause: '{% if paintedwolf.remaining_overlay_paths %}Changes remain at {{ paintedwolf.remaining_overlay_paths }}, but this operation selected no paths to apply.{% else %}The current overlay inspection found no remaining changes.{% endif %}'
+why: An empty path selection does not establish that the leg’s work is complete or that its overlay should be discarded.
+fix: '{% if paintedwolf.remaining_overlay_paths %}Preserve the overlay. {% else %}Inspect the leg''s result and existing primary work. {% endif %}{{ paintedwolf.next_steps }}'
+instead: Do not repeat the unchanged promotion or discard remaining work merely to clear the error.
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    job_id: job-empty
-- id: remaining_changes
-  vars:
-    job_id: job-partial
-    remaining_overlay_paths:
-    - src/remaining.go
-selector:
-  tool:
-  - preview_overlay
-  - promote_overlay
+  - id: default
+    vars:
+      job_id: job-empty
+  - id: remaining_changes
+    vars:
+      job_id: job-partial
+      remaining_overlay_paths:
+        - src/remaining.go

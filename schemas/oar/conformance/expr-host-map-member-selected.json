@@ -1,0 +1,39 @@
+{
+  "id": "expr-host-map-member-selected",
+  "title": "A reference selects a member of a host-tier map fact",
+  "covers": [
+    "OAR-EXPR-2",
+    "OAR-EXPR-13"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "example.args.path == \"/etc\" && example.args.missing == \"\"",
+    "requires_facts": [
+      "example.args"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "example.args": {
+        "path": "/etc"
+      }
+    },
+    "host_facts": {
+      "example.args": "map<string, dyn>"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

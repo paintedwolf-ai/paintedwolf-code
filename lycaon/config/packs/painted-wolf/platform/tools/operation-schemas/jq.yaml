@@ -17,7 +17,7 @@ schema:
       description: Skip this many result values before returning (use with next_offset).
       type: integer
     path:
-      description: Repo-relative path to the document.
+      description: "Document path relative to the session folder, `@label/path` for any attached folder, `@output/path` for session output, or absolute."
       type: string
     query:
       description: jq program (default "."). A narrower sub-path returns its values instead of a shape.

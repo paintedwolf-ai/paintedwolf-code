@@ -30,14 +30,10 @@ func (m *Service) queuePolicy(_ context.Context, sessionID, anchor string, decis
 	if sessionID == "" {
 		return fmt.Errorf("policy advisory delivery requires a session")
 	}
-	entries := make([]guidance.PolicyFeedback, 0, len(decision.Advisories))
-	for _, advisory := range decision.Advisories {
-		entries = append(entries, guidance.PolicyFeedback{
-			Anchor: anchor, Rule: advisory.Rule, Effect: string(decision.Effect), Copy: advisory.Copy,
-			ToolFeedback: api.ToolFeedback{Code: advisory.Code, Details: advisory.Data, Subject: policyfeedback.Subject(sessionID, advisory.Data)},
-		})
-	}
-	m.kicks.QueuePolicyFeedback(sessionID, entries)
+	m.kicks.QueuePolicyFeedback(sessionID, []guidance.PolicyFeedback{{
+		Anchor: anchor, Rule: decision.Rule, Effect: string(decision.Effect), Copy: decision.Copy,
+		ToolFeedback: api.ToolFeedback{Code: decision.Code, Details: decision.Data, Subject: policyfeedback.Subject(sessionID, decision.Data)},
+	}})
 	return nil
 }
 
@@ -75,7 +71,7 @@ func (m *Service) policyMessage(ctx context.Context, lease kick.PolicyFeedbackLe
 			return api.Message{}, fmt.Errorf("policy feedback renderer unavailable")
 		}
 		rendered, err := m.renderer.Render(ctx, oar.StageFromAnchor(entry.Anchor), &oar.Decision{
-			Effect: oar.Effect(entry.Effect), Advisories: []oar.Advisory{{Code: entry.Code, Rule: entry.Rule, Copy: entry.Copy, Data: entry.Details}},
+			Effect: oar.Effect(entry.Effect), Code: entry.Code, Rule: entry.Rule, Copy: entry.Copy, Data: entry.Details,
 		})
 		if err != nil {
 			return api.Message{}, err

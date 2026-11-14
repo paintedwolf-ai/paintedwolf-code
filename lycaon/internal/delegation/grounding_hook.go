@@ -102,7 +102,7 @@ func (g *GroundingCoordinator) AfterPrompt(ctx context.Context, sessionID string
 	}
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = sessionID
-	gc.Session.Profile = "coordinator"
+	gc.Session.Role = "coordinator"
 	tools.RegisterRecoveryFacts(ctx, gc)
 	ObserveDelegationGroundingVerdict(gc, verdict)
 	if _, err := g.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorPostTurn, gc); err != nil {
@@ -121,7 +121,7 @@ func (g *GroundingCoordinator) rejectCloseoutGrounding(ctx context.Context, sess
 	}
 	gc := oar.NewGuardContext()
 	gc.Session.SessionID = sessionID
-	gc.Session.Profile = "coordinator"
+	gc.Session.Role = "coordinator"
 	ObserveDelegationGroundingVerdict(gc, verdict)
 	res, err := g.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorCloseoutCheck, gc)
 	if err != nil {

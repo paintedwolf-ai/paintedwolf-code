@@ -150,10 +150,12 @@ type Endpoint struct {
 	// FirstUseThisSession is true when this chat has not yet reached this
 	// host in the same way: by its own dial, or for a retrieval dial, by any.
 	FirstUseThisSession bool
-	// Retrieval is a dial made under a declared retrieval capability, such
-	// as web research, whose contract covers reaching its sources; only
-	// Strict's first-contact confirmation applies to it.
+	// Retrieval is a retrieval capability, such as web research, reaching one
+	// of its sources; only Strict's first-contact confirmation applies to it.
 	Retrieval bool
+	// DisplayedLink is a retrieval capability following a link a read page
+	// displayed.
+	DisplayedLink bool
 }
 
 // FileMode is which direction a filesystem action moves content.
@@ -185,6 +187,14 @@ type FileTarget struct {
 	// OtherTargetCount is how many further crossings a batch action names beyond
 	// this worst one. Card disclosure only; the verdict ignores it.
 	OtherTargetCount int
+	// ResolvedPath is the canonical absolute spelling the host resolved the
+	// target to, when it resolved one. Card disclosure only; grants and verdicts
+	// keep matching on Path.
+	ResolvedPath string
+	// Exists reports the host's Lstat probe of the target: true when the path
+	// exists, false when it does not, nil when unprobed. Card disclosure only;
+	// the verdict ignores it and model-visible results never carry it.
+	Exists *bool
 }
 
 // Consent is the MCP definition pin for the tool being called.

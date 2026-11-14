@@ -2,16 +2,19 @@
   "category": "source_directories",
   "artifact": "lycaon/internal/tools/native/command",
   "kind": "module",
-  "workstream": "shared-verification-runtime",
+  "workstream": "command-verdict-evidence",
   "disposition": "retain",
-  "reason": "This package adapts command programs to host admission, receipts, confinement, output publication and supervision. Evaluation, path authority and native mutations remain separate packages. Command and verification share these adapters and their actual invocation identities; splitting by initiating tool would duplicate lifecycle ownership. Retain the measured 49 ceiling; growth requires renewed review.",
-  "reviewed_commit": "e2519cef51d263fbb797b9f1137df6dc3fc996c0",
-  "ceiling": 49,
+  "reason": "Retain the command host adapter package. Child stream retention and result records now have separate cohesive files; invocation storage, language evaluation, path authority and native mutations remain separate collaborators. Splitting adapters by initiating tool would duplicate the shared program lifetime.",
+  "reviewed_commit": "1a7da07d4d1fe89a90d55b3342e8c415c1093444",
+  "ceiling": 58,
   "boundaries": {
-    "lycaon/internal/tools/native/verify_test.go": "30d258e73e5f1fa299b24fe66452ed1a6c2bde65971e3e9da629986d39eb4cad",
-    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338",
-    "lycaon/internal/toolexecution/program_model_invocation_test.go": "4a2d9417a4e5c4c3f41aa36699a8a11b370929cf2d90955784ddcc39f398d3f7",
-    "lycaon/internal/session/verify_evidence_test.go": "4e71a3d113c6a868e58a32f207aaa929ce52fe67b6bfb4cfc7c59623a3c3ac90"
+    "lycaon/internal/tools/native/verify_test.go": "8116e2ee7eb5ba471215557f875a59bae43d60e131f0d262ead38e2cc365da48",
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "6132c1a428b7d576743b2e797147fd2d674245d8aefe69998e4a81a356297919",
+    "lycaon/internal/toolexecution/program_model_invocation_test.go": "f7dd9781d250e9d05950f103acc5f34a9c0cc53c17a5edfd48d20a0a309cafd3",
+    "lycaon/internal/session/verify_evidence_test.go": "e8366c5a648ca5fa028d9aa9048036a05581eb24c5463859202371a6d9c97543",
+    "lycaon/internal/toolhost/command_output_recovery_test.go": "90a27db2579beff4ff86abd9ebad423168c756f9913be7ceaf006e3622fd3a12",
+    "lycaon/internal/tools/native/command/program_output_stream_test.go": "55ddba59438b847a4c0dbb8eb5b7e0761648f218e2f89b4e2c9b7d4fb3e0ee07",
+    "lycaon/internal/invocation/program_feedback_read_test.go": "d25a921acc4ff1993caea937f1f8bb49d007586ff91c459ddd3e226be6e531cd"
   },
-  "reviewed_shape": "cdc23b47a7bfa763d3c2a97f9c7ca7c5bd1c97f93d5e3de92785ee72692e02e9"
+  "reviewed_shape": "21557da0a5882c66bfe8b140cc5c2e1162ae48992e941b78a66b8559c92ea556"
 }

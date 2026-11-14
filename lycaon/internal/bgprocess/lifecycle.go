@@ -92,7 +92,10 @@ func (r *Output) Promote(ctx context.Context, sessionID, handle string) error {
 		}
 	}
 	r.publishTerminal(ctx, proc)
-	if running && len(proc.facts.Refusals().Refusals) > 0 {
+	r.jobs.mu.Lock()
+	refused := len(proc.confinementLocked().Refusals().Refusals) > 0
+	r.jobs.mu.Unlock()
+	if running && refused {
 		r.refusalObserved(context.WithoutCancel(ctx), proc)
 	}
 	return nil
@@ -349,7 +352,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 		SourceRevision: proc.sourceRevision, SourceRootDigest: proc.sourceRootDigest, Cwd: proc.cwd,
 		Handle: proc.Handle, SessionID: proc.SessionID, ProjectID: proc.ProjectID,
 		OriginTool: proc.originTool, ToolCallID: proc.toolCallID, RunID: proc.runID,
-		Mode: proc.mode, StartedAt: proc.startedAt, FinishedAt: proc.finishedAt,
+		Mode: proc.mode, StartedAt: proc.startedAt, FinishedAt: proc.finishedAt, PersonWait: proc.personWaitedLocked(proc.finishedAt),
 		TerminationReason: proc.reason, ExitCode: proc.exitCode, Failure: proc.failure,
 		Stages: append([]hostcmd.StageResult(nil), proc.Stages...),
 	}
@@ -357,8 +360,7 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	completion.UnsavedDocumentPaths, completion.ReleaseNotices = owned.unsavedDocumentPaths, owned.releaseNotices
 	completion.IndexWatch = owned.indexWatch
 	exitCode := proc.exitCode
-	boundary := proc.boundary
-	facts := proc.facts
+	confinement := proc.confinementLocked()
 	originTool := proc.originTool
 	sessionID := proc.SessionID
 	publish := r.publish
@@ -369,12 +371,12 @@ func (r *Output) publishTerminal(ctx context.Context, proc *Process) {
 	}
 	body, _, screening := r.safeOutput(ctx, proc)
 	completion.Tail = screenedOrSuppressed(CutTail(body, r.ringBufferBytes), screening)
-	stamped := confine.StampRefusal(originTool, sessionID, boundary, confine.RefusalContext{
-		MediatedNetwork:        facts.MediatedNetwork(),
-		RemotePackageExecution: facts.Report.RemotePackageExecution,
+	stamped := confine.StampRefusal(originTool, sessionID, confinement.Boundary, confine.RefusalContext{
+		MediatedNetwork:        confinement.Network(),
+		RemotePackageExecution: confinement.Report.RemotePackageExecution,
 		FailedStages:           hostcmd.FailedStages(completion.Stages, exitCode),
 		TerminationReason:      string(completion.TerminationReason),
-		Refusals:               facts.SettledRefusals(ctx),
+		Refusals:               confinement.SettledRefusals(ctx),
 	})
 	completion.BoundaryRefusal = string(stamped.Attribution)
 	completion.GuidanceCodes = append([]string(nil), stamped.GuidanceCodes...)

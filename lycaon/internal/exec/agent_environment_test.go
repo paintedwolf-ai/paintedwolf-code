@@ -4,6 +4,8 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -82,11 +84,57 @@ func TestAgentLaunchOptionsReduceAndRefuseReservedExports(t *testing.T) {
 	}
 }
 
+// A child's boundary may add PATH directories its program's base lacks; the
+// program's unmodified PATH is still the host's, never an export.
+func TestAgentLaunchOptionsKeepTheProgramPathUnderChildPathExtras(t *testing.T) {
+	base, err := FinalProcessEnvironment(ExecOpts{Launch: LaunchPlan{}.WithReducedEnvironment()}, nil)
+	testutil.FailErr(t, "program base environment", err)
+	programPath := environmentOf(base)["PATH"]
+	onPath := filepath.SplitList(programPath)[0]
+	trusted := LaunchPlan{}.WithTrustedEnvironment(base)
+	for name, extra := range map[string][]string{
+		"absent":  {t.TempDir()},
+		"present": {onPath},
+		"partly":  {onPath, t.TempDir()},
+	} {
+		opts, err := AgentLaunchOptions(trusted, t.TempDir(), []string{"PATH=" + programPath}, extra)
+		if err != nil {
+			t.Fatalf("%s: program PATH refused: %v", name, err)
+		}
+		final, err := FinalProcessEnvironment(opts, nil)
+		testutil.FailErr(t, name+" final environment", err)
+		for _, dir := range extra {
+			if !slices.Contains(filepath.SplitList(environmentOf(final)["PATH"]), dir) {
+				t.Errorf("%s: child PATH %q lacks %s", name, environmentOf(final)["PATH"], dir)
+			}
+		}
+	}
+	if _, err := AgentLaunchOptions(trusted, t.TempDir(), []string{"PATH=" + programPath + string(filepath.ListSeparator) + "/exported"}, []string{t.TempDir()}); !errors.Is(err, ErrBlockedEnvKey) {
+		t.Fatalf("exported PATH accepted: %v", err)
+	}
+}
+
 func TestAgentCommandPlanStatesItsReducedEnvironment(t *testing.T) {
 	if plan := AgentLaunch(LaunchAgentCommand, "fixture", nil); plan.Environment != EnvironmentReduced {
 		t.Fatalf("agent command plan environment %q", plan.Environment)
 	}
 	if plan := AgentLaunch(LaunchLocalMCP, "fixture", nil); plan.Environment != EnvironmentInherited {
 		t.Fatalf("local MCP plan gained a reduced environment it builds itself: %q", plan.Environment)
+	}
+}
+
+// A service's client variable applies unless the program exported its own.
+func TestServiceEnvYieldsToTheProgramsExport(t *testing.T) {
+	opts := ExecOpts{Launch: LaunchPlan{}.WithReducedEnvironment(), ServiceEnv: []string{"ENGINE_HOST=unix:///reviewed.sock", "OTHER_HOST=unix:///other.sock"}}
+	env, err := FinalProcessEnvironment(opts, nil)
+	testutil.FailErr(t, "service environment", err)
+	if got := environmentOf(env); got["ENGINE_HOST"] != "unix:///reviewed.sock" || got["OTHER_HOST"] != "unix:///other.sock" {
+		t.Fatalf("service variables missing: %v", got)
+	}
+	opts.InlineEnv = map[string]string{"ENGINE_HOST": "unix:///chosen.sock"}
+	env, err = FinalProcessEnvironment(opts, nil)
+	testutil.FailErr(t, "exported environment", err)
+	if got := environmentOf(env); got["ENGINE_HOST"] != "unix:///chosen.sock" || got["OTHER_HOST"] != "unix:///other.sock" {
+		t.Fatalf("program export did not win: %v", got)
 	}
 }

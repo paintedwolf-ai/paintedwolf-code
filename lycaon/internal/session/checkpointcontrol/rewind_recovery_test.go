@@ -42,7 +42,7 @@ func TestSweepCommittedRewindsReclaimsOrphanedAnchor(t *testing.T) {
 	cpStore := sessioncheckpoint.New(rewinds.captures.dataDir, dir, repository)
 	_, err = cpStore.Open(t.Context(), sessionID, anchor.ID)
 	testutil.FailErr(t, "open checkpoint", err)
-	testutil.FailErr(t, "capture", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "file.txt"))
+	testutil.FailErr(t, "capture", cpStore.CapturePreImage(t.Context(), sessionID, anchor.ID, "file.txt", ""))
 	testutil.FailErr(t, "turn writes", os.WriteFile(path, []byte("after"), 0o640))
 	project, err := rewinds.rewindProject(ctx, sessionID)
 	testutil.FailErr(t, "resolve project", err)

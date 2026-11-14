@@ -1,34 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: MEASURE_SELECTOR_AMBIGUOUS
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - measure_page
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.selector_ambiguous
-  - paintedwolf.measure_selector
-  - paintedwolf.count
+  tools:
+    - measure_page
+requires_facts: [paintedwolf.count, paintedwolf.measure_selector, paintedwolf.rejection_code, paintedwolf.selector_ambiguous]
 when: paintedwolf.rejection_code == "MEASURE_SELECTOR_AMBIGUOUS"
 effect: block
-copy:
-  what: Selector {{ paintedwolf.measure_selector }} matched {{ paintedwolf.count }} DOM nodes.
-  cause: The selector is too broad for a single-node rect probe.
-  why: measure_page requires exactly one node per selector so numbers are deterministic.
-  fix: Narrow the selector to the one intended node using an observed unique attribute or context. Do not choose
-    an arbitrary first match merely to obtain geometry.
-  instead: Branch on Code MEASURE_SELECTOR_AMBIGUOUS; narrow the selector
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:visual_capture
-x-paintedwolf-message: measure_page selector matched more than one node
+message: measure_page selector matched more than one node
+what: Selector {{ paintedwolf.measure_selector }} matched {{ paintedwolf.count }} DOM nodes.
+cause: The selector is too broad for a single-node rect probe.
+why: measure_page requires exactly one node per selector so numbers are deterministic.
+fix: Narrow the selector to the one intended node using an observed unique attribute or context. Do not choose an arbitrary first match merely to obtain geometry.
+instead: Branch on Code MEASURE_SELECTOR_AMBIGUOUS; narrow the selector
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    count: 2
-    selector: div
-    tool: measure_page
-    measure_selector: div
+  - id: default
+    vars:
+      count: 2
+      selector: div
+      tool: measure_page
+      measure_selector: div

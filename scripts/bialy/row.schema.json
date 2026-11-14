@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://paintedwolf.ai/schemas/pw-decide-row/1",
-  "title": "pw-decide-row/1",
+  "$id": "https://paintedwolf.ai/schemas/pw-decide-row/2",
+  "title": "pw-decide-row/2",
   "description": "One turn decision as a training row, written by `lycaon-debug decide export`: the state the engine read, the candidates the turn offered, what the engine answered, and what the session then did. Producers may add `meta` and judged scores; consumers read option sets from `offered` and option texts from the corpus.",
   "type": "object",
   "required": [
@@ -24,7 +24,7 @@
   ],
   "properties": {
     "schema": {
-      "const": "pw-decide-row/1"
+      "const": "pw-decide-row/2"
     },
     "receipt": {
       "type": "integer",
@@ -75,8 +75,7 @@
       "required": [
         "state",
         "reason",
-        "preloaded",
-        "omitted"
+        "preloaded"
       ],
       "properties": {
         "state": {
@@ -94,12 +93,6 @@
           "items": {
             "type": "string"
           }
-        },
-        "omitted": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
         }
       }
     },
@@ -107,8 +100,7 @@
       "type": "object",
       "required": [
         "floor",
-        "loadable",
-        "guides"
+        "loadable"
       ],
       "properties": {
         "floor": {
@@ -118,12 +110,6 @@
           }
         },
         "loadable": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          }
-        },
-        "guides": {
           "type": "array",
           "items": {
             "type": "string"
@@ -147,8 +133,7 @@
         "requested_names",
         "requested_groups",
         "skills",
-        "kind",
-        "guides"
+        "kind"
       ],
       "properties": {
         "tools": {
@@ -224,16 +209,6 @@
           ],
           "description": "The kind the turn's tool calls imply; null for a turn that did not complete."
         },
-        "guides": {
-          "type": "object",
-          "additionalProperties": {
-            "type": [
-              "boolean",
-              "null"
-            ]
-          },
-          "description": "Offered instruction units: needed, unneeded, or unknown (null)."
-        },
         "tool_scores": {
           "type": "object",
           "additionalProperties": {
@@ -256,12 +231,43 @@
           "type": "object",
           "description": "A second judge's scores on the same cards: its model, skills and tools maps, and one map per request_tools need (null where it scored none).",
           "properties": {
-            "model": {"type": "string"},
-            "skills": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 4}},
-            "tools": {"type": "object", "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 4}},
-            "requests": {"type": "array", "items": {"type": ["object", "null"], "additionalProperties": {"type": "integer", "minimum": 0, "maximum": 4}}}
+            "model": {
+              "type": "string"
+            },
+            "skills": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              }
+            },
+            "tools": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 4
+              }
+            },
+            "requests": {
+              "type": "array",
+              "items": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 4
+                }
+              }
+            }
           },
-          "required": ["model"]
+          "required": [
+            "model"
+          ]
         }
       }
     },

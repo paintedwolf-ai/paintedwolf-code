@@ -38,7 +38,7 @@ The pages below are a map, not a linear book. Read the path that matches the cha
 
 1. [Host contract](host-contract.md) — Den/sidecar authority, the host handshake, and reconciliation.
 2. [Den](den.md) — client state, workspace structure, and projection rules.
-3. [Tools](tools.md) — capability model, execution lifecycle, and worker scope.
+3. [Tools](tools.md) — capability model, path addressing, execution lifecycle, and worker scope.
 4. [SQL persistence](sql-persistence.md) — lifetime parentage, transaction boundaries, and durable effects.
 5. [Package layering](package-layering.md) — dependency direction and effect doors.
 6. [Test strategy](test-strategy.md) — proof layers and handoff gates.

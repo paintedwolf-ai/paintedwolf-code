@@ -1,26 +1,22 @@
 # Deprecated rejection identity; raw transfers use portable curl.
-oar: '1.0'
+spec_version: "1.0"
 id: FETCH_URL_DEST_INVALID
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - fetch_url
-requires:
-  facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "FETCH_URL_DEST_INVALID"
 effect: block
-copy:
-  what: fetch_url was called with dest while mode was not raw.
-  cause: That invocation combined a text extraction with a file destination.
-  why: The current source reader has no destination argument.
-  fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
-  instead: Follow the current schema and access boundaries.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: recorded fetch_url destination was invalid
+message: recorded fetch_url destination was invalid
+what: fetch_url was called with dest while mode was not raw.
+cause: That invocation combined a text extraction with a file destination.
+why: The current source reader has no destination argument.
+fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
+instead: Follow the current schema and access boundaries.
 x-paintedwolf-scenarios:
   - id: default
     vars:

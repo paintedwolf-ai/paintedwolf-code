@@ -4,10 +4,10 @@ schema:
   properties:
     path:
       type: string
-      description: Project-relative walk root, or an absolute path — no flags or scope text inside this string (default "."). name_glob, type, max_depth, max_results, and offset are sibling JSON keys. Subpaths (not ".") return literal pages on overflow. Host enforces attached roots — do not refuse an absolute path in prose without calling the tool.
+      description: "`.` or empty walks every attached folder; a bare path is relative to the session folder; `@label/path` addresses one attached folder; absolute paths are accepted — no flags or scope text inside this string (default \".\"). name_glob, type, max_depth, max_results, and offset are sibling JSON keys. Subpaths (not \".\") return literal pages on overflow. Host enforces attached roots — do not refuse an absolute path in prose without calling the tool."
     name_glob:
       type: string
-      description: "Optional glob filter. Supports *, ?, character classes, ** directories, and brace alternatives (e.g. **/*.{go,ts}). Patterns without / or ** match basenames; path patterns match repo-relative paths. Invalid patterns are rejected."
+      description: "Optional glob filter. Supports *, ?, character classes, ** directories, and brace alternatives (e.g. **/*.{go,ts}). Patterns without / or ** match basenames; path patterns match walk-root-relative paths. Invalid patterns are rejected."
     type:
       type: string
       enum: [file, dir, any]

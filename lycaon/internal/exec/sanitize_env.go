@@ -55,6 +55,17 @@ func SanitizeEnviron(entries []string) []string {
 	return out
 }
 
+// reservedEnvKey reports a key the host owns: a program may not set it inline.
+func reservedEnvKey(upperKey string) bool {
+	if _, blocked := blockedEnvKeys[upperKey]; blocked {
+		return true
+	}
+	if _, blocked := inlineBlockedEnvKeys[upperKey]; blocked {
+		return true
+	}
+	return hasBlockedPrefix(upperKey)
+}
+
 func hasBlockedPrefix(upperKey string) bool {
 	for _, prefix := range blockedEnvPrefixes {
 		if strings.HasPrefix(upperKey, prefix) {

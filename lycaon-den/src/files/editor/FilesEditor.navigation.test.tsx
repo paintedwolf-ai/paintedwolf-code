@@ -360,7 +360,7 @@ describe("FilesEditor", () => {
     ).toBe(true);
     expect(status.querySelector("[data-tip]")).toBeNull();
     expect(screen.queryByTestId("files-editor-lines-toggle")).toBeNull();
-    expect(screen.getByTestId("files-editor-wrap-toggle").getAttribute("aria-pressed")).toBe("false");
+    expect(screen.getByTestId("files-editor-layout-off").getAttribute("aria-pressed")).toBe("true");
   });
 
   it("keeps identity stable while announcing an update", () => {

@@ -1,0 +1,28 @@
+{
+  "id": "doc-unknown-on-fire-action-rejected",
+  "title": "A side-effect outside the closed on_fire vocabulary is rejected at load",
+  "covers": [
+    "OAR-FIRE-1"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "BAD_ON_FIRE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true",
+    "on_fire": [
+      "delete_everything"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "on_fire"
+  }
+}

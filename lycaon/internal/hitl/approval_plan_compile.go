@@ -166,8 +166,9 @@ func CompileCheckpointApprovalPlan(req CheckpointRequest) (*ApprovalPlan, error)
 	return plan.WithHeld(req.SecretScreen.Held)
 }
 
-// leadFactKeys orders the facts shown on the approval card.
-var leadFactKeys = []string{"destination.state", "session.state", "effect.class"}
+// leadFactKeys orders the facts shown on the approval card. A missing target
+// leads: the human must see the path is not there before weighing a grant.
+var leadFactKeys = []string{"file.exists", "destination.state", "session.state", "effect.class"}
 
 // leadFact lifts the primary gate's most distinguishing citation onto the face.
 func leadFact(primary api.ApprovalGate, cited []PresentedFact) string {

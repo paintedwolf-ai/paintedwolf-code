@@ -6,7 +6,7 @@ schema:
     path:
       type: string
       minLength: 1
-      description: Repo-relative file path
+      description: File path relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute
     old_string:
       type: string
       minLength: 1

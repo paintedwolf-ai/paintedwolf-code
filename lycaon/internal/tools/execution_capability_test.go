@@ -36,11 +36,11 @@ func TestExecutionCapabilityGrammar(t *testing.T) {
 			}
 		}
 	}
-	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"host_execution": true, "direct_ip": true}}); reject == nil {
-		t.Fatal("accepted conflicting authority")
-	}
-	if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"credential_store": true, "host_execution": true}}); reject == nil {
-		t.Fatal("accepted credential_store with host_execution")
+	for _, extra := range []string{"direct_ip", "credential_store"} {
+		request, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"host_execution": true, extra: true}})
+		if reject != nil || request == nil || !request.HostExecution || request.DirectIP != nil || request.CredentialStore {
+			t.Fatalf("host_execution with %s = (%+v, %v), want host execution alone", extra, request, reject)
+		}
 	}
 	for _, value := range []any{false, nil, "true", 1, map[string]any{}} {
 		if _, reject := capabilityrequest.ParseCapabilityRequest(map[string]any{"capability_request": map[string]any{"credential_store": value}}); reject == nil {

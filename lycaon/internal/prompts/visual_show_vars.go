@@ -8,7 +8,7 @@ import (
 
 var (
 	visualShowPageTools         = []string{"capture_page", "page_open"}
-	visualShowTerminalTools     = []string{"command", "terminal_snapshot"}
+	visualShowTerminalTools     = []string{"command", "terminal_open", "terminal_snapshot"}
 	visualShowHeldTerminalTools = []string{"terminal_open", "terminal_snapshot"}
 )
 

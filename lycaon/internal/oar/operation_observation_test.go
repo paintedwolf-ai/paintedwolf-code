@@ -8,7 +8,13 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-func TestNativeOperationObservationKeepsRealToolAndSelectorConjunction(t *testing.T) {
+func TestNativeOperationObservationKeepsTheRealTool(t *testing.T) {
+	holds := func(gc *GuardContext, condition string) bool {
+		t.Helper()
+		ok, err := EvaluateCondition(condition, gc)
+		testutil.FailErr(t, "evaluate "+condition, err)
+		return ok
+	}
 	contract, ok := toolcontract.Lookup("read")
 	if !ok {
 		t.Fatal("read contract absent")
@@ -27,16 +33,16 @@ func TestNativeOperationObservationKeepsRealToolAndSelectorConjunction(t *testin
 	if facts["tool"] != "command" || facts["paintedwolf.native_operation"] != "read" || facts["tool_args"].(map[string]any)["command"] != "cat input" {
 		t.Fatalf("presentation data replaced actual call or operation: %+v", facts)
 	}
-	if !selectorMatches(Selector{"tool": {"command"}, "paintedwolf.native_operation": {"read"}}, facts) {
-		t.Fatal("explicit command and operation selector did not match")
+	if !holds(gc, `tool == "command" && paintedwolf.native_operation == "read"`) {
+		t.Fatal("command and its bound operation did not both hold")
 	}
-	if selectorMatches(Selector{"tool": {"read"}}, facts) || selectorMatches(Selector{"tool": {"write"}, "paintedwolf.native_operation": {"read"}}, facts) {
-		t.Fatal("native operation impersonated old tool or changed selector AND semantics")
+	if holds(gc, `tool == "read"`) || holds(gc, `tool == "write" && paintedwolf.native_operation == "read"`) {
+		t.Fatal("native operation impersonated the structured tool")
 	}
 	gc.ObserveToolCall("verify", args)
 	testutil.FailErr(t, "observe verification operation", gc.ObserveNativeOperation(operation))
 	facts = activation(gc)
-	if facts["tool"] != "verify" || facts["paintedwolf.native_operation"] != "read" || !selectorMatches(Selector{"tool": {"verify"}, "paintedwolf.native_operation": {"read"}}, facts) {
+	if facts["tool"] != "verify" || facts["paintedwolf.native_operation"] != "read" || !holds(gc, `tool == "verify" && paintedwolf.native_operation == "read"`) {
 		t.Fatalf("verification operation attribution changed: %+v", facts)
 	}
 	gc.ObserveToolCall("read", map[string]any{"path": "input"})

@@ -43,6 +43,20 @@ func resolveCommandDir(ctx context.Context, p Prepared, stderr io.Writer, write 
 	return dir, 0, nil
 }
 
+// commandDir is the directory the command's -C options name, unbound; the
+// command binds it before it runs anything there.
+func (p Prepared) commandDir() string {
+	dir := p.paths.Cwd().Abs
+	for _, next := range p.command.dirs {
+		if filepath.IsAbs(next) {
+			dir = next
+		} else {
+			dir = filepath.Join(dir, next)
+		}
+	}
+	return dir
+}
+
 // resolveCommandRepo finds the repository a command acts on. A read that finds
 // none on a worker branch, a copy without Git metadata, states that for the
 // program's warning; Git's own fatal and status stand.

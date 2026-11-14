@@ -1,0 +1,39 @@
+{
+  "id": "doc-rule-set-duplicate-identity-rejected",
+  "title": "A rule set holding two rules with one identity is rejected at load",
+  "covers": [
+    "OAR-DOC-28",
+    "OAR-DOC-27"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "TWICE",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "true",
+      "namespace": "example.a"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "TWICE",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "false",
+      "namespace": "example.a"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-DOC-28"
+  }
+}

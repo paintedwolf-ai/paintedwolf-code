@@ -131,7 +131,7 @@ func TestFloorProjectDisables(t *testing.T) {
 		Compatibility: extpacks.ManifestCompatibility{ExtensionAPI: "^1.0.0"},
 		Dependencies:  map[string]extpacks.DependencyRequest{"painted-wolf/platform": {Version: "*"}},
 	}, map[string]string{
-		"policy/HOUSE_RULE.yaml": "oar: '1.0'\nid: HOUSE_RULE\nkind: policy\nanchor: tool.pre_invoke\neffect: warn\n",
+		"policy/HOUSE_RULE.yaml": "spec_version: '1.0'\nid: HOUSE_RULE\nkind: policy\non: tool.pre_invoke\neffect: warn\n",
 		"approvals/house.yaml":   "title: house approval\n",
 	})
 	acme := mustContractInventoryPack(t, filepath.Join(dir, "acme-add"), "acme/add")

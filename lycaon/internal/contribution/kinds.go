@@ -165,6 +165,9 @@ type Menu struct {
 	// while it holds, and without StateLabel the item carries a checkmark.
 	State      *Condition `yaml:"state,omitempty" json:"state,omitempty"`
 	StateLabel string     `yaml:"state_label,omitempty" json:"state_label,omitempty"`
+	// Submenu nests the item under a pull-out of that title; placements in
+	// one slot and group sharing a title share the pull-out.
+	Submenu string `yaml:"submenu,omitempty" json:"submenu,omitempty"`
 }
 
 // Keybinding declares default chords for a command per platform and scope.
@@ -376,6 +379,9 @@ func validateMenu(m *Menu) error {
 	}
 	if m.StateLabel != "" && m.State == nil {
 		return fmt.Errorf("state_label requires state")
+	}
+	if m.Submenu != strings.TrimSpace(m.Submenu) {
+		return fmt.Errorf("submenu title has surrounding space")
 	}
 	return nil
 }

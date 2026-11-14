@@ -1,0 +1,32 @@
+{
+  "id": "expr-in-tests-membership-and-keys",
+  "title": "in tests list membership and map key presence",
+  "covers": [
+    "OAR-EXPR-12"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool in [\"read\", \"write\"] && \"path\" in tool_args && !(\"mode\" in tool_args)"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "tool_args": {
+        "path": "/etc"
+      }
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

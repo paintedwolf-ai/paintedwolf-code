@@ -78,11 +78,12 @@ implement_overlay_promote:
   exit: none
   publishes_mid_turn_text: true
   # skills_read resolves a described need and opens one procedure.
-  # Terminal and secret tools load on demand like on implement_investigate.
-  floor: [recall, promote_overlay, reject_overlay, preview_overlay, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, task, pack_board, skills_read, web_search, fetch_url, command, verify, wait, scan_query, scan_summary, scan_list, ask_user, request_tools, summarize, survey_repo]
+  # terminal_open stays beside command so a running program can be shown;
+  # its session controls arrive once a terminal is open.
+  floor: [recall, promote_overlay, reject_overlay, preview_overlay, worker_cancel, answer_decision, extend_worker_budget, decline_worker_budget, update_progress, task, pack_board, skills_read, web_search, fetch_url, command, terminal_open, verify, wait, scan_query, scan_summary, scan_list, ask_user, request_tools, summarize, survey_repo]
   # Visual, browser, terminal, and secret checks load when the landed change
   # needs them.
-  loadable: [command_output, command_stop, render_view, view_image, view_video, capture_page, measure_page, page_open, page_act, page_snapshot, page_close, terminal_open, terminal_send, terminal_read, terminal_snapshot, terminal_close, secret_generate, secret_list, secret_revoke]
+  loadable: [command_output, command_stop, render_view, view_image, view_video, capture_page, measure_page, page_open, page_act, page_snapshot, page_close, terminal_send, terminal_read, terminal_snapshot, terminal_close, secret_generate, secret_list, secret_revoke]
 
 # The open-intent surface: read the project on the floor, load everything
 # else per turn.
@@ -99,6 +100,7 @@ implement_investigate:
   floor:
     - recall
     - command
+    - terminal_open
     - summarize
     - source_history
     - skills_read
@@ -115,7 +117,6 @@ implement_investigate:
     - command_stop
     - verify
     - wait
-    - terminal_open
     - terminal_send
     - terminal_read
     - terminal_snapshot

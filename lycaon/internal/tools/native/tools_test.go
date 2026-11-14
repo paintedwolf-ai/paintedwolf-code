@@ -48,14 +48,14 @@ func TestWriteToolAtomic(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(tmpDir, "test.txt.tmp")); !os.IsNotExist(err) {
 		t.Fatal("temp file should not remain")
 	}
-	if out.FileEdit == nil {
-		t.Fatal("expected file_edit capture")
+	if len(out.FileEdits) != 1 {
+		t.Fatal("expected one recorded file edit")
 	}
-	if out.FileEdit.Path != "test.txt" || out.FileEdit.After != "test content" {
-		t.Fatalf("file_edit = %+v", out.FileEdit)
+	if out.FileEdits[0].Path != "test.txt" || out.FileEdits[0].After != "test content" {
+		t.Fatalf("file edits = %+v", out.FileEdits)
 	}
-	if out.FileEdit.Before != nil {
-		t.Fatalf("new file before = %v", out.FileEdit.Before)
+	if out.FileEdits[0].Before != nil {
+		t.Fatalf("new file before = %v", out.FileEdits[0].Before)
 	}
 }
 
@@ -100,8 +100,8 @@ func TestWriteToolAppend(t *testing.T) {
 	if string(content) != "<html>\n<body></body>\n" {
 		t.Fatalf("content = %q", content)
 	}
-	if out.FileEdit == nil || out.FileEdit.Before == nil || *out.FileEdit.Before != "<html>\n" {
-		t.Fatalf("file_edit = %+v", out.FileEdit)
+	if len(out.FileEdits) != 1 || out.FileEdits[0].Before == nil || *out.FileEdits[0].Before != "<html>\n" {
+		t.Fatalf("file edits = %+v", out.FileEdits)
 	}
 }
 
@@ -135,11 +135,11 @@ func TestWriteToolCaptureOverwrite(t *testing.T) {
 		"content": "new",
 	}, ctx)
 	testutil.FailErr(t, "tool.Run failed", err)
-	if out.FileEdit == nil || out.FileEdit.Before == nil || *out.FileEdit.Before != "old" {
-		t.Fatalf("file_edit before = %+v", out.FileEdit)
+	if len(out.FileEdits) != 1 || out.FileEdits[0].Before == nil || *out.FileEdits[0].Before != "old" {
+		t.Fatalf("file edits = %+v", out.FileEdits)
 	}
-	if out.FileEdit.After != "new" {
-		t.Fatalf("file_edit after = %q", out.FileEdit.After)
+	if out.FileEdits[0].After != "new" {
+		t.Fatalf("file edit after = %q", out.FileEdits[0].After)
 	}
 }
 

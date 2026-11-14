@@ -32,7 +32,7 @@ func workerTestOARPipeline(t *testing.T) *oar.GuardPipeline {
 			workerTestPipelineErr = err
 			return
 		}
-		if err := oar.InstallCapabilityDocumentFile(profile); err != nil {
+		if err := oar.InstallEngineDeclarationFile(profile); err != nil {
 			workerTestPipelineErr = err
 			return
 		}

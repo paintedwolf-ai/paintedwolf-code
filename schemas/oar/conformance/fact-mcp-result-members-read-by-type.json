@@ -1,0 +1,43 @@
+{
+  "title": "The mcp profile reads result members by selection and typed accessors",
+  "covers": [
+    "OAR-FACT-13"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.post_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "mcp_field_bool(\"ok\") && mcp_field_int(\"count\") == 3 && mcp_field_int(\"missing\") == 0 && mcp_result.status == \"done\" && \"x\" in mcp_enabled_servers",
+    "requires_facts": [
+      "mcp_enabled_servers",
+      "mcp_field_bool",
+      "mcp_field_int",
+      "mcp_result"
+    ]
+  },
+  "input": {
+    "anchor": "tool.post_invoke",
+    "facts": {
+      "tool": "x_search",
+      "mcp_result": {
+        "ok": true,
+        "count": 3,
+        "status": "done"
+      },
+      "mcp_enabled_servers": [
+        "x"
+      ]
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  },
+  "id": "fact-mcp-result-members-read-by-type"
+}

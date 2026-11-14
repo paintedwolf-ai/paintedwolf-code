@@ -1,9 +1,9 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_BOUNDARY_REFUSED
 kind: policy
-anchor: tool.post_invoke
+on: tool.post_invoke
 selector:
-  tool:
+  tools:
     - command
     - verify
     - command_output
@@ -12,27 +12,18 @@ selector:
     - terminal_read
     - terminal_snapshot
     - terminal_close
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.confine_applied
-    - paintedwolf.confine_signals
-    - paintedwolf.destination
+requires_facts: [paintedwolf.confine_applied, paintedwolf.confine_signals, paintedwolf.destination, paintedwolf.failed_stages, paintedwolf.process_running, paintedwolf.refused_connect_ports, paintedwolf.refused_credential_store_paths, paintedwolf.refused_listen_ports, paintedwolf.refused_read_grants, paintedwolf.refused_signals, paintedwolf.refused_socket_paths, paintedwolf.refused_write_grants, paintedwolf.unsandboxed_refusals]
 when: >-
-  paintedwolf.confine_applied
-  && "boundary_refused" in paintedwolf.confine_signals
-  && !("remote_package_destination_denied" in paintedwolf.confine_signals)
+  paintedwolf.confine_applied && "boundary_refused" in paintedwolf.confine_signals && !("remote_package_destination_denied" in paintedwolf.confine_signals) && tool != "verify" && !((size(paintedwolf.failed_stages) > 0 || paintedwolf.process_running) && tool in ["command", "verify"] && (size(paintedwolf.refused_read_grants) > 0 || size(paintedwolf.refused_write_grants) > 0 || size(paintedwolf.refused_credential_store_paths) > 0 || size(paintedwolf.unsandboxed_refusals) > 0 || size(paintedwolf.refused_listen_ports) > 0 || size(paintedwolf.refused_connect_ports) > 0 || size(paintedwolf.refused_signals) > 0 || size(paintedwolf.refused_socket_paths) > 0))
 effect: warn
-copy:
-  what: The egress broker refused a connection from `{{ tool }}`{% if paintedwolf.destination %} to `{{ paintedwolf.destination }}`{% endif %}.
-  cause: The observed destination was not allowed by the invocation's egress policy.
-  why: This refusal identifies a connection; it does not determine the outcome of the entire command.
-  fix: ''
-  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
-x-paintedwolf-message: egress broker refused an observed destination
+message: egress broker refused an observed destination
+what: The egress broker refused a connection from `{{ tool }}`{% if paintedwolf.destination %} to `{{ paintedwolf.destination }}`{% endif %}.
+cause: The observed destination was not allowed by the invocation's egress policy.
+why: This refusal identifies a connection; it does not determine the outcome of the entire command.
+fix: ''
+instead: ''
 x-paintedwolf-scenarios:
   - id: command_broker_denial
     vars:

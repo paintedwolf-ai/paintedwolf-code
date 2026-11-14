@@ -1,0 +1,31 @@
+{
+  "title": "The winning rule's copy renders against the occurrence facts",
+  "covers": [
+    "OAR-COPY-1",
+    "OAR-COPY-7"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "SCOPE_READ",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "what": "Reading {{ tool }} outside the declared scope."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "SCOPE_READ",
+    "copy": {
+      "what": "Reading read outside the declared scope."
+    }
+  },
+  "id": "copy-renders-in-decision"
+}

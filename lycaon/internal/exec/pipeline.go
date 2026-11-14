@@ -134,6 +134,12 @@ func processEnvironment(opts ExecOpts, stageEnv map[string]string) ([]string, er
 			env = append(env, e)
 		}
 	}
+	for _, e := range opts.ServiceEnv {
+		name, _, ok := strings.Cut(e, "=")
+		if _, exported := inline[name]; ok && !exported {
+			env = append(env, e)
+		}
+	}
 	return env, nil
 }
 

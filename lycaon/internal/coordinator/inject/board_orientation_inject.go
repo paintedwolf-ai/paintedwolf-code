@@ -51,14 +51,12 @@ func RenderWorkerBoardInject(
 	omitDelegation bool,
 	includeScanLegend bool,
 	now time.Time,
-	workspacePath string,
 ) (string, error) {
 	if renderer == nil {
 		return "", fmt.Errorf("inject renderer not configured")
 	}
 	data := BuildBoardInjectData(snap, scope, omitDelegation, includeScanLegend, now)
 	vars := BoardInjectToMap(data)
-	vars["worker_workspace_path"] = workspacePath
 	if !snap.Repo.GeneratedAt.IsZero() {
 		vars["inventory_at"] = snap.Repo.GeneratedAt.UTC().Format(time.RFC3339)
 	}

@@ -1,0 +1,29 @@
+{
+  "id": "expr-string-escapes",
+  "title": "The six string escapes decode as specified",
+  "covers": [
+    "OAR-EXPR-3"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"a\\\"b\\\\c\\n\\t\\r'\" && 'q\\'' == \"q'\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "a\"b\\c\n\t\r'"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

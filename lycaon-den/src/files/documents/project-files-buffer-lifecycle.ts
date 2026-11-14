@@ -52,7 +52,6 @@ import {
   setFilesStoreRaw,
 } from "./files-buffer-state.ts";
 import { discardFilesBufferDraft } from "./project-files-buffer-io.ts";
-import { clearPrettyDisplayTab } from "../editor/pretty-display-state.ts";
 
 function clearOtherPreviews(state: ProjectFilesState, exceptKey: FileBufferKey | null): void {
   for (const key of state.order) {
@@ -172,7 +171,7 @@ export function openFilesBuffer(
       ...(jobId ? { jobId } : {}), loading: true, sourcePresent: false, loadError: null,
       content: { state: "unloaded" }, payloadGeneration: nextBufferPayloadGeneration(),
       eol: defaultEol(), baseEol: defaultEol(), mixedEol: false, baseMixedEol: false,
-      detectedIndent: undefined, indentOverride: undefined, editorConfig: undefined,
+      detectedIndent: undefined, indentOverride: undefined, editorConfig: undefined, formatSources: undefined,
       baseSha256: null, sizeBytes: 0, kind: args.kind ?? "text", mime: null, mtime: null,
       overLimit: false, encoding: args.decodeAs ?? null, writable: null,
       unsupportedEncodingDetected: null, dirty: false, editRevision: 0,
@@ -357,7 +356,6 @@ export function closeFilesBuffer(
   const index = state.order.indexOf(key);
   const snapshot: FileBuffer = { ...unwrap(buffer), closeError: null };
   setFilesStore(projectId, produce((current) => detachBuffer(current, key)));
-  clearPrettyDisplayTab(projectId, key);
 
   const closing = closingBuffers.get(projectId) ?? new Set<ClosingBuffer>();
   closingBuffers.set(projectId, closing);

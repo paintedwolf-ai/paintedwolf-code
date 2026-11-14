@@ -70,6 +70,7 @@ const (
 	InjectSkillProcedure          ID = "inject.skill_procedure"
 	InjectSkillPointer            ID = "inject.skill_pointer"
 	InjectSourceChanges           ID = "inject.source_changes"
+	InjectViewContext             ID = "inject.view_context"
 	InjectSynthesisEvidence       ID = "inject.synthesis_evidence"
 	InjectImplementSpawn          ID = "inject.implement_spawn"
 	InjectBlueprint               ID = "inject.blueprint"

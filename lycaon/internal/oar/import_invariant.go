@@ -177,7 +177,7 @@ func (imp *InvariantImport) ToRule() *Rule {
 		return nil
 	}
 	r := &Rule{
-		OAR:         CurrentOARVersion,
+		SpecVersion: CurrentOARVersion,
 		ID:          imp.ID,
 		Title:       imp.Title,
 		Kind:        imp.Kind,
@@ -188,7 +188,7 @@ func (imp *InvariantImport) ToRule() *Rule {
 		Enforcement: "enforce",
 		OnError:     "fail_closed",
 		Emit:        imp.Emit,
-		What:        imp.Message,
+		Copy:        Copy{What: imp.Message},
 		Tier:        TierPack,
 		Source:      "import:invariant",
 	}
@@ -213,23 +213,15 @@ func (imp *InvariantImport) ToHintYAML() ([]byte, error) {
 	var b strings.Builder
 	b.WriteString("hint_codes:\n")
 	fmt.Fprintf(&b, "  %s:\n", r.ID)
-	fmt.Fprintf(&b, "    oar: %q\n", r.OAR)
+	fmt.Fprintf(&b, "    spec_version: %q\n", SupportedSpecVersion)
 	fmt.Fprintf(&b, "    id: %s\n", r.ID)
 	fmt.Fprintf(&b, "    kind: %s\n", r.Kind)
-	fmt.Fprintf(&b, "    anchor: %s\n", r.Anchor)
-	if req := RequiresFor(r.When, r.Flow, r.Selector); len(req.Profiles) > 0 || len(req.Facts) > 0 {
-		b.WriteString("    requires:\n")
-		if len(req.Profiles) > 0 {
-			b.WriteString("      profiles:\n")
-			for _, p := range req.Profiles {
-				fmt.Fprintf(&b, "        - %s\n", p)
-			}
-		}
-		if len(req.Facts) > 0 {
-			b.WriteString("      facts:\n")
-			for _, f := range req.Facts {
-				fmt.Fprintf(&b, "        - %s\n", f)
-			}
+	fmt.Fprintf(&b, "    on: %s\n", r.Anchor)
+	b.WriteString("    selector: {}\n")
+	if facts := RequiresFor(r.When, r.Flow, r.Selector); len(facts) > 0 {
+		b.WriteString("    requires_facts:\n")
+		for _, f := range facts {
+			fmt.Fprintf(&b, "      - %s\n", f)
 		}
 	}
 	fmt.Fprintf(&b, "    when: %q\n", r.When)
@@ -240,11 +232,10 @@ func (imp *InvariantImport) ToHintYAML() ([]byte, error) {
 		}
 	}
 	fmt.Fprintf(&b, "    effect: %s\n", r.Effect)
-	// Presentation copy is a closed nested object ([OAR-DOC-24]); emit and
-	// category are this engine's own and travel as extensions ([OAR-DOC-26]).
-	b.WriteString("    copy:\n")
-	fmt.Fprintf(&b, "      title: %q\n", r.Title)
-	fmt.Fprintf(&b, "      what: %q\n", r.What)
+	// Copy members are top-level ([OAR-DOC-18]); the channel and category are
+	// host metadata.
+	fmt.Fprintf(&b, "    title: %q\n", r.Title)
+	fmt.Fprintf(&b, "    what: %q\n", r.Copy.What)
 	fmt.Fprintf(&b, "    x-paintedwolf-emit: %s\n", r.Emit)
 	b.WriteString("    x-paintedwolf-category: recoverable\n")
 	return []byte(b.String()), nil

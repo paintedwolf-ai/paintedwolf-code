@@ -1,0 +1,25 @@
+{
+  "id": "expr-in-with-non-string-rejected",
+  "title": "in with a non-string left operand is rejected at load",
+  "covers": [
+    "OAR-EXPR-12"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "1 in [\"a\"]"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-12"
+  }
+}

@@ -32,6 +32,8 @@ func ContactsFromLedger(ev Ledger) map[string]Contact {
 		switch {
 		case strings.HasPrefix(handle, DialedHostHandlePrefix):
 			contact = ContactOwn
+		case strings.HasPrefix(handle, AuditedHostHandlePrefix):
+			contact = ContactAudited
 		case strings.HasPrefix(handle, RetrievedHostHandlePrefix):
 			contact = ContactRetrieval
 		}

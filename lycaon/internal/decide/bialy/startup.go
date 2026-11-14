@@ -53,7 +53,7 @@ func (r *Resources) acquire(ctx context.Context) (*startupGrant, error) {
 		grant.release()
 		return nil, err
 	}
-	grant.permit, err = device.Acquire(ctx, inference.Work{Owner: "bialy", Generation: grant.generation, Priority: inference.Decision})
+	grant.permit, err = device.Acquire(ctx, inference.Work{Owner: "bialy", Generation: grant.generation, Priority: inference.Decision, Step: "start"})
 	if err != nil {
 		grant.release()
 		return nil, err

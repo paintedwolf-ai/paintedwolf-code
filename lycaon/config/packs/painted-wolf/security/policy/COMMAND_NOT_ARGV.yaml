@@ -1,117 +1,105 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_NOT_ARGV
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - command
-  - terminal_open
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.command
-  - paintedwolf.rejection_reason
-  - paintedwolf.directory_change
-  - paintedwolf.shell_metacharacters
-  - paintedwolf.reissue_via_command
-  - paintedwolf.env_assignment
-  - paintedwolf.next_steps
+  tools:
+    - command
+    - terminal_open
+requires_facts: [paintedwolf.command, paintedwolf.directory_change, paintedwolf.env_assignment, paintedwolf.next_steps, paintedwolf.reissue_via_command, paintedwolf.rejection_code, paintedwolf.rejection_reason, paintedwolf.shell_metacharacters]
 when: paintedwolf.rejection_code == "COMMAND_NOT_ARGV"
 effect: block
-copy:
-  what: 'This invocation could not be admitted as literal executable arguments{% if paintedwolf.command %}: `{{ paintedwolf.command }}`{% endif %}.'
-  cause: '{{ paintedwolf.rejection_reason }}'
-  why: Each admitted stage uses literal arguments; shell expansions are not evaluated on this surface.
-  fix: '{% if paintedwolf.next_steps %}{{ paintedwolf.next_steps }}{% else %}Repair the command syntax: close quoted strings, name every redirection target, and remove empty stages.{% endif %}'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_surface
-x-paintedwolf-message: command rejected
+message: command rejected
+what: 'This invocation could not be admitted as literal executable arguments{% if paintedwolf.command %}: `{{ paintedwolf.command }}`{% endif %}.'
+cause: '{{ paintedwolf.rejection_reason }}'
+why: Each admitted stage uses literal arguments; shell expansions are not evaluated on this surface.
+fix: '{% if paintedwolf.next_steps %}{{ paintedwolf.next_steps }}{% else %}Repair the command syntax: close quoted strings, name every redirection target, and remove empty stages.{% endif %}'
 x-paintedwolf-scenarios:
-- id: directory_change
-  tool: command
-  vars:
-    command: cd src && tool --check
-    reason: '`cd` changes only its own process; pass cwd'
-    directory_change: true
-    terminal_capture: true
-- id: capture_sequence
-  tool: command
-  vars:
-    command: tool --check; echo "$?"
-    reason: this surface runs one program; `&&`, `||`, and `;` run several
-    sequence_unsupported: true
-    reissue_via_command: true
-    terminal_capture: true
-- id: capture_pipe
-  tool: command
-  vars:
-    command: tool --check | tee output.txt
-    reason: this surface runs one program; `&&`, `||`, and `;` run several
-    sequence_unsupported: true
-    reissue_via_command: true
-    terminal_capture: true
-- id: substitution
-  tool: terminal_open
-  vars:
-    command: git checkout $(git rev-parse HEAD)
-    profile_id: implement
-    reason: 'command contains unquoted shell metacharacters: `$`'
-    shell_metacharacters: true
-- id: scratch_variable
-  tool: terminal_open
-  vars:
-    command: cat $SCRATCH_DIR/notes.txt
-    profile_id: implement
-    reason: 'command contains unquoted shell metacharacters: `$`'
-    shell_metacharacters: true
-    scratch_var: true
-- id: background_operator
-  tool: command
-  vars:
-    command: python3 -m http.server 8000 &
-    profile_id: implement
-    reason: '`&` backgrounds a command rather than sequencing it: `&`'
-    reissue_via_command: true
-    terminal_capture: true
-- id: environment_assignment
-  tool: command
-  vars:
-    command: TOKEN=value
-    profile_id: implement
-    reason: environment assignments belong in env
-    env_assignment: true
-    terminal_capture: true
-- id: shell_metacharacters
-  tool: terminal_open
-  vars:
-    command: cat <<'EOF' > out.txt
-    profile_id: implement
-    reason: 'command contains unquoted shell metacharacters: `<<`'
-    shell_metacharacters: true
-    reissue_via_command: true
-- id: pipeline_pipe
-  tool: terminal_open
-  vars:
-    command: git log --oneline | head -20
-    profile_id: implement
-    reason: this surface runs one program; `&&`, `||`, and `;` run several
-    sequence_unsupported: true
-    reissue_via_command: true
-- id: terminal_pipe
-  tool: terminal_open
-  vars:
-    command: npm run dev | tee dev.log
-    profile_id: implement
-    reason: this surface runs one program; `&&`, `||`, and `;` run several
-    sequence_unsupported: true
-    reissue_via_command: true
-- id: terminal_sequence
-  tool: terminal_open
-  vars:
-    command: go build ./... && ./server
-    profile_id: implement
-    reason: this surface runs one program; `&&`, `||`, and `;` run several
-    sequence_unsupported: true
-    reissue_via_command: true
+  - id: directory_change
+    tool: command
+    vars:
+      command: cd src && tool --check
+      reason: '`cd` changes only its own process; pass cwd'
+      directory_change: true
+      terminal_capture: true
+  - id: capture_sequence
+    tool: command
+    vars:
+      command: tool --check; echo "$?"
+      reason: this surface runs one program; `&&`, `||`, and `;` run several
+      sequence_unsupported: true
+      reissue_via_command: true
+      terminal_capture: true
+  - id: capture_pipe
+    tool: command
+    vars:
+      command: tool --check | tee output.txt
+      reason: this surface runs one program; `&&`, `||`, and `;` run several
+      sequence_unsupported: true
+      reissue_via_command: true
+      terminal_capture: true
+  - id: substitution
+    tool: terminal_open
+    vars:
+      command: git checkout $(git rev-parse HEAD)
+      profile_id: implement
+      reason: 'command contains unquoted shell metacharacters: `$`'
+      shell_metacharacters: true
+  - id: scratch_variable
+    tool: terminal_open
+    vars:
+      command: cat $SCRATCH_DIR/notes.txt
+      profile_id: implement
+      reason: 'command contains unquoted shell metacharacters: `$`'
+      shell_metacharacters: true
+      scratch_var: true
+  - id: background_operator
+    tool: command
+    vars:
+      command: python3 -m http.server 8000 &
+      profile_id: implement
+      reason: '`&` backgrounds a command rather than sequencing it: `&`'
+      reissue_via_command: true
+      terminal_capture: true
+  - id: environment_assignment
+    tool: command
+    vars:
+      command: TOKEN=value
+      profile_id: implement
+      reason: environment assignments belong in env
+      env_assignment: true
+      terminal_capture: true
+  - id: shell_metacharacters
+    tool: terminal_open
+    vars:
+      command: cat <<'EOF' > out.txt
+      profile_id: implement
+      reason: 'command contains unquoted shell metacharacters: `<<`'
+      shell_metacharacters: true
+      reissue_via_command: true
+  - id: pipeline_pipe
+    tool: terminal_open
+    vars:
+      command: git log --oneline | head -20
+      profile_id: implement
+      reason: this surface runs one program; `&&`, `||`, and `;` run several
+      sequence_unsupported: true
+      reissue_via_command: true
+  - id: terminal_pipe
+    tool: terminal_open
+    vars:
+      command: npm run dev | tee dev.log
+      profile_id: implement
+      reason: this surface runs one program; `&&`, `||`, and `;` run several
+      sequence_unsupported: true
+      reissue_via_command: true
+  - id: terminal_sequence
+    tool: terminal_open
+    vars:
+      command: go build ./... && ./server
+      profile_id: implement
+      reason: this surface runs one program; `&&`, `||`, and `;` run several
+      sequence_unsupported: true
+      reissue_via_command: true

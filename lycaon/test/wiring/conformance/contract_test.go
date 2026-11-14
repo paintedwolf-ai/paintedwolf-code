@@ -84,13 +84,26 @@ var baseContractCases = []contractCase{
 	},
 	{
 		Case: commandconformance.Case{
-			ID:          "inspect-domain-builtins",
-			Description: "The outline, repo-map, survey-repo and summarize built-ins return typed results.",
-			Commands:    []string{"outline", "repo-map", "survey-repo", "summarize"},
-			Forms:       []string{"outline:--path", "repo-map:--path", "repo-map:--depth", "summarize:--path", "summarize:--focus", "summarize:--cursor"},
-			Program:     `outline --path code.go; repo-map --path . --depth 2; survey-repo --path . --depth 1; summarize --path code.go --focus Alpha`,
+			ID:          "inspect-file-builtins",
+			Description: "The outline and summarize built-ins return typed results.",
+			Commands:    []string{"outline", "summarize"},
+			Forms:       []string{"outline:--path", "summarize:--path", "summarize:--focus", "summarize:--cursor"},
+			Program:     `outline --path code.go; summarize --path code.go --focus Alpha`,
 		},
-		Validate: verifyInspectDomainOutputs,
+		Validate: verifyInspectFileOutputs,
+	},
+	{
+		// Each map repeats the workspace's absolute path, so the two maps are a
+		// program of their own: together with the file results they can pass
+		// the session's inline result size where that path is long.
+		Case: commandconformance.Case{
+			ID:          "inspect-tree-builtins",
+			Description: "The repo-map and survey-repo built-ins return typed results.",
+			Commands:    []string{"repo-map", "survey-repo"},
+			Forms:       []string{"repo-map:--path", "repo-map:--depth"},
+			Program:     `repo-map --path . --depth 2; survey-repo --path . --depth 1`,
+		},
+		Validate: verifyInspectTreeOutputs,
 	},
 	{
 		Case: commandconformance.Case{
@@ -183,6 +196,9 @@ func verifyContract(t *testing.T, c contractCase, obs runtimeObservation) {
 	}
 	if obs.Outcome.State != "completed" || obs.Outcome.Status != c.Status {
 		t.Fatalf("state %s status %d, want completed %d (stdout=%q stderr=%q)", obs.Outcome.State, obs.Outcome.Status, c.Status, obs.Outcome.Stdout, obs.Outcome.Stderr)
+	}
+	if obs.Outcome.Truncated {
+		t.Fatalf("outcome truncated before decode (stdout=%q stderr=%q)", obs.Outcome.Stdout, obs.Outcome.Stderr)
 	}
 	if obs.Outcome.Stderr != c.Stderr {
 		t.Fatalf("stderr = %q, want %q", obs.Outcome.Stderr, c.Stderr)

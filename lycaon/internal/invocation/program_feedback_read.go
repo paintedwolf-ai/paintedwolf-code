@@ -164,8 +164,8 @@ func feedbackStateBytes(ctx context.Context, tx *sql.Tx, session, program, execu
 			return 0, err
 		}
 	}
-	columns := "e.id,e.program_id,e.node_id,e.parent_execution_id,e.owner,e.lifecycle,e.definition_digest,e.arguments_representation,e.arguments_digest,e.reviewed_arguments_representation,e.reviewed_arguments_digest,e.reviewed_arguments_ref,e.native_command,e.effect_mode,e.effect_classes_json,e.arguments_ref,e.canonical,e.state,e.stop_code,e.host_stop_code,e.effect_certainty,e.evidence_kind,e.evidence_ref,e.owner_ref,e.recovery_ref,e.held_version_id,e.accepted_revision,e.published_revision,e.detail_ref,e.approval_ref,n.source_unit_id"
-	for _, kind := range []string{"completed", "uncertain", "stopped"} {
+	columns := "e.id,e.program_id,e.node_id,e.parent_execution_id,e.owner,e.lifecycle,e.definition_digest,e.arguments_representation,e.arguments_digest,e.reviewed_arguments_representation,e.reviewed_arguments_digest,e.reviewed_arguments_ref,e.native_command,e.effect_mode,e.effect_classes_json,e.arguments_ref,e.canonical,e.state,e.stop_code,e.host_stop_code,e.effect_certainty,e.evidence_kind,e.evidence_ref,e.owner_ref,e.recovery_ref,e.held_version_id,e.accepted_revision,e.published_revision,e.detail_ref,e.approval_ref,e.job_handle,e.conflict_path,e.conflict_expected_revision,e.conflict_observed_revision,n.source_unit_id"
+	for _, kind := range []string{"completed", "uncertain", "stopped", "nonzero"} {
 		limit := maximum
 		if kind == "stopped" {
 			limit = 1
@@ -173,12 +173,13 @@ func feedbackStateBytes(ctx context.Context, tx *sql.Tx, session, program, execu
 		if err := validateExecutionProjectionKind(kind); err != nil {
 			return 0, err
 		}
-		query := `SELECT COALESCE(sum(bytes),0) FROM (SELECT ` + sqlByteSum(columns) + ` AS bytes FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND ` + executionProjectionSelection + ` ORDER BY e.ordinal DESC LIMIT ?)`
-		if err := add(query, program, kind, kind, kind, limit); err != nil {
+		outputBytes := `COALESCE((SELECT sum(` + sqlByteSum("o.stream,o.reference,o.preview") + `) FROM invocation_program_outputs o WHERE o.program_id=e.program_id AND o.execution_id=e.id AND ` + latestExecutionOutput + `),0)`
+		query := `SELECT COALESCE(sum(bytes),0) FROM (SELECT ` + sqlByteSum(columns) + `+` + outputBytes + ` AS bytes FROM invocation_program_executions e JOIN invocation_program_nodes n ON n.program_id=e.program_id AND n.node_id=e.node_id WHERE e.program_id=? AND ` + executionProjectionSelection + ` ORDER BY e.ordinal DESC LIMIT ?)`
+		if err := add(query, program, kind, kind, kind, kind, limit); err != nil {
 			return 0, err
 		}
 	}
-	return 64<<10 + total*32 + int64(2*maximum+2)*4096, nil
+	return 64<<10 + total*32 + int64(3*maximum+2)*4096, nil
 }
 
 func sqlByteSum(columns string) string {

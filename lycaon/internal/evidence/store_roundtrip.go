@@ -5,12 +5,17 @@ type RecordAux struct {
 	PathsTouched     []string
 	URLsTouched      []string
 	URLTitles        map[string]string
+	URLsShown        []string
 	GrepLines        map[string]map[int]string
 	PathTiers        map[string]string
 	UntrustedContent bool
 	ExternalCustody  bool
 	CustodyTree      bool
 	CustodySeq       int
+	// PathRoots maps a stored path key to its owning root ID for keys whose
+	// root differs from the record's primary RootID; empty values mark
+	// legacy tokens.
+	PathRoots map[string]string
 }
 
 // CloneRecordForStore copies auxiliary index fields for persistence.
@@ -18,12 +23,14 @@ func CloneRecordForStore(rec Record) RecordAux {
 	cloned := cloneRecord(rec)
 	out := RecordAux{
 		PathsTouched:     append([]string(nil), cloned.pathsTouched...),
-		URLsTouched:      append([]string(nil), cloned.urlsTouched...),
-		URLTitles:        cloned.urlTitles,
+		URLsTouched:      append([]string(nil), cloned.urls.touched...),
+		URLTitles:        cloned.urls.titles,
+		URLsShown:        append([]string(nil), cloned.urls.shown...),
 		UntrustedContent: cloned.UntrustedContent,
 		ExternalCustody:  cloned.Custody.External,
 		CustodyTree:      cloned.Custody.Tree,
 		CustodySeq:       cloned.Custody.Seq,
+		PathRoots:        cloned.rooted.owners,
 	}
 	if cloned.grepLines != nil {
 		out.GrepLines = make(map[string]map[int]string, len(cloned.grepLines))
@@ -50,8 +57,9 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		return
 	}
 	rec.pathsTouched = append([]string(nil), aux.PathsTouched...)
-	rec.urlsTouched = append([]string(nil), aux.URLsTouched...)
-	rec.urlTitles = nil
+	rec.urls.touched = append([]string(nil), aux.URLsTouched...)
+	rec.urls.shown = append([]string(nil), aux.URLsShown...)
+	rec.urls.titles = nil
 	for u, t := range aux.URLTitles {
 		rec.touchURLTitle(u, t)
 	}
@@ -69,6 +77,12 @@ func ApplyRecordAux(rec *Record, aux RecordAux) {
 		rec.pathTiers = make(map[string]string, len(aux.PathTiers))
 		for path, tier := range aux.PathTiers {
 			rec.pathTiers[NormalizeLedgerPath(path)] = tier
+		}
+	}
+	if aux.PathRoots != nil {
+		rec.rooted.owners = make(map[string]string, len(aux.PathRoots))
+		for path, rootID := range aux.PathRoots {
+			rec.rooted.owners[NormalizeLedgerPath(path)] = rootID
 		}
 	}
 	if aux.UntrustedContent {

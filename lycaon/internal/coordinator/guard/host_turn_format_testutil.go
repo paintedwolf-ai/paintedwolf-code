@@ -119,13 +119,5 @@ func resultHasCode(res *oar.PipelineResult, code string) bool {
 	if res == nil || res.Decision == nil || code == "" {
 		return false
 	}
-	if res.Decision.Code == code {
-		return true
-	}
-	for _, a := range res.Decision.Advisories {
-		if a.Code == code {
-			return true
-		}
-	}
-	return false
+	return res.Decision.Code == code
 }

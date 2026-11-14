@@ -41,7 +41,7 @@ schema:
           count: {type: integer, minimum: 1, maximum: 3, description: "Click count; 2 double-clicks."}
           to:
             type: object
-            description: "Drag drop target, located like the step's target."
+            description: "Drag drop target, located like the step's target (a page element selector, not a filesystem path)."
             properties:
               testid: {type: string, description: "data-testid."}
               selector: {type: string, description: "CSS selector."}
@@ -70,7 +70,7 @@ schema:
                 method: {type: string, description: "Method to match; default any."}
                 status: {type: integer, minimum: 100, maximum: 599, description: "Response status; default 200 when a body is given."}
                 body: {type: string, description: "Response body text."}
-                body_path: {type: string, description: "Workspace file served as the body."}
+                body_path: {type: string, description: "File served as the body: relative to the session folder, `@label/path` for any attached folder, `@output/path` for session output, or absolute."}
                 content_type: {type: string, description: "Response Content-Type; default from body_path's extension, else application/json."}
                 headers: {type: object, additionalProperties: {type: string}, description: "Extra response headers."}
                 delay_ms: {type: integer, minimum: 0, maximum: 30000, description: "Wait before answering; given alone, it slows a request that still reaches the network."}

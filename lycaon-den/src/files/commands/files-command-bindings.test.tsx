@@ -13,15 +13,14 @@ import { produce } from "solid-js/store";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
 import { requestScopePicker, toggleComparison, toggleDeletedLines, cycleSidebarScope } from "../review/review-pane.ts";
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
-import { saveEditorWordWrap, saveEditorLineNumbers, saveEditorTabMovesFocus } from "../../settings/editor/editor-prefs.ts";
-import { isPrettyDisplayEnabled, registerPrettySurfaceCapability, resetPrettyDisplayStateForTests, togglePrettyDisplayPref } from "../editor/pretty-display-state.ts";
+import { editorLineLayoutPref, resetEditorPrefsForTests, saveEditorLineNumbers, saveEditorTabMovesFocus } from "../../settings/editor/editor-prefs.ts";
 vi.mock("../../shortcuts/focus-region.ts", () => ({ focusRegion: vi.fn() }));
 vi.mock("../../platform/navigation/open-files-surface.ts", () => ({ openFilesSurface: vi.fn() }));
 vi.mock("../review/review-pane.ts", async original => ({ ...await original<typeof import("../review/review-pane.ts")>(),
   requestScopePicker: vi.fn(), toggleComparison: vi.fn(), toggleDeletedLines: vi.fn(), cycleSidebarScope: vi.fn() }));
 vi.mock("../../settings/editor/editor-prefs.ts", async original => ({ ...await original<typeof import("../../settings/editor/editor-prefs.ts")>(),
-  saveEditorWordWrap: vi.fn().mockResolvedValue(undefined), saveEditorLineNumbers: vi.fn().mockResolvedValue(undefined), saveEditorTabMovesFocus: vi.fn().mockResolvedValue(undefined) }));
-afterEach(() => { cleanup(); resetDispatcherForTests(); resetProjectFilesForTests(); resetPrettyDisplayStateForTests(); vi.clearAllMocks(); });
+  saveEditorLineNumbers: vi.fn().mockResolvedValue(undefined), saveEditorTabMovesFocus: vi.fn().mockResolvedValue(undefined) }));
+afterEach(() => { cleanup(); resetDispatcherForTests(); resetProjectFilesForTests(); resetEditorPrefsForTests(); vi.clearAllMocks(); });
 
 function fixture() {
   const f = filesControllerFixture("command-routing"); const key = f.open();
@@ -103,15 +102,22 @@ it("saves dirty tabs before close and delegates an empty close to the window", a
 });
 
 it("updates editor preferences through command handlers", () => {
-  const f = fixture(); invokeCommand("editor.toggleWrap"); invokeCommand("editor.toggleLineNumbers"); invokeCommand("editor.toggleTabFocus");
-  expect(saveEditorWordWrap).toHaveBeenCalledOnce(); expect(saveEditorLineNumbers).toHaveBeenCalledOnce(); expect(saveEditorTabMovesFocus).toHaveBeenCalledOnce();
-  expect(invokeCommand("editor.togglePretty")).toBe("declined");
-  const unregister = registerPrettySurfaceCapability(f.projectId, f.key, {
-    enabled: () => isPrettyDisplayEnabled(f.projectId, f.key),
-    onToggle: () => { togglePrettyDisplayPref(f.projectId, f.key); },
-  });
-  expect(invokeCommand("editor.togglePretty")).toBe("ran");
-  expect(isPrettyDisplayEnabled(f.projectId, f.key)).toBe(true);
-  unregister();
-  expect(invokeCommand("editor.togglePretty")).toBe("declined");
+  fixture(); invokeCommand("editor.toggleLineNumbers"); invokeCommand("editor.toggleTabFocus");
+  expect(saveEditorLineNumbers).toHaveBeenCalledOnce(); expect(saveEditorTabMovesFocus).toHaveBeenCalledOnce();
+});
+
+it("moves between Off, Wrap and Pretty, and leaves Pretty for the stored Wrap choice", () => {
+  fixture(); resetEditorPrefsForTests({ wordWrap: true });
+  const after = (command: string) => { expect(invokeCommand(command)).toBe("ran"); return editorLineLayoutPref(); };
+  expect(after("editor.togglePretty")).toBe("pretty");
+  expect(after("editor.togglePretty")).toBe("wrap");
+  expect(after("editor.toggleWrap")).toBe("off");
+  expect(after("editor.togglePretty")).toBe("pretty");
+  expect(after("editor.togglePretty")).toBe("off");
+  expect(after("editor.toggleWrap")).toBe("wrap");
+  expect(after("editor.togglePretty")).toBe("pretty");
+  expect(after("editor.toggleWrap")).toBe("wrap");
+  expect(after("editor.togglePretty")).toBe("pretty");
+  expect(after("editor.lineLayoutOff")).toBe("off");
+  expect(after("editor.lineLayoutOff")).toBe("off");
 });

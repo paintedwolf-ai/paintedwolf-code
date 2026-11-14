@@ -1,0 +1,44 @@
+{
+  "title": "A substitute on_error block carries the substitute rule's rendered copy",
+  "covers": [
+    "OAR-OPS-4",
+    "OAR-COPY-7"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "BAD",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "1 / size(tool) == 0",
+      "on_error": "SUB",
+      "what": "bad"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "SUB",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "tool == \"nope\"",
+      "what": "substitute for {{ tool }}"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": ""
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "SUB",
+    "copy": {
+      "what": "substitute for "
+    }
+  },
+  "id": "substitute-carries-copy"
+}

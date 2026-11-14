@@ -161,8 +161,8 @@ func TestReconcileCoordinatorBatch_skipsSynthesisReadyWithoutBatchReady(t *testi
 			Role:    wire.MessageRoleTool,
 			Content: "ok",
 			ToolResult: &wire.ToolResult{
-				Outcome:  wire.ToolResultOutcomeCompleted,
-				FileEdit: &wire.FileEditSnapshot{Path: "internal/handler.go"},
+				Outcome:   wire.ToolResultOutcomeCompleted,
+				FileEdits: []wire.FileEditSnapshot{{Path: "internal/handler.go"}},
 			},
 		},
 	}

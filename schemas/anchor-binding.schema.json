@@ -3,7 +3,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://lycaon.dev/schemas/host/anchor-binding.schema.json",
   "title": "AnchorBinding",
-  "description": "Shared Anchor Binding grammar. Bus effect classes: inform | block | transform. OAR Decision refinements warn|nudge|allow remain valid block-class values so oar.schema.json can $ref without forking. Do not mint a parallel stage enum — lifecycle is on: <catalog anchor id> only. Base grammar: it declares no additionalProperties, so it stays permissive standalone while a consumer composing it with allOf can close the world; the consumer closes the world (oar.schema.json sets unevaluatedProperties:false plus an ^x- allowance, [OAR-DOC-20]).",
+  "description": "Shared Anchor Binding grammar. Bus effect classes: inform | block, where the OAR decisions warn|nudge|allow are block-class values. Do not mint a parallel stage enum — lifecycle is on: <catalog anchor id> only. Base grammar: it declares no additionalProperties, so it stays permissive standalone and a consumer composing it with allOf closes the world.",
   "type": "object",
   "required": [
     "on",
@@ -27,14 +27,13 @@
         "block",
         "warn",
         "nudge",
-        "allow",
-        "transform"
+        "allow"
       ],
-      "description": "Binding effect. Bus classes: inform (prompt render) | block (OAR Decision, including warn|nudge|allow refinements) | transform (content mutate). Shared vocabulary freezes inform|block|transform as the Emit bus classes."
+      "description": "Binding effect. Bus classes: inform (prompt render) | block (OAR decision, including the warn|nudge|allow refinements)."
     },
     "when": {
       "type": "string",
-      "description": "Condition over the closed typed fact set. Required for block/transform; inform bindings use it when authored."
+      "description": "Condition over the closed typed fact set. Required for block; inform bindings use it when authored."
     },
     "render": {
       "type": "string",

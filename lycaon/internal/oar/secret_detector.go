@@ -18,7 +18,7 @@ func (SecretMatchDetector) Name() string { return "secretmatch" }
 // Inspect screens content and returns one secret_matches finding.
 func (d SecretMatchDetector) Inspect(gc *GuardContext) ([]Finding, error) {
 	if d.Matcher == nil {
-		return nil, fmt.Errorf("[OAR-FACT-26] secret_matches provider unavailable")
+		return nil, fmt.Errorf("[OAR-FACT-18] secret_matches provider unavailable")
 	}
 	if gc == nil || d.Matcher.Inert() {
 		return []Finding{{Fact: "secret_matches", Value: []any{}}}, nil

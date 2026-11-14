@@ -148,7 +148,7 @@ func TestChunkPassForwardsRowHandlesToBanner(t *testing.T) {
 	msgs := []ContextMessage{
 		{ID: "u1", Role: string(api.MessageRoleUser), Content: "survey"},
 		{ID: "a1", Role: string(api.MessageRoleAssistant), Content: "Surveying."},
-		{ID: "t1", Role: string(api.MessageRoleTool), ToolName: "command", Content: strings.Repeat("line\n", 4000), EvidenceHandles: []string{"command#12"}},
+		{ID: "t1", Role: string(api.MessageRoleTool), ToolName: "git_diff", Content: strings.Repeat("line\n", 4000), EvidenceHandles: []string{"git_diff#12"}},
 		{ID: "a2", Role: string(api.MessageRoleAssistant), Content: "aged past hot"},
 	}
 	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "orientation summary"})
@@ -156,7 +156,7 @@ func TestChunkPassForwardsRowHandlesToBanner(t *testing.T) {
 	if n == 0 {
 		t.Fatal("aged oversized tool result must shrink")
 	}
-	if !strings.Contains(out[2].Content, "recall handle:command#12") {
+	if !strings.Contains(out[2].Content, "recall handle:git_diff#12") {
 		t.Fatalf("shrunk row must carry its handle: %q", out[2].Content[:minInt(200, len(out[2].Content))])
 	}
 }

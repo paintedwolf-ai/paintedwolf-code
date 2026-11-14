@@ -46,37 +46,17 @@ func NewRenderer(reject RejectFormatter, nudge NudgeFormatter) *Renderer {
 	return &Renderer{Reject: reject, Nudge: nudge}
 }
 
-// Render maps a resolved decision onto channels. Nudge and warn walk
-// Advisories ([OAR-EVAL-20]). post_turn blocks use grounding_nudge;
-// pre_invoke/tool_handler/finalize use tool_reject.
+// Render maps a resolved decision onto its channel. post_turn blocks use
+// grounding_nudge; pre_invoke/tool_handler/finalize use tool_reject.
 func (r *Renderer) Render(ctx context.Context, stage Stage, decision *Decision) ([]RenderedDecision, error) {
 	if decision == nil {
 		return nil, nil
 	}
-	switch decision.Effect {
-	case EffectNudge, EffectWarn:
-		out := make([]RenderedDecision, 0, len(decision.Advisories))
-		for _, a := range decision.Advisories {
-			rd, err := r.renderOne(ctx, stage, Decision{
-				Effect: decision.Effect,
-				Code:   a.Code,
-				Rule:   a.Rule,
-				Copy:   a.Copy,
-				Data:   a.Data,
-			})
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, rd)
-		}
-		return out, nil
-	default:
-		rd, err := r.renderOne(ctx, stage, *decision)
-		if err != nil {
-			return nil, err
-		}
-		return []RenderedDecision{rd}, nil
+	rd, err := r.renderOne(ctx, stage, *decision)
+	if err != nil {
+		return nil, err
 	}
+	return []RenderedDecision{rd}, nil
 }
 
 func (r *Renderer) renderOne(ctx context.Context, stage Stage, d Decision) (RenderedDecision, error) {
@@ -93,7 +73,7 @@ func (r *Renderer) renderOne(ctx context.Context, stage Stage, d Decision) (Rend
 			rd.Channel = ChannelBanner
 		case EffectNudge:
 			rd.Channel = ChannelGuidanceNudge
-		case EffectAllow, EffectTransform:
+		case EffectAllow:
 			return rd, nil
 		default:
 			return rd, fmt.Errorf("unknown effect %q", d.Effect)
@@ -106,7 +86,7 @@ func (r *Renderer) renderOne(ctx context.Context, stage Stage, d Decision) (Rend
 	switch d.Effect {
 	case EffectAllow:
 		return rd, nil
-	case EffectBlock, EffectTransform:
+	case EffectBlock:
 		if stage == StagePostTurn {
 			rd.Channel = ChannelGroundingNudge
 			if r != nil && r.Nudge != nil {

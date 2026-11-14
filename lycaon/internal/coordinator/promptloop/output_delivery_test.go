@@ -50,7 +50,7 @@ func TestOutputDeliveryRefusalRetainsExecutionAndEvaluatesOnce(t *testing.T) {
 				if !got.invoked || got.captures.ownerRef != run.captures.ownerRef || details["execution_outcome"] != string(outcome) {
 					t.Fatalf("execution state lost: %+v", got)
 				}
-				if got.reject == nil || len(got.reject.Copy) != 5 || !strings.Contains(got.reject.Copy["cause"], string(outcome)) {
+				if got.reject == nil || !carriesRuleCopy(got.reject.Copy) || !strings.Contains(got.reject.Copy["cause"], string(outcome)) {
 					t.Fatalf("evaluated copy lost execution outcome: %+v", got.reject)
 				}
 				if got.failure.CallerFault() || got.failure.Retryable {

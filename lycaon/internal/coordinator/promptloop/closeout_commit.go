@@ -3,6 +3,7 @@ package promptloop
 import (
 	"context"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/evidence"
 	"github.com/lycaon/lycaon/internal/toolreach"
 	"maps"
 	"strings"
@@ -192,6 +193,13 @@ func (l *turnCloseout) rejectCloseoutGrounding(
 	// turn, so repair copy may name them.
 	renderDecision.Data["resume_work_allowed"] = !st.proseFinish && len(st.offeredToolNames) > 0
 	renderDecision.Data["can_recall"] = st.requestReach().Status("recall") == toolreach.Callable
+	offered := make(map[string]bool, len(st.offeredToolNames))
+	for _, name := range st.offeredToolNames {
+		offered[name] = true
+	}
+	if minted, err := evidence.ActiveBinding().MintedKinds(offered); err == nil {
+		renderDecision.Data["mints"] = minted
+	}
 	decision = &renderDecision
 	nudge, err := guard.FormatCloseoutGroundingReject(
 		ctx,

@@ -108,7 +108,7 @@ func appendUnique(list []string, value string) []string {
 }
 
 // RegisterWorktreeFacts compares the command's Git index capture only when a
-// selected rule reads one of the facts ([OAR-FACT-11]).
+// selected rule reads one of the facts ([OAR-FACT-9]).
 func RegisterWorktreeFacts(ctx context.Context, gc *oar.GuardContext, snapshot indexwatch.Snapshot) {
 	if gc == nil || !snapshot.Active() {
 		return

@@ -104,8 +104,8 @@ func TestTutorialPackRuleLoadsAndConforms(t *testing.T) {
 		t.Fatalf("tutorial conformance fixtures = %d want 2 (one firing, one not)", len(fixtures))
 	}
 	for _, fx := range fixtures {
-		if err := cr.RunFixture(fx); err != nil {
-			t.Errorf("%s: %v", fx.Name, err)
+		if err := cr.RunFixture(context.Background(), fx); err != nil {
+			t.Errorf("%s: %v", fx.ID, err)
 		}
 	}
 }

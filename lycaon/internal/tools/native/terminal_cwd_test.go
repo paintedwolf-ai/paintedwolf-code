@@ -138,7 +138,7 @@ func TestTerminalOpenCwdWorkerBranchResolvesArgUnderBranch(t *testing.T) {
 	tctx.Source.WorkerBranchRoot = branch
 	tctx.Source.BranchWorkspace = testutil.CompleteBranchWorkspace{}
 	testutil.FailErr(t, "WriteJobMeta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
-		Roots: []workspace.JobMetaRoot{{ID: "root", Path: root, IsPrimary: true}},
+		Roots: []workspace.JobMetaRoot{{ID: "root", Label: "root", Path: root, IsPrimary: true}},
 	}))
 	openRaw, err := reg.Run(context.Background(), terminal.OpenToolName, map[string]any{
 		"command": script,

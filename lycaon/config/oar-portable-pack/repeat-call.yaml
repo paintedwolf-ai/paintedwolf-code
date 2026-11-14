@@ -1,0 +1,35 @@
+# Escalation over time: notice a replayed call, flag it, then refuse.
+#
+# same_call_run is maintained by the engine ([OAR-FIRE-9]): how many of the
+# latest earlier calls in the session were this same call, with the same
+# arguments. The thresholds are in the rules ([OAR-FIRE-3]), so the escalation
+# travels with the pack.
+#
+# Both rules are `invariant` kind and evaluate in ascending id order
+# ([OAR-EVAL-1]): REPEAT_CALL_BLOCK first. After two identical earlier calls it
+# fires and its block ends the occurrence ([OAR-EVAL-3]); after one it passes
+# and REPEAT_CALL_WARN decides.
+spec_version: "1.0"
+id: REPEAT_CALL_BLOCK
+namespace: example.hygiene
+kind: invariant
+on: tool.pre_invoke
+selector: {}
+when: 'same_call_run >= 2'
+effect: block
+on_fire: [publish_event]
+profile: portable
+what: The same call has been made three times in a row, so it is refused.
+fix: Inspect the environment or change the call rather than replaying it.
+---
+spec_version: "1.0"
+id: REPEAT_CALL_WARN
+namespace: example.hygiene
+kind: invariant
+on: tool.pre_invoke
+selector: {}
+when: 'same_call_run >= 1'
+effect: warn
+profile: portable
+what: The same call has been made twice in a row.
+fix: Change the approach instead of replaying the call.

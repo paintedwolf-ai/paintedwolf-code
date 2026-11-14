@@ -27,7 +27,7 @@ func (k *KickEngine) QueuePolicyFeedback(sessionID string, entries []guidance.Po
 	q := k.policyQueue(sessionID)
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	// [OAR-EVAL-20] Preserve every occurrence and its evaluation order.
+	// Preserve every occurrence and its evaluation order.
 	// OAR counters and conditions own repetition; this delivery queue does not.
 	for _, entry := range entries {
 		q.pending = append(q.pending, entry.Clone())

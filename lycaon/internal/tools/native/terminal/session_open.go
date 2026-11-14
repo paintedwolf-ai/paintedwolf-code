@@ -133,6 +133,7 @@ func OpenHandler(bg *bgprocess.Registry) tools.ToolHandler {
 			Stages:     stages,
 			IOParams:   hostcmd.IOParams{InlineEnv: in.Env},
 			PathExtra:  append([]string(nil), tctx.Host.HostResourcePathExtra...),
+			ServiceEnv: append([]string(nil), tctx.Host.HostResourceEnv...),
 		}
 		facts := confine.SpawnFacts{Report: report, Network: egressLease.ObservedHosts, Action: egressLease}
 		if err := tctx.Effects.Secrets.HandOff(ctx, nil); err != nil {

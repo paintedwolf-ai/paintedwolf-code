@@ -41,6 +41,17 @@ func (m *memoryItems) remove(string) error {
 	return nil
 }
 
+func TestItemsCustodyKeySharesOnlyWhenAnAccountIsBound(t *testing.T) {
+	keychain := (&itemsIdentityProvider{mode: CustodyKeychain, account: "device-account"}).custodyKey()
+	if keychain.mode != CustodyKeychain || keychain.account != "device-account" || !keychain.canShare() {
+		t.Fatalf("keychain custody key = %+v, shareable", keychain)
+	}
+	service := (&itemsIdentityProvider{mode: CustodyIdentityService}).custodyKey()
+	if service.mode != CustodyIdentityService || service.account != "" || service.canShare() {
+		t.Fatalf("service custody key = %+v, shareable", service)
+	}
+}
+
 func TestItemsIdentityCreatesAndReloads(t *testing.T) {
 	items := &memoryItems{}
 	p := &itemsIdentityProvider{account: "test", description: "test custodian", items: items}

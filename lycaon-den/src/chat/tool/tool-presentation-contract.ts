@@ -27,6 +27,10 @@ export type StructuredToolSection =
       kind: "content";
       text: string;
       label?: string;
+      /** The file the text was read from. */
+      path?: string;
+      /** The text's language where no path names it. */
+      language?: string;
     }
   | { kind: "note"; text: string }
   | {
@@ -60,9 +64,15 @@ export type StructuredToolPresentation = {
 
 export function contentSection(
   text: string,
-  options?: { label?: string },
+  options?: { label?: string; path?: string; language?: string },
 ): StructuredToolSection {
-  return { kind: "content", text, label: options?.label };
+  return {
+    kind: "content",
+    text,
+    label: options?.label,
+    ...(options?.path ? { path: options.path } : {}),
+    ...(options?.language ? { language: options.language } : {}),
+  };
 }
 
 /** Host compaction banners precede the result body. */

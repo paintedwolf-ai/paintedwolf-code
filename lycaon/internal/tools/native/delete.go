@@ -15,9 +15,24 @@ import (
 	"github.com/lycaon/lycaon/internal/toolcontract"
 	"github.com/lycaon/lycaon/internal/toolrejection"
 	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/tools/native/sourceview"
 	"github.com/lycaon/lycaon/internal/tools/projectpaths"
 	"github.com/lycaon/lycaon/internal/tools/surveyjson"
 )
+
+// removedText is the text a regular file holds just before its removal, for
+// the result's diff. Anything the host does not serve as editable text, such
+// as a binary or oversized file, a link or a directory, has none.
+func removedText(ctx context.Context, tctx tools.ToolContext, resolved projectpaths.Resolved, info os.FileInfo) *string {
+	if !info.Mode().IsRegular() {
+		return nil
+	}
+	text, err := sourceview.LoadText(ctx, "delete", sourceview.AccessMutate, tctx, resolved)
+	if err != nil {
+		return nil
+	}
+	return &text.Content
+}
 
 // DeleteTool removes files and empty directories within write scope.
 type DeleteTool struct {
@@ -149,15 +164,19 @@ func (t *DeleteTool) Delete(ctx context.Context, in DeleteInput, tctx tools.Tool
 				}
 				result.Deleted = append(result.Deleted, summary.deleted...)
 				result.Deleted = append(result.Deleted, relSlash)
-				afterSuccessfulMutation(ctx, tctx, relSlash)
+				afterSuccessfulMutationResolved(ctx, tctx, resolved)
 				continue
 			}
 		}
+		removed := removedText(ctx, tctx, resolved, info)
 		if err := removeAgentPath(ctx, tctx, resolvedMutationTarget(resolved), in.Memory); err != nil {
 			return result, fmt.Errorf("delete %s: %w", relSlash, err)
 		}
+		if removed != nil {
+			captureFileEdit(tctx, resolved, textEdit{before: removed, deleted: true})
+		}
 		result.Deleted = append(result.Deleted, relSlash)
-		afterSuccessfulMutation(ctx, tctx, relSlash)
+		afterSuccessfulMutationResolved(ctx, tctx, resolved)
 	}
 	return result, nil
 }

@@ -6,11 +6,11 @@ import { filesControllerFixture, controllerSource } from "../../test/files-contr
 import { applyBufferSourceChanged, setBufferLiveHandlers } from "./buffer-live.ts";
 import { bindFilesBufferSynchronization } from "./files-buffer-synchronization.ts";
 import { observeEditorDocument } from "./editor-document.ts";
-import { refreshOpenEditorConfigs, loadEditorConfigForBuffer } from "../../components/source/editor/editorconfig-load.ts";
+import { refreshOpenFormatSettings, loadFormatSettingsForBuffer } from "../../components/source/editor/format-settings-load.ts";
 import { setFilesStore } from "./files-buffer-state.ts";
 import { applyFilesBufferDraft, resetProjectFilesForTests } from "./project-files-buffers.ts";
 vi.mock("./editor-document.ts", async (original) => ({ ...await original<typeof import("./editor-document.ts")>(), observeEditorDocument: vi.fn() }));
-vi.mock("../../components/source/editor/editorconfig-load.ts", () => ({ refreshOpenEditorConfigs: vi.fn(), loadEditorConfigForBuffer: vi.fn() }));
+vi.mock("../../components/source/editor/format-settings-load.ts", () => ({ refreshOpenFormatSettings: vi.fn(), loadFormatSettingsForBuffer: vi.fn() }));
 const disposers: Array<() => void> = [];
 afterEach(() => { disposers.splice(0).forEach(dispose => dispose()); resetProjectFilesForTests(); vi.clearAllMocks(); });
 
@@ -30,11 +30,11 @@ function fixture() {
 
 it("refreshes EditorConfig and clean source presentation through live events", async () => {
   const f = fixture(); f.emit(".editorconfig");
-  expect(vi.mocked(refreshOpenEditorConfigs).mock.calls[0]![0].client).toBe(f.client);
-  expect(refreshOpenEditorConfigs).toHaveBeenCalledWith(expect.objectContaining({ projectId: f.projectId, rootId: "root", sessionId: "chat" }));
-  f.emit(); await vi.waitFor(() => expect(loadEditorConfigForBuffer).toHaveBeenCalled());
+  expect(vi.mocked(refreshOpenFormatSettings).mock.calls[0]![0].client).toBe(f.client);
+  expect(refreshOpenFormatSettings).toHaveBeenCalledWith(expect.objectContaining({ projectId: f.projectId, rootId: "root", sessionId: "chat" }));
+  f.emit(); await vi.waitFor(() => expect(loadFormatSettingsForBuffer).toHaveBeenCalled());
   expect(f.state().byKey[f.key]!.baseSha256).toBe("refreshed");
-  f.dispose(); f.emit(".editorconfig"); expect(refreshOpenEditorConfigs).toHaveBeenCalledOnce();
+  f.dispose(); f.emit(".editorconfig"); expect(refreshOpenFormatSettings).toHaveBeenCalledOnce();
 });
 
 it.each(["diverged", "failed"] as const)("handles a current clean document that %s", async outcome => {
@@ -65,6 +65,6 @@ it("does not refresh EditorConfig without a connection", () => {
       dropFileVersionState: vi.fn(), loadVersionHistory: vi.fn(), setSaveError: vi.fn(), flashUpdatedNote: vi.fn(), setBulkClose: vi.fn(), setConfirm: vi.fn() });
     return dispose;
   }); disposers.push(stop); f.emit(".editorconfig");
-  expect(refreshOpenEditorConfigs).not.toHaveBeenCalled();
+  expect(refreshOpenFormatSettings).not.toHaveBeenCalled();
   setBufferLiveHandlers(f.projectId, null);
 });

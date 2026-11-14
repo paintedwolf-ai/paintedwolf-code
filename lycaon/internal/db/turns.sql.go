@@ -593,6 +593,51 @@ func (q *Queries) ListRecoveringTurns(ctx context.Context) ([]Turns, error) {
 	return items, nil
 }
 
+const listSessionModelOutputs = `-- name: ListSessionModelOutputs :many
+SELECT id, turn_attempt_id, session_id, project_id, iteration, scripted, message_id, provider_id,
+       model, content_blob_sha256, finish_reason, created_at, settled_at
+FROM model_outputs
+WHERE session_id = ?
+ORDER BY settled_at, id
+`
+
+func (q *Queries) ListSessionModelOutputs(ctx context.Context, sessionID string) ([]ModelOutputs, error) {
+	rows, err := q.db.QueryContext(ctx, listSessionModelOutputs, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ModelOutputs
+	for rows.Next() {
+		var i ModelOutputs
+		if err := rows.Scan(
+			&i.ID,
+			&i.TurnAttemptID,
+			&i.SessionID,
+			&i.ProjectID,
+			&i.Iteration,
+			&i.Scripted,
+			&i.MessageID,
+			&i.ProviderID,
+			&i.Model,
+			&i.ContentBlobSha256,
+			&i.FinishReason,
+			&i.CreatedAt,
+			&i.SettledAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const markModelOutputProjected = `-- name: MarkModelOutputProjected :execrows
 INSERT INTO model_output_projections (model_output_id, message_seq, projected_at)
 SELECT output.id, message.seq, ?

@@ -1,0 +1,40 @@
+{
+  "id": "fire-counter-increment",
+  "title": "A rule that fires applies its declared on_fire increment",
+  "covers": [
+    "OAR-FIRE-2",
+    "OAR-FIRE-4",
+    "OAR-CONF-12"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "BREAKER_ARMED",
+    "kind": "invariant",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "nudge",
+    "when": "tool == \"read\"",
+    "on_fire": [
+      "increment_breaker"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session"
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "BREAKER_ARMED",
+    "on_fire": [
+      "increment_breaker"
+    ],
+    "counters": {
+      "BREAKER_ARMED": {
+        "breaker_count": 1
+      }
+    }
+  }
+}

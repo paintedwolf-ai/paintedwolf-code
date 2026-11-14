@@ -67,7 +67,7 @@ func TestPackVersionsAndReleasedArchivesAreImmutable(t *testing.T) {
 			case "new_fact", "new_fact_raised":
 				policyDir := filepath.Join(repo, filepath.FromSlash(pack), "policy")
 				testutil.FailErr(t, "create policy dir", os.MkdirAll(policyDir, 0o750))
-				testutil.FailErr(t, "write policy fact requirement", os.WriteFile(filepath.Join(policyDir, "rules.yaml"), []byte("requires:\n  facts: [added_fact]\n"), 0o600))
+				testutil.FailErr(t, "write policy fact requirement", os.WriteFile(filepath.Join(policyDir, "rules.yaml"), []byte("requires_facts: [added_fact]\n"), 0o600))
 			case "manifest":
 				testutil.FailErr(t, "remove manifest", os.Remove(file))
 			}

@@ -1,0 +1,30 @@
+{
+  "id": "doc-copy-fields-do-not-affect-decision",
+  "title": "Presentation copy describes the finding and changes nothing about the decision",
+  "covers": [
+    "OAR-DOC-18"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "DOCUMENTED_RULE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "what": "The call reads outside the declared scope.",
+    "cause": "A path argument resolved outside the allowed roots.",
+    "fix": "Read inside scope, or widen the scope deliberately.",
+    "instead": "Branch on the returned identifier and re-scope the read."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "DOCUMENTED_RULE"
+  }
+}

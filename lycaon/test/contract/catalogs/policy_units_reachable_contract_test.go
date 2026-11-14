@@ -33,32 +33,25 @@ func TestShippedPolicyUnitsAreReachable(t *testing.T) {
 			raw, err := os.ReadFile(filepath.Join(dir, e.Name()))
 			testutil.FailErr(t, "read "+rel, err)
 			var unit struct {
-				ID          string `yaml:"id"`
-				When        string `yaml:"when"`
-				Enforcement string `yaml:"enforcement"`
-				Status      string `yaml:"status"`
-				Successor   string `yaml:"x-paintedwolf-successor"`
-				Related     []struct {
-					ID   string `yaml:"id"`
-					Type string `yaml:"type"`
-				} `yaml:"related"`
+				ID        string `yaml:"id"`
+				Kind      string `yaml:"kind"`
+				When      string `yaml:"when"`
+				Status    string `yaml:"x-paintedwolf-status"`
+				Successor string `yaml:"x-paintedwolf-successor"`
 			}
 			testutil.FailErr(t, "parse "+rel, yaml.Unmarshal(raw, &unit))
 			seen++
-			if strings.TrimSpace(unit.Enforcement) == "off" {
-				// [OAR-EVAL-11] keeps an enforcement-off unit load-checked without
-				// rule evaluation; hint emissions render its copy through the
-				// host-raised hint channel. The unit still ships dead copy unless
-				// that channel can render something beyond the bare code.
+			if unit.Kind == "hint" {
+				// A hint is never evaluated; it exists only to render copy
+				// for a code the host raises ([OAR-HINT-1]).
 				var entry guidance.HintEntry
 				if err := yaml.Unmarshal(raw, &entry); err != nil {
 					t.Errorf("%s: hint copy projection failed: %v", rel, err)
 				} else if !hintViewShipsCopy(unit.ID, entry) {
-					t.Errorf("%s: enforcement 'off' ships copy that can never render — delete the unit or give it a real condition", rel)
+					t.Errorf("%s: hint ships no copy beyond its bare code", rel)
 				}
 			}
-			retired := deprecatedWithSuccessor(unit.Status, unit.Related) ||
-				(strings.TrimSpace(unit.Status) == "deprecated" && strings.TrimSpace(unit.Successor) != "")
+			retired := strings.TrimSpace(unit.Status) == "deprecated" && strings.TrimSpace(unit.Successor) != ""
 			if when := strings.TrimSpace(unit.When); when == "false" && !retired {
 				t.Errorf("%s: when 'false' is unreachable by construction — the agent would receive the bare code %q", rel, unit.ID)
 			}
@@ -67,21 +60,6 @@ func TestShippedPolicyUnitsAreReachable(t *testing.T) {
 	if seen == 0 {
 		t.Fatalf("no policy units found under %v", dirs)
 	}
-}
-
-func deprecatedWithSuccessor(status string, related []struct {
-	ID   string `yaml:"id"`
-	Type string `yaml:"type"`
-}) bool {
-	if strings.TrimSpace(status) != "deprecated" {
-		return false
-	}
-	for _, relation := range related {
-		if strings.TrimSpace(relation.ID) != "" && strings.TrimSpace(relation.Type) == "obsolete" {
-			return true
-		}
-	}
-	return false
 }
 
 // hintViewShipsCopy reports whether the projected hint view carries copy beyond

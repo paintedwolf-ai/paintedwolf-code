@@ -285,3 +285,16 @@ describe("Install pw command", () => {
     expect(labels(app.submenu)).not.toContain("Install pw command");
   });
 });
+
+describe("Line layout", () => {
+  it("pulls the modes out of View with the current one checked", () => {
+    seedStockFrame({ lineLayout: "wrap" });
+    const view = section(inWindowAppMenuItems(), "View");
+    const pullOut = view.submenu.find((item) => item.submenu !== undefined);
+    expect(pullOut?.label).toBe("Line layout");
+    expect(pullOut?.submenu?.map((item) => [item.label, item.checked])).toEqual([
+      ["Off", false], ["Wrap", true], ["Pretty", false],
+    ]);
+    expect(labels(view.submenu)).not.toContain("Toggle wrap");
+  });
+});

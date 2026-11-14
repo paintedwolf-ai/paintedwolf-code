@@ -28,6 +28,37 @@ the same callable roster. Native operation schemas describe execution contracts;
 they do not introduce additional tool choices. Retired public tool names name
 `command` as their successor and retain their recorded historical meanings.
 
+## Path addressing
+
+Every path-taking tool resolves and displays paths through one addressing rule,
+keyed to the session's attached roots. The model-facing grammar:
+
+- **Bare relative paths** (`src/main.go`) and an empty `cwd` resolve in the
+  **session folder** — the attached root the session currently addresses
+  unqualified paths against.
+- **`@<label>/relative/path`** addresses any attached folder, including the
+  session folder, at any root count. Every root carries a label — draft
+  projects label their scratch root `Draft`, and single-root projects still
+  carry a mandatory label — so the grammar is uniform across layouts.
+- **`.` or an empty path in discovery operations** (`find`, `grep`, `ls` in
+  `command`, `survey_repo`) walks **every attached folder**; bare file operands
+  and `cwd` still resolve in the session folder.
+- **`@scratch/<path>`** addresses the session's temporary scratch directory and
+  **`@output/<path>`** addresses retained command/tool output spills. These
+  virtual labels are host-owned; no attached root may carry a virtual label.
+- **Absolute paths are accepted on input** and canonicalize to display form in
+  tool receipts — bare off the session folder, `@label/rel` off any other
+  attached root. Prompts never print host absolute paths.
+
+The prompt partials teach the same rule
+([`workspace-roots.md`](../lycaon/config/packs/painted-wolf/platform/shared/partials/workspace-roots.md)
+lists every attached folder as an `@<label>` row with `(session folder)` on the
+active one), and [Compatibility](compatibility.md#agent-public-vocabulary)
+records the grammar as agent-public vocabulary. Git operations are the one
+deliberate exception: their pathspecs stay repository-relative on the session
+folder rather than root-labelled, because they name Git revisions and index
+entries ([Git](git.md)).
+
 ## Portable command language version 1
 
 The versioned catalog defines the program language and native utility contracts.
@@ -600,7 +631,9 @@ Multi-root calls use explicit root addressing when a relative path is ambiguous.
 `@scratch/<path>` addresses the invoking session's private scratch folder, a host namespace no attached root may share, and `@label/<path>` an attached folder. One grammar resolves them for native tools, `cwd` and redirects. In a `command` program an unquoted leading `@label` or `@scratch` expands to the folder's absolute path in every argument and assignment value, external programs included; a quoted one stays literal, and a label no folder carries stays literal for the program to read. Expansion grants nothing; the operation or launch that uses the path checks it. `native_path` converts a computed path explicitly. `TMPDIR`, `TMP`, `TEMP` and `SCRATCH_DIR` name the same folder for native utilities and processes, and `mktemp` creates there; literal `/tmp` keeps its OS meaning. `pwd` and `$PWD` are absolute, and the command guidance lists each folder's label and absolute path with the scratch path ([paths in command programs](projects.md#paths-in-command-programs)). A path or label of a folder that was removed, moved or renamed refuses with `ROOT_NOT_ATTACHED` and lists the current folders ([root changes](projects.md#root-changes-during-a-session)). A worker's scratch is its own, so a worker returns findings in its result rather than as a scratch path.
 
 `@output/<program>.stdout` and `.stderr` address the invoking chat's retained
-command output copies. Unquoted addresses expand to absolute paths; quoted
+command output copies. Failed child diagnostics use
+`@output/<program>/<execution>.stdout` and `.stderr`; the result provides each
+path and whether the retained prefix is complete. Unquoted addresses expand to absolute paths; quoted
 addresses remain literal. The host prepares this folder under its own state,
 outside writable scratch and standard temporary roots. These files are views,
 not authoritative output: retained screened blobs and their size and SHA-256
@@ -792,7 +825,7 @@ Worker plans start from the profile-filtered capabilities rather than the coordi
 
 Invocation is bound to the schemas actually offered on that request. An unoffered call receives `TOOL_NOT_OFFERED` without running the handler; the call and rejection stay in the transcript so the model can load the deferred schema and retry.
 
-On a surface, `floor` is offered on every call and `loadable` names the tools the turn may add. A loadable tool is immediate when the session's load ledger holds it (predicted by the turn decision, asked for through `request_tools`, or already used in the chat) and requestable otherwise. `request_tools` takes a description of the need: names the text spells out load directly, the decision engine ranks the rest of the loadable set against the text, and an unavailable ranker returns a paginated catalog of available names and descriptions. The model can select an exact name without ranking. Fallback results provide `discovery.next_need` to pass unchanged as `need` for the next page; healthy calls and standing schemas carry no discovery instructions. When the engine answers but no tool reaches `request.load_at`, its `nearest_loads` closest tools load anyway and the result lists them under `nearest`, so an answered request is never a dead end. Surface placement takes precedence over a profile's default deferral, while confinement, approval, and the profile's allowed-tool policy still apply at execution. Enabled MCP tools are deferred by default in the compiled plan and load as needed through `request_tools`, unless the provider is explicitly configured to always load. Catalog loading rejects ambiguous placement, duplicate or empty names, and loadable sets on surfaces that do not carry `request_tools` on the floor. Resource families expand the addressable surface before the plan is consumed, but requesting one member does not activate the others. A tool's declared `companions` in `native-tools.yaml` do load with it when a request selects it, bounded by the surface: the file-mutation tools declare one another, because a need to create or change files ranks them near one another and a turn that does one soon does the rest. Live resources supply their required controls through structured resource facts. The decision engine, its data, and its offline evaluation live under [`scripts/bialy/`](../scripts/bialy/README.md).
+On a surface, `floor` is offered on every call and `loadable` names the tools the turn may add. A loadable tool is immediate when the session's load ledger holds it (predicted by the turn decision, asked for through `request_tools`, or already used in the chat) and requestable otherwise. `request_tools` takes a description of the need: names the text spells out load directly, the decision engine ranks the rest of the loadable set against the text, and an unavailable ranker returns a paginated catalog of available names and descriptions. The model can select an exact name without ranking. Fallback results provide `discovery.next_need` to pass unchanged as `need` for the next page; healthy calls and standing schemas carry no discovery instructions. When the engine answers but no tool reaches `request.load_at`, its `nearest_loads` closest tools load anyway and the result lists them under `nearest`, so an answered request is never a dead end. Surface placement takes precedence over a profile's default deferral, while confinement, approval, and the profile's allowed-tool policy still apply at execution. Enabled MCP tools are deferred by default in the compiled plan and load as needed through `request_tools`, unless the provider is explicitly configured to always load. Catalog loading rejects ambiguous placement, duplicate or empty names, and loadable sets on surfaces that do not carry `request_tools` on the floor. Families expand the addressable surface before the plan is consumed, and requesting one member loads the others. A live resource's controls form one family that its launcher stays outside, so a launcher such as `terminal_open` can sit on a floor while its controls arrive with the live resource; those controls are never listed as a requestable capability. A tool's declared `companions` in `native-tools.yaml` do load with it when a request selects it, bounded by the surface: the file-mutation tools declare one another, because a need to create or change files ranks them near one another and a turn that does one soon does the rest. Live resources supply their required controls through structured resource facts. The decision engine, its data, and its offline evaluation live under [`scripts/bialy/`](../scripts/bialy/README.md).
 
 ### Session scope
 
@@ -895,7 +928,7 @@ Provenance rows are ledger facts, not prose inference ([Host behavior](dispatch-
 
 ## Host process tools
 
-`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_list` with `listening_port` (and optionally `protocol`) answers which process holds a port: each matching process carries its listeners, and `unattributed_listeners` lists held sockets whose process could not be read. A host can withhold other processes' rows from the kernel table without an error, as macOS 27 does for some processes. The listener view then reports what this user's processes show directly, sets `snapshot_complete` to false, and leaves a port with no entry unknown rather than free; native `lsof` says the same on standard error. Native `lsof -i :PORT`, `-iTCP:PORT -sTCP:LISTEN` and `-iUDP:PORT` read the same kernel listener tables through the same owner. They always list the session's own listeners with their job identity; for a named port they list other holders only after the same inspection approval, and otherwise say those holders were not inspected. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls.
+`process_list` discovers or inspects host processes and `process_signal` signals the returned session-bound instance references. Only processes the session started carry a reference; any other target is refused with `PROCESS_NOT_OWNED` whatever the approval. Both request approval before their host operation. `process_list` with `listening_port` (and optionally `protocol`) answers which process holds a port: each matching process carries its listeners, and `unattributed_listeners` lists held sockets whose process could not be read. A host can withhold other processes' rows from the kernel table without an error, as macOS 27 does for some processes. The listener view then reports what this user's processes show directly, sets `snapshot_complete` to false, and leaves a port with no entry unknown rather than free; native `lsof` says the same on standard error. Native `lsof -i :PORT`, `-iTCP:PORT -sTCP:LISTEN` and `-iUDP:PORT` read the same kernel listener tables through the same owner. They always list the session's own listeners with their job identity; for a named port they list other holders only after the same inspection approval, and otherwise say those holders were not inspected. `process_signal` returns per-target delivery results, so partial failure is visible, and never expands a name, process group, or descendant set after approval. Command jobs keep their own handle controls; native `kill` and `pkill` also signal a process a job started, by its kernel instance, as `ps` and `pgrep` list it.
 
 For command behavior native tools cannot express, declare `capability_request.process_control` to keep the sandbox while permitting external signaling, `capability_request.credential_store` to read from the host OS credential store inside the sandbox, or `capability_request.host_execution` to run the approved command outside it, including passwordless `sudo -n`. Declare the requirement on each invocation, as with `direct_ip`. See [host processes and exceptional execution](security.md#host-processes-and-exceptional-execution).
 
@@ -1163,7 +1196,7 @@ OAR policies select the actual operation and typed rejection facts. A host refus
 
 [`tool-audit.csv`](../tool-audit.csv) enumerates the 118 tool declarations in the [command disposition catalog](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/dispositions.json). Its `runtime_authority` column names the subsystem that governs each operation; `surface_disposition` says how the tool is presented. The catalog has one primary `command` entry, 78 retained domain tools, 15 structured tools also available as command forms, and 24 command-only operation contracts. Host process controls, Git mutations and conversational document edits retain useful structured surfaces beside command forms.
 
-The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain the utility's stderr and exit status. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
+The current command entry parses and admits ordinary bash programs, dispatches cataloged utilities natively, and launches other programs through confinement. It returns child output and status, effects, a program receipt, and typed host refusals. Utility errors retain bounded stdout and stderr diagnostics with the utility's exit status. A withheld redirect records `output_withheld` without claiming the write owner ran. Verification verdicts apply to the submitted program; bounded `nonzero_executions` preserve earlier child statuses even when a later statement succeeds. OAR renders host decisions from typed facts; it does not classify a command by reading its output. The stopped statement's shell-voice stderr accompanies the structured refusal, and earlier child results remain available. The [feedback contract](agent-tool-feedback.md) and [command language](../lycaon/config/packs/painted-wolf/platform/tools/command-language-v1/) define those surfaces.
 
 | Area | Current path and cutover decision |
 |---|---|

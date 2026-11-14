@@ -1,0 +1,49 @@
+{
+  "id": "fire-same-call-run-breaks-on-different-arguments",
+  "title": "A call with different arguments ends the run of the same call",
+  "covers": [
+    "OAR-FIRE-9"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "warn",
+    "when": "same_call_run >= 1"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "tool_args": {
+        "path": "a"
+      }
+    },
+    "session_id": "fixture-session",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "read",
+          "tool_args": {
+            "path": "a"
+          }
+        }
+      },
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "read",
+          "tool_args": {
+            "path": "b"
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

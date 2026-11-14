@@ -1,25 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: TERMINAL_NOT_RUNNING
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - terminal_send
-requires:
-  profiles:
-    - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.id, paintedwolf.next_steps]
+requires_facts: [paintedwolf.id, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TERMINAL_NOT_RUNNING"
 effect: block
-copy:
-  what: Pty handle {{ paintedwolf.id }} has already exited.
-  cause: The process finished or was killed before input could be sent.
-  why: Writing to an exited pty cannot continue the session.
-  fix: '{{ paintedwolf.next_steps }}'
-  instead: Preserve the exited process outcome before deciding whether another process is needed
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:terminal_session
-x-paintedwolf-message: terminal process is not running
+message: terminal process is not running
+what: Pty handle {{ paintedwolf.id }} has already exited.
+cause: The process finished or was killed before input could be sent.
+why: Writing to an exited pty cannot continue the session.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Preserve the exited process outcome before deciding whether another process is needed
 x-paintedwolf-scenarios:
   - id: default
     vars:

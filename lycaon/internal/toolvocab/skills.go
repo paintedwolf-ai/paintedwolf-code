@@ -93,9 +93,10 @@ var profileHasCapabilityAliases = map[string]bool{
 var profileHasIdentifier = regexp.MustCompile(`profile_has_([a-z0-9_]+)`)
 
 // UnreachableNames returns the tool, operation, and command-program names copy
-// tells its reader to reach but the reachable map cannot, sorted. A name is
-// reachable when the map holds it or when a reader with those facts can run it
-// as a command program: command forms need `command`, mutating forms need
+// tells its reader to reach but the reachable map cannot, and the evidence
+// handles (as "kind#") no reachable tool mints, sorted. A name is reachable when
+// the map holds it or when a reader with those facts can run it as a command
+// program: command forms need `command`, mutating forms need
 // ReachCommandMutation, and a dual-state form needs its tool. Callers render
 // copy first so guarded branches resolve against the reader's actual facts.
 func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []string {
@@ -121,6 +122,9 @@ func UnreachableNames(c *Catalog, corpus string, reachable map[string]bool) []st
 			continue
 		}
 		add(name)
+	}
+	for _, handle := range c.unmintableHandles(corpus, reachable) {
+		add(handle)
 	}
 	sort.Strings(out)
 	return out
@@ -180,7 +184,7 @@ func (c *Catalog) profileCommandMutates(profileID string) bool {
 // stay unset, which renders false. has_git is true and root_count is 1 — the
 // workspace case, where guarded command guidance is visible; ValidateSkills
 // renders the git-less and other root-count states besides these defaults.
-func skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
+func (c *Catalog) skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
 	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
 	spawn.RefreshSizingHintVars(vars)
 	for name, ok := range held {
@@ -199,6 +203,8 @@ func skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
 	vars["is_coordinator"] = coordinator
 	vars["has_git"] = true
 	vars["root_count"] = 1
+	vars["mints"] = c.mintFacts(held)
+	vars["receipt_kind"] = c.evidence.ReceiptKinds()
 	return vars
 }
 
@@ -367,7 +373,7 @@ func ValidateSkills(c *Catalog, agents []AgentSurface, loaded []skills.Skill) er
 	}
 	for _, agent := range agents {
 		held := profileReachable(c, agent.ProfileID)
-		vars := skillRenderVars(held, agent.ProfileID == "coordinator")
+		vars := c.skillRenderVars(held, agent.ProfileID == "coordinator")
 		variants := skillRenderVarVariants(vars)
 		seen := map[string]bool{}
 		report := func(problem, label string) {
@@ -549,7 +555,7 @@ func SkillToolsOffered(sk skills.Skill, offered map[string]bool) bool {
 // profile-guarded branches resolve against the reader's actual tool set.
 // Compilation or execution failures fall back to the raw body.
 func renderSkillBody(sk skills.Skill, offered map[string]bool) string {
-	rendered, err := renderSkillText(sk.Body, skillRenderVars(offered, offered["task"]))
+	rendered, err := renderSkillText(sk.Body, StockCatalog().skillRenderVars(offered, offered["task"]))
 	if err != nil {
 		return sk.Body
 	}

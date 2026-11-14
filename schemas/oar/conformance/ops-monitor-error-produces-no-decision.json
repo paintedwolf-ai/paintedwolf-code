@@ -1,0 +1,30 @@
+{
+  "id": "ops-monitor-error-produces-no-decision",
+  "title": "A monitored rule that cannot be evaluated produces no decision",
+  "covers": [
+    "OAR-OPS-8"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "1 / 0 == 0",
+    "enforcement": "monitor",
+    "on_error": "fail_closed"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "none",
+    "applied": [
+      "R:errored"
+    ]
+  }
+}

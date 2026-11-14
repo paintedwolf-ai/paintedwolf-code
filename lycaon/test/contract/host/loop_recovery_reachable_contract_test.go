@@ -29,11 +29,9 @@ var workerExits = []string{
 }
 
 type loopPolicyCopy struct {
-	ID   string `yaml:"id"`
-	Copy struct {
-		Fix     string `yaml:"fix"`
-		Instead string `yaml:"instead"`
-	} `yaml:"copy"`
+	ID      string `yaml:"id"`
+	Fix     string `yaml:"fix"`
+	Instead string `yaml:"instead"`
 }
 
 // TestLoopRecoveryCopyIsReachableFromAWorkerLeg requires any loop-recovery unit
@@ -56,7 +54,7 @@ func TestLoopRecoveryCopyIsReachableFromAWorkerLeg(t *testing.T) {
 		contractcheck.FailErr(t, "read "+entry.Name(), err)
 		var unit loopPolicyCopy
 		contractcheck.FailErr(t, "parse "+entry.Name(), yaml.Unmarshal(raw, &unit))
-		copyText := unit.Copy.Fix + "\n" + unit.Copy.Instead
+		copyText := unit.Fix + "\n" + unit.Instead
 		// Calls live in the host catalog beside the policy.
 		if steps, err := os.ReadFile(filepath.Join(dir, "..", "host", "next-steps", entry.Name())); err == nil {
 			copyText += "\n" + string(steps)

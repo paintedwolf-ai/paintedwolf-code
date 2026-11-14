@@ -1,30 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: CODE_REWRITE_PATTERN_TOO_BROAD
 kind: schema
-anchor: tool.rejected
-selector:
-  paintedwolf.operation:
-    - code_rewrite
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.operator
-    - paintedwolf.path
-    - paintedwolf.pattern
-when: paintedwolf.rejection_code == "CODE_REWRITE_PATTERN_TOO_BROAD"
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.operator, paintedwolf.path, paintedwolf.pattern, paintedwolf.rejection_code]
+when: paintedwolf.operation == "code_rewrite" && paintedwolf.rejection_code == "CODE_REWRITE_PATTERN_TOO_BROAD"
 effect: block
-copy:
-  what: 'The structural rewrite on {{ paintedwolf.path }} rejected pattern {{ paintedwolf.pattern }} — a bare {{ paintedwolf.operator }} between two metavariables matches every such operator in the file, not one meaning of it.'
-  cause: '`$A | $B` is every binary or (bitwise, boolean, and type union). `$A + $B` is every addition. A rewrite at that breadth changes sites you did not intend.'
-  why: 'Structural match is by tree shape, not by the comment you had in mind. Narrow one operand so the pattern names the sites you mean.'
-  fix: 'Make one side concrete — `$T | None`, `foo($A) | $B`, or the exact expression — then verify with `--dry-run` before apply.'
-  instead: Branch on Code; narrow the pattern and dry-run before apply
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:structural
-x-paintedwolf-message: structural pattern is a bare binary operator
+message: structural pattern is a bare binary operator
+what: 'The structural rewrite on {{ paintedwolf.path }} rejected pattern {{ paintedwolf.pattern }} — a bare {{ paintedwolf.operator }} between two metavariables matches every such operator in the file, not one meaning of it.'
+cause: '`$A | $B` is every binary or (bitwise, boolean, and type union). `$A + $B` is every addition. A rewrite at that breadth changes sites you did not intend.'
+why: 'Structural match is by tree shape, not by the comment you had in mind. Narrow one operand so the pattern names the sites you mean.'
+fix: 'Make one side concrete — `$T | None`, `foo($A) | $B`, or the exact expression — then verify with `--dry-run` before apply.'
+instead: Branch on Code; narrow the pattern and dry-run before apply
 x-paintedwolf-scenarios:
   - id: default
     vars:

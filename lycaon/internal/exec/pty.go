@@ -42,6 +42,8 @@ type PTYOpts struct {
 	WinSize        WinSize
 	// PathExtra mirrors ExecOpts.PathExtra for interactive sessions.
 	PathExtra []string
+	// ServiceEnv mirrors ExecOpts.ServiceEnv.
+	ServiceEnv []string
 }
 
 // PTY is a live pseudo-terminal attached to a child process.
@@ -149,6 +151,7 @@ func (o PTYOpts) toExecOpts() ExecOpts {
 		InlineEnv:      o.InlineEnv,
 		NoTimeout:      o.NoTimeout,
 		PathExtra:      o.PathExtra,
+		ServiceEnv:     o.ServiceEnv,
 	}
 }
 

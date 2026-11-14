@@ -45,24 +45,23 @@ func TestEvidenceMetaDrivesCheckAndRetry(t *testing.T) {
 }
 
 func TestHintCatalogProjection(t *testing.T) {
-	const document = `oar: '1.0'
+	const document = `spec_version: '1.0'
 id: EXAMPLE
-status: deprecated
-related:
-  - id: REPLACEMENT
-    type: obsolete
+title: Review action
+x-paintedwolf-status: deprecated
+x-paintedwolf-successor: REPLACEMENT
 selector:
-  tool: [command, verify]
-copy:
-  title: Review action
-  what: Action needs review
-  cause: Approval is pending
-  why: The action crosses a boundary
-  fix: Resolve the approval
-  instead: Wait for the approval result
+  tools: [command, verify]
+requires_facts: [paintedwolf.operation]
+when: paintedwolf.operation == "write"
+what: Action needs review
+cause: Approval is pending
+why: The action crosses a boundary
+fix: Resolve the approval
+instead: Wait for the approval result
 x-paintedwolf-emit: guard:tool
 x-paintedwolf-category: recoverable
-x-paintedwolf-message: Review action
+message: Review action
 x-paintedwolf-evidence:
   ui_label: Source
   ui_check_id: source
@@ -74,20 +73,34 @@ x-paintedwolf-scenarios:
 `
 	var entry guidance.HintEntry
 	testutil.FailErr(t, "decode catalog rule", yaml.Unmarshal([]byte(document), &entry))
-	if entry.Title != "Review action" || entry.What != "Action needs review" ||
+	if !entry.IsOAR() || entry.Title != "Review action" || entry.What != "Action needs review" ||
 		entry.Cause != "Approval is pending" || entry.Why != "The action crosses a boundary" ||
 		entry.Fix != "Resolve the approval" || entry.Instead != "Wait for the approval result" {
 		t.Fatalf("copy projection = %+v", entry)
 	}
 	if entry.Emit != "guard:tool" || entry.Category != "recoverable" || entry.Message != "Review action" {
-		t.Fatalf("extension projection = %+v", entry)
+		t.Fatalf("presentation fields = %+v", entry)
 	}
-	if strings.Join(entry.Tools, ",") != "command,verify" || len(entry.Scenarios) != 1 ||
-		entry.Evidence == nil || !entry.Evidence.InSessionRetry || entry.ContextSchema["type"] != "object" {
+	if strings.Join(entry.Tools, ",") != "command,verify" || strings.Join(entry.Operations(), ",") != "write" ||
+		len(entry.Scenarios) != 1 || entry.Evidence == nil || !entry.Evidence.InSessionRetry || entry.ContextSchema["type"] != "object" {
 		t.Fatalf("coverage projection = %+v", entry)
 	}
-	if entry.Status != "deprecated" || len(entry.Related) != 1 || entry.Related[0].ID != "REPLACEMENT" {
-		t.Fatalf("lineage = %s %v", entry.Status, entry.Related)
+	if entry.Status != "deprecated" || entry.Successor != "REPLACEMENT" {
+		t.Fatalf("lineage = %s %s", entry.Status, entry.Successor)
+	}
+}
+
+func TestHintDocumentCategoryExtension(t *testing.T) {
+	const document = `spec_version: '1.0'
+id: EXAMPLE
+kind: hint
+x-paintedwolf-category: recoverable
+what: Action needs review
+`
+	var entry guidance.HintEntry
+	testutil.FailErr(t, "decode hint", yaml.Unmarshal([]byte(document), &entry))
+	if entry.Kind != "hint" || entry.Category != "recoverable" {
+		t.Fatalf("hint category = %+v", entry)
 	}
 }
 
@@ -106,7 +119,7 @@ scenarios:
 `
 	var entry guidance.HintEntry
 	testutil.FailErr(t, "decode display hint", yaml.Unmarshal([]byte(document), &entry))
-	if entry.OAR != "" || entry.Category != "recoverable" || entry.Severity != "error" ||
+	if entry.IsOAR() || entry.Category != "recoverable" || entry.Severity != "error" ||
 		entry.Message != "Review action" || entry.What != "Action needs review" ||
 		entry.Cause != "Approval is pending" || entry.Fix != "Resolve the approval" ||
 		entry.Instead != "Wait for the approval result" || strings.Join(entry.Tools, ",") != "command" ||

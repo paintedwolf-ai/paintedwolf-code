@@ -158,6 +158,14 @@ func (r *CommandServices) SetProgramParking(parking tools.ProgramParking) {
 	}
 }
 
+// SetProgramEffects records a detached program's later file edits on the
+// result of the call that started it.
+func (r *CommandServices) SetProgramEffects(effects tools.ProgramEffectSink) {
+	if programs := r.programs(); programs != nil {
+		programs.Effects = effects
+	}
+}
+
 // ProgramReceiptResult reports a program the host no longer runs from its
 // durable receipts.
 func (r *CommandServices) ProgramReceiptResult(ctx context.Context, sessionID, programID string) (string, error) {

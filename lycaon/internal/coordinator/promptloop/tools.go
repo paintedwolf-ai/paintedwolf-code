@@ -41,7 +41,8 @@ type toolCaptures struct {
 	sourceContext    *api.SourceContext
 	overlayPromotion *api.OverlayPromotion
 	ownerRef         string
-	fileEdit         *tools.FileEditCapture
+	fileEdits        []api.FileEditSnapshot
+	fileEditsOmitted int
 	visual           *tools.VisualCapture
 	externalAccess   *api.ExternalAccess
 	displaySubject   string
@@ -92,7 +93,7 @@ type toolInvocation struct {
 	sourceRootDigest string
 }
 
-// [OAR-OPS-8] Parallel captures cannot deliver content withheld by policy.
+// [OAR-OPS-6] Parallel captures cannot deliver content withheld by policy.
 func (t *toolInvocation) replaceContent(content string) {
 	t.content = content
 	t.facts.ContentReplaced = true
@@ -343,7 +344,7 @@ func (l *toolInvocations) finalizeToolRun(ctx context.Context, sess *api.Session
 		if run.toolCtx.Effects.Out != nil {
 			result.facts = result.facts.Merge(run.toolCtx.Effects.Out.Facts)
 		}
-		// [OAR-PROF-10] Every returned result, including failures, crosses policy before logging or delivery.
+		// Every returned result, including failures, crosses policy before logging or delivery.
 		if ownerInvoked || run.runErr == nil {
 			if l.Deps.EnrichToolOutput != nil {
 				content, facts := l.Deps.EnrichToolOutput(ctx, sess, run.call.Name, run.call.Args,
@@ -423,7 +424,7 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		displaySubject:   out.DisplaySubject,
 		overlayPromotion: out.OverlayPromotion,
 		sourceContext:    out.SourceContext,
-		ownerRef:         out.OwnerRef, fileEdit: out.FileEdit, visual: out.Visual,
+		ownerRef:         out.OwnerRef, fileEdits: out.FileEdits, fileEditsOmitted: out.FileEditsOmitted, visual: out.Visual,
 		externalAccess: out.ExternalAccess,
 		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
 		commandProgram:   out.CommandProgram,
@@ -526,13 +527,7 @@ func applyToolResultSidecars(
 		completion := *captures.completion
 		tr.Completion = &completion
 	}
-	if fileEdit := captures.fileEdit; fileEdit != nil {
-		tr.FileEdit = &api.FileEditSnapshot{
-			Path:   fileEdit.Path,
-			Before: fileEdit.Before,
-			After:  fileEdit.After,
-		}
-	}
+	tr.FileEdits, tr.FileEditsOmitted = captures.fileEdits, captures.fileEditsOmitted
 	if captures.externalAccess != nil {
 		tr.ExternalAccess = tools.ExternalAccessFromCapture(captures.externalAccess)
 	}

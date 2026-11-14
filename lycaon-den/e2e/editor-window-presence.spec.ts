@@ -19,9 +19,9 @@ async function selectLines(page: Page, first: number, last = first) {
 }
 
 async function setWrap(page: Page, enabled: boolean) {
-  const toggle = page.getByTestId("files-editor-wrap-toggle");
-  if (await toggle.getAttribute("aria-pressed") !== String(enabled)) await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", String(enabled));
+  const choice = page.getByTestId(enabled ? "files-editor-layout-wrap" : "files-editor-layout-off");
+  await choice.click();
+  await expect(choice).toHaveAttribute("aria-pressed", "true");
 }
 
 // The local selection mixes its fill with color-mix, which serializes as color(srgb …) rather than rgba().

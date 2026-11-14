@@ -44,7 +44,7 @@ func contractStockOARPipeline(t *testing.T) *oar.GuardPipeline {
 			contractOARErr = err
 			return
 		}
-		if err := oar.InstallCapabilityDocumentFile(profile); err != nil {
+		if err := oar.InstallEngineDeclarationFile(profile); err != nil {
 			contractOARErr = err
 			return
 		}

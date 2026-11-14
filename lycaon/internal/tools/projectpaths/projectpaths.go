@@ -141,7 +141,7 @@ func recordPrimaryMutation(ctx context.Context, tctx tools.ToolContext, resolved
 	if rel == "" {
 		return
 	}
-	tctx.Source.MutationRecorder.RecordPrimaryMutation(ctx, tctx.Identity.SessionID, rel)
+	tctx.Source.MutationRecorder.RecordPrimaryMutation(ctx, tctx.Identity.SessionID, resolved.Root.ID, rel)
 }
 
 // repositoryMetadataClass names the .git content native tools never write;
@@ -237,10 +237,6 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		}
 		return Resolved{}, mapResolveErr(err, modelPath)
 	}
-	primary, err := projectroot.PrimaryRoot(tctx.Source.Roots)
-	if err != nil {
-		return Resolved{}, noRootsReject()
-	}
 	if reject := currentRootReject(tctx, root, abs); reject != nil {
 		return Resolved{}, reject
 	}
@@ -269,7 +265,7 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 	}
 	return Resolved{
 		Abs:         abs,
-		DisplayPath: projectroot.Qualify(primary, root, abs),
+		DisplayPath: projectroot.Qualify(tctx.Source.Roots, tctx.Source.ActiveRootID, root, abs),
 		ScopeRel:    scopeRel,
 		Root:        root,
 	}, nil
@@ -311,7 +307,7 @@ func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bo
 	abs := filepath.Join(filepath.Clean(host), filepath.FromSlash(scopeRel))
 	return Resolved{
 		Abs:         abs,
-		DisplayPath: scopeRel,
+		DisplayPath: "@" + projectroot.VirtualOutputLabel + "/" + scopeRel,
 		ScopeRel:    scopeRel,
 		Root:        projectroot.RootRef{ID: hostDataRootID, Path: filepath.Clean(host), IsPrimary: false},
 		External:    true,
@@ -322,18 +318,24 @@ func resolveHostDataRead(tctx tools.ToolContext, modelPath string) (Resolved, bo
 
 func mapResolveErr(err error, modelPath string) error {
 	if errors.Is(err, sandbox.ErrPathEscape) {
-		return &toolrejection.ToolReject{Code: "SURVEY_PATH_ESCAPE", Data: map[string]any{"path": modelPath, "reason": err.Error()}}
+		return surveyPathEscapeReject(modelPath)
 	}
 	switch {
 	case errors.Is(err, projectroot.ErrNoProjectRoots):
 		return noRootsReject()
 	case errors.Is(err, projectroot.ErrPathEscape):
-		return &toolrejection.ToolReject{
-			Code: "SURVEY_PATH_ESCAPE",
-			Data: map[string]any{"path": modelPath, "reason": err.Error()},
-		}
+		return surveyPathEscapeReject(modelPath)
 	default:
 		return err
+	}
+}
+
+// surveyPathEscapeReject names the boundary in fixed copy: the reason never
+// echoes err.Error(), whose payload can carry host absolute paths.
+func surveyPathEscapeReject(modelPath string) error {
+	return &toolrejection.ToolReject{
+		Code: "SURVEY_PATH_ESCAPE",
+		Data: map[string]any{"path": modelPath, "reason": "path escapes the attached folders"},
 	}
 }
 
@@ -381,13 +383,13 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 	return []projectroot.RootRef{res.Root}, nil
 }
 
-// QualifyAbs formats an absolute path with multi-root display qualifiers.
+// QualifyAbs formats an absolute path with multi-root display qualifiers
+// keyed on the session's active root.
 func QualifyAbs(tctx tools.ToolContext, root projectroot.RootRef, abs string) string {
-	primary, err := projectroot.PrimaryRoot(tctx.Source.Roots)
-	if err != nil {
+	if len(tctx.Source.Roots) == 0 {
 		return abs
 	}
-	return projectroot.Qualify(primary, root, abs)
+	return projectroot.Qualify(tctx.Source.Roots, tctx.Source.ActiveRootID, root, abs)
 }
 
 // CommandCwd resolves a process directory within its attached root or session scratch.
@@ -408,7 +410,7 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	if cwdClean == "" {
 		return tctx.ActiveRootPath(), ".", nil
 	}
-	resolved, _, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, cwdClean)
+	resolved, root, resolveErr := projectroot.ResolveAbs(tctx.Source.Roots, tctx.Source.ActiveRootID, cwdClean)
 	if resolveErr != nil {
 		return "", "", &toolrejection.ToolReject{
 			Code: "CWD_OUT_OF_SCOPE",
@@ -422,7 +424,7 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 			Data: map[string]any{"cwd": cwdArg},
 		}
 	}
-	return resolved, cwdArg, nil
+	return resolved, QualifyAbs(tctx, root, resolved), nil
 }
 
 // commandCwdInScratch runs a process in the session's scratch folder. A
@@ -500,7 +502,15 @@ func resolveSessionArea(ctx context.Context, b *sandbox.Boundary, tctx tools.Too
 			return Resolved{}, false, err
 		}
 	}
-	return Resolved{Abs: abs, DisplayPath: display, ScopeRel: scopeRel, Root: projectroot.RootRef{ID: area, Label: area, Path: filepath.Clean(dir)}, External: true, ToolOutput: area == projectroot.VirtualOutputLabel}, true, nil
+	rootID, compressed, toolOutput := area, false, area == projectroot.VirtualOutputLabel
+	if host := strings.TrimSpace(tctx.Host.HostDataDir); toolOutput && host != "" && dir == filepath.Clean(host) && tooloutput.IsAgentWireSpillRel(scopeRel) {
+		// Spill files keep the host-data identity their bare spelling uses.
+		rootID = hostDataRootID
+		compressed = tooloutput.IsBlobstoreCompressedRel(scopeRel)
+		toolOutput = strings.HasPrefix(scopeRel, tooloutput.ToolOutputSpillDir+"/") ||
+			strings.HasPrefix(scopeRel, tooloutput.PromoteSpillDir+"/")
+	}
+	return Resolved{Abs: abs, DisplayPath: display, ScopeRel: scopeRel, Root: projectroot.RootRef{ID: rootID, Label: area, Path: filepath.Clean(dir)}, External: true, Compressed: compressed, ToolOutput: toolOutput}, true, nil
 }
 
 // sessionRel selects the host directory that owns an operand's exact path.
@@ -509,6 +519,11 @@ func sessionRel(tc tools.ToolContext, path string) (area, rel, dir string, ok bo
 		dir = tc.Host.SessionScratchDir
 		if area == projectroot.VirtualOutputLabel {
 			dir = tc.Host.SessionOutputDir
+			// Host spill paths share the @output namespace so spill files
+			// resolve and display through one spelling.
+			if host := strings.TrimSpace(tc.Host.HostDataDir); host != "" && tooloutput.IsAgentWireSpillRel(rel) {
+				dir = filepath.Clean(host)
+			}
 		}
 		return
 	}

@@ -1,0 +1,30 @@
+{
+  "id": "prof-requires-facts-unmet-rejected",
+  "title": "A rule requiring a fact the host does not provide is rejected at load, naming both",
+  "covers": [
+    "OAR-DOC-22",
+    "OAR-PROF-6",
+    "OAR-CONF-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "NEEDS_GHOST_FACT",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true",
+    "requires_facts": [
+      "ghost_fact"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "ghost_fact"
+  }
+}

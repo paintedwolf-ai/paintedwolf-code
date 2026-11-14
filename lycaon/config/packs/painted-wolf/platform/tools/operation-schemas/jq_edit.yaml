@@ -4,7 +4,7 @@ schema:
   additionalProperties: false
   properties:
     dest:
-      description: Repo-relative file to write instead of path; path is then only read.
+      description: "File to write instead of path: relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute; path is then only read."
       type: string
     format:
       description: auto detects format from extension.
@@ -15,7 +15,7 @@ schema:
         - toml
       type: string
     path:
-      description: Repo-relative path to the document.
+      description: "Document path relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute."
       type: string
     query:
       description: jq program returning the updated document.

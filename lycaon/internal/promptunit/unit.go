@@ -1,15 +1,14 @@
-// Package promptunit catalogs the loadable instruction units of a prompt: the
-// prose a turn carries only when the request makes it relevant. A unit is a
-// template under shared/units/ whose front matter says what request it serves
+// Package promptunit catalogs the instruction units of a prompt: prose that
+// renders only on the hosts, modes and offered tools it declares. A unit is a
+// template under shared/units/ whose front matter says what it serves
 // (description), where it renders (slot), and which tools it follows
-// (attaches). Floor prose is an ordinary include; only units are loadable.
+// (attaches). Floor prose is an ordinary include.
 package promptunit
 
 import (
 	"bytes"
 	"fmt"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -52,7 +51,7 @@ const (
 	HostWorker Host = "worker"
 )
 
-// Unit is one loadable instruction unit.
+// Unit is one instruction unit.
 type Unit struct {
 	// ID is the unit stem, unique across packs.
 	ID string
@@ -63,19 +62,14 @@ type Unit struct {
 	PackID string
 	// Stock is true for units the platform and bundled packs ship.
 	Stock bool
-	// Description says which requests need this unit; it is the only thing
-	// the decision model reads about it.
+	// Description says what the unit is for.
 	Description string
 	Slot        Slot
 	// Order sorts units within a slot, lowest first.
 	Order int
 	// Attaches names tools the unit follows: it renders only while one of
-	// them is offered, and it follows their load decision when every one is
-	// loadable on the surface.
+	// them is offered.
 	Attaches []string
-	// NeededWith names tools whose call in a turn shows the unit was needed.
-	// It labels the unit for the decision model and never changes rendering.
-	NeededWith []string
 	// Modes restricts the unit to execution-mode families; empty means any.
 	Modes []string
 	// Hosts lists the prompt families the unit renders in.
@@ -88,13 +82,14 @@ type FrontMatter struct {
 	Slot        string   `yaml:"slot"`
 	Order       int      `yaml:"order"`
 	Attaches    []string `yaml:"attaches"`
-	NeededWith  []string `yaml:"needed_with"`
-	Modes       []string `yaml:"modes"`
-	Hosts       []string `yaml:"hosts"`
+	// NeededWith is accepted from extension API 1.x packs and has no effect.
+	NeededWith []string `yaml:"needed_with"`
+	Modes      []string `yaml:"modes"`
+	Hosts      []string `yaml:"hosts"`
 }
 
 const (
-	// DescriptionMaxWords bounds what the decision model reads per unit.
+	// DescriptionMaxWords bounds a unit's description.
 	DescriptionMaxWords = 60
 	// DescriptionMaxRunes bounds the same text by length.
 	DescriptionMaxRunes = 480
@@ -182,15 +177,6 @@ func Parse(stem string, content []byte) (Unit, error) {
 	if err != nil {
 		return Unit{}, err
 	}
-	neededWith, err := names(stem, "needed_with", fm.NeededWith)
-	if err != nil {
-		return Unit{}, err
-	}
-	for _, tool := range neededWith {
-		if slices.Contains(attaches, tool) {
-			return Unit{}, fmt.Errorf("unit %q: needed_with repeats attached tool %q", stem, tool)
-		}
-	}
 	modes, err := names(stem, "modes", fm.Modes)
 	if err != nil {
 		return Unit{}, err
@@ -224,7 +210,6 @@ func Parse(stem string, content []byte) (Unit, error) {
 		Slot:        slot,
 		Order:       order,
 		Attaches:    attaches,
-		NeededWith:  neededWith,
 		Modes:       modes,
 		Hosts:       hosts,
 	}, nil
@@ -299,33 +284,6 @@ func (u Unit) ModeFits(mode string) bool {
 func (u Unit) AttachedTo(set map[string]bool) bool {
 	for _, tool := range u.Attaches {
 		if set[tool] {
-			return true
-		}
-	}
-	return false
-}
-
-// Follows reports whether the unit follows its tools' load decision rather
-// than carrying its own: it attaches to tools, and none of them is on the
-// floor. A unit attached to a floor tool, or to nothing, is scored.
-func (u Unit) Follows(floor map[string]bool) bool {
-	return len(u.Attaches) > 0 && !u.AttachedTo(floor)
-}
-
-// Labelled reports whether a turn's tool calls can say if the unit was
-// needed: it attaches to tools or names tools it is needed with.
-func (u Unit) Labelled() bool {
-	return len(u.Attaches) > 0 || len(u.NeededWith) > 0
-}
-
-// NeededBy reports whether a turn that called the tools in used needed the
-// unit: one of its attached tools or one of its needed_with tools was called.
-func (u Unit) NeededBy(used map[string]bool) bool {
-	if u.AttachedTo(used) {
-		return true
-	}
-	for _, tool := range u.NeededWith {
-		if used[tool] {
 			return true
 		}
 	}

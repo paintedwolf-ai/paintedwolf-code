@@ -1,0 +1,40 @@
+{
+  "id": "prof-core-anchor-unsupported-rejected",
+  "title": "A rule on a core anchor the host declares unsupported is rejected at load",
+  "covers": [
+    "OAR-PROF-3",
+    "OAR-CONF-19",
+    "OAR-PROF-2"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "NEEDS_MODEL_INPUT",
+    "kind": "policy",
+    "on": "model.input",
+    "selector": {},
+    "effect": "block",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "model.input",
+    "facts": {},
+    "profile": {
+      "oar_profile_version": "1.0",
+      "core": {
+        "tool.pre_invoke": "tool.pre_invoke",
+        "tool.handler": "tool.handler",
+        "tool.post_invoke": "tool.post_invoke",
+        "agent.post_turn": "agent.post_turn",
+        "agent.finalize": "agent.finalize"
+      },
+      "unsupported": [
+        "model.input",
+        "model.output",
+        "model.tool_result"
+      ]
+    }
+  },
+  "expected": {
+    "error": "model.input"
+  }
+}

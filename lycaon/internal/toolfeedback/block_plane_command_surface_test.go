@@ -34,9 +34,9 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 		{
 			tool: "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_PWD_NOT_CWD", Data: map[string]any{
-				"command": "go mod tidy", "cwd": "/project", "pwd": "/project/subdir",
+				"command": "go mod tidy", "cwd": "@app/src", "pwd": "@app/src/subdir",
 			}},
-			want: []string{"env.PWD", "/project/subdir", "resolved working directory"},
+			want: []string{"env.PWD", "@app/src/subdir", "resolved working directory"},
 		},
 		{
 			tool: "command",
@@ -69,8 +69,8 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 		},
 		{
 			tool:   "wait",
-			reject: &toolrejection.ToolReject{Code: "WAIT_CONDITION_NOT_ALLOWED", Data: map[string]any{"condition": "process_done", "profile": "worker_readonly", "wait_allowed_conditions": []string{"timer"}}},
-			want:   []string{"process_done", "worker_readonly", "timer"},
+			reject: &toolrejection.ToolReject{Code: "WAIT_CONDITION_NOT_ALLOWED", Data: map[string]any{"condition": "process_done", "profile": "implement", "wait_allowed_conditions": []string{"timer"}}},
+			want:   []string{"process_done", "implement", "timer"},
 		},
 	}
 	for _, tc := range cases {

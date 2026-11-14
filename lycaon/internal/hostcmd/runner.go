@@ -21,6 +21,8 @@ type Request struct {
 	Launch exec.LaunchPlan
 	// PathExtra appends catalog-resolved install directories to the child PATH.
 	PathExtra []string
+	// ServiceEnv points a declared service's client at its reviewed endpoint.
+	ServiceEnv []string
 }
 
 // StageResult is one stage outcome in the tool-visible JSON envelope.

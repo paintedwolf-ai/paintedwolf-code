@@ -240,6 +240,7 @@ const (
 	OperandRegion        OperandKind = "region"
 	OperandWorkspace     OperandKind = "workspace_kind"
 	OperandFeature       OperandKind = "context_feature"
+	OperandLineLayout    OperandKind = "line_layout"
 )
 
 // FactSpec is one entry of the closed condition vocabulary.
@@ -291,6 +292,8 @@ var facts = map[string]FactSpec{
 	"peer_views_present":  {Plane: PlaneShell},
 	// The system package installs and owns the pw command.
 	"shell_command_packaged": {Plane: PlaneShell},
+	// The editor's line layout: off, wrap or pretty.
+	"line_layout": {Plane: PlaneShell, Operand: OperandLineLayout},
 }
 
 // Facts returns the condition vocabulary sorted by fact id.
@@ -356,6 +359,8 @@ var focusRegions = map[string]bool{
 var workspaceKinds = map[string]bool{
 	"main": true, "session": true, "file": true, "context": true,
 }
+
+var lineLayouts = map[string]bool{"off": true, "wrap": true, "pretty": true}
 
 // contextFeatures validates context navigation operands.
 var contextFeatures = map[string]bool{

@@ -2,6 +2,8 @@ package oar
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/secretmatch"
@@ -28,14 +30,14 @@ func TestStageFromAnchor(t *testing.T) {
 func TestPipelineBlockShortCircuitAndOnFire(t *testing.T) {
 	when := `paintedwolf.claims_completion && !paintedwolf.has_matching_ledger_job && breaker_count < 3`
 	nudge := &Rule{
-		OAR: "1.0", ID: "COORDINATOR_UNGROUNDED_CLAIM", Kind: KindInvariant,
+		SpecVersion: "1.0", ID: "COORDINATOR_UNGROUNDED_CLAIM", Kind: KindInvariant,
 		Anchor: AnchorCoordinatorPostTurn, When: when,
 		Effect: EffectNudge, OnFire: []OnFireAction{OnFireIncrementBreaker},
 		Enforcement: "enforce", OnError: "fail_closed",
 	}
 	when2 := `paintedwolf.claims_completion && !paintedwolf.has_matching_ledger_job && breaker_count >= 3`
 	block := &Rule{
-		OAR: "1.0", ID: "COORDINATOR_GROUNDING_ESCALATED", Kind: KindInvariant,
+		SpecVersion: "1.0", ID: "COORDINATOR_GROUNDING_ESCALATED", Kind: KindInvariant,
 		Anchor: AnchorCoordinatorPostTurn, When: when2,
 		Effect: EffectBlock, Enforcement: "enforce", OnError: "fail_closed",
 	}
@@ -84,7 +86,7 @@ func TestPipelineBlockShortCircuitAndOnFire(t *testing.T) {
 
 func TestPipelineMonitorSuppressesActions(t *testing.T) {
 	r := &Rule{
-		OAR: "1.0", ID: "MONITOR_DEMO", Kind: KindPolicy,
+		SpecVersion: "1.0", ID: "MONITOR_DEMO", Kind: KindPolicy,
 		Anchor: AnchorToolPreInvoke, When: "paintedwolf.tool_is_state",
 		Effect: EffectBlock, Enforcement: "monitor", OnError: "fail_closed",
 		OnFire: []OnFireAction{OnFireIncrementCounter},
@@ -105,7 +107,7 @@ func TestPipelineMonitorSuppressesActions(t *testing.T) {
 	}
 	found := false
 	for _, e := range res.Trace.Entries {
-		// [OAR-OPS-9] a monitor rule that would have fired records
+		// [OAR-OPS-7] a monitor rule that would have fired records
 		// monitored_fired — the outcome an operator reads to decide whether the
 		// rule is ready to enforce.
 		if e.Rule == "MONITOR_DEMO" && e.Outcome == TraceMonitoredFired {
@@ -137,16 +139,16 @@ func TestLazyFactsSkipEvidenceForGreppyWhen(t *testing.T) {
 }
 
 func TestFactsReferencedDoesNotTreatStringLiteralsAsFacts(t *testing.T) {
-	names := FactsReferenced(`"tool" in content_origins && content_contains_untrusted`, nil)
+	names := FactsReferenced(`"tool" in paintedwolf.content_origins && paintedwolf.content_contains_untrusted`, nil)
 	foundOrigins := false
 	foundUntrusted := false
 	for _, name := range names {
 		switch name {
 		case "tool":
 			t.Fatalf("string literal promoted to fact reference: %v", names)
-		case "content_origins":
+		case "paintedwolf.content_origins":
 			foundOrigins = true
-		case "content_contains_untrusted":
+		case "paintedwolf.content_contains_untrusted":
 			foundUntrusted = true
 		}
 	}
@@ -172,9 +174,8 @@ func TestRendererMapsEffects(t *testing.T) {
 		t.Fatalf("got %s", rendered[0].Channel)
 	}
 	rendered, err = r.Render(context.Background(), StagePostTool, &Decision{
-		Effect:     EffectWarn,
-		Code:       "DOOM_LOOP_REPEAT_WARN",
-		Advisories: []Advisory{{Code: "DOOM_LOOP_REPEAT_WARN"}},
+		Effect: EffectWarn,
+		Code:   "DOOM_LOOP_REPEAT_WARN",
 	})
 	testutil.FailErr(t, "render warn", err)
 	if rendered[0].Channel != ChannelBanner {
@@ -202,10 +203,44 @@ func TestDetectorDispatchSecretMatch(t *testing.T) {
 	}
 }
 
+type refusingPublisher struct{}
+
+func (refusingPublisher) Publish(context.Context, OnFireEvent) error {
+	return errors.New("stream closed")
+}
+
+func TestFire7RefusedEventChangesNothingElse(t *testing.T) {
+	run := func(pub EventPublisher) (*PipelineResult, int64) {
+		rule := &Rule{
+			SpecVersion: "1.0", ID: "COORDINATOR_UNGROUNDED_CLAIM", Kind: KindInvariant,
+			Anchor: AnchorCoordinatorPostTurn, When: `paintedwolf.claims_completion`,
+			Effect: EffectNudge, OnFire: []OnFireAction{OnFirePublishEvent, OnFireIncrementCounter},
+			Enforcement: "enforce", OnError: "fail_closed",
+		}
+		store := NewCounterStore()
+		p := NewGuardPipeline(NewRuleSet([]*Rule{rule}), nil, store)
+		p.SetEventPublisher(pub)
+		gc := NewGuardContext()
+		gc.Session.SessionID = "s"
+		gc.Grounding.ClaimsCompletion = true
+		res, err := p.Evaluate(t.Context(), StagePostTurn, gc)
+		testutil.FailErr(t, "evaluate", err)
+		return res, store.Get("s", rule.ID, CounterFire)
+	}
+	accepted, acceptedFires := run(acceptPublisher{})
+	refused, refusedFires := run(refusingPublisher{})
+	if len(accepted.PublishedEvents) != 1 || len(refused.PublishedEvents) != 0 {
+		t.Fatalf("[OAR-FIRE-7] published events: accepted=%d refused=%d", len(accepted.PublishedEvents), len(refused.PublishedEvents))
+	}
+	if !reflect.DeepEqual(accepted.Decision, refused.Decision) || !reflect.DeepEqual(accepted.Trace, refused.Trace) || acceptedFires != refusedFires || acceptedFires != 1 {
+		t.Fatalf("[OAR-FIRE-7] refused event changed the occurrence: decision %+v vs %+v, trace %+v vs %+v, fires %d vs %d",
+			accepted.Decision, refused.Decision, accepted.Trace, refused.Trace, acceptedFires, refusedFires)
+	}
+}
+
 func TestExecuteOnFireRespectsClosedVocab(t *testing.T) {
 	store := NewCounterStore()
-	_, err := ExecuteOnFire(t.Context(), store, nil, OnFireEvent{SessionID: "s"}, "C", []OnFireAction{OnFireIncrementCounter, OnFireResetCounter})
-	testutil.FailErr(t, "execute side effects", err)
+	ExecuteOnFire(t.Context(), store, nil, OnFireEvent{SessionID: "s"}, "C", []OnFireAction{OnFireIncrementCounter, OnFireResetCounter})
 	if store.Get("s", "C", CounterFire) != 0 {
 		t.Fatal("reset should clear")
 	}

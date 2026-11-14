@@ -13,14 +13,15 @@ schema:
     project_dir:
       type: string
       description: >-
-        Sandboxed file-tree probe for plain HTML/CSS/JS or a built static export. Host serves
+        Folder to serve: bare = the session folder, `@label/path` = any attached
+        folder, absolute accepted. Sandboxed file-tree probe for plain HTML/CSS/JS or a built static export. Host serves
         in-process via CDP (no TCP). Mount the site/export root (not a leaf page folder). Use
         path for nested pages. Absolute production asset paths under the mount are fulfilled
         from disk. Use url for bundler/dev/SSR or when running fidelity matters.
     path:
       type: string
       description: >-
-        Optional site-relative path within project_dir (e.g. /talks/). Only valid with project_dir.
+        Optional site-relative path within project_dir, a URL path not a filesystem path (e.g. /talks/). Only valid with project_dir.
     url:
       type: string
       description: >-

@@ -19,11 +19,14 @@ func (m *Service) CitationRoots(ctx context.Context, sess *api.Session) (evidenc
 		roots.ActiveRootID = strings.TrimSpace(sess.WorkspaceRootID)
 		roots.ProjectDir = strings.TrimSpace(sess.WorkspacePath)
 	}
-	if primary, primaryErr := projectroot.PrimaryRoot(refs); primaryErr == nil {
+	// The session folder resolves by root ID, so a worker branch path in
+	// WorkspacePath never displaces the active root's project directory.
+	if active, activeErr := projectroot.ActiveRoot(refs, roots.ActiveRootID); activeErr == nil {
+		roots.ProjectDir = strings.TrimSpace(active.Path)
+		roots.ActiveRootID = active.ID
+	} else if primary, primaryErr := projectroot.PrimaryRoot(refs); primaryErr == nil {
 		roots.ProjectDir = strings.TrimSpace(primary.Path)
-		if roots.ActiveRootID == "" {
-			roots.ActiveRootID = primary.ID
-		}
+		roots.ActiveRootID = primary.ID
 	}
 	return roots, nil
 }

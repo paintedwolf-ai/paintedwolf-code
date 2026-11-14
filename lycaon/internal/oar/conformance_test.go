@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -18,7 +19,7 @@ func TestConformanceRunnerSpecPosture(t *testing.T) {
 		"DISALLOWED_AGENT",
 	}
 	testutil.FailErr(t, "seed", SeedFixturesFromScenarios("", out, codes))
-	cr, err := NewConformanceRunner(filepath.Join(root, "schemas"))
+	cr, err := NewHostConformanceRunner(filepath.Join(root, "schemas"), InstalledEngineDeclaration())
 	testutil.FailErr(t, "runner", err)
 	fxs, err := LoadFixturesDir(out)
 	testutil.FailErr(t, "load fixtures", err)
@@ -26,8 +27,8 @@ func TestConformanceRunnerSpecPosture(t *testing.T) {
 		t.Fatalf("expected fixtures, got %d", len(fxs))
 	}
 	for _, fx := range fxs {
-		if err := cr.RunFixture(fx); err != nil {
-			t.Errorf("%s: %v", fx.Name, err)
+		if err := cr.RunFixture(context.Background(), fx); err != nil {
+			t.Errorf("%s: %v", fx.ID, err)
 		}
 	}
 }

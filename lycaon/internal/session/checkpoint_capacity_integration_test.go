@@ -37,7 +37,7 @@ func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
 		rel := "src/f" + strconv.Itoa(i) + ".go"
 		testutil.FailErr(t, "seed "+rel,
 			os.WriteFile(filepath.Join(dir, filepath.FromSlash(rel)), []byte("before"), 0o644))
-		mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, rel)
+		mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", rel)
 	}
 
 	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Load(t.Context(), sessionID, anchor)
@@ -127,7 +127,7 @@ func TestPolicyFeedbackRetriesRenderingAndPersistenceWithoutLoss(t *testing.T) {
 	mgr := NewHost(storage, Models{Client: nil, Provider: nil, Limits: settings.DefaultSessionLimits(), Cost: nil}, tools.NewStubRegistry())
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
-	decision := &oar.Decision{Effect: oar.EffectNudge, Advisories: []oar.Advisory{{Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}}}
+	decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "frozen observation"}}
 	testutil.FailErr(t, "queue before renderer", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorPostTurn, decision))
 	lease := mgr.Coordinator.Runtime.Kicks().LeasePolicyFeedback(sess.ID)
 	if _, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID); err == nil {
@@ -157,7 +157,7 @@ func TestPolicyAdvisoryRoutingAtEveryHostBoundary(t *testing.T) {
 		for _, effect := range []oar.Effect{oar.EffectWarn, oar.EffectNudge} {
 			t.Run(anchor+"/"+string(effect), func(t *testing.T) {
 				mgr := advisoryTestManager(t)
-				rule := &oar.Rule{OAR: "1.0", ID: "PROBE", Kind: oar.KindPolicy, Anchor: anchor, Effect: effect, Enforcement: "enforce", OnError: "fail_closed", Copy: oar.Copy{What: "Frozen boundary observation"}}
+				rule := &oar.Rule{SpecVersion: "1.0", ID: "PROBE", Kind: oar.KindPolicy, Anchor: anchor, Effect: effect, Enforcement: "enforce", OnError: "fail_closed", Copy: oar.Copy{What: "Frozen boundary observation"}}
 				pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, oar.NewCounterStore())
 				pipeline.EnableAnchor(anchor)
 				mgr.SetOARPipeline(pipeline, mgr.Coordinator.Feedback.Renderer())
@@ -200,7 +200,7 @@ func TestPolicyAdvisoryPersistenceUsesScreenedBytesAndAcknowledgesOnce(t *testin
 	sess, err := mem.Create(t.Context(), api.CreateSessionRequest{}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session", err)
 	for _, id := range []string{"first", "second"} {
-		decision := &oar.Decision{Effect: oar.EffectNudge, Advisories: []oar.Advisory{{Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "private-fixture"}, Data: map[string]any{"subject": map[string]any{"kind": "task", "id": id}, "observation": "private-fixture"}}}}
+		decision := &oar.Decision{Effect: oar.EffectNudge, Code: "PROBE", Rule: "example/PROBE", Copy: map[string]string{"what": "private-fixture"}, Data: map[string]any{"subject": map[string]any{"kind": "task", "id": id}, "observation": "private-fixture"}}
 		testutil.FailErr(t, "queue advisory", mgr.Coordinator.Guidance.DeliverAdvisories(t.Context(), sess.ID, oar.AnchorCoordinatorCloseoutCheck, decision))
 	}
 	messages, err := mgr.Coordinator.Guidance.TakePolicy(t.Context(), sess.ID)

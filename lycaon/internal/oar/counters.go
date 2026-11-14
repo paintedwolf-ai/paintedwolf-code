@@ -1,6 +1,8 @@
 package oar
 
 import (
+	"encoding/json"
+	"reflect"
 	"strings"
 	"sync"
 )
@@ -18,7 +20,19 @@ type CounterStore struct {
 	mu          sync.Mutex
 	occurrences map[string]*occurrenceLock
 	history     map[string][]string
-	data        map[string]map[CounterKind]int64 // key = sessionID + "\x00" + code
+	// runs holds the trailing runs of each session's earlier occurrences per
+	// anchor ([OAR-FIRE-8], [OAR-FIRE-9]).
+	runs map[string]*trailingRuns         // key = sessionID + "\x00" + anchor
+	data map[string]map[CounterKind]int64 // key = sessionID + "\x00" + code
+}
+
+// trailingRuns is the state the run counts need: the latest blocks carrying
+// one code, and the latest occurrences of one call.
+type trailingRuns struct {
+	blockCode  string
+	blockRun   int64
+	call       any // the latest call as a JSON value
+	callStreak int64
 }
 
 type occurrenceLock struct {
@@ -28,7 +42,10 @@ type occurrenceLock struct {
 
 // NewCounterStore returns an empty store.
 func NewCounterStore() *CounterStore {
-	return &CounterStore{data: map[string]map[CounterKind]int64{}, history: map[string][]string{}, occurrences: map[string]*occurrenceLock{}}
+	return &CounterStore{
+		data: map[string]map[CounterKind]int64{}, history: map[string][]string{},
+		runs: map[string]*trailingRuns{}, occurrences: map[string]*occurrenceLock{},
+	}
 }
 
 func counterKey(sessionID, code string) string {
@@ -36,7 +53,7 @@ func counterKey(sessionID, code string) string {
 }
 
 // CloneSession copies every counter key touched in session, for the
-// occurrence-scoped snapshot [OAR-FIRE-6] requires.
+// occurrence-scoped snapshot [OAR-FIRE-5] requires.
 func (s *CounterStore) CloneSession(sessionID string) map[string]map[CounterKind]int64 {
 	out := map[string]map[CounterKind]int64{}
 	if s == nil {
@@ -110,7 +127,7 @@ func (s *CounterStore) Reset(sessionID, code string, kind CounterKind) {
 }
 
 // Report returns fire_count / breaker_count for every key touched in session,
-// in the fixture shape ([OAR-CONF-21], [OAR-CONF-33]).
+// in the fixture shape ([OAR-CONF-15]).
 func (s *CounterStore) Report(sessionID string) map[string]map[string]int {
 	out := map[string]map[string]int{}
 	if s == nil {
@@ -148,6 +165,75 @@ func (s *CounterStore) ForgetSession(sessionID string) {
 		}
 	}
 	delete(s.history, sessionID)
+	for key := range s.runs {
+		if strings.HasPrefix(key, prefix) {
+			delete(s.runs, key)
+		}
+	}
+}
+
+// applyRunCounts sets a new occurrence's run counts from the session's earlier
+// occurrences at the same anchor.
+func (s *CounterStore) applyRunCounts(gc *GuardContext, anchor string) {
+	if s == nil || gc == nil {
+		return
+	}
+	s.mu.Lock()
+	runs := s.runs[counterKey(gc.Session.SessionID, anchor)]
+	s.mu.Unlock()
+	gc.Counters.SameCodeRejectRun, gc.Counters.SameCallRun = 0, 0
+	if runs == nil {
+		return
+	}
+	gc.Counters.SameCodeRejectRun = runs.blockRun
+	if reflect.DeepEqual(runs.call, callValue(gc)) {
+		gc.Counters.SameCallRun = runs.callStreak
+	}
+}
+
+// recordOccurrence advances the trailing runs with an occurrence's decision
+// and call.
+func (s *CounterStore) recordOccurrence(gc *GuardContext, anchor string, decision *Decision) {
+	if s == nil || gc == nil {
+		return
+	}
+	call := callValue(gc)
+	key := counterKey(gc.Session.SessionID, anchor)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	runs := s.runs[key]
+	if runs == nil {
+		runs = &trailingRuns{}
+		s.runs[key] = runs
+	}
+	switch {
+	case decision == nil || decision.Effect != EffectBlock:
+		runs.blockCode, runs.blockRun = "", 0
+	case runs.blockRun > 0 && runs.blockCode == decision.Code:
+		runs.blockRun++
+	default:
+		runs.blockCode, runs.blockRun = decision.Code, 1
+	}
+	if runs.callStreak > 0 && reflect.DeepEqual(runs.call, call) {
+		runs.callStreak++
+	} else {
+		runs.call, runs.callStreak = call, 1
+	}
+}
+
+// callValue is an occurrence's call as a JSON value, so arguments compare as
+// JSON values whatever their member order or number representation
+// ([OAR-FACT-20]).
+func callValue(gc *GuardContext) any {
+	raw, err := json.Marshal(map[string]any{"tool": gc.Invocation.Tool, "args": mapOrEmpty(gc.Invocation.ToolArgs)})
+	if err != nil {
+		return nil
+	}
+	var v any
+	if json.Unmarshal(raw, &v) != nil {
+		return nil
+	}
+	return v
 }
 
 // beginOccurrence serializes one session's snapshot and side-effects.

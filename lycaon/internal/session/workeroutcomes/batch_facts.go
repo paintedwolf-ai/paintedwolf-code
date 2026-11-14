@@ -84,7 +84,7 @@ func ImplementationWorkSinceBoundary(history []api.Message, sinceIdx int) bool {
 		if msg.ToolResult.Outcome != api.ToolResultOutcomeCompleted {
 			continue
 		}
-		if msg.ToolResult.FileEdit != nil {
+		if len(msg.ToolResult.FileEdits) > 0 {
 			return true
 		}
 		if _, ok := coordinatorMutationTools[strings.TrimSpace(msg.ToolResult.Tool)]; ok {

@@ -17,7 +17,7 @@ const doomLoopPolicyDir = "lycaon/config/packs/painted-wolf/security/policy"
 
 type doomLoopPolicyUnit struct {
 	Effect string `yaml:"effect"`
-	Anchor string `yaml:"anchor"`
+	Anchor string `yaml:"on"`
 	When   string `yaml:"when"`
 }
 

@@ -19,12 +19,17 @@ const ITEMS_1_MB = 14_000;
 
 type Probe = { content: Locator; scroller: Locator };
 
-async function openPretty(page: Page, request: Parameters<typeof openProjectFilesFixture>[1], items: number): Promise<Probe> {
-  const name = `one-line-${items}.json`;
+type Source = number | { name: string; text: string; alongside?: Record<string, string> };
+
+async function openPretty(page: Page, request: Parameters<typeof openProjectFilesFixture>[1], source: Source): Promise<Probe> {
+  const { name, text, alongside = {} } = typeof source === "number" ? { name: `one-line-${source}.json`, text: oneLineJson(source) } : source;
   const { project } = await openProjectFilesFixture(page, request, {
     prefix: "pretty-display",
     name: "Pretty display",
-    seed: (root) => writeFileSync(path.join(root, name), oneLineJson(items)),
+    seed: (root) => {
+      writeFileSync(path.join(root, name), text);
+      for (const [file, body] of Object.entries(alongside)) writeFileSync(path.join(root, file), body);
+    },
   });
   await page.getByTestId("files-tree-file").filter({ hasText: name }).click();
   const host = page.getByTestId("files-editor-host");
@@ -44,8 +49,8 @@ async function openPretty(page: Page, request: Parameters<typeof openProjectFile
     };
     Object.assign(window, { __pretty: { view, breaksIn, visualLineAt: pretty.prettyVisualLineAt, active: pretty.prettyLayoutActive } });
   }, project.id);
-  await page.getByTestId("files-editor-pretty-toggle").click();
-  await expect(page.getByTestId("files-editor-pretty-toggle")).toHaveAttribute("aria-pressed", "true");
+  await page.getByTestId("files-editor-layout-pretty").click();
+  await expect(page.getByTestId("files-editor-layout-pretty")).toHaveAttribute("aria-pressed", "true");
   await content.focus();
   return { content, scroller: host.locator(".cm-scroller") };
 }
@@ -115,8 +120,6 @@ modelIndependentWebE2e("lays a long one-line document out under soft wrapping", 
   expect(facts.active).toBe(true);
   expect(["pre-wrap", "break-spaces"]).toContain(facts.wrap);
   expect(facts.lineNumberOnes).toBe(1);
-  await expect(page.getByTestId("files-editor-wrap-toggle")).toHaveAttribute("aria-pressed", "true");
-  await expect(page.getByTestId("files-editor-wrap-toggle")).toBeDisabled();
   await expect(content).toBeFocused();
 });
 
@@ -315,25 +318,34 @@ modelIndependentWebE2e("shades exactly the visual line holding the caret", async
 });
 
 modelIndependentWebE2e("keeps the selection and brings it into view across toggles", async ({ page, request }) => {
-  const { content } = await openPretty(page, request, 2_600);
+  await openPretty(page, request, 2_600);
   const length = await page.evaluate(() => window.__pretty.view().state.doc.length);
   const visible = () => page.evaluate(() => {
     const view = window.__pretty.view();
     const rect = view.coordsAtPos(view.state.selection.main.head);
     const port = view.scrollDOM.getBoundingClientRect();
-    return Boolean(rect && rect.bottom > port.top && rect.top < port.bottom);
+    return Boolean(rect && rect.bottom > port.top && rect.top < port.bottom && rect.right >= port.left && rect.left <= port.right);
   });
   const toggles: Array<() => Promise<void>> = [
-    () => page.getByTestId("files-editor-pretty-toggle").click(),
-    async () => { await content.focus(); await page.keyboard.press("Alt+KeyP"); },
+    async () => {
+      const on = await page.getByTestId("files-editor-layout-pretty").getAttribute("aria-pressed") === "true";
+      await page.getByTestId(on ? "files-editor-layout-off" : "files-editor-layout-pretty").click();
+    },
+    // Focus as the editor does: a native focus() scrolls the content element into view.
+    async () => { await page.evaluate(() => window.__pretty.view().focus()); await page.keyboard.press("Alt+KeyP"); },
   ];
   for (const fraction of [0.3, 0.5, 0.9]) {
     for (const toggle of toggles) {
       const pos = Math.round(length * fraction);
-      await page.evaluate((pos) => {
+      // A scroll request lands a position in a long wrapped line by its whole
+      // block, so settle the head into view before toggling.
+      await page.evaluate(async (pos) => {
         const view = window.__pretty.view();
+        const scroll = await import(/* @vite-ignore */ String("/src/components/source/editor/editor-settled-scroll.ts")) as typeof import("../src/components/source/editor/editor-settled-scroll.ts");
         view.dispatch({ selection: { anchor: pos - 5, head: pos }, scrollIntoView: true });
+        scroll.keepPositionInView(view, (state) => state.selection.main.head);
       }, pos);
+      await expect.poll(visible, { timeout: 5_000 }).toBe(true);
       await settle(page);
       const before = await selection(page);
       const docBefore = await page.evaluate(() => window.__pretty.view().state.doc.length);
@@ -364,50 +376,153 @@ modelIndependentWebE2e("keeps the selection and brings it into view across toggl
   }
 });
 
-for (const wrapPref of [false, true]) {
-  modelIndependentWebE2e(`renders source text at every scroll position (Wrap ${wrapPref ? "on" : "off"})`, async ({ page, request }) => {
-    const nodes: number[] = [];
-    for (const items of [ITEMS_200_KB, ITEMS_1_MB]) {
-      const { scroller } = await openPretty(page, request, items);
-      await page.evaluate(async (wrap) => {
-        const prefs = await import(/* @vite-ignore */ String("/src/settings/editor/editor-prefs.ts")) as typeof import("../src/settings/editor/editor-prefs.ts");
-        await prefs.saveEditorWordWrap(wrap);
-      }, wrapPref);
-      for (const fraction of [0, 0.5, 1]) {
-        await scroller.evaluate((element, fraction) => {
-          element.scrollTop = (element.scrollHeight - element.clientHeight) * fraction;
-        }, fraction);
-        await settle(page);
-        await settle(page);
-        const mismatches = await page.evaluate(() => {
-          const view = window.__pretty.view();
-          const doc = view.state.doc;
-          const bad: string[] = [];
-          for (const line of view.contentDOM.querySelectorAll(".cm-line")) {
-            // A long line is drawn as a window; compare from its first text.
-            const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
-            let first: Node | null = walker.nextNode();
-            while (first && !first.nodeValue) first = walker.nextNode();
-            if (!first) continue;
-            let text = "";
-            for (let node: Node | null = first; node; node = walker.nextNode()) text += node.nodeValue ?? "";
-            const from = view.posAtDOM(first, 0);
-            if (text.length < 200 || doc.sliceString(from, from + text.length) !== text) bad.push(`${from}:${text.length}`);
-          }
-          return bad;
-        });
-        expect(mismatches, `at ${fraction}`).toEqual([]);
-      }
-      await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
-      await expect.poll(() => page.evaluate(() => {
-        const view = window.__pretty.view();
-        const head = view.state.selection.main.head;
-        const rect = view.coordsAtPos(head);
-        const port = view.scrollDOM.getBoundingClientRect();
-        return head === view.state.doc.length && Boolean(rect && rect.top < port.bottom && rect.bottom > port.top);
-      }), { timeout: 5_000 }).toBe(true);
-      nodes.push(await page.evaluate(() => window.__pretty.view().contentDOM.querySelectorAll("*").length));
-    }
-    expect(nodes[1]!).toBeLessThan(nodes[0]! * 2 + 2_000);
+modelIndependentWebE2e("marks tabs in indentation while laid out", async ({ page, request }) => {
+  const text = '{\n\t"rows": [\n\t\t{"a":\t1},\n  \t"mixed",\n\t\t"end"\n\t]\n}\n';
+  await openPretty(page, request, { name: "tabs.json", text });
+  const marks = (selector: string) => page.evaluate((selector) => [...window.__pretty.view().contentDOM.querySelectorAll(selector)]
+    .map((element) => {
+      const after = getComputedStyle(element, "::after");
+      return { text: element.textContent, width: element.getBoundingClientRect().width, arrow: after.maskImage || after.webkitMaskImage };
+    }), selector);
+  const marked = await marks(".cm-den-tab");
+  expect(marked).toHaveLength(7);
+  for (const mark of marked) {
+    expect(mark.text).toBe("\t");
+    expect(mark.width).toBeGreaterThan(0);
+    expect(mark.arrow).toContain("svg");
+  }
+  await page.getByTestId("files-editor-layout-off").click();
+  await expect(page.getByTestId("files-editor-layout-pretty")).toHaveAttribute("aria-pressed", "false");
+  await expect.poll(async () => (await marks(".cm-den-tab")).length).toBe(0);
+
+  await page.evaluate(async () => {
+    const prefs = await import(/* @vite-ignore */ String("/src/settings/editor/editor-prefs.ts")) as typeof import("../src/settings/editor/editor-prefs.ts");
+    await prefs.saveEditorWhitespace(true);
   });
-}
+  await expect.poll(async () => (await marks(".cm-highlightTab")).length).toBe(8);
+  for (const mark of await marks(".cm-highlightTab")) expect(mark.arrow).toContain("svg");
+  const dots = await page.evaluate(() => [...window.__pretty.view().contentDOM.querySelectorAll(".cm-highlightSpace")]
+    .map((element) => getComputedStyle(element).backgroundImage));
+  expect(dots.length).toBeGreaterThan(0);
+  for (const dot of dots) expect(dot).toContain("radial-gradient");
+});
+
+modelIndependentWebE2e("keeps the text at the top of the view across line layout changes when the caret is off screen", async ({ page, request }) => {
+  // With Off the one-line document is unwrapped, so the place to keep is sideways.
+  const { scroller } = await openPretty(page, request, ITEMS_1_MB);
+  await page.evaluate(() => window.__pretty.view().dispatch({ selection: { anchor: 0 } }));
+  await scroller.evaluate((element) => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
+  await settle(page);
+  await settle(page);
+  // The document position drawn at the top left of the view, as the editor reads it.
+  const topText = () => page.evaluate(async () => {
+    const view = window.__pretty.view();
+    const scroll = await import(/* @vite-ignore */ String("/src/components/source/editor/editor-settled-scroll.ts")) as typeof import("../src/components/source/editor/editor-settled-scroll.ts");
+    return { pos: view.posAtCoords(scroll.topEdgePoint(view), false), line: view.defaultLineHeight };
+  });
+  const width = await scroller.evaluate((element) => element.clientWidth);
+  const placeOf = (pos: number) => page.evaluate((pos) => {
+    const view = window.__pretty.view();
+    const rect = view.coordsAtPos(pos);
+    const port = view.scrollDOM.getBoundingClientRect();
+    return rect ? { top: rect.top - port.top, left: rect.left - port.left } : null;
+  }, pos);
+  // Off, Pretty, Wrap and Off again: every change between line layouts.
+  for (const [i, layout] of ["off", "pretty", "wrap", "off"].entries()) {
+    const before = await topText();
+    const placeBefore = (await placeOf(before.pos))!;
+    const start = await page.evaluate(() => {
+      const view = window.__pretty.view();
+      const rect = view.coordsAtPos(0);
+      const port = view.scrollDOM.getBoundingClientRect();
+      const visible = Boolean(rect && rect.bottom > port.top && rect.top < port.bottom && rect.right >= port.left && rect.left <= port.right);
+      return { visible, scrollTop: view.scrollDOM.scrollTop, scrollLeft: view.scrollDOM.scrollLeft };
+    });
+    expect(start.visible, `before switch ${i}: the caret is on screen at ${start.scrollTop}, ${start.scrollLeft}`).toBe(false);
+    await page.getByTestId(`files-editor-layout-${layout}`).click();
+    await expect(page.getByTestId(`files-editor-layout-${layout}`)).toHaveAttribute("aria-pressed", "true");
+    let place: { top: number; left: number } | null = null;
+    await expect.poll(async () => {
+      place = await placeOf(before.pos);
+      // Vertically held to within a line; sideways, still on screen (wrapped text has no sideways scroll).
+      return place !== null && Math.abs(place.top - placeBefore.top) < 2 * before.line && place.left >= 0 && place.left < width;
+      // Laying out a megabyte and measuring the line it becomes takes seconds on a loaded machine.
+    }, { timeout: 15_000 }).toBe(true).catch((error: unknown) => {
+      throw new Error(`switch ${i} to ${layout}: pos ${before.pos} was at ${JSON.stringify(placeBefore)}, now ${JSON.stringify(place)}`, { cause: error });
+    });
+    await settle(page);
+  }
+});
+
+modelIndependentWebE2e("stays in Pretty and wraps a file it cannot lay out", async ({ page, request }) => {
+  const line = `exec ./server ${"--flag value ".repeat(40)}`;
+  await openProjectFilesFixture(page, request, {
+    prefix: "pretty-display",
+    name: "Pretty display",
+    seed: (root) => writeFileSync(path.join(root, "serve.sh"), `#!/bin/sh\n${line}\n`),
+  });
+  await page.getByTestId("files-tree-file").filter({ hasText: "serve.sh" }).click();
+  const host = page.getByTestId("files-editor-host");
+  await expect(host.locator(".cm-content")).toBeEditable();
+  const status = page.locator(".den-files-editor__status").filter({ visible: true });
+  const before = await status.innerText();
+  await page.getByTestId("files-editor-layout-pretty").click();
+  await expect(page.getByTestId("files-editor-layout-pretty")).toHaveAttribute("aria-pressed", "true");
+  await expect(host.locator(".cm-content")).toHaveClass(/cm-lineWrapping/);
+  await expect(host.locator(".pw-pretty-break")).toHaveCount(0);
+  expect(await status.innerText()).toBe(before);
+  const rows = await host.locator(".cm-line").nth(1).evaluate((element) =>
+    Math.round(element.getBoundingClientRect().height / parseFloat(getComputedStyle(element).lineHeight)));
+  expect(rows).toBeGreaterThan(1);
+});
+
+modelIndependentWebE2e("lays out to the width the project's formatter declares", async ({ page, request }) => {
+  const call = `run(${Array.from({ length: 12 }, (_, i) => `value${i}`).join(", ")});\n`;
+  const breaks = () => page.evaluate(() => window.__pretty.breaksIn(0, window.__pretty.view().state.doc.length).length);
+  await openPretty(page, request, { name: "plain.ts", text: call });
+  await expect.poll(breaks).toBe(0);
+  await openPretty(page, request, { name: "narrow.ts", text: call, alongside: { ".prettierrc": "printWidth: 60\n" } });
+  await expect.poll(breaks).toBeGreaterThan(0);
+});
+
+modelIndependentWebE2e("renders source text at every scroll position", async ({ page, request }) => {
+  const nodes: number[] = [];
+  for (const items of [ITEMS_200_KB, ITEMS_1_MB]) {
+    const { scroller } = await openPretty(page, request, items);
+    for (const fraction of [0, 0.5, 1]) {
+      await scroller.evaluate((element, fraction) => {
+        element.scrollTop = (element.scrollHeight - element.clientHeight) * fraction;
+      }, fraction);
+      await settle(page);
+      await settle(page);
+      const mismatches = await page.evaluate(() => {
+        const view = window.__pretty.view();
+        const doc = view.state.doc;
+        const bad: string[] = [];
+        for (const line of view.contentDOM.querySelectorAll(".cm-line")) {
+          // A long line is drawn as a window; compare from its first text.
+          const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+          let first: Node | null = walker.nextNode();
+          while (first && !first.nodeValue) first = walker.nextNode();
+          if (!first) continue;
+          let text = "";
+          for (let node: Node | null = first; node; node = walker.nextNode()) text += node.nodeValue ?? "";
+          const from = view.posAtDOM(first, 0);
+          if (text.length < 200 || doc.sliceString(from, from + text.length) !== text) bad.push(`${from}:${text.length}`);
+        }
+        return bad;
+      });
+      expect(mismatches, `at ${fraction}`).toEqual([]);
+    }
+    await page.keyboard.press(process.platform === "darwin" ? "Meta+ArrowDown" : "Control+End");
+    await expect.poll(() => page.evaluate(() => {
+      const view = window.__pretty.view();
+      const head = view.state.selection.main.head;
+      const rect = view.coordsAtPos(head);
+      const port = view.scrollDOM.getBoundingClientRect();
+      return head === view.state.doc.length && Boolean(rect && rect.top < port.bottom && rect.bottom > port.top);
+    }), { timeout: 5_000 }).toBe(true);
+    nodes.push(await page.evaluate(() => window.__pretty.view().contentDOM.querySelectorAll("*").length));
+  }
+  expect(nodes[1]!).toBeLessThan(nodes[0]! * 2 + 2_000);
+});

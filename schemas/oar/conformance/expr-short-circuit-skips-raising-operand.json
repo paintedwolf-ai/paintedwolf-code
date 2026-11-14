@@ -1,0 +1,30 @@
+{
+  "id": "expr-short-circuit-skips-raising-operand",
+  "title": "A decided && or || does not evaluate its right operand",
+  "covers": [
+    "OAR-EXPR-5"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "(tool == \"\" || 1 / size(tool) == 1) && !(false && 1 / 0 == 0)",
+    "on_error": "fail_open"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": ""
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

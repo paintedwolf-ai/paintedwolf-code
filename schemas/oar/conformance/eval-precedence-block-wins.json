@@ -1,0 +1,39 @@
+{
+  "id": "eval-precedence-block-wins",
+  "title": "A block outranks a nudge that fired earlier in the order",
+  "covers": [
+    "OAR-EVAL-4",
+    "OAR-EVAL-6",
+    "OAR-CONF-11"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "A_NUDGES",
+      "kind": "schema",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "nudge",
+      "when": "tool == \"read\""
+    },
+    {
+      "spec_version": "1.0",
+      "id": "B_BLOCKS",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "tool == \"read\""
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "B_BLOCKS"
+  }
+}

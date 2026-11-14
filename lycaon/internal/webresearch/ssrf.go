@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/egress"
@@ -52,6 +53,7 @@ func guardedGetWithHopPolicy(
 			}
 		}
 	}
+	timeout := fetchTimeout(ctx)
 	hopHeaders := []outboundhttp.Header{
 		{Name: "User-Agent", Value: fetchUserAgent},
 		{Name: "Accept", Value: accept},
@@ -73,7 +75,7 @@ func guardedGetWithHopPolicy(
 			Method:     http.MethodGet,
 			URL:        current.String(),
 			HopHeaders: hopHeaders,
-			Timeout:    defaultFetchTimeout,
+			Timeout:    timeout,
 			// Callers read a prefix, as a streamed body once let them stop.
 			MaxBodyBytes: limit,
 			TruncateBody: true,
@@ -114,6 +116,16 @@ func guardedGetWithHopPolicy(
 		current = next
 	}
 	return nil, "", fmt.Errorf("too many redirects")
+}
+
+// fetchTimeout bounds each hop's I/O by the caller's remaining deadline when
+// the fetch starts, never above the default. The door waits for approval
+// outside the caller's deadline, so the deadline is read before any wait.
+func fetchTimeout(ctx context.Context) time.Duration {
+	if deadline, ok := ctx.Deadline(); ok {
+		return min(max(time.Until(deadline), 0), defaultFetchTimeout)
+	}
+	return defaultFetchTimeout
 }
 
 func callIfSet(fn func()) {

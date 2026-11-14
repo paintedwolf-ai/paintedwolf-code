@@ -1,4 +1,4 @@
-Document the code or prose at {{ path }} lines {{ start_line }}–{{ end_line }}.
+Document the code or prose at {{ path_display }} lines {{ start_line }}–{{ end_line }}.
 
 Use file survey tools to understand the selected range and nearby conventions, then add or update the smallest useful documentation in this same file. For code, prefer an idiomatic doc comment attached to the selected declaration. For prose, schemas, or configuration, improve the selected documentation or field descriptions in place.
 

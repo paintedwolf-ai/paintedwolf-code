@@ -57,7 +57,7 @@ func TestMergeReconcilePathsNotRegisteredForInvestigateProductWrite(t *testing.T
 	}
 }
 
-// [OAR-EVAL-8] Catalog selection uses the producer's observed facts.
+// [OAR-EVAL-6] Catalog selection uses the producer's observed facts.
 func requireCatalogDecision(t *testing.T, anchor string, gc *oar.GuardContext, code string) {
 	t.Helper()
 	result, err := sessionTestOARPipeline(t).EvaluateBlock(context.Background(), anchor, gc)
@@ -116,7 +116,7 @@ func TestCatalogGroundingVerdictsDoNotOverlap(t *testing.T) {
 			if code == "COORDINATOR_GROUNDING_ESCALATED" {
 				result, err := sessionTestOARPipeline(t).EvaluateBlock(t.Context(), oar.AnchorCoordinatorPostTurn, gc)
 				testutil.FailErr(t, "evaluate escalation notice", err)
-				if result.Decision == nil || result.Decision.Effect != oar.EffectNudge || len(result.Decision.Advisories) != 1 || result.Decision.Advisories[0].Code != code {
+				if result.Decision == nil || result.Decision.Effect != oar.EffectNudge || result.Decision.Code != code {
 					t.Fatalf("post-turn advisory = %+v", result.Decision)
 				}
 			} else {

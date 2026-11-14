@@ -14,8 +14,8 @@ import (
 
 const maxCommandLedgerLineRunes = 64
 
-// RenderCommandJobsBlock renders the live host ledger of command jobs and held
-// calls for a turn.
+// RenderCommandJobsBlock renders the host ledger of command jobs and held calls
+// for a turn. Each sentence renders only in the states it is true for.
 func RenderCommandJobsBlock(
 	ctx context.Context,
 	renderer *prompts.InjectRenderer,
@@ -28,21 +28,36 @@ func RenderCommandJobsBlock(
 	if renderer == nil || len(jobs)+len(held) == 0 {
 		return ""
 	}
+	block, err := anchor.RenderInform(
+		ctx, anchor.InjectCommandJobs, anchor.MatchContext{Surface: surface, SessionID: sessionID},
+		renderer, commandJobsVars(jobs, held, now),
+	)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(block)
+}
+
+// commandJobsVars are the ledger's facts: one row per job or held call, and
+// which kinds are present, so each sentence is conditioned on its own state.
+func commandJobsVars(jobs []bgprocess.JobSnapshot, held []heldcall.Running, now time.Time) map[string]any {
 	rows := make([]map[string]any, 0, len(jobs)+len(held))
+	running, exited := false, false
 	for _, job := range jobs {
-		row := map[string]any{
-			"handle": job.Handle, "mode": job.Mode, "origin_tool": job.OriginTool,
-			"elapsed": now.Sub(job.StartedAt).Round(time.Second).String(),
-		}
+		row := map[string]any{"handle": job.Handle, "origin_tool": job.OriginTool, "exited": job.Exited}
 		if len(job.Stages) > 0 {
 			row["command"] = commandLedgerLine(job.Stages[0].Command)
 		}
+		if job.Exited {
+			exited = true
+			row["exit_code"], row["refusals"] = job.ExitCode, job.Refusals
+			rows = append(rows, row)
+			continue
+		}
+		running = true
+		row["mode"], row["elapsed"] = job.Mode, now.Sub(job.StartedAt).Round(time.Second).String()
 		if job.Timeout > 0 {
-			remaining := job.StartedAt.Add(job.Timeout).Sub(now).Round(time.Second)
-			if remaining < 0 {
-				remaining = 0
-			}
-			row["deadline_in"] = remaining.String()
+			row["deadline_in"] = max(job.StartedAt.Add(job.Timeout).Sub(now).Round(time.Second), 0).String()
 		}
 		rows = append(rows, row)
 	}
@@ -52,16 +67,10 @@ func RenderCommandJobsBlock(
 			"elapsed": call.Elapsed.Round(time.Second).String(),
 		})
 	}
-	block, err := anchor.RenderInform(
-		ctx, anchor.InjectCommandJobs, anchor.MatchContext{Surface: surface, SessionID: sessionID},
-		renderer, map[string]any{
-			"jobs": rows, "can_wait": true, "has_command": len(jobs) > 0, "has_held": len(held) > 0,
-		},
-	)
-	if err != nil {
-		return ""
+	return map[string]any{
+		"jobs": rows, "has_running": running, "has_exited": exited, "has_held": len(held) > 0,
+		"can_wait": running || len(held) > 0,
 	}
-	return strings.TrimSpace(block)
 }
 
 func commandLedgerLine(command string) string {

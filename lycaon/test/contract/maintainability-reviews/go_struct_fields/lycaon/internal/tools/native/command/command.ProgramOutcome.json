@@ -2,14 +2,17 @@
   "category": "go_struct_fields",
   "artifact": "lycaon/internal/tools/native/command/command.ProgramOutcome",
   "kind": "data_record",
-  "workstream": "shared-verification-runtime",
+  "workstream": "command-verdict-evidence",
   "disposition": "retain",
-  "reason": "Retain the bounded result projection. Version and check verdict describe the initiating verification without granting running or parked programs a premature verdict. Historical receipt meanings and effect counts remain separate from source-bound check settlement.",
-  "reviewed_commit": "1da0705c31dcb167e8a38f16761ff8a4b8e1f033",
-  "ceiling": 19,
+  "reason": "Retain one bounded model result with aggregate verdict scope, child failures and output references. Child records have their own type and bounded selection; the result does not own execution or evidence storage.",
+  "reviewed_commit": "1a7da07d4d1fe89a90d55b3342e8c415c1093444",
+  "ceiling": 24,
   "boundaries": {
-    "lycaon/internal/tools/native/verify_test.go": "30d258e73e5f1fa299b24fe66452ed1a6c2bde65971e3e9da629986d39eb4cad",
-    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338"
+    "lycaon/internal/tools/native/verify_test.go": "8116e2ee7eb5ba471215557f875a59bae43d60e131f0d262ead38e2cc365da48",
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "6132c1a428b7d576743b2e797147fd2d674245d8aefe69998e4a81a356297919",
+    "lycaon/internal/toolhost/command_output_recovery_test.go": "90a27db2579beff4ff86abd9ebad423168c756f9913be7ceaf006e3622fd3a12",
+    "lycaon/internal/tools/native/command/program_output_stream_test.go": "55ddba59438b847a4c0dbb8eb5b7e0761648f218e2f89b4e2c9b7d4fb3e0ee07",
+    "lycaon/internal/invocation/program_feedback_read_test.go": "d25a921acc4ff1993caea937f1f8bb49d007586ff91c459ddd3e226be6e531cd"
   },
-  "reviewed_shape": "94c65d893c5102b6703d7de8de6936eb7bc1224f46ee7839cfb7c29a1a42ae71"
+  "reviewed_shape": "5651b244bfce6c08e04ed66cc3bdee4403b1529e72aef7a3910bea3c464923dc"
 }

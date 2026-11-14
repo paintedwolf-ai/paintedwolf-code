@@ -10,19 +10,15 @@ import (
 	"github.com/lycaon/lycaon/internal/coordinator/surface"
 	"github.com/lycaon/lycaon/internal/coordinator/turnload"
 	"github.com/lycaon/lycaon/internal/extpacks"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/toolcontract"
 )
 
-const corpusSchema = "pw-decide-corpus/2"
+const corpusSchema = "pw-decide-corpus/3"
 
 type corpusSurface struct {
 	ID       string   `json:"id"`
-	Mode     string   `json:"mode"`
 	Floor    []string `json:"floor"`
 	Loadable []string `json:"loadable"`
-	// Guides names the instruction units the surface scores.
-	Guides []string `json:"guides"`
 }
 
 type corpusTool struct {
@@ -32,20 +28,6 @@ type corpusTool struct {
 	Option string `json:"option"`
 	// Card is the text the engine ranks against a request_tools need.
 	Card string `json:"card"`
-}
-
-type corpusUnit struct {
-	ID          string   `json:"id"`
-	PackID      string   `json:"pack_id"`
-	Option      string   `json:"option"`
-	Stock       bool     `json:"stock"`
-	Description string   `json:"description"`
-	Slot        string   `json:"slot"`
-	Attaches    []string `json:"attaches,omitempty"`
-	// NeededWith names tools that require the unit without gating its rendering.
-	NeededWith []string `json:"needed_with,omitempty"`
-	Modes      []string `json:"modes,omitempty"`
-	Hosts      []string `json:"hosts"`
 }
 
 // corpusSkill is one loaded skill with the card the engine ranks.
@@ -66,7 +48,6 @@ type corpus struct {
 	Kinds           []string               `json:"kinds"`
 	Surfaces        []corpusSurface        `json:"surfaces"`
 	Tools           []corpusTool           `json:"tools"`
-	Units           []corpusUnit           `json:"units"`
 	Skills          []corpusSkill          `json:"skills"`
 }
 
@@ -79,10 +60,6 @@ func buildCorpus() (corpus, error) {
 	if err != nil {
 		return corpus{}, fmt.Errorf("effective catalog: %w", err)
 	}
-	units, err := promptunit.Load(eff)
-	if err != nil {
-		return corpus{}, err
-	}
 	schemas, _, err := extpacks.LoadEffectiveToolSchemas(eff)
 	if err != nil {
 		return corpus{}, fmt.Errorf("tool schemas: %w", err)
@@ -91,7 +68,7 @@ func buildCorpus() (corpus, error) {
 	if err != nil {
 		return corpus{}, err
 	}
-	out := corpus{Schema: corpusSchema, CatalogRevision: units.Revision(), State: catalog.State, Questions: catalog.Turn, Request: catalog.Request, Lookup: catalog.Lookup, Retention: catalog.Retention, Kinds: turnload.Kinds()}
+	out := corpus{Schema: corpusSchema, CatalogRevision: eff.Revision, State: catalog.State, Questions: catalog.Turn, Request: catalog.Request, Lookup: catalog.Lookup, Retention: catalog.Retention, Kinds: turnload.Kinds()}
 	ids := make([]string, 0, len(plans))
 	for id := range plans {
 		ids = append(ids, id)
@@ -102,13 +79,7 @@ func buildCorpus() (corpus, error) {
 		floor, loadable := plan.ImmediateNames(), plan.DeferredNames()
 		sort.Strings(floor)
 		sort.Strings(loadable)
-		mode := surface.ExecutionModeFamily(id)
-		guides := units.Candidates(promptunit.HostCoordinator, mode, nameSet(floor), nameSet(loadable))
-		row := corpusSurface{ID: id, Mode: mode, Floor: floor, Loadable: loadable}
-		for _, g := range guides {
-			row.Guides = append(row.Guides, g.ID)
-		}
-		out.Surfaces = append(out.Surfaces, row)
+		out.Surfaces = append(out.Surfaces, corpusSurface{ID: id, Floor: floor, Loadable: loadable})
 	}
 	// Worker profiles share the callable option vocabulary.
 	names := make([]string, 0, len(schemas.Tools))
@@ -125,13 +96,6 @@ func buildCorpus() (corpus, error) {
 		out.Questions.Tools.Options[name] = turnload.OptionText(desc, catalog.Turn.Tools.OptionWords)
 		card := turnload.RequestCandidate(turnload.ToolCard{Name: name, Description: meta.Description})
 		out.Tools = append(out.Tools, corpusTool{Name: name, Description: desc, Option: turnload.OptionText(desc, catalog.Turn.Tools.OptionWords), Card: card})
-	}
-	for _, u := range units.Units() {
-		hosts := make([]string, 0, len(u.Hosts))
-		for _, h := range u.Hosts {
-			hosts = append(hosts, string(h))
-		}
-		out.Units = append(out.Units, corpusUnit{ID: u.ID, PackID: u.PackID, Stock: u.Stock, Description: u.Description, Option: turnload.OptionText(u.Description, catalog.Turn.Guides.OptionWords), Slot: string(u.Slot), Attaches: u.Attaches, NeededWith: u.NeededWith, Modes: u.Modes, Hosts: hosts})
 	}
 	loaded, _ := extpacks.LoadEffectiveSkills(eff)
 	for _, sk := range loaded {

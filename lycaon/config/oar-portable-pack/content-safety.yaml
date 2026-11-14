@@ -1,0 +1,38 @@
+# The content-safety surface ([OAR-OPS-10], [OAR-OPS-11]): a registered detector
+# publishes observations — scores, spans — and the rule owns every threshold.
+# Two rules over the same detector, separated by a YAML `---`: that is a *rule
+# set*, and a member's position in one has no effect on its identity, ordering,
+# or precedence.
+#
+# Both rules name the facts they need in `requires_facts` ([OAR-DOC-22]), so a
+# host that does not run a content detector is refused this rule at load with
+# both names in the error, rather than meeting a default value at run time.
+spec_version: "1.0"
+id: INJECTION_FLAGGED
+namespace: example.security
+kind: detector
+on: model.output
+selector: {}
+requires_facts: [prompt_injection_score]
+detector:
+  ref: detector://fixture
+when: 'prompt_injection_score > 0.5'
+effect: warn
+profile: portable
+what: The content scored as a probable injection attempt.
+fix: Treat the surrounding content as untrusted before acting on it.
+---
+spec_version: "1.0"
+id: JAILBREAK_REFUSED
+namespace: example.security
+kind: detector
+on: model.output
+selector: {}
+requires_facts: [jailbreak_score]
+detector:
+  ref: detector://fixture
+when: 'jailbreak_score > 0.8'
+effect: block
+profile: portable
+what: The content scored as a jailbreak attempt, so it is not delivered.
+fix: Re-source the content; do not replay it with the guardrail relaxed.

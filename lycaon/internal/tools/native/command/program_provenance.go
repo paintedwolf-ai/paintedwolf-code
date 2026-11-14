@@ -11,6 +11,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/commandprogram"
 	"github.com/lycaon/lycaon/internal/evidence"
+	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
 type programHTTPProvenanceStore interface {
@@ -114,8 +115,9 @@ func (r *programRun) normalizeProvenancePath(root, path string) string {
 			}
 		}
 	}
-	if norm := evidence.NormalizeEvidencePath(r.projectDir(), display); norm != "" {
-		return norm
+	roots := r.tc.Source.Roots
+	if abs, ref, err := projectroot.ResolveAbs(roots, r.tc.Source.ActiveRootID, display); err == nil && !ref.External {
+		return projectroot.Qualify(roots, r.tc.Source.ActiveRootID, ref, abs)
 	}
 	return filepath.ToSlash(filepath.Clean(path))
 }
@@ -136,6 +138,26 @@ func (r *programRun) observeProvenanceFileRead(ctx context.Context, root, path s
 		r.provenance.activeTrackers[n-1].addReadPath(norm)
 	}
 	r.provenance.mu.Unlock()
+}
+
+// observeContentFlow records an owner's read of stored content for the op's
+// streams, and carries the custody of what it read to files it derived from it.
+func (r *programRun) observeContentFlow(ctx context.Context, tracker *opProvenanceTracker, flow evidence.ContentFlow) {
+	if r == nil || tracker == nil {
+		return
+	}
+	source := r.normalizeProvenancePath("", flow.Source)
+	if source == "" {
+		return
+	}
+	tracker.addReadPath(source)
+	if len(flow.Files) == 0 {
+		return
+	}
+	urls := r.lookupCustodyURLs(ctx, []string{source})
+	for _, file := range flow.Files {
+		r.addCustodyFile(r.normalizeProvenancePath("", file), urls)
+	}
 }
 
 func (r *programRun) noteInputRedirectRead(tracker *opProvenanceTracker, normPath string) {

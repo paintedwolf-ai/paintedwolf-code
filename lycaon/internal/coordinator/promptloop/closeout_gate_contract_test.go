@@ -75,9 +75,6 @@ func newCloseoutContract(t *testing.T) *closeoutContract {
 					return nil, err
 				}
 				c.fired = append(c.fired, result.Decision.Code)
-				for _, advisory := range result.Decision.Advisories {
-					c.fired = append(c.fired, advisory.Code)
-				}
 				if result.Decision.Effect != oar.EffectBlock {
 					return nil, nil
 				}
@@ -270,7 +267,7 @@ func TestRepairKicksReadWhatTheRealPathSends(t *testing.T) {
 		sharedOnly []string
 	}{
 		{kick: "coordinator-citation-grounding", content: "Done [read#9:1].", sharedOnly: []string{"pinned_body_chars", "worker_leg"}},
-		{kick: "coordinator-report-document", content: documentContent, reportPhase: true, sharedOnly: []string{"drafted_synthesis", "can_recall", "worker_leg"}},
+		{kick: "coordinator-report-document", content: documentContent, reportPhase: true, sharedOnly: []string{"drafted_synthesis", "can_recall", "mints", "worker_leg"}},
 	} {
 		t.Run(tc.kick, func(t *testing.T) {
 			c := newCloseoutContract(t)
@@ -639,7 +636,7 @@ func TestCloseoutReportUsesOnePolicyOccurrence(t *testing.T) {
 				}
 				return
 			}
-			if selected == nil || selected.Code != tc.code || len(selected.Copy) != 5 {
+			if selected == nil || selected.Code != tc.code || !carriesRuleCopy(selected.Copy) {
 				t.Fatalf("closeout did not retain evaluated decision: %+v", selected)
 			}
 			if out.committed || out.endWithoutAssemble != tc.duplicate || out.retry == tc.duplicate {
@@ -668,4 +665,15 @@ func TestCommittedFindingKeepsItsWhere(t *testing.T) {
 	if where := meta.Findings[0].Where[0]; where.Path != "a.go" || where.Line != 2 {
 		t.Fatalf("where = %+v", where)
 	}
+}
+
+// carriesRuleCopy reports whether a decision kept the rule's evaluated copy:
+// every shipped rule says what happened and why.
+func carriesRuleCopy(copy map[string]string) bool {
+	for _, member := range []string{"what", "cause"} {
+		if copy[member] == "" {
+			return false
+		}
+	}
+	return true
 }

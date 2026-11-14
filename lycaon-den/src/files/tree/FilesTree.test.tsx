@@ -454,10 +454,22 @@ describe("Files interactions with host rows", () => {
 
   it("renders agent activity from host facts alongside paged rows", async () => {
     mount(treeViewFixture(), { agentPresenceForPath: (_root, path) => path === "README.md" ? {
-      chip: { state: "reading", text: "Reading", description: "Reading this file", sessionId: "session" }, name: null, labels: ["Reading this file"],
+      chip: { state: "reading", phase: "live", text: "reading", description: "Reading this file", sessionId: "session" }, name: null, labels: ["Reading this file"],
     } : null });
     await findFileRow("README.md");
-    expect(document.querySelector('.den-files-presence--reading')).toBeTruthy();
+    expect(document.querySelector('.den-files-presence--reading')?.getAttribute("data-agent-phase")).toBe("live");
+  });
+
+  it("marks agent activity that has ended as past", async () => {
+    const chat = { sessionId: "session", title: "Fix login", slot: 0 };
+    const labels = ["Fix login: editing"];
+    mount(treeViewFixture(), { agentPresenceForPath: (_root, path) => path === "README.md" ? {
+      chip: { state: "editing", phase: "past", text: "editing", description: labels[0]!, sessionId: "session" },
+      name: { chat, phase: "past", labels }, labels,
+    } : null });
+    await findFileRow("README.md");
+    expect(document.querySelector(".den-files-presence")?.getAttribute("data-agent-phase")).toBe("past");
+    expect(document.querySelector(".den-files-agent-name")?.getAttribute("data-agent-phase")).toBe("past");
   });
 
   it("filters through a host command and preserves the existing empty state", async () => {

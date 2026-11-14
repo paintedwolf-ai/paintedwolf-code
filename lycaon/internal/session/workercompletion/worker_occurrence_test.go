@@ -23,12 +23,12 @@ func TestWorkerReportChecksProduceOneOccurrence(t *testing.T) {
 		{name: "over budget", report: workercompletion.WorkerCompletionReport{LegStatus: "partial", Brief: "☃🚀☃🚀"}, max: 3},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			rule := &oar.Rule{OAR: "1.0", ID: "REPORT_OCCURRENCE", Kind: oar.KindPolicy, Anchor: oar.AnchorWorkerReportCheck, Effect: oar.EffectAllow, Enforcement: "enforce", OnError: "fail_closed", OnFire: []oar.OnFireAction{oar.OnFireIncrementCounter}}
+			rule := &oar.Rule{SpecVersion: "1.0", ID: "REPORT_OCCURRENCE", Kind: oar.KindPolicy, Anchor: oar.AnchorWorkerReportCheck, Effect: oar.EffectAllow, Enforcement: "enforce", OnError: "fail_closed", OnFire: []oar.OnFireAction{oar.OnFireIncrementCounter}}
 			pipeline := oar.NewGuardPipeline(oar.NewRuleSet([]*oar.Rule{rule}), nil, oar.NewCounterStore())
 			pipeline.EnableAnchor(oar.AnchorWorkerReportCheck)
 			result, err := workercompletion.EvaluateWorkerSummary(t.Context(), workercompletion.WorkerSummaryEvalInput{AgentType: "security-reviewer", ChildSessionID: t.Name(), Report: tc.report, MissingReport: tc.missing, MaxChars: tc.max, Pipeline: pipeline})
 			testutil.FailErr(t, "evaluate report occurrence", err)
-			// [OAR-FIRE-6] Side effects belong to exactly one report occurrence.
+			// [OAR-FIRE-5] Side effects belong to exactly one report occurrence.
 			if n := pipeline.Counters().Get(t.Name(), rule.Qualified(), oar.CounterFire); n != 1 {
 				t.Fatalf("report evaluated %d times", n)
 			}

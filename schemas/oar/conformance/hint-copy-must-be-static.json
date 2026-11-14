@@ -1,0 +1,22 @@
+{
+  "title": "Hint copy carrying a binding is rejected at load",
+  "covers": [
+    "OAR-HINT-3"
+  ],
+  "hints": [
+    {
+      "spec_version": "1.0",
+      "id": "H",
+      "kind": "hint",
+      "what": "read {{ tool }} outside scope."
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {}
+  },
+  "expected": {
+    "error": "OAR-HINT-3"
+  },
+  "id": "hint-copy-must-be-static"
+}

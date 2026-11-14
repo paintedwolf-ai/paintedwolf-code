@@ -1,0 +1,28 @@
+{
+  "id": "ops-detector-ref-unresolvable-rejected",
+  "title": "A detector-kind rule whose reference cannot be resolved is rejected at load",
+  "covers": [
+    "OAR-OPS-11"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "UNRESOLVABLE_DETECTOR",
+    "kind": "detector",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "prompt_injection_score > 0.5",
+    "detector": {
+      "ref": "detector://not-registered-anywhere"
+    }
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "detector://not-registered-anywhere"
+  }
+}

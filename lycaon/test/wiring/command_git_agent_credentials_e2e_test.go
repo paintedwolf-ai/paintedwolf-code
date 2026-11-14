@@ -25,10 +25,12 @@ import (
 	"github.com/lycaon/lycaon/internal/gitengine"
 	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/isolation"
+	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/socketref"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/testutil/gittest"
+	"github.com/lycaon/lycaon/internal/toolrejection"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -75,10 +77,12 @@ func authenticatedUploadPack(t *testing.T, repo string) (*httptest.Server, func(
 }
 
 // An agent's Git authenticates through the host credential service from
-// inside its real confinement once the call holds the credential-store grant:
-// the confined helper reaches the service and the service verifies it as the
-// served Git's own helper. Without the grant nothing is released, and the
-// result names the capability that would.
+// inside its real confinement: the confined helper reaches the service, the
+// service verifies it as the served Git's own helper, and a saved credential
+// leaves only once the person reviews its release to that recipient. A
+// declined release settles as the outbound secret refusal; a release
+// remembered for the chat covers the next command without a card or a
+// capability request.
 func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	gitengine.TestingEnableBundledBinary()
 	confine.TestingSetAutoConfine(t)
@@ -101,27 +105,50 @@ func TestAgentGitAuthenticatesFromInsideItsConfinement(t *testing.T) {
 	}
 	program := "git ls-remote " + server.URL + "/repo.git"
 
-	ungranted := newCommandProgramSession(t, program, "")
-	grantLoopback(ungranted)
-	runCommandWithApprovals(t, ungranted)
-	if got := ungranted.outcome(t, "program-1"); got.Status == 0 || authenticated() {
-		t.Fatalf("credentials released without the grant: %+v", got)
+	declined := newCommandProgramSession(t, program, "")
+	grantLoopback(declined)
+	runCommandWithApprovals(t, declined, "decline")
+	if got := declined.outcome(t, "program-1"); got.Status == 0 || authenticated() {
+		t.Fatalf("credentials released after a declined review: %+v", got)
 	}
-	if !ungranted.resultNames(t, isolation.CodeTryCredentialStore) {
-		t.Fatalf("the result does not name the credential-store capability: %s", ungranted.result(t))
+	if !declined.resultNames(t, toolrejection.OutboundSecretDeniedCode) {
+		t.Fatalf("the result does not name the kept credential: %s", declined.result(t))
 	}
 
-	granted := newCommandProgramSessionWithArgs(t, map[string]any{
-		"command": program, "capability_request": map[string]any{"credential_store": true},
-	}, wire.CreateSessionRequest{}, "")
-	grantLoopback(granted)
-	runCommandWithApprovals(t, granted, "recommended")
-	got := granted.outcome(t, "program-1")
-	if got.Status != 0 || !strings.Contains(got.Stdout, head) {
+	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{
+		{Pattern: "run the program", ToolCalls: []llm.MockToolCall{{ID: "program-1", Name: "command", Args: map[string]any{"command": program}}}, FollowUpText: "Program finished."},
+		{Pattern: "list it again", ToolCalls: []llm.MockToolCall{{ID: "program-2", Name: "command", Args: map[string]any{"command": program}}}, FollowUpText: "Listed again."},
+	}})
+	released := startSessionWithClient(t, mock, wire.CreateSessionRequest{}, "")
+	released.h.SeedProgress(t, t.Context(), released.session)
+	grantLoopback(released)
+	runCommandWithApprovals(t, released, "recommended")
+	if got := released.outcome(t, "program-1"); got.Status != 0 || !strings.Contains(got.Stdout, head) {
 		t.Fatalf("ls-remote under confinement = %+v", got)
 	}
 	if !authenticated() {
 		t.Fatal("the remote never saw the stored credentials")
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := released.h.Sessions.Manager.Submissions.Prompt(t.Context(), released.session, "list it again")
+		done <- err
+	}()
+	kind := wire.CheckpointKindToolApproval
+	testutil.WaitFor(t, func() bool {
+		select {
+		case err := <-done:
+			testutil.FailErr(t, "second ls-remote", err)
+			return true
+		default:
+		}
+		if pending, _ := released.h.Sessions.Checkpoints.ListPending(t.Context(), released.session, &kind); len(pending) > 0 {
+			t.Fatalf("the chat release asked again: %+v", pending[0].ToolApproval.Plan)
+		}
+		return false
+	})
+	if got := released.outcome(t, "program-2"); got.Status != 0 || !strings.Contains(got.Stdout, head) {
+		t.Fatalf("second ls-remote under the chat release = %+v", got)
 	}
 }
 

@@ -37,6 +37,8 @@ type Properties struct {
 	InsertFinalNewline     *bool
 	// Charset is a recognized token such as utf-8 or utf-8-bom.
 	Charset string
+	// MaxLineLength is the declared line width; zero when undeclared or `off`.
+	MaxLineLength int
 }
 
 // Declared reports whether any pair is in effect.
@@ -112,22 +114,35 @@ func Parse(dir, content string) File {
 // Resolve applies configs ordered farthest from the file first, so nearer
 // files and later sections win.
 func Resolve(path string, configs []File) Properties {
+	props, _ := resolveContributors(path, configs)
+	return props
+}
+
+// resolveContributors also returns the directories of the files whose sections
+// matched, nearest first.
+func resolveContributors(path string, configs []File) (Properties, []string) {
 	file := strings.TrimPrefix(strings.ReplaceAll(path, "\\", "/"), "./")
 	var props Properties
+	var dirs []string
 	for _, config := range configs {
 		dir := strings.TrimSuffix(config.Dir, "/")
 		rel := file
 		if dir != "" {
 			rel = strings.TrimPrefix(file, dir+"/")
 		}
+		matched := false
 		for _, section := range config.Sections {
 			if section.Pattern == nil || !MatchPattern(*section.Pattern, rel) {
 				continue
 			}
 			props = props.merge(section.Pairs)
+			matched = true
+		}
+		if matched {
+			dirs = append([]string{config.Dir}, dirs...)
 		}
 	}
-	return props
+	return props, dirs
 }
 
 func isUnset(raw string) bool { return strings.EqualFold(raw, "unset") }
@@ -179,6 +194,13 @@ func (p Properties) merge(raw map[string]string) Properties {
 	}
 	if v, ok := raw["insert_final_newline"]; ok {
 		next.InsertFinalNewline = mergeBool(next.InsertFinalNewline, v)
+	}
+	if v, ok := raw["max_line_length"]; ok {
+		if isUnset(v) || strings.EqualFold(v, "off") {
+			next.MaxLineLength = 0
+		} else if n, ok := boundedInt(v, 10_000); ok {
+			next.MaxLineLength = n
+		}
 	}
 	if v, ok := raw["charset"]; ok {
 		switch cs := strings.ToLower(v); cs {

@@ -29,6 +29,7 @@ type TurnAssemblyScratch struct {
 	WorkspaceRoots             []map[string]any
 	WorkspaceRootCount         int
 	WorkspaceActivePath        string
+	WorkspaceRootsOmittedCount int
 	WorkspaceRootsLoaded       bool
 	// SourceBriefBlocks holds each turn's rendered source-change brief, keyed
 	// by the message that opened the turn.

@@ -1,0 +1,37 @@
+{
+  "title": "A double renders as the shortest round-tripping decimal",
+  "covers": [
+    "OAR-COPY-9"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "SCORE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "requires_facts": [
+      "example.score"
+    ],
+    "what": "score {{ example.score }}."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "example.score": 1e-07
+    },
+    "host_facts": {
+      "example.score": "double"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "SCORE",
+    "copy": {
+      "what": "score 0.0000001."
+    }
+  },
+  "id": "copy-double-canonical"
+}

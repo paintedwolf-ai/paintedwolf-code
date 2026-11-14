@@ -1,31 +1,27 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_TURN_NO_PROSE
 kind: invariant
-anchor: worker.report_check
-requires:
-  facts:
-    - paintedwolf.profile
-    - paintedwolf.worker_attempted_mutation
-    - paintedwolf.worker_summary_present
-when: paintedwolf.profile == "worker" && !paintedwolf.worker_summary_present && !paintedwolf.worker_attempted_mutation
+on: worker.report_check
+selector: {}
+requires_facts: [paintedwolf.session_role, paintedwolf.worker_attempted_mutation, paintedwolf.worker_summary_present]
+when: paintedwolf.session_role == "worker" && !paintedwolf.worker_summary_present && !paintedwolf.worker_attempted_mutation
 effect: block
-copy:
-  what: 'The worker result has no usable parent-visible brief.'
-  cause: 'The completion report did not supply a nonempty brief for the parent.'
-  why: 'A missing brief is separate from the status of the underlying work or retained tool observations.'
-  fix: 'Inspect the retained worker result and observations. If a worker report turn is resumed, request a concise completion report with honest status. Dispatch new work only for an identified gap, using an eligible profile from the current catalog.'
-  instead: 'Preserve existing results and report the missing brief without claiming that all worker work must be repeated.'
 # The leg is over when this fires; the reader is the dispatching coordinator,
 # whose tools the fix names.
 x-paintedwolf-audience:
   - coordinator
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
-x-paintedwolf-message: 'Worker result has no usable parent-visible brief'
+message: 'Worker result has no usable parent-visible brief'
+what: 'The worker result has no usable parent-visible brief.'
+cause: 'The completion report did not supply a nonempty brief for the parent.'
+why: 'A missing brief is separate from the status of the underlying work or retained tool observations.'
+fix: 'Inspect the retained worker result and observations. If a worker report turn is resumed, request a concise completion report with honest status. Dispatch new work only for an identified gap, using an eligible profile from the current catalog.'
+instead: 'Preserve existing results and report the missing brief without claiming that all worker work must be repeated.'
 x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args
       path: src/main.go
-      profile: coordinator
+      session_role: coordinator
       tool: read

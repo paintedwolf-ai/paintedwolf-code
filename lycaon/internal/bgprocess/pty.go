@@ -188,6 +188,7 @@ func (r *Terminal) startPTY(
 		NoTimeout:      true,
 		InlineEnv:      lycexec.MergeInlineEnv(req.InlineEnv, stage.Env),
 		PathExtra:      req.PathExtra,
+		ServiceEnv:     req.ServiceEnv,
 		Launch:         req.Launch,
 		WinSize:        size,
 		MaxOutputBytes: r.ringBufferBytes,

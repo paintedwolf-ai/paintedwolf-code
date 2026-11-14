@@ -1,11 +1,10 @@
 package oarcore
 
-// The version gate, the closed field set, anchor resolution, capability
-// negotiation, selector clauses, and a full type check of the condition all run
-// at load, before any occurrence is evaluated.
-//
-// [OAR-OPS-3] Malformed documents, unknown identifiers, and type errors are
-// load-time rejections and never route through `on_error`.
+// The version gate, the closed field set, anchor resolution, fact
+// negotiation, selector clauses, and a full type check of the condition and
+// copy all run at load, before any occurrence is evaluated. Malformed
+// documents, unknown identifiers, and type errors are load-time rejections and
+// never route through `on_error`.
 
 import (
 	"fmt"
@@ -15,8 +14,8 @@ import (
 	"strings"
 )
 
-// LoadError is a rule document, or a rule set, this engine refuses. Every
-// rejection names the field, identifier, or capability at fault.
+// LoadError is a document, or a rule set, this engine refuses. Every rejection
+// names the field, identifier, or fact at fault.
 type LoadError struct{ Message string }
 
 func (e *LoadError) Error() string { return e.Message }
@@ -29,84 +28,93 @@ var (
 	idRE           = regexp.MustCompile(`^[A-Z][A-Z0-9_]*$`)
 	anchorRE       = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
 	factNameRE     = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)*$`)
-	qualifiedRefRE = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*/[A-Z][A-Z0-9_]*$`)
 	extensionRE    = regexp.MustCompile(`^x-[a-z0-9]+(-[a-z0-9]+)*$`)
 	ruleDetectorRE = regexp.MustCompile(`^detector://[a-z0-9]([a-z0-9-]*[a-z0-9])?$`)
 )
 
-// definedFields is the closed document field set ([OAR-DOC-27]).
-var definedFields = []string{
-	"oar", "id", "namespace", "kind", "anchor", "selector", "when", "flow",
-	"effect", "enforcement", "mandatory", "on_error", "on_fire", "counter_scope",
-	"overrides", "requires", "transform", "detector", "copy", "references",
-	"status", "related",
+// ruleFields is the closed field set of a rule document ([OAR-DOC-19]).
+var ruleFields = []string{
+	"spec_version", "id", "title", "kind", "on", "selector", "effect", "severity",
+	"when", "flow", "enforcement", "mandatory", "on_error", "on_fire", "stream",
+	"references", "detector", "namespace", "requires_facts", "profile",
+	"what", "cause", "why", "fix", "instead", "message",
 }
 
-// copyMembers cannot affect decisions ([OAR-DOC-24]).
-var copyMembers = []string{"title", "what", "cause", "why", "fix", "instead"}
+// hintFields is the closed field set of a hint document ([OAR-HINT-1]).
+var hintFields = []string{
+	"spec_version", "id", "title", "kind", "namespace", "severity", "references",
+	"what", "cause", "why", "fix", "instead", "message",
+}
 
-// SelectorClause is one selector clause, named by a fact ([OAR-SEL-1]).
+// copyMembers are the presentation strings a document may carry
+// ([OAR-DOC-18]); a rule's may bind facts (Appendix B), a hint's is static.
+var copyMembers = []string{"what", "cause", "why", "fix", "instead", "message"}
+
+var (
+	severities = []string{"block", "warn", "info"}
+	streams    = []string{"buffered", "chunk"}
+	authoring  = []string{"portable", "host"}
+)
+
+// SelectorClause is one selector clause. The vocabulary has one clause, tools,
+// which matches when the core fact tool is one of Values ([OAR-SEL-7]).
 type SelectorClause struct {
-	Fact   string
-	Values []string
-}
-
-// TransformSpec describes a content mutation ([OAR-OPS-13]).
-type TransformSpec struct {
-	Action      string
-	Target      string
-	Replacement string
-	// HasReplacement distinguishes an absent replacement from an empty one:
-	// `redact` MAY omit it, and when it does the engine substitutes its own
-	// placeholder rather than the empty string.
-	HasReplacement bool
-}
-
-// CounterRef is one fire_count_of or breaker_count_of call in a condition: the
-// built-in that read it, the literal the author wrote, and the qualified
-// identifier that literal resolves to in the referencing rule's namespace
-// ([OAR-FIRE-11]).
-type CounterRef struct {
-	Fn      string
-	Counter string
-	Literal string
-	Target  string
+	Dimension string
+	Values    []string
 }
 
 // Rule is one loaded rule document.
 type Rule struct {
 	environment *Environment
+	ID          string
 	Namespace   string
 	// Qualified is the identity of a rule: <namespace>/<id>, or the bare id when
-	// namespace is absent ([OAR-DOC-8]). It is derivable from the document alone
-	// and does not vary with the host that loaded it.
+	// namespace is absent ([OAR-DOC-22]).
 	Qualified string
 	Kind      string
 	Effect    string
 	// ResolvedAnchor is the local anchor a core anchor resolves to through the
-	// profile map ([OAR-PROF-4]).
+	// profile map ([OAR-PROF-3]).
 	ResolvedAnchor string
 	Selector       []SelectorClause
 	When           *node
-	CounterRefs    []CounterRef
-	Transform      *TransformSpec
+	Flow           []string
+	Enforcement    string
+	Mandatory      bool
+	OnError        string
+	OnFire         []string
+	Stream         string
+	Severity       string
+	RequiresFacts  []string
 	Copy           map[string]string
-	// Refs is every fact and function name the condition, selector,
-	// counter_scope, and copy reference.
-	Refs     map[string]bool
-	Warnings []string
+	// Refs is every fact and function name the condition and copy reference.
+	Refs map[string]bool
+	// CounterReads are the rule ids passed to fire_count_of and
+	// breaker_count_of, resolved over the rule set ([OAR-FIRE-6]).
+	CounterReads []string
+	// Extensions are the document's x- fields; they never affect a decision
+	// ([OAR-DOC-19]).
+	Extensions map[string]any
 }
 
-// ResolveRef resolves a bare or qualified rule reference within a referring
-// namespace ([OAR-EVAL-13]).
-func ResolveRef(ref, namespace string) string {
-	if strings.Contains(ref, "/") {
-		return ref
-	}
+// Hint is one loaded hint document ([OAR-HINT-1]): static copy keyed by the
+// code a host raises. It is never selected or evaluated.
+type Hint struct {
+	ID         string
+	Namespace  string
+	Title      string
+	Severity   string
+	Copy       map[string]string
+	Extensions map[string]any
+}
+
+// Identity is the written identity of a rule: <namespace>/<id>, or the bare id
+// when the namespace is absent ([OAR-DOC-21]).
+func Identity(namespace, id string) string {
 	if namespace == "" {
-		return ref
+		return id
 	}
-	return namespace + "/" + ref
+	return namespace + "/" + id
 }
 
 func stringList(v any, field string) ([]string, error) {
@@ -115,6 +123,9 @@ func stringList(v any, field string) ([]string, error) {
 	}
 	list, ok := v.([]any)
 	if !ok {
+		if typed, ok := v.([]string); ok {
+			return append([]string(nil), typed...), nil
+		}
 		return nil, loadErr("field %q must be a list of strings", field)
 	}
 	out := make([]string, 0, len(list))
@@ -128,122 +139,135 @@ func stringList(v any, field string) ([]string, error) {
 	return out, nil
 }
 
-// LoadRuleDocument loads one rule document against a declared environment.
-func LoadRuleDocument(doc any, env *Environment) (*Rule, error) {
+// LoadDocument loads a rule or a hint document. Exactly one of the results is
+// non-nil when err is nil.
+func LoadDocument(doc any, env *Environment) (*Rule, *Hint, error) {
 	obj, ok := asObject(doc)
 	if !ok {
-		return nil, loadErr("[OAR-DOC-31] a rule set member is not a rule document: expected a JSON object")
+		return nil, nil, loadErr("[OAR-DOC-1] a rule set member is not a document: expected a JSON object")
 	}
-
+	// [OAR-CONF-2] The version gate runs before any other processing.
 	if err := checkVersion(obj); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := checkClosedWorld(obj); err != nil {
-		return nil, err
+	if kind, _ := obj["kind"].(string); kind == "hint" {
+		hint, err := loadHint(obj)
+		return nil, hint, err
 	}
+	rule, err := loadRule(obj, env)
+	return rule, nil, err
+}
 
-	// [OAR-DOC-2] The five obligatory fields. `oar` was already checked, because
-	// [OAR-CONF-2] requires the version gate before any other processing.
-	for _, required := range []string{"id", "kind", "anchor", "effect"} {
+// LoadRuleDocument loads one rule document against a declared environment. A
+// hint document is refused here: it is not a rule.
+func LoadRuleDocument(doc any, env *Environment) (*Rule, error) {
+	rule, hint, err := LoadDocument(doc, env)
+	if err != nil {
+		return nil, err
+	}
+	if hint != nil {
+		return nil, loadErr("[OAR-DOC-2] document %s has kind hint and is not a rule", hint.ID)
+	}
+	return rule, nil
+}
+
+func loadHint(obj map[string]any) (*Hint, error) {
+	if err := checkClosedWorld(obj, hintFields, "hint"); err != nil {
+		return nil, err
+	}
+	id, ok := obj["id"].(string)
+	if !ok || !idRE.MatchString(id) {
+		return nil, loadErr("[OAR-HINT-2] field \"id\" does not match ^[A-Z][A-Z0-9_]*$: %v", obj["id"])
+	}
+	hint := &Hint{ID: id, Copy: map[string]string{}, Extensions: extensions(obj)}
+	if err := loadIdentity(obj, &hint.Namespace); err != nil {
+		return nil, err
+	}
+	var err error
+	if hint.Title, err = optionalString(obj, "title"); err != nil {
+		return nil, err
+	}
+	if hint.Severity, err = optionalEnum(obj, "severity", severities); err != nil {
+		return nil, err
+	}
+	if err := loadReferences(obj); err != nil {
+		return nil, err
+	}
+	for _, member := range copyMembers {
+		raw, present := obj[member]
+		if !present {
+			continue
+		}
+		s, ok := raw.(string)
+		if !ok {
+			return nil, loadErr("field %q must be a string", member)
+		}
+		// [OAR-HINT-3] A hint's copy is static: it carries no bindings.
+		if strings.Contains(s, "{{") || strings.Contains(s, "{%") {
+			return nil, loadErr("[OAR-HINT-3] hint %s field %s carries a binding; a hint's copy is static", id, member)
+		}
+		hint.Copy[member] = s
+	}
+	// [OAR-HINT-2] A hint that publishes no copy is not a hint.
+	if len(hint.Copy) == 0 {
+		return nil, loadErr("[OAR-HINT-2] hint %s carries no copy field", id)
+	}
+	return hint, nil
+}
+
+func loadRule(obj map[string]any, env *Environment) (*Rule, error) {
+	if err := checkClosedWorld(obj, ruleFields, "rule"); err != nil {
+		return nil, err
+	}
+	// [OAR-DOC-2] The obligatory fields.
+	for _, required := range []string{"id", "kind", "on", "selector", "effect"} {
 		if _, present := obj[required]; !present {
 			return nil, loadErr("[OAR-DOC-2] rule document is missing required field %q", required)
 		}
 	}
-
 	id, ok := obj["id"].(string)
 	if !ok || !idRE.MatchString(id) {
-		return nil, loadErr("[OAR-DOC-6] field \"id\" does not match ^[A-Z][A-Z0-9_]*$: %v", obj["id"])
+		return nil, loadErr("[OAR-DOC-4] field \"id\" does not match ^[A-Z][A-Z0-9_]*$: %v", obj["id"])
 	}
-
-	namespace := ""
-	if raw, present := obj["namespace"]; present {
-		ns, ok := raw.(string)
-		if !ok || !namespaceRE.MatchString(ns) {
-			return nil, loadErr("field \"namespace\" is not a publisher scope: %v", raw)
-		}
-		namespace = ns
+	rule := &Rule{ID: id, Copy: map[string]string{}, Refs: map[string]bool{}, Extensions: extensions(obj), environment: env}
+	if err := loadIdentity(obj, &rule.Namespace); err != nil {
+		return nil, err
 	}
-	qualified := id
-	if namespace != "" {
-		qualified = namespace + "/" + id
-	}
+	rule.Qualified = Identity(rule.Namespace, id)
 
 	kind, ok := obj["kind"].(string)
 	if !ok || !contains(kinds, kind) {
-		return nil, loadErr("[OAR-DOC-10] field \"kind\" is %v, not one of %s", obj["kind"], strings.Join(kinds, ", "))
+		return nil, loadErr("[OAR-DOC-6] field \"kind\" is %v, not one of %s", obj["kind"], strings.Join(append(append([]string(nil), kinds...), "hint"), ", "))
 	}
-
+	rule.Kind = kind
 	effect, ok := obj["effect"].(string)
 	if !ok || !contains(effects, effect) {
-		return nil, loadErr("[OAR-DOC-11] field \"effect\" is %v, not one of %s", obj["effect"], strings.Join(effects, ", "))
+		return nil, loadErr("[OAR-DOC-8] field \"effect\" is %v, not one of %s", obj["effect"], strings.Join(effects, ", "))
 	}
+	rule.Effect = effect
 
-	anchorRaw, ok := obj["anchor"].(string)
-	if !ok || !anchorRE.MatchString(anchorRaw) {
-		return nil, loadErr("field \"anchor\" must name exactly one lifecycle moment")
-	}
-
-	rule := &Rule{
-		Namespace:   namespace,
-		Qualified:   qualified,
-		Kind:        kind,
-		Effect:      effect,
-		Copy:        map[string]string{},
-		Refs:        map[string]bool{},
-		environment: env,
-	}
-
-	if err := checkScalarFields(obj); err != nil {
+	if err := loadScalarFields(obj, rule, env); err != nil {
 		return nil, err
 	}
-	if err := loadRelatedAndCopy(obj, rule); err != nil {
+	if err := loadReferences(obj); err != nil {
 		return nil, err
 	}
 	if err := loadDetectorField(obj, rule, env); err != nil {
 		return nil, err
 	}
-	if err := loadTransformField(obj, rule, env); err != nil {
+	if err := resolveAnchor(obj, rule, env); err != nil {
 		return nil, err
 	}
-
-	// [OAR-CONF-3], [OAR-PROF-4] Resolve the anchor: a core anchor identifier
-	// through the profile map, any other value as a host-native anchor.
-	if IsCoreAnchor(anchorRaw) {
-		local, supported := env.Anchors[anchorRaw]
-		if !supported {
-			return nil, loadErr("[OAR-PROF-4] rule %s targets core anchor %s, which this host declares unsupported", qualified, anchorRaw)
-		}
-		rule.ResolvedAnchor = local
-	} else {
-		// [OAR-PROF-5], [OAR-DOC-12] A host-native anchor loads only when the
-		// declared catalogue lists it; any other value is rejected by name.
-		if !env.HostAnchors[anchorRaw] {
-			return nil, loadErr("[OAR-PROF-5] rule %s targets anchor %q, which is neither a core anchor nor in the declared host anchor catalogue", qualified, anchorRaw)
-		}
-		rule.ResolvedAnchor = anchorRaw
-	}
-
-	reachable, err := loadRequires(obj, rule, env)
-	if err != nil {
+	if err := loadSelector(obj, rule); err != nil {
 		return nil, err
 	}
-	if err := loadSelector(obj, rule, env, reachable); err != nil {
+	if err := loadWhen(obj, rule, env); err != nil {
 		return nil, err
 	}
-	if err := loadWhen(obj, rule, env, reachable); err != nil {
+	if err := loadCopy(obj, rule, env); err != nil {
 		return nil, err
 	}
-	if err := loadCounterScope(obj, rule, env, reachable); err != nil {
-		return nil, err
-	}
-	if rule.Transform != nil && rule.Transform.Target != "content" {
-		name := rule.Transform.Target
-		if !reachable[name] {
-			return nil, loadErr("[OAR-FACT-20] transform target %s is outside requires", name)
-		}
-		rule.Refs[name] = true
-	}
-	if err := loadCopyBindings(rule, env, reachable); err != nil {
+	if err := loadRequiresFacts(obj, rule, env); err != nil {
 		return nil, err
 	}
 	if err := loadFlow(obj, rule, env); err != nil {
@@ -252,35 +276,42 @@ func LoadRuleDocument(doc any, env *Environment) (*Rule, error) {
 	return rule, nil
 }
 
-// checkVersion is the version gate. [OAR-CONF-2] requires `oar` to be checked
-// before any other processing of the document, so a bad version wins over a bad
-// field.
+// extensions collects a document's x- fields for the host.
+func extensions(obj map[string]any) map[string]any {
+	out := map[string]any{}
+	for key, value := range obj {
+		if extensionRE.MatchString(key) {
+			out[key] = value
+		}
+	}
+	return out
+}
+
+// checkVersion is the version gate ([OAR-DOC-3], [OAR-CONF-2]): a bad version
+// wins over every other fault in the document.
 func checkVersion(obj map[string]any) error {
-	raw, present := obj["oar"]
+	raw, present := obj["spec_version"]
 	if !present {
-		return loadErr("rule document is missing required field \"oar\"")
+		return loadErr("[OAR-DOC-2] document is missing required field \"spec_version\"")
 	}
-	oar, ok := raw.(string)
-	if !ok || !versionRE.MatchString(oar) {
-		return loadErr("field \"oar\" must be a version string of the form <major>.<minor>")
+	version, ok := raw.(string)
+	if !ok || !versionRE.MatchString(version) {
+		return loadErr("[OAR-DOC-3] field \"spec_version\" must be <major>.<minor> without leading zeros, got %v", raw)
 	}
-	parts := strings.SplitN(oar, ".", 2)
+	parts := strings.SplitN(version, ".", 2)
 	major, _ := strconv.Atoi(parts[0])
 	minor, _ := strconv.Atoi(parts[1])
-	if major != oarMajor {
-		// [OAR-DOC-4] An unsupported major is refused, never downgraded or
-		// coerced.
-		return loadErr("[OAR-DOC-4] oar %s names a major version this engine does not implement (%d.%d)", oar, oarMajor, oarMinor)
-	}
-	if minor > oarMinor {
-		// [OAR-DOC-5] A greater minor may narrow the rule with a field this engine
-		// would ignore, so refusing to load is the only visible failure mode.
-		return loadErr("[OAR-DOC-5] oar %s names a minor version above this engine's own (%d.%d)", oar, oarMajor, oarMinor)
+	// [OAR-DOC-3] This engine accepts its own major at any minor up to its own,
+	// and never downgrades another version.
+	if major != oarMajor || minor > oarMinor {
+		return loadErr("[OAR-DOC-3] spec_version %s is not supported by this engine (%d.%d)", version, oarMajor, oarMinor)
 	}
 	return nil
 }
 
-func checkClosedWorld(obj map[string]any) error {
+// checkClosedWorld refuses a field the document model does not define; an
+// x- extension is ignored ([OAR-DOC-19]).
+func checkClosedWorld(obj map[string]any, defined []string, what string) error {
 	names := make([]string, 0, len(obj))
 	for key := range obj {
 		names = append(names, key)
@@ -288,41 +319,76 @@ func checkClosedWorld(obj map[string]any) error {
 	// Sorted so the rejection names the same undefined field on every run.
 	sort.Strings(names)
 	for _, key := range names {
-		if contains(definedFields, key) {
+		if contains(defined, key) || extensionRE.MatchString(key) {
 			continue
 		}
-		// [OAR-DOC-26] An unrecognised x- extension is ignored, and MUST NOT
-		// affect selection, evaluation, ordering, precedence, or the decision.
-		if extensionRE.MatchString(key) {
-			continue
-		}
-		return loadErr("[OAR-DOC-27] rule document carries undefined field %q", key)
+		return loadErr("[OAR-DOC-19] %s document carries undefined field %q", what, key)
 	}
 	return nil
 }
 
-// checkScalarFields validates the fields the host reads from its own rule
-// model; this engine checks their shape only.
-func checkScalarFields(obj map[string]any) error {
-	if raw, present := obj["enforcement"]; present {
-		v, ok := raw.(string)
-		if !ok || !contains(enforcements, v) {
-			return loadErr("field \"enforcement\" must be one of %s", strings.Join(enforcements, ", "))
+func loadIdentity(obj map[string]any, namespace *string) error {
+	raw, present := obj["namespace"]
+	if !present {
+		return nil
+	}
+	ns, ok := raw.(string)
+	if !ok || !namespaceRE.MatchString(ns) {
+		return loadErr("[OAR-DOC-20] field \"namespace\" is not a publisher scope: %v", raw)
+	}
+	*namespace = ns
+	return nil
+}
+
+func optionalString(obj map[string]any, field string) (string, error) {
+	raw, present := obj[field]
+	if !present {
+		return "", nil
+	}
+	s, ok := raw.(string)
+	if !ok {
+		return "", loadErr("field %q must be a string", field)
+	}
+	return s, nil
+}
+
+func optionalEnum(obj map[string]any, field string, allowed []string) (string, error) {
+	s, err := optionalString(obj, field)
+	if err != nil || s == "" {
+		if _, present := obj[field]; present && s == "" && err == nil {
+			return "", loadErr("field %q must be one of %s", field, strings.Join(allowed, ", "))
 		}
+		return s, err
+	}
+	if !contains(allowed, s) {
+		return "", loadErr("field %q must be one of %s", field, strings.Join(allowed, ", "))
+	}
+	return s, nil
+}
+
+// loadScalarFields reads the fields whose values the engine and host act on.
+func loadScalarFields(obj map[string]any, rule *Rule, env *Environment) error {
+	var err error
+	if rule.Enforcement, err = optionalEnum(obj, "enforcement", enforcements); err != nil {
+		return err
+	}
+	if rule.Enforcement == "" {
+		rule.Enforcement = "enforce"
 	}
 	if raw, present := obj["mandatory"]; present {
-		if _, ok := raw.(bool); !ok {
-			return loadErr("field \"mandatory\" must be a boolean")
+		v, ok := raw.(bool)
+		if !ok {
+			return loadErr("[OAR-DOC-12] field \"mandatory\" must be a boolean")
 		}
+		rule.Mandatory = v
 	}
+	rule.OnError = "fail_closed"
 	if raw, present := obj["on_error"]; present {
 		v, ok := raw.(string)
-		if !ok {
-			return loadErr("field \"on_error\" must be a string")
+		if !ok || (v != "fail_closed" && v != "fail_open" && !idRE.MatchString(v)) {
+			return loadErr("[OAR-DOC-13] field \"on_error\" must be fail_closed, fail_open, or a rule id, got %v", raw)
 		}
-		if v != "fail_closed" && v != "fail_open" && !idRE.MatchString(v) && !qualifiedRefRE.MatchString(v) {
-			return loadErr("field \"on_error\" must be fail_closed, fail_open, or a rule identifier, got %q", v)
-		}
+		rule.OnError = v
 	}
 	if raw, present := obj["on_fire"]; present {
 		actions, err := stringList(raw, "on_fire")
@@ -331,106 +397,73 @@ func checkScalarFields(obj map[string]any) error {
 		}
 		for _, action := range actions {
 			if !contains(onFireActions, action) {
-				// [OAR-FIRE-1] The side-effect vocabulary is closed.
 				return loadErr("[OAR-FIRE-1] field \"on_fire\" names undefined side-effect %q", action)
 			}
 		}
+		rule.OnFire = actions
 	}
-	if raw, present := obj["overrides"]; present {
-		refs, err := stringList(raw, "overrides")
-		if err != nil {
+	if rule.Stream, err = optionalEnum(obj, "stream", streams); err != nil {
+		return err
+	}
+	if rule.Stream == "" {
+		rule.Stream = "buffered"
+	}
+	// [OAR-OPS-6] An engine that does not stream refuses a chunked rule rather
+	// than buffering it silently.
+	if rule.Stream == "chunk" && !env.SupportsChunk {
+		return loadErr("[OAR-OPS-6] rule %s requests stream chunk, which this engine does not support", rule.Qualified)
+	}
+	// [OAR-OPS-9] A rule cannot be both required and not enforced.
+	if rule.Mandatory && rule.Enforcement == "monitor" {
+		return loadErr("[OAR-OPS-9] rule %s is mandatory and cannot have enforcement monitor", rule.Qualified)
+	}
+	if rule.Severity, err = optionalEnum(obj, "severity", severities); err != nil {
+		return err
+	}
+	if _, err := optionalEnum(obj, "profile", authoring); err != nil {
+		return err
+	}
+	if _, err := optionalString(obj, "title"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// loadReferences validates the taxonomy tags, which never affect a decision
+// ([OAR-DOC-16]).
+func loadReferences(obj map[string]any) error {
+	raw, present := obj["references"]
+	if !present {
+		return nil
+	}
+	member, ok := asObject(raw)
+	if !ok {
+		return loadErr("field \"references\" must be an object")
+	}
+	for key, value := range member {
+		if key != "mitre_atlas" && key != "owasp_llm" {
+			return loadErr("field \"references\" carries undefined member %q", key)
+		}
+		if _, err := stringList(value, "references."+key); err != nil {
 			return err
 		}
-		for _, ref := range refs {
-			if !idRE.MatchString(ref) && !qualifiedRefRE.MatchString(ref) {
-				return loadErr("field \"overrides\" holds malformed rule reference %q", ref)
-			}
-		}
-	}
-	if raw, present := obj["status"]; present {
-		v, ok := raw.(string)
-		if !ok || !contains(statuses, v) {
-			return loadErr("field \"status\" must be one of %s", strings.Join(statuses, ", "))
-		}
 	}
 	return nil
 }
 
-func loadRelatedAndCopy(obj map[string]any, rule *Rule) error {
-	if raw, present := obj["related"]; present {
-		list, ok := raw.([]any)
-		if !ok {
-			return loadErr("field \"related\" must be a list")
-		}
-		for _, entry := range list {
-			member, ok := asObject(entry)
-			if !ok {
-				return loadErr("field \"related\" holds a non-object")
-			}
-			for key := range member {
-				if key != "id" && key != "type" {
-					return loadErr("field \"related\" carries undefined member %q", key)
-				}
-			}
-			// [OAR-DOC-30] Related targets need not be loaded.
-			rid, ok := member["id"].(string)
-			if !ok || (!idRE.MatchString(rid) && !qualifiedRefRE.MatchString(rid)) {
-				return loadErr("field \"related\" holds malformed rule reference %v", member["id"])
-			}
-			rtype, ok := member["type"].(string)
-			if !ok || !contains(relatedTypes, rtype) {
-				return loadErr("field \"related\" type must be one of %s", strings.Join(relatedTypes, ", "))
-			}
-		}
-	}
-
-	if raw, present := obj["copy"]; present {
-		member, ok := asObject(raw)
-		if !ok {
-			return loadErr("field \"copy\" must be an object")
-		}
-		for key, value := range member {
-			// [OAR-DOC-24] copy carries a closed set of presentation strings.
-			if !contains(copyMembers, key) {
-				return loadErr("[OAR-DOC-24] field \"copy\" carries undefined member %q", key)
-			}
-			s, ok := value.(string)
-			if !ok {
-				return loadErr("field \"copy.%s\" must be a string", key)
-			}
-			rule.Copy[key] = s
-		}
-	}
-
-	// [OAR-DOC-25] references is an interoperability taxonomy and MUST NOT affect
-	// any decision. It is validated for shape and then never read again.
-	if raw, present := obj["references"]; present {
-		member, ok := asObject(raw)
-		if !ok {
-			return loadErr("field \"references\" must be an object")
-		}
-		for key, value := range member {
-			if _, err := stringList(value, "references."+key); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// loadDetectorField reads `detector`. [OAR-DOC-23] it is present if and only if
-// kind is detector.
+// loadDetectorField reads `detector`, present if and only if kind is detector
+// ([OAR-DOC-17]).
 func loadDetectorField(obj map[string]any, rule *Rule, env *Environment) error {
 	raw, present := obj["detector"]
 	if rule.Kind != "detector" {
 		if present {
-			return loadErr("[OAR-DOC-23] rule %s has kind %s and must not carry \"detector\"", rule.Qualified, rule.Kind)
+			return loadErr("[OAR-DOC-17] rule %s has kind %s and must not carry \"detector\"", rule.Qualified, rule.Kind)
 		}
 		return nil
 	}
 	member, ok := asObject(raw)
 	if !ok {
-		return loadErr("[OAR-DOC-23] rule %s has kind detector and must carry \"detector\"", rule.Qualified)
+		return loadErr("[OAR-DOC-17] rule %s has kind detector and must carry \"detector\"", rule.Qualified)
 	}
 	for key := range member {
 		if key != "ref" {
@@ -439,262 +472,154 @@ func loadDetectorField(obj map[string]any, rule *Rule, env *Environment) error {
 	}
 	ref, ok := member["ref"].(string)
 	if !ok || !ruleDetectorRE.MatchString(ref) {
-		return loadErr("field \"detector.ref\" must be a detector:// reference")
+		return loadErr("[OAR-OPS-11] field \"detector.ref\" must be a detector:// reference")
 	}
-	// [OAR-OPS-12] An unregistered detector is a load-time rejection, not a
-	// run-time on_error.
 	if !env.Detectors[ref] {
-		return loadErr("[OAR-OPS-12] rule %s references detector %s, which is not registered", rule.Qualified, ref)
+		return loadErr("[OAR-OPS-11] rule %s references detector %s, which this engine cannot resolve", rule.Qualified, ref)
 	}
 	return nil
 }
 
-// loadTransformField reads `transform`. [OAR-DOC-22] it is present if and only
-// if effect is transform.
-func loadTransformField(obj map[string]any, rule *Rule, env *Environment) error {
-	raw, present := obj["transform"]
-	if rule.Effect != "transform" {
-		if present {
-			return loadErr("[OAR-DOC-22] rule %s has effect %s and must not carry \"transform\"", rule.Qualified, rule.Effect)
+// resolveAnchor resolves `on`: a core anchor through the profile map, any
+// other value as a host-native anchor ([OAR-CONF-3], [OAR-PROF-3],
+// [OAR-PROF-4]).
+func resolveAnchor(obj map[string]any, rule *Rule, env *Environment) error {
+	on, ok := obj["on"].(string)
+	if !ok || !anchorRE.MatchString(on) {
+		return loadErr("[OAR-SEL-1] field \"on\" must name exactly one anchor, got %v", obj["on"])
+	}
+	if IsCoreAnchor(on) {
+		local, supported := env.Anchors[on]
+		if !supported {
+			return loadErr("[OAR-PROF-3] rule %s targets core anchor %s, which this host declares unsupported", rule.Qualified, on)
 		}
+		rule.ResolvedAnchor = local
 		return nil
 	}
-	// [OAR-OPS-18] An engine that does not implement content mutation refuses the
-	// rule at load, rather than treating it as a block or ignoring it.
-	if !env.SupportsTransform {
-		return loadErr("[OAR-OPS-18] rule %s has effect transform, and this engine declares supports_transform false", rule.Qualified)
+	if !env.HostAnchors[on] {
+		return loadErr("[OAR-SEL-1] rule %s targets anchor %q, which this engine cannot resolve", rule.Qualified, on)
 	}
-	member, ok := asObject(raw)
-	if !ok {
-		return loadErr("[OAR-DOC-22] rule %s has effect transform and must carry \"transform\"", rule.Qualified)
-	}
-	for key := range member {
-		if key != "action" && key != "target" && key != "replacement" {
-			return loadErr("field \"transform\" carries undefined member %q", key)
-		}
-	}
-	action, ok := member["action"].(string)
-	if !ok || !contains(transformActions, action) {
-		return loadErr("field \"transform.action\" must be one of %s", strings.Join(transformActions, ", "))
-	}
-	target, ok := member["target"].(string)
-	if !ok {
-		return loadErr("field \"transform.target\" must be a string")
-	}
-	spec := &TransformSpec{Action: action, Target: target}
-	if rawReplacement, hasReplacement := member["replacement"]; hasReplacement {
-		replacement, ok := rawReplacement.(string)
-		if !ok {
-			return loadErr("field \"transform.replacement\" must be a string")
-		}
-		spec.Replacement = replacement
-		spec.HasReplacement = true
-	}
-	// [OAR-OPS-13] An annotation with nothing to annotate with is not a
-	// transform, so replace and annotate must carry a replacement; redact may
-	// omit one, and the engine then substitutes its own placeholder.
-	if (action == "replace" || action == "annotate") && !spec.HasReplacement {
-		return loadErr("[OAR-OPS-13] field \"transform.replacement\" is required for action %s", action)
-	}
-	// [OAR-OPS-14] target names the whole content, or a list<map> fact whose
-	// members carry the spans to act on. Anything else is a load-time rejection.
-	if target != "content" {
-		fact, declared := env.Facts[target]
-		if !declared || fact.Type != TypeListMap {
-			return loadErr("[OAR-OPS-14] field \"transform.target\" names %q, which is neither \"content\" nor a declared list<map> fact", target)
-		}
-	}
-	rule.Transform = spec
+	rule.ResolvedAnchor = on
 	return nil
 }
 
-// loadRequires is capability negotiation ([OAR-DOC-21], [OAR-FACT-19]). It
-// returns the set of names the rule may reach.
-func loadRequires(obj map[string]any, rule *Rule, env *Environment) (map[string]bool, error) {
-	reachable := map[string]bool{}
-	raw, present := obj["requires"]
-	if !present {
-		return reachable, nil
-	}
-	member, ok := asObject(raw)
-	if !ok {
-		return nil, loadErr("field \"requires\" must be an object")
-	}
-	for key := range member {
-		if key != "profiles" && key != "facts" {
-			return nil, loadErr("field \"requires\" carries undefined member %q", key)
-		}
-	}
-	requiresProfiles, err := stringList(member["profiles"], "requires.profiles")
+// loadRequiresFacts is fact negotiation ([OAR-DOC-22], [OAR-PROF-6],
+// [OAR-CONF-4]). Every non-core fact and function the condition or copy
+// references is listed, and every listed name is provided.
+func loadRequiresFacts(obj map[string]any, rule *Rule, env *Environment) error {
+	names, err := stringList(obj["requires_facts"], "requires_facts")
 	if err != nil {
-		return nil, err
+		return err
 	}
-	requiresFacts, err := stringList(member["facts"], "requires.facts")
-	if err != nil {
-		return nil, err
-	}
-	for _, name := range requiresFacts {
+	listed := map[string]bool{}
+	for _, name := range names {
 		if !factNameRE.MatchString(name) {
-			return nil, loadErr("field \"requires.facts\" holds malformed name %q", name)
+			return loadErr("[OAR-DOC-22] field \"requires_facts\" holds malformed name %q", name)
+		}
+		if tierOf(env, name) == "" {
+			return loadErr("[OAR-DOC-22] rule %s requires %s, which this host does not provide", rule.Qualified, name)
+		}
+		listed[name] = true
+	}
+	refs := make([]string, 0, len(rule.Refs))
+	for name := range rule.Refs {
+		refs = append(refs, name)
+	}
+	sort.Strings(refs)
+	for _, name := range refs {
+		if tier := tierOf(env, name); tier != TierCore && !listed[name] {
+			return loadErr("[OAR-DOC-22] rule %s references %s, which is not a core fact and is not listed in requires_facts", rule.Qualified, name)
 		}
 	}
-	for _, profile := range requiresProfiles {
-		if !env.Profiles[profile] {
-			return nil, loadErr("[OAR-FACT-19] rule %s requires capability profile %q, which this host does not provide", rule.Qualified, profile)
-		}
-		def := profiles[profile]
-		for name := range def.Facts {
-			reachable[name] = true
-		}
-		for name := range def.Functions {
-			reachable[name] = true
-		}
-	}
-	for _, name := range requiresFacts {
-		_, isFact := env.Facts[name]
-		_, isFn := env.Functions[name]
-		if !isFact && !isFn {
-			return nil, loadErr("[OAR-FACT-19] rule %s requires fact %q, which this host does not provide", rule.Qualified, name)
-		}
-		reachable[name] = true
-	}
-	return reachable, nil
+	rule.RequiresFacts = names
+	return nil
 }
 
-func loadSelector(obj map[string]any, rule *Rule, env *Environment, reachable map[string]bool) error {
-	raw, present := obj["selector"]
-	if !present {
-		return nil
+// tierOf is the tier of a declared fact or function, or "" when neither.
+func tierOf(env *Environment, name string) Tier {
+	if fact, ok := env.Facts[name]; ok {
+		return fact.Tier
 	}
-	member, ok := asObject(raw)
+	if fn, ok := env.Functions[name]; ok {
+		return fn.Tier
+	}
+	return ""
+}
+
+// loadSelector reads the selector: its one clause, tools, is a non-empty list
+// of tool names ([OAR-SEL-7]).
+func loadSelector(obj map[string]any, rule *Rule) error {
+	member, ok := asObject(obj["selector"])
 	if !ok {
-		return loadErr("field \"selector\" must be an object")
+		return loadErr("[OAR-DOC-2] field \"selector\" must be an object")
 	}
-	names := make([]string, 0, len(member))
-	for name := range member {
-		names = append(names, name)
-	}
-	// Clauses are conjunctive ([OAR-SEL-4]); sorting fixes which one a rejection
-	// names.
-	sort.Strings(names)
-	for _, factName := range names {
-		fact, declared := env.Facts[factName]
-		// [OAR-SEL-3] A clause naming a fact the engine does not declare, or one
-		// whose type is neither string nor list<string>, is a load error — never a
-		// silent match and never a silent non-match.
-		if !declared {
-			return loadErr("[OAR-SEL-3] selector clause %q names a fact this engine does not declare", factName)
+	for dimension, raw := range member {
+		if dimension != "tools" {
+			return loadErr("[OAR-SEL-7] selector carries clause %q, which the selector schema does not define", dimension)
 		}
-		if fact.Type != TypeString && fact.Type != TypeListString {
-			return loadErr("[OAR-SEL-3] selector clause %q names a fact of type %s, which is neither string nor list<string>", factName, fact.Type)
+		values, err := stringList(raw, "selector.tools")
+		if err != nil || len(values) == 0 || contains(values, "") {
+			return loadErr("[OAR-SEL-7] selector clause \"tools\" must be a non-empty list of tool names")
 		}
-		if fact.Tier != TierCore && !reachable[factName] {
-			// [OAR-FACT-20] A selector reference outside the core tier must be
-			// reached through requires, exactly as a condition reference must.
-			return loadErr("[OAR-FACT-20] selector clause %q is outside the core tier and the rule does not reach it through requires", factName)
-		}
-		values, err := stringList(member[factName], "selector."+factName)
-		if err != nil {
-			return err
-		}
-		// [OAR-SEL-6] A clause whose value is the empty list matches nothing, so
-		// the rule is never selected. The rule loads, and the engine warns.
-		if len(values) == 0 {
-			rule.Warnings = append(rule.Warnings,
-				fmt.Sprintf("selector clause %q is empty, so rule %s is never selected", factName, rule.Qualified))
-			values = []string{}
-		}
-		rule.Refs[factName] = true
-		rule.Selector = append(rule.Selector, SelectorClause{Fact: factName, Values: values})
+		rule.Selector = append(rule.Selector, SelectorClause{Dimension: "tools", Values: values})
 	}
 	return nil
 }
 
 // loadWhen parses and type-checks the condition against the declared
-// environment ([OAR-DOC-14], [OAR-CONF-5]).
-func loadWhen(obj map[string]any, rule *Rule, env *Environment, reachable map[string]bool) error {
+// environment ([OAR-DOC-9], [OAR-CONF-5]).
+func loadWhen(obj map[string]any, rule *Rule, env *Environment) error {
 	raw, present := obj["when"]
 	if !present {
 		return nil
 	}
 	source, ok := raw.(string)
 	if !ok {
-		return loadErr("field \"when\" must be a string")
+		return loadErr("[OAR-DOC-9] field \"when\" must be a string")
 	}
 	ast, err := parseCondition(source)
 	if err != nil {
 		return loadErr("rule %s condition: %s", rule.Qualified, err.Error())
 	}
-	// [OAR-EXPR-17] The declared parse-tree ceiling.
-	if nodes := countNodes(ast); nodes > env.ExpressionNodesMax {
-		return loadErr("[OAR-EXPR-17] rule %s condition has %d parse-tree nodes, above the declared expression_nodes_max of %d",
-			rule.Qualified, nodes, env.ExpressionNodesMax)
+	if env.ExpressionNodesMax > 0 {
+		if nodes := countNodes(ast); nodes > env.ExpressionNodesMax {
+			return loadErr("[OAR-EXPR-19] rule %s condition has %d parse-tree nodes, above this engine's limit of %d", rule.Qualified, nodes, env.ExpressionNodesMax)
+		}
 	}
-	resultType, refs, err := checkCondition(ast, env, reachable)
+	resultType, refs, err := checkCondition(ast, env)
 	if err != nil {
 		return loadErr("rule %s condition: %s", rule.Qualified, err.Error())
 	}
-	// [OAR-FACT-4] The rejection names the produced type and the word bool.
+	// [OAR-FACT-3] The rejection names the produced type and the word bool.
 	if resultType != TypeBool {
-		return loadErr("[OAR-FACT-4] rule %s condition produces %s, want bool", rule.Qualified, resultType)
+		return loadErr("[OAR-FACT-3] rule %s condition produces %s, want bool", rule.Qualified, resultType)
 	}
 	for name := range refs {
 		rule.Refs[name] = true
 	}
 	rule.When = ast
-
-	// [OAR-FIRE-11] The type checker already required each counter reader's
-	// argument to be a string literal, so every reference resolves statically.
 	walkNodes(ast, func(n *node) {
-		if n.kind != nodeCall {
-			return
+		if _, isReader := counterReaders[n.strValue]; isReader && n.kind == nodeCall {
+			rule.CounterReads = append(rule.CounterReads, n.items[0].strValue)
 		}
-		counter, isReader := counterReaders[n.strValue]
-		if !isReader || len(n.items) == 0 || n.items[0].kind != nodeString {
-			return
-		}
-		literal := n.items[0].strValue
-		rule.CounterRefs = append(rule.CounterRefs, CounterRef{
-			Fn:      n.strValue,
-			Counter: counter,
-			Literal: literal,
-			Target:  ResolveRef(literal, rule.Namespace),
-		})
 	})
 	return nil
 }
 
-// loadCounterScope reads `counter_scope`: the declared string fact whose value
-// keys this rule's counters ([OAR-DOC-32], [OAR-FIRE-10]).
-func loadCounterScope(obj map[string]any, rule *Rule, env *Environment, reachable map[string]bool) error {
-	raw, present := obj["counter_scope"]
-	if !present {
-		return nil
+// loadCopy reads the copy members and type-checks their bindings
+// ([OAR-DOC-18], Appendix B).
+func loadCopy(obj map[string]any, rule *Rule, env *Environment) error {
+	for _, member := range copyMembers {
+		raw, present := obj[member]
+		if !present {
+			continue
+		}
+		s, ok := raw.(string)
+		if !ok {
+			return loadErr("field %q must be a string", member)
+		}
+		rule.Copy[member] = s
 	}
-	name, ok := raw.(string)
-	if !ok || !factNameRE.MatchString(name) {
-		return loadErr("field \"counter_scope\" must name a declared fact, got %v", raw)
-	}
-	decl, declared := env.Facts[name]
-	if !declared {
-		return loadErr("[OAR-FIRE-10] rule %s names counter_scope %s, which this engine does not declare", rule.Qualified, name)
-	}
-	if decl.Type != TypeString {
-		return loadErr("[OAR-FIRE-10] rule %s names counter_scope %s, whose type is %s and not string", rule.Qualified, name, decl.Type)
-	}
-	if decl.Tier != TierCore && !reachable[name] {
-		return loadErr("[OAR-FIRE-10] rule %s names counter_scope %s, which is outside the core tier and the rule does not reach it through requires",
-			rule.Qualified, name)
-	}
-	// The scope fact is observed wherever the rule's counters move, so it counts
-	// as a reference for fact production and the [OAR-PROF-8] portability report.
-	rule.Refs[name] = true
-	return nil
-}
-
-// loadCopyBindings type-checks each copy member after requires is known
-// ([OAR-COPY-2], [OAR-COPY-3], [OAR-COPY-4], [OAR-COPY-5]).
-func loadCopyBindings(rule *Rule, env *Environment, reachable map[string]bool) error {
 	names := make([]string, 0, len(rule.Copy))
 	for name := range rule.Copy {
 		names = append(names, name)
@@ -703,30 +628,25 @@ func loadCopyBindings(rule *Rule, env *Environment, reachable map[string]bool) e
 	for _, member := range names {
 		bindings, err := ParseCopy(rule.Copy[member])
 		if err != nil {
-			return loadErr("[OAR-COPY-3] rule %s copy.%s carries construct %s", rule.Qualified, member, err.Error())
+			return loadErr("[OAR-COPY-3] rule %s %s carries construct %s", rule.Qualified, member, err.Error())
 		}
 		for _, binding := range bindings {
 			decl, declared := env.Facts[binding.Name]
 			if !declared {
-				return loadErr("[OAR-COPY-2] rule %s copy.%s names %s, which this engine does not declare",
-					rule.Qualified, member, binding.Name)
+				return loadErr("[OAR-COPY-2] rule %s %s names %s, which is not a declared fact", rule.Qualified, member, binding.Name)
 			}
 			if binding.Interpolate && !copyInterpolatable(decl.Type) {
-				return loadErr("[OAR-COPY-4] rule %s copy.%s interpolates %s, whose type is %s",
-					rule.Qualified, member, binding.Name, decl.Type)
+				return loadErr("[OAR-COPY-4] rule %s %s interpolates %s, whose type is %s", rule.Qualified, member, binding.Name, decl.Type)
 			}
-			if decl.Tier != TierCore && !reachable[binding.Name] {
-				return loadErr("[OAR-FACT-20] copy names %s, which is outside the core tier and the rule does not reach it through requires",
-					binding.Name)
-			}
+			// [OAR-COPY-5] A copy reference is held to requires_facts like any other.
 			rule.Refs[binding.Name] = true
 		}
 	}
 	return nil
 }
 
-// loadFlow reads `flow` against the declared activity window ([OAR-DOC-15],
-// [OAR-FACT-13], [OAR-PROF-3]).
+// loadFlow reads `flow` against the published activity window ([OAR-DOC-10],
+// [OAR-FACT-10]).
 func loadFlow(obj map[string]any, rule *Rule, env *Environment) error {
 	raw, present := obj["flow"]
 	if !present {
@@ -736,17 +656,13 @@ func loadFlow(obj map[string]any, rule *Rule, env *Environment) error {
 	if err != nil {
 		return err
 	}
-	// [OAR-DOC-15] The empty list has no single reading (vacuous or impossible
-	// match), so a present flow must be non-empty.
 	if len(flow) == 0 {
-		return loadErr("[OAR-DOC-15] rule %s carries an empty \"flow\"; a flow that is present must be non-empty", rule.Qualified)
-	}
-	if env.ActivityWindow == 0 {
-		return loadErr("[OAR-PROF-3] rule %s carries flow, and this host declares activity_window 0", rule.Qualified)
+		return loadErr("[OAR-DOC-10] rule %s carries an empty \"flow\"", rule.Qualified)
 	}
 	if len(flow) > env.ActivityWindow {
-		return loadErr("[OAR-FACT-13] rule %s carries a flow of %d steps, above the declared activity_window of %d",
+		return loadErr("[OAR-FACT-10] rule %s carries a flow of %d steps, above the published activity window of %d",
 			rule.Qualified, len(flow), env.ActivityWindow)
 	}
+	rule.Flow = flow
 	return nil
 }

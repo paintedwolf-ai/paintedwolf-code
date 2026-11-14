@@ -25,8 +25,8 @@ func TestSessionOutputReadsItsOwnHostFolderAndRefusesNativeWrites(t *testing.T) 
 	testutil.FailErr(t, "other folders", err)
 	tc, _, rec := scratchToolContext(t)
 	tc.Host.SessionScratchDir, tc.Host.SessionOutputDir = own.Scratch, own.Output
-	testutil.FailErr(t, "publish own copy", scratch.PublishCommandOutput(own.Output, "program", "stdout", strings.NewReader("one\ntwo\n")))
-	testutil.FailErr(t, "publish other copy", scratch.PublishCommandOutput(other.Output, "program", "stdout", strings.NewReader("private\n")))
+	testutil.FailErr(t, "publish own copy", scratch.PublishCommandOutput(own.Output, scratch.CommandOutput{ProgramID: "program", Stream: "stdout"}, strings.NewReader("one\ntwo\n")))
+	testutil.FailErr(t, "publish other copy", scratch.PublishCommandOutput(other.Output, scratch.CommandOutput{ProgramID: "program", Stream: "stdout"}, strings.NewReader("private\n")))
 	reads := projectpaths.NewReadSession(nil, tc)
 	defer reads.Close()
 	for _, path := range []string{"@output/program.stdout", "@OUTPUT/program.stdout", filepath.Join(own.Output, "program.stdout")} {

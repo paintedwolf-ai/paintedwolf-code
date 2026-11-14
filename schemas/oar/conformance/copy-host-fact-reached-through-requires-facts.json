@@ -1,0 +1,39 @@
+{
+  "title": "A host fact declared in requires_facts renders in copy",
+  "covers": [
+    "OAR-COPY-5",
+    "OAR-FACT-19",
+    "OAR-FACT-15"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "SPILL_NOTE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "requires_facts": [
+      "example.spill_path"
+    ],
+    "what": "Retained prefix at {{ example.spill_path }}."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "example.spill_path": "tool-output/example.txt"
+    },
+    "host_facts": {
+      "example.spill_path": "string"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "SPILL_NOTE",
+    "copy": {
+      "what": "Retained prefix at tool-output/example.txt."
+    }
+  },
+  "id": "copy-host-fact-reached-through-requires-facts"
+}

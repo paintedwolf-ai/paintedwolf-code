@@ -40,6 +40,34 @@ func WithExchangeProvenanceObserver(ctx context.Context, fn func(ExchangeProvena
 	return context.WithValue(ctx, exchangeProvenanceObserverKey{}, fn)
 }
 
+// ContentFlow is stored content an operation delivered: Source is what it
+// read, and Files, when set, now hold content derived from it.
+type ContentFlow struct {
+	Source string
+	Files  []string
+}
+
+type contentFlowObserverKey struct{}
+
+// WithContentFlowObserver attaches a callback to ctx that receives each
+// content flow reported within that context.
+func WithContentFlowObserver(ctx context.Context, fn func(ContentFlow)) context.Context {
+	if ctx == nil || fn == nil {
+		return ctx
+	}
+	return context.WithValue(ctx, contentFlowObserverKey{}, fn)
+}
+
+// ReportContentFlow notifies any observer attached to ctx.
+func ReportContentFlow(ctx context.Context, flow ContentFlow) {
+	if ctx == nil || flow.Source == "" {
+		return
+	}
+	if fn, ok := ctx.Value(contentFlowObserverKey{}).(func(ContentFlow)); ok && fn != nil {
+		fn(flow)
+	}
+}
+
 // ReportExchangeProvenance notifies any observer attached to ctx.
 func ReportExchangeProvenance(ctx context.Context, p ExchangeProvenance) {
 	if ctx == nil {
@@ -80,7 +108,7 @@ type ProgramHTTPProvenance struct {
 
 // BuildProgramHTTPRecord constructs an http_response ledger record for a command
 // program that observed external HTTP traffic or wrote external custody files.
-func BuildProgramHTTPRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+func BuildProgramHTTPRecord(roots CitationRoots, prov ProgramHTTPProvenance) Record {
 	if !prov.UntrustedContent && len(prov.ObservedURLs) == 0 && len(prov.CustodyPaths) == 0 {
 		return Record{}
 	}
@@ -97,7 +125,7 @@ func BuildProgramHTTPRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 		rec.touchURL(u)
 	}
 	for _, p := range prov.CustodyPaths {
-		addRecordPath(projectDir, &rec, p, FidelityStructured)
+		addRecordPath(roots, &rec, p, FidelityStructured)
 	}
 	if strings.TrimSpace(prov.ProgramID) != "" {
 		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))
@@ -107,7 +135,7 @@ func BuildProgramHTTPRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 
 // BuildProgramTreeRecord constructs the custody record for directories a
 // command program filled from the network, such as a clone.
-func BuildProgramTreeRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+func BuildProgramTreeRecord(roots CitationRoots, prov ProgramHTTPProvenance) Record {
 	if len(prov.CustodyTrees) == 0 {
 		return Record{}
 	}
@@ -123,7 +151,7 @@ func BuildProgramTreeRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 		rec.touchURL(u)
 	}
 	for _, p := range prov.CustodyTrees {
-		addRecordPath(projectDir, &rec, p, FidelityStructured)
+		addRecordPath(roots, &rec, p, FidelityStructured)
 	}
 	if strings.TrimSpace(prov.ProgramID) != "" {
 		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))
@@ -133,7 +161,7 @@ func BuildProgramTreeRecord(projectDir string, prov ProgramHTTPProvenance) Recor
 
 // BuildProgramCustodyReplacementRecord constructs a whole-file local write record
 // when a command program overwrites or removes paths that previously held external custody.
-func BuildProgramCustodyReplacementRecord(projectDir string, prov ProgramHTTPProvenance) Record {
+func BuildProgramCustodyReplacementRecord(roots CitationRoots, prov ProgramHTTPProvenance) Record {
 	if len(prov.ClearedPaths) == 0 {
 		return Record{}
 	}
@@ -144,7 +172,7 @@ func BuildProgramCustodyReplacementRecord(projectDir string, prov ProgramHTTPPro
 		SourceTool: "command",
 	}
 	for _, p := range prov.ClearedPaths {
-		addRecordPath(projectDir, &rec, p, FidelityStructured)
+		addRecordPath(roots, &rec, p, FidelityStructured)
 	}
 	if strings.TrimSpace(prov.ProgramID) != "" {
 		captureRecordBody(&rec, "program_id: "+strings.TrimSpace(prov.ProgramID))

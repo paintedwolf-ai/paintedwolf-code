@@ -193,7 +193,7 @@ func TestArgumentCheckFactsExcludeOperationalFailures(t *testing.T) {
 	gc := oar.NewGuardContext()
 	ApplyToolRejectObservations(gc, invalid)
 	if len(gc.Invocation.ArgValidationErrors) != 1 || gc.Invocation.ArgValidationErrors[0] != invalid.Code || gc.Invocation.ArgValidationReason == "" {
-		t.Fatalf("[OAR-PROF-3] lost observed argument check: %#v", gc)
+		t.Fatalf("[OAR-FACT-10] lost observed argument check: %#v", gc)
 	}
 	operational := &toolrejection.ToolReject{Code: "HTTP_REQUEST_FAILED", Data: map[string]any{
 		"reason": "response transfer interrupted", "field": "response",
@@ -202,7 +202,7 @@ func TestArgumentCheckFactsExcludeOperationalFailures(t *testing.T) {
 	gc = oar.NewGuardContext()
 	ApplyToolRejectObservations(gc, operational)
 	if len(gc.Invocation.ArgValidationErrors) != 0 || gc.Invocation.ArgValidationReason != "" || gc.Invocation.ArgValidationField != "" {
-		t.Fatal("[OAR-PROF-3] operational failure was reported as an argument check")
+		t.Fatal("[OAR-FACT-10] operational failure was reported as an argument check")
 	}
 	err := bp.RejectFromObservation(t.Context(), oar.AnchorToolRejected, "http_request", "implement", nil, operational)
 	if err == nil || toolrejection.AsToolReject(err) != operational || !strings.Contains(err.Error(), "response transfer interrupted") {

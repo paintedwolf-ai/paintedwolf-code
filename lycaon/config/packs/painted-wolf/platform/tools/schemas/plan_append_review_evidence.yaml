@@ -3,7 +3,7 @@ schema:
   type: object
   properties:
     blueprint_path:
-      description: "Repo-relative blueprint path receiving the evidence line."
+      description: "Blueprint plan-store key receiving the evidence line (not a filesystem path)."
       type: string
     evidence:
       description: "Text line to append to critic.jsonl."

@@ -56,7 +56,7 @@ schema:
       description: JSON object or array, not serialized text.
     body_path:
       type: string
-      description: Project-scoped file to send, up to 32 MiB.
+      description: "Project-scoped file to send, up to 32 MiB: relative to the session folder, `@label/path` for any attached folder, `@output/path` for session output, or absolute."
     body_form:
       type: array
       maxItems: 64
@@ -77,7 +77,7 @@ schema:
         properties:
           name: {type: string, minLength: 1, maxLength: 256, description: Field name.}
           value: {type: string, maxLength: 5242880, description: Literal field value.}
-          path: {type: string, description: Project-scoped file for this part.}
+          path: {type: string, description: "Part file relative to the session folder, `@label/path` for any attached folder, `@output/path` for session output, or absolute."}
           filename: {type: string, maxLength: 256, description: Sent filename; defaults to file name.}
           content_type: {type: string, maxLength: 128, description: Part content type; defaults to application/octet-stream.}
         required: [name]
@@ -106,7 +106,7 @@ schema:
         type: object
         properties:
           name: {type: string, minLength: 1, maxLength: 64, description: Token name to store.}
-          from: {type: string, minLength: 1, maxLength: 128, description: Extraction source ('json:path' or 'header:name').}
+          from: {type: string, minLength: 1, maxLength: 128, description: "Extraction source ('json:path' or 'header:name') — a response extraction spec, not a filesystem path."}
         required: [name, from]
         additionalProperties: false
     host_header:
@@ -172,7 +172,7 @@ schema:
       description: A redaction receipt from the same request. Never invent one.
     unix_socket:
       type: string
-      description: Unix domain socket to send the request through, absolute or project-relative. The socket is the destination and is approved like any local service socket; the URL supplies only the path and Host header.
+      description: "Unix domain socket to send the request through: absolute, relative to the statement cwd (the session folder by default), or `@label/path`. The socket is the destination and is approved like any local service socket; the URL supplies only the path and Host header."
   required: [url]
   allOf:
     - not: {required: [body_text, body_json]}

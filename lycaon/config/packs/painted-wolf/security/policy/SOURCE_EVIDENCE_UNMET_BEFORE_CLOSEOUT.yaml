@@ -1,31 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SOURCE_EVIDENCE_UNMET_BEFORE_CLOSEOUT
 kind: policy
-anchor: coordinator.closeout_check
-requires:
-  facts:
-    - paintedwolf.cap
-    - paintedwolf.source_revision
-    - paintedwolf.verify_required
-    - paintedwolf.verifier_pass
+on: coordinator.closeout_check
+selector: {}
+requires_facts: [paintedwolf.cap, paintedwolf.source_revision, paintedwolf.verifier_pass, paintedwolf.verify_required]
 when: paintedwolf.verify_required && !paintedwolf.verifier_pass
 effect: block
-copy:
-  what: An explicit workflow check is unresolved for revision {{ paintedwolf.source_revision }}.
-  cause: No current passing check satisfies this workflow gate.
-  why: A required test gate and permission to report a blocker are separate facts.
-  fix: >-
-    Run the required check when useful recovery is possible. Both verify and command
-    produce evidence; a different command cannot substitute for a selected verify.test check.
-    Inspect the actual terminal outcome, not a running handle.
-  instead: >-
-    If no justified recovery remains, report the limitation now and include
-    `[verify: blocked - reason]` in your answer. This ends the turn without
-    passing or advancing the workflow gate. {{ paintedwolf.cap }} settled attempts is a
-    recovery ceiling, not a quota. Do not repeat unchanged failures.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:source_evidence
-x-paintedwolf-message: Required workflow validation is unresolved
+message: Required workflow validation is unresolved
+what: An explicit workflow check is unresolved for revision {{ paintedwolf.source_revision }}.
+cause: No current passing check satisfies this workflow gate.
+why: A required test gate and permission to report a blocker are separate facts.
+fix: >-
+  Run the required check when useful recovery is possible. Both verify and command produce evidence; a different command cannot substitute for a selected verify.test check. Inspect the actual terminal outcome, not a running handle.
+instead: >-
+  If no justified recovery remains, report the limitation now and include `[verify: blocked - reason]` in your answer. This ends the turn without passing or advancing the workflow gate. {{ paintedwolf.cap }} settled attempts is a recovery ceiling, not a quota. Do not repeat unchanged failures.
 x-paintedwolf-scenarios:
   - id: default
     vars: {source_revision: revision-3, cap: 3}

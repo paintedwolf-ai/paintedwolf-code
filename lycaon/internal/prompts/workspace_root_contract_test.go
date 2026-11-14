@@ -17,7 +17,7 @@ func TestRootKickTracksSessionPathResolution(t *testing.T) {
 	for _, roots := range [][]projectroot.RootRef{{a, b}, {b}, nil} {
 		for _, activeID := range []string{"", "a", "b", "removed"} {
 			data := prompts.RootsChangedKickData(projectroot.DiffRoots(before, roots), roots, activeID)
-			abs, resolved, err := projectroot.ResolveAbs(roots, activeID, "file.txt")
+			_, resolved, err := projectroot.ResolveAbs(roots, activeID, "file.txt")
 			active, present := data["active_root"].(map[string]any)
 			if err != nil {
 				if present {
@@ -25,8 +25,8 @@ func TestRootKickTracksSessionPathResolution(t *testing.T) {
 				}
 				continue
 			}
-			if !present || active["id"] != resolved.ID || filepath.Join(active["path"].(string), "file.txt") != abs {
-				t.Fatalf("active=%q prompt=%v resolver=%s/%s", activeID, active, resolved.ID, abs)
+			if !present || active["id"] != resolved.ID || active["label"] != resolved.Label {
+				t.Fatalf("active=%q prompt=%v resolver=%s/%s", activeID, active, resolved.ID, resolved.Label)
 			}
 			for _, root := range roots {
 				qualified, _, err := projectroot.ResolveAbs(roots, activeID, "@"+root.Label+"/file.txt")

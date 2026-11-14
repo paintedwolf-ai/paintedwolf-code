@@ -1,0 +1,46 @@
+{
+  "id": "eval-first-of-winning-effect-decides",
+  "title": "When several rules fire with the winning effect, the first in order decides",
+  "covers": [
+    "OAR-EVAL-10"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "B_WARN",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "true",
+      "what": "second"
+    },
+    {
+      "spec_version": "1.0",
+      "id": "A_WARN",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "true",
+      "what": "first"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "A_WARN",
+    "copy": {
+      "what": "first"
+    },
+    "applied": [
+      "A_WARN:fired",
+      "B_WARN:fired"
+    ]
+  }
+}

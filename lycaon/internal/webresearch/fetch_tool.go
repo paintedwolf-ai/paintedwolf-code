@@ -26,7 +26,8 @@ func registerFetchTool(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		limit := intArg(args, "limit")
 		// Each remote host requires its own egress decision.
 		contest, _ := args["unredact"].(string)
-		ctx = withToolEgressGate(ctx, deps, tctx, "fetch_url", nil, contest, screenDestination{})
+		dial := toolEgress{image: "fetch_url", origin: deps.addressOrigin(tctx, rawURL)}
+		ctx = withToolEgressGate(ctx, deps, tctx, dial, contest, screenDestination{})
 		defer confine.ForgetEgressAction(tctx.Identity.SessionID, tctx.Identity.ToolCallID)
 		out, fetched, err := fetchURLTool(ctx, fetchURLToolArgs{
 			URL:          rawURL,
@@ -54,6 +55,21 @@ func registerFetchTool(reg *tools.DefaultRegistry, deps ToolDeps) error {
 		}
 		return appendSecretReceipt(ctx, out), nil
 	})
+}
+
+// addressOrigin reports how the calling session or its chat came by exactly
+// this address, taking the stronger of the two.
+func (d ToolDeps) addressOrigin(tctx tools.ToolContext, rawURL string) confine.AddressOrigin {
+	rawURL = strings.TrimSpace(rawURL)
+	if d.AddressOrigin == nil || rawURL == "" {
+		return confine.AddressAuthored
+	}
+	session, chat := tctx.Identity.SessionID, tctx.ChatSessionID()
+	origin := d.AddressOrigin(session, rawURL)
+	if chat != session {
+		origin = min(origin, d.AddressOrigin(chat, rawURL))
+	}
+	return origin
 }
 
 type fetchURLToolArgs struct {

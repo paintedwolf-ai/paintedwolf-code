@@ -48,25 +48,32 @@ func TestCollectionThenReclamationKeepsPublication_AC_DB_01_AC_DB_02_AC_DB_03(t 
 		t.Fatalf("collection freed %d pages, fixture too small", before.FreelistPages)
 	}
 
-	// Foreground writes wake maintenance; nothing else requests it.
+	// Foreground writes wake maintenance; nothing else requests it. One
+	// progress snapshot pairs live page counts with counters sampled later,
+	// so a pass can complete between those reads; wait for a fresh snapshot
+	// where the reclamation and the resulting shrink are both visible.
 	wake, stop := context.WithCancel(ctx)
 	done := make(chan error, 1)
 	go func() { done <- db.RunMaintenance(wake, database, cfg) }()
+	deadline := time.Now().Add(10 * time.Second)
 	var progress db.MaintenanceProgress
-	for progress.PagesReclaimed == 0 {
+	for {
 		for range 64 {
 			_, err := s.db.ExecContext(ctx, `DELETE FROM source_manifest_entries WHERE chunk_id='no-such-chunk'`)
 			testutil.FailErr(t, "foreground write", err)
 		}
 		progress, err = database.MaintenanceProgress(ctx, cfg)
 		testutil.FailErr(t, "read progress", err)
+		if progress.PagesReclaimed > 0 && progress.PageCount < before.PageCount {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("reclamation never shrank the file: progress=%+v before=%+v", progress, before)
+		}
 	}
 	stop()
 	<-done
 
-	if progress.PageCount >= before.PageCount {
-		t.Fatalf("file stayed at %d pages after reclaiming %d", progress.PageCount, progress.PagesReclaimed)
-	}
 	if got := countRows(t, s, `SELECT COUNT(*) FROM source_manifest_entries WHERE chunk_id IN ('held-chunk','built-chunk')`); got != retained {
 		t.Fatalf("retained entries %d, want %d", got, retained)
 	}

@@ -1,0 +1,26 @@
+{
+  "id": "expr-int-against-double-rejected",
+  "title": "Ordering an int against a double is rejected at load",
+  "covers": [
+    "OAR-EXPR-10"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "jailbreak_score > 1"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "jailbreak_score": 0.9
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-10"
+  }
+}

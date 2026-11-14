@@ -48,7 +48,7 @@ func resolveFilesystemPath(ctx context.Context, b *sandbox.Boundary, tctx tools.
 	}
 	return Resolved{
 		Abs: abs, DisplayPath: abs, ScopeRel: filepath.ToSlash(rel),
-		Root: projectroot.RootRef{Path: anchor}, External: true,
+		Root: projectroot.RootRef{Path: anchor, External: true}, External: true,
 	}, true, nil
 }
 

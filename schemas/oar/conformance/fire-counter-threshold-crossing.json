@@ -1,0 +1,62 @@
+{
+  "id": "fire-counter-threshold-crossing",
+  "title": "A rule reads another rule's counter on a later occurrence",
+  "covers": [
+    "OAR-FIRE-3",
+    "OAR-FIRE-4",
+    "OAR-FIRE-6"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "BELOW_THRESHOLD",
+      "kind": "invariant",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "nudge",
+      "when": "tool == \"read\"",
+      "on_fire": [
+        "increment_breaker",
+        "increment_breaker",
+        "increment_breaker"
+      ]
+    },
+    {
+      "spec_version": "1.0",
+      "id": "THRESHOLD_ARMED",
+      "kind": "invariant",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "breaker_count_of(\"BELOW_THRESHOLD\") >= 3"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "read"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "block",
+    "code": "THRESHOLD_ARMED",
+    "applied": [
+      "BELOW_THRESHOLD:fired",
+      "THRESHOLD_ARMED:fired"
+    ],
+    "counters": {
+      "BELOW_THRESHOLD": {
+        "breaker_count": 6
+      }
+    }
+  }
+}

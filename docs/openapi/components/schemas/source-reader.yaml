@@ -63,15 +63,20 @@ components:
         row: {type: integer, minimum: 0}
         from: {type: integer, minimum: 0}
         to: {type: integer, minimum: 0}
+    FileEditSource:
+      type: string
+      enum: [file_edit, overlay_promotion]
+      description: The tool result list a file edit reference indexes. `file_edit` is file_edits; `overlay_promotion` is the promoted files.
     FileEditReference:
       x-go-generate: true
       type: object
       additionalProperties: false
-      required: [message_id, tool_call_id, index]
+      required: [message_id, tool_call_id, source, index]
       properties:
         message_id: {type: string, format: uuid}
         tool_call_id: {type: string, pattern: '^[A-Za-z0-9_.:-]+$'}
-        index: {type: integer, minimum: 0, description: 'Zero for file_edit; one-based index for a promotion file.'}
+        source: {$ref: '#/components/schemas/FileEditSource'}
+        index: {type: integer, minimum: 0, description: Zero-based position in that list.}
     FileEditPreview:
       x-go-generate: true
       type: object

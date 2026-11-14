@@ -1,6 +1,7 @@
 package oar
 
 import (
+	"sort"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -10,6 +11,21 @@ type fakeMCPCatalog struct {
 	configured map[string]bool
 	enabled    map[string]bool
 	tools      map[string]struct{ providerID, toolName string }
+}
+
+func (f *fakeMCPCatalog) ConfiguredProviderIDs() []string { return sortedTrue(f.configured) }
+
+func (f *fakeMCPCatalog) EnabledProviderIDs() []string { return sortedTrue(f.enabled) }
+
+func sortedTrue(set map[string]bool) []string {
+	out := []string{}
+	for id, ok := range set {
+		if ok {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func (f *fakeMCPCatalog) ProviderConfigured(id string) bool {
@@ -50,10 +66,10 @@ func TestObserveMCPStructuralNonMCPZeros(t *testing.T) {
 	}
 	gc := NewGuardContext()
 	ObserveMCPStructuralPre(gc, "read", cat)
-	if gc.MCP.MCPProviderID != "" || gc.MCP.MCPToolName != "" || gc.MCP.MCPQualifiedTool != "" {
-		t.Fatalf("expected zero identity, got id=%q tool=%q qual=%q", gc.MCP.MCPProviderID, gc.MCP.MCPToolName, gc.MCP.MCPQualifiedTool)
+	if gc.MCP.MCPServerID != "" || gc.MCP.MCPToolName != "" || gc.MCP.MCPQualifiedTool != "" {
+		t.Fatalf("expected zero identity, got id=%q tool=%q qual=%q", gc.MCP.MCPServerID, gc.MCP.MCPToolName, gc.MCP.MCPQualifiedTool)
 	}
-	if gc.MCP.MCPProviderConfigured || gc.MCP.MCPProviderEnabled || gc.MCP.MCPCallOK || gc.MCP.MCPSchemaMatched {
+	if gc.MCP.MCPServerConfigured || gc.MCP.MCPServerEnabled || gc.MCP.MCPCallOK || gc.MCP.MCPSchemaMatched {
 		t.Fatal("expected zero MCP bools for non-MCP tool")
 	}
 	if gc.MCP.MCPErrorCode != "" {
@@ -71,10 +87,10 @@ func TestObserveMCPStructuralPre(t *testing.T) {
 	}
 	gc := NewGuardContext()
 	ObserveMCPStructuralPre(gc, "mcp_fixture_echo", cat)
-	if gc.MCP.MCPProviderID != "fixture" || gc.MCP.MCPToolName != "echo" || gc.MCP.MCPQualifiedTool != "mcp_fixture_echo" {
-		t.Fatalf("identity: %+v %+v %+v", gc.MCP.MCPProviderID, gc.MCP.MCPToolName, gc.MCP.MCPQualifiedTool)
+	if gc.MCP.MCPServerID != "fixture" || gc.MCP.MCPToolName != "echo" || gc.MCP.MCPQualifiedTool != "mcp_fixture_echo" {
+		t.Fatalf("identity: %+v %+v %+v", gc.MCP.MCPServerID, gc.MCP.MCPToolName, gc.MCP.MCPQualifiedTool)
 	}
-	if !gc.MCP.MCPProviderConfigured || !gc.MCP.MCPProviderEnabled {
+	if !gc.MCP.MCPServerConfigured || !gc.MCP.MCPServerEnabled {
 		t.Fatal("expected configured+enabled")
 	}
 	if gc.MCP.MCPCallOK || gc.MCP.MCPErrorCode != "" || gc.MCP.MCPSchemaMatched {
@@ -116,13 +132,13 @@ func TestObserveMCPStructuralPostMachineCode(t *testing.T) {
 	if gc.MCP.MCPErrorCode != "MCP_TOOL_FAILED" {
 		t.Fatalf("error_code=%q", gc.MCP.MCPErrorCode)
 	}
-	if gc.MCP.MCPProviderEnabled {
+	if gc.MCP.MCPServerEnabled {
 		t.Fatal("expected disabled provider flag")
 	}
 }
 
 func TestMCPStructuralConditionEvaluation(t *testing.T) {
-	testutil.FailErr(t, "validate vars", checkWhenAgainstSpec(`mcp_provider_id != "" && mcp_provider_enabled`, nil))
+	testutil.FailErr(t, "validate vars", checkWhenAgainstSpec(`mcp_server_id != "" && mcp_server_enabled`, nil))
 	cat := &fakeMCPCatalog{
 		configured: map[string]bool{"fixture": true},
 		enabled:    map[string]bool{"fixture": true},
@@ -132,23 +148,23 @@ func TestMCPStructuralConditionEvaluation(t *testing.T) {
 	}
 	gc := NewGuardContext()
 	ObserveMCPStructuralPre(gc, "mcp_fixture_echo", cat)
-	ok, err := EvaluateCondition(`mcp_provider_id != "" && mcp_provider_enabled`, gc)
+	ok, err := EvaluateCondition(`mcp_server_id != "" && mcp_server_enabled`, gc)
 	testutil.FailErr(t, "eval vars", err)
 	if !ok {
 		t.Fatal("expected fire")
 	}
 
-	testutil.FailErr(t, "validate fn", checkWhenAgainstSpec(`mcp_provider_enabled_for("fixture")`, nil))
-	ok, err = EvaluateCondition(`mcp_provider_enabled_for("fixture")`, gc)
-	testutil.FailErr(t, "eval fn", err)
+	testutil.FailErr(t, "validate enabled", checkWhenAgainstSpec(`"fixture" in mcp_enabled_servers`, nil))
+	ok, err = EvaluateCondition(`"fixture" in mcp_enabled_servers`, gc)
+	testutil.FailErr(t, "eval enabled", err)
 	if !ok {
-		t.Fatal("expected mcp_provider_enabled_for(\"fixture\")")
+		t.Fatal("expected fixture in mcp_enabled_servers")
 	}
 
 	testutil.FailErr(t, "validate configured", checkWhenAgainstSpec(
-		`mcp_provider_configured_for("fixture") && !mcp_provider_configured_for("missing")`, nil,
+		`"fixture" in mcp_configured_servers && !("missing" in mcp_configured_servers)`, nil,
 	))
-	ok, err = EvaluateCondition(`mcp_provider_configured_for("fixture") && !mcp_provider_configured_for("missing")`, gc)
+	ok, err = EvaluateCondition(`"fixture" in mcp_configured_servers && !("missing" in mcp_configured_servers)`, gc)
 	testutil.FailErr(t, "eval configured", err)
 	if !ok {
 		t.Fatal("expected configured fn parity")

@@ -8,6 +8,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/egress"
@@ -184,5 +185,28 @@ func TestGuardedGetReturnsTheCallersPrefix(t *testing.T) {
 	body, err := io.ReadAll(resp.Body)
 	if err != nil || string(body) != page[:verifyBodyByteLimit] {
 		t.Fatalf("read %d bytes, err %v; want the first %d", len(body), err, verifyBodyByteLimit)
+	}
+}
+
+// A fetch's I/O bound is the caller's remaining deadline, read before the door
+// waits for any approval, and never more than the default.
+func TestFetchTimeoutFollowsTheCallersDeadline(t *testing.T) {
+	if got := fetchTimeout(context.Background()); got != defaultFetchTimeout {
+		t.Fatalf("no deadline = %v, want the default", got)
+	}
+	probe, cancel := context.WithTimeout(context.Background(), verifyFetchTimeout)
+	defer cancel()
+	if got := fetchTimeout(probe); got <= 0 || got > verifyFetchTimeout {
+		t.Fatalf("a probe's deadline = %v, want at most %v", got, verifyFetchTimeout)
+	}
+	long, cancelLong := context.WithTimeout(context.Background(), 10*defaultFetchTimeout)
+	defer cancelLong()
+	if got := fetchTimeout(long); got != defaultFetchTimeout {
+		t.Fatalf("a longer deadline = %v, want the default", got)
+	}
+	spent, cancelSpent := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+	defer cancelSpent()
+	if got := fetchTimeout(spent); got != 0 {
+		t.Fatalf("a spent deadline = %v, want none left", got)
 	}
 }

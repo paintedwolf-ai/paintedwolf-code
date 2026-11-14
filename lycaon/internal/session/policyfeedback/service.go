@@ -48,9 +48,6 @@ func (m *Service) RenderResult(ctx context.Context, anchor string, res *oar.Pipe
 		if !blocks {
 			ref.Facts.Outcome = api.ToolResultOutcomeCompleted
 		}
-		for _, a := range res.Decision.Advisories {
-			ref.Facts = ref.Facts.WithFeedback(a.Code, Details(a.Rule, a.Data), Subject("", a.Data))
-		}
 		return ref, blocks, nil
 	}
 	return fallback, blocks, nil
@@ -90,10 +87,6 @@ func (m *Service) DeliverPostToolResult(ctx context.Context, anchor, output stri
 	if decision.Effect == oar.EffectNudge {
 		return output, facts
 	}
-	if decision.Effect == oar.EffectTransform {
-		facts.ContentReplaced = true
-		return res.Content, facts.WithFeedback(decision.Code, Details(decision.Rule, decision.Data), Subject("", decision.Data))
-	}
 	banner, _, err := m.RenderResult(ctx, anchor, res)
 	if decision.Effect == oar.EffectBlock {
 		facts.ContentReplaced = true
@@ -105,9 +98,6 @@ func (m *Service) DeliverPostToolResult(ctx context.Context, anchor, output stri
 	}
 	if err != nil || banner == nil || strings.TrimSpace(banner.Body) == "" {
 		return output, facts
-	}
-	for _, advisory := range decision.Advisories {
-		facts = facts.WithFeedback(advisory.Code, Details(advisory.Rule, advisory.Data), Subject("", advisory.Data))
 	}
 	return output + "\n" + banner.Body, facts.WithFeedback(decision.Code, Details(decision.Rule, decision.Data), Subject("", decision.Data))
 }

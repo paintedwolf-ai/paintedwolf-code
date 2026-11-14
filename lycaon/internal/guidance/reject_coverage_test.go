@@ -40,7 +40,9 @@ func TestEveryRejectCodeHasScenario(t *testing.T) {
 	setupGuidanceRenderer(t)
 	f := guidance.NewStaticRejectFormatter(cfg)
 	for code, entry := range cfg.HintCodes {
-		if guidance.CopyOnlyEmit(entry.Emit) {
+		// Copy-only units and OAR hints are never evaluated, so they carry no
+		// scenarios to rehearse.
+		if guidance.CopyOnlyEmit(entry.Emit) || entry.Kind == "hint" {
 			continue
 		}
 		// Warn-severity hints render through the same formatter, so their

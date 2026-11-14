@@ -1,46 +1,24 @@
 {
   "id": "fact-unknown-identifier-rejected",
-  "title": "A condition naming something that is not a declared fact or function is refused at load",
+  "title": "A condition referencing an undeclared fact is rejected at load, naming it",
   "covers": [
-    "OAR-FACT-3",
-    "OAR-FACT-1",
+    "OAR-FACT-2",
     "OAR-CONF-5"
   ],
-  "rules": [
-    {
-      "oar": "1.0",
-      "namespace": "oar.test",
-      "kind": "policy",
-      "anchor": "tool.pre_invoke",
-      "id": "GHOST",
-      "effect": "block",
-      "when": "ghost_fact == \"x\""
-    }
-  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "GHOST_IDENTIFIER",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "ghost_fact"
+  },
   "input": {
-    "capability": {
-      "oar_capability_version": "1.0",
-      "host": "oar.testhost",
-      "anchors": {
-        "core": {
-          "tool.pre_invoke": "tool.pre_invoke",
-          "tool.handler": "tool.handler",
-          "tool.post_invoke": "tool.post_invoke",
-          "agent.post_turn": "agent.post_turn",
-          "agent.finalize": "agent.finalize",
-          "model.input": "model.input",
-          "model.output": "model.output",
-          "model.tool_result": "model.tool_result"
-        },
-        "unsupported": []
-      },
-      "profiles": [],
-      "activity_window": 0,
-      "detectors": [],
-      "expression_nodes_max": 1024,
-      "supports_transform": false
-    },
-    "anchor": "tool.pre_invoke"
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
   },
   "expected": {
     "error": "ghost_fact"

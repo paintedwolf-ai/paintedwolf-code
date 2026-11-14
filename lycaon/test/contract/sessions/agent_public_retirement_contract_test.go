@@ -126,7 +126,7 @@ func liveRuleEffects(t *testing.T) map[string]struct{} {
 	out := map[string]struct{}{
 		"inform": {}, // anchor binding effect; it has no typed constant
 	}
-	for _, eff := range []oar.Effect{oar.EffectBlock, oar.EffectWarn, oar.EffectNudge, oar.EffectAllow, oar.EffectTransform} {
+	for _, eff := range []oar.Effect{oar.EffectBlock, oar.EffectWarn, oar.EffectNudge, oar.EffectAllow} {
 		out[string(eff)] = struct{}{}
 	}
 	for _, eff := range []settings.ApprovalEffect{settings.ApprovalEffectAsk, settings.ApprovalEffectDeny} {

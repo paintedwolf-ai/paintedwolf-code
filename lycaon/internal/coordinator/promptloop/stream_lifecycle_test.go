@@ -222,7 +222,7 @@ func TestCoordinatorStreamFailureWithdrawsPartialDraftAfterLiveFlush(t *testing.
 
 func TestOps8StreamDecisionPrecedesEveryContentDelivery(t *testing.T) {
 	for _, blocked := range []bool{false, true} {
-		name := "transform"
+		name := "allow"
 		if blocked {
 			name = "block"
 		}
@@ -242,7 +242,7 @@ func TestOps8StreamDecisionPrecedesEveryContentDelivery(t *testing.T) {
 					AppendMessages: func(_ context.Context, _ string, messages ...api.Message) error {
 						for _, message := range messages {
 							if message.Content != "" {
-								t.Fatal("[OAR-OPS-8] placeholder published unreviewed content")
+								t.Fatal("[OAR-OPS-6] placeholder published unreviewed content")
 							}
 						}
 						return nil
@@ -250,18 +250,18 @@ func TestOps8StreamDecisionPrecedesEveryContentDelivery(t *testing.T) {
 					Streams: &testMessageStreams{
 						cachelive: func(_, _, content string, tokens []string, _ int) {
 							if content != "" || len(tokens) != 0 {
-								t.Fatal("[OAR-OPS-8] live cache exposed partial content")
+								t.Fatal("[OAR-OPS-6] live cache exposed partial content")
 							}
 						},
 						cachereplay: func(_, content string, tokens []string) {
 							replays++
-							if !reviewed || blocked || content != "reviewed replacement" || strings.Join(tokens, "") != "reviewed replacement" {
-								t.Fatalf("[OAR-OPS-8] replay content=%q tokens=%v", content, tokens)
+							if !reviewed || blocked || !strings.Contains(content, "final answer") || !strings.Contains(strings.Join(tokens, ""), "final answer") {
+								t.Fatalf("[OAR-OPS-6] replay content=%q tokens=%v", content, tokens)
 							}
 						},
 						project: func(_ context.Context, _ string, message api.Message) error {
 							if message.Content != "" {
-								t.Fatal("[OAR-OPS-8] live projection exposed content")
+								t.Fatal("[OAR-OPS-6] live projection exposed content")
 							}
 							return nil
 						},
@@ -269,25 +269,25 @@ func TestOps8StreamDecisionPrecedesEveryContentDelivery(t *testing.T) {
 					},
 					UpdateMessage: func(_ context.Context, _, _ string, message api.Message) error {
 						updates++
-						if !reviewed || blocked || message.Content != "reviewed replacement" {
-							t.Fatalf("[OAR-OPS-8] persisted content %q", message.Content)
+						if !reviewed || blocked || !strings.Contains(message.Content, "final answer") {
+							t.Fatalf("[OAR-OPS-6] persisted content %q", message.Content)
 						}
 						return nil
 					},
 				},
 				Closeout: CloseoutDeps{
-					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, observation oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool, string, bool) {
+					EvaluateContentAnchor: func(_ context.Context, _ *api.Session, anchor string, observation oar.ContentObservation, _ string, _ map[string]any) (*guidance.Refusal, bool) {
 						if anchor != oar.AnchorContentOutput {
-							return nil, false, "", false
+							return nil, false
 						}
 						if len(observation.Segments) != 1 || !strings.Contains(observation.Segments[0].Content, "final answer") {
-							t.Fatalf("[OAR-OPS-8] incomplete buffer: %#v", observation.Segments)
+							t.Fatalf("[OAR-OPS-6] incomplete buffer: %#v", observation.Segments)
 						}
 						reviewed = true
 						if blocked {
-							return guidance.NewRefusal("WITHHELD", "withheld"), true, "", false
+							return guidance.NewRefusal("WITHHELD", "withheld"), true
 						}
-						return nil, false, "reviewed replacement", true
+						return nil, false
 					},
 				},
 			})
@@ -295,10 +295,10 @@ func TestOps8StreamDecisionPrecedesEveryContentDelivery(t *testing.T) {
 			_, _, _, err := loop.Model.runAssistantStreamTurn(t.Context(), sess.ID, sess, nil, &promptLoopTurnState{}, "worker", "go", 0, 3, false)
 			if blocked {
 				if err == nil || updates != 0 || replays != 0 {
-					t.Fatalf("[OAR-OPS-8] blocked delivery: err=%v updates=%d replays=%d", err, updates, replays)
+					t.Fatalf("[OAR-OPS-6] blocked delivery: err=%v updates=%d replays=%d", err, updates, replays)
 				}
 			} else if err != nil || updates != 1 || replays != 1 {
-				t.Fatalf("[OAR-OPS-8] transformed delivery: err=%v updates=%d replays=%d", err, updates, replays)
+				t.Fatalf("[OAR-OPS-6] reviewed delivery: err=%v updates=%d replays=%d", err, updates, replays)
 			}
 		})
 	}

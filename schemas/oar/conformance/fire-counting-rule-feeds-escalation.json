@@ -1,0 +1,61 @@
+{
+  "id": "fire-counting-rule-feeds-escalation",
+  "title": "An allow rule that counts feeds a rule that escalates on the count",
+  "covers": [
+    "OAR-FIRE-6",
+    "OAR-FIRE-5"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "COUNT_SHELL",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "allow",
+      "when": "tool == \"shell\"",
+      "on_fire": [
+        "increment_counter"
+      ]
+    },
+    {
+      "spec_version": "1.0",
+      "id": "SHELL_REPEATED",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "fire_count_of(\"COUNT_SHELL\") >= 2"
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "shell"
+    },
+    "session_id": "fixture-session",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "shell"
+        }
+      },
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "shell"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "SHELL_REPEATED",
+    "counters": {
+      "COUNT_SHELL": {
+        "fire_count": 3
+      }
+    }
+  }
+}

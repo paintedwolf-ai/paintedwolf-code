@@ -17,7 +17,7 @@ func (d *ProgramDispatcher) checkPreparedPolicy(ctx context.Context, tc tools.To
 		if requirement.Mode != selectEffectMode(spec, mode) {
 			continue
 		}
-		effects, err := requirement.CommandEffects(d.childEffectSet(spec, requirement.Mode, request))
+		effects, err := requirement.CommandEffects(d.childEffectSet(ctx, spec, requirement.Mode, request))
 		if err != nil {
 			return err
 		}

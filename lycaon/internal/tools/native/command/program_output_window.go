@@ -125,7 +125,17 @@ func sampleOutput(reader io.Reader, budget int) (outputSample, error) {
 func (s outputSample) window(ctx context.Context, stream, ref, path string, complete bool) (string, api.CommandProgramOutputWindow, []deliveredOutputPart, error) {
 	window := api.CommandProgramOutputWindow{Stream: stream, Ref: ref, OutputPath: path, TotalBytes: s.total, TotalLines: s.lines, Complete: complete, InlineBudgetBytes: s.budget}
 	if s.total <= int64(s.budget) {
-		return string(s.head), window, []deliveredOutputPart{{0, s.head}}, nil
+		if complete {
+			return string(s.head), window, []deliveredOutputPart{{0, s.head}}, nil
+		}
+		// The capture ended before the stream did: deliver the prefix with the
+		// incomplete notice instead of presenting it as the full stream.
+		notice, err := guidance.RenderCommandOutputOmitted(ctx, formatDecimalCommas(0), formatOmittedSize(0), path, s.lines+1, s.lines+1, s.lines, s.total, complete)
+		if err != nil {
+			return "", window, nil, err
+		}
+		window.Truncated = true
+		return string(s.head) + notice + "\n", window, []deliveredOutputPart{{0, s.head}}, nil
 	}
 	headEnd := snapHeadEnd(s.head, s.budget/2)
 	tailStart := snapTailStart(s.tail, 0, s.budget-s.budget/2)

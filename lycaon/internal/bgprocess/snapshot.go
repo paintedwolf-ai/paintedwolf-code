@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/lycaon/lycaon/internal/captureprojection"
-	"github.com/lycaon/lycaon/internal/confine"
 	"github.com/lycaon/lycaon/internal/hostcmd"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -157,20 +156,21 @@ type RawOutput struct {
 	Handle string
 	// From is the requested offset; Next is the offset just past the last
 	// retained byte.
-	From      int64
-	Next      int64
-	Chunks    []OutputChunk
-	Running   bool
-	Truncated bool
-	ExitCode  *int
+	From    int64
+	Next    int64
+	Chunks  []OutputChunk
+	Running bool
+	// AwaitingPerson reports a running job blocked on a person's decision.
+	AwaitingPerson bool
+	Truncated      bool
+	ExitCode       *int
 }
 
-// OutputSnapshot combines process output with its spawn boundary.
+// OutputSnapshot combines process output with its confinement.
 type OutputSnapshot struct {
 	TerminationReason TerminationReason
 	Output            RawOutput
-	Boundary          confine.Boundary
-	Facts             confine.SpawnFacts
+	Confinement       JobConfinement
 	// Failure is the run error the exit status does not carry.
 	Failure *hostcmd.ExecFailure
 }
@@ -184,23 +184,26 @@ func (r *Output) ReadRawOutput(sessionID, handle string, cursor int64) (OutputSn
 	chunks, next, truncated := proc.buffer.ReadSince(cursor)
 	r.jobs.mu.Lock()
 	running, hasExit, exitCode, failure := proc.running, proc.hasExit, proc.exitCode, proc.failure
+	confinement := proc.confinementLocked()
+	awaiting := running && proc.personWaits > 0
 	var terminationReason TerminationReason
 	if hasExit {
 		terminationReason = proc.reason
 	}
 	r.jobs.mu.Unlock()
 	out := RawOutput{
-		Handle:    handle,
-		From:      cursor,
-		Next:      next,
-		Chunks:    chunks,
-		Running:   running,
-		Truncated: truncated,
+		Handle:         handle,
+		From:           cursor,
+		Next:           next,
+		Chunks:         chunks,
+		Running:        running,
+		AwaitingPerson: awaiting,
+		Truncated:      truncated,
 	}
 	if hasExit {
 		out.ExitCode = &exitCode
 	}
-	return OutputSnapshot{Output: out, Boundary: proc.boundary, Facts: proc.facts, Failure: failure, TerminationReason: terminationReason}, nil
+	return OutputSnapshot{Output: out, Confinement: confinement, Failure: failure, TerminationReason: terminationReason}, nil
 }
 
 // ReadOutput returns the safe Den-facing projection of the whole retained window.

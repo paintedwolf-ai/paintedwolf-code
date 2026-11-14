@@ -17,13 +17,13 @@ import (
 func TestFact21ToolOccurrenceUsesCallerAndActiveProfile(t *testing.T) {
 	testutil.FailErr(t, "install catalogue", anchorcatalog.InstallBundled())
 	dir := t.TempDir()
-	document := `oar: '1.0'
+	document := `spec_version: '1.0'
 id: CALLER_POLICY
 kind: policy
-anchor: tool.pre_invoke
-requires:
-  profiles: [session, tool]
-when: principal == "person" && "owner" in principal_roles && permission_profile == "implement" && session_posture == "build"
+on: tool.pre_invoke
+selector: {}
+requires_facts: [paintedwolf.principal, paintedwolf.principal_roles, paintedwolf.session_posture, paintedwolf.tool_profile]
+when: paintedwolf.principal == "person" && "owner" in paintedwolf.principal_roles && paintedwolf.tool_profile == "implement" && paintedwolf.session_posture == "build"
 effect: block
 `
 	testutil.FailErr(t, "write caller policy", os.WriteFile(filepath.Join(dir, "caller.yaml"), []byte(document), 0o600))
@@ -37,9 +37,9 @@ effect: block
 	ctx := curationctx.WithSession(t.Context(), curationctx.Session{SessionID: "session", Agent: "agent-type", OwnerPersonID: "owner", Posture: "build"})
 	ctx = people.WithCaller(ctx, people.Person{ID: "person", Role: api.PersonRoleOwner})
 	if err := bp.Evaluate(ctx, oar.AnchorToolPreInvoke, "read", "implement", nil, nil); err == nil {
-		t.Fatal("[OAR-FACT-21] caller-scoped policy did not see the real occurrence facts")
+		t.Fatal("[OAR-PROF-2] caller-scoped policy did not see the real occurrence facts")
 	}
 	if err := bp.Evaluate(ctx, oar.AnchorToolPreInvoke, "read", "worker_readonly", nil, nil); err != nil {
-		t.Fatalf("[OAR-SEL-1] policy crossed permission profiles: %v", err)
+		t.Fatalf("policy crossed permission profiles: %v", err)
 	}
 }

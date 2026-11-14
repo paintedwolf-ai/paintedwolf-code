@@ -1,0 +1,55 @@
+{
+  "id": "fire-same-call-run-ignores-member-order",
+  "title": "same_call_run compares arguments as JSON values, ignoring member order",
+  "covers": [
+    "OAR-FIRE-9",
+    "OAR-FACT-20",
+    "OAR-FIRE-10"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "warn",
+    "when": "same_call_run >= 2"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "tool_args": {
+        "path": "a",
+        "limit": 10
+      }
+    },
+    "session_id": "fixture-session",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "read",
+          "tool_args": {
+            "limit": 10,
+            "path": "a"
+          }
+        }
+      },
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "read",
+          "tool_args": {
+            "path": "a",
+            "limit": 10.0
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "R"
+  }
+}

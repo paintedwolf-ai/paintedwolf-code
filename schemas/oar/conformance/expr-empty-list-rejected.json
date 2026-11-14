@@ -1,0 +1,25 @@
+{
+  "id": "expr-empty-list-rejected",
+  "title": "An empty list literal is rejected at load",
+  "covers": [
+    "OAR-EXPR-7"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool in []"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-7"
+  }
+}

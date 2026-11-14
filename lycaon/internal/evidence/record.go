@@ -20,7 +20,8 @@ type Record struct {
 	SupersededBy string `json:"-"`
 	Survey       bool   // true for survey-grade observations
 	Truncated    bool   // body capture exceeded EvidenceCaptureBodyCapBytes
-	Path         string // normalized repo-relative when the tool touched a path
+	Path         string // scope-relative when the tool touched a rooted path; legacy normalized token otherwise
+	RootID       string // owning root of Path; empty for legacy rows and unrooted tokens
 	LineRanges   []LineRange
 	Body         []string // result lines for excerpt verification
 	URL          string   // primary observed URL
@@ -34,8 +35,8 @@ type Record struct {
 	grepLines    map[string]map[int]string // grep kind: path → line → content
 	pathsTouched []string                  // additional normalized paths for ByPath index
 	pathTiers    map[string]string         // normalized path → trust tier at capture
-	urlsTouched  []string                  // every URL named by the result
-	urlTitles    map[string]string         // URL → page title the tool reported
+	rooted       recordPathRoots           // root identity of indexed paths beyond RootID
+	urls         recordURLs                // addresses beyond the primary URL
 
 	// Gate/inspector fields — populated when GateType != "" (scan verify/security rows).
 	GateType       string         `json:"type,omitempty"`
@@ -49,6 +50,23 @@ type Record struct {
 	Attempt        int            `json:"attempt,omitempty"`
 	HeadSHA        string         `json:"head_sha,omitempty"`
 	RecordedAt     string         `json:"at,omitempty"` // RFC3339 in gate JSONL
+}
+
+// recordPathRoots is the root identity of a record's indexed paths.
+type recordPathRoots struct {
+	// owners maps a stored key to its root when that differs from RootID;
+	// absent entries share RootID and empty values mark legacy tokens.
+	owners map[string]string
+	// display is each stored key's session-folder token, stamped at write
+	// and load time against the session's active root.
+	display map[string]string
+}
+
+// recordURLs is the addresses a result carried beyond its primary URL.
+type recordURLs struct {
+	touched []string          // every URL named by the result
+	titles  map[string]string // URL → page title the tool reported
+	shown   []string          // addresses a read page displayed; not sources
 }
 
 // FileCustody tracks workspace file custody provenance and the per-session

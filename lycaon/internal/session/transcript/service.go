@@ -21,6 +21,7 @@ type Store interface {
 	Get(context.Context, string) (*api.Session, error)
 	AppendMessages(context.Context, string, ...api.Message) error
 	GetMessage(context.Context, string, string) (api.Message, error)
+	ToolResultMessageID(context.Context, string, string) (string, error)
 	GetMessages(context.Context, string) ([]api.Message, error)
 	GetTranscriptPage(context.Context, string, api.TranscriptPageQuery) (api.SessionTranscriptPage, error)
 	ListTurnLoadReceiptsForTurns(context.Context, []string) ([]store.TurnLoadReceipt, error)
@@ -71,6 +72,7 @@ type Service struct {
 	redactMessageForStorage Redactor
 	secretSweeps            sweepQueue
 	reconcile               Reconciler
+	programEdits            programEdits
 }
 
 func New(store Store, workspace Workspace) *Service {

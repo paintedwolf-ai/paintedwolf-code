@@ -161,7 +161,7 @@ func (s mergeEngine) applyPromoteOverlayPlans(ctx context.Context, work promoteW
 	}
 	revertPending := func() error { return s.releaseMergeClaim(ctx, claim) }
 	if s.Captures != nil {
-		s.Captures.RecordPromotedPrimaryPaths(ctx, work.sessionID, promoteMutationPaths(plans))
+		s.Captures.RecordPromotedPrimaryPaths(ctx, work.sessionID, promoteMutationIdentities(plans))
 	}
 	promote := PromoteRootsForTask(work.task, work.roots)
 	tx, err := beginPromoteTransaction(s.hostDataDirFor(work.task), work.overlayID, plans)

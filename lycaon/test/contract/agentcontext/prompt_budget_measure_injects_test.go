@@ -20,6 +20,7 @@ import (
 	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/reviewcoverage"
 	scancoverage "github.com/lycaon/lycaon/internal/scan/coverage"
+	"github.com/lycaon/lycaon/internal/session/viewcontext"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
 	workflowpresentation "github.com/lycaon/lycaon/internal/workflow/presentation"
@@ -75,10 +76,9 @@ func measureCoordinatorInjectBlock(
 		for _, unit := range catalog.Units() {
 			if unit.Slot == promptunit.SlotProcedures && unit.HostsFor(host) {
 				offered = append(offered, unit.Attaches...)
-				offered = append(offered, unit.NeededWith...)
 			}
 		}
-		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered, nil)
+		block, err := inject.RenderToolProceduresBlock(ctx, renderer, "sess-inject-test", profile, offered)
 		contractcheck.FailErr(t, "render tool procedures", err)
 		return block
 	case "command_jobs", "worker_command_jobs":
@@ -91,14 +91,18 @@ func measureCoordinatorInjectBlock(
 				mode = bgprocess.JobModeAwaited
 				timeout = 10 * time.Minute
 			}
-			jobs = append(jobs, bgprocess.JobSnapshot{
+			job := bgprocess.JobSnapshot{
 				Handle: fmt.Sprintf("command-%d", i), Mode: mode, OriginTool: "verify",
 				StartedAt: now.Add(-time.Duration(i+1) * time.Minute), Timeout: timeout,
 				Stages: []hostcmd.StageResult{{
-					// A live job has not exited, so it carries no exit code.
 					Command: "./task test:digest -- ./internal/" + strings.Repeat("wide-scope/", 80),
 				}},
-			})
+			}
+			// The widest ledger mixes running jobs with unobserved exits.
+			if i >= 6 {
+				job.Exited, job.ExitCode, job.Refusals = true, 1, 3
+			}
+			jobs = append(jobs, job)
 		}
 		surface := "coordinator"
 		if spec.ID == "worker_command_jobs" {
@@ -130,6 +134,22 @@ func measureCoordinatorInjectBlock(
 			})
 		}
 		return inject.RenderSourceChangesBlock(ctx, renderer, "sess-inject-test", brief, true)
+	case "view_context":
+		long := func(kind string, i int) string {
+			return fmt.Sprintf("@secondary/src/components/project/%s/%02d/ReviewDiffViewLongName.tsx", kind, i)
+		}
+		view := api.ViewContext{
+			Folder: &api.ViewPath{DisplayPath: long("folder", 0)},
+			Search: &api.ViewSearch{Query: strings.Repeat("q", 1024), Hit: &api.ViewLocation{DisplayPath: long("hit", 0), Line: 99999}},
+		}
+		for i := 0; i < viewcontext.MaxItems; i++ {
+			view.Editors = append(view.Editors, api.ViewEditor{DisplayPath: long("editor", i), Unsaved: true,
+				Selection: &api.ViewSelection{StartLine: 10000 + i, EndLine: 20000 + i}})
+			view.Diffs = append(view.Diffs, api.ViewPath{DisplayPath: long("diff", i)})
+			view.Findings = append(view.Findings, api.ViewFinding{RuleID: strings.Repeat("r", 128), Level: api.FindingLevelCritical,
+				Location: &api.ViewLocation{DisplayPath: long("finding", i), Line: 99999}})
+		}
+		return inject.RenderViewContextBlock(ctx, renderer, "sess-inject-test", view, true)
 	case "implement_spawn":
 		block, err := inject.RenderImplementSpawnInject(
 			ctx, renderer, "sess-inject-test", spawn.AmbientAllowedAgents(), spawn.MaxInFlightTaskWorkers, spawn.SurfaceImplementSynthesis, 1, false, true,

@@ -11,7 +11,7 @@ import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, describe, expect, it } from "vitest";
 import * as Y from "yjs";
 import { stepEditorHistory } from "../../components/source/editor/editor-history.ts";
-import { prettyNativeStateField } from "../../components/source/pretty/pretty-native-layout.ts";
+import { prettyOutcomeOf } from "../../components/source/pretty/pretty-layout.ts";
 import { setSecretScreen } from "../../components/source/secrets/secret-span-decorations.ts";
 import {
   gotoLineController,
@@ -40,7 +40,6 @@ import {
 } from "../documents/files-buffer-state.ts";
 import {
   applyFilesBufferEditorDocument,
-  closeFilesBuffer,
   filesBufferText,
 } from "../documents/project-files-buffers.ts";
 import { FilesEditor } from "./FilesEditor.tsx";
@@ -56,10 +55,10 @@ import {
   secretActionRange,
 } from "./files-secret-actions.ts";
 import {
-  invokePrettyToggleForTab,
-  isPrettyDisplayEnabled,
-  resetPrettyDisplayStateForTests,
-} from "./pretty-display-state.ts";
+  editorPrettyPref,
+  resetEditorPrefsForTests,
+  saveEditorLineLayout,
+} from "../../settings/editor/editor-prefs.ts";
 
 async function openAndAttachDocumentReplica(
   buf: FileBuffer,
@@ -95,12 +94,12 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
   setupFilesEditorTests();
 
   afterEach(() => {
-    resetPrettyDisplayStateForTests();
+    resetEditorPrefsForTests();
     resetGotoLineForTests();
     resetEditorDocumentsForTests();
   });
 
-  it("toggles Pretty from the status bar and surface command without mutating raw bytes, dirty state, or editor identity (FMT-AC-06, FMT-AC-09)", async () => {
+  it("switches to Pretty and back from the status bar without mutating raw bytes, dirty state, or editor identity (FMT-AC-06, FMT-AC-09)", async () => {
     const rawJsonl =
       '{"id":1,"msg":"hello\\nworld","nested":{"a":1,"b":2}}\n{"id":2,"arr":[10,20]}\n';
     const buf = loadedBuffer({
@@ -115,7 +114,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     expect(view.state.doc.toString()).toBe(rawJsonl);
     expect(getFilesEditorViewDoc(PROJECT, buf.key)).toBe(rawJsonl);
 
-    const toggleBtn = screen.getByTestId("files-editor-pretty-toggle");
+    const toggleBtn = screen.getByTestId("files-editor-layout-pretty");
     expect(toggleBtn.getAttribute("aria-pressed")).toBe("false");
     expect(
       document
@@ -128,11 +127,11 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     await waitFor(() => {
       expect(toggleBtn.getAttribute("aria-pressed")).toBe("true");
     });
-    expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(true);
+    expect(editorPrettyPref()).toBe(true);
     // Raw document text and line count are completely untouched; layout is supplied by native decorations.
     expect(view.state.doc.toString()).toBe(rawJsonl);
     expect(getFilesEditorViewDoc(PROJECT, buf.key)).toBe(rawJsonl);
-    expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
+    expect(prettyOutcomeOf(view.state).kind).toBe("active");
     expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(4);
     expect(view.dom.querySelectorAll(".pw-pretty-line").length).toBeGreaterThan(3);
     expect(projectFilesState(PROJECT).byKey[buf.key]!.dirty).toBe(false);
@@ -143,8 +142,8 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
         ?.getAttribute("data-editor-identity"),
     ).toBe("editing");
 
-    // Toggle Pretty OFF via command handler (`invokePrettyToggleForTab`)
-    expect(invokePrettyToggleForTab(PROJECT, buf.key)).toBe(true);
+    // Leave Pretty for Off
+    fireEvent.click(screen.getByTestId("files-editor-layout-off"));
     await waitFor(() => {
       expect(toggleBtn.getAttribute("aria-pressed")).toBe("false");
     });
@@ -165,7 +164,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     render(() => <FilesEditor {...props} />);
 
     const view = getFilesEditorView(PROJECT, buf.key)!;
-    const toggleBtn = screen.getByTestId("files-editor-pretty-toggle");
+    const toggleBtn = screen.getByTestId("files-editor-layout-pretty");
     fireEvent.click(toggleBtn);
     await waitFor(() => {
       expect(toggleBtn.getAttribute("aria-pressed")).toBe("true");
@@ -183,8 +182,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
       '{"service":"gateway""enabled":true,"ports":[8080,8443]}',
     );
     expect(replica.currentText).toBe(view.state.doc.toString());
-    expect(view.state.field(prettyNativeStateField).enabled).toBe(true);
-    expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
+        expect(prettyOutcomeOf(view.state).kind).toBe("active");
     expect(screen.queryByTestId("pretty-recovery-dialog")).toBeNull();
 
     // 2. Undo restores the deleted comma via replica.stepHistory:
@@ -245,8 +243,8 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     render(() => <FilesEditor {...props} />);
     const view = getFilesEditorView(PROJECT, buf.key)!;
 
-    invokePrettyToggleForTab(PROJECT, buf.key);
-    expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(true);
+    void saveEditorLineLayout("pretty");
+    expect(editorPrettyPref()).toBe(true);
 
     // 1. Constructing a transaction with `view.state.update(...)` without dispatching must not mutate `replica`:
     const undispatched = view.state.update({
@@ -273,7 +271,7 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     await waitFor(() => {
       expect(view.state.doc.toString()).toBe(remoteJson);
     });
-    expect(view.state.field(prettyNativeStateField).outcome).toBe("formatted");
+    expect(prettyOutcomeOf(view.state).kind).toBe("active");
     expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(3);
   });
 
@@ -307,8 +305,8 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     setSecretScreen(view, screenPayload);
 
     // Enable Pretty
-    invokePrettyToggleForTab(PROJECT, buf.key);
-    expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(true);
+    void saveEditorLineLayout("pretty");
+    expect(editorPrettyPref()).toBe(true);
     expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(3);
 
     // 1. Go to line 2, column 5 lands on raw line 2, column 5:
@@ -350,9 +348,5 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     // 4. Copy contents copies exact raw text without generated decoration whitespace:
     await copyTextToClipboard(view.state.doc.toString());
     expect(filesBufferText(buf)).toBe(rawJsonl);
-
-    // 5. Closing the buffer disposes the tab's Pretty state:
-    void closeFilesBuffer(PROJECT, buf.key);
-    expect(isPrettyDisplayEnabled(PROJECT, buf.key)).toBe(false);
   });
 });

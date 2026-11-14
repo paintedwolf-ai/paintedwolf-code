@@ -443,8 +443,8 @@ func TestEjectedVolumeKeepsRecordsAndTheWorkerRecoversOnRemount(t *testing.T) {
 	}
 	TouchBranchUse(binding.Root)
 	if _, _, err := fixture.mgr.CreateWorkerWorkspaceFromSources(t.Context(),
-		[]projectroot.RootRef{{ID: "primary", Path: project, IsPrimary: true}},
-		[]projectroot.RootRef{{ID: "primary", Path: project, IsPrimary: true}}, "primary", "job"); !errors.Is(err, ErrBranchVolumeUnavailable) {
+		[]projectroot.RootRef{{ID: "primary", Label: "primary", Path: project, IsPrimary: true}},
+		[]projectroot.RootRef{{ID: "primary", Label: "primary", Path: project, IsPrimary: true}}, "primary", "job"); !errors.Is(err, ErrBranchVolumeUnavailable) {
 		t.Fatalf("reclaim err = %v", err)
 	}
 	removed, err := ReconcileStaleSandboxes(t.Context(), fixture.mgr.branchRoot, project, func(context.Context) (map[string]struct{}, error) {

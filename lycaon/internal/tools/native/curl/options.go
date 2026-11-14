@@ -1,7 +1,6 @@
 package curl
 
 import (
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -246,10 +245,11 @@ func parseOptions(bound commandprogram.BoundArgv) (options, error) {
 
 func seconds(value string) (time.Duration, error) {
 	f, err := strconv.ParseFloat(value, 64)
-	if err != nil || f < 0 || math.IsInf(f, 0) || f > (time.Duration(math.MaxInt64)/time.Second).Seconds() {
+	d, ok := commandprogram.ScaleDuration(f, time.Second)
+	if err != nil || !ok {
 		return 0, usage(value, "a nonnegative number of seconds")
 	}
-	return time.Duration(f * float64(time.Second)), nil
+	return d, nil
 }
 
 // writeOutVariables are the catalog's -w variables.

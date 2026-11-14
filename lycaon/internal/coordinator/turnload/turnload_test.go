@@ -3,14 +3,12 @@ package turnload
 import (
 	"context"
 	"errors"
-	"slices"
 	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/decide"
 	"github.com/lycaon/lycaon/internal/decide/decidetest"
-	"github.com/lycaon/lycaon/internal/promptunit"
 	"github.com/lycaon/lycaon/internal/skills"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -20,7 +18,7 @@ func TestBundledCatalogValidates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadCatalog: %v", err)
 	}
-	if cat.Version != Version || cat.Turn.Tools.LoadAt <= 0 || cat.Turn.Guides.OmitBelow < 0 || cat.Request.MaxLoads <= 0 {
+	if cat.Version != Version || cat.Turn.Tools.LoadAt <= 0 || cat.Request.MaxLoads <= 0 {
 		t.Fatalf("catalog = %+v", cat)
 	}
 	for _, kind := range Kinds() {
@@ -31,18 +29,26 @@ func TestBundledCatalogValidates(t *testing.T) {
 }
 
 func TestParseCatalogRejectsBadThresholds(t *testing.T) {
-	bad := `version: 2
+	bad := `version: 3
 state: {user_text_chars: 900, recent_tools: 12}
 turn:
   deadline_ms: 100
   tools: {question: "x", load_at: 0.5}
-  guides: {question: "{description}", omit_below: 0.2, confidence_floor: 2}
-  kind: {confidence_floor: 0.6, instructions: "k", options: {answer_only: a, inspect: b, change: c, run: d, delegate: e}}
+  kind: {confidence_floor: 2, instructions: "k", options: {answer_only: a, inspect: b, change: c, run: d, delegate: e}}
 request: {deadline_ms: 100, load_at: 2.5, max_loads: 12}
 lookup: {deadline_ms: 100, read_at: 1}
 `
 	_, err := ParseCatalog([]byte(bad))
-	if err == nil || !strings.Contains(err.Error(), "tools.option_words") || !strings.Contains(err.Error(), "confidence_floor") {
+	if err == nil || !strings.Contains(err.Error(), "tools.option_words") || !strings.Contains(err.Error(), "kind.confidence_floor") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestParseCatalogRefusesAnEarlierFormat(t *testing.T) {
+	raw, err := config.Read(config.Decisions)
+	testutil.FailErr(t, "read decisions", err)
+	earlier := strings.Replace(string(raw), "version: 3", "version: 2", 1)
+	if _, err := ParseCatalog([]byte(earlier)); err == nil || !strings.Contains(err.Error(), "version 2 is not 3") {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -51,22 +57,18 @@ func testSpec() TurnSpec {
 	return TurnSpec{
 		DeadlineMS: 500,
 		Tools:      ToolsSpec{Question: "which tools?", OptionWords: 6, LoadAt: 0.5},
-		Guides:     GuidesSpec{Omittable: []string{"survey-ladder", "read-tool"}, Question: "which guidance?", OptionWords: 6, OmitBelow: 0.25, ConfidenceFloor: 0.6},
 		Kind:       KindSpec{ConfidenceFloor: 0.6, Instructions: "kind", Options: map[string]string{KindAnswerOnly: "a", KindInspect: "b", KindChange: "c", KindRun: "d", KindDelegate: "e"}},
 	}
 }
 
 func fixtureCandidates() []Candidate {
-	tools := ToolCandidates([]ToolCard{{Name: "git_commit", Description: "Commit files. Replaces command: git commit."}, {Name: "command", Description: "Run a command"}})
-	guides := GuideCandidates([]promptunit.Unit{{ID: "survey-ladder", Description: "orienting"}, {ID: "read-tool", Description: "reading"}})
-	return Candidates(tools, guides)
+	return ToolCandidates([]ToolCard{{Name: "git_commit", Description: "Commit files. Replaces command: git commit."}, {Name: "command", Description: "Run a command"}})
 }
 
-func TestDecideLoadsToolsWithConfidenceAndOmitsGuidesWithConfidence(t *testing.T) {
+func TestDecideLoadsToolsWithConfidence(t *testing.T) {
 	fake := &decidetest.Fake{Heads: []decide.Head{decide.HeadTurnLoad}, Answers: decide.Answers{
-		"tools":  {Kind: decide.KindMulti, Probabilities: map[string]float64{"git_commit": 0.9, "command": 0.2}, Confidence: 0.85},
-		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"survey-ladder": 0.1, "read-tool": 0.45}, Confidence: 0.7},
-		"kind":   {Kind: decide.KindChoice, Choice: KindChange, Confidence: 0.8},
+		"tools": {Kind: decide.KindMulti, Probabilities: map[string]float64{"git_commit": 0.9, "command": 0.2}, Confidence: 0.85},
+		"kind":  {Kind: decide.KindChoice, Choice: KindChange, Confidence: 0.8},
 	}}
 	got := Decide(context.Background(), fake, testSpec(), State{User: "commit"}, fixtureCandidates())
 	if got.Abstained || got.Kind != KindChange {
@@ -75,16 +77,15 @@ func TestDecideLoadsToolsWithConfidenceAndOmitsGuidesWithConfidence(t *testing.T
 	if got.Tools["git_commit"] != 0.9 || len(got.Tools) != 1 {
 		t.Fatalf("tools = %v", got.Tools)
 	}
-	// read-tool at 0.45 is below omit_below but its certainty (0.55) is under the floor.
-	if _, ok := got.Omitted["survey-ladder"]; !ok || len(got.Omitted) != 1 {
-		t.Fatalf("omitted = %v; an unsure verdict must not omit", got.Omitted)
-	}
-	if v := got.Verdicts["tool.command"]; v.P != 0.2 || v.Confidence != 0.8 {
+	if v := got.Verdicts["command"]; v.P != 0.2 || v.Confidence != 0.8 {
 		t.Fatalf("verdict = %+v", v)
 	}
-	// One question per kind; the option text carries the unit description without the command alias.
+	if len(fake.Decisions) != 1 || fake.Decisions[0].Head != decide.HeadTurnLoad {
+		t.Fatalf("calls = %+v", fake.Decisions)
+	}
+	// The option text carries the tool description without the command alias.
 	qs := fake.Decisions[0].Questions
-	if len(qs) != 3 || qs["tools"].Kind != decide.KindMulti || qs["guides"].Kind != decide.KindMulti {
+	if len(qs) != 2 || qs["tools"].Kind != decide.KindMulti {
 		t.Fatalf("questions = %+v", qs)
 	}
 	if o := qs["tools"].Options["git_commit"]; !strings.Contains(o, "Commit files") || strings.Contains(o, "Replaces command") {
@@ -95,132 +96,41 @@ func TestDecideLoadsToolsWithConfidenceAndOmitsGuidesWithConfidence(t *testing.T
 	}
 }
 
-func TestDecideAsksTheGuideHeadWhenTheReleaseShipsOne(t *testing.T) {
+func TestIndependentHeadsAreAskedOnlyTheToolsQuestion(t *testing.T) {
 	fake := &decidetest.Fake{Answers: decide.Answers{
-		"tools":  {Kind: decide.KindMulti, Probabilities: map[string]float64{"git_commit": 0.9}, Confidence: 0.9},
-		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"survey-ladder": 0.05, "read-tool": 0.9}, Confidence: 0.95},
+		"tools": {Kind: decide.KindMulti, Probabilities: map[string]float64{"git_commit": 0.9}, Confidence: 0.9},
 	}}
 	spec := testSpec()
 	spec.Tools.Independent = true
-	spec.Guides.Omittable = []string{"survey-ladder"}
 	got := Decide(context.Background(), fake, spec, State{User: "commit"}, fixtureCandidates())
-	if got.Abstained || len(got.Tools) != 1 || len(got.Omitted) != 1 {
+	if got.Abstained || len(got.Tools) != 1 || got.Kind != "" {
 		t.Fatalf("decision = %+v", got)
 	}
-	if len(fake.Decisions) != 2 || fake.Decisions[0].Head != decide.HeadTurnLoad || fake.Decisions[1].Head != decide.HeadGuideLoad {
+	if len(fake.Decisions) != 1 || len(fake.Decisions[0].Questions) != 1 || !fake.Decisions[0].Questions["tools"].Independent {
 		t.Fatalf("calls = %+v", fake.Decisions)
-	}
-	if _, asked := fake.Decisions[0].Questions["guides"]; asked {
-		t.Fatal("the tools call must not carry the guides question")
-	}
-	if _, asked := fake.Decisions[1].Questions["tools"]; asked || len(fake.Decisions[1].Questions) != 1 {
-		t.Fatalf("guide head call = %+v", fake.Decisions[1].Questions)
-	}
-	// Without a guide head every question goes to turn-load in one call.
-	single := &decidetest.Fake{Heads: []decide.Head{decide.HeadTurnLoad}, Answers: fake.Answers}
-	Decide(context.Background(), single, spec, State{User: "commit"}, fixtureCandidates())
-	if len(single.Decisions) != 1 || len(single.Decisions[0].Questions) != 2 {
-		t.Fatalf("single-head calls = %+v", single.Decisions)
-	}
-}
-
-func TestDecideKeepsGuidesWithoutCalibratedOmission(t *testing.T) {
-	fake := &decidetest.Fake{Answers: decide.Answers{
-		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"survey-ladder": 0, "read-tool": 0.01}, Confidence: 1},
-	}}
-	spec := testSpec()
-	spec.Guides.Omittable = []string{"read-tool"}
-	got := Decide(context.Background(), fake, spec, State{User: "commit"}, fixtureCandidates())
-	if _, omitted := got.Omitted["survey-ladder"]; omitted || len(got.Omitted) != 1 {
-		t.Fatalf("omitted = %v; only calibrated units may leave the prompt", got.Omitted)
-	}
-	if _, scored := got.Verdicts["guide.survey-ladder"]; !scored {
-		t.Fatal("uncalibrated unit's score must remain available for diagnostics")
-	}
-	spec.Guides.Omittable = nil
-	got = Decide(context.Background(), fake, spec, State{User: "commit"}, fixtureCandidates())
-	if len(got.Omitted) != 0 {
-		t.Fatalf("omitted = %v; no calibration keeps every unit", got.Omitted)
-	}
-}
-
-func TestDecideKeepsAGuideWhoseToolTheChatAlreadyUsed(t *testing.T) {
-	fake := &decidetest.Fake{Answers: decide.Answers{
-		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"survey-ladder": 0.05, "read-tool": 0.05}, Confidence: 0.95},
-	}}
-	guides := GuideCandidates([]promptunit.Unit{
-		{ID: "survey-ladder", Description: "orienting", NeededWith: []string{"list_dir"}},
-		{ID: "read-tool", Description: "reading", Attaches: []string{"read"}},
-	})
-	got := Decide(context.Background(), fake, testSpec(), State{User: "commit", Loaded: []string{"read"}}, guides)
-	if _, omitted := got.Omitted["read-tool"]; omitted || len(got.Omitted) != 1 {
-		t.Fatalf("omitted = %v; a unit needed by a tool the chat called stays", got.Omitted)
-	}
-	if got.Verdicts["guide.read-tool"].P != 0.05 {
-		t.Fatalf("verdicts = %v", got.Verdicts)
-	}
-}
-
-func TestDecideKeepsAGuideWhoseToolTheCurrentTurnLoads(t *testing.T) {
-	fake := &decidetest.Fake{Answers: decide.Answers{
-		"tools":  {Kind: decide.KindMulti, Probabilities: map[string]float64{"terminal_open": 0.9}, Confidence: 0.9},
-		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"claim-evidence": 0.05, "survey-ladder": 0.05}, Confidence: 0.95},
-		"kind":   {Kind: decide.KindChoice, Choice: KindRun, Confidence: 0.9},
-	}}
-	spec := testSpec()
-	spec.Guides.Omittable = []string{"claim-evidence", "survey-ladder"}
-	guides := GuideCandidates([]promptunit.Unit{
-		{ID: "claim-evidence", Description: "evidence for claims", NeededWith: []string{"terminal_open", "terminal_snapshot"}},
-		{ID: "survey-ladder", Description: "orienting", NeededWith: []string{"list_dir"}},
-	})
-	tools := ToolCandidates([]ToolCard{{Name: "terminal_open", Description: "Open an interactive terminal"}})
-	// Place guides before tools in candidates to verify order independence.
-	candidates := slices.Concat(guides, tools)
-	got := Decide(context.Background(), fake, spec, State{User: "play the terminal adventure game"}, candidates)
-	if _, loaded := got.Tools["terminal_open"]; !loaded {
-		t.Fatalf("tools = %v; expected terminal_open to load", got.Tools)
-	}
-	if _, omitted := got.Omitted["claim-evidence"]; omitted {
-		t.Fatalf("omitted = %v; a guide needed_with a tool loaded this turn must stay", got.Omitted)
-	}
-	if _, omitted := got.Omitted["survey-ladder"]; !omitted {
-		t.Fatalf("omitted = %v; unrelated guide should still be omitted", got.Omitted)
-	}
-}
-
-func TestDecideOmitBelowZeroKeepsEveryUnit(t *testing.T) {
-	fake := &decidetest.Fake{Answers: decide.Answers{
-		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"survey-ladder": 0, "read-tool": 0.01}, Confidence: 1},
-	}}
-	spec := testSpec()
-	spec.Guides.OmitBelow = 0
-	got := Decide(context.Background(), fake, spec, State{User: "commit"}, fixtureCandidates())
-	if len(got.Omitted) != 0 {
-		t.Fatalf("omitted = %v; omit_below 0 keeps every unit", got.Omitted)
 	}
 }
 
 func TestDecideAnswerOnlyVetoesToolsOnlyWhenTheCatalogSaysSo(t *testing.T) {
 	fake := &decidetest.Fake{Answers: decide.Answers{
-		"tools":  {Kind: decide.KindMulti, Probabilities: map[string]float64{"git_commit": 0.9}},
-		"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{"survey-ladder": 0.1}},
-		"kind":   {Kind: decide.KindChoice, Choice: KindAnswerOnly, Confidence: 0.9},
+		"tools": {Kind: decide.KindMulti, Probabilities: map[string]float64{"git_commit": 0.9}},
+		"kind":  {Kind: decide.KindChoice, Choice: KindAnswerOnly, Confidence: 0.9},
 	}}
 	// The kind records on the decision, and without the veto switch the tools still load.
 	got := Decide(context.Background(), fake, testSpec(), State{User: "what is git"}, fixtureCandidates())
-	if got.Kind != KindAnswerOnly || len(got.Tools) != 1 || len(got.Omitted) != 1 {
+	if got.Kind != KindAnswerOnly || len(got.Tools) != 1 {
 		t.Fatalf("decision = %+v", got)
 	}
 	spec := testSpec()
 	spec.Kind.VetoTools = true
 	got = Decide(context.Background(), fake, spec, State{User: "what is git"}, fixtureCandidates())
-	if got.Kind != KindAnswerOnly || len(got.Tools) != 0 || len(got.Omitted) != 1 {
+	if got.Kind != KindAnswerOnly || len(got.Tools) != 0 {
 		t.Fatalf("vetoed decision = %+v", got)
 	}
 }
 
 func TestDecideAbstainsOnFaultsAndAbsence(t *testing.T) {
-	if got := Decide(context.Background(), decide.Absent{}, testSpec(), State{}, fixtureCandidates()); !got.Abstained || len(got.Tools) != 0 || len(got.Omitted) != 0 {
+	if got := Decide(context.Background(), decide.Absent{}, testSpec(), State{}, fixtureCandidates()); !got.Abstained || len(got.Tools) != 0 {
 		t.Fatalf("absent = %+v", got)
 	}
 	fake := &decidetest.Fake{Err: decide.ErrDeadline}
@@ -372,24 +282,5 @@ func TestBoundDescriptionAndUser(t *testing.T) {
 	}
 	if got := BoundUser("héllo wörld", 5); got != "héllo" {
 		t.Fatalf("BoundUser = %q", got)
-	}
-}
-
-func TestRecallGuideOmissionRetainsItsAuditedToolAttachment(t *testing.T) {
-	raw, err := config.Read(config.PlatformShared + "/units/native-recall-tool.md")
-	testutil.FailErr(t, "read recall unit", err)
-	unit, err := promptunit.Parse("native-recall-tool", raw)
-	testutil.FailErr(t, "parse recall unit", err)
-	catalog, err := LoadCatalog()
-	testutil.FailErr(t, "load turn policy", err)
-	fake := &decidetest.Fake{Answers: decide.Answers{"guides": {Kind: decide.KindMulti, Probabilities: map[string]float64{unit.ID: 0.01}, Confidence: 0.99}}}
-	candidates := GuideCandidates([]promptunit.Unit{unit})
-	decision := Decide(t.Context(), fake, catalog.Turn, State{User: "continue"}, candidates)
-	if _, ok := decision.Omitted[unit.ID]; !ok {
-		t.Fatal("recall guidance no longer follows its audited omission policy")
-	}
-	decision = Decide(t.Context(), fake, catalog.Turn, State{User: "continue", Loaded: []string{"recall"}}, candidates)
-	if _, ok := decision.Omitted[unit.ID]; ok {
-		t.Fatal("recall use did not restore its attached guidance")
 	}
 }

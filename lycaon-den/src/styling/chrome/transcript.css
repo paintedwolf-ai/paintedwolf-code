@@ -222,6 +222,26 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* What the agent was told the person had in view, under their message. */
+.den-view-context {
+  align-self: flex-end;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 8px;
+  max-width: var(--transcript-user-width);
+  margin: calc(var(--transcript-message-time-gap) - var(--transcript-part-gap)) 0 0;
+  padding-inline-end: 4px;
+  color: color-mix(in srgb, var(--den-text-muted) 78%, transparent);
+  font-size: var(--text-den-caption);
+  line-height: 1.4;
+}
+
+.den-view-context__item {
+  font-family: var(--den-font-mono);
+  overflow-wrap: anywhere;
+}
+
 .bubble--user {
   align-self: flex-end;
   max-width: var(--transcript-user-width);

@@ -1,36 +1,29 @@
-oar: '1.0'
+spec_version: "1.0"
 id: TRIAGE_LITE_WRITE_FORBIDDEN
+title: Triage Lite is read-only
 kind: policy
-anchor: tool.pre_invoke
-selector:
-  paintedwolf.operation:
-    - write
-    - edit
-requires:
-  facts:
-    - paintedwolf.operation
-  profiles:
-    - session
-    - tool
-when: session_posture == "spec"
+on: tool.pre_invoke
+selector: {}
+requires_facts:
+  - paintedwolf.operation
+  - paintedwolf.session_posture
+when: paintedwolf.operation in ["write", "edit"] && paintedwolf.session_posture == "spec"
 effect: block
 enforcement: enforce
 on_error: fail_closed
-copy:
-  title: Triage Lite is read-only
-  what: A write tool was called during triage.
-  cause: The triage-lite workflow reports findings; it does not change files.
-  why: Triage runs in the spec posture, where the project tree stays untouched.
-  fix: Record the finding in your write-up, then leave triage before editing.
-  instead: Branch on Code TRIAGE_LITE_WRITE_FORBIDDEN and report instead of writing
 x-paintedwolf-emit: rule:triage_lite
-x-paintedwolf-message: Triage Lite is a read-only workflow.
+message: Triage Lite is a read-only workflow.
+what: A write tool was called during triage.
+cause: The triage-lite workflow reports findings; it does not change files.
+why: Triage runs in the spec posture, where the project tree stays untouched.
+fix: Record the finding in your write-up, then leave triage before editing.
+instead: Branch on Code TRIAGE_LITE_WRITE_FORBIDDEN and report instead of writing
 x-paintedwolf-scenarios:
   - id: default
     vars:
       tool: write
       path: src/main.go
-      profile: coordinator
+      session_role: coordinator
     expect_contains:
       - 'Rejected:'
       - 'Code: TRIAGE_LITE_WRITE_FORBIDDEN'

@@ -1,40 +1,22 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SOURCE_PARSE_INCOMPLETE
 kind: schema
-anchor: tool.rejected
-selector:
-  paintedwolf.operation: [read, grep, code_rewrite]
-requires:
-  profiles: [tool]
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.path
-    - paintedwolf.rejection_code
-    - paintedwolf.parse_timed_out
-    - paintedwolf.parse_canceled
-    - paintedwolf.parse_reason
-    - paintedwolf.parse_language
-    - paintedwolf.parse_phase
-    - paintedwolf.parse_timeout_ms
-    - paintedwolf.parse_elapsed_ms
-    - paintedwolf.parse_source_bytes
-    - paintedwolf.parse_reached_bytes
-    - paintedwolf.parse_failure
-    - paintedwolf.parse_config
-when: paintedwolf.rejection_code == "SOURCE_PARSE_INCOMPLETE"
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.operation, paintedwolf.parse_canceled, paintedwolf.parse_config, paintedwolf.parse_elapsed_ms, paintedwolf.parse_failure, paintedwolf.parse_language, paintedwolf.parse_phase, paintedwolf.parse_reached_bytes, paintedwolf.parse_reason, paintedwolf.parse_source_bytes, paintedwolf.parse_timed_out, paintedwolf.parse_timeout_ms, paintedwolf.path, paintedwolf.rejection_code]
+when: paintedwolf.operation in ["read", "grep", "code_rewrite"] && paintedwolf.rejection_code == "SOURCE_PARSE_INCOMPLETE"
 effect: block
-copy:
-  what: '{{ tool }} could not analyze {{ paintedwolf.path }}: {{ paintedwolf.parse_language }} parsing could not finish.'
-  cause: >-
-    {{ paintedwolf.parse_failure }}. Snapshot: {{ paintedwolf.parse_phase }}.
-  why: >-
-    This is a host analysis failure. It does not establish a syntax error or an absence of matches.
-  fix: >-
-    {% if paintedwolf.parse_timed_out %}Report this host parser timeout with the path and measured limits. The host owner can adjust analysis_timeout_ms in {{ paintedwolf.parse_config }} or repair the parser. Retry after that change; preserve the proposed work and continue independent work.{% else %}{% if paintedwolf.parse_canceled %}The request was canceled or its enclosing deadline expired. Preserve the proposed work and resume only under an active request. Raising the parser timeout does not clear cancellation.{% else %}Report the exact parser failure and path to the coordinator or user. A parser resource limit, internal error, or invalid host configuration needs a host-side correction. Preserve the proposed work until the host can validate it.{% endif %}{% endif %} For source reads, use read with explicit line ranges; for structural search, use grep with structural=false to inspect text. These alternatives do not establish syntax health.
-  instead: Preserve the work and report the host failure with these diagnostics
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:source_parse
-x-paintedwolf-message: source parser did not provide a syntax verdict
+message: source parser did not provide a syntax verdict
+what: '{{ tool }} could not analyze {{ paintedwolf.path }}: {{ paintedwolf.parse_language }} parsing could not finish.'
+cause: >-
+  {{ paintedwolf.parse_failure }}. Snapshot: {{ paintedwolf.parse_phase }}.
+why: >-
+  This is a host analysis failure. It does not establish a syntax error or an absence of matches.
+fix: >-
+  {% if paintedwolf.parse_timed_out %}Report this host parser timeout with the path and measured limits. The host owner can adjust analysis_timeout_ms in {{ paintedwolf.parse_config }} or repair the parser. Retry after that change; preserve the proposed work and continue independent work.{% else %}{% if paintedwolf.parse_canceled %}The request was canceled or its enclosing deadline expired. Preserve the proposed work and resume only under an active request. Raising the parser timeout does not clear cancellation.{% else %}Report the exact parser failure and path to the coordinator or user. A parser resource limit, internal error, or invalid host configuration needs a host-side correction. Preserve the proposed work until the host can validate it.{% endif %}{% endif %} For source reads, use read with explicit line ranges; for structural search, use grep with structural=false to inspect text. These alternatives do not establish syntax health.
+instead: Preserve the work and report the host failure with these diagnostics
 x-paintedwolf-scenarios:
   - id: timeout
     vars:

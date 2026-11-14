@@ -25,7 +25,6 @@ func TestTurnReceiptRecordsTheOfferedCandidates(t *testing.T) {
 		state:    turnload.State{Host: "worker", Surface: "implement", User: "fix it"},
 		floor:    []string{"read"},
 		loadable: []string{"jq_edit", "web_search"},
-		guides:   []string{"style"},
 		decision: turnload.Decision{Abstained: true, Reason: "engine disabled"},
 	}
 	receipt := d.receipt()
@@ -36,14 +35,14 @@ func TestTurnReceiptRecordsTheOfferedCandidates(t *testing.T) {
 	if err := json.Unmarshal([]byte(receipt.Decisions), &decisions); err != nil {
 		testutil.FailErr(t, "decode decisions", err)
 	}
-	if !slices.Equal(decisions.Candidates["loadable"], d.loadable) || !slices.Equal(decisions.Candidates["guides"], d.guides) {
-		t.Fatalf("candidates = %v, want loadable %v and guides %v", decisions.Candidates, d.loadable, d.guides)
+	if !slices.Equal(decisions.Candidates["loadable"], d.loadable) || len(decisions.Candidates) != 1 {
+		t.Fatalf("candidates = %v, want loadable %v", decisions.Candidates, d.loadable)
 	}
 	if !slices.Equal(decisions.Floor, d.floor) || receipt.SurfaceID != "implement" || !receipt.Abstained {
 		t.Fatalf("receipt = %+v", receipt)
 	}
 	empty := (&Decision{}).receipt()
-	if !strings.Contains(empty.Decisions, `"candidates":{"guides":[],"loadable":[]}`) {
+	if !strings.Contains(empty.Decisions, `"candidates":{"loadable":[]}`) {
 		t.Fatalf("an empty decision must still record empty candidate lists: %s", empty.Decisions)
 	}
 }

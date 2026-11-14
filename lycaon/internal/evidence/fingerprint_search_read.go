@@ -7,10 +7,10 @@ import (
 	"github.com/lycaon/lycaon/internal/jsonvalue"
 )
 
-func populateReadRecord(projectDir string, rec *Record, args map[string]any, content string) {
+func populateReadRecord(roots CitationRoots, rec *Record, args map[string]any, content string) {
 	path := stringArg(args, "path")
-	addRecordPath(projectDir, rec, path, FidelityStructured)
-	if _, ok := NormalizeCitationPath(projectDir, path); !ok && strings.TrimSpace(projectDir) != "" {
+	addRecordPath(roots, rec, path, FidelityStructured)
+	if _, ok := resolveScopeRel(roots, path); !ok && strings.TrimSpace(roots.ProjectDir) != "" {
 		return
 	}
 	if payload, ok := parseReadPayload(content); ok {
@@ -80,15 +80,12 @@ func populateReadRecord(projectDir string, rec *Record, args map[string]any, con
 
 // populateSummarizeRecord indexes the summarize response's anchors (path/line/
 // excerpt) so a citation of a summarize#N span resolves verbatim.
-func populateSummarizeRecord(projectDir string, rec *Record, content string) {
+func populateSummarizeRecord(roots CitationRoots, rec *Record, content string) {
 	for _, h := range summarizeAnchorDetails(content) {
-		addRecordPath(projectDir, rec, h.path, FidelityStructured)
-		rel, ok := NormalizeCitationPath(projectDir, h.path)
+		addRecordPath(roots, rec, h.path, FidelityStructured)
+		rel, ok := resolveScopeRel(roots, h.path)
 		if !ok {
-			if strings.TrimSpace(projectDir) != "" {
-				continue
-			}
-			rel = NormalizeLedgerPath(h.path)
+			continue
 		}
 		if rel == "" || h.line <= 0 {
 			continue
@@ -132,19 +129,16 @@ func appendLineRange(rec *Record, start, end int) {
 	rec.LineRanges = append(rec.LineRanges, LineRange{Start: start, End: end})
 }
 
-func populateGrepRecord(projectDir string, rec *Record, args map[string]any, content string) {
-	addRecordPath(projectDir, rec, stringArg(args, "path"), FidelityStructured)
+func populateGrepRecord(roots CitationRoots, rec *Record, args map[string]any, content string) {
+	addRecordPath(roots, rec, stringArg(args, "path"), FidelityStructured)
 	for _, p := range grepMatchPaths(content) {
-		addRecordPath(projectDir, rec, p, FidelityStructured)
+		addRecordPath(roots, rec, p, FidelityStructured)
 	}
 	for _, m := range grepMatchDetails(content) {
-		addRecordPath(projectDir, rec, m.path, FidelityStructured)
-		rel, ok := NormalizeCitationPath(projectDir, m.path)
+		addRecordPath(roots, rec, m.path, FidelityStructured)
+		rel, ok := resolveScopeRel(roots, m.path)
 		if !ok {
-			if strings.TrimSpace(projectDir) != "" {
-				continue
-			}
-			rel = NormalizeLedgerPath(m.path)
+			continue
 		}
 		if rel == "" || m.line <= 0 {
 			continue
@@ -160,13 +154,10 @@ func populateGrepRecord(projectDir string, rec *Record, args map[string]any, con
 		appendLineRange(rec, m.line-b, m.line+len(m.contextAfter))
 	}
 	for _, h := range highlightDetails(content) {
-		addRecordPath(projectDir, rec, h.path, FidelityStructured)
-		rel, ok := NormalizeCitationPath(projectDir, h.path)
+		addRecordPath(roots, rec, h.path, FidelityStructured)
+		rel, ok := resolveScopeRel(roots, h.path)
 		if !ok {
-			if strings.TrimSpace(projectDir) != "" {
-				continue
-			}
-			rel = NormalizeLedgerPath(h.path)
+			continue
 		}
 		if rel == "" || h.line <= 0 {
 			continue

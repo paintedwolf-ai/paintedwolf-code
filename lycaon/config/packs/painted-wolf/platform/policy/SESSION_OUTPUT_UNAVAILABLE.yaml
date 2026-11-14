@@ -1,21 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SESSION_OUTPUT_UNAVAILABLE
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles: [tool]
-  facts: [paintedwolf.rejection_code, paintedwolf.path]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SESSION_OUTPUT_UNAVAILABLE"
 effect: block
-copy:
-  what: 'This call has no session output folder, so {{ paintedwolf.path }} cannot resolve.'
-  cause: The host did not provide this chat's output folder.
-  why: Each chat reads its own output copies; this address cannot fall back to another folder.
-  fix: Keep the existing result. Retry after the chat's output storage is available.
-  instead: Keep the delivered result until output storage is available
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:tool
-x-paintedwolf-message: Session output is unavailable in this chat
+message: Session output is unavailable in this chat
+what: 'This call has no session output folder, so {{ paintedwolf.path }} cannot resolve.'
+cause: The host did not provide this chat's output folder.
+why: Each chat reads its own output copies; this address cannot fall back to another folder.
+fix: Keep the existing result. Retry after the chat's output storage is available.
+instead: Keep the delivered result until output storage is available
 x-paintedwolf-scenarios:
   - id: default
     vars:

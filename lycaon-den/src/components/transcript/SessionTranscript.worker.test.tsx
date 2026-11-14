@@ -329,11 +329,11 @@ describe("SessionTranscript worker layout", () => {
               tool_call_id: "tc1",
               assistant_message_id: "a1",
               tool_args: { path: "main.go" },
-              file_edit_preview: fileEditPreviewFixture({
+              file_edit_previews: [fileEditPreviewFixture({
                 path: "main.go",
                 before: "",
                 after: "package main\n",
-              }),
+              })],
             },
             created_at: "2026-01-01T00:00:01Z",
           },

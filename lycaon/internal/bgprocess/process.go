@@ -55,6 +55,12 @@ type processRuntimeState struct {
 	done              chan struct{}
 	cancel            context.CancelFunc
 	async             *exec.AsyncPipeline
+	// personWaits counts open waits on a person; personWaited sums the closed ones.
+	personWaits     int
+	personWaitSince time.Time
+	personWaited    time.Duration
+	// observed records that the agent read, waited on or was told of the job's state.
+	observed bool
 }
 
 type processIOState struct {
@@ -85,6 +91,8 @@ type processConfinementState struct {
 	runKey           string
 	boundary         confine.Boundary
 	facts            confine.SpawnFacts
+	// program holds a program job's stage confinement.
+	program programStages
 	// refusalsShown counts the refusals a result has already shown.
 	refusalsShown int
 	// refusalNotice gathers a burst of refusals before one notice.

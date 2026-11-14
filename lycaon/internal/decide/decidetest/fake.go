@@ -28,6 +28,20 @@ type Fake struct {
 
 	Decisions []DecideCall
 	Ranks     []RankCall
+	// Calls lists engine calls and priority holds in the order they happened.
+	Calls []string
+}
+
+// HoldPriority records the hold and its release.
+func (f *Fake) HoldPriority(context.Context) func() {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.Calls = append(f.Calls, "hold")
+	return func() {
+		f.mu.Lock()
+		defer f.mu.Unlock()
+		f.Calls = append(f.Calls, "release")
+	}
 }
 
 // Loaded reports the scripted head set, or true for every head when none is scripted.
@@ -67,6 +81,7 @@ func (f *Fake) Decide(_ context.Context, head decide.Head, state any, questions 
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Decisions = append(f.Decisions, DecideCall{Head: head, State: state, Questions: questions})
+	f.Calls = append(f.Calls, "decide")
 	if f.Err != nil {
 		return decide.Result{}, f.Err
 	}
@@ -86,6 +101,7 @@ func (f *Fake) Rank(_ context.Context, head decide.Head, task string, candidates
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.Ranks = append(f.Ranks, RankCall{Head: head, Task: task, Candidates: append([]string(nil), candidates...)})
+	f.Calls = append(f.Calls, "rank")
 	if f.Err != nil {
 		return nil, decide.Engine{}, f.Err
 	}
@@ -139,6 +155,9 @@ func (LoadAll) Decide(_ context.Context, _ decide.Head, _ any, questions map[str
 func (LoadAll) Rank(_ context.Context, _ decide.Head, _ string, candidates []string) ([]float64, decide.Engine, error) {
 	return make([]float64, len(candidates)), loadAllEngine, nil
 }
+
+// HoldPriority holds nothing.
+func (LoadAll) HoldPriority(context.Context) func() { return func() {} }
 
 // Available is true.
 func (LoadAll) Available() bool { return true }

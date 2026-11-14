@@ -1,27 +1,25 @@
-oar: '1.0'
+spec_version: "1.0"
 id: WORKER_SUMMARY_NO_ARTIFACT
 kind: invariant
-anchor: worker.report_check
-requires:
-  facts: [paintedwolf.agent_is_implementer, paintedwolf.profile, paintedwolf.worker_artifact_present, paintedwolf.worker_summary_present, paintedwolf.next_steps]
-when: paintedwolf.profile == "worker" && paintedwolf.agent_is_implementer && !paintedwolf.worker_artifact_present
-  && paintedwolf.worker_summary_present
+on: worker.report_check
+selector: {}
+requires_facts: [paintedwolf.agent_is_implementer, paintedwolf.next_steps, paintedwolf.session_role, paintedwolf.worker_artifact_present, paintedwolf.worker_summary_present]
+when: paintedwolf.session_role == "worker" && paintedwolf.agent_is_implementer && !paintedwolf.worker_artifact_present && paintedwolf.worker_summary_present
 effect: block
-copy:
-  what: 'Worker finished without disk proof of implementation (no successful file mutation or workspace change)'
-  cause: The completion report has no observed artifact evidence; its prose alone does not establish an applied implementation.
-  why: An implementation claim must be supported by the worker's recorded changes or inspected workspace, not inferred from the report's wording.
-  fix: 'Inspect the worker outcome and any existing overlay first. {{ paintedwolf.next_steps }} If no change was necessary, preserve that outcome and report the evidence rather than inventing a mutation.'
-  instead: Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established
+x-paintedwolf-audience:
+  - coordinator
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
-x-paintedwolf-message: Worker finished without disk proof of implementation
+message: Worker finished without disk proof of implementation
+what: 'Worker finished without disk proof of implementation (no successful file mutation or workspace change)'
+cause: The completion report has no observed artifact evidence; its prose alone does not establish an applied implementation.
+why: An implementation claim must be supported by the worker's recorded changes or inspected workspace, not inferred from the report's wording.
+fix: 'Inspect the worker outcome and any existing overlay first. {{ paintedwolf.next_steps }} If no change was necessary, preserve that outcome and report the evidence rather than inventing a mutation.'
+instead: Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    detail: bad args
-    path: src/main.go
-    profile: coordinator
-    tool: read
-x-paintedwolf-audience:
-- coordinator
+  - id: default
+    vars:
+      detail: bad args
+      path: src/main.go
+      session_role: coordinator
+      tool: read

@@ -1,29 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SURVEY_GLOB_INVALID
 kind: schema
-anchor: tool.rejected
-selector:
-  paintedwolf.operation:
-    - grep
-    - find
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.operation
-    - paintedwolf.rejection_code
-    - paintedwolf.detail
-when: paintedwolf.rejection_code == "SURVEY_GLOB_INVALID"
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.detail, paintedwolf.operation, paintedwolf.rejection_code]
+when: paintedwolf.operation in ["grep", "find"] && paintedwolf.rejection_code == "SURVEY_GLOB_INVALID"
 effect: block
-copy:
-  what: 'Invalid discovery glob: {{ paintedwolf.detail }}.'
-  cause: The file selection pattern could not be compiled.
-  why: An invalid filter must not be reported as an empty search.
-  fix: "Use *, ?, character classes, ** for directories, and comma-separated brace alternatives such as **/*.{go,ts}. Escape literal metacharacters."
-  instead: Branch on Code; correct the glob and retry
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:grep
-x-paintedwolf-message: Discovery glob is invalid
+message: Discovery glob is invalid
+what: 'Invalid discovery glob: {{ paintedwolf.detail }}.'
+cause: The file selection pattern could not be compiled.
+why: An invalid filter must not be reported as an empty search.
+fix: "Use *, ?, character classes, ** for directories, and comma-separated brace alternatives such as **/*.{go,ts}. Escape literal metacharacters."
+instead: Branch on Code; correct the glob and retry
 x-paintedwolf-scenarios:
   - id: default
     vars:

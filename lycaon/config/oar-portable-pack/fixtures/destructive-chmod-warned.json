@@ -1,0 +1,57 @@
+{
+  "id": "destructive-chmod-warned",
+  "title": "A state change that is still allowed is flagged",
+  "covers": [
+    "OAR-EVAL-1",
+    "OAR-EVAL-4",
+    "OAR-SEL-3"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "DELETE_REFUSED",
+      "namespace": "example.security",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {
+        "tools": [
+          "delete"
+        ]
+      },
+      "effect": "block",
+      "profile": "portable",
+      "what": "This tool destroys state the session cannot restore.",
+      "fix": "Move the files to a holding path instead of deleting them."
+    },
+    {
+      "spec_version": "1.0",
+      "id": "DESTRUCTIVE_TOOL_WARN",
+      "namespace": "example.security",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {
+        "tools": [
+          "delete",
+          "move",
+          "chmod"
+        ]
+      },
+      "effect": "warn",
+      "profile": "portable",
+      "what": "This tool changes state that is awkward to restore."
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "chmod"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "DESTRUCTIVE_TOOL_WARN",
+    "applied": [
+      "example.security/DESTRUCTIVE_TOOL_WARN:fired"
+    ]
+  }
+}

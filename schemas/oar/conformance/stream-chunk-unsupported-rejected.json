@@ -1,0 +1,26 @@
+{
+  "title": "An engine that does not implement chunked evaluation rejects the document",
+  "covers": [
+    "OAR-OPS-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "model.input",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "stream": "chunk"
+  },
+  "input": {
+    "anchor": "model.input",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "chunk"
+  },
+  "id": "stream-chunk-unsupported-rejected"
+}

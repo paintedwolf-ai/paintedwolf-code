@@ -119,7 +119,7 @@ describe("approval display", () => {
         status: "approved",
       },
       { id: "call-2", name: "edit", args: { path: "src/a.ts" } },
-      { content: "", tool: "edit", file_edit_preview: fileEditPreviewFixture({ path: "src/a.ts", after: "x" }) },
+      { content: "", tool: "edit", file_edit_previews: [fileEditPreviewFixture({ path: "src/a.ts", after: "x" })] },
     );
     expect(enriched.tool).toBe("edit");
     expect(enriched.subject).toBe("src/a.ts");

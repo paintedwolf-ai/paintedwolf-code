@@ -19,7 +19,11 @@ func (s *StreamSpill) Open(ctx context.Context) (io.ReadCloser, error) {
 	s.opening++
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); s.opening--; s.mu.Unlock() }()
-	return body.Open(ctx)
+	reader, err := body.Open(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return verifyStreamReadback(reader, s.reference.Blob.Size, s.EmittedSHA256), nil
 }
 
 func (s *StreamSpill) releaseDisplay() {

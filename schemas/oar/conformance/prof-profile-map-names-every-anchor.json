@@ -1,0 +1,32 @@
+{
+  "id": "prof-profile-map-names-every-anchor",
+  "title": "An anchor profile map that omits a core anchor is rejected",
+  "covers": [
+    "OAR-PROF-2"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "profile": {
+      "oar_profile_version": "1.0",
+      "core": {
+        "tool.pre_invoke": "tool.pre_invoke"
+      },
+      "unsupported": []
+    }
+  },
+  "expected": {
+    "error": "OAR-PROF-2"
+  }
+}

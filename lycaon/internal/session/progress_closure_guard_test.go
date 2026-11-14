@@ -48,7 +48,7 @@ func closureGuardPreInvoke(t *testing.T, mgr *Host, sess *api.Session, rootID, t
 	content := mgr.RewindRuntime.Progress.Get(t.Context(), rootID)
 	baseline, armed := mgr.Coordinator.ProgressClosure.Baseline(rootID)
 	reject, blocked, err := mgr.ToolPolicy.Block(t.Context(), oar.AnchorCoordinatorPreInvoke, sess, tool, nil, func(gc *oar.GuardContext) error {
-		guard.ObserveProgressItemNotClosedBeforeDispatch(sess, content, tool, baseline, armed, gc)
+		guard.ObserveProgressReconciliationBeforeDispatch(sess, content, tool, baseline, armed, gc)
 		return nil
 	})
 	if err != nil {
@@ -102,9 +102,6 @@ func TestProgressClosureAccumulatesCompletedWork(t *testing.T) {
 	baseline, armed := mgr.Coordinator.ProgressClosure.Baseline("root-1")
 	if !armed || len(baseline.Settled) != 2 || baseline.Settled[0] != "job-1" || baseline.Settled[1] != "job-2" {
 		t.Fatalf("baseline = %+v armed=%v want job-1 then job-2 once each", baseline, armed)
-	}
-	if baseline.Content != "## Progress\n- [ ] step a\n- [ ] step b" {
-		t.Fatalf("later completions must keep the first baseline: %q", baseline.Content)
 	}
 }
 

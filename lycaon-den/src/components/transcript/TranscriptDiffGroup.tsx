@@ -29,6 +29,8 @@ import { SOURCE_COMPARISON_FAILURE } from "../source/reader/SourceReader.tsx";
 
 type Props = {
   folds: readonly FileEditFold[];
+  /** Changes made past the results' bounds; Review lists them. */
+  omitted?: number;
   layout: TranscriptLayout;
   sessionId?: string | null;
   projectId?: string;
@@ -37,6 +39,14 @@ type Props = {
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
   entryKey: string;
 };
+
+/** Names the files shown and, past a result's bound, the changes Review holds. */
+export function diffGroupFileLabel(files: number, omitted: number): string {
+  const more = omitted === 1 ? "1 more change in Review" : `${omitted} more changes in Review`;
+  if (files === 0) return omitted === 1 ? "1 change in Review" : `${omitted} changes in Review`;
+  const shown = files === 1 ? "1 file changed" : `${files} files changed`;
+  return omitted > 0 ? `${shown}, ${more}` : shown;
+}
 
 function LineStat(props: { added: number; removed: number }) {
   return (
@@ -104,8 +114,7 @@ export function TranscriptDiffGroup(props: Props) {
       stat: total,
     };
   });
-  const fileLabel = () =>
-    summary().files === 1 ? "1 file changed" : `${summary().files} files changed`;
+  const fileLabel = () => diffGroupFileLabel(summary().files, props.omitted ?? 0);
   const writeLabel = () =>
     summary().writes === 1 ? "1 write" : `${summary().writes} writes`;
   const handleSummaryClick: JSX.EventHandler<HTMLButtonElement, MouseEvent> = (

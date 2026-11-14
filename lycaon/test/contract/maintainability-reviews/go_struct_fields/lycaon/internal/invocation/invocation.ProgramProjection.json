@@ -1,0 +1,17 @@
+{
+  "category": "go_struct_fields",
+  "artifact": "lycaon/internal/invocation/invocation.ProgramProjection",
+  "kind": "projection",
+  "workstream": "command-verdict-evidence",
+  "disposition": "retain",
+  "reason": "Retain one ledger projection with explicit selection counts and bounded child records. SQL selects actual nonzero statuses and memory admission includes hydrated output previews. Projection does not interpret diagnostic prose.",
+  "reviewed_commit": "1a7da07d4d1fe89a90d55b3342e8c415c1093444",
+  "ceiling": 24,
+  "boundaries": {
+    "lycaon/internal/toolhost/command_output_recovery_test.go": "90a27db2579beff4ff86abd9ebad423168c756f9913be7ceaf006e3622fd3a12",
+    "lycaon/internal/tools/native/command/program_output_stream_test.go": "55ddba59438b847a4c0dbb8eb5b7e0761648f218e2f89b4e2c9b7d4fb3e0ee07",
+    "lycaon/internal/tools/native/verify_test.go": "8116e2ee7eb5ba471215557f875a59bae43d60e131f0d262ead38e2cc365da48",
+    "lycaon/internal/invocation/program_feedback_read_test.go": "d25a921acc4ff1993caea937f1f8bb49d007586ff91c459ddd3e226be6e531cd"
+  },
+  "reviewed_shape": "79fe7fc6c8496bea4d1eee41a345e5cd06a93024947ed6ecb1f6f25bd7c09b56"
+}

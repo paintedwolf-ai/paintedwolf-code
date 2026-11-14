@@ -1975,6 +1975,8 @@ type ContributionMenu struct {
 	// Condition the toggle reflects. With state_label the item reads state_label while it holds; without it the item carries a checkmark.
 	State      *ContributionCondition `json:"state,omitempty"`
 	StateLabel string                 `json:"state_label,omitempty"`
+	// Title of a pull-out the item nests under. Items in one slot and group that share a title share the pull-out, ordered by order.
+	Submenu string `json:"submenu,omitempty"`
 }
 
 // ContributionNote
@@ -3226,9 +3228,10 @@ type FileEditPreview struct {
 
 // FileEditReference
 type FileEditReference struct {
-	MessageID  string `json:"message_id"`
-	ToolCallID string `json:"tool_call_id"`
-	// Zero for file_edit; one-based index for a promotion file.
+	MessageID  string         `json:"message_id"`
+	ToolCallID string         `json:"tool_call_id"`
+	Source     FileEditSource `json:"source"`
+	// Zero-based position in that list.
 	Index int `json:"index"`
 }
 
@@ -3434,6 +3437,33 @@ type FolderDetectProject struct {
 	// True when the detected folder is the project's only attached root.
 	IsSingleRoot bool      `json:"is_single_root"`
 	LastOpenedAt time.Time `json:"last_opened_at"`
+}
+
+// FormatSettings Settings in effect under a tool's configuration, in one vocabulary
+// across tools: what the configuration declares, else the tool's fixed
+// default. A property is omitted when neither gives a value or the tool
+// chooses automatically.
+type FormatSettings struct {
+	// Column the tool keeps lines within.
+	LineWidth   int    `json:"line_width,omitempty"`
+	IndentStyle string `json:"indent_style,omitempty"`
+	// Columns per indentation level; omitted when indent_size_tab is true.
+	IndentSize int `json:"indent_size,omitempty"`
+	// True when a level is one tab and follows tab_width.
+	IndentSizeTab          bool   `json:"indent_size_tab,omitempty"`
+	TabWidth               int    `json:"tab_width,omitempty"`
+	EndOfLine              string `json:"end_of_line,omitempty"`
+	TrimTrailingWhitespace *bool  `json:"trim_trailing_whitespace,omitempty"`
+	InsertFinalNewline     *bool  `json:"insert_final_newline,omitempty"`
+	Charset                string `json:"charset,omitempty"`
+}
+
+// FormatSettingsSource
+type FormatSettingsSource struct {
+	Tool FormatTool `json:"tool"`
+	// Repo-relative configuration files that contributed, nearest first.
+	Configs  []string       `json:"configs"`
+	Settings FormatSettings `json:"settings"`
 }
 
 // FullScanRequest A complete pass of every admitted file by the named scanners, or by every selected scanner when none are named. The only way a full pass starts; automatic scanning is incremental.
@@ -4383,7 +4413,7 @@ type MessageContentPart struct {
 	ArtifactID string `json:"artifact_id,omitempty"`
 	// Stable blob ID for a payload attachment, used to restage Edit/rewind.
 	BlobID string `json:"blob_id,omitempty"`
-	// Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices).
+	// Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the canonical display path: bare relative to the session's active folder, qualified with `@label/` for any other attached folder. Absent when the part has no openable body (search_hit, user prose, host notices).
 	Path string `json:"path,omitempty"`
 	// Attached root a path_file / path_folder reference resolves under. Absent on payload attachments, search hits, prose, and host notices.
 	RootID string `json:"root_id,omitempty"`
@@ -5482,6 +5512,18 @@ type ReplaceEditorDocumentRetentionRequest struct {
 type ReplaceManagedSecretValueRequest struct {
 	// The new credential. Never echoed back. Named so the host's own request-capture scrubber redacts it by name. It holds the same length floor as minting: a replacement the screen could not recognize would silently retire a protection that worked.
 	SecretValue string `json:"secret_value"`
+}
+
+// ReplaceProjectViewRequest What one window of this person shows of the project right now. Every surface is present; one the window does not show is null, and a window that shows none of them, or is hidden, withdraws its report. Reports expire unless renewed.
+type ReplaceProjectViewRequest struct {
+	ClientID string `json:"client_id"`
+	// The window has keyboard focus.
+	Focused  bool                `json:"focused"`
+	Editor   *ViewReportEditor   `json:"editor"`
+	Diff     *ViewReportPath     `json:"diff"`
+	Folder   *ViewReportPath     `json:"folder"`
+	Search   *ViewReportSearch   `json:"search"`
+	Findings []ViewReportFinding `json:"findings"`
 }
 
 // RepoBrief Project orientation summary — languages detected by content via enry, listed in dominant-bytes order.
@@ -7057,10 +7099,11 @@ type SourceComparisonViewUpdate struct {
 	Intent                 SourceComparisonIntent `json:"intent"`
 }
 
-// SourceContext Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory.
+// SourceContext Host-recorded source context supplied with this message; independent of evidence and filesystem inventory.
 type SourceContext struct {
 	Locations []NavigationTarget `json:"locations"`
 	Truncated bool               `json:"truncated"`
+	View      *ViewContext       `json:"view,omitempty"`
 }
 
 // SourceContributor One author of a change. Identity fields the contribution does not have are omitted.
@@ -7139,25 +7182,6 @@ type SourceDirListing struct {
 	// Whether host filesystem observation covers this directory. A truncated watch covers some directories and not others, so this is answered per listing rather than per root. False tells visible clients to revalidate this directory on a bounded timer.
 	WatchComplete bool             `json:"watch_complete"`
 	Entries       []SourceDirEntry `json:"entries"`
-}
-
-// SourceEditorConfig EditorConfig pairs in effect for one root-addressed path. Every property
-// is omitted when no `.editorconfig` declares it.
-type SourceEditorConfig struct {
-	// Normalized repo-relative path (slash-separated)
-	Path string `json:"path"`
-	// Attached root that holds the path
-	RootID      string `json:"root_id"`
-	IndentStyle string `json:"indent_style,omitempty"`
-	// Columns per indentation level; omitted when indent_size_tab is true.
-	IndentSize int `json:"indent_size,omitempty"`
-	// True when `indent_size = tab`, so a level follows tab_width.
-	IndentSizeTab          bool   `json:"indent_size_tab,omitempty"`
-	TabWidth               int    `json:"tab_width,omitempty"`
-	EndOfLine              string `json:"end_of_line,omitempty"`
-	TrimTrailingWhitespace *bool  `json:"trim_trailing_whitespace,omitempty"`
-	InsertFinalNewline     *bool  `json:"insert_final_newline,omitempty"`
-	Charset                string `json:"charset,omitempty"`
 }
 
 // SourceFileCommit One commit of the file's git lineage, followed across renames. A
@@ -7250,6 +7274,21 @@ type SourceFileVersionsResponse struct {
 	TrackedAt *time.Time `json:"tracked_at,omitempty"`
 	// Opaque cursor continuing every requested lane that holds more. Omitted when all are exhausted.
 	NextCursor string `json:"next_cursor,omitempty"`
+}
+
+// SourceFormatSettings Formatting settings that each tool's configuration declares for one
+// root-addressed path. A tool appears only when a configuration it reads
+// is in effect for the path.
+type SourceFormatSettings struct {
+	// Normalized repo-relative path (slash-separated)
+	Path string `json:"path"`
+	// Attached root that holds the path
+	RootID string `json:"root_id"`
+	// One entry per tool with configuration in effect, in catalog order.
+	Sources []FormatSettingsSource `json:"sources"`
+	// File names the resolution reads. A change to a file with one of
+	// these names can change the settings of paths beneath it.
+	ConfigNames []string `json:"config_names"`
 }
 
 // SourceGitChange One observed git ref movement, stated from git's own records (HEAD and
@@ -8350,10 +8389,14 @@ type ToolResult struct {
 	// Producer-stated asynchronous or lifecycle completion fact.
 	Completion *ToolCompletion `json:"completion,omitempty"`
 	// Report accepted against this worker job's observations and policy.
-	WorkerReport       *WorkerReportAcceptance `json:"worker_report,omitempty"`
-	FileEditPreview    *FileEditPreview        `json:"file_edit_preview,omitempty"`
-	PromotionPreviews  []FileEditPreview       `json:"promotion_previews,omitempty"`
-	FileEdit           *FileEditSnapshot       `json:"file_edit,omitempty"`
+	WorkerReport *WorkerReportAcceptance `json:"worker_report,omitempty"`
+	// Transcript reads carry one summary and reference per recorded file edit, in order, in place of the edits' text.
+	FileEditPreviews  []FileEditPreview `json:"file_edit_previews,omitempty"`
+	PromotionPreviews []FileEditPreview `json:"promotion_previews,omitempty"`
+	// Text changes the call made, one per file, from the text before its first write to the text after its last, in the order the files were first written.
+	FileEdits []FileEditSnapshot `json:"file_edits,omitempty"`
+	// Further text changes the call made that file_edits does not hold because the result reached its bound. Source history holds them.
+	FileEditsOmitted   int                     `json:"file_edits_omitted,omitempty"`
 	OverlayPromotion   *OverlayPromotion       `json:"overlay_promotion,omitempty"`
 	Visual             *VisualArtifact         `json:"visual,omitempty"`
 	CheckpointDecision *CheckpointDecisionMeta `json:"checkpoint_decision,omitempty"`
@@ -8469,9 +8512,8 @@ type TurnLoad struct {
 	// Present on a turn decision.
 	Boundary *TurnLoadBoundary `json:"boundary,omitempty"`
 	// The skill whose body the turn carries: read at the turn decision, or by the tool_event that this receipt records.
-	PreloadedSkill *TurnLoadSkill  `json:"preloaded_skill,omitempty"`
-	Guides         *TurnLoadGuides `json:"guides,omitempty"`
-	Match          *TurnLoadMatch  `json:"match,omitempty"`
+	PreloadedSkill *TurnLoadSkill `json:"preloaded_skill,omitempty"`
+	Match          *TurnLoadMatch `json:"match,omitempty"`
 }
 
 // TurnLoadBoundary Expected reuse of the standing prefix when the turn opened; history compaction does not expire this tier.
@@ -8494,12 +8536,6 @@ type TurnLoadEngine struct {
 	Head string `json:"head,omitempty"`
 	// The receipt's one-line engine label, name/model#head.
 	Label string `json:"label"`
-}
-
-// TurnLoadGuides How many loadable instruction units the turn rendered and left out of the prompt.
-type TurnLoadGuides struct {
-	Rendered int `json:"rendered"`
-	Omitted  int `json:"omitted"`
 }
 
 // TurnLoadKind The turn kind the engine chose, with its calibrated confidence.
@@ -8770,6 +8806,98 @@ type VerifySettingsResponse struct {
 type VersionComparisonSource struct {
 	Kind      string `json:"kind"`
 	VersionID string `json:"version_id"`
+}
+
+// ViewContext What the sender had in view when this prompt opened a turn, across their visible windows, most recently focused first. Recorded only when it differs from the last view still in the agent's history; empty lists and no folder or search mean nothing was in view.
+type ViewContext struct {
+	// Files shown in a visible editor, with that editor's selection.
+	Editors []ViewEditor `json:"editors"`
+	// Files shown in a visible diff.
+	Diffs  []ViewPath  `json:"diffs"`
+	Folder *ViewPath   `json:"folder,omitempty"`
+	Search *ViewSearch `json:"search,omitempty"`
+	// Security findings open or selected in a visible security view.
+	Findings []ViewFinding `json:"findings"`
+}
+
+// ViewEditor
+type ViewEditor struct {
+	RootID      string         `json:"root_id"`
+	Path        string         `json:"path"`
+	DisplayPath string         `json:"display_path"`
+	Unsaved     bool           `json:"unsaved"`
+	Selection   *ViewSelection `json:"selection,omitempty"`
+}
+
+// ViewFinding
+type ViewFinding struct {
+	Fingerprint string        `json:"fingerprint"`
+	RuleID      string        `json:"rule_id"`
+	Level       FindingLevel  `json:"level"`
+	Location    *ViewLocation `json:"location,omitempty"`
+}
+
+// ViewLocation
+type ViewLocation struct {
+	RootID      string `json:"root_id"`
+	Path        string `json:"path"`
+	DisplayPath string `json:"display_path"`
+	Line        int    `json:"line,omitempty"`
+}
+
+// ViewPath
+type ViewPath struct {
+	RootID string `json:"root_id"`
+	// Root-relative slash path.
+	Path string `json:"path"`
+	// The path as the agent was shown it, @label-qualified off the primary root.
+	DisplayPath string `json:"display_path"`
+}
+
+// ViewReportEditor The document a visible editor shows; its selection is the window's editor presence.
+type ViewReportEditor struct {
+	DocumentID string `json:"document_id"`
+}
+
+// ViewReportFinding
+type ViewReportFinding struct {
+	Fingerprint string              `json:"fingerprint"`
+	RuleID      string              `json:"rule_id"`
+	Level       FindingLevel        `json:"level"`
+	Location    *ViewReportLocation `json:"location,omitempty"`
+}
+
+// ViewReportLocation
+type ViewReportLocation struct {
+	RootID string `json:"root_id"`
+	Path   string `json:"path"`
+	Line   int    `json:"line,omitempty"`
+}
+
+// ViewReportPath
+type ViewReportPath struct {
+	RootID string `json:"root_id"`
+	Path   string `json:"path"`
+}
+
+// ViewReportSearch
+type ViewReportSearch struct {
+	Query string              `json:"query"`
+	Hit   *ViewReportLocation `json:"hit,omitempty"`
+}
+
+// ViewSearch
+type ViewSearch struct {
+	Query string        `json:"query"`
+	Hit   *ViewLocation `json:"hit,omitempty"`
+}
+
+// ViewSelection The editor's main selection.
+type ViewSelection struct {
+	StartLine int `json:"start_line"`
+	EndLine   int `json:"end_line"`
+	// No text is selected; start_line is the cursor's line.
+	Cursor bool `json:"cursor"`
 }
 
 // VisualArtifact

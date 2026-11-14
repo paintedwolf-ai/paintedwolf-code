@@ -1,0 +1,46 @@
+{
+  "id": "read-outside-scope-blocked",
+  "title": "A read outside the declared scope is blocked",
+  "covers": [
+    "OAR-SEL-2",
+    "OAR-FACT-7",
+    "OAR-EVAL-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "READ_OUTSIDE_SCOPE",
+    "namespace": "example.security",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {
+      "tools": [
+        "read",
+        "grep"
+      ]
+    },
+    "requires_facts": [
+      "path_outside_scope"
+    ],
+    "when": "path_outside_scope",
+    "effect": "block",
+    "on_error": "fail_closed",
+    "profile": "portable",
+    "title": "Read outside the declared scope",
+    "what": "The call reads a path outside the scope in force for this tool.",
+    "fix": "Read inside the scope, or widen the scope deliberately."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "path_outside_scope": true
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "READ_OUTSIDE_SCOPE",
+    "applied": [
+      "example.security/READ_OUTSIDE_SCOPE:fired"
+    ]
+  }
+}

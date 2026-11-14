@@ -8,3 +8,6 @@ type ProducerFailure interface {
 }
 
 const AcceptedUnpublishedWrite = "accepted_unpublished_write"
+
+// OutputWithheld records staged bytes discarded before destination publication.
+const OutputWithheld = "output_withheld"

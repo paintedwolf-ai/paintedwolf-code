@@ -1,0 +1,29 @@
+{
+  "id": "sel-unknown-clause-rejected",
+  "title": "A selector clause the vocabulary does not define is rejected at load",
+  "covers": [
+    "OAR-SEL-7"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "BAD_SELECTOR",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {
+      "phase_of_moon": [
+        "waxing"
+      ]
+    },
+    "effect": "block",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "phase_of_moon"
+  }
+}

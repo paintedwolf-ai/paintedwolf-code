@@ -181,8 +181,8 @@ func TestFindPromptTailToolChunksSplitReadsAggregateBudget(t *testing.T) {
 		{ID: "u1", Role: string(api.MessageRoleUser), Content: "physics feel flat"},
 		{ID: "a1", Role: string(api.MessageRoleAssistant), Content: "Let me survey the repo."},
 		{ID: "t1", Role: string(api.MessageRoleTool), ToolName: "command", Content: `{"entries":[]}`},
-		{ID: "t2", Role: string(api.MessageRoleTool), ToolName: "command", Content: readA},
-		{ID: "t3", Role: string(api.MessageRoleTool), ToolName: "command", Content: readB},
+		{ID: "t2", Role: string(api.MessageRoleTool), ToolName: "git_diff", Content: readA},
+		{ID: "t3", Role: string(api.MessageRoleTool), ToolName: "git_diff", Content: readB},
 		// The reads have aged behind a later assistant turn, so graduation makes
 		// them eligible for prompt-tail compaction.
 		{ID: "a2", Role: string(api.MessageRoleAssistant), Content: "Now I have what I need."},
@@ -216,8 +216,8 @@ func TestWorkerChildPromptTailChunkCompaction(t *testing.T) {
 		{ID: "u1", Role: string(api.MessageRoleUser), Content: "physics feel flat"},
 		{ID: "a1", Role: string(api.MessageRoleAssistant), Content: "Let me survey the repo."},
 		{ID: "t1", Role: string(api.MessageRoleTool), ToolName: "command", Content: `{"entries":[]}`},
-		{ID: "t2", Role: string(api.MessageRoleTool), ToolName: "command", Content: readA},
-		{ID: "t3", Role: string(api.MessageRoleTool), ToolName: "command", Content: readB},
+		{ID: "t2", Role: string(api.MessageRoleTool), ToolName: "git_diff", Content: readA},
+		{ID: "t3", Role: string(api.MessageRoleTool), ToolName: "git_diff", Content: readB},
 		{ID: "a2", Role: string(api.MessageRoleAssistant), Content: "aged past hot"},
 	}
 	c := NewSimpleCompactor(cfg, MockSummarizer{Text: "orientation summary"})

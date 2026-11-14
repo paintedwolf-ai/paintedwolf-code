@@ -1,0 +1,25 @@
+{
+  "id": "doc-invalid-id-rejected",
+  "title": "An id that does not match the identifier pattern is rejected at load",
+  "covers": [
+    "OAR-DOC-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "lower_case_id",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "id"
+  }
+}

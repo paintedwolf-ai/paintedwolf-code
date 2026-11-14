@@ -97,13 +97,16 @@ func TestEvaluateConditionGroundingFacts(t *testing.T) {
 	}
 }
 
-func TestPathOutsideScopeFunction(t *testing.T) {
+func TestPathOutsideScopeReadsTheCurrentTool(t *testing.T) {
 	gc := NewGuardContext()
 	gc.Access.PathOutsideScopeByTool = map[string]bool{"read": true}
-	ok, err := EvaluateCondition(`path_outside_scope("read")`, gc)
-	testutil.FailErr(t, "eval", err)
-	if !ok {
-		t.Fatal("expected path_outside_scope true")
+	for tool, want := range map[string]bool{"read": true, "write": false} {
+		gc.ObserveToolCall(tool, nil)
+		ok, err := EvaluateCondition(`path_outside_scope`, gc)
+		testutil.FailErr(t, "eval", err)
+		if ok != want {
+			t.Fatalf("path_outside_scope for %s = %v, want %v", tool, ok, want)
+		}
 	}
 }
 
@@ -185,15 +188,14 @@ func TestSyncRegistryThreadsReferences(t *testing.T) {
 	dir := t.TempDir()
 	body := `hint_codes:
   DEMO_OWASP_TAG:
-    oar: "1.0"
+    spec_version: "1.0"
     id: DEMO_OWASP_TAG
     kind: policy
-    anchor: tool.pre_invoke
+    on: tool.pre_invoke
     effect: block
     when: "true"
     selector: {}
-    copy:
-      what: demo
+    what: demo
     references:
       owasp_llm: [LLM01]
       mitre_atlas: [AML.T0051]

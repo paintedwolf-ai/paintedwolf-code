@@ -2,6 +2,7 @@
 package guidance
 
 import (
+	"github.com/lycaon/lycaon/internal/oarcore"
 	"maps"
 	"sort"
 	"strings"
@@ -62,9 +63,9 @@ func (c *HintConfig) InSessionRetryCodes() []string {
 
 // HintEntry holds rule metadata and its normalized presentation fields.
 type HintEntry struct {
-	Emit          string        `yaml:"emit,omitempty"`
+	Emit          string        `yaml:"x-paintedwolf-emit,omitempty"`
 	Effect        string        `yaml:"effect,omitempty"`
-	Anchor        string        `yaml:"anchor,omitempty"`
+	Anchor        string        `yaml:"on,omitempty"`
 	Tools         []string      `yaml:"tools,omitempty"`
 	Message       string        `yaml:"message,omitempty"`
 	What          string        `yaml:"what,omitempty"`
@@ -72,7 +73,7 @@ type HintEntry struct {
 	Why           string        `yaml:"why,omitempty"`
 	Fix           string        `yaml:"fix,omitempty"`
 	Instead       string        `yaml:"instead,omitempty"`
-	Evidence      *EvidenceMeta `yaml:"evidence,omitempty"`
+	Evidence      *EvidenceMeta `yaml:"x-paintedwolf-evidence,omitempty"`
 	HintEntryRule `yaml:",inline"`
 }
 
@@ -81,18 +82,19 @@ type HintEntryRule struct {
 	ID                string          `yaml:"id,omitempty"`
 	Title             string          `yaml:"title,omitempty"`
 	Kind              string          `yaml:"kind,omitempty"`
-	Category          string          `yaml:"category,omitempty"`
+	Category          string          `yaml:"x-paintedwolf-category,omitempty"`
 	Severity          string          `yaml:"severity,omitempty"`
 	When              string          `yaml:"when,omitempty"`
 	DraftOutcomeLabel string          `yaml:"draft_outcome_label,omitempty"`
-	ContextSchema     map[string]any  `yaml:"context_schema,omitempty"`
-	Scenarios         []ScenarioEntry `yaml:"scenarios,omitempty"`
+	ContextSchema     map[string]any  `yaml:"x-paintedwolf-context-schema,omitempty"`
+	Scenarios         []ScenarioEntry `yaml:"x-paintedwolf-scenarios,omitempty"`
 	Selector          map[string]any  `yaml:"selector,omitempty"`
 	HintEntryPolicy   `yaml:",inline"`
 }
 
 // HintEntryPolicy holds OAR rule execution and dependency fields.
 type HintEntryPolicy struct {
+	SpecVersion         string         `yaml:"spec_version,omitempty"`
 	Enforcement         string         `yaml:"enforcement,omitempty"`
 	Mandatory           bool           `yaml:"mandatory,omitempty"`
 	OnError             string         `yaml:"on_error,omitempty"`
@@ -100,51 +102,31 @@ type HintEntryPolicy struct {
 	Flow                []string       `yaml:"flow,omitempty"`
 	References          map[string]any `yaml:"references,omitempty"`
 	Detector            map[string]any `yaml:"detector,omitempty"`
-	OAR                 string         `yaml:"oar,omitempty"`
-	Copy                *HintCopy      `yaml:"copy,omitempty"`
-	Requires            *HintRequires  `yaml:"requires,omitempty"`
+	RequiresFacts       []string       `yaml:"requires_facts,omitempty"`
 	HintEntryExtensions `yaml:",inline"`
 }
 
-// HintEntryExtensions holds rule lineage and host extension fields.
+// HintEntryExtensions holds this host's x-paintedwolf- fields.
 type HintEntryExtensions struct {
-	Overrides []string      `yaml:"overrides,omitempty"`
-	Status    string        `yaml:"status,omitempty"`
-	Related   []HintRelated `yaml:"related,omitempty"`
-	Successor string        `yaml:"x-paintedwolf-successor,omitempty"`
-	XEmit     string        `yaml:"x-paintedwolf-emit,omitempty"`
+	Status    string `yaml:"x-paintedwolf-status,omitempty"`
+	Successor string `yaml:"x-paintedwolf-successor,omitempty"`
 	// XAudience limits the tool profiles that can receive this rule.
-	XAudience      []string        `yaml:"x-paintedwolf-audience,omitempty"`
-	XCategory      string          `yaml:"x-paintedwolf-category,omitempty"`
-	XMessage       string          `yaml:"x-paintedwolf-message,omitempty"`
-	XScenarios     []ScenarioEntry `yaml:"x-paintedwolf-scenarios,omitempty"`
-	XEvidence      *EvidenceMeta   `yaml:"x-paintedwolf-evidence,omitempty"`
-	XContextSchema map[string]any  `yaml:"x-paintedwolf-context-schema,omitempty"`
+	XAudience []string `yaml:"x-paintedwolf-audience,omitempty"`
 }
 
-// HintCopy contains presentation fields that do not affect decisions ([OAR-DOC-24]).
-type HintCopy struct {
-	Title   string `yaml:"title,omitempty"`
-	What    string `yaml:"what,omitempty"`
-	Cause   string `yaml:"cause,omitempty"`
-	Why     string `yaml:"why,omitempty"`
-	Fix     string `yaml:"fix,omitempty"`
-	Instead string `yaml:"instead,omitempty"`
+// flatUnitMetadata is the host metadata of a copy-only unit, which is not an
+// OAR document and keeps plain field names.
+type flatUnitMetadata struct {
+	Emit          string          `yaml:"emit"`
+	Category      string          `yaml:"category"`
+	Evidence      *EvidenceMeta   `yaml:"evidence"`
+	ContextSchema map[string]any  `yaml:"context_schema"`
+	Scenarios     []ScenarioEntry `yaml:"scenarios"`
 }
 
-// HintRequires declares capability profiles and host-tier facts ([OAR-DOC-21]).
-type HintRequires struct {
-	Profiles []string `yaml:"profiles,omitempty"`
-	Facts    []string `yaml:"facts,omitempty"`
-}
-
-// HintRelated records rule lineage without affecting decisions ([OAR-DOC-30]).
-type HintRelated struct {
-	ID   string `yaml:"id"`
-	Type string `yaml:"type"`
-}
-
-// UnmarshalYAML decodes a rule document into its normalized shape.
+// UnmarshalYAML decodes a policy unit into its normalized shape. An OAR
+// document carries host metadata under x-paintedwolf- names; a copy-only unit
+// under plain names.
 func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 	type hintAlias HintEntry
 	var raw hintAlias
@@ -152,34 +134,28 @@ func (e *HintEntry) UnmarshalYAML(node *yaml.Node) error {
 		return err
 	}
 	*e = HintEntry(raw)
-	if strings.TrimSpace(e.OAR) != "" {
-		e.projectOARFields()
+	if !e.IsOAR() {
+		var flat flatUnitMetadata
+		if err := node.Decode(&flat); err != nil {
+			return err
+		}
+		e.Emit, e.Category, e.Evidence, e.ContextSchema, e.Scenarios = flat.Emit, flat.Category, flat.Evidence, flat.ContextSchema, flat.Scenarios
+	}
+	if tools := stringList(e.Selector["tools"]); len(tools) > 0 {
+		e.Tools = tools
 	}
 	return nil
 }
 
-// projectOARFields maps rule fields to the hint rendering model.
-func (e *HintEntry) projectOARFields() {
-	if c := e.Copy; c != nil {
-		e.Title = c.Title
-		e.What = c.What
-		e.Cause = c.Cause
-		e.Why = c.Why
-		e.Fix = c.Fix
-		e.Instead = c.Instead
-	}
-	e.Emit = e.XEmit
-	e.Category = e.XCategory
-	e.Message = e.XMessage
-	e.Scenarios = e.XScenarios
-	e.Evidence = e.XEvidence
-	e.ContextSchema = e.XContextSchema
-	e.Tools = stringList(e.Selector["tool"])
-}
+// IsOAR reports whether the unit is an Open Agent Rules document.
+func (e HintEntry) IsOAR() bool { return strings.TrimSpace(e.SpecVersion) != "" }
 
-// Operations is the rule's paintedwolf.operation selector: the bound native
-// operation beneath command, or the structured tool of that name.
-func (e HintEntry) Operations() []string { return stringList(e.Selector["paintedwolf.operation"]) }
+// Operations are the paintedwolf.operation values the rule's condition
+// requires: the bound native operation beneath command, or the structured tool
+// of that name.
+func (e HintEntry) Operations() []string {
+	return oarcore.ConjunctValues(e.When, "paintedwolf.operation")
+}
 
 func stringList(v any) []string {
 	items, ok := v.([]any)

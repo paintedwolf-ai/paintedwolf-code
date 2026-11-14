@@ -2,15 +2,19 @@
   "category": "go_struct_fields",
   "artifact": "lycaon/internal/tools/native/command/command.ProgramRuntime",
   "kind": "runtime_service",
-  "workstream": "shared-verification-runtime",
+  "workstream": "command-verdict-evidence",
   "disposition": "retain",
-  "reason": "Retain the single program lifetime shared by command and verify. Foreground continuation transfers output custody and settlement of the original evaluation; it does not replay statements or introduce another authority owner. Admission, review and persistence remain with their existing collaborators. Continuation, cancellation, screened-stream ordering and parked-verification contracts cover this boundary. Retain the measured ceiling; growth requires renewed review.",
-  "reviewed_commit": "4738f54a38b1fc727d9c144fdccb77e043e0d002",
+  "reason": "Retain one program lifetime across command, verification, continuation and retained output recovery. Output views resolve session-scoped retained bodies; bounded child diagnostics use the existing retention and publication owners. Stream capture and result records have separate domain files.",
+  "reviewed_commit": "1a7da07d4d1fe89a90d55b3342e8c415c1093444",
   "ceiling": 24,
   "boundaries": {
     "lycaon/internal/tools/native/command/program_continue_test.go": "118121800a4e8683a057b6124e2da4ce1feb74a57f79a3ada58485285d5358e9",
     "lycaon/internal/tools/native/command/program_continue_stream_test.go": "9bdbd8e4826f11e79583a9f1712b7341adff930d31c0dc2429ccbd68b3221582",
-    "lycaon/internal/tools/native/command/verify_program_park_test.go": "7bc32bb756c8e0fec108fb29eff2011839eb2a48eaad0f046ce6c11f1da17338"
+    "lycaon/internal/tools/native/command/verify_program_park_test.go": "6132c1a428b7d576743b2e797147fd2d674245d8aefe69998e4a81a356297919",
+    "lycaon/internal/toolhost/command_output_recovery_test.go": "90a27db2579beff4ff86abd9ebad423168c756f9913be7ceaf006e3622fd3a12",
+    "lycaon/internal/tools/native/command/program_output_stream_test.go": "55ddba59438b847a4c0dbb8eb5b7e0761648f218e2f89b4e2c9b7d4fb3e0ee07",
+    "lycaon/internal/tools/native/verify_test.go": "8116e2ee7eb5ba471215557f875a59bae43d60e131f0d262ead38e2cc365da48",
+    "lycaon/internal/invocation/program_feedback_read_test.go": "d25a921acc4ff1993caea937f1f8bb49d007586ff91c459ddd3e226be6e531cd"
   },
-  "reviewed_shape": "08398093733b1c39c97f65668d1aa970280519f1e02ca5dcaca37b3730072287"
+  "reviewed_shape": "068c805056a8417945beb3bed08114b5011a2c654cbe5b9743e1adb8eaae70a8"
 }

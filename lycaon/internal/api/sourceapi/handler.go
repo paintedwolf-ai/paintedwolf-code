@@ -24,6 +24,7 @@ import (
 	"github.com/lycaon/lycaon/internal/sourcecomparison"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/viewstate"
 	"github.com/lycaon/lycaon/internal/visual"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workscope"
@@ -37,6 +38,7 @@ type Deps struct {
 	CatalogSnapshot CatalogSnapshotFunc
 	WatchNeedsSeed  func(rootPath string) bool
 	EditorClients   *editordoc.ClientLiveness
+	ProjectViews    *viewstate.Service
 	EditorDocuments *editordoc.Service
 	Events          events.ReplayHub
 	FileBriefings   *filebriefing.Service
@@ -239,7 +241,7 @@ func New(responses *httpio.Responder, background *taskgroup.Group, operations Op
 	// Editor publications share source path reservations.
 	deps.EditorDocuments.SetSourcePaths(deps.SourceMutations.Paths)
 
-	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion})
+	editor := editoradmin.New(responses, background, editoradmin.Dependencies{EditorClients: deps.EditorClients, EditorDocuments: deps.EditorDocuments, ProjectViews: deps.ProjectViews, Events: deps.Events, ManagedSecrets: deps.ManagedSecrets, MutationGate: deps.MutationGate, ProjectRegistry: deps.ProjectRegistry, SecretSpans: deps.SecretSpans, SessionStore: deps.SessionStore, TryRunPromotion: deps.TryRunPromotion})
 	sourceViews := &sourceViewService{}
 	sourceReaders := &sourcecomparison.Cache{}
 	warmupPolls := newWarmupClock()

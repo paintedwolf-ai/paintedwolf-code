@@ -108,7 +108,7 @@ func TestProgressMissingRetainsBoundedRejectedCallOnProjection(t *testing.T) {
 			gc := oar.NewGuardContext()
 			gc.Session.SessionID = t.Name()
 			gc.Session.SessionPosture = "build"
-			gc.Session.Profile = "coordinator"
+			gc.Session.Role = "coordinator"
 			gc.ObserveToolCall(tc.tool, args)
 			ObserveProgressMissingBeforeDispatch(&api.Session{ID: t.Name()}, "", tc.tool, false, gc)
 			res, err := hostFinishOARPipeline().EvaluateBlock(t.Context(), oar.AnchorCoordinatorPreInvoke, gc)

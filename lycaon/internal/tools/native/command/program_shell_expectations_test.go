@@ -128,6 +128,17 @@ func TestProgramShellProcessInspectionAndOwnership(t *testing.T) {
 	if pkillOwned.Refusal != nil || !strings.Contains(pkillOwned.Stdout, "pkilled=143") {
 		t.Fatalf("expected pkill on owned process to settle with 143, got %+v", pkillOwned)
 	}
+
+	// A process a job started is the session's too: pkill signals that child
+	// alone, by its kernel instance, and the job's shell carries on.
+	childOut, err := f.call(t, t.Context(), `external -- /bin/sh -c '/bin/sleep 31; exit 0' & job=$!; i=0; until [ "$i" -ge 100 ]; do if pgrep -f -x '/bin/sleep 31'; then i=100; else i=$((i+1)); external -- /bin/sleep 0.1; fi; done; pkill -f -x '/bin/sleep 31'; external -- /bin/echo "pkill=$?"; wait "$job"; external -- /bin/echo "job=$?"`)
+	testutil.FailErr(t, "pkill a job's child", err)
+	child := decodeOutcome(t, childOut)
+	// The job finishing 0 is its shell going on after its child's signal; a
+	// signal to the job itself would settle it 143.
+	if child.Refusal != nil || !strings.Contains(child.Stdout, "pkill=0") || !strings.Contains(child.Stdout, "job=0") {
+		t.Fatalf("pkill of a job's child = %+v", child)
+	}
 }
 
 func TestProgramPsCustomHeadersAndUnknownField(t *testing.T) {

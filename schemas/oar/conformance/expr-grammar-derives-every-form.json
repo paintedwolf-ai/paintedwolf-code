@@ -1,0 +1,30 @@
+{
+  "id": "expr-grammar-derives-every-form",
+  "title": "Every form the grammar derives is accepted and evaluated",
+  "covers": [
+    "OAR-EXPR-1",
+    "OAR-EXPR-8"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "!(size(tool) == 0) ? (-1 < 0 && 7 % 3 == 1 && 1.5e0 > 1.0 && tool + \"x\" == \"readx\") : false"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "id": "sel-unmodelled-clause-does-not-match",
+  "title": "A tools clause does not match at an anchor where no tool is invoked",
+  "covers": [
+    "OAR-SEL-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "NEEDS_POSTURE",
+    "kind": "policy",
+    "on": "model.output",
+    "selector": {
+      "tools": [
+        "read"
+      ]
+    },
+    "effect": "block"
+  },
+  "input": {
+    "anchor": "model.output",
+    "facts": {}
+  },
+  "expected": {
+    "decision": "none"
+  }
+}

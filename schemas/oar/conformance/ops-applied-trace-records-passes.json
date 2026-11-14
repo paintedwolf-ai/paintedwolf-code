@@ -1,0 +1,41 @@
+{
+  "id": "ops-applied-trace-records-passes",
+  "title": "The applied-rules trace records selected rules that did not fire",
+  "covers": [
+    "OAR-OPS-7"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "A_PASSES",
+      "kind": "schema",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "tool == \"write\""
+    },
+    {
+      "spec_version": "1.0",
+      "id": "B_FIRES",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "warn",
+      "when": "tool == \"read\""
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "B_FIRES",
+    "applied": [
+      "A_PASSES:passed",
+      "B_FIRES:fired"
+    ]
+  }
+}

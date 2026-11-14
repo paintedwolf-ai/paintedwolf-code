@@ -1,0 +1,25 @@
+{
+  "id": "fire-counter-of-unknown-rule-rejected",
+  "title": "Reading the counters of a rule outside the rule set is rejected at load",
+  "covers": [
+    "OAR-FIRE-6"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "fire_count_of(\"MISSING\") > 0"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-FIRE-6"
+  }
+}

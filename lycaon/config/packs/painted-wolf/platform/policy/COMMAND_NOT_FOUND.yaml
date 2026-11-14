@@ -1,33 +1,27 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_NOT_FOUND
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - command
     - verify
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.command
+requires_facts: [paintedwolf.command, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_NOT_FOUND"
 effect: block
-copy:
-  what: '{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}`{% else %}An executable{% endif %} could not be resolved for this invocation.'
-  cause: The launcher did not start this executable.
-  why: The requested executable did not start. Earlier operations may have run.
-  fix: ''
-  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: Executable not found on PATH
+message: Executable not found on PATH
+what: '{% if paintedwolf.command %}Executable `{{ paintedwolf.command }}`{% else %}An executable{% endif %} could not be resolved for this invocation.'
+cause: The launcher did not start this executable.
+why: The requested executable did not start. Earlier operations may have run.
+fix: ''
+instead: ''
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    command: missing-tool
-- id: near_miss_named
-  vars:
-    command: python
-    resolvable: python3
+  - id: default
+    vars:
+      command: missing-tool
+  - id: near_miss_named
+    vars:
+      command: python
+      resolvable: python3

@@ -1,0 +1,39 @@
+{
+  "title": "A copy-carrying rule does not displace the rule that wins",
+  "covers": [
+    "OAR-COPY-6"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "BLOCKER",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "block",
+      "when": "tool == \"read\"",
+      "what": "Blocked."
+    },
+    {
+      "spec_version": "1.0",
+      "id": "NUDGER",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "nudge",
+      "when": "tool == \"read\"",
+      "what": "Consider {{ tool }} alternatives."
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "BLOCKER"
+  },
+  "id": "copy-does-not-affect-decision"
+}

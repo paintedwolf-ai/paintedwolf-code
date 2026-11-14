@@ -27,9 +27,9 @@ func TestCompletionKeepsOneWiringSnapshot(t *testing.T) {
 		return api.Message{Content: "replacement wiring"}, true
 	}}
 	engine.SetDeps(AssemblyDeps{Prompts: pe,
-		WorkspaceRoots: func(context.Context, *api.Session) ([]map[string]any, int, string) {
+		WorkspaceRoots: func(context.Context, *api.Session) ([]map[string]any, int, string, int) {
 			engine.SetDeps(replacement)
-			return nil, 0, ""
+			return nil, 0, "", 0
 		},
 		AgentsMDIndex: func(context.Context, *api.Session) (api.Message, bool) {
 			oldReads++

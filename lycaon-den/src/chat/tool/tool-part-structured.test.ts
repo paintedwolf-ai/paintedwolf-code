@@ -4,6 +4,7 @@ import {
   resetStructuredToolPresentationCacheForTests,
 } from "./tool-part-structured.ts";
 import type { ToolPartView } from "./tool-part-model.ts";
+import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 
 function part(overrides: Partial<ToolPartView> = {}): ToolPartView {
   return {
@@ -249,6 +250,33 @@ describe("buildStructuredToolPresentation", () => {
       text: "package main\n",
     });
     expect(view.rawOutputAvailable).toBe(true);
+  });
+
+  it("keeps a command's output beside its file edits", () => {
+    const view = buildStructuredToolPresentation(
+      part({
+        tool: "command",
+        kind: "command",
+        args: { command: "edit --path a.go --old-string old --new-string new && go test ./..." },
+        output: "FAIL pkg/foo 0.12s\n",
+        fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "old", after: "new" })],
+      }),
+    );
+    expect(view.sections).toContainEqual(expect.objectContaining({ kind: "content", text: "FAIL pkg/foo 0.12s\n" }));
+  });
+
+  it("drops a write tool's receipt and text arguments when its diff shows them", () => {
+    const view = buildStructuredToolPresentation(
+      part({
+        tool: "restore_version",
+        kind: "write",
+        args: { path: "a.go", content: "new" },
+        output: "Restored a.go to version v1 (3 bytes)",
+        fileEdits: [fileEditPreviewFixture({ path: "a.go", before: "old", after: "new" })],
+      }),
+    );
+    expect(view.sections.some((section) => section.kind === "content")).toBe(false);
+    expect(view.argsFacts.map((fact) => fact.label)).toEqual(["Path"]);
   });
 
   it("marks input path args as typed path facts for SourcePathLink", () => {

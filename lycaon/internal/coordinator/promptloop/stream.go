@@ -332,11 +332,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		return coordinatorLLMLoopProgress(profileID, surfaceID, l.Context.coordinatorSurfaceActivityLabel(surfaceID), hostTurn, progressIterIndex, maxIter, proseFinish)
 	}
 	ctx = attachStreamObservers(ctx, l, sess, sessionID, llmCallID, callProvider, callModel, isCoordinatorTurn, finishPreparing, loopProgress)
-	callFailed := func() {
-		if isCoordinatorTurn {
-			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, loopProgress())
-		}
-	}
+	callFailed := l.streamCallFailedFunc(ctx, sess, sessionID, llmCallID, callProvider, callModel, isCoordinatorTurn, loopProgress)
 	suppressCallFailed := false
 	// Publish one terminal event even after cancellation.
 	defer func() {
@@ -345,8 +341,12 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		}
 	}()
 
-	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req)
-	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx))
+	req.EmptyResponseRecovery = l.emptyResponseRecovery(sess, req, st)
+	procedureProfile := profileID
+	if surfaceID != "" {
+		procedureProfile = surfaceID
+	}
+	req = trainingcapture.Prepare(ctx, req, l.trainingCapturePolicy(ctx, sess, procedureProfile))
 	req, sourceRequest := modelcall.CaptureSourceRequest(req)
 	if st != nil {
 		st.output.recoveryAdmitted = false
@@ -377,7 +377,7 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		return completion, nil, truncErr
 	}
 
-	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, completion, providerID, model)
+	response, err := llm.ClassifyToolResponse(l.providerProfile(providerID), req, st.deferredToolNames(), completion, providerID, model)
 	if err != nil {
 		l.recordAbandonedTurnUsage(ctx, sess, llmCallID, providerID, model, req, delivered)
 		return nil, nil, err
@@ -392,8 +392,8 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		slog.WarnContext(ctx, "record llm call usage", "call_id", llmCallID, "error", err)
 	}
 	outputGateStarted := time.Now()
-	reject, blocked, transformed, changed := l.Closeout.evaluateContentAnchor(ctx, sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextActionTools: response.TextActionTools}, "", nil)
-	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextActionTools)
+	reject, blocked := l.Closeout.evaluateContentAnchor(contentOutputReach(ctx, st, req), sess, oar.AnchorContentOutput, oar.ContentObservation{Segments: oarModelOutputSegments(completion.Content), TextAction: response.TextAction}, "", nil)
+	slog.InfoContext(ctx, "model output gate", "call_id", llmCallID, "session_id", sessionID, "duration_ms", time.Since(outputGateStarted).Milliseconds(), "blocked", blocked, "selected_text_protocol", req.ToolProtocol, "text_action_tools", response.TextAction.Tools)
 	if st != nil {
 		st.output.rejection = nil
 		if !blocked {
@@ -401,13 +401,11 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 		}
 	}
 	if blocked {
-		if st == nil || len(response.TextActionTools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {
+		if st == nil || len(response.TextAction.Tools) == 0 || reject == nil || reject.Code() != "TOOL_ACTION_IN_TEXT" {
 			return nil, nil, reject
 		}
 		st.output.rejection = reject
-	} else if changed {
-		completion.Content = transformed
-		tokens = []string{transformed}
+		st.output.recoveryAdmitted = true
 	}
 	if input := completion.ContextInputTokens(); l.Deps.RecordCompactionTokenObservation != nil && input > 0 {
 		l.Deps.RecordCompactionTokenObservation(sessionID, callProvider, callModel, input, transcriptEstimate)
@@ -441,6 +439,17 @@ func (l *modelTurn) completeStreamWithOverflowRetry(
 	completion.ProviderID = providerID
 	completion.Model = model
 	return completion, tokens, nil
+}
+
+func (l *modelTurn) streamCallFailedFunc(
+	ctx context.Context, sess *api.Session, sessionID, llmCallID, callProvider, callModel string,
+	isCoordinatorTurn bool, loopProgress func() *api.CoordinatorLoopProgress,
+) func() {
+	return func() {
+		if isCoordinatorTurn {
+			l.publishLLMCallError(ctx, sess, sessionID, llmCallID, callProvider, callModel, loopProgress())
+		}
+	}
 }
 
 func beginTurnCallLedger(ctx context.Context, costDep any, sess *api.Session, llmCallID, callProvider, callModel string) func() {

@@ -13,23 +13,20 @@ import { watchPaletteTheme } from "../../contributions/palette-cache.ts";
 import { editorShownAgentActivity, type AgentActivityKinds } from "../../settings/editor/editor-prefs.ts";
 import { overviewAgentMarks, setOverviewAgentMarks, type OverviewAgentMark } from "../../components/source/annotations/overview-agent-marks.ts";
 import { agentDocumentMarks, type AgentMark } from "../components/agent-presence.ts";
+import {
+  AGENT_FADE_IN_MS,
+  agentMarkLeavingAt,
+  agentMarkPhase,
+  agentWholeFile,
+  currentAgentSteps,
+  nextAgentPaint,
+  nextAgentPaintChange,
+  type PaintedAgentMark,
+} from "./agent-paint-lifetime.ts";
 import { agentPresenceFor } from "../components/agent-presence-store.ts";
 import { decodeUpdate } from "./document-outbox.ts";
 import type { DocumentReplica } from "./document-replica.ts";
 import { selectionOutline } from "../tree/selection-outline.ts";
-
-const AGENT_FADE_IN_MS = 700;
-export const AGENT_FADE_OUT_MS = 1600;
-
-export type PaintedAgentMark = {
-  mark: AgentMark;
-  from: number;
-  to: number;
-  color: WindowColor | undefined;
-  bornAt: number;
-  /** Fade-out start time; null while reported. */
-  leftAt: number | null;
-};
 
 type AgentPaint = { marks: readonly PaintedAgentMark[] };
 
@@ -91,36 +88,17 @@ export function resolveAgentMark(replica: DocumentReplica, doc: Text, mark: Agen
   return { from: Math.min(from, to), to: Math.max(from, to) };
 }
 
-/** Preserve fade timing across updates and retain departing marks until fade-out ends. */
-export function nextAgentPaint(
-  previous: readonly PaintedAgentMark[],
-  reported: ReadonlyArray<{ mark: AgentMark; from: number; to: number; color: WindowColor | undefined }>,
-  now: number,
-): PaintedAgentMark[] {
-  const prior = new Map(previous.map(painted => [painted.mark.key, painted]));
-  const next: PaintedAgentMark[] = [];
-  const present = new Set<string>();
-  for (const item of reported) {
-    const held = prior.get(item.mark.key);
-    present.add(item.mark.key);
-    next.push({ ...item, bornAt: held && held.leftAt === null ? held.bornAt : now, leftAt: null });
-  }
-  for (const painted of previous) {
-    if (present.has(painted.mark.key)) continue;
-    const leftAt = painted.leftAt ?? now;
-    if (now - leftAt < AGENT_FADE_OUT_MS) next.push({ ...painted, leftAt });
-  }
-  return next;
-}
-
 function fadeClass(painted: PaintedAgentMark, now: number): string {
-  if (painted.leftAt !== null) return " cm-agent--leaving";
+  const phase = agentMarkPhase(painted, now);
+  if (phase === "leaving" || phase === "gone") return " cm-agent--leaving";
+  if (phase === "past") return " cm-agent--past";
   return now - painted.bornAt < AGENT_FADE_IN_MS ? " cm-agent--entering" : "";
 }
 
 /** Negative delays preserve fade progress on redraw; set them only at animation start. */
 function fadeDelay(painted: PaintedAgentMark, now: number): string {
-  return `${-(now - (painted.leftAt ?? painted.bornAt))}ms`;
+  const leaving = agentMarkLeavingAt(painted);
+  return `${-(now - (leaving !== null && now >= leaving ? leaving : painted.bornAt))}ms`;
 }
 
 function paintStyle(element: HTMLElement, painted: PaintedAgentMark, now: number, animationStarts: boolean): void {
@@ -153,7 +131,7 @@ class AgentMarker extends RectangleMarker {
   eq(other: RectangleMarker): boolean {
     return other instanceof AgentMarker && super.eq(other) && this.base === other.base && this.outline === other.outline
       && this.painted.mark.key === other.painted.mark.key && this.painted.mark.stale === other.painted.mark.stale
-      && this.painted.leftAt === other.painted.leftAt && this.painted.color?.caret === other.painted.color?.caret;
+      && fadeClass(this.painted, this.now) === fadeClass(other.painted, other.now) && this.painted.color?.caret === other.painted.color?.caret;
   }
 
   draw(): HTMLDivElement {
@@ -181,29 +159,6 @@ class AgentMarker extends RectangleMarker {
     if (this.outline) element.querySelector("path")?.setAttribute("d", this.outline);
     return true;
   }
-}
-
-/** Keep all ranges of one current operation per chat; older facts remain in the gutter. */
-export function currentAgentSteps(marks: readonly PaintedAgentMark[]): PaintedAgentMark[] {
-  const chosen = new Map<string, PaintedAgentMark>();
-  const rank = (painted: PaintedAgentMark) => {
-    const source = painted.mark.source;
-    return source.kind === "intent" ? (source.item.state === "awaiting_approval" ? 0 : 1)
-      : source.kind === "draft" ? 2 : 3;
-  };
-  for (const painted of marks) {
-    const held = chosen.get(painted.mark.chat.sessionId);
-    const source = painted.mark.source, prior = held?.mark.source;
-    const live = painted.leftAt === null, heldLive = held?.leftAt === null;
-    if (!held || (live && !heldLive) || (live === heldLive && (rank(painted) < rank(held)
-      || (source.kind === "read" && prior?.kind === "read" && source.item.sequence > prior.item.sequence)))) {
-      chosen.set(painted.mark.chat.sessionId, painted);
-    }
-  }
-  return marks.filter(painted => {
-    const selected = chosen.get(painted.mark.chat.sessionId);
-    return selected?.mark.source.item === painted.mark.source.item;
-  });
 }
 
 const SELECTION_KINDS = new Set<AgentMark["kind"]>(["pending", "whole-pending"]);
@@ -253,7 +208,7 @@ const agentSelectionLayer = layer({
     || agentPaint(update.startState) !== agentPaint(update.state),
   markers: view => {
     const now = Date.now();
-    return currentAgentSteps(agentPaint(view.state).marks).filter(painted => SELECTION_KINDS.has(painted.mark.kind)).sort(paintOrder)
+    return currentAgentSteps(agentPaint(view.state).marks, now).filter(painted => SELECTION_KINDS.has(painted.mark.kind)).sort(paintOrder)
       .flatMap(painted => selectionMarkers(view, painted, now));
   },
 });
@@ -265,9 +220,11 @@ const agentCaretLayer = layer({
     || agentPaint(update.startState) !== agentPaint(update.state) || scrolledSince(update.view, dom),
   markers: view => {
     const now = Date.now();
-    const marks = currentAgentSteps(agentPaint(view.state).marks).sort(paintOrder);
+    const marks = currentAgentSteps(agentPaint(view.state).marks, now).sort(paintOrder);
+    // A caret marks where a chat is working now, so ended reads drop it.
+    const caret = (painted: PaintedAgentMark) => painted.mark.kind === "insertion" || (painted.mark.caret && agentMarkPhase(painted, now) === "live");
     return [
-      ...marks.filter(painted => painted.mark.caret || painted.mark.kind === "insertion").flatMap(painted => caretMarkers(view, painted, now)),
+      ...marks.filter(caret).flatMap(painted => caretMarkers(view, painted, now)),
       ...marks.filter((painted, index) => marks.findIndex(item => item.mark.source.item === painted.mark.source.item) === index)
         .flatMap(painted => labelMarkers(view, painted, now)),
     ];
@@ -342,7 +299,7 @@ function scrolledSince(view: EditorView, dom: HTMLElement): boolean {
 function labelMarkers(view: EditorView, painted: PaintedAgentMark, now: number): LayerMarker[] {
   const fact = painted.mark.label ?? (painted.mark.kind === "match"
     ? `search match this turn${painted.mark.stale ? ", changed since" : ""}` : undefined);
-  if (!fact || painted.leftAt !== null) return [];
+  if (!fact || agentMarkPhase(painted, now) !== "live") return [];
   const { doc } = view.state;
   const first = doc.lineAt(painted.mark.kind === "whole-pending" ? 0 : Math.min(painted.from, doc.length)).number;
   const last = doc.lineAt(Math.min(Math.max(painted.to, painted.from), doc.length)).number;
@@ -369,7 +326,7 @@ function labelMarkers(view: EditorView, painted: PaintedAgentMark, now: number):
 
 const agentDecorations = EditorView.decorations.compute([agentPaintField], (state): DecorationSet => {
   const at = Date.now();
-  const marks = currentAgentSteps(agentPaint(state).marks);
+  const marks = currentAgentSteps(agentPaint(state).marks, at);
   const ranges: Range<Decoration>[] = [];
   for (const painted of marks) {
     if (painted.mark.kind !== "match" || painted.to <= painted.from) continue;
@@ -380,20 +337,6 @@ const agentDecorations = EditorView.decorations.compute([agentPaintField], (stat
   }
   return Decoration.set(ranges, true);
 });
-
-/** Only reads tint the gutter; pending changes stay in the text. */
-export function agentWholeFile(marks: readonly PaintedAgentMark[]): PaintedAgentMark | null {
-  let chosen: PaintedAgentMark | null = null;
-  for (const painted of marks) {
-    if (painted.mark.kind !== "whole") continue;
-    const leaving = painted.leftAt !== null, heldLeaving = chosen?.leftAt != null;
-    const source = painted.mark.source, prior = chosen?.mark.source;
-    const newer = source.kind === "read" && prior?.kind === "read" && painted.mark.chat.sessionId === chosen?.mark.chat.sessionId
-      ? source.item.sequence > prior.item.sequence : painted.bornAt > (chosen?.bornAt ?? 0);
-    if (!chosen || (heldLeaving && !leaving) || (leaving === heldLeaving && newer)) chosen = painted;
-  }
-  return chosen;
-}
 
 let heldWholeFileAttributes: { key: string; attributes: Record<string, string> } | null = null;
 
@@ -491,9 +434,8 @@ export function documentAgentPresence(replica: DocumentReplica, source?: AgentPr
         from: item.from, to: item.to, color: item.color?.caret,
       }));
       this.view.dispatch({ effects: [setAgentPaint.of(painted), setOverviewAgentMarks.of(overview)] });
-      const due = painted.flatMap(item => item.leftAt !== null ? [item.leftAt + AGENT_FADE_OUT_MS]
-        : now - item.bornAt < AGENT_FADE_IN_MS ? [item.bornAt + AGENT_FADE_IN_MS] : []);
-      if (due.length) this.timer = setTimeout(() => this.schedule(), Math.max(16, Math.min(...due) - now));
+      const due = nextAgentPaintChange(painted, now);
+      if (due !== null) this.timer = setTimeout(() => this.schedule(), Math.max(16, due - now));
     }
     destroy(): void {
       this.alive = false;

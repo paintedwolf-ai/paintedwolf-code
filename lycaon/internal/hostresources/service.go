@@ -16,6 +16,8 @@ import (
 	"github.com/lycaon/lycaon/config"
 	"github.com/lycaon/lycaon/internal/catalogruntime"
 	"github.com/lycaon/lycaon/internal/configdir"
+	"github.com/lycaon/lycaon/internal/confine"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/settingsoverlay"
 )
 
@@ -484,7 +486,96 @@ func (s *Service) ResolveAction(
 	// of the same name, the one the caller asked for first is the one they meant.
 	resolution.PathExtra = s.execPathExtra(ids, resolved)
 	resolution.WriteRoots = s.realizationWriteRoots(ids, resolved)
+	resolution.ClientEnv = s.realizationClientEnv(ids, resolved)
 	return resolution, unmet
+}
+
+// ResourcesForSockets names the available resources whose local Unix socket
+// is one of paths and whose launch points a client at it (client_env).
+func (s *Service) ResourcesForSockets(ctx context.Context, project ProjectContext, paths []string) []string {
+	if s == nil || len(paths) == 0 {
+		return nil
+	}
+	byID := s.definitionsByID()
+	wanted := map[string]struct{}{}
+	for _, path := range paths {
+		wanted[path] = struct{}{}
+		wanted[filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(path)))] = struct{}{}
+	}
+	var ids []string
+	for _, state := range s.SnapshotFor(ctx, false, project, nil).Resources {
+		if state.Status != StatusAvailable || state.HostSupport != HostSupported || state.Access == AccessDeny {
+			continue
+		}
+		if !s.pointsSocketClient(byID[state.ID]) {
+			continue
+		}
+		for _, connection := range state.Connections {
+			if connection.Mode != ConnectionLocalService || connection.Transport != LocalServiceUnixSocket {
+				continue
+			}
+			_, direct := wanted[connection.Target]
+			_, canonical := wanted[filepath.Clean(filepath.FromSlash(fspath.CanonicalPath(connection.Target)))]
+			if direct || canonical {
+				ids = append(ids, state.ID)
+				break
+			}
+		}
+	}
+	return uniqueSorted(ids)
+}
+
+// pointsSocketClient reports a resource whose local Unix socket names the
+// variable its client reads, on this platform.
+func (s *Service) pointsSocketClient(def Definition) bool {
+	realization := realizationForPlatform(def.Realizations, s.env.platform)
+	if realization == nil {
+		return false
+	}
+	for _, template := range realization.Connections {
+		if template.Mode == ConnectionLocalService && template.Transport == LocalServiceUnixSocket && template.ClientEnv != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// realizationClientEnv points each declared resource's client at the socket
+// the action reviews, as a whole socket reference the launch resolves.
+func (s *Service) realizationClientEnv(ids []string, resolved map[string]State) []string {
+	byID := s.definitionsByID()
+	var env []string
+	seen := map[string]struct{}{}
+	for _, id := range ids {
+		state, ok := resolved[id]
+		def, known := byID[id]
+		if !ok || !known {
+			continue
+		}
+		realization := realizationForPlatform(def.Realizations, s.env.platform)
+		if realization == nil {
+			continue
+		}
+		for _, template := range realization.Connections {
+			if template.ClientEnv == "" {
+				continue
+			}
+			if _, duplicate := seen[template.ClientEnv]; duplicate {
+				continue
+			}
+			for _, connection := range state.Connections {
+				if connection.Mode != template.Mode || connection.Transport != template.Transport || connection.Target == "" {
+					continue
+				}
+				if _, reference := confine.SocketEndpointReferences(connection.Target); reference != "" {
+					seen[template.ClientEnv] = struct{}{}
+					env = append(env, template.ClientEnv+"="+reference)
+				}
+				break
+			}
+		}
+	}
+	return env
 }
 
 func (s *Service) realizationWriteRoots(ids []string, resolved map[string]State) []string {

@@ -10,7 +10,7 @@ import (
 
 func TestSummarizePackHighlightRecords_dirMapTask(t *testing.T) {
 	content := `{"task":"Overview of packages/opencode","completeness":"complete","pack":{"identity":[{"path":"packages/opencode","kind":"dir_map","line_count":740}],"skeleton":[{"path":"packages/opencode/src/cli","kind":"directory_rollup","name":"87 files","line":1}]}}`
-	recs := evidence.SummarizePackHighlightRecords("", content)
+	recs := evidence.SummarizePackHighlightRecords(evidence.CitationRoots{}, content)
 	if len(recs) != 1 {
 		t.Fatalf("records = %d want 1", len(recs))
 	}
@@ -24,7 +24,7 @@ func TestSummarizePackHighlightRecords_dirMapTask(t *testing.T) {
 
 func TestSummarizePackHighlightRecords_callSite(t *testing.T) {
 	content := `{"task":"t","pack":{"identity":[{"path":"pkg/a.go","kind":"file"}],"call_sites":[{"path":"pkg/a.go","line":12,"excerpt":"func Entry() {}"}]}}`
-	recs := evidence.SummarizePackHighlightRecords("", content)
+	recs := evidence.SummarizePackHighlightRecords(evidence.CitationRoots{}, content)
 	if len(recs) != 1 || recs[0].Path != "pkg/a.go" || recs[0].Body[0] != "func Entry() {}" {
 		t.Fatalf("records = %+v", recs)
 	}

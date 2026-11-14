@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/people"
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -21,13 +22,13 @@ func TestCaptureIntervalsRetainTheFirstPreimage(t *testing.T) {
 	file := filepath.Join(dir, "item.txt")
 	testutil.FailErr(t, "seed preimage", os.WriteFile(file, []byte("before"), 0o640))
 	testutil.FailErr(t, "open interval", rewinds.captures.SealPromptCheckpoint(ctx, sessionID, anchor.ID))
-	rewinds.captures.RecordPrimaryMutation(ctx, sessionID, "item.txt")
+	rewinds.captures.RecordPrimaryMutation(ctx, sessionID, "", "item.txt")
 	checkpoint, err := rewinds.captures.ForSession(ctx, sessionID)
 	testutil.FailErr(t, "resolve checkpoint", err)
 	original, err := checkpoint.Load(ctx, sessionID, anchor.ID)
 	testutil.FailErr(t, "load preimage", err)
 	testutil.FailErr(t, "write after", os.WriteFile(file, []byte("after"), 0o640))
-	rewinds.captures.RecordPrimaryMutation(ctx, sessionID, "item.txt")
+	rewinds.captures.RecordPrimaryMutation(ctx, sessionID, "", "item.txt")
 	updated, err := checkpoint.Load(ctx, sessionID, anchor.ID)
 	testutil.FailErr(t, "load repeated touch", err)
 	if original.Paths["item.txt"].SHA256 == "" || updated.Paths["item.txt"].SHA256 != original.Paths["item.txt"].SHA256 {
@@ -42,7 +43,7 @@ func TestCapturedPromotionAndBlueprintRemainInCheckpoint(t *testing.T) {
 		testutil.FailErr(t, "seed file", os.WriteFile(filepath.Join(dir, name), []byte(name), 0o600))
 	}
 	testutil.FailErr(t, "open interval", rewinds.captures.SealPromptCheckpoint(ctx, sessionID, "promotion"))
-	rewinds.captures.RecordPromotedPrimaryPaths(ctx, sessionID, []string{"one.txt", "two.txt"})
+	rewinds.captures.RecordPromotedPrimaryPaths(ctx, sessionID, []tools.PrimaryMutation{{RelPath: "one.txt"}, {RelPath: "two.txt"}})
 	rewinds.captures.RecordBlueprintBinding(ctx, sessionID, "plans/original.md")
 	rewinds.captures.RecordBlueprintBinding(ctx, sessionID, "plans/replacement.md")
 	checkpoints, err := rewinds.captures.ForSession(ctx, sessionID)

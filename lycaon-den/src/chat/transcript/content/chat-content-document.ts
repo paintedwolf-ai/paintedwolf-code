@@ -10,6 +10,10 @@ export type ChatContentDocument = {
   title: string;
   revealOffset?: number;
   find?: { query: string; caseSensitive: boolean; offset?: number };
+  /** The file the content was read from, which decides its layout. */
+  path?: string;
+  /** The content's language where no path names it. */
+  language?: string;
 } & (
   | { kind: "tool"; messageId: string; toolCallId: string; content: Content }
   | { kind: "approval"; checkpointId: string; content: InlineContent }
