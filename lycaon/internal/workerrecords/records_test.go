@@ -235,3 +235,18 @@ func TestOpenLaneRootsListCurrentLanesOfOpenWorkers(t *testing.T) {
 		t.Fatalf("open lane roots = %v", roots)
 	}
 }
+
+// A worker whose start failed before any round is discarded with its create
+// receipt, freeing its name; a worker that ran a round cannot be discarded.
+func TestDiscardRemovesOnlyARoundlessWorker(t *testing.T) {
+	f := newFixture(t)
+	created := f.createWorker(t, "create-scout", workerrecords.WorkerSpec{Name: "scout"})
+	testutil.FailErr(t, "discard", f.store.Discard(t.Context(), f.coord, op("create-scout"), created.WorkerID))
+	again := f.createWorker(t, "create-scout", workerrecords.WorkerSpec{Name: "scout"})
+	if again.WorkerID == created.WorkerID {
+		t.Fatal("the create receipt survived the discard")
+	}
+	ran, _ := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	err := f.store.Discard(t.Context(), f.coord, op("create-fixer"), ran.WorkerID)
+	wantErr(t, "discard a worker that ran", err, workerrecords.ErrRoundUnsettled)
+}

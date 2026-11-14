@@ -162,11 +162,16 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 
 		task.SourceArgsDigest = sourceDigest
 		// The worker exists before its job, so a refused name enqueues nothing.
-		if _, err := createTaskWorker(ctx, deps, tctx, task, name, brief.Goal); err != nil {
+		created, err := createTaskWorker(ctx, deps, tctx, task, name, brief.Goal)
+		if err != nil {
 			return "", err
 		}
 		enqueuedID, err := deps.Queue.Enqueue(ctx, task)
 		if err != nil {
+			// The job never existed, so neither does its worker.
+			if discardErr := deps.WorkerRecords.Discard(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "worker"), created.WorkerID); discardErr != nil {
+				return "", errors.Join(err, discardErr)
+			}
 			var active *ReviewAssignmentActiveError
 			if errors.As(err, &active) {
 				return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "task", "field": "workflow_work_id", "reason": "review_assignment_already_active", "action": "wait_for_work", "job_ids": []string{active.JobID}, "workflow_work_id": task.WorkflowWorkID}}

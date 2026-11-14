@@ -130,6 +130,13 @@ SELECT worker_id, recipient_session_id, generation, delivered_through_seq,
 FROM worker_message_deliveries
 WHERE worker_id = ? AND recipient_session_id = ? AND generation = ?;
 
+-- name: DeleteRoundlessWorker :execrows
+DELETE FROM workers WHERE id = ?
+  AND NOT EXISTS (SELECT 1 FROM worker_rounds WHERE worker_rounds.worker_id = workers.id);
+
+-- name: DeleteWorkerOperation :exec
+DELETE FROM worker_operations WHERE operation_id = ?;
+
 -- name: GetWorkerMessageDeliveredThrough :one
 -- How far any earlier generation delivered a worker's messages to a session.
 SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq

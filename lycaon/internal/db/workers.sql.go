@@ -220,6 +220,28 @@ func (q *Queries) CountWorkerLaterUnsettledRounds(ctx context.Context, jobID str
 	return count, err
 }
 
+const deleteRoundlessWorker = `-- name: DeleteRoundlessWorker :execrows
+DELETE FROM workers WHERE id = ?
+  AND NOT EXISTS (SELECT 1 FROM worker_rounds WHERE worker_rounds.worker_id = workers.id)
+`
+
+func (q *Queries) DeleteRoundlessWorker(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteRoundlessWorker, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteWorkerOperation = `-- name: DeleteWorkerOperation :exec
+DELETE FROM worker_operations WHERE operation_id = ?
+`
+
+func (q *Queries) DeleteWorkerOperation(ctx context.Context, operationID string) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkerOperation, operationID)
+	return err
+}
+
 const disposeWorkerResultsByJob = `-- name: DisposeWorkerResultsByJob :execrows
 INSERT INTO worker_result_dispositions (
     result_id, worker_id, accounted_operation_id, accounted_at,

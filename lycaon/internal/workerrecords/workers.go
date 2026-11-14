@@ -316,6 +316,36 @@ func (s *Store) Close(ctx context.Context, actor Actor, op Op, workerID, reason 
 	})
 }
 
+// Discard removes a worker that never ran a round, with the receipt of the
+// operation that created it, so a start that failed leaves no worker and no
+// taken name. A worker with a round is refused.
+func (s *Store) Discard(ctx context.Context, actor Actor, created Op, workerID string) error {
+	if err := actor.check(); err != nil {
+		return err
+	}
+	tx, err := s.handle.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	q := s.q.WithTx(tx)
+	w, err := coordinatorWorker(ctx, q, actor, workerID)
+	if err != nil {
+		return err
+	}
+	n, err := q.DeleteRoundlessWorker(ctx, w.ID)
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrRoundUnsettled
+	}
+	if err := q.DeleteWorkerOperation(ctx, strings.TrimSpace(created.ID)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 // Self returns the worker whose child session the actor runs in.
 func (s *Store) Self(ctx context.Context, actor Actor) (Worker, error) {
 	if err := actor.check(); err != nil {

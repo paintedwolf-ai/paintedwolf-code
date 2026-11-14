@@ -3,6 +3,9 @@ package workerops_test
 import (
 	"context"
 	"errors"
+	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -427,5 +430,38 @@ func TestWaitingOnAPrerequisiteAndWithdrawal(t *testing.T) {
 	}
 	if v := f.state(t); v.State != workerstate.Closed {
 		t.Fatalf("after withdrawal: %+v", v)
+	}
+}
+
+// Two instructions to an idle worker at once start one round; the other
+// joins it as a queued instruction instead of failing.
+func TestConcurrentInstructionsStartOneRound(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	for _, id := range []string{"job-a", "job-b"} {
+		f.job(t, id, api.WorkerStatusPending, "")
+	}
+	var next atomic.Int32
+	enqueue := func(context.Context, workerops.RoundJob) (string, string, error) {
+		return []string{"job-a", "job-b"}[next.Add(1)-1], "local", nil
+	}
+	var wg sync.WaitGroup
+	receipts := make([]workerops.Receipt, 2)
+	errs := make([]error, 2)
+	for i := range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			receipts[i], errs[i] = f.svc.Instruct(t.Context(), f.coord, op("concurrent-"+strconv.Itoa(i)), workerops.Instruction{Worker: "surveyor", Instructions: "look again " + strconv.Itoa(i)}, enqueue)
+		}()
+	}
+	wg.Wait()
+	outcomes := map[workerops.Outcome]int{}
+	for i := range 2 {
+		testutil.FailErr(t, "instruct "+strconv.Itoa(i), errs[i])
+		outcomes[receipts[i].Outcome]++
+	}
+	if outcomes[workerops.OutcomeStarted] != 1 || outcomes[workerops.OutcomeQueued] != 1 || next.Load() != 1 {
+		t.Fatalf("outcomes = %v, enqueued %d", outcomes, next.Load())
 	}
 }

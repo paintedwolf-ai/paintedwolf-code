@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
 
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workerstate"
@@ -114,6 +115,17 @@ type Service struct {
 	// WakeParked settles a parked round's wait because an instruction
 	// arrived; the worker resumes and reads it at its next model call.
 	WakeParked func(ctx context.Context, jobID string) error
+
+	// instructing serializes instructions to one worker, so two never both
+	// start its next round.
+	instructing sync.Map
+}
+
+func (s *Service) lockWorker(workerID string) func() {
+	mu, _ := s.instructing.LoadOrStore(workerID, &sync.Mutex{})
+	m := mu.(*sync.Mutex)
+	m.Lock()
+	return m.Unlock
 }
 
 func (s *Service) accounted(sessionID, jobID string) {
@@ -142,6 +154,12 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 	}
 	snap, err := s.resolve(ctx, actor, in.Worker)
 	if err != nil {
+		return Receipt{}, err
+	}
+	// Read the worker again under its lock: another instruction may have
+	// started its round meanwhile.
+	defer s.lockWorker(snap.Worker.ID)()
+	if snap, err = s.resolve(ctx, actor, in.Worker); err != nil {
 		return Receipt{}, err
 	}
 	if prior, ok, err := s.replay(ctx, actor, op, snap); err != nil || ok {
