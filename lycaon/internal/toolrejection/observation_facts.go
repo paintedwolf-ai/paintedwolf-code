@@ -68,6 +68,7 @@ var rejectCodeObservation = map[string]string{
 	"CHOWN_USER_UNKNOWN":                        "user_unknown",
 	"CODE_REWRITE_PATTERN_TOO_BROAD":            "pattern_too_broad",
 	"COMPLETE_LEG_ADDRESSED_SESSION":            "leg_addressed_session",
+	"COMPLETE_LEG_RESULT_NOT_EARLIER":           "result_not_earlier",
 	"COMPLETE_LEG_STATUS_REQUIRED":              "complete_leg_status",
 	"COORDINATOR_DELEGATE_DISPATCH_USE_TASK":    "delegate_dispatch_use_task",
 	"COORDINATOR_INVESTIGATE_DENIED_PATH":       "investigate_denied_path",

@@ -142,6 +142,12 @@ schema:
       items:
         type: string
       description: Exact URLs your web tools returned.
+    cited_results:
+      type: array
+      maxItems: 12
+      items:
+        type: string
+      description: Handles of your own earlier results this report builds on, as your round lists them. Historical evidence only; a claim about current source still cites a fresh observation.
     objectives_met:
       type: array
       maxItems: 12

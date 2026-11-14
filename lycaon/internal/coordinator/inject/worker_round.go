@@ -19,6 +19,8 @@ type WorkerRoundFrame struct {
 	// Workspace and PriorChange describe a later round's starting point.
 	Workspace   string
 	PriorChange string
+	// EarlierResults are the worker's settled results, oldest first.
+	EarlierResults []string
 }
 
 // RenderWorkerRoundBlock renders host framing for the round and, as a
@@ -30,7 +32,7 @@ func RenderWorkerRoundBlock(ctx context.Context, renderer *prompts.InjectRendere
 	}
 	header, err := anchor.RenderInform(ctx, anchor.InjectWorkerRound, anchor.MatchContext{Surface: "worker", SessionID: sessionID}, renderer, map[string]any{
 		"round": frame.Ordinal, "has_brief": brief != "", "instruction_count": len(frame.Instructions),
-		"workspace": frame.Workspace, "prior_change": frame.PriorChange,
+		"workspace": frame.Workspace, "prior_change": frame.PriorChange, "earlier_results": frame.EarlierResults,
 	})
 	if err != nil || strings.TrimSpace(header) == "" {
 		return WorkerMessagesBlock{}

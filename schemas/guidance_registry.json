@@ -578,6 +578,12 @@
       "emit": "guard:tool",
       "summary": "The coverage assessment is missing, incomplete, or stale."
     },
+    "COMPLETE_LEG_RESULT_NOT_EARLIER": {
+      "branch_instruction": "Branch on Code; cite only results your round lists",
+      "category": "recoverable",
+      "emit": "guard:tool",
+      "summary": "cited_results lists handles that are not results of your earlier rounds: {{ paintedwolf.unknown_cited_results }}"
+    },
     "COMPLETE_LEG_REVIEW_ASSIGNMENT_MISSING": {
       "branch_instruction": "Preserve the evidence already gathered and report this dependency; do not invent a revision.",
       "category": "recoverable",

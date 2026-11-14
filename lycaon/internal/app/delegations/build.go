@@ -58,7 +58,8 @@ func (r *Runtime) BuildWorkers(ctx context.Context, deps Dependencies) error {
 	r.Executor.SetPromptInjects(r.InjectRenderer)
 	r.Executor.SetPhaseTouchPaths(deps.Workflows.Manager.Ambient)
 	r.BranchRoot = enginepaths.WorkerBranchesRootUnder(deps.Storage.Directory)
-	r.LaneRoots = workerrecords.New(deps.Storage.Database).OpenLaneRoots
+	r.Records = workerrecords.New(deps.Storage.Database)
+	r.LaneRoots = r.Records.OpenLaneRoots
 	if err := localdata.ClearRetiredWorkerSeeds(deps.Storage.Directory); err != nil {
 		slog.WarnContext(ctx, "clear retired worker seeds", "err", err)
 	}

@@ -8926,14 +8926,16 @@ type WorkerCompletionReport struct {
 	// Leg status the worker declared; leg_status is the host-graded status.
 	DeclaredLegStatus string `json:"declared_leg_status,omitempty"`
 	// Host-graded leg status.
-	LegStatus           string                     `json:"leg_status"`
-	FilesModified       []string                   `json:"files_modified,omitempty"`
-	ObjectivesMet       []string                   `json:"objectives_met,omitempty"`
-	RemainingRisk       []string                   `json:"remaining_risk,omitempty"`
-	SuggestedNextTask   string                     `json:"suggested_next_task,omitempty"`
-	Brief               string                     `json:"brief,omitempty"`
-	Findings            []WorkerCompletionFinding  `json:"findings,omitempty"`
-	CitedURLs           []string                   `json:"cited_urls,omitempty"`
+	LegStatus         string                    `json:"leg_status"`
+	FilesModified     []string                  `json:"files_modified,omitempty"`
+	ObjectivesMet     []string                  `json:"objectives_met,omitempty"`
+	RemainingRisk     []string                  `json:"remaining_risk,omitempty"`
+	SuggestedNextTask string                    `json:"suggested_next_task,omitempty"`
+	Brief             string                    `json:"brief,omitempty"`
+	Findings          []WorkerCompletionFinding `json:"findings,omitempty"`
+	CitedURLs         []string                  `json:"cited_urls,omitempty"`
+	// Handles of the worker's own earlier results this report builds on, cited as historical evidence.
+	CitedResults        []string                   `json:"cited_results,omitempty"`
 	EvidenceObligations []WorkerEvidenceObligation `json:"evidence_obligations,omitempty"`
 }
 
