@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_WAITING"
 effect: block
-category: recoverable
-emit: guard:instruct_worker
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:instruct_worker
 message: The worker has not started; it is waiting on a prerequisite.
 what: The worker has not started; it is waiting on a prerequisite.
 cause: Its prerequisite has not delivered and landed yet.
 why: 'A waiting worker''s brief is its instruction, and it starts on its own when the prerequisite lands.'
 fix: '{{ paintedwolf.next_steps }}'
 instead: Branch on Code INSTRUCT_WORKER_WAITING; do not retry the same call
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: coordinator
