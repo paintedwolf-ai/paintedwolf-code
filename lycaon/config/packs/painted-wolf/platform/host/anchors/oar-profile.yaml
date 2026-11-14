@@ -530,8 +530,6 @@ host_facts:
    type: bool
  - name: paintedwolf.mime
    type: string
- - name: paintedwolf.missing_required_arguments
-   type: string
  - name: paintedwolf.search_provider_statuses
    type: list<string>
  - name: paintedwolf.period_max_year
