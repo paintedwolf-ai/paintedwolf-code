@@ -42,6 +42,7 @@ type WorkerCompletionReport struct {
 	Brief               string                   `json:"brief,omitempty"`
 	Findings            []WorkerFinding          `json:"findings,omitempty"`
 	CitedURLs           []string                 `json:"cited_urls,omitempty"`
+	CitedResults        []string                 `json:"cited_results,omitempty"`
 	EvidenceObligations []EvidenceObligation     `json:"evidence_obligations,omitempty"`
 }
 
@@ -172,6 +173,7 @@ func (r WorkerCompletionReport) Empty() bool {
 		strings.TrimSpace(r.Brief) == "" &&
 		len(r.Findings) == 0 &&
 		len(r.CitedURLs) == 0 &&
+		len(r.CitedResults) == 0 &&
 		len(r.EvidenceObligations) == 0
 }
 
@@ -189,6 +191,7 @@ func (r *WorkerCompletionReport) normalizeListsAndLeg() {
 	r.RemainingRisk = normalizeReportStringList(r.RemainingRisk, 0)
 	r.Findings = normalizeFindings(r.Findings, 0)
 	r.CitedURLs = normalizeReportStringList(r.CitedURLs, 0)
+	r.CitedResults = normalizeReportStringList(r.CitedResults, 0)
 	r.EvidenceObligations = normalizeEvidenceObligations(r.EvidenceObligations)
 	r.SuggestedNextTask = strings.TrimSpace(r.SuggestedNextTask)
 }
@@ -501,6 +504,7 @@ func (r WorkerCompletionReport) ParentReport() WorkerCompletionReport {
 	r.ObjectivesMet = parentReportNarrativeList(r.ObjectivesMet)
 	r.RemainingRisk = parentReportNarrativeList(r.RemainingRisk)
 	r.CitedURLs = normalizeReportStringList(r.CitedURLs, maxReportListItems)
+	r.CitedResults = normalizeReportStringList(r.CitedResults, maxReportListItems)
 	r.Findings = normalizeFindings(r.Findings, maxReportListItems)
 	for i := range r.Findings {
 		r.Findings[i].Note = runeclamp.Fit(r.Findings[i].Note, maxFindingNoteChars)

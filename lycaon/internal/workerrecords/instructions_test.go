@@ -120,7 +120,7 @@ func TestRoundFrameCarriesTheRoundsStartingPoint(t *testing.T) {
 	w, child := f.workerWithRound(t, "fixer", "child-1", "job-1")
 	first, ok, err := f.store.RoundFrame(t.Context(), child)
 	testutil.FailErr(t, "first frame", err)
-	if !ok || first.Ordinal != 1 || first.Workspace != "" || len(first.Instructions) != 0 {
+	if !ok || first.Ordinal != 1 || first.Workspace != "" || len(first.Instructions) != 0 || len(first.EarlierResults) != 0 {
 		t.Fatalf("first frame = %+v ok=%v", first, ok)
 	}
 	f.insertResult(t, "result-1", "job-1")
@@ -141,5 +141,14 @@ func TestRoundFrameCarriesTheRoundsStartingPoint(t *testing.T) {
 	}
 	if len(frame.Instructions) != 2 || frame.Instructions[0].Body != "try the other parser" || frame.Instructions[1].Body != "keep the old tests" {
 		t.Fatalf("instructions = %+v", frame.Instructions)
+	}
+	// A settled result stays citable whatever became of its changes.
+	if len(frame.EarlierResults) != 1 || frame.EarlierResults[0] != "result-1" {
+		t.Fatalf("earlier results in frame = %v", frame.EarlierResults)
+	}
+	earlier, err := f.store.EarlierResults(t.Context(), child)
+	testutil.FailErr(t, "earlier results", err)
+	if len(earlier) != 1 || earlier[0] != "result-1" {
+		t.Fatalf("earlier results = %v", earlier)
 	}
 }

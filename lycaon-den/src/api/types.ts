@@ -10923,6 +10923,8 @@ export interface components {
             brief?: string;
             findings?: components["schemas"]["WorkerCompletionFinding"][];
             cited_urls?: string[];
+            /** @description Handles of the worker's own earlier results this report builds on, cited as historical evidence. */
+            cited_results?: string[];
             evidence_obligations?: components["schemas"]["WorkerEvidenceObligation"][];
         };
         /**

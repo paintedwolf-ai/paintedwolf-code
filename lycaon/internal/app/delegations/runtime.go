@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/prompts"
 	"github.com/lycaon/lycaon/internal/repoinfo"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workspace"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -31,6 +32,7 @@ type Runtime struct {
 	PlaybookMatcher *prompts.PlaybookMatcher
 	ContextLoader   *delegation.WorkerContextLoader
 	BranchRoot      string
+	Records         *workerrecords.Store
 	// LaneRoots lists every open worker's current lane, which branch
 	// reconciliation keeps.
 	LaneRoots func(context.Context) ([]string, error)

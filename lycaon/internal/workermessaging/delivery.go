@@ -126,7 +126,7 @@ func (d *Delivery) RoundFrame(ctx context.Context, sess *api.Session) (inject.Wo
 	if err != nil || !ok {
 		return inject.WorkerRoundFrame{}, false, err
 	}
-	out := inject.WorkerRoundFrame{Ordinal: frame.Ordinal, Brief: frame.Brief, Workspace: frame.Workspace, PriorChange: frame.PriorChange}
+	out := inject.WorkerRoundFrame{Ordinal: frame.Ordinal, Brief: frame.Brief, Workspace: frame.Workspace, PriorChange: frame.PriorChange, EarlierResults: frame.EarlierResults}
 	for _, m := range frame.Instructions {
 		out.Instructions = append(out.Instructions, inject.WorkerMessageLine{Seq: m.Seq, ReplyToSeq: m.ReplyToSeq, Body: m.Body, ArtifactRef: m.ArtifactRef})
 	}

@@ -28157,6 +28157,11 @@ components:
           type: array
           items:
             type: string
+        cited_results:
+          description: Handles of the worker's own earlier results this report builds on, cited as historical evidence.
+          type: array
+          items:
+            type: string
         evidence_obligations:
           type: array
           items:

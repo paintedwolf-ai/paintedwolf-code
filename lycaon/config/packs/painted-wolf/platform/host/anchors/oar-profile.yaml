@@ -1048,6 +1048,10 @@ host_facts:
    type: list<string>
  - name: paintedwolf.offenders_sample
    type: string
+ - name: paintedwolf.unknown_cited_results
+   type: list<string>
+ - name: paintedwolf.earlier_results
+   type: list<string>
  - name: paintedwolf.unaccounted_group_ids
    type: list<string>
  - name: paintedwolf.unaccounted_omitted

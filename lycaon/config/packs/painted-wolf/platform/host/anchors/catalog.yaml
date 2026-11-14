@@ -664,6 +664,7 @@ anchors:
         instruction_count: { type: int, required: true }
         workspace: { type: string }
         prior_change: { type: string }
+        earlier_results: { type: "string[]" }
 
   - id: inject.source_changes
     title: Source change brief inject

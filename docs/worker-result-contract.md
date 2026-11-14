@@ -140,6 +140,8 @@ Worker observations are indexed under the root session tree, including completed
 
 Workers close through the structured `complete_leg` tool. Submission validates the report shape, durable worker identity, assigned coverage, size, and evidence against the current worker job. Success stores a `worker_report` acceptance receipt on the tool result containing the validated report and its grounding decision. The acknowledgement may be compacted; the retained receipt is the completion record.
 
+A later round may build on the worker's own earlier results. Its round frame lists their handles, and the report cites them in `cited_results`. Submission refuses a handle that is not a settled result of the same worker with `COMPLETE_LEG_RESULT_NOT_EARLIER`. A cited result is historical provenance: it is immutable, and it never stands in for an observation of current source, which still needs evidence from this job.
+
 While tool invocation remains available, prose without an accepted report produces `WORKER_REPORT_REQUIRED` through the normal finish guard. Rejected submissions retain the normal tool surface so the worker can correct its report or acquire missing evidence within its round. A pending human decision parks the worker without requiring a report.
 
 With no decision outstanding, finalization uses the latest accepted receipt for the current worker job. Without one the round fails with `WORKER_COMPLETION_REPORT_MISSING` and keeps its work; nothing is synthesized from the transcript.

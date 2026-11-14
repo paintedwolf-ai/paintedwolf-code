@@ -331,6 +331,8 @@ var staticOccurrenceFactDecls = []factDecl{
 	{"observed_handles_sample", oarcore.TypeString, FactTierHost, ""},
 	{"remaining_overlay_paths", oarcore.TypeListString, FactTierHost, ""},
 	{"offenders_sample", oarcore.TypeString, FactTierHost, ""},
+	{"unknown_cited_results", oarcore.TypeListString, FactTierHost, ""},
+	{"earlier_results", oarcore.TypeListString, FactTierHost, ""},
 	{"unaccounted_group_ids", oarcore.TypeListString, FactTierHost, ""},
 	{"unaccounted_omitted", oarcore.TypeInt, FactTierHost, ""},
 	{"regressed_group_ids", oarcore.TypeListString, FactTierHost, ""},

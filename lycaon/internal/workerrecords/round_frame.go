@@ -25,6 +25,9 @@ type RoundFrame struct {
 	// PriorChange is landed, rejected, shelved or open for the latest
 	// earlier round that changed files; empty when none did.
 	PriorChange string
+	// EarlierResults are the handles of the worker's settled rounds, oldest
+	// first: the results a later report may cite.
+	EarlierResults []string
 }
 
 // RoundFrame reads the frame of the running round of the worker whose child
@@ -58,7 +61,13 @@ func (s *Store) RoundFrame(ctx context.Context, actor Actor) (RoundFrame, bool, 
 	}
 	var prior struct{ ResultID, SettledAt string }
 	for _, r := range rounds {
-		if r.Ordinal < current.Ordinal && r.SettledAt.Valid && r.CheckpointID != "" {
+		if r.Ordinal >= current.Ordinal || !r.SettledAt.Valid {
+			continue
+		}
+		if r.ResultID != "" {
+			frame.EarlierResults = append(frame.EarlierResults, r.ResultID)
+		}
+		if r.CheckpointID != "" {
 			prior.ResultID, prior.SettledAt = r.ResultID, r.SettledAt.String
 		}
 	}
@@ -85,4 +94,24 @@ func (s *Store) RoundFrame(ctx context.Context, actor Actor) (RoundFrame, bool, 
 		}
 	}
 	return frame, true, nil
+}
+
+// EarlierResults lists the handles of the settled rounds of the worker whose
+// child session the actor runs in, oldest first.
+func (s *Store) EarlierResults(ctx context.Context, actor Actor) ([]string, error) {
+	w, err := s.Self(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	rounds, err := s.q.ListWorkerRounds(ctx, w.ID)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, r := range rounds {
+		if r.SettledAt.Valid && r.ResultID != "" {
+			out = append(out, r.ResultID)
+		}
+	}
+	return out, nil
 }
