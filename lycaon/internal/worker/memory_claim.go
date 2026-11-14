@@ -98,7 +98,10 @@ func (q *memoryQueueClaims) claimPending(ctx context.Context, req ClaimRequest, 
 		q.pending = append(q.pending[:i], q.pending[i+1:]...)
 		now := time.Now().UTC()
 		job.task.Status = api.WorkerStatusRunning
-		job.task.StartedAt = &now
+		// A round started once; resuming after a wait or a decision keeps it.
+		if job.task.StartedAt == nil {
+			job.task.StartedAt = &now
+		}
 		job.task.ClaimToken = uuid.NewString()
 		job.task.Attempt++
 		job.task.HeartbeatAt = &now

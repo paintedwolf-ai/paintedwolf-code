@@ -120,6 +120,11 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 			return "", "", err
 		}
 		scope := project.ScopeFromToolContext(tctx.Identity.ProjectID, tctx.Source.ActiveRootID, tctx.Source.Roots, tctx.ActiveRootPath())
+		// The paths a worker was scoped to carry over while its mode holds.
+		taskScope := &api.TaskScope{Mode: api.TaskScopeMode(mode)}
+		if prior, ok := deps.Queue.GetLatestByChildSessionID(ctx, w.ChildSessionID); ok && prior.EffectiveScope().Mode == taskScope.Mode {
+			taskScope.Paths = append([]string(nil), prior.EffectiveScope().Paths...)
+		}
 		task := api.WorkerTask{
 			ID:               uuid.NewString(),
 			ParentSessionID:  w.SessionID,
@@ -127,7 +132,7 @@ func roundEnqueuer(deps WorkerToolDeps, tctx tools.ToolContext, args map[string]
 			AgentType:        agent,
 			Prompt:           prompt,
 			Brief:            goal,
-			Scope:            &api.TaskScope{Mode: api.TaskScopeMode(mode)},
+			Scope:            taskScope,
 			ProjectID:        scope.ProjectID,
 			WorkspaceRootID:  scope.WorkspaceRootID,
 			WorkspacePath:    scope.WorkspacePath,

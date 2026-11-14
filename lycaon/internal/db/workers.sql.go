@@ -220,6 +220,28 @@ func (q *Queries) CountWorkerLaterUnsettledRounds(ctx context.Context, jobID str
 	return count, err
 }
 
+const deleteRoundlessWorker = `-- name: DeleteRoundlessWorker :execrows
+DELETE FROM workers WHERE id = ?
+  AND NOT EXISTS (SELECT 1 FROM worker_rounds WHERE worker_rounds.worker_id = workers.id)
+`
+
+func (q *Queries) DeleteRoundlessWorker(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteRoundlessWorker, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const deleteWorkerOperation = `-- name: DeleteWorkerOperation :exec
+DELETE FROM worker_operations WHERE operation_id = ?
+`
+
+func (q *Queries) DeleteWorkerOperation(ctx context.Context, operationID string) error {
+	_, err := q.db.ExecContext(ctx, deleteWorkerOperation, operationID)
+	return err
+}
+
 const disposeWorkerResultsByJob = `-- name: DisposeWorkerResultsByJob :execrows
 INSERT INTO worker_result_dispositions (
     result_id, worker_id, accounted_operation_id, accounted_at,
@@ -528,6 +550,24 @@ func (q *Queries) GetWorkerMessage(ctx context.Context, arg GetWorkerMessagePara
 		&i.CreatedAt,
 	)
 	return i, err
+}
+
+const getWorkerMessageDeliveredThrough = `-- name: GetWorkerMessageDeliveredThrough :one
+SELECT CAST(COALESCE(MAX(delivered_through_seq), 0) AS INTEGER) AS delivered_through_seq
+FROM worker_message_deliveries WHERE worker_id = ? AND recipient_session_id = ?
+`
+
+type GetWorkerMessageDeliveredThroughParams struct {
+	WorkerID           string `json:"worker_id"`
+	RecipientSessionID string `json:"recipient_session_id"`
+}
+
+// How far any earlier generation delivered a worker's messages to a session.
+func (q *Queries) GetWorkerMessageDeliveredThrough(ctx context.Context, arg GetWorkerMessageDeliveredThroughParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerMessageDeliveredThrough, arg.WorkerID, arg.RecipientSessionID)
+	var delivered_through_seq int64
+	err := row.Scan(&delivered_through_seq)
+	return delivered_through_seq, err
 }
 
 const getWorkerMessageDelivery = `-- name: GetWorkerMessageDelivery :one

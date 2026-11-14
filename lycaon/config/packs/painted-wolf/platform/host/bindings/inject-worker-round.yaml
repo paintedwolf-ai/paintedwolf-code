@@ -1,0 +1,10 @@
+# Inform Binding — assembly-only worker round frame.
+'on': inject.worker_round
+effect: inform
+render: worker-round
+tier: builtin
+when: 'true'
+invariants:
+  trigger_class: assembly_inject
+  fires_in:
+  - worker assembly while its round runs

@@ -28,6 +28,7 @@ import (
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/internal/workerlane"
 	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	workflowstatetools "github.com/lycaon/lycaon/internal/workflow/statetools"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
@@ -47,6 +48,14 @@ func (b *serveBuilder) wireCoordinatorRuntime() error {
 	if err := loopwake.RegisterWaitTool(b.execution.Host.Registry, subscriptions, loopwake.WaitToolDeps{
 		Store: waitStore, ProfileConditions: waitConditions,
 		SecretMatcher: b.security.Matcher, RuntimeContext: b.startup.ctx,
+		WorkerKnown: func(ctx context.Context, sessionID, handle string) bool {
+			actor := workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
+			if _, err := b.boards.WorkerRecords.Resolve(ctx, actor, handle); err == nil {
+				return true
+			}
+			task, ok := b.delegations.Queue.Get(handle)
+			return ok && task.ParentSessionID == sessionID
+		},
 	}); err != nil {
 		return fmt.Errorf("wait tool: %w", err)
 	}

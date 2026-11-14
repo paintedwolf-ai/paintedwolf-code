@@ -6,6 +6,7 @@ package workerroster
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/spawn"
 	"slices"
 	"sort"
 	"strings"
@@ -229,7 +230,7 @@ func (s Source) about(ctx context.Context, actor workerrecords.Actor, snap worke
 			return clip(msgs[0].Body), nil
 		}
 	}
-	return clip(snap.Worker.Brief), nil
+	return clip(strings.TrimPrefix(snap.Worker.Brief, spawn.CharterGoalHeader)), nil
 }
 
 func (s Source) changedPaths(jobID string) []string {

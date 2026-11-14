@@ -102,6 +102,9 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 		t.Fatalf("blocker_class = %q", env.DecisionRequest.BlockerClass)
 	}
 
+	// The coordinator's next request shows the question on its roster.
+	_, _, err = h.Sessions.Manager.Coordinator.Assembly.WorkerRoster(ctx, sess.ID)
+	testutil.FailErr(t, "render the roster", err)
 	out, err := h.ToolRegistry.Run(ctx, "answer_decision", map[string]any{
 		"worker": "parser", "answer": "2",
 	}, wiringToolContext(sess.ID, dir))

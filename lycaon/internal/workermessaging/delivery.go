@@ -56,7 +56,7 @@ func (d *Delivery) PrepareMessages(ctx context.Context, sess *api.Session) (asse
 			return assembly.MessageDelivery{}, err
 		}
 		out := assembly.MessageDelivery{Recipient: RecipientWorker}
-		if err := d.openPage(ctx, actor, w, generation, &out); err != nil {
+		if err := d.openPage(ctx, actor, w, generation, workerrecords.MaxPageMessages, &out); err != nil {
 			return assembly.MessageDelivery{}, err
 		}
 		return out, nil
@@ -71,20 +71,20 @@ func (d *Delivery) PrepareMessages(ctx context.Context, sess *api.Session) (asse
 			out.More = true
 			break
 		}
-		if err := d.openPage(ctx, actor, w, generation, &out); err != nil {
+		if err := d.openPage(ctx, actor, w, generation, maxCoordinatorLines-len(out.Lines), &out); err != nil {
 			return assembly.MessageDelivery{}, err
 		}
 	}
 	return out, nil
 }
 
-func (d *Delivery) openPage(ctx context.Context, actor workerrecords.Actor, w workerrecords.Worker, generation int64, out *assembly.MessageDelivery) error {
-	page, err := d.Records.OpenPage(ctx, actor, w.ID, generation)
+func (d *Delivery) openPage(ctx context.Context, actor workerrecords.Actor, w workerrecords.Worker, generation int64, limit int, out *assembly.MessageDelivery) error {
+	page, err := d.Records.OpenPage(ctx, actor, w.ID, generation, limit)
 	if err != nil || page.ID == "" {
 		return err
 	}
 	out.Pages = append(out.Pages, assembly.MessagePageRef{WorkerID: w.ID, PageID: page.ID, Generation: generation})
-	if len(page.Messages) == workerrecords.MaxPageMessages {
+	if len(page.Messages) >= limit {
 		out.More = true
 	}
 	for _, m := range page.Messages {
@@ -112,4 +112,23 @@ func (d *Delivery) CommitMessages(ctx context.Context, sessionID string, deliver
 		}
 	}
 	return nil
+}
+
+// RoundFrame reads a worker session's running round for its every request.
+func (d *Delivery) RoundFrame(ctx context.Context, sess *api.Session) (inject.WorkerRoundFrame, bool, error) {
+	if d == nil || d.Records == nil || sess == nil || !sess.IsWorkerChild() {
+		return inject.WorkerRoundFrame{}, false, nil
+	}
+	frame, ok, err := d.Records.RoundFrame(ctx, actorFor(sess))
+	if errors.Is(err, workerrecords.ErrWorkerNotFound) {
+		return inject.WorkerRoundFrame{}, false, nil
+	}
+	if err != nil || !ok {
+		return inject.WorkerRoundFrame{}, false, err
+	}
+	out := inject.WorkerRoundFrame{Ordinal: frame.Ordinal, Brief: frame.Brief, Workspace: frame.Workspace, PriorChange: frame.PriorChange}
+	for _, m := range frame.Instructions {
+		out.Instructions = append(out.Instructions, inject.WorkerMessageLine{Seq: m.Seq, ReplyToSeq: m.ReplyToSeq, Body: m.Body, ArtifactRef: m.ArtifactRef})
+	}
+	return out, true, nil
 }

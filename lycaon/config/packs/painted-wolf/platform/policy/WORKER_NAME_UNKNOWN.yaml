@@ -7,6 +7,7 @@ selector:
     - answer_decision
     - instruct_worker
     - task
+    - wait
     - worker_cancel
     - worker_history
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]

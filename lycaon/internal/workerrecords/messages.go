@@ -119,10 +119,11 @@ type Page struct {
 	Messages []Message `json:"messages"`
 }
 
-// OpenPage returns the messages a recipient session has not yet been shown,
-// oldest first and bounded. Until CommitPage records a successful response the
-// same page is returned again, so a failed request replays it.
-func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, generation int64) (Page, error) {
+// OpenPage returns up to limit messages a recipient session has not yet been
+// shown, oldest first, at most MaxPageMessages. Until CommitPage records a
+// successful response the same page is returned again, so a failed request
+// replays it.
+func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, generation int64, limit int) (Page, error) {
 	if err := actor.check(); err != nil {
 		return Page{}, err
 	}
@@ -163,6 +164,13 @@ func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, gene
 	if err != nil && !db.IsNoRows(err) {
 		return Page{}, err
 	}
+	// A coordinator's compaction starts a generation without replaying what
+	// it was already shown; a worker's round instructions are shown again.
+	if db.IsNoRows(err) && recipient == RoleCoordinator {
+		if state.DeliveredThroughSeq, err = q.GetWorkerMessageDeliveredThrough(ctx, db.GetWorkerMessageDeliveredThroughParams{WorkerID: w.ID, RecipientSessionID: actor.SessionID}); err != nil {
+			return Page{}, err
+		}
+	}
 	if err == nil && state.PageID != "" {
 		msgs, err := pageMessages(ctx, q, w.ID, recipient, round, state.PageFirstSeq.Int64-1, state.PageLastSeq.Int64)
 		if err != nil {
@@ -171,7 +179,7 @@ func (s *Store) OpenPage(ctx context.Context, actor Actor, workerID string, gene
 		return Page{ID: state.PageID, Messages: msgs}, tx.Commit()
 	}
 	rows, err := q.ListWorkerMessagesAfter(ctx, db.ListWorkerMessagesAfterParams{
-		WorkerID: w.ID, AfterSeq: max(state.DeliveredThroughSeq, after), RecipientRole: string(recipient), RoundOrdinal: round, PageLimit: MaxPageMessages,
+		WorkerID: w.ID, AfterSeq: max(state.DeliveredThroughSeq, after), RecipientRole: string(recipient), RoundOrdinal: round, PageLimit: int64(min(max(limit, 1), MaxPageMessages)),
 	})
 	if err != nil {
 		return Page{}, err
