@@ -351,9 +351,10 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
   });
 
   it("activates highlighting and Pretty layout from host buf.language on extensionless scripts", () => {
+    const args = Array.from({ length: 30 }, (_, i) => `arg_${i}`).join(", ");
     const buf = loadedBuffer({
       path: "bin/deploy",
-      content: "def deploy(targets, dry_run): return [t for t in targets if not dry_run]\n",
+      content: `def deploy(targets, dry_run): return compute(${args})\n`,
       language: "python",
     });
     void saveEditorLineLayout("pretty");
@@ -361,5 +362,6 @@ describe("FilesEditor Source-Native Editable Pretty Integration (Decisions 004 &
     render(() => <FilesEditor {...props} />);
     const view = getFilesEditorView(PROJECT, buf.key)!;
     expect(prettyOutcomeOf(view.state).kind).toBe("active");
+    expect(view.dom.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(0);
   });
 });

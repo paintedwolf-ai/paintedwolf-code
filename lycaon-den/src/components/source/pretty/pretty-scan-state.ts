@@ -1,7 +1,7 @@
 import type { Text } from "@codemirror/state";
 import type { Container, Frame } from "./pretty-bracket.ts";
 import { type ChainState, INITIAL_CHAIN_STATE } from "./pretty-chain.ts";
-import { INITIAL_JSX_STATE, type JsxState } from "./pretty-jsx.ts";
+import { type ClauseState, INITIAL_CLAUSE_STATE } from "./pretty-clause.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import type { MarkupState } from "./pretty-markup.ts";
 import type { SexpFrame } from "./pretty-sexp.ts";
@@ -126,13 +126,8 @@ export class ScanState {
   containers: Container | null = null;
   sexpFrames: SexpFrame | null = null;
   chainState: ChainState = INITIAL_CHAIN_STATE;
-  jsxState: JsxState = INITIAL_JSX_STATE;
+  clauseState: ClauseState = INITIAL_CLAUSE_STATE;
   markup: MarkupState;
-  /** Group depth whose commas break as a SQL clause list, or -1. */
-  listDepth = -1;
-  predicateDepth = -1;
-  betweenPending = false;
-  caseStack: Array<{ readonly depth: number; readonly expanded: boolean }> = [];
   fence: Fence | null = null;
   inLine = false;
   /** The current source line is laid out. */

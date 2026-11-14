@@ -1,4 +1,4 @@
-import { type ScanCursor, type ScanState, targetColumns } from "./pretty-scan-state.ts";
+import { PRETTY_MAX_DEPTH, type ScanCursor, type ScanState, targetColumns } from "./pretty-scan-state.ts";
 
 const SPACE = 0x20;
 const TAB = 0x09;
@@ -67,7 +67,7 @@ export function closeChainLine(state: ScanState): void {
 }
 
 function skipQuoted(cursor: ScanCursor, pos: number, end: number, quote: number): { next: number; closed: boolean } {
-  const { text } = cursor;
+  const { text, state } = cursor;
   let p = pos;
   while (p < end) {
     const c = text.at(p);
@@ -76,10 +76,12 @@ function skipQuoted(cursor: ScanCursor, pos: number, end: number, quote: number)
       continue;
     }
     if (c === quote) {
+      state.visits += p + 1 - pos;
       return { next: p + 1, closed: true };
     }
     p += 1;
   }
+  state.visits += end - pos;
   return { next: end, closed: false };
 }
 
@@ -90,6 +92,7 @@ function nextSegmentWidth(cursor: ScanCursor, pos: number, limit: number): numbe
   let p = pos;
   let depth = 0;
   while (p < lineEnd && width <= limit) {
+    state.visits += 1;
     const c = text.at(p);
     if (c === BACKSLASH && p + 1 < lineEnd) {
       width += 2;
@@ -119,6 +122,7 @@ function nextSegmentWidth(cursor: ScanCursor, pos: number, limit: number): numbe
 export function stepChain(cursor: ScanCursor, pos: number, end: number): number {
   const { state, text } = cursor;
   if (state.chainState.heredocEnd !== null) {
+    state.visits += end - pos;
     return end;
   }
 
@@ -130,6 +134,7 @@ export function stepChain(cursor: ScanCursor, pos: number, end: number): number 
     return res.next;
   }
 
+  state.visits += 1;
   const c = text.at(pos);
   if (c === SPACE || c === TAB) {
     state.col += c === TAB ? cursor.options.tabSize : 1;
@@ -144,6 +149,7 @@ export function stepChain(cursor: ScanCursor, pos: number, end: number): number 
 
   // Comments start at line start or after whitespace, preserving `${var#pat}` and URLs.
   if (c === HASH && (pos === 0 || !state.hasContent || text.at(pos - 1) === SPACE || text.at(pos - 1) === TAB)) {
+    state.visits += end - pos;
     state.col += end - pos;
     return end;
   }
@@ -159,12 +165,17 @@ export function stepChain(cursor: ScanCursor, pos: number, end: number): number 
   // Dockerfile JSON exec arrays (`CMD [...]`, `ENTRYPOINT [...]`, etc.)
   if (state.chainState.inJsonExec) {
     if (c === OPEN_BRACKET) {
+      const nextDepth = state.chainState.depth + 1;
+      if (nextDepth > PRETTY_MAX_DEPTH) {
+        state.failure = "depth";
+        return pos + 1;
+      }
       const next = cursor.skipSpaces(pos + 1, state.lineEnd);
       if (state.laidOut && next < state.lineEnd && text.at(next) !== CLOSE_BRACKET) {
         state.pending = next;
         state.pendingColumns = cursor.columns(1);
       }
-      state.chainState = { ...state.chainState, depth: state.chainState.depth + 1 };
+      state.chainState = { ...state.chainState, depth: nextDepth };
       state.col += 1;
       state.hasContent = true;
       return pos + 1;
@@ -188,7 +199,12 @@ export function stepChain(cursor: ScanCursor, pos: number, end: number): number 
   }
 
   if (c === OPEN_PAREN || c === OPEN_BRACE || c === OPEN_BRACKET) {
-    state.chainState = { ...state.chainState, depth: state.chainState.depth + 1 };
+    const nextDepth = state.chainState.depth + 1;
+    if (nextDepth > PRETTY_MAX_DEPTH) {
+      state.failure = "depth";
+      return pos + 1;
+    }
+    state.chainState = { ...state.chainState, depth: nextDepth };
     state.col += 1;
     state.hasContent = true;
     return pos + 1;

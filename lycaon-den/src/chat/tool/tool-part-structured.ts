@@ -278,11 +278,12 @@ function buildStructuredToolPresentationFresh(
   }
 
   const pathHint =
-    typeof part.args?.path === "string"
-      ? part.args.path
-      : typeof part.args?.file_path === "string"
-        ? part.args.file_path
+    typeof part.args?.path === "string" && part.args.path.trim()
+      ? part.args.path.trim()
+      : typeof part.args?.file_path === "string" && part.args.file_path.trim()
+        ? part.args.file_path.trim()
         : undefined;
+  const readSource = part.kind === "read" && pathHint ? { path: pathHint } : undefined;
 
   const jsonWire = tryParseToolJsonWire(body);
   if (
@@ -292,9 +293,8 @@ function buildStructuredToolPresentationFresh(
     if (!diffShowsResult) {
       // Recover content from truncated compaction residue.
       const recovered = compactionBanner ? extractReadableToolBody(null, body) : null;
-      const source = pathHint ? { path: pathHint } : undefined;
       if (recovered) {
-        sections.push(contentSection(recovered, source));
+        sections.push(contentSection(recovered, readSource));
         prependCompactionSection(
           sections,
           compactionBanner,
@@ -304,15 +304,17 @@ function buildStructuredToolPresentationFresh(
           evidenceHandle,
           sections,
           rawOutputAvailable: true,
+          ...(readSource?.path ? { rawOutputPath: readSource.path } : {}),
         });
       }
-      sections.push(contentSection(body, source));
+      sections.push(contentSection(body, readSource));
     }
     prependCompactionSection(sections, compactionBanner, undefined);
     return emptyView({
       evidenceHandle,
       sections,
       rawOutputAvailable: true,
+      ...(readSource?.path ? { rawOutputPath: readSource.path } : {}),
     });
   }
 
@@ -326,6 +328,7 @@ function buildStructuredToolPresentationFresh(
           evidenceHandle,
           sections,
           rawOutputAvailable: true,
+          rawOutputLanguage: "json",
         });
       }
     }
@@ -337,6 +340,7 @@ function buildStructuredToolPresentationFresh(
         evidenceHandle,
         sections,
         rawOutputAvailable: true,
+        rawOutputLanguage: "json",
       });
     }
     if (isRecord(parsed)) {
@@ -371,6 +375,7 @@ function buildStructuredToolPresentationFresh(
           evidenceHandle,
           sections,
           rawOutputAvailable: true,
+          rawOutputLanguage: "json",
         });
       }
       if (part.tool === "preview_overlay" || part.tool === "promote_overlay") {
@@ -383,6 +388,7 @@ function buildStructuredToolPresentationFresh(
           evidenceHandle,
           sections,
           rawOutputAvailable: true,
+          rawOutputLanguage: "json",
         });
       }
       if (
@@ -394,6 +400,7 @@ function buildStructuredToolPresentationFresh(
           ...presentationFromReadableFileJson(
             parsed,
             jsonWire.jsonBody,
+            part.kind === "read" ? pathHint : undefined,
           ),
         );
         finalizeJsonPresentation(sections, parsed, compactionBanner);
@@ -401,6 +408,7 @@ function buildStructuredToolPresentationFresh(
           evidenceHandle,
           sections,
           rawOutputAvailable: true,
+          rawOutputLanguage: "json",
         });
       }
       sections.push(...presentationFromJsonObject(parsed, jsonWire.jsonBody));
@@ -409,24 +417,25 @@ function buildStructuredToolPresentationFresh(
         evidenceHandle,
         sections,
         rawOutputAvailable: true,
+        rawOutputLanguage: "json",
       });
     }
   }
 
   // Recover unbalanced JSON residue with a content field.
   const recoveredBody = extractReadableToolBody(null, body);
-  const fallbackSource = pathHint ? { path: pathHint } : undefined;
   if (recoveredBody) {
-    sections.push(contentSection(recoveredBody, fallbackSource));
+    sections.push(contentSection(recoveredBody, readSource));
     prependCompactionSection(sections, compactionBanner, undefined);
     return emptyView({
       evidenceHandle,
       sections,
       rawOutputAvailable: true,
+      ...(readSource?.path ? { rawOutputPath: readSource.path } : {}),
     });
   }
 
-  sections.push(contentSection(body, fallbackSource));
+  sections.push(contentSection(body));
   prependCompactionSection(sections, compactionBanner, undefined);
   return emptyView({
     evidenceHandle,

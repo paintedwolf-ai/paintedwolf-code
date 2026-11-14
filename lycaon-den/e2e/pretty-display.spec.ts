@@ -569,7 +569,7 @@ modelIndependentWebE2e("lays out wide Python tool output in ChatContentPage with
         sessionId: "e2e-session",
         messageId: "e2e-message",
         toolCallId: "e2e-call",
-        pane: "raw",
+        pane: "output",
         title: "worker.py",
         path: "src/worker.py",
         content: { kind: "inline", text },

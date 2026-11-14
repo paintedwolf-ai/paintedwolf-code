@@ -18,7 +18,17 @@ import {
 } from "../editor/codemirror-lang.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
 import { NO_LAYOUT, type PrettyLayout } from "./pretty-outcome.ts";
-import type { BracketRule, ChainRule, ClauseRule, JsxRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan, SexpRule } from "./pretty-scan-state.ts";
+import type {
+  BracketRule,
+  ChainRule,
+  ClauseRule,
+  JsxRule,
+  MarkupRule,
+  PrettyPlan,
+  PrettyRule,
+  PrettySpan,
+  SexpRule,
+} from "./pretty-scan-state.ts";
 import { TreeLexer } from "./pretty-tokens.ts";
 
 export const DATA_RULE: BracketRule = {
@@ -31,7 +41,7 @@ const RECORDS_RULE: BracketRule = { ...DATA_RULE, records: true };
 export const DATA_LIKE_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: false }) };
 export const SCRIPT_RULE: BracketRule = {
   kind: "bracket", data: false, statements: true, afterBlock: "script", records: false, parsed: false,
-  lexer: () => new ScriptLexer(),
+  lexer: () => new ScriptLexer(false),
 };
 export const SCRIPT_JSX_RULE: JsxRule = { kind: "jsx" };
 export const STYLE_RULE: BracketRule = {
@@ -174,46 +184,156 @@ const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
 // JSON literals, and Python's, so a printed dict or list is recognised too.
 const LITERAL = /^(?:true|false|null|True|False|None)\b/;
 
+const enum JsonStep {
+  ObjFirstKeyOrClose,
+  ObjKey,
+  ObjColon,
+  ObjValue,
+  ObjCommaOrClose,
+  ArrFirstValOrClose,
+  ArrValue,
+  ArrCommaOrClose,
+}
+
+function skipJsonString(text: string, from: number, quote: number): number {
+  let i = from + 1;
+  while (i < text.length) {
+    const s = text.charCodeAt(i);
+    if (s === 0x5c) {
+      if (i + 1 >= text.length) return -text.length;
+      const esc = text.charCodeAt(i + 1);
+      if (esc === 0x0a || esc === 0x0d) return -(i + 1);
+      i += 2;
+    } else if (s === quote) {
+      return i + 1;
+    } else if (s === 0x0a || s === 0x0d) {
+      return -i;
+    } else {
+      i += 1;
+    }
+  }
+  return -text.length;
+}
+
+function readScalarValue(text: string, i: number): number {
+  const c = text.charCodeAt(i);
+  if (c === 0x22 || c === 0x27) return skipJsonString(text, i, c);
+  const rest = text.slice(i, i + 32);
+  const token = NUMBER.exec(rest) ?? LITERAL.exec(rest);
+  if (!token) return -i;
+  const end = i + token[0].length;
+  if (end < text.length) {
+    const next = text.charCodeAt(end);
+    if ((next >= 0x30 && next <= 0x39) || (next >= 0x41 && next <= 0x5a) || (next >= 0x61 && next <= 0x7a) || next === 0x5f) {
+      return -end;
+    }
+  }
+  return end;
+}
+
 /**
- * Reads a JSON container starting at `from`. Returns its end, or the negated
- * position of the first character that is not a JSON token.
+ * Reads a grammatical JSON or Python-dict container starting at `from`.
+ * Returns its end, or the negated offset of the first token that breaks the grammar.
  */
-export function readJsonContainer(text: string, from: number): number {
-  const stack: number[] = [];
-  let i = from;
+export function readJsonContainer(
+  text: string,
+  from: number,
+  nested?: Array<{ from: number; to: number }>,
+): number {
+  if (from >= text.length) return -from;
+  const first = text.charCodeAt(from);
+  if (first !== 0x7b && first !== 0x5b) return -from;
+  const stack: JsonStep[] = [first === 0x7b ? JsonStep.ObjFirstKeyOrClose : JsonStep.ArrFirstValOrClose];
+  const openOffsets: number[] = [from];
+  const closeFrame = (at: number): number => {
+    stack.pop();
+    const start = openOffsets.pop() ?? from;
+    if (stack.length === 1 && nested) nested.push({ from: start, to: at });
+    return stack.length;
+  };
+  let pythonic = false;
+  let i = from + 1;
   while (i < text.length) {
     const c = text.charCodeAt(i);
-    if (c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d || c === 0x3a || c === 0x2c) {
+    if (c === 0x20 || c === 0x09 || c === 0x0a || c === 0x0d) {
       i += 1;
-    } else if (c === 0x7b || c === 0x5b) {
-      stack.push(c === 0x7b ? 0x7d : 0x5d);
-      i += 1;
-    } else if (c === 0x7d || c === 0x5d) {
-      if (stack.pop() !== c) return -i;
-      i += 1;
-      if (stack.length === 0) return i;
-    } else if (c === 0x22 || c === 0x27) {
-      i += 1;
-      while (i < text.length) {
-        const s = text.charCodeAt(i);
-        if (s === 0x5c) i += 2;
-        else if (s === c) break;
-        else if (s === 0x0a) return -i;
-        else i += 1;
+      continue;
+    }
+    const top = stack[stack.length - 1]!;
+    switch (top) {
+      case JsonStep.ObjFirstKeyOrClose:
+      case JsonStep.ObjKey: {
+        if ((top === JsonStep.ObjFirstKeyOrClose || pythonic) && c === 0x7d) {
+          i += 1;
+          if (closeFrame(i) === 0) return i;
+          continue;
+        }
+        if (c !== 0x22 && c !== 0x27) return -i;
+        if (c === 0x27) pythonic = true;
+        const end = skipJsonString(text, i, c);
+        if (end < 0) return end;
+        stack[stack.length - 1] = JsonStep.ObjColon;
+        i = end;
+        continue;
       }
-      if (i >= text.length) return -i;
-      i += 1;
-    } else {
-      const rest = text.slice(i, i + 32);
-      const token = NUMBER.exec(rest) ?? LITERAL.exec(rest);
-      if (!token) return -i;
-      i += token[0].length;
+      case JsonStep.ObjColon:
+        if (c !== 0x3a) return -i;
+        stack[stack.length - 1] = JsonStep.ObjValue;
+        i += 1;
+        continue;
+      case JsonStep.ObjCommaOrClose:
+        if (c === 0x2c) {
+          stack[stack.length - 1] = JsonStep.ObjKey;
+          i += 1;
+          continue;
+        }
+        if (c === 0x7d) {
+          i += 1;
+          if (closeFrame(i) === 0) return i;
+          continue;
+        }
+        return -i;
+      case JsonStep.ArrCommaOrClose:
+        if (c === 0x2c) {
+          stack[stack.length - 1] = JsonStep.ArrValue;
+          i += 1;
+          continue;
+        }
+        if (c === 0x5d) {
+          i += 1;
+          if (closeFrame(i) === 0) return i;
+          continue;
+        }
+        return -i;
+      case JsonStep.ArrFirstValOrClose:
+      case JsonStep.ObjValue:
+      case JsonStep.ArrValue: {
+        if ((top === JsonStep.ArrFirstValOrClose || (top === JsonStep.ArrValue && pythonic)) && c === 0x5d) {
+          i += 1;
+          if (closeFrame(i) === 0) return i;
+          continue;
+        }
+        const afterValue = top === JsonStep.ObjValue ? JsonStep.ObjCommaOrClose : JsonStep.ArrCommaOrClose;
+        if (c === 0x7b || c === 0x5b) {
+          stack[stack.length - 1] = afterValue;
+          stack.push(c === 0x7b ? JsonStep.ObjFirstKeyOrClose : JsonStep.ArrFirstValOrClose);
+          openOffsets.push(i);
+          i += 1;
+          continue;
+        }
+        const end = readScalarValue(text, i);
+        if (end < 0) return end;
+        if (c === 0x27 || c === 0x54 || c === 0x46 || c === 0x4e) pythonic = true;
+        stack[stack.length - 1] = afterValue;
+        i = end;
+        continue;
+      }
     }
   }
   return -i;
 }
 
-/** Balanced JSON-like containers at line starts or after host markers and log prefixes. */
+/** Grammatical JSON-like containers at line starts or after host markers and log prefixes. */
 export function recognizeJsonContainers(doc: Text): PrettySpan[] {
   const text = doc.toString();
   const spans: PrettySpan[] = [];
@@ -225,6 +345,8 @@ export function recognizeJsonContainers(doc: Text): PrettySpan[] {
       lineNumber += 1;
       continue;
     }
+    const blankEnd = skipBlanks(line.text, 0);
+    const logPrefixed = column > blankEnd && hostMarkerLength(line.text.slice(blankEnd)) === 0;
     let pos = line.from + column;
     let nextLine = lineNumber + 1;
     while (pos < line.to) {
@@ -233,7 +355,8 @@ export function recognizeJsonContainers(doc: Text): PrettySpan[] {
         pos += 1;
         continue;
       }
-      const end = readJsonContainer(text, pos);
+      const nested: Array<{ from: number; to: number }> = [];
+      const end = readJsonContainer(text, pos, nested);
       if (end > 0) {
         spans.push({ from: pos, to: end, rule: DATA_LIKE_RULE });
         if (end > line.to) {
@@ -243,9 +366,18 @@ export function recognizeJsonContainers(doc: Text): PrettySpan[] {
         pos = end;
         continue;
       }
-      const failLine = doc.lineAt(Math.min(doc.length, -end)).number;
+      if (-end >= text.length && !logPrefixed) return spans;
+      const failLine = -end >= text.length ? doc.lines + 1 : doc.lineAt(-end).number;
       if (failLine > lineNumber) {
-        nextLine = Math.max(nextLine, failLine);
+        for (const child of nested) {
+          if (child.from <= line.to) continue;
+          const childLine = doc.lineAt(child.from);
+          const childCol = containerStartColumn(childLine.text);
+          if (childCol !== null && child.from >= childLine.from + childCol) {
+            spans.push({ from: child.from, to: child.to, rule: DATA_LIKE_RULE });
+          }
+        }
+        nextLine = failLine;
         break;
       }
       pos = Math.max(pos + 1, -end);

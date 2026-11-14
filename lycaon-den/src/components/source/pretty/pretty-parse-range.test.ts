@@ -17,52 +17,105 @@ function lastDecoration(view: EditorView): number {
 }
 
 describe("layout over the parsed range", () => {
-  it("lays out only parsed text, extends as parsing advances, and never forces a parse", () => {
-    const line = (i: number) => `result${i} := compute(${Array.from({ length: 40 }, (_, k) => `arg${k}`).join(", ")}, "s, (t)") // c, (d)`;
-    const doc = Array.from({ length: 6_000 }, (_, i) => line(i)).join("\n");
-    const parent = document.createElement("div");
-    document.body.appendChild(parent);
-    const view = new EditorView({
-      parent,
-      state: EditorState.create({
-        doc,
-        extensions: [languageExtensionForPath("big.go")!, indentUnit.of("\t"), createPrettyExtension({ enabled: false, path: "big.go" })],
-      }),
-    });
-    try {
-      const parsedBefore = syntaxTree(view.state).length;
-      expect(parsedBefore).toBeLessThan(doc.length);
-      applyPrettyConfig(view, { enabled: true, path: "big.go" });
-      const parsed = syntaxTree(view.state).length;
-      expect(parsed).toBe(parsedBefore);
-      expect(lastDecoration(view)).toBeGreaterThan(0);
-      expect(lastDecoration(view)).toBeLessThan(parsed);
+  it("lays out only parsed text, extends as parsing advances, and never forces a parse (Lezer and StreamLanguage)", () => {
+    const cases = [
+      {
+        path: "big.go",
+        unit: "\t",
+        line: (i: number) =>
+          `result${i} := compute(${Array.from({ length: 40 }, (_, k) => `arg${k}`).join(", ")}, "s, (t)") // c, (d)`,
+      },
+      {
+        path: "Big.java",
+        unit: "  ",
+        line: (i: number) =>
+          `int r${i} = compute(${Array.from({ length: 40 }, (_, k) => `arg${k}`).join(", ")}, "s, (t)"); // c, (d)`,
+      },
+    ];
 
-      const target = Math.min(doc.length, parsed + 200_000);
-      expect(forceParsing(view, target, 5_000)).toBe(true);
-      const reached = syntaxTree(view.state).length;
-      expect(reached).toBeGreaterThan(parsed);
-      const work = prettyWorkOf(view.state);
-      expect(work.from).toBeGreaterThanOrEqual(view.state.doc.lineAt(parsed).from - 2 * PRETTY_CHECKPOINT_INTERVAL);
-      expect(work.visits).toBeLessThan(3 * (reached - parsed) + 4 * PRETTY_CHECKPOINT_INTERVAL);
-      expect(lastDecoration(view)).toBeGreaterThan(parsed);
-      expect(lastDecoration(view)).toBeLessThan(reached);
-    } finally {
-      view.destroy();
-      parent.remove();
+    for (const { path, unit, line } of cases) {
+      const doc = Array.from({ length: 6_000 }, (_, i) => line(i)).join("\n");
+      const parent = document.createElement("div");
+      document.body.appendChild(parent);
+      const view = new EditorView({
+        parent,
+        state: EditorState.create({
+          doc,
+          extensions: [
+            languageExtensionForPath(path)!,
+            indentUnit.of(unit),
+            createPrettyExtension({ enabled: false, path }),
+          ],
+        }),
+      });
+      try {
+        const parsedBefore = syntaxTree(view.state).length;
+        expect(parsedBefore, path).toBeLessThan(doc.length);
+        applyPrettyConfig(view, { enabled: true, path });
+        const parsed = syntaxTree(view.state).length;
+        expect(parsed, path).toBe(parsedBefore);
+        expect(lastDecoration(view), path).toBeGreaterThan(0);
+        expect(lastDecoration(view), path).toBeLessThan(parsed);
+
+        const target = Math.min(doc.length, parsed + 200_000);
+        expect(forceParsing(view, target, 5_000), path).toBe(true);
+        const reached = syntaxTree(view.state).length;
+        expect(reached, path).toBeGreaterThan(parsed);
+        const work = prettyWorkOf(view.state);
+        expect(work.from, path).toBeGreaterThanOrEqual(
+          view.state.doc.lineAt(parsed).from - 2 * PRETTY_CHECKPOINT_INTERVAL,
+        );
+        expect(work.visits, path).toBeLessThan(
+          3 * (reached - parsed) + 4 * PRETTY_CHECKPOINT_INTERVAL,
+        );
+        expect(lastDecoration(view), path).toBeGreaterThan(parsed);
+        expect(lastDecoration(view), path).toBeLessThan(reached);
+      } finally {
+        view.destroy();
+        parent.remove();
+      }
     }
   });
 
-  it("waits for syntaxTree on fenced Markdown instead of scanning with Tree.empty", () => {
-    const doc = [
-      "```python",
-      `msg = "${"x".repeat(120)}, ${"y".repeat(120)}"`,
-      "```",
-    ].join("\n");
-    const state = EditorState.create({
-      doc,
-      extensions: [indentUnit.of("  "), createPrettyExtension({ enabled: true, path: "notes.md" })],
+  it("waits for syntaxTree on fenced Markdown instead of scanning bracketed fences with Tree.empty", () => {
+    const args = Array.from({ length: 30 }, (_, i) => `arg_${i}`).join(", ");
+    const trap = '"keep, (together)"';
+    const doc = ["```python", `result = compute(${args}, ${trap})`, "```"].join("\n");
+
+    const unparsed = new EditorView({
+      state: EditorState.create({
+        doc,
+        extensions: [indentUnit.of("  "), createPrettyExtension({ enabled: true, path: "notes.md" })],
+      }),
     });
-    expect(lastDecoration(new EditorView({ state }))).toBe(-1);
+    try {
+      expect(lastDecoration(unparsed)).toBe(-1);
+    } finally {
+      unparsed.destroy();
+    }
+
+    const parsed = new EditorView({
+      state: EditorState.create({
+        doc,
+        extensions: [
+          languageExtensionForPath("notes.md")!,
+          indentUnit.of("  "),
+          createPrettyExtension({ enabled: true, path: "notes.md" }),
+        ],
+      }),
+    });
+    try {
+      forceParsing(parsed, doc.length, 5_000);
+      expect(lastDecoration(parsed)).toBeGreaterThan(0);
+      const trapStart = doc.indexOf(trap);
+      const trapEnd = trapStart + trap.length;
+      const breaksInTrap: number[] = [];
+      parsed.state.facet(prettyLayoutDecorations).between(trapStart + 1, trapEnd - 1, (from, to) => {
+        if (from === to) breaksInTrap.push(from);
+      });
+      expect(breaksInTrap).toEqual([]);
+    } finally {
+      parsed.destroy();
+    }
   });
 });

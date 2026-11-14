@@ -2,7 +2,7 @@ import { Decoration, EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
 import type { LycaonClient } from "../../api/client.ts";
-import type { HostSecretRedactionMeta, RedactedSpan } from "../../api/types.ts";
+import type { FormatTool, HostSecretRedactionMeta, RedactedSpan } from "../../api/types.ts";
 import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
 import {
   formattersForBuffer,
@@ -11,10 +11,7 @@ import {
   languageLabelForPath,
   PLAIN_TEXT_LABEL,
 } from "../../components/source/editor/codemirror-lang.ts";
-import {
-  declaredLineWidth,
-  type PrettyFormatTool,
-} from "../../components/source/editor/format-settings.ts";
+import { declaredLineWidth } from "../../components/source/editor/format-settings.ts";
 import {
   redactionMarkModifier,
   redactionMarkTitle,
@@ -23,7 +20,7 @@ import {
 export interface ChatContentLanguage {
   readonly extension: Extension | null;
   readonly label: string;
-  readonly formatters: readonly PrettyFormatTool[];
+  readonly formatters: readonly FormatTool[];
 }
 
 export function resolveChatContentLanguage(doc: ChatContentDocument): ChatContentLanguage {
@@ -43,7 +40,7 @@ export function useChatContentLineWidth(
   client: Accessor<LycaonClient | null>,
   projectId: Accessor<string>,
   doc: Accessor<ChatContentDocument>,
-  formatters: Accessor<readonly PrettyFormatTool[]>,
+  formatters: Accessor<readonly FormatTool[]>,
 ): Accessor<number | undefined> {
   const [lineWidth, setLineWidth] = createSignal<number | undefined>(undefined);
   createEffect(() => {

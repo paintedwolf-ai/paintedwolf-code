@@ -1,17 +1,29 @@
 import { indentUnit } from "@codemirror/language";
-import { EditorState, type Extension } from "@codemirror/state";
+import { EditorState, type Extension, Text } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
-import { createPrettyExtension, prettyOutcomeOf, prettyWorkOf } from "./pretty-layout.ts";
+import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
+import { createPrettyExtension, prettyOutcomeOf, prettyPlanHasLayout, prettyWorkOf } from "./pretty-layout.ts";
+import { prettyTargetFor } from "./pretty-recognition.ts";
 import { PRETTY_MAX_INPUT, type PrettyConfig } from "./pretty-rescan.ts";
 import { PRETTY_CHECKPOINT_INTERVAL } from "./pretty-scan-state.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 
 type Layout = { breaks: number[]; lines: Array<[number, number, number]> };
 
+function extraLanguage(path: string | undefined): Extension {
+  return path === "notes.md" ? (languageExtensionForPath(path) ?? []) : [];
+}
+
 function open(doc: string, config: Omit<PrettyConfig, "enabled">, unit = "  ", extra: Extension = []): EditorState {
   return EditorState.create({
     doc,
-    extensions: [indentUnit.of(unit), EditorState.tabSize.of(4), createPrettyExtension({ enabled: true, ...config }), extra],
+    extensions: [
+      extraLanguage(config.path),
+      indentUnit.of(unit),
+      EditorState.tabSize.of(4),
+      createPrettyExtension({ enabled: true, ...config }),
+      extra,
+    ],
   });
 }
 
@@ -50,9 +62,15 @@ function pretty(doc: string, path: string, unit = "  "): string {
 }
 
 function rebuilt(state: EditorState): Layout {
+  const cfg = currentConfig(state);
   return layoutOf(EditorState.create({
     doc: state.doc,
-    extensions: [indentUnit.of(state.facet(indentUnit)), EditorState.tabSize.of(state.tabSize), createPrettyExtension(currentConfig(state))],
+    extensions: [
+      extraLanguage(cfg.path),
+      indentUnit.of(state.facet(indentUnit)),
+      EditorState.tabSize.of(state.tabSize),
+      createPrettyExtension(cfg),
+    ],
   }));
 }
 
@@ -251,6 +269,46 @@ describe("recognition", () => {
     const fence = md.indexOf('{"a"');
     expect(breaks.length).toBeGreaterThan(0);
     expect(breaks.every((pos) => pos > fence && pos < md.indexOf("```", fence))).toBe(true);
+  });
+
+  it("is active iff the plan can produce layout decorations, including across edits", () => {
+    const cases: Array<{ label: string; config: Omit<PrettyConfig, "enabled">; doc: string; expected: boolean }> = [
+      { label: "document rule", config: { path: "app.ts" }, doc: "const x = 1;\n", expected: true },
+      { label: "no target", config: { path: "app.ini" }, doc: "a = 1\n", expected: false },
+      { label: "unknown prose", config: {}, doc: "hello world\n", expected: false },
+      { label: "unknown with JSON", config: {}, doc: '{"a": 1, "b": 2}\n', expected: true },
+      { label: "fenced prose only", config: { path: "notes.md" }, doc: "# Title\n\nPlain paragraph.\n", expected: false },
+      { label: "fenced unsupported ini", config: { path: "notes.md" }, doc: "```ini\na=1\n```\n", expected: false },
+      { label: "fenced supported ts", config: { path: "notes.md" }, doc: "```ts\nconst x = 1;\n```\n", expected: true },
+      { label: "fenced unlabelled JSON", config: { path: "notes.md" }, doc: '```\n{"a": 1}\n```\n', expected: true },
+      { label: "fenced unlabelled prose", config: { path: "notes.md" }, doc: "```\nplain words\n```\n", expected: false },
+    ];
+    for (const { label, config, doc, expected } of cases) {
+      const target = prettyTargetFor(config.path, config.languageHint);
+      expect(prettyPlanHasLayout(Text.of(doc.split("\n")), target), `${label}: planHasLayout`).toBe(expected);
+      expect(prettyOutcomeOf(open(doc, config)).kind === "active", `${label}: outcome`).toBe(expected);
+    }
+
+    // Incremental transition on unknown text: unavailable -> active -> unavailable.
+    let unknownState = open("plain log line\n", {});
+    expect(prettyOutcomeOf(unknownState).kind).toBe("unavailable");
+    unknownState = edit(unknownState, unknownState.doc.length, unknownState.doc.length, '{"added":[1,2]}\n');
+    expect(prettyOutcomeOf(unknownState).kind).toBe("active");
+    expect(layoutOf(unknownState).breaks.length).toBeGreaterThan(0);
+    unknownState = edit(unknownState, "plain log line\n".length, unknownState.doc.length, "");
+    expect(prettyOutcomeOf(unknownState).kind).toBe("unavailable");
+    expect(layoutOf(unknownState).breaks).toEqual([]);
+
+    // Incremental transition on fenced Markdown: unavailable -> active -> unavailable.
+    let mdState = open("# Heading\n", { path: "notes.md" });
+    configs.set(mdState, { enabled: true, path: "notes.md" });
+    expect(prettyOutcomeOf(mdState).kind).toBe("unavailable");
+    mdState = edit(mdState, mdState.doc.length, mdState.doc.length, '\n```json\n{"k":[1,2]}\n```\n');
+    expect(prettyOutcomeOf(mdState).kind).toBe("active");
+    expect(layoutOf(mdState).breaks.length).toBeGreaterThan(0);
+    mdState = edit(mdState, "# Heading\n".length, mdState.doc.length, "");
+    expect(prettyOutcomeOf(mdState).kind).toBe("unavailable");
+    expect(layoutOf(mdState).breaks).toEqual([]);
   });
 });
 

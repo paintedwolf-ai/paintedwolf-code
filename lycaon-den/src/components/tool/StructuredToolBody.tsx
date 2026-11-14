@@ -310,6 +310,8 @@ function BackgroundProcessSection(props: {
 
 function RawOutputChrome(props: {
   part: ToolPartView;
+  rawPath?: string;
+  rawLanguage?: string;
   sessionId?: string;
   projectId?: string;
 }) {
@@ -341,23 +343,6 @@ function RawOutputChrome(props: {
     });
   });
 
-  const rawPath = createMemo(() => {
-    const args = props.part.args;
-    if (typeof args?.path === "string" && args.path.trim()) return args.path.trim();
-    if (typeof args?.file_path === "string" && args.file_path.trim()) return args.file_path.trim();
-    return undefined;
-  });
-  const rawLanguage = createMemo(() => {
-    const trimmed = (props.part.output ?? "").trimStart();
-    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined;
-    try {
-      JSON.parse(trimmed);
-      return "json";
-    } catch {
-      return undefined;
-    }
-  });
-
   const onAddToChat = () => {
     const ref = searchHitRef();
     if (ref) void addToChat(ref, { destination: chatDestination() });
@@ -381,8 +366,8 @@ function RawOutputChrome(props: {
               label="Raw output"
               testId="tool-raw-output-link"
               projectId={props.projectId}
-              path={rawPath()}
-              language={rawLanguage()}
+              path={props.rawPath}
+              language={props.rawLanguage}
               revealOffset={toolContent?.outputOffset()}
               content={rawContent()}
             />
@@ -495,6 +480,8 @@ export function StructuredToolBody(props: Props) {
       <Show when={view().rawOutputAvailable}>
         <RawOutputChrome
           part={props.part}
+          rawPath={view().rawOutputPath}
+          rawLanguage={view().rawOutputLanguage}
           sessionId={props.sessionId}
           projectId={props.projectId}
         />

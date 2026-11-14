@@ -1,4 +1,4 @@
-import { type ScanCursor, type ScanState, targetColumns } from "./pretty-scan-state.ts";
+import { PRETTY_MAX_DEPTH, type ScanCursor, type ScanState, targetColumns } from "./pretty-scan-state.ts";
 
 const SPACE = 0x20;
 const TAB = 0x09;
@@ -20,14 +20,14 @@ const CARET = 0x5e;
 const HEADER_FORMS = /^(?:def\S*|ns|fn|let\S*|define\S*|lambda)$/;
 
 export class SexpFrame {
-  formCount = 0;
-  keepSecond = false;
-
   constructor(
     readonly kind: number,
     readonly expanded: boolean,
     readonly isMap: boolean,
     readonly childIndent: number,
+    readonly depth: number,
+    readonly formCount: number,
+    readonly keepSecond: boolean,
     readonly parent: SexpFrame | null,
   ) {}
 }
@@ -35,7 +35,14 @@ export class SexpFrame {
 export function sexpFramesEqual(a: SexpFrame | null, b: SexpFrame | null): boolean {
   while (a && b) {
     if (a === b) return true;
-    if (a.kind !== b.kind || a.expanded !== b.expanded || a.isMap !== b.isMap || a.childIndent !== b.childIndent) {
+    if (
+      a.kind !== b.kind ||
+      a.expanded !== b.expanded ||
+      a.isMap !== b.isMap ||
+      a.childIndent !== b.childIndent ||
+      a.formCount !== b.formCount ||
+      a.keepSecond !== b.keepSecond
+    ) {
       return false;
     }
     a = a.parent;
@@ -92,10 +99,12 @@ function sexpFits(cursor: ScanCursor, openPos: number): boolean {
     const protectedEnd = text.tokens?.protectedEnd(pos) ?? -1;
     if (protectedEnd > pos) {
       const to = Math.min(protectedEnd, lineEnd);
+      state.visits += to - pos;
       width += to - pos;
       pos = to;
       continue;
     }
+    state.visits += 1;
     const c = text.at(pos);
     if (c === BACKSLASH && pos + 1 < lineEnd) {
       width += 2;
@@ -115,14 +124,16 @@ function sexpFits(cursor: ScanCursor, openPos: number): boolean {
 }
 
 function skipProtectedOrAtom(cursor: ScanCursor, pos: number, end: number): { next: number; text: string } {
-  const { text } = cursor;
+  const { text, state } = cursor;
   const protectedEnd = text.tokens?.protectedEnd(pos) ?? -1;
   if (protectedEnd > pos) {
     const next = Math.min(protectedEnd, end);
+    state.visits += next - pos;
     return { next, text: "" };
   }
   const c = text.at(pos);
   if (c === BACKSLASH && pos + 1 < end) {
+    state.visits += 2;
     return { next: pos + 2, text: "" };
   }
   let p = pos;
@@ -132,7 +143,9 @@ function skipProtectedOrAtom(cursor: ScanCursor, pos: number, end: number): { ne
     if ((text.tokens?.protectedEnd(p) ?? -1) > p) break;
     p += 1;
   }
-  return { next: Math.max(pos + 1, p), text: text.slice(pos, p) };
+  const next = Math.max(pos + 1, p);
+  state.visits += next - pos;
+  return { next, text: text.slice(pos, p) };
 }
 
 function maybeBreakBeforeForm(cursor: ScanCursor, pos: number, atomText: string): void {
@@ -140,19 +153,25 @@ function maybeBreakBeforeForm(cursor: ScanCursor, pos: number, atomText: string)
   const top = state.sexpFrames;
   if (!top || !top.expanded || !state.hasContent) return;
   const index = top.formCount;
-  top.formCount += 1;
-  if (index === 0) {
-    if (top.kind === OPEN_PAREN && HEADER_FORMS.test(atomText)) {
-      top.keepSecond = true;
-    }
-    return;
-  }
+  const keepSecond =
+    index === 0 ? top.kind === OPEN_PAREN && HEADER_FORMS.test(atomText) : top.keepSecond;
+  state.sexpFrames = new SexpFrame(
+    top.kind,
+    top.expanded,
+    top.isMap,
+    top.childIndent,
+    top.depth,
+    index + 1,
+    keepSecond,
+    top.parent,
+  );
+  if (index === 0) return;
   if (top.isMap) {
     if (index % 2 === 0) cursor.emitBreak(pos, cursor.columns(top.childIndent));
     return;
   }
   if (top.kind === OPEN_PAREN) {
-    if (index === 1 && top.keepSecond) return;
+    if (index === 1 && keepSecond) return;
     cursor.emitBreak(pos, cursor.columns(top.childIndent));
     return;
   }
@@ -164,6 +183,7 @@ export function stepSexp(cursor: ScanCursor, dataMode: boolean, pos: number, end
   const protectedEnd = text.tokens?.protectedEnd(pos) ?? -1;
   if (protectedEnd > pos) {
     const to = Math.min(protectedEnd, end);
+    state.visits += to - pos;
     if (state.laidOut && pos === cursor.skipSpaces(pos, end)) {
       maybeBreakBeforeForm(cursor, pos, "");
     }
@@ -172,6 +192,7 @@ export function stepSexp(cursor: ScanCursor, dataMode: boolean, pos: number, end
     return to;
   }
 
+  state.visits += 1;
   const c = text.at(pos);
   if (isWhitespace(c)) {
     state.col += c === TAB ? cursor.options.tabSize : 1;
@@ -191,7 +212,7 @@ export function stepSexp(cursor: ScanCursor, dataMode: boolean, pos: number, end
     let p = pos + 1;
     if (c === HASH && p < end) {
       const next = text.at(p);
-      if (next === QUOTE || next === 0x5f /* _ */ || next === 0x3f /* ? */) p += 1;
+      if (next === QUOTE || next === 0x5f || next === 0x3f) p += 1;
       if (next === OPEN_BRACE || next === OPEN_PAREN) {
         const isSet = next === OPEN_BRACE;
         state.col += p - pos;
@@ -230,6 +251,11 @@ export function stepSexp(cursor: ScanCursor, dataMode: boolean, pos: number, end
 
 function openSexpGroup(cursor: ScanCursor, dataMode: boolean, openPos: number, isSet: boolean): number {
   const { state, text } = cursor;
+  const depth = (state.sexpFrames?.depth ?? 0) + 1;
+  if (depth > PRETTY_MAX_DEPTH) {
+    state.failure = "depth";
+    return openPos + 1;
+  }
   const kind = text.at(openPos);
   const nextPos = cursor.skipSpaces(openPos + 1, state.lineEnd);
   const nonEmpty = nextPos < state.lineEnd && text.at(nextPos) !== closerOf(kind);
@@ -239,7 +265,7 @@ function openSexpGroup(cursor: ScanCursor, dataMode: boolean, openPos: number, i
     nonEmpty &&
     ((dataMode && isMap) || !sexpFits(cursor, openPos));
   const parentIndent = state.sexpFrames?.childIndent ?? 0;
-  state.sexpFrames = new SexpFrame(kind, expanded, isMap, parentIndent + 1, state.sexpFrames);
+  state.sexpFrames = new SexpFrame(kind, expanded, isMap, parentIndent + 1, depth, 0, false, state.sexpFrames);
   state.col += 1;
   state.hasContent = true;
   return openPos + 1;

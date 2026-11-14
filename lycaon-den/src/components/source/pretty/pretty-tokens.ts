@@ -3,7 +3,7 @@ import type { Text } from "@codemirror/state";
 import type { Tree } from "@lezer/common";
 import { highlightTree, tagHighlighter, tags } from "@lezer/highlight";
 import type { PrettyLexer } from "./pretty-lexers.ts";
-import { STREAM_LINE_LIMIT, StreamLineTokens } from "./pretty-stream-tokens.ts";
+import { StreamLineTokens } from "./pretty-stream-tokens.ts";
 import type { TextWindow } from "./pretty-text-window.ts";
 
 const PROTECTED = "p";
@@ -37,9 +37,10 @@ export class TreeTokens implements PrettyTokenSource {
     private readonly tree: Tree,
     private readonly doc?: Text,
     streamParser?: StreamParser<unknown> | null,
+    tabSize = 4,
     indentUnit = 2,
   ) {
-    this.streamTokens = streamParser ? new StreamLineTokens(streamParser, indentUnit) : null;
+    this.streamTokens = streamParser ? new StreamLineTokens(streamParser, tabSize, indentUnit) : null;
   }
 
   get parsedTo(): number {
@@ -49,10 +50,10 @@ export class TreeTokens implements PrettyTokenSource {
   private load(pos: number): void {
     if (this.streamTokens && this.doc) {
       const line = this.doc.lineAt(pos);
-      if (line.length > STREAM_LINE_LIMIT) {
+      if (this.streamTokens.usesStreamAt(this.doc, line.number)) {
         const win = this.streamTokens.loadWindow(this.doc, pos);
         this.from = win.from;
-        this.to = win.to;
+        this.to = Math.min(this.tree.length, win.to);
         this.starts = win.starts;
         this.ends = win.ends;
         return;
@@ -94,7 +95,13 @@ export class TreeTokens implements PrettyTokenSource {
     if (pos >= this.tree.length) return -1;
     const i = this.find(pos);
     if (i < 0 || this.ends[i]! <= pos) return -1;
-    return this.ends[i]!;
+    let end = this.ends[i]!;
+    while (end === this.to && end < this.tree.length) {
+      this.load(end);
+      if (this.starts.length === 0 || this.starts[0]! > end) break;
+      end = this.ends[0]!;
+    }
+    return end;
   }
 }
 

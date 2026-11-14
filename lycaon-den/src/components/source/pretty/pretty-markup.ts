@@ -1,5 +1,5 @@
 import { stepBracket } from "./pretty-bracket.ts";
-import { INITIAL_JSX_STATE, stepJsx } from "./pretty-jsx.ts";
+import { JSX_SCRIPT_RULE, stepJsx } from "./pretty-jsx.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
 import { type BracketRule, type ScanCursor, targetColumns } from "./pretty-scan-state.ts";
 
@@ -110,7 +110,7 @@ function embeddedForTag(cursor: ScanCursor, tag: OpenTag, tagEnd: number): Embed
   if (tag.name === "script") {
     const type = attrValue(tagText, "type");
     if (JSON_SCRIPT_TYPES.has(type)) return { closeTag: "</script", rule: EMBEDDED_DATA_RULE, jsx: false };
-    if (lang === "tsx" || lang === "jsx") return { closeTag: "</script", rule: EMBEDDED_SCRIPT_RULE, jsx: true };
+    if (lang === "tsx" || lang === "jsx") return { closeTag: "</script", rule: JSX_SCRIPT_RULE, jsx: true };
     return { closeTag: "</script", rule: EMBEDDED_SCRIPT_RULE, jsx: false };
   }
   const rule = lang === "scss" || lang === "less" ? EMBEDDED_SCSS_RULE : EMBEDDED_STYLE_RULE;
@@ -174,7 +174,6 @@ export function stepMarkup(cursor: ScanCursor, pos: number, end: number): number
         state.lexer = null;
         state.frames = null;
         state.containers = null;
-        state.jsxState = INITIAL_JSX_STATE;
         state.markup = { ...m, embedded: null };
         m = state.markup;
       }
@@ -216,7 +215,6 @@ export function stepMarkup(cursor: ScanCursor, pos: number, end: number): number
         state.lexer = embedded.rule.lexer();
         state.frames = null;
         state.containers = null;
-        state.jsxState = INITIAL_JSX_STATE;
       }
       state.markup = {
         ...m,

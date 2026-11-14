@@ -1,11 +1,14 @@
 // @vitest-environment jsdom
-import { forceParsing, indentUnit } from "@codemirror/language";
-import { EditorState } from "@codemirror/state";
+import { NodeType, Tree } from "@lezer/common";
+import { forceParsing, indentUnit, type StreamParser } from "@codemirror/language";
+import { EditorState, Text } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { describe, expect, it } from "vitest";
 import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
 import { createSourceEditorState } from "../editor/codemirror-theme.ts";
 import { createPrettyExtension } from "./pretty-layout.ts";
+import { TextWindow } from "./pretty-text-window.ts";
+import { TreeLexer, TreeTokens } from "./pretty-tokens.ts";
 import { prettyLayoutDecorations } from "./pretty-view.ts";
 
 function breakPositions(state: EditorState): number[] {
@@ -17,13 +20,12 @@ function breakPositions(state: EditorState): number[] {
 }
 
 function buildState(path: string, doc: string): EditorState {
-  const state = createSourceEditorState({
+  return createSourceEditorState({
     surface: "files",
     doc,
     language: languageExtensionForPath(path),
     extensions: [indentUnit.of("  "), createPrettyExtension({ enabled: true, path })],
   });
-  return state;
 }
 
 function forceAndRead(path: string, doc: string): { view: EditorView; parent: HTMLDivElement; breaks: number[] } {
@@ -65,6 +67,65 @@ describe("simplified parser and stream tokens past column 10,000", () => {
         view.destroy();
         parent.remove();
       }
+    }
+  });
+
+  it("matches ^-anchored mode regexes past column 0 and deep-clones array state across checkpoints", () => {
+    const parser: StreamParser<{ stack: string[] }> = {
+      startState: () => ({ stack: [] }),
+      token(stream, state) {
+        if (state.stack.length > 0) {
+          if (stream.match(/^\}/)) {
+            state.stack.pop();
+            return "string";
+          }
+          stream.next();
+          return "string";
+        }
+        if (stream.match(/^STR\{/)) {
+          state.stack.push("str");
+          return "string";
+        }
+        stream.next();
+        return null;
+      },
+    };
+
+    const pad = "a".repeat(10_500);
+    const line = `prefix = STR{${pad}} + tail`;
+    const doc = Text.of([line]);
+    const fullTree = new Tree(NodeType.none, [], [], doc.length);
+    const treeTokens = new TreeTokens(fullTree, doc, parser as StreamParser<unknown>, 4, 2);
+    const win = new TextWindow(doc, treeTokens);
+    const lexer = new TreeLexer();
+
+    const openIdx = line.indexOf("STR{");
+    const closeIdx = line.indexOf("}") + 1;
+    // Query past two 4,096-char windows first to populate checkpoints inside `stack: ["str"]`,
+    // then advance past `}` (mutating the working state's `stack`), then re-query an earlier window.
+    expect(lexer.skip(win, openIdx + 9_000, line.length)).toBe(closeIdx);
+    lexer.endLine();
+    expect(lexer.skip(win, closeIdx + 1, line.length)).toBe(closeIdx + 1);
+    expect(lexer.skip(win, openIdx, line.length)).toBe(closeIdx);
+    lexer.endLine();
+    expect(lexer.skip(win, openIdx + 4_500, line.length)).toBe(closeIdx);
+  });
+
+  it("carries multi-line block comment state from earlier lines into >10,000-column lines", () => {
+    const commentBody = `${"word ".repeat(2_500)}trap(a, b, c); { x: 1, y: 2 } */`;
+    const codeTail = ` void after() { compute(${Array.from({ length: 30 }, (_, i) => `arg${i}`).join(", ")}); } }`;
+    const line2 = `${commentBody}${codeTail}`;
+    expect(line2.length).toBeGreaterThan(12_500);
+    const doc = `class Multi { /* open comment on line 1\n${line2}\n`;
+
+    const { view, parent, breaks } = forceAndRead("Multi.java", doc);
+    try {
+      const commentEnd = doc.indexOf("*/") + 2;
+      expect(breaks.filter((pos) => pos < commentEnd)).toEqual([]);
+      expect(breaks.filter((pos) => pos > commentEnd).length).toBeGreaterThan(0);
+    } finally {
+      view.destroy();
+      parent.remove();
     }
   });
 

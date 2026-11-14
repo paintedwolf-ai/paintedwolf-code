@@ -1,6 +1,7 @@
+import type { Text } from "@codemirror/state";
 import { containerStartColumn, DATA_LIKE_RULE, readJsonContainer } from "./pretty-recognition.ts";
-import type { Fence, PrettyRule } from "./pretty-scan-state.ts";
-import type { TextWindow } from "./pretty-text-window.ts";
+import type { Fence, PrettyPlan, PrettyRule } from "./pretty-scan-state.ts";
+import { TextWindow } from "./pretty-text-window.ts";
 
 export interface OpeningFence {
   readonly char: number;
@@ -61,4 +62,35 @@ export function unlabelledFenceSpan(
   const end = readJsonContainer(probe, prefixLen + col);
   if (end <= 0) return null;
   return { rule: DATA_LIKE_RULE, spanEnd: from + end };
+}
+
+/** Whether `plan` can lay out any region in `doc`. */
+export function planHasLayout(doc: Text, plan: PrettyPlan): boolean {
+  if (plan.kind === "document") return true;
+  if (plan.kind === "spans") return plan.spans.length > 0;
+  const text = new TextWindow(doc, null);
+  let open: Fence | null = null;
+  for (let i = 1; i <= doc.lines; i++) {
+    const line = doc.line(i);
+    const head = text.slice(line.from, Math.min(line.to, line.from + 200));
+    if (open) {
+      if (line.to - line.from <= 200 && isClosingFence(head, open)) {
+        open = null;
+      } else if (open.unlabelled && unlabelledFenceSpan(text, line.from, line.to, open)) {
+        return true;
+      }
+      continue;
+    }
+    const parsed = parseOpeningFence(head);
+    if (!parsed) continue;
+    if (plan.fenceRule(parsed.info)) return true;
+    open = {
+      char: parsed.char,
+      length: parsed.length,
+      rule: null,
+      quoteDepth: parsed.quoteDepth,
+      unlabelled: parsed.info === "",
+    };
+  }
+  return false;
 }

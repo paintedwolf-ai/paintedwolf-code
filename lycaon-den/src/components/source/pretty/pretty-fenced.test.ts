@@ -1,8 +1,15 @@
 import { indentUnit } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
+import { languageExtensionForPath } from "../editor/codemirror-lang.ts";
 import { createPrettyExtension } from "./pretty-layout.ts";
 import { prettyLayoutDecorations } from "./pretty-view.ts";
+
+const mdExtensions = [
+  indentUnit.of("  "),
+  languageExtensionForPath("README.md")!,
+  createPrettyExtension({ enabled: true, path: "README.md" }),
+];
 
 function breakCount(state: EditorState): number {
   let count = 0;
@@ -26,7 +33,7 @@ describe("Markdown fenced code improvements", () => {
     ].join("\n");
     const state = EditorState.create({
       doc,
-      extensions: [indentUnit.of("  "), createPrettyExtension({ enabled: true, path: "README.md" })],
+      extensions: mdExtensions,
     });
     expect(breakCount(state)).toBeGreaterThan(2);
   });
@@ -35,14 +42,14 @@ describe("Markdown fenced code improvements", () => {
     const jsonDoc = ["```", '{"a":1,"b":{"c":2}}', "```"].join("\n");
     const jsonState = EditorState.create({
       doc: jsonDoc,
-      extensions: [indentUnit.of("  "), createPrettyExtension({ enabled: true, path: "README.md" })],
+      extensions: mdExtensions,
     });
     expect(breakCount(jsonState)).toBeGreaterThan(0);
 
     const proseDoc = ["```", "+---+   +---+", "| A |-->| B |", "+---+   +---+", "```"].join("\n");
     const proseState = EditorState.create({
       doc: proseDoc,
-      extensions: [indentUnit.of("  "), createPrettyExtension({ enabled: true, path: "README.md" })],
+      extensions: mdExtensions,
     });
     expect(breakCount(proseState)).toBe(0);
   });

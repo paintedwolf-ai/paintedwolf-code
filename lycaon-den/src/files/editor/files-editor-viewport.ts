@@ -82,7 +82,7 @@ function prettyConfigFor(buffer: FileBuffer, enabled: boolean): PrettyConfig {
   return {
     enabled,
     path: buffer.path,
-    ...(detected ? { language: detected } : {}),
+    ...(detected ? { languageHint: detected } : {}),
     ...(lineWidth ? { lineWidth } : {}),
   };
 }

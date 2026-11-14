@@ -9,18 +9,19 @@ import {
   formattersForBuffer,
   languageExtensionForBuffer,
   languageExtensionForPath,
+  prettyLayoutCatalog,
   prettyLayoutForBuffer,
   prettyLayoutForPath,
 } from "../editor/codemirror-lang.ts";
-import { createPrettyExtension } from "./pretty-layout.ts";
+import { createPrettyExtension, prettyOutcomeOf } from "./pretty-layout.ts";
 import { PrettyBreakWidget, prettyLayoutDecorations } from "./pretty-view.ts";
 
 function parseSupportedLanguages(): string[] {
   const goPath = path.resolve(process.cwd(), "../lycaon/internal/filekind/supported.go");
   const source = readFileSync(goPath, "utf8");
   const block = /var\s+supportedLanguages\s*=\s*\[\]string\s*\{([\s\S]*?)\}/.exec(source);
-  if (!block) throw new Error(`Could not locate supportedLanguages in ${goPath}`);
-  return Array.from(block[1]!.matchAll(/"([^"]+)"/g), (match) => match[1]!);
+  expect(block, `supportedLanguages in ${goPath}`).not.toBeNull();
+  return Array.from((block?.[1] ?? "").matchAll(/"([^"]+)"/g), (match) => match[1]!);
 }
 
 const REPRESENTATIVE_PATHS: Record<string, string> = {
@@ -71,6 +72,8 @@ const REPRESENTATIVE_PATHS: Record<string, string> = {
 };
 
 const EXTRA_PATHS = [
+  "App.tsx",
+  "site.css",
   "data.edn",
   "query.sql",
   "App.svelte",
@@ -88,6 +91,16 @@ function open(doc: string, filePath: string, language?: string): EditorState {
     createPrettyExtension({ enabled: true, path: filePath, languageHint: language }),
   ];
   return EditorState.create({ doc, extensions: ext ? [ext, ...extensions] : extensions });
+}
+
+function openForced(doc: string, filePath: string, language?: string): EditorState {
+  const view = new EditorView({ state: open(doc, filePath, language) });
+  try {
+    forceParsing(view, doc.length, 5_000);
+    return view.state;
+  } finally {
+    view.destroy();
+  }
 }
 
 function breaks(state: EditorState): number[] {
@@ -141,146 +154,226 @@ interface FixturePair {
   protectedRanges: Array<[number, number]>;
 }
 
+function rangesOf(dense: string, literals: string[]): Array<[number, number]> {
+  return literals.map((lit) => {
+    const start = dense.indexOf(lit);
+    expect(start, `literal ${lit} in fixture`).toBeGreaterThanOrEqual(0);
+    return [start, start + lit.length];
+  });
+}
+
 function fixtureForPath(filePath: string): FixturePair {
   const base = path.basename(filePath);
   const ext = path.extname(filePath).slice(1).toLowerCase();
   const items = Array.from({ length: 28 }, (_, i) => `item${i}`);
+  const args = items.join(", ");
   const strLit = '"s, (t); [u]"';
   const commentLit = commentLiteralFor(ext);
 
   if (base === "Dockerfile") {
     const chain = items.map((item) => `echo ${item}`).join(" && ");
+    const dense = `RUN ${chain} && echo ${strLit}`;
     return {
-      dense: `RUN ${chain} && echo ${strLit}`,
+      dense,
       formatted: "RUN echo item0 &&\n  echo item1\n",
-      protectedRanges: [[`RUN ${chain} && echo `.length, `RUN ${chain} && echo `.length + strLit.length]],
+      protectedRanges: rangesOf(dense, [strLit]),
     };
   }
-  if (ext === "sh") {
-    const chain = items.map((item) => `echo ${item}`).join(" && ");
-    const prefix = `${chain} && echo `;
-    return {
-      dense: `${prefix}${strLit} ${commentLit}`,
-      formatted: "echo item0 &&\n  echo item1\n",
-      protectedRanges: [
-        [prefix.length, prefix.length + strLit.length],
-        [prefix.length + strLit.length + 1, prefix.length + strLit.length + 1 + commentLit.length],
-      ],
-    };
+  switch (ext) {
+    case "sh": {
+      const chain = items.map((item) => `echo ${item}`).join(" && ");
+      const dense = `${chain} && echo ${strLit} ${commentLit}`;
+      return { dense, formatted: "echo item0 &&\n  echo item1\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "clj":
+    case "lisp":
+    case "scm": {
+      const dense = `(defn process-items [xs] ${items.map((item) => `(step ${item} ${strLit})`).join(" ")}) ${commentLit}`;
+      return { dense, formatted: "(defn process-items [xs]\n  (step item0)\n  (step item1))\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "edn": {
+      const dense = `{:items [${items.map((item) => `{:name ${strLit} :id ${item}}`).join(" ")}]} ${commentLit}`;
+      return { dense, formatted: '{:items\n  [\n    "a"\n    "b"\n  ]}\n', protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "sql": {
+      const cols = items.slice(0, 12).join(", ");
+      const conds = items.slice(12, 22).map((item) => `${item} = ${strLit}`).join(" AND ");
+      const dense = `SELECT ${cols} FROM users JOIN orders ON users.id = orders.user_id WHERE ${conds} ${commentLit}`;
+      return { dense, formatted: "SELECT item0,\n  item1\nFROM users\nWHERE item2 = 1\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "vue": {
+      const spans = items.slice(0, 14).map((item) => `<span data-id="${item}">${strLit}</span>`).join("");
+      const dense = `<template><div class="root">${spans}</div></template>`;
+      return { dense, formatted: "<template>\n  <div>\n    <span>ok</span>\n  </div>\n</template>\n", protectedRanges: rangesOf(dense, [strLit]) };
+    }
+    case "html":
+    case "xml":
+    case "svelte":
+    case "astro":
+    case "svg": {
+      const children = items.slice(0, 14).map((item) => `<span data-id="${item}">${item}</span>`).join("");
+      const dense = `<div class="container" data-note=${strLit}>${children}</div>${commentLit}`;
+      return { dense, formatted: "<div>\n  <span>ok</span>\n</div>\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "tsx": {
+      const children = items.slice(0, 12).map((item) => `<Item key="${item}" label=${strLit} />`).join("");
+      const dense = `export function View() { return (<Section>${children}</Section>); } ${commentLit}`;
+      return { dense, formatted: "export function View() {\n  return (\n    <Section>\n      <Item />\n    </Section>\n  );\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "css": {
+      const rules = items.slice(0, 14).map((item) => `.${item}{color:red;content:${strLit}}`).join("");
+      const dense = `${rules} /* c, (d); {e} */`;
+      return { dense, formatted: ".item0 {\n  color: red;\n}\n", protectedRanges: rangesOf(dense, [strLit, "/* c, (d); {e} */"]) };
+    }
+    case "md": {
+      const jsonRow = `{${items.map((item) => `"${item}": ${strLit}`).join(", ")}}`;
+      const dense = `# Notes\n\n\`\`\`json\n${jsonRow}\n\`\`\`\n`;
+      return { dense, formatted: '# Notes\n\n```json\n{\n  "a": 1\n}\n```\n', protectedRanges: rangesOf(dense, [strLit]) };
+    }
+    case "log": {
+      const jsonRow = `{${items.map((item) => `"${item}": ${strLit}`).join(", ")}}`;
+      const dense = `2026-11-14T10:00:00Z INFO request ${jsonRow}`;
+      return { dense, formatted: "2026-11-14T10:00:00Z INFO ok\n2026-11-14T10:00:01Z INFO done\n", protectedRanges: rangesOf(dense, [strLit]) };
+    }
+    case "json":
+    case "jsonnet": {
+      const pairs = items.map((item) => `"${item}": 1`).join(", ");
+      const dense = `{"data": [${items.map((item) => `"${item}"`).join(", ")}], "note": ${strLit}, ${pairs}}`;
+      return { dense, formatted: '{\n  "a": 1,\n  "b": 2\n}\n', protectedRanges: rangesOf(dense, [strLit]) };
+    }
+    case "yaml": {
+      const longItems = Array.from({ length: 36 }, (_, i) => `item${i}`);
+      const dense = `value: [${longItems.slice(0, 18).join(", ")}, [${longItems.slice(18).join(", ")}], ${strLit}] ${commentLit}`;
+      return { dense, formatted: "value:\n  - a\n  - b\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "py": {
+      const dense = `def compute_all(inputs): return compute(${args}, ${strLit}) ${commentLit}`;
+      return { dense, formatted: "def compute_all(inputs):\n  return [\n    item0,\n    item1,\n  ]\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "rb": {
+      const dense = `def compute_all(inputs); render(${args}, ${strLit}); end ${commentLit}`;
+      return { dense, formatted: "def compute_all(inputs)\n  render(\n    item0,\n    item1\n  )\nend\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "ex": {
+      const dense = `defmodule App do def run(inputs), do: compute(${args}, ${strLit}) end ${commentLit}`;
+      return { dense, formatted: "defmodule App do\n  def run(inputs) do\n    compute(item0, item1)\n  end\nend\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "jl": {
+      const dense = `function compute_all(inputs) return compute(${args}, ${strLit}) end ${commentLit}`;
+      return { dense, formatted: "function compute_all(inputs)\n  return compute(item0, item1)\nend\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "lua": {
+      const dense = `local function compute_all(inputs) return compute(${args}, ${strLit}) end ${commentLit}`;
+      return { dense, formatted: "local function compute_all(inputs)\n  return compute(item0, item1)\nend\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "ml": {
+      const dense = `let compute_all inputs = compute (${args}, ${strLit}) ${commentLit}`;
+      return { dense, formatted: "let compute_all inputs =\n  compute (item0, item1)\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "pl": {
+      const dense = `sub compute_all { my ($x) = @_; return compute(${args}, ${strLit}); } ${commentLit}`;
+      return { dense, formatted: "sub compute_all {\n  my ($x) = @_;\n  return compute(item0, item1);\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "r": {
+      const dense = `compute_all <- function(inputs) { list(${args}, label = ${strLit}) } ${commentLit}`;
+      return { dense, formatted: "compute_all <- function(inputs) {\n  list(item0, item1)\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "promql": {
+      const labels = items.slice(0, 18).map((item) => `${item}="ok"`).join(", ");
+      const dense = `sum by (job, instance) (rate(http_requests_total{${labels}, note=${strLit}}[5m])) ${commentLit}`;
+      return { dense, formatted: 'sum by (job) (\n  rate(http_requests_total{job="api"}[5m])\n)\n', protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "tf": {
+      const dense = `resource "aws_instance" "web" { tags = { ${items.slice(0, 16).map((item) => `${item} = 1`).join(", ")}, note = ${strLit} } } ${commentLit}`;
+      return { dense, formatted: 'resource "aws_instance" "web" {\n  ami = "ami-1"\n}\n', protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "proto": {
+      const fields = items.slice(0, 14).map((item, idx) => `string ${item} = ${idx + 1};`).join(" ");
+      const dense = `syntax = "proto3"; message Request { string note = 99 [default = ${strLit}]; ${fields} } ${commentLit}`;
+      return { dense, formatted: 'syntax = "proto3";\nmessage Request {\n  string item0 = 1;\n}\n', protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "ql": {
+      const dense = `from Function f where f.hasName(${strLit}) and exists(Expr e | call(${args})) select f ${commentLit}`;
+      return { dense, formatted: "from Function f\nwhere f.isPublic()\nselect f\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "php": {
+      const dense = `<?php function run_all($in) { $note = ${strLit}; return compute(${args}, $note); } ${commentLit}`;
+      return { dense, formatted: "<?php\nfunction run_all($in) {\n  return compute(1, 2);\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "hack": {
+      const dense = `<?hh function run_all(vec<int> $in): void { $note = ${strLit}; compute(${args}, $note); } ${commentLit}`;
+      return { dense, formatted: "<?hh\nfunction run_all(): void {\n  compute(1, 2);\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "sol": {
+      const dense = `pragma solidity ^0.8.0; contract Token { function transfer() public { emit Log(${args}, ${strLit}); } } ${commentLit}`;
+      return { dense, formatted: "pragma solidity ^0.8.0;\ncontract Token {\n  uint256 public total;\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "move": {
+      const dense = `module 0x1::token { public fun run() { let s = ${strLit}; compute(${args}, s); } } ${commentLit}`;
+      return { dense, formatted: "module 0x1::token {\n  public fun run() {\n    compute(1, 2);\n  }\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "cairo": {
+      const dense = `fn run_contract() { let note = ${strLit}; compute(${args}, note); } ${commentLit}`;
+      return { dense, formatted: "fn run_contract() {\n  compute(1, 2);\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "circom": {
+      const dense = `template Circuit() { signal input a; log(${args}, ${strLit}); } ${commentLit}`;
+      return { dense, formatted: "template Circuit() {\n  signal input a;\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "cls": {
+      const dense = `public class ApexClass { public static void run() { String s = 's, (t); [u]'; compute(${args}, s); } } ${commentLit}`;
+      return { dense, formatted: "public class ApexClass {\n  public static void run() {\n    compute(1, 2);\n  }\n}\n", protectedRanges: rangesOf(dense, ["'s, (t); [u]'", commentLit]) };
+    }
+    case "ps1": {
+      const dense = `function Invoke-Build { Invoke-Step -Items @(${args}) -Note ${strLit}; } ${commentLit}`;
+      return { dense, formatted: "function Invoke-Build {\n  Invoke-Step -Items @(1, 2)\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "js":
+    case "ts": {
+      const dense = `export function run() { const note = ${strLit}; return compute(${args}, note); } ${commentLit}`;
+      return { dense, formatted: "export function run() {\n  return compute(item0, item1);\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "go":
+    case "swift": {
+      const dense = `func run() { let note = ${strLit}; compute(${args}, note) } ${commentLit}`;
+      return { dense, formatted: "func run() {\n  compute(\n    item0,\n    item1\n  )\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "rs": {
+      const dense = `pub fn run() { let note = ${strLit}; compute(${args}, note); } ${commentLit}`;
+      return { dense, formatted: "pub fn run() {\n  compute(item0, item1);\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "kt": {
+      const dense = `fun run() { val note = ${strLit}; compute(${args}, note) } ${commentLit}`;
+      return { dense, formatted: "fun run() {\n  compute(item0, item1)\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "scala": {
+      const dense = `object Main { def run(): Unit = { val note = ${strLit}; compute(${args}, note) } } ${commentLit}`;
+      return { dense, formatted: "object Main {\n  def run(): Unit = {\n    compute(item0, item1)\n  }\n}\n", protectedRanges: rangesOf(dense, [strLit, commentLit]) };
+    }
+    case "c":
+    case "cpp":
+    case "java":
+    case "cs":
+    case "dart":
+    case "groovy": {
+      const prefix = ext === "java" || ext === "cs" ? "class Main { void run() {" : "void run() {";
+      const suffix = ext === "java" || ext === "cs" ? "} }" : "}";
+      const dense = `${prefix} auto_call(${args}, ${strLit}); ${suffix} ${commentLit}`;
+      return {
+        dense,
+        formatted: `${prefix}\n  auto_call(item0, item1);\n${suffix}\n`,
+        protectedRanges: rangesOf(dense, [strLit, commentLit]),
+      };
+    }
+    default:
+      throw new Error(`Unhandled fixture extension: ${filePath}`);
   }
-  if (ext === "clj" || ext === "lisp" || ext === "scm") {
-    const dense = `(process-items ${items.map((item) => `(step ${item} ${strLit})`).join(" ")}) ${commentLit}`;
-    return {
-      dense,
-      formatted: "(process-items\n  (step item0)\n  (step item1))\n",
-      protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
-    };
-  }
-  if (ext === "edn") {
-    const dense = `{:items [${items.map((item) => `{:name ${strLit} :id ${item}}`).join(" ")}]} ${commentLit}`;
-    return {
-      dense,
-      formatted: "{:items\n  [\n    \"a\"\n    \"b\"\n  ]}\n",
-      protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
-    };
-  }
-  if (ext === "sql") {
-    const cols = items.slice(0, 12).join(", ");
-    const conds = items.slice(12, 22).map((item) => `${item} = ${strLit}`).join(" AND ");
-    const dense = `SELECT ${cols} FROM users JOIN orders ON users.id = orders.user_id WHERE ${conds} ${commentLit}`;
-    return {
-      dense,
-      formatted: "SELECT item0,\n  item1\nFROM users\nWHERE item2 = 1\n",
-      protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
-    };
-  }
-  if (ext === "vue") {
-    const spans = items.slice(0, 14).map((item) => `<span data-id="${item}">${strLit}</span>`).join("");
-    const dense = `<template><div class="root">${spans}</div></template>`;
-    return {
-      dense,
-      formatted: "<template>\n  <div>\n    <span>ok</span>\n  </div>\n</template>\n",
-      protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length]],
-    };
-  }
-  if (XML_MARKUP.has(ext)) {
-    const children = items.slice(0, 14).map((item) => `<span data-id="${item}">${item}</span>`).join("");
-    const dense = `<div class="container" data-note=${strLit}>${children}</div>${commentLit}`;
-    return {
-      dense,
-      formatted: "<div>\n  <span>ok</span>\n</div>\n",
-      protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
-    };
-  }
-  if (ext === "md") {
-    const jsonRow = `{${items.map((item) => `"${item}": ${strLit}`).join(", ")}}`;
-    const dense = `# Notes\n\n\`\`\`\n${jsonRow}\n\`\`\`\n`;
-    return {
-      dense,
-      formatted: "# Notes\n\n```json\n{\n  \"a\": 1\n}\n```\n",
-      protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length]],
-    };
-  }
-  if (ext === "log") {
-    const jsonRow = `{${items.map((item) => `"${item}": ${strLit}`).join(", ")}}`;
-    const dense = `2026-11-14T10:00:00Z INFO request ${jsonRow}`;
-    return {
-      dense,
-      formatted: "2026-11-14T10:00:00Z INFO ok\n2026-11-14T10:00:01Z INFO done\n",
-      protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length]],
-    };
-  }
-  if (ext === "json" || ext === "jsonnet") {
-    const pairs = items.map((item) => `"${item}": 1`).join(", ");
-    const dense = `{"data": [${items.map((item) => `"${item}"`).join(", ")}], "note": ${strLit}, ${pairs}}`;
-    return {
-      dense,
-      formatted: "{\n  \"a\": 1,\n  \"b\": 2\n}\n",
-      protectedRanges: [[dense.indexOf(strLit), dense.indexOf(strLit) + strLit.length]],
-    };
-  }
-  if (ext === "yaml") {
-    const longItems = Array.from({ length: 36 }, (_, i) => `item${i}`);
-    const head = `value: [${longItems.slice(0, 16).join(", ")}, [${longItems.slice(16, 36).join(", ")}], `;
-    const dense = `${head}${strLit}] ${commentLit}`;
-    return {
-      dense,
-      formatted: "value:\n  - a\n  - b\n",
-      protectedRanges: [[head.length, head.length + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
-    };
-  }
-  if (ext === "go") {
-    const head = `func run() { call(${items.join(", ")}, `;
-    const dense = `${head}${strLit}); } ${commentLit}`;
-    return {
-      dense,
-      formatted: "func run() {\n  call(\n    item0,\n    item1,\n  )\n}\n",
-      protectedRanges: [[head.length, head.length + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
-    };
-  }
-  if (ext === "ps1") {
-    const head = `function Run { Call(${items.join(", ")}, `;
-    const dense = `${head}${strLit}); } ${commentLit}`;
-    return {
-      dense,
-      formatted: "function Run {\n  Call(\n    item0,\n    item1\n  )\n}\n",
-      protectedRanges: [[head.length, head.length + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
-    };
-  }
-
-  const head = `value = call(${items.slice(0, 10).join(", ")}, [${items.slice(10, 20).join(", ")}], (${items.slice(20).join(", ")}), `;
-  const dense = `${head}${strLit}) ${commentLit}`;
-  return {
-    dense,
-    formatted: "value = call(\n  item0,\n  item1\n)\n",
-    protectedRanges: [[head.length, head.length + strLit.length], [dense.lastIndexOf(commentLit), dense.length]],
-  };
 }
 
-describe("bidirectional supportedLanguages matrix", () => {
+describe("bidirectional supportedLanguages and Pretty catalog matrix", () => {
   const supported = parseSupportedLanguages();
 
-  it("maps all 44 supportedLanguages to a non-null grammar and active PrettyLayout", () => {
+  it("maps all 44 supportedLanguages to grammars and Pretty layouts, and every active catalog entry to a grammar", () => {
     expect(supported).toHaveLength(44);
     for (const lang of supported) {
       expect(languageExtensionForBuffer("unknown", lang), lang).not.toBeNull();
@@ -294,9 +387,27 @@ describe("bidirectional supportedLanguages matrix", () => {
       expect(languageExtensionForPath(repPath!), repPath).not.toBeNull();
       expect(prettyLayoutForPath(repPath!).kind, repPath).toBe(layout.kind);
     }
+
+    const catalog = prettyLayoutCatalog();
+    const coveredKinds = new Set<string>();
+    for (const { ext, pretty } of catalog) {
+      coveredKinds.add(pretty.kind);
+      if (pretty.kind !== "none" && pretty.kind !== "containers") {
+        expect(
+          languageExtensionForPath(`sample.${ext}`),
+          `catalog ext .${ext} (${pretty.kind}) must mount a grammar so parsed rules never stall`,
+        ).not.toBeNull();
+      }
+    }
+    const matrixKinds = new Set<string>(
+      [...Object.values(REPRESENTATIVE_PATHS), ...EXTRA_PATHS].map((p) => prettyLayoutForPath(p).kind),
+    );
+    for (const kind of coveredKinds) {
+      if (kind !== "none") expect(matrixKinds.has(kind), `matrix covers ${kind}`).toBe(true);
+    }
   });
 
-  it("passes dense, formatted, idempotence, and malformed-edit checks across all 44 supported languages and extras", () => {
+  it("passes dense, formatted, idempotence, and malformed-edit convergence across all 44 supported languages and extras", () => {
     const cases = [
       ...supported.map((lang) => ({ label: lang, filePath: REPRESENTATIVE_PATHS[lang]!, language: lang })),
       ...EXTRA_PATHS.map((filePath) => ({ label: filePath, filePath, language: undefined })),
@@ -304,7 +415,8 @@ describe("bidirectional supportedLanguages matrix", () => {
 
     for (const { label, filePath, language } of cases) {
       const { dense, formatted, protectedRanges } = fixtureForPath(filePath);
-      const denseState = open(dense, filePath, language);
+      const denseState = openForced(dense, filePath, language);
+      expect(prettyOutcomeOf(denseState).kind, `${label}: dense outcome`).toBe("active");
       const denseBreaks = breaks(denseState);
       expect(denseBreaks.length, `${label}: dense breaks`).toBeGreaterThan(0);
       for (const pos of denseBreaks) {
@@ -313,18 +425,30 @@ describe("bidirectional supportedLanguages matrix", () => {
         }
       }
 
-      const formattedState = open(formatted, filePath, language);
+      const formattedState = openForced(formatted, filePath, language);
       expect(breaks(formattedState), `${label}: formatted breaks`).toEqual([]);
 
-      const roundTrip = open(writtenOut(denseState), filePath, language);
+      const roundTrip = openForced(writtenOut(denseState), filePath, language);
       expect(breaks(roundTrip), `${label}: second-pass idempotence`).toEqual([]);
 
-      const malformed = denseState.update({ changes: { from: Math.floor(dense.length / 2), insert: ' "unclosed' } }).state;
-      expect(() => breaks(malformed), `${label}: malformed edit`).not.toThrow();
+      // Malformed edit convergence: incremental state matches a fresh build on the broken document.
+      const view = new EditorView({ state: open(dense, filePath, language) });
+      try {
+        forceParsing(view, dense.length, 5_000);
+        const mid = Math.floor(dense.length / 2);
+        view.dispatch({ changes: { from: mid, insert: ' "unclosed(' } });
+        const brokenDoc = view.state.doc.toString();
+        forceParsing(view, brokenDoc.length, 5_000);
+        const freshBroken = openForced(brokenDoc, filePath, language);
+        expect(prettyOutcomeOf(view.state), `${label}: malformed outcome`).toEqual(prettyOutcomeOf(freshBroken));
+        expect(breaks(view.state), `${label}: malformed edit matches fresh build`).toEqual(breaks(freshBroken));
+      } finally {
+        view.destroy();
+      }
     }
   });
 
-  it("protects strings and comments past column 11,000 on 15,000-character single-line Lezer and StreamLanguage buffers", () => {
+  it("protects strings and comments past column 11,000 and converges to a fresh build on edits", () => {
     const modes: Array<{ filePath: string; commentPrefix: string; isSexp?: boolean }> = [
       { filePath: "long.go", commentPrefix: "//" },
       { filePath: "long.py", commentPrefix: "#" },
@@ -356,8 +480,7 @@ describe("bidirectional supportedLanguages matrix", () => {
       const view = new EditorView({ state: open(doc, filePath) });
       try {
         forceParsing(view, doc.length, 5_000);
-        const state = view.state;
-        const posList = breaks(state);
+        const posList = breaks(view.state);
         expect(posList.length, `${filePath}: total breaks`).toBeGreaterThan(10);
         expect(posList.some((p) => p > 11_000), `${filePath}: breaks past 11k`).toBe(true);
         for (const p of posList) {
@@ -366,15 +489,38 @@ describe("bidirectional supportedLanguages matrix", () => {
         }
 
         view.dispatch({ changes: { from: strEnd + 2, insert: " " } });
+        const afterDoc = view.state.doc.toString();
+        forceParsing(view, afterDoc.length, 5_000);
         const editedBreaks = breaks(view.state);
-        expect(editedBreaks.some((p) => p > 11_000), `${filePath}: edited breaks past 11k`).toBe(true);
-        for (const p of editedBreaks) {
-          expect(p > strStart + 1 && p < strEnd, `${filePath}: edited break inside string at ${p}`).toBe(false);
-          expect(p > commentStart + 1 && p < commentEnd + 1, `${filePath}: edited break inside comment at ${p}`).toBe(false);
-        }
+        const freshState = openForced(afterDoc, filePath);
+        expect(editedBreaks, `${filePath}: incremental edit matches fresh build`).toEqual(breaks(freshState));
       } finally {
         view.destroy();
       }
+    }
+  });
+
+  it("snapshots SQL predicateDepth, betweenPending, and caseStack across mid-line checkpoints", () => {
+    const conds = Array.from(
+      { length: 90 },
+      (_, i) => `col_${i} BETWEEN 10 AND 20 AND CASE WHEN flag_${i} = 1 THEN 'a' ELSE 'b' END = 'a'`,
+    ).join(" AND ");
+    const sql = `SELECT id, account_id, created_at FROM events JOIN accounts ON events.account_id = accounts.id ON DELETE CASCADE WHERE ${conds};`;
+    expect(sql.length).toBeGreaterThan(6_500);
+
+    const view = new EditorView({ state: open(sql, "query.sql") });
+    try {
+      forceParsing(view, sql.length, 5_000);
+      // Edit past two 2,048-char checkpoints inside the WHERE clause and compare to a fresh build.
+      const editPos = sql.indexOf("col_70");
+      expect(editPos).toBeGreaterThan(4_500);
+      view.dispatch({ changes: { from: editPos, to: editPos + 6, insert: "updated_col_70" } });
+      const afterSql = view.state.doc.toString();
+      forceParsing(view, afterSql.length, 5_000);
+      const freshSql = openForced(afterSql, "query.sql");
+      expect(breaks(view.state)).toEqual(breaks(freshSql));
+    } finally {
+      view.destroy();
     }
   });
 });

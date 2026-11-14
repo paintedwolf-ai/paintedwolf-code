@@ -176,3 +176,38 @@ it("renders an outside-root tool path as an inert fact", () => {
   expect(container.querySelector("[data-testid=source-path-link]")).toBeNull();
   expect(container.textContent).toContain("/home/person/settings.json");
 });
+
+it("does not label write tool raw output with the written file path", () => {
+  openFilesSurface.mockReset();
+  const writeOutput = JSON.stringify({ path: "src/main.go", bytes_written: 18 });
+  const view = render(() => (
+    <ToolContentProvider
+      value={{
+        identity: () => ({ projectId: "proj-1", sessionId: "session", messageId: "m1", toolCallId: "tc1" }),
+        output: () => undefined,
+        args: () => undefined,
+        outputOffset: () => undefined,
+        argsOffset: () => undefined,
+      }}
+    >
+      <StructuredToolBody
+        part={part({
+          tool: "write",
+          kind: "write",
+          args: { path: "src/main.go" },
+          output: writeOutput,
+        })}
+        projectId="proj-1"
+        sessionId="session"
+      />
+    </ToolContentProvider>
+  ));
+  const rawLink = view.getByTestId("tool-raw-output-link");
+  fireEvent.click(rawLink);
+  expect(openFilesSurface).toHaveBeenCalledTimes(1);
+  const callArg = openFilesSurface.mock.calls[0]?.[0];
+  expect(callArg?.kind).toBe("chat-content");
+  expect(callArg?.document.pane).toBe("output");
+  expect(callArg?.document.path).toBeUndefined();
+  expect(callArg?.document.language).toBe("json");
+});

@@ -218,7 +218,7 @@ describe("codemirror-lang", () => {
       "markup": "xml svg html htm vue svelte astro csproj fsproj nuspec plist props targets vbproj vcxproj wsdl xaml xsd",
       "code": "ts mts cts tsx js mjs cjs jsx css scss less",
       "bracket statements": "c h cc cpp cxx hpp hh hxx java cs csx cake scala kt kts dart rs swift groovy gradle gvy d php hack sol move cairo circom cls trigger ql qll proto hcl tf tfvars tofu nomad ps1 psm1 psd1",
-      "bracket": "go py pyi yaml yml toml rb cr ex exs lua r jl hs elm ml mli erl hrl al perl ph pl plx pm psgi t promql sass bzl",
+      "bracket": "go py pyi yaml yml toml rb rake gemspec ru cr ex exs lua r jl hs elm ml mli erl hrl al perl ph pl plx pm psgi t promql sass bzl",
       "clause": "sql",
       "sexp": "clj cljs cljc edn scm ss lisp cl lsp",
       "chain": "sh bash zsh dockerfile",
@@ -269,9 +269,13 @@ describe("codemirror-lang", () => {
     expect(languageLabelForPath("Cargo.lock")).toBe("TOML");
     expect(formattersForPath("main.go")).toEqual(["golangci"]);
     expect(formattersForPath("lib/app.ex")).toEqual(["mix_format"]);
-    expect(formattersForPath("app/User.php")).toEqual(["pint", "phpcs", "prettier"]);
-    expect(formattersForPath("src/core.clj")).toEqual(["cljfmt"]);
+    expect(formattersForPath("app/User.php")).toEqual(["phpcs", "prettier"]);
+    expect(formattersForPath("src/core.clj")).toEqual([]);
     expect(formattersForPath("src/Main.java")).toEqual(["checkstyle", "clang_format"]);
+    expect(prettyLayoutForPath("App.tsx")).toEqual({ kind: "code", dialect: "script-jsx" });
+    expect(prettyLayoutForPath("App.jsx")).toEqual({ kind: "code", dialect: "script-jsx" });
+    expect(prettyLayoutForPath("a.ts")).toEqual({ kind: "code", dialect: "script" });
+    expect(prettyLayoutForPath("a.js")).toEqual({ kind: "code", dialect: "script" });
     expect(languageForInfoString("csharp")).not.toBeNull();
     expect(languageForInfoString("Common Lisp")).not.toBeNull();
     expect(languageForInfoString("golang")).not.toBeNull();
