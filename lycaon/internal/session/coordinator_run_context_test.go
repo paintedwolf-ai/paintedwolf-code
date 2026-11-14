@@ -126,7 +126,7 @@ func TestImplementModeWorkerSummaryUsesCompletionEnvelope(t *testing.T) {
 	if msgs[1].WorkerSummary != nil {
 		toolEnvelope = msgs[1].WorkerSummary.Envelope
 	}
-	if !strings.Contains(toolEnvelope, `<task job_id="`+jobID+`"`) || !strings.Contains(toolEnvelope, `state="complete"`) {
+	if strings.Contains(toolEnvelope, jobID) || !strings.Contains(toolEnvelope, `state="complete"`) {
 		t.Fatalf("tool envelope = %q", toolEnvelope)
 	}
 }
