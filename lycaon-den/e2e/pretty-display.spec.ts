@@ -410,20 +410,16 @@ modelIndependentWebE2e("keeps the text at the top of the view across toggles whe
   await scroller.evaluate((element) => { element.scrollTop = (element.scrollHeight - element.clientHeight) / 2; });
   await settle(page);
   await settle(page);
-  // The document position drawn at the top left of the view, and where it sits:
-  // the first drawn line, which at the top of the document starts below the padding.
-  const topText = () => page.evaluate(() => {
+  // The document position drawn at the top left of the view, as the editor reads it.
+  const topText = () => page.evaluate(async () => {
     const view = window.__pretty.view();
-    const port = view.scrollDOM.getBoundingClientRect();
-    const content = view.contentDOM.getBoundingClientRect();
-    const block = view.lineBlockAtHeight(port.top - view.documentTop);
-    const y = Math.max(port.top, view.documentTop + block.top) + 4;
-    const pos = view.posAtCoords({ x: Math.max(content.left, port.left) + 4, y }, false);
-    return { pos, line: view.defaultLineHeight };
+    const scroll = await import(/* @vite-ignore */ String("/src/components/source/editor/editor-settled-scroll.ts")) as typeof import("../src/components/source/editor/editor-settled-scroll.ts");
+    return { pos: view.posAtCoords(scroll.topEdgePoint(view), false), line: view.defaultLineHeight };
   });
+  const width = await scroller.evaluate((element) => element.clientWidth);
   const placeOf = (pos: number) => page.evaluate((pos) => {
     const view = window.__pretty.view();
-    const rect = view.coordsAtPos(pos, 1);
+    const rect = view.coordsAtPos(pos);
     const port = view.scrollDOM.getBoundingClientRect();
     return rect ? { top: rect.top - port.top, left: rect.left - port.left } : null;
   }, pos);
@@ -442,7 +438,8 @@ modelIndependentWebE2e("keeps the text at the top of the view across toggles whe
     let place: { top: number; left: number } | null = null;
     await expect.poll(async () => {
       place = await placeOf(before.pos);
-      return place !== null && Math.abs(place.top - placeBefore.top) < 2 * before.line && place.left >= 0 && place.left < 200;
+      // Vertically held to within a line; sideways, still on screen (wrapped text has no sideways scroll).
+      return place !== null && Math.abs(place.top - placeBefore.top) < 2 * before.line && place.left >= 0 && place.left < width;
       // Laying out a megabyte and measuring the line it becomes takes seconds on a loaded machine.
     }, { timeout: 15_000 }).toBe(true).catch((error: unknown) => {
       throw new Error(`toggle ${i}: pos ${before.pos} was at ${JSON.stringify(placeBefore)}, now ${JSON.stringify(place)}`, { cause: error });
