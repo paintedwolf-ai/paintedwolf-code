@@ -240,7 +240,7 @@ func (p Properties) merge(raw map[string]string) Properties {
 	return next
 }
 
-// mergeKotlinLineState updates IntelliJ's fallback width and ktlint's rule toggle.
+// mergeKotlinLineState updates `ij_kotlin_max_line_length` and `ktlint_standard_max-line-length`.
 func mergeKotlinLineState(ijWidth int, ktlintDisabled bool, raw map[string]string) (int, bool) {
 	if v, ok := raw["ij_kotlin_max_line_length"]; ok {
 		if isUnset(v) || strings.EqualFold(v, "off") {
