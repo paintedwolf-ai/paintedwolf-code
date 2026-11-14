@@ -21,10 +21,11 @@ func RepositoryDirs(path string) (own, shared []string, ok bool) {
 	path = filepath.Clean(path)
 	gitDir := ""
 	dot := filepath.Join(path, dotGit)
-	switch info, err := os.Lstat(dot); {
+	// Git follows a .git symlink, to a directory or to a gitfile.
+	switch info, err := os.Stat(dot); {
 	case err == nil && info.Mode().IsRegular():
 		gitDir = readGitDirPointer(path, dot)
-	case err == nil:
+	case err == nil && info.IsDir():
 		gitDir = dot
 	case isBareRepository(path):
 		gitDir = path

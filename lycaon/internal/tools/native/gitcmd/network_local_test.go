@@ -119,8 +119,9 @@ func TestRejectedPushSettlesUnknown(t *testing.T) {
 	}
 }
 
-// git init and git worktree add bind their launch with the directory they
-// create, so an approved path outside the project is writable.
+// git init and git worktree add and remove bind their launch with the
+// directory whose entry they create or remove, so an approved path outside
+// the project is writable.
 func TestTargetFormsLaunchWithTheirTarget(t *testing.T) {
 	h := newHarness(t)
 	recorder := &launchRecorder{}
@@ -140,5 +141,12 @@ func TestTargetFormsLaunchWithTheirTarget(t *testing.T) {
 	}
 	if !slices.Contains(recorder.writes, outside) {
 		t.Fatalf("worktree launch writes %v, want %s", recorder.writes, outside)
+	}
+	recorder.reset()
+	if r := h.exec("git", "worktree", "remove", filepath.Join(outside, "side")); r.err != nil || r.result.Status != 0 {
+		t.Fatalf("worktree remove: %+v %v %s", r.result, r.err, r.stderr)
+	}
+	if !slices.Contains(recorder.writes, outside) {
+		t.Fatalf("worktree remove launch writes %v, want its parent %s", recorder.writes, outside)
 	}
 }
