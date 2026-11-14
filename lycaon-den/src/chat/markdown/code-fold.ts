@@ -135,7 +135,7 @@ export function createMarkdownCodeFoldController(
     }
 
     entry.frame.dispatchEvent(new Event(TRANSCRIPT_DISCLOSURE_LAYOUT_EVENT, { bubbles: true }));
-    holdChange?.finish();
+    holdChange?.end();
     finishMotion?.();
     if (findController.isOpen() && findController.query()) refreshFindResults();
   };

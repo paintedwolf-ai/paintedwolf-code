@@ -91,8 +91,7 @@ describe("code-fold", () => {
 
         const codeText = code!.textContent ?? "";
         expect(countFenceLines(codeText)).toBe(n);
-        expect(codeText.startsWith("line-1")).toBe(true);
-        expect(codeText.trimEnd().endsWith(`line-${n}`)).toBe(true);
+        expect(codeText.trimEnd()).toBe(expectedCode);
 
         const toggle = frame!.querySelector<HTMLButtonElement>(".den-code-fold-toggle");
         const fade = frame!.querySelector<HTMLElement>(".den-code-fold-fade");
@@ -129,7 +128,7 @@ describe("code-fold", () => {
   });
 
   it("copies the full 400-line source from a folded fence", async () => {
-    const copySpy = vi.spyOn(clipboard, "copyTextToClipboard").mockResolvedValue(true);
+    const copySpy = vi.spyOn(clipboard, "copyTextToClipboard").mockResolvedValue(undefined);
     const full400 = buildLines(400, "stmt");
     const { container } = render(() => (
       <MarkdownBody source={`\`\`\`ts\n${full400}\n\`\`\``} />
