@@ -13,8 +13,6 @@ export type LineFactsCardState = {
 type Props = {
   state: LineFactsCardState | null;
   onActivate: (row: LineFactRow, line: number) => void;
-  onKeepOpen: () => void;
-  onLeave: () => void;
   onDismiss: () => void;
   onReturnFocus: () => void;
 };
@@ -44,9 +42,7 @@ export function LineFactsCard(props: Props) {
       dismissOnScroll
       dismissWhenAnchorHidden
       onDismiss={props.onDismiss}
-      onEscape={props.onReturnFocus}
-      onMouseEnter={props.onKeepOpen}
-      onMouseLeave={() => { if (!surface?.contains(document.activeElement)) props.onLeave(); }}
+      onEscape={() => { if (surface?.contains(document.activeElement)) props.onReturnFocus(); else props.onDismiss(); }}
       onPositioned={() => { if (state().enter && !surface?.contains(document.activeElement)) rows()[0]?.focus({ preventScroll: true }); }}
       onKeyDown={event => {
         const items = rows(), at = items.indexOf(document.activeElement as HTMLButtonElement);
@@ -62,8 +58,9 @@ export function LineFactsCard(props: Props) {
         event.preventDefault(); event.stopPropagation(); items[next]?.focus();
       }}
     >
-      <div class="files-line-facts__content" onFocusIn={props.onKeepOpen} onFocusOut={event => {
-        if (!(event.relatedTarget instanceof Node) || (!surface?.contains(event.relatedTarget) && !state().anchor.contains(event.relatedTarget))) props.onDismiss();
+      <div class="files-line-facts__content" onFocusOut={event => {
+        const editor = state().anchor.closest(".cm-editor") ?? state().anchor;
+        if (!(event.relatedTarget instanceof Node) || (!surface?.contains(event.relatedTarget) && !editor.contains(event.relatedTarget))) props.onDismiss();
       }}>
         <div class="files-line-facts__head">
           <span class="files-line-facts__title">Line {state().line}</span>

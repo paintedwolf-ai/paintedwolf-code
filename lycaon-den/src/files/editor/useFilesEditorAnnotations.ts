@@ -67,7 +67,6 @@ export function useFilesEditorAnnotations(
     revealInTranscript: options.revealInTranscript,
     rejectHunk: options.rejectHunk,
   });
-  onCleanup(lineFacts.clearLineFactsTimers);
   lineFacts.observePresence();
   onCleanup(lineFacts.hideLineFacts);
   onCleanup(lineFacts.clearRemovedTimers);

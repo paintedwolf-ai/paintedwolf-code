@@ -49,35 +49,17 @@ export function createEditorLineFacts(options: EditorLineFactsOptions) {
   };
   const sessionTitleCache = new Map<string, string>();
   const sessionTitleRequests = new Set<string>();
-  let hidePopoverTimer: ReturnType<typeof setTimeout> | undefined;
   const [lineFactsCard, setLineFactsCard] = createSignal<LineFactsCardState | null>(null);
-  let showPopoverTimer: ReturnType<typeof setTimeout> | undefined;
-  let returningGutterFocus = false;
-  const cancelHidePopover = () => {
-    clearTimeout(hidePopoverTimer);
-    hidePopoverTimer = undefined;
-  };
   const hideLineFacts = () => {
-    clearTimeout(showPopoverTimer);
-    showPopoverTimer = undefined;
-    cancelHidePopover();
     const held = lineFactsCard();
     held?.anchor.classList.remove("is-open");
     held?.anchor.querySelector(".files-line-gutter__facts")?.setAttribute("aria-expanded", "false");
     setLineFactsCard(null);
   };
-  const scheduleHidePopover = () => {
-    clearTimeout(showPopoverTimer);
-    showPopoverTimer = undefined;
-    cancelHidePopover();
-    hidePopoverTimer = setTimeout(hideLineFacts, 160);
-  };
   const returnLineFactsFocus = () => {
     const button = lineFactsCard()?.anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts");
     hideLineFacts();
-    returningGutterFocus = true;
     button?.focus({ preventScroll: true });
-    returningGutterFocus = false;
   };
   const showLineFacts = (v: EditorView, line: number, anchor: HTMLElement, enter = false) => {
     const palette = readAgentPalette(v.dom.ownerDocument.documentElement);
@@ -237,15 +219,11 @@ export function createEditorLineFacts(options: EditorLineFactsOptions) {
 
   const installGutterInteractions = (v: EditorView) => {
       setLineFactsHandlers(v, {
-        show: (line, anchor, via) => {
-          if (returningGutterFocus) return;
+        open: (line, anchor, via) => {
           hideRemovedPreview();
-          cancelHidePopover();
-          clearTimeout(showPopoverTimer);
-          if (via !== "pointer" || lineFactsCard()) showLineFacts(v, line, anchor, via === "enter");
-          else showPopoverTimer = setTimeout(() => showLineFacts(v, line, anchor), 250);
+          if (via === "pointer" && lineFactsCard()?.anchor === anchor) { hideLineFacts(); return; }
+          showLineFacts(v, line, anchor, via === "keyboard");
         },
-        leave: scheduleHidePopover,
         dismiss: hideLineFacts,
         refresh: () => {
           const held = lineFactsCard();
@@ -293,18 +271,10 @@ export function createEditorLineFacts(options: EditorLineFactsOptions) {
       if (held && binding.view) showLineFacts(binding.view, held.line, held.anchor, held.enter);
     });
   });
-
-
-  };
-  const clearLineFactsTimers = () => {
-    if (hidePopoverTimer) clearTimeout(hidePopoverTimer);
-    if (showPopoverTimer) clearTimeout(showPopoverTimer);
   };
   return {
     lineFactsCard,
-    cancelHidePopover,
     hideLineFacts,
-    scheduleHidePopover,
     returnLineFactsFocus,
     removedPreview,
     hideRemovedPreview,
@@ -318,6 +288,5 @@ export function createEditorLineFacts(options: EditorLineFactsOptions) {
     installGutterInteractions,
     observePresence,
     clearRemovedTimers,
-    clearLineFactsTimers,
   };
 }

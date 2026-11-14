@@ -7,21 +7,21 @@ import { sourceContributorLabel } from "../annotations/source-contributor-label.
 export function createReaderFacts(path: () => string, activate: (author: SourceContributor, line: number) => void) {
   const [state, setState] = createSignal<LineFactsCardState | null>(null);
   let authors: SourceContributor[] = [];
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const keep = () => { clearTimeout(timer); timer = undefined; };
   const hide = () => {
-    keep();
     const held = state();
     held?.anchor.classList.remove("is-open");
     held?.anchor.querySelector(".files-line-gutter__facts")?.setAttribute("aria-expanded", "false");
     setState(null);
   };
-  const leave = () => { keep(); timer = setTimeout(hide, 160); };
   onCleanup(hide);
   return {
-    leave,
+    hide,
     show(editor: ReaderEditor, line: number, anchor: HTMLElement, enter: boolean) {
-      keep();
+      const held = state();
+      if (!enter && held?.anchor === anchor) {
+        hide();
+        return;
+      }
       const entry = editor.document.at(editor.view.state.doc.line(line).from);
       const row = entry?.row;
       authors = row?.contributors?.filter(author => author.session_id) ?? [];
@@ -30,7 +30,6 @@ export function createReaderFacts(path: () => string, activate: (author: SourceC
       const changed = authors.map((author, index) => ({ key: String(index), title: sourceContributorLabel(author), fact: `Changed line ${sourceLine}`,
         target: { kind: "chat" as const, sessionId: author.session_id ?? "", toolCallId: author.tool_call_id ?? "" },
       }));
-      const held = state();
       if (held?.anchor !== anchor) {
         held?.anchor.classList.remove("is-open");
         held?.anchor.querySelector(".files-line-gutter__facts")?.setAttribute("aria-expanded", "false");
@@ -40,8 +39,8 @@ export function createReaderFacts(path: () => string, activate: (author: SourceC
       setState({ anchor, line: sourceLine, path: path(), enter, facts: { now: [], changed, findings: [], count: changed.length } });
     },
     card: <LineFactsCard state={state()} onActivate={(row, line) => { const author = authors[Number(row.key)]; if (author) activate(author, line); hide(); }}
-      onKeepOpen={keep} onLeave={leave} onDismiss={hide} onReturnFocus={() => {
-        const anchor = state()?.anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts"); hide(); anchor?.focus();
+      onDismiss={hide} onReturnFocus={() => {
+        const anchor = state()?.anchor.querySelector<HTMLButtonElement>(".files-line-gutter__facts"); hide(); anchor?.focus({ preventScroll: true });
       }} />,
   };
 }
