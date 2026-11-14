@@ -25,11 +25,23 @@ var ErrFileTooLarge = errors.New("editorconfig file exceeds size limit")
 // Load resolves properties for a root-relative path, walking from its directory
 // up to root and stopping early at `root = true`.
 func Load(root, rel string) (Properties, error) {
+	props, _, err := LoadWithFiles(root, rel)
+	return props, err
+}
+
+// LoadWithFiles is Load that also names the root-relative files whose sections
+// matched the path, nearest first.
+func LoadWithFiles(root, rel string) (Properties, []string, error) {
 	configs, err := loadChain(root, rel)
 	if err != nil {
-		return Properties{}, err
+		return Properties{}, nil, err
 	}
-	return Resolve(rel, configs), nil
+	props, dirs := resolveContributors(rel, configs)
+	files := make([]string, len(dirs))
+	for i, dir := range dirs {
+		files[i] = path.Join(dir, FileName)
+	}
+	return props, files, nil
 }
 
 // SearchDirs lists a path's ancestor directories from nearest to root ("").

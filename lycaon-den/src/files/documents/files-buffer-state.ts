@@ -5,6 +5,7 @@ import type { ProjectSourceReadResponse, SourceEncoding } from "../../api/types.
 import { type IndentInfo } from "../../components/source/editor/indent-detect.ts";
 import type { EditorConfigProps } from "../../components/source/editor/editorconfig.ts";
 import { type EolKind } from "../../components/source/editor/eol.ts";
+import type { FormatSources } from "../../components/source/editor/format-settings.ts";
 import { type FileBufferKind } from "./project-files-buffer-kind.ts";
 import { type FileBufferKey } from "../components/project-files-model.ts";
 import type { FileVersionView } from "../history/file-version.ts";
@@ -89,6 +90,8 @@ export type FileBuffer = {
   indentOverride: IndentInfo | undefined;
   /** Resolved `.editorconfig` props for this path (undefined = none / pending). */
   editorConfig: EditorConfigProps | undefined;
+  /** Every tool's formatting settings for this path (undefined = pending). */
+  formatSources: FormatSources | undefined;
   baseSha256: string | null;
   sizeBytes: number;
   kind: FileBufferKind;

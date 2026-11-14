@@ -1,5 +1,5 @@
 import { onCleanup } from "solid-js";
-import { loadEditorConfigForBuffer, refreshOpenEditorConfigs } from "../../components/source/editor/editorconfig-load.ts";
+import { loadFormatSettingsForBuffer, refreshOpenFormatSettings } from "../../components/source/editor/format-settings-load.ts";
 import { createBufferRefresh } from "./files-buffer-refresh.ts";
 import { setBufferLiveHandlers } from "./buffer-live.ts";
 import { projectFilesState } from "./files-buffer-state.ts";
@@ -10,7 +10,7 @@ import { applyProjectSourceLoadFailure } from "../components/project-files-load-
 import type { FileBufferKey } from "../components/project-files-model.ts";
 import type { createFileConfirmations } from "../commands/file-confirmations.ts";
 
-type BufferSynchronization = Omit<Parameters<typeof createBufferRefresh>[0], "reloadEditorConfig" | "shouldApply"> &
+type BufferSynchronization = Omit<Parameters<typeof createBufferRefresh>[0], "reloadFormatSettings" | "shouldApply"> &
   Pick<ReturnType<typeof createFileConfirmations>, "setBulkClose" | "setConfirm">;
 
 export function bindFilesBufferSynchronization(options: BufferSynchronization): void {
@@ -18,11 +18,11 @@ export function bindFilesBufferSynchronization(options: BufferSynchronization): 
     flashUpdatedNote, setBulkClose, setConfirm } = options;
   let stopped = false;
   let isCurrent = () => !stopped;
-  const reloadEditorConfig = (key: FileBufferKey) => {
+  const reloadFormatSettings = (key: FileBufferKey) => {
     const c = client();
     const buf = projectFilesState(projectId()).byKey[key];
     if (!c || !buf) return;
-    void loadEditorConfigForBuffer({
+    void loadFormatSettingsForBuffer({
       client: c,
       projectId: projectId(),
       key,
@@ -30,14 +30,14 @@ export function bindFilesBufferSynchronization(options: BufferSynchronization): 
       sessionId: sourceSessionId(),
     });
   };
-  const refreshBufferPresentation = createBufferRefresh({ ...options, reloadEditorConfig, flashUpdatedNote, shouldApply: () => isCurrent() });
+  const refreshBufferPresentation = createBufferRefresh({ ...options, reloadFormatSettings, flashUpdatedNote, shouldApply: () => isCurrent() });
 
   const stop = setBufferLiveHandlers(projectId(), {
-    onEditorConfigChange: (rootId) => {
+    onFormatConfigChange: (rootId) => {
       if (!isCurrent()) return;
       const c = client();
       if (!c) return;
-      void refreshOpenEditorConfigs({
+      void refreshOpenFormatSettings({
         client: c,
         projectId: projectId(),
         rootId,

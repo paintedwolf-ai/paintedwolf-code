@@ -8,8 +8,6 @@ describe("editorConfigPropsFromHost", () => {
   it("maps declared host pairs onto buffer props", () => {
     expect(
       editorConfigPropsFromHost({
-        path: "a.go",
-        root_id: "r1",
         indent_style: "tab",
         indent_size_tab: true,
         tab_width: 8,
@@ -30,7 +28,8 @@ describe("editorConfigPropsFromHost", () => {
   });
 
   it("returns undefined when nothing is declared", () => {
-    expect(editorConfigPropsFromHost({ path: "a.go", root_id: "r1" })).toBeUndefined();
+    expect(editorConfigPropsFromHost({})).toBeUndefined();
+    expect(editorConfigPropsFromHost(undefined)).toBeUndefined();
   });
 });
 

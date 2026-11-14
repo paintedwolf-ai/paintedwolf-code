@@ -231,11 +231,15 @@ func registerStubProjectSourceRoutes(mux *http.ServeMux, writeJSON stubJSONWrite
 			Truncated: false,
 		})
 	})
-	mux.HandleFunc("GET /v1/projects/{id}/source/editorconfig", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /v1/projects/{id}/source/format-settings", func(w http.ResponseWriter, r *http.Request) {
 		trim := true
-		writeJSON(w, http.StatusOK, api.SourceEditorConfig{
+		writeJSON(w, http.StatusOK, api.SourceFormatSettings{
 			Path: "src/fixture.ts", RootID: fixtureRootID,
-			IndentStyle: "space", IndentSize: 2, TrimTrailingWhitespace: &trim,
+			Sources: []api.FormatSettingsSource{{
+				Tool: api.FormatToolEditorConfig, Configs: []string{".editorconfig"},
+				Settings: api.FormatSettings{IndentStyle: "space", IndentSize: 2, TrimTrailingWhitespace: &trim},
+			}},
+			ConfigNames: []string{".editorconfig"},
 		})
 	})
 	mux.HandleFunc("GET /v1/projects/{id}/source/raw", func(w http.ResponseWriter, r *http.Request) {

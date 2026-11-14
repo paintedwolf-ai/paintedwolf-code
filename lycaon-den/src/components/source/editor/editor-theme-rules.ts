@@ -11,6 +11,16 @@ const ARRIVAL_FLASH_FRAMES = {
   },
 };
 
+/** A tab drawn with the whitespace marker whatever the setting. */
+export const MARKED_TAB_CLASS = "cm-den-tab";
+
+const WHITESPACE_MARK_COLOR = "color-mix(in srgb, var(--den-text-muted) 55%, transparent)";
+
+// Masked so the arrow takes the theme colour; narrow tabs show its head.
+const TAB_ARROW =
+  `url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="200" height="20">` +
+  `<path stroke="%23000" stroke-width="1" fill="none" d="M1 10H196L190 5M190 15L196 10"/></svg>')`;
+
 export const sourceEditorThemeRules = {
   "&": {
     backgroundColor: "var(--den-background)",
@@ -152,9 +162,24 @@ export const sourceEditorThemeRules = {
       "inset 0 0 0 1px color-mix(in srgb, var(--den-accent-signal) 28%, transparent)",
     borderRadius: "3px",
   },
-  ".cm-highlightSpace, .cm-highlightTab": {
+  ".cm-highlightSpace": {
+    backgroundImage: `radial-gradient(circle at 50% 55%, ${WHITESPACE_MARK_COLOR} 1.5px, transparent 1.75px)`,
+  },
+  [`.cm-highlightTab, .${MARKED_TAB_CLASS}`]: {
+    position: "relative",
     backgroundImage: "none",
-    color: "color-mix(in srgb, var(--den-text-muted) 55%, transparent)",
+  },
+  // A drawn arrow, not text, so it is never read aloud or copied.
+  [`.cm-highlightTab::after, .${MARKED_TAB_CLASS}::after`]: {
+    content: '""',
+    position: "absolute",
+    inset: "0 1px",
+    pointerEvents: "none",
+    backgroundColor: WHITESPACE_MARK_COLOR,
+    maskImage: TAB_ARROW,
+    maskSize: "auto 100%",
+    maskPosition: "right center",
+    maskRepeat: "no-repeat",
   },
   ".cm-trailingSpace": {
     backgroundColor: "color-mix(in srgb, var(--den-danger) 14%, transparent)",

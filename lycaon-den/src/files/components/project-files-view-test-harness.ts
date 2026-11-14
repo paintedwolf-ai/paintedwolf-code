@@ -138,7 +138,7 @@ vi.mock("../../platform/connection/app-connection.ts", async (importOriginal) =>
           sha256: "abc",
           encoding: "utf-8" as const,
         })),
-        getProjectSourceEditorConfig: vi.fn(async (_projectId: string, path: string, rootId: string) => ({ path, root_id: rootId })),
+        getProjectSourceFormatSettings: vi.fn(async (_projectId: string, path: string, rootId: string) => ({ path, root_id: rootId, sources: [], config_names: [".editorconfig"] })),
         getSourceWorkspace: vi.fn(async () => sourceWorkspace()),
         openEditorDocument: vi.fn(async (projectId: string, request: { root_id: string; path: string }) =>
           editorDocumentFixtureFor(projectId, request.root_id, request.path).snapshot()),

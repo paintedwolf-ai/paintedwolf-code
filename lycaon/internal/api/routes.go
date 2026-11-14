@@ -264,7 +264,7 @@ func (s *Server) registerProjectRoutes(r chi.Router) {
 	s.registerV1Operation(r, operationMakeProjectSourceEditable, s.Sources.Mutations.HandleMakeProjectSourceEditable)
 	s.registerV1Operation(r, operationDeleteProjectSource, s.Sources.Mutations.SourceRequestHandler(toSourceOperation(operationDeleteProjectSource), s.Sources.Mutations.HandleDeleteProjectSource))
 	s.registerV1Operation(r, operationGetProjectSourceRaw, s.Sources.Workspace.HandleGetProjectSourceRaw)
-	s.registerV1Operation(r, operationGetProjectSourceEditorConfig, s.Sources.Workspace.HandleGetProjectSourceEditorConfig)
+	s.registerV1Operation(r, operationGetProjectSourceFormatSettings, s.Sources.Workspace.HandleGetProjectSourceFormatSettings)
 	s.registerV1Operation(r, operationBrowseProjectSource, s.Sources.Workspace.HandleBrowseProjectSource)
 	s.registerV1Operation(r, operationGetProjectSourceHistory, s.Sources.Mutations.HandleGetProjectSourceHistory)
 	s.registerV1Operation(r, operationUndoProjectSourceHistory, s.Sources.Mutations.SourceRequestHandler(toSourceOperation(operationUndoProjectSourceHistory), s.Sources.Mutations.HandleUndoProjectSourceHistory))

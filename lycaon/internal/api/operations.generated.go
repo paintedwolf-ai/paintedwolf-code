@@ -146,7 +146,7 @@ var (
 	operationGetProjectSource                   = generatedOperation{ID: "getProjectSource", Method: "GET", Path: "/v1/projects/{id}/source", Params: []string{"id"}}
 	operationGetProjectSourceAttribution        = generatedOperation{ID: "getProjectSourceAttribution", Method: "GET", Path: "/v1/projects/{id}/source/attribution", Params: []string{"id"}}
 	operationGetProjectSourceComparison         = generatedOperation{ID: "getProjectSourceComparison", Method: "GET", Path: "/v1/projects/{id}/source/comparison", Params: []string{"id"}}
-	operationGetProjectSourceEditorConfig       = generatedOperation{ID: "getProjectSourceEditorConfig", Method: "GET", Path: "/v1/projects/{id}/source/editorconfig", Params: []string{"id"}}
+	operationGetProjectSourceFormatSettings     = generatedOperation{ID: "getProjectSourceFormatSettings", Method: "GET", Path: "/v1/projects/{id}/source/format-settings", Params: []string{"id"}}
 	operationGetProjectSourceGitReview          = generatedOperation{ID: "getProjectSourceGitReview", Method: "GET", Path: "/v1/projects/{id}/source/git-changes/{git_change_id}/review", Params: []string{"id", "git_change_id"}}
 	operationGetProjectSourceHistory            = generatedOperation{ID: "getProjectSourceHistory", Method: "GET", Path: "/v1/projects/{id}/source/history", Params: []string{"id"}}
 	operationGetProjectSourceIndex              = generatedOperation{ID: "getProjectSourceIndex", Method: "GET", Path: "/v1/projects/{id}/source/index", Params: []string{"id"}}
@@ -486,7 +486,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationGetProjectSource,
 	operationGetProjectSourceAttribution,
 	operationGetProjectSourceComparison,
-	operationGetProjectSourceEditorConfig,
+	operationGetProjectSourceFormatSettings,
 	operationGetProjectSourceGitReview,
 	operationGetProjectSourceHistory,
 	operationGetProjectSourceIndex,

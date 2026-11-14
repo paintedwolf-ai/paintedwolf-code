@@ -21,14 +21,14 @@ import type { FilesScope } from "../components/files-scope.ts";
 
 type BufferRefreshDependencies = Pick<FilesScope, "projectId" | "client" | "sourceSessionId" | "state" |
   "dropFileVersionState" | "loadVersionHistory" | "setSaveError" | "versionForBuffer"> & {
-  reloadEditorConfig: (key: FileBufferKey) => void;
+  reloadFormatSettings: (key: FileBufferKey) => void;
   flashUpdatedNote: () => void;
   shouldApply: () => boolean;
 };
 
 export function createBufferRefresh({ projectId, client, sourceSessionId, state, dropFileVersionState,
   loadVersionHistory, setSaveError, versionForBuffer,
-  reloadEditorConfig, flashUpdatedNote, shouldApply }: BufferRefreshDependencies) {
+  reloadFormatSettings, flashUpdatedNote, shouldApply }: BufferRefreshDependencies) {
   const cleanRefreshRequests = new FilesBufferLatestRequests();
   type CleanBufferRefresh = {
     requestKey: string;
@@ -112,7 +112,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
         dropFileVersionState(settledKey);
         loadVersionHistory(settled);
       } else {
-        reloadEditorConfig(settledKey);
+        reloadFormatSettings(settledKey);
       }
       cleanRefreshRequests.finish(refresh.requestKey, refresh.generation);
       return;
@@ -142,7 +142,7 @@ export function createBufferRefresh({ projectId, client, sourceSessionId, state,
         return;
       }
       const settledKey = applyFilesBufferLoad(projectId(), buf.key, res);
-      reloadEditorConfig(settledKey);
+      reloadFormatSettings(settledKey);
       cleanRefreshRequests.finish(refresh.requestKey, refresh.generation);
 
       dropFilesEditorHandlers(projectId(), buf.key);

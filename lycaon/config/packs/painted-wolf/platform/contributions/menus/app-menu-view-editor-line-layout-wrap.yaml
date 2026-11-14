@@ -1,0 +1,10 @@
+id: painted-wolf/platform:app-menu-view-editor-line-layout-wrap
+slot: "app_menu.view"
+command: painted-wolf/platform:editor-toggle-wrap
+group: "2"
+order: 2
+submenu: "Line layout"
+label: "Wrap"
+state:
+  fact: "line_layout"
+  is: "wrap"

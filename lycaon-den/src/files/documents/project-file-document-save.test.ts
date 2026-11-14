@@ -14,7 +14,8 @@ import { connectFilesEditorDocuments } from "../editor/files-editor-synchronizat
 import { editorReplica, resetEditorDocumentsForTests, resolveEditorDocument, subscribeEditorDocuments } from "./editor-document.ts";
 import { suspendFileDocument } from "./files-residency.ts";
 import { saveProjectFileDocument } from "./project-file-document-save.ts";
-import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests, setFilesBufferEditorConfig } from "./project-files-buffers.ts";
+import { applyFilesBufferDraft, applyFilesBufferEditorDocument, applyFilesBufferLoad, openFilesBuffer, resetProjectFilesForTests, setFilesBufferFormatSettings } from "./project-files-buffers.ts";
+import type { FileBufferKey } from "../components/project-files-model.ts";
 import { projectFilesState } from "./files-buffer-state.ts";
 
 const projectId = "project-1";
@@ -50,8 +51,10 @@ async function setup(path = "a.txt", content = "base") {
   const client = stubClient({ openEditorDocument: async () => host.snapshot(), syncEditorDocument: host.sync,
     submitEditorDocumentUpdate: host.submit, replaceEditorDocument: replace, createEditorDocumentSnapshot: pin, saveEditorDocument: save,
     leaveEditorDocument: async () => undefined, observeEditorDocument: async () => host.snapshot(),
-    getProjectSourceEditorConfig: async (_project: string, requested: string, rootId: string) =>
-      ({ path: requested, root_id: rootId, indent_size: 2 }),
+    getProjectSourceFormatSettings: async (_project: string, requested: string, rootId: string) => ({
+      path: requested, root_id: rootId, config_names: [".editorconfig"],
+      sources: [{ tool: "editorconfig" as const, configs: [".editorconfig"], settings: { indent_size: 2 } }],
+    }),
   });
   connectFilesEditorDocuments(projectId, () => client, () => undefined);
   subscribeEditorDocuments((document) => applyFilesBufferEditorDocument(projectId, key, document));
@@ -61,10 +64,23 @@ async function setup(path = "a.txt", content = "base") {
   return { key, host, client, pin, save, replace, replica, type };
 }
 
+/** Gives a buffer EditorConfig settings as the host would resolve them. */
+function setEditorConfig(project: string, key: FileBufferKey, props: { trimTrailingWhitespace?: boolean; insertFinalNewline?: boolean; indentSize?: number; endOfLine?: "lf" | "crlf" }) {
+  setFilesBufferFormatSettings(project, key, [{
+    tool: "editorconfig", configs: [".editorconfig"],
+    settings: {
+      ...(props.trimTrailingWhitespace !== undefined ? { trim_trailing_whitespace: props.trimTrailingWhitespace } : {}),
+      ...(props.insertFinalNewline !== undefined ? { insert_final_newline: props.insertFinalNewline } : {}),
+      ...(props.indentSize !== undefined ? { indent_size: props.indentSize } : {}),
+      ...(props.endOfLine !== undefined ? { end_of_line: props.endOfLine } : {}),
+    },
+  }]);
+}
+
 describe("saving collaborative documents", () => {
   it("saves a suspended draft with hygiene and returns its body to storage", async () => {
     const f = await setup();
-    setFilesBufferEditorConfig(projectId, f.key, { trimTrailingWhitespace: true, insertFinalNewline: true });
+    setEditorConfig(projectId, f.key, { trimTrailingWhitespace: true, insertFinalNewline: true });
     f.type("cold draft   ");
     expect(await suspendFileDocument(projectId, "root-1", "a.txt", f.host.wire.id)).toBe(true);
     expect(editorReplica(f.host.wire.id)).toBeUndefined();
@@ -167,7 +183,7 @@ describe("saving collaborative documents", () => {
 
   it("applies whitespace and EOL hygiene to the live replica before pinning", async () => {
     const f = await setup("a.txt", "line  \n"); f.type("line  ");
-    setFilesBufferEditorConfig(projectId, f.key, { trimTrailingWhitespace: true, insertFinalNewline: true, endOfLine: "crlf" });
+    setEditorConfig(projectId, f.key, { trimTrailingWhitespace: true, insertFinalNewline: true, endOfLine: "crlf" });
     expect((await saveProjectFileDocument({ client: f.client, projectId, key: f.key })).status).toBe("saved");
     expect(f.host.text.toString()).toBe("line\n");
     expect(f.host.wire.eol).toBe("crlf");
@@ -176,7 +192,7 @@ describe("saving collaborative documents", () => {
 
   it("refreshes EditorConfig for other open files after publication", async () => {
     const source = loaded("src/a.ts", "const value = 1;\n");
-    setFilesBufferEditorConfig(projectId, source, { indentSize: 8 });
+    setEditorConfig(projectId, source, { indentSize: 8 });
     const f = await setup(".editorconfig", "root = true\n[*.ts]\nindent_size = 8\n");
     f.type("root = true\n[*.ts]\nindent_size = 2\n");
     expect((await saveProjectFileDocument({ client: f.client, projectId, key: f.key })).status).toBe("saved");
@@ -212,7 +228,7 @@ describe("save reservations", () => {
 
   it("applies save hygiene as exact edits rather than a whole-document replacement", async () => {
     const f = await setup();
-    setFilesBufferEditorConfig(projectId, f.key, { trimTrailingWhitespace: true, insertFinalNewline: true });
+    setEditorConfig(projectId, f.key, { trimTrailingWhitespace: true, insertFinalNewline: true });
     f.type("base  \nkeep");
     const changes: string[] = [];
     f.replica.doc.on("update", (update: Uint8Array) => {

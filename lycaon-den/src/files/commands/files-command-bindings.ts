@@ -1,4 +1,4 @@
-import { editorWordWrapPref, editorLineNumbersPref, saveEditorWordWrap, saveEditorLineNumbers } from "../../settings/editor/editor-prefs.ts";
+import { editorLineLayoutPref, editorLineNumbersPref, editorWordWrapPref, saveEditorLineLayout, saveEditorLineNumbers } from "../../settings/editor/editor-prefs.ts";
 import { EDITOR_STANDARD_COMMANDS } from "../../components/source/editor/editor-standard-commands.ts";
 import { focusRegion } from "../../shortcuts/focus-region.ts";
 import { editorTabMovesFocusPref, saveEditorTabMovesFocus } from "../../settings/editor/editor-prefs.ts";
@@ -14,7 +14,7 @@ import { createFilesTreeReveal } from "../tree/files-tree-reveal.ts";
 import type { EditorView } from "@codemirror/view";
 import { createEffect, onCleanup, onMount } from "solid-js";
 import { editorIndentStylePref, editorIndentWidthPref } from "../../settings/editor/editor-prefs.ts";
-import { attachDispatcher, declinable, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
+import { attachDispatcher, registerCommandHandler } from "../../shortcuts/dispatcher.ts";
 import { openFilesSurface } from "../../platform/navigation/open-files-surface.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { useResidentPresence } from "../../ui/resident-presence-context.tsx";
@@ -26,7 +26,6 @@ import { convertIndentationCommand } from "../../components/source/editor/indent
 import { beginInlineEditPanel, beginRenameCard } from "../../components/source/inline-edit/run-editor-action.ts";
 import { flushFilesDraftSyncFor } from "../documents/files-draft-sync.ts";
 import { getFilesEditorView } from "../editor/files-editor-host.ts";
-import { invokePrettyToggleForTab } from "../editor/pretty-display-state.ts";
 import { filesTreeCollapsed } from "../tree/files-tree-window-state.ts";
 import { selectedFileVersion, toggleVersionComparison } from "../history/files-version-selection.ts";
 import { versionRestoreOffered } from "../history/file-version-restore.ts";
@@ -107,8 +106,12 @@ export function bindFilesCommands(options: CommandBindings): void {
       applyFilesBufferDraft(scope.projectId(), buf.key, view.state.doc.toString());
     }, true);
     for (const [id, command] of Object.entries(EDITOR_STANDARD_COMMANDS)) on(id, withEditor(command));
-    on("editor.togglePretty", declinable(() => invokePrettyToggleForTab(scope.projectId(), activeBuffer()?.key)));
-    on("editor.toggleWrap", () => { void saveEditorWordWrap(!editorWordWrapPref()); });
+    on("editor.togglePretty", () => {
+      const off = editorWordWrapPref() ? "wrap" : "off";
+      void saveEditorLineLayout(editorLineLayoutPref() === "pretty" ? off : "pretty");
+    });
+    on("editor.toggleWrap", () => { void saveEditorLineLayout(editorLineLayoutPref() === "wrap" ? "off" : "wrap"); });
+    on("editor.lineLayoutOff", () => { void saveEditorLineLayout("off"); });
     on("editor.toggleLineNumbers", () => { void saveEditorLineNumbers(!editorLineNumbersPref()); });
     on("editor.toggleTabFocus", () => { void saveEditorTabMovesFocus(!editorTabMovesFocusPref()); });
     on("files.moveTabLeft", () => tabCommands.moveTab(-1));

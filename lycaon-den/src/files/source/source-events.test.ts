@@ -62,7 +62,7 @@ describe("source-events", () => {
     const onConfig = vi.fn();
     setBufferLiveHandlers(projectId, {
       onCleanDiskChange: onClean, onDirtyDiskChange: onDirty,
-      onForeignDeleteDirty: onDelete, onEditorConfigChange: onConfig,
+      onForeignDeleteDirty: onDelete, onFormatConfigChange: onConfig,
     });
     applySourceChangesEvent({
       project_id: projectId, workspace_id: WORKSPACE, workspace_kind: "project",

@@ -1975,6 +1975,8 @@ type ContributionMenu struct {
 	// Condition the toggle reflects. With state_label the item reads state_label while it holds; without it the item carries a checkmark.
 	State      *ContributionCondition `json:"state,omitempty"`
 	StateLabel string                 `json:"state_label,omitempty"`
+	// Title of a pull-out the item nests under. Items in one slot and group that share a title share the pull-out, ordered by order.
+	Submenu string `json:"submenu,omitempty"`
 }
 
 // ContributionNote
@@ -3435,6 +3437,33 @@ type FolderDetectProject struct {
 	// True when the detected folder is the project's only attached root.
 	IsSingleRoot bool      `json:"is_single_root"`
 	LastOpenedAt time.Time `json:"last_opened_at"`
+}
+
+// FormatSettings Settings in effect under a tool's configuration, in one vocabulary
+// across tools: what the configuration declares, else the tool's fixed
+// default. A property is omitted when neither gives a value or the tool
+// chooses automatically.
+type FormatSettings struct {
+	// Column the tool keeps lines within.
+	LineWidth   int    `json:"line_width,omitempty"`
+	IndentStyle string `json:"indent_style,omitempty"`
+	// Columns per indentation level; omitted when indent_size_tab is true.
+	IndentSize int `json:"indent_size,omitempty"`
+	// True when a level is one tab and follows tab_width.
+	IndentSizeTab          bool   `json:"indent_size_tab,omitempty"`
+	TabWidth               int    `json:"tab_width,omitempty"`
+	EndOfLine              string `json:"end_of_line,omitempty"`
+	TrimTrailingWhitespace *bool  `json:"trim_trailing_whitespace,omitempty"`
+	InsertFinalNewline     *bool  `json:"insert_final_newline,omitempty"`
+	Charset                string `json:"charset,omitempty"`
+}
+
+// FormatSettingsSource
+type FormatSettingsSource struct {
+	Tool FormatTool `json:"tool"`
+	// Repo-relative configuration files that contributed, nearest first.
+	Configs  []string       `json:"configs"`
+	Settings FormatSettings `json:"settings"`
 }
 
 // FullScanRequest A complete pass of every admitted file by the named scanners, or by every selected scanner when none are named. The only way a full pass starts; automatic scanning is incremental.
@@ -7155,25 +7184,6 @@ type SourceDirListing struct {
 	Entries       []SourceDirEntry `json:"entries"`
 }
 
-// SourceEditorConfig EditorConfig pairs in effect for one root-addressed path. Every property
-// is omitted when no `.editorconfig` declares it.
-type SourceEditorConfig struct {
-	// Normalized repo-relative path (slash-separated)
-	Path string `json:"path"`
-	// Attached root that holds the path
-	RootID      string `json:"root_id"`
-	IndentStyle string `json:"indent_style,omitempty"`
-	// Columns per indentation level; omitted when indent_size_tab is true.
-	IndentSize int `json:"indent_size,omitempty"`
-	// True when `indent_size = tab`, so a level follows tab_width.
-	IndentSizeTab          bool   `json:"indent_size_tab,omitempty"`
-	TabWidth               int    `json:"tab_width,omitempty"`
-	EndOfLine              string `json:"end_of_line,omitempty"`
-	TrimTrailingWhitespace *bool  `json:"trim_trailing_whitespace,omitempty"`
-	InsertFinalNewline     *bool  `json:"insert_final_newline,omitempty"`
-	Charset                string `json:"charset,omitempty"`
-}
-
 // SourceFileCommit One commit of the file's git lineage, followed across renames. A
 // commit whose blob equals a retained version's bytes names it in
 // matches_version_id — one state, both identities. A commit whose bytes
@@ -7264,6 +7274,21 @@ type SourceFileVersionsResponse struct {
 	TrackedAt *time.Time `json:"tracked_at,omitempty"`
 	// Opaque cursor continuing every requested lane that holds more. Omitted when all are exhausted.
 	NextCursor string `json:"next_cursor,omitempty"`
+}
+
+// SourceFormatSettings Formatting settings that each tool's configuration declares for one
+// root-addressed path. A tool appears only when a configuration it reads
+// is in effect for the path.
+type SourceFormatSettings struct {
+	// Normalized repo-relative path (slash-separated)
+	Path string `json:"path"`
+	// Attached root that holds the path
+	RootID string `json:"root_id"`
+	// One entry per tool with configuration in effect, in catalog order.
+	Sources []FormatSettingsSource `json:"sources"`
+	// File names the resolution reads. A change to a file with one of
+	// these names can change the settings of paths beneath it.
+	ConfigNames []string `json:"config_names"`
 }
 
 // SourceGitChange One observed git ref movement, stated from git's own records (HEAD and

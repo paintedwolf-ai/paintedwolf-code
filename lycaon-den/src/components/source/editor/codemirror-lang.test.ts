@@ -6,6 +6,9 @@ import {
   languageLabelForDetectedLanguage,
   languageForInfoString,
   languageLabelForPath,
+  prettyLayoutCatalog,
+  prettyLayoutForLanguage,
+  prettyLayoutForPath,
 } from "./codemirror-lang.ts";
 
 function parsedTree(path: string, doc: string) {
@@ -201,5 +204,35 @@ describe("codemirror-lang", () => {
     expect(
       languageLabelForDetectedLanguage("requirements", "requirements.txt"),
     ).toBe("Requirements");
+  });
+
+  it("declares the Pretty layout of every catalog language", () => {
+    const declared: Record<string, string> = {
+      "data": "json jsonc json5 jsonl ndjson webmanifest har avsc jsonnet libsonnet",
+      "markup": "xml svg html htm vue svelte astro",
+      "code": "ts tsx js jsx mjs cjs css scss less",
+      "bracket statements": "c h cc cpp cxx hpp hh hxx java cs scala kt kts dart rs swift groovy gradle d php hack sol move cairo circom cls trigger ql qll proto hcl tf tfvars",
+      "bracket": "go py pyi yaml yml toml rb cr ex exs lua r jl hs elm ml mli erl hrl al perl ph pl plx pm psgi t promql sass",
+      "clause": "sql",
+      "fenced": "md mdx",
+      "none": "sh bash zsh ps1 psm1 psd1 dockerfile diff patch properties ini env cfg cmake tcl f f90 f95 f03 pas clj cljs cljc edn scm ss lisp cl lsp txt",
+    };
+    const outcome = (ext: string) => {
+      const layout = prettyLayoutForPath(`file.${ext}`);
+      return layout.kind === "bracket" && layout.statements ? "bracket statements" : layout.kind;
+    };
+    const expected = Object.entries(declared).flatMap(([kind, exts]) => exts.split(" ").map((ext) => [ext, kind] as const));
+    expect(Object.fromEntries(expected.map(([ext]) => [ext, outcome(ext)]))).toEqual(Object.fromEntries(expected));
+    expect(prettyLayoutCatalog().map(({ ext }) => ext).sort()).toEqual(expected.map(([ext]) => ext).sort());
+  });
+
+  it("gives files outside the catalog and unknown names no Pretty layout", () => {
+    expect(prettyLayoutForPath("data.csv").kind).toBe("none");
+    expect(prettyLayoutForPath("README").kind).toBe("none");
+    expect(prettyLayoutForPath("Gemfile")).toEqual(prettyLayoutForPath("x.rb"));
+    expect(prettyLayoutForLanguage("json")).toEqual(prettyLayoutForPath("x.json"));
+    expect(prettyLayoutForLanguage("Markdown").kind).toBe("fenced");
+    expect(prettyLayoutForLanguage("TypeScript title=x").kind).toBe("code");
+    expect(prettyLayoutForLanguage("no-such-language").kind).toBe("none");
   });
 });

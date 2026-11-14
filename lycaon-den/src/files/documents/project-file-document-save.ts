@@ -5,7 +5,8 @@ import type { LycaonClient } from "../../api/client.ts";
 import type { EditorDocument } from "../../api/types.ts";
 import { clientIdentity } from "../../platform/connection/client-identity.ts";
 import { saveHygieneChanges } from "../../components/source/editor/save-hygiene.ts";
-import { refreshOpenEditorConfigs } from "../../components/source/editor/editorconfig-load.ts";
+import { refreshOpenFormatSettings } from "../../components/source/editor/format-settings-load.ts";
+import { isFormatConfigPath } from "../../components/source/editor/format-settings.ts";
 import {
   canEditLoadedSource,
   isSourceWriteConflict,
@@ -130,11 +131,8 @@ async function saveResidentDocument(args: SaveArguments): Promise<ProjectFileDoc
       documentId: response.id,
       documentRevision: response.revision,
     });
-    if (
-      buffer.path === ".editorconfig" ||
-      buffer.path.endsWith("/.editorconfig")
-    ) {
-      await refreshOpenEditorConfigs({
+    if (isFormatConfigPath(args.projectId, buffer.path)) {
+      await refreshOpenFormatSettings({
         client: args.client,
         projectId: args.projectId,
         rootId: buffer.rootId,

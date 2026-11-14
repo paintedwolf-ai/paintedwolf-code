@@ -11,13 +11,13 @@ import { findController, resetFindControllerForTests, setFindQuery } from "../..
 import { FIND_BAR_ID } from "../../find/command-bar-disclosure.ts";
 import { applyBackgroundProcessEvent, resetBackgroundProcessStoreForTests } from "../../chat/tool/background-process-store.ts";
 import { clearChatContentCache } from "../../chat/transcript/content/chat-content-reader.ts";
-import { resetPrettyDisplayStateForTests } from "../editor/pretty-display-state.ts";
+import { resetEditorPrefsForTests } from "../../settings/editor/editor-prefs.ts";
 
 afterEach(() => {
   resetFindControllerForTests();
   resetBackgroundProcessStoreForTests();
   clearChatContentCache();
-  resetPrettyDisplayStateForTests();
+  resetEditorPrefsForTests();
 });
 
 describe("chat content Files pane", () => {
@@ -60,7 +60,7 @@ describe("chat content Files pane", () => {
     expect(view.container.querySelector("header")).toBeNull();
     expect(view.container.querySelector(".den-files-toolbar")).not.toBeNull();
     expect(assertNamedControl(view.getByTestId("files-readonly-goto"), "button")).toBeTruthy();
-    expect(assertNamedControl(view.getByTestId("files-editor-wrap-toggle"), "button")).toBeTruthy();
+    expect(assertNamedControl(view.getByTestId("files-editor-layout-wrap"), "button")).toBeTruthy();
     expect(view.container.querySelectorAll(".cm-line").length).toBeLessThan(100);
     expect(getRows).not.toHaveBeenCalled();
   });
@@ -74,7 +74,7 @@ describe("chat content Files pane", () => {
     expect(view.container.querySelector("header")).toBeNull();
     expect(view.container.querySelector(".den-files-toolbar")).not.toBeNull();
     expect(assertNamedControl(view.getByTestId("files-readonly-goto"), "button")).toBeTruthy();
-    expect(assertNamedControl(view.getByTestId("files-editor-wrap-toggle"), "button")).toBeTruthy();
+    expect(assertNamedControl(view.getByTestId("files-editor-layout-wrap"), "button")).toBeTruthy();
   });
 
   it("does not copy a retained preview as if it were the complete offline document", () => {
@@ -172,7 +172,7 @@ describe("chat content Files pane", () => {
       />
     ));
 
-    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
+    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-layout-pretty"), "button");
     expect(prettyBtn.getAttribute("aria-pressed")).toBe("false");
     expect(view.container.querySelector(".cm-content")?.getAttribute("contenteditable")).toBe("false");
     expect(view.getByTestId("files-editor-mode").getAttribute("data-editor-identity")).toBe("view-only");
@@ -247,7 +247,7 @@ describe("chat content Files pane", () => {
       />
     ));
 
-    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
+    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-layout-pretty"), "button");
     fireEvent.click(prettyBtn);
     await waitFor(() =>
       expect(view.container.querySelector(".den-redaction-mark")?.textContent).toBe("[REDACTED]"),
@@ -286,7 +286,7 @@ describe("chat content Files pane", () => {
     expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
 
     // Enable Pretty: captures snapshot of `{"step":1}\n`, renders native breaks, and shows Snapshot + Refresh.
-    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-pretty-toggle"), "button");
+    const prettyBtn = assertNamedControl(view.getByTestId("files-editor-layout-pretty"), "button");
     fireEvent.click(prettyBtn);
     await waitFor(() =>
       expect(view.getByTestId("chat-process-pretty-snapshot").textContent).toBe("Snapshot"),
@@ -316,8 +316,8 @@ describe("chat content Files pane", () => {
     );
     expect(view.container.querySelectorAll(".pw-pretty-break").length).toBe(4);
 
-    // Turning Pretty OFF returns to live output and removes Snapshot/Refresh indicators.
-    fireEvent.click(prettyBtn);
+    // Leaving Pretty returns to live output and removes Snapshot/Refresh indicators.
+    fireEvent.click(view.getByTestId("files-editor-layout-off"));
     expect(view.queryByTestId("chat-process-pretty-snapshot")).toBeNull();
     expect(view.container.querySelectorAll(".pw-pretty-break").length).toBe(0);
     applyBackgroundProcessEvent({
