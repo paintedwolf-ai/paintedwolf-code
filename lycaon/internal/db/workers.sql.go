@@ -462,23 +462,27 @@ func (q *Queries) GetWorkerJobBinding(ctx context.Context, id string) (GetWorker
 
 const getWorkerJobNames = `-- name: GetWorkerJobNames :one
 SELECT w.name,
-       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id
+       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state
 FROM worker_rounds r
 JOIN workers w ON w.id = r.worker_id
 LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
 WHERE r.job_id = ?
 `
 
 type GetWorkerJobNamesRow struct {
-	Name     string `json:"name"`
-	ResultID string `json:"result_id"`
+	Name        string `json:"name"`
+	ResultID    string `json:"result_id"`
+	ChangeState string `json:"change_state"`
 }
 
-// A job's worker name and, once its round settles, the result handle.
+// A job's worker name and, once its round settles, the result handle and what
+// became of the result's changes.
 func (q *Queries) GetWorkerJobNames(ctx context.Context, jobID string) (GetWorkerJobNamesRow, error) {
 	row := q.db.QueryRowContext(ctx, getWorkerJobNames, jobID)
 	var i GetWorkerJobNamesRow
-	err := row.Scan(&i.Name, &i.ResultID)
+	err := row.Scan(&i.Name, &i.ResultID, &i.ChangeState)
 	return i, err
 }
 

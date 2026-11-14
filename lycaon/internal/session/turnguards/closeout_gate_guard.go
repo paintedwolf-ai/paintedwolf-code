@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -23,7 +24,7 @@ func (m *Service) PendingOverlays(ctx context.Context, sess *api.Session, invoke
 	if m == nil || sess == nil || sess.IsWorkerChild() {
 		return nil, false
 	}
-	pending := m.state.ForSession(ctx, sess).PendingOverlayIDs
+	pending := m.openResults(ctx, m.state.ForSession(ctx, sess).PendingOverlayIDs)
 	if len(pending) == 0 {
 		return nil, false
 	}
@@ -91,9 +92,27 @@ func (m *Service) AssertCompletion(ctx context.Context, sess *api.Session) error
 	return m.workflows.Policy.AssertSessionCompletion(ctx, sess.ID)
 }
 
-// pendingResultData names a pending job by its worker and result handle.
+// openResults drops pending jobs whose result the coordinator shelved: keeping
+// changes unlanded on purpose is a disposition. A failed lookup keeps the job.
+func (m *Service) openResults(ctx context.Context, jobIDs []string) []string {
+	if m.jobNames == nil {
+		return jobIDs
+	}
+	out := make([]string, 0, len(jobIDs))
+	for _, id := range jobIDs {
+		names, ok, err := m.jobNames.NamesByJob(ctx, id)
+		if err == nil && ok && names.Change == workerrecords.ChangeShelved {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// pendingResultData names a pending result by its worker and handle; the
+// coordinator never addresses the job.
 func (m *Service) pendingResultData(ctx context.Context, jobID string) map[string]any {
-	data := map[string]any{"job_id": jobID}
+	data := map[string]any{}
 	if m.jobNames == nil {
 		return data
 	}

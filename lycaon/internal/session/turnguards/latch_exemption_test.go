@@ -55,22 +55,25 @@ func (n jobNames) NamesByJob(_ context.Context, jobID string) (workerrecords.Job
 	return names, ok, nil
 }
 
-// The closeout refusal names the pending result by worker and handle; without
-// names it keeps only the job.
+// The closeout refusal names the pending result by worker and handle, never
+// the job; a result the coordinator shelved does not hold closeout.
 func TestPendingResultIsNamed(t *testing.T) {
 	m := &Service{}
-	if got := m.pendingResultData(t.Context(), "job-1"); len(got) != 1 {
+	if got := m.pendingResultData(t.Context(), "job-1"); len(got) != 0 {
 		t.Fatalf("without names = %v", got)
 	}
-	m.SetJobNames(jobNames{"job-1": {Worker: "parser-fix", Handle: "result-1"}, "job-2": {Worker: "docs"}})
+	m.SetJobNames(jobNames{"job-1": {Worker: "parser-fix", Handle: "result-1"}, "job-2": {Worker: "docs"}, "job-3": {Worker: "kept", Handle: "result-3", Change: workerrecords.ChangeShelved}})
 	got := m.pendingResultData(t.Context(), "job-1")
-	if got["worker"] != "parser-fix" || got["overlay_id"] != "result-1" {
+	if got["worker"] != "parser-fix" || got["overlay_id"] != "result-1" || got["job_id"] != nil {
 		t.Fatalf("named = %v", got)
 	}
 	if got := m.pendingResultData(t.Context(), "job-2"); got["worker"] != "docs" || got["overlay_id"] != nil {
 		t.Fatalf("unsettled = %v", got)
 	}
-	if got := m.pendingResultData(t.Context(), "broken"); len(got) != 1 {
+	if got := m.pendingResultData(t.Context(), "broken"); len(got) != 0 {
 		t.Fatalf("failed lookup = %v", got)
+	}
+	if got := m.openResults(t.Context(), []string{"job-1", "job-3", "broken"}); len(got) != 2 || got[0] != "job-1" || got[1] != "broken" {
+		t.Fatalf("open results = %v", got)
 	}
 }

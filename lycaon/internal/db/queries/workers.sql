@@ -328,12 +328,15 @@ WHERE w.closed_at IS NULL
   AND p.generation = (SELECT MAX(q.generation) FROM worker_workspace_preparations q WHERE q.worker_id = p.worker_id);
 
 -- name: GetWorkerJobNames :one
--- A job's worker name and, once its round settles, the result handle.
+-- A job's worker name and, once its round settles, the result handle and what
+-- became of the result's changes.
 SELECT w.name,
-       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id
+       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state
 FROM worker_rounds r
 JOIN workers w ON w.id = r.worker_id
 LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
 WHERE r.job_id = ?;
 
 -- name: LatestRoundJobForJob :one

@@ -299,10 +299,12 @@ func (s *Store) RoundByJob(ctx context.Context, jobID string) (Round, bool, erro
 }
 
 // JobNames are what a coordinator calls a job: its worker and, once its round
-// settles, the result handle that addresses its changes.
+// settles, the result handle that addresses its changes. Change is what became
+// of those changes: landed, rejected, shelved, or empty while open.
 type JobNames struct {
 	Worker string
 	Handle string
+	Change string
 }
 
 // NamesByJob finds the worker and result a job belongs to, for refusals about
@@ -315,7 +317,7 @@ func (s *Store) NamesByJob(ctx context.Context, jobID string) (JobNames, bool, e
 	if err != nil {
 		return JobNames{}, false, err
 	}
-	return JobNames{Worker: row.Name, Handle: row.ResultID}, true, nil
+	return JobNames{Worker: row.Name, Handle: row.ResultID, Change: row.ChangeState}, true, nil
 }
 
 // NameByJob names the worker whose round a job runs, for host copy that
