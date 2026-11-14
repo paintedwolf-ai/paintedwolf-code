@@ -1,11 +1,11 @@
 import { EditorState, type StateEffect } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { keepPositionInView, preserveScrollAnchor, SETTLED_SCROLL_REPEATS } from "./editor-settled-scroll.ts";
+import { isSettlingScroll, keepPositionInView, preserveScrollAnchor, SETTLED_SCROLL_REPEATS } from "./editor-settled-scroll.ts";
 
 type Measure = { read: (view: EditorView) => number | null; write: (value: number | null, view: EditorView) => void };
 
-const PORT = { top: 0, bottom: 600, height: 600 };
+const PORT = { top: 0, bottom: 600, height: 600, left: 0, right: 800 };
 
 /**
  * A view whose target sits at `targetAt(scrollTop)` in document coordinates,
@@ -14,7 +14,7 @@ const PORT = { top: 0, bottom: 600, height: 600 };
 function fakeView(targetAt: (scrollTop: number) => number | null) {
   const measures: Measure[] = [];
   const dispatched: StateEffect<unknown>[][] = [];
-  const scrollDOM = { scrollTop: 0, getBoundingClientRect: () => PORT };
+  const scrollDOM = { scrollTop: 0, scrollLeft: 0, getBoundingClientRect: () => PORT };
   const view = {
     state: EditorState.create({ doc: "x".repeat(100) }),
     dom: { isConnected: true },
@@ -123,19 +123,27 @@ describe("keeping a position in view", () => {
   });
 });
 
-/** A view whose position `p` sits at `layout.height * p` in document coordinates. */
-function reflowingView(head: number, scrollTop: number) {
-  const layout = { height: 20 };
+/**
+ * A view whose position `p` sits at `layout.height * p` in document coordinates.
+ * With `scrollLeft`, the content starts that far left of the viewport and a
+ * probe left of the viewport reads position 0.
+ */
+function reflowingView(head: number, scrollTop: number, scrollLeft = 0) {
+  // `x` moves every position sideways, as when a line stops wrapping.
+  const layout = { height: 20, x: 0 };
   const fake = fakeView(() => null);
   fake.scrollDOM.scrollTop = scrollTop;
+  fake.scrollDOM.scrollLeft = scrollLeft;
   const view = fake.view as unknown as Record<string, unknown>;
   view.state = EditorState.create({ doc: "x".repeat(100), selection: { anchor: head } });
-  view.contentDOM = { getBoundingClientRect: () => ({ left: 40 }) };
+  view.contentDOM = { getBoundingClientRect: () => ({ left: 40 - scrollLeft }) };
   view.coordsAtPos = (pos: number) => {
     const top = layout.height * pos - fake.scrollDOM.scrollTop;
-    return { top, bottom: top + layout.height, left: 40, right: 50 };
+    const left = 40 + layout.x - fake.scrollDOM.scrollLeft;
+    return { top, bottom: top + layout.height, left, right: left + 10 };
   };
-  view.posAtCoords = ({ y }: { y: number }) => Math.floor((y + fake.scrollDOM.scrollTop) / layout.height);
+  view.posAtCoords = ({ x, y }: { x: number; y: number }) =>
+    x < PORT.left ? 0 : Math.floor((y + fake.scrollDOM.scrollTop) / layout.height);
   const at = (pos: number) => layout.height * pos - fake.scrollDOM.scrollTop;
   return { ...fake, layout, at };
 }
@@ -145,6 +153,8 @@ describe("preserving the reader's place across a reflow", () => {
     // The head is on the first line, far above the window.
     const fake = reflowingView(0, 910);
     preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    // One scroll request, ahead of the editor's own anchoring.
+    expect(fake.dispatched).toHaveLength(1);
     settle(fake);
     expect(fake.at(45)).toBeLessThanOrEqual(0);
     expect(fake.at(45)).toBeGreaterThan(-40);
@@ -156,6 +166,66 @@ describe("preserving the reader's place across a reflow", () => {
     preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
     settle(fake);
     expect(Math.abs(fake.at(50) - 100)).toBeLessThan(1);
+  });
+
+  it("keeps a selection head that is partly above the top edge", () => {
+    const fake = reflowingView(50, 1010);
+    expect(fake.at(50)).toBe(-10);
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    settle(fake);
+    expect(Math.abs(fake.at(50) + 10)).toBeLessThan(1);
+  });
+
+  it("keeps a visible selection head in a view at the top", () => {
+    const fake = reflowingView(10, 0);
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    settle(fake);
+    expect(Math.abs(fake.at(10) - 200)).toBeLessThan(1);
+  });
+
+  it("reads the top edge inside the viewport when the content is scrolled sideways", () => {
+    const fake = reflowingView(0, 910, 500);
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    settle(fake);
+    expect(fake.at(45)).toBeLessThanOrEqual(0);
+    expect(fake.at(46)).toBeGreaterThan(0);
+  });
+
+  it("ends an earlier settle when a later one starts", () => {
+    const fake = reflowingView(0, 0);
+    // The first settle chases a position far below; the second's target is already in view.
+    keepPositionInView(fake.view, () => 90);
+    keepPositionInView(fake.view, () => 5);
+    expect(isSettlingScroll(fake.view)).toBe(true);
+    settle(fake);
+    expect(fake.scrollDOM.scrollTop).toBe(0);
+    expect(isSettlingScroll(fake.view)).toBe(false);
+  });
+
+  it("keeps the text in view when scrolled sideways at the top of the document", () => {
+    const fake = reflowingView(90, 0, 500);
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    expect(fake.dispatched).toHaveLength(1);
+  });
+
+  it("holds a position at its distance from the left edge too", () => {
+    const fake = reflowingView(10, 100);
+    preserveScrollAnchor(fake.view, () => { fake.layout.x = 5_000; });
+    settle(fake);
+    expect(Math.abs(40 + fake.layout.x - fake.scrollDOM.scrollLeft - 40)).toBeLessThan(1);
+    expect(Math.abs(fake.at(10) - 100)).toBeLessThan(1);
+  });
+
+  it("stops correcting at a scroll bound", () => {
+    // The head sits 200px down at the top of the document; after the reflow it is
+    // 100px down, and the view cannot scroll above 0 to hold 200px.
+    const fake = reflowingView(10, 0);
+    const clamp = fake.scrollDOM as { scrollTop: number };
+    let top = 0;
+    Object.defineProperty(clamp, "scrollTop", { get: () => top, set: (v: number) => { top = Math.max(0, v); }, configurable: true });
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 10; });
+    expect(settle(fake)).toBeLessThan(10);
+    expect(top).toBe(0);
   });
 
   it("leaves a view at the top where it is", () => {
