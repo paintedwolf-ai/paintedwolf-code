@@ -76,10 +76,6 @@ WHERE r.worker_id = ? ORDER BY r.ordinal;
 UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
 WHERE job_id = sqlc.arg(job_id) AND settled_at IS NULL;
 
--- name: SettleWorkerRound :execrows
-UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
-WHERE worker_id = sqlc.arg(worker_id) AND ordinal = sqlc.arg(ordinal) AND settled_at IS NULL;
-
 -- name: InsertWorkerMessage :exec
 INSERT INTO worker_messages (
     id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
@@ -191,12 +187,12 @@ WHERE res.id = ?;
 
 -- name: InsertWorkerWorkspacePreparation :exec
 INSERT INTO worker_workspace_preparations (
-    worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+    worker_id, generation, source_result_id, preparation_ref,
     binding_generation, operation_id, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetLatestWorkerWorkspacePreparation :one
-SELECT worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+SELECT worker_id, generation, source_result_id, preparation_ref,
        binding_generation, operation_id, created_at
 FROM worker_workspace_preparations WHERE worker_id = ? ORDER BY generation DESC LIMIT 1;
 

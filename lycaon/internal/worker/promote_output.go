@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/idset"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -117,7 +118,7 @@ func allOverlapJobIDs(assessment PromoteAssessment) []string {
 
 // RejectOverlay closes an overlay and orphans its stacked children.
 func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, reason string) (api.OverlayRejectOutcome, error) {
-	ctx = mergeGit(ctx)
+	ctx = gitexec.WithHostPurpose(ctx, mergeHostPurpose)
 	overlayID = strings.TrimSpace(overlayID)
 	if overlayID == "" {
 		return api.OverlayRejectOutcome{}, s.reject(ctx, OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
@@ -216,7 +217,7 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 
 // RebaseChildren assesses stacked children against the promoted primary.
 func (s *MergeService) RebaseChildren(ctx context.Context, sessionID, parentOverlayID string) ([]api.OverlayRebaseOutcome, error) {
-	ctx = mergeGit(ctx)
+	ctx = gitexec.WithHostPurpose(ctx, mergeHostPurpose)
 	if s == nil || s.Queue == nil {
 		return nil, fmt.Errorf("merge service not configured")
 	}

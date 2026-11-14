@@ -1,7 +1,9 @@
 package worker
 
 import (
+	"github.com/lycaon/lycaon/internal/db"
 	"testing"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/testdbseed"
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -43,8 +45,10 @@ func TestRejectionReachesLaterRoundsOfTheLane(t *testing.T) {
 		t.Fatalf("refused rejection disposed results: %+v", states)
 	}
 
-	_, err = f.records.SettleRound(t.Context(), f.coord, workerrecords.Op{ID: "settle-job-4"}, f.workerID, "job-4", "")
-	testutil.FailErr(t, "settle running round", err)
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(db.FormatTime(time.Now().UTC())), JobID: "job-4"})
+	if err != nil || n != 1 {
+		t.Fatalf("settle running round: n=%d err=%v", n, err)
+	}
 	out, err := merge.RejectOverlay(t.Context(), "coord", "job-1", "wrong approach")
 	testutil.FailErr(t, "reject", err)
 	if len(out.Later) != 1 || out.Later[0] != "job-2" {

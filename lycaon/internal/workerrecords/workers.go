@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -131,7 +132,7 @@ func normalizeSpec(spec WorkerSpec) WorkerSpec {
 
 func validateSpec(spec WorkerSpec) error {
 	switch {
-	case len(spec.Name) > maxNameLen:
+	case utf8.RuneCountInString(spec.Name) > maxNameLen:
 		return ErrInvalidName
 	case spec.AgentType == "":
 		return ErrInvalidAgent
@@ -194,11 +195,11 @@ func derivedName(ctx context.Context, q *db.Queries, sessionID, agent string) (s
 	}
 	for n := count + 1; ; n++ {
 		suffix := "-" + strconv.FormatInt(n, 10)
-		base := agent
-		if len(base)+len(suffix) > maxNameLen {
-			base = base[:maxNameLen-len(suffix)]
+		base := []rune(agent)
+		if keep := maxNameLen - len(suffix); len(base) > keep {
+			base = base[:keep]
 		}
-		name := base + suffix
+		name := strings.TrimSpace(string(base)) + suffix
 		_, err := q.GetWorkerByName(ctx, db.GetWorkerByNameParams{SessionID: sessionID, Name: name})
 		if db.IsNoRows(err) {
 			return name, nil

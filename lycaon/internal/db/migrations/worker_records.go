@@ -137,9 +137,9 @@ func migrateSessionWorkers(ctx context.Context, tx *sql.Tx, sessionID string) er
 	boundWork := map[string]bool{}
 	for _, key := range order {
 		group := groups[key]
-		latest := group[len(group)-1]
-		counters[latest.agentType]++
-		name := legacyWorkerName(latest.agentType, counters[latest.agentType])
+		agentType := legacyAgentType(group[len(group)-1].agentType)
+		counters[agentType]++
+		name := legacyWorkerName(agentType, counters[agentType])
 		if err := insertLegacyWorker(ctx, tx, sessionID, name, group, boundWork); err != nil {
 			return err
 		}
@@ -147,16 +147,21 @@ func migrateSessionWorkers(ctx context.Context, tx *sql.Tx, sessionID string) er
 	return nil
 }
 
+// Revision 4 accepted blank agent types; workers require one.
+func legacyAgentType(agentType string) string {
+	if t := strings.TrimSpace(agentType); t != "" {
+		return t
+	}
+	return "worker"
+}
+
 func legacyWorkerName(agentType string, n int) string {
-	base := strings.TrimSpace(agentType)
-	if base == "" {
-		base = "worker"
-	}
 	suffix := "-" + strconv.Itoa(n)
-	if len(base)+len(suffix) > 64 {
-		base = base[:64-len(suffix)]
+	base := []rune(agentType)
+	if keep := 64 - len(suffix); len(base) > keep {
+		base = base[:keep]
 	}
-	return base + suffix
+	return strings.TrimSpace(string(base)) + suffix
 }
 
 func insertLegacyWorker(ctx context.Context, tx *sql.Tx, sessionID, name string, group []legacyWorkerJob, boundWork map[string]bool) error {
@@ -180,7 +185,7 @@ func insertLegacyWorker(ctx context.Context, tx *sql.Tx, sessionID, name string,
 			delegation_id, leg_id, workflow_run_id, workflow_phase, workflow_work_id,
 			next_round_ordinal, operation_id, created_at, updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		workerID, first.projectID, sessionID, name, latest.agentType, legacyScopeMode(latest.scopeJSON), latest.brief, child,
+		workerID, first.projectID, sessionID, name, legacyAgentType(latest.agentType), legacyScopeMode(latest.scopeJSON), latest.brief, child,
 		delegation, leg, runID, phase, workID,
 		len(group)+1, "migration:worker:"+first.id, first.createdAt, latest.createdAt); err != nil {
 		return err
