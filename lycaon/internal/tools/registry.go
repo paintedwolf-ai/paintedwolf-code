@@ -4,6 +4,7 @@ package tools
 import (
 	"github.com/lycaon/lycaon/internal/hostprocess"
 	"github.com/lycaon/lycaon/internal/toolreach"
+	"sync"
 	"sync/atomic"
 
 	"context"
@@ -68,7 +69,9 @@ type SourceRunCapture struct {
 // ToolInvocationOut collects host-side invocation outputs.
 type ToolInvocationOut struct {
 	// DisplaySubject names the resolved target before durable secret screening.
-	DisplaySubject  string
+	DisplaySubject string
+	// mu guards a value that several goroutines write, such as a program's.
+	mu              sync.Mutex
 	sourceLocations map[string]struct{}
 	SourceContext   *api.SourceContext
 	// OwnerInvoked is set at the handler boundary.

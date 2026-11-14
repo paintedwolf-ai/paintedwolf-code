@@ -288,8 +288,8 @@ func (r *ProgramRuntime) Run(ctx context.Context, tool string, args map[string]a
 		ScratchDir:     tc.Host.SessionScratchDir,
 		Streams:        commandprogram.Streams{Input: commandprogram.NullInput(), Output: stdout, Error: stderr},
 	}
-	// Evaluation writes the call's effects privately until its result belongs
-	// to the call; a parked program's later effects never reach the call.
+	// Evaluation writes its effects privately. They are merged into the call
+	// when it returns, whether the program has ended or detached.
 	callTC := tc
 	run.tc.Effects.Out = &tools.ToolInvocationOut{}
 	run.tc.Effects.GitNoRepository = &atomic.Bool{}
