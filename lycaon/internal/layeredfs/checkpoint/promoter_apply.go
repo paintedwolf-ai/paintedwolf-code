@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/layeredfs"
 )
 
@@ -54,6 +55,8 @@ type ApplyRequest struct {
 // ApplyCheckpoint revalidates the preview's target observations and applies its file and ref effects.
 // Any failure restores the original target before returning.
 func (txn *Transaction) ApplyCheckpoint(ctx context.Context, pr *Promoter, req ApplyRequest) (*PromotionJournalRecord, error) {
+	// The coordinator chose to promote, not which Git commands publish the result.
+	ctx = gitexec.WithHostPurpose(ctx, "checkpoint_promotion")
 	pr.applyMu.Lock()
 	defer pr.applyMu.Unlock()
 	pr.targets.holdRoots()
