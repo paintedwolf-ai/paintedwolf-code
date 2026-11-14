@@ -14,7 +14,16 @@ const PORT = { top: 0, bottom: 600, height: 600, left: 0, right: 800 };
 function fakeView(targetAt: (scrollTop: number) => number | null) {
   const measures: Measure[] = [];
   const dispatched: StateEffect<unknown>[][] = [];
-  const scrollDOM = { scrollTop: 0, scrollLeft: 0, getBoundingClientRect: () => PORT };
+  const listeners = new Map<string, Set<() => void>>();
+  const scrollDOM = {
+    scrollTop: 0,
+    scrollLeft: 0,
+    getBoundingClientRect: () => PORT,
+    addEventListener: (type: string, fn: () => void) => { listeners.set(type, (listeners.get(type) ?? new Set()).add(fn)); },
+    removeEventListener: (type: string, fn: () => void) => { listeners.get(type)?.delete(fn); },
+    /** Delivers reader input to the listeners. */
+    fire: (type: string) => { for (const fn of [...(listeners.get(type) ?? [])]) fn(); },
+  };
   const view = {
     state: EditorState.create({ doc: "x".repeat(100) }),
     dom: { isConnected: true },
@@ -226,6 +235,27 @@ describe("preserving the reader's place across a reflow", () => {
     preserveScrollAnchor(fake.view, () => { fake.layout.height = 10; });
     expect(settle(fake)).toBeLessThan(10);
     expect(top).toBe(0);
+  });
+
+  it("keeps the first change's anchor for a change made before it settles", () => {
+    // Wrapping, then Pretty: the second change arrives before the first is measured.
+    const fake = reflowingView(0, 910);
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 10; });
+    settle(fake);
+    // Position 45 sat 10px above the top edge before either change.
+    expect(Math.abs(fake.at(45) + 10)).toBeLessThan(1);
+  });
+
+  it("ends a correction when the reader scrolls", () => {
+    const fake = reflowingView(0, 910);
+    preserveScrollAnchor(fake.view, () => { fake.layout.height = 40; });
+    expect(isSettlingScroll(fake.view)).toBe(true);
+    fake.scrollDOM.fire("wheel");
+    expect(isSettlingScroll(fake.view)).toBe(false);
+    const top = fake.scrollDOM.scrollTop;
+    settle(fake);
+    expect(fake.scrollDOM.scrollTop).toBe(top);
   });
 
   it("leaves a view at the top where it is", () => {
