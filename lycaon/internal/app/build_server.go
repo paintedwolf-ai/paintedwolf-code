@@ -445,6 +445,17 @@ func (b *serveBuilder) quietRounds() *worker.QuietRounds {
 			}
 			return db.ParseTime(raw)
 		},
+		PauseEnded: func(ctx context.Context, runID string) time.Time {
+			raw, err := queries.GetLatestWorkflowResumeAt(ctx, runID)
+			if err != nil || raw == "" {
+				return time.Time{}
+			}
+			at, err := db.ParseTime(raw)
+			if err != nil {
+				return time.Time{}
+			}
+			return at
+		},
 		Notify: b.sessions.Manager.Coordinator.Workers.RoundNotice,
 		After:  b.worker.cfg.RoundPolicy().QuietNoticeAfter,
 		Waiting: func(ctx context.Context, task *wire.WorkerTask) bool {

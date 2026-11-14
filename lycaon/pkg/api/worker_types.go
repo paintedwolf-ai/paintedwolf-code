@@ -359,6 +359,9 @@ type WorkerTask struct {
 	// TurnToolCalls and TurnToolsDone describe the active batch.
 	TurnToolCalls int `json:"turn_tool_calls,omitempty"`
 	TurnToolsDone int `json:"turn_tools_done,omitempty"`
+	// TurnTools and TurnStartedAt name the active batch and when it began.
+	TurnTools     []string   `json:"turn_tools,omitempty"`
+	TurnStartedAt *time.Time `json:"turn_started_at,omitempty"`
 	// ContextUsage is the worker's live context occupancy.
 	ContextUsage         *WorkerContextUsage   `json:"context_usage,omitempty"`
 	WorkspacePreparation *WorkspacePreparation `json:"workspace_preparation,omitempty"`

@@ -25,6 +25,8 @@ func TestWorkerKickCopyRendersEveryState(t *testing.T) {
 		{"coordinator-worker-task-finished", map[string]any{"partial_workers": 3}, []string{"3"}},
 		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "consumption", "worker": "parser-fix", "agent_type": "implementer", "model_calls": 7, "tokens": 0}, []string{"`parser-fix`", "7"}},
 		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "quiet", "agent_type": "implementer", "quiet_minutes": 12, "model_calls": 1, "tokens": 0}, []string{"12"}},
+		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "quiet", "agent_type": "implementer", "quiet_minutes": 12, "model_calls": 1, "tokens": 0, "in_flight": "tools", "tool_calls": 3, "tools_done": 1, "tools": []string{"command", "read"}, "tools_minutes": 9, "latest_message_seq": int64(4)}, []string{"1 of 3", "`command`, `read`", "9 minutes", "#4"}},
+		{"coordinator-worker-round-notice", map[string]any{"notice_kind": "consumption", "agent_type": "implementer", "model_calls": 7, "tokens": 0, "latest_message_seq": int64(2)}, []string{"7", "#2"}},
 		{"coordinator-root-detach-canceled", map[string]any{"path": "/r", "workers": []map[string]any{{"worker": "parser-fix", "agent_type": "implementer", "reason": "root detached"}}, "overlays": []map[string]any{{}}}, []string{"`parser-fix`", "root detached"}},
 		{"coordinator-root-detach-canceled", map[string]any{"path": "/r", "workers": []map[string]any{{"agent_type": "implementer", "reason": "root detached"}}}, []string{"implementer", "root detached"}},
 	}

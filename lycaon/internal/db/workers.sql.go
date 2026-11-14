@@ -303,6 +303,19 @@ func (q *Queries) GetLandedChangeJobID(ctx context.Context, id string) (string, 
 	return worker_job_id, err
 }
 
+const getLatestWorkerSentSeqByJob = `-- name: GetLatestWorkerSentSeqByJob :one
+SELECT CAST(COALESCE(MAX(m.seq), 0) AS INTEGER) AS seq
+FROM worker_messages m JOIN worker_rounds r ON r.worker_id = m.worker_id
+WHERE r.job_id = ? AND m.sender_role = 'worker' AND m.recipient_role = 'coordinator'
+`
+
+func (q *Queries) GetLatestWorkerSentSeqByJob(ctx context.Context, jobID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getLatestWorkerSentSeqByJob, jobID)
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
+}
+
 const getLatestWorkerWorkspacePreparation = `-- name: GetLatestWorkerWorkspacePreparation :one
 SELECT worker_id, generation, source_result_id, preparation_ref,
        binding_generation, operation_id, created_at

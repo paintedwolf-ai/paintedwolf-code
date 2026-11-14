@@ -318,3 +318,9 @@ func (s *Store) NotApplied(ctx context.Context, actor Actor, workerID string, or
 	}
 	return out, nil
 }
+
+// LatestSentSeq is the seq of the latest message sent by the worker whose
+// round jobID runs, to its coordinator; zero when it has sent none.
+func (s *Store) LatestSentSeq(ctx context.Context, jobID string) (int64, error) {
+	return s.q.GetLatestWorkerSentSeqByJob(ctx, strings.TrimSpace(jobID))
+}

@@ -23,6 +23,9 @@ type Workers struct {
 	Results    *workeroutcomes.Results
 	// Names names the worker a round notice is about.
 	Names workercompletion.WorkerNames
+	// LatestSent is the seq of the latest message the worker running a job
+	// sent to its coordinator; zero when it has sent none.
+	LatestSent func(ctx context.Context, jobID string) (int64, error)
 }
 
 func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string) {
@@ -43,8 +46,20 @@ func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.W
 	if m == nil || parentID == "" || strings.TrimSpace(facts.JobID) == "" {
 		return
 	}
-	facts.Worker = m.Names.Name(ctx, facts.JobID)
+	facts = m.addressed(ctx, facts)
 	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerRoundNotice(ctx, parentID, facts.JobID, anchor.Envelope{WorkerRoundNotice: &facts})
+}
+
+// addressed adds what the coordinator knows the round's worker by: its name
+// and its latest message.
+func (m *Workers) addressed(ctx context.Context, facts kick.WorkerRoundNoticeFacts) kick.WorkerRoundNoticeFacts {
+	facts.Worker = m.Names.Name(ctx, facts.JobID)
+	if m.LatestSent != nil {
+		if seq, err := m.LatestSent(ctx, facts.JobID); err == nil {
+			facts.LatestMessageSeq = seq
+		}
+	}
+	return facts
 }
 
 // PrerequisiteBlocked tells a coordinator that a waiting worker's

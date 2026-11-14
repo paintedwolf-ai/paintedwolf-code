@@ -230,7 +230,7 @@ func (l *toolBatch) executeToolCallsInTurn(
 		return result, err
 	}
 	// Batch closure survives request cancellation.
-	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(len(toolCalls)), false)
+	l.Nudges.publishWorkerProgress(ctx, sess, st.workerRunID(), st.progress().BeginBatch(toolCallNames(toolCalls), time.Now()), false)
 	defer func() {
 		l.Nudges.publishWorkerProgress(context.WithoutCancel(ctx), sess, st.workerRunID(), st.progress().EndBatch(), false)
 	}()
@@ -581,4 +581,13 @@ func (l *toolBatch) executeOneToolCall(
 		handleEligible: sess != nil && toolEvidenceEligible(run, tc.Name, tc.Args),
 		deliveries:     run.captures.sourceDeliveries,
 	}
+}
+
+// toolCallNames names each call of a batch, in order.
+func toolCallNames(calls []api.ToolCall) []string {
+	out := make([]string, len(calls))
+	for i := range calls {
+		out[i] = calls[i].Name
+	}
+	return out
 }
