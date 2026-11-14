@@ -148,7 +148,7 @@ function manualCompletions(request: APIRequestContext, sessionId: string) {
 
 webE2e.describe("agent mid-turn note", () => {
   webE2e(
-    "note appears once above its tool card with badge and grounding chicklet",
+    "note appears once above its tool card with its grounding chicklet",
     async ({ page, request }, testInfo) => {
       const { project, sessionId } = await openMockedNoteChat(page, request);
 
@@ -160,9 +160,11 @@ webE2e.describe("agent mid-turn note", () => {
         timeout: 30_000,
       });
 
-      const noteBadge = page.getByTestId("agent-note-badge");
+      const noteArticle = page.locator(
+        '[data-testid="transcript-article-assistant"][data-kind="agent_note"]',
+      );
       try {
-        await expect(noteBadge).toHaveCount(1);
+        await expect(noteArticle).toHaveCount(1);
       } catch (error) {
         const { apiUrl, token } = apiConfig();
         const response = await request.get(`${apiUrl}/v1/sessions/${sessionId}/messages`, {
@@ -172,13 +174,6 @@ webE2e.describe("agent mid-turn note", () => {
         await testInfo.attach("note-rendered-state", { body: await stream.evaluate((element) => element.outerHTML), contentType: "text/html" });
         throw error;
       }
-      await expect(noteBadge).toHaveText("Note");
-      await expect(noteBadge).toHaveAttribute("aria-label", "Note");
-
-      const noteArticle = page.locator(
-        '[data-testid="transcript-article-assistant"][data-kind="agent_note"]',
-      );
-      await expect(noteArticle).toHaveCount(1);
       await expect(
         noteArticle.getByTestId("citation-evidence-chicklet"),
       ).toBeVisible();
@@ -204,7 +199,7 @@ webE2e.describe("agent mid-turn note", () => {
       await ensureProjectFocused(page, project.id);
       await openSessionRow(page, sessionId);
       await expect(liveChatStage(page).getByText("Auth middleware lives in middleware.go.", { exact: true })).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId("agent-note-badge")).toHaveCount(1);
+      await expect(page.locator('[data-testid="transcript-article-assistant"][data-kind="agent_note"]')).toHaveCount(1);
     },
   );
 
@@ -247,7 +242,7 @@ webE2e.describe("agent mid-turn note", () => {
 
         await llm.respond("Auth is described in the readme [README.md:1-2].");
         await expect(stream.locator("p", { hasText: "Auth is described in the readme" })).toBeVisible({ timeout: 30_000 });
-        await expect(stream.getByTestId("agent-note-badge")).toHaveCount(2);
+        await expect(notes).toHaveCount(2);
       } finally {
         await apiJson(request, "POST", "/harness/llm/auto", { enabled: true, text: "Done." });
       }
@@ -290,7 +285,7 @@ webE2e.describe("agent mid-turn note", () => {
       await ensureProjectFocused(page, project.id);
       await openSessionRow(page, sessionId);
       await expect(liveChatStage(page).getByText("Auth is in middleware.go.", { exact: true })).toBeVisible({ timeout: 30_000 });
-      await expect(page.getByTestId("agent-note-badge")).toHaveCount(1);
+      await expect(page.locator('[data-testid="transcript-article-assistant"][data-kind="agent_note"]')).toHaveCount(1);
     },
   );
 });
