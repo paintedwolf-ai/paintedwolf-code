@@ -1,10 +1,74 @@
 import { Decoration, EditorView } from "@codemirror/view";
 import type { Extension } from "@codemirror/state";
+import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js";
+import type { LycaonClient } from "../../api/client.ts";
 import type { HostSecretRedactionMeta, RedactedSpan } from "../../api/types.ts";
+import type { ChatContentDocument } from "../../chat/transcript/content/chat-content-document.ts";
+import {
+  formattersForBuffer,
+  languageExtensionForBuffer,
+  languageLabelForDetectedLanguage,
+  languageLabelForPath,
+  PLAIN_TEXT_LABEL,
+} from "../../components/source/editor/codemirror-lang.ts";
+import {
+  declaredLineWidth,
+  type PrettyFormatTool,
+} from "../../components/source/editor/format-settings.ts";
 import {
   redactionMarkModifier,
   redactionMarkTitle,
 } from "../../chat/transcript/content/redaction-spans.ts";
+
+export interface ChatContentLanguage {
+  readonly extension: Extension | null;
+  readonly label: string;
+  readonly formatters: readonly PrettyFormatTool[];
+}
+
+export function resolveChatContentLanguage(doc: ChatContentDocument): ChatContentLanguage {
+  const path = doc.path?.trim() || "";
+  const detected = doc.language?.trim() || "";
+  const extension = path || detected ? languageExtensionForBuffer(path, detected || undefined) : null;
+  const label = detected
+    ? languageLabelForDetectedLanguage(detected, path)
+    : path
+      ? languageLabelForPath(path)
+      : PLAIN_TEXT_LABEL;
+  const formatters = path || detected ? formattersForBuffer(path, detected || undefined) : [];
+  return { extension, label, formatters };
+}
+
+export function useChatContentLineWidth(
+  client: Accessor<LycaonClient | null>,
+  projectId: Accessor<string>,
+  doc: Accessor<ChatContentDocument>,
+  formatters: Accessor<readonly PrettyFormatTool[]>,
+): Accessor<number | undefined> {
+  const [lineWidth, setLineWidth] = createSignal<number | undefined>(undefined);
+  createEffect(() => {
+    const apiClient = client();
+    const pid = projectId().trim();
+    const current = doc();
+    const path = current.path?.trim() || "";
+    const tools = formatters();
+    setLineWidth(undefined);
+    if (!apiClient || !pid || !path || typeof apiClient.getProjectSourceFormatSettings !== "function") {
+      return;
+    }
+    let cancelled = false;
+    onCleanup(() => {
+      cancelled = true;
+    });
+    void apiClient
+      .getProjectSourceFormatSettings(pid, path, "", current.sessionId)
+      .then((resolved) => {
+        if (!cancelled) setLineWidth(declaredLineWidth(resolved.sources, tools));
+      })
+      .catch(() => undefined);
+  });
+  return lineWidth;
+}
 
 /** Full retained text loaded so Pretty can lay it out in one editor. */
 export interface ChatRetainedText {

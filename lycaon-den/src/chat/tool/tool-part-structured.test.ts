@@ -1242,3 +1242,27 @@ it("refreshes the target when the resolved subject arrives", () => {
   expect(after.argsFacts[0]).toMatchObject({ label: "Target", value: "./task den:test:fast" });
   expect(after.argsFacts).toContainEqual(expect.objectContaining({ label: "Handle", value: "exact-handle" }));
 });
+
+it("preserves source.path on write and recovered compaction fallback sections", () => {
+  const writePart = part({
+    id: "write-path",
+    tool: "write_file",
+    kind: "write",
+    args: { path: "src/main.go" },
+    output: "package main\nfunc main() {}\n",
+  });
+  const writeView = buildStructuredToolPresentation(writePart);
+  const contentSec = writeView.sections.find((s) => s.kind === "content");
+  expect(contentSec && contentSec.kind === "content" ? contentSec.source?.path : undefined).toBe("src/main.go");
+
+  const fallbackPart = part({
+    id: "fallback-path",
+    tool: "custom_file_tool",
+    kind: "generic",
+    args: { file_path: "lib/app.py" },
+    output: '{"content": "def f(): return 1"',
+  });
+  const fallbackView = buildStructuredToolPresentation(fallbackPart);
+  const recoveredSec = fallbackView.sections.find((s) => s.kind === "content");
+  expect(recoveredSec && recoveredSec.kind === "content" ? recoveredSec.source?.path : undefined).toBe("lib/app.py");
+});

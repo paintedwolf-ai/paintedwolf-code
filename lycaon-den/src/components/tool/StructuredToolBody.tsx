@@ -341,6 +341,23 @@ function RawOutputChrome(props: {
     });
   });
 
+  const rawPath = createMemo(() => {
+    const args = props.part.args;
+    if (typeof args?.path === "string" && args.path.trim()) return args.path.trim();
+    if (typeof args?.file_path === "string" && args.file_path.trim()) return args.file_path.trim();
+    return undefined;
+  });
+  const rawLanguage = createMemo(() => {
+    const trimmed = (props.part.output ?? "").trimStart();
+    if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) return undefined;
+    try {
+      JSON.parse(trimmed);
+      return "json";
+    } catch {
+      return undefined;
+    }
+  });
+
   const onAddToChat = () => {
     const ref = searchHitRef();
     if (ref) void addToChat(ref, { destination: chatDestination() });
@@ -364,6 +381,8 @@ function RawOutputChrome(props: {
               label="Raw output"
               testId="tool-raw-output-link"
               projectId={props.projectId}
+              path={rawPath()}
+              language={rawLanguage()}
               revealOffset={toolContent?.outputOffset()}
               content={rawContent()}
             />

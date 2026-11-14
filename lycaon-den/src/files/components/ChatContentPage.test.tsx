@@ -332,4 +332,52 @@ describe("chat content Files pane", () => {
       expect(view.container.querySelector(".cm-content")?.textContent).toContain('{"step":3}'),
     );
   });
+
+  it("mounts language grammars, renders language labels, and applies project lineWidth in ChatContentPage", async () => {
+    saveEditorLineLayout("pretty");
+    const pad = "x".repeat(95);
+    const py = `def f(a, b): return {"k": "${pad}, inside", "n": 1}\n`;
+    const client = {
+      getProjectSourceFormatSettings: async () => ({
+        config_names: [".editorconfig"],
+        sources: [{ tool: "editorconfig", configs: [".editorconfig"], settings: { line_width: 80 } }],
+      }),
+    } as never;
+    const view = render(() => (
+      <ChatContentPage
+        projectId="proj"
+        client={client}
+        document={{
+          sessionId: "session",
+          title: "app.py",
+          path: "src/app.py",
+          content: { kind: "inline", text: py },
+        }}
+      />
+    ));
+    await waitFor(() => {
+      expect(view.container.querySelectorAll(".pw-pretty-break").length).toBeGreaterThan(0);
+    });
+    expect(view.container.querySelector(".den-files-editor__status-language")?.textContent).toContain("Python");
+
+    const mdView = render(() => (
+      <ChatContentPage
+        projectId="proj"
+        client={null}
+        document={{
+          sessionId: "session",
+          title: "notes.md",
+          path: "docs/notes.md",
+          content: {
+            kind: "inline",
+            text: `\`\`\`python\nmsg = "${"a".repeat(120)}, ${"b".repeat(120)}"\n\`\`\`\n`,
+          },
+        }}
+      />
+    ));
+    await waitFor(() => {
+      expect(mdView.container.querySelector(".den-files-editor__status-language")?.textContent).toContain("Markdown");
+    });
+    expect(mdView.container.querySelectorAll(".pw-pretty-break").length).toBe(0);
+  });
 });

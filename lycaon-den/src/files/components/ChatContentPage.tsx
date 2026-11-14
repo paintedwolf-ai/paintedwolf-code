@@ -32,7 +32,9 @@ import {
   type ChatRetainedText,
   extractInlineRedactionSpans,
   redactionSpansFit,
+  resolveChatContentLanguage,
   runeOffsetToUtf16,
+  useChatContentLineWidth,
 } from "./chat-content-pretty.ts";
 
 const contentFailure = {
@@ -203,6 +205,8 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
   };
   createEffect(() => { props.onHandle?.({ gotoLine }); onCleanup(() => props.onHandle?.(undefined)); });
   const isProcessSnapshot = () => props.document.content.kind === "process" && prettyEnabled();
+  const resolvedLanguage = createMemo(() => resolveChatContentLanguage(props.document));
+  const resolvedLineWidth = useChatContentLineWidth(() => props.client, () => props.projectId, () => props.document, () => resolvedLanguage().formatters);
   return <section ref={setHost} class="den-source-reader" data-testid="chat-content-page" aria-label={props.document.title}>
     <ReadonlyFilesDocument title={props.document.title}
       actions={<Show when={isProcessSnapshot()}><button type="button" class="den-files-editor__tool den-inset-icon-btn" data-testid="chat-process-pretty-refresh" aria-label="Refresh snapshot" data-tip="Refresh snapshot" data-tip-pos="below" onClick={refreshProcessSnapshot}>Refresh</button></Show>}
@@ -210,10 +214,10 @@ export function ChatContentPage(props: { projectId: string; document: ChatConten
       status={{ identity: resolveEditorIdentity({ historical: false, workerDraft: false, deleted: false, writable: null, preview: false, editable: false, unsupported: true }),
         windows: <DocumentWindows projectId={props.projectId} />,
         dirtyCount: projectFilesState(props.projectId).order.filter(key => projectFilesState(props.projectId).byKey[key]?.dirty).length,
-        cursor: cursor(), language: "Plain text", indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
+        cursor: cursor(), language: resolvedLanguage().label, indent: { label: indentChipLabel(editorDisplayPrefs().indent) },
         details: <><Show when={isProcessSnapshot()}><span class="den-files-editor__status-detail" data-testid="chat-process-pretty-snapshot">Snapshot</span></Show><span class="den-files-editor__status-detail" data-testid="files-editor-encoding-chip">UTF-8</span></>,
       }}>
-    <Show when={usePagedReader()} fallback={<InlineChatContent receiptText={receipts().text} document={props.document} client={props.client} prettyEnabled={prettyEnabled()} processSnapshot={processSnapshot()} retainedText={retainedText()} onError={reportError} onEditor={setInlineEditor} />}>
+    <Show when={usePagedReader()} fallback={<InlineChatContent receiptText={receipts().text} document={props.document} client={props.client} prettyEnabled={prettyEnabled()} languageExtension={resolvedLanguage().extension} lineWidth={resolvedLineWidth()} processSnapshot={processSnapshot()} retainedText={retainedText()} onError={reportError} onEditor={setInlineEditor} />}>
       <div class="den-source-reader__editors"><div class="den-source-reader__editor" ref={setEditorHost} /></div>
     </Show>
     </ReadonlyFilesDocument>
@@ -225,6 +229,8 @@ function InlineChatContent(props: {
   document: ChatContentDocument;
   client: LycaonClient | null;
   prettyEnabled: boolean;
+  languageExtension: ReturnType<typeof resolveChatContentLanguage>["extension"];
+  lineWidth: number | undefined;
   processSnapshot: { text: string; rev: number } | null;
   retainedText: ChatRetainedText | null;
   onError: (cause: unknown) => void;
@@ -257,13 +263,15 @@ function InlineChatContent(props: {
     enabled: props.prettyEnabled,
     ...(props.document.path ? { path: props.document.path } : {}),
     ...(props.document.language ? { languageHint: props.document.language } : {}),
+    ...(props.lineWidth ? { lineWidth: props.lineWidth } : {}),
   });
   let editor: EditorView | undefined;
   const redactions = new Compartment();
   createEffect(() => {
     const host = parent(); if (!host) return;
     const value = untrack(rawText);
-    const view = new EditorView({ parent: host, state: createSourceEditorState({ surface: "diff-viewer", doc: value, ...untrack(editorDisplayPrefs), editable: false, scrollPastEnd: false, commandBridge: true,
+    const language = untrack(() => props.languageExtension) ?? undefined;
+    const view = new EditorView({ parent: host, state: createSourceEditorState({ surface: "diff-viewer", doc: value, language, ...untrack(editorDisplayPrefs), editable: false, scrollPastEnd: false, commandBridge: true,
       extensions: [
         redactions.of(buildRawRedactionExtension(value, untrack(redactionSpans))),
         createPrettyExtension(untrack(prettyConfig)),

@@ -292,7 +292,7 @@ function buildStructuredToolPresentationFresh(
     if (!diffShowsResult) {
       // Recover content from truncated compaction residue.
       const recovered = compactionBanner ? extractReadableToolBody(null, body) : null;
-      const source = part.kind === "read" && pathHint ? { path: pathHint } : undefined;
+      const source = pathHint ? { path: pathHint } : undefined;
       if (recovered) {
         sections.push(contentSection(recovered, source));
         prependCompactionSection(
@@ -415,8 +415,9 @@ function buildStructuredToolPresentationFresh(
 
   // Recover unbalanced JSON residue with a content field.
   const recoveredBody = extractReadableToolBody(null, body);
+  const fallbackSource = pathHint ? { path: pathHint } : undefined;
   if (recoveredBody) {
-    sections.push(contentSection(recoveredBody));
+    sections.push(contentSection(recoveredBody, fallbackSource));
     prependCompactionSection(sections, compactionBanner, undefined);
     return emptyView({
       evidenceHandle,
@@ -425,7 +426,7 @@ function buildStructuredToolPresentationFresh(
     });
   }
 
-  sections.push(contentSection(body));
+  sections.push(contentSection(body, fallbackSource));
   prependCompactionSection(sections, compactionBanner, undefined);
   return emptyView({
     evidenceHandle,
