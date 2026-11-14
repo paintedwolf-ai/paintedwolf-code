@@ -1,4 +1,3 @@
-import { contextAction } from "../context-actions.ts";
 import { createSurfaceQuery } from "../../ui/surface-query.ts";
 import {
   Match,
@@ -6,7 +5,6 @@ import {
   Switch,
   createEffect,
   createMemo,
-  createResource,
   createSignal,
   on,
   onCleanup,
@@ -16,7 +14,6 @@ import { ResidentPortal } from "../primitives/ResidentPortal.tsx";
 import type { LycaonClient } from "../../api/client.ts";
 import type { ArtifactListItem, ArtifactListResponse } from "../../api/types.ts";
 import { getLycaonClient } from "../../platform/connection/app-connection.ts";
-import { formatRelativeTime } from "../../time/time-copy.ts";
 import type { AppStore } from "../../store/app-state-model.ts";
 import { KeyedIndex } from "../keyed-index.tsx";
 import { BrowseSegmented } from "../browse/BrowseSegmented.tsx";
@@ -28,12 +25,8 @@ import { Scrollport } from "../primitives/Scrollport.tsx";
 import { DenOverlay } from "../overlay/DenOverlay.tsx";
 import { ChromeCloseButton } from "../shell/ChromeCloseButton.tsx";
 import { chromeProps } from "../../styling/ui-chrome.ts";
-import { ContextMenu } from "../ContextMenu.tsx";
-import { addToChat } from "../../chat/composer/add-to-chat.ts";
-import { startChatAttachmentDrag } from "../../chat/composer/chat-attachment-drag.ts";
 import { isVisualVideoMime } from "../../chat/visual/visual-artifact-model.ts";
 import { isFilmstripMime } from "../../chat/visual/filmstrip-zip.ts";
-import { artifactPreview } from "../../chat/visual/frame-archive-preview.ts";
 import { isTimelineMime } from "../../chat/visual/timeline-archive.ts";
 import { TranscriptVisualFilmstrip } from "../transcript/TranscriptVisualFilmstrip.tsx";
 import { TranscriptVisualTimeline } from "../transcript/TranscriptVisualTimeline.tsx";
@@ -47,12 +40,10 @@ import {
   shortChatLabel,
   uniqueArtifactChatIds,
 } from "./project-artifacts-filter.ts";
+import { ArtifactGalleryTile } from "./ArtifactGalleryTile.tsx";
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
 import { notifyArtifactChanged, subscribeArtifactChanges } from "../../chat/visual/artifact-change-store.ts";
-import {
-  deleteConfirmBody,
-  referenceImpactSentence,
-} from "../../files/components/artifact-reference-impact.ts";
+import { deleteConfirmBody } from "../../files/components/artifact-reference-impact.ts";
 import { createResidentActivity } from "../../ui/resident-activity.ts";
 
 type Props = {
@@ -73,201 +64,6 @@ const ARTIFACT_SOURCE_OPTIONS = [
 ] as const;
 
 const ARTIFACTS_PAGE_SIZE = 12;
-
-type TileProps = {
-  item: ArtifactListItem;
-  index: number;
-  total: number;
-  projectId: string;
-  client: LycaonClient;
-  onOpen: (index: number) => void;
-  onSrc: (artifactId: string, src: string | null) => void;
-  onRequestDelete: (item: ArtifactListItem) => void;
-};
-
-function ArtifactGalleryTile(props: TileProps) {
-  const caption = () => props.item.caption?.trim() || "";
-  const artifactId = () => props.item.id.trim();
-  const isVideo = () => isVisualVideoMime(props.item.mime);
-  let disposed = false;
-  let mediaRequest = 0;
-  onCleanup(() => { disposed = true; mediaRequest++; });
-  const [revealed, setRevealed] = createSignal(false);
-  const [menu, setMenu] = createSignal<
-    import("../ContextMenu.tsx").ContextMenuAnchor | null
-  >(null);
-  const [blob] = createResource(
-    () => {
-      const id = artifactId();
-      const sid = props.item.session_id.trim();
-      return sid && id ? `${sid}\0${id}` : null;
-    },
-    async (key) => {
-      const request = ++mediaRequest;
-      const [sid, id] = key.split("\0");
-      if (!sid || !id) throw new Error("artifact fetch missing session or id");
-      const body = await props.client.getSessionArtifact(sid, id);
-      const preview = await artifactPreview(body);
-      if (disposed || request !== mediaRequest) {
-        preview.release();
-        return null;
-      }
-      return preview;
-    },
-  );
-  const [src, setSrc] = createSignal<string | null>(null);
-  const [decodeFailed, setDecodeFailed] = createSignal(false);
-  createEffect(() => {
-    const b = blob.error === undefined ? blob() : undefined;
-    setDecodeFailed(false);
-    setRevealed(false);
-    if (!b) {
-      setSrc(null);
-      setRevealed(false);
-      props.onSrc(props.item.id, null);
-      return;
-    }
-    setSrc(b.src);
-    props.onSrc(props.item.id, b.src);
-    onCleanup(() => b.release());
-  });
-  const markReady = () => setRevealed(true);
-  const createdLabel = () => {
-    const ms = Date.parse(props.item.created_at);
-    return Number.isFinite(ms) ? formatRelativeTime(ms) : "";
-  };
-
-  const onAddToChat = () => {
-    const ref = chatRef();
-    if (ref) void addToChat(ref);
-  };
-  const chatRef = () => {
-    const projectId = props.projectId.trim();
-    const id = artifactId();
-    if (!projectId || !id || isVideo()) return null;
-    return {
-      kind: "artifact" as const,
-      projectId,
-      artifactId: id,
-      name: caption() || id,
-      previewUrl: src() ?? undefined,
-    };
-  };
-
-  return (
-    <figure
-      class="den-transcript-visual project-artifacts-tile"
-      classList={{ "den-transcript-visual--ready": revealed() }}
-      data-testid="project-artifact-tile"
-      data-artifact-id={artifactId()}
-      data-artifact-source={props.item.source}
-      draggable={chatRef() ? true : undefined}
-      onDragStart={(event) => startChatAttachmentDrag(event, chatRef())}
-      onContextMenu={(e) => {
-        const projectId = props.projectId.trim();
-        if (!projectId || !artifactId()) return;
-        e.preventDefault();
-        e.stopPropagation();
-        setMenu({ x: e.clientX, y: e.clientY });
-      }}
-    >
-      <button
-        type="button"
-        class="den-transcript-visual__frame"
-        aria-label={
-          caption()
-            ? `Enlarge ${caption()}`
-            : `Enlarge visual ${props.index + 1} of ${props.total}`
-        }
-        aria-haspopup="dialog"
-        aria-busy={!revealed() && !blob.error && !decodeFailed()}
-        disabled={!src() || !revealed()}
-        onClick={() => props.onOpen(props.index)}
-      >
-        <Show when={src()}>
-          {(url) => (
-            <Show
-              when={isVideo()}
-              fallback={
-                <img
-                  src={url()}
-                  alt={caption() || `Visual ${props.index + 1}`}
-                  class="den-transcript-visual__img"
-                  ref={(el) => {
-                    if (el?.complete && el.naturalWidth > 0) markReady();
-                  }}
-                  onLoad={() => markReady()}
-                  onError={() => setDecodeFailed(true)}
-                />
-              }
-            >
-              <video
-                src={url()}
-                class="den-transcript-visual__img"
-                muted
-                preload="metadata"
-                onLoadedData={markReady}
-                onError={() => setDecodeFailed(true)}
-              />
-            </Show>
-          )}
-        </Show>
-      </button>
-      <Show when={blob.error || decodeFailed()}>
-        <p role="status" data-testid="project-artifact-load-error">This artifact could not be loaded.</p>
-      </Show>
-      <figcaption class="project-artifacts-tile__meta">
-        <Show when={caption()}>
-          {(text) => (
-            <span class="project-artifacts-tile__caption">{text()}</span>
-          )}
-        </Show>
-        <span
-          class="project-artifacts-tile__source"
-          data-testid="project-artifact-source-badge"
-        >
-          {artifactSourceLabel(props.item.source)}
-        </span>
-        <span class="project-artifacts-tile__chat">
-          {shortChatLabel(props.item.session_id)}
-        </span>
-        <Show when={createdLabel()}>
-          {(label) => (
-            <span class="project-artifacts-tile__when">{label()}</span>
-          )}
-        </Show>
-      </figcaption>
-      <Show when={menu()} keyed>
-        {(anchor) => (
-          <ContextMenu
-            anchor={anchor}
-            items={[
-              {
-                label: caption() || "Artifact",
-                header: true,
-                description:
-                  referenceImpactSentence(props.item) || "Nothing refers to it.",
-                testId: "menu-artifact-header",
-              },
-              contextAction("addToChat", {
-                testId: "menu-add-to-chat",
-                disabled: isVideo(),
-                onSelect: onAddToChat,
-              }),
-              { separator: true },
-              contextAction("deleteArtifact", {
-                testId: "menu-delete-artifact",
-
-                onSelect: () => props.onRequestDelete(props.item),
-              }),
-            ]}
-            onDismiss={() => setMenu(null)}
-          />
-        )}
-      </Show>
-    </figure>
-  );
-}
 
 export function ProjectArtifactsView(props: Props) {
   onMount(() => requestFirstTimeTip("project-artifacts"));
