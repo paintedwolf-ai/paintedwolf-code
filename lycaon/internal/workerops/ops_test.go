@@ -40,6 +40,7 @@ type fixture struct {
 	workerID string
 	enqueued []workerops.RoundJob
 	woken    []string
+	released []string
 }
 
 func now() string { return db.FormatTime(time.Now().UTC()) }
@@ -58,6 +59,10 @@ func newFixture(t *testing.T) *fixture {
 		Reader: workerops.Reader{Records: records, Jobs: f.jobs, Decisions: f.dec},
 		WakeParked: func(_ context.Context, jobID string) error {
 			f.woken = append(f.woken, jobID)
+			return nil
+		},
+		Release: func(_ context.Context, jobID string) error {
+			f.released = append(f.released, jobID)
 			return nil
 		},
 		Agents: func(agent string) (bool, bool) {
@@ -157,6 +162,9 @@ func TestInstructStartsARoundAndAccountsForTheResult(t *testing.T) {
 	testutil.FailErr(t, "instruct", err)
 	if receipt.Outcome != workerops.OutcomeStarted || receipt.Round != 2 || receipt.JobID != "job-2" || receipt.Accounted != "result-job-1" {
 		t.Fatalf("receipt = %+v", receipt)
+	}
+	if len(f.released) != 1 || f.released[0] != "job-2" {
+		t.Fatalf("released = %v, want the new round's job once its round is recorded", f.released)
 	}
 	if len(f.enqueued) != 1 || f.enqueued[0].ScopeMode != "write" || f.enqueued[0].AgentType != "implementer" {
 		t.Fatalf("enqueued = %+v", f.enqueued)
