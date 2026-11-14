@@ -68,7 +68,7 @@ func TestCatalogNamesEveryWireToolOnce(t *testing.T) {
 
 func TestNearestConfigurationWins(t *testing.T) {
 	got, ok := resolveTool(t, map[string]string{
-		".prettierrc":         "printWidth: 120\n",
+		".prettierrc":          "printWidth: 120\n",
 		"web/.prettierrc.json": `{"printWidth": 100, "useTabs": true}`,
 	}, "web/src/app.ts", api.FormatToolPrettier)
 	if !ok || got.Configs[0] != "web/.prettierrc.json" || got.Settings.LineWidth != 100 ||
@@ -103,7 +103,7 @@ func TestAFileWithoutTheToolsSectionDoesNotStopTheSearch(t *testing.T) {
 
 func TestANearerConfigurationTheHostCannotReadDeclaresNothing(t *testing.T) {
 	if got, ok := resolveTool(t, map[string]string{
-		".prettierrc":           "printWidth: 120\n",
+		".prettierrc":            "printWidth: 120\n",
 		"web/prettier.config.js": "export default { printWidth: 100 }\n",
 	}, "web/app.ts", api.FormatToolPrettier); ok {
 		t.Fatalf("prettier = %+v, want nothing in effect", got)
