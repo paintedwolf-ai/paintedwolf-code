@@ -158,3 +158,41 @@ func TestQuietRoundsReportWhatIsInFlight(t *testing.T) {
 		t.Fatalf("tool batch notice = %+v", got)
 	}
 }
+
+// A pass that cannot read the rounds leaves its window open: the next pass
+// still raises the notice whose threshold fell inside it.
+func TestQuietRoundsKeepTheWindowAcrossAFailedRead(t *testing.T) {
+	start := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	after := 10 * time.Minute
+	h := newQuietHarness(start, after)
+	h.jobs = []api.WorkerTask{runningJob("job-1", "child-1", start)}
+	h.rounds.Check(t.Context())
+	failing := true
+	h.rounds.Jobs = func(context.Context) ([]api.WorkerTask, error) {
+		if failing {
+			return nil, context.DeadlineExceeded
+		}
+		return h.jobs, nil
+	}
+	h.advance(t, after+time.Minute)
+	failing = false
+	h.advance(t, time.Minute)
+	if len(h.notices) != 1 {
+		t.Fatalf("notices = %d after a failed read, want the crossing raised once", len(h.notices))
+	}
+}
+
+// A pending round waiting on a prerequisite is not quiet.
+func TestQuietRoundsSkipRoundsWaitingOnAPrerequisite(t *testing.T) {
+	start := time.Date(2026, 11, 12, 9, 0, 0, 0, time.UTC)
+	h := newQuietHarness(start, 10*time.Minute)
+	job := runningJob("job-1", "", start)
+	job.Status = api.WorkerStatusPending
+	h.jobs = []api.WorkerTask{job}
+	h.rounds.Waiting = func(context.Context, *api.WorkerTask) bool { return true }
+	h.rounds.Check(t.Context())
+	h.advance(t, time.Hour)
+	if len(h.notices) != 0 {
+		t.Fatalf("a waiting round raised %d quiet notices", len(h.notices))
+	}
+}
