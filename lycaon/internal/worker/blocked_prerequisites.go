@@ -20,8 +20,10 @@ type BlockedPrerequisite struct {
 // prerequisite it waits on can no longer be met. The job keeps waiting until
 // the coordinator starts a replacement or withdraws it.
 type BlockedPrerequisites struct {
-	List   func(ctx context.Context) ([]BlockedPrerequisite, error)
-	Jobs   interface{ Get(string) (*api.WorkerTask, bool) }
+	List func(ctx context.Context) ([]BlockedPrerequisite, error)
+	Jobs interface {
+		Get(string) (*api.WorkerTask, bool)
+	}
 	Notify func(ctx context.Context, parentID, consumerJobID, producerJobID, reason string)
 
 	mu     sync.Mutex
