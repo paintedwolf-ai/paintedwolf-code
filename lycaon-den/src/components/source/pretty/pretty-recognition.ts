@@ -11,52 +11,54 @@ import {
   REJECTED,
   VERBATIM_HEAD_TAIL,
 } from "../../../chat/host-markers.generated.ts";
+import { prettyLayoutForLanguage, prettyLayoutForPath } from "../editor/codemirror-lang.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
-import type { BracketRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan-state.ts";
-
-const plainData = { singleQuotes: false, comments: false };
-const commentedData = { singleQuotes: true, comments: true };
+import type { PrettyLayout } from "./pretty-outcome.ts";
+import type { BracketRule, ClauseRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan-state.ts";
+import { TreeLexer } from "./pretty-tokens.ts";
 
 export const DATA_RULE: BracketRule = {
-  kind: "bracket", data: true, statements: false, afterBlock: null, records: false,
-  lexer: () => new DataLexer(plainData),
+  kind: "bracket", data: true, statements: false, afterBlock: null, records: false, parsed: false,
+  lexer: () => new DataLexer({ singleQuotes: false, comments: false }),
 };
-const COMMENTED_DATA_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer(commentedData) };
+const COMMENTED_DATA_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: true }) };
 const RECORDS_RULE: BracketRule = { ...DATA_RULE, records: true };
+/** Unknown text recognised as JSON-like data, which may quote with `'`. */
+const DATA_LIKE_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: false }) };
 export const SCRIPT_RULE: BracketRule = {
-  kind: "bracket", data: false, statements: true, afterBlock: "script", records: false,
+  kind: "bracket", data: false, statements: true, afterBlock: "script", records: false, parsed: false,
   lexer: () => new ScriptLexer(),
 };
 export const STYLE_RULE: BracketRule = {
-  kind: "bracket", data: false, statements: true, afterBlock: "style", records: false,
+  kind: "bracket", data: false, statements: true, afterBlock: "style", records: false, parsed: false,
   lexer: () => new StyleLexer(false),
 };
-const PREPROCESSED_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
+const LINE_COMMENT_STYLE_RULE: BracketRule = { ...STYLE_RULE, lexer: () => new StyleLexer(true) };
 export const MARKUP_RULE: MarkupRule = { kind: "markup" };
+/** Any brace language: groups over the editor's tokens, with `;` separating statements where the language has them. */
+const BRACKET_RULE: BracketRule = {
+  kind: "bracket", data: false, statements: false, afterBlock: null, records: false, parsed: true,
+  lexer: () => new TreeLexer(),
+};
+const BRACKET_STATEMENTS_RULE: BracketRule = { ...BRACKET_RULE, statements: true };
+const CLAUSE_RULE: ClauseRule = { kind: "clause" };
 
-const RULES_BY_NAME = new Map<string, PrettyRule>([
-  ...["json", "webmanifest", "har", "avsc", "application/json"].map((name) => [name, DATA_RULE] as const),
-  ...["jsonc", "json5", "jsonnet", "libsonnet", "application/jsonc", "application/json5"].map((name) => [name, COMMENTED_DATA_RULE] as const),
-  ...["jsonl", "ndjson", "application/x-ndjson"].map((name) => [name, RECORDS_RULE] as const),
-  ...["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "javascript", "typescript", "application/javascript", "text/javascript"]
-    .map((name) => [name, SCRIPT_RULE] as const),
-  ...["css", "text/css"].map((name) => [name, STYLE_RULE] as const),
-  ...["scss", "less"].map((name) => [name, PREPROCESSED_STYLE_RULE] as const),
-  ...["xml", "svg", "xhtml", "html", "htm", "vue", "svelte", "astro", "application/xml", "text/xml", "text/html", "image/svg+xml"]
-    .map((name) => [name, MARKUP_RULE] as const),
-]);
-const MARKDOWN_NAMES = new Set(["md", "markdown", "mdx", "gfm", "text/markdown"]);
-
-function extensionOf(path: string): string {
-  const clean = path.split(/[?#]/)[0] ?? path;
-  const slash = Math.max(clean.lastIndexOf("/"), clean.lastIndexOf("\\"));
-  const base = (slash >= 0 ? clean.slice(slash + 1) : clean).toLowerCase();
-  const dot = base.lastIndexOf(".");
-  return dot > 0 ? base.slice(dot + 1) : "";
+/** The rule that applies a declared layout, or null where no rule exists. */
+function ruleFor(layout: PrettyLayout): PrettyRule | null {
+  switch (layout.kind) {
+    case "data": return layout.records ? RECORDS_RULE : layout.comments ? COMMENTED_DATA_RULE : DATA_RULE;
+    case "markup": return MARKUP_RULE;
+    case "code": return layout.dialect === "script" ? SCRIPT_RULE : layout.dialect === "style" ? STYLE_RULE : LINE_COMMENT_STYLE_RULE;
+    case "bracket": return layout.statements ? BRACKET_STATEMENTS_RULE : BRACKET_RULE;
+    case "clause": return CLAUSE_RULE;
+    case "fenced":
+    case "none":
+      return null;
+  }
 }
 
 function fenceRule(info: string): PrettyRule | null {
-  return RULES_BY_NAME.get(info.replace(/^\./, "")) ?? null;
+  return ruleFor(prettyLayoutForLanguage(info));
 }
 
 /** What decides a document's layout: its language, Markdown fences, or recognition of unknown text. */
@@ -74,13 +76,12 @@ const UNKNOWN: PrettyTarget = { kind: "unknown" };
  * language without a layout.
  */
 export function prettyTargetFor(path?: string, languageHint?: string): PrettyTarget | null {
-  const name = languageHint?.trim().toLowerCase() || (path ? extensionOf(path) : "");
-  if (name) {
-    if (MARKDOWN_NAMES.has(name)) return FENCED;
-    const rule = RULES_BY_NAME.get(name);
-    return rule ? { kind: "document", rule } : null;
-  }
-  return path ? null : UNKNOWN;
+  const hint = languageHint?.trim();
+  if (!hint && !path) return UNKNOWN;
+  const layout = hint ? prettyLayoutForLanguage(hint) : prettyLayoutForPath(path!);
+  if (layout.kind === "fenced") return FENCED;
+  const rule = ruleFor(layout);
+  return rule ? { kind: "document", rule } : null;
 }
 
 export function prettyPlanFor(doc: Text, target: PrettyTarget): PrettyPlan {
@@ -142,7 +143,8 @@ export function containerStartColumn(lineText: string): number | null {
 }
 
 const NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?/;
-const LITERAL = /^(?:true|false|null)/;
+// JSON literals, and Python's, so a printed dict or list is recognised too.
+const LITERAL = /^(?:true|false|null|True|False|None)\b/;
 
 /**
  * Reads a JSON container starting at `from`. Returns its end, or the negated
@@ -162,12 +164,12 @@ function readJsonContainer(text: string, from: number): number {
       if (stack.pop() !== c) return -i;
       i += 1;
       if (stack.length === 0) return i;
-    } else if (c === 0x22) {
+    } else if (c === 0x22 || c === 0x27) {
       i += 1;
       while (i < text.length) {
         const s = text.charCodeAt(i);
         if (s === 0x5c) i += 2;
-        else if (s === 0x22) break;
+        else if (s === c) break;
         else if (s === 0x0a) return -i;
         else i += 1;
       }
@@ -183,7 +185,7 @@ function readJsonContainer(text: string, from: number): number {
   return -i;
 }
 
-/** Balanced JSON containers at line starts or after host markers and log prefixes. */
+/** Balanced JSON-like containers at line starts or after host markers and log prefixes. */
 export function recognizeJsonContainers(doc: Text): PrettySpan[] {
   const text = doc.toString();
   const spans: PrettySpan[] = [];
@@ -197,7 +199,7 @@ export function recognizeJsonContainers(doc: Text): PrettySpan[] {
     }
     const end = readJsonContainer(text, line.from + column);
     if (end > 0) {
-      spans.push({ from: line.from + column, to: end, rule: DATA_RULE });
+      spans.push({ from: line.from + column, to: end, rule: DATA_LIKE_RULE });
       lineNumber = doc.lineAt(end).number + 1;
     } else {
       // Lines already read as part of a failed candidate are not tried again.

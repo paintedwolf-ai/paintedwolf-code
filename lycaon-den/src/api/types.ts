@@ -1909,7 +1909,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/projects/{id}/source/editorconfig": {
+    "/v1/projects/{id}/source/format-settings": {
         parameters: {
             query?: never;
             header?: never;
@@ -1917,15 +1917,18 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Resolve the EditorConfig pairs in effect for a project path
-         * @description Resolves `.editorconfig` files from the path's directory toward its
-         *     attached root, stopping at `root = true` or at the root itself, with
-         *     nearer files and later sections winning. The host applies the same
-         *     resolution when it checks agent writes. The file itself need not exist.
-         *     Unrecognized keys and values are ignored; `unset` clears a pair from a
-         *     farther file. An absent property is not declared for this path.
+         * Resolve the formatting settings each tool declares for a project path
+         * @description Resolves each catalog tool's configuration for the path the way that
+         *     tool finds it. EditorConfig merges `.editorconfig` files from the
+         *     path's directory toward its attached root, stopping at `root = true`,
+         *     with nearer files and later sections winning; the host applies the same
+         *     resolution when it checks agent writes. Every other tool uses its
+         *     nearest configuration file between the path's directory and the root.
+         *     A nearer configuration the host cannot read, such as a JavaScript
+         *     file, means that tool declares nothing for the path. The file itself
+         *     need not exist; unrecognized keys and values are ignored.
          */
-        get: operations["getProjectSourceEditorConfig"];
+        get: operations["getProjectSourceFormatSettings"];
         put?: never;
         post?: never;
         delete?: never;
@@ -13440,11 +13443,43 @@ export interface components {
             width: number;
             height: number;
         };
+        /** @enum {string} */
+        FormatTool: "editorconfig" | "prettier" | "biome" | "dprint" | "ruff" | "black" | "rustfmt" | "clang_format" | "scalafmt" | "swift_format" | "dart" | "rubocop" | "stylua" | "ocamlformat" | "fourmolu" | "julia_formatter" | "sqlfluff" | "foundry" | "taplo";
         /**
-         * @description EditorConfig pairs in effect for one root-addressed path. Every property
-         *     is omitted when no `.editorconfig` declares it.
+         * @description Settings in effect under a tool's configuration, in one vocabulary
+         *     across tools: what the configuration declares, else the tool's fixed
+         *     default. A property is omitted when neither gives a value or the tool
+         *     chooses automatically.
          */
-        SourceEditorConfig: {
+        FormatSettings: {
+            /** @description Column the tool keeps lines within. */
+            line_width?: number;
+            /** @enum {string} */
+            indent_style?: "space" | "tab";
+            /** @description Columns per indentation level; omitted when indent_size_tab is true. */
+            indent_size?: number;
+            /** @description True when a level is one tab and follows tab_width. */
+            indent_size_tab?: boolean;
+            tab_width?: number;
+            /** @enum {string} */
+            end_of_line?: "lf" | "crlf" | "cr";
+            trim_trailing_whitespace?: boolean;
+            insert_final_newline?: boolean;
+            /** @enum {string} */
+            charset?: "latin1" | "utf-8" | "utf-8-bom" | "utf-16be" | "utf-16le";
+        };
+        FormatSettingsSource: {
+            tool: components["schemas"]["FormatTool"];
+            /** @description Repo-relative configuration files that contributed, nearest first. */
+            configs: string[];
+            settings: components["schemas"]["FormatSettings"];
+        };
+        /**
+         * @description Formatting settings that each tool's configuration declares for one
+         *     root-addressed path. A tool appears only when a configuration it reads
+         *     is in effect for the path.
+         */
+        SourceFormatSettings: {
             /** @description Normalized repo-relative path (slash-separated) */
             path: string;
             /**
@@ -13452,19 +13487,13 @@ export interface components {
              * @description Attached root that holds the path
              */
             root_id: string;
-            /** @enum {string} */
-            indent_style?: "space" | "tab";
-            /** @description Columns per indentation level; omitted when indent_size_tab is true. */
-            indent_size?: number;
-            /** @description True when `indent_size = tab`, so a level follows tab_width. */
-            indent_size_tab?: boolean;
-            tab_width?: number;
-            /** @enum {string} */
-            end_of_line?: "lf" | "crlf";
-            trim_trailing_whitespace?: boolean;
-            insert_final_newline?: boolean;
-            /** @enum {string} */
-            charset?: "latin1" | "utf-8" | "utf-8-bom" | "utf-16be" | "utf-16le";
+            /** @description One entry per tool with configuration in effect, in catalog order. */
+            sources: components["schemas"]["FormatSettingsSource"][];
+            /**
+             * @description File names the resolution reads. A change to a file with one of
+             *     these names can change the settings of paths beneath it.
+             */
+            config_names: string[];
         };
         /** @description Human request to add owner-write permission to the exact file bytes shown in the editor. */
         MakeProjectSourceEditableRequest: {
@@ -21950,7 +21979,7 @@ export interface operations {
             default: components["responses"]["Error"];
         };
     };
-    getProjectSourceEditorConfig: {
+    getProjectSourceFormatSettings: {
         parameters: {
             query: {
                 /** @description Optional session whose bound checkout supplies the project roots */
@@ -21968,13 +21997,13 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Pairs in effect for the path */
+            /** @description Settings in effect for the path */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["SourceEditorConfig"];
+                    "application/json": components["schemas"]["SourceFormatSettings"];
                 };
             };
             /** @description Missing or invalid path or root_id */
@@ -30883,7 +30912,10 @@ export type SecretMarkRange = components["schemas"]["SecretMarkRange"];
 export type SecretMarkPreview = components["schemas"]["SecretMarkPreview"];
 export type SecretMarkRequest = components["schemas"]["SecretMarkRequest"];
 export type AttachmentVideoFacts = components["schemas"]["AttachmentVideoFacts"];
-export type SourceEditorConfig = components["schemas"]["SourceEditorConfig"];
+export type FormatTool = components["schemas"]["FormatTool"];
+export type FormatSettings = components["schemas"]["FormatSettings"];
+export type FormatSettingsSource = components["schemas"]["FormatSettingsSource"];
+export type SourceFormatSettings = components["schemas"]["SourceFormatSettings"];
 export type MakeProjectSourceEditableRequest = components["schemas"]["MakeProjectSourceEditableRequest"];
 export type MakeProjectSourceEditableResponse = components["schemas"]["MakeProjectSourceEditableResponse"];
 export type SourceDirEntry = components["schemas"]["SourceDirEntry"];

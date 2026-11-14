@@ -18,7 +18,7 @@ it.each(["observe", "evict"] as const)("reports current document %s failure with
   vi.mocked(observeEditorDocument).mockRejectedValue(error); vi.mocked(evictEditorDocument).mockRejectedValue(error);
   vi.mocked(f.client.getProjectSource).mockResolvedValue(controllerSource("changed", { binary: boundary === "evict" }));
   const refresh = createBufferRefresh({ ...f.scope, dropFileVersionState: vi.fn(), loadVersionHistory: vi.fn(), setSaveError,
-    versionForBuffer: () => null, reloadEditorConfig: vi.fn(), flashUpdatedNote: vi.fn(), shouldApply: () => true });
+    versionForBuffer: () => null, reloadFormatSettings: vi.fn(), flashUpdatedNote: vi.fn(), shouldApply: () => true });
   refresh(f.state().byKey[key]!);
   await vi.waitFor(() => expect(setSaveError).toHaveBeenCalledWith(expect.stringContaining(`${boundary} failed`)));
   if (boundary === "observe") { expect(observeEditorDocument).toHaveBeenCalledWith(f.projectId, f.state().byKey[key]); expect(filesBufferText(f.state().byKey[key]!)).toBe("original"); }

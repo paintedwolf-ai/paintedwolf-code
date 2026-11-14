@@ -2,7 +2,8 @@ import { batch } from "solid-js";
 import { produce } from "solid-js/store";
 import type { ProjectSourceReadResponse, SourceEncoding } from "../../api/types.ts";
 import { detectIndent, type IndentInfo } from "../../components/source/editor/indent-detect.ts";
-import type { EditorConfigProps } from "../../components/source/editor/editorconfig.ts";
+import { editorConfigPropsFromHost } from "../../components/source/editor/editorconfig.ts";
+import { editorConfigSettings, type FormatSources } from "../../components/source/editor/format-settings.ts";
 import { defaultEol, normalizeEolForEditor, type EolKind } from "../../components/source/editor/eol.ts";
 import { bufferKindFromSourceRead } from "./project-files-buffer-kind.ts";
 import { fileBufferKey, type FileBufferKey } from "../components/project-files-model.ts";
@@ -219,12 +220,14 @@ export function setFilesBufferIndentOverride(
 }
 
 /** Undefined clears the path's resolved formatting settings. */
-export function setFilesBufferEditorConfig(
-  projectId: string, key: FileBufferKey, props: EditorConfigProps | undefined,
+export function setFilesBufferFormatSettings(
+  projectId: string, key: FileBufferKey, sources: FormatSources | undefined,
 ): void {
   setFilesStore(projectId, produce((state) => {
     const buf = state.byKey[key];
-    if (buf) buf.editorConfig = props;
+    if (!buf) return;
+    buf.formatSources = sources;
+    buf.editorConfig = sources ? editorConfigPropsFromHost(editorConfigSettings(sources)) : undefined;
   }));
 }
 

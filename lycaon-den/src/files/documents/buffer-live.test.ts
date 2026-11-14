@@ -224,12 +224,12 @@ describe("buffer-live lifecycle + divergence", () => {
   });
 
   it("announces EditorConfig changes for every lifecycle operation", () => {
-    const onEditorConfigChange = vi.fn();
+    const onFormatConfigChange = vi.fn();
     setBufferLiveHandlers(PROJECT, {
       onCleanDiskChange: vi.fn(),
       onDirtyDiskChange: vi.fn(),
       onForeignDeleteDirty: vi.fn(),
-      onEditorConfigChange,
+      onFormatConfigChange,
     });
     applyBufferSourceChanged(
       PROJECT,
@@ -247,8 +247,8 @@ describe("buffer-live lifecycle + divergence", () => {
         path: "new/.editorconfig",
       }),
     );
-    expect(onEditorConfigChange).toHaveBeenCalledTimes(3);
-    expect(onEditorConfigChange).toHaveBeenCalledWith("r1");
+    expect(onFormatConfigChange).toHaveBeenCalledTimes(3);
+    expect(onFormatConfigChange).toHaveBeenCalledWith("r1");
   });
 
   it("foreign rename retargets dirty buffer path", () => {

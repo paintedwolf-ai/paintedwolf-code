@@ -1,3 +1,4 @@
+import { isFormatConfigPath } from "../../components/source/editor/format-settings.ts";
 import { refreshFileDocumentMetadata } from "./files-document-metadata.ts";
 /** Apply source changes to open buffers. */
 
@@ -14,7 +15,7 @@ type BufferLiveHandlers = {
   /** Confirm before closing dirty buffers deleted on disk. */
   onForeignDeleteDirty: (bufs: FileBuffer[], event: SourceChange) => void;
   /** Re-resolve open buffers when a root EditorConfig source changes. */
-  onEditorConfigChange?: (rootId: string) => void;
+  onFormatConfigChange?: (rootId: string) => void;
 };
 
 const handlersByProject = new Map<string, BufferLiveHandlers>();
@@ -91,7 +92,7 @@ export function applyBufferSourceResync(projectId: string): void {
     if (buf.dirty) handlers.onDirtyDiskChange(buf);
     else handlers.onCleanDiskChange(buf);
   }
-  for (const rootId of roots) handlers.onEditorConfigChange?.(rootId);
+  for (const rootId of roots) handlers.onFormatConfigChange?.(rootId);
 }
 
 /** Applies a source change to matching open buffers. */
@@ -108,11 +109,9 @@ export function applyBufferSourceChanged(
   const handlers = handlersByProject.get(pid);
   if (
     workspaceKind === "project" &&
-    [event.path, event.from_path].some((path) =>
-      path === ".editorconfig" || path?.endsWith("/.editorconfig")
-    )
+    [event.path, event.from_path].some((path) => isFormatConfigPath(pid, path))
   ) {
-    handlers?.onEditorConfigChange?.(rootId);
+    handlers?.onFormatConfigChange?.(rootId);
   }
 
   // Worker buffers expose content updates only.

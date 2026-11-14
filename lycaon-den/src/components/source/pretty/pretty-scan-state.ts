@@ -3,11 +3,18 @@ import type { Container, Frame } from "./pretty-bracket.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import type { MarkupState } from "./pretty-markup.ts";
 import type { TextWindow } from "./pretty-text-window.ts";
+import type { PrettyTokenSource } from "./pretty-tokens.ts";
 
 /** Laid-out groups stay flat when their visual line fits this many columns. */
 export const PRETTY_TARGET_COLUMNS = 80;
 /** Outside data, only source lines wider than this are laid out. */
 export const PRETTY_TRIGGER_COLUMNS = 240;
+
+/** Groups fit the declared line width, else the default target. */
+export function targetColumns(lineWidth: number | undefined): number {
+  return lineWidth ?? PRETTY_TARGET_COLUMNS;
+}
+
 /** Characters between saved scan states. */
 export const PRETTY_CHECKPOINT_INTERVAL = 2048;
 /** Open groups and containers allowed at once. */
@@ -24,7 +31,14 @@ export interface BracketRule {
   readonly afterBlock: "script" | "style" | null;
   /** Each line is its own record; containers never span lines. */
   readonly records: boolean;
+  /** Protected text comes from the editor's syntax tree, so only parsed text is laid out. */
+  readonly parsed: boolean;
   readonly lexer: () => PrettyLexer;
+  /**
+   * Whether a break the rule makes on its own precedes `pos`; such a break
+   * keeps an enclosing group from staying flat.
+   */
+  readonly breaksBefore?: (cursor: ScanCursor, pos: number) => boolean;
 }
 
 /** Breaks between adjacent tags. */
@@ -32,7 +46,17 @@ export interface MarkupRule {
   readonly kind: "markup";
 }
 
-export type PrettyRule = BracketRule | MarkupRule;
+/** SQL: a break before each clause, clause lists that do not fit, and parenthesised groups. */
+export interface ClauseRule {
+  readonly kind: "clause";
+}
+
+export type PrettyRule = BracketRule | MarkupRule | ClauseRule;
+
+/** Whether a rule reads the editor's syntax tree and so lays out only what it has parsed. */
+export function readsSyntaxTree(rule: PrettyRule): boolean {
+  return rule.kind === "clause" || (rule.kind === "bracket" && rule.parsed);
+}
 
 /** Where a document's rules apply. */
 export type PrettyPlan =
@@ -64,6 +88,10 @@ export interface PrettyScanOptions {
   readonly tabSize: number;
   readonly indentUnit: number;
   readonly facts: PrettyBlockFacts;
+  /** Tokens from the editor's syntax tree, for rules that read them. */
+  readonly tokens?: PrettyTokenSource | null;
+  /** The line width the project declares for the file. */
+  readonly lineWidth?: number;
 }
 
 export interface Fence {
@@ -79,6 +107,8 @@ export class ScanState {
   frames: Frame | null = null;
   containers: Container | null = null;
   markup: MarkupState;
+  /** Group depth whose commas break as a SQL clause list, or -1. */
+  listDepth = -1;
   fence: Fence | null = null;
   inLine = false;
   /** The current source line is laid out. */

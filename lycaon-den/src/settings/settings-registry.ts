@@ -111,7 +111,7 @@ const SETTING_SPECS = [
   { ...EDITOR, id: "editor-line-height", label: "Line height", group: "Text", keywords: ["line spacing", "leading"] },
   { ...EDITOR, id: "reveal-in-tree", label: "Reveal opened files in tree", group: "Text", keywords: ["file tree", "auto reveal", "follow file", "sync tree"] },
   { ...EDITOR, id: "tree-visible-levels", label: "Visible tree levels", group: "Text", keywords: ["file tree", "sticky folders", "pinned rows", "indentation folding"] },
-  { ...EDITOR, id: "editor-word-wrap", label: "Word wrap", group: "Text", keywords: ["wrap lines", "soft wrap", "long lines"] },
+  { ...EDITOR, id: "editor-line-layout", label: "Line layout", group: "Text", keywords: ["word wrap", "wrap lines", "soft wrap", "long lines", "pretty", "pretty print", "format"] },
   { ...EDITOR, id: "line-numbers", label: "Line numbers", group: "Text", keywords: ["gutter"] },
   { ...EDITOR, id: "walk-controls-placement", label: "Default walk controls placement", group: "Version history", keywords: ["walk", "floating", "docked", "history controls"] },
   { ...EDITOR, id: "walk-controls-location", label: "Saved walk controls location", group: "Version history", keywords: ["walk", "reset location", "history controls"] },

@@ -23,9 +23,11 @@ import {
 import {
   applyPrettyConfig,
   createPrettyExtension,
-  prettyOutcomeListener,
-  prettyOutcomeOf,
 } from "../../components/source/pretty/pretty-layout.ts";
+import { editorPrettyPref } from "../../settings/editor/editor-prefs.ts";
+import { formattersForPath } from "../../components/source/editor/codemirror-lang.ts";
+import { declaredLineWidth } from "../../components/source/editor/format-settings.ts";
+import type { PrettyConfig } from "../../components/source/pretty/pretty-rescan.ts";
 import { applyBufferReveal, hasPendingReveal } from "./files-editor-reveal.ts";
 import { restoreEditorScrollTop } from "../../components/source/editor/editor-view-state.ts";
 import { lineGutterExtension } from "../../components/source/annotations/line-gutter.ts";
@@ -44,13 +46,6 @@ import {
   settleFilesEditorView,
   softDetachFilesEditor,
 } from "./files-editor-host.ts";
-import {
-  clearPrettyDisplayTab,
-  isPrettyDisplayEnabled,
-  registerPrettySurfaceCapability,
-  setPrettyLayoutOutcome,
-  togglePrettyDisplayPref,
-} from "./pretty-display-state.ts";
 import { filesGutterContextExtension } from "./files-gutter-context.ts";
 import { hunkPlaybackExtension } from "../walk/hunk-playback.ts";
 import { JUMP_CURSOR_LINE_THRESHOLD } from "../history/jump-history.ts";
@@ -59,7 +54,7 @@ import {
   clearFilesBufferReveal,
   markFilesBufferTyping,
 } from "../documents/project-files-buffers.ts";
-import { projectFilesState } from "../documents/files-buffer-state.ts";
+import { projectFilesState, type FileBuffer } from "../documents/files-buffer-state.ts";
 import type { FilesEditorScope } from "../components/files-scope.ts";
 
 const filesHostExtensions = new Compartment();
@@ -77,6 +72,12 @@ type ViewportDependencies = Pick<FilesEditorScope, "projectId" | "buffer" | "liv
   setChromeReady: (ready: boolean) => void;
   installChrome: (view: EditorView, path: string, prefs: ReturnType<typeof currentDisplayPrefs>) => void;
 };
+
+/** Pretty's settings for a buffer: its path and the line width its formatter keeps to. */
+function prettyConfigFor(buffer: FileBuffer, enabled: boolean): PrettyConfig {
+  const lineWidth = declaredLineWidth(buffer.formatSources, formattersForPath(buffer.path));
+  return { enabled, path: buffer.path, ...(lineWidth ? { lineWidth } : {}) };
+}
 
 export function createFilesEditorViewport({ projectId: currentProjectId, buffer, editable, live, hostElement,
   currentView, editorView, bindView, historicalActive, currentAbsent, reportCursor,
@@ -114,25 +115,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
     const draft = untrack(() => filesBufferText(buffer()));
     const prefs = untrack(() => currentDisplayPrefs(buffer()));
     const projectId = currentProjectId();
-    const initialPrettyEnabled = untrack(() =>
-      isPrettyDisplayEnabled(projectId, key),
-    );
-    const unregisterPretty = registerPrettySurfaceCapability(projectId, key, {
-      enabled: () => isPrettyDisplayEnabled(projectId, key),
-      available: () => !historicalActive() && !currentAbsent(),
-      onToggle: () => {
-        const next = togglePrettyDisplayPref(projectId, key);
-        const v = binding.view;
-        if (v) {
-          applyPrettyConfig(
-            v,
-            { enabled: next, path: buffer().path },
-            [documentSynchronization.of(true)],
-          );
-        }
-        return true;
-      },
-    });
+    const initialPretty = untrack(() => prettyConfigFor(buffer(), editorPrettyPref()));
 
     const wireHandlers = (handlers: SourceEditorHandlers) => {
       handlers.onDocChange = (update) => {
@@ -188,11 +171,10 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       applyEditable(reused, canEdit);
       applyPrettyConfig(
         reused,
-        { enabled: initialPrettyEnabled, path },
+        initialPretty,
         [documentSynchronization.of(true)],
       );
       setSimplifiedDisplay(sourceUsesSimplifiedDisplay(reused.state));
-      setPrettyLayoutOutcome(projectId, key, prettyOutcomeOf(reused.state));
       if (plan.scrollTop > 0) {
         setEditorScrollTop(reused, plan.scrollTop);
         restoreEditorScrollTop(reused, plan.scrollTop);
@@ -205,8 +187,7 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       const replica = editorReplica(buffer().documentId);
       const hostExtensions = [
         filesCollaborationExtension(replica),
-        createPrettyExtension({ enabled: initialPrettyEnabled, path }),
-        prettyOutcomeListener((outcome) => setPrettyLayoutOutcome(projectId, key, outcome)),
+        createPrettyExtension(initialPretty),
         filesGutterContextExtension,
         hunkPlaybackExtension,
         lineGutterExtension,
@@ -256,7 +237,6 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         el,
       );
       bindView(created);
-      setPrettyLayoutOutcome(projectId, key, prettyOutcomeOf(created.state));
       // Reattachment applies the current editability.
       applyEditable(created, canEdit);
       completeFilesEditorAttach({
@@ -299,7 +279,6 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
       }
     }
     onCleanup(() => {
-      unregisterPretty();
       cancelChrome?.();
       setChromeReady(false);
       flushFilesDraftSyncFor(projectId, key);
@@ -315,22 +294,18 @@ export function createFilesEditorViewport({ projectId: currentProjectId, buffer,
         softDetachFilesEditor(projectId, key, el);
         return;
       }
-      clearPrettyDisplayTab(projectId, key);
       destroyFilesEditor(projectId, key, { dropHandlers: true });
     });
   }));
 
   createEffect(() => {
-    const projectId = currentProjectId();
-    const key = buffer().key;
-    const path = buffer().path;
-    const enabled = isPrettyDisplayEnabled(projectId, key);
+    const config = prettyConfigFor(buffer(), editorPrettyPref());
     const v = editorView();
     if (!v) return;
     untrack(() => {
       applyPrettyConfig(
         v,
-        { enabled, path },
+        config,
         [documentSynchronization.of(true)],
       );
     });
