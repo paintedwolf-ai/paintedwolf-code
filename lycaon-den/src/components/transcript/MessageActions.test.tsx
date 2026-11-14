@@ -96,6 +96,26 @@ describe("MessageActions", () => {
     }
   });
 
+  it("formats historical stamps older than an hour without subscribing to the minute clock", () => {
+    vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+    vi.setSystemTime(Date.parse("2026-09-12T18:00:00Z"));
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+    try {
+      render(() => (
+        <MessageActions
+          align="start"
+          ts="2026-09-12T15:00:00Z"
+          actions={buildAssistantMessageActions({ onCopy: () => {} })}
+        />
+      ));
+      expect(screen.getByTestId("message-time").textContent).not.toContain("ago");
+      expect(setTimeoutSpy).not.toHaveBeenCalled();
+    } finally {
+      setTimeoutSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+
   it("omits the timestamp and separator when ts is invalid", () => {
     const { container } = render(() => (
       <MessageActions

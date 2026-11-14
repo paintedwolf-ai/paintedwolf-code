@@ -2,6 +2,7 @@ import {
   Index,
   Show,
   createEffect,
+  createMemo,
   createSignal,
   on,
   onCleanup,
@@ -198,10 +199,10 @@ export function MessageActions(props: MessageActionsProps) {
     return props.actions[0]?.id;
   };
 
-  const validTimestamp = () => {
+  const validTimestamp = createMemo(() => {
     const ts = props.ts;
     return ts && Number.isFinite(Date.parse(ts)) ? ts : undefined;
-  };
+  });
   const align = () => props.align ?? "end";
 
   return (

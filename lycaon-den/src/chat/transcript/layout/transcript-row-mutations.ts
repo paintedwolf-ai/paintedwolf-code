@@ -10,6 +10,8 @@ export function observeTranscriptRowMutations(
     const rows = new Set<HTMLElement>();
     for (const mutation of mutations) {
       const element = mutation.target instanceof Element ? mutation.target : mutation.target.parentElement;
+      // Fixed-height hover chrome never resizes its row when its time or icon updates.
+      if (element?.closest(".den-msg-actions")) continue;
       const row = element?.closest<HTMLElement>(".transcript-viewport-row");
       if (row?.isConnected && root.contains(row)) rows.add(row);
     }

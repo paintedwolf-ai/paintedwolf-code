@@ -247,10 +247,10 @@ export function TranscriptItemRow(props: {
             const row = user();
             return row.kind === "pending_user" ? row.pending : undefined;
           };
-          const timestamp = () => {
+          const timestamp = createMemo(() => {
             const entry = pending();
             return wire()?.created_at ?? (entry ? new Date(entry.createdAt).toISOString() : undefined);
-          };
+          });
           const artifactIds = () => {
             const fromWire = (wire()?.artifact_ids ?? [])
               .map((id) => id.trim())

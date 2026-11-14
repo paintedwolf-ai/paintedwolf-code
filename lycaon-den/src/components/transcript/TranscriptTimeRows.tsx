@@ -1,4 +1,4 @@
-import { Show } from "solid-js";
+import { Show, createMemo } from "solid-js";
 import type { TranscriptTimeItem } from "../../chat/transcript/projection/transcript-item-model.ts";
 import { viewerCalendarTimeFormat } from "../../time/calendar-time.ts";
 import { useNow } from "../../time/now.ts";
@@ -7,6 +7,8 @@ import { chromeProps } from "../../styling/ui-chrome.ts";
 
 /** Work under a second is not shown. */
 const MIN_WORK_SHOWN_MS = 1000;
+/** Stamps older than an hour format as fixed clock times and need no minute ticks. */
+const RELATIVE_STAMP_WINDOW_MS = 60 * 60_000;
 
 const isoOf = (at: number) => new Date(at).toISOString();
 
@@ -101,9 +103,13 @@ export function TurnTail(props: {
 
 /** When a message was sent: in its hover toolbar, or below a user bubble. */
 export function MessageTime(props: { ts: string; placement: "toolbar" | "below" }) {
-  const now = useNow("minute");
   const calendar = viewerCalendarTimeFormat();
-  const at = () => Date.parse(props.ts);
+  const at = createMemo(() => Date.parse(props.ts));
+  const needsMinuteClock = createMemo(() => {
+    const parsed = at();
+    return Number.isFinite(parsed) && Date.now() - parsed < RELATIVE_STAMP_WINDOW_MS;
+  });
+  const now = useNow("minute", needsMinuteClock);
   return (
     <Show when={Number.isFinite(at())}>
       <time
@@ -114,7 +120,7 @@ export function MessageTime(props: { ts: string; placement: "toolbar" | "below" 
         data-testid="message-time"
         {...chromeProps()}
       >
-        {calendar.stamp(at(), now())}
+        {needsMinuteClock() ? calendar.stamp(at(), now()) : calendar.time(at())}
       </time>
     </Show>
   );

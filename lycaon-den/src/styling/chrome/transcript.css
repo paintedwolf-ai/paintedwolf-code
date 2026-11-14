@@ -195,7 +195,10 @@
 .den-msg-actions__time {
   position: relative;
   z-index: 1;
+  min-width: 0;
   padding-inline: 8px 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
   color: var(--den-text-muted);
   font-size: var(--text-den-caption);
   line-height: 1.4;
@@ -205,6 +208,7 @@
 }
 
 .den-msg-actions__sep {
+  flex-shrink: 0;
   width: 1px;
   height: 14px;
   margin-inline: 2px;
@@ -273,31 +277,39 @@
 .den-user-msg-footer {
   align-self: flex-end;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   justify-content: flex-end;
   gap: 6px;
+  min-width: 0;
   max-width: 100%;
   margin-top: calc(var(--transcript-message-time-gap) - var(--transcript-part-gap));
 }
 
 .den-user-msg-footer--actions {
-  min-height: calc(1.5rem + 4px);
+  height: calc(1.5rem + 4px);
 }
 
 .den-user-msg-footer > .den-msg-time-below {
   align-self: center;
+  min-width: 0;
   margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-/* Reserves layout space below the message on its horizontal side. */
+/* Single-line fixed height keeps virtualized row boxes stable across hover and resize. */
 .den-msg-actions {
   position: relative;
   align-self: flex-end;
+  box-sizing: border-box;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   width: max-content;
+  min-width: 0;
   max-width: 100%;
+  height: calc(1.5rem + 4px);
   align-items: center;
   gap: 1px;
   padding: 1px;
@@ -318,7 +330,9 @@
   margin-top: calc(var(--transcript-message-time-gap) - var(--transcript-part-gap));
 }
 
-.user-turn:has(> .bubble--user:hover, > .den-view-context:hover, > .den-user-msg-footer:hover) .den-msg-actions,
+.bubble--user:hover ~ .den-user-msg-footer > .den-msg-actions,
+.den-view-context:hover ~ .den-user-msg-footer > .den-msg-actions,
+.den-user-msg-footer:hover > .den-msg-actions,
 .user-turn:focus-within .den-msg-actions,
 .assistant-turn:hover > .den-msg-actions,
 .assistant-turn:focus-within > .den-msg-actions,
@@ -332,6 +346,7 @@
 .den-msg-actions__btn {
   position: relative;
   z-index: 1;
+  flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;

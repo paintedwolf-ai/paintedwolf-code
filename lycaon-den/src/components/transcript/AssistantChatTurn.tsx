@@ -104,6 +104,7 @@ export function AssistantChatTurn(props: Props) {
 
   const streaming = () =>
     props.streaming === true || wireRow()?.status === "streaming";
+  const createdAt = createMemo(() => wireRow()?.created_at);
   const actions = createMemo(() =>
     buildAssistantMessageActions({
       onCopy: props.onCopy ? () => props.onCopy?.(content()) : undefined,
@@ -185,7 +186,7 @@ export function AssistantChatTurn(props: Props) {
         {/* The message-times setting governs user prompts; replies keep hover time. */}
         <MessageActions
           align="start"
-          ts={wireRow()?.created_at}
+          ts={createdAt()}
           actions={actions()}
         />
       </Show>

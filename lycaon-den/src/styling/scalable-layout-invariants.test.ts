@@ -136,6 +136,9 @@ describe("scalable layout chrome", () => {
     expect(msgActions).toBeDefined();
     expect(msgActions).not.toMatch(/position:\s*(?:absolute|fixed)/);
     expect(msgActions).toMatch(/align-self:\s*flex-end/);
+    expect(msgActions).toMatch(/flex-wrap:\s*nowrap/);
+    expect(msgActions).toMatch(/height:\s*calc\(1\.5rem \+ 4px\)/);
+    expect(components).not.toMatch(/\.user-turn:has\(/);
     expect(components.match(/\.den-msg-actions--start\s*\{([^}]+)\}/)?.[1]).toMatch(
       /align-self:\s*flex-start/,
     );
