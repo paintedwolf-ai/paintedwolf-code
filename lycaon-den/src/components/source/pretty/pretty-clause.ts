@@ -183,7 +183,7 @@ function caseWidth(cursor: ScanCursor, pos: number, limit: number): number {
   return width;
 }
 
-/** Width of the next predicate starting at `pos` up to the next AND/OR/clause/closer at depth 0, or more than `limit`. */
+/** Width of the next predicate up to the next AND/OR/clause/closer at depth 0. */
 function nextPredicateWidth(cursor: ScanCursor, pos: number, limit: number): number {
   const { text, state } = cursor;
   const lineEnd = state.lineEnd;
