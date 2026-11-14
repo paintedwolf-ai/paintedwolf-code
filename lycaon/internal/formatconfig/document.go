@@ -33,32 +33,35 @@ const (
 // document is a decoded configuration tree.
 type document map[string]any
 
-func decode(f format, body []byte) (document, error) {
+// decode reads a configuration file. It reports false when the file is not
+// readable: executable configuration, or text its tool would reject too.
+func decode(f format, body []byte) (document, bool) {
+	var (
+		doc document
+		err error
+	)
 	switch f {
+	case formatScript:
+		return nil, false
 	case formatJSON:
-		return decodeJSON(body)
+		doc, err = decodeJSON(body)
 	case formatJSONC:
-		return decodeJSON(stripJSONC(body))
+		doc, err = decodeJSON(stripJSONC(body))
 	case formatYAML:
-		var doc document
-		if err := yaml.Unmarshal(body, &doc); err != nil {
-			return nil, err
-		}
-		return doc, nil
+		err = yaml.Unmarshal(body, &doc)
 	case formatYAMLDocuments:
-		return decodeYAMLDocuments(body)
+		doc, err = decodeYAMLDocuments(body)
 	case formatTOML:
-		var doc document
-		if _, err := toml.Decode(string(body), &doc); err != nil {
-			return nil, err
-		}
-		return doc, nil
+		_, err = toml.Decode(string(body), &doc)
 	case formatINI:
-		return decodeINI(body), nil
+		doc = decodeINI(body)
 	case formatKeyValue:
-		return decodeKeyValue(body), nil
+		doc = decodeKeyValue(body)
 	}
-	return nil, errors.New("configuration format is not readable")
+	if err != nil {
+		return nil, false
+	}
+	return doc, true
 }
 
 func decodeJSON(body []byte) (document, error) {

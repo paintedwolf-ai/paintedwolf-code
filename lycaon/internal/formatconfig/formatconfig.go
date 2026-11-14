@@ -121,12 +121,10 @@ func (t tool) resolve(root, rel string) (Source, bool, error) {
 			if !found {
 				continue
 			}
-			if f.format == formatScript {
-				return Source{}, false, nil
-			}
-			doc, err := decode(f.format, body)
-			if err != nil {
-				// The tool fails on this file too, so nothing is in effect.
+			doc, readable := decode(f.format, body)
+			if !readable {
+				// The host does not run scripts, and the tool fails on unreadable text
+				// too: either way the search ends with nothing declared.
 				return Source{}, false, nil
 			}
 			if len(f.section) > 0 {
