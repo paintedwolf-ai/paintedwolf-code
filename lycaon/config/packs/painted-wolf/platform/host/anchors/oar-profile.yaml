@@ -872,8 +872,6 @@ host_facts:
    type: string
  - name: paintedwolf.count
    type: string
- - name: paintedwolf.current_max
-   type: string
  - name: paintedwolf.cwd
    type: string
  - name: paintedwolf.declared
@@ -953,8 +951,6 @@ host_facts:
  - name: paintedwolf.handles_text
    type: string
  - name: paintedwolf.host
-   type: string
- - name: paintedwolf.host_max
    type: string
  - name: paintedwolf.hunk_count
    type: string
