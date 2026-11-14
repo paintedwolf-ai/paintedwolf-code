@@ -58,11 +58,14 @@ describe("line facts card", () => {
     expect(handlers.onReturnFocus).toHaveBeenCalledOnce();
     expect(handlers.onDismiss).not.toHaveBeenCalled();
   });
-  it("dismisses on Escape without moving focus when focus is outside the card", () => {
+  it("dismisses on Escape before editor keymaps see the press and keeps focus outside the card", () => {
     const { code, handlers } = fixture();
+    const editorKeyDown = vi.fn();
+    code.addEventListener("keydown", editorKeyDown);
     code.focus();
     expect(document.activeElement).toBe(code);
-    fireEvent.keyDown(document, { key: "Escape" });
+    fireEvent.keyDown(code, { key: "Escape" });
+    expect(editorKeyDown).not.toHaveBeenCalled();
     expect(handlers.onDismiss).toHaveBeenCalledOnce();
     expect(handlers.onReturnFocus).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(code);

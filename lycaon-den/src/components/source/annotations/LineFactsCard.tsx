@@ -1,4 +1,5 @@
-import { createEffect, createMemo, For, Show } from "solid-js";
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js";
+import { isImeComposition } from "../../../platform/interaction/ime-composition.ts";
 import { AnchoredSurface } from "../../primitives/AnchoredSurface.tsx";
 import { ShowLatest } from "../../primitives/ShowLatest.tsx";
 import type { LineFacts, LineFactRow } from "./line-facts.ts";
@@ -27,6 +28,19 @@ export function LineFactsCard(props: Props) {
     queueMicrotask(() => {
       if (entryLine() === line && !surface?.contains(document.activeElement)) rows()[0]?.focus({ preventScroll: true });
     });
+  });
+  createEffect(() => {
+    if (!props.state) return;
+    // Capture Escape before editor keymaps collapse an active selection.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented || isImeComposition(event)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (surface?.contains(document.activeElement)) props.onReturnFocus();
+      else props.onDismiss();
+    };
+    document.addEventListener("keydown", onKeyDown, true);
+    onCleanup(() => document.removeEventListener("keydown", onKeyDown, true));
   });
   return <ShowLatest when={props.state}>{state => (
     <AnchoredSurface
