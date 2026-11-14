@@ -206,6 +206,12 @@ var operationJournals = []operationJournal{
 			SELECT rowid FROM command_invocations WHERE created_at < ? ORDER BY rowid LIMIT ?
 		)`,
 	},
+	{
+		name: "worker_operations",
+		query: `DELETE FROM worker_operations WHERE rowid IN (
+			SELECT rowid FROM worker_operations WHERE created_at < ? ORDER BY rowid LIMIT ?
+		)`,
+	},
 	// Purge workflow receipts only after their run terminates.
 	{
 		name: "workflow_verdict_operations",

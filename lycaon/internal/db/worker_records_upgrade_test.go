@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/testutil"
@@ -12,7 +13,8 @@ import (
 // Released jobs become workers: one per child session, one per job without a
 // child session, named from the agent. A later job on the same child settles
 // the earlier open round; only receipted landings become dispositions; held
-// prerequisites carry over; jobs of deleted sessions get no worker.
+// prerequisites carry over; jobs of deleted sessions get no worker. A blank
+// agent type becomes "worker", and long names keep whole characters.
 func TestReleasedJobsBecomeWorkers(t *testing.T) {
 	original, err := os.ReadFile(filepath.Join("..", "..", "testdata", "upgrade-corpus", "1.0.1", "store.db"))
 	testutil.FailErr(t, "read released corpus", err)
@@ -54,6 +56,8 @@ func TestReleasedJobsBecomeWorkers(t *testing.T) {
 	exec("insert prerequisite", `INSERT INTO worker_prerequisites (worker_job_id, prerequisite_id) VALUES ('j4', 'j1')`)
 	job("j5", "parent", "foreign-child", "repo-researcher", "complete", t2, t2, nil)
 	job("j6", nil, nil, "implementer", "complete", t1, t1, nil)
+	job("j7", "parent", nil, "  ", "complete", t1, t1, nil)
+	job("j8", "parent", nil, strings.Repeat("é", 70), "complete", t1, t1, nil)
 	testutil.FailErr(t, "close released store", src.Close())
 
 	testutil.FailErr(t, "upgrade", UpgradeStaged(t.Context(), path))
@@ -62,12 +66,14 @@ func TestReleasedJobsBecomeWorkers(t *testing.T) {
 	defer reader.Close()
 
 	workers := map[string]string{}
-	rows, err := reader.QueryContext(t.Context(), `SELECT name, id, COALESCE(child_session_id, ''), scope_mode, brief FROM workers WHERE session_id = 'parent' ORDER BY name`)
+	agents := map[string]string{}
+	rows, err := reader.QueryContext(t.Context(), `SELECT name, id, agent_type, COALESCE(child_session_id, ''), scope_mode, brief FROM workers WHERE session_id = 'parent' ORDER BY name`)
 	testutil.FailErr(t, "read workers", err)
 	for rows.Next() {
-		var name, id, child, scope, brief string
-		testutil.FailErr(t, "scan worker", rows.Scan(&name, &id, &child, &scope, &brief))
+		var name, id, agent, child, scope, brief string
+		testutil.FailErr(t, "scan worker", rows.Scan(&name, &id, &agent, &child, &scope, &brief))
 		workers[name] = id
+		agents[name] = agent
 		switch name {
 		case "implementer-1":
 			if child != "child-1" || scope != "write" || brief != "brief of j3" {
@@ -80,8 +86,10 @@ func TestReleasedJobsBecomeWorkers(t *testing.T) {
 		}
 	}
 	testutil.FailErr(t, "close workers", rows.Close())
-	if len(workers) != 3 || workers["implementer-1"] == "" || workers["implementer-2"] == "" || workers["repo-researcher-1"] == "" {
-		t.Fatalf("workers = %v", workers)
+	long := strings.Repeat("é", 62) + "-1"
+	if len(workers) != 5 || workers["implementer-1"] == "" || workers["implementer-2"] == "" || workers["repo-researcher-1"] == "" ||
+		agents["worker-1"] != "worker" || workers[long] == "" {
+		t.Fatalf("workers = %v agents = %v", workers, agents)
 	}
 
 	type round struct {
