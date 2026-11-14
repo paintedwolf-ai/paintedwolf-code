@@ -213,7 +213,7 @@ func TestReviewerReadsItsViewAndWritesNothing(t *testing.T) {
 	tctx := tools.ToolContext{
 		Identity: tools.InvocationIdentity{Agent: "code-reviewer", WorkerJobID: "review-job"},
 		Source: tools.InvocationSource{Roots: []projectroot.RootRef{{ID: "p", Path: primary, IsPrimary: true}},
-			ActiveRootID: "p", ReviewViewRoot: view, BranchWorkspace: testutil.CompleteBranchWorkspace{}},
+			ActiveRootID: "p", WorkerBranchRoot: view, ReadOnlyView: true, BranchWorkspace: testutil.CompleteBranchWorkspace{}},
 	}
 	res, err := projectpaths.ResolveRead(context.Background(), nil, tctx, "pkg/x.go")
 	testutil.FailErr(t, "ResolveRead", err)

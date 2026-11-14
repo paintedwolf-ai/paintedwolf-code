@@ -69,8 +69,8 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 	tctx.Identity.HandoffSessionID = parentID
 	tctx.Identity.HandoffAgentID = task.ID
 	tctx.Source.WorkerCoord = m
-	root := strings.TrimSpace(task.WorkspaceRoot)
-	if root != "" && task.EffectiveScope().IsWrite() {
+	// A write worker's branch is its own; a reviewer's view is read-only.
+	if root := strings.TrimSpace(task.WorkspaceRoot); root != "" {
 		layout, err := workspace.LoadBranchLayout(root)
 		if err != nil {
 			tctx.Source.BranchWorkspace = nil
@@ -80,6 +80,7 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
 		tctx.Source.Roots = layout.Roots
 		tctx.Source.WorkerBranchRoot = root
+		tctx.Source.ReadOnlyView = !task.EffectiveScope().IsWrite()
 		tctx.Source.RecordViewProcess = workspace.BranchProcessRecorder(root)
 		tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
 		tctx.Source.WorkerBaselinePath = task.WorkspaceBaselinePath
@@ -88,35 +89,12 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 			return tctx, err
 		}
 		tctx.Source.BranchWorkspace = branchState
-		_, _ = m.BindPreparedBranch(root, task.ID, sess.ID)
-	} else if root != "" {
-		if err := m.bindReviewView(&tctx, root); err != nil {
-			return tctx, err
+		if !tctx.Source.ReadOnlyView {
+			_, _ = m.BindPreparedBranch(root, task.ID, sess.ID)
 		}
 	}
 	m.EnsureTracker(task.ID, sess.ID, firstNonEmpty(task.WorkspacePath, sess.WorkspacePath), strings.TrimSpace(task.WorkspaceRoot), tctx.Source.Roots)
 	return tctx, nil
-}
-
-// bindReviewView points a reviewer's tools at its view of the sealed subject.
-// It has no branch root, so file tools refuse every write.
-func (m *Service) bindReviewView(tctx *tools.ToolContext, root string) error {
-	layout, err := workspace.LoadBranchLayout(root)
-	if err != nil {
-		return err
-	}
-	branchState, err := m.branchState(root)
-	if err != nil {
-		return err
-	}
-	tctx.Source.SourceWorkspaceKind = api.SourceWorkspaceKindWorker
-	tctx.Source.WorkerSourceRoots = workerSourceRootPaths(layout.Roots)
-	tctx.Source.Roots = layout.Roots
-	tctx.Source.ReviewViewRoot = root
-	tctx.Source.RecordViewProcess = workspace.BranchProcessRecorder(root)
-	tctx.Source.WorkerViewBoundary = workspace.BranchViewBoundary(root)
-	tctx.Source.BranchWorkspace = branchState
-	return nil
 }
 
 func (m *Service) BoardRoots(ctx context.Context, sess *api.Session) ([]projectroot.RootRef, error) {
@@ -181,8 +159,7 @@ func (m *Service) AfterWorkerWrite(ctx context.Context, tctx tools.ToolContext, 
 
 // EnsureBranch ensures a write worker has an isolated branch.
 func (m *Service) EnsureBranch(ctx context.Context, tctx tools.ToolContext) (tools.ToolContext, error) {
-	// A reviewer's view was bound with its tool context.
-	if m == nil || strings.TrimSpace(tctx.Source.ReviewViewRoot) != "" {
+	if m == nil {
 		return tctx, nil
 	}
 	if strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "" {

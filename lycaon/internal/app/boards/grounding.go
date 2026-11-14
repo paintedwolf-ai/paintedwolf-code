@@ -2,6 +2,7 @@ package boards
 
 import (
 	"context"
+	"errors"
 	"database/sql"
 	"fmt"
 
@@ -280,6 +281,13 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	}
 	r.deps.Sessions.Manager.SetWorkerResults(func(ctx context.Context, sessionID, name string) (string, bool, error) {
 		return roster.Reader.LatestResultJob(ctx, coordinator(sessionID), name)
+	})
+	r.deps.Sessions.Manager.SetResultJobs(func(ctx context.Context, sessionID, handle string) (string, bool, error) {
+		ref, err := r.WorkerRecords.Result(ctx, coordinator(sessionID), handle)
+		if errors.Is(err, workerrecords.ErrResultNotFound) {
+			return "", false, nil
+		}
+		return ref.JobID, err == nil, err
 	})
 	r.deps.Sessions.Manager.SetDeliveredWorkers(func(ctx context.Context, sessionID string) (int, error) {
 		return roster.Reader.CountState(ctx, coordinator(sessionID), workerstate.Delivered)

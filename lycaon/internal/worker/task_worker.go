@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
-	"github.com/lycaon/lycaon/internal/workerstate"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -194,26 +193,43 @@ func accountReplayedReview(ctx context.Context, deps TaskToolDeps, tctx tools.To
 	return deps.Reviews.ReviewStarted(ctx, taskActor(tctx), taskWorkerOp(tctx, "review"), subject)
 }
 
-// ReviewOfNotAdmittedCode refuses a review of a result whose worker is not
-// delivered: it is still working, or the result was already dealt with.
+// ReviewOfNotAdmittedCode refuses a review of a result whose changes were
+// already landed or rejected.
 const ReviewOfNotAdmittedCode = "REVIEW_OF_NOT_ADMITTED"
 
 // ReviewOfNoChangesCode refuses a review of a result that changed nothing.
 const ReviewOfNoChangesCode = "REVIEW_OF_NO_CHANGES"
 
 func reviewReject(handle string, err error) error {
-	var refusal *workerops.Refusal
+	var settled *workerops.ReviewSettledError
 	switch {
 	case errors.Is(err, workerrecords.ErrResultNotFound):
 		return &toolrejection.ToolReject{Code: "RESULT_HANDLE_UNKNOWN", Data: map[string]any{"tool": "task", "overlay_id": handle}}
 	case errors.Is(err, workerops.ErrReviewNoChanges):
 		return &toolrejection.ToolReject{Code: ReviewOfNoChangesCode, Data: map[string]any{"tool": "task", "overlay_id": handle}}
-	case errors.As(err, &refusal):
-		data := map[string]any{"tool": "task", "overlay_id": handle, "worker": refusal.Worker, "state": string(refusal.View.State), "admitted": admittedOps(refusal.View)}
-		if refusal.View.Reason != workerstate.ReasonNone {
-			data["reason"] = string(refusal.View.Reason)
+	case errors.As(err, &settled):
+		status := api.WorkerMergeStatusRejected
+		if settled.Change == workerrecords.ChangeLanded {
+			status = api.WorkerMergeStatusMerged
 		}
-		return &toolrejection.ToolReject{Code: ReviewOfNotAdmittedCode, Data: data}
+		return &toolrejection.ToolReject{Code: ReviewOfNotAdmittedCode, Data: map[string]any{"tool": "task", "overlay_id": handle, "worker": settled.Worker, "merge_status": string(status)}}
 	}
 	return err
+}
+
+// enqueueStatus holds a job that will run a worker round until the round is
+// recorded, so no executor claims it first and runs it as roundless work.
+func enqueueStatus(deps TaskToolDeps) api.WorkerStatus {
+	if deps.WorkerRecords != nil {
+		return api.WorkerStatusHeld
+	}
+	return api.WorkerStatusPending
+}
+
+// releaseAdmitted makes a held job claimable once its round is recorded.
+func releaseAdmitted(ctx context.Context, deps TaskToolDeps, jobID string) error {
+	if deps.WorkerRecords == nil {
+		return nil
+	}
+	return deps.Queue.ReleaseAdmitted(ctx, jobID)
 }

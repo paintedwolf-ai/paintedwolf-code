@@ -180,6 +180,11 @@ WHERE id = sqlc.arg(id) AND status IN ('pending', 'running', 'waiting', 'held');
 -- name: HoldWorkerJob :execrows
 UPDATE worker_jobs SET status = 'held' WHERE id = ? AND status = 'pending' AND cancel_requested_at IS NULL;
 
+-- ReleaseAdmittedWorkerJob makes a job claimable once its worker round is
+-- recorded; until then it is held so no executor runs it without one.
+-- name: ReleaseAdmittedWorkerJob :execrows
+UPDATE worker_jobs SET status = 'pending' WHERE id = ? AND status = 'held' AND cancel_requested_at IS NULL;
+
 -- ResumeWorkerJobDecision requeues a worker with its lifetime state intact.
 -- name: ResumeWorkerJobDecision :execrows
 UPDATE worker_jobs

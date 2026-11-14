@@ -194,9 +194,9 @@ type InvocationSource struct {
 	ActiveRootID        string
 	SourceWorkspaceKind api.SourceWorkspaceKind
 	WorkerBranchRoot    string
-	// ReviewViewRoot is a reviewer's own view of its sealed subject. Its
-	// tools read it and never write it; its processes are jailed in it.
-	ReviewViewRoot string
+	// ReadOnlyView marks WorkerBranchRoot as a view the worker reads and never
+	// writes: a reviewer's view of its sealed subject.
+	ReadOnlyView bool
 	// RecordViewProcess durably names a process started in the worker's view, so recovery can settle it.
 	RecordViewProcess func(pid int) error
 	// WorkerViewBoundary reads what a process of this worker must not reach, as of its launch.

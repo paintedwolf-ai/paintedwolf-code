@@ -91,6 +91,13 @@ func insertCanceledWorkerResult(ctx context.Context, tx *sql.Tx, jobID, claimTok
 }
 
 // HoldJob moves a pending job to held (CAS on pending).
+// ReleaseAdmittedJob makes a held job whose round is recorded claimable.
+func (s *SQLStore) ReleaseAdmittedJob(ctx context.Context, id string) (bool, error) {
+	return s.casInTx(ctx, id, func(q *db.Queries) (int64, error) {
+		return q.ReleaseAdmittedWorkerJob(ctx, id)
+	})
+}
+
 func (s *SQLStore) HoldJob(ctx context.Context, id string) (bool, error) {
 	return s.casInTx(ctx, id, func(q *db.Queries) (int64, error) {
 		return q.HoldWorkerJob(ctx, id)

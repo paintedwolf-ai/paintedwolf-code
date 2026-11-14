@@ -59,8 +59,9 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 	testutil.FailErr(t, "create worker", err)
 	f.workerID = w.WorkerID
 	f.ops = &workerops.Service{
-		Reader: workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
-		Agents: prompts.AgentMutationCapable,
+		Reader:  workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
+		Agents:  prompts.AgentMutationCapable,
+		Release: f.queue.ReleaseAdmitted,
 	}
 	testutil.FailErr(t, "register", RegisterWorkerTools(f.reg, WorkerToolDeps{Ops: f.ops, Queue: f.queue}))
 	return f
@@ -604,12 +605,22 @@ func TestTaskStartsAReviewerOnASealedResult(t *testing.T) {
 	_, err = f.run(t, InstructWorkerTool, "become", map[string]any{"worker": "checker-ok", "instructions": "fix it", "agent_type": "implementer"})
 	wantReject(t, err, "INSTRUCT_WORKER_AGENT_SEALED")
 
-	// A worker still working has no result to review.
+	// A result stays reviewable while its worker makes the next one.
 	testutil.FailErr(t, "insert job", f.queue.store.InsertTask(t.Context(), api.WorkerTask{
 		ID: "job-2", ProjectID: testdbseed.DefaultProjectID, ParentSessionID: "coord", ChildSessionID: "child",
 		AgentType: "repo-researcher", Status: api.WorkerStatusRunning, ExecutionTarget: api.ExecutionTargetLocal, Prompt: "more", Brief: "more",
 	}))
 	_, err = f.records.AdmitRound(t.Context(), f.coord, workerrecords.Op{ID: "admit-job-2"}, f.workerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
 	testutil.FailErr(t, "admit", err)
-	wantReject(t, review("working", "result-job-1", nil), ReviewOfNotAdmittedCode)
+	testutil.FailErr(t, "review while working", review("working", "result-job-1", nil))
+
+	// Rejected changes leave nothing to review.
+	_, err = f.db.ExecContext(t.Context(), `UPDATE worker_result_dispositions SET change_state = 'rejected', change_operation_id = 'reject-1', changed_at = ? WHERE result_id = 'result-job-1'`, db.FormatTime(time.Now().UTC()))
+	testutil.FailErr(t, "reject result", err)
+	err = review("rejected", "result-job-1", nil)
+	wantReject(t, err, ReviewOfNotAdmittedCode)
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Data["merge_status"] != "rejected" || reject.Data["worker"] != "surveyor" {
+		t.Fatalf("refusal data = %+v", reject)
+	}
 }

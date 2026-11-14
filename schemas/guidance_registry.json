@@ -2285,10 +2285,10 @@
       "summary": "That result handle names no result of this session's workers."
     },
     "REVIEW_OF_NOT_ADMITTED": {
-      "branch_instruction": "Branch on Code REVIEW_OF_NOT_ADMITTED; do not retry until the worker's state changes",
+      "branch_instruction": "Branch on Code REVIEW_OF_NOT_ADMITTED; review the worker's current result instead",
       "category": "recoverable",
       "emit": "guard:task",
-      "summary": "Worker `{{ paintedwolf.worker }}` is {{ paintedwolf.state }}, which does not admit a review of its result now."
+      "summary": "The changes in that result from worker `{{ paintedwolf.worker }}` were already {{ paintedwolf.merge_status }}; there is nothing left to review."
     },
     "REVIEW_OF_NO_CHANGES": {
       "branch_instruction": "Branch on Code REVIEW_OF_NO_CHANGES; do not retry the same call",

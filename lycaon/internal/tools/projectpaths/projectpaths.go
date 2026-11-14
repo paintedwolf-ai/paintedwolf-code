@@ -197,24 +197,13 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 		}
 		return scratchResolved, nil
 	}
-	// WorkerJobID without WorkerBranchRoot: reject non-reads (no mutation).
-	if op != sandbox.PathOpRead && strings.TrimSpace(tctx.Identity.WorkerJobID) != "" && strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" {
+	// A worker writes only its own branch: never without one, never a read-only view.
+	if op != sandbox.PathOpRead && strings.TrimSpace(tctx.Identity.WorkerJobID) != "" && (strings.TrimSpace(tctx.Source.WorkerBranchRoot) == "" || tctx.Source.ReadOnlyView) {
 		return Resolved{}, workerWriteWithoutBranchReject(modelPath)
 	}
 	// No root, branch, or grant may answer for the control plane.
 	if reject := controlPlaneReject(tctx, modelPath, op); reject != nil {
 		return Resolved{}, reject
-	}
-	// A reviewer reads its view of the subject; writing it was refused above.
-	if view := strings.TrimSpace(tctx.Source.ReviewViewRoot); view != "" {
-		resolved, err := resolveUnderBranch(ctx, b, tctx, view, modelPath, op)
-		if err == nil {
-			return resolved, nil
-		}
-		if granted, ok := resolveGranted(tctx, modelPath, op); ok {
-			return granted, nil
-		}
-		return Resolved{}, err
 	}
 	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 		resolved, err := resolveUnderBranch(ctx, b, tctx, branch, modelPath, op)
@@ -284,8 +273,8 @@ func resolveUnderAdmittedRoots(ctx context.Context, b *sandbox.Boundary, tctx to
 }
 
 func actionRootPaths(tctx tools.ToolContext) []string {
-	if view := tools.WorkerViewRoot(tctx); view != "" {
-		return []string{view}
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
+		return []string{branch}
 	}
 	return workspaceRoots(tctx)
 }
@@ -362,7 +351,7 @@ func UnionDiscoveryRoots(ctx context.Context, tctx tools.ToolContext, modelPath 
 		return nil, noRootsReject()
 	}
 	if projectroot.IsUnionDiscoveryPath(modelPath) {
-		if branch := tools.WorkerViewRoot(tctx); branch != "" {
+		if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
 			if len(tctx.Source.Roots) > 1 {
 				refs := make([]projectroot.RootRef, 0, len(tctx.Source.Roots))
 				for _, r := range tctx.Source.Roots {
@@ -407,8 +396,8 @@ func CommandCwd(ctx context.Context, tctx tools.ToolContext, cwdArg string) (abs
 	if area, _, _, session := sessionRel(tctx, cwdClean); session && area == projectroot.VirtualScratchLabel {
 		return commandCwdInScratch(ctx, tctx, cwdClean)
 	}
-	if view := tools.WorkerViewRoot(tctx); view != "" {
-		return commandCwdUnderBranch(ctx, tctx, view, cwdArg)
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
+		return commandCwdUnderBranch(ctx, tctx, branch, cwdArg)
 	}
 	if len(tctx.Source.Roots) == 0 {
 		return "", "", noRootsReject()

@@ -95,6 +95,7 @@ func (b *serveBuilder) registerCoordinatorTools() error {
 		Reader:    workerops.Reader{Records: b.boards.WorkerRecords, Jobs: b.delegations.Queue, Decisions: b.sessions.Decisions},
 		Agents:    prompts.AgentMutationCapable,
 		Accounted: b.boards.ReleaseAccounted,
+		Release:   b.delegations.Queue.ReleaseAdmitted,
 	}
 	taskDeps := taskToolDeps(b)
 	taskDeps.Reviews = workerOps

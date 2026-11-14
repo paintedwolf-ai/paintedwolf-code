@@ -82,6 +82,9 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				if err := accountReplayedReview(ctx, deps, tctx, prior.ID); err != nil {
 					return "", err
 				}
+				if err := releaseAdmitted(ctx, deps, prior.ID); err != nil {
+					return "", err
+				}
 				return taskEnqueueOutput(tctx, scope, *prior, name)
 			}
 		}
@@ -154,7 +157,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			WorkspaceRootID: projScope.WorkspaceRootID,
 			WorkspacePath:   projScope.WorkspacePath,
 			SpawnReason:     api.SpawnReasonHumanRequest,
-			Status:          api.WorkerStatusPending,
+			Status:          enqueueStatus(deps),
 			ExecutionTarget: DefaultExecutionTarget(deps.Workers),
 		}
 		if err := ApplyEnqueueDefaults(&task, projScope, deps.Workers); err != nil {
@@ -198,6 +201,9 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			if err := deps.Reviews.ReviewStarted(ctx, taskActor(tctx), taskWorkerOp(tctx, "review"), *subject); err != nil {
 				return "", err
 			}
+		}
+		if err := releaseAdmitted(ctx, deps, task.ID); err != nil {
+			return "", err
 		}
 		return taskEnqueueOutput(tctx, projScope, task, workerName)
 	})

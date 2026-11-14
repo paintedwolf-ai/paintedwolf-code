@@ -5,21 +5,27 @@ on: tool.rejected
 selector:
   tools:
     - task
-requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.state, paintedwolf.worker]
+requires_facts: [paintedwolf.merge_status, paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "REVIEW_OF_NOT_ADMITTED"
 effect: block
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:task
-message: The worker that delivered this result does not admit a review now.
-what: 'Worker `{{ paintedwolf.worker }}` is {{ paintedwolf.state }}, which does not admit a review of its result now.'
-cause: A review binds to a result its worker has delivered and the coordinator has not yet dealt with.
-why: A reviewer reads one sealed result; a worker still working has none, and a result already landed, rejected or shelved needs no review.
+message: The changes in that result were already settled, so there is nothing left to review.
+what: 'The changes in that result from worker `{{ paintedwolf.worker }}` were already {{ paintedwolf.merge_status }}; there is nothing left to review.'
+cause: A review reads changes the coordinator has not yet landed or rejected.
+why: Landed changes are part of the source and rejected ones are gone; a reviewer reads a result still awaiting a decision.
 fix: '{{ paintedwolf.next_steps }}'
-instead: Branch on Code REVIEW_OF_NOT_ADMITTED; do not retry until the worker's state changes
+instead: Branch on Code REVIEW_OF_NOT_ADMITTED; review the worker's current result instead
 x-paintedwolf-scenarios:
-  - id: default
+  - id: merged
     vars:
       session_role: coordinator
       worker: parser-fix
       tool: task
-      state: working
+      merge_status: merged
+  - id: rejected
+    vars:
+      session_role: coordinator
+      worker: parser-fix
+      tool: task
+      merge_status: rejected

@@ -10,28 +10,25 @@ import (
 	"github.com/lycaon/lycaon/internal/toolrejection"
 )
 
-// HostWriteRoot prefers a worker's isolated branch, then a reviewer's view.
+// HostWriteRoot prefers a worker's isolated branch.
 func HostWriteRoot(tctx ToolContext) string {
-	if view := WorkerViewRoot(tctx); view != "" {
-		return view
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
+		return branch
 	}
 	return strings.TrimSpace(tctx.ActiveRootPath())
 }
 
-// WorkerViewRoot is the private view a worker's processes run in: a write
-// leg's branch or a reviewer's view of its subject.
-func WorkerViewRoot(tctx ToolContext) string {
-	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
-		return branch
-	}
-	return strings.TrimSpace(tctx.Source.ReviewViewRoot)
-}
-
 // ConfineRootsForAction shares write authority between policy and confinement.
-// A worker's processes are jailed in its own view.
 func ConfineRootsForAction(tctx ToolContext) []string {
-	if view := WorkerViewRoot(tctx); view != "" {
-		return workerBranchRoots(view, tctx.Source.Roots)
+	if tctx.Source.ReadOnlyView {
+		// A read-only view is read back below; processes write only scratch.
+		if scratch := strings.TrimSpace(tctx.Host.SessionScratchDir); scratch != "" {
+			return []string{scratch}
+		}
+		return nil
+	}
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
+		return workerBranchRoots(branch, tctx.Source.Roots)
 	}
 	out := make([]string, 0, len(tctx.Source.Roots)+1)
 	if s := HostWriteRoot(tctx); s != "" {
@@ -64,8 +61,8 @@ func workerBranchRoots(branch string, sources []projectroot.RootRef) []string {
 // branch may sit below a denied primary ancestor, so its exact branch is added.
 func ConfineReadRootsForAction(tctx ToolContext) []string {
 	out := append([]string(nil), tctx.Files.ReadRoots...)
-	if view := WorkerViewRoot(tctx); view != "" {
-		out = append(out, view)
+	if branch := strings.TrimSpace(tctx.Source.WorkerBranchRoot); branch != "" {
+		out = append(out, branch)
 	}
 	return UniqueRoots(out)
 }

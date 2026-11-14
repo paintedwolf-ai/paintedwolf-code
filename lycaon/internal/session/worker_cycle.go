@@ -118,6 +118,13 @@ func (m *Host) SetWorkerResults(results turnguards.LatestResultJobs) {
 	}
 }
 
+// SetResultJobs sets how a result handle resolves to its job.
+func (m *Host) SetResultJobs(results turnguards.ResultJobs) {
+	if m != nil && m.Coordinator.Guards != nil {
+		m.Coordinator.Guards.SetResultJobs(results)
+	}
+}
+
 // SetDeliveredWorkers sets how surface selection counts delivered workers.
 func (m *Host) SetDeliveredWorkers(count workeroutcomes.DeliveredWorkers) {
 	if m != nil && m.Workers.State != nil {
