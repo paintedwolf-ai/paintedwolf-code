@@ -125,6 +125,22 @@ describe("keeping a position in view", () => {
     expect(corrections).toBeLessThanOrEqual(SETTLED_SCROLL_REPEATS + 1);
   });
 
+  it("counts a revised width as still measuring", () => {
+    let corrections = 0;
+    let last = -1;
+    const probe = fakeView((scrollTop) => {
+      if (scrollTop !== last) corrections += 1;
+      last = scrollTop;
+      return scrollTop + 5_000;
+    });
+    let width = 10_000;
+    Object.defineProperty(probe.scrollDOM, "scrollWidth", { get: () => (width += 100) });
+    Object.defineProperty(probe.scrollDOM, "scrollHeight", { get: () => 600 });
+    keepPositionInView(probe.view, () => 0);
+    settle(probe, 2_000);
+    expect(corrections).toBeGreaterThan(SETTLED_SCROLL_REPEATS + 1);
+  });
+
   it("keeps correcting while the editor is still measuring, within a frame cap", () => {
     let corrections = 0;
     let last = -1;
@@ -136,6 +152,7 @@ describe("keeping a position in view", () => {
     // Each frame's measurement revises the document height.
     let height = 10_000;
     Object.defineProperty(probe.scrollDOM, "scrollHeight", { get: () => (height += 100) });
+    Object.defineProperty(probe.scrollDOM, "scrollWidth", { get: () => 800 });
     keepPositionInView(probe.view, () => 0);
     const run = settle(probe, 2_000);
     expect(corrections).toBeGreaterThan(SETTLED_SCROLL_REPEATS + 1);
