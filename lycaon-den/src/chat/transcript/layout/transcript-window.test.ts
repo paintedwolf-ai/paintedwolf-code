@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { Message } from "../../../api/types.ts";
 import {
   DEFAULT_TRANSCRIPT_PAGE_LIMIT,
-  TRANSCRIPT_PAGE_BUDGET,
+  TRANSCRIPT_RESIDENT_ORD_BUDGET,
+  TRANSCRIPT_RESIDENT_ORD_HARD_CAP,
   TRANSCRIPT_TAIL_BUDGET,
   appendToTail,
   applyTranscriptPage,
@@ -16,11 +17,13 @@ import {
   precedesLiveTail,
   presentedOrdSpan,
   refreshTailWindow,
+  residentPageOrds,
   transcriptPageQuery,
   transcriptPageRequest,
   transcriptSeekRequest,
   trimOldestPages,
   unloadedTranscriptOrds,
+  type TranscriptEvictedPage,
   type TranscriptWindow,
   type TranscriptWindowPage,
 } from "./transcript-window.ts";
@@ -78,23 +81,31 @@ describe("TranscriptWindow", () => {
     expect(tw.tail[0]?.seq).toBe(2);
   });
 
-  it("loads older pages and evicts beside the tail beyond the page budget", () => {
+  it("loads older pages and evicts beside the tail beyond the resident message budget", () => {
     let tw = installTailWindow(
       emptyTranscriptWindow(),
-      page([msg("t", 100)], true, false),
+      page([msg("t", 1_000)], true, false),
       { resetPages: true },
     );
-    for (let i = 0; i < TRANSCRIPT_PAGE_BUDGET + 2; i++) {
-      const base = 90 - i * 10;
+    const fullPages = TRANSCRIPT_RESIDENT_ORD_BUDGET / DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+    for (let i = 0; i < fullPages + 2; i++) {
+      const end = 900 - i * DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+      const start = end - DEFAULT_TRANSCRIPT_PAGE_LIMIT + 1;
       tw = loadOlderWindow(
         tw,
-        page([msg(`p${i}a`, base), msg(`p${i}b`, base + 1)], true, true),
+        page(
+          Array.from({ length: DEFAULT_TRANSCRIPT_PAGE_LIMIT }, (_, j) =>
+            msg(`p${start + j}`, start + j),
+          ),
+          start > 1,
+          true,
+        ),
       );
     }
-    expect(Object.keys(tw.pages).length).toBe(TRANSCRIPT_PAGE_BUDGET);
+    expect(residentPageOrds(tw.pages)).toBeLessThanOrEqual(TRANSCRIPT_RESIDENT_ORD_BUDGET);
     expect(tw.hasTailGap).toBe(true);
     expect(materializeTranscriptWindow(tw).length).toBeLessThanOrEqual(
-      TRANSCRIPT_PAGE_BUDGET * 2 + 1,
+      TRANSCRIPT_RESIDENT_ORD_BUDGET + 1,
     );
     expect(tw.tail).toHaveLength(1);
   });
@@ -102,15 +113,26 @@ describe("TranscriptWindow", () => {
   it("records a tail gap only after page eviction", () => {
     let tw = installTailWindow(
       emptyTranscriptWindow(),
-      page([msg("tail", 100)], true, false),
+      page([msg("tail", 1_000)], true, false),
       { resetPages: true },
     );
-    for (let index = 0; index < TRANSCRIPT_PAGE_BUDGET; index += 1) {
-      tw = loadOlderWindow(tw, page([msg(`p${index}`, 90 - index)], true));
+    const fullPages = TRANSCRIPT_RESIDENT_ORD_BUDGET / DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+    for (let index = 0; index < fullPages; index += 1) {
+      const end = 900 - index * DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+      const start = end - DEFAULT_TRANSCRIPT_PAGE_LIMIT + 1;
+      tw = loadOlderWindow(
+        tw,
+        page(
+          Array.from({ length: DEFAULT_TRANSCRIPT_PAGE_LIMIT }, (_, j) =>
+            msg(`p${start + j}`, start + j),
+          ),
+          true,
+        ),
+      );
     }
     expect(tw.hasTailGap).toBe(false);
 
-    tw = loadOlderWindow(tw, page([msg("evicting", 70)], true));
+    tw = loadOlderWindow(tw, page([msg("evicting", 100)], true));
     expect(tw.hasTailGap).toBe(true);
   });
 
@@ -166,14 +188,14 @@ describe("TranscriptWindow", () => {
 
   it("evicts the oldest rolled page over budget and re-arms hasMoreBefore", () => {
     let tw = emptyTranscriptWindow();
-    // Enough appends to roll TRANSCRIPT_PAGE_BUDGET + 2 pages.
-    const rolls = TRANSCRIPT_PAGE_BUDGET + 2;
+    const fullPages = TRANSCRIPT_RESIDENT_ORD_BUDGET / DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+    const rolls = fullPages + 2;
     const total =
       TRANSCRIPT_TAIL_BUDGET + rolls * DEFAULT_TRANSCRIPT_PAGE_LIMIT;
     for (let i = 0; i < total; i++) {
       tw = appendToTail(tw, msg(`m${i}`, i));
     }
-    expect(Object.keys(tw.pages).length).toBe(TRANSCRIPT_PAGE_BUDGET);
+    expect(residentPageOrds(tw.pages)).toBeLessThanOrEqual(TRANSCRIPT_RESIDENT_ORD_BUDGET);
     expect(tw.hasMoreBefore).toBe(true);
     // The retained window is the newest contiguous run: no interior holes.
     const ords = materializeTranscriptWindow(tw).map((m) => m.ord ?? 0);
@@ -249,11 +271,12 @@ describe("TranscriptWindow page requests", () => {
 
   it("evicts the oldest pages while reading forward and reopens older history", () => {
     let tw = tailAt(1901, 2000);
+    const fullPages = TRANSCRIPT_RESIDENT_ORD_BUDGET / DEFAULT_TRANSCRIPT_PAGE_LIMIT;
     tw = applyTranscriptPage(tw, transcriptPageRequest(tw, "start")!, page(rows(1, 100), false, true))!;
-    for (let i = 0; i < TRANSCRIPT_PAGE_BUDGET + 1; i++) {
+    for (let i = 0; i < fullPages + 1; i++) {
       tw = applyTranscriptPage(tw, transcriptPageRequest(tw, "newer")!, page(rows(101 + i * 100, 200 + i * 100), true, true))!;
     }
-    expect(Object.keys(tw.pages)).toHaveLength(TRANSCRIPT_PAGE_BUDGET);
+    expect(residentPageOrds(tw.pages)).toBe(TRANSCRIPT_RESIDENT_ORD_BUDGET);
     expect(tw.hasMoreBefore).toBe(true);
     expect(transcriptPageRequest(tw, "older")).toEqual({ edge: "older", beforeMessageId: "m201" });
   });
@@ -337,7 +360,8 @@ describe("refreshTailWindow", () => {
 
   it("retains the reader's page during tail overflow until the reader moves away", () => {
     let tw = emptyTranscriptWindow();
-    const rolls = TRANSCRIPT_PAGE_BUDGET + 2;
+    const fullPages = TRANSCRIPT_RESIDENT_ORD_BUDGET / DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+    const rolls = fullPages + 2;
     const total = TRANSCRIPT_TAIL_BUDGET + rolls * DEFAULT_TRANSCRIPT_PAGE_LIMIT;
     const keepOrds = { firstOrd: 10, lastOrd: 20 };
     for (let i = 1; i <= total; i++) {
@@ -348,21 +372,67 @@ describe("refreshTailWindow", () => {
 
     // Once the reader moves away from the oldest page, trimming reclaims it.
     const trimmed = trimOldestPages(tw);
-    expect(Object.keys(trimmed.pages).length).toBe(TRANSCRIPT_PAGE_BUDGET);
+    expect(residentPageOrds(trimmed.pages)).toBeLessThanOrEqual(TRANSCRIPT_RESIDENT_ORD_BUDGET);
     expect(materializeTranscriptWindow(trimmed).some((m) => m.ord === 15)).toBe(false);
   });
 
   it("evicts an unprotected page instead of the reader's keepOrds page when exceeding the hard cap", () => {
     let tw = emptyTranscriptWindow();
     const keepOrds = { firstOrd: 10, lastOrd: 20 };
-    const rolls = 22;
+    const rolls = TRANSCRIPT_RESIDENT_ORD_HARD_CAP / DEFAULT_TRANSCRIPT_PAGE_LIMIT + 2;
     const total = TRANSCRIPT_TAIL_BUDGET + rolls * DEFAULT_TRANSCRIPT_PAGE_LIMIT;
     for (let i = 1; i <= total; i++) {
       tw = appendToTail(tw, msg(`m${i}`, i), { keepOrds });
     }
-    expect(Object.keys(tw.pages).length).toBeLessThanOrEqual(20);
+    expect(residentPageOrds(tw.pages)).toBeLessThanOrEqual(TRANSCRIPT_RESIDENT_ORD_HARD_CAP);
     expect(materializeTranscriptWindow(tw).some((m) => m.ord === 15)).toBe(true);
     expect(tw.hasTailGap).toBe(true);
+  });
+
+  it("keeps seven byte-bounded older pages resident when their total messages fit the budget", () => {
+    // 254 messages across 7 older pages + 51-message tail = 305 messages total.
+    const lengths = [31, 34, 48, 33, 39, 34, 35];
+    let tw = installTailWindow(
+      emptyTranscriptWindow(),
+      page(rows(255, 305), true, false),
+      { resetPages: true },
+    );
+    let end = 254;
+    for (const len of lengths) {
+      const start = end - len + 1;
+      const req = transcriptPageRequest(tw, "older")!;
+      tw = applyTranscriptPage(tw, req, page(rows(start, end), start > 1, true))!;
+      end = start - 1;
+    }
+    expect(Object.keys(tw.pages)).toHaveLength(7);
+    expect(residentPageOrds(tw.pages)).toBe(254);
+    expect(tw.hasTailGap).toBe(false);
+    expect(tw.hasMoreBefore).toBe(false);
+    expect(contiguousWindowRows(tw).map((m) => m.ord)).toEqual(
+      rows(1, 305).map((m) => m.ord),
+    );
+  });
+
+  it("never evicts the newly applied page even if a single page exceeds the budget", () => {
+    let tw = installTailWindow(
+      emptyTranscriptWindow(),
+      page(rows(701, 750), true, false),
+      { resetPages: true },
+    );
+    const evicted: TranscriptEvictedPage[] = [];
+    tw = loadOlderWindow(tw, page(rows(601, 700), true, true));
+    tw = loadOlderWindow(tw, page(rows(1, 600), false, true), { evicted });
+    expect(tw.pages["1:600"]).toHaveLength(600);
+    expect(tw.pages["601:700"]).toBeUndefined();
+    expect(evicted).toEqual([
+      {
+        firstOrd: 601,
+        lastOrd: 700,
+        side: "newer",
+        residentOrds: 600,
+        deferredByReach: false,
+      },
+    ]);
   });
 });
 

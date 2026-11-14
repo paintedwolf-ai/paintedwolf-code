@@ -4,7 +4,7 @@ import { render } from "@solidjs/testing-library";
 import { SessionTranscript } from "../../../components/transcript/transcript-viewport-test-harness.tsx";
 import {
   DEFAULT_TRANSCRIPT_PAGE_LIMIT,
-  TRANSCRIPT_PAGE_BUDGET,
+  TRANSCRIPT_RESIDENT_ORD_BUDGET,
   materializeTranscriptWindow,
 } from "./transcript-window.ts";
 import {
@@ -14,7 +14,7 @@ import {
 import { sparseWindowForSessionLength } from "./transcript-scale-fixture.ts";
 
 const TRANSCRIPT_RESIDENT_MESSAGE_BUDGET =
-  (TRANSCRIPT_PAGE_BUDGET + 1) * DEFAULT_TRANSCRIPT_PAGE_LIMIT;
+  TRANSCRIPT_RESIDENT_ORD_BUDGET + DEFAULT_TRANSCRIPT_PAGE_LIMIT;
 const SESSION_LENGTH = 5000;
 const DOUBLE_SESSION_LENGTH = 10_000;
 

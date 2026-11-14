@@ -24,7 +24,8 @@ import type { SessionChatScope, SessionChatSnapshot } from "./session-chat-snaps
 import { cachedProjectsFromRegistry } from "../../store/boot-cache-model.ts";
 import {
   materializeTranscriptWindow,
-  TRANSCRIPT_PAGE_BUDGET,
+  residentPageOrds,
+  TRANSCRIPT_RESIDENT_ORD_BUDGET,
   TRANSCRIPT_TAIL_BUDGET,
   type TranscriptWindow,
 } from "../transcript/layout/transcript-window.ts";
@@ -156,12 +157,11 @@ export function trimSnapshotForPersist(
     (a, b) => (b[1][0]?.ord ?? 0) - (a[1][0]?.ord ?? 0),
   );
   let trimmedPages = false;
-  while (tailFirstPages.length > TRANSCRIPT_PAGE_BUDGET) {
+  while (residentPageOrds(pages) > TRANSCRIPT_RESIDENT_ORD_BUDGET) {
     const evict = tailFirstPages.shift();
-    if (evict) {
-      delete pages[evict[0]];
-      trimmedPages = true;
-    }
+    if (!evict) break;
+    delete pages[evict[0]];
+    trimmedPages = true;
   }
   // Persistence preserves the complete bounded live tail.
   const tail = snap.transcript.tail.slice(-TRANSCRIPT_TAIL_BUDGET);

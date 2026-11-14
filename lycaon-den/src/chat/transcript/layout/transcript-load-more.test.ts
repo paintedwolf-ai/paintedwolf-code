@@ -772,7 +772,7 @@ describe("createTranscriptPaging", () => {
       await vi.waitFor(() => {
         expect(appStore.state.transcript.pages["1:100"]).toBeUndefined();
       });
-      expect(Object.keys(appStore.state.transcript.pages).length).toBe(5);
+      expect(Object.keys(appStore.state.transcript.pages).length).toBe(4);
     } finally {
       stop.dispose();
       el.remove();

@@ -1,10 +1,11 @@
 import type { Message } from "../../../api/types.ts";
 import {
   DEFAULT_TRANSCRIPT_PAGE_LIMIT,
-  TRANSCRIPT_PAGE_BUDGET,
+  TRANSCRIPT_RESIDENT_ORD_BUDGET,
   emptyTranscriptWindow,
   installTailWindow,
   loadOlderWindow,
+  residentPageOrds,
   type TranscriptWindow,
 } from "./transcript-window.ts";
 
@@ -43,9 +44,13 @@ export function sparseWindowForSessionLength(n: number): TranscriptWindow {
     },
     { resetPages: true },
   );
-  // Fill the page budget to exercise maximum residency.
+  // Fill the older-page message budget to exercise maximum residency.
   let cursor = tail[0]?.ord;
-  for (let p = 0; p < TRANSCRIPT_PAGE_BUDGET && cursor != null && cursor > 1; p++) {
+  while (
+    residentPageOrds(tw.pages) < TRANSCRIPT_RESIDENT_ORD_BUDGET &&
+    cursor != null &&
+    cursor > 1
+  ) {
     const end = cursor - 1;
     const start = Math.max(1, end - DEFAULT_TRANSCRIPT_PAGE_LIMIT + 1);
     const rows = messagesInRange(start, end);
