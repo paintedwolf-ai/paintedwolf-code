@@ -47,8 +47,8 @@ var taskToolLog = observability.LazyComponent("task_tool")
 
 // RegisterTaskTool registers task(agent_type, brief, files?) for coordinator spawns.
 func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
-	if reg == nil || deps.Queue == nil || deps.Agents == nil {
-		return fmt.Errorf("registry, sessions, queue, and agents required")
+	if reg == nil || deps.Queue == nil || deps.Agents == nil || deps.WorkerRecords == nil {
+		return fmt.Errorf("registry, queue, agents and worker records required")
 	}
 	identityResolver := deps.IdentityResolver()
 	return reg.Register("task", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {

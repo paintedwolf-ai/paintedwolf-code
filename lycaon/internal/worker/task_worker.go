@@ -34,17 +34,9 @@ func taskWorkerOp(tctx tools.ToolContext, part string) workerrecords.Op {
 	return workerrecords.Op{ID: "task:" + strings.TrimSpace(tctx.Identity.SessionID) + ":" + strings.TrimSpace(tctx.Identity.ToolCallID) + ":" + part}
 }
 
-func taskActor(tctx tools.ToolContext) workerrecords.Actor {
-	id := strings.TrimSpace(tctx.Identity.SessionID)
-	return workerrecords.Actor{SessionID: id, Role: workerrecords.RoleCoordinator, PrincipalID: id}
-}
-
 // createTaskWorker records the worker a task starts. Without a name the host
 // derives one from the agent.
 func createTaskWorker(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, task api.WorkerTask, name, brief string) (workerrecords.WorkerReceipt, error) {
-	if deps.WorkerRecords == nil {
-		return workerrecords.WorkerReceipt{}, nil
-	}
 	if strings.TrimSpace(tctx.Identity.ToolCallID) == "" {
 		return workerrecords.WorkerReceipt{}, fmt.Errorf("task requires a tool call identity")
 	}
@@ -52,7 +44,7 @@ func createTaskWorker(ctx context.Context, deps TaskToolDeps, tctx tools.ToolCon
 	if task.EffectiveScope().IsWrite() {
 		mode = workerrecords.ScopeWrite
 	}
-	receipt, err := deps.WorkerRecords.CreateWorker(ctx, taskActor(tctx), taskWorkerOp(tctx, "worker"), workerrecords.WorkerSpec{
+	receipt, err := deps.WorkerRecords.CreateWorker(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "worker"), workerrecords.WorkerSpec{
 		Name: name, AgentType: task.AgentType, ScopeMode: mode, Brief: brief,
 		WorkflowRunID: task.WorkflowRunID, WorkflowPhase: task.WorkflowPhase, WorkflowWorkID: task.WorkflowWorkID,
 	})
@@ -66,10 +58,7 @@ func createTaskWorker(ctx context.Context, deps TaskToolDeps, tctx tools.ToolCon
 // returns the worker's name. A replayed task call finds the worker its first
 // call created.
 func startWorkerRound(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, task api.WorkerTask) (string, error) {
-	if deps.WorkerRecords == nil {
-		return "", nil
-	}
-	actor := taskActor(tctx)
+	actor := coordinatorActor(tctx)
 	kind, raw, ok, err := deps.WorkerRecords.Operation(ctx, actor, taskWorkerOp(tctx, "worker").ID)
 	if err != nil {
 		return "", err
@@ -96,10 +85,7 @@ func startWorkerRound(ctx context.Context, deps TaskToolDeps, tctx tools.ToolCon
 // into its job. A prerequisite follows its producer's later rounds on its
 // own, so the latest round is where it starts.
 func resolveTaskAddresses(ctx context.Context, deps TaskToolDeps, tctx tools.ToolContext, after []string, scope *api.TaskScope) ([]string, error) {
-	if deps.WorkerRecords == nil {
-		return after, nil
-	}
-	actor := taskActor(tctx)
+	actor := coordinatorActor(tctx)
 	jobs := make([]string, 0, len(after))
 	for _, name := range after {
 		w, err := deps.WorkerRecords.Resolve(ctx, actor, name)
