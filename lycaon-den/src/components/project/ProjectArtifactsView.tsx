@@ -36,13 +36,14 @@ import {
   type ArtifactChatFilter,
   type ArtifactSourceFilter,
   artifactSourceLabel,
-  filterProjectArtifacts,
   shortChatLabel,
-  uniqueArtifactChatIds,
 } from "./project-artifacts-filter.ts";
 import { ArtifactGalleryTile } from "./ArtifactGalleryTile.tsx";
 import { requestFirstTimeTip } from "../../first-time-tips/first-time-tips-service.ts";
-import { notifyArtifactChanged, subscribeArtifactChanges } from "../../chat/visual/artifact-change-store.ts";
+import {
+  createArtifactRefreshSubscription,
+  notifyArtifactChanged,
+} from "../../chat/visual/artifact-change-store.ts";
 import { deleteConfirmBody } from "../../files/components/artifact-reference-impact.ts";
 import { createResidentActivity } from "../../ui/resident-activity.ts";
 
@@ -73,98 +74,135 @@ export function ProjectArtifactsView(props: Props) {
     createSignal<ArtifactSourceFilter>("all");
   const [chatFilter, setChatFilter] = createSignal<ArtifactChatFilter>("all");
   const [lightboxIndex, setLightboxIndex] = createSignal<number | null>(null);
-  // Tiles keep identity across reorders, so sources are keyed by artifact.
+  // Tiles report and clear their own URLs on mount, replacement, and unmount.
   const [srcById, setSrcById] = createSignal<Record<string, string>>({});
 
   const [pendingDelete, setPendingDelete] =
     createSignal<ArtifactListItem | null>(null);
   const [deleting, setDeleting] = createSignal(false);
   const [deleteError, setDeleteError] = createSignal("");
-  const [pages, setPages] = createSignal<ArtifactListResponse[]>([]);
+  const [pageCursors, setPageCursors] = createSignal<string[]>([""]);
   const [pageIndex, setPageIndex] = createSignal(0);
-  const [loadingPage, setLoadingPage] = createSignal(false);
-  const [pageError, setPageError] = createSignal("");
+
+  let galleryEl: HTMLDivElement | undefined;
+  createEffect(
+    on(
+      [sourceFilter, chatFilter, () => props.projectId],
+      () => {
+        setPageCursors([""]);
+        setPageIndex(0);
+        setLightboxIndex(null);
+        if (galleryEl) galleryEl.scrollTop = 0;
+      },
+      { defer: true },
+    ),
+  );
+
+  const fetchArgs = () => ({
+    projectId: props.projectId.trim(),
+    source: sourceFilter(),
+    chat: chatFilter(),
+    cursor: pageCursors()[pageIndex()] ?? "",
+    page: pageIndex(),
+  });
+
   const artifacts = createSurfaceQuery({
     name: "project-artifacts",
-    source: () => { const c = client(); return c ? { client: c, key: props.projectId } : null; },
-    load: ({ client, key }) => client.listProjectArtifacts(key, { limit: ARTIFACTS_PAGE_SIZE }),
+    source: () => {
+      props.appStore.state.sidecarStatus;
+      const c = client();
+      const args = fetchArgs();
+      return c && args.projectId
+        ? { client: c, key: JSON.stringify(args), args }
+        : null;
+    },
+    scope: ({ args }) => args.projectId,
+    load: ({ client: c, args }): Promise<ArtifactListResponse> => {
+      const query: {
+        limit: number;
+        cursor?: string;
+        source?: Exclude<ArtifactSourceFilter, "all">;
+        session_id?: string;
+      } = { limit: ARTIFACTS_PAGE_SIZE };
+      if (args.cursor) query.cursor = args.cursor;
+      if (args.source !== "all") query.source = args.source;
+      if (args.chat !== "all") query.session_id = args.chat;
+      return c.listProjectArtifacts(args.projectId, query);
+    },
     required: false,
   });
   const refetchList = artifacts.refresh;
-  let pageGeneration = 0;
-  onCleanup(() => { pageGeneration++; });
-  createEffect(() => {
-    const response = artifacts.value();
-    if (!response) return;
-    pageGeneration++;
-    setLoadingPage(false);
-    setPages([{ ...response, artifacts: response.artifacts ?? [] }]);
-    setPageIndex(0);
-    setPageError("");
-  });
+  const displayedPage = () => artifacts.displayed()?.source.args.page ?? 0;
 
-  createResidentActivity(() => {
-    return subscribeArtifactChanges((projectId) => {
-      if (projectId === props.projectId.trim()) void refetchList();
-    });
-  });
-
-  const page = createMemo(() => pages()[pageIndex()] ?? null);
-  const items = createMemo(() => page()?.artifacts ?? []);
-  const filtered = createMemo(() =>
-    filterProjectArtifacts(items(), sourceFilter(), chatFilter()),
-  );
-  const chatOptions = createMemo(() =>
-    uniqueArtifactChatIds(pages().flatMap((entry) => entry.artifacts ?? [])),
+  createResidentActivity(() =>
+    createArtifactRefreshSubscription(
+      () => props.projectId,
+      () => {
+        void refetchList();
+      },
+    ),
   );
 
-  let galleryEl: HTMLDivElement | undefined;
+  const items = createMemo(() => artifacts.value()?.artifacts ?? []);
+  const hasActiveFilter = () =>
+    sourceFilter() !== "all" || chatFilter() !== "all";
+  const chatOptions = createMemo(() => {
+    const sessions = artifacts.value()?.facets?.session_ids ?? [];
+    const active = chatFilter();
+    if (active !== "all" && !sessions.includes(active)) {
+      return [active, ...sessions];
+    }
+    return sessions;
+  });
+
   const showPage = (index: number) => {
     setPageIndex(index);
     setLightboxIndex(null);
-    setSrcById({});
     if (galleryEl) galleryEl.scrollTop = 0;
   };
 
-  const goNextPage = async () => {
-    const c = client();
-    const projectId = props.projectId.trim();
-    const index = pageIndex();
-    if (index + 1 < pages().length) {
-      showPage(index + 1);
-      return;
-    }
-    const cursor = page()?.next_cursor?.trim() ?? "";
-    if (!c || !projectId || !cursor || loadingPage()) return;
-    const generation = ++pageGeneration;
-    const current = () => generation === pageGeneration && client() === c && props.projectId.trim() === projectId;
-    setLoadingPage(true);
-    setPageError("");
-    try {
-      const response = await c.listProjectArtifacts(projectId, {
-        limit: ARTIFACTS_PAGE_SIZE,
-        cursor,
-      });
-      if (!current()) return;
-      setPages((current) => [
-        ...current,
-        { ...response, artifacts: response.artifacts ?? [] },
-      ]);
-      showPage(index + 1);
-    } catch (error) {
-      if (current()) setPageError(error instanceof Error ? error.message : "Could not load the next artifact page.");
-    } finally {
-      if (current()) setLoadingPage(false);
-    }
-  };
-
   const changePage = (next: number) => {
+    if (artifacts.loading()) return;
     if (next < pageIndex()) {
       showPage(next);
       return;
     }
-    if (next === pageIndex() + 1) void goNextPage();
+    if (next === pageIndex() + 1) {
+      const cursor = artifacts.value()?.next_cursor?.trim();
+      if (!cursor) return;
+      setPageCursors((held) => {
+        const cursors = held.slice(0, pageIndex() + 1);
+        cursors[next] = cursor;
+        return cursors;
+      });
+      showPage(next);
+    }
   };
+
+  createEffect(() => {
+    const response = artifacts.value();
+    const shown = displayedPage();
+    if (
+      !response ||
+      artifacts.loading() ||
+      shown <= 0 ||
+      shown !== pageIndex() ||
+      (response.artifacts?.length ?? 0) > 0
+    ) {
+      return;
+    }
+    const previous = shown - 1;
+    setPageCursors((held) => held.slice(0, previous + 1));
+    showPage(previous);
+  });
+
+  createEffect(() => {
+    const idx = lightboxIndex();
+    if (idx == null || artifacts.value() === undefined) return;
+    const len = items().length;
+    if (len === 0) setLightboxIndex(null);
+    else if (idx >= len) setLightboxIndex(len - 1);
+  });
 
   const setTileSrc = (artifactId: string, src: string | null) => {
     setSrcById((prev) => {
@@ -178,7 +216,7 @@ export function ProjectArtifactsView(props: Props) {
   const activeItem = () => {
     const idx = lightboxIndex();
     if (idx == null) return null;
-    return filtered()[idx] ?? null;
+    return items()[idx] ?? null;
   };
   const activeSrc = () => {
     const item = activeItem();
@@ -190,7 +228,7 @@ export function ProjectArtifactsView(props: Props) {
   };
   const canNext = () => {
     const idx = lightboxIndex();
-    return idx != null && idx < filtered().length - 1;
+    return idx != null && idx < items().length - 1;
   };
   const goPrev = () => {
     const idx = lightboxIndex();
@@ -199,18 +237,9 @@ export function ProjectArtifactsView(props: Props) {
   };
   const goNext = () => {
     const idx = lightboxIndex();
-    if (idx == null || idx >= filtered().length - 1) return;
+    if (idx == null || idx >= items().length - 1) return;
     setLightboxIndex(idx + 1);
   };
-
-  createEffect(
-    on([sourceFilter, chatFilter], () => {
-      setPageIndex(0);
-      setLightboxIndex(null);
-      setSrcById({});
-      if (galleryEl) galleryEl.scrollTop = 0;
-    }, { defer: true }),
-  );
 
   createEffect(() => {
     if (lightboxIndex() == null) return;
@@ -244,10 +273,13 @@ export function ProjectArtifactsView(props: Props) {
     setDeleteError("");
     try {
       await c.deleteProjectArtifact(projectId, target.id);
-      notifyArtifactChanged({ project_id: projectId, artifact_id: target.id, op: "deleted" });
+      notifyArtifactChanged({
+        project_id: projectId,
+        artifact_id: target.id,
+        op: "deleted",
+      });
       setPendingDelete(null);
       setLightboxIndex(null);
-      setSrcById({});
       await refetchList();
     } catch (err) {
       setDeleteError(
@@ -272,11 +304,7 @@ export function ProjectArtifactsView(props: Props) {
     <div
       class="project-artifacts-view"
       data-testid="project-artifacts-view"
-      aria-busy={
-        artifacts.coldPending() ||
-        artifacts.refreshing() ||
-        loadingPage()
-      }
+      aria-busy={artifacts.coldPending() || artifacts.refreshing()}
     >
       <BrowseStagePanel
         appStore={props.appStore}
@@ -324,9 +352,9 @@ export function ProjectArtifactsView(props: Props) {
           </div>
         }
         meta={
-          <Show when={(artifacts.value() !== undefined) && items().length > 0}>
+          <Show when={artifacts.value() !== undefined && items().length > 0}>
             <span data-testid="project-artifacts-count">
-              {filtered().length} shown
+              {items().length} shown
             </span>
           </Show>
         }
@@ -337,16 +365,22 @@ export function ProjectArtifactsView(props: Props) {
               Loading artifacts…
             </p>
           </Show>
-          <Show when={(artifacts.value() !== undefined) && items().length === 0}>
+          <Show
+            when={
+              artifacts.value() !== undefined &&
+              items().length === 0 &&
+              !hasActiveFilter()
+            }
+          >
             <p class="den-artifacts-empty" data-testid="project-artifacts-empty">
               No artifacts for this project yet.
             </p>
           </Show>
           <Show
             when={
-              (artifacts.value() !== undefined) &&
-              items().length > 0 &&
-              filtered().length === 0
+              artifacts.value() !== undefined &&
+              items().length === 0 &&
+              hasActiveFilter()
             }
           >
             <p
@@ -358,7 +392,7 @@ export function ProjectArtifactsView(props: Props) {
           </Show>
           <Show
             when={
-              (artifacts.value() !== undefined) && filtered().length > 0
+              artifacts.value() !== undefined && items().length > 0
                 ? client()
                 : null
             }
@@ -368,16 +402,18 @@ export function ProjectArtifactsView(props: Props) {
               <Scrollport
                 class="den-artifacts-grid"
                 contentClass="den-artifacts-grid__content"
-                viewportRef={(el) => { galleryEl = el; }}
+                viewportRef={(el) => {
+                  galleryEl = el;
+                }}
                 data-testid="project-artifacts-gallery"
-                data-count={filtered().length}
+                data-count={items().length}
               >
-                <KeyedIndex each={filtered()} keyOf={(a) => a.id}>
+                <KeyedIndex each={items()} keyOf={(a) => a.id}>
                   {(item, index) => (
                     <ArtifactGalleryTile
                       item={item()}
                       index={index()}
-                      total={filtered().length}
+                      total={items().length}
                       projectId={props.projectId}
                       client={c}
                       onOpen={setLightboxIndex}
@@ -392,26 +428,16 @@ export function ProjectArtifactsView(props: Props) {
               </Scrollport>
             )}
           </Show>
-          <Show when={(artifacts.value() !== undefined)}>
+          <Show when={artifacts.value() !== undefined}>
             <TablePager
-              page={pageIndex()}
-              itemCount={filtered().length}
-              hasNext={Boolean(page()?.next_cursor?.trim())}
-              loading={loadingPage()}
+              page={displayedPage()}
+              itemCount={items().length}
+              hasNext={Boolean(artifacts.value()?.next_cursor?.trim())}
+              loading={artifacts.loading()}
               onPageChange={changePage}
               testId="project-artifacts-pager"
               ariaLabel="Artifact pagination"
             />
-          </Show>
-          <Show when={pageError()}>
-            {(message) => (
-              <p
-                class="den-artifacts-page-error"
-                data-testid="project-artifacts-page-error"
-              >
-                {message()}
-              </p>
-            )}
           </Show>
         </div>
       </BrowseStagePanel>
@@ -432,11 +458,11 @@ export function ProjectArtifactsView(props: Props) {
               <header class="den-overlay__header" {...chromeProps()}>
                 <span class="den-overlay__title">
                   {activeItem()?.caption?.trim() ||
-                    `Visual ${(lightboxIndex() ?? 0) + 1} of ${filtered().length}`}
+                    `Visual ${(lightboxIndex() ?? 0) + 1} of ${items().length}`}
                 </span>
                 <div class="den-overlay__header-actions">
                   <span data-testid="project-artifacts-lightbox-counter">
-                    {(lightboxIndex() ?? 0) + 1} / {filtered().length}
+                    {(lightboxIndex() ?? 0) + 1} / {items().length}
                   </span>
                   <ChromeCloseButton
                     class="den-overlay__close den-inset-icon-btn"

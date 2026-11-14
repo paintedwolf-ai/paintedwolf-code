@@ -1,22 +1,18 @@
 import { fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ArtifactListItem } from "../../api/types.ts";
+import type { ArtifactListItem, VisualArtifactSource } from "../../api/types.ts";
 import { createAppStore } from "../../store/app-state.ts";
 import { createSignal } from "solid-js";
 import { ResidentPresenceProvider } from "../../ui/resident-presence-context.tsx";
+import { resetSurfaceQueriesForTests } from "../../ui/surface-query.ts";
 import { notifyArtifactChanged } from "../../chat/visual/artifact-change-store.ts";
 import { ProjectArtifactsView } from "./ProjectArtifactsView.tsx";
 import { FILMSTRIP_MIME } from "../../chat/visual/filmstrip-zip.ts";
 import { buildTestFilmstripZip, zipAsBlob } from "../../chat/visual/filmstrip-zip.fixture.ts";
-import {
-  filterProjectArtifacts,
-  uniqueArtifactChatIds,
-} from "./project-artifacts-filter.ts";
 
 const listProjectArtifacts = vi.fn();
 const getSessionArtifact = vi.fn();
 const addToChat = vi.hoisted(() => vi.fn());
-
 const deleteProjectArtifact = vi.fn();
 
 const mockClient = {
@@ -24,13 +20,14 @@ const mockClient = {
   getSessionArtifact,
   deleteProjectArtifact,
 };
+let activeClient: typeof mockClient | null = mockClient;
 
 vi.mock("../../platform/connection/app-connection.ts", async (importOriginal) => {
   const actual =
     await importOriginal<typeof import("../../platform/connection/app-connection.ts")>();
   return {
     ...actual,
-    getLycaonClient: () => mockClient,
+    getLycaonClient: () => activeClient,
   };
 });
 
@@ -49,6 +46,11 @@ function pngBlob(): Blob {
   ]);
   return new Blob([bytes], { type: "image/png" });
 }
+
+const FIXTURE_SESSIONS = [
+  "sess-aaaa-bbbb-cccc-dddddddddddd",
+  "sess-eeee-ffff-0000-111111111111",
+];
 
 function fixtureItems(): ArtifactListItem[] {
   return [
@@ -99,43 +101,21 @@ async function readyThumb(name: string): Promise<HTMLElement> {
   return thumb;
 }
 
-describe("project-artifacts-filter", () => {
-  it("filters by source and chat", () => {
-    const items = fixtureItems();
-    expect(filterProjectArtifacts(items, "capture", "all")).toHaveLength(1);
-    expect(
-      filterProjectArtifacts(
-        items,
-        "all",
-        "sess-eeee-ffff-0000-111111111111",
-      ),
-    ).toHaveLength(1);
-    expect(
-      filterProjectArtifacts(
-        items,
-        "all",
-        "sess-aaaa-bbbb-cccc-dddddddddddd",
-      ),
-    ).toHaveLength(2);
-    expect(uniqueArtifactChatIds(items)).toEqual([
-      "sess-aaaa-bbbb-cccc-dddddddddddd",
-      "sess-eeee-ffff-0000-111111111111",
-    ]);
-  });
-});
-
 describe("ProjectArtifactsView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     addToChat.mockReset();
-    listProjectArtifacts.mockResolvedValue({ artifacts: fixtureItems() });
+    resetSurfaceQueriesForTests();
+    activeClient = mockClient;
+    listProjectArtifacts.mockResolvedValue({
+      artifacts: fixtureItems(),
+      facets: { session_ids: FIXTURE_SESSIONS },
+    });
     getSessionArtifact.mockImplementation(async () => pngBlob());
   });
 
   afterEach(() => {
-    for (const el of document.querySelectorAll(
-      '[data-testid="project-artifacts-lightbox"]',
-    )) {
+    for (const el of document.querySelectorAll('[data-testid="project-artifacts-lightbox"]')) {
       el.remove();
     }
   });
@@ -179,64 +159,66 @@ describe("ProjectArtifactsView", () => {
     expect(thumb.hasAttribute("disabled")).toBe(true);
   });
 
-  it("renders tiles from a mocked list with source badges", async () => {
+  it("renders tiles from a mocked list with source badges and loads on sidecar connect", async () => {
+    activeClient = null;
     const appStore = createAppStore();
-    appStore.actions.setSidecarStatus("connected");
-    render(() => (
-      <ProjectArtifactsView projectId="proj-1" appStore={appStore} />
-    ));
+    appStore.actions.setSidecarStatus("connecting");
+    render(() => <ProjectArtifactsView projectId="proj-1" appStore={appStore} />);
+    expect(listProjectArtifacts).not.toHaveBeenCalled();
 
+    activeClient = mockClient;
+    appStore.actions.setSidecarStatus("connected");
     expect(await screen.findByTestId("project-artifacts-gallery")).toBeTruthy();
-    await waitFor(() => {
-      expect(listProjectArtifacts).toHaveBeenCalledWith("proj-1", {
-        limit: 12,
-      });
-    });
-    const tiles = screen.getAllByTestId("project-artifact-tile");
-    expect(tiles).toHaveLength(3);
+    expect(listProjectArtifacts).toHaveBeenCalledWith("proj-1", { limit: 12 });
+    expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(3);
     const badges = screen.getAllByTestId("project-artifact-source-badge");
-    expect(badges.map((el) => el.textContent)).toEqual([
-      "Render",
-      "Capture",
-      "User",
-    ]);
+    expect(badges.map((el) => el.textContent)).toEqual(["Render", "Capture", "User"]);
   });
 
-  it("pages through the opaque cursor and keeps prior pages available", async () => {
+  it("pages through the opaque cursor, keeps prior pages available, and steps back when a later page empties", async () => {
     const items = fixtureItems();
-    listProjectArtifacts
-      .mockResolvedValueOnce({ artifacts: items.slice(0, 2), next_cursor: "cursor-1" })
-      .mockResolvedValueOnce({ artifacts: [items[2]] });
+    let page2Items = [items[2]!];
+    listProjectArtifacts.mockImplementation(
+      async (_pid: string, query?: { cursor?: string }) =>
+        query?.cursor === "cursor-1"
+          ? { artifacts: page2Items }
+          : { artifacts: items.slice(0, 2), next_cursor: page2Items.length > 0 ? "cursor-1" : undefined },
+    );
+    deleteProjectArtifact.mockImplementation(async () => {
+      page2Items = [];
+    });
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
-    render(() => (
-      <ProjectArtifactsView projectId="proj-1" appStore={appStore} />
-    ));
+    render(() => <ProjectArtifactsView projectId="proj-1" appStore={appStore} />);
 
     expect(await screen.findAllByTestId("project-artifact-tile")).toHaveLength(2);
     const gallery = screen.getByTestId("project-artifacts-gallery");
     expect(gallery.closest(".den-browse-main--content-scroll")).toBeTruthy();
     expect(gallery.getAttribute("data-den-scrollport")).toBe("y");
     expect(gallery.querySelector(":scope > .den-scrollport__viewport > .den-artifacts-grid__content")).toBeTruthy();
-    const pager = screen.getByTestId("project-artifacts-pager");
-    expect(gallery.contains(pager)).toBe(false);
+    expect(gallery.contains(screen.getByTestId("project-artifacts-pager"))).toBe(false);
 
     fireEvent.click(screen.getByTestId("project-artifacts-pager-next"));
     await waitFor(() => {
-      expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", {
-        limit: 12,
-        cursor: "cursor-1",
-      });
+      expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", { limit: 12, cursor: "cursor-1" });
       expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(1);
     });
     expect(screen.getByText("Page 2")).toBeTruthy();
-    expect(
-      screen.getByTestId("project-artifacts-pager-next").hasAttribute("disabled"),
-    ).toBe(true);
+    expect(screen.getByTestId("project-artifacts-pager-next").hasAttribute("disabled")).toBe(true);
 
     fireEvent.click(screen.getByTestId("project-artifacts-pager-prev"));
     expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(2);
     expect(screen.getByText("Page 1")).toBeTruthy();
+
+    fireEvent.click(screen.getByTestId("project-artifacts-pager-next"));
+    await waitFor(() => expect(screen.getByText("Page 2")).toBeTruthy());
+    fireEvent.contextMenu(screen.getByTestId("project-artifact-tile"));
+    fireEvent.click(screen.getByTestId("menu-delete-artifact"));
+    fireEvent.click(await screen.findByTestId("project-artifact-delete-confirm-action"));
+    await waitFor(() => {
+      expect(screen.getByText("Page 1")).toBeTruthy();
+      expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(2);
+    });
   });
 
   it("plays video artifacts and does not offer them as image prompt attachments", async () => {
@@ -278,39 +260,25 @@ describe("ProjectArtifactsView", () => {
       }
     });
 
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: "Enlarge Live tool recording",
-      }),
-    );
+    fireEvent.click(await screen.findByRole("button", { name: "Enlarge Live tool recording" }));
     expect(await screen.findByTestId("project-artifacts-lightbox")).toBeTruthy();
-    expect(
-      document.querySelector("video.den-transcript-visual-lightbox__img"),
-    ).toBeTruthy();
+    expect(document.querySelector("video.den-transcript-visual-lightbox__img")).toBeTruthy();
   });
 
   it("shows empty state when the project has no artifacts", async () => {
     listProjectArtifacts.mockResolvedValue({ artifacts: [] });
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
-    render(() => (
-      <ProjectArtifactsView projectId="proj-empty" appStore={appStore} />
-    ));
+    render(() => <ProjectArtifactsView projectId="proj-empty" appStore={appStore} />);
     expect(await screen.findByTestId("project-artifacts-empty")).toBeTruthy();
   });
 
   it("paints a fast cold result without flashing loading or empty chrome", async () => {
     let resolveList!: (value: { artifacts: ArtifactListItem[] }) => void;
-    listProjectArtifacts.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveList = resolve;
-      }),
-    );
+    listProjectArtifacts.mockReturnValueOnce(new Promise((resolve) => { resolveList = resolve; }));
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
-    render(() => (
-      <ProjectArtifactsView projectId="proj-empty" appStore={appStore} />
-    ));
+    render(() => <ProjectArtifactsView projectId="proj-empty" appStore={appStore} />);
 
     expect(screen.queryByTestId("project-artifacts-loading")).toBeNull();
     expect(screen.queryByTestId("project-artifacts-empty")).toBeNull();
@@ -352,7 +320,21 @@ describe("ProjectArtifactsView", () => {
     resolveRefresh({ artifacts: fixtureItems() });
   });
 
-  it("narrows the grid with source and chat filters", async () => {
+  it("narrows the grid via server source and chat filters and shows filter-empty copy", async () => {
+    const all = fixtureItems();
+    listProjectArtifacts.mockImplementation(
+      async (
+        _pid: string,
+        query?: { source?: VisualArtifactSource; session_id?: string },
+      ) => ({
+        artifacts: all.filter(
+          (item) =>
+            (!query?.source || item.source === query.source) &&
+            (!query?.session_id || item.session_id === query.session_id),
+        ),
+        facets: { session_ids: FIXTURE_SESSIONS },
+      }),
+    );
     const appStore = createAppStore();
     appStore.actions.setSidecarStatus("connected");
     render(() => (
@@ -362,11 +344,19 @@ describe("ProjectArtifactsView", () => {
 
     fireEvent.click(screen.getByTestId("project-artifacts-source-capture"));
     await waitFor(() => {
+      expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", {
+        limit: 12,
+        source: "capture",
+      });
       expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(1);
     });
     expect(
       screen.getByTestId("project-artifact-tile").getAttribute("data-artifact-id"),
     ).toBe("art-capture");
+
+    fireEvent.click(screen.getByTestId("project-artifacts-source-workspace"));
+    expect(await screen.findByTestId("project-artifacts-filter-empty")).toBeTruthy();
+    expect(screen.queryByTestId("project-artifacts-empty")).toBeNull();
 
     fireEvent.click(screen.getByTestId("project-artifacts-source-all"));
     fireEvent.click(screen.getByTestId("project-artifacts-chat-filter"));
@@ -380,6 +370,10 @@ describe("ProjectArtifactsView", () => {
     if (!chat) throw new Error("Missing chat filter option");
     fireEvent.click(chat);
     await waitFor(() => {
+      expect(listProjectArtifacts).toHaveBeenLastCalledWith("proj-1", {
+        limit: 12,
+        session_id: "sess-eeee-ffff-0000-111111111111",
+      });
       expect(screen.getAllByTestId("project-artifact-tile")).toHaveLength(1);
     });
     expect(
