@@ -40,7 +40,7 @@ Escape is handled as dismissal by the active overlay or surface before it can be
 
 Files has two independent undo domains. An editor or text field keeps its document undo; the collaborative text editor uses CodeMirror history mapped through remote changes, and keyboard Undo/Redo includes explicit human document actions and restores all selection ranges. With focus elsewhere in Files, the host-owned lifecycle commands `files-undo-lifecycle` and `files-redo-lifecycle` undo and redo create, rename, move, duplicate, and Trash operations. Their defaults are not symmetric across platforms (redo carries a second `Mod+Y` chord on Windows and Linux), so the current pair is read from **Settings → Keyboard shortcuts**, not from this page. The persistent Files header buttons expose the same commands and their exact current action labels.
 
-The Files gutter has one Tab entry. On a line-facts handle, Up and Down move between visible fact lines, Right or Enter enters the card, and Left or Escape returns to the line. Within the card, Up and Down move between rows; Tab can leave it. Fold, finding, change-bar, and restore controls have their own activation keys.
+The Files gutter has one Tab entry. On a line-facts handle, Up and Down move between visible fact lines, Right, Enter or Space opens the card and enters it, and Left or Escape returns to the line. Within the card, Up and Down move between rows; Tab can leave it. Fold, finding, change-bar, and restore controls have their own activation keys.
 
 ## Platform bindings
 
