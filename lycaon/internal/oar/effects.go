@@ -96,21 +96,3 @@ func ExecuteOnFire(ctx context.Context, store *CounterStore, pub EventPublisher,
 	}
 	return applied
 }
-
-// applyScopedCounter applies a rule's counter actions to the additional
-// scope it declares; breakers and events stay keyed by the rule alone.
-func applyScopedCounter(store *CounterStore, sessionID, key string, actions []OnFireAction) {
-	if store == nil {
-		return
-	}
-	for _, a := range actions {
-		switch a {
-		case OnFireIncrementCounter:
-			store.Increment(sessionID, key, CounterFire, 1)
-		case OnFireResetCounter:
-			store.Reset(sessionID, key, CounterFire)
-		default:
-			// Breakers and events stay keyed by the rule alone.
-		}
-	}
-}
