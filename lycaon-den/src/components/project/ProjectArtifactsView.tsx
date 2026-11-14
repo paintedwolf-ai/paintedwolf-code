@@ -160,22 +160,25 @@ export function ProjectArtifactsView(props: Props) {
     setLightboxIndex(null);
     if (galleryEl) galleryEl.scrollTop = 0;
   };
+  const hasNextPage = () =>
+    displayedPage() === pageIndex() &&
+    Boolean(artifacts.value()?.next_cursor?.trim());
 
   const changePage = (next: number) => {
-    if (artifacts.loading()) return;
-    if (next < pageIndex()) {
-      showPage(next);
+    const target = Math.max(0, Math.floor(next));
+    if (target < pageIndex()) {
+      showPage(target);
       return;
     }
-    if (next === pageIndex() + 1) {
+    if (target === pageIndex() + 1 && hasNextPage()) {
       const cursor = artifacts.value()?.next_cursor?.trim();
       if (!cursor) return;
       setPageCursors((held) => {
         const cursors = held.slice(0, pageIndex() + 1);
-        cursors[next] = cursor;
+        cursors[target] = cursor;
         return cursors;
       });
-      showPage(next);
+      showPage(target);
     }
   };
 
@@ -430,9 +433,10 @@ export function ProjectArtifactsView(props: Props) {
           </Show>
           <Show when={artifacts.value() !== undefined}>
             <TablePager
-              page={displayedPage()}
+              page={pageIndex()}
+              shownPage={displayedPage()}
               itemCount={items().length}
-              hasNext={Boolean(artifacts.value()?.next_cursor?.trim())}
+              hasNext={hasNextPage()}
               loading={artifacts.loading()}
               onPageChange={changePage}
               testId="project-artifacts-pager"
