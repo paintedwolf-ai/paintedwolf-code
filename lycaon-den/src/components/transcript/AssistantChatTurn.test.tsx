@@ -237,18 +237,30 @@ describe("AssistantChatTurn agent note", () => {
     expect(screen.getByTestId("transcript-article-assistant").textContent).not.toMatch(/grounded/i);
   });
 
-  it("leaves a normal assistant row without the Note badge", () => {
-    const messages = [groundedMessage()];
+  it("leaves a normal assistant row without the Note badge and anchors its hover toolbar bottom-left", () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(Date.parse("2026-09-12T18:00:00Z"));
+    try {
+      const onCopy = vi.fn();
+      const messages = [groundedMessage({ created_at: "2026-09-12T17:55:00Z" })];
 
-    render(() => (
-      <AssistantChatTurn
-        item={{ kind: "assistant", key: "msg-1", text: "Survey complete." }}
-        wireRow={() => messages.find((row) => row.id === "msg-1")}
-      />
-    ));
+      render(() => (
+        <AssistantChatTurn
+          item={{ kind: "assistant", key: "msg-1", text: "Survey complete." }}
+          wireRow={() => messages.find((row) => row.id === "msg-1")}
+          onCopy={onCopy}
+        />
+      ));
 
-    expect(screen.queryByTestId("agent-note-badge")).toBeNull();
-    expect(screen.getByTestId("transcript-article-assistant")).toBeTruthy();
+      expect(screen.queryByTestId("agent-note-badge")).toBeNull();
+      const toolbar = screen.getByTestId("message-actions");
+      expect(toolbar.getAttribute("data-align")).toBe("start");
+      expect(screen.getByTestId("message-time").textContent).toBe("5m ago");
+      fireEvent.click(screen.getByTestId("bubble-copy"));
+      expect(onCopy).toHaveBeenCalledWith("Survey complete.");
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 

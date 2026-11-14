@@ -99,7 +99,7 @@ export function TurnTail(props: {
   );
 }
 
-/** When one of the person's own messages was sent: in its hover toolbar, or below it. */
+/** When a message was sent: in its hover toolbar, or below a user bubble. */
 export function MessageTime(props: { ts: string; placement: "toolbar" | "below" }) {
   const now = useNow("minute");
   const calendar = viewerCalendarTimeFormat();

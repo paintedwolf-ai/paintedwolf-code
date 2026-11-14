@@ -14,7 +14,7 @@ import { openSourceLocation } from "../../platform/navigation/open-source.ts";
 import { markdownProjectPathLinkContextMenu } from "../../chat/markdown/markdown-project-path-link.ts";
 import { ContextMenu } from "../ContextMenu.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
-import { MessageActions } from "./MessageActions.tsx";
+import { MessageActions, buildUserMessageActions } from "./MessageActions.tsx";
 import { VisualPresentBlock } from "./VisualPresentBlock.tsx";
 import { ViewContextLine } from "./ViewContextLine.tsx";
 import { messageTimesPref } from "../../settings/chat/chat-prefs.ts";
@@ -215,27 +215,20 @@ export function UserBubble(props: {
       <Show when={props.recovery ? anchorId() || "actions" : ""} keyed>
         {(id) => (
           <MessageActions
-            onEdit={
-              props.recovery
-                ? () => props.recovery?.onEdit(id, projection().copyText)
-                : undefined
-            }
-            onRewind={
-              props.recovery
-                ? () => props.recovery?.onRewind(id, projection().copyText)
-                : undefined
-            }
-            onCopy={
-              props.recovery
+            align="end"
+            ts={messageTimesPref() === "hover" ? props.ts : undefined}
+            actions={buildUserMessageActions({
+              onCopy: props.recovery
                 ? () => props.recovery?.onCopy(projection().copyText)
-                : undefined
-            }
-            recoveryHeld={props.recovery?.held()}
-            leading={
-              props.ts && messageTimesPref() === "hover" ? (
-                <MessageTime ts={props.ts} placement="toolbar" />
-              ) : undefined
-            }
+                : undefined,
+              onEdit: props.recovery
+                ? () => props.recovery?.onEdit(id, projection().copyText)
+                : undefined,
+              onRewind: props.recovery
+                ? () => props.recovery?.onRewind(id, projection().copyText)
+                : undefined,
+              recoveryHeld: props.recovery?.held(),
+            })}
           />
         )}
       </Show>

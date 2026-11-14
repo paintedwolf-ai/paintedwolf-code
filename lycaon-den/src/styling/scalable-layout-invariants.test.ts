@@ -130,9 +130,18 @@ describe("scalable layout chrome", () => {
     );
   });
 
-  it("anchors message actions to their chat bubble", () => {
+  it("anchors message actions below their chat bubble on the message's side", () => {
     const components = read("global-components.css");
     expect(components).toMatch(/\.bubble\s*\{[\s\S]*?position:\s*relative/);
+    expect(components).toMatch(
+      /\.den-msg-actions\s*\{[\s\S]*?right:\s*0;[\s\S]*?top:\s*calc\(100%\s*\+\s*4px\)/,
+    );
+    expect(components).toMatch(
+      /\.den-msg-actions--start\s*\{[\s\S]*?left:\s*0;[\s\S]*?right:\s*auto/,
+    );
+    expect(components).toMatch(
+      /\.den-msg-actions::after\s*\{[\s\S]*?bottom:\s*100%/,
+    );
   });
 
   it("uses one closed width and full open width for transcript cards", () => {

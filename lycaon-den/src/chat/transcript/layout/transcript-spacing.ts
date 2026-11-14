@@ -15,8 +15,8 @@ export type TranscriptSeam = "row" | "section" | "turn";
  */
 export const TRANSCRIPT_SPACING = {
   partGap: { value: 0.5714, unit: "rem", affects: "row" },
-  rowGap: { value: 0.8571, unit: "rem", affects: "placement" },
-  sectionGap: { value: 1.4286, unit: "rem", affects: "placement" },
+  rowGap: { value: 1.1429, unit: "rem", affects: "placement" },
+  sectionGap: { value: 2, unit: "rem", affects: "placement" },
   turnGap: { value: 5.1429, unit: "rem", affects: "placement" },
   userWidth: { value: 78, unit: "%", affects: "row" },
   userPaddingX: { value: 0.9286, unit: "rem", affects: "row" },

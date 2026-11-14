@@ -37,6 +37,11 @@
   min-width: 0;
 }
 
+.den-chat-stream-inner .transcript-viewport-row:hover,
+.den-chat-stream-inner .transcript-viewport-row:focus-within {
+  z-index: 2;
+}
+
 .den-transcript-virtual-runway {
   flex: 0 0 auto;
   width: 100%;

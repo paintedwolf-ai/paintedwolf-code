@@ -261,11 +261,11 @@
   border-style: dashed;
 }
 
-/* Floats above the message's top-right corner without taking space. */
+/* Floats below the message without taking layout space. */
 .den-msg-actions {
   position: absolute;
   right: 0;
-  bottom: calc(100% + 4px);
+  top: calc(100% + 4px);
   z-index: 2;
   display: flex;
   width: max-content;
@@ -281,6 +281,16 @@
   transition: opacity 140ms ease 240ms;
 }
 
+.den-msg-actions--start {
+  left: 0;
+  right: auto;
+}
+
+.bubble:hover,
+.bubble:focus-within {
+  z-index: 2;
+}
+
 .bubble:hover > .den-msg-actions,
 .bubble:focus-within > .den-msg-actions,
 .den-msg-actions:hover,
@@ -290,12 +300,12 @@
   transition: opacity 80ms ease 0ms;
 }
 
-/* Bridges the gap into the message bubble. */
+/* Bridges the gap into the message bubble above. */
 .den-msg-actions::after {
   content: "";
   position: absolute;
   inset-inline: 0;
-  top: 100%;
+  bottom: 100%;
   height: 6px;
   pointer-events: none;
 }

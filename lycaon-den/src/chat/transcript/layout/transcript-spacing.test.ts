@@ -13,7 +13,7 @@ describe("transcript spacing", () => {
     for (const [name, spec] of Object.entries(TRANSCRIPT_SPACING)) {
       expect(styles[transcriptSpacingProperty(name as keyof typeof TRANSCRIPT_SPACING)]).toBe(`${spec.value}${spec.unit}`);
     }
-    expect(styles["--transcript-row-gap"]).toBe("0.8571rem");
+    expect(styles["--transcript-row-gap"]).toBe("1.1429rem");
     expect(styles["--transcript-paragraph-gap"]).toBe("0.65em");
   });
   it("carries every seam rung in rem so it follows the text scale", () => {
@@ -31,8 +31,8 @@ describe("transcript spacing", () => {
       transcriptSeamPx("section", DEFAULT_TRANSCRIPT_SPACING, remPx),
       transcriptSeamPx("turn", DEFAULT_TRANSCRIPT_SPACING, remPx),
     ].map((px) => Math.round(px));
-    expect(at(TRANSCRIPT_ROOT_REM_PX)).toEqual([12, 20, 72]);
-    expect(at(TRANSCRIPT_ROOT_REM_PX * 2)).toEqual([24, 40, 144]);
+    expect(at(TRANSCRIPT_ROOT_REM_PX)).toEqual([16, 28, 72]);
+    expect(at(TRANSCRIPT_ROOT_REM_PX * 2)).toEqual([32, 56, 144]);
     expect(transcriptSeamPx(undefined, DEFAULT_TRANSCRIPT_SPACING, TRANSCRIPT_ROOT_REM_PX)).toBe(0);
   });
   it("retains interior measurements when only row placement changes", () => {
