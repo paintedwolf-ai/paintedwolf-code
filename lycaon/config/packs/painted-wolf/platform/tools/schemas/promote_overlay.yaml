@@ -14,7 +14,7 @@ schema:
         additionalProperties: false
         properties:
           path:
-            description: "Session-folder-relative conflict path (key matching the overlay's changed paths, not an addressed path)."
+            description: "Conflict path, as listed in the overlay's changed paths."
             type: string
           action:
             type: string
