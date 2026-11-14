@@ -768,6 +768,12 @@
       "emit": "guard:coordinator",
       "summary": "Worker {{ paintedwolf.worker }} has no pending decision to answer."
     },
+    "DECISION_NOT_SHOWN": {
+      "branch_instruction": "Answer a question once it is on the roster",
+      "category": "recoverable",
+      "emit": "guard:coordinator",
+      "summary": "You have not been shown worker {{ paintedwolf.worker }}'s current question yet."
+    },
     "DECISION_NOT_SUSPENDED": {
       "branch_instruction": "Inspect the current worker state before retrying.",
       "category": "recoverable",

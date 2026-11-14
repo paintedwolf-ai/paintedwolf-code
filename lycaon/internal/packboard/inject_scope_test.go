@@ -110,4 +110,3 @@ func TestInjectedBoardRetainsPendingWorkerIntegration(t *testing.T) {
 		}
 	}
 }
-

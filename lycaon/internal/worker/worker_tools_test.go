@@ -59,9 +59,10 @@ func newWorkerToolsFixture(t *testing.T) *workerToolsFixture {
 	testutil.FailErr(t, "create worker", err)
 	f.workerID = w.WorkerID
 	f.ops = &workerops.Service{
-		Reader:  workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
-		Agents:  prompts.AgentMutationCapable,
-		Release: f.queue.ReleaseAdmitted,
+		Reader:     workerops.Reader{Records: f.records, Jobs: f.queue, Decisions: f.decisions},
+		Agents:     prompts.AgentMutationCapable,
+		WakeParked: func(context.Context, string) error { return nil },
+		Release:    f.queue.ReleaseAdmitted,
 	}
 	testutil.FailErr(t, "register", RegisterWorkerTools(f.reg, WorkerToolDeps{Ops: f.ops, Queue: f.queue}))
 	return f
@@ -424,7 +425,7 @@ func TestTaskStartsANamedWorker(t *testing.T) {
 func TestAnswerDecisionByWorkerName(t *testing.T) {
 	f := newWorkerToolsFixture(t)
 	resolver := &answerStubResolver{decisions: f.decisions}
-	answers := &AnswerDecisionService{Queue: f.queue, Decisions: f.decisions, Resolver: resolver}
+	answers := &AnswerDecisionService{Queue: f.queue, Decisions: f.decisions, Resolver: resolver, Shown: &shownOnce{taken: map[string]bool{}, hidden: map[string]bool{}}}
 	testutil.FailErr(t, "register", RegisterAnswerDecisionTool(f.reg, AnswerDecisionToolDeps{Answer: answers, Workers: f.ops}))
 	f.deliver(t, "job-1")
 	_, err := f.run(t, "answer_decision", "call-0", map[string]any{"worker": "surveyor", "answer": "utf-8"})

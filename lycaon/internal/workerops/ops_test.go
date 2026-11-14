@@ -36,6 +36,7 @@ type fixture struct {
 	coord    workerrecords.Actor
 	workerID string
 	enqueued []workerops.RoundJob
+	woken    []string
 }
 
 func now() string { return db.FormatTime(time.Now().UTC()) }
@@ -52,6 +53,10 @@ func newFixture(t *testing.T) *fixture {
 		coord: workerrecords.Actor{SessionID: "coord", Role: workerrecords.RoleCoordinator, PrincipalID: "coord"}}
 	f.svc = &workerops.Service{
 		Reader: workerops.Reader{Records: records, Jobs: f.jobs, Decisions: f.dec},
+		WakeParked: func(_ context.Context, jobID string) error {
+			f.woken = append(f.woken, jobID)
+			return nil
+		},
 		Agents: func(agent string) (bool, bool) {
 			switch agent {
 			case "implementer":
@@ -180,6 +185,26 @@ func TestInstructQueuesForARunningRound(t *testing.T) {
 	var refusal *workerops.Refusal
 	if !errors.As(err, &refusal) || refusal.AgentChange != workerstate.AgentChangeBusy {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// An instruction to a parked worker settles its wait so it resumes and reads
+// the instruction; one to a running worker only queues.
+func TestInstructWakesAParkedWorker(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "job-1", api.WorkerStatusRunning, "")
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	_, err = f.svc.Instruct(t.Context(), f.coord, op("running"), workerops.Instruction{Worker: "surveyor", Instructions: "also read the encoder"}, f.enqueue("unused"))
+	testutil.FailErr(t, "instruct running", err)
+	if len(f.woken) != 0 {
+		t.Fatalf("a running worker was woken: %v", f.woken)
+	}
+	f.jobs["job-1"].Status = api.WorkerStatusWaiting
+	receipt, err := f.svc.Instruct(t.Context(), f.coord, op("parked"), workerops.Instruction{Worker: "surveyor", Instructions: "the server is up now"}, f.enqueue("unused"))
+	testutil.FailErr(t, "instruct parked", err)
+	if receipt.Outcome != workerops.OutcomeQueued || len(f.woken) != 1 || f.woken[0] != "job-1" {
+		t.Fatalf("receipt = %+v woken = %v", receipt, f.woken)
 	}
 }
 
@@ -353,5 +378,54 @@ func TestRoundSuspendedOnItsDecisionIsAsking(t *testing.T) {
 	f.dec["child"] = api.WorkerDecisionRequest{WorkerID: "job-1", Question: "Which parser?"}
 	if v := f.state(t); v.State != workerstate.Asking {
 		t.Fatalf("held on its decision = %+v", v)
+	}
+}
+
+// A worker that has run and then lost its child session reads as closed
+// because its session is unusable.
+func TestLostChildSessionMakesTheWorkerUnusable(t *testing.T) {
+	f := newFixture(t)
+	f.round(t, "job-1", "complete", "")
+	if v := f.state(t); v.Reason == workerstate.ReasonSessionUnusable {
+		t.Fatalf("a worker with its session was unusable: %+v", v)
+	}
+	_, err := f.db.ExecContext(t.Context(), `UPDATE workers SET child_session_id = NULL WHERE id = ?`, f.workerID)
+	testutil.FailErr(t, "lose child", err)
+	if v := f.state(t); v.State != workerstate.Closed || v.Reason != workerstate.ReasonSessionUnusable {
+		t.Fatalf("after losing the child session: %+v", v)
+	}
+}
+
+// A pending round whose producer has not delivered waits on its
+// prerequisite and queues once the producer's output is ready; withdrawing
+// the waiting worker cancels that round first, so the worker can close.
+func TestWaitingOnAPrerequisiteAndWithdrawal(t *testing.T) {
+	f := newFixture(t)
+	f.job(t, "producer-job", api.WorkerStatusRunning, "")
+	f.job(t, "job-1", api.WorkerStatusPending, "")
+	f.jobs["job-1"].AfterWorkers = []string{"producer-job"}
+	_, err := f.records.AdmitRound(t.Context(), f.coord, op("admit"), f.workerID, workerrecords.RoundSpec{JobID: "job-1", ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit", err)
+	if v := f.state(t); v.State != workerstate.Waiting {
+		t.Fatalf("before the producer delivers: %+v", v)
+	}
+	f.jobs["producer-job"].Status = api.WorkerStatusComplete
+	f.jobs["producer-job"].Result = &api.WorkerResult{Status: "complete"}
+	if v := f.state(t); v.State != workerstate.Working || v.Reason != workerstate.ReasonQueued {
+		t.Fatalf("once the producer delivered: %+v", v)
+	}
+	f.jobs["producer-job"].Status = api.WorkerStatusRunning
+	var cancelled []string
+	stop, err := f.svc.Stop(t.Context(), f.coord, op("withdraw"), "surveyor", "", func(_ context.Context, jobID string) error {
+		cancelled = append(cancelled, jobID)
+		_, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{SettledAt: db.NullString(now()), JobID: jobID})
+		return err
+	})
+	testutil.FailErr(t, "withdraw", err)
+	if !stop.Withdrawn || len(cancelled) != 1 || cancelled[0] != "job-1" {
+		t.Fatalf("stop = %+v cancelled = %v", stop, cancelled)
+	}
+	if v := f.state(t); v.State != workerstate.Closed {
+		t.Fatalf("after withdrawal: %+v", v)
 	}
 }

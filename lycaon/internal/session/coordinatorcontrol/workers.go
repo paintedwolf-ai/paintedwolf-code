@@ -47,6 +47,19 @@ func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.W
 	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerRoundNotice(ctx, parentID, facts.JobID, anchor.Envelope{WorkerRoundNotice: &facts})
 }
 
+// PrerequisiteBlocked tells a coordinator that a waiting worker's
+// prerequisite can no longer be met, naming both workers and why.
+func (m *Workers) PrerequisiteBlocked(ctx context.Context, parentID, consumerJobID, producerJobID, reason string) {
+	parentID = strings.TrimSpace(parentID)
+	if m == nil || parentID == "" || strings.TrimSpace(consumerJobID) == "" {
+		return
+	}
+	env := anchor.Envelope{Vars: map[string]any{
+		"worker": m.Names.Name(ctx, consumerJobID), "producer": m.Names.Name(ctx, producerJobID), "producer_state": reason,
+	}}
+	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerPrerequisiteBlocked(ctx, parentID, consumerJobID, env)
+}
+
 // MessageNeedsReply wakes a coordinator for a running worker's message that
 // asks for an answer.
 func (m *Workers) MessageNeedsReply(ctx context.Context, parentID, jobID string) {

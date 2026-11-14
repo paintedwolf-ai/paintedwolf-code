@@ -1,0 +1,12 @@
+# Inform Binding. Anchor catalog is lifecycle SSOT.
+'on': worker.prerequisite.blocked
+selector:
+  surface: coordinator
+effect: inform
+render: coordinator-worker-prerequisite-blocked
+tier: builtin
+invariants:
+  trigger_class: wait_trigger
+  fires_in:
+  - a waiting worker's prerequisite can no longer be met; any coordinator wait
+    on workers wakes for it, and a turn without a wait reads it

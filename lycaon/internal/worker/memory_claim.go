@@ -11,9 +11,6 @@ import (
 
 // ClaimNext claims the next matching pending job.
 func (q *memoryQueueClaims) ClaimNext(ctx context.Context, req ClaimRequest) (*api.WorkerTask, error) {
-	if _, err := q.recoverPrerequisites(ctx); err != nil {
-		return nil, err
-	}
 	for {
 		candidate, err := q.nextPending(ctx, req)
 		if err != nil {
@@ -140,13 +137,10 @@ func (q *memoryQueueClaims) RenewClaim(ctx context.Context, jobID, claimToken st
 
 // RecoverExpiredClaims retries expired attempts while runway remains.
 func (q *memoryQueueClaims) RecoverExpiredClaims(ctx context.Context) ([]api.WorkerTask, error) {
-	prerequisites, prerequisiteErr := q.recoverPrerequisites(ctx)
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	canceled, cancelErr := recoverCancellations(ctx, q.self)
-	canceled = append(prerequisites, canceled...)
-	cancelErr = errors.Join(prerequisiteErr, cancelErr)
 	q.mu.Lock()
 	now := time.Now().UTC()
 	var ids []string

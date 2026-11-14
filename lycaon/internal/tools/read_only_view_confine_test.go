@@ -15,7 +15,7 @@ func TestReadOnlyConfinesProcessesToScratch(t *testing.T) {
 		Host:     InvocationHost{SessionScratchDir: "/scratch/session"},
 		Source: InvocationSource{
 			WorkerBranchRoot:  "/views/review",
-			ReadOnly:      true,
+			ReadOnly:          true,
 			WorkerSourceRoots: []string{"/src/project"},
 			Roots:             []projectroot.RootRef{{ID: "root", Path: "/src/project", IsPrimary: true}},
 		},

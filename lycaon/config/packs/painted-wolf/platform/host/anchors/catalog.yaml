@@ -242,6 +242,18 @@ anchors:
         tool_calls: { type: int }
         tools_done: { type: int }
 
+  - id: worker.prerequisite.blocked
+    title: Worker prerequisite blocked
+    description: A waiting worker's prerequisite can no longer be met because its producer was closed or its changes were rejected; the worker keeps waiting until the coordinator replaces or withdraws it.
+    trigger_class: wait_trigger
+    surface: coordinator
+    planes: [inform]
+    envelope:
+      vars:
+        worker: { type: string }
+        producer: { type: string }
+        producer_state: { type: string, required: true }
+
   - id: worker.message.received
     title: Worker message received
     description: A running worker sent its coordinator a message that needs a reply. Non-content Anchor — the message reaches the coordinator through its message page, so there is no inform Binding.

@@ -105,14 +105,14 @@ func ParseWorkerCompletionEnvelope(content string) (WorkerCompletionEnvelope, bo
 		return WorkerCompletionEnvelope{}, false
 	}
 	env := WorkerCompletionEnvelope{
-		Worker:         strings.TrimSpace(doc.Worker),
-		AgentType:      strings.TrimSpace(doc.AgentType),
-		State:          NormalizeWorkerCompletionState(doc.State),
-		MergeStatus:    strings.TrimSpace(doc.MergeStatus),
-		HintCode:       strings.TrimSpace(doc.HintCode),
-		Summary:        strings.TrimSpace(doc.Summary),
-		Body:           strings.TrimSpace(doc.TaskResult),
-		Digest:         strings.TrimSpace(doc.Digest),
+		Worker:      strings.TrimSpace(doc.Worker),
+		AgentType:   strings.TrimSpace(doc.AgentType),
+		State:       NormalizeWorkerCompletionState(doc.State),
+		MergeStatus: strings.TrimSpace(doc.MergeStatus),
+		HintCode:    strings.TrimSpace(doc.HintCode),
+		Summary:     strings.TrimSpace(doc.Summary),
+		Body:        strings.TrimSpace(doc.TaskResult),
+		Digest:      strings.TrimSpace(doc.Digest),
 	}
 	if proofJSON := strings.TrimSpace(doc.ProofJSON); proofJSON != "" {
 		var parent ParentProof

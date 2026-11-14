@@ -774,7 +774,13 @@ func (q *Queries) InsertWorkerResult(ctx context.Context, arg InsertWorkerResult
 }
 
 const listBlockedWorkerPrerequisites = `-- name: ListBlockedWorkerPrerequisites :many
-SELECT DISTINCT consumer.id FROM worker_prerequisites dependency
+SELECT DISTINCT consumer.id AS consumer_id, dependency.prerequisite_id AS producer_job_id,
+    CAST(CASE
+        WHEN origin.job_id IS NOT NULL AND producer.closed_at IS NOT NULL THEN 'closed'
+        WHEN origin.job_id IS NULL AND upstream.status IN ('failed', 'canceled') THEN 'failed'
+        ELSE 'rejected'
+    END AS TEXT) AS reason
+FROM worker_prerequisites dependency
 JOIN worker_jobs consumer ON consumer.id = dependency.worker_job_id
 JOIN worker_jobs upstream ON upstream.id = dependency.prerequisite_id
 LEFT JOIN worker_rounds origin ON origin.job_id = dependency.prerequisite_id
@@ -800,22 +806,28 @@ WHERE consumer.status = 'pending' AND (
 ORDER BY consumer.id
 `
 
+type ListBlockedWorkerPrerequisitesRow struct {
+	ConsumerID    string `json:"consumer_id"`
+	ProducerJobID string `json:"producer_job_id"`
+	Reason        string `json:"reason"`
+}
+
 // A job-only producer that failed, or whose changes are gone, can never be
 // met. A long-lived producer can be instructed again, so only closing it, or
 // a rejection of its latest round's changes with no round after, ends it.
-func (q *Queries) ListBlockedWorkerPrerequisites(ctx context.Context) ([]string, error) {
+func (q *Queries) ListBlockedWorkerPrerequisites(ctx context.Context) ([]ListBlockedWorkerPrerequisitesRow, error) {
 	rows, err := q.db.QueryContext(ctx, listBlockedWorkerPrerequisites)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []ListBlockedWorkerPrerequisitesRow
 	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
+		var i ListBlockedWorkerPrerequisitesRow
+		if err := rows.Scan(&i.ConsumerID, &i.ProducerJobID, &i.Reason); err != nil {
 			return nil, err
 		}
-		items = append(items, id)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

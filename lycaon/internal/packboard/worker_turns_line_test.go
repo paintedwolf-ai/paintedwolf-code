@@ -35,4 +35,3 @@ func TestFormatWorkerDetailLineOmitsTurnsBeforeFirst(t *testing.T) {
 		t.Fatalf("line = %q should carry only its status segment", line)
 	}
 }
-

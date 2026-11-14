@@ -218,7 +218,7 @@ func waitEventMatches(triggers []WaitTrigger, in waitMatchInput) bool {
 	case anchor.ProcessFinished, anchor.ProcessRefused:
 		_, ok := set[WaitTriggerProcessDone]
 		return ok && handleMatches(in.ProcessHandles, in.Subject)
-	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived:
+	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived, anchor.WorkerPrerequisiteBlocked:
 		_, ok := runningWorkerCondition(set, in.WorkerHandles, in.workerHandle(in.Subject))
 		return ok
 	case anchor.WorkerTaskFinished, anchor.LegFinished:
@@ -274,8 +274,8 @@ func waitConditionForWake(triggers []WaitTrigger, in waitMatchInput) (awaitstore
 		_, ok := set[WaitTriggerProcessDone]
 		ok = ok && handleMatches(in.ProcessHandles, in.Subject)
 		return awaitstore.Condition{Kind: string(WaitTriggerProcessDone), Handles: []string{in.Subject}, Outcome: "refused"}, ok
-	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived:
-		// The worker is still running, so the wait ends with what arrived, not as satisfied.
+	case anchor.WorkerRoundNotice, anchor.WorkerMessageReceived, anchor.WorkerPrerequisiteBlocked:
+		// The worker has not finished, so the wait ends with what arrived, not as satisfied.
 		outcome := "notice"
 		if in.Wake == anchor.WorkerMessageReceived {
 			outcome = "message"

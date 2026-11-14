@@ -114,13 +114,9 @@ type Service struct {
 	// Release makes a round's job, enqueued held, claimable once the round
 	// is recorded.
 	Release func(ctx context.Context, jobID string) error
-}
-
-func (s *Service) release(ctx context.Context, jobID string) error {
-	if s.Release == nil || jobID == "" {
-		return nil
-	}
-	return s.Release(ctx, jobID)
+	// WakeParked settles a parked round's wait because an instruction
+	// arrived; the worker resumes and reads it at its next model call.
+	WakeParked func(ctx context.Context, jobID string) error
 }
 
 func (s *Service) accounted(sessionID, jobID string) {
@@ -187,6 +183,11 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 			return Receipt{}, err
 		}
 		latest, _ := snap.Latest()
+		if snap.Facts.Latest != nil && snap.Facts.Latest.Parked {
+			if err := s.WakeParked(ctx, latest.JobID); err != nil {
+				return Receipt{}, err
+			}
+		}
 		return Receipt{Worker: w.Name, Outcome: OutcomeQueued, State: view.State, Round: latest.Ordinal, JobID: latest.JobID, InstructionSeq: m.Seq}, nil
 	}
 	jobID, target, err := enqueue(ctx, RoundJob{Worker: w, Instructions: in.Instructions, Brief: in.Brief, AgentType: in.AgentType, ScopeMode: scope})
@@ -201,7 +202,7 @@ func (s *Service) Instruct(ctx context.Context, actor workerrecords.Actor, op wo
 		return Receipt{}, err
 	}
 	receipt := Receipt{Worker: w.Name, Outcome: OutcomeStarted, State: workerstate.Working, Round: start.Ordinal, JobID: jobID, InstructionSeq: start.InstructionSeq}
-	if err := s.release(ctx, jobID); err != nil {
+	if err := s.Release(ctx, jobID); err != nil {
 		return Receipt{}, err
 	}
 	if view.Admits(workerstate.OpAccount) {
@@ -231,7 +232,7 @@ func (s *Service) replay(ctx context.Context, actor workerrecords.Actor, op work
 			return Receipt{}, false, err
 		}
 		receipt := Receipt{Worker: name, Outcome: OutcomeStarted, State: workerstate.Working, Round: start.Ordinal, JobID: start.JobID, InstructionSeq: start.InstructionSeq}
-		if err := s.release(ctx, start.JobID); err != nil {
+		if err := s.Release(ctx, start.JobID); err != nil {
 			return Receipt{}, false, err
 		}
 		if akind, araw, aok, err := s.Reader.Records.Operation(ctx, actor, op.ID+":account"); err != nil {
@@ -381,11 +382,11 @@ type Stop struct {
 	Withdrawn bool `json:"withdrawn,omitempty"`
 }
 
-// Stop resolves what worker_cancel stops. A working or asking worker's
-// round is stopped and keeps its work; a waiting worker's held job is
-// withdrawn with the worker, and a planned worker is withdrawn. The caller
-// cancels JobID through the job queue; withdrawal closes the worker here.
-func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, name, reason string) (Stop, error) {
+// Stop stops a worker for worker_cancel. A working or asking worker's round
+// is stopped through cancel and keeps its work. A waiting worker's round is
+// cancelled, which settles it, and the worker is closed; a planned worker is
+// closed.
+func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, name, reason string, cancel func(ctx context.Context, jobID string) error) (Stop, error) {
 	snap, err := s.resolve(ctx, actor, name)
 	if err != nil {
 		return Stop{}, err
@@ -395,10 +396,13 @@ func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op worker
 	switch {
 	case snap.View.Admits(workerstate.OpCancel):
 		out.JobID = latest.JobID
-		return out, nil
+		return out, cancel(ctx, latest.JobID)
 	case snap.View.Admits(workerstate.OpWithdraw):
 		if hasRound && latest.SettledAt == "" {
 			out.JobID = latest.JobID
+			if err := cancel(ctx, latest.JobID); err != nil {
+				return Stop{}, err
+			}
 		}
 		if strings.TrimSpace(reason) == "" {
 			reason = "withdrawn"
