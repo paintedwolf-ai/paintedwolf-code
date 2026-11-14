@@ -69,6 +69,7 @@ func (m *Service) PeerReservations(ctx context.Context, childSessionID string) [
 	if err != nil || len(rows) == 0 {
 		return nil
 	}
+	ownWorker := m.names.Name(ctx, ownJob)
 	out := make([]inject.ReservedPath, 0, len(rows))
 	for _, row := range rows {
 		path := strings.TrimSpace(row.Path)
@@ -76,9 +77,14 @@ func (m *Service) PeerReservations(ctx context.Context, childSessionID string) [
 		if path == "" || jobID == "" || jobID == ownJob {
 			continue
 		}
+		// The worker's own earlier rounds are not siblings.
+		worker := m.names.Name(ctx, jobID)
+		if ownWorker != "" && worker == ownWorker {
+			continue
+		}
 		out = append(out, inject.ReservedPath{
 			Path:     path,
-			Worker:   m.names.Name(ctx, jobID),
+			Worker:   worker,
 			LegLabel: m.legLabel(jobID),
 		})
 	}
