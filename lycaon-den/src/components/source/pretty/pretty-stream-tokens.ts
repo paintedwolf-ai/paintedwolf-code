@@ -204,7 +204,7 @@ export class StreamLineTokens {
     const stream = new LineStream(line.text, this.indentUnit);
     stream.pos = cp.offset;
     stream.start = cp.offset;
-    let state = cloneParserState(this.parser, cp.state);
+    const state = cloneParserState(this.parser, cp.state);
 
     const starts: number[] = [];
     const ends: number[] = [];

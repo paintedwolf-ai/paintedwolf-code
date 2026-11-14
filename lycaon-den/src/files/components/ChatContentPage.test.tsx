@@ -334,7 +334,7 @@ describe("chat content Files pane", () => {
   });
 
   it("mounts language grammars, renders language labels, and applies project lineWidth in ChatContentPage", async () => {
-    saveEditorLineLayout("pretty");
+    void saveEditorLineLayout("pretty");
     const py = `def f(a, b): return {${Array.from({ length: 16 }, (_, i) => `"key_${i}": ${i}`).join(", ")}}\n`;
     const client = {
       getProjectSourceFormatSettings: async () => ({
