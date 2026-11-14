@@ -17,8 +17,8 @@ func TestFormatWorkerCompletionEnvelope(t *testing.T) {
 		HintCode:       "WORKER_SUMMARY_NO_ARTIFACT",
 		Body:           "no disk proof",
 	})
-	if !strings.Contains(out, `job_id="job-1"`) {
-		t.Fatalf("out = %q", out)
+	if strings.Contains(out, "job-1") || strings.Contains(out, "child-1") {
+		t.Fatalf("out = %q names host identity", out)
 	}
 	if !strings.Contains(out, `state="partial"`) {
 		t.Fatalf("out = %q", out)

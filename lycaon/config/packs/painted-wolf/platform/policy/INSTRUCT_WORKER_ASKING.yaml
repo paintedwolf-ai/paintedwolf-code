@@ -5,7 +5,7 @@ on: tool.rejected
 selector:
   tools:
     - instruct_worker
-requires_facts: [paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.rejection_code]
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.worker]
 when: paintedwolf.rejection_code == "INSTRUCT_WORKER_ASKING"
 effect: block
 x-paintedwolf-category: recoverable
@@ -19,5 +19,6 @@ instead: Branch on Code INSTRUCT_WORKER_ASKING; do not retry the same call
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
+      worker: parser-fix
       tool: instruct_worker

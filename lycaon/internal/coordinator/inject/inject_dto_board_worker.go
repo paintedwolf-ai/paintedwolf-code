@@ -39,7 +39,7 @@ type SiblingNoteView struct {
 // ReservedPathView is one sibling path reservation for worker-leg inject.
 type ReservedPathView struct {
 	Path     string
-	JobID    string
+	Worker   string
 	LegLabel string
 }
 
@@ -245,7 +245,7 @@ func BuildWorkerLegInjectData(ctx WorkerLegContext) WorkerLegInjectData {
 		}
 		reservedPaths = append(reservedPaths, ReservedPathView{
 			Path:     path,
-			JobID:    strings.TrimSpace(hold.JobID),
+			Worker:   strings.TrimSpace(hold.Worker),
 			LegLabel: strings.TrimSpace(hold.LegLabel),
 		})
 	}
@@ -305,7 +305,7 @@ func WorkerLegInjectToMap(data WorkerLegInjectData) map[string]any {
 	for i, hold := range reservedRows {
 		reservedPaths[i] = map[string]any{
 			"path":      hold.Path,
-			"job_id":    hold.JobID,
+			"worker":    hold.Worker,
 			"leg_label": hold.LegLabel,
 		}
 	}

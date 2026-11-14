@@ -20,7 +20,6 @@ type Envelope struct {
 	CommandRefusalDigest      string
 	TopologyOutput            string
 	PendingOverlayPromoteJobs []string
-	PartialWorkerJobs         []string
 	PromotedPaths             []string
 	ScanID                    string
 	ScanStatus                string
@@ -72,12 +71,6 @@ func (e Envelope) KickOptions() []kick.KickOption {
 	if e.MaxFanoutLegs > 0 {
 		opts = append(opts, kick.WithMaxFanoutLegs(e.MaxFanoutLegs))
 	}
-	if len(e.PendingOverlayPromoteJobs) > 0 {
-		opts = append(opts, kick.WithPendingOverlayPromote(e.PendingOverlayPromoteJobs))
-	}
-	if len(e.PartialWorkerJobs) > 0 {
-		opts = append(opts, kick.WithPartialWorkerJobs(e.PartialWorkerJobs))
-	}
 	if len(e.PromotedPaths) > 0 {
 		opts = append(opts, kick.WithPromotedPaths(e.PromotedPaths))
 	}
@@ -95,8 +88,9 @@ func (e Envelope) KickOptions() []kick.KickOption {
 	}
 	if len(e.WorkerDecisionRequest) > 0 {
 		req := workerDecisionFromMap(e.WorkerDecisionRequest)
+		worker, _ := e.WorkerDecisionRequest["worker"].(string)
 		if strings.TrimSpace(req.Question) != "" {
-			opts = append(opts, kick.WithWorkerDecisionRequest(req))
+			opts = append(opts, kick.WithWorkerDecisionRequest(req, worker))
 		}
 	}
 	return opts
@@ -117,11 +111,12 @@ func (e Envelope) HasWorkerDecision() bool {
 }
 
 // WithWorkerDecision sets structured worker decision facts on the Envelope.
-func (e *Envelope) WithWorkerDecision(req api.WorkerDecisionRequest) {
+func (e *Envelope) WithWorkerDecision(req api.WorkerDecisionRequest, worker string) {
 	if e == nil || strings.TrimSpace(req.Question) == "" {
 		return
 	}
 	e.WorkerDecisionRequest = map[string]any{
+		"worker":           strings.TrimSpace(worker),
 		"job_id":           strings.TrimSpace(req.WorkerID),
 		"child_session_id": strings.TrimSpace(req.ChildSessionID),
 		"question":         strings.TrimSpace(req.Question),

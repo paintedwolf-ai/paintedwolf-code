@@ -298,9 +298,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		}
 		settleRetained(st.history, assistantMsg.ID)
 		batchTurnTools := batchResult.turnTools
-		anyTaskEnqueued := batchResult.anyTaskEnqueued
 		taskEnqueuedThisTurn := batchResult.taskEnqueuedThisTurn
-		lastTaskMessageID := batchResult.lastTaskMessageID
 		breakToolLoop := batchResult.breakToolLoop
 		batchProgress := batchResult.progress
 		if batchProgress.Advanced {
@@ -323,11 +321,6 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 		}
 		st.turnTools = append(st.turnTools, batchTurnTools...)
 		st.tasksDispatchedCount += taskEnqueuedThisTurn
-		if anyTaskEnqueued {
-			if err := l.Tools.appendInFlightWorkerRosterNote(ctx, sessionID, sess, st.history, taskEnqueuedThisTurn, lastTaskMessageID); err != nil {
-				return out, err
-			}
-		}
 		if breakToolLoop {
 			out.breakLoop = true
 			out.exit = loopExitToolBoundary

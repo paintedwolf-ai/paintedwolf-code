@@ -9,6 +9,7 @@ import (
 	"github.com/lycaon/lycaon/internal/messageview"
 	"github.com/lycaon/lycaon/internal/project"
 	"github.com/lycaon/lycaon/internal/projectroot"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -72,6 +73,7 @@ type Service struct {
 	lastSessionExternalHidden sync.Map
 	pendingExternalBaselines  sync.Map
 	processes                 *bgprocess.Registry
+	names                     workercompletion.WorkerNames
 }
 
 func New(store Sessions, stops Stops, status Status, admission Admission, batch Batch, instructions Instructions, transcript Transcript) *Service {
@@ -81,6 +83,9 @@ func (s *Service) SetProjects(projects Projects)      { s.projects = projects }
 func (s *Service) SetWorkers(workers Workers)         { s.workers = workers }
 func (s *Service) SetWorkerAbort(workers WorkerAbort) { s.workerAbort = workers }
 func (s *Service) SetAnchors(anchors Anchors)         { s.anchors = anchors }
+
+// SetWorkerNames names the workers that notices about bound work report.
+func (s *Service) SetWorkerNames(names workercompletion.WorkerNames) { s.names = names }
 
 // SetRootHistory selects the attachment change record root changes advance.
 func (s *Service) SetRootHistory(history *projectroot.History) { s.rootHistory = history }

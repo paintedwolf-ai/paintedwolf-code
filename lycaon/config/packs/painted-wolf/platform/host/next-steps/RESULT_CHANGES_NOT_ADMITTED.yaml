@@ -1,0 +1,16 @@
+steps:
+  - when: "paintedwolf.state == 'working' && paintedwolf.worker != ''"
+    tool: "wait"
+    args:
+      conditions:
+        - kind: "next_worker_done"
+          handles: ["{{ paintedwolf.worker }}"]
+    complete: true
+    say: "Wait for the worker to deliver with {{ call }}, then try again."
+    otherwise: "Try again once the worker delivers."
+  - when: "paintedwolf.state == 'asking' && paintedwolf.worker != ''"
+    tool: "answer_decision"
+    args:
+      worker: "{{ paintedwolf.worker }}"
+    say: "The worker is waiting on its question; answer it with {{ call }}."
+    otherwise: "The worker is waiting on its question; answer it first."

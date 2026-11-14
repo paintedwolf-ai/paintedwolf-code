@@ -348,3 +348,9 @@ func (s *Store) SetBrief(ctx context.Context, actor Actor, op Op, workerID, brie
 		return workerFromRow(w), nil
 	})
 }
+
+// OpenLaneRoots lists the current lane of every open worker, for the host
+// paths that keep branch trees on disk.
+func (s *Store) OpenLaneRoots(ctx context.Context) ([]string, error) {
+	return s.q.ListOpenWorkerLaneRefs(ctx)
+}

@@ -842,7 +842,9 @@ host_facts:
    type: bool
  - name: paintedwolf.supports_local_listen
    type: bool
- - name: paintedwolf.missing_summary_job_ids
+ - name: paintedwolf.missing_summary_count
+   type: int
+ - name: paintedwolf.missing_summary_workers
    type: list<string>
  - name: paintedwolf.supports_loopback_connect
    type: bool
@@ -1072,7 +1074,7 @@ host_facts:
    type: string
  - name: paintedwolf.original_bytes
    type: string
- - name: paintedwolf.overlap_job_ids
+ - name: paintedwolf.overlap_overlay_ids
    type: list<string>
  - name: paintedwolf.overlay_id
    type: string
@@ -1142,8 +1144,6 @@ host_facts:
    type: string
  - name: paintedwolf.period
    type: string
- - name: paintedwolf.prior_job_id
-   type: string
  - name: paintedwolf.progress
    type: string
  - name: paintedwolf.project_dir
@@ -1171,12 +1171,6 @@ host_facts:
  - name: paintedwolf.requested
    type: string
  - name: paintedwolf.resource
-   type: string
- - name: paintedwolf.resume_field
-   type: string
- - name: paintedwolf.resume_recorded
-   type: string
- - name: paintedwolf.resume_requested
    type: string
  - name: paintedwolf.receipt_token
    type: string
@@ -1221,8 +1215,6 @@ host_facts:
  - name: paintedwolf.step_fields
    type: string
  - name: paintedwolf.supplied
-   type: string
- - name: paintedwolf.threshold
    type: string
  - name: paintedwolf.timeout_ms
    type: string

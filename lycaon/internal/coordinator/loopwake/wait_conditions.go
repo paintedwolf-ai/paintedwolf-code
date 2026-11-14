@@ -244,7 +244,7 @@ func triggersFromConditions(conditions []awaitstore.Condition) ([]WaitTrigger, [
 	return ensureTimerBackstop(triggers), normalizeProcessHandles(handles)
 }
 
-// workerHandlesFromConditions lists the task ids a next_worker_done wait named.
+// workerHandlesFromConditions lists the worker names a next_worker_done wait named.
 func workerHandlesFromConditions(conditions []awaitstore.Condition) []string {
 	var handles []string
 	for _, condition := range conditions {

@@ -21,7 +21,7 @@ type ToolDeps struct {
 	Findings           func() findings.Store
 	RootSession        func(context.Context, string) string
 	PromotePaths       func(sessionID string) []api.WorkerPromoteJobPathStatus
-	OverlayMergePlan   func(sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan
+	OverlayMergePlan   func(ctx context.Context, sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan
 	ActiveReservations func(sessionID string) []api.BoardReservationEntry
 }
 
@@ -62,9 +62,12 @@ func RegisterBoardTools(reg *tools.DefaultRegistry, deps ToolDeps) error {
 			packboard.EnrichSnapshotReservationsForSession(sessionID, snap, deps.ActiveReservations)
 		}
 		view := BuildBoardView(snap, sessionID, level, time.Now().UTC())
+		// The coordinator reads workers by name from Workers; the job-keyed
+		// roster and path rows stay on the board Den shows.
+		view.Roster, view.PromotePaths = nil, nil
 		if deps.OverlayMergePlan != nil {
 			tasks := packboard.WorkerTasksFromSnapshot(*snap)
-			if plan := deps.OverlayMergePlan(sessionID, tasks); plan != nil && plan.PendingCount > 0 {
+			if plan := deps.OverlayMergePlan(ctx, sessionID, tasks); plan != nil && plan.PendingCount > 0 {
 				view.OverlayMergePlan = plan
 			}
 		}

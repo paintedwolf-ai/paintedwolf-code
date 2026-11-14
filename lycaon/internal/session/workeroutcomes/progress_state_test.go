@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/progress"
@@ -48,7 +49,7 @@ func TestCurrentProgressSnapshotUsesRootStoreIndependentlyOfHistory(t *testing.T
 		if snapshot.ScopeSessionID != "root" || snapshot.InitializationRequired || snapshot.Content != expected.Content || snapshot.Revision != expected.Revision || current.ProgressOpenCount != 2 || current.ProgressMissing {
 			t.Fatalf("stored facts were lost: %+v / %+v", snapshot, current)
 		}
-		if snapshot.Reconciliation == nil || snapshot.Reconciliation.Token != closure.Reconciliation("root").Token || len(snapshot.Reconciliation.Jobs) != 1 || snapshot.Reconciliation.Jobs[0] != "worker-one" {
+		if snapshot.Reconciliation == nil || snapshot.Reconciliation.Token != closure.Reconciliation("root").Token || strings.Contains(current.ProgressSnapshot, "worker-one") {
 			t.Fatalf("wrong root finish set: %+v", snapshot)
 		}
 		if previousRevision != "" && previousRevision == snapshot.Revision {
@@ -69,5 +70,26 @@ func TestEmptyProgressExplicitlyRequiresInitialization(t *testing.T) {
 	testutil.FailErr(t, "decode empty checklist", json.Unmarshal([]byte(current.ProgressSnapshot), &snapshot))
 	if snapshot.ScopeSessionID != "root" || !snapshot.InitializationRequired || !current.ProgressMissing || snapshot.Revision == "" {
 		t.Fatalf("empty current checklist was ambiguous: %+v / %+v", snapshot, current)
+	}
+}
+
+// Surface selection reads the delivered worker count; a failed count leaves it
+// at zero.
+func TestSessionStateCountsDeliveredWorkers(t *testing.T) {
+	for _, tc := range []struct {
+		n    int
+		err  error
+		want int
+	}{{2, nil, 2}, {5, errors.New("store closed"), 0}} {
+		state := workeroutcomes.NewState(workeroutcomes.StatePorts{Sessions: &progressSessions{}})
+		state.SetDeliveredWorkers(func(_ context.Context, sessionID string) (int, error) {
+			if sessionID != "coord" {
+				t.Fatalf("counted in session %q", sessionID)
+			}
+			return tc.n, tc.err
+		})
+		if got := state.ForSession(t.Context(), &api.Session{ID: "coord"}).WorkersDelivered; got != tc.want {
+			t.Fatalf("delivered = %d want %d", got, tc.want)
+		}
 	}
 }

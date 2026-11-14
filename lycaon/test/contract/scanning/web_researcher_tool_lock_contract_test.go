@@ -59,8 +59,8 @@ func TestWebResearcherToolLockContract(t *testing.T) {
 	}
 	sort.Strings(granted)
 	want := []string{
-		"complete_leg", "fetch_url", "pack_board", "recall", "record_finding",
-		"request_decision", "scan_query", "skills_read", "wait", "web_search",
+		"complete_leg", "fetch_url", "message_coordinator", "pack_board", "recall",
+		"record_finding", "request_decision", "scan_query", "skills_read", "wait", "web_search",
 	}
 	if !reflect.DeepEqual(granted, want) {
 		t.Fatalf("web_research profile grants %v want exactly %v", granted, want)

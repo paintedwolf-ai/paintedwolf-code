@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workerops"
+	"github.com/lycaon/lycaon/internal/workerstate"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
@@ -16,6 +18,22 @@ import (
 // OverlayToolDeps provides overlay merge operations.
 type OverlayToolDeps struct {
 	Merge *MergeService
+	// Results resolves the result handles the tools are addressed by.
+	Results *workerops.Service
+}
+
+// overlayJob resolves a result handle to the job whose changes it names.
+// overlayJob resolves a result handle to the job holding its changes. Without
+// worker results the handle is the job itself and names no result.
+func overlayJob(ctx context.Context, deps OverlayToolDeps, tool string, tctx tools.ToolContext, handle string, op workerstate.Operation) (jobID, resultHandle string, err error) {
+	if deps.Results == nil {
+		return handle, "", nil
+	}
+	ref, err := deps.Results.Result(ctx, coordinatorActor(tctx), handle, op)
+	if err != nil {
+		return "", "", workerToolReject(tool, "", "", err, handle)
+	}
+	return ref.JobID, handle, nil
 }
 
 // RegisterOverlayTools registers coordinator overlay tools.
@@ -29,9 +47,13 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if overrideErr != nil {
 			return "", overrideErr
 		}
-		overlayID := strings.TrimSpace(stringArg(args["overlay_id"]))
-		if overlayID == "" {
+		handle := strings.TrimSpace(stringArg(args["overlay_id"]))
+		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
+		}
+		overlayID, resultHandle, err := overlayJob(ctx, deps, "promote_overlay", tctx, handle, workerstate.OpPromote)
+		if err != nil {
+			return "", err
 		}
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		resolutions := parsePromoteResolutions(args["resolutions"])
@@ -51,6 +73,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 			UserTurn:    tctx.Identity.UserTurn,
 		}
 		out, err := deps.Merge.PromoteOverlay(ctx, tctx.Identity.SessionID, overlayID, in)
+		out.ResultHandle = resultHandle
 		if err == nil {
 			tools.ReportSyntaxOverride(ctx, tctx, out.Applied...)
 		}
@@ -59,14 +82,18 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 			tctx.Effects.Out.Completion = overlayCompletion("overlay_promotion", out, "promoted")
 			tctx.Effects.Out.OverlayPromotion = out.OverlayPromotion
 		}
-		return formatOverlayPromoteHostContent(ctx, overlayID, out, err)
+		return formatOverlayPromoteHostContent(ctx, handle, out, err)
 	}); err != nil {
 		return err
 	}
 	if err := reg.Register("reject_overlay", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		overlayID := strings.TrimSpace(stringArg(args["overlay_id"]))
-		if overlayID == "" {
+		handle := strings.TrimSpace(stringArg(args["overlay_id"]))
+		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
+		}
+		overlayID, _, err := overlayJob(ctx, deps, "reject_overlay", tctx, handle, workerstate.OpReject)
+		if err != nil {
+			return "", err
 		}
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		reason := strings.TrimSpace(stringArg(args["reason"]))
@@ -77,14 +104,18 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 				Operation: "overlay_rejection", State: "rejected", ResourceKind: "overlay", ResourceID: strings.TrimSpace(out.OverlayID),
 			}
 		}
-		return formatOverlayRejectHostContent(ctx, overlayID, out, err)
+		return formatOverlayRejectHostContent(ctx, handle, out, err)
 	}); err != nil {
 		return err
 	}
 	if err := reg.Register("preview_overlay", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		overlayID := strings.TrimSpace(stringArg(args["overlay_id"]))
-		if overlayID == "" {
+		handle := strings.TrimSpace(stringArg(args["overlay_id"]))
+		if handle == "" {
 			return "", fmt.Errorf("overlay_id is required")
+		}
+		overlayID, resultHandle, err := overlayJob(ctx, deps, "preview_overlay", tctx, handle, workerstate.OpPreview)
+		if err != nil {
+			return "", err
 		}
 		captureWorkerSubject(tctx, deps.Merge.Queue, overlayID)
 		detail := parsePromoteDetailArg(args["detail"])
@@ -93,6 +124,7 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 		if err != nil {
 			return "", err
 		}
+		out.ResultHandle = resultHandle
 		if tctx.Effects.Out != nil {
 			tctx.Effects.Out.OwnerRef = strings.TrimSpace(out.JobID)
 			tctx.Effects.Out.Completion = overlayCompletion("overlay_preview", out, "previewed")

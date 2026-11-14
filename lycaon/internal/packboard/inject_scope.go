@@ -50,13 +50,6 @@ func BuildInjectLines(snapshot api.BoardSnapshot, scope InjectScope, opts Orient
 		}
 	}
 	lines = append(lines, workerStateLines(snapshot, now)...)
-	if scope == InjectScopePulse {
-		for _, t := range inFlightWorkerTasks(tasks) {
-			if line := FormatInFlightWorkerPulseLine(t); line != "" {
-				lines = append(lines, line)
-			}
-		}
-	}
 	if scanLines := FormatScansLines(snapshot.Scans, gitHeadShort(snapshot.Git), now, false); len(scanLines) > 0 {
 		lines = append(lines, scanLines...)
 	}

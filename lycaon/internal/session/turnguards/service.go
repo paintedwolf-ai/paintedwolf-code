@@ -101,6 +101,8 @@ type Service struct {
 	coordinatorFrame    inject.CoordinatorTurnFrameSource
 	workerQueue         workeroutcomes.CycleLedger
 	taskIdentities      workeradmission.TaskIdentityResolver
+	latestResultJob     LatestResultJobs
+	jobNames            JobNames
 }
 
 func New(store Sessions, policy *policyfacts.Service, verification *sessionverification.Service, feedback *policyfeedback.Service, state State, decisions Decisions, workspace Workspace, batch *batchcontrol.Service, closure *progressclosure.Service, closeouts *closeouts.Service, profiles *profiles.Service, limits *sessionlimits.Service) *Service {

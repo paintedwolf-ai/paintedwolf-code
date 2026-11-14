@@ -17,28 +17,24 @@ type Refusal struct {
 	View   workerstate.View
 	// AgentChange is set when an agent or scope change was refused.
 	AgentChange workerstate.AgentChange
-	// JobID is the worker's latest round's job; ChangedJobID is the job of
-	// its newest result whose changes are open, else of its newest changed
-	// result; WorkflowWorkID is a planned leg's work identity. Recovery
-	// steps are built from them.
-	JobID, ChangedJobID, WorkflowWorkID string
+	// ChangedResult is the handle of the newest result whose changes are
+	// open, else of the newest changed result; WorkflowWorkID is a planned
+	// leg's work identity. Recovery steps are built from them.
+	ChangedResult, WorkflowWorkID string
 }
 
 func refusal(snap Snapshot, op workerstate.Operation) *Refusal {
 	r := &Refusal{Worker: snap.Worker.Name, Op: op, View: snap.View, WorkflowWorkID: snap.Worker.WorkflowWorkID}
-	if latest, ok := snap.Latest(); ok {
-		r.JobID = latest.JobID
-	}
 	for i := len(snap.Rounds) - 1; i >= 0; i-- {
 		round := snap.Rounds[i]
 		if round.ResultID == "" || round.CheckpointID == "" {
 			continue
 		}
-		if r.ChangedJobID == "" {
-			r.ChangedJobID = round.JobID
+		if r.ChangedResult == "" {
+			r.ChangedResult = round.ResultID
 		}
 		if snap.Dispositions[round.ResultID].ChangeState == "" {
-			r.ChangedJobID = round.JobID
+			r.ChangedResult = round.ResultID
 			break
 		}
 	}
@@ -318,4 +314,80 @@ func (s *Service) History(ctx context.Context, actor workerrecords.Actor, name s
 		page.Before = msgs[limit-1].Seq
 	}
 	return page, nil
+}
+
+// Result resolves a result handle for an operation on its changes. A handle
+// of a worker whose state does not admit op is refused: changes are not
+// promoted, rejected or previewed against a round that is still running.
+func (s *Service) Result(ctx context.Context, actor workerrecords.Actor, handle string, op workerstate.Operation) (workerrecords.ResultRef, error) {
+	ref, err := s.Reader.Records.Result(ctx, actor, strings.TrimSpace(handle))
+	if err != nil {
+		return workerrecords.ResultRef{}, err
+	}
+	w, err := s.Reader.Records.Worker(ctx, actor, ref.WorkerID)
+	if err != nil {
+		return workerrecords.ResultRef{}, err
+	}
+	snap, err := s.Reader.Read(ctx, actor, w)
+	if err != nil {
+		return workerrecords.ResultRef{}, err
+	}
+	if !snap.View.Admits(op) {
+		return workerrecords.ResultRef{}, refusal(snap, op)
+	}
+	return ref, nil
+}
+
+// Stop is what stopping a worker did.
+type Stop struct {
+	Worker string `json:"worker"`
+	// JobID is the round stopped, or the held job withdrawn.
+	JobID string `json:"job_id,omitempty"`
+	// Withdrawn closes a planned or waiting worker that never started.
+	Withdrawn bool `json:"withdrawn,omitempty"`
+}
+
+// Stop resolves what worker_cancel stops. A working or asking worker's
+// round is stopped and keeps its work; a waiting worker's held job is
+// withdrawn with the worker, and a planned worker is withdrawn. The caller
+// cancels JobID through the job queue; withdrawal closes the worker here.
+func (s *Service) Stop(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, name, reason string) (Stop, error) {
+	snap, err := s.resolve(ctx, actor, name)
+	if err != nil {
+		return Stop{}, err
+	}
+	out := Stop{Worker: snap.Worker.Name}
+	latest, hasRound := snap.Latest()
+	switch {
+	case snap.View.Admits(workerstate.OpCancel):
+		out.JobID = latest.JobID
+		return out, nil
+	case snap.View.Admits(workerstate.OpWithdraw):
+		if hasRound && latest.SettledAt == "" {
+			out.JobID = latest.JobID
+		}
+		if strings.TrimSpace(reason) == "" {
+			reason = "withdrawn"
+		}
+		if _, err := s.Reader.Records.Close(ctx, actor, op, snap.Worker.ID, reason); err != nil {
+			return Stop{}, err
+		}
+		out.Withdrawn = true
+		return out, nil
+	}
+	return Stop{}, refusal(snap, workerstate.OpCancel)
+}
+
+// Asking returns the job of the round a worker's pending question
+// suspended; a worker that is not asking is refused.
+func (s *Service) Asking(ctx context.Context, actor workerrecords.Actor, name string) (string, error) {
+	snap, err := s.resolve(ctx, actor, name)
+	if err != nil {
+		return "", err
+	}
+	if !snap.View.Admits(workerstate.OpAnswer) {
+		return "", refusal(snap, workerstate.OpAnswer)
+	}
+	latest, _ := snap.Latest()
+	return latest.JobID, nil
 }

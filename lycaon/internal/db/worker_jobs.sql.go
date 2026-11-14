@@ -1446,7 +1446,7 @@ func (q *Queries) ListWorkerJobs(ctx context.Context, statusesJson string) ([]Wo
 }
 
 const listWorkerJobsForBranchRetention = `-- name: ListWorkerJobsForBranchRetention :many
-SELECT id, project_id, status, merge_status, workspace_overlay_id
+SELECT id, project_id, status, merge_status, workspace_overlay_id, workspace_relpath
 FROM worker_jobs
 ORDER BY created_at, id
 `
@@ -1457,6 +1457,7 @@ type ListWorkerJobsForBranchRetentionRow struct {
 	Status             string         `json:"status"`
 	MergeStatus        sql.NullString `json:"merge_status"`
 	WorkspaceOverlayID sql.NullString `json:"workspace_overlay_id"`
+	WorkspaceRelpath   sql.NullString `json:"workspace_relpath"`
 }
 
 // Jobs own provisioning before their branch path and baseline are published.
@@ -1475,6 +1476,7 @@ func (q *Queries) ListWorkerJobsForBranchRetention(ctx context.Context) ([]ListW
 			&i.Status,
 			&i.MergeStatus,
 			&i.WorkspaceOverlayID,
+			&i.WorkspaceRelpath,
 		); err != nil {
 			return nil, err
 		}

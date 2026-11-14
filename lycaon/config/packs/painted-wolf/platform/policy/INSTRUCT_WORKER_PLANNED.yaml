@@ -19,5 +19,7 @@ instead: Branch on Code INSTRUCT_WORKER_PLANNED; do not retry the same call
 x-paintedwolf-scenarios:
   - id: default
     vars:
-      profile: coordinator
+      session_role: coordinator
+      worker: parser-fix
+      workflow_work_id: review-1
       tool: instruct_worker

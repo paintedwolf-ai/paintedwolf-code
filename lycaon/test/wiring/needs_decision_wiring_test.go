@@ -13,6 +13,7 @@ import (
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	wire "github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -38,6 +39,14 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	child, err := h.Store.CreateChild(ctx, sess, wire.SpawnChildRequest{AgentType: "implementer", Prompt: "Wire the parser"})
 	testutil.FailErr(t, "create child", err)
 	testutil.FailErr(t, "set child", h.Delegations.Queue.SetChildSessionID(ctx, jobID, child.ID))
+	records := workerrecords.New(h.DB)
+	coord := workerrecords.Actor{SessionID: sess.ID, Role: workerrecords.RoleCoordinator, PrincipalID: sess.ID}
+	w, err := records.CreateWorker(ctx, coord, workerrecords.Op{ID: "create-parser"}, workerrecords.WorkerSpec{
+		Name: "parser", AgentType: "implementer", ScopeMode: "write", Brief: "fixture", ChildSessionID: child.ID,
+	})
+	testutil.FailErr(t, "create worker", err)
+	_, err = records.AdmitRound(ctx, coord, workerrecords.Op{ID: "admit-parser"}, w.WorkerID, workerrecords.RoundSpec{JobID: jobID, ExecutionTarget: "local"})
+	testutil.FailErr(t, "admit round", err)
 	claimed, err := h.Delegations.Queue.ClaimNext(ctx, worker.ClaimRequest{
 		ProjectID:       sess.ProjectID,
 		ExecutionTarget: wire.ExecutionTargetLocal,
@@ -94,7 +103,7 @@ func TestNeedsDecisionRoundTrip(t *testing.T) {
 	}
 
 	out, err := h.ToolRegistry.Run(ctx, "answer_decision", map[string]any{
-		"job_id": jobID, "option": "2",
+		"worker": "parser", "answer": "2",
 	}, wiringToolContext(sess.ID, dir))
 	testutil.FailErr(t, "answer_decision", err)
 	if !strings.Contains(out, "resumed") {

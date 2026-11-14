@@ -141,7 +141,7 @@ func TestQueuedWakeRetainsDecisionAndBatchIdentity(t *testing.T) {
 	f := newQueuedWaitFixture(t)
 	finish := f.loop.Admission.BeginPromptExecution(t.Context(), "session")
 	env := anchor.Envelope{BatchSeq: 3, BatchSeqSet: true}
-	env.WithWorkerDecision(api.WorkerDecisionRequest{WorkerID: "job", Question: "Choose scope"})
+	env.WithWorkerDecision(api.WorkerDecisionRequest{WorkerID: "job", Question: "Choose scope"}, "fixer")
 	f.loop.Nudges.NudgeAfterWorkerJobTerminal(t.Context(), "session", "job", anchor.WorkerTaskFinished, "", "leg", env)
 	pending, ok := f.loop.Nudges.sessionPendingQueue("session").peek()
 	if !ok || pending.completingJobID != "job" || pending.legID != "leg" || !pending.env.HasWorkerDecision() || pending.env.BatchSeq != 3 {

@@ -217,6 +217,18 @@ func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string
 	if err := disposeWorkerRound(ctx, q, jobID, api.WorkerMergeStatusMerged, plan.ID); err != nil {
 		return err
 	}
+	ancestors, err := q.ListWorkerAncestorPendingJobs(ctx, jobID)
+	if err != nil {
+		return err
+	}
+	for _, ancestor := range ancestors {
+		if err := landAncestorRound(ctx, q, ancestor, plan.ID); err != nil {
+			return err
+		}
+		if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, ancestor); err != nil {
+			return err
+		}
+	}
 	if err := jobstate.EnqueueJobEventTx(ctx, tx, s.outbox, jobID); err != nil {
 		return err
 	}
@@ -260,4 +272,19 @@ func disposeWorkerRound(ctx context.Context, q *db.Queries, jobID string, status
 	}
 	_, err := q.DisposeWorkerResultsByJob(ctx, params)
 	return err
+}
+
+// landAncestorRound records that a later round of the same worker landed an
+// earlier round's changes: its lane carried them forward.
+func landAncestorRound(ctx context.Context, q *db.Queries, jobID, landedChangeID string) error {
+	n, err := q.SetLiveWorkerJobMergeStatus(ctx, db.SetLiveWorkerJobMergeStatusParams{
+		MergeStatus: db.NullString(string(api.WorkerMergeStatusMerged)), ID: jobID,
+	})
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return fmt.Errorf("earlier round %s is no longer pending", jobID)
+	}
+	return disposeWorkerRound(ctx, q, jobID, api.WorkerMergeStatusMerged, landedChangeID)
 }

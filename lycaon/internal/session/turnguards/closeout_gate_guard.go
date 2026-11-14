@@ -3,12 +3,14 @@ package turnguards
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session/closeouts"
 	sessiontree "github.com/lycaon/lycaon/internal/session/tree"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -22,14 +24,14 @@ func (m *Service) PendingOverlays(ctx context.Context, sess *api.Session, invoke
 	if m == nil || sess == nil || sess.IsWorkerChild() {
 		return nil, false
 	}
-	pending := m.state.ForSession(ctx, sess).PendingOverlayIDs
+	pending := m.openResults(ctx, m.state.ForSession(ctx, sess).PendingOverlayIDs)
 	if len(pending) == 0 {
 		return nil, false
 	}
 	reject, blocked := m.ToolPolicy.FinishBlock(ctx, sess, func(gc *oar.GuardContext) error {
 		gc.Workers.PendingOverlayPromote = true
 		gc.Rejection.RejectObservation = "closeout_pending_overlays"
-		gc.PutRejectData(overlayDispositionRequiredCode, map[string]any{"job_id": pending[0]})
+		gc.PutRejectData(overlayDispositionRequiredCode, m.pendingResultData(ctx, pending[0]))
 		return nil
 	})
 	if blocked && !invokeAllowed {
@@ -88,4 +90,42 @@ func (m *Service) AssertCompletion(ctx context.Context, sess *api.Session) error
 		return nil
 	}
 	return m.workflows.Policy.AssertSessionCompletion(ctx, sess.ID)
+}
+
+// openResults drops pending jobs whose result the coordinator shelved: keeping
+// changes unlanded on purpose is a disposition. A failed lookup keeps the job.
+func (m *Service) openResults(ctx context.Context, jobIDs []string) []string {
+	if m.jobNames == nil {
+		return jobIDs
+	}
+	out := make([]string, 0, len(jobIDs))
+	for _, id := range jobIDs {
+		names, ok, err := m.jobNames.NamesByJob(ctx, id)
+		if err == nil && ok && names.Change == workerrecords.ChangeShelved {
+			continue
+		}
+		out = append(out, id)
+	}
+	return out
+}
+
+// pendingResultData names a pending result by its worker and handle; the
+// coordinator never addresses the job.
+func (m *Service) pendingResultData(ctx context.Context, jobID string) map[string]any {
+	data := map[string]any{}
+	if m.jobNames == nil {
+		return data
+	}
+	names, ok, err := m.jobNames.NamesByJob(ctx, jobID)
+	if err != nil {
+		slog.WarnContext(ctx, "name a pending result for closeout", "job_id", jobID, "error", err)
+		return data
+	}
+	if ok {
+		data["worker"] = names.Worker
+		if names.Handle != "" {
+			data["overlay_id"] = names.Handle
+		}
+	}
+	return data
 }

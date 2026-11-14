@@ -12,7 +12,7 @@ message: Required review work is outstanding.
 what: Required review evidence is unavailable for these inputs.
 cause: A declared review assignment needs a completed applicable result.
 why: Editing the verdict cannot supply another worker's assessment.
-fix: Follow the returned action and exact work_ids or job_ids. For dispatch_work, dispatch the named assignment; for wait_for_work, wait for the active jobs.
+fix: Follow the returned action and exact work_ids. For dispatch_work, dispatch the named assignment; for wait_for_work, wait for the workers already running.
 instead: Reconcile the resulting evidence before resubmitting the verdict.
 x-paintedwolf-scenarios:
   - id: required

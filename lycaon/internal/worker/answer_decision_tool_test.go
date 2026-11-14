@@ -52,7 +52,6 @@ func answerDecisionService(t *testing.T, q *answerStubQueue, decisions sessionde
 }
 
 func TestAnswerDecisionResumesWorker(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
 	q := &answerStubQueue{task: &api.WorkerTask{
 		ID: "job-1", ParentSessionID: "parent-1", ChildSessionID: "child-1",
 		AgentType: "implementer", ProjectID: testdbseed.DefaultProjectID,
@@ -63,65 +62,38 @@ func TestAnswerDecisionResumesWorker(t *testing.T) {
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "Refactor or work around?", Options: []string{"do A", "do B"}, BlockerClass: api.WorkerBlockerDecision,
 	}))
 	svc, resolver := answerDecisionService(t, q, decisions)
-	testutil.FailErr(t, "register", RegisterAnswerDecisionTool(reg, AnswerDecisionToolDeps{Answer: svc}))
-
-	capture := &tools.ToolInvocationOut{}
-	out, err := reg.Run(context.Background(), "answer_decision",
-		map[string]any{"job_id": "job-1", "option": "2"},
-		tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "parent-1"},
-			Effects:  tools.InvocationEffects{Out: capture},
-		})
-	testutil.FailErr(t, "run", err)
-	if capture.DisplaySubject != "Refactor the project · do B" {
-		t.Fatalf("decision subject = %q", capture.DisplaySubject)
-	}
-	if !strings.Contains(out, "resumed") {
-		t.Fatalf("out = %q", out)
-	}
-	if resolver.sessionID != "child-1" || len(resolver.appended) != 1 || !strings.Contains(resolver.appended[0].Content, "do B") {
-		t.Fatalf("appended = %+v", resolver.appended)
+	out, err := svc.AnswerJob(context.Background(), "parent-1", "fixer", "job-1", "2", "")
+	testutil.FailErr(t, "answer", err)
+	if out.Option != "do B" || resolver.sessionID != "child-1" || len(resolver.appended) != 1 || !strings.Contains(resolver.appended[0].Content, "do B") {
+		t.Fatalf("answer = %+v appended = %+v", out, resolver.appended)
 	}
 	if _, ok, err := decisions.Get(context.Background(), "child-1"); err != nil || ok {
 		t.Fatalf("decision after answer: ok=%v err=%v", ok, err)
 	}
+	if _, err := svc.AnswerJob(context.Background(), "other", "fixer", "job-1", "do A", ""); err == nil {
+		t.Fatal("answered a job from another session")
+	}
 }
 
+// A decision that offers options takes one of them; one that names another
+// job is no pending decision of that worker.
 func TestAnswerDecisionValidation(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
 	q := &answerStubQueue{task: &api.WorkerTask{ID: "job-1", ParentSessionID: "parent-1", ChildSessionID: "child-1"}}
 	decisions := sessiondecisions.NewMemory()
 	testutil.FailErr(t, "store decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
+		ChildSessionID: "child-1", WorkerID: "job-other", Question: "q", Options: []string{"a", "b"}, BlockerClass: api.WorkerBlockerDecision,
+	}))
+	svc, _ := answerDecisionService(t, q, decisions)
+	_, err := svc.AnswerJob(context.Background(), "parent-1", "fixer", "job-1", "a", "")
+	var reject *toolrejection.ToolReject
+	if !errors.As(err, &reject) || reject.Code != DecisionNotFoundCode || reject.Data["worker"] != "fixer" {
+		t.Fatalf("mismatched decision: %v", err)
+	}
+	testutil.FailErr(t, "store matching decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "q", Options: []string{"a", "b"}, BlockerClass: api.WorkerBlockerDecision,
 	}))
-	svc, _ := answerDecisionService(t, q, decisions)
-	testutil.FailErr(t, "register", RegisterAnswerDecisionTool(reg, AnswerDecisionToolDeps{Answer: svc}))
-	if _, err := reg.Run(context.Background(), "answer_decision",
-		map[string]any{"job_id": "job-1", "option": "a"}, tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "other"},
-		}); err == nil || !strings.Contains(err.Error(), DecisionSessionMismatchCode) {
-		t.Fatalf("wrong-session err = %v", err)
-	}
-	if _, err := reg.Run(context.Background(), "answer_decision",
-		map[string]any{"job_id": "job-1", "option": "zzz"}, tools.ToolContext{
-			Identity: tools.InvocationIdentity{SessionID: "parent-1"},
-		}); err == nil || !strings.Contains(err.Error(), "not one of") {
+	if _, err := svc.AnswerJob(context.Background(), "parent-1", "fixer", "job-1", "zzz", ""); err == nil || !strings.Contains(err.Error(), "not one of") {
 		t.Fatalf("bad-option err = %v", err)
-	}
-}
-
-func TestAnswerDecisionJobIDMismatch(t *testing.T) {
-	q := &answerStubQueue{task: &api.WorkerTask{
-		ID: "job-wrong", ParentSessionID: "parent-1", ChildSessionID: "child-1",
-	}}
-	decisions := sessiondecisions.NewMemory()
-	testutil.FailErr(t, "store decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
-		ChildSessionID: "child-1", WorkerID: "job-expected", Question: "Pick one", Options: []string{"a", "b"}, BlockerClass: api.WorkerBlockerDecision,
-	}))
-	svc, _ := answerDecisionService(t, q, decisions)
-	_, err := svc.AnswerJob(context.Background(), "parent-1", "job-wrong", "1", "")
-	if err == nil || !strings.Contains(err.Error(), DecisionJobIDMismatchCode) {
-		t.Fatalf("err = %v want %s", err, DecisionJobIDMismatchCode)
 	}
 }
 
@@ -146,9 +118,9 @@ func TestResolveDecisionOption(t *testing.T) {
 
 func TestAnswerDecisionMissingJobRetainsTypedDecisionFacts(t *testing.T) {
 	svc, _ := answerDecisionService(t, &answerStubQueue{}, sessiondecisions.NewMemory())
-	_, err := svc.AnswerJob(t.Context(), "parent", "missing", "a", "coordinator")
+	_, err := svc.AnswerJob(t.Context(), "parent", "fixer", "missing", "a", "coordinator")
 	var reject *toolrejection.ToolReject
-	if !errors.As(err, &reject) || reject.Code != DecisionNotFoundCode || reject.Data["job_id"] != "missing" {
+	if !errors.As(err, &reject) || reject.Code != DecisionNotFoundCode || reject.Data["worker"] != "fixer" {
 		t.Fatalf("lost decision refusal: %#v / %v", reject, err)
 	}
 }
@@ -180,7 +152,7 @@ func TestAnswerDecisionOpenQuestionTakesFreeText(t *testing.T) {
 		ChildSessionID: "child-1", WorkerID: "job-1", Question: "Which encoding does the caller expect?", BlockerClass: api.WorkerBlockerDecision,
 	}))
 	svc, resolver := answerDecisionService(t, q, decisions)
-	out, err := svc.AnswerJob(context.Background(), "parent-1", "job-1", "2", "")
+	out, err := svc.AnswerJob(context.Background(), "parent-1", "fixer", "job-1", "2", "")
 	testutil.FailErr(t, "answer", err)
 	if out.Option != "2" || len(resolver.appended) != 1 || !strings.HasPrefix(resolver.appended[0].Content, DecisionAnswerCoordinator+": 2\n") {
 		t.Fatalf("answer = %+v appended = %+v", out, resolver.appended)

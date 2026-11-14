@@ -52,20 +52,22 @@ type Assembly struct {
 	Notes    *workeroutcomes.Notes
 	// MessageDelivery delivers coordinator and worker messages into requests.
 	MessageDelivery assembly.MessageDeliveryRecorder
-	PolicyIndex     *policyindex.Service
-	Processes       *processcontrol.Service
-	Profiles        *profiles.Service
-	Prompts         prompts.PromptTemplateEngine
-	Repository      repoinfo.Provider
-	Runtime         *coordinator.Runtime
-	Scan            assembly.ScanGuidanceHook
-	Stash           *toolpresentation.Stash
-	State           *workeroutcomes.State
-	WebResearch     *webresearch.ConfigStore
-	WorkerContext   assembly.WorkerContextBuilder
-	Workspace       *sessionscope.Service
-	Workspaces      *workerworkspace.Service
-	ToolContext     *toolcontext.Service
+	// WorkerRoster lists a coordinator's workers for its requests.
+	WorkerRoster  assembly.WorkerRosterSource
+	PolicyIndex   *policyindex.Service
+	Processes     *processcontrol.Service
+	Profiles      *profiles.Service
+	Prompts       prompts.PromptTemplateEngine
+	Repository    repoinfo.Provider
+	Runtime       *coordinator.Runtime
+	Scan          assembly.ScanGuidanceHook
+	Stash         *toolpresentation.Stash
+	State         *workeroutcomes.State
+	WebResearch   *webresearch.ConfigStore
+	WorkerContext assembly.WorkerContextBuilder
+	Workspace     *sessionscope.Service
+	Workspaces    *workerworkspace.Service
+	ToolContext   *toolcontext.Service
 }
 
 func (m *Assembly) Build() assembly.AssemblyDeps {
@@ -77,7 +79,7 @@ func (m *Assembly) Build() assembly.AssemblyDeps {
 		Agents:                m.Profiles.Agents,
 		Workflows:             m.Workflow.Manifests,
 		CoordinatorFrame:      m.Frame,
-		WorkerContext:         m.WorkerContext,
+		Workers:               assembly.Workers{Leg: m.WorkerContext, Roster: m.WorkerRoster},
 		Deliveries:            assembly.Deliveries{SiblingNotes: m.Notes, Messages: m.MessageDelivery},
 		PeerReservations:      m.Workspaces,
 		ImplementSessionState: m.State.ForSession,

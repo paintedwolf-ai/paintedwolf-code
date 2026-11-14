@@ -10,27 +10,17 @@ import (
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
-const (
-	workerResumeMismatchCode     = "WORKER_RESUME_MISMATCH"
-	workerResumeChildUnknownCode = "WORKER_RESUME_CHILD_UNKNOWN"
-)
-
-// TaskIdentity is a task call with the fields a resumed child or planned leg supplies.
+// TaskIdentity is a task call with the fields a planned leg supplies.
 type TaskIdentity struct {
 	MutationCapable bool
 	AgentType       string
 	Scope           api.TaskScope
 	WorkflowWorkID  string
-	// Prior is the resumed child's latest job.
-	Prior   *api.WorkerTask
-	Charter *api.WorkerTaskCharter
+	Charter         *api.WorkerTaskCharter
 }
 
-// TaskIdentityResolver resolves the identity supplied by an existing child or workflow leg.
+// TaskIdentityResolver resolves the identity a workflow leg supplies.
 type TaskIdentityResolver struct {
-	Children interface {
-		GetLatestByChildSessionID(context.Context, string) (*api.WorkerTask, bool)
-	}
 	WorkflowWork func(context.Context, string, string) (spawn.WorkflowWork, bool, error)
 }
 
@@ -47,35 +37,16 @@ func (r TaskIdentityResolver) Resolve(ctx context.Context, sessionID string, arg
 	}
 	id.Scope = scope.Normalized()
 
-	workIDGiven := id.WorkflowWorkID != ""
-	childSessionID, _ := args["child_session_id"].(string)
-	if childSessionID = strings.TrimSpace(childSessionID); childSessionID != "" {
-		var prior *api.WorkerTask
-		var ok bool
-		if r.Children != nil {
-			prior, ok = r.Children.GetLatestByChildSessionID(ctx, childSessionID)
-		}
-		if !ok || prior == nil {
-			return id, &toolrejection.ToolReject{Code: workerResumeChildUnknownCode, Data: map[string]any{"child_session_id": childSessionID}}
-		}
-		id.Prior = prior
-		if err := id.inheritFrom(prior, scopeGiven, childSessionID); err != nil {
-			return id, err
-		}
-	}
-
-	leg, planned, err := id.workflowWork(ctx, r, sessionID, id.Prior != nil && !workIDGiven)
+	leg, planned, err := id.workflowWork(ctx, r, sessionID)
 	if err != nil {
 		return id, err
 	}
 	if planned {
-		if id.Prior == nil {
-			id.Charter = leg.Charter
-		}
+		id.Charter = leg.Charter
 		if id.AgentType == "" {
 			id.AgentType = leg.AgentType
 		}
-		if !scopeGiven && id.Prior == nil && leg.Scope != nil {
+		if !scopeGiven && leg.Scope != nil {
 			id.Scope = leg.Scope.Normalized()
 		}
 	}
@@ -93,45 +64,9 @@ func (r TaskIdentityResolver) Resolve(ctx context.Context, sessionID string, arg
 	return id, nil
 }
 
-func (id *TaskIdentity) inheritFrom(prior *api.WorkerTask, scopeGiven bool, childSessionID string) error {
-	recordedScope := prior.EffectiveScope()
-	switch {
-	case id.AgentType != "" && id.AgentType != prior.AgentType:
-		return resumeMismatch(childSessionID, "agent_type", prior.AgentType, id.AgentType)
-	case scopeGiven && id.Scope.Mode != recordedScope.Mode:
-		return resumeMismatch(childSessionID, "scope", string(recordedScope.Mode), string(id.Scope.Mode))
-	}
-	id.AgentType = prior.AgentType
-	if !scopeGiven {
-		id.Scope = recordedScope
-	}
-	if id.WorkflowWorkID == "" {
-		id.WorkflowWorkID = strings.TrimSpace(prior.WorkflowWorkID)
-	}
-	return nil
-}
-
-// Resumed work retains its assignment only within its active run and phase.
-func (id *TaskIdentity) workflowWork(ctx context.Context, r TaskIdentityResolver, sessionID string, inherited bool) (spawn.WorkflowWork, bool, error) {
+func (id *TaskIdentity) workflowWork(ctx context.Context, r TaskIdentityResolver, sessionID string) (spawn.WorkflowWork, bool, error) {
 	if id.WorkflowWorkID == "" || r.WorkflowWork == nil {
 		return spawn.WorkflowWork{}, false, nil
 	}
-	leg, ok, err := r.WorkflowWork(ctx, sessionID, id.WorkflowWorkID)
-	if err != nil {
-		return spawn.WorkflowWork{}, false, err
-	}
-	if inherited && (!ok || leg.RunID != id.Prior.WorkflowRunID || leg.Phase != id.Prior.WorkflowPhase) {
-		id.WorkflowWorkID = ""
-		return spawn.WorkflowWork{}, false, nil
-	}
-	return leg, ok, nil
-}
-
-func resumeMismatch(childSessionID, field, recorded, requested string) error {
-	return &toolrejection.ToolReject{Code: workerResumeMismatchCode, Data: map[string]any{
-		"child_session_id": childSessionID,
-		"resume_field":     field,
-		"resume_recorded":  recorded,
-		"resume_requested": requested,
-	}}
+	return r.WorkflowWork(ctx, sessionID, id.WorkflowWorkID)
 }

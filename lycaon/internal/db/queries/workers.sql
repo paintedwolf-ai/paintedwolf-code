@@ -246,6 +246,21 @@ SELECT id, project_id, session_id, name, agent_type, scope_mode, brief, child_se
        closed_at, closed_reason, next_round_ordinal, next_message_seq, operation_id, created_at, updated_at
 FROM workers WHERE child_session_id = ?;
 
+-- name: ListWorkerAncestorPendingJobs :many
+-- The earlier rounds of the worker that ran this job whose changes are still
+-- pending. A worker's lane carries every undisposed earlier result into its
+-- later rounds, so landing a later round lands these with it.
+SELECT prior.job_id
+FROM worker_rounds r
+JOIN worker_rounds prior ON prior.worker_id = r.worker_id AND prior.ordinal < r.ordinal
+JOIN worker_results res ON res.worker_job_id = prior.job_id
+JOIN worker_jobs j ON j.id = prior.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY prior.ordinal;
+
 -- name: DisposeWorkerResultsByJob :execrows
 -- Records how a landing or rejection resolved a worker round's changes, in
 -- the transaction that resolved them. Landed and rejected are final; a
@@ -292,6 +307,37 @@ JOIN worker_results res ON res.id = d.result_id
 JOIN worker_rounds r ON r.job_id = res.worker_job_id
 JOIN workers w ON w.id = r.worker_id
 WHERE w.session_id = sqlc.arg(session_id) AND d.change_state = 'shelved';
+
+-- name: BindWorkerChildByJob :execrows
+-- A worker's first round spawns its child session; the worker keeps that
+-- session for every later round.
+UPDATE workers SET child_session_id = sqlc.arg(child_session_id), updated_at = sqlc.arg(updated_at)
+WHERE id = (SELECT worker_id FROM worker_rounds WHERE job_id = sqlc.arg(job_id))
+  AND child_session_id IS NULL;
+
+-- name: GetWorkerNameByJob :one
+SELECT w.name FROM worker_rounds r JOIN workers w ON w.id = r.worker_id WHERE r.job_id = ?;
+
+-- name: ListOpenWorkerLaneRefs :many
+-- The current lane of every open worker.
+SELECT p.preparation_ref
+FROM worker_workspace_preparations p
+JOIN workers w ON w.id = p.worker_id
+WHERE w.closed_at IS NULL
+  AND p.preparation_ref != ''
+  AND p.generation = (SELECT MAX(q.generation) FROM worker_workspace_preparations q WHERE q.worker_id = p.worker_id);
+
+-- name: GetWorkerJobNames :one
+-- A job's worker name and, once its round settles, the result handle and what
+-- became of the result's changes.
+SELECT w.name,
+       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state
+FROM worker_rounds r
+JOIN workers w ON w.id = r.worker_id
+LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?;
 
 -- name: LatestRoundJobForJob :one
 -- The job of the latest round of the worker that ran this job, or the job

@@ -1,0 +1,28 @@
+spec_version: "1.0"
+id: RESULT_CHANGES_NOT_ADMITTED
+kind: schema
+on: tool.rejected
+selector:
+  tools:
+    - preview_overlay
+    - promote_overlay
+    - reject_overlay
+    - shelve_overlay
+requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code, paintedwolf.state, paintedwolf.worker]
+when: paintedwolf.rejection_code == "RESULT_CHANGES_NOT_ADMITTED"
+effect: block
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:promote_overlay
+message: The worker that holds these changes does not admit this now.
+what: The worker that holds these changes is {{ paintedwolf.state }}, which does not admit this now.
+cause: Changes are resolved only while their worker is between rounds and they are still open.
+why: A worker's changes move only between its rounds, while they are still open; landed and rejected changes are final.
+fix: '{{ paintedwolf.next_steps }}'
+instead: Branch on Code RESULT_CHANGES_NOT_ADMITTED; do not retry until the worker's state changes
+x-paintedwolf-scenarios:
+  - id: default
+    vars:
+      session_role: coordinator
+      worker: parser-fix
+      tool: promote_overlay
+      state: working

@@ -12,6 +12,8 @@ import (
 )
 
 type WorkerCompletionEnvelope struct {
+	// Worker is the name the coordinator addresses the worker by.
+	Worker          string
 	JobID           string
 	ChildSessionID  string
 	AgentType       string
@@ -42,8 +44,7 @@ func FormatWorkerCompletionEnvelope(env WorkerCompletionEnvelope) string {
 	}
 	decisionJSON := marshalEnvelopeJSON(env.DecisionRequest)
 	doc := workercompletionxml.Doc{
-		JobID:               strings.TrimSpace(env.JobID),
-		ChildSessionID:      strings.TrimSpace(env.ChildSessionID),
+		Worker:              strings.TrimSpace(env.Worker),
 		AgentType:           strings.TrimSpace(env.AgentType),
 		State:               state,
 		MergeStatus:         strings.TrimSpace(env.MergeStatus),
@@ -96,15 +97,15 @@ func marshalEnvelopeJSON(v any) string {
 	return s
 }
 
-// ParseWorkerCompletionEnvelope reads a parent <task> block.
+// ParseWorkerCompletionEnvelope reads a parent <task> block. The block carries
+// no job or child session; callers take them from the worker summary.
 func ParseWorkerCompletionEnvelope(content string) (WorkerCompletionEnvelope, bool) {
 	doc, ok := workercompletionxml.Unmarshal(content)
 	if !ok {
 		return WorkerCompletionEnvelope{}, false
 	}
 	env := WorkerCompletionEnvelope{
-		JobID:          strings.TrimSpace(doc.JobID),
-		ChildSessionID: strings.TrimSpace(doc.ChildSessionID),
+		Worker:         strings.TrimSpace(doc.Worker),
 		AgentType:      strings.TrimSpace(doc.AgentType),
 		State:          NormalizeWorkerCompletionState(doc.State),
 		MergeStatus:    strings.TrimSpace(doc.MergeStatus),
@@ -130,7 +131,7 @@ func ParseWorkerCompletionEnvelope(content string) (WorkerCompletionEnvelope, bo
 			env.DecisionRequest = &dec
 		}
 	}
-	if env.JobID == "" && env.State == "" && env.AgentType == "" {
+	if env.State == "" && env.AgentType == "" {
 		return WorkerCompletionEnvelope{}, false
 	}
 	return env, true

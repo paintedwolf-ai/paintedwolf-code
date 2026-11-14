@@ -43,18 +43,18 @@ func TrimOverlayPromoteChunk(content string) (string, bool) {
 
 func overlayPromoteChunkMinimal(result api.WorkerMergeResult) api.WorkerMergeResult {
 	out := api.WorkerMergeResult{
-		JobID:         result.JobID,
-		Mode:          result.Mode,
-		Status:        result.Status,
-		Paths:         append([]string(nil), result.Paths...),
-		CleanPaths:    append([]string(nil), result.CleanPaths...),
-		Applied:       append([]string(nil), result.Applied...),
-		PathStatus:    append([]api.WorkerPromotePathStatus(nil), result.PathStatus...),
-		SpillPath:     strings.TrimSpace(result.SpillPath),
-		PromoteOrder:  result.PromoteOrder,
-		PromoteAfter:  append([]string(nil), result.PromoteAfter...),
-		BlockedBy:     append([]string(nil), result.BlockedBy...),
-		OverlapJobIDs: append([]string(nil), result.OverlapJobIDs...),
+		JobID:             result.JobID,
+		Mode:              result.Mode,
+		Status:            result.Status,
+		Paths:             append([]string(nil), result.Paths...),
+		CleanPaths:        append([]string(nil), result.CleanPaths...),
+		Applied:           append([]string(nil), result.Applied...),
+		PathStatus:        append([]api.WorkerPromotePathStatus(nil), result.PathStatus...),
+		SpillPath:         strings.TrimSpace(result.SpillPath),
+		PromoteOrder:      result.PromoteOrder,
+		PromoteAfter:      append([]string(nil), result.PromoteAfter...),
+		BlockedBy:         append([]string(nil), result.BlockedBy...),
+		OverlapOverlayIDs: append([]string(nil), result.OverlapOverlayIDs...),
 	}
 	if result.OverlayIntent != nil {
 		cp := *result.OverlayIntent
@@ -118,8 +118,7 @@ func inspectOverlayPromoteToolContent(content string) overlayPromoteInspection {
 		return overlayPromoteInspection{}
 	}
 	inspection := overlayPromoteInspection{
-		protected: strings.Contains(content, "OVERLAY_PROMOTE_SPILL") ||
-			strings.Contains(content, "BANNER_PROMOTE_CONFLICT_DIGEST"),
+		protected: strings.Contains(content, "OVERLAY_PROMOTE_SPILL"),
 	}
 	_, jsonPart, banners, ok := hostmarker.SplitToolJSONBody(content)
 	inspection.banners = banners

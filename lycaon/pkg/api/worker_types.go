@@ -246,26 +246,31 @@ type PromoteOverlayInput struct {
 // WorkerMergeResult is the promote_overlay / preview_overlay tool response.
 type WorkerMergeResult struct {
 	// OverlayPromotion is host-only transcript metadata.
-	OverlayPromotion *OverlayPromotion             `json:"-"`
-	JobID            string                        `json:"job_id"`
-	Mode             string                        `json:"mode"`
-	Status           WorkerMergeStatus             `json:"merge_status,omitempty"`
-	AgentType        string                        `json:"agent_type,omitempty"`
-	Paths            []string                      `json:"paths,omitempty"`
-	ChangedPaths     []string                      `json:"changed_paths,omitempty"`
-	CleanPaths       []string                      `json:"clean_paths,omitempty"`
-	Applied          []string                      `json:"applied,omitempty"`
-	PathStatus       []WorkerPromotePathStatus     `json:"path_status,omitempty"`
-	OverlapJobIDs    []string                      `json:"overlap_job_ids,omitempty"`
-	PromoteOrder     WorkerPromoteOrderKind        `json:"promote_order,omitempty"`
-	PromoteAfter     []string                      `json:"promote_after,omitempty"`
-	BlockedBy        []string                      `json:"blocked_by,omitempty"`
-	ConflictDigest   []WorkerPromoteConflictDigest `json:"conflict_digest,omitempty"`
-	Conflicts        []WorkerMergeConflict         `json:"conflicts,omitempty"`
-	OverlayIntent    *WorkerOverlayIntent          `json:"overlay_intent,omitempty"`
-	SpillPath        string                        `json:"spill_path,omitempty"` // host-data-relative (promote-spills/…); never absolute ~/.config/paintedwolf
-	ReadyResolutions []WorkerReadyResolution       `json:"ready_resolutions,omitempty"`
-	Error            string                        `json:"error,omitempty"`
+	OverlayPromotion *OverlayPromotion `json:"-"`
+	// JobID is host identity; the coordinator addresses the result by handle.
+	JobID        string                    `json:"-"`
+	ResultHandle string                    `json:"result_handle"`
+	Mode         string                    `json:"mode"`
+	Status       WorkerMergeStatus         `json:"merge_status,omitempty"`
+	AgentType    string                    `json:"agent_type,omitempty"`
+	Paths        []string                  `json:"paths,omitempty"`
+	ChangedPaths []string                  `json:"changed_paths,omitempty"`
+	CleanPaths   []string                  `json:"clean_paths,omitempty"`
+	Applied      []string                  `json:"applied,omitempty"`
+	PathStatus   []WorkerPromotePathStatus `json:"path_status,omitempty"`
+	// OverlapJobIDs are the sibling jobs whose pending changes share paths.
+	OverlapJobIDs []string `json:"-"`
+	// OverlapOverlayIDs are the result handles of those siblings.
+	OverlapOverlayIDs []string                      `json:"overlap_overlay_ids,omitempty"`
+	PromoteOrder      WorkerPromoteOrderKind        `json:"promote_order,omitempty"`
+	PromoteAfter      []string                      `json:"promote_after,omitempty"`
+	BlockedBy         []string                      `json:"blocked_by,omitempty"`
+	ConflictDigest    []WorkerPromoteConflictDigest `json:"conflict_digest,omitempty"`
+	Conflicts         []WorkerMergeConflict         `json:"conflicts,omitempty"`
+	OverlayIntent     *WorkerOverlayIntent          `json:"overlay_intent,omitempty"`
+	SpillPath         string                        `json:"spill_path,omitempty"` // host-data-relative (promote-spills/…); never absolute ~/.config/paintedwolf
+	ReadyResolutions  []WorkerReadyResolution       `json:"ready_resolutions,omitempty"`
+	Error             string                        `json:"error,omitempty"`
 	// Rebased lists children rebased after this overlay lands.
 	Rebased []OverlayRebaseOutcome `json:"rebased,omitempty"`
 	// SourceEvidence describes current verification requirements.

@@ -19,7 +19,7 @@ func reconciliation(root string, baseline guard.ProgressClosureBaseline) *progre
 		Jobs           []string
 	}{root, baseline.Revision, jobs})
 	digest := sha256.Sum256(raw)
-	return &progress.Reconciliation{Token: hex.EncodeToString(digest[:]), Jobs: jobs}
+	return &progress.Reconciliation{Token: hex.EncodeToString(digest[:]), Jobs: jobs, Settled: baseline.SettledWork()}
 }
 
 // Reconciliation exposes the exact worker finishes awaiting acknowledgement.

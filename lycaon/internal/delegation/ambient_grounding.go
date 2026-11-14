@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/grounding"
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/session"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -142,6 +143,8 @@ type AmbientGroundingCoordinator struct {
 	Events   *events.Publisher
 	// Pipeline is required for ambient post-turn Decisions (coordinator.closeout_check).
 	Pipeline *oar.GuardPipeline
+	// Names names the worker a job's round belongs to.
+	Names workercompletion.WorkerNames
 }
 
 func NewAmbientGroundingCoordinator(store Store, queue ambientWorkerQueue, gate AmbientGroundingGate, cfg GroundingConfig, state *grounding.StateStore, sessions *session.Host) *AmbientGroundingCoordinator {
@@ -215,13 +218,16 @@ func (g *AmbientGroundingCoordinator) applyOARAmbientGrounding(ctx context.Conte
 	tools.RegisterRecoveryFacts(ctx, gc)
 	ObserveDelegationGroundingVerdict(gc, verdict)
 	gc.Grounding.GroundingEscalated = groundingFlagged(g.State.Get(key), g.Config)
-	missing := []string{}
+	missing, workers := 0, []string{}
 	for _, job := range in.Jobs {
 		if job.Status == api.WorkerStatusComplete && !hasSummaryForJob(in.SummaryTags, job.ID) {
-			missing = append(missing, job.ID)
+			missing++
+			if name := g.Names.Name(ctx, job.ID); name != "" {
+				workers = append(workers, name)
+			}
 		}
 	}
-	gc.PutRejectData(ambientUngroundedCompletionCode, map[string]any{"missing_summary_job_ids": missing})
+	gc.PutRejectData(ambientUngroundedCompletionCode, map[string]any{"missing_summary_count": missing, "missing_summary_workers": workers})
 	_, err := g.Pipeline.EvaluateBlock(ctx, oar.AnchorCoordinatorPostTurn, gc)
 	if err != nil {
 		return err

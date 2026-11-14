@@ -19,20 +19,20 @@ import (
 // keeps the sandbox, and the settler retains the state a later retry resumes from.
 type SandboxSettler func(ctx context.Context, jobID, root string) error
 
-// ReconcileStaleSandboxes removes snapshotted candidates absent from current task state,
-// settling each one first. A blocked candidate is kept and reported; the rest proceed.
+// ReconcileStaleSandboxes removes branch trees whose directory name current state does not
+// retain, settling each one first. A blocked candidate is kept and reported; the rest proceed.
 func ReconcileStaleSandboxes(
 	ctx context.Context,
 	branchRoot, primaryDir string,
 	settle SandboxSettler,
-	loadRetainedJobIDs func(context.Context) (map[string]struct{}, error),
+	loadRetainedBranches func(context.Context) (map[string]struct{}, error),
 ) (removed int, err error) {
 	stateRoot := filepath.Dir(strings.TrimSpace(branchRoot))
 	listing, err := listAllSandboxEntries(stateRoot, branchRoot, primaryDir)
 	if err != nil {
 		return 0, err
 	}
-	retainJobIDs, err := loadRetainedJobIDs(ctx)
+	retainJobIDs, err := loadRetainedBranches(ctx)
 	if err != nil {
 		return 0, err
 	}

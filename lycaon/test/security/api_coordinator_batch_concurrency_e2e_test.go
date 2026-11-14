@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -104,7 +105,7 @@ func TestHTTPCoordinatorBatchCapRejectE2E(t *testing.T) {
 	}
 }
 
-func TestHTTPCoordinatorBatchRosterAndPackBoardE2E(t *testing.T) {
+func TestHTTPCoordinatorBatchWorkersOnPackBoardE2E(t *testing.T) {
 	mock := llm.NewMockProvider(&llm.MockConfig{Responses: []llm.MockResponseEntry{{
 		Pattern: "^HTTP_ROSTER",
 		ToolCalls: []llm.MockToolCall{
@@ -121,13 +122,17 @@ func TestHTTPCoordinatorBatchRosterAndPackBoardE2E(t *testing.T) {
 
 	acceptPromptHTTP(t, h.Server, sess.ID, "HTTP_ROSTER")
 	waitTaskEnqueueCountHTTP(t, h.Server, sess.ID, 2)
-	waitToolFeedbackHTTP(t, h.Server, sess.ID, "BANNER_WORKER_INFLIGHT_ROSTER")
 
 	_, err := h.Store.GetMessages(ctx, sess.ID)
 	testutil.FailErr(t, "GetMessages", err)
 
-	_, err = h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, securityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
+	board, err := h.ToolRegistry.Run(ctx, "pack_board", map[string]any{"detail_level": "compact"}, securityToolContext(sess.ID, sess.WorkspacePath, "coordinator"))
 	testutil.FailErr(t, "pack_board", err)
+	var view api.BoardView
+	testutil.FailErr(t, "decode pack_board", json.Unmarshal([]byte(board), &view))
+	if len(view.Workers) != 2 {
+		t.Fatalf("pack_board workers = %+v, want the two dispatched workers", view.Workers)
+	}
 }
 
 func seedCoordinatorRepo(t *testing.T, dir string) {

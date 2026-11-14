@@ -937,11 +937,13 @@ type BoardView struct {
 	// Coordinator session this board snapshot belongs to.
 	SessionID string `json:"session_id,omitempty"`
 	// One-line coordination headline (worker counts, merge status, conflicts).
-	Summary           string                       `json:"summary"`
-	Repo              RepoBrief                    `json:"repo"`
-	Git               *BoardGitSlice               `json:"git,omitempty"`
-	Scans             *BoardScansSlice             `json:"scans,omitempty"`
-	Roster            []BoardWorkerRosterEntry     `json:"roster,omitempty"`
+	Summary string                   `json:"summary"`
+	Repo    RepoBrief                `json:"repo"`
+	Git     *BoardGitSlice           `json:"git,omitempty"`
+	Scans   *BoardScansSlice         `json:"scans,omitempty"`
+	Roster  []BoardWorkerRosterEntry `json:"roster,omitempty"`
+	// Every open worker in the session, needing the coordinator first.
+	Workers           []BoardWorker                `json:"workers,omitempty"`
 	PromotePaths      []WorkerPromoteJobPathStatus `json:"promote_paths,omitempty"`
 	OverlayMergePlan  *OverlayMergePlan            `json:"overlay_merge_plan,omitempty"`
 	Delegation        []BoardDelegationEntry       `json:"delegation,omitempty"`
@@ -956,6 +958,26 @@ type BoardView struct {
 	TruncatedSections []string                     `json:"truncated_sections,omitempty"`
 	GeneratedAt       string                       `json:"generated_at"`
 	NowLine           string                       `json:"now_line"`
+}
+
+// BoardWorker One worker as its coordinator sees it, with the state admission reads.
+type BoardWorker struct {
+	Name      string            `json:"name"`
+	AgentType string            `json:"agent_type"`
+	ScopeMode string            `json:"scope_mode,omitempty"`
+	State     WorkerState       `json:"state"`
+	Reason    WorkerStateReason `json:"reason,omitempty"`
+	// The worker's latest instruction, else its brief, clipped to one line.
+	About string `json:"about,omitempty"`
+	// The pending decision an asking worker waits on.
+	Question string `json:"question,omitempty"`
+	// Handle of the worker's latest result.
+	ResultHandle      string                  `json:"result_handle,omitempty"`
+	ResultDisposition WorkerResultDisposition `json:"result_disposition,omitempty"`
+	ReadPaths         []string                `json:"read_paths,omitempty"`
+	ReadOmitted       int                     `json:"read_omitted,omitempty"`
+	ChangedPaths      []string                `json:"changed_paths,omitempty"`
+	ChangedOmitted    int                     `json:"changed_omitted,omitempty"`
 }
 
 // BoardWorkerRosterEntry
@@ -4518,29 +4540,36 @@ type OpenEditorDocumentRequest struct {
 
 // OverlayMergePlan
 type OverlayMergePlan struct {
-	PendingCount    int                      `json:"pending_count"`
+	PendingCount int `json:"pending_count"`
+	// Result handles in landing order.
 	PromoteSequence []string                 `json:"promote_sequence,omitempty"`
 	SharedPaths     []OverlayMergeSharedPath `json:"shared_paths,omitempty"`
 	Entries         []OverlayMergePlanEntry  `json:"entries,omitempty"`
 }
 
-// OverlayMergePlanEntry
+// OverlayMergePlanEntry One worker's latest pending result.
 type OverlayMergePlanEntry struct {
-	WorkerID      string                 `json:"worker_id"`
+	// Handle of the result.
+	OverlayID string `json:"overlay_id"`
+	// Name of the worker that delivered it.
+	Worker        string                 `json:"worker"`
 	AgentType     string                 `json:"agent_type,omitempty"`
 	ChangedPaths  []string               `json:"changed_paths,omitempty"`
 	CleanPaths    []string               `json:"clean_paths,omitempty"`
 	ConflictPaths []string               `json:"conflict_paths,omitempty"`
 	PromoteOrder  WorkerPromoteOrderKind `json:"promote_order,omitempty"`
-	PromoteAfter  []string               `json:"promote_after,omitempty"`
-	BlockedBy     []string               `json:"blocked_by,omitempty"`
-	PreviewStale  bool                   `json:"preview_stale,omitempty"`
+	// Handles of results that must land before this one is clean.
+	PromoteAfter []string `json:"promote_after,omitempty"`
+	// Handles of results this one must land before.
+	BlockedBy    []string `json:"blocked_by,omitempty"`
+	PreviewStale bool     `json:"preview_stale,omitempty"`
 }
 
 // OverlayMergeSharedPath
 type OverlayMergeSharedPath struct {
-	Path      string   `json:"path"`
-	WorkerIDs []string `json:"worker_ids"`
+	Path string `json:"path"`
+	// Handles of the pending results that change this path.
+	OverlayIDs []string `json:"overlay_ids"`
 }
 
 // OverlayPromotion Project file snapshots recorded by the host at the merge event.
@@ -9045,12 +9074,14 @@ type WorkerPromoteJobPathStatus struct {
 
 // WorkerPromotePathStatus
 type WorkerPromotePathStatus struct {
-	Path             string                    `json:"path"`
-	Status           WorkerPromotePathOutcome  `json:"status"`
-	Reason           string                    `json:"reason,omitempty"`
-	HunkCount        int                       `json:"hunk_count,omitempty"`
-	PromoteOrder     WorkerPromoteOrderKind    `json:"promote_order,omitempty"`
-	PromoteAfter     []string                  `json:"promote_after,omitempty"`
+	Path         string                   `json:"path"`
+	Status       WorkerPromotePathOutcome `json:"status"`
+	Reason       string                   `json:"reason,omitempty"`
+	HunkCount    int                      `json:"hunk_count,omitempty"`
+	PromoteOrder WorkerPromoteOrderKind   `json:"promote_order,omitempty"`
+	// Handles of results that must land before this path is clean.
+	PromoteAfter []string `json:"promote_after,omitempty"`
+	// Handles of results this path must land before.
 	BlockedBy        []string                  `json:"blocked_by,omitempty"`
 	PromoteOrderNote string                    `json:"promote_order_note,omitempty"`
 	ConflictTier     WorkerPromoteConflictTier `json:"conflict_tier,omitempty"`

@@ -48,7 +48,7 @@ workflow_compose: "Workflow definition",
 export const TOOL_CHICKLET_TITLE_KEYS: Readonly<
   Record<string, readonly string[]>
 > = {
-  answer_decision: ["option"],
+  answer_decision: ["answer"],
   ask_user: ["prompt"],
   capture_page: ["caption", "url", "project_dir"],
   chmod: ["paths", "mode"],

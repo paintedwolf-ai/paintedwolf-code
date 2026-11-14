@@ -213,7 +213,7 @@ func (q *memoryQueueQuery) ListBranchJobs(context.Context) ([]BranchJob, error) 
 	var out []BranchJob
 	for _, job := range q.jobs {
 		out = append(out, BranchJob{
-			ID: job.task.ID, ProjectID: job.projectID,
+			ID: job.task.ID, ProjectID: job.projectID, Branch: branchName(job.task.WorkspaceRoot),
 			Sealed: branchJobSealed(job.task.Status, job.task.MergeStatus, job.task.WorkspaceOverlayPath, job.task.WorkspaceRoot),
 		})
 	}

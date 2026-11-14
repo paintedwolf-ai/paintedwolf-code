@@ -222,6 +222,43 @@ components:
       - failed
       - canceled
       - held
+    WorkerState:
+      type: string
+      description: A worker's derived state.
+      enum:
+      - planned
+      - waiting
+      - working
+      - asking
+      - delivered
+      - idle
+      - failed
+      - recovering
+      - closed
+    WorkerStateReason:
+      type: string
+      description: What qualifies a worker's state.
+      enum:
+      - queued
+      - parked
+      - approval_wait
+      - prerequisite
+      - result_unaccounted
+      - changes_unresolved
+      - no_report
+      - recovery_required
+      - withdrawn
+      - session_unusable
+    WorkerResultDisposition:
+      type: string
+      description: What became of a worker's latest result.
+      enum:
+      - unaccounted
+      - accounted
+      - open
+      - landed
+      - rejected
+      - shelved
     WorkerMergeStatus:
       type: string
       description: |
@@ -289,10 +326,12 @@ components:
         promote_order:
           $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
         promote_after:
+          description: Handles of results that must land before this path is clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results this path must land before.
           type: array
           items:
             type: string
@@ -760,13 +799,13 @@ components:
       description: The promote_overlay and preview_overlay tool result.
       type: object
       required:
-      - job_id
+      - result_handle
       - mode
       additionalProperties: false
       properties:
-        job_id:
+        result_handle:
           type: string
-          format: uuid
+          description: The result these changes belong to.
         mode:
           type: string
         merge_status:
@@ -793,17 +832,19 @@ components:
           type: array
           items:
             $ref: worker.yaml#/components/schemas/WorkerPromotePathStatus
-        overlap_job_ids:
+        overlap_overlay_ids:
           type: array
           items:
             type: string
         promote_order:
           $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
         promote_after:
+          description: Handles of results that must land before these changes are clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results these changes must land before.
           type: array
           items:
             type: string

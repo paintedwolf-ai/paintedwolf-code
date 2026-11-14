@@ -209,6 +209,7 @@ func registerServerHooks(b *serveBuilder, extensionJournal *extensionstate.SQLJo
 	}
 	if b.delegations != nil {
 		b.server.Server.Admin.Project.Sandboxes.SettleWorker = b.delegations.SandboxSettler()
+		b.server.Server.Admin.Project.Sandboxes.LaneRoots = b.delegations.LaneRoots
 		if err := b.registerRecovery(bootrecovery.Entry{
 			Name: "worker-views", Kind: bootrecovery.KindJournal, Phase: bootrecovery.PhaseBuild,
 			Run: b.delegations.RecoverWorkerViews,

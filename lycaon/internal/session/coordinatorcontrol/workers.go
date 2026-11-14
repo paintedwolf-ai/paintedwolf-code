@@ -10,6 +10,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/batchcontrol"
 	"github.com/lycaon/lycaon/internal/session/turnadmission"
 	"github.com/lycaon/lycaon/internal/session/turnsettlement"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
 )
 
@@ -20,6 +21,8 @@ type Workers struct {
 	Admission  *turnadmission.Service
 	Digests    *workeroutcomes.Digests
 	Results    *workeroutcomes.Results
+	// Names names the worker a round notice is about.
+	Names workercompletion.WorkerNames
 }
 
 func (m *Workers) Terminal(ctx context.Context, parentID, completingJobID string) {
@@ -40,6 +43,7 @@ func (m *Workers) RoundNotice(ctx context.Context, parentID string, facts kick.W
 	if m == nil || parentID == "" || strings.TrimSpace(facts.JobID) == "" {
 		return
 	}
+	facts.Worker = m.Names.Name(ctx, facts.JobID)
 	m.Runtime.CoordinatorLoop().Nudges.NudgeWorkerRoundNotice(ctx, parentID, facts.JobID, anchor.Envelope{WorkerRoundNotice: &facts})
 }
 

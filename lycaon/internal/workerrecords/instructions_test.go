@@ -96,3 +96,27 @@ func TestStartRoundAppliesProfileChanges(t *testing.T) {
 	_, err = f.store.StartRound(t.Context(), f.coord, op("start-4"), w.WorkerID, workerrecords.RoundStart{JobID: "job-3", ExecutionTarget: "local", Instruction: "x", AgentType: "implementer"})
 	wantErr(t, "agent without scope", err, workerrecords.ErrInvalidProfile)
 }
+
+// A job names its worker from admission and its result handle once settled;
+// a job that runs no worker round names nothing.
+func TestNamesByJobFollowsTheRound(t *testing.T) {
+	f := newFixture(t)
+	f.workerWithRound(t, "fixer", "child-1", "job-1")
+	names, ok, err := f.store.NamesByJob(t.Context(), "job-1")
+	testutil.FailErr(t, "names while running", err)
+	if !ok || names.Worker != "fixer" || names.Handle != "" {
+		t.Fatalf("running names = %+v ok=%v", names, ok)
+	}
+	f.insertResult(t, "result-1", "job-1")
+	w, err := f.store.Resolve(t.Context(), f.coord, "fixer")
+	testutil.FailErr(t, "resolve", err)
+	f.settle(t, w.ID, "job-1")
+	names, ok, err = f.store.NamesByJob(t.Context(), "job-1")
+	testutil.FailErr(t, "names once settled", err)
+	if !ok || names.Worker != "fixer" || names.Handle != "result-1" {
+		t.Fatalf("settled names = %+v ok=%v", names, ok)
+	}
+	if _, ok, err := f.store.NamesByJob(t.Context(), "job-other"); ok || err != nil {
+		t.Fatalf("job without a round: ok=%v err=%v", ok, err)
+	}
+}

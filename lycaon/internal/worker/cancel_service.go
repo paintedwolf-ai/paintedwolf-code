@@ -42,6 +42,8 @@ type CancelService struct {
 	Events        TerminalNotice
 	Reports       ChangeReportDeps
 	Reject        *guidance.StaticRejectFormatter
+	// Results names the worker and result a refused job belongs to.
+	Names JobNamer
 }
 
 // CancelJob cancels by job id with a graceful closeout (HTTP worker pane).
@@ -52,7 +54,7 @@ func (s *CancelService) CancelJob(ctx context.Context, jobID, reason string) (ap
 	}
 	task, ok := s.Queue.Get(jobID)
 	if !ok {
-		return api.WorkerCancelResult{}, s.reject(WorkerCancelNotFoundCode, map[string]any{"job_id": jobID})
+		return api.WorkerCancelResult{}, s.reject(ctx, WorkerCancelNotFoundCode, map[string]any{"job_id": jobID})
 	}
 	return s.cancelTask(ctx, task, strings.TrimSpace(task.ParentSessionID), reason, CancelGraceful)
 }
@@ -66,10 +68,10 @@ func (s *CancelService) CancelForSession(ctx context.Context, sessionID, jobID, 
 	}
 	task, ok := s.Queue.Get(jobID)
 	if !ok {
-		return api.WorkerCancelResult{}, s.reject(WorkerCancelNotFoundCode, map[string]any{"job_id": jobID})
+		return api.WorkerCancelResult{}, s.reject(ctx, WorkerCancelNotFoundCode, map[string]any{"job_id": jobID})
 	}
 	if strings.TrimSpace(task.ParentSessionID) != sessionID {
-		return api.WorkerCancelResult{}, s.reject(WorkerCancelSessionMismatchCode, map[string]any{"job_id": jobID})
+		return api.WorkerCancelResult{}, s.reject(ctx, WorkerCancelSessionMismatchCode, map[string]any{"job_id": jobID})
 	}
 	return s.cancelTask(ctx, task, sessionID, reason, CancelGraceful)
 }
@@ -165,7 +167,7 @@ func (s *CancelService) cancelTask(ctx context.Context, task *api.WorkerTask, se
 	}
 	jobID := strings.TrimSpace(task.ID)
 	if task.Status.IsTerminal() {
-		return api.WorkerCancelResult{}, s.reject(WorkerCancelTerminalCode, map[string]any{
+		return api.WorkerCancelResult{}, s.reject(ctx, WorkerCancelTerminalCode, map[string]any{
 			"job_id": jobID,
 			"status": string(task.Status),
 		})
@@ -215,7 +217,7 @@ func (s *CancelService) cancelImmediate(ctx context.Context, task *api.WorkerTas
 	}
 	// A task a concurrent stop already canceled still gets this stop's transcript record.
 	if task.Status.IsTerminal() && task.Status != api.WorkerStatusCanceled {
-		return api.WorkerCancelResult{}, s.reject(WorkerCancelTerminalCode, map[string]any{"job_id": jobID, "status": string(task.Status)})
+		return api.WorkerCancelResult{}, s.reject(ctx, WorkerCancelTerminalCode, map[string]any{"job_id": jobID, "status": string(task.Status)})
 	}
 	result := hostCancellationResult(settleCtx, *task, reason, s.reports())
 	report := *result.ChangeReport
@@ -281,12 +283,13 @@ func (s *CancelService) reports() ChangeReportDeps {
 	return s.Reports
 }
 
-func (s *CancelService) reject(code string, data map[string]any) error {
+func (s *CancelService) reject(ctx context.Context, code string, data map[string]any) error {
 	var formatter *guidance.StaticRejectFormatter
+	var refs JobNamer
 	if s != nil {
-		formatter = s.Reject
+		formatter, refs = s.Reject, s.Names
 	}
-	return toolrejection.FormatDecisionReject(code, data, formatter)
+	return toolrejection.FormatDecisionReject(code, withResultRef(ctx, refs, data), formatter)
 }
 
 func cancellationSummary(task api.WorkerTask, reason string, report api.WorkerChangeReport) string {

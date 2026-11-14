@@ -134,7 +134,7 @@ func notifyMergeWorktreeChanged(ctx context.Context, task *api.WorkerTask, roots
 	}
 }
 
-func (s mergeEngine) rejectConflict(jobID string, assessment PromoteAssessment) error {
+func (s mergeEngine) rejectConflict(ctx context.Context, jobID string, assessment PromoteAssessment) error {
 	conflictPaths := make([]string, 0, len(assessment.Conflicts))
 	for _, c := range assessment.Conflicts {
 		conflictPaths = append(conflictPaths, c.Path)
@@ -146,10 +146,10 @@ func (s mergeEngine) rejectConflict(jobID string, assessment PromoteAssessment) 
 		"path_status":       buildPathStatus(assessment, nil),
 		"ready_resolutions": promoteRecoveryChoices(assessment),
 	}
-	if overlap := allOverlapJobIDs(assessment); len(overlap) > 0 {
-		data["overlap_job_ids"] = overlap
+	if overlap := overlayHandles(ctx, s.Names, allOverlapJobIDs(assessment)); len(overlap) > 0 {
+		data["overlap_overlay_ids"] = overlap
 	}
-	return s.reject(OverlayPromoteConflictCode, data)
+	return s.reject(ctx, OverlayPromoteConflictCode, data)
 }
 
 // Rejection recovery identifies choices without copying proposed source bodies.

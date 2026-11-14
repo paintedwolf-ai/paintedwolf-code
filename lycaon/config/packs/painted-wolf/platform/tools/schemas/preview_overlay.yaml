@@ -1,13 +1,13 @@
 description: >-
-  Merge preview — same plan as promote_overlay without landing. overlay_id == job_id.
+  Merge preview of a result handle — same plan as promote_overlay without landing.
   Returns path_status and ready_resolutions; spill_path is
-  host-data-relative (promote-spills/<id>.json). Example: {"overlay_id":"<job_id>"}.
+  host-data-relative (promote-spills/<id>.json). Example: {"overlay_id":"<result handle>"}.
 schema:
   type: object
   properties:
     overlay_id:
       type: string
-      description: Worker job_id from task() or pack_board
+      description: The result handle from the worker's result notice or the roster.
     path:
       type: string
       description: Optional — scope preview to one repo-relative path

@@ -42,7 +42,7 @@ type BoardEngine struct {
 	omitDelegation     func() bool
 	includeScanLegend  func() bool
 	promotePathOverlay func(sessionID string) []api.WorkerPromoteJobPathStatus
-	overlayMergePlan   func(sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan
+	overlayMergePlan   func(ctx context.Context, sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan
 	activeReservations func(sessionID string) []api.BoardReservationEntry
 }
 
@@ -85,7 +85,7 @@ func (b *BoardEngine) SetPromotePathOverlay(fn func(sessionID string) []api.Work
 	b.promotePathOverlay = fn
 }
 
-func (b *BoardEngine) SetOverlayMergePlan(fn func(sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan) {
+func (b *BoardEngine) SetOverlayMergePlan(fn func(ctx context.Context, sessionID string, tasks []api.WorkerTask) *api.OverlayMergePlan) {
 	if b == nil {
 		return
 	}
@@ -152,7 +152,7 @@ func (b *BoardEngine) PrependBoardIfChanged(
 		return "", false
 	}
 	if b.promotePathOverlay != nil || b.overlayMergePlan != nil {
-		packboard.EnrichSnapshotOverlay(boardWorkerSessionID(sess), snap, b.promotePathOverlay, b.overlayMergePlan)
+		packboard.EnrichSnapshotOverlay(ctx, boardWorkerSessionID(sess), snap, b.promotePathOverlay, b.overlayMergePlan)
 	}
 	if b.activeReservations != nil {
 		packboard.EnrichSnapshotReservationsForSession(boardWorkerSessionID(sess), snap, b.activeReservations)
@@ -225,7 +225,7 @@ func (b *BoardEngine) WorkerBoard(
 		return "", false
 	}
 	if b.promotePathOverlay != nil || b.overlayMergePlan != nil {
-		packboard.EnrichSnapshotOverlay(boardWorkerSessionID(sess), snap, b.promotePathOverlay, b.overlayMergePlan)
+		packboard.EnrichSnapshotOverlay(ctx, boardWorkerSessionID(sess), snap, b.promotePathOverlay, b.overlayMergePlan)
 	}
 	if b.activeReservations != nil {
 		packboard.EnrichSnapshotReservationsForSession(boardWorkerSessionID(sess), snap, b.activeReservations)
@@ -314,7 +314,7 @@ func (b *BoardEngine) BoardWillForceInject(ctx context.Context, sess *api.Sessio
 		return false
 	}
 	if b.promotePathOverlay != nil || b.overlayMergePlan != nil {
-		packboard.EnrichSnapshotOverlay(boardWorkerSessionID(sess), snap, b.promotePathOverlay, b.overlayMergePlan)
+		packboard.EnrichSnapshotOverlay(ctx, boardWorkerSessionID(sess), snap, b.promotePathOverlay, b.overlayMergePlan)
 	}
 	if b.activeReservations != nil {
 		packboard.EnrichSnapshotReservationsForSession(boardWorkerSessionID(sess), snap, b.activeReservations)

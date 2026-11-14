@@ -278,7 +278,7 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 	eng := prefixStabilityEngine(t)
 	var (
 		missingProgress bool
-		pendingOverlays []string
+		roster          []map[string]any
 		evidenceGates   []string
 	)
 	deps := eng.deps()
@@ -286,9 +286,9 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 		return surface.ImplementSessionState{
 			WrapupGatesLoaded: true,
 			ProgressMissing:   missingProgress,
-			PendingOverlayIDs: pendingOverlays,
 		}
 	}
+	deps.Workers.Roster = func(context.Context, string) ([]map[string]any, int, error) { return roster, 0, nil }
 	deps.CoordinatorFrame = prefixStabilityMutableCoordCtx{
 		base:          deps.CoordinatorFrame,
 		evidenceGates: &evidenceGates,
@@ -315,42 +315,33 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 	type testCase struct {
 		name            string
 		missingProgress bool
-		pendingOverlays []string
-		partialHistory  bool
+		roster          bool
 		verifyRequired  bool
 	}
 	cases := []testCase{
 		{name: "baseline", missingProgress: false},
 		{name: "progress_missing", missingProgress: true},
-		{name: "pending_overlays", pendingOverlays: []string{"job-ov-1"}},
-		{name: "partial_jobs_in_history", partialHistory: true},
+		{name: "worker_delivered", roster: true},
 		{name: "verify_required", verifyRequired: true},
-		{name: "all_active", missingProgress: true, pendingOverlays: []string{"job-ov-1"}, partialHistory: true, verifyRequired: true},
+		{name: "all_active", missingProgress: true, roster: true, verifyRequired: true},
 		{name: "return_to_baseline", missingProgress: false},
 	}
 
 	for i, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			missingProgress = tc.missingProgress
-			pendingOverlays = tc.pendingOverlays
+			roster = nil
+			if tc.roster {
+				roster = []map[string]any{{"name": "roster-worker", "agent": "implementer", "state": "delivered", "result_handle": "result-roster-1"}}
+			}
 			if tc.verifyRequired {
 				evidenceGates = []string{"verify"}
 			} else {
 				evidenceGates = nil
 			}
 
-			testHistory := history
-			if tc.partialHistory {
-				testHistory = append([]api.Message(nil), history...)
-				testHistory = append(testHistory, api.Message{
-					Role:          api.MessageRoleAssistant,
-					Content:       `<task job_id="j-part" agent_type="implementer" state="partial"></task>`,
-					WorkerSummary: &api.WorkerSummaryMeta{WorkerID: "j-part", Status: api.WorkerSummaryStatusPartial},
-				})
-			}
-
 			eng.Cache().LoadTurn(sess.ID).Iteration = i
-			out, err := eng.BuildCompletionMessages(t.Context(), sess, testHistory, nil)
+			out, err := eng.BuildCompletionMessages(t.Context(), sess, history, nil)
 			if err != nil {
 				t.Fatalf("BuildCompletionMessages: %v", err)
 			}
@@ -372,7 +363,7 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 				firstStandingKey = turn.StablePromptKey
 				firstStandingMarkIdx = standingIdx
 				firstHistoryMarkIdx = historyIdx
-			} else if !tc.partialHistory {
+			} else {
 				if out[0].Content != firstStandingContent {
 					t.Fatalf("standing content mutated across mid-turn gate flips:\ngot=%q\nwant=%q", out[0].Content, firstStandingContent)
 				}
@@ -385,21 +376,13 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 				if historyIdx != firstHistoryMarkIdx {
 					t.Fatalf("history mark row changed: %d != %d", historyIdx, firstHistoryMarkIdx)
 				}
-			} else {
-				if out[0].Content != firstStandingContent {
-					t.Fatalf("standing content mutated with partial history:\ngot=%q\nwant=%q", out[0].Content, firstStandingContent)
-				}
-				if turn.StablePromptKey != firstStandingKey {
-					t.Fatalf("standing key mutated with partial history: %q != %q", turn.StablePromptKey, firstStandingKey)
-				}
 			}
 
 			var turnStateBlock string
 			for idx := historyIdx + 1; idx < len(out); idx++ {
 				content := out[idx].Content
 				if strings.Contains(content, "No checklist is stored") ||
-					strings.Contains(content, "Integrate turn") ||
-					strings.Contains(content, "Partial `") ||
+					strings.Contains(content, "`roster-worker`") ||
 					strings.Contains(content, "test-evidence gate") {
 					turnStateBlock = content
 					break
@@ -409,11 +392,8 @@ func TestPromptCacheMidTurnGateFlipsPreservePrefixCache(t *testing.T) {
 			if tc.missingProgress && !strings.Contains(turnStateBlock, "No checklist is stored") {
 				t.Fatalf("expected checklist warning in turn-state block: %q", turnStateBlock)
 			}
-			if len(tc.pendingOverlays) > 0 && !strings.Contains(turnStateBlock, "Integrate turn") {
-				t.Fatalf("expected integrate-turn in turn-state block: %q", turnStateBlock)
-			}
-			if tc.partialHistory && len(tc.pendingOverlays) == 0 && !strings.Contains(turnStateBlock, "Partial `j-part`") {
-				t.Fatalf("expected partial job in turn-state block: %q", turnStateBlock)
+			if tc.roster && !strings.Contains(turnStateBlock, "`result-roster-1`") {
+				t.Fatalf("expected the roster's result handle in turn-state block: %q", turnStateBlock)
 			}
 			if tc.verifyRequired && !strings.Contains(turnStateBlock, "test-evidence gate") {
 				t.Fatalf("expected test-evidence gate in turn-state block: %q", turnStateBlock)

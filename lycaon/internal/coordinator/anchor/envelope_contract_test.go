@@ -193,7 +193,7 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"completed_ago": true, "worker_digest": true, "last_worker_decision_request": true,
 		"evidence_digest": true, "command_completion": true, "command_refusal": true, "topology_output": true, "options_criterion": true,
 		"fanout_plan": true, "max_fanout_legs": true, "batch_phase": true,
-		"pending_overlay_jobs": true, "partial_worker_jobs": true, "promoted_paths": true,
+		"pending_overlays": true, "partial_workers": true, "promoted_paths": true,
 		"advance_when_gate_met": true, "failed_leaves": true, "gate_obligations": true,
 		"progress_open_items": true, "progress_closure_armed": true,
 		"batches": true, "tools": true,

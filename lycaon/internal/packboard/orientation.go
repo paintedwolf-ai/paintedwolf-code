@@ -111,73 +111,39 @@ func TruncateLinesBottomUp(lines []string, max int, truncated *[]string) ([]stri
 	return lines, true
 }
 
-// FormatOverlayMergePlanLine summarizes pending overlay promote order for board orientation.
+// FormatOverlayMergePlanLine summarizes the landing order of pending results
+// by worker for board orientation.
 func FormatOverlayMergePlanLine(plan *api.OverlayMergePlan) string {
 	if plan == nil || plan.PendingCount == 0 {
 		return ""
 	}
-	line := fmt.Sprintf("Overlay plan: %d pending", plan.PendingCount)
-	if len(plan.PromoteSequence) > 0 {
-		parts := make([]string, 0, len(plan.PromoteSequence))
-		for _, id := range plan.PromoteSequence {
-			parts = append(parts, WorkerJobIDPrefix(id))
-		}
-		line += " · promote " + strings.Join(parts, " → ")
+	workers := make(map[string]string, len(plan.Entries))
+	for _, entry := range plan.Entries {
+		workers[entry.OverlayID] = entry.Worker
 	}
-	if len(plan.SharedPaths) > 0 {
-		var sharedParts []string
-		for _, row := range plan.SharedPaths {
-			if len(row.WorkerIDs) < 2 {
-				continue
+	names := func(handles []string) []string {
+		out := make([]string, 0, len(handles))
+		for _, h := range handles {
+			if name := workers[h]; name != "" {
+				out = append(out, name)
 			}
-			chips := make([]string, 0, len(row.WorkerIDs))
-			for _, id := range row.WorkerIDs {
-				chips = append(chips, WorkerJobIDPrefix(id))
-			}
-			sharedParts = append(sharedParts, fmt.Sprintf("%s (%s)", row.Path, strings.Join(chips, ",")))
 		}
-		if len(sharedParts) > 0 {
-			line += " · shared " + strings.Join(sharedParts, "; ")
+		return out
+	}
+	line := fmt.Sprintf("Overlay plan: %d pending", plan.PendingCount)
+	if order := names(plan.PromoteSequence); len(order) > 1 {
+		line += " · land " + strings.Join(order, " → ")
+	}
+	var shared []string
+	for _, row := range plan.SharedPaths {
+		if who := names(row.OverlayIDs); len(who) > 1 {
+			shared = append(shared, fmt.Sprintf("%s (%s)", row.Path, strings.Join(who, ", ")))
 		}
+	}
+	if len(shared) > 0 {
+		line += " · shared " + strings.Join(shared, "; ")
 	}
 	return line
-}
-
-// FormatPromotePathStatusLine summarizes cached path_status from promote_overlay / preview_overlay.
-func FormatPromotePathStatusLine(rows []api.WorkerPromoteJobPathStatus) string {
-	if len(rows) == 0 {
-		return ""
-	}
-	var parts []string
-	for _, job := range rows {
-		if len(job.Paths) == 0 {
-			continue
-		}
-		pathParts := make([]string, 0, len(job.Paths))
-		for _, p := range job.Paths {
-			path := strings.TrimSpace(p.Path)
-			if path == "" {
-				continue
-			}
-			status := string(p.Status)
-			if p.PromoteOrder != "" && p.PromoteOrder != api.WorkerPromoteOrderIndependent {
-				status = status + ":" + string(p.PromoteOrder)
-			}
-			if p.Status == api.WorkerPromotePathOutcomeConflict && p.HunkCount > 0 {
-				pathParts = append(pathParts, fmt.Sprintf("%s:%s(%d)", path, status, p.HunkCount))
-			} else {
-				pathParts = append(pathParts, fmt.Sprintf("%s:%s", path, status))
-			}
-		}
-		if len(pathParts) == 0 {
-			continue
-		}
-		parts = append(parts, WorkerJobIDPrefix(job.WorkerID)+" "+strings.Join(pathParts, " "))
-	}
-	if len(parts) == 0 {
-		return ""
-	}
-	return "Merge paths: " + strings.Join(parts, " · ")
 }
 
 func FormatWorkLine(tasks []api.WorkerTask, now time.Time) string {
@@ -185,15 +151,15 @@ func FormatWorkLine(tasks []api.WorkerTask, now time.Time) string {
 	inFlight := inFlightWorkerTasks(tasks)
 	if len(inFlight) > 0 {
 		line := fmt.Sprintf("Work: %d in flight", len(inFlight))
-		chips := make([]string, 0, len(inFlight))
+		agents := make([]string, 0, len(inFlight))
 		for _, t := range inFlight {
-			if chip := formatInFlightWorkerChip(t); chip != "" {
-				chips = append(chips, chip)
+			agent := strings.TrimSpace(t.AgentType)
+			if agent == "" {
+				agent = "worker"
 			}
+			agents = append(agents, agent)
 		}
-		if len(chips) > 0 {
-			line += " · " + strings.Join(chips, " · ")
-		}
+		line += " · " + strings.Join(agents, " · ")
 		if labels := outcomes.Labels(); len(labels) > 0 {
 			line += " · " + strings.Join(labels, " · ")
 		}
@@ -218,45 +184,28 @@ func FormatWorkLine(tasks []api.WorkerTask, now time.Time) string {
 	return line
 }
 
-// FormatBranchMergeLine lists write-branch merge_status for board orientation.
+// FormatBranchMergeLine counts write results by merge status for board
+// orientation; the worker roster names them.
 func FormatBranchMergeLine(tasks []api.WorkerTask) string {
-	var pendingIDs, mergedIDs, rebasingIDs, orphanedIDs, rejectedIDs []string
+	counts := map[api.WorkerMergeStatus]int{}
 	for _, t := range tasks {
 		if strings.TrimSpace(t.WorkspaceRoot) == "" && t.MergeStatus == "" {
 			continue
 		}
-		switch t.MergeStatus {
-		case api.WorkerMergeStatusPending, api.WorkerMergeStatusApplying:
-			pendingIDs = append(pendingIDs, WorkerJobIDPrefix(t.ID))
-		case api.WorkerMergeStatusRebasing:
-			rebasingIDs = append(rebasingIDs, WorkerJobIDPrefix(t.ID))
-		case api.WorkerMergeStatusMerged:
-			mergedIDs = append(mergedIDs, WorkerJobIDPrefix(t.ID))
-		case api.WorkerMergeStatusOrphaned:
-			orphanedIDs = append(orphanedIDs, WorkerJobIDPrefix(t.ID))
-		case api.WorkerMergeStatusRejected:
-			rejectedIDs = append(rejectedIDs, WorkerJobIDPrefix(t.ID))
-		case api.WorkerMergeStatusAborted:
+		status := t.MergeStatus
+		if status == api.WorkerMergeStatusApplying {
+			status = api.WorkerMergeStatusPending
 		}
-	}
-	if len(pendingIDs)+len(mergedIDs)+len(rebasingIDs)+len(orphanedIDs)+len(rejectedIDs) == 0 {
-		return ""
+		counts[status]++
 	}
 	var parts []string
-	if len(pendingIDs) > 0 {
-		parts = append(parts, fmt.Sprintf("pending %s", strings.Join(pendingIDs, ",")))
+	for _, status := range []api.WorkerMergeStatus{api.WorkerMergeStatusPending, api.WorkerMergeStatusRebasing, api.WorkerMergeStatusMerged, api.WorkerMergeStatusOrphaned, api.WorkerMergeStatusRejected} {
+		if n := counts[status]; n > 0 {
+			parts = append(parts, fmt.Sprintf("%d %s", n, status))
+		}
 	}
-	if len(rebasingIDs) > 0 {
-		parts = append(parts, fmt.Sprintf("rebasing %s", strings.Join(rebasingIDs, ",")))
-	}
-	if len(mergedIDs) > 0 {
-		parts = append(parts, fmt.Sprintf("merged %s", strings.Join(mergedIDs, ",")))
-	}
-	if len(orphanedIDs) > 0 {
-		parts = append(parts, fmt.Sprintf("orphaned %s", strings.Join(orphanedIDs, ",")))
-	}
-	if len(rejectedIDs) > 0 {
-		parts = append(parts, fmt.Sprintf("rejected %s", strings.Join(rejectedIDs, ",")))
+	if len(parts) == 0 {
+		return ""
 	}
 	return "Merge: " + strings.Join(parts, " · ")
 }
@@ -271,14 +220,6 @@ func inFlightWorkerTasks(tasks []api.WorkerTask) []api.WorkerTask {
 	return out
 }
 
-func formatInFlightWorkerChip(t api.WorkerTask) string {
-	agent := strings.TrimSpace(t.AgentType)
-	if agent == "" {
-		agent = "worker"
-	}
-	return WorkerJobIDPrefix(t.ID) + " " + agent
-}
-
 // WorkerJobIDPrefix returns a short job id prefix for roster lines (e.g. 8a3f…).
 func WorkerJobIDPrefix(id string) string {
 	id = strings.TrimSpace(id)
@@ -286,23 +227,6 @@ func WorkerJobIDPrefix(id string) string {
 		return "????"
 	}
 	return runeclamp.ClampBytes(id, shortIDBytes)
-}
-
-// FormatInFlightWorkerPulseLine renders one pulse roster line for an in-flight job.
-func FormatInFlightWorkerPulseLine(t api.WorkerTask) string {
-	agent := strings.TrimSpace(t.AgentType)
-	if agent == "" {
-		agent = "worker"
-	}
-	line := fmt.Sprintf("In flight: %s · %s · %s · %s", WorkerJobIDPrefix(t.ID), agent, t.Status, t.EffectiveScope().Summary())
-	if brief := strings.Join(strings.Fields(t.Brief), " "); brief != "" {
-		line += " · " + runeclamp.ClampBytes(brief, 240)
-	}
-	if touch := formatTouchSummary(t.TouchedPaths); touch != "" {
-		line += " · " + touch
-	}
-	line += formatWorkerRoundSegment(t)
-	return line
 }
 
 func formatTouchSummary(paths []string) string {

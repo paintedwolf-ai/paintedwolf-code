@@ -3,14 +3,15 @@ package session
 import (
 	"context"
 	"errors"
-	"github.com/lycaon/lycaon/internal/guidance"
-	"github.com/lycaon/lycaon/internal/toolreach"
-	"github.com/lycaon/lycaon/internal/tools"
 	"strings"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/guidance"
 	"github.com/lycaon/lycaon/internal/session/promptinput"
 	"github.com/lycaon/lycaon/internal/session/workflowfacts"
+	"github.com/lycaon/lycaon/internal/toolreach"
+	"github.com/lycaon/lycaon/internal/tools"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -133,6 +134,7 @@ func TestPendingOverlayCloseoutUsesLedgerOnEveryTurnOrigin(t *testing.T) {
 				Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending,
 				WorkspaceRoot: t.TempDir(), Scope: &api.TaskScope{Mode: api.TaskScopeModeWrite},
 			}}})
+			mgr.SetJobNames(pendingJobNames{})
 			history := []api.Message{{Role: api.MessageRoleUser, Origin: origin, Content: "Continue"}}
 			if origin == api.MessageOriginHost {
 				history[0].Kind = api.MessageKindHostLoopWake
@@ -145,7 +147,7 @@ func TestPendingOverlayCloseoutUsesLedgerOnEveryTurnOrigin(t *testing.T) {
 				if errors.Is(reject, guidance.ErrCloseoutStopped) == invokeAllowed {
 					t.Fatalf("invoke=%t stop=%v", invokeAllowed, reject)
 				}
-				if !strings.Contains(reject.Body, `promote_overlay(overlay_id="pending-worker")`) {
+				if !strings.Contains(reject.Body, `promote_overlay(overlay_id="result-pending")`) || !strings.Contains(reject.Body, "`fixer`") {
 					t.Fatalf("recovery omitted the actual overlay: %s", reject.Body)
 				}
 			}
@@ -178,4 +180,10 @@ func TestPendingOverlayCloseoutClearsOnlyAfterDisposition(t *testing.T) {
 	if _, blocked := mgr.Coordinator.Guards.PendingOverlays(t.Context(), sess, true); blocked {
 		t.Fatal("read worker created an overlay obligation")
 	}
+}
+
+type pendingJobNames struct{}
+
+func (pendingJobNames) NamesByJob(_ context.Context, jobID string) (workerrecords.JobNames, bool, error) {
+	return workerrecords.JobNames{Worker: "fixer", Handle: "result-pending"}, jobID == "pending-worker", nil
 }

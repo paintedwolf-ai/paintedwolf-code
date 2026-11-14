@@ -7,6 +7,7 @@ import (
 	"github.com/lycaon/lycaon/internal/events"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/repochange"
+	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -39,7 +40,11 @@ type Service struct {
 	Touches                *TouchLedger
 	branchState            func(string) (tools.BranchWorkspace, error)
 	unregisterRepoObserver func()
+	names                  workercompletion.WorkerNames
 }
+
+// SetWorkerNames names the siblings that hold reserved paths.
+func (m *Service) SetWorkerNames(names workercompletion.WorkerNames) { m.names = names }
 
 func New(sessions Sessions, workspace Workspace, branchState func(string) (tools.BranchWorkspace, error)) *Service {
 	s := &Service{store: sessions, workspace: workspace, branchState: branchState, Touches: NewTouchLedger()}

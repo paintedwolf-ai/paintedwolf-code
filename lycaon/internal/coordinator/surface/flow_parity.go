@@ -31,6 +31,12 @@ func AllFlowParityCases() []ParityCase {
 		Sess:    &api.Session{Posture: api.SessionPostureBuild},
 		History: parityTurnHistory(HostLoopWakeSentinel),
 	})
+	cases = append(cases, ParityCase{
+		Name:    "worker_delivered",
+		State:   ImplementSessionState{WorkersDelivered: 1},
+		Sess:    &api.Session{Posture: api.SessionPostureBuild},
+		History: parityTurnHistory(HostLoopWakeSentinel),
+	})
 	for _, manifest := range []string{"plan_research", "plan_execute"} {
 		cases = append(cases, ParityCase{
 			Name:   "manifest_" + manifest,

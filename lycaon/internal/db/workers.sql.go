@@ -101,6 +101,28 @@ func (q *Queries) AllocateWorkerRoundOrdinal(ctx context.Context, arg AllocateWo
 	return column_1, err
 }
 
+const bindWorkerChildByJob = `-- name: BindWorkerChildByJob :execrows
+UPDATE workers SET child_session_id = ?1, updated_at = ?2
+WHERE id = (SELECT worker_id FROM worker_rounds WHERE job_id = ?3)
+  AND child_session_id IS NULL
+`
+
+type BindWorkerChildByJobParams struct {
+	ChildSessionID sql.NullString `json:"child_session_id"`
+	UpdatedAt      string         `json:"updated_at"`
+	JobID          string         `json:"job_id"`
+}
+
+// A worker's first round spawns its child session; the worker keeps that
+// session for every later round.
+func (q *Queries) BindWorkerChildByJob(ctx context.Context, arg BindWorkerChildByJobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, bindWorkerChildByJob, arg.ChildSessionID, arg.UpdatedAt, arg.JobID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const bindWorkerChildSession = `-- name: BindWorkerChildSession :execrows
 UPDATE workers SET child_session_id = ?1, updated_at = ?2
 WHERE id = ?3 AND child_session_id IS NULL
@@ -438,6 +460,32 @@ func (q *Queries) GetWorkerJobBinding(ctx context.Context, id string) (GetWorker
 	return i, err
 }
 
+const getWorkerJobNames = `-- name: GetWorkerJobNames :one
+SELECT w.name,
+       CAST(CASE WHEN r.settled_at IS NOT NULL THEN COALESCE(res.id, '') ELSE '' END AS TEXT) AS result_id,
+       CAST(COALESCE(d.change_state, '') AS TEXT) AS change_state
+FROM worker_rounds r
+JOIN workers w ON w.id = r.worker_id
+LEFT JOIN worker_results res ON res.worker_job_id = r.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+`
+
+type GetWorkerJobNamesRow struct {
+	Name        string `json:"name"`
+	ResultID    string `json:"result_id"`
+	ChangeState string `json:"change_state"`
+}
+
+// A job's worker name and, once its round settles, the result handle and what
+// became of the result's changes.
+func (q *Queries) GetWorkerJobNames(ctx context.Context, jobID string) (GetWorkerJobNamesRow, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerJobNames, jobID)
+	var i GetWorkerJobNamesRow
+	err := row.Scan(&i.Name, &i.ResultID, &i.ChangeState)
+	return i, err
+}
+
 const getWorkerMessage = `-- name: GetWorkerMessage :one
 SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
@@ -497,6 +545,17 @@ func (q *Queries) GetWorkerMessageDelivery(ctx context.Context, arg GetWorkerMes
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const getWorkerNameByJob = `-- name: GetWorkerNameByJob :one
+SELECT w.name FROM worker_rounds r JOIN workers w ON w.id = r.worker_id WHERE r.job_id = ?
+`
+
+func (q *Queries) GetWorkerNameByJob(ctx context.Context, jobID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getWorkerNameByJob, jobID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
 }
 
 const getWorkerOperation = `-- name: GetWorkerOperation :one
@@ -866,6 +925,39 @@ func (q *Queries) LatestRoundJobForJob(ctx context.Context, jobID string) (strin
 	return job_id, err
 }
 
+const listOpenWorkerLaneRefs = `-- name: ListOpenWorkerLaneRefs :many
+SELECT p.preparation_ref
+FROM worker_workspace_preparations p
+JOIN workers w ON w.id = p.worker_id
+WHERE w.closed_at IS NULL
+  AND p.preparation_ref != ''
+  AND p.generation = (SELECT MAX(q.generation) FROM worker_workspace_preparations q WHERE q.worker_id = p.worker_id)
+`
+
+// The current lane of every open worker.
+func (q *Queries) ListOpenWorkerLaneRefs(ctx context.Context) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listOpenWorkerLaneRefs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var preparation_ref string
+		if err := rows.Scan(&preparation_ref); err != nil {
+			return nil, err
+		}
+		items = append(items, preparation_ref)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRoundInstructionsAfter = `-- name: ListRoundInstructionsAfter :many
 SELECT id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
        body, artifact_ref, reply_to_seq, needs_reply, operation_id, created_at
@@ -982,6 +1074,45 @@ WHERE w.session_id = ?1 AND d.change_state = 'shelved'
 // unlanded on purpose and ask for no promotion.
 func (q *Queries) ListShelvedWorkerJobs(ctx context.Context, sessionID string) ([]string, error) {
 	rows, err := q.db.QueryContext(ctx, listShelvedWorkerJobs, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var job_id string
+		if err := rows.Scan(&job_id); err != nil {
+			return nil, err
+		}
+		items = append(items, job_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkerAncestorPendingJobs = `-- name: ListWorkerAncestorPendingJobs :many
+SELECT prior.job_id
+FROM worker_rounds r
+JOIN worker_rounds prior ON prior.worker_id = r.worker_id AND prior.ordinal < r.ordinal
+JOIN worker_results res ON res.worker_job_id = prior.job_id
+JOIN worker_jobs j ON j.id = prior.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY prior.ordinal
+`
+
+// The earlier rounds of the worker that ran this job whose changes are still
+// pending. A worker's lane carries every undisposed earlier result into its
+// later rounds, so landing a later round lands these with it.
+func (q *Queries) ListWorkerAncestorPendingJobs(ctx context.Context, jobID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkerAncestorPendingJobs, jobID)
 	if err != nil {
 		return nil, err
 	}

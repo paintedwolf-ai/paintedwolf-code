@@ -6,6 +6,8 @@ package workerops
 
 import (
 	"context"
+	"errors"
+	"strings"
 
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workerstate"
@@ -122,6 +124,43 @@ func (r Reader) Read(ctx context.Context, actor workerrecords.Actor, w workerrec
 	return snap, nil
 }
 
+// LatestResultJob names the job of the named worker's latest result. ok is
+// false for a name with no worker or a worker with no result yet.
+func (r Reader) LatestResultJob(ctx context.Context, actor workerrecords.Actor, name string) (string, bool, error) {
+	w, err := r.Records.Resolve(ctx, actor, strings.TrimSpace(name))
+	if errors.Is(err, workerrecords.ErrWorkerNotFound) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, err
+	}
+	snap, err := r.Read(ctx, actor, w)
+	if err != nil {
+		return "", false, err
+	}
+	round, ok := snap.LatestResult()
+	return round.JobID, ok, nil
+}
+
+// CountState counts the actor's session's workers in state.
+func (r Reader) CountState(ctx context.Context, actor workerrecords.Actor, state workerstate.State) (int, error) {
+	workers, err := r.Records.Workers(ctx, actor)
+	if err != nil {
+		return 0, err
+	}
+	n := 0
+	for _, w := range workers {
+		snap, err := r.Read(ctx, actor, w)
+		if err != nil {
+			return 0, err
+		}
+		if snap.View.State == state {
+			n++
+		}
+	}
+	return n, nil
+}
+
 func (r Reader) job(jobID string) (api.WorkerTask, bool) {
 	if r.Jobs == nil {
 		return api.WorkerTask{}, false
@@ -143,16 +182,6 @@ func (r Reader) round(ctx context.Context, w workerrecords.Worker, latest worker
 		}
 		return out, nil
 	}
-	if found {
-		switch job.Status {
-		case api.WorkerStatusHeld:
-			out.Held = true
-		case api.WorkerStatusPending:
-			out.Queued = true
-		case api.WorkerStatusWaiting:
-			out.Parked = true
-		}
-	}
 	child := w.ChildSessionID
 	if child != "" && r.Decisions != nil {
 		dec, ok, err := r.Decisions.Get(ctx, child)
@@ -160,6 +189,18 @@ func (r Reader) round(ctx context.Context, w workerrecords.Worker, latest worker
 			return nil, err
 		}
 		out.DecisionPending = ok && dec.WorkerID == latest.JobID
+	}
+	if found {
+		switch job.Status {
+		case api.WorkerStatusHeld:
+			// A job suspended on its decision is held too; it waits on the
+			// coordinator's answer, not on a prerequisite.
+			out.Held = !out.DecisionPending
+		case api.WorkerStatusPending:
+			out.Queued = true
+		case api.WorkerStatusWaiting:
+			out.Parked = true
+		}
 	}
 	if child != "" && r.ApprovalWait != nil {
 		out.ApprovalWait = r.ApprovalWait(ctx, child)

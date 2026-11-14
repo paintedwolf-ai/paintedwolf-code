@@ -131,9 +131,7 @@ type parallelBatchCommit struct {
 	reserved             []time.Time
 	lastToolTS           *time.Time
 	turnTools            []string
-	anyTaskEnqueued      bool
 	taskEnqueuedThisTurn int
-	lastTaskMessageID    string
 	st                   *promptLoopTurnState
 	sess                 *api.Session
 	sessionID            string
@@ -154,9 +152,7 @@ func newParallelBatchCommit(
 	run []api.ToolCall,
 	lastToolTS *time.Time,
 	turnTools []string,
-	anyTaskEnqueued bool,
 	taskEnqueuedThisTurn int,
-	lastTaskMessageID string,
 	st *promptLoopTurnState,
 	sess *api.Session,
 	sessionID string,
@@ -166,9 +162,7 @@ func newParallelBatchCommit(
 		reserved:             reserveCommitTimestamps(len(run), lastToolTS),
 		lastToolTS:           lastToolTS,
 		turnTools:            turnTools,
-		anyTaskEnqueued:      anyTaskEnqueued,
 		taskEnqueuedThisTurn: taskEnqueuedThisTurn,
-		lastTaskMessageID:    lastTaskMessageID,
 		st:                   st,
 		sess:                 sess,
 		sessionID:            sessionID,
@@ -216,9 +210,7 @@ func (l *toolBatch) appendParallelOutcomeLocked(
 	out.persistedTransient = transients
 	commit.turnTools = l.settleToolRow(ctx, commit.sess, commit.sessionID, out.toolName, commit.turnTools, commit.st)
 	if out.taskCommitted {
-		commit.anyTaskEnqueued = true
 		commit.taskEnqueuedThisTurn++
-		commit.lastTaskMessageID = out.taskMessageID
 	}
 	return nil
 }
