@@ -33,6 +33,7 @@ import {
   unbindScrollportMotion,
 } from "../../platform/scrolling/scrollport-motion.ts";
 import { assertNamedControl } from "../../test/controls.ts";
+import { mockScrollerMotion } from "../../test/scroll-mock.ts";
 import * as clipboard from "../../utils/clipboard.ts";
 
 function buildLines(count: number, prefix = "line"): string {
@@ -349,6 +350,11 @@ describe("code-fold", () => {
     // Model layout geometry: row starts at document y=5000; folded=240px, open=7200px.
     const rowStart = 5000;
     const frameHeight = () => (frame.dataset.codeFold === "open" ? 7200 : 240);
+    Object.defineProperties(streamEl, {
+      clientHeight: { configurable: true, get: () => 600 },
+      scrollHeight: { configurable: true, get: () => rowStart + frameHeight() + 2000 },
+    });
+    mockScrollerMotion(streamEl);
     vi.spyOn(streamEl, "getBoundingClientRect").mockImplementation(() =>
       new DOMRect(0, 0, 700, 600),
     );
