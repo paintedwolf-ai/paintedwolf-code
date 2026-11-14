@@ -78,8 +78,8 @@ func TestEachSideGetsOnlyItsDirection(t *testing.T) {
 	}
 }
 
-// A failed request replays the page; a committed one is not shown again, and
-// a new context generation is shown everything again.
+// A failed request replays the page; a committed one is not shown again, even
+// in a new context generation: the coordinator's cursor carries across them.
 func TestPagesReplayUntilCommittedAndAfterCompaction(t *testing.T) {
 	f := newDeliveryFixture(t)
 	f.send(t, f.child, "out-1", "first", false)
@@ -99,7 +99,7 @@ func TestPagesReplayUntilCommittedAndAfterCompaction(t *testing.T) {
 	compacted := &api.Session{ID: "coord", CompactionGeneration: 1}
 	again, err := f.delivery.PrepareMessages(t.Context(), compacted)
 	testutil.FailErr(t, "after compaction", err)
-	if len(again.Lines) != 1 {
+	if len(again.Lines) != 0 {
 		t.Fatalf("new generation page = %+v", again)
 	}
 }
@@ -111,8 +111,8 @@ func TestCoordinatorPagesAreBoundedAcrossWorkers(t *testing.T) {
 	}
 	page, err := f.delivery.PrepareMessages(t.Context(), coordSession)
 	testutil.FailErr(t, "prepare", err)
-	if len(page.Lines) != 40 || page.Lines[0].Seq != 1 {
-		t.Fatalf("one worker's page = %d lines from %d", len(page.Lines), page.Lines[0].Seq)
+	if len(page.Lines) != 32 || page.Lines[0].Seq != 1 || !page.More {
+		t.Fatalf("one worker's page = %d lines from %d, more %v", len(page.Lines), page.Lines[0].Seq, page.More)
 	}
 }
 

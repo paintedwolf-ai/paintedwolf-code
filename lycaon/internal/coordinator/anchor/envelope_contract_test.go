@@ -225,6 +225,10 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"held_call_handle": true, "held_call_tool": true, "held_call_outcome": true,
 		// The worker message page counts the messages it carries.
 		"message_count": true,
+		// The worker round frame names its round, what it carries and, on a
+		// later round, its starting point and earlier results.
+		"round": true, "has_brief": true, "instruction_count": true,
+		"workspace": true, "prior_change": true, "earlier_results": true,
 	}
 	entries, err := config.List(config.PlatformGuidance)
 	testutil.FailErr(t, "readdir kicks", err)

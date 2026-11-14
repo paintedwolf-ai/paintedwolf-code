@@ -398,7 +398,8 @@ func TestTaskStartsANamedWorker(t *testing.T) {
 	testutil.FailErr(t, "resolve", err)
 	rounds, err := f.records.Rounds(t.Context(), f.coord, w.ID)
 	testutil.FailErr(t, "rounds", err)
-	if len(rounds) != 1 || rounds[0].JobID != started.JobID || w.Brief != "Map the parser" || w.ScopeMode != "read" {
+	if len(rounds) != 1 || rounds[0].JobID != started.JobID || w.ScopeMode != "read" ||
+		!strings.Contains(w.Brief, "Map the parser") || !strings.Contains(w.Brief, "Entry points listed") {
 		t.Fatalf("worker = %+v rounds = %+v", w, rounds)
 	}
 
