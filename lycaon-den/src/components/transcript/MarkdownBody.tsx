@@ -1,7 +1,8 @@
-import { Show, createEffect, createMemo, createSignal } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, onCleanup } from "solid-js";
 import type { Token } from "marked";
 import type { ResolveProjectRoot } from "../../api/project-path.ts";
 import { useChatDestinationScope } from "../../chat/composer/chat-destination-scope.tsx";
+import { createMarkdownCodeFoldController } from "../../chat/markdown/code-fold.ts";
 import { prepareMarkdownSource } from "../../chat/markdown/markdown-output.ts";
 import { renderMarkdownHtml } from "../../chat/markdown/markdown-render.ts";
 import { remoteImagePlaceholderURL } from "../../chat/markdown/untrusted-markdown.ts";
@@ -13,6 +14,7 @@ import type {
   ProseCitationIndex,
   ProseNavigationIndex,
 } from "../../chat/markdown/prose-path-opens.ts";
+import { useTranscriptViewport } from "../../chat/stream/transcript-viewport.tsx";
 import { copyTextToClipboard } from "../../utils/clipboard.ts";
 import { confirmAndOpenExternalLink } from "../../platform/desktop/external-link.ts";
 import { clickSelectedText } from "../../platform/interaction/selection-gesture.ts";
@@ -117,14 +119,20 @@ export function MarkdownBody(props: Props) {
   };
 
   let rootRef: HTMLDivElement | undefined;
+  const codeFold = createMarkdownCodeFoldController(useTranscriptViewport());
+  onCleanup(() => codeFold.dispose());
 
-  // Add copy controls after sanitization.
+  // Attach fence chrome after sanitization.
   createEffect(() => {
-    if (props.inline) return;
+    if (props.inline) {
+      codeFold.clear();
+      return;
+    }
     html();
     const root = rootRef;
     if (!root) return;
     queueMicrotask(() => {
+      if (!root.isConnected) return;
       for (const pre of Array.from(root.querySelectorAll("pre"))) {
         // The frame holds the button at the fence's visible corner while the code scrolls.
         const fence = pre.closest(".markdown-code-scroll") ?? pre;
@@ -142,6 +150,7 @@ export function MarkdownBody(props: Props) {
         });
         fence.appendChild(button);
       }
+      codeFold.sync(root);
     });
   });
 

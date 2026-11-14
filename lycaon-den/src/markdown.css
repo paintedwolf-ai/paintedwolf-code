@@ -115,6 +115,97 @@
   user-select: text;
 }
 
+/* Tall fences clip to 12 lines while keeping full text in the DOM for Copy and Find. */
+.markdown-body .markdown-code-scroll[data-code-fold],
+.markdown-body .markdown-code-scroll[data-code-fold][data-overlayscrollbars~="host"],
+.markdown-body pre[data-code-fold] {
+  display: flex;
+  flex-direction: column !important;
+}
+
+.markdown-body .markdown-code-scroll[data-code-fold="folded"] > .den-scrollport__viewport {
+  max-height: calc(
+    12 *
+      max(
+        var(--text-den-body) * var(--transcript-prose-line-height),
+        var(--text-den-label) * var(--transcript-code-line-height)
+      ) + var(--transcript-code-padding-y)
+  );
+  overflow-y: hidden;
+}
+
+.markdown-body pre[data-code-fold="folded"] > code {
+  display: block;
+  max-height: calc(
+    12 *
+      max(
+        var(--text-den-body) * var(--transcript-prose-line-height),
+        var(--text-den-label) * var(--transcript-code-line-height)
+      )
+  );
+  overflow: hidden;
+}
+
+.markdown-body .markdown-code-scroll[data-code-fold] > .os-scrollbar-horizontal {
+  bottom: var(--den-icon-target);
+  z-index: 2;
+}
+
+.den-code-fold-fade {
+  height: 2.5rem;
+  margin-top: -2.5rem;
+  flex-shrink: 0;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, var(--den-tint-1));
+  position: relative;
+  z-index: 1;
+}
+
+.markdown-body [data-code-fold="open"] > .den-code-fold-fade {
+  display: none;
+}
+
+.den-code-fold-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: var(--den-icon-target);
+  padding: 0.25em var(--transcript-code-padding-x);
+  border: 0;
+  border-top: 1px solid var(--den-line-quiet);
+  background: var(--den-tint-1);
+  color: var(--den-text-muted);
+  font-family: inherit;
+  font-size: var(--text-den-caption);
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  z-index: 2;
+  transition:
+    color var(--den-duration) var(--den-ease),
+    background-color var(--den-duration) var(--den-ease);
+}
+
+.den-code-fold-toggle:hover {
+  background: var(--den-tint-2);
+  color: var(--den-text);
+}
+
+.den-code-fold-toggle:focus-visible {
+  outline: 2px solid var(--den-accent-signal);
+  outline-offset: -2px;
+  color: var(--den-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .den-code-fold-toggle {
+    transition: none;
+  }
+}
+
 /* Wide tables scroll within prose instead of widening the conversation. */
 .markdown-body .markdown-table-scroll {
   max-width: 100%;

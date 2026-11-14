@@ -32,6 +32,7 @@ Every surface below registers a `FindableView` adapter (`bindFindableView`) or a
 | Chat content links | [`ChatContentLink.tsx`](../lycaon-den/src/components/transcript/ChatContentLink.tsx) | Reveal host whose collapsed corpus is the recorded document behind a link such as **Raw output in Files**; activating opens the document in Files at the match |
 | Chat content documents in Files | [`ChatContentPage.tsx`](../lycaon-den/src/files/components/ChatContentPage.tsx) | Keyed by the chat content document |
 | File-edit manifest group | [`TranscriptDiffGroup.tsx`](../lycaon-den/src/components/transcript/TranscriptDiffGroup.tsx) | Reveal host in front of its diff rows; the rows themselves have no adapter and are found as transcript text |
+| Folded markdown code fence | [`code-fold.ts`](../lycaon-den/src/chat/markdown/code-fold.ts) | Reveal host on `.markdown-code-scroll` (or `pre`) for blocks over 24 lines; full code remains in the DOM clipped to 12 lines, and Next / Prev hold an unclipping lease |
 | Source reader | [`SourceReader.tsx`](../lycaon-den/src/components/source/reader/SourceReader.tsx) | `primary` when its host says so |
 | Files editor ([files-stage.md](files-stage.md)) | [`ProjectFilesView.tsx`](../lycaon-den/src/files/components/ProjectFilesView.tsx), `files-editor`, `provider: "codemirror"` | Matches the whole buffer; unregistered while a buffer is loading, errored, or a diff |
 
