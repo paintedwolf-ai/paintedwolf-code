@@ -14,8 +14,7 @@
         "read"
       ]
     },
-    "effect": "block",
-    "emit": "rule:conformance"
+    "effect": "block"
   },
   "input": {
     "anchor": "tool.pre_invoke",

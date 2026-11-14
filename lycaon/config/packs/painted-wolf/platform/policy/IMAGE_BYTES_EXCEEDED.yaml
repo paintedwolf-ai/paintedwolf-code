@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.bytes, paintedwolf.max_bytes, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.resource_limit]
 when: paintedwolf.rejection_code == "IMAGE_BYTES_EXCEEDED"
 effect: block
-category: recoverable
-emit: guard:view_image
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
 message: view_image file exceeds the image byte limit
 what: '{{ tool }} cannot view {{ paintedwolf.path }} because its {{ paintedwolf.bytes }} bytes exceed the {{ paintedwolf.max_bytes }}-byte image limit.'
 cause: The file is larger than the image byte limit, checked before any bytes are read.
 why: An image a model views is stored as an artifact and sent to the provider; both carry the same byte limit.
 fix: Export a smaller copy of the image (lower resolution or stronger compression) and view that file.
 instead: Branch on Code IMAGE_BYTES_EXCEEDED; view a smaller copy of the image
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       bytes: 41943040

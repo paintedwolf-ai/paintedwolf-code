@@ -60,7 +60,6 @@ type Environment struct {
 	ActivityWindow     int
 	Detectors          map[string]bool
 	ExpressionNodesMax int
-	SupportsTransform  bool
 	// SupportsChunk reports streamed evaluation of content anchors
 	// ([OAR-OPS-6]).
 	SupportsChunk bool
@@ -165,7 +164,6 @@ type EnvironmentSpec struct {
 	ActivityWindow     int
 	Detectors          []string
 	ExpressionNodesMax int
-	SupportsTransform  bool
 	SupportsChunk      bool
 }
 
@@ -183,7 +181,6 @@ func NewEnvironment(spec EnvironmentSpec) (*Environment, error) {
 		ActivityWindow:     spec.ActivityWindow,
 		Detectors:          map[string]bool{},
 		ExpressionNodesMax: spec.ExpressionNodesMax,
-		SupportsTransform:  spec.SupportsTransform,
 		SupportsChunk:      spec.SupportsChunk,
 	}
 	for core, local := range spec.ProfileMap.Core {
@@ -226,7 +223,7 @@ func NewEnvironment(spec EnvironmentSpec) (*Environment, error) {
 	}
 	for _, ref := range spec.Detectors {
 		if !detectorRE.MatchString(ref) {
-			return nil, envErr("[OAR-OPS-10] malformed detector reference %q", ref)
+			return nil, envErr("[OAR-OPS-11] malformed detector reference %q", ref)
 		}
 		env.Detectors[ref] = true
 	}
@@ -241,13 +238,25 @@ func declareHostFact(env *Environment, host, name, typ string) error {
 	if !strings.HasPrefix(name, host+".") || !factNameRE.MatchString(name) {
 		return envErr("[OAR-FACT-15] host fact %s is not published under the host namespace %s", name, host)
 	}
-	if isReservedWord(name) {
-		return envErr("host fact %s is declared under a reserved word", name)
+	if IsReservedName(name) {
+		return envErr("[OAR-EXPR-17] host fact %s is declared under a reserved word or built-in name", name)
 	}
 	_, isFact := env.Facts[name]
 	_, isFn := env.Functions[name]
 	if isFact || isFn {
 		return envErr("[OAR-FACT-19] host fact %s redefines a declared name", name)
+	}
+	// [OAR-EXPR-2] A reference keeps one reading: no fact is named for a member
+	// of a declared map, and no map is declared over an existing fact's name.
+	if at := strings.LastIndexByte(name, '.'); at > 0 && env.Facts[name[:at]].Type == TypeMap {
+		return envErr("[OAR-EXPR-2] host fact %s names a member of the map %s", name, name[:at])
+	}
+	if typ == string(TypeMap) {
+		for other := range env.Facts {
+			if strings.HasPrefix(other, name+".") {
+				return envErr("[OAR-EXPR-2] host fact %s is a map, and %s is declared under it", name, other)
+			}
+		}
 	}
 	if m := fnSigRE.FindStringSubmatch(typ); m != nil {
 		env.Functions[name] = FunctionDecl{Sig: FunctionSig{Arg: FactType(m[1]), Ret: FactType(m[2])}, Tier: TierHost}

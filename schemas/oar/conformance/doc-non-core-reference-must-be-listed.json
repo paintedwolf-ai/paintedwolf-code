@@ -1,0 +1,26 @@
+{
+  "id": "doc-non-core-reference-must-be-listed",
+  "title": "A rule referencing a standard-profile fact it does not list is rejected at load",
+  "covers": [
+    "OAR-DOC-22",
+    "OAR-PROF-5"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "not_found"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "not_found"
+  }
+}

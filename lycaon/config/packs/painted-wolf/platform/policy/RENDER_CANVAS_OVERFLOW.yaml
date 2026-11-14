@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.content_height, paintedwolf.max_height, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "RENDER_CANVAS_OVERFLOW"
 effect: block
-category: recoverable
-emit: guard:visual_render
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:visual_render
 message: Authored document is taller than the maximum render canvas
 what: The laid-out document is {{ paintedwolf.content_height }} CSS pixels tall; content fit can grow to {{ paintedwolf.max_height }}.
 cause: The measured document exceeds the bounded content-fit canvas.
 why: A complete but illegible image and a quietly cropped one are both unusable as design evidence. The host refuses rather than returning either.
 fix: Split the document into sections, tighten intended spacing, or use a suitable wider layout. If a partial viewport is the intended deliverable, set viewport.fit to viewport with an explicit height and report the crop; do not present it as full-document evidence.
 instead: Branch on Code RENDER_CANVAS_OVERFLOW; split or shorten the document, then retry render_view
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

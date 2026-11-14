@@ -460,7 +460,7 @@
         "version": 1
       },
       "paintedwolf.profile": [
-        "profile",
+        "paintedwolf.tool_profile",
         "paintedwolf.session_role"
       ],
       "paintedwolf.same_code_reject_run": [

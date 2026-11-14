@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.fetch_budget_retry_after_seconds, paintedwolf.fetch_budget_used, paintedwolf.kind, paintedwolf.max, paintedwolf.rejection_code, paintedwolf.window]
 when: paintedwolf.rejection_code == "FETCH_URL_BUDGET_EXCEEDED"
 effect: block
-category: recoverable
-emit: guard:fetch_url
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
 message: fetch_url session budget exceeded
 what: fetch_url has used {{ paintedwolf.fetch_budget_used }} session reservations; the cap is {{ paintedwolf.max }} per {{ paintedwolf.window }}.
 cause: The current session window has no remaining fetch reservation.
 why: Changing the source list does not refund prior requests.
 fix: Stop fetching and synthesize from retained pages. At this refusal the earliest reservation expires in {{ paintedwolf.fetch_budget_retry_after_seconds }} seconds; later requests still need capacity. Do not restart the host or switch sessions to evade the budget.
 instead: Use retained evidence until the actual session window permits another fetch
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       kind: session

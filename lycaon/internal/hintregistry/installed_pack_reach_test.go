@@ -74,7 +74,7 @@ func writePolicyPack(t *testing.T, dir, packID, code, anchor string) {
 		"spec_version: '1.0'\nid: "+code+"\nkind: policy\non: "+anchor+"\n"+
 			"selector: {}\nwhen: 'false'\neffect: warn\n"+
 			"cause: c\nwhy: w\nfix: f\ninstead: i\n"+
-			"emit: rule:test\nmessage: m\n")
+			"x-paintedwolf-emit: rule:test\nmessage: m\n")
 }
 
 func mustWriteFile(t *testing.T, path, body string) {
@@ -91,7 +91,7 @@ func TestDoc1InstalledJSONPolicyReachesRegistry(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	author := filepath.Join(t.TempDir(), "json-policy")
 	writePolicyPack(t, author, "acme/json", "BASE_RULE", "tool.post_invoke")
-	const document = `{"spec_version":"1.0","namespace":"acme.json","id":"JSON_RULE","kind":"policy","on":"model.output","selector":{},"requires_facts":["paintedwolf.content_length"],"when":"paintedwolf.content_length == 12","effect":"transform","x-paintedwolf-transform":{"action":"replace","target":"content","replacement":"Reviewed \ud83d\udc3a"}}`
+	const document = `{"spec_version":"1.0","namespace":"acme.json","id":"JSON_RULE","kind":"policy","on":"model.output","selector":{},"requires_facts":["paintedwolf.content_length"],"when":"paintedwolf.content_length == 12","effect":"nudge","what":"Reviewed \ud83d\udc3a"}`
 	mustWriteFile(t, filepath.Join(author, "policy", "portable.json"), document)
 	extstatetest.InstallPack(t, extstatetest.DeviceScope(), "path:"+author, "", "")
 	cat, err := extpacks.ResolveCatalog(t.Context(), nil, nil)

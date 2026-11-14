@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.handle, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "RENDER_PATCH_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:render_view
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:render_view
 message: patch target string not found in handle markup
 what: '{{ tool }} could not find old_string in render handle "{{ paintedwolf.handle }}".'
 cause: The exact target string to replace does not match the handle's stored markup.
 why: Surgical patching requires an exact substring match in the handle's current markup.
 fix: Check the handle's current markup or re-render the view with full markup to establish a new baseline.
 instead: Branch on Code RENDER_PATCH_NOT_FOUND; provide full markup or check the target string
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       handle: mockup-1

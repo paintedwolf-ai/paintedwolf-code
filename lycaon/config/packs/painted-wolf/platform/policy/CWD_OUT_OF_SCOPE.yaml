@@ -10,15 +10,15 @@ selector:
 requires_facts: [paintedwolf.cwd, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CWD_OUT_OF_SCOPE"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: '`command`/`terminal_open` cwd outside project scope'
 what: The requested working directory {{ paintedwolf.cwd }} is outside this invocation's permitted directory scope.
 cause: The working directory must resolve within the permitted directory scope.
 why: The requested directory is outside the allowed scope.
 fix: Use an existing directory within this invocation's permitted scope.
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       cwd: /etc

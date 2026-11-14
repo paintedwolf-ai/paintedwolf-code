@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: COPY_PATH_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - copy
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "COPY_PATH_DENIED"
+when: paintedwolf.operation == "copy" && paintedwolf.rejection_code == "COPY_PATH_DENIED"
 effect: block
-category: recoverable
-emit: guard:copy
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:copy
 message: copy:copy path matches deny glob
 what: The copy path {{ paintedwolf.path }} is protected.
 cause: A source or destination crossed the host write-protection boundary.
 why: The copy operation checks both paths against its required authority.
 fix: Leave the protected path unchanged. Do not use another tool or a broader write glob to bypass this floor. Preserve any earlier copies reported as completed.
 instead: Respect the protected-path boundary
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.pending, paintedwolf.progress_closure_armed, paintedwolf.progress_gated_tool, paintedwolf.progress_open_items, paintedwolf.settled_work]
 when: paintedwolf.progress_closure_armed && paintedwolf.progress_gated_tool
 effect: block
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Reconcile Progress rows before more progress-gated work
 what: 'Worker finishes await acknowledgement before **`{{ tool }}`**{% if paintedwolf.settled_work %}: {{ paintedwolf.settled_work }}{% endif %}.'
 cause: The worker finishes have not been acknowledged in current progress state.
 why: The coordinator must review newly finished worker results before continuing governed work.
 fix: '{{ paintedwolf.next_steps }} Close only completed deliverables and keep unfinished rows pending. An unchanged document can acknowledge its listed finishes with that exact token. Then immediately retry the authorized `{{ tool }}` action.'
 instead: Acknowledge the listed worker finishes with the current reconciliation_token and expected_revision, then retry the authorized action
-scenarios:
+x-paintedwolf-scenarios:
   - id: not_closed
     vars:
       pending: 3

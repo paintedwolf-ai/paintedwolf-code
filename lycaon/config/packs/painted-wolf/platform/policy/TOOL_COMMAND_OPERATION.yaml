@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.need, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "TOOL_COMMAND_OPERATION"
 effect: block
-category: recoverable
-emit: guard:command_operation
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_operation
 message: 'Command operation {{ paintedwolf.need }} is not a callable tool'
 what: '"{{ paintedwolf.need }}" is a command operation, not a callable tool.'
 cause: Routine operations use the command interface.
 why: Operation names retain their meaning in receipts and history.
 fix: '{{ paintedwolf.next_steps }} Existing permission and scope restrictions still apply.'
 instead: Do not request or invoke this operation as a separate tool.
-scenarios:
+x-paintedwolf-scenarios:
   - id: retired_operation
     vars:
       need: edit

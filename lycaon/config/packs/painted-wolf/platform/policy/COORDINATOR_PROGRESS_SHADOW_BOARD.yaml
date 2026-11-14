@@ -8,15 +8,15 @@ when: paintedwolf.rejection_code == "COORDINATOR_PROGRESS_SHADOW_BOARD"
 effect: block
 x-paintedwolf-audience:
   - coordinator
-category: recoverable
-emit: guard:coordinator
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:coordinator
 message: Coordinator progress must not use a file-board path
 what: Coordinator {{ tool }} on {{ paintedwolf.path }} targets a parallel progress board.
 cause: Progress lives in `session_progress`; blueprints live under `${overlay_dir}/blueprints/**`.
 why: Parallel board files diverge from host progress state.
 fix: '{{ paintedwolf.next_steps }}'
 instead: 'Keep the checklist in the progress record.'
-scenarios:
+x-paintedwolf-scenarios:
   - id: plans_board
     vars:
       path: ${overlay_dir}/plans/board.md

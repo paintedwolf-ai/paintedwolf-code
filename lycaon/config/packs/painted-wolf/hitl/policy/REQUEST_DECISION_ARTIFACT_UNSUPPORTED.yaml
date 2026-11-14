@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.artifact_id, paintedwolf.artifact_preview_mimes, paintedwolf.mime, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "REQUEST_DECISION_ARTIFACT_UNSUPPORTED"
 effect: block
-category: recoverable
-emit: guard:request_decision
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:request_decision
 message: artifact cannot render in the decision card
 what: Artifact {{ paintedwolf.artifact_id }} has MIME {{ paintedwolf.mime }}, which the decision card cannot preview.
 cause: The artifact MIME type is not an interactive preview format.
 why: A decision card must show the artifact it asks the coordinator to review.
 fix: 'Use an intended review artifact in a currently supported format: {{ paintedwolf.artifact_preview_mimes }}. Preserve the content the coordinator must evaluate.'
 instead: Branch on Code REQUEST_DECISION_ARTIFACT_UNSUPPORTED; pass a supported artifact UUID
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: stub

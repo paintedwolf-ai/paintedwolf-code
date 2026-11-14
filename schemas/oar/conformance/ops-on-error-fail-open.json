@@ -12,12 +12,14 @@
     "on": "tool.pre_invoke",
     "selector": {},
     "effect": "block",
-    "emit": "rule:conformance",
     "when": "prompt_injection_score > 0.8",
     "on_error": "fail_open",
     "detector": {
       "ref": "detector://error"
-    }
+    },
+    "requires_facts": [
+      "prompt_injection_score"
+    ]
   },
   "input": {
     "anchor": "tool.pre_invoke",

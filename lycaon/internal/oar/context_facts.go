@@ -9,7 +9,6 @@ type InvocationFacts struct {
 	CapabilityContract              *toolcontract.ToolCapabilitySnapshot
 	Tool                            string
 	ToolArgs                        map[string]any
-	ToolArgsFingerprint             string
 	PatternParseOK                  bool
 	ArgValidationErrors             []string
 	ArgValidationReason             string
@@ -227,12 +226,20 @@ type MCPFacts struct {
 }
 
 type CountersFacts struct {
-	FireCount           int64
-	ScopedFireCount     int64
+	FireCount    int64
+	BreakerCount int64
+	// SameCodeRejectRun and SameCallRun are computed by the engine from the
+	// session's earlier occurrences ([OAR-FIRE-8], [OAR-FIRE-9]).
+	SameCodeRejectRun int64
+	SameCallRun       int64
+	// CredentialDecisions counts earlier credential.assignment occurrences in
+	// the session that delivered a decision for the same fingerprint.
+	CredentialDecisions int64
+	// RepeatedRejectCode is the rejection code the loop guard observed
+	// repeating, or empty.
+	RepeatedRejectCode  string
 	RepeatCount         int64
-	BreakerCount        int64
 	FruitlessSearchRun  int64
-	SameCodeRejectRun   int64
 	CodeRejectResponses int64
 	DeferredUnactivated int64
 }

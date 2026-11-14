@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.mode, paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "FETCH_URL_MODE_INVALID"
 effect: block
-category: recoverable
-emit: guard:fetch_url
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:fetch_url
 message: recorded fetch_url mode was invalid
 what: The recorded fetch_url request used unsupported mode {{ paintedwolf.mode }}.
 cause: That invocation required text or raw; the mode argument is now retired.
 why: The current source reader has no transfer mode.
 fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
 instead: Follow the current schema and access boundaries.
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       mode: html

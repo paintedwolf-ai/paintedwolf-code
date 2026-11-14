@@ -1,40 +1,14 @@
 package oar
 
-// resolve picks the winning effect. Nudge and warn collect every live
-// contribution of that effect in evaluation order ([OAR-EVAL-4],
-// ). Block, transform, and none have an empty
-// advisory list.
-func resolve(blocks, transforms, nudges, warns []Decision) *Decision {
-	if len(blocks) > 0 {
-		d := blocks[0]
-		d.Advisories = nil
-		return &d
-	}
-	if len(transforms) > 0 {
-		d := transforms[0]
-		d.Advisories = nil
-		return &d
-	}
-	if len(nudges) > 0 {
-		return advisoryDecision(EffectNudge, nudges)
-	}
-	if len(warns) > 0 {
-		return advisoryDecision(EffectWarn, warns)
-	}
-	return nil
-}
-
-func advisoryDecision(effect Effect, hits []Decision) *Decision {
-	d := hits[0]
-	d.Effect = effect
-	d.Advisories = make([]Advisory, len(hits))
-	for i, h := range hits {
-		d.Advisories[i] = Advisory{
-			Code: h.Code,
-			Rule: h.Rule,
-			Copy: h.Copy,
-			Data: h.Data,
+// resolve picks the decision: a block, else a nudge, else a warn, and within
+// the winning effect the first rule in evaluation order ([OAR-EVAL-4],
+// [OAR-EVAL-10]). The others are only on the applied-rules trace.
+func resolve(blocks, nudges, warns []Decision) *Decision {
+	for _, group := range [][]Decision{blocks, nudges, warns} {
+		if len(group) > 0 {
+			d := group[0]
+			return &d
 		}
 	}
-	return &d
+	return nil
 }

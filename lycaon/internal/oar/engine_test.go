@@ -97,13 +97,16 @@ func TestEvaluateConditionGroundingFacts(t *testing.T) {
 	}
 }
 
-func TestPathOutsideScopeFunction(t *testing.T) {
+func TestPathOutsideScopeReadsTheCurrentTool(t *testing.T) {
 	gc := NewGuardContext()
 	gc.Access.PathOutsideScopeByTool = map[string]bool{"read": true}
-	ok, err := EvaluateCondition(`path_outside_scope("read")`, gc)
-	testutil.FailErr(t, "eval", err)
-	if !ok {
-		t.Fatal("expected path_outside_scope true")
+	for tool, want := range map[string]bool{"read": true, "write": false} {
+		gc.ObserveToolCall(tool, nil)
+		ok, err := EvaluateCondition(`path_outside_scope`, gc)
+		testutil.FailErr(t, "eval", err)
+		if ok != want {
+			t.Fatalf("path_outside_scope for %s = %v, want %v", tool, ok, want)
+		}
 	}
 }
 

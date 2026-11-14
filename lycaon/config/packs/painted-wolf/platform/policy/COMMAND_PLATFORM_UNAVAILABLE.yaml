@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_PLATFORM_UNAVAILABLE"
 effect: block
-category: recoverable
-emit: guard:command_composition_redirect
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
 message: native command operation is unavailable
 what: This native command operation is unavailable on the current platform.
 cause: The platform adapter cannot provide the required confined path operation.
 why: ''
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: unavailable_path_operation
     vars:
       tool: command

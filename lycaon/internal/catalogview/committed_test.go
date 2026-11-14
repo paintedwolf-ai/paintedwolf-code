@@ -227,7 +227,7 @@ func TestBuildServesCapturedBytesAfterEdit(t *testing.T) {
 	const policyBody = "spec_version: '1.0'\nid: FIXTURE_CAPTURED\nkind: policy\non: tool.post_invoke\n" +
 		"selector: {}\nwhen: 'false'\neffect: warn\n" +
 		"cause: c\nwhy: w\nfix: f\ninstead: i\n" +
-		"emit: rule:test\nmessage: m\n"
+		"x-paintedwolf-emit: rule:test\nmessage: m\n"
 	pack := fixturePack(t, "acme/captured", map[string]string{
 		"policy/FIXTURE_CAPTURED.yaml": policyBody,
 		"agents/fixture-agent.yaml":    "id: fixture-agent\nname: Fixture\ntool_profile: read_only\n",

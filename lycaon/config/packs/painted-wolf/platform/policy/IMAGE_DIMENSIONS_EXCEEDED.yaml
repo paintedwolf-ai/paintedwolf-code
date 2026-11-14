@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.height, paintedwolf.max_dimension, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.width]
 when: paintedwolf.rejection_code == "IMAGE_DIMENSIONS_EXCEEDED"
 effect: block
-category: recoverable
-emit: guard:view_image
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
 message: view_image dimensions exceeded ceiling
 what: '{{ tool }} cannot display {{ paintedwolf.path }} because its dimensions ({{ paintedwolf.width }}x{{ paintedwolf.height }}) exceed {{ paintedwolf.max_dimension }}px.'
 cause: Image dimensions exceed the maximum perceivable ceiling.
 why: Visual perception models have bounded input dimensions.
 fix: Scale down the image before viewing.
 instead: Branch on Code IMAGE_DIMENSIONS_EXCEEDED; resize the image to fit within {{ paintedwolf.max_dimension }}px
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       height: 6000

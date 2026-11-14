@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: CHMOD_NOT_FOUND
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - chmod
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "CHMOD_NOT_FOUND"
+when: paintedwolf.operation == "chmod" && paintedwolf.rejection_code == "CHMOD_NOT_FOUND"
 effect: block
-category: recoverable
-emit: guard:chmod
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:chmod
 message: chmod path does not exist
 what: The target for chmod path {{ paintedwolf.path }} does not exist.
 cause: The requested path or its resolved link target is absent.
 why: Permission changes require an existing target.
 fix: Confirm the intended path with an offered discovery tool, or remove an unintended missing path from the request. Do not create a file solely to make chmod succeed.
 instead: Branch on Code; confirm the target or remove the unintended target
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

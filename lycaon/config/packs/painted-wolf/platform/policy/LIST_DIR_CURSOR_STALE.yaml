@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: LIST_DIR_CURSOR_STALE
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - list_dir
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "LIST_DIR_CURSOR_STALE"
+when: paintedwolf.operation == "list_dir" && paintedwolf.rejection_code == "LIST_DIR_CURSOR_STALE"
 effect: block
-category: recoverable
-emit: guard:list_dir
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:list_dir
 message: '`list_dir` cursor is stale for this scope'
 what: 'A directory listing received a cursor that is not valid for this scope and source generation.'
 cause: The source changed or the cursor belongs to another path set or pattern.
 why: A cursor advances only the exact view that issued it.
 fix: List the path again to start a new map. Copy any returned continuation exactly.
 instead: Remove cursor and retry the same scope once
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       profile: coordinator

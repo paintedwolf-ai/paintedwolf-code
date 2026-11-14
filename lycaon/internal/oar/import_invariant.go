@@ -232,11 +232,11 @@ func (imp *InvariantImport) ToHintYAML() ([]byte, error) {
 		}
 	}
 	fmt.Fprintf(&b, "    effect: %s\n", r.Effect)
-	// Copy members are top-level ([OAR-DOC-18]); emit and category are
-	// informational fields of the document model ([OAR-DOC-29], [OAR-DOC-30]).
+	// Copy members are top-level ([OAR-DOC-18]); the channel and category are
+	// host metadata.
 	fmt.Fprintf(&b, "    title: %q\n", r.Title)
 	fmt.Fprintf(&b, "    what: %q\n", r.Copy.What)
-	fmt.Fprintf(&b, "    emit: %s\n", r.Emit)
-	b.WriteString("    category: recoverable\n")
+	fmt.Fprintf(&b, "    x-paintedwolf-emit: %s\n", r.Emit)
+	b.WriteString("    x-paintedwolf-category: recoverable\n")
 	return []byte(b.String()), nil
 }

@@ -257,7 +257,7 @@ func TestTerminalEmptyResponseRendersContextualOAR(t *testing.T) {
 		if mask&1 != 0 {
 			obs.EmptyResponse = &oar.EmptyResponseObservation{ToolsCallable: mask&2 != 0, StructuredOutput: mask&4 != 0}
 		}
-		reject, blocked, _, _, err := mgr.ToolPolicy.ContentBlock(t.Context(), &api.Session{ID: "empty-response"}, oar.AnchorContentOutput, obs, "", nil)
+		reject, blocked, err := mgr.ToolPolicy.ContentBlock(t.Context(), &api.Session{ID: "empty-response"}, oar.AnchorContentOutput, obs, "", nil)
 		testutil.FailErr(t, "evaluate terminal-empty policy", err)
 		if blocked != (mask&1 != 0) {
 			t.Fatalf("mask%d: blocked=%v", mask, blocked)

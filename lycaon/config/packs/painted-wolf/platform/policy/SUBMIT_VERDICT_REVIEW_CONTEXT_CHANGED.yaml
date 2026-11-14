@@ -6,14 +6,14 @@ selector: {}
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SUBMIT_VERDICT_REVIEW_CONTEXT_CHANGED"
 effect: block
-category: recoverable
-emit: guard:workflow
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:workflow
 message: Refresh the changed review context.
 what: The review context changed after this submission was prepared.
 cause: The submitted revision does not identify the current reconciliation inputs.
 why: Existing accepted results remain recorded; their applicability is checked separately.
 fix: '{{ paintedwolf.next_steps }}'
 instead: Refresh the context before dispatching any replacement review.
-scenarios:
+x-paintedwolf-scenarios:
   - id: refresh
     vars: {}

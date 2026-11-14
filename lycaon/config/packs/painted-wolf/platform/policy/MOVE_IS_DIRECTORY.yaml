@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: MOVE_IS_DIRECTORY
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - move
+selector: {}
 requires_facts: [paintedwolf.operation, paintedwolf.path, paintedwolf.rejection_code]
-when: paintedwolf.rejection_code == "MOVE_IS_DIRECTORY"
+when: paintedwolf.operation == "move" && paintedwolf.rejection_code == "MOVE_IS_DIRECTORY"
 effect: block
-category: recoverable
-emit: guard:move
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:move
 message: move:move source is a directory
 what: Move source {{ paintedwolf.path }} is a directory.
 cause: The native move operation accepts files.
 why: A rejected item does not undo earlier successful moves in the batch.
 fix: Inspect the intended directory transfer and choose an offered operation that supports it within current authority. Do not move an arbitrary child as a substitute for the whole directory.
 instead: Resolve the reported item and preserve completed move receipts
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

@@ -10,15 +10,15 @@ selector:
 requires_facts: [paintedwolf.cwd, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "CWD_SCRATCH_NOT_VERIFICATION"
 effect: block
-category: recoverable
-emit: guard:tool
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:tool
 message: '`verify` cwd cannot be session scratch'
 what: Verification commands cannot run with scratch working directory {{ paintedwolf.cwd }}.
 cause: Verification checks validate workspace or repository state and must run in a project root.
 why: Session scratch (@scratch) is ephemeral and outside the version-controlled project tree.
 fix: Run verification commands within the workspace or a project root, not in @scratch.
 instead: Branch on Code; run verification targets against project root paths
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       cwd: '@scratch'

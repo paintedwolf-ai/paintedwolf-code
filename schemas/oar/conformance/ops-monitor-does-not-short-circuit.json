@@ -12,7 +12,6 @@
       "on": "tool.pre_invoke",
       "selector": {},
       "effect": "block",
-      "emit": "rule:conformance",
       "when": "tool == \"read\"",
       "enforcement": "monitor"
     },
@@ -23,7 +22,6 @@
       "on": "tool.pre_invoke",
       "selector": {},
       "effect": "warn",
-      "emit": "rule:conformance",
       "when": "tool == \"read\""
     }
   ],

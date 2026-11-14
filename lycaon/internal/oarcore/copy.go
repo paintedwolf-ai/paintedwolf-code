@@ -45,7 +45,7 @@ func copyInterpolatable(t FactType) bool {
 	switch t {
 	case TypeString, TypeBool, TypeInt, TypeDouble, TypeListString:
 		return true
-	case TypeListMap, TypeMap, typeDyn:
+	case TypeListMap, TypeMap:
 	}
 	return false
 }

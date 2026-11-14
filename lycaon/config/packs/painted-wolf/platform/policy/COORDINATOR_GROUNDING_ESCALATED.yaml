@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.grounding_escalated, paintedwolf.grounding_verdict]
 when: paintedwolf.grounding_escalated && paintedwolf.grounding_verdict == "COORDINATOR_GROUNDING_ESCALATED"
 effect: nudge
-category: recoverable
-emit: guard:grounding
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:grounding
 message: Repeated ungrounded completion claims — delegation required before continuing
 what: Repeated ungrounded completion claims — delegation required before continuing
 cause: Repeated ungrounded completion claims — delegation required before continuing
 why: Report the unresolved completion evidence and ask the user how to proceed; the session is paused by the grounding circuit breaker.
 fix: Report the unresolved completion evidence and ask the user how to proceed; the session is paused by the grounding circuit breaker.
 instead: Stop asserting completion and wait for user guidance
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

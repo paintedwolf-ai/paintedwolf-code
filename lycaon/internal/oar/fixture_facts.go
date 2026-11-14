@@ -20,7 +20,7 @@ func factsToContext(facts map[string]any) *GuardContext {
 	if v, ok := facts["session_posture"].(string); ok {
 		gc.Session.SessionPosture = v
 	}
-	if v, ok := facts["profile"].(string); ok {
+	if v, ok := facts["tool_profile"].(string); ok {
 		gc.Session.PermissionProfile = v
 	}
 	if v, ok := facts["session_role"].(string); ok {
@@ -70,15 +70,12 @@ func factsToContext(facts map[string]any) *GuardContext {
 	setBool("tool_is_delegation", &gc.Invocation.ToolIsDelegation)
 	setBool("tool_is_handoff", &gc.Invocation.ToolIsHandoff)
 	setBool("path_outside_scope", &gc.Access.PathOutsideScope)
-	// Core observations a published fixture may set directly.
+	// Filesystem profile and host observations a fixture may set directly.
 	setBool("path_denied", &gc.Rejection.PathDenied)
 	setBool("not_found", &gc.Rejection.NotFound)
 	setBool("is_directory", &gc.Rejection.IsDirectory)
 	setBool("policy_denied", &gc.Rejection.PolicyDenied)
 	setBool("content_contains_untrusted", &gc.Content.ContentContainsUntrusted)
-	if v, ok := facts["tool_args_fingerprint"].(string); ok {
-		gc.Invocation.ToolArgsFingerprint = v
-	}
 	if m, ok := facts["tool_args"].(map[string]any); ok {
 		gc.Invocation.ToolArgs = m
 	}
@@ -90,17 +87,11 @@ func factsToContext(facts map[string]any) *GuardContext {
 			}
 		}
 	}
-	if v, ok := facts["same_code_reject_run"].(float64); ok {
-		gc.Counters.SameCodeRejectRun = int64(v)
-	}
 	if v, ok := facts["prompt_injection_score"].(float64); ok {
 		gc.Content.PromptInjectionScore = v
 	}
 	if v, ok := facts["jailbreak_score"].(float64); ok {
 		gc.Content.JailbreakScore = v
-	}
-	if v, ok := facts["breaker_count"].(float64); ok {
-		gc.Counters.BreakerCount = int64(v)
 	}
 	if v, ok := facts["repeat_count"].(float64); ok {
 		gc.Counters.RepeatCount = int64(v)

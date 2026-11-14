@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.git_addressed_session_required, paintedwolf.path, paintedwolf.rejection_code, paintedwolf.rejection_reason]
 when: paintedwolf.rejection_code == "GIT_OPERATION_PRECONDITION"
 effect: block
-category: recoverable
-emit: guard:git_operation_precondition
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:git_operation_precondition
 message: Git operation precondition failed
 what: '{% if paintedwolf.git_addressed_session_required %}This Git operation requires the user-addressed session.{% else %}The repository does not satisfy this Git operation’s preconditions.{% endif %}'
 cause: '{{ paintedwolf.rejection_reason }}{% if paintedwolf.path %} — {{ paintedwolf.path }}{% endif %}'
 why: Repository state and reviewed file contents must still match before Git changes them.
 fix: '{% if paintedwolf.git_addressed_session_required %}Return the required repository operation to the coordinator with the worker’s actual results. Do not perform the operation through another tool or alter the worker’s branch ownership.{% else %}Inspect the repository status and reported details, resolve the named condition within the task’s authority, and make a fresh request.{% endif %}'
 instead: Keep the current repository state until the precondition is resolved.
-scenarios:
+x-paintedwolf-scenarios:
   - id: stale
     vars:
       tool: git_checkout

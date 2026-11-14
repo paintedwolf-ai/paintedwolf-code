@@ -1,7 +1,7 @@
 spec_version: "1.0"
 id: PROGRESS_ITEM_NOT_CLOSED
 kind: hint
-emit: guard:coordinator
+x-paintedwolf-emit: guard:coordinator
 x-paintedwolf-status: deprecated
 x-paintedwolf-successor: PROGRESS_RECONCILIATION_REQUIRED
 x-paintedwolf-category: recoverable

@@ -9,15 +9,15 @@ selector:
 requires_facts: [paintedwolf.cwd, paintedwolf.pwd, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_PWD_NOT_CWD"
 effect: block
-category: recoverable
-emit: guard:command_composition_redirect
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:command_composition_redirect
 message: env.PWD does not set the working directory
 what: env.PWD ({{ paintedwolf.pwd }}) does not match the resolved working directory ({{ paintedwolf.cwd }}) for this {{ tool }} call.
 cause: cwd comes from the per-call cwd arg (branch-anchored on write workers), not env.PWD.
 why: env.PWD is a plain environment variable; it does not chdir.
 fix: ''
 instead: ''
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       command: go mod tidy

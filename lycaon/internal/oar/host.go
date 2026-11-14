@@ -68,27 +68,3 @@ func (p *EngineDeclaration) requireHostAdapters() error {
 	}
 	return nil
 }
-
-// ValidateHostRuleSet refuses copy that displays next steps a rule does not
-// have, transformations at boundaries whose deliveries cannot represent
-// rewritten content, and transforms that name nothing to replace.
-func ValidateHostRuleSet(rules *RuleSet) error {
-	for _, rule := range rules.All() {
-		// Copy that displays next steps would render without a remedy.
-		if rule.NextSteps == nil && bindsNextSteps(rule) {
-			return fmt.Errorf("rule %s displays %s but has no next-steps entry", rule.Qualified(), NextStepsFact)
-		}
-		if rule.Effect != EffectTransform {
-			continue
-		}
-		if rule.Transform == nil {
-			return fmt.Errorf("rule %s: transform carries no x-paintedwolf-transform, so the host has nothing to apply", rule.Qualified())
-		}
-		switch rule.Anchor {
-		case AnchorToolPost, AnchorContentOutput, AnchorContentToolResult, AnchorCredentialAssignment:
-		default:
-			return fmt.Errorf("rule %s: transform cannot be delivered at anchor %s", rule.Qualified(), rule.Anchor)
-		}
-	}
-	return nil
-}

@@ -2,22 +2,19 @@ spec_version: "1.0"
 id: MKDIR_BULK_DENIED
 kind: schema
 on: tool.rejected
-selector:
-  ledger:
-    paintedwolf.operation:
-      - mkdir
+selector: {}
 requires_facts: [paintedwolf.bulk_denied, paintedwolf.max_paths, paintedwolf.operation, paintedwolf.rejection_code, paintedwolf.requested]
-when: paintedwolf.rejection_code == "MKDIR_BULK_DENIED"
+when: paintedwolf.operation == "mkdir" && paintedwolf.rejection_code == "MKDIR_BULK_DENIED"
 effect: block
-category: recoverable
-emit: guard:mkdir
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:mkdir
 message: mkdir:mkdir batch exceeds max paths
 what: mkdir received {{ paintedwolf.requested }} paths; the current bound is {{ paintedwolf.max_paths }}.
 cause: The explicit directory set exceeds the per-call bound.
 why: Directory creation must preserve the intended targets across batches.
 fix: Split the intended paths into batches of at most {{ paintedwolf.max_paths }}. Retain successful creation receipts before retrying an interrupted batch.
 instead: Keep each batch bounded and preserve completed results
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       detail: bad args

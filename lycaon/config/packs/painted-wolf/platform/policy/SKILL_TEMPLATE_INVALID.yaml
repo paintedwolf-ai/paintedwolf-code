@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.detail, paintedwolf.missing, paintedwolf.name, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "SKILL_TEMPLATE_INVALID"
 effect: block
-category: recoverable
-emit: guard:skills_read
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:skills_read
 message: Skill {{ paintedwolf.name }} failed to render. {{ paintedwolf.detail }}
 what: Skill {{ paintedwolf.name }} failed to render.
 cause: The pack skill body failed pongo render under host policy vars.
 why: Pack skill bodies are rendered at skills_read.
 fix: 'Report the broken skill {{ paintedwolf.name }} and template diagnostic: {{ paintedwolf.detail }}. Installed pack templates are host-managed; do not edit the active host control plane. Use another skill only if it actually covers the required task.'
 instead: Branch on Code SKILL_TEMPLATE_INVALID; open a different skill or report the broken pack skill
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       name: orchestrate-a-large-task

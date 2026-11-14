@@ -6,15 +6,15 @@ selector: {}
 requires_facts: [paintedwolf.bytes, paintedwolf.content_type, paintedwolf.host, paintedwolf.http_request_web_page, paintedwolf.next_steps]
 when: paintedwolf.http_request_web_page
 effect: warn
-category: informational
-emit: guard:http_request
+x-paintedwolf-category: informational
+x-paintedwolf-emit: guard:http_request
 message: http_request delivered a web page as raw HTML
 what: 'curl returned a {{ paintedwolf.bytes }}-byte HTML document from {{ paintedwolf.host }} as raw markup.'
 cause: 'The response is {{ paintedwolf.content_type }}; curl returns bodies verbatim, including scripts, styles, and navigation.'
 why: 'Raw markup spends context on page structure instead of the text you need.'
 fix: '{{ paintedwolf.next_steps }}'
 instead: Keep native curl when you need the exact markup, headers, or status of this endpoint
-scenarios:
+x-paintedwolf-scenarios:
   - id: loaded
     vars:
       tool: http_request

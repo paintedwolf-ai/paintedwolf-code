@@ -12,9 +12,9 @@
       "on": "tool.pre_invoke",
       "selector": {},
       "effect": "block",
-      "when": "prompt_injection_score > 0.5",
+      "when": "1 / size(tool) == 0",
       "on_error": "SUB",
-      "what": "bad {{ arg_validation_errors }}"
+      "what": "bad"
     },
     {
       "spec_version": "1.0",
@@ -30,15 +30,14 @@
   "input": {
     "anchor": "tool.pre_invoke",
     "facts": {
-      "prompt_injection_score": 1e999,
-      "tool": "shell"
+      "tool": ""
     }
   },
   "expected": {
     "decision": "block",
     "code": "SUB",
     "copy": {
-      "what": "substitute for shell"
+      "what": "substitute for "
     }
   },
   "id": "substitute-carries-copy"

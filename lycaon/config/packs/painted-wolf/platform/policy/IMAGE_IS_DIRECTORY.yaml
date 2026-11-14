@@ -8,15 +8,15 @@ selector:
 requires_facts: [paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "IMAGE_IS_DIRECTORY"
 effect: block
-category: recoverable
-emit: guard:view_image
+x-paintedwolf-category: recoverable
+x-paintedwolf-emit: guard:view_image
 message: view_image path is a directory
 what: '{{ tool }} cannot view {{ paintedwolf.path }} because it is a directory.'
 cause: The path names a directory, not an image file.
 why: view_image inspects one image file at a time.
 fix: '{{ paintedwolf.next_steps }} Pass a path to one image file.'
 instead: Branch on Code IMAGE_IS_DIRECTORY; pass a file path
-scenarios:
+x-paintedwolf-scenarios:
   - id: default
     vars:
       path: assets/icons
