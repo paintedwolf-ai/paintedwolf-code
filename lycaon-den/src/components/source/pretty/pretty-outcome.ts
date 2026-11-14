@@ -5,6 +5,8 @@ export type PrettyLayout =
   | { readonly kind: "code"; readonly dialect: "script" | "style" | "style-line-comments" }
   | { readonly kind: "bracket"; readonly statements: boolean; readonly blocks?: boolean }
   | { readonly kind: "clause" }
+  | { readonly kind: "sexp"; readonly data: boolean }
+  | { readonly kind: "chain" }
   | { readonly kind: "fenced" }
   | { readonly kind: "containers" }
   | { readonly kind: "none" };
@@ -20,6 +22,9 @@ export const BRACKET_STATEMENTS: PrettyLayout = { kind: "bracket", statements: t
 export const BRACKET_BLOCKS: PrettyLayout = { kind: "bracket", statements: false, blocks: true };
 export const BRACKET: PrettyLayout = { kind: "bracket", statements: false };
 export const CLAUSE: PrettyLayout = { kind: "clause" };
+export const SEXP: PrettyLayout = { kind: "sexp", data: false };
+export const SEXP_DATA: PrettyLayout = { kind: "sexp", data: true };
+export const CHAIN: PrettyLayout = { kind: "chain" };
 export const FENCED: PrettyLayout = { kind: "fenced" };
 export const CONTAINERS: PrettyLayout = { kind: "containers" };
 export const NO_LAYOUT: PrettyLayout = { kind: "none" };

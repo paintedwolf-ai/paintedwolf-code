@@ -1,7 +1,9 @@
 import type { Text } from "@codemirror/state";
 import type { Container, Frame } from "./pretty-bracket.ts";
+import { type ChainState, INITIAL_CHAIN_STATE } from "./pretty-chain.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import type { MarkupState } from "./pretty-markup.ts";
+import type { SexpFrame } from "./pretty-sexp.ts";
 import type { TextWindow } from "./pretty-text-window.ts";
 import type { PrettyTokenSource } from "./pretty-tokens.ts";
 
@@ -51,11 +53,20 @@ export interface ClauseRule {
   readonly kind: "clause";
 }
 
-export type PrettyRule = BracketRule | MarkupRule | ClauseRule;
+export interface SexpRule {
+  readonly kind: "sexp";
+  readonly data: boolean;
+}
+
+export interface ChainRule {
+  readonly kind: "chain";
+}
+
+export type PrettyRule = BracketRule | MarkupRule | ClauseRule | SexpRule | ChainRule;
 
 /** Whether a rule reads the editor's syntax tree and so lays out only what it has parsed. */
 export function readsSyntaxTree(rule: PrettyRule): boolean {
-  return rule.kind === "clause" || (rule.kind === "bracket" && rule.parsed);
+  return rule.kind === "clause" || rule.kind === "sexp" || (rule.kind === "bracket" && rule.parsed);
 }
 
 /** Where a document's rules apply. */
@@ -108,6 +119,8 @@ export class ScanState {
   lexer: PrettyLexer | null = null;
   frames: Frame | null = null;
   containers: Container | null = null;
+  sexpFrames: SexpFrame | null = null;
+  chainState: ChainState = INITIAL_CHAIN_STATE;
   markup: MarkupState;
   /** Group depth whose commas break as a SQL clause list, or -1. */
   listDepth = -1;

@@ -18,7 +18,7 @@ import {
 } from "../editor/codemirror-lang.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
 import { NO_LAYOUT, type PrettyLayout } from "./pretty-outcome.ts";
-import type { BracketRule, ClauseRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan-state.ts";
+import type { BracketRule, ChainRule, ClauseRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan, SexpRule } from "./pretty-scan-state.ts";
 import { TreeLexer } from "./pretty-tokens.ts";
 
 export const DATA_RULE: BracketRule = {
@@ -47,6 +47,9 @@ const BRACKET_RULE: BracketRule = {
 const BRACKET_BLOCKS_RULE: BracketRule = { ...BRACKET_RULE, afterBlock: "block" };
 const BRACKET_STATEMENTS_RULE: BracketRule = { ...BRACKET_RULE, statements: true, afterBlock: "block" };
 const CLAUSE_RULE: ClauseRule = { kind: "clause" };
+const SEXP_RULE: SexpRule = { kind: "sexp", data: false };
+const SEXP_DATA_RULE: SexpRule = { kind: "sexp", data: true };
+const CHAIN_RULE: ChainRule = { kind: "chain" };
 
 /** The rule that applies a declared layout, or null where no rule exists. */
 function ruleFor(layout: PrettyLayout): PrettyRule | null {
@@ -56,6 +59,8 @@ function ruleFor(layout: PrettyLayout): PrettyRule | null {
     case "code": return layout.dialect === "script" ? SCRIPT_RULE : layout.dialect === "style" ? STYLE_RULE : LINE_COMMENT_STYLE_RULE;
     case "bracket": return layout.statements ? BRACKET_STATEMENTS_RULE : layout.blocks ? BRACKET_BLOCKS_RULE : BRACKET_RULE;
     case "clause": return CLAUSE_RULE;
+    case "sexp": return layout.data ? SEXP_DATA_RULE : SEXP_RULE;
+    case "chain": return CHAIN_RULE;
     case "fenced":
     case "containers":
     case "none":

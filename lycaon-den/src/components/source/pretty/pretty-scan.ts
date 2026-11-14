@@ -1,8 +1,10 @@
 import { closeBracketLine, type Container, containersEqual, type Frame, framesEqual, stepBracket } from "./pretty-bracket.ts";
+import { type ChainState, chainStatesEqual, closeChainLine, INITIAL_CHAIN_STATE, startChainLine, stepChain } from "./pretty-chain.ts";
 import { SQL_GROUPS, stepClause } from "./pretty-clause.ts";
 import { isClosingFence, parseOpeningFence, unlabelledFenceSpan } from "./pretty-fenced.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import { INITIAL_MARKUP, type MarkupState, markupEqual, startMarkupLine, stepMarkup } from "./pretty-markup.ts";
+import { closeSexpLine, type SexpFrame, sexpFramesEqual, stepSexp } from "./pretty-sexp.ts";
 import {
   type Fence,
   type PrettyRule,
@@ -23,6 +25,8 @@ export interface PrettySnapshot {
   readonly lexer: PrettyLexer | null;
   readonly frames: Frame | null;
   readonly containers: Container | null;
+  readonly sexpFrames: SexpFrame | null;
+  readonly chainState: ChainState;
   readonly markup: MarkupState;
   readonly listDepth: number;
   readonly fence: Fence | null;
@@ -44,6 +48,7 @@ export function snapshotsEqual(a: PrettySnapshot, b: PrettySnapshot): boolean {
   if (a.visualBack !== b.visualBack || (a.visualBack >= 0 && a.visualColumns !== b.visualColumns)) return false;
   if ((a.lexer === null) !== (b.lexer === null) || (a.lexer && !a.lexer.equals(b.lexer!))) return false;
   if (!framesEqual(a.frames, b.frames) || !containersEqual(a.containers, b.containers)) return false;
+  if (!sexpFramesEqual(a.sexpFrames, b.sexpFrames) || !chainStatesEqual(a.chainState, b.chainState)) return false;
   if (!markupEqual(a.markup, b.markup) || a.listDepth !== b.listDepth) return false;
   const fa = a.fence;
   const fb = b.fence;
@@ -96,6 +101,8 @@ export class PrettyScanner implements ScanCursor {
       lexer: s.lexer?.copy() ?? null,
       frames: s.frames,
       containers: s.containers,
+      sexpFrames: s.sexpFrames,
+      chainState: s.chainState,
       markup: s.markup,
       listDepth: s.listDepth,
       fence: s.fence,
@@ -117,6 +124,8 @@ export class PrettyScanner implements ScanCursor {
     s.lexer = snapshot.lexer?.copy() ?? null;
     s.frames = snapshot.frames;
     s.containers = snapshot.containers;
+    s.sexpFrames = snapshot.sexpFrames;
+    s.chainState = snapshot.chainState;
     s.markup = snapshot.markup;
     s.listDepth = snapshot.listDepth;
     s.fence = snapshot.fence;
@@ -203,6 +212,8 @@ export class PrettyScanner implements ScanCursor {
       case "bracket": return stepBracket(this, rule, pos, end);
       case "markup": return stepMarkup(this, pos);
       case "clause": return stepClause(this, pos, end);
+      case "sexp": return stepSexp(this, rule.data, pos, end);
+      case "chain": return stepChain(this, pos, end);
     }
   }
 
@@ -212,6 +223,8 @@ export class PrettyScanner implements ScanCursor {
     s.lexer = rule?.kind === "bracket" ? rule.lexer() : rule?.kind === "clause" ? SQL_GROUPS.lexer() : null;
     s.frames = null;
     s.containers = null;
+    s.sexpFrames = null;
+    s.chainState = INITIAL_CHAIN_STATE;
     s.markup = INITIAL_MARKUP;
     s.listDepth = -1;
   }
@@ -278,6 +291,7 @@ export class PrettyScanner implements ScanCursor {
     }
     s.leadColumns = leadColumns;
     s.laidOut = (rule.kind === "bracket" && rule.data) ||
+      (rule.kind === "sexp" && rule.data) ||
       exceedsLineWidth(this.text, from, to, this.options.tabSize, rule, this.options.lineWidth);
     s.hasContent = false;
     s.col = 0;
@@ -285,6 +299,7 @@ export class PrettyScanner implements ScanCursor {
     s.visualFrom = -1;
     if (rule.kind === "bracket" && rule.records) s.containers = null;
     if (rule.kind === "markup") s.markup = startMarkupLine(s.markup);
+    if (rule.kind === "chain") s.chainState = startChainLine(s, this.text.slice(from, Math.min(to, from + 200)));
     if (rule.kind === "clause") {
       s.listDepth = -1;
       s.predicateDepth = -1;
@@ -302,6 +317,8 @@ export class PrettyScanner implements ScanCursor {
     s.pending = -1;
     s.inLine = false;
     if (s.rule?.kind === "bracket" || s.rule?.kind === "clause") closeBracketLine(s);
+    if (s.rule?.kind === "sexp") closeSexpLine(s);
+    if (s.rule?.kind === "chain") closeChainLine(s);
     if (this.spanEnd >= 0 && s.lineEnd >= this.spanEnd) {
       this.enterRule(null);
       this.spanEnd = -1;
