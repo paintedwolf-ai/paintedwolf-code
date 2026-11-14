@@ -1,7 +1,7 @@
 import { EditorState, type StateEffect } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { isSettlingScroll, keepPositionInView, preserveScrollAnchor, SETTLED_SCROLL_REPEATS } from "./editor-settled-scroll.ts";
+import { isSettlingScroll, keepPositionInView, preserveScrollAnchor, SETTLED_SCROLL_REPEATS, settleGeneration } from "./editor-settled-scroll.ts";
 
 type Measure = { read: (view: EditorView) => number | null; write: (value: number | null, view: EditorView) => void };
 
@@ -243,8 +243,10 @@ describe("preserving the reader's place across a reflow", () => {
   it("ends an earlier settle when a later one starts", () => {
     const fake = reflowingView(0, 0);
     // The first settle chases a position far below; the second's target is already in view.
+    const generation = settleGeneration(fake.view);
     keepPositionInView(fake.view, () => 90);
     keepPositionInView(fake.view, () => 5);
+    expect(settleGeneration(fake.view)).toBe(generation + 2);
     expect(isSettlingScroll(fake.view)).toBe(true);
     settle(fake);
     expect(fake.scrollDOM.scrollTop).toBe(0);
