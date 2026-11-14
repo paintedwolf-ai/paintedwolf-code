@@ -242,6 +242,15 @@
   overflow-wrap: anywhere;
 }
 
+.user-turn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--transcript-part-gap);
+  width: 100%;
+  min-width: 0;
+}
+
 .bubble--user {
   align-self: flex-end;
   max-width: var(--transcript-user-width);
@@ -261,14 +270,34 @@
   border-style: dashed;
 }
 
-/* Floats below the message without taking layout space. */
-.den-msg-actions {
-  position: absolute;
-  right: 0;
-  top: calc(100% + 4px);
-  z-index: 2;
+.den-user-msg-footer {
+  align-self: flex-end;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  max-width: 100%;
+  margin-top: calc(var(--transcript-message-time-gap) - var(--transcript-part-gap));
+}
+
+.den-user-msg-footer--actions {
+  min-height: calc(1.5rem + 4px);
+}
+
+.den-user-msg-footer > .den-msg-time-below {
+  align-self: center;
+  margin-top: 0;
+}
+
+/* Reserves layout space below the message on its horizontal side. */
+.den-msg-actions {
+  position: relative;
+  align-self: flex-end;
+  display: flex;
+  flex-wrap: wrap;
   width: max-content;
+  max-width: 100%;
   align-items: center;
   gap: 1px;
   padding: 1px;
@@ -282,38 +311,22 @@
 }
 
 .den-msg-actions--start {
-  left: 0;
-  right: auto;
+  align-self: flex-start;
 }
 
-.bubble:hover,
-.bubble:focus-within {
-  z-index: 2;
+.assistant-turn > .den-msg-actions {
+  margin-top: calc(var(--transcript-message-time-gap) - var(--transcript-part-gap));
 }
 
-.bubble:hover > .den-msg-actions,
-.bubble:focus-within > .den-msg-actions,
+.user-turn:has(> .bubble--user:hover, > .den-view-context:hover, > .den-user-msg-footer:hover) .den-msg-actions,
+.user-turn:focus-within .den-msg-actions,
+.assistant-turn:hover > .den-msg-actions,
+.assistant-turn:focus-within > .den-msg-actions,
 .den-msg-actions:hover,
 .den-msg-actions:focus-within {
   opacity: 1;
   pointer-events: auto;
   transition: opacity 80ms ease 0ms;
-}
-
-/* Bridges the gap into the message bubble above. */
-.den-msg-actions::after {
-  content: "";
-  position: absolute;
-  inset-inline: 0;
-  bottom: 100%;
-  height: 6px;
-  pointer-events: none;
-}
-
-.bubble:hover > .den-msg-actions::after,
-.bubble:focus-within > .den-msg-actions::after,
-.den-msg-actions:hover::after {
-  pointer-events: auto;
 }
 
 .den-msg-actions__btn {

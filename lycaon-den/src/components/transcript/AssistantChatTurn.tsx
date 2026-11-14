@@ -169,13 +169,6 @@ export function AssistantChatTurn(props: Props) {
             />
           )}
         </Show>
-        <Show when={actions().length > 0}>
-          <MessageActions
-            align="start"
-            ts={wireRow()?.created_at}
-            actions={actions()}
-          />
-        </Show>
       </div>
       <Show when={grounding()}>
         <CitationEvidenceChicklet
@@ -186,6 +179,14 @@ export function AssistantChatTurn(props: Props) {
           onExplore={props.onExploreInSearch}
           sessionId={props.sessionId}
           rowKey={rowKey()}
+        />
+      </Show>
+      <Show when={actions().length > 0}>
+        {/* The message-times setting governs user prompts; replies keep hover time. */}
+        <MessageActions
+          align="start"
+          ts={wireRow()?.created_at}
+          actions={actions()}
         />
       </Show>
     </article>

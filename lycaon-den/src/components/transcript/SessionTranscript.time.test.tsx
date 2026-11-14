@@ -156,10 +156,10 @@ describe("SessionTranscript time rows", () => {
         turnClocks={{ u1: settled("u1", 11) }}
       />
     ));
-    const userBubble = () => container.querySelector(".bubble--user")!;
-    const assistantBubble = () => container.querySelector(".bubble--assistant")!;
-    const userToolbar = () => userBubble().querySelector('[data-testid="message-actions"]');
-    const assistantToolbar = () => assistantBubble().querySelector('[data-testid="message-actions"]');
+    const userTurn = () => container.querySelector(".user-turn")!;
+    const assistantTurn = () => container.querySelector(".assistant-turn")!;
+    const userToolbar = () => userTurn().querySelector('[data-testid="message-actions"]');
+    const assistantToolbar = () => assistantTurn().querySelector('[data-testid="message-actions"]');
 
     expect(userToolbar()?.getAttribute("data-align")).toBe("end");
     expect(assistantToolbar()?.getAttribute("data-align")).toBe("start");
@@ -172,7 +172,8 @@ describe("SessionTranscript time rows", () => {
     expect(userToolbar()?.querySelector('[data-testid="message-time"]')).toBeNull();
     const belowTime = container.querySelector(".den-msg-time-below");
     expect(text(belowTime)).toBe("12m ago");
-    expect(belowTime?.previousElementSibling?.classList.contains("bubble--user")).toBe(true);
+    expect(belowTime?.parentElement?.classList.contains("den-user-msg-footer")).toBe(true);
+    expect(belowTime?.previousElementSibling).toBe(userToolbar());
     expect(text(assistantToolbar()?.querySelector('[data-testid="message-time"]'))).toBe("11m ago");
   });
 

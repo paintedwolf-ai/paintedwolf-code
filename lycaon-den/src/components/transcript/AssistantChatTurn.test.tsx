@@ -237,23 +237,52 @@ describe("AssistantChatTurn agent note", () => {
     expect(screen.getByTestId("transcript-article-assistant").textContent).not.toMatch(/grounded/i);
   });
 
-  it("leaves a normal assistant row without the Note badge and anchors its hover toolbar bottom-left", () => {
+  it("leaves a normal assistant row without the Note badge", () => {
+    const messages = [groundedMessage()];
+
+    render(() => (
+      <AssistantChatTurn
+        item={{ kind: "assistant", key: "msg-1", text: "Survey complete." }}
+        wireRow={() => messages.find((row) => row.id === "msg-1")}
+      />
+    ));
+
+    expect(screen.queryByTestId("agent-note-badge")).toBeNull();
+  });
+});
+
+describe("AssistantChatTurn message actions", () => {
+  it("renders the assistant action toolbar after grounding chrome", () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(Date.parse("2026-09-12T18:00:00Z"));
     try {
       const onCopy = vi.fn();
-      const messages = [groundedMessage({ created_at: "2026-09-12T17:55:00Z" })];
+      const messages = [
+        groundedMessage({
+          created_at: "2026-09-12T17:55:00Z",
+          grounding: {
+            traced: true,
+            cited_evidence: [{ path: "src/foo.ts", line: 12 }],
+          },
+        }),
+      ];
 
-      render(() => (
+      const { container } = render(() => (
         <AssistantChatTurn
           item={{ kind: "assistant", key: "msg-1", text: "Survey complete." }}
           wireRow={() => messages.find((row) => row.id === "msg-1")}
+          projectId="p1"
           onCopy={onCopy}
         />
       ));
 
-      expect(screen.queryByTestId("agent-note-badge")).toBeNull();
+      const bubble = container.querySelector(".bubble--assistant")!;
+      const chicklet = screen.getByTestId("citation-evidence-chicklet");
       const toolbar = screen.getByTestId("message-actions");
+      expect(bubble.contains(toolbar)).toBe(false);
+      expect(
+        Boolean(chicklet.compareDocumentPosition(toolbar) & Node.DOCUMENT_POSITION_FOLLOWING),
+      ).toBe(true);
       expect(toolbar.getAttribute("data-align")).toBe("start");
       expect(screen.getByTestId("message-time").textContent).toBe("5m ago");
       fireEvent.click(screen.getByTestId("bubble-copy"));

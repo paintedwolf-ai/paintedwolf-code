@@ -130,17 +130,14 @@ describe("scalable layout chrome", () => {
     );
   });
 
-  it("anchors message actions below their chat bubble on the message's side", () => {
+  it("reserves layout space for message actions instead of floating over adjacent content", () => {
     const components = read("global-components.css");
-    expect(components).toMatch(/\.bubble\s*\{[\s\S]*?position:\s*relative/);
-    expect(components).toMatch(
-      /\.den-msg-actions\s*\{[\s\S]*?right:\s*0;[\s\S]*?top:\s*calc\(100%\s*\+\s*4px\)/,
-    );
-    expect(components).toMatch(
-      /\.den-msg-actions--start\s*\{[\s\S]*?left:\s*0;[\s\S]*?right:\s*auto/,
-    );
-    expect(components).toMatch(
-      /\.den-msg-actions::after\s*\{[\s\S]*?bottom:\s*100%/,
+    const msgActions = components.match(/\.den-msg-actions\s*\{([^}]+)\}/)?.[1];
+    expect(msgActions).toBeDefined();
+    expect(msgActions).not.toMatch(/position:\s*(?:absolute|fixed)/);
+    expect(msgActions).toMatch(/align-self:\s*flex-end/);
+    expect(components.match(/\.den-msg-actions--start\s*\{([^}]+)\}/)?.[1]).toMatch(
+      /align-self:\s*flex-start/,
     );
   });
 

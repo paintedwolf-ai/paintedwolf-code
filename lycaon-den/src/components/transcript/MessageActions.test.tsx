@@ -6,8 +6,6 @@ import {
   MessageActions,
   buildAssistantMessageActions,
   buildUserMessageActions,
-  copyMessageAction,
-  type MessageActionItem,
 } from "./MessageActions.tsx";
 import { SessionRecoverDialog } from "./SessionRecoverDialog.tsx";
 
@@ -98,33 +96,19 @@ describe("MessageActions", () => {
     }
   });
 
-  it("supports custom extensible action items, omits invalid timestamps, and hides when empty", () => {
-    const onPin = vi.fn();
-    const custom: MessageActionItem[] = [
-      copyMessageAction(() => {}),
-      {
-        id: "pin",
-        label: "Pin message",
-        icon: "check",
-        tip: "Pin message",
-        feedback: { label: "Pinned", icon: "check", tip: "Pinned" },
-        testId: "custom-pin",
-        onSelect: onPin,
-      },
-    ];
-    const { container, unmount } = render(() => (
-      <MessageActions ts="not-a-timestamp" actions={custom} />
+  it("omits the timestamp and separator when ts is invalid", () => {
+    const { container } = render(() => (
+      <MessageActions
+        ts="not-a-timestamp"
+        actions={buildAssistantMessageActions({ onCopy: () => {} })}
+      />
     ));
     expect(screen.queryByTestId("message-time")).toBeNull();
     expect(container.querySelector(".den-msg-actions__sep")).toBeNull();
-    const pin = screen.getByTestId("custom-pin");
-    expect(pin.getAttribute("data-tip")).toBe("Pin message");
-    fireEvent.click(pin);
-    expect(onPin).toHaveBeenCalledOnce();
-    expect(pin.getAttribute("aria-label")).toBe("Pinned");
-    expect(pin.getAttribute("data-tip")).toBe("Pinned");
-    unmount();
+    expect(screen.getByTestId("bubble-copy")).toBeTruthy();
+  });
 
+  it("renders nothing when neither actions nor a valid timestamp are present", () => {
     render(() => <MessageActions ts="not-a-timestamp" actions={[]} />);
     expect(screen.queryByTestId("message-actions")).toBeNull();
   });

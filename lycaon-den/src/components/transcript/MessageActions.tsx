@@ -1,13 +1,11 @@
 import {
   Index,
   Show,
-  children,
   createEffect,
   createSignal,
   on,
   onCleanup,
   type Accessor,
-  type JSX,
 } from "solid-js";
 import type { IconSlot } from "../../contributions/theme-vocabulary.generated.ts";
 import { focusWithoutScroll } from "../../platform/interaction/focus.ts";
@@ -16,12 +14,9 @@ import { MessageTime } from "./TranscriptTimeRows.tsx";
 
 export type MessageActionAlignment = "start" | "end";
 
-export type MessageActionTone = "default" | "danger";
-
 export type MessageActionFeedback = {
   label: string;
   icon: IconSlot;
-  tip?: string;
 };
 
 export type MessageActionItem = {
@@ -37,8 +32,8 @@ export type MessageActionItem = {
   tip?: string;
   /** Keeps the button mounted in place with `aria-disabled="true"` while unavailable. */
   disabled?: boolean;
-  /** Visual emphasis for truncating or destructive actions. */
-  tone?: MessageActionTone;
+  /** Danger hover emphasis for truncating or destructive actions. */
+  danger?: boolean;
   /** Optional `data-testid` for queries and harness helpers. */
   testId?: string;
   onSelect: () => void;
@@ -47,10 +42,8 @@ export type MessageActionItem = {
 export type MessageActionsProps = {
   /** Message timestamp rendered as relative "time ago" ahead of the buttons. */
   ts?: string;
-  /** Horizontal anchor under the message bubble: `"end"` (bottom-right) or `"start"` (bottom-left). */
+  /** Horizontal anchor under the message: `"end"` (bottom-right) or `"start"` (bottom-left). */
   align?: MessageActionAlignment;
-  /** Optional custom leading element ahead of the buttons; overrides `ts` when provided. */
-  leading?: JSX.Element;
   /** Relevant action buttons for this message, rendered in order. */
   actions: readonly MessageActionItem[];
 };
@@ -101,7 +94,7 @@ export function buildUserMessageActions(
       icon: "rewind",
       tip: held ? "Rewind after this turn finishes" : "Rewind to here",
       disabled: held,
-      tone: "danger",
+      danger: true,
       testId: "user-bubble-rewind",
       onSelect: options.onRewind,
     });
@@ -163,7 +156,7 @@ function MessageActionButton(props: {
   const activeFeedback = () => (flashing() ? props.item().feedback : undefined);
   const label = () => activeFeedback()?.label ?? props.item().label;
   const icon = () => activeFeedback()?.icon ?? props.item().icon;
-  const tip = () => activeFeedback()?.tip ?? props.item().tip;
+  const tip = () => props.item().tip;
 
   const handleClick = () => {
     const current = props.item();
@@ -182,7 +175,7 @@ function MessageActionButton(props: {
     <button
       type="button"
       class="den-msg-actions__btn den-inset-icon-btn"
-      classList={{ "den-msg-actions__btn--danger": props.item().tone === "danger" }}
+      classList={{ "den-msg-actions__btn--danger": props.item().danger === true }}
       data-testid={props.item().testId}
       data-message-action={props.item().id}
       tabindex={props.selected ? 0 : -1}
@@ -205,16 +198,14 @@ export function MessageActions(props: MessageActionsProps) {
     return props.actions[0]?.id;
   };
 
-  const customLeading = children(() => props.leading);
   const validTimestamp = () => {
     const ts = props.ts;
     return ts && Number.isFinite(Date.parse(ts)) ? ts : undefined;
   };
-  const hasLeading = () => Boolean(customLeading()) || validTimestamp() !== undefined;
   const align = () => props.align ?? "end";
 
   return (
-    <Show when={props.actions.length > 0 || hasLeading()}>
+    <Show when={props.actions.length > 0 || validTimestamp() !== undefined}>
       <div
         class="den-msg-actions"
         classList={{ "den-msg-actions--start": align() === "start" }}
@@ -238,17 +229,10 @@ export function MessageActions(props: MessageActionsProps) {
           }
         }}
       >
-        <Show
-          when={customLeading()}
-          fallback={
-            <Show when={validTimestamp()}>
-              {(ts) => <MessageTime ts={ts()} placement="toolbar" />}
-            </Show>
-          }
-        >
-          {customLeading()}
+        <Show when={validTimestamp()}>
+          {(ts) => <MessageTime ts={ts()} placement="toolbar" />}
         </Show>
-        <Show when={hasLeading() && props.actions.length > 0}>
+        <Show when={validTimestamp() !== undefined && props.actions.length > 0}>
           <span class="den-msg-actions__sep" aria-hidden="true" />
         </Show>
         <Index each={props.actions}>
