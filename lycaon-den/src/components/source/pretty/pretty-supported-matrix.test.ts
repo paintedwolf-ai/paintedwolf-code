@@ -79,11 +79,11 @@ const EXTRA_PATHS = [
 ];
 
 function open(doc: string, filePath: string, language?: string): EditorState {
-  const ext = languageExtensionForBuffer({ path: filePath, language });
+  const ext = languageExtensionForBuffer(filePath, language);
   const extensions: Extension[] = [
     indentUnit.of("  "),
     EditorState.tabSize.of(4),
-    createPrettyExtension({ enabled: true, path: filePath, language }),
+    createPrettyExtension({ enabled: true, path: filePath, languageHint: language }),
   ];
   return EditorState.create({ doc, extensions: ext ? [ext, ...extensions] : extensions });
 }
@@ -280,11 +280,11 @@ describe("bidirectional supportedLanguages matrix", () => {
   it("maps all 44 supportedLanguages to a non-null grammar and active PrettyLayout", () => {
     expect(supported).toHaveLength(44);
     for (const lang of supported) {
-      expect(languageExtensionForBuffer({ language: lang }), lang).not.toBeNull();
-      const layout = prettyLayoutForBuffer({ language: lang });
+      expect(languageExtensionForBuffer("unknown", lang), lang).not.toBeNull();
+      const layout = prettyLayoutForBuffer("unknown", lang);
       expect(layout.kind, lang).not.toBe("none");
       expect(layout.kind, lang).not.toBe("containers");
-      expect(Array.isArray(formattersForBuffer({ language: lang })), lang).toBe(true);
+      expect(Array.isArray(formattersForBuffer("unknown", lang)), lang).toBe(true);
 
       const repPath = REPRESENTATIVE_PATHS[lang];
       expect(repPath, `representative path for ${lang}`).toBeDefined();

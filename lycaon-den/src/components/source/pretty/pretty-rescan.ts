@@ -10,7 +10,6 @@ import {
   type Transaction,
 } from "@codemirror/state";
 import { Decoration, type DecorationSet } from "@codemirror/view";
-import { Tree } from "@lezer/common";
 import { prettyPlanFor, prettyTargetFor } from "./pretty-recognition.ts";
 import { PrettyScanner, type PrettySnapshot, snapshotsEqual } from "./pretty-scan.ts";
 import {

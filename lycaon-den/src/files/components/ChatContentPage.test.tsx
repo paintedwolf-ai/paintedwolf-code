@@ -11,7 +11,7 @@ import { findController, resetFindControllerForTests, setFindQuery } from "../..
 import { FIND_BAR_ID } from "../../find/command-bar-disclosure.ts";
 import { applyBackgroundProcessEvent, resetBackgroundProcessStoreForTests } from "../../chat/tool/background-process-store.ts";
 import { clearChatContentCache } from "../../chat/transcript/content/chat-content-reader.ts";
-import { resetEditorPrefsForTests } from "../../settings/editor/editor-prefs.ts";
+import { resetEditorPrefsForTests, saveEditorLineLayout } from "../../settings/editor/editor-prefs.ts";
 
 afterEach(() => {
   resetFindControllerForTests();
@@ -349,6 +349,7 @@ describe("chat content Files pane", () => {
         client={client}
         document={{
           sessionId: "session",
+          pane: "raw",
           title: "app.py",
           path: "src/app.py",
           content: { kind: "inline", text: py },
@@ -366,6 +367,7 @@ describe("chat content Files pane", () => {
         client={null}
         document={{
           sessionId: "session",
+          pane: "raw",
           title: "notes.md",
           path: "docs/notes.md",
           content: {

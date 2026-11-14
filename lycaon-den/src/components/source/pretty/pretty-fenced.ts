@@ -57,7 +57,7 @@ export function unlabelledFenceSpan(
   const prefixLen = line.length - rest.length;
   const col = containerStartColumn(rest);
   if (col === null) return null;
-  const probe = text.slice(from, Math.min(text.length, from + 16_384));
+  const probe = text.slice(from, Math.min(text.doc.length, from + 16_384));
   const end = readJsonContainer(probe, prefixLen + col);
   if (end <= 0) return null;
   return { rule: DATA_LIKE_RULE, spanEnd: from + end };

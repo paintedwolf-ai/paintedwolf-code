@@ -1253,7 +1253,7 @@ it("preserves source.path on write and recovered compaction fallback sections", 
   });
   const writeView = buildStructuredToolPresentation(writePart);
   const contentSec = writeView.sections.find((s) => s.kind === "content");
-  expect(contentSec && contentSec.kind === "content" ? contentSec.source?.path : undefined).toBe("src/main.go");
+  expect(contentSec && contentSec.kind === "content" ? contentSec.path : undefined).toBe("src/main.go");
 
   const fallbackPart = part({
     id: "fallback-path",
@@ -1264,5 +1264,5 @@ it("preserves source.path on write and recovered compaction fallback sections", 
   });
   const fallbackView = buildStructuredToolPresentation(fallbackPart);
   const recoveredSec = fallbackView.sections.find((s) => s.kind === "content");
-  expect(recoveredSec && recoveredSec.kind === "content" ? recoveredSec.source?.path : undefined).toBe("lib/app.py");
+  expect(recoveredSec && recoveredSec.kind === "content" ? recoveredSec.path : undefined).toBe("lib/app.py");
 });

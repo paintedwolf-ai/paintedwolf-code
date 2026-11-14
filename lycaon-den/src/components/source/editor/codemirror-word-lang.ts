@@ -155,6 +155,6 @@ export function wordStreamParser(spec: WordLangSpec): StreamParser<WordLangState
   return parser;
 }
 
-export function wordLanguage(spec: WordLangSpec): StreamLanguage<State> {
+export function wordLanguage(spec: WordLangSpec) {
   return StreamLanguage.define(wordStreamParser(spec));
 }
