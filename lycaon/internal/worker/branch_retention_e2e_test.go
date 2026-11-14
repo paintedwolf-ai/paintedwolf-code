@@ -14,6 +14,7 @@ import (
 	"github.com/lycaon/lycaon/internal/backup"
 	"github.com/lycaon/lycaon/internal/db"
 	"github.com/lycaon/lycaon/internal/enginepaths"
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceledger"
@@ -432,7 +433,8 @@ func testCompletedMaterializedWorkerSurvivesRelocatedArchive(t *testing.T, evict
 // into it, files, refs and objects.
 func promoteRestoredCheckpoint(t *testing.T, svc *MergeService, project, id, checkpointID, workerCommit string) {
 	t.Helper()
-	ctx, origCheckpointID := t.Context(), checkpointID
+	// Promotion runs inside the coordinator's tool call.
+	ctx, origCheckpointID := gitexec.AgentEntry(t.Context()), checkpointID
 	testutil.FailErr(t, "mkdir target project", os.MkdirAll(project, 0o755))
 	testutil.FailErr(t, "seed target main", os.WriteFile(filepath.Join(project, "main.go"), []byte("package before\n"), 0o644))
 	testutil.FailErr(t, "seed target keep", os.WriteFile(filepath.Join(project, "keep.go"), []byte("package keep\n"), 0o644))

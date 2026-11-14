@@ -14,6 +14,7 @@ import (
 
 // PromoteOverlay implements session.OverlayPromoter for the worker merge service.
 func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
+	ctx = mergeGit(ctx)
 	overlayID = strings.TrimSpace(overlayID)
 	sessionID = strings.TrimSpace(sessionID)
 	if s == nil || s.Queue == nil {
