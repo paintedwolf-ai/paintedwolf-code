@@ -49,7 +49,7 @@ export function ViewContextLine(props: { view: ViewContext; projectId?: string }
   return (
     <p class="den-view-context" data-testid="transcript-view-context">
       <Show when={!empty()} fallback={<span>Nothing in view</span>}>
-        <span class="den-view-context__label">In view</span>
+        <span>In view</span>
         <For each={targets()}>
           {(target) => (
             <button

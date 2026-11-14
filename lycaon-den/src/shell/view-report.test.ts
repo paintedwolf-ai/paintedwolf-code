@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createRoot, createSignal } from "solid-js";
-import type { LycaonClient } from "../api/client.ts";
 import type { ReplaceProjectViewRequest } from "../api/types.ts";
+import { stubClient } from "../test/client-fixture.ts";
 import { composeViews, offerViewFacet, setStageShown, startViewReporter, VIEW_RENEW_MS, type ViewFacet } from "./view-report.ts";
 
 function offerFor(projectId: string, facet: () => ViewFacet | null) {
@@ -28,8 +28,10 @@ describe("startViewReporter", () => {
   function harness() {
     vi.useFakeTimers();
     const calls: Array<[string, ReplaceProjectViewRequest]> = [];
-    const client = { replaceProjectView: vi.fn(async (projectId: string, req: ReplaceProjectViewRequest) => { calls.push([projectId, req]); }) };
-    const stop = startViewReporter(() => client as unknown as LycaonClient);
+    const client = stubClient({
+      replaceProjectView: vi.fn(async (projectId: string, req: ReplaceProjectViewRequest) => { calls.push([projectId, req]); }),
+    });
+    const stop = startViewReporter(() => client);
     return { calls, stop };
   }
 
