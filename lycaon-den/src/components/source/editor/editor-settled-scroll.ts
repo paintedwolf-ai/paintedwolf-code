@@ -13,6 +13,10 @@ const SETTLED_SCROLL_STABLE = 2;
 
 // The settle loop each view is running; starting another ends it.
 const activeSettles = new WeakMap<EditorView, object>();
+// The reader's place a running restore holds; a change made meanwhile keeps it.
+const heldAnchors = new WeakMap<EditorView, ScrollAnchor>();
+/** Reader input that ends automatic corrections. */
+const READER_INPUT = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
 
 /** Whether a settle loop is correcting this view's scroll offset. */
 export function isSettlingScroll(view: EditorView): boolean {
@@ -33,12 +37,17 @@ function settleScroll(
   view: EditorView,
   read: (view: EditorView) => SettleOffset | null,
   fallback: (view: EditorView) => StateEffect<unknown>,
+  onRelease?: () => void,
 ): void {
   const token = {};
   activeSettles.set(view, token);
   const release = (): void => {
-    if (activeSettles.get(view) === token) activeSettles.delete(view);
+    for (const type of READER_INPUT) view.scrollDOM.removeEventListener(type, release, true);
+    if (activeSettles.get(view) !== token) return;
+    activeSettles.delete(view);
+    onRelease?.();
   };
+  for (const type of READER_INPUT) view.scrollDOM.addEventListener(type, release, { capture: true, passive: true });
   let checks = 0;
   let repeats = 0;
   let stable = 0;
@@ -149,6 +158,7 @@ export function captureScrollAnchor(view: EditorView): ScrollAnchor | null {
  */
 export function restoreScrollAnchor(view: EditorView, anchor: ScrollAnchor): void {
   const pos = (v: EditorView) => Math.min(anchor.pos, v.state.doc.length);
+  heldAnchors.set(view, anchor);
   settleScroll(
     view,
     (v) => {
@@ -160,12 +170,15 @@ export function restoreScrollAnchor(view: EditorView, anchor: ScrollAnchor): voi
       return { top: Math.abs(top) < 1 ? 0 : top, left: Math.abs(left) < 1 ? 0 : left };
     },
     (v) => EditorView.scrollIntoView(pos(v), { y: "start", yMargin: Math.max(0, anchor.offset) }),
+    () => { if (heldAnchors.get(view) === anchor) heldAnchors.delete(view); },
   );
 }
 
 /** Applies a reflowing change without moving the reader's place in the document. */
 export function preserveScrollAnchor(view: EditorView, apply: () => void): void {
-  const anchor = captureScrollAnchor(view);
+  // One choice can arrive as several changes (wrapping, then Pretty). Until the
+  // first settles, the geometry is half-updated, so later ones keep its anchor.
+  const anchor = (isSettlingScroll(view) ? heldAnchors.get(view) : undefined) ?? captureScrollAnchor(view);
   apply();
   if (!anchor) return;
   // The editor's own scroll anchoring would hold the top line block, which in
