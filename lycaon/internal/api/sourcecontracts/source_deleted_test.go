@@ -136,7 +136,7 @@ func TestDeletedWorkerSourceDoesNotOpenThePrimaryReplacement(t *testing.T) {
 	rootID := p.Roots[0].ID
 	testutil.FailErr(t, "primary file", os.WriteFile(filepath.Join(primary, "gone.go"), []byte("primary replacement\n"), 0600))
 	testutil.FailErr(t, "worker metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{
-		Roots: []workspace.JobMetaRoot{{ID: rootID, Path: primary, IsPrimary: true}}, SnapshotComplete: true,
+		Roots: []workspace.JobMetaRoot{{ID: rootID, Label: rootID, Path: primary, IsPrimary: true}}, SnapshotComplete: true,
 	}))
 	workerID := contractfixture.EnqueueBranchJob(t, queue, p.ID, branchRoot)
 	branch, err := sourcebranch.ForWorker(workerID)

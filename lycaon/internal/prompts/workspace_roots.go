@@ -6,8 +6,43 @@ import (
 	"github.com/lycaon/lycaon/internal/projectroot"
 )
 
-// MergeWorkspaceRootsVars adds workspace_roots and root_count for workspace-roots.md.
-func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, activePath string) {
+// WorkspaceRootRows builds the prompt rows shared by live assembly and
+// prompt_dump: one row per root with label, path, is_primary, and is_active
+// matched by the active root ID, capped at the prompt collection limit. The
+// second return is the number of rows omitted by the cap.
+func WorkspaceRootRows(roots []projectroot.RootRef, activeRootID string) ([]map[string]any, int) {
+	active, _ := activeWorkspaceRoot(roots, activeRootID)
+	limit := len(roots)
+	if limit > pongoplain.MaxCollectionItems {
+		limit = pongoplain.MaxCollectionItems
+	}
+	rows := make([]map[string]any, 0, limit)
+	for _, r := range roots[:limit] {
+		rows = append(rows, map[string]any{
+			"label":      r.Label,
+			"path":       r.Path,
+			"is_primary": r.IsPrimary,
+			"is_active":  active.ID != "" && r.ID == active.ID,
+		})
+	}
+	return rows, len(roots) - len(rows)
+}
+
+// activeWorkspaceRoot resolves the session's active root by ID, falling back
+// to the primary root when the ID is empty or unknown.
+func activeWorkspaceRoot(roots []projectroot.RootRef, activeRootID string) (projectroot.RootRef, bool) {
+	if r, err := projectroot.ActiveRoot(roots, activeRootID); err == nil {
+		return r, true
+	}
+	if r, err := projectroot.PrimaryRoot(roots); err == nil {
+		return r, true
+	}
+	return projectroot.RootRef{}, false
+}
+
+// MergeWorkspaceRootsVars adds workspace_roots, root_count, project_dir, and
+// workspace_roots_omitted_count for workspace-roots.md.
+func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, activeRootID string) {
 	if vars == nil {
 		return
 	}
@@ -15,67 +50,58 @@ func MergeWorkspaceRootsVars(vars map[string]any, roots []projectroot.RootRef, a
 		vars["reviews_confined_writes"] = true
 	}
 	vars["root_count"] = len(roots)
-	if activePath != "" {
-		vars["project_dir"] = activePath
+	rows, omitted := WorkspaceRootRows(roots, activeRootID)
+	vars["workspace_roots"] = rows
+	vars["workspace_roots_omitted_count"] = omitted
+	if active, ok := activeWorkspaceRoot(roots, activeRootID); ok && active.Path != "" {
+		vars["project_dir"] = active.Path
 	}
-	if len(roots) == 0 {
-		vars["workspace_roots"] = []map[string]any{}
-		vars["workspace_roots_omitted_count"] = 0
-		return
-	}
-	limit := len(roots)
-	if limit > pongoplain.MaxCollectionItems {
-		limit = pongoplain.MaxCollectionItems
-	}
-	out := make([]map[string]any, 0, limit)
-	for _, r := range roots[:limit] {
-		out = append(out, map[string]any{
-			"label":      r.Label,
-			"path":       r.Path,
-			"is_primary": r.IsPrimary,
-			"is_active":  activePath != "" && r.Path == activePath,
-		})
-	}
-	vars["workspace_roots"] = out
-	vars["workspace_roots_omitted_count"] = len(roots) - len(out)
 }
 
 // RootsChangedKickData builds the root-change notice context: one row per
-// added, removed, moved or renamed root in the change, then the root set the
-// next turn resolves against.
+// added, removed, or renamed root in the change, then the root set the next
+// turn resolves against. Rows carry labels only: a host path move under an
+// unchanged ID and label is not announced, and no row ever names a host
+// path.
 func RootsChangedKickData(change projectroot.RootChange, after []projectroot.RootRef, activeRootID string) map[string]any {
-	changes := make([]map[string]any, 0, len(change.Added)+len(change.Retired))
+	rows := make([]map[string]any, 0, len(change.Added)+len(change.Retired)+len(change.Renamed))
 	for _, r := range change.Added {
-		changes = append(changes, map[string]any{"kind": "added", "label": r.Label, "path": r.Path})
+		rows = append(rows, map[string]any{"kind": "added", "label": r.Label})
 	}
 	for _, r := range change.Retired {
-		row := map[string]any{"kind": string(r.Reason), "label": r.Root.Label, "old_label": r.Root.Label, "old_path": r.Root.Path}
 		if r.Reason != projectroot.RootDetached {
-			row["label"], row["path"] = r.Successor.Label, r.Successor.Path
+			continue
 		}
-		changes = append(changes, row)
+		rows = append(rows, map[string]any{"kind": "removed", "label": r.Root.Label})
 	}
-	if len(changes) > pongoplain.MaxCollectionItems {
-		changes = changes[:pongoplain.MaxCollectionItems]
+	for _, r := range change.Renamed {
+		rows = append(rows, map[string]any{"kind": "renamed", "label": r.NewLabel, "old_label": r.OldLabel})
 	}
-	afterRows := rootsKickRows(after)
+	omitted := 0
+	if len(rows) > pongoplain.MaxCollectionItems {
+		omitted = len(rows) - pongoplain.MaxCollectionItems
+		rows = rows[:pongoplain.MaxCollectionItems]
+	}
+	activeID := ""
 	data := map[string]any{
-		"changes":             changes,
-		"changes_omitted":     len(change.Added) + len(change.Retired) - len(changes),
-		"generation":          change.Generation,
-		"primary_changed":     change.Primary.ID != "",
-		"new_primary":         map[string]any{"label": change.Primary.Label, "path": change.Primary.Path},
-		"after":               afterRows,
-		"after_count":         len(after),
-		"after_omitted_count": len(after) - len(afterRows),
+		"changes":         rows,
+		"changes_omitted": omitted,
+		"generation":      change.Generation,
+		"primary_changed": change.Primary.ID != "",
+		"new_primary":     map[string]any{"label": change.Primary.Label},
+		"after_count":     len(after),
 	}
 	if active, err := projectroot.ActiveRoot(after, activeRootID); err == nil {
-		data["active_root"] = map[string]any{"id": active.ID, "label": active.Label, "path": active.Path}
+		activeID = active.ID
+		data["active_root"] = map[string]any{"id": active.ID, "label": active.Label}
 	}
+	afterRows := rootsKickRows(after, activeID)
+	data["after"] = afterRows
+	data["after_omitted_count"] = len(after) - len(afterRows)
 	return data
 }
 
-func rootsKickRows(roots []projectroot.RootRef) []map[string]any {
+func rootsKickRows(roots []projectroot.RootRef, activeID string) []map[string]any {
 	limit := len(roots)
 	if limit > pongoplain.MaxCollectionItems {
 		limit = pongoplain.MaxCollectionItems
@@ -83,10 +109,9 @@ func rootsKickRows(roots []projectroot.RootRef) []map[string]any {
 	out := make([]map[string]any, 0, limit)
 	for _, r := range roots[:limit] {
 		out = append(out, map[string]any{
-			"id":         r.ID,
-			"label":      r.Label,
-			"path":       r.Path,
-			"is_primary": r.IsPrimary,
+			"id":        r.ID,
+			"label":     r.Label,
+			"is_active": activeID != "" && r.ID == activeID,
 		})
 	}
 	return out

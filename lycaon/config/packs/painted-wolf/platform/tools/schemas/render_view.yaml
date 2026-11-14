@@ -32,7 +32,9 @@ schema:
     dest:
       type: string
       description: >-
-        Optional repo-relative file path to write the rasterized image (PNG). The host writes the
+        Optional file path to write the rasterized image (PNG): relative to the
+        session folder, `@label/path` for any attached folder, `@scratch/path`
+        for session scratch, or absolute. The host writes the
         image using standard mutation, recording it in the ledger and workspace.
     handle:
       type: string

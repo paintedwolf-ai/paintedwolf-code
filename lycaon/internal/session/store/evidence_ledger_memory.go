@@ -182,7 +182,7 @@ func commitEvidenceToolResultMemory(ctx context.Context, s *memoryCore, sessionI
 	var highlightRecs []evidence.Record
 	var handle string
 	if strings.EqualFold(toolName, "summarize") {
-		handle, patched, highlightRecs = evidenceSummarizeCommit(projectDir, content, rec, ordinal)
+		handle, patched, highlightRecs = evidenceSummarizeCommit(evidence.CitationRoots{ProjectDir: projectDir}, content, rec, ordinal)
 	} else if strings.EqualFold(toolName, "capture_page") && len(evidence.CaptureFrameHighlightRecords(content)) > 0 {
 		handle, patched, highlightRecs = evidenceCaptureFilmstripCommit(content, rec, ordinal)
 	} else {
@@ -194,7 +194,7 @@ func commitEvidenceToolResultMemory(ctx context.Context, s *memoryCore, sessionI
 				ordinalCursor[kind]++
 				return ordinalCursor[kind]
 			}
-			patched, highlightRecs = mintToolHighlightRecords(projectDir, toolName, content, nextOrdinal)
+			patched, highlightRecs = mintToolHighlightRecords(evidence.CitationRoots{ProjectDir: projectDir}, toolName, content, nextOrdinal)
 		}
 	}
 	rec.Handle = handle

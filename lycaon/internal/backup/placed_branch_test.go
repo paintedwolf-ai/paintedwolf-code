@@ -49,7 +49,7 @@ func newPlacedJob(t *testing.T) placedJob {
 	testutil.FailErr(t, "create tree", os.MkdirAll(filepath.Join(tree, "pkg"), 0o700))
 	testutil.FailErr(t, "write edit", os.WriteFile(filepath.Join(tree, "pkg", "edit.go"), []byte("unfinished"), 0o600))
 	testutil.FailErr(t, "write link", os.Symlink("edit.go", filepath.Join(tree, "pkg", "alias.go")))
-	meta := workspace.JobMeta{SnapshotComplete: true, Roots: []workspace.JobMetaRoot{{ID: "primary", Path: "/project", IsPrimary: true}}}
+	meta := workspace.JobMeta{SnapshotComplete: true, Roots: []workspace.JobMetaRoot{{ID: "primary", Label: "primary", Path: "/project", IsPrimary: true}}}
 	testutil.FailErr(t, "write layout", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(tree), meta))
 	meta.SnapshotComplete = false
 	logical := filepath.Join(enginepaths.WorkerBranchesRootUnder(root), placedKey, "job")

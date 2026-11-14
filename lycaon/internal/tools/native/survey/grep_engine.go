@@ -45,6 +45,16 @@ func grepWorkerCount() int {
 type grepFileJob struct {
 	abs string
 	rel string
+	// Structured identity of the file under its project root.
+	rootID   string
+	scopeRel string
+}
+
+// grepFileIdentity carries the resolved {RootID, ScopeRel} of one scanned file
+// so matches record source identity without re-resolving display strings.
+type grepFileIdentity struct {
+	rootID   string
+	scopeRel string
 }
 
 type grepFileOutcome struct {
@@ -99,7 +109,7 @@ func (t *GrepTool) grepWalkTreeSequential(ctx context.Context, tctx tools.ToolCo
 			if search.stats != nil {
 				search.stats.FilesOpened.Add(1)
 			}
-			scanErr = search.scanFile(ctx, job.rel, content, bytesTruncated)
+			scanErr = search.scanFile(ctx, job.rel, grepFileIdentity{rootID: job.rootID, scopeRel: job.scopeRel}, content, bytesTruncated)
 		}
 		search.publishProgress("searching")
 		return scanErr == nil
@@ -158,7 +168,7 @@ func (t *GrepTool) grepWalkTreeSequentialSurvey(ctx context.Context, tctx tools.
 				if search.stats != nil {
 					search.stats.FilesOpened.Add(1)
 				}
-				scanErr = search.scanFile(ctx, rel, content, bytesTruncated)
+				scanErr = search.scanFile(ctx, rel, grepFileIdentity{rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, e.Abs)}, content, bytesTruncated)
 			}
 			if scanErr != nil {
 				if errors.Is(scanErr, errGrepMatchCap) {
@@ -322,7 +332,7 @@ func (t *GrepTool) forEachGrepBranchJob(ctx context.Context, tctx tools.ToolCont
 			if err := ctx.Err(); err != nil {
 				return sandbox.SurveyStop, err
 			}
-			if !yield(grepFileJob{abs: e.Abs, rel: projectpaths.QualifyAbs(tctx, target.root, e.Abs)}) {
+			if !yield(grepFileJob{abs: e.Abs, rel: projectpaths.QualifyAbs(tctx, target.root, e.Abs), rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, e.Abs)}) {
 				return sandbox.SurveyStop, nil
 			}
 			return sandbox.SurveyContinue, nil
@@ -382,7 +392,7 @@ func (t *GrepTool) forEachGrepCatalogJob(
 				return sourcecatalog.WalkContinue
 			}
 		}
-		if !yield(grepFileJob{abs: abs, rel: projectpaths.QualifyAbs(tctx, target.root, abs)}) {
+		if !yield(grepFileJob{abs: abs, rel: projectpaths.QualifyAbs(tctx, target.root, abs), rootID: target.root.ID, scopeRel: projectroot.ScopeRel(target.root, abs)}) {
 			return sourcecatalog.WalkStop
 		}
 		return sourcecatalog.WalkContinue
@@ -473,7 +483,7 @@ func (s *grepSearch) searchAbsFile(ctx context.Context, job grepFileJob) grepFil
 		out.binarySkipped = true
 		return out
 	}
-	scanned := s.scanContent(job.rel, content)
+	scanned := s.scanContent(job.rel, grepFileIdentity{rootID: job.rootID, scopeRel: job.scopeRel}, content)
 	scanned.bytesTruncated = bytesTruncated
 	return scanned
 }

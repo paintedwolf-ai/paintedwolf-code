@@ -20,4 +20,5 @@ scenarios:
       detail: bad args
       path: src/main.go
       profile: coordinator
+      project_dir: '@app'
       tool: read

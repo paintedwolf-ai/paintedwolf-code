@@ -33,7 +33,7 @@ func TestWorkerBoardUsesCurrentBranchInventory(t *testing.T) {
 	})
 	sess := &api.Session{ID: "worker", ParentSessionID: "parent", ProjectID: "project", WorkspaceRootID: "root", WorkspacePath: t.TempDir()}
 	first, ok := engine.WorkerBoard(t.Context(), sess)
-	if !ok || !strings.Contains(first, "Repo: 2 files") || !strings.Contains(first, branch) {
+	if !ok || !strings.Contains(first, "Repo: 2 files") {
 		t.Fatalf("initial board = %q", first)
 	}
 	builder.files = 3

@@ -16,7 +16,7 @@ schema:
         scanner: {type: string, minLength: 1, description: Scanner whose groups the set-aside selects.}
         paths:
           type: array
-          description: Path globs every selected group must lie wholly inside.
+          description: "Path globs every selected group must lie wholly inside (a filter over recorded finding paths, not addressed paths)."
           minItems: 1
           items: {type: string, minLength: 1}
     inventory_revision:
@@ -34,7 +34,7 @@ schema:
       description: Return only findings from this rule.
     path:
       type: string
-      description: Return findings or coverage diagnostics under this project-relative path.
+      description: Return findings or coverage diagnostics whose recorded paths start with this prefix. Recorded paths are relative to the folder each scan covered (bare for the session folder); this is a filter, not addressed paths — `@label/` prefixes do not resolve here.
     code:
       type: string
       description: Return only findings carrying this engine code.

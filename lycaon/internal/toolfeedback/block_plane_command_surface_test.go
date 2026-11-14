@@ -34,9 +34,9 @@ func TestCommandSurfaceRejectsRenderGuidance(t *testing.T) {
 		{
 			tool: "command",
 			reject: &toolrejection.ToolReject{Code: "COMMAND_PWD_NOT_CWD", Data: map[string]any{
-				"command": "go mod tidy", "cwd": "/project", "pwd": "/project/subdir",
+				"command": "go mod tidy", "cwd": "@app/src", "pwd": "@app/src/subdir",
 			}},
-			want: []string{"env.PWD", "/project/subdir", "resolved working directory"},
+			want: []string{"env.PWD", "@app/src/subdir", "resolved working directory"},
 		},
 		{
 			tool: "command",

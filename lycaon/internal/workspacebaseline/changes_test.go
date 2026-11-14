@@ -54,10 +54,10 @@ func TestChangeSetNamesEachKindInPathOrder(t *testing.T) {
 	changes, err := reader.ChangeSet(t.Context(), nil, branch)
 	testutil.FailErr(t, "change set", err)
 	want := []workspacebaseline.Change{
-		{Path: "dir/swap", Kind: workspacebaseline.ChangeDeleted},
-		{Path: "edit.txt", Kind: workspacebaseline.ChangeModified},
-		{Path: "gone.txt", Kind: workspacebaseline.ChangeDeleted},
-		{Path: "made.txt", Kind: workspacebaseline.ChangeCreated},
+		{RootID: "", ScopeRel: "dir/swap", Path: "dir/swap", Kind: workspacebaseline.ChangeDeleted},
+		{RootID: "", ScopeRel: "edit.txt", Path: "edit.txt", Kind: workspacebaseline.ChangeModified},
+		{RootID: "", ScopeRel: "gone.txt", Path: "gone.txt", Kind: workspacebaseline.ChangeDeleted},
+		{RootID: "", ScopeRel: "made.txt", Path: "made.txt", Kind: workspacebaseline.ChangeCreated},
 	}
 	if fmt.Sprint(changes) != fmt.Sprint(want) {
 		t.Fatalf("changes = %+v, want %+v", changes, want)
@@ -129,7 +129,10 @@ func TestChangeSetListsFilesUnderAParentThatBecameAFile(t *testing.T) {
 
 	changes, err := reader.ChangeSet(t.Context(), nil, branch)
 	testutil.FailErr(t, "change set", err)
-	want := []workspacebaseline.Change{{Path: "dir", Kind: workspacebaseline.ChangeCreated}, {Path: "dir/x.go", Kind: workspacebaseline.ChangeDeleted}}
+	want := []workspacebaseline.Change{
+		{RootID: "", ScopeRel: "dir", Path: "dir", Kind: workspacebaseline.ChangeCreated},
+		{RootID: "", ScopeRel: "dir/x.go", Path: "dir/x.go", Kind: workspacebaseline.ChangeDeleted},
+	}
 	if fmt.Sprint(changes) != fmt.Sprint(want) {
 		t.Fatalf("changes = %+v, want %+v", changes, want)
 	}

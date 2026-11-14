@@ -2,6 +2,8 @@ package survey
 
 import (
 	"context"
+	"path/filepath"
+
 	"github.com/lycaon/lycaon/internal/hostmarker"
 	"github.com/lycaon/lycaon/internal/summarize"
 
@@ -24,8 +26,8 @@ type summaryAccess struct {
 	projectID     string
 	profileID     string
 	activeRoot    string
-	primary       projectroot.RootRef
-	primaryValid  bool
+	roots         []projectroot.RootRef
+	activeRootID  string
 	drafts        func(context.Context) sourceview.DraftOverlay
 	literals      func(context.Context, string, []string, sandbox.SurveyOptions, func(grepMatch)) error
 }
@@ -33,11 +35,10 @@ type summaryAccess struct {
 func newSummaryAccess(boundary *sandbox.Boundary, reads *projectpaths.ReadSession, tctx tools.ToolContext, catalog *sourcecatalog.Catalog) *summaryAccess {
 	// The call's root set remains stable while observers update their own projections.
 	tctx.Source.Roots = append([]projectroot.RootRef(nil), tctx.Source.Roots...)
-	primary, err := projectroot.PrimaryRoot(tctx.Source.Roots)
 	access := &summaryAccess{
 		reads: reads, boundary: boundary, catalog: catalogOrProcess(catalog), trees: catalogOrProcess(catalog).Trees, literalsIndex: catalogOrProcess(catalog).Literals,
 		projectID: tctx.Identity.ProjectID, profileID: tctx.ProfileID(), activeRoot: tctx.ActiveRootPath(),
-		primary: primary, primaryValid: err == nil,
+		roots: tctx.Source.Roots, activeRootID: tctx.Source.ActiveRootID,
 		drafts: func(ctx context.Context) sourceview.DraftOverlay { return sourceview.DraftsFor(ctx, tctx) },
 	}
 	access.literals = func(ctx context.Context, path string, terms []string, policy sandbox.SurveyOptions, visit func(grepMatch)) error {
@@ -47,10 +48,10 @@ func newSummaryAccess(boundary *sandbox.Boundary, reads *projectpaths.ReadSessio
 }
 
 func (a *summaryAccess) qualify(root projectroot.RootRef, abs string) string {
-	if !a.primaryValid {
+	if len(a.roots) == 0 {
 		return abs
 	}
-	return projectroot.Qualify(a.primary, root, abs)
+	return projectroot.Qualify(a.roots, a.activeRootID, root, abs)
 }
 
 // Only a complete, exact source window can establish the same document basis
@@ -60,8 +61,8 @@ func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, 
 		if window.StartLine != 1 || window.Body == "" || window.Path == "inline" {
 			continue
 		}
-		resolved, err := reads.Resolve(ctx, window.Path)
-		if err != nil {
+		resolved, ok := resolveSummaryWindow(ctx, reads, tctx, window)
+		if !ok {
 			continue
 		}
 		documents, ok := sourceview.DocumentsFor(tctx, resolved)
@@ -82,4 +83,22 @@ func rememberSummaryReads(ctx context.Context, reads *projectpaths.ReadSession, 
 		}
 		documents.RememberAgentRead(tctx.Identity.ProjectID, tctx.Identity.SessionID, doc)
 	}
+}
+
+// resolveSummaryWindow prefers the structured root identity carried by the
+// window and only falls back to display-string resolution for legacy windows.
+func resolveSummaryWindow(ctx context.Context, reads *projectpaths.ReadSession, tctx tools.ToolContext, window summarize.PackWindow) (projectpaths.Resolved, bool) {
+	if window.RootID != "" && window.ScopeRel != "" && window.ScopeRel != "." {
+		for _, root := range tctx.Source.Roots {
+			if root.ID == window.RootID {
+				return projectpaths.Resolved{Root: root, ScopeRel: window.ScopeRel, Abs: filepath.Join(root.Path, filepath.FromSlash(window.ScopeRel)), DisplayPath: window.Path}, true
+			}
+		}
+		return projectpaths.Resolved{}, false
+	}
+	resolved, err := reads.Resolve(ctx, window.Path)
+	if err != nil {
+		return projectpaths.Resolved{}, false
+	}
+	return resolved, true
 }

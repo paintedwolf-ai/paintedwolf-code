@@ -12,10 +12,10 @@ schema:
         properties:
           from:
             type: string
-            description: Repo-relative source file
+            description: "Source file relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute."
           to:
             type: string
-            description: Repo-relative destination file
+            description: "Destination file relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute."
         required: [from, to]
         additionalProperties: false
   required: [moves]

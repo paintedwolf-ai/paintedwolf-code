@@ -8,7 +8,7 @@ schema:
       items:
         type: string
       maxItems: 20
-      description: Repo-relative directory paths (max 20)
+      description: "Directory paths relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute (max 20)."
     mode:
       type: string
       description: Octal allowlist (755 default; same family as chmod)

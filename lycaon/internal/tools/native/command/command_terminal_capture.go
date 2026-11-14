@@ -63,7 +63,7 @@ func runCommandTerminalCapture(
 	if err := tools.ValidateWorkerBranch(ctx, tctx); err != nil {
 		return RunOutcome{}, err
 	}
-	if reject := rejectPwdEnvMismatch(args, canonicalCommandKey(tctx, args), cwd); reject != nil {
+	if reject := rejectPwdEnvMismatch(tctx, args, canonicalCommandKey(tctx, args), cwd, cwdDisplay); reject != nil {
 		return RunOutcome{}, reject
 	}
 	commandLine := canonicalCommandKey(tctx, args)

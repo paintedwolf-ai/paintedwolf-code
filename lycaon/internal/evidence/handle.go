@@ -194,5 +194,17 @@ func cloneRecord(rec Record) Record {
 			out.pathTiers[path] = tier
 		}
 	}
+	if rec.rooted.owners != nil {
+		out.rooted.owners = make(map[string]string, len(rec.rooted.owners))
+		for path, rootID := range rec.rooted.owners {
+			out.rooted.owners[path] = rootID
+		}
+	}
+	if rec.rooted.display != nil {
+		out.rooted.display = make(map[string]string, len(rec.rooted.display))
+		for path, display := range rec.rooted.display {
+			out.rooted.display[path] = display
+		}
+	}
 	return out
 }

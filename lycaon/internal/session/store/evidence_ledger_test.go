@@ -539,7 +539,7 @@ func TestCommitEvidenceToolResult_externalFileCustodyAndModelIngestion(t *testin
 	// buildMetadataLedgerFromRows.
 	rows, err := store.queries.ListEvidenceRecords(ctx, sess.ID)
 	testutil.FailErr(t, "ListEvidenceRecords", err)
-	metaLedger, err := buildMetadataLedgerFromRows(rows)
+	metaLedger, err := buildMetadataLedgerFromRows(rows, evidence.CitationRoots{})
 	testutil.FailErr(t, "buildMetadataLedgerFromRows", err)
 	if _, hasRead := metaLedger.Handles[readHandle]; hasRead {
 		t.Fatalf("buildMetadataLedgerFromRows retained non-custody read record %s", readHandle)
@@ -723,7 +723,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	if len(rows) != 125 {
 		t.Fatalf("len(rows) = %d, want 125", len(rows))
 	}
-	metaLedger, err := buildMetadataLedgerFromRows(rows)
+	metaLedger, err := buildMetadataLedgerFromRows(rows, evidence.CitationRoots{})
 	testutil.FailErr(t, "buildMetadataLedgerFromRows", err)
 	if len(metaLedger.Handles) != 2 {
 		t.Fatalf("len(metaLedger.Handles) = %d, want 2 (handles=%v)", len(metaLedger.Handles), evidence.HandlesSorted(metaLedger))
@@ -776,7 +776,7 @@ func TestEvidenceLedgerStore_ExternalCustodyAndMetadataLookupBoundedWork(t *test
 	if !foundWrite {
 		t.Fatal("missing write#2 in rows")
 	}
-	if _, err := buildMetadataLedgerFromRows(poisonedCustodyRows); err == nil {
+	if _, err := buildMetadataLedgerFromRows(poisonedCustodyRows, evidence.CitationRoots{}); err == nil {
 		t.Fatal("expected buildMetadataLedgerFromRows to decode live whole-file write row and fail on poisoned JSON")
 	}
 }
@@ -1197,5 +1197,25 @@ func TestEvidenceLedgerStore_CustodySeqWorkBoundAndDurabilitySemantics(t *testin
 		CustodyPaths: []string{"legacy.txt"},
 	}); err == nil {
 		t.Fatal("file-saving CommitProgramHTTPProvenance must fail closed when allocating CustodySeq over corrupt custody metadata")
+	}
+}
+
+// Paths owned by a root other than the record's primary root survive the v=1
+// payload, so a multi-root record keeps each path's folder after reload.
+func TestStoredLineRangesPayloadRoundTripsPathRoots(t *testing.T) {
+	rec := evidence.Record{Kind: "read", Path: "a.txt", RootID: "root-a"}
+	evidence.ApplyRecordAux(&rec, evidence.RecordAux{
+		PathsTouched: []string{"a.txt", "b.txt"},
+		PathRoots:    map[string]string{"b.txt": "root-b"},
+	})
+	raw, err := marshalEvidenceLineRanges(rec)
+	testutil.FailErr(t, "marshal rooted record", err)
+	if !strings.Contains(raw, `"v":1`) || !strings.Contains(raw, `"path_roots":{"b.txt":"root-b"}`) {
+		t.Fatalf("rooted record payload = %s, want v=1 with path_roots", raw)
+	}
+	var decoded evidence.Record
+	testutil.FailErr(t, "unmarshal rooted record", unmarshalEvidenceLineRanges(raw, &decoded))
+	if got := evidence.CloneRecordForStore(decoded).PathRoots; len(got) != 1 || got["b.txt"] != "root-b" {
+		t.Fatalf("decoded path roots = %v, want b.txt -> root-b", got)
 	}
 }

@@ -57,7 +57,7 @@ func TestProgramPathsBindCallCwdUnderWorkerBranch(t *testing.T) {
 	testutil.FailErr(t, "mkdir pkg", os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
 	testutil.FailErr(t, "mkdir branch pkg", os.MkdirAll(filepath.Join(branch, "pkg"), 0o755))
 	testutil.FailErr(t, "write job meta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), workspace.JobMeta{
-		Roots: []workspace.JobMetaRoot{{ID: "root", Path: root, IsPrimary: true}},
+		Roots: []workspace.JobMetaRoot{{ID: "root", Label: "root", Path: root, IsPrimary: true}},
 	}))
 	tc := tools.ToolContext{
 		Identity: tools.InvocationIdentity{SessionID: "sess", WorkerJobID: "job", Agent: "implement"},

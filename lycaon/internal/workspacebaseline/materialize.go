@@ -33,15 +33,15 @@ func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *s
 		return MaterializeReport{}, err
 	}
 	defer func() { _ = baseline.Close() }()
-	overlay := map[string]File{}
+	overlay := map[string]overlayEntry{}
 	if overlayPath != "" {
 		reader, err := Open(ctx, overlayPath, blobs)
 		if err != nil {
 			return MaterializeReport{}, err
 		}
 		defer func() { _ = reader.Close() }()
-		err = reader.Each(ctx, func(path string, f File) error {
-			overlay[path] = f
+		err = reader.EachIdentity(ctx, roots, func(entry Entry) error {
+			overlay[identityKey(entry.RootID, entry.ScopeRel)] = overlayEntry{entry: entry}
 			return nil
 		})
 		if err != nil {
@@ -49,41 +49,51 @@ func Materialize(ctx context.Context, baselinePath, overlayPath string, blobs *s
 		}
 	}
 	m := materializer{ctx: ctx, roots: roots, branch: branch, blobs: baseline.blobs}
-	err = baseline.Each(ctx, func(path string, f File) error {
-		if _, changed := overlay[path]; changed {
+	err = baseline.EachIdentity(ctx, roots, func(entry Entry) error {
+		if _, changed := overlay[identityKey(entry.RootID, entry.ScopeRel)]; changed {
 			return nil
 		}
-		if !f.Opaque || f.LinkTarget != "" {
-			return m.write(path, f)
+		if !entry.File.Opaque || entry.File.LinkTarget != "" {
+			return m.write(entry)
 		}
 		src := ""
 		if current != nil {
-			src = current(path)
+			src = current(entry.Path)
 		}
 		if src == "" {
-			m.report.Unavailable = append(m.report.Unavailable, path)
+			m.report.Unavailable = append(m.report.Unavailable, entry.Path)
 			return nil
 		}
-		return m.standIn(path, f, src)
+		return m.standIn(entry, src)
 	})
 	if err != nil {
 		return MaterializeReport{}, err
 	}
-	for path, f := range overlay {
-		if f.Deleted {
-			if err := m.remove(path); err != nil {
+	for _, item := range overlay {
+		entry := item.entry
+		if entry.File.Deleted {
+			if err := m.remove(entry); err != nil {
 				return MaterializeReport{}, err
 			}
 			continue
 		}
-		if f.Opaque && f.LinkTarget == "" {
-			return MaterializeReport{}, fmt.Errorf("overlay body for %s was not captured", path)
+		if entry.File.Opaque && entry.File.LinkTarget == "" {
+			return MaterializeReport{}, fmt.Errorf("overlay body for %s was not captured", entry.Path)
 		}
-		if err := m.write(path, f); err != nil {
+		if err := m.write(entry); err != nil {
 			return MaterializeReport{}, err
 		}
 	}
 	return m.report, nil
+}
+
+// identityKey keys overlay lookups by structured identity.
+func identityKey(rootID, scopeRel string) string {
+	return rootID + "\x00" + scopeRel
+}
+
+type overlayEntry struct {
+	entry Entry
 }
 
 type materializer struct {
@@ -96,8 +106,8 @@ type materializer struct {
 	report MaterializeReport
 }
 
-func (m *materializer) dest(path string) (string, error) {
-	abs, err := branchPath(m.roots, m.branch, path)
+func (m *materializer) dest(entry Entry) (string, error) {
+	abs, err := branchPathAt(m.roots, m.branch, entry.RootID, entry.ScopeRel)
 	if err != nil {
 		return "", err
 	}
@@ -107,8 +117,8 @@ func (m *materializer) dest(path string) (string, error) {
 	return abs, nil
 }
 
-func (m *materializer) remove(path string) error {
-	abs, err := branchPath(m.roots, m.branch, path)
+func (m *materializer) remove(entry Entry) error {
+	abs, err := branchPathAt(m.roots, m.branch, entry.RootID, entry.ScopeRel)
 	if err != nil {
 		return err
 	}
@@ -119,33 +129,34 @@ func (m *materializer) remove(path string) error {
 	return err
 }
 
-func (m *materializer) write(path string, f File) error {
+func (m *materializer) write(entry Entry) error {
+	f := entry.File
 	if err := m.ctx.Err(); err != nil {
 		return err
 	}
-	abs, err := m.dest(path)
+	abs, err := m.dest(entry)
 	if err != nil {
 		return err
 	}
 	_ = os.RemoveAll(abs)
 	if f.LinkTarget != "" {
 		if err := os.Symlink(f.LinkTarget, abs); err != nil {
-			return fmt.Errorf("restore symlink %s: %w", path, err)
+			return fmt.Errorf("restore symlink %s: %w", entry.Path, err)
 		}
 		m.report.Files++
 		return lchtimes(abs, time.Unix(0, f.MtimeNano))
 	}
 	if f.SHA256 == "" {
-		return fmt.Errorf("baseline %s has no body to restore", path)
+		return fmt.Errorf("baseline %s has no body to restore", entry.Path)
 	}
-	out, err := os.OpenFile(abs, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(f.Mode).Perm()) // #nosec G304 -- branch-confined path from branchPath
+	out, err := os.OpenFile(abs, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, os.FileMode(f.Mode).Perm()) // #nosec G304 -- branch-confined path from branchPathAt
 	if err != nil {
 		return err
 	}
 	if err := m.blobs.CopySHA(m.ctx, f.SHA256, out); err != nil {
 		_ = out.Close()
 		_ = os.Remove(abs)
-		return fmt.Errorf("restore %s: %w", path, err)
+		return fmt.Errorf("restore %s: %w", entry.Path, err)
 	}
 	if err := out.Close(); err != nil {
 		return err
@@ -154,22 +165,23 @@ func (m *materializer) write(path string, f File) error {
 }
 
 // standIn clones the caller's current file for an opaque baseline body.
-func (m *materializer) standIn(path string, f File, src string) error {
+func (m *materializer) standIn(entry Entry, src string) error {
+	f := entry.File
 	if err := m.ctx.Err(); err != nil {
 		return err
 	}
-	abs, err := m.dest(path)
+	abs, err := m.dest(entry)
 	if err != nil {
 		return err
 	}
 	_ = os.RemoveAll(abs)
 	cloned, err := fileclone.Clone(src, abs)
 	if err != nil {
-		return fmt.Errorf("restore %s: %w", path, err)
+		return fmt.Errorf("restore %s: %w", entry.Path, err)
 	}
 	if !cloned {
 		if err := copyFile(src, abs, os.FileMode(f.Mode).Perm()); err != nil {
-			return fmt.Errorf("restore %s: %w", path, err)
+			return fmt.Errorf("restore %s: %w", entry.Path, err)
 		}
 	}
 	return m.finish(abs, f)

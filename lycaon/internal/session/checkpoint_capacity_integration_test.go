@@ -37,7 +37,7 @@ func TestOverCapTurnMarksTheCheckpointTruncated(t *testing.T) {
 		rel := "src/f" + strconv.Itoa(i) + ".go"
 		testutil.FailErr(t, "seed "+rel,
 			os.WriteFile(filepath.Join(dir, filepath.FromSlash(rel)), []byte("before"), 0o644))
-		mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, rel)
+		mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", rel)
 	}
 
 	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Load(t.Context(), sessionID, anchor)

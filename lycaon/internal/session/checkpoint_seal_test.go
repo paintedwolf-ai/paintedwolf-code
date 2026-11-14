@@ -112,7 +112,7 @@ func TestPrimaryMutationCapturesPreTurnBytesIntoTheOpenAnchor(t *testing.T) {
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
 
 	// The mutation hook runs before the disk write.
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 	testutil.FailErr(t, "simulate the write", os.WriteFile(filepath.Join(dir, "foo.go"), []byte("after"), 0o644))
 
 	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
@@ -129,6 +129,36 @@ func TestPrimaryMutationCapturesPreTurnBytesIntoTheOpenAnchor(t *testing.T) {
 	}
 }
 
+// Primary mutations carry the attached project root they belong to; session
+// artifacts such as blueprints record an empty root.
+func TestPrimaryMutationRecordsTheProjectRootIdentity(t *testing.T) {
+	mgr, sessionID, dir := newCheckpointTestSession(t)
+	ctx := context.Background()
+	testutil.FailErr(t, "seed files", func() error {
+		if err := os.WriteFile(filepath.Join(dir, "foo.go"), []byte("before"), 0o644); err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dir, "notes.md"), []byte("notes"), 0o644)
+	}())
+
+	_, err := mgr.Submissions.Prompt(ctx, sessionID, "hello")
+	testutil.FailErr(t, "prompt", err)
+	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
+
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "root-alpha", "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "notes.md")
+
+	store := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store))
+	man, err := store.Load(t.Context(), sessionID, anchor)
+	testutil.FailErr(t, "load checkpoint", err)
+	if entry := man.Paths["foo.go"]; entry.RootID != "root-alpha" {
+		t.Fatalf("foo.go root id = %q, want root-alpha", entry.RootID)
+	}
+	if entry := man.Paths["notes.md"]; entry.RootID != "" {
+		t.Fatalf("notes.md root id = %q, want empty for a session artifact", entry.RootID)
+	}
+}
+
 // Each prompt retains its own pre-turn bytes.
 func TestEachPromptOpensItsOwnAnchorAndOlderAnchorsKeepTheirBytes(t *testing.T) {
 	mgr, sessionID, dir := newCheckpointTestSession(t)
@@ -138,12 +168,12 @@ func TestEachPromptOpensItsOwnAnchorAndOlderAnchorsKeepTheirBytes(t *testing.T) 
 
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "first ask")
 	testutil.FailErr(t, "first prompt", err)
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 	testutil.FailErr(t, "write v2", os.WriteFile(path, []byte("v2"), 0o644))
 
 	_, err = mgr.Submissions.Prompt(ctx, sessionID, "second ask")
 	testutil.FailErr(t, "second prompt", err)
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 	testutil.FailErr(t, "write v3", os.WriteFile(path, []byte("v3"), 0o644))
 
 	anchors := visibleUserMessageIDs(t, mgr, sessionID)
@@ -176,7 +206,7 @@ func TestUnderCapTurnLeavesTheCheckpointComplete(t *testing.T) {
 	_, err := mgr.Submissions.Prompt(ctx, sessionID, "touch one file")
 	testutil.FailErr(t, "prompt", err)
 	anchor := visibleUserMessageIDs(t, mgr, sessionID)[0]
-	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "foo.go")
+	mgr.Chats.Captures.RecordPrimaryMutation(ctx, sessionID, "", "foo.go")
 
 	man, err := sessioncheckpoint.New(mgr.Workspace.DataDir, dir, mgr.Coordinator.Context.Sessions.(Store)).Load(t.Context(), sessionID, anchor)
 	testutil.FailErr(t, "load manifest", err)

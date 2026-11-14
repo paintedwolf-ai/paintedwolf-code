@@ -127,7 +127,7 @@ func (t *Tool) Run(ctx context.Context, args map[string]any, tctx tools.ToolCont
 		return "", err
 	}
 
-	tctx.RecordSourcePath(resolved.Abs, api.NavigationEntryKindFile)
+	tctx.RecordSourceIdentity(resolved.Root.ID, resolved.ScopeRel, api.NavigationEntryKindFile)
 	resp := response{Path: displayPath, Format: parsedAs, Query: query}
 	if note := normalizedFormatNote(parsedAs); note != "" {
 		resp.Note = note

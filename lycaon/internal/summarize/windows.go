@@ -49,6 +49,8 @@ func symbolWindowLines(d DefinitionItem, windowLines int, lines []string) (PackW
 		EndLine:   wEnd,
 		Symbol:    d.Name,
 		Body:      numberWindowBody(body, wStart),
+		RootID:    d.RootID,
+		ScopeRel:  d.ScopeRel,
 	}, true
 }
 

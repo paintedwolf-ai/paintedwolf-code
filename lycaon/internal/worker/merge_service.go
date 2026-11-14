@@ -17,6 +17,7 @@ import (
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
 	"github.com/lycaon/lycaon/internal/sourcefeed"
 	"github.com/lycaon/lycaon/internal/sourceledger"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -331,5 +332,5 @@ type MergeReconcileRegistrar interface {
 	ClearPromotePathStatus(sessionID, jobID string)
 }
 type PromoteCapture interface {
-	RecordPromotedPrimaryPaths(context.Context, string, []string)
+	RecordPromotedPrimaryPaths(context.Context, string, []tools.PrimaryMutation)
 }

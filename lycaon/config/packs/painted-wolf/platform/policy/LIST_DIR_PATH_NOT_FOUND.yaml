@@ -13,7 +13,7 @@ category: recoverable
 emit: guard:list_dir
 message: list_dir path does not exist
 what: The listing path {{ paintedwolf.path }} does not exist.
-cause: The path argument must name an existing directory under the attached project roots.
+cause: The path argument must name an existing directory in the attached folders (`.` covers every attached folder).
 why: Structured rejects let agents branch without parsing free-form stat errors.
 fix: Inspect the nearest existing parent, then list a directory shown there.
 instead: Branch on Code; choose an existing directory before listing again

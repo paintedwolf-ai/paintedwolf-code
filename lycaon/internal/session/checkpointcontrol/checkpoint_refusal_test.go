@@ -26,7 +26,7 @@ func TestPromptRewindReplaysReceiptWithoutReplacingLaterWork(t *testing.T) {
 	path := filepath.Join(root, "file.txt")
 	testutil.FailErr(t, "seed file", os.WriteFile(path, []byte("before"), 0o640))
 	testutil.FailErr(t, "open capture", r.captures.SealPromptCheckpoint(ctx, id, anchor.ID))
-	r.captures.RecordPrimaryMutation(ctx, id, "file.txt")
+	r.captures.RecordPrimaryMutation(ctx, id, "", "file.txt")
 	testutil.FailErr(t, "write result", os.WriteFile(path, []byte("after"), 0o640))
 	project, err := r.rewindProject(ctx, id)
 	testutil.FailErr(t, "resolve project", err)

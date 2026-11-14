@@ -180,7 +180,7 @@ Source findings identify an observed source span and may include its leg-scoped 
 
 | Field | Meaning |
 |---|---|
-| `path` | project-relative source identity; what makes the finding resolvable |
+| `path` | session-folder-relative source identity (`@label/rel` in another attached root); what makes the finding resolvable |
 | `evidence` | observed leg-scoped handle; source claims require source evidence |
 | `line` | optional 1-based location |
 | `excerpt` | source text used to resolve the citation |

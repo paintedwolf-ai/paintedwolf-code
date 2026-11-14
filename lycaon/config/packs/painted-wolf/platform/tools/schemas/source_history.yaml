@@ -9,7 +9,7 @@ schema:
       description: effects (default with a path) lists a file's recorded changes newest first; lines attributes the current lines; mine lists paths this session authored; version reads historical content; diff compares versions; overview (default without a path) lists the session's changes
     path:
       type: string
-      description: Repo-relative file path (required except for mine and overview)
+      description: File path relative to the session folder, `@label/path` for any attached folder, `@scratch/path` or `@output/path` for session scratch/output, or absolute (required except for mine and overview)
     version_id:
       type: string
       description: version mode (required) or diff mode (optional; omitted diffs the session baseline with head, or on a worker branch the live file) — retained source version ID from an effect row or read receipt

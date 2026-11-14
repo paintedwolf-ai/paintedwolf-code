@@ -28,7 +28,7 @@ import (
 func CompleteBranchMeta(t *testing.T, branch string) {
 	t.Helper()
 	meta := workspace.JobMeta{
-		Roots:            []workspace.JobMetaRoot{{ID: "primary", Path: t.TempDir(), IsPrimary: true}},
+		Roots:            []workspace.JobMetaRoot{{ID: "primary", Label: "primary", Path: t.TempDir(), IsPrimary: true}},
 		SnapshotComplete: true,
 	}
 	testutil.FailErr(t, "write branch meta", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branch), meta))

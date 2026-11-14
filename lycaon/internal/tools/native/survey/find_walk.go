@@ -60,7 +60,7 @@ func (t *FindTool) walkFindTree(p findWalkParams) error {
 		info := catalogFileInfo{entry: entry}
 		if t.matchesEntry(entry.Path, p.nameFilter, p.entryType, info) {
 			abs := filepath.Join(p.root.Path, filepath.FromSlash(entry.Path))
-			p.collect(makeFindResult(projectpaths.QualifyAbs(p.tctx, p.root, abs), info))
+			p.collect(makeFindResult(p.root.ID, entry.Path, projectpaths.QualifyAbs(p.tctx, p.root, abs), info))
 		}
 		return sourcecatalog.WalkContinue
 	})
@@ -91,7 +91,7 @@ func (t *FindTool) walkFindTreeSurvey(p findWalkParams) error {
 				return sandbox.SurveyContinue, nil
 			}
 			if t.matchesEntry(projectroot.ScopeRel(p.root, e.Abs), p.nameFilter, p.entryType, info) {
-				p.collect(makeFindResult(projectpaths.QualifyAbs(p.tctx, p.root, e.Abs), info))
+				p.collect(makeFindResult(p.root.ID, projectroot.ScopeRel(p.root, e.Abs), projectpaths.QualifyAbs(p.tctx, p.root, e.Abs), info))
 			}
 			return sandbox.SurveyContinue, nil
 		})

@@ -1,10 +1,10 @@
-description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Locate repository areas with {\"path\":\".\"}. A named directory or explicit listing controls return entries instead. Use summarize to explain the area."
+description: "Paths accept @scratch/<path> for this chat or worker’s private working files. Locate repository areas with {\"path\":\".\"} — a map of every attached folder. A named directory or explicit listing controls return entries instead. Use summarize to explain the area."
 schema:
   type: object
   properties:
     path:
       type: string
-      description: Relative or absolute directory; the host checks access. Use . for a map.
+      description: "`.` or empty maps every attached folder; a bare path is relative to the session folder; `@label/path` addresses one attached folder; absolute paths are accepted. The host checks access."
     cursor:
       type: string
       description: Map continuation; copy the returned args unchanged.

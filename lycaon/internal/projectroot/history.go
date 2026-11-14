@@ -32,12 +32,22 @@ type Retired struct {
 	Generation int
 }
 
+// RootRename is one kept root whose model-visible label changed. A rename
+// that arrived together with a host path move is still a rename: the model
+// addresses folders by label, never by host path.
+type RootRename struct {
+	ID       string
+	OldLabel string
+	NewLabel string
+}
+
 // RootChange is one advance of a project's attachment generation, as the
 // difference between the roots before and after it.
 type RootChange struct {
 	Generation int
 	Added      []RootRef
 	Retired    []Retired
+	Renamed    []RootRename
 	// Primary is the new primary root when a kept root took that role.
 	Primary RootRef
 }
@@ -45,6 +55,22 @@ type RootChange struct {
 // Empty reports a change with nothing to announce.
 func (c RootChange) Empty() bool {
 	return len(c.Added) == 0 && len(c.Retired) == 0 && c.Primary.ID == ""
+}
+
+// ModelVisible reports whether the change alters the (id, label) root set
+// the model addresses folders by. A host path move under an unchanged ID and
+// label is not model-visible: the model never sees host paths, and every
+// @label it knows still resolves.
+func (c RootChange) ModelVisible() bool {
+	if len(c.Added) > 0 || len(c.Renamed) > 0 || c.Primary.ID != "" {
+		return true
+	}
+	for _, r := range c.Retired {
+		if r.Reason == RootDetached {
+			return true
+		}
+	}
+	return false
 }
 
 // History is the engine's record of root attachment changes per project.
@@ -193,6 +219,8 @@ func under(path, root string) bool {
 
 // DiffRoots compares root sets by identity: a new ID is added, a missing ID
 // is removed, and a kept ID with another path or label is moved or renamed.
+// A kept ID whose label changed is also reported in Renamed, including when
+// the change arrived together with a host path move.
 func DiffRoots(before, after []RootRef) RootChange {
 	var change RootChange
 	previous := make(map[string]RootRef, len(before))
@@ -208,8 +236,12 @@ func DiffRoots(before, after []RootRef) RootChange {
 			change.Added = append(change.Added, r)
 		case filepath.Clean(old.Path) != filepath.Clean(r.Path):
 			change.Retired = append(change.Retired, Retired{Root: old, Reason: RootMoved, Successor: r})
+			if old.Label != r.Label {
+				change.Renamed = append(change.Renamed, RootRename{ID: r.ID, OldLabel: old.Label, NewLabel: r.Label})
+			}
 		case old.Label != r.Label:
 			change.Retired = append(change.Retired, Retired{Root: old, Reason: RootRenamed, Successor: r})
+			change.Renamed = append(change.Renamed, RootRename{ID: r.ID, OldLabel: old.Label, NewLabel: r.Label})
 		}
 	}
 	for _, r := range before {

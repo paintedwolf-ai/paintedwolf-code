@@ -28,6 +28,8 @@ export function WorkerTranscriptMessageRow(props: {
   sessionId?: string | null;
   projectId?: string;
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
+  /** Session's active root; bare prose paths resolve against it. */
+  activeRootId?: string;
 }) {
   const label = () => (props.role === "user" ? "You" : "Assistant");
   const citations = createMemo(() => buildProseCitationIndex(props.grounding));
@@ -67,6 +69,7 @@ export function WorkerTranscriptMessageRow(props: {
                 citations={citations()}
                 navigation={navigation()}
                 rootRefs={props.rootRefs}
+                activeRootId={props.activeRootId}
               />
             }
           >
@@ -81,6 +84,7 @@ export function WorkerTranscriptMessageRow(props: {
               citations={citations()}
               navigation={navigation()}
               rootRefs={props.rootRefs}
+              activeRootId={props.activeRootId}
             />
           </Show>
         </div>

@@ -91,18 +91,20 @@ func (t *ExtractArchiveTool) Extract(ctx context.Context, in ExtractInput, tctx 
 		err = &toolrejection.ToolReject{Code: "EXTRACT_FORMAT_UNSUPPORTED", Data: map[string]any{"path": relArchive}}
 	}
 	if err != nil {
-		afterSuccessfulMutation(ctx, tctx, relDest)
+		afterSuccessfulMutationResolved(ctx, tctx, dest)
 		return ExtractResult{}, extractionFailure(err, relArchive, relDest, budget)
 	}
 	resp := ExtractResult{Path: relArchive, Dest: relDest, Extracted: budget.out, Entries: budget.entries, Bytes: budget.bytes, Skipped: budget.skipped}
-	mutPaths := make([]string, 0, 1+len(budget.out))
-	mutPaths = append(mutPaths, relDest)
+	mutLocations := make([]mutationLocation, 0, 1+len(budget.out))
+	mutLocations = append(mutLocations, resolvedMutationLocation(dest))
 	for _, e := range budget.out {
 		if p := strings.TrimSpace(e.Path); p != "" {
-			mutPaths = append(mutPaths, filepath.ToSlash(filepath.Join(relDest, p)))
+			loc := resolvedMutationLocation(dest)
+			loc.scopeRel = filepath.ToSlash(filepath.Join(dest.ScopeRel, p))
+			mutLocations = append(mutLocations, loc)
 		}
 	}
-	afterSuccessfulMutation(ctx, tctx, mutPaths...)
+	afterSuccessfulMutationLocations(ctx, tctx, mutLocations...)
 	return resp, nil
 }
 
