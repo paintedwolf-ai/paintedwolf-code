@@ -3,6 +3,7 @@ package session_test
 import (
 	"context"
 	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"path/filepath"
 	"testing"
@@ -210,6 +211,7 @@ func registerContextualToolsCoordinatorExtras(
 		Agents:        agents,
 		Workers:       worker.DefaultWorkersConfig(),
 		WorkerRecords: workerrecords.New(sqlDB),
+		Reviews:       &workerops.Service{Reader: workerops.Reader{Records: workerrecords.New(sqlDB), Jobs: queue}},
 	}); err != nil {
 		t.Fatal(err)
 	}

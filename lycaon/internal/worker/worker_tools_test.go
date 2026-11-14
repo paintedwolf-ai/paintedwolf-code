@@ -373,7 +373,7 @@ func TestPrerequisiteFollowsTheProducersLatestRound(t *testing.T) {
 func TestTaskStartsANamedWorker(t *testing.T) {
 	f := newWorkerToolsFixture(t)
 	testutil.FailErr(t, "register task", RegisterTaskTool(f.reg, TaskToolDeps{
-		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(), WorkerRecords: f.records,
+		Queue: f.queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: DefaultWorkersConfig(), WorkerRecords: f.records, Reviews: f.ops,
 	}))
 	args := map[string]any{"agent_type": "repo-researcher", "name": "scout", "scope": map[string]any{"mode": "read"},
 		"brief": map[string]any{"goal": "Map the parser", "done_when": []any{"Entry points listed"}}}
