@@ -120,7 +120,6 @@ func TestLoopPublishesWorkerProgress(t *testing.T) {
 	sess, err := store.Create(ctx, api.CreateSessionRequest{Posture: api.SessionPostureBuild}, testdbseed.DefaultProjectID)
 	testutil.FailErr(t, "create session in store", err)
 	sess.ParentSessionID = "parent-1"
-	sess.MaxToolLoops = 5
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
 		Session:   sess,
@@ -190,7 +189,6 @@ func TestLoopPublishesAnEdgePerSettledToolCall(t *testing.T) {
 	testutil.FailErr(t, "create session in store", err)
 	sess.AgentType = orchestration.ProfilePathExplorer
 	sess.ParentSessionID = "parent-1"
-	sess.MaxToolLoops = 5
 	_, err = loop.Run(ctx, promptloop.PromptRunInput{
 		SessionID: sess.ID,
 		Session:   sess,

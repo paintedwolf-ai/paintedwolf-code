@@ -4,17 +4,15 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
 
 func TestSkillSurfaceTemplateVarsCoordinatorSurface(t *testing.T) {
 	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
-		ProfileID:        CoordinatorProfileID,
-		SurfaceID:        "implement_routing",
-		Offered:          []string{"command", "task", "ask_user"},
-		RootCount:        2,
-		DelegationBudget: spawn.DefaultWorkerToolBudget(),
+		ProfileID: CoordinatorProfileID,
+		SurfaceID: "implement_routing",
+		Offered:   []string{"command", "task", "ask_user"},
+		RootCount: 2,
 	})
 	testutil.FailErr(t, "coordinator vars", err)
 	if vars["is_coordinator"] != true {
@@ -43,12 +41,11 @@ func TestSkillSurfaceTemplateVarsCoordinatorSurface(t *testing.T) {
 
 func TestSkillSurfaceTemplateVarsWorkerProfile(t *testing.T) {
 	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
-		ProfileID:        "worker_readonly",
-		Offered:          []string{"command", "summarize", "recall"},
-		OnWorkerBranch:   true,
-		HasGit:           true,
-		RootCount:        1,
-		DelegationBudget: spawn.DefaultWorkerToolBudget(),
+		ProfileID:      "worker_readonly",
+		Offered:        []string{"command", "summarize", "recall"},
+		OnWorkerBranch: true,
+		HasGit:         true,
+		RootCount:      1,
 	})
 	testutil.FailErr(t, "worker vars", err)
 	if vars["is_coordinator"] != false {
@@ -100,27 +97,6 @@ func TestSkillSurfaceTemplateVarsCallerShapeSurvivesMerges(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestSkillSurfaceTemplateVarsDefaultsZeroBudget(t *testing.T) {
-	vars, err := SkillSurfaceTemplateVars(SkillSurfaceVarsInput{
-		ProfileID: "worker_readonly",
-		Offered:   []string{"command", "summarize"},
-		HasGit:    true,
-		RootCount: 1,
-	})
-	testutil.FailErr(t, "worker vars", err)
-	def := spawn.DefaultWorkerToolBudget()
-	for k, want := range map[string]int{
-		"worker_tool_budget_default": def.Default,
-		"worker_tool_budget_min":     def.Min,
-		"worker_tool_budget_max":     def.Max,
-	} {
-		got, _ := vars[k].(int)
-		if got != want {
-			t.Fatalf("%s = %d, want %d (zero budget must default to the host budget)", k, got, want)
-		}
 	}
 }
 

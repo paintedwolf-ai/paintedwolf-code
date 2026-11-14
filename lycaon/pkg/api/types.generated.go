@@ -972,10 +972,6 @@ type BoardWorkerRosterEntry struct {
 	// Worker assignment goal included in full board detail.
 	Brief string `json:"brief,omitempty"`
 	Error string `json:"error,omitempty"`
-	// Effective worker tool-round ceiling when known (host default 20, maximum 120)
-	MaxToolLoops int `json:"max_tool_loops,omitempty"`
-	// The worker's unanswered request for more tool rounds; grant it with extend_worker_budget
-	BudgetRequest *WorkerBudgetRequest `json:"budget_request,omitempty"`
 	// Completed tool rounds this worker run
 	ToolLoopsUsed int `json:"tool_loops_used,omitempty"`
 	// Repo-relative paths held by handoff_reserve for this worker
@@ -6391,16 +6387,14 @@ type Session struct {
 	// Active root for this session; omitted when no roots
 	WorkspaceRootID string `json:"workspace_root_id,omitempty"`
 	// Computed on read from workspace_root_id or primary root; omitted when project has no roots
-	WorkspacePath   string         `json:"workspace_path,omitempty"`
-	Posture         SessionPosture `json:"posture"`
-	AgentType       string         `json:"agent_type,omitempty"`
-	ProviderID      string         `json:"provider_id,omitempty"`
-	Model           string         `json:"model,omitempty"`
-	Status          SessionStatus  `json:"status"`
-	ParentSessionID string         `json:"parent_session_id,omitempty"`
-	// Effective worker tool-loop cap. Omitted task budgets default to 12 for read scope and 20 for write scope; maximum 120. The final iteration is prose-only.
-	MaxToolLoops         int `json:"max_tool_loops,omitempty"`
-	CompactionGeneration int `json:"compaction_generation,omitempty"`
+	WorkspacePath        string         `json:"workspace_path,omitempty"`
+	Posture              SessionPosture `json:"posture"`
+	AgentType            string         `json:"agent_type,omitempty"`
+	ProviderID           string         `json:"provider_id,omitempty"`
+	Model                string         `json:"model,omitempty"`
+	Status               SessionStatus  `json:"status"`
+	ParentSessionID      string         `json:"parent_session_id,omitempty"`
+	CompactionGeneration int            `json:"compaction_generation,omitempty"`
 	// Server-derived: true once this session has ingested untrusted external content (web tools, MCP, or web-researcher worker summary). Read-only; ignored on input.
 	UntrustedContent bool `json:"untrusted_content,omitempty"`
 	// Server-derived 1-based ordinal of the session's newest user turn, and the same number the source ledger stamps on writes made during it. A client addressing a turn (source `baseline=turn:{session_id},{n}`) cites this value rather than counting transcript messages itself; `baseline=turn:{session_id}` lets the host resolve it. 0 means no user turn has started. Read-only; ignored on input.
@@ -6623,12 +6617,6 @@ type SettingsLimitsPatch struct {
 	CoordinatorMaxSleepMs *int `json:"coordinator_max_sleep_ms,omitempty"`
 	// Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
 	AwaitParentWorkersTimeoutMs *int `json:"await_parent_workers_timeout_ms,omitempty"`
-	// Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-	WorkerToolBudgetDefault *int `json:"worker_tool_budget_default,omitempty"`
-	// Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-	WorkerToolBudgetMin *int `json:"worker_tool_budget_min,omitempty"`
-	// Largest worker tool-round ceiling the coordinator may set or grant.
-	WorkerToolBudgetMax *int `json:"worker_tool_budget_max,omitempty"`
 	// Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
 	SessionSpendCeilingNanoUSD *int64 `json:"session_spend_ceiling_nano_usd,omitempty"`
 	// Share of the session spend limit at which the host emits a one-shot warning.
@@ -6660,12 +6648,6 @@ type SettingsLimitsResponse struct {
 	CoordinatorMaxSleepMs int `json:"coordinator_max_sleep_ms"`
 	// Wall-clock cap (milliseconds) blocking until parent-session workers finish, in whole seconds.
 	AwaitParentWorkersTimeoutMs int `json:"await_parent_workers_timeout_ms"`
-	// Worker tool-round ceiling applied when neither the task nor its planned leg sets max_tool_loops. The host never raises a ceiling on its own; a worker asks with request_budget and the coordinator grants with extend_worker_budget.
-	WorkerToolBudgetDefault int `json:"worker_tool_budget_default"`
-	// Smallest worker tool-round ceiling the coordinator may set (host floor is 2).
-	WorkerToolBudgetMin int `json:"worker_tool_budget_min"`
-	// Largest worker tool-round ceiling the coordinator may set or grant.
-	WorkerToolBudgetMax int `json:"worker_tool_budget_max"`
 	// Opt-in per-session nano-USD spend limit (enforced only when spend_ceiling_enabled is true and spend is priced).
 	SessionSpendCeilingNanoUSD int64 `json:"session_spend_ceiling_nano_usd,omitempty"`
 	// Share of the session spend limit at which the host emits a one-shot warning.
@@ -8885,19 +8867,6 @@ type WebResearchWarmActivity struct {
 	SessionID  string   `json:"session_id,omitempty"`
 }
 
-// WorkerBudgetRequest A running worker's request that its coordinator raise its tool-round ceiling.
-type WorkerBudgetRequest struct {
-	// Additional tool rounds the worker asked for beyond its ceiling at request time
-	Rounds int `json:"rounds"`
-	// Ceiling the worker asked for, bounded by the host maximum
-	RequestedMax int `json:"requested_max"`
-	// Worker-authored work the extra rounds would cover; data for the coordinator, not instructions
-	RemainingWork []string `json:"remaining_work"`
-	// Rounds the worker had completed when it asked
-	ToolLoopsUsed int       `json:"tool_loops_used"`
-	RequestedAt   time.Time `json:"requested_at"`
-}
-
 // WorkerChangeReport
 type WorkerChangeReport struct {
 	ChangedPaths   []string         `json:"changed_paths,omitempty"`
@@ -9005,11 +8974,8 @@ type WorkerEvent struct {
 	ChildSessionID  string             `json:"child_session_id,omitempty"`
 	ParentSessionID string             `json:"parent_session_id,omitempty"`
 	// Worker assignment goal used for card titles.
-	Brief        string            `json:"brief,omitempty"`
-	MergeStatus  WorkerMergeStatus `json:"merge_status,omitempty"`
-	MaxToolLoops int               `json:"max_tool_loops,omitempty"`
-	// The worker's unanswered request for more tool rounds; absent once granted
-	BudgetRequest        *WorkerBudgetRequest  `json:"budget_request,omitempty"`
+	Brief                string                `json:"brief,omitempty"`
+	MergeStatus          WorkerMergeStatus     `json:"merge_status,omitempty"`
 	ToolLoopsUsed        int                   `json:"tool_loops_used,omitempty"`
 	ToolCallsUsed        int                   `json:"tool_calls_used,omitempty"`
 	TurnToolCalls        int                   `json:"turn_tool_calls,omitempty"`
@@ -9111,7 +9077,6 @@ type WorkerResult struct {
 	Status           string                  `json:"status,omitempty"`
 	HintCode         string                  `json:"hint_code,omitempty"`
 	PolicyFeedback   *WorkerPolicyFeedback   `json:"policy_feedback,omitempty"`
-	HostAssembled    bool                    `json:"host_assembled,omitempty"`
 }
 
 // WorkerSummaryMeta

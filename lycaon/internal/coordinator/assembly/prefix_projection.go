@@ -30,7 +30,6 @@ func (p *promptSurface) renderSystemPrefix(ctx context.Context, sess *api.Sessio
 	if coordinator {
 		vars["skills_heading"] = "##"
 	}
-	p.applyToolBudgetVars(ctx, sess, coordinator, vars)
 	if vision != nil {
 		prompts.MergeModelCapabilityVars(vision(ctx, sess), vars)
 	}

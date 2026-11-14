@@ -63,7 +63,6 @@ func (e *promptSurface) renderCoordinatorStablePrompt(
 		OmittedUnits:     sortedLoadedSet(e.omittedUnits(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
-		WorkerToolBudget: e.workerToolBudget(ctx, sess),
 		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
 	stableKey, err := in.cacheKey()
@@ -146,7 +145,6 @@ func (e *promptSurface) renderTripartiteCoordinatorPrompt(
 		OmittedUnits:     sortedLoadedSet(e.omittedUnits(sess)),
 		ExecutionMode:    transition.ExecutionMode,
 		VerifyCommand:    strings.TrimSpace(implState.VerifyCommand),
-		WorkerToolBudget: e.workerToolBudget(ctx, sess),
 		catalogView:      e.sessionCatalogView(ctx, sess),
 	}
 	rendered, err := renderStandingPrompt(ctx, pe, in)

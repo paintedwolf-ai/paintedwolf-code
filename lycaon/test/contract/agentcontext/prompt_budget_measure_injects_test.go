@@ -143,10 +143,9 @@ func measureCoordinatorInjectBlock(
 			Charter: api.WorkerTaskCharter{
 				Goal: "Implement login fix", DoneWhen: []string{"The scoped auth behavior is corrected."},
 			},
-			AgentType:    "implementer",
-			WorkerJobID:  "job-budget-fixture",
-			Scope:        api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
-			MaxToolLoops: 8,
+			AgentType:   "implementer",
+			WorkerJobID: "job-budget-fixture",
+			Scope:       api.TaskScope{Mode: api.TaskScopeModeWrite, Paths: []string{"internal/auth/**"}},
 		}
 		block, err := inject.RenderWorkerTaskAssignment(ctx, renderer, input)
 		contractcheck.FailErr(t, "RenderWorkerTaskAssignment", err)

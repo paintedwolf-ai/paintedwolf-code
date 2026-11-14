@@ -8,6 +8,7 @@ import (
 	"github.com/lycaon/lycaon/internal/cost"
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/llm/modelcall"
+	"github.com/lycaon/lycaon/internal/promptresult"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
@@ -37,7 +38,8 @@ type spendCeilingDecision struct {
 	Finished *PromptRunResult
 }
 
-// A spent session may receive one final tool round before closeout.
+// A spent coordinator may receive one final tool round before closeout; a
+// worker round is fenced with no further model call.
 func (l *turnNudges) applySpendCeiling(
 	ctx context.Context,
 	sess *api.Session,
@@ -55,10 +57,23 @@ func (l *turnNudges) applySpendCeiling(
 		out.Runway = check.Runway
 		return out, nil
 	}
-	if !l.spendCeilingReached(err) || strings.TrimSpace(st.lastAssistantID) == "" {
+	if !l.spendCeilingReached(err) {
 		return out, err
 	}
-	if sess != nil && !sess.IsWorkerChild() && !st.spendSoftStopGranted && check.SoftStop {
+	if sess != nil && sess.IsWorkerChild() {
+		st.turnEndedGuidanceReject = true
+		out.Finished = &PromptRunResult{
+			TurnTools:            st.turnTools,
+			Reach:                st.requestReach(),
+			TasksDispatchedCount: st.tasksDispatchedCount,
+			Outcome:              promptresult.OutcomeSpendLimit,
+		}
+		return out, nil
+	}
+	if strings.TrimSpace(st.lastAssistantID) == "" {
+		return out, err
+	}
+	if sess != nil && !st.spendSoftStopGranted && check.SoftStop {
 		st.spendSoftStopGranted = true
 		out.WindDown = true
 		return out, nil

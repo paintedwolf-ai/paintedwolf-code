@@ -53,11 +53,7 @@ func (m *Service) SetTaskIdentityResolver(resolver workeradmission.TaskIdentityR
 }
 
 func (m *Service) resolveTaskIdentity(ctx context.Context, sess *api.Session, args map[string]any) (workeradmission.TaskIdentity, error) {
-	projectDir, err := m.Workspace.ActivePath(ctx, sess)
-	if err != nil {
-		return workeradmission.TaskIdentity{}, err
-	}
-	identity, err := m.taskIdentities.Resolve(ctx, sess.ID, projectDir, args)
+	identity, err := m.taskIdentities.Resolve(ctx, sess.ID, args)
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil {
 		return identity, err

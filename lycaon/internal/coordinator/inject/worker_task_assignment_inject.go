@@ -40,7 +40,6 @@ type WorkerTaskAssignmentInput struct {
 	AgentType          string
 	WorkerJobID        string
 	Scope              api.TaskScope
-	MaxToolLoops       int
 	Attachments        []promptattach.ForwardedAttachment
 	// RecordedVerdicts are the run's stamped verdicts in phase order.
 	RecordedVerdicts []RecordedVerdict
@@ -62,7 +61,6 @@ type WorkerTaskAssignmentData struct {
 	ScopeMode          string
 	ScopePaths         []string
 	LinkedCheckout     bool
-	MaxToolLoops       int
 	FileOrientations   []ScopeFileOrientation
 	Attachments        []promptattach.ForwardedAttachment
 	RecordedVerdicts   []RecordedVerdict
@@ -112,7 +110,6 @@ func BuildWorkerTaskAssignmentData(ctx context.Context, in WorkerTaskAssignmentI
 		ScopeMode:      string(norm.Mode),
 		ScopePaths:     paths,
 		LinkedCheckout: norm.Mode == api.TaskScopeModeWrite && gitrepo.ScopeIncludesLinkedCheckout(in.ProjectDir, norm.Paths),
-		MaxToolLoops:   in.MaxToolLoops,
 		Attachments:    attachments,
 
 		RecordedVerdicts: verdicts,
@@ -211,7 +208,6 @@ func WorkerTaskAssignmentToMap(data WorkerTaskAssignmentData) map[string]any {
 		"scope_mode":          data.ScopeMode,
 		"scope_paths":         data.ScopePaths,
 		"linked_checkout":     data.LinkedCheckout,
-		"max_tool_loops":      data.MaxToolLoops,
 		"file_orientations":   orientations,
 		"attachments":         attachments,
 		"recorded_verdicts":   recorded,

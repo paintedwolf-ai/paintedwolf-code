@@ -19,8 +19,6 @@ const (
 // orchestrationLifecycleTools remain callable on pinned implement surfaces.
 var orchestrationLifecycleTools = []string{
 	"answer_decision",
-	"decline_worker_budget",
-	"extend_worker_budget",
 	"update_progress",
 	"worker_cancel",
 	"wait",

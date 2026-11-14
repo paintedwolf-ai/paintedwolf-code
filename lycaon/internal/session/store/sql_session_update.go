@@ -67,10 +67,6 @@ func updateSession(
 		return &SessionStatusTransitionError{From: previousStatus, To: sess.Status}
 	}
 	sess.UpdatedAt = time.Now().UTC()
-	maxLoops := sql.NullInt64{}
-	if sess.MaxToolLoops > 0 {
-		maxLoops = sql.NullInt64{Int64: int64(sess.MaxToolLoops), Valid: true}
-	}
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
@@ -83,7 +79,6 @@ func updateSession(
 		AgentType:            db.NullString(sess.AgentType),
 		ProviderID:           db.NullString(sess.ProviderID),
 		Model:                db.NullString(sess.Model),
-		MaxToolLoops:         maxLoops,
 		Title:                db.NullString(sess.Title),
 		Status:               string(sess.Status),
 		CompactionGeneration: int64(sess.CompactionGeneration),
@@ -267,9 +262,6 @@ func sessionFromRow(r db.GetSessionRow) (*api.Session, error) {
 		ProviderID:           db.StringFromNull(r.ProviderID),
 		Model:                db.StringFromNull(r.Model),
 		ParentSessionID:      db.StringFromNull(r.ParentSessionID),
-	}
-	if r.MaxToolLoops.Valid && r.MaxToolLoops.Int64 > 0 {
-		sess.MaxToolLoops = int(r.MaxToolLoops.Int64)
 	}
 	var err error
 	sess.CreatedAt, err = db.ParseTime(r.CreatedAt)

@@ -200,6 +200,10 @@
     "paintedwolf.tool_turn_has_text": {
       "version": 1,
       "summary": "Host fact of type bool; no observation was declared."
+    },
+    "paintedwolf.worker_round_without_ceiling": {
+      "version": 1,
+      "summary": "Worker rounds have no tool-round ceiling: nothing counts rounds, tells a worker how many remain, or raises one. Round notices report long and quiet rounds to the coordinator."
     }
   },
   "vocabularies": {
@@ -467,7 +471,23 @@
       ],
       "paintedwolf.progress_reconciled_since_arm": [
         "paintedwolf.progress_closure_armed"
-      ]
+      ],
+      "paintedwolf.max_tool_loops": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      },
+      "paintedwolf.worker_budget_at_max": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      },
+      "paintedwolf.requested_max": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      },
+      "paintedwolf.suggested_resume_max": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      }
     },
     "rejection_codes": {
       "COORDINATOR_CLOSEOUT_ENVELOPE_ONLY": [
@@ -548,6 +568,39 @@
       ],
       "USE_WRITE_NATIVE": [
         "COMMAND_NATIVE_FORM_UNSUPPORTED"
+      ],
+      "REQUEST_BUDGET_ADDRESSED_SESSION": [
+        "COMPLETE_LEG_ADDRESSED_SESSION"
+      ],
+      "TASK_MAX_TOOL_LOOPS_INVALID": [
+        "TOOL_ARGS_INVALID"
+      ],
+      "WORKER_BUDGET_DECLINE_NO_REQUEST": [
+        "WORKER_CANCEL_TERMINAL"
+      ],
+      "WORKER_BUDGET_DECLINE_SESSION_MISMATCH": [
+        "WORKER_CANCEL_SESSION_MISMATCH"
+      ],
+      "WORKER_BUDGET_EXHAUSTED": [
+        "WORKER_COMPLETION_REPORT_MISSING"
+      ],
+      "WORKER_BUDGET_EXTEND_INVALID": [
+        "TOOL_ARGS_INVALID"
+      ],
+      "WORKER_BUDGET_EXTEND_NOT_INCREASE": [
+        "TOOL_ARGS_INVALID"
+      ],
+      "WORKER_BUDGET_EXTEND_NOT_RUNNING": [
+        "WORKER_CANCEL_TERMINAL"
+      ],
+      "WORKER_BUDGET_EXTEND_SESSION_MISMATCH": [
+        "WORKER_CANCEL_SESSION_MISMATCH"
+      ],
+      "WORKER_BUDGET_REQUEST_AT_HOST_MAX": [
+        "WORKER_COMPLETION_REPORT_MISSING"
+      ],
+      "WORKER_BUDGET_REQUEST_OPEN": [
+        "WORKER_COMPLETION_REPORT_MISSING"
       ]
     },
     "tools": {
@@ -662,13 +715,37 @@
       ],
       "write": [
         "command"
+      ],
+      "request_budget": [
+        "complete_leg"
+      ],
+      "extend_worker_budget": [
+        "worker_cancel"
+      ],
+      "decline_worker_budget": [
+        "worker_cancel"
       ]
     },
     "workflow_terms": {},
     "anchors": {
       "worker.summary.trim": [
         "worker.report_check"
-      ]
+      ],
+      "worker.budget.requested": [
+        "worker.round.notice"
+      ],
+      "worker.budget.raised": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      },
+      "worker.budget.declined": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      },
+      "worker.iterations.low": {
+        "content_contract": "paintedwolf.worker_round_without_ceiling",
+        "version": 1
+      }
     },
     "themes": {}
   }

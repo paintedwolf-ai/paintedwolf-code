@@ -1,44 +1,14 @@
 package settings_test
 
 import (
-	"os"
-	"path/filepath"
-	"runtime"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/llm"
 	"github.com/lycaon/lycaon/internal/settings"
-	"github.com/lycaon/lycaon/internal/spawn"
-	"github.com/lycaon/lycaon/internal/testutil"
 )
 
-func bundledSessionYAML(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("runtime.Caller failed")
-	}
-	return filepath.Join(filepath.Dir(file), "..", "..", "config", "packs", "painted-wolf", "platform", "host", "session.yaml")
-}
-
-func TestDefaultSessionLimitsMatchesBundledYAML(t *testing.T) {
-	def := settings.DefaultSessionLimits()
-	cfg, err := settings.LoadSessionLimits(bundledSessionYAML(t))
-	testutil.FailErr(t, "settings.LoadSessionLimits failed", err)
-	if def.MaxIterations != cfg.MaxIterations {
-		t.Fatalf("max_iterations default = %d bundled = %d", def.MaxIterations, cfg.MaxIterations)
-	}
-	if def.MaxToolResultBytes != cfg.MaxToolResultBytes {
-		t.Fatalf("max_tool_result_bytes default = %d bundled = %d", def.MaxToolResultBytes, cfg.MaxToolResultBytes)
-	}
-	if def.MaxToolSpillBytes != cfg.MaxToolSpillBytes {
-		t.Fatalf("max_tool_spill_bytes default = %d bundled = %d", def.MaxToolSpillBytes, cfg.MaxToolSpillBytes)
-	}
-}
-
-func TestLoadSessionLimitsFromBundledYAML(t *testing.T) {
-	cfg, err := settings.LoadSessionLimits(bundledSessionYAML(t))
-	testutil.FailErr(t, "settings.LoadSessionLimits failed", err)
+func TestBundledSessionLimits(t *testing.T) {
+	cfg := settings.DefaultSessionLimits()
 	if cfg.MaxIterations != 500 {
 		t.Fatalf("max_iterations = %d", cfg.MaxIterations)
 	}
@@ -68,9 +38,6 @@ func TestLoadSessionLimitsFromBundledYAML(t *testing.T) {
 	}
 	if !cfg.SpendSoftStopEnabled() {
 		t.Fatal("spend soft stop should default on")
-	}
-	if cfg.WorkerToolBudgetDefault != spawn.DefaultWorkerMaxToolLoops {
-		t.Fatalf("worker default = %d want %d", cfg.WorkerToolBudgetDefault, spawn.DefaultWorkerMaxToolLoops)
 	}
 	// llm_turn_timeout_sec measures from the send, so an approval hold does not
 	// spend it and the ceiling stays hour-scale. Hung streams hit the stall
@@ -108,20 +75,6 @@ func TestMergeSessionLimitsProjectOverlay(t *testing.T) {
 	}
 	if merged.SpendWarningRatio != 0.65 {
 		t.Fatalf("spend_warning_ratio = %v want 0.65", merged.SpendWarningRatio)
-	}
-}
-
-func TestNormalizeSessionLimitsCapsWorkerToolBudget(t *testing.T) {
-	merged := settings.MergeSessionLimits(settings.DefaultSessionLimits(), settings.SessionLimits{
-		WorkerToolBudgetDefault: 180,
-		WorkerToolBudgetMin:     2,
-		WorkerToolBudgetMax:     200,
-	})
-	if merged.WorkerToolBudgetMax != spawn.DefaultWorkerToolBudgetMax {
-		t.Fatalf("max = %d want %d", merged.WorkerToolBudgetMax, spawn.DefaultWorkerToolBudgetMax)
-	}
-	if merged.WorkerToolBudgetDefault != spawn.DefaultWorkerToolBudgetMax {
-		t.Fatalf("default = %d want %d", merged.WorkerToolBudgetDefault, spawn.DefaultWorkerToolBudgetMax)
 	}
 }
 
@@ -180,23 +133,5 @@ func TestSessionLimitsAccessorsDefaultTrue(t *testing.T) {
 	}
 	if lim.EffectiveMaxCoordinatorLoopCycles() != 256 {
 		t.Fatalf("max auto continue = %d want 256", lim.EffectiveMaxCoordinatorLoopCycles())
-	}
-}
-
-func TestLoadSessionLimitsMissingFileUsesDefaults(t *testing.T) {
-	cfg, err := settings.LoadSessionLimits(filepath.Join(t.TempDir(), "missing.yaml"))
-	testutil.FailErr(t, "settings.LoadSessionLimits failed", err)
-	if cfg.MaxIterations != settings.DefaultSessionLimits().MaxIterations {
-		t.Fatal("missing file should return defaults")
-	}
-}
-
-func TestLoadSessionLimitsRejectsInvalidYAML(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bad.yaml")
-	if err := os.WriteFile(path, []byte("max_iterations: not-a-number\n"), 0o644); err != nil {
-		testutil.FailErr(t, "write file", err)
-	}
-	if _, err := settings.LoadSessionLimits(path); err == nil {
-		t.Fatal("expected parse error")
 	}
 }

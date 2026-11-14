@@ -11,7 +11,6 @@ import (
 	"github.com/lycaon/lycaon/internal/llm/compaction"
 	"github.com/lycaon/lycaon/internal/llm/modelinfo"
 	"github.com/lycaon/lycaon/internal/session/loopguard"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/worker"
 	"github.com/lycaon/lycaon/pkg/api"
 	contractcheck "github.com/lycaon/lycaon/test/contract/internal/check"
@@ -21,18 +20,6 @@ func TestDoomLoopThreshold(t *testing.T) {
 	t.Parallel()
 	if loopguard.DoomLoopMaxAttempts != 8 {
 		t.Fatalf("DoomLoopMaxAttempts = %d, want 8", loopguard.DoomLoopMaxAttempts)
-	}
-}
-
-func TestWorkerMaxToolLoopsHostCap(t *testing.T) {
-	t.Parallel()
-	budget := spawn.DefaultWorkerToolBudget()
-	if budget.Min < spawn.WorkerToolBudgetFloor || budget.Min > budget.Default || budget.Default > budget.Max {
-		t.Fatalf("worker tool budget violates floor(%d) ≤ min(%d) ≤ default(%d) ≤ max(%d)",
-			spawn.WorkerToolBudgetFloor, budget.Min, budget.Default, budget.Max)
-	}
-	if budget.Max <= budget.Default {
-		t.Fatalf("budget max %d must exceed the default %d so a coordinator can grant more", budget.Max, budget.Default)
 	}
 }
 

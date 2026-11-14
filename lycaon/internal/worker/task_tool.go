@@ -27,7 +27,6 @@ type TaskToolDeps struct {
 	Queue            WorkerQueue
 	Agents           orchestration.AgentRegistry
 	Workers          WorkersConfig
-	ToolBudget       func(projectDir string) spawn.WorkerToolBudget
 	ComposePrompt    func(ctx context.Context, tctx tools.ToolContext, agentType string, brief api.WorkerTaskCharter, task *api.WorkerTask) (string, error)
 	WebSearchEnabled func() bool
 	// PendingDecision returns a child's open decision.
@@ -38,9 +37,9 @@ type TaskToolDeps struct {
 	TaskReceipt  func(context.Context, string, string) (*api.WorkerTask, error)
 }
 
-// IdentityResolver supplies the same child, plan, and budget sources to task admission and execution.
+// IdentityResolver supplies the same child and plan sources to task admission and execution.
 func (d TaskToolDeps) IdentityResolver() workeradmission.TaskIdentityResolver {
-	return workeradmission.TaskIdentityResolver{Children: d.Queue, WorkflowWork: d.WorkflowWork, ToolBudget: d.ToolBudget}
+	return workeradmission.TaskIdentityResolver{Children: d.Queue, WorkflowWork: d.WorkflowWork}
 }
 
 var taskToolLog = observability.LazyComponent("task_tool")
@@ -79,7 +78,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				return taskEnqueueOutput(tctx, scope, *prior)
 			}
 		}
-		identity, err := identityResolver.Resolve(ctx, tctx.Identity.SessionID, tctx.ActiveRootPath(), args)
+		identity, err := identityResolver.Resolve(ctx, tctx.Identity.SessionID, args)
 		if err != nil {
 			return "", err
 		}
@@ -125,7 +124,6 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			}
 		}
 		normalizedScope := identity.Scope
-		effectiveMaxToolLoops := identity.MaxToolLoops
 		scopePtr := &normalizedScope
 		jobID := uuid.NewString()
 		if prior := identity.Prior; prior != nil && overlayDiscarded(prior.MergeStatus) {
@@ -168,7 +166,6 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			SpawnReason:     api.SpawnReasonHumanRequest,
 			Status:          api.WorkerStatusPending,
 			ExecutionTarget: DefaultExecutionTarget(deps.Workers),
-			MaxToolLoops:    effectiveMaxToolLoops,
 		}
 		if err := ApplyEnqueueDefaults(&task, projScope, deps.Workers); err != nil {
 			return "", err

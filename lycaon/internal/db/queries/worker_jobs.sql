@@ -10,8 +10,8 @@ INSERT INTO worker_jobs (
     execution_target, runner_id, claimed_by, claim_token, attempt, heartbeat_at, lease_expires_at,
     agent_type, status, spawn_reason,
     prompt, brief, files_json, scope_json, result_json, error, failure_json, created_at, started_at, completed_at,
-    overlay_id, max_tool_loops, tool_loops_used, tool_calls_used
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+    overlay_id, tool_loops_used, tool_calls_used
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetWorkerJob :one
 SELECT id, project_id, workspace_root_id, workspace_path, workspace_key, delegation_id, leg_id, parent_session_id, source_tool_call_id, source_args_digest, child_session_id, workflow_run_id, workflow_phase, workflow_work_id,
@@ -318,25 +318,9 @@ SELECT id, parent_session_id FROM worker_jobs
 WHERE status = 'complete' AND merge_status = 'pending'
 ORDER BY created_at, id;
 
--- SetWorkerJobProgress stores counters at a round boundary. The ceiling is
--- written only at creation and by a grant, so a round never overwrites one.
+-- SetWorkerJobProgress stores usage counters at a model-turn boundary.
 -- name: SetWorkerJobProgress :exec
 UPDATE worker_jobs SET tool_loops_used = ?, tool_calls_used = ? WHERE id = ?;
-
--- A grant raises the ceiling and answers any open request.
--- name: GrantWorkerJobBudget :execrows
-UPDATE worker_jobs SET max_tool_loops = ?, budget_request_json = ''
-WHERE id = ? AND status IN ('pending', 'running');
-
--- A decline closes a live job's open request and leaves its ceiling.
--- name: DeclineWorkerJobBudget :execrows
-UPDATE worker_jobs SET budget_request_json = ''
-WHERE id = ? AND status IN ('pending', 'running') AND budget_request_json != '';
-
--- A live job holds at most one open request.
--- name: RequestWorkerJobBudget :execrows
-UPDATE worker_jobs SET budget_request_json = sqlc.arg(budget_request_json)
-WHERE id = sqlc.arg(id) AND status IN ('pending', 'running') AND budget_request_json = '';
 
 -- name: CountRunningWorkerJobs :one
 SELECT COUNT(*) FROM worker_jobs WHERE status = 'running' AND execution_target = ?;

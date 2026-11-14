@@ -89,7 +89,7 @@ describe("buildWorkerEvidenceFallbackView", () => {
         status: "failed" as const,
         created_at: "2026-01-01T00:00:00Z",
         failure: {
-          code: "worker_closeout_exhausted",
+          code: "worker_model_timeout",
           title: "Worker could not finish",
           message: "The worker used every tool turn and both closing attempts.",
           suggested_action: "Retry with a narrower task() brief.",
@@ -99,7 +99,7 @@ describe("buildWorkerEvidenceFallbackView", () => {
     );
     expect(view?.outcome).toBe("failed");
     expect(view?.headline).toBe("Worker could not finish");
-    expect(view?.hintCode).toBe("worker_closeout_exhausted");
+    expect(view?.hintCode).toBe("worker_model_timeout");
     expect(view?.statusLines[0]).toContain("closing attempts");
   });
 

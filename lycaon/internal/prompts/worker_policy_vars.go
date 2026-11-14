@@ -16,7 +16,7 @@ func MergeWorkerPolicyTemplateVars(agentID string, into map[string]any) error {
 	if strings.TrimSpace(agentID) == "" {
 		return fmt.Errorf("agent id required")
 	}
-	for k, v := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
+	for k, v := range spawn.PolicyTemplateVars() {
 		if _, exists := into[k]; !exists {
 			into[k] = v
 		}

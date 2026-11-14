@@ -14,7 +14,7 @@ describe("workerFailureDisplay", () => {
       status: "failed" as const,
       created_at: "2026-01-01T00:00:00Z",
       failure: {
-        code: "worker_closeout_exhausted",
+        code: "worker_model_timeout",
         title: "Worker could not finish",
         message:
           "The worker used every tool turn and both closing attempts, but the model did not finish its summary before the time limit.",

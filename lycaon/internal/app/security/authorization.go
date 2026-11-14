@@ -14,7 +14,7 @@ import (
 
 type MCPProviders interface{ EnabledProviderIDs() []string }
 
-func (b *Runtime) BuildAuthorization(moduleRoot string, profiles []sandbox.ToolProfile, perms *settings.ApprovalStore, gate func() hitl.ApprovalGate, metadata func() []tools.ToolMeta, access func(context.Context, *api.Session) sandbox.ToolAccess, budget func(string) spawn.WorkerToolBudget) error {
+func (b *Runtime) BuildAuthorization(moduleRoot string, profiles []sandbox.ToolProfile, perms *settings.ApprovalStore, gate func() hitl.ApprovalGate, metadata func() []tools.ToolMeta, access func(context.Context, *api.Session) sandbox.ToolAccess) error {
 	audit, err := authzcontext.LoadAuditConfig(moduleRoot)
 	if err != nil {
 		return fmt.Errorf("audit config: %w", err)
@@ -49,7 +49,6 @@ func (b *Runtime) BuildAuthorization(moduleRoot string, profiles []sandbox.ToolP
 		}
 		return spawn.AmbientAllowedAgents()
 	}
-	sealer.WorkerToolBudget = budget
 	return nil
 }
 func (b *Runtime) BindMCPInventory(providers MCPProviders) {

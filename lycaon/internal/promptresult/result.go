@@ -13,6 +13,9 @@ const (
 	// OutcomeOutputTruncated marks a turn that ended cleanly after a recovery
 	// attempt also stopped on an output token limit with no usable content.
 	OutcomeOutputTruncated Outcome = "output_truncated"
+	// OutcomeSpendLimit marks a worker round fenced at the armed spend limit
+	// before another model call.
+	OutcomeSpendLimit Outcome = "spend_limit"
 )
 
 // OutputTruncatedOutcome carries structured details when a prompt turn ends on

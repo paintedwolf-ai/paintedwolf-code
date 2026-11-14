@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/lycaon/lycaon/internal/progress"
-	"github.com/lycaon/lycaon/internal/session/workeradmission"
 	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/tools"
 	workflowdef "github.com/lycaon/lycaon/internal/workflow/definition"
@@ -86,9 +85,6 @@ func RegisterFanoutPlanTool(reg *tools.DefaultRegistry, runs *Fanout) error {
 					return "", &toolrejection.ToolReject{Code: "TOOL_ARGS_INVALID", Data: map[string]any{"tool": "fanout_plan", "field": "legs.done_when", "reason": "completion_criteria_required"}}
 				}
 			}
-		}
-		if err := validateFanoutLegBudgets(plan, runs.workerToolBudget(tctx.ActiveRootPath())); err != nil {
-			return marshalFanoutPlanResult(FanoutPlanToolResult{Error: "invalid_plan", Message: err.Error()})
 		}
 		plan.MaxAttempts = max(1, def.Fanout.MaxAttempts)
 		plan.Phase = def.Next
@@ -175,11 +171,6 @@ func parseFanoutPlanArgs(args map[string]any) (runstate.FanoutPlan, error) {
 			}
 			leg.Scope = &scope
 		}
-		loops, err := workeradmission.ParseTaskMaxToolLoopsFromArgs(m)
-		if err != nil {
-			return runstate.FanoutPlan{}, fmt.Errorf("legs[%d].%w", i, err)
-		}
-		leg.MaxToolLoops = loops
 		legs = append(legs, leg)
 	}
 	return runstate.FanoutPlan{
@@ -251,25 +242,6 @@ func validateFanoutPlan(plan runstate.FanoutPlan, allowedAgents, excludedAgents 
 		}
 	}
 	return nil
-}
-
-// validateFanoutLegBudgets keeps each planned ceiling inside the host range.
-func validateFanoutLegBudgets(plan runstate.FanoutPlan, budget spawn.WorkerToolBudget) error {
-	for i, leg := range plan.Legs {
-		if workeradmission.ValidateTaskMaxToolLoopsCode(leg.MaxToolLoops, budget) != "" {
-			return fmt.Errorf("legs[%d].max_tool_loops is %d; set it between %d and %d, or omit it for the default %d",
-				i, leg.MaxToolLoops, budget.Min, budget.Max, budget.Default)
-		}
-	}
-	return nil
-}
-
-// workerToolBudget resolves the ceiling bounds for workers under projectDir.
-func (m *Fanout) workerToolBudget(projectDir string) spawn.WorkerToolBudget {
-	if m != nil && m.WorkerToolBudget != nil {
-		return m.WorkerToolBudget(projectDir)
-	}
-	return spawn.DefaultWorkerToolBudget()
 }
 
 // formatWorkerAgentAllowlist includes valid worker ids in rejection text.

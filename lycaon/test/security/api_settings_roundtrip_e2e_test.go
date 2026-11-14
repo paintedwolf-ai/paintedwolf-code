@@ -179,8 +179,8 @@ func testSettingsLimits(t *testing.T, base string) {
 	if getLimits.MaxIterations != *newLimit.MaxIterations {
 		t.Fatalf("GET after PATCH limits lost change: %+v", getLimits)
 	}
-	if getLimits.WorkerToolBudgetDefault != limits.WorkerToolBudgetDefault || getLimits.WorkerToolBudgetMin != limits.WorkerToolBudgetMin || getLimits.WorkerToolBudgetMax != limits.WorkerToolBudgetMax {
-		t.Fatalf("partial patch changed omitted worker budgets: before=%+v after=%+v", limits, getLimits)
+	if getLimits.MaxToolResultBytes != limits.MaxToolResultBytes || getLimits.SpendWarningRatio != limits.SpendWarningRatio {
+		t.Fatalf("partial patch changed omitted limits: before=%+v after=%+v", limits, getLimits)
 	}
 	empty := settingsPatchJSON[wire.SettingsLimitsResponse](t, base, "/v1/settings/limits", `{}`, http.StatusOK)
 	if empty.MaxIterations != getLimits.MaxIterations {

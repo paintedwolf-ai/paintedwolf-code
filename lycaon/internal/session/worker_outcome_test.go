@@ -227,7 +227,7 @@ func TestFinalizationDoesNotAddAToolDisabledRepairTurn(t *testing.T) {
 	resolver := &stubSummaryResolver{msgs: scoutSurveyFixtureMessages()}
 	out, err := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "finalize missing report", err)
-	if out.Status != "partial" || resolver.prompts != 0 {
+	if out.Status != string(api.WorkerSummaryStatusFailed) || resolver.prompts != 0 {
 		t.Fatalf("outcome=%+v prompts=%d", out, resolver.prompts)
 	}
 }
@@ -237,7 +237,7 @@ func TestFinalizeWorkerSummaryForCanceledCloseout(t *testing.T) {
 		closeoutAddsLegTool: true,
 		msgs:                scoutSurveyFixtureMessages(),
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForCanceled(context.Background(), resolver, resolver, "child", "path-explorer", "wrong scope", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
+	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForCanceled(context.Background(), resolver, resolver, "child", "wrong scope", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
 	if out.Status != "partial" || out.Provenance != "cancel_complete_leg" {
 		t.Fatalf("out = %+v want cancel closeout partial", out)
@@ -250,24 +250,38 @@ func TestFinalizeWorkerSummaryForCanceledCloseout(t *testing.T) {
 	}
 }
 
-func TestFinalizeWorkerSummarySynthesizedFromTools(t *testing.T) {
-	resolver := &stubSummaryResolver{
-		msgs: []api.Message{
-			{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: "read"}}},
-			{Role: api.MessageRoleTool, Content: strings.Repeat("file contents here ", 40)},
-		},
+// A round that ends without an accepted report fails with its reason; the
+// host never writes a report from the worker's tool results.
+func TestFinalizeWithoutReportFailsWithItsReason(t *testing.T) {
+	msgs := []api.Message{
+		{Role: api.MessageRoleAssistant, ToolCalls: []api.ToolCall{{Name: "read"}}},
+		{Role: api.MessageRoleTool, Content: strings.Repeat("file contents here ", 40)},
 	}
-	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
-	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "partial" || out.Provenance != "synthesized+grounding_host_assembled" || !out.HostAssembled {
-		t.Fatalf("out = %+v want synthesized partial", out)
-	}
-	if out.Report.LegStatus != "partial" || len(out.Report.ObjectivesMet) == 0 {
-		t.Fatalf("report = %+v", out.Report)
+	for _, tc := range []struct {
+		name       string
+		spent      bool
+		provenance string
+		code       string
+	}{
+		{"report missing", false, "report_missing", workercompletion.WorkerCompletionReportMissingCode},
+		{"spend limit", true, "spend_limit", workercompletion.WorkerSpendLimitReachedCode},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resolver := &stubSummaryResolver{msgs: msgs}
+			opts := finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{Pipeline: sessionTestOARPipeline(t), SpendLimitReached: tc.spent})
+			out, err := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, resolver, "child", "path-explorer", opts)
+			testutil.FailErr(t, "finalize without report", err)
+			if out.Status != string(api.WorkerSummaryStatusFailed) || out.Provenance != tc.provenance || out.HintCode != tc.code {
+				t.Fatalf("out = %+v want failed %s", out, tc.code)
+			}
+			if out.Summary != "" || out.Report.Brief != "" || len(out.Report.ObjectivesMet) != 0 {
+				t.Fatalf("host wrote a report: %+v", out)
+			}
+		})
 	}
 }
 
-func TestFinalizeWorkerSummaryNoProsePartial(t *testing.T) {
+func TestFinalizeWorkerSummaryNoProseFails(t *testing.T) {
 	resolver := &stubSummaryResolver{
 		msgs: []api.Message{
 			{Role: api.MessageRoleTool, Content: "Rejected: bad"},
@@ -275,7 +289,7 @@ func TestFinalizeWorkerSummaryNoProsePartial(t *testing.T) {
 	}
 	out, workerEvalErr := workercloseout.FinalizeWorkerSummaryForChild(context.Background(), resolver, resolver, "child", "path-explorer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{Pipeline: sessionTestOARPipeline(t)}))
 	testutil.FailErr(t, "evaluate worker completion", workerEvalErr)
-	if out.Status != "partial" || out.HintCode != workercompletion.WorkerCompletionReportMissingCode {
+	if out.Status != string(api.WorkerSummaryStatusFailed) || out.HintCode != workercompletion.WorkerCompletionReportMissingCode {
 		t.Fatalf("out = %+v", out)
 	}
 	if out.Summary != "" {
@@ -287,7 +301,7 @@ func TestFinalizationDoesNotTreatMidRunProseAsAnAcceptedReport(t *testing.T) {
 	resolver := &stubSummaryResolver{msgs: []api.Message{{Role: api.MessageRoleAssistant, Content: "Work remains", ToolCalls: []api.ToolCall{{Name: "find"}}}, {Role: api.MessageRoleTool, Content: `{"results":[]}`}}}
 	out, err := workercloseout.FinalizeWorkerSummaryForChild(t.Context(), resolver, resolver, "child", "security-reviewer", finalizeOpts(resolver, "child", workercloseout.WorkerSummaryFinalizeOpts{}))
 	testutil.FailErr(t, "finalize mid-run prose", err)
-	if out.Status != "partial" || resolver.prompts != 0 {
+	if out.Status != string(api.WorkerSummaryStatusFailed) || resolver.prompts != 0 {
 		t.Fatalf("outcome=%+v prompts=%d", out, resolver.prompts)
 	}
 }

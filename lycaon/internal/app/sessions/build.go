@@ -151,19 +151,9 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 		mgr.Catalog.SetCatalogViewCache(deps.Catalog.ViewCache)
 	}
 
-	workerToolBudgetFor := func(projectDir string) spawn.WorkerToolBudget {
-		if deps.Settings.Service == nil {
-			return deps.Settings.SessionLimits.WorkerToolBudget()
-		}
-		if !deps.Settings.ProjectSurfaceGate(projectcontrib.SurfaceProjectSettings, deps.Storage.Projects).AppliesPath(context.WithoutCancel(ctx), projectDir) {
-			projectDir = ""
-		}
-		return settings.ProjectLimitsAdapter{Store: deps.Settings.Service.Limits}.SessionLimits(projectDir).WorkerToolBudget()
-	}
+	wireSessionToolSources(mgr, deps.Execution.Host, deps.Settings.HostResources)
 
-	wireSessionToolSources(mgr, deps.Execution.Host, deps.Settings.HostResources, workerToolBudgetFor)
-
-	if err := deps.Security.BuildAuthorization(deps.Catalog.ModuleRoot, deps.Agents.ToolProfiles, deps.Settings.Service.Approvals, deps.Execution.Host.Authority.ApprovalGate, deps.Execution.Host.Registry.List, mgr.Profiles.ResolveToolAccess, workerToolBudgetFor); err != nil {
+	if err := deps.Security.BuildAuthorization(deps.Catalog.ModuleRoot, deps.Agents.ToolProfiles, deps.Settings.Service.Approvals, deps.Execution.Host.Authority.ApprovalGate, deps.Execution.Host.Registry.List, mgr.Profiles.ResolveToolAccess); err != nil {
 		return nil, err
 	}
 	mgr.Runner.Authorization.SetSealer(deps.Security.Authority.Sealer)
@@ -172,31 +162,29 @@ func Build(ctx context.Context, deps Dependencies) (*Runtime, error) {
 	}
 
 	return &Runtime{
-		Manager:             mgr,
-		Store:               deps.Storage.Sessions,
-		PromptEngine:        promptEngine,
-		Invocations:         invocations,
-		WorkerToolBudgetFor: workerToolBudgetFor,
+		Manager:      mgr,
+		Store:        deps.Storage.Sessions,
+		PromptEngine: promptEngine,
+		Invocations:  invocations,
 	}, nil
 }
 
 // skillSurfaceVarsInput maps a tool invocation context to skill surface input:
 // the agent's tool profile, the turn surface, the offered tools, and the
 // workspace shape facts (worker branch, git, root count).
-func skillSurfaceVarsInput(tctx tools.ToolContext, budget spawn.WorkerToolBudget) prompts.SkillSurfaceVarsInput {
+func skillSurfaceVarsInput(tctx tools.ToolContext) prompts.SkillSurfaceVarsInput {
 	profileID := strings.TrimSpace(tctx.Identity.Agent)
 	if mapped, err := prompts.ToolProfileForAgent(profileID); err == nil && mapped != "" {
 		profileID = mapped
 	}
 	return prompts.SkillSurfaceVarsInput{
-		Plan:             tctx.Turn.TurnToolPlan,
-		ProfileID:        profileID,
-		SurfaceID:        strings.TrimSpace(tctx.Turn.TurnSurfaceID),
-		Offered:          tctx.Turn.TurnOfferedToolNames,
-		OnWorkerBranch:   tctx.Source.SourceWorkspaceKind == api.SourceWorkspaceKindWorker && strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "",
-		HasGit:           skillReaderHasGit(tctx),
-		RootCount:        len(tctx.Source.Roots),
-		DelegationBudget: budget,
+		Plan:           tctx.Turn.TurnToolPlan,
+		ProfileID:      profileID,
+		SurfaceID:      strings.TrimSpace(tctx.Turn.TurnSurfaceID),
+		Offered:        tctx.Turn.TurnOfferedToolNames,
+		OnWorkerBranch: tctx.Source.SourceWorkspaceKind == api.SourceWorkspaceKindWorker && strings.TrimSpace(tctx.Source.WorkerBranchRoot) != "",
+		HasGit:         skillReaderHasGit(tctx),
+		RootCount:      len(tctx.Source.Roots),
 	}
 }
 
@@ -258,7 +246,7 @@ func profileIDForSurface(tctx tools.ToolContext) string {
 	return profileID
 }
 
-func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResources *hostresources.Service, workerToolBudgetFor func(string) spawn.WorkerToolBudget) {
+func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResources *hostresources.Service) {
 	if host != nil && host.Boundary != nil {
 		host.Boundary.SetProfileSource(func(ctx context.Context, sessionID string) []sandbox.ToolProfile {
 			view := mgr.Catalog.ViewForSessionID(ctx, sessionID)
@@ -305,13 +293,9 @@ func wireSessionToolSources(mgr *session.Host, host *toolhost.Runtime, hostResou
 			return reachable
 		})
 		host.Skills.SetSkillTemplateVars(func(_ context.Context, tctx tools.ToolContext) map[string]any {
-			budget := spawn.DefaultWorkerToolBudget()
-			if workerToolBudgetFor != nil {
-				budget = workerToolBudgetFor(strings.TrimSpace(tctx.ActiveRootPath()))
-			}
-			vars, err := prompts.SkillSurfaceTemplateVars(skillSurfaceVarsInput(tctx, budget))
+			vars, err := prompts.SkillSurfaceTemplateVars(skillSurfaceVarsInput(tctx))
 			if err != nil || vars == nil {
-				return spawn.PolicyTemplateVars(budget)
+				return spawn.PolicyTemplateVars()
 			}
 			return vars
 		})

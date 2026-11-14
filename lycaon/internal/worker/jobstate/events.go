@@ -91,8 +91,6 @@ func JobEvent(task api.WorkerTask) api.WorkerEvent {
 		ParentSessionID:      task.ParentSessionID,
 		Brief:                task.Brief,
 		MergeStatus:          task.MergeStatus,
-		MaxToolLoops:         task.MaxToolLoops,
-		BudgetRequest:        task.BudgetRequest,
 		ToolLoopsUsed:        task.ToolLoopsUsed,
 		ToolCallsUsed:        task.ToolCallsUsed,
 		ContextUsage:         task.ContextUsage,

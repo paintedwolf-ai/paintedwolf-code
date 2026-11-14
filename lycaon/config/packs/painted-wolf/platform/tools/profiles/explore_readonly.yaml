@@ -11,7 +11,6 @@ tools:
   record_finding: sticky
   pack_board: sticky
   request_decision: sticky
-  request_budget: sticky
   complete_leg: sticky
   source_history: true
   scan_list: true

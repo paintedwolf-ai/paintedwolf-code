@@ -29,7 +29,7 @@ Deliver the requested result. {% if execution_mode == "orchestrate" %}Coordinate
 {{ units.evidence }}
 {% include "partials/external-facts-verify.md" %}
 
-{% if execution_mode == "orchestrate" %}Each running job carries a tool-round ceiling shown as **`used/max`** on the board's worker rows. A worker that needs more asks for it, waking any wait on workers — answer promptly: its final round waits for the answer{% if profile_has_extend_worker_budget %} — **`extend_worker_budget`** grants{% if profile_has_decline_worker_budget %}, **`decline_worker_budget`** declines{% endif %}{% endif %}.{% endif %}
+{% if execution_mode == "orchestrate" %}A worker runs until it delivers, asks a blocking question or is stopped. A round notice tells you when a round runs long or goes quiet{% if profile_has_worker_cancel %}; stop it with **`worker_cancel`** only when it is no longer worth continuing{% endif %}.{% if profile_has_task %} A worker whose round ended without finishing resumes with **`task(child_session_id=…)`**.{% endif %}{% endif %}
 
 {% if can_orient or has_file_tools %}
 ## Board and scans

@@ -20,7 +20,7 @@ import {
   workerCardProgress,
   type WorkerCardProgress,
 } from "../chat/worker/worker-progress.ts";
-import { WorkerBudgetChip } from "./worker/WorkerBudgetChip.tsx";
+import { WorkerTurnsChip } from "./worker/WorkerTurnsChip.tsx";
 import { WorkerToolCallsChip } from "./worker/WorkerToolCallsChip.tsx";
 import { ContextRing } from "./chatview/ContextRing.tsx";
 import { ContextMenu, type ContextMenuAnchor, type ContextMenuItem } from "./ContextMenu.tsx";
@@ -261,10 +261,7 @@ export function TaskCardShell(props: ShellProps) {
       if (props.status() === "canceled") return "Worker canceled";
       return props.status() === "error" ? "Worker failed" : "Worker finished";
     }
-    const rounds = `Tool round ${value.used} of ${value.max}`;
-    return value.batch
-      ? `${rounds}, tool ${value.batch.done} of ${value.batch.total}`
-      : rounds;
+    return `Tool ${value.batch.done} of ${value.batch.total} in this turn`;
   };
 
   const percent = (fraction: number) =>
@@ -342,7 +339,7 @@ export function TaskCardShell(props: ShellProps) {
                     compact
                     testId="worker-context-meter"
                   />
-                  <WorkerBudgetChip worker={() => worker} />
+                  <WorkerTurnsChip worker={() => worker} />
                   <WorkerToolCallsChip worker={() => worker} />
                 </>
               )}
@@ -356,30 +353,17 @@ export function TaskCardShell(props: ShellProps) {
               data-testid="task-card-progress"
               aria-label={progressAriaLabel(value())}
             >
-              <div class="den-task-card-progress-track">
+              <div
+                class="den-task-card-progress-track--batch den-task-card-progress-track"
+                data-testid="task-card-progress-batch"
+                data-batch-done={value().batch.done}
+                data-batch-total={value().batch.total}
+              >
                 <div
-                  class="den-task-card-progress-fill"
-                  style={{ width: percent(value().ratio) }}
+                  class="den-task-card-progress-fill den-task-card-progress-fill--batch"
+                  style={{ width: percent(value().batch.ratio) }}
                 />
               </div>
-              {/* The round's tools are most of its wall-clock, and the budget bar
-                  cannot show them: one round is a couple of pixels wide. This is
-                  the mark that moves while a round is being worked. */}
-              <Show when={value().batch} keyed>
-                {(batch) => (
-                  <div
-                    class="den-task-card-progress-track--batch den-task-card-progress-track"
-                    data-testid="task-card-progress-batch"
-                    data-batch-done={batch.done}
-                    data-batch-total={batch.total}
-                  >
-                    <div
-                      class="den-task-card-progress-fill den-task-card-progress-fill--batch"
-                      style={{ width: percent(batch.ratio) }}
-                    />
-                  </div>
-                )}
-              </Show>
             </div>
           )}
         </Show>

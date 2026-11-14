@@ -301,7 +301,7 @@ func FormatInFlightWorkerPulseLine(t api.WorkerTask) string {
 	if touch := formatTouchSummary(t.TouchedPaths); touch != "" {
 		line += " · " + touch
 	}
-	line += formatWorkerBudgetSegment(t)
+	line += formatWorkerRoundSegment(t)
 	return line
 }
 
@@ -739,19 +739,16 @@ func FormatWorkerDetailLine(t api.WorkerTask, now time.Time) string {
 	if t.StartedAt != nil {
 		line += " · " + FormatRelativeSince(now, *t.StartedAt)
 	}
-	line += formatWorkerBudgetSegment(t)
+	line += formatWorkerRoundSegment(t)
 	return line
 }
 
-func formatWorkerBudgetSegment(t api.WorkerTask) string {
-	if t.MaxToolLoops <= 0 {
+// formatWorkerRoundSegment reports how many model turns the worker's job has taken.
+func formatWorkerRoundSegment(t api.WorkerTask) string {
+	if t.ToolLoopsUsed <= 0 {
 		return ""
 	}
-	used := t.ToolLoopsUsed
-	if used < 0 {
-		used = 0
-	}
-	return fmt.Sprintf(" · %d/%d", used, t.MaxToolLoops)
+	return fmt.Sprintf(" · %d turns", t.ToolLoopsUsed)
 }
 
 func FormatDelegationDetailLine(d api.Delegation) string {

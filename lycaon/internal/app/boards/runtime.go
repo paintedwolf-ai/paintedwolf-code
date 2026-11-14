@@ -30,7 +30,6 @@ type Runtime struct {
 	Grounding      *toolhost.GroundingService
 	ParentWaiter   *worker.ParentWorkerWaiter
 	RepoProvider   repoinfo.Provider
-	BudgetLedger   *worker.SQLBudgetLedger
 	AnswerDecision *worker.AnswerDecisionService
 	BrowserPool    *browser.Pool
 	BrowserRaster  *browser.Rasterizer
