@@ -54,6 +54,7 @@ import {
   BRACKET,
   BRACKET_STATEMENTS,
   CLAUSE,
+  CONTAINERS,
   DATA,
   DATA_RECORDS,
   DATA_WITH_COMMENTS,
@@ -462,9 +463,9 @@ const CATALOG = {
   jsonnet: { grammar: () => defineWord(WORD_LANG_SPECS.jsonnet), label: "Jsonnet", pretty: DATA_WITH_COMMENTS, formatters: NO_FORMATTERS },
   libsonnet: { grammar: () => defineWord(WORD_LANG_SPECS.jsonnet), label: "Jsonnet", pretty: DATA_WITH_COMMENTS, formatters: NO_FORMATTERS },
   promql: { grammar: () => defineWord(WORD_LANG_SPECS.promql), label: "PromQL", pretty: BRACKET, formatters: NO_FORMATTERS },
-  log: { grammar: null, label: "Log", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
-  out: { grammar: null, label: "Log", pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
-  txt: { grammar: null, label: PLAIN_TEXT_LABEL, pretty: NO_LAYOUT, formatters: NO_FORMATTERS },
+  log: { grammar: null, label: "Log", pretty: CONTAINERS, formatters: NO_FORMATTERS },
+  out: { grammar: null, label: "Log", pretty: CONTAINERS, formatters: NO_FORMATTERS },
+  txt: { grammar: null, label: PLAIN_TEXT_LABEL, pretty: CONTAINERS, formatters: NO_FORMATTERS },
 } satisfies Record<string, CatalogEntry>;
 
 type CatalogKey = keyof typeof CATALOG;
@@ -678,6 +679,11 @@ function catalogEntryForBuffer(path: string, detectedLanguage?: string): Catalog
     if (detected && detected !== CATALOG.txt) return detected;
   }
   return byPath;
+}
+
+/** Whether `path` maps to an explicit catalog entry (including NO_LAYOUT formats). */
+export function hasCatalogEntryForPath(path: string): boolean {
+  return catalogEntryForPath(path) !== undefined;
 }
 
 /** How Pretty lays out a file; a file outside the catalog has no layout. */

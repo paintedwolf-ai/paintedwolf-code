@@ -11,9 +11,13 @@ import {
   REJECTED,
   VERBATIM_HEAD_TAIL,
 } from "../../../chat/host-markers.generated.ts";
-import { prettyLayoutForLanguage, prettyLayoutForPath } from "../editor/codemirror-lang.ts";
+import {
+  hasCatalogEntryForPath,
+  prettyLayoutForLanguage,
+  prettyLayoutForPath,
+} from "../editor/codemirror-lang.ts";
 import { DataLexer, ScriptLexer, StyleLexer } from "./pretty-lexers.ts";
-import type { PrettyLayout } from "./pretty-outcome.ts";
+import { NO_LAYOUT, type PrettyLayout } from "./pretty-outcome.ts";
 import type { BracketRule, ClauseRule, MarkupRule, PrettyPlan, PrettyRule, PrettySpan } from "./pretty-scan-state.ts";
 import { TreeLexer } from "./pretty-tokens.ts";
 
@@ -24,7 +28,7 @@ export const DATA_RULE: BracketRule = {
 const COMMENTED_DATA_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: true }) };
 const RECORDS_RULE: BracketRule = { ...DATA_RULE, records: true };
 /** Unknown text recognised as JSON-like data, which may quote with `'`. */
-const DATA_LIKE_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: false }) };
+export const DATA_LIKE_RULE: BracketRule = { ...DATA_RULE, lexer: () => new DataLexer({ singleQuotes: true, comments: false }) };
 export const SCRIPT_RULE: BracketRule = {
   kind: "bracket", data: false, statements: true, afterBlock: "script", records: false, parsed: false,
   lexer: () => new ScriptLexer(),
@@ -52,6 +56,7 @@ function ruleFor(layout: PrettyLayout): PrettyRule | null {
     case "bracket": return layout.statements ? BRACKET_STATEMENTS_RULE : BRACKET_RULE;
     case "clause": return CLAUSE_RULE;
     case "fenced":
+    case "containers":
     case "none":
       return null;
   }
@@ -78,10 +83,19 @@ const UNKNOWN: PrettyTarget = { kind: "unknown" };
 export function prettyTargetFor(path?: string, languageHint?: string): PrettyTarget | null {
   const hint = languageHint?.trim();
   if (!hint && !path) return UNKNOWN;
-  const layout = hint ? prettyLayoutForLanguage(hint) : prettyLayoutForPath(path!);
+  const hintedLayout = hint ? prettyLayoutForLanguage(hint) : null;
+  const layout =
+    hintedLayout && hintedLayout.kind !== "none"
+      ? hintedLayout
+      : path
+        ? prettyLayoutForPath(path)
+        : NO_LAYOUT;
   if (layout.kind === "fenced") return FENCED;
+  if (layout.kind === "containers") return UNKNOWN;
   const rule = ruleFor(layout);
-  return rule ? { kind: "document", rule } : null;
+  if (rule) return { kind: "document", rule };
+  if (!hint && path && !hasCatalogEntryForPath(path)) return UNKNOWN;
+  return null;
 }
 
 export function prettyPlanFor(doc: Text, target: PrettyTarget): PrettyPlan {
@@ -150,7 +164,7 @@ const LITERAL = /^(?:true|false|null|True|False|None)\b/;
  * Reads a JSON container starting at `from`. Returns its end, or the negated
  * position of the first character that is not a JSON token.
  */
-function readJsonContainer(text: string, from: number): number {
+export function readJsonContainer(text: string, from: number): number {
   const stack: number[] = [];
   let i = from;
   while (i < text.length) {
@@ -197,14 +211,32 @@ export function recognizeJsonContainers(doc: Text): PrettySpan[] {
       lineNumber += 1;
       continue;
     }
-    const end = readJsonContainer(text, line.from + column);
-    if (end > 0) {
-      spans.push({ from: line.from + column, to: end, rule: DATA_LIKE_RULE });
-      lineNumber = doc.lineAt(end).number + 1;
-    } else {
-      // Lines already read as part of a failed candidate are not tried again.
-      lineNumber = Math.max(lineNumber + 1, doc.lineAt(Math.min(doc.length, -end)).number);
+    let pos = line.from + column;
+    let nextLine = lineNumber + 1;
+    while (pos < line.to) {
+      const ch = text.charCodeAt(pos);
+      if (ch !== 0x7b && ch !== 0x5b) {
+        pos += 1;
+        continue;
+      }
+      const end = readJsonContainer(text, pos);
+      if (end > 0) {
+        spans.push({ from: pos, to: end, rule: DATA_LIKE_RULE });
+        if (end > line.to) {
+          nextLine = doc.lineAt(end).number + 1;
+          break;
+        }
+        pos = end;
+        continue;
+      }
+      const failLine = doc.lineAt(Math.min(doc.length, -end)).number;
+      if (failLine > lineNumber) {
+        nextLine = Math.max(nextLine, failLine);
+        break;
+      }
+      pos = Math.max(pos + 1, -end);
     }
+    lineNumber = nextLine;
   }
   return spans;
 }

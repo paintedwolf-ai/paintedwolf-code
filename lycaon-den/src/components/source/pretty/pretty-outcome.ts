@@ -6,6 +6,7 @@ export type PrettyLayout =
   | { readonly kind: "bracket"; readonly statements: boolean }
   | { readonly kind: "clause" }
   | { readonly kind: "fenced" }
+  | { readonly kind: "containers" }
   | { readonly kind: "none" };
 
 export const DATA: PrettyLayout = { kind: "data", comments: false, records: false };
@@ -19,4 +20,5 @@ export const BRACKET_STATEMENTS: PrettyLayout = { kind: "bracket", statements: t
 export const BRACKET: PrettyLayout = { kind: "bracket", statements: false };
 export const CLAUSE: PrettyLayout = { kind: "clause" };
 export const FENCED: PrettyLayout = { kind: "fenced" };
+export const CONTAINERS: PrettyLayout = { kind: "containers" };
 export const NO_LAYOUT: PrettyLayout = { kind: "none" };

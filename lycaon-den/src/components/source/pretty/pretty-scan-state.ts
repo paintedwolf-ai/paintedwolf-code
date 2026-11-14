@@ -98,6 +98,8 @@ export interface Fence {
   readonly char: number;
   readonly length: number;
   readonly rule: PrettyRule | null;
+  readonly quoteDepth?: number;
+  readonly unlabelled?: boolean;
 }
 
 /** Everything a scan carries from one position to the next. */

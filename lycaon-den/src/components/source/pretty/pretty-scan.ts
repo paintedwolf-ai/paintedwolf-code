@@ -1,5 +1,6 @@
 import { closeBracketLine, type Container, containersEqual, type Frame, framesEqual, stepBracket } from "./pretty-bracket.ts";
 import { SQL_GROUPS, stepClause } from "./pretty-clause.ts";
+import { isClosingFence, parseOpeningFence, unlabelledFenceSpan } from "./pretty-fenced.ts";
 import type { PrettyLexer } from "./pretty-lexers.ts";
 import { INITIAL_MARKUP, type MarkupState, markupEqual, startMarkupLine, stepMarkup } from "./pretty-markup.ts";
 import {
@@ -46,7 +47,16 @@ export function snapshotsEqual(a: PrettySnapshot, b: PrettySnapshot): boolean {
   if (!markupEqual(a.markup, b.markup) || a.listDepth !== b.listDepth) return false;
   const fa = a.fence;
   const fb = b.fence;
-  return fa === fb || (!!fa && !!fb && fa.char === fb.char && fa.length === fb.length && fa.rule === fb.rule);
+  return (
+    fa === fb ||
+    (!!fa &&
+      !!fb &&
+      fa.char === fb.char &&
+      fa.length === fb.length &&
+      fa.rule === fb.rule &&
+      (fa.quoteDepth ?? 0) === (fb.quoteDepth ?? 0) &&
+      !!fa.unlabelled === !!fb.unlabelled)
+  );
 }
 
 /**
@@ -218,14 +228,28 @@ export class PrettyScanner implements ScanCursor {
       if (s.fence) {
         if (to - from <= 200 && isClosingFence(head, s.fence)) {
           s.fence = null;
+          this.spanEnd = -1;
           this.enterRule(null);
           return from;
+        }
+        if (s.fence.unlabelled && !s.rule) {
+          const detected = unlabelledFenceSpan(this.text, from, to, s.fence);
+          if (detected) {
+            this.enterRule(detected.rule);
+            this.spanEnd = detected.spanEnd;
+          }
         }
       } else {
         const fence = parseOpeningFence(head);
         if (fence) {
           const rule = plan.fenceRule(fence.info);
-          s.fence = { char: fence.char, length: fence.length, rule };
+          s.fence = {
+            char: fence.char,
+            length: fence.length,
+            rule,
+            quoteDepth: fence.quoteDepth,
+            unlabelled: fence.info === "",
+          };
           this.enterRule(rule);
         }
         return from;
@@ -273,21 +297,9 @@ export class PrettyScanner implements ScanCursor {
     s.pending = -1;
     s.inLine = false;
     if (s.rule?.kind === "bracket" || s.rule?.kind === "clause") closeBracketLine(s);
-    if (this.spanEnd >= 0) this.enterRule(null);
+    if (this.spanEnd >= 0 && s.lineEnd >= this.spanEnd) {
+      this.enterRule(null);
+      this.spanEnd = -1;
+    }
   }
-}
-
-/** A Markdown opening fence and its info string. */
-function parseOpeningFence(lineText: string): { char: number; length: number; info: string } | null {
-  const match = /^ {0,3}(`{3,}|~{3,})(.*)$/.exec(lineText);
-  if (!match) return null;
-  const fence = match[1]!;
-  const info = match[2] ?? "";
-  if (fence[0] === "`" && info.includes("`")) return null;
-  return { char: fence.charCodeAt(0), length: fence.length, info: (info.trim().split(/\s+/)[0] ?? "").toLowerCase() };
-}
-
-function isClosingFence(lineText: string, fence: Fence): boolean {
-  const match = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(lineText);
-  return !!match && match[1]!.charCodeAt(0) === fence.char && match[1]!.length >= fence.length;
 }
