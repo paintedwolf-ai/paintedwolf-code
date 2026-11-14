@@ -44,6 +44,8 @@ export type TranscriptHistoryGeometry = {
   residentEndPx: number;
   /** Height of the unloaded newer runway below the resident window, when known. */
   afterPx?: number;
+  /** Measured pixels per message ordinal from the virtualizer's runway budget. */
+  densityPxPerOrd?: number;
   /** Ordinal span of the presented resident window, when any rows are resident. */
   residentSpan: TranscriptOrdSpan | undefined;
   /** Unloaded ordinal counts on each side of the presented resident window. */
@@ -106,7 +108,9 @@ export function createTranscriptHistoryView(opts: {
     return {
       residentStartPx: extent.startPx,
       residentEndPx: extent.endPx,
-      ...(runway ? { afterPx: runway.afterPx } : {}),
+      ...(runway
+        ? { afterPx: runway.afterPx, densityPxPerOrd: runway.densityPxPerOrd }
+        : {}),
       residentSpan: residentOrdSpan(),
       unloaded: unloadedOrds(),
       prepareLanding: (targetPx) => virtualizer.prepareLanding(targetPx),
@@ -217,12 +221,14 @@ function ordInRunway(
   if (!span) return undefined;
   const firstOrd = Math.max(1, span.firstOrd - layout.unloaded.before);
   const lastOrd = Math.max(span.lastOrd, span.lastOrd + layout.unloaded.after);
+  const densityPxPerOrd =
+    layout.densityPxPerOrd ?? DEFAULT_TRANSCRIPT_ORD_DENSITY_PX;
   const afterPx =
     layout.afterPx ??
     Math.max(
       0,
       scrollHeightPx - layout.residentEndPx,
-      transcriptRunwayHeight(layout.unloaded.after, DEFAULT_TRANSCRIPT_ORD_DENSITY_PX),
+      transcriptRunwayHeight(layout.unloaded.after, densityPxPerOrd),
     );
   return transcriptRunwayOrd({
     offsetPx: targetPx,
@@ -230,7 +236,7 @@ function ordInRunway(
     runway: {
       beforePx: layout.residentStartPx,
       afterPx,
-      densityPxPerOrd: DEFAULT_TRANSCRIPT_ORD_DENSITY_PX,
+      densityPxPerOrd,
     },
     residentHeightPx: Math.max(0, layout.residentEndPx - layout.residentStartPx),
     residentSpan: span,

@@ -1,6 +1,7 @@
 import { createTranscriptRowMeasurements, type RowSize } from "./transcript-row-measurements.ts";
 import {
   createTranscriptRunwayBudget,
+  measureTranscriptResidentRows,
   type TranscriptRunwayState,
   type TranscriptUnloadedOrds,
 } from "../history/transcript-runway.ts";
@@ -438,6 +439,8 @@ export type CreateTranscriptVirtualizerOptions<
   /** Carries the offset with content that moved above it; returns the applied shift. */
   shiftContent: (deltaY: number, fromOffset: number) => number;
   rowSizeHint?: (item: T) => number | undefined;
+  /** Persisted row height from a prior mount, used to seed runway density before DOM measurement. */
+  restoredRowEstimate?: (item: T) => number | undefined;
   /** Inputs to `rowSizeHint` beyond the item; unmeasured rows re-estimate when they change. */
   estimateBasis?: () => unknown;
   /** Placement changes refresh unmeasured estimates without discarding measured interiors. */
@@ -483,28 +486,23 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
   const estimatedSize = (index: number): number => {
     const item = opts.items()[index];
     if (!item) return 72;
-    return opts.rowSizeHint?.(item) ?? transcriptRowEstimatedHeight(item);
+    return opts.restoredRowEstimate?.(item) ?? opts.rowSizeHint?.(item) ?? transcriptRowEstimatedHeight(item);
   };
   const [measurementEpoch, setMeasurementEpoch] = createSignal(0);
   const virtualizerRef: { current?: TranscriptVirtualizer } = {};
-  const residentHeight = (): number => {
-    const count = opts.items().length;
-    if (count === 0) return 0;
-    let total = 0;
-    for (let index = 0; index < count; index += 1) {
-      const item = opts.items()[index];
-      const cached = item ? virtualizerRef.current?.itemSizeCache.get(item.key) : undefined;
-      total += cached ?? estimatedSize(index);
-    }
-    return total;
-  };
+  const residentMetrics = () =>
+    measureTranscriptResidentRows({
+      items: opts.items(),
+      span: opts.residentRowSpan?.(),
+      cachedSize: (key) => virtualizerRef.current?.itemSizeCache.get(key),
+      persistedSize: (item) => opts.restoredRowEstimate?.(item),
+      estimatedSize: (_, index) => estimatedSize(index),
+    });
+  const residentHeight = (): number => residentMetrics().residentHeightPx;
   const runwayBudget = createTranscriptRunwayBudget();
   const runway = createMemo<TranscriptRunwayState>(() => {
     measurementEpoch();
-    const items = opts.items();
     const unloaded = opts.unloadedOrds?.() ?? { before: 0, after: 0 };
-    const span = opts.residentRowSpan?.() ?? { count: items.length, ordSpan: items.length };
-    const heightPx = residentHeight();
     const viewport = opts.scrollElement();
     const viewportHeightPx =
       virtualizerRef.current?.scrollRect?.height ||
@@ -516,9 +514,7 @@ export function createTranscriptVirtualizer<T extends TranscriptItem>(
       0;
     return runwayBudget.observe({
       unloaded,
-      residentRowCount: span.count,
-      residentOrdSpan: span.ordSpan,
-      residentHeightPx: heightPx,
+      ...residentMetrics(),
       scrollOffsetPx,
       viewportHeightPx,
       following: unloaded.after === 0,

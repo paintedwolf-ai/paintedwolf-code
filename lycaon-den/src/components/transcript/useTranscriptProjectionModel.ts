@@ -463,6 +463,7 @@ export function useTranscriptProjectionModel(options: UseTranscriptProjectionMod
     rowHeightScope,
     artifactPlacements,
     rowHeightKey,
+    restoredRowEstimate,
     estimatedContentHeight,
   };
 }
