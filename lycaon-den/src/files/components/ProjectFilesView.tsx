@@ -22,6 +22,7 @@ import { createFilesWorkspace } from "../source/files-workspace.ts";
 import { FilesStageDialogs } from "./FilesStageDialogs.tsx";
 import { getFilesStagePaneMode, subscribeFilesStagePaneMode } from "../review/review-pane.ts";
 import { useProjectFilesController } from "./useProjectFilesController.ts";
+import { offerFilesViewFacet } from "./files-view-facet.ts";
 
 export function ProjectFilesView(props: ProjectFilesViewProps) {
   const client = () => props.client ?? getLycaonClient() ?? null;
@@ -155,6 +156,7 @@ export function ProjectFilesView(props: ProjectFilesViewProps) {
 
   const treeLayout = createFilesTreeLayout(stageEl);
   const { treeStyle, showFilesTree, toggleFilesTree, stripSide } = treeLayout;
+  offerFilesViewFacet({ projectId: () => props.projectId, displayedBuffer, treeShown: () => !filesTreeCollapsed(), selectedEntry });
 
   // Pointer-driven tab reordering stays separate from native file dragging.
   const tabDrag = createFilesTabDrag({

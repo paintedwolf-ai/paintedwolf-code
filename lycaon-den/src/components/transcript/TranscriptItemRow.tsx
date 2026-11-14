@@ -275,6 +275,7 @@ export function TranscriptItemRow(props: {
               client={props.checkpointClient}
               recovery={pending() ? undefined : props.recovery}
               ts={timestamp()}
+              viewContext={wire()?.source_context?.view}
             />
           );
         }}
