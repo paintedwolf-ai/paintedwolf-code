@@ -458,17 +458,6 @@ func synthesizeObjectivesFromProof(proof WorkerCompletionProof, excerpts string)
 	return normalizeReportStringList(out, 5)
 }
 
-// AnnotateWorkerReportForBranch adds merge routing hints for isolated write workers.
-func AnnotateWorkerReportForBranch(report WorkerCompletionReport, task *api.WorkerTask) WorkerCompletionReport {
-	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) == "" {
-		return report
-	}
-	if strings.TrimSpace(report.SuggestedNextTask) == "" {
-		report.SuggestedNextTask = "preview_overlay then promote_overlay for overlay " + strings.TrimSpace(task.ID)
-	}
-	return report
-}
-
 func synthesizeBrief(agentType string, proof WorkerCompletionProof) string {
 	agent := strings.TrimSpace(agentType)
 	if agent == "" {

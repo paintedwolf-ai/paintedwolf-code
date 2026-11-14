@@ -326,10 +326,12 @@ components:
         promote_order:
           $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
         promote_after:
+          description: Handles of results that must land before this path is clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results this path must land before.
           type: array
           items:
             type: string
@@ -797,13 +799,10 @@ components:
       description: The promote_overlay and preview_overlay tool result.
       type: object
       required:
-      - job_id
+      - result_handle
       - mode
       additionalProperties: false
       properties:
-        job_id:
-          type: string
-          format: uuid
         result_handle:
           type: string
           description: The result these changes belong to.
@@ -840,10 +839,12 @@ components:
         promote_order:
           $ref: worker.yaml#/components/schemas/WorkerPromoteOrderKind
         promote_after:
+          description: Handles of results that must land before these changes are clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results these changes must land before.
           type: array
           items:
             type: string

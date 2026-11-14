@@ -269,6 +269,7 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 		Touches: r.deps.Sessions.Manager.Workers.Workspaces.Touches,
 	}
 	r.deps.Sessions.Manager.SetWorkerRoster(roster.Template)
+	r.deps.Sessions.Manager.Promotion.SetLatestResults(roster.LatestResults)
 	if r.Snapshot != nil {
 		r.Snapshot.NamedWorkers = roster.Board
 	}

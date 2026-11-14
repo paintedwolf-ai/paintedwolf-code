@@ -157,7 +157,6 @@ func (m *Summaries) completeWorkerSummary(
 	}
 	proof := draft.proof
 	draft.report = workercompletion.EnrichWorkerCompletionReport(draft.report, proof, draft.status)
-	draft.report = workercompletion.AnnotateWorkerReportForBranch(draft.report, draft.task)
 	if decisionReq == nil {
 		draft.status = string(m.overlayStatus(
 			ctx, api.WorkerSummaryStatus(draft.status), draft.task,

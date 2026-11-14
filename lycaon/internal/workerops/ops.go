@@ -17,28 +17,24 @@ type Refusal struct {
 	View   workerstate.View
 	// AgentChange is set when an agent or scope change was refused.
 	AgentChange workerstate.AgentChange
-	// JobID is the worker's latest round's job; ChangedJobID is the job of
-	// its newest result whose changes are open, else of its newest changed
-	// result; WorkflowWorkID is a planned leg's work identity. Recovery
-	// steps are built from them.
-	JobID, ChangedJobID, WorkflowWorkID string
+	// ChangedResult is the handle of the newest result whose changes are
+	// open, else of the newest changed result; WorkflowWorkID is a planned
+	// leg's work identity. Recovery steps are built from them.
+	ChangedResult, WorkflowWorkID string
 }
 
 func refusal(snap Snapshot, op workerstate.Operation) *Refusal {
 	r := &Refusal{Worker: snap.Worker.Name, Op: op, View: snap.View, WorkflowWorkID: snap.Worker.WorkflowWorkID}
-	if latest, ok := snap.Latest(); ok {
-		r.JobID = latest.JobID
-	}
 	for i := len(snap.Rounds) - 1; i >= 0; i-- {
 		round := snap.Rounds[i]
 		if round.ResultID == "" || round.CheckpointID == "" {
 			continue
 		}
-		if r.ChangedJobID == "" {
-			r.ChangedJobID = round.JobID
+		if r.ChangedResult == "" {
+			r.ChangedResult = round.ResultID
 		}
 		if snap.Dispositions[round.ResultID].ChangeState == "" {
-			r.ChangedJobID = round.JobID
+			r.ChangedResult = round.ResultID
 			break
 		}
 	}

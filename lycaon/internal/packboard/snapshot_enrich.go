@@ -1,6 +1,10 @@
 package packboard
 
-import "github.com/lycaon/lycaon/pkg/api"
+import (
+	"context"
+
+	"github.com/lycaon/lycaon/pkg/api"
+)
 
 // WorkerTasksFromSnapshot returns worker tasks embedded in a board snapshot.
 func WorkerTasksFromSnapshot(snap api.BoardSnapshot) []api.WorkerTask {
@@ -72,10 +76,11 @@ func EnrichSnapshotOverlayMergePlan(snap *api.BoardSnapshot, plan *api.OverlayMe
 
 // EnrichSnapshotOverlay attaches cached promote path rows and overlay merge plan to a board snapshot.
 func EnrichSnapshotOverlay(
+	ctx context.Context,
 	sessionID string,
 	snap *api.BoardSnapshot,
 	promoteFn func(string) []api.WorkerPromoteJobPathStatus,
-	planFn func(string, []api.WorkerTask) *api.OverlayMergePlan,
+	planFn func(context.Context, string, []api.WorkerTask) *api.OverlayMergePlan,
 ) {
 	if snap == nil {
 		return
@@ -85,7 +90,7 @@ func EnrichSnapshotOverlay(
 	}
 	if planFn != nil {
 		tasks := WorkerTasksFromSnapshot(*snap)
-		EnrichSnapshotOverlayMergePlan(snap, planFn(sessionID, tasks))
+		EnrichSnapshotOverlayMergePlan(snap, planFn(ctx, sessionID, tasks))
 	}
 }
 

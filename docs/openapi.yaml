@@ -24762,13 +24762,10 @@ components:
       description: The promote_overlay and preview_overlay tool result.
       type: object
       required:
-        - job_id
+        - result_handle
         - mode
       additionalProperties: false
       properties:
-        job_id:
-          type: string
-          format: uuid
         result_handle:
           type: string
           description: The result these changes belong to.
@@ -24805,10 +24802,12 @@ components:
         promote_order:
           $ref: '#/components/schemas/WorkerPromoteOrderKind'
         promote_after:
+          description: Handles of results that must land before these changes are clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results these changes must land before.
           type: array
           items:
             type: string
@@ -24882,10 +24881,12 @@ components:
         promote_order:
           $ref: '#/components/schemas/WorkerPromoteOrderKind'
         promote_after:
+          description: Handles of results that must land before this path is clean.
           type: array
           items:
             type: string
         blocked_by:
+          description: Handles of results this path must land before.
           type: array
           items:
             type: string
@@ -36648,27 +36649,35 @@ components:
       type: object
       required:
         - path
-        - worker_ids
+        - overlay_ids
       additionalProperties: false
       properties:
         path:
           type: string
-        worker_ids:
-          x-go-name: WorkerIDs
+        overlay_ids:
+          x-go-name: OverlayIDs
+          description: Handles of the pending results that change this path.
           type: array
           items:
             type: string
             format: uuid
     OverlayMergePlanEntry:
       x-go-generate: true
+      description: One worker's latest pending result.
       type: object
       required:
-        - worker_id
+        - overlay_id
+        - worker
       additionalProperties: false
       properties:
-        worker_id:
+        overlay_id:
+          x-go-name: OverlayID
+          description: Handle of the result.
           type: string
           format: uuid
+        worker:
+          description: Name of the worker that delivered it.
+          type: string
         agent_type:
           type: string
         changed_paths:
@@ -36686,11 +36695,13 @@ components:
         promote_order:
           $ref: '#/components/schemas/WorkerPromoteOrderKind'
         promote_after:
+          description: Handles of results that must land before this one is clean.
           type: array
           items:
             type: string
             format: uuid
         blocked_by:
+          description: Handles of results this one must land before.
           type: array
           items:
             type: string
@@ -36708,6 +36719,7 @@ components:
           type: integer
           minimum: 0
         promote_sequence:
+          description: Result handles in landing order.
           type: array
           items:
             type: string

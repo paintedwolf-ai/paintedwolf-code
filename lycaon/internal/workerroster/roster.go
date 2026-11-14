@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/overlayplan"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
 	"github.com/lycaon/lycaon/internal/workerstate"
@@ -105,6 +106,30 @@ func (s Source) Board(ctx context.Context, sessionID string) ([]api.BoardWorker,
 			w.ResultDisposition = api.WorkerResultDisposition(row.Result.Disposition)
 		}
 		out = append(out, w)
+	}
+	return out, nil
+}
+
+// LatestResults maps the job of each open worker's latest result to the
+// worker's name and that result's handle.
+func (s Source) LatestResults(ctx context.Context, sessionID string) (map[string]overlayplan.LatestResult, error) {
+	actor := workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
+	workers, err := s.Reader.Records.Workers(ctx, actor)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]overlayplan.LatestResult{}
+	for _, w := range workers {
+		snap, err := s.Reader.Read(ctx, actor, w)
+		if err != nil {
+			return nil, err
+		}
+		if snap.View.State == workerstate.Closed {
+			continue
+		}
+		if round, ok := snap.LatestResult(); ok {
+			out[round.JobID] = overlayplan.LatestResult{Worker: w.Name, Handle: round.ResultID}
+		}
 	}
 	return out, nil
 }

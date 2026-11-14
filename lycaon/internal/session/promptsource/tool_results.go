@@ -2,6 +2,7 @@ package promptsource
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -52,9 +53,13 @@ func (m *ToolResults) AfterTool(
 		if jobID := strings.TrimSpace(out.Dispatch.WorkerID); jobID != "" {
 			agentType, _ := args["agent_type"].(string)
 			m.Batch.TaskEnqueued(ctx, sess.ID, agentType)
+			var started struct {
+				Worker string `json:"worker"`
+			}
+			_ = json.Unmarshal([]byte(output), &started)
 			out.Facts = out.Facts.WithFeedback("BANNER_TASK_QUEUED", map[string]any{
-				"agent_type": agentType, "job_id": jobID, "max_in_flight": spawn.MaxInFlightTaskWorkers,
-			}, &api.FeedbackSubject{Kind: "worker", ID: jobID})
+				"agent_type": agentType, "worker": started.Worker, "max_in_flight": spawn.MaxInFlightTaskWorkers,
+			}, nil)
 			out.Completion = &api.ToolCompletion{
 				Operation: "worker_dispatch", State: "enqueued", ResourceKind: "worker", ResourceID: jobID,
 			}

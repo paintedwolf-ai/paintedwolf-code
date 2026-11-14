@@ -9668,10 +9668,8 @@ export interface components {
         };
         /** @description The promote_overlay and preview_overlay tool result. */
         WorkerMergeResult: {
-            /** Format: uuid */
-            job_id: string;
             /** @description The result these changes belong to. */
-            result_handle?: string;
+            result_handle: string;
             mode: string;
             merge_status?: components["schemas"]["WorkerMergeStatus"];
             agent_type?: string;
@@ -9682,7 +9680,9 @@ export interface components {
             path_status?: components["schemas"]["WorkerPromotePathStatus"][];
             overlap_overlay_ids?: string[];
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before these changes are clean. */
             promote_after?: string[];
+            /** @description Handles of results these changes must land before. */
             blocked_by?: string[];
             conflict_digest?: components["schemas"]["WorkerPromoteConflictDigest"][];
             conflicts?: components["schemas"]["WorkerMergeConflict"][];
@@ -9710,7 +9710,9 @@ export interface components {
             reason?: string;
             hunk_count?: number;
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before this path is clean. */
             promote_after?: string[];
+            /** @description Handles of results this path must land before. */
             blocked_by?: string[];
             promote_order_note?: string;
             conflict_tier?: components["schemas"]["WorkerPromoteConflictTier"];
@@ -14714,22 +14716,32 @@ export interface components {
         };
         OverlayMergeSharedPath: {
             path: string;
-            worker_ids: string[];
+            /** @description Handles of the pending results that change this path. */
+            overlay_ids: string[];
         };
+        /** @description One worker's latest pending result. */
         OverlayMergePlanEntry: {
-            /** Format: uuid */
-            worker_id: string;
+            /**
+             * Format: uuid
+             * @description Handle of the result.
+             */
+            overlay_id: string;
+            /** @description Name of the worker that delivered it. */
+            worker: string;
             agent_type?: string;
             changed_paths?: string[];
             clean_paths?: string[];
             conflict_paths?: string[];
             promote_order?: components["schemas"]["WorkerPromoteOrderKind"];
+            /** @description Handles of results that must land before this one is clean. */
             promote_after?: string[];
+            /** @description Handles of results this one must land before. */
             blocked_by?: string[];
             preview_stale?: boolean;
         };
         OverlayMergePlan: {
             pending_count: number;
+            /** @description Result handles in landing order. */
             promote_sequence?: string[];
             shared_paths?: components["schemas"]["OverlayMergeSharedPath"][];
             entries?: components["schemas"]["OverlayMergePlanEntry"][];

@@ -223,7 +223,6 @@ func taskEnqueueOutput(tctx tools.ToolContext, scope project.ProjectScope, task 
 	out := map[string]any{
 		"worker":             worker,
 		"agent_type":         agentType,
-		"job_id":             jobID,
 		"status":             "enqueued",
 		"scope_mode":         task.EffectiveScope().Mode,
 		"sibling_files_live": false,

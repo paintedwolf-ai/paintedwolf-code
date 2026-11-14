@@ -4540,29 +4540,36 @@ type OpenEditorDocumentRequest struct {
 
 // OverlayMergePlan
 type OverlayMergePlan struct {
-	PendingCount    int                      `json:"pending_count"`
+	PendingCount int `json:"pending_count"`
+	// Result handles in landing order.
 	PromoteSequence []string                 `json:"promote_sequence,omitempty"`
 	SharedPaths     []OverlayMergeSharedPath `json:"shared_paths,omitempty"`
 	Entries         []OverlayMergePlanEntry  `json:"entries,omitempty"`
 }
 
-// OverlayMergePlanEntry
+// OverlayMergePlanEntry One worker's latest pending result.
 type OverlayMergePlanEntry struct {
-	WorkerID      string                 `json:"worker_id"`
+	// Handle of the result.
+	OverlayID string `json:"overlay_id"`
+	// Name of the worker that delivered it.
+	Worker        string                 `json:"worker"`
 	AgentType     string                 `json:"agent_type,omitempty"`
 	ChangedPaths  []string               `json:"changed_paths,omitempty"`
 	CleanPaths    []string               `json:"clean_paths,omitempty"`
 	ConflictPaths []string               `json:"conflict_paths,omitempty"`
 	PromoteOrder  WorkerPromoteOrderKind `json:"promote_order,omitempty"`
-	PromoteAfter  []string               `json:"promote_after,omitempty"`
-	BlockedBy     []string               `json:"blocked_by,omitempty"`
-	PreviewStale  bool                   `json:"preview_stale,omitempty"`
+	// Handles of results that must land before this one is clean.
+	PromoteAfter []string `json:"promote_after,omitempty"`
+	// Handles of results this one must land before.
+	BlockedBy    []string `json:"blocked_by,omitempty"`
+	PreviewStale bool     `json:"preview_stale,omitempty"`
 }
 
 // OverlayMergeSharedPath
 type OverlayMergeSharedPath struct {
-	Path      string   `json:"path"`
-	WorkerIDs []string `json:"worker_ids"`
+	Path string `json:"path"`
+	// Handles of the pending results that change this path.
+	OverlayIDs []string `json:"overlay_ids"`
 }
 
 // OverlayPromotion Project file snapshots recorded by the host at the merge event.
@@ -9067,12 +9074,14 @@ type WorkerPromoteJobPathStatus struct {
 
 // WorkerPromotePathStatus
 type WorkerPromotePathStatus struct {
-	Path             string                    `json:"path"`
-	Status           WorkerPromotePathOutcome  `json:"status"`
-	Reason           string                    `json:"reason,omitempty"`
-	HunkCount        int                       `json:"hunk_count,omitempty"`
-	PromoteOrder     WorkerPromoteOrderKind    `json:"promote_order,omitempty"`
-	PromoteAfter     []string                  `json:"promote_after,omitempty"`
+	Path         string                   `json:"path"`
+	Status       WorkerPromotePathOutcome `json:"status"`
+	Reason       string                   `json:"reason,omitempty"`
+	HunkCount    int                      `json:"hunk_count,omitempty"`
+	PromoteOrder WorkerPromoteOrderKind   `json:"promote_order,omitempty"`
+	// Handles of results that must land before this path is clean.
+	PromoteAfter []string `json:"promote_after,omitempty"`
+	// Handles of results this path must land before.
 	BlockedBy        []string                  `json:"blocked_by,omitempty"`
 	PromoteOrderNote string                    `json:"promote_order_note,omitempty"`
 	ConflictTier     WorkerPromoteConflictTier `json:"conflict_tier,omitempty"`
