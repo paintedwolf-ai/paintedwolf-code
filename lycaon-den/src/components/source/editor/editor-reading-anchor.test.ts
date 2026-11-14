@@ -5,15 +5,16 @@ import { readReadingAnchor } from "./editor-reading-anchor.ts";
 const PORT = { top: 100, bottom: 700, left: 0, right: 800 };
 
 /** A view scrolled to `scrollTop` whose top line block is `blockHeight` tall; position p sits at 10 * p. */
-function view(blockHeight: number, scrollTop: number, contentLeft = 40): EditorView {
+function view(blockHeight: number, scrollTop: number, contentLeft = 40, wrapping = true, scrollWidth = 800): EditorView {
   return {
-    scrollDOM: { clientHeight: 600, scrollTop, getBoundingClientRect: () => PORT },
+    lineWrapping: wrapping,
+    scrollDOM: { clientHeight: 600, clientWidth: 800, scrollWidth, scrollTop, getBoundingClientRect: () => PORT },
     contentDOM: { getBoundingClientRect: () => ({ left: contentLeft }) },
     lineBlockAtHeight: () => ({ top: 0, height: blockHeight }),
     documentTop: PORT.top - scrollTop,
     viewport: { from: 0, to: 1_000_000 },
     posAtCoords: ({ x, y }: { x: number; y: number }) => (x < PORT.left ? -1 : Math.floor((y - PORT.top + scrollTop) / 10)),
-    coordsAtPos: (pos: number) => ({ top: PORT.top + 10 * pos - scrollTop, bottom: PORT.top + 10 * pos - scrollTop + 10 }),
+    coordsAtPos: (pos: number) => ({ top: PORT.top + 10 * pos - scrollTop, bottom: PORT.top + 10 * pos - scrollTop + 10, left: PORT.left + 3 }),
   } as unknown as EditorView;
 }
 
@@ -31,7 +32,15 @@ describe("reading anchor", () => {
   });
 
   it("takes the text at the top edge of a line taller than the viewport", () => {
-    expect(readReadingAnchor(view(50_000, 5_005))).toEqual({ pos: 500, offset: -5 });
+    expect(readReadingAnchor(view(50_000, 5_005))).toEqual({ pos: 500, offset: -5, left: 3 });
+  });
+
+  it("takes the text at the top-left edge of an unwrapped line wider than the viewport", () => {
+    expect(readReadingAnchor(view(20, 5_000, -400_000, false, 2_000_000))?.pos).toBe(500);
+  });
+
+  it("has none for an unwrapped line that fits sideways", () => {
+    expect(readReadingAnchor(view(20, 5_000, 40, false, 800))).toBeNull();
   });
 
   it("probes inside the viewport when the content is scrolled sideways", () => {
