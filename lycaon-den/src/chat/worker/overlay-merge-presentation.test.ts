@@ -11,7 +11,7 @@ function overlaySections(output: string) {
 describe("overlay merge cards", () => {
   it("renders ready resolutions from merge-plan output", () => {
     const output = JSON.stringify({
-      job_id: "job-a",
+      result_handle: "result-a",
       merge_status: "pending",
       clean_paths: ["pkg/a.go"],
       ready_resolutions: [
@@ -41,7 +41,7 @@ describe("overlay merge cards", () => {
 
   it("falls back to path_status when no ready rows", () => {
     const output = JSON.stringify({
-      job_id: "job-a",
+      result_handle: "result-a",
       path_status: [
         { path: "main.go", status: "clean" },
         { path: "util.go", status: "conflict", conflict_tier: "overlapping_edit" },
@@ -55,7 +55,7 @@ describe("overlay merge cards", () => {
 
   it("parses host-prefixed promote event bodies", () => {
     const output = `[host:overlay-promote-event] ${JSON.stringify({
-      job_id: "job-a",
+      result_handle: "result-a",
       merge_status: "merged",
       applied: ["cli.js"],
     })}`;
@@ -65,7 +65,7 @@ describe("overlay merge cards", () => {
 
   it("ignores braces in strings and trailing feedback", () => {
     const output = `[host:overlay-promote-event]\n${JSON.stringify({
-      job_id: "job-a",
+      result_handle: "result-a",
       merge_status: "pending",
       ready_resolutions: [
         { path: "cli.js", status: "conflict", advisory: "literal } brace" },
