@@ -59,6 +59,7 @@ var tableLifetimes = map[string]TableLifetime{
 	"editor_replica_receipts":      {Class: LifetimeReceiptWithRetention, Reason: "editor replica update receipts"},
 	"invocation_receipts":          {Class: LifetimeReceiptWithRetention, Reason: "tool invocation receipts"},
 	"editor_document_retention":    {Class: LifetimeReceiptWithRetention, Reason: "document retention records"},
+	"worker_operations":            {Class: LifetimeReceiptWithRetention, Reason: "worker operation receipts"},
 
 	"file_briefings":                 {Class: LifetimeProjection, Reason: "briefings derived from files"},
 	"chunk_projections":              {Class: LifetimeProjection, Reason: "search chunks derived from messages"},
@@ -209,7 +210,6 @@ var tableLifetimes = map[string]TableLifetime{
 	"worker_dependencies":            cascadeOwnedBy("workers"),
 	"worker_messages":                cascadeOwnedBy("workers"),
 	"worker_message_deliveries":      cascadeOwnedBy("workers"),
-	"worker_operations":              cascadeOwnedBy("sessions"),
 	"worker_result_dispositions":     cascadeOwnedBy("workers"),
 	"worker_workspace_preparations":  cascadeOwnedBy("workers"),
 	"worker_attempts":                cascadeOwnedBy("worker_jobs"),

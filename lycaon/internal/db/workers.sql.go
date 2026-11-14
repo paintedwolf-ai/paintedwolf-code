@@ -207,6 +207,19 @@ func (q *Queries) CountSessionWorkersByAgent(ctx context.Context, arg CountSessi
 	return count, err
 }
 
+const countWorkerLaterUnsettledRounds = `-- name: CountWorkerLaterUnsettledRounds :one
+SELECT COUNT(*) FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+WHERE r.job_id = ? AND later.settled_at IS NULL
+`
+
+func (q *Queries) CountWorkerLaterUnsettledRounds(ctx context.Context, jobID string) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countWorkerLaterUnsettledRounds, jobID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const disposeWorkerResultsByJob = `-- name: DisposeWorkerResultsByJob :execrows
 INSERT INTO worker_result_dispositions (
     result_id, worker_id, accounted_operation_id, accounted_at,
@@ -269,7 +282,7 @@ func (q *Queries) GetLandedChangeJobID(ctx context.Context, id string) (string, 
 }
 
 const getLatestWorkerWorkspacePreparation = `-- name: GetLatestWorkerWorkspacePreparation :one
-SELECT worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+SELECT worker_id, generation, source_result_id, preparation_ref,
        binding_generation, operation_id, created_at
 FROM worker_workspace_preparations WHERE worker_id = ? ORDER BY generation DESC LIMIT 1
 `
@@ -281,7 +294,6 @@ func (q *Queries) GetLatestWorkerWorkspacePreparation(ctx context.Context, worke
 		&i.WorkerID,
 		&i.Generation,
 		&i.SourceResultID,
-		&i.PromotionRef,
 		&i.PreparationRef,
 		&i.BindingGeneration,
 		&i.OperationID,
@@ -880,16 +892,15 @@ func (q *Queries) InsertWorkerRound(ctx context.Context, arg InsertWorkerRoundPa
 
 const insertWorkerWorkspacePreparation = `-- name: InsertWorkerWorkspacePreparation :exec
 INSERT INTO worker_workspace_preparations (
-    worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+    worker_id, generation, source_result_id, preparation_ref,
     binding_generation, operation_id, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES (?, ?, ?, ?, ?, ?, ?)
 `
 
 type InsertWorkerWorkspacePreparationParams struct {
 	WorkerID          string         `json:"worker_id"`
 	Generation        int64          `json:"generation"`
 	SourceResultID    sql.NullString `json:"source_result_id"`
-	PromotionRef      string         `json:"promotion_ref"`
 	PreparationRef    string         `json:"preparation_ref"`
 	BindingGeneration int64          `json:"binding_generation"`
 	OperationID       string         `json:"operation_id"`
@@ -901,7 +912,6 @@ func (q *Queries) InsertWorkerWorkspacePreparation(ctx context.Context, arg Inse
 		arg.WorkerID,
 		arg.Generation,
 		arg.SourceResultID,
-		arg.PromotionRef,
 		arg.PreparationRef,
 		arg.BindingGeneration,
 		arg.OperationID,
@@ -1194,6 +1204,45 @@ func (q *Queries) ListWorkerDependencies(ctx context.Context, workerID string) (
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkerLaterPendingJobs = `-- name: ListWorkerLaterPendingJobs :many
+SELECT later.job_id
+FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+JOIN worker_results res ON res.worker_job_id = later.job_id
+JOIN worker_jobs j ON j.id = later.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY later.ordinal
+`
+
+// The later rounds of the worker that ran this job whose changes are still
+// pending. Their lanes carried this job's changes, so rejecting it rejects
+// these with it.
+func (q *Queries) ListWorkerLaterPendingJobs(ctx context.Context, jobID string) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, listWorkerLaterPendingJobs, jobID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var job_id string
+		if err := rows.Scan(&job_id); err != nil {
+			return nil, err
+		}
+		items = append(items, job_id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -1514,31 +1563,6 @@ func (q *Queries) SetWorkerResultChangeState(ctx context.Context, arg SetWorkerR
 		arg.LandedChangeID,
 		arg.ShelveReason,
 		arg.ChangedAt,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
-}
-
-const settleWorkerRound = `-- name: SettleWorkerRound :execrows
-UPDATE worker_rounds SET settled_at = ?1, checkpoint_id = ?2
-WHERE worker_id = ?3 AND ordinal = ?4 AND settled_at IS NULL
-`
-
-type SettleWorkerRoundParams struct {
-	SettledAt    sql.NullString `json:"settled_at"`
-	CheckpointID string         `json:"checkpoint_id"`
-	WorkerID     string         `json:"worker_id"`
-	Ordinal      int64          `json:"ordinal"`
-}
-
-func (q *Queries) SettleWorkerRound(ctx context.Context, arg SettleWorkerRoundParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, settleWorkerRound,
-		arg.SettledAt,
-		arg.CheckpointID,
-		arg.WorkerID,
-		arg.Ordinal,
 	)
 	if err != nil {
 		return 0, err

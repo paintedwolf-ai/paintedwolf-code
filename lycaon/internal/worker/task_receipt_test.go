@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/lycaon/lycaon/internal/testdbseed"
 	"testing"
 
-	"github.com/lycaon/lycaon/internal/orchestration"
 	"github.com/lycaon/lycaon/internal/testutil"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/internal/worker"
@@ -20,14 +20,12 @@ func (receiptWorkflowChecker) AssertRunnable(context.Context, string) error { re
 func (receiptWorkflowChecker) AssertWorkerTask(context.Context, *api.WorkerTask) error { return nil }
 
 func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
-	inner := worker.NewInMemoryQueue(2)
-	inner.SetWorkflowDomains(&worker.WorkflowDomains{Runs: receiptWorkflowChecker{}, Tasks: receiptWorkflowChecker{}})
-	queue := &captureQueue{WorkerQueue: inner, out: &enqueued}
+	dir := t.TempDir()
+	sqlDB := taskStore(t, dir)
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run", "parent-1", testdbseed.DefaultProjectID)
 	bound := 0
 	deps := worker.TaskToolDeps{
-		Queue: queue, Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
 		BindWorkflowTask: func(_ context.Context, _ tools.ToolContext, id string, task *api.WorkerTask) error {
 			bound++
 			if bound > 1 {
@@ -49,9 +47,12 @@ func TestTaskToolReplaysReceiptAfterWorkflowMovedOn(t *testing.T) {
 			return nil, nil
 		},
 	}
-	testutil.FailErr(t, "register", worker.RegisterTaskTool(reg, deps))
+	reg := taskTool(t, sqlDB, func(q worker.WorkerQueue) worker.WorkerQueue {
+		q.(*worker.SQLQueue).SetWorkflowDomains(&worker.WorkflowDomains{Runs: receiptWorkflowChecker{}, Tasks: receiptWorkflowChecker{}})
+		return &captureQueue{WorkerQueue: q, out: &enqueued}
+	}, deps)
 	args := map[string]any{"agent_type": "repo-researcher", "brief": taskBrief("inspect"), "workflow_work_id": "leg-1", "scope": map[string]any{"mode": "read"}}
-	tctx := toolContext("parent-1", t.TempDir())
+	tctx := toolContext("parent-1", dir)
 	tctx.Identity.ToolCallID = "source-call"
 	first, err := reg.Run(t.Context(), "task", args, tctx)
 	testutil.FailErr(t, "first dispatch", err)

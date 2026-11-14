@@ -98,6 +98,28 @@ func (q *sqlQueueClaims) resolveWriteCompletionTarget(ctx context.Context, claim
 	}
 }
 
+// keptCheckpoint publishes the checkpoint of a write round that ends
+// without delivering, so its changes stay under its result.
+func (q *sqlQueueClaims) keptCheckpoint(ctx context.Context, task *api.WorkerTask) string {
+	if task == nil || !task.EffectiveScope().IsWrite() || strings.TrimSpace(task.WorkspaceRoot) == "" ||
+		strings.TrimSpace(task.WorkspaceOverlayPath) != "" {
+		return ""
+	}
+	if _, status, _ := q.resolveWriteCompletionTarget(ctx, task, api.WorkerResult{}); status != api.WorkerMergeStatusPending {
+		return ""
+	}
+	published, err := workspace.PublishBranchCheckpoint(ctx, task.WorkspaceRoot)
+	if err != nil {
+		workerWorkspaceLog.Warn("ended round kept its branch without a checkpoint", "job_id", task.ID, "error", err)
+		return ""
+	}
+	if !published {
+		return ""
+	}
+	_, checkpointID, _ := workspace.BranchCheckpoint(task.WorkspaceRoot)
+	return checkpointID
+}
+
 // Fail commits a failure only while the claim remains current.
 func (q *sqlQueueClaims) Fail(ctx context.Context, claimed *api.WorkerTask, runErr error) (bool, error) {
 	return admitWorkerTransition(ctx, q.self, claimed, func() (bool, error) {
@@ -125,14 +147,15 @@ func (q *sqlQueueClaims) failAdmitted(ctx context.Context, claimed *api.WorkerTa
 			task = loaded
 		}
 	}
-	won, err := q.store.FailJob(ctx, claimed, msg, failure)
+	kept := q.keptCheckpoint(ctx, task)
+	won, err := q.store.FailJob(ctx, claimed, msg, failure, kept)
 	if err != nil {
 		return false, err
 	}
 	if !won {
 		return false, nil
 	}
-	if task != nil {
+	if task != nil && kept == "" {
 		q.destroyWorkerWorkspace(ctx, task)
 	}
 	q.refreshBoardByID(ctx, claimed.ID)

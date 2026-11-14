@@ -56,8 +56,8 @@ var taskToolLog = observability.LazyComponent("task_tool")
 
 // RegisterTaskTool registers task(agent_type, brief, files?) for coordinator spawns.
 func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
-	if reg == nil || deps.Queue == nil || deps.Agents == nil {
-		return fmt.Errorf("registry, sessions, queue, and agents required")
+	if reg == nil || deps.Queue == nil || deps.Agents == nil || deps.WorkerRecords == nil || deps.Reviews == nil {
+		return fmt.Errorf("registry, queue, agents, worker records and reviews required")
 	}
 	identityResolver := deps.IdentityResolver()
 	return reg.Register("task", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
@@ -82,7 +82,7 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 				if err := accountReplayedReview(ctx, deps, tctx, prior.ID); err != nil {
 					return "", err
 				}
-				if err := releaseAdmitted(ctx, deps, prior.ID); err != nil {
+				if err := deps.Queue.ReleaseAdmitted(ctx, prior.ID); err != nil {
 					return "", err
 				}
 				return taskEnqueueOutput(tctx, scope, *prior, name)
@@ -157,7 +157,9 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			WorkspaceRootID: projScope.WorkspaceRootID,
 			WorkspacePath:   projScope.WorkspacePath,
 			SpawnReason:     api.SpawnReasonHumanRequest,
-			Status:          enqueueStatus(deps),
+			// Held until its round is recorded, so no executor claims it
+			// as work without a round.
+			Status:          api.WorkerStatusHeld,
 			ExecutionTarget: DefaultExecutionTarget(deps.Workers),
 		}
 		if err := ApplyEnqueueDefaults(&task, projScope, deps.Workers); err != nil {
@@ -198,11 +200,11 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 			return "", err
 		}
 		if subject != nil {
-			if err := deps.Reviews.ReviewStarted(ctx, taskActor(tctx), taskWorkerOp(tctx, "review"), *subject); err != nil {
+			if err := deps.Reviews.ReviewStarted(ctx, coordinatorActor(tctx), taskWorkerOp(tctx, "review"), *subject); err != nil {
 				return "", err
 			}
 		}
-		if err := releaseAdmitted(ctx, deps, task.ID); err != nil {
+		if err := deps.Queue.ReleaseAdmitted(ctx, task.ID); err != nil {
 			return "", err
 		}
 		return taskEnqueueOutput(tctx, projScope, task, workerName)

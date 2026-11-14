@@ -44,7 +44,7 @@ rules:
   - id: spec_posture_disallowed_agent
     when:
       posture_is: spec
-      tool_is_task: true
+      tool_names_agent: true
       disallowed_agent: true
     then:
       deny:
@@ -81,7 +81,7 @@ rules:
   - id: spec_posture_stub_required_plan_writer
     when:
       posture_is: spec
-      tool_is_task: true
+      tool_names_agent: true
       stub_invalid: true
       agent_is_plan_writer: true
     then:

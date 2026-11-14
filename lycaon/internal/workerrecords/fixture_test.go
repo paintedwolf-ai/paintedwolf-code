@@ -126,3 +126,15 @@ func countRows(t *testing.T, sqlDB *db.Store, query string, args ...any) int {
 	testutil.FailErr(t, "count", sqlDB.QueryRowContext(t.Context(), query, args...).Scan(&n))
 	return n
 }
+
+// settle ends a round as the completion transaction does.
+func (f *fixture) settle(t *testing.T, jobID, checkpointID string) {
+	t.Helper()
+	n, err := db.New(f.db).SettleWorkerRoundByJob(t.Context(), db.SettleWorkerRoundByJobParams{
+		SettledAt: db.NullString(db.FormatTime(time.Now().UTC())), CheckpointID: checkpointID, JobID: jobID,
+	})
+	testutil.FailErr(t, "settle "+jobID, err)
+	if n != 1 {
+		t.Fatalf("settle %s touched %d rounds", jobID, n)
+	}
+}

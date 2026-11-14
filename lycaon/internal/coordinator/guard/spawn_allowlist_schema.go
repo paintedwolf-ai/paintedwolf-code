@@ -7,10 +7,11 @@ import (
 	"github.com/lycaon/lycaon/internal/tools"
 )
 
-// ApplyTaskSpawnAllowlistSchema narrows task(agent_type=…) to the turn spawn roster.
+// ApplySpawnAllowlistSchema narrows the agent_type of task and
+// instruct_worker to the turn spawn roster.
 // A nil roster leaves the schema unchanged; an empty roster allows no agents.
-func ApplyTaskSpawnAllowlistSchema(meta tools.ToolMeta, allowedAgents []string) tools.ToolMeta {
-	if strings.TrimSpace(meta.Name) != "task" || allowedAgents == nil {
+func ApplySpawnAllowlistSchema(meta tools.ToolMeta, allowedAgents []string) tools.ToolMeta {
+	if name := strings.TrimSpace(meta.Name); (name != "task" && name != "instruct_worker") || allowedAgents == nil {
 		return meta
 	}
 	out := meta

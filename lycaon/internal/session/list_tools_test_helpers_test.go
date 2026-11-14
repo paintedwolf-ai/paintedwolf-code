@@ -2,6 +2,8 @@ package session_test
 
 import (
 	"context"
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"path/filepath"
 	"testing"
 
@@ -116,7 +118,7 @@ func setupContextualToolsFixtureFull(t *testing.T, posture api.SessionPosture, c
 	if err := workflowinputs.RegisterAskUserTool(rt.Registry, workflowMgr.Asks, rt.Boundary); err != nil {
 		testutil.FailErr(t, "workflowinputs.RegisterAskUserTool failed", err)
 	}
-	registerContextualToolsCoordinatorExtras(t, configRoot, rt.Registry, mgr, agents, sessionWF, bundledDir)
+	registerContextualToolsCoordinatorExtras(t, sqlDB, configRoot, rt.Registry, mgr, agents, sessionWF, bundledDir)
 
 	testdbseed.InsertProjectRoot(t, sqlDB, testdbseed.DefaultProjectID, projectDir)
 	ctx := context.Background()
@@ -188,6 +190,7 @@ func newContextualToolsRuntime(t *testing.T, configRoot string) *toolhost.Runtim
 
 func registerContextualToolsCoordinatorExtras(
 	t *testing.T,
+	sqlDB *db.Store,
 	configRoot string,
 	reg *tools.DefaultRegistry,
 	mgr *session.Host,
@@ -203,9 +206,10 @@ func registerContextualToolsCoordinatorExtras(
 		testutil.FailErr(t, "delegation.RegisterDelegationTools failed", err)
 	}
 	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   queue,
-		Agents:  agents,
-		Workers: worker.DefaultWorkersConfig(),
+		Queue:         queue,
+		Agents:        agents,
+		Workers:       worker.DefaultWorkersConfig(),
+		WorkerRecords: workerrecords.New(sqlDB),
 	}); err != nil {
 		t.Fatal(err)
 	}

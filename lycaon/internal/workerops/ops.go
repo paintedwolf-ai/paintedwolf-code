@@ -282,22 +282,39 @@ func (s *Service) Shelve(ctx context.Context, actor workerrecords.Actor, op work
 		return workerrecords.Disposition{}, refusal(snap, workerstate.OpShelve)
 	}
 	changed := false
+	var carried []workerrecords.Round
 	for _, r := range snap.Rounds {
-		changed = changed || (r.ResultID == ref.ResultID && r.CheckpointID != "")
+		if r.ResultID == ref.ResultID {
+			changed = r.CheckpointID != ""
+			break
+		}
+		if r.ResultID != "" && r.CheckpointID != "" && snap.Dispositions[r.ResultID].ChangeState == "" {
+			carried = append(carried, r)
+		}
 	}
 	if !changed {
 		return workerrecords.Disposition{}, ErrNoChanges
 	}
-	d, err := s.Reader.Records.SetChange(ctx, actor, op, ref.ResultID, workerrecords.Change{State: workerrecords.ChangeShelved, ShelveReason: reason})
+	// The lane carried earlier pending changes into this result; they wait with it.
+	for _, r := range carried {
+		if _, err := s.shelveOne(ctx, actor, workerrecords.Op{ID: op.ID + ":carried:" + r.ResultID}, r.ResultID, r.JobID, reason); err != nil {
+			return workerrecords.Disposition{}, err
+		}
+	}
+	return s.shelveOne(ctx, actor, op, ref.ResultID, ref.JobID, reason)
+}
+
+func (s *Service) shelveOne(ctx context.Context, actor workerrecords.Actor, op workerrecords.Op, resultID, jobID, reason string) (workerrecords.Disposition, error) {
+	d, err := s.Reader.Records.SetChange(ctx, actor, op, resultID, workerrecords.Change{State: workerrecords.ChangeShelved, ShelveReason: reason})
 	if err != nil {
 		return workerrecords.Disposition{}, err
 	}
 	if d.AccountedAt == "" {
-		if d, err = s.Reader.Records.AccountResult(ctx, actor, workerrecords.Op{ID: op.ID + ":account"}, ref.ResultID); err != nil && !errors.Is(err, workerrecords.ErrAlreadyAccounted) {
+		if d, err = s.Reader.Records.AccountResult(ctx, actor, workerrecords.Op{ID: op.ID + ":account"}, resultID); err != nil && !errors.Is(err, workerrecords.ErrAlreadyAccounted) {
 			return workerrecords.Disposition{}, err
 		}
 	}
-	s.accounted(actor.SessionID, ref.JobID)
+	s.accounted(actor.SessionID, jobID)
 	return d, nil
 }
 

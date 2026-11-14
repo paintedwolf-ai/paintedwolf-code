@@ -23,12 +23,8 @@ type OverlayToolDeps struct {
 }
 
 // overlayJob resolves a result handle to the job whose changes it names.
-// overlayJob resolves a result handle to the job holding its changes. Without
-// worker results the handle is the job itself and names no result.
+// overlayJob resolves a result handle to the job holding its changes.
 func overlayJob(ctx context.Context, deps OverlayToolDeps, tool string, tctx tools.ToolContext, handle string, op workerstate.Operation) (jobID, resultHandle string, err error) {
-	if deps.Results == nil {
-		return handle, "", nil
-	}
 	ref, err := deps.Results.Result(ctx, coordinatorActor(tctx), handle, op)
 	if err != nil {
 		return "", "", workerToolReject(tool, "", "", err, handle)
@@ -38,8 +34,8 @@ func overlayJob(ctx context.Context, deps OverlayToolDeps, tool string, tctx too
 
 // RegisterOverlayTools registers coordinator overlay tools.
 func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) error {
-	if reg == nil || deps.Merge == nil {
-		return fmt.Errorf("registry and overlay merge service required")
+	if reg == nil || deps.Merge == nil || deps.Results == nil {
+		return fmt.Errorf("registry, overlay merge service and worker results required")
 	}
 	if err := reg.Register("promote_overlay", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
 		var overrideErr error
@@ -104,6 +100,12 @@ func RegisterOverlayTools(reg *tools.DefaultRegistry, deps OverlayToolDeps) erro
 				Operation: "overlay_rejection", State: "rejected", ResourceKind: "overlay", ResourceID: strings.TrimSpace(out.OverlayID),
 			}
 		}
+		// The coordinator addresses results by handle, never by job.
+		if strings.TrimSpace(out.OverlayID) != "" {
+			out.OverlayID = handle
+		}
+		out.Later = overlayHandles(ctx, deps.Merge.Names, out.Later)
+		out.Orphaned = overlayHandles(ctx, deps.Merge.Names, out.Orphaned)
 		return formatOverlayRejectHostContent(ctx, handle, out, err)
 	}); err != nil {
 		return err

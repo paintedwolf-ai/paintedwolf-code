@@ -30,13 +30,12 @@ const (
 	OverlayPromoteConflictCode            = "OVERLAY_PROMOTE_CONFLICT"
 	OverlayPromoteResolutionsRequiredCode = "OVERLAY_PROMOTE_RESOLUTIONS_REQUIRED"
 	OverlayPromoteSyntaxUnhealthyCode     = "OVERLAY_PROMOTE_SYNTAX_UNHEALTHY"
+	OverlayRejectWorkerWorkingCode        = "OVERLAY_REJECT_WORKER_WORKING"
 )
 
-// mergeGit names the host purpose of a merge operation's Git. The coordinator
+// mergeHostPurpose names the Git a merge operation runs: the coordinator
 // chose the operation inside its tool call, not the commands that carry it out.
-func mergeGit(ctx context.Context) context.Context {
-	return gitexec.WithHostPurpose(ctx, "worker_merge")
-}
+const mergeHostPurpose = "worker_merge"
 
 // MergeQueue loads worker jobs and materializes their branches.
 type MergeQueue interface {
@@ -53,6 +52,9 @@ type MergeStore interface {
 	ListMergeApplying(ctx context.Context) ([]string, error)
 	SetMergeStatus(ctx context.Context, jobID string, status api.WorkerMergeStatus) error
 	SetMergeStatuses(ctx context.Context, updates []MergeStatusUpdate) error
+	// LaterRounds reports the worker's later rounds carrying this job's
+	// changes: those whose changes are pending, and whether one still runs.
+	LaterRounds(ctx context.Context, jobID string) (pending []string, working bool, err error)
 	CommitPromotion(ctx context.Context, jobID, claimToken string, commit PromotionCommit) error
 	ClearWorkerWorkspace(ctx context.Context, jobID string) error
 }
@@ -136,7 +138,7 @@ type MergeService struct {
 
 // PreviewForSession assesses one overlay without changing state.
 func (s *MergeService) PreviewForSession(ctx context.Context, sessionID, jobID, detail string, paths []string) (api.WorkerMergeResult, error) {
-	ctx = mergeGit(ctx)
+	ctx = gitexec.WithHostPurpose(ctx, mergeHostPurpose)
 	out, err := s.previewForSession(ctx, sessionID, jobID, detail, paths)
 	s.nameOverlaps(ctx, &out)
 	return out, err

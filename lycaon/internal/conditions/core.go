@@ -190,6 +190,10 @@ func registerCoreTools(reg *ConditionRegistry) error {
 		{"tool_is_task", func(ec EvalContext) (bool, error) {
 			return ec.ToolName == "task", nil
 		}},
+		{"tool_names_agent", func(ec EvalContext) (bool, error) {
+			_, ok := namedAgent(ec.ToolName, ec.ToolArgs)
+			return ok, nil
+		}},
 		// The compiled axis avoids a tools → guidance → conditions import cycle.
 		{"tool_is_write", func(ec EvalContext) (bool, error) {
 			return toolcontract.MutatesContent(ec.ToolName), nil
@@ -567,25 +571,35 @@ func registerCoreRuleFacts(reg *ConditionRegistry) error {
 	return nil
 }
 
+// namedAgent is the agent a worker-starting call names: task always, and
+// instruct_worker when it changes the worker's agent.
+func namedAgent(name string, args map[string]any) (string, bool) {
+	agent, _ := args["agent_type"].(string)
+	agent = strings.TrimSpace(agent)
+	switch name {
+	case "task":
+		return agent, true
+	case "instruct_worker":
+		return agent, agent != ""
+	}
+	return "", false
+}
+
 // isHighRiskTool classifies state transitions, handoffs, and implementation delegation.
 func isHighRiskTool(name string, args map[string]any) bool {
 	if strings.HasPrefix(name, "state_") || strings.HasPrefix(name, "handoff_") || strings.HasPrefix(name, "delegate_") {
 		return true
 	}
-	if name != "task" {
-		return false
-	}
-	agent, _ := args["agent_type"].(string)
-	return strings.EqualFold(strings.TrimSpace(agent), "implementer")
+	agent, ok := namedAgent(name, args)
+	return ok && strings.EqualFold(agent, "implementer")
 }
 
 // matchDisallowedAgent treats a nil roster as unrestricted and an empty roster as closed.
 func matchDisallowedAgent(ec EvalContext) bool {
-	if ec.ToolName != "task" || ec.AllowedAgents == nil {
+	agent, ok := namedAgent(ec.ToolName, ec.ToolArgs)
+	if !ok || ec.AllowedAgents == nil {
 		return false
 	}
-	agent, _ := ec.ToolArgs["agent_type"].(string)
-	agent = strings.TrimSpace(agent)
 	if agent == "" {
 		return len(ec.AllowedAgents) == 0
 	}

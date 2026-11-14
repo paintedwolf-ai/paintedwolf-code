@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/lycaon/lycaon/internal/gitexec"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/sourceworkspace"
@@ -14,7 +15,7 @@ import (
 
 // PromoteOverlay lands an overlay's changes.
 func (s *MergeService) PromoteOverlay(ctx context.Context, sessionID, overlayID string, in api.PromoteOverlayInput) (api.WorkerMergeResult, error) {
-	ctx = mergeGit(ctx)
+	ctx = gitexec.WithHostPurpose(ctx, mergeHostPurpose)
 	out, err := s.promoteOverlay(ctx, sessionID, overlayID, in)
 	s.nameOverlaps(ctx, &out)
 	return out, err

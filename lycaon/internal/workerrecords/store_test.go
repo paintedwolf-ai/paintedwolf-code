@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 
@@ -37,6 +38,15 @@ func TestCreateWorkerNamesAndBindings(t *testing.T) {
 	wantErr(t, "duplicate name", err, workerrecords.ErrNameTaken)
 	_, err = f.store.CreateWorker(t.Context(), f.coord, op("op-e"), workerrecords.WorkerSpec{AgentType: "implementer", ScopeMode: "edit"})
 	wantErr(t, "scope", err, workerrecords.ErrInvalidScope)
+
+	// Lengths count characters, and derived names keep whole ones.
+	wide := strings.Repeat("é", 64)
+	_, err = f.store.CreateWorker(t.Context(), f.coord, op("op-wide"), workerrecords.WorkerSpec{Name: wide, AgentType: "implementer", ScopeMode: "write"})
+	testutil.FailErr(t, "64-character name", err)
+	derived := f.createWorker(t, "op-wide-agent", workerrecords.WorkerSpec{AgentType: strings.Repeat("ü", 70)})
+	if derived.Name != strings.Repeat("ü", 62)+"-1" {
+		t.Fatalf("derived wide name = %q", derived.Name)
+	}
 
 	// Names are unique per session, not globally.
 	_, err = f.store.CreateWorker(t.Context(), f.other, op("op-f"), workerrecords.WorkerSpec{Name: "parser fix", AgentType: "implementer", ScopeMode: "write"})
@@ -168,18 +178,12 @@ func TestRoundsAdmitOneUnsettledRound(t *testing.T) {
 	_, err = f.store.Close(t.Context(), f.coord, op("close-early"), w.WorkerID, "withdrawn")
 	wantErr(t, "close while working", err, workerrecords.ErrRoundUnsettled)
 
-	settled, err := f.store.SettleRound(t.Context(), f.coord, op("settle-1"), w.WorkerID, "job-1", "cp-1")
-	testutil.FailErr(t, "settle", err)
+	f.settle(t, "job-1", "cp-1")
 	f.insertResult(t, "result-1", "job-1")
 	rounds, err := f.store.Rounds(t.Context(), f.coord, w.WorkerID)
 	testutil.FailErr(t, "rounds with result", err)
-	if rounds[0].CheckpointID != "cp-1" || settled.CheckpointID != "cp-1" || rounds[0].ResultID != "result-1" {
-		t.Fatalf("settled round = %+v, receipt %+v", rounds[0], settled)
-	}
-	again, err := f.store.SettleRound(t.Context(), f.coord, op("settle-1b"), w.WorkerID, "job-1", "")
-	testutil.FailErr(t, "settle again", err)
-	if again != settled {
-		t.Fatalf("second settlement = %+v, want %+v", again, settled)
+	if rounds[0].CheckpointID != "cp-1" || rounds[0].SettledAt == "" || rounds[0].ResultID != "result-1" {
+		t.Fatalf("settled round = %+v", rounds[0])
 	}
 	r2, err := f.store.AdmitRound(t.Context(), f.coord, op("admit-2"), w.WorkerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
 	testutil.FailErr(t, "admit after settlement", err)
@@ -187,8 +191,7 @@ func TestRoundsAdmitOneUnsettledRound(t *testing.T) {
 		t.Fatalf("ordinal = %d want 2", r2.Ordinal)
 	}
 
-	_, err = f.store.SettleRound(t.Context(), f.coord, op("settle-2"), w.WorkerID, "job-2", "")
-	testutil.FailErr(t, "settle 2", err)
+	f.settle(t, "job-2", "")
 	_, err = f.store.AdmitRound(t.Context(), f.coord, op("admit-2-again"), w.WorkerID, workerrecords.RoundSpec{JobID: "job-2", ExecutionTarget: "local"})
 	wantErr(t, "a job in two rounds", err, workerrecords.ErrJobBinding)
 	insertSession(t, f.db, "foreign-child", otherSession)

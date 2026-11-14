@@ -75,6 +75,20 @@ func (s *SQLStore) SetMergeStatuses(ctx context.Context, updates []MergeStatusUp
 	})
 }
 
+// LaterRounds reports the worker's later rounds carrying this job's changes.
+func (s *SQLStore) LaterRounds(ctx context.Context, jobID string) ([]string, bool, error) {
+	q := s.queries
+	pending, err := q.ListWorkerLaterPendingJobs(ctx, jobID)
+	if err != nil {
+		return nil, false, err
+	}
+	running, err := q.CountWorkerLaterUnsettledRounds(ctx, jobID)
+	if err != nil {
+		return nil, false, err
+	}
+	return pending, running > 0, nil
+}
+
 // CommitPromotion finalizes one landed promotion under its lease.
 func (s *SQLStore) CommitPromotion(ctx context.Context, jobID, claimToken string, commit PromotionCommit) error {
 	jobID = strings.TrimSpace(jobID)

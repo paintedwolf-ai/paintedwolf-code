@@ -98,7 +98,7 @@ func RegisterWorkerCancelTool(reg *tools.DefaultRegistry, deps CancelToolDeps) e
 		return fmt.Errorf("registry and cancel service required")
 	}
 	return reg.Register("worker_cancel", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		name := stringArgOf(args, "worker")
+		name := strings.TrimSpace(stringArg(args["worker"]))
 		if name == "" {
 			return "", fmt.Errorf("worker is required")
 		}
@@ -141,9 +141,9 @@ func RegisterAnswerDecisionTool(reg *tools.DefaultRegistry, deps AnswerDecisionT
 	}
 	svc := deps.Answer
 	return reg.Register("answer_decision", func(ctx context.Context, args map[string]any, tctx tools.ToolContext) (string, error) {
-		name := stringArgOf(args, "worker")
-		answer := stringArgOf(args, "answer")
-		resolvedBy := stringArgOf(args, "resolved_by")
+		name := strings.TrimSpace(stringArg(args["worker"]))
+		answer := strings.TrimSpace(stringArg(args["answer"]))
+		resolvedBy := strings.TrimSpace(stringArg(args["resolved_by"]))
 		if name == "" || answer == "" {
 			return "", fmt.Errorf("worker and answer are required")
 		}

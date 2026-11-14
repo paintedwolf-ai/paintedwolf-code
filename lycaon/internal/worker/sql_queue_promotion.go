@@ -93,6 +93,14 @@ func (q *sqlQueuePromotion) SetMergeStatuses(ctx context.Context, updates []Merg
 	return nil
 }
 
+// LaterRounds reports the worker's later rounds carrying this job's changes.
+func (q *sqlQueuePromotion) LaterRounds(ctx context.Context, jobID string) ([]string, bool, error) {
+	if q == nil || q.sqlQueueCore == nil || q.store == nil {
+		return nil, false, fmt.Errorf("worker queue store not configured")
+	}
+	return q.store.LaterRounds(ctx, jobID)
+}
+
 // CommitPromotion finalizes one landed promotion under its lease.
 func (q *sqlQueuePromotion) CommitPromotion(ctx context.Context, jobID, claimToken string, commit PromotionCommit) error {
 	if q == nil || q.sqlQueueCore == nil || q.store == nil {

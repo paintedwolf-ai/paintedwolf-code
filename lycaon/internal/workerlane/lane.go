@@ -40,8 +40,7 @@ type Binding struct {
 	Action     Action `json:"action"`
 }
 
-// Service keeps lanes. Admission, landing, rejection and binding switches for
-// one worker run one at a time.
+// Service keeps lanes. One worker's admissions run one at a time.
 type Service struct {
 	workspaces Workspaces
 	records    *workerrecords.Store
@@ -69,10 +68,6 @@ type Request struct {
 	Facts        Facts
 	Roots        []projectroot.RootRef
 	ActiveRootID string
-	// SourceResultID names the result a refresh or reset follows.
-	SourceResultID string
-	// PromotionRef names the landing a refresh follows.
-	PromotionRef string
 }
 
 // Admit selects and readies the workspace for a worker's next round.
@@ -95,7 +90,8 @@ func (s *Service) Admit(ctx context.Context, req Request) (Binding, error) {
 			current.Action = ActionSubject
 			return current, nil
 		}
-		req.SourceResultID = ""
+		// The view follows the subject, never one of the reviewer's results.
+		req.Facts.LastResultID = ""
 		return s.switchLane(ctx, req, sel)
 	case ActionKeep:
 		current, ok, err := s.current(ctx, req.Actor, req.WorkerID)
@@ -122,7 +118,8 @@ func (s *Service) switchLane(ctx context.Context, req Request, sel Selection) (B
 	previous := Binding{Root: latest.PreparationRef, Generation: latest.BindingGeneration}
 	// A replay after the switch committed returns that switch instead of
 	// preparing an orphan view.
-	if hadLane && req.SourceResultID != "" && latest.SourceResultID == req.SourceResultID {
+	source := req.Facts.LastResultID
+	if hadLane && source != "" && latest.SourceResultID == source {
 		previous.Action = sel.Action
 		return previous, nil
 	}
@@ -141,8 +138,7 @@ func (s *Service) switchLane(ctx context.Context, req Request, sel Selection) (B
 		return Binding{}, fmt.Errorf("prepare lane generation %d: no branch root", generation)
 	}
 	if _, err := s.records.RecordPreparation(ctx, req.Actor, req.Op, req.WorkerID, workerrecords.Preparation{
-		SourceResultID: req.SourceResultID, PromotionRef: req.PromotionRef,
-		PreparationRef: binding.Root, BindingGeneration: generation,
+		SourceResultID: source, PreparationRef: binding.Root, BindingGeneration: generation,
 	}); err != nil {
 		return Binding{}, err
 	}

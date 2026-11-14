@@ -76,10 +76,6 @@ WHERE r.worker_id = ? ORDER BY r.ordinal;
 UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
 WHERE job_id = sqlc.arg(job_id) AND settled_at IS NULL;
 
--- name: SettleWorkerRound :execrows
-UPDATE worker_rounds SET settled_at = sqlc.arg(settled_at), checkpoint_id = sqlc.arg(checkpoint_id)
-WHERE worker_id = sqlc.arg(worker_id) AND ordinal = sqlc.arg(ordinal) AND settled_at IS NULL;
-
 -- name: InsertWorkerMessage :exec
 INSERT INTO worker_messages (
     id, worker_id, seq, sender_role, sender_id, recipient_role, round_ordinal,
@@ -191,12 +187,12 @@ WHERE res.id = ?;
 
 -- name: InsertWorkerWorkspacePreparation :exec
 INSERT INTO worker_workspace_preparations (
-    worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+    worker_id, generation, source_result_id, preparation_ref,
     binding_generation, operation_id, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?);
 
 -- name: GetLatestWorkerWorkspacePreparation :one
-SELECT worker_id, generation, source_result_id, promotion_ref, preparation_ref,
+SELECT worker_id, generation, source_result_id, preparation_ref,
        binding_generation, operation_id, created_at
 FROM worker_workspace_preparations WHERE worker_id = ? ORDER BY generation DESC LIMIT 1;
 
@@ -260,6 +256,26 @@ WHERE r.job_id = ?
   AND j.merge_status = 'pending'
   AND COALESCE(d.change_state, '') IN ('', 'shelved')
 ORDER BY prior.ordinal;
+
+-- name: ListWorkerLaterPendingJobs :many
+-- The later rounds of the worker that ran this job whose changes are still
+-- pending. Their lanes carried this job's changes, so rejecting it rejects
+-- these with it.
+SELECT later.job_id
+FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+JOIN worker_results res ON res.worker_job_id = later.job_id
+JOIN worker_jobs j ON j.id = later.job_id
+LEFT JOIN worker_result_dispositions d ON d.result_id = res.id
+WHERE r.job_id = ?
+  AND j.merge_status = 'pending'
+  AND COALESCE(d.change_state, '') IN ('', 'shelved')
+ORDER BY later.ordinal;
+
+-- name: CountWorkerLaterUnsettledRounds :one
+SELECT COUNT(*) FROM worker_rounds r
+JOIN worker_rounds later ON later.worker_id = r.worker_id AND later.ordinal > r.ordinal
+WHERE r.job_id = ? AND later.settled_at IS NULL;
 
 -- name: DisposeWorkerResultsByJob :execrows
 -- Records how a landing or rejection resolved a worker round's changes, in

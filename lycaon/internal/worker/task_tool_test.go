@@ -3,11 +3,16 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/lycaon/lycaon/internal/db"
+	"github.com/lycaon/lycaon/internal/testdbfixture"
 	"github.com/lycaon/lycaon/internal/toolexecution"
 	"github.com/lycaon/lycaon/internal/toolrejection"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lycaon/lycaon/internal/orchestration"
@@ -22,12 +27,12 @@ import (
 )
 
 func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
 	var boundWorkID string
-	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:  &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued},
-		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
+	dir := t.TempDir()
+	sqlDB := taskStore(t, dir)
+	testdbseed.InsertWorkflowRun(t, sqlDB, "run-1", "parent-1", testdbseed.DefaultProjectID)
+	reg := taskTool(t, sqlDB, capture(&enqueued), worker.TaskToolDeps{
 		WorkflowWork: func(_ context.Context, _ string, workID string) (spawn.WorkflowWork, bool, error) {
 			if workID != "leg-2" {
 				return spawn.WorkflowWork{}, false, nil
@@ -41,10 +46,10 @@ func TestTaskToolWorkflowWorkSuppliesOmittedFields(t *testing.T) {
 			boundWorkID = workID
 			return nil
 		},
-	}))
+	})
 	_, err := reg.Run(t.Context(), "task", map[string]any{
 		"brief": taskBrief("trace the subsystem"), "workflow_work_id": "leg-2",
-	}, toolContext("parent-1", t.TempDir()))
+	}, toolContext("parent-1", dir))
 	testutil.FailErr(t, "dispatch a planned leg by id", err)
 	if enqueued.AgentType != "repo-researcher" || boundWorkID != "leg-2" {
 		t.Fatalf("task = %+v bound=%q want the leg's agent", enqueued, boundWorkID)
@@ -75,6 +80,40 @@ func (q *priorJobQueue) Enqueue(ctx context.Context, task api.WorkerTask) (strin
 	return q.WorkerQueue.Enqueue(ctx, task)
 }
 
+// taskStore is a store whose project has root r1 at dir and holds the
+// given coordinator sessions.
+func taskStore(t *testing.T, dir string, sessions ...string) *db.Store {
+	t.Helper()
+	sqlDB := testdbfixture.Open(t, "task.db")
+	testdbseed.InsertProjectRootWithID(t, sqlDB, testdbseed.DefaultProjectID, "r1", dir)
+	for _, id := range sessions {
+		testdbseed.InsertSession(t, sqlDB, id, testdbseed.DefaultProjectID)
+	}
+	return sqlDB
+}
+
+// taskTool registers the task tool over sqlDB's queue and worker records;
+// wrap observes the queue.
+func taskTool(t *testing.T, sqlDB *db.Store, wrap func(worker.WorkerQueue) worker.WorkerQueue, deps worker.TaskToolDeps) *tools.DefaultRegistry {
+	t.Helper()
+	var queue worker.WorkerQueue = worker.NewSQLQueue(sqlDB, 4)
+	if wrap != nil {
+		queue = wrap(queue)
+	}
+	deps.Queue, deps.WorkerRecords = queue, workerrecords.New(sqlDB)
+	if deps.Agents == nil {
+		deps.Agents = orchestration.NewMemoryAgentRegistryForTest()
+	}
+	deps.Workers = worker.DefaultWorkersConfig()
+	reg := tools.NewDefaultRegistry()
+	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, deps))
+	return reg
+}
+
+func capture(out *api.WorkerTask) func(worker.WorkerQueue) worker.WorkerQueue {
+	return func(q worker.WorkerQueue) worker.WorkerQueue { return &captureQueue{WorkerQueue: q, out: out} }
+}
+
 func taskBrief(goal string) map[string]any {
 	return map[string]any{"goal": goal, "done_when": []any{"Return grounded results."}}
 }
@@ -92,16 +131,7 @@ func (c *captureQueue) Enqueue(ctx context.Context, task api.WorkerTask) (string
 func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
-	cq := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(2), out: &enqueued}
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   cq,
-		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-		Workers: worker.DefaultWorkersConfig(),
-	}); err != nil {
-		t.Fatal(err)
-	}
 	ctx := context.Background()
 	projReg := project.NewMemoryRegistry()
 	p, err := projReg.Create(ctx, project.CreateParams{Draft: true})
@@ -111,13 +141,17 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 	if len(roots) != 1 {
 		t.Fatalf("len(roots) = %d want 1", len(roots))
 	}
+	sqlDB := taskStore(t, t.TempDir())
+	testdbseed.InsertProjectRootWithID(t, sqlDB, p.ID, roots[0].ID, scratch)
+	testdbseed.InsertSession(t, sqlDB, "parent-draft", p.ID)
+	reg := taskTool(t, sqlDB, capture(&enqueued), worker.TaskToolDeps{})
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err = exec.Invoke(ctx, "task", map[string]any{
 		"agent_type": "implementer",
 		"brief":      taskBrief("ship core module"),
 		"scope":      map[string]any{"mode": "write", "paths": []any{"src"}},
 	}, tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "parent-draft",
-		ProjectID: p.ID}, Source: tools.InvocationSource{Roots: roots,
+		ProjectID: p.ID, ToolCallID: "call-draft"}, Source: tools.InvocationSource{Roots: roots,
 		ActiveRootID: roots[0].ID},
 	})
 	testutil.FailErr(t, "task implementer on draft scratch", err)
@@ -130,15 +164,11 @@ func TestTaskToolDraftScratchSpawnsImplementerWithWorkspacePath(t *testing.T) {
 }
 
 func TestTaskToolFreshDispatchRequiresAgentType(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   worker.NewInMemoryQueue(1),
-		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-		Workers: worker.DefaultWorkersConfig(),
-	}))
+	dir := t.TempDir()
+	reg := taskTool(t, taskStore(t, dir, "p"), nil, worker.TaskToolDeps{})
 	_, err := reg.Run(t.Context(), "task", map[string]any{
 		"brief": taskBrief("new work"),
-	}, toolContext("p", t.TempDir()))
+	}, toolContext("p", dir))
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" {
 		t.Fatalf("err = %v want TOOL_ARGS_INVALID", err)
@@ -150,13 +180,8 @@ func TestTaskToolFreshDispatchRequiresAgentType(t *testing.T) {
 }
 
 func TestTaskToolCapsAggregateBriefText(t *testing.T) {
-	reg := tools.NewDefaultRegistry()
-	if err := worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:  worker.NewInMemoryQueue(1),
-		Agents: orchestration.NewMemoryAgentRegistryForTest(), Workers: worker.DefaultWorkersConfig(),
-	}); err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
+	reg := taskTool(t, taskStore(t, dir, "parent-1"), nil, worker.TaskToolDeps{})
 	exec := toolexecution.NewExecutor(nil, reg, "coordinator")
 	_, err := exec.Invoke(context.Background(), "task", map[string]any{
 		"agent_type": "implementer",
@@ -164,16 +189,20 @@ func TestTaskToolCapsAggregateBriefText(t *testing.T) {
 			"goal":      strings.Repeat("x", spawn.MaxTaskCharterRunes),
 			"done_when": []any{"done"},
 		},
-	}, toolContext("parent-1", t.TempDir()))
+	}, toolContext("parent-1", dir))
 	reject := toolrejection.AsToolReject(err)
 	if reject == nil || reject.Code != "TOOL_ARGS_INVALID" || reject.Data["max_runes"] != spawn.MaxTaskCharterRunes {
 		t.Fatalf("err = %v want aggregate brief cap reject", err)
 	}
 }
 
+var toolCalls atomic.Int64
+
+// toolContext is one coordinator tool call in a project rooted at dir.
 func toolContext(sessionID, dir string) tools.ToolContext {
 	roots := []projectroot.RootRef{{ID: "r1", Label: "root", Path: dir, IsPrimary: true}}
-	return tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID}, Source: tools.InvocationSource{Roots: roots, ActiveRootID: "r1"}}
+	call := "call-" + strconv.FormatInt(toolCalls.Add(1), 10)
+	return tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: sessionID, ProjectID: testdbseed.DefaultProjectID, ToolCallID: call}, Source: tools.InvocationSource{Roots: roots, ActiveRootID: "r1"}}
 }
 
 func TestTaskToolDispatchWriteScopeInsideLinkedWorktree(t *testing.T) {
@@ -183,14 +212,8 @@ func TestTaskToolDispatchWriteScopeInsideLinkedWorktree(t *testing.T) {
 	testutil.FailErr(t, "write worktree .git", os.WriteFile(filepath.Join(wt, ".git"), []byte("gitdir: /real/repo/.git/worktrees/wt\n"), 0o644))
 	testutil.FailErr(t, "write worktree file", os.WriteFile(filepath.Join(wt, "pkg", "a.go"), []byte("package pkg\n"), 0o644))
 
-	reg := tools.NewDefaultRegistry()
 	var enqueued api.WorkerTask
-	cq := &captureQueue{WorkerQueue: worker.NewInMemoryQueue(4), out: &enqueued}
-	testutil.FailErr(t, "register task tool", worker.RegisterTaskTool(reg, worker.TaskToolDeps{
-		Queue:   cq,
-		Agents:  orchestration.NewMemoryAgentRegistryForTest(),
-		Workers: worker.DefaultWorkersConfig(),
-	}))
+	reg := taskTool(t, taskStore(t, root, "parent-wt"), capture(&enqueued), worker.TaskToolDeps{})
 
 	rawReceipt, err := reg.Run(t.Context(), "task", map[string]any{
 		"agent_type": "implementer",

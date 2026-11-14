@@ -461,3 +461,42 @@ func TestOverlayPromoteConsultsLayeredConsumerDivergenceWithoutFullBaseline(t *t
 		t.Fatalf("expected OverlayAwaitingPromote=true when layered view has private changes")
 	}
 }
+
+// A worker's rounds share one lane, whose record names only the latest
+// checkpoint: each round's job still opens the checkpoint its round published.
+func TestEachRoundOpensItsOwnCheckpointInASharedLane(t *testing.T) {
+	primary, lane := t.TempDir(), t.TempDir()
+	testutil.FailErr(t, "write primary", os.WriteFile(filepath.Join(primary, "total.go"), []byte("v0\n"), 0o644))
+	store, bindCheckpoint := recoveryStoreFor(t, lane, primary)
+	core, err := layeredfs.New(layeredfs.Config{
+		ViewID: "lane-view", BackingDir: t.TempDir(),
+		Roots: []layeredfs.RootSpec{{ID: "primary", Label: "primary", TrunkPath: primary, IsPrimary: true}},
+	})
+	testutil.FailErr(t, "New Core", err)
+	defer func() { _ = core.ReleaseView() }()
+	pub, err := checkpoint.NewPublisher(checkpoint.PublisherConfig{
+		WorkerID: "worker-1", TaskID: "job-1", ProjectID: testdbseed.DefaultProjectID, SourceGeneration: "gen-1", Core: core, Store: store,
+	})
+	testutil.FailErr(t, "NewPublisher", err)
+	for i, id := range []string{"chk-round-1", "chk-round-2"} {
+		_, err = core.WriteFile(layeredfs.QualifiedPath{RootID: "primary", Rel: "total.go"}, []byte(fmt.Sprintf("v%d\n", i+1)), 0o644)
+		testutil.FailErr(t, "write round", err)
+		_, err = pub.Publish(t.Context(), checkpoint.PublishRequest{CheckpointID: id, Trigger: checkpoint.TriggerWorkerCompletion})
+		testutil.FailErr(t, "Publish "+id, err)
+	}
+	bindCheckpoint("chk-round-2")
+	session.SetRoundCheckpoints(func(jobID string) (string, bool) {
+		cp, ok := map[string]string{"job-1": "chk-round-1", "job-2": "chk-round-2"}[jobID]
+		return cp, ok
+	})
+	t.Cleanup(func() { session.SetRoundCheckpoints(nil) })
+	scope := api.TaskScope{Mode: api.TaskScopeModeWrite}
+	for job, want := range map[string]string{"job-1": "chk-round-1", "job-2": "chk-round-2", "job-roundless": "chk-round-2"} {
+		task := &api.WorkerTask{ID: job, ProjectID: testdbseed.DefaultProjectID, WorkspacePath: primary, WorkspaceRoot: lane, Scope: &scope}
+		_, manifest, ok, err := session.OpenTaskCheckpointStore(task)
+		testutil.FailErr(t, "open "+job, err)
+		if !ok || manifest.CheckpointID != want {
+			t.Fatalf("%s opened %q, want %q", job, manifest.CheckpointID, want)
+		}
+	}
+}
