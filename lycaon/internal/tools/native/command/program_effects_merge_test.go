@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"slices"
+	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -179,4 +182,95 @@ func TestParkedProgramCarriesEffectsRecordedBeforeItParked(t *testing.T) {
 	waiting.EndWait()
 	settled := <-recorded.settled
 	testutil.FailErr(t, "settle parked program", settled.err)
+}
+
+type recordedEffects struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (r *recordedEffects) AppendProgramEffects(_ context.Context, sessionID, toolCallID string, edits []api.FileEditSnapshot, _ int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	paths := make([]string, 0, len(edits))
+	for _, edit := range edits {
+		paths = append(paths, edit.Path)
+	}
+	r.calls = append(r.calls, sessionID+"/"+toolCallID+":"+strings.Join(paths, ","))
+}
+
+func (r *recordedEffects) recorded() []string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]string(nil), r.calls...)
+}
+
+// What a program does after its call returned goes to the call's stored
+// result: file edits only, once, under the call that started the program.
+func TestBackgroundedProgramHandsItsLaterEditsToTheCallsStoredResult(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	f, out := effectFixture(t, func(call int, tc tools.ToolContext) error {
+		if call == 1 {
+			recordEdit(tc, "a.go")
+			return nil
+		}
+		close(entered)
+		<-release
+		recordEveryEffect(tc)
+		recordEdit(tc, "late.go")
+		return nil
+	})
+	effects := &recordedEffects{}
+	clock := programtest.NewManualClock()
+	f.Runtime.Clock, f.Runtime.Effects = clock, effects
+	done := make(chan callResult, 1)
+	go func() {
+		s, e := f.Call(t, t.Context(), "head; head")
+		done <- callResult{s, e}
+	}()
+	<-entered
+	clock.Advance(command.ProgramInlineWait())
+	got := <-done
+	testutil.FailErr(t, "return running program", got.err)
+	var running command.RunningProgramResult
+	testutil.FailErr(t, "decode running program", json.Unmarshal([]byte(got.content), &running))
+	close(release)
+	_, _, err := f.Background.Lifecycle.Wait(t.Context(), f.Session, running.Handle)
+	testutil.FailErr(t, "join program", err)
+	// The second stage rewrote a.go and wrote late.go after the call returned.
+	if want := []string{f.Session + "/model-call-1:a.go,late.go"}; !slices.Equal(effects.recorded(), want) {
+		t.Fatalf("stored result received %v, want %v", effects.recorded(), want)
+	}
+	if editedPath(out) != "a.go" || out.Listener != nil || len(out.SourceReads) != 0 {
+		t.Fatalf("later effects reached the returned call: edit=%q listener=%v reads=%d", editedPath(out), out.Listener != nil, len(out.SourceReads))
+	}
+}
+
+func TestParkedProgramHandsItsLaterEditsToTheCallsStoredResult(t *testing.T) {
+	waiting := programtest.NewWaitingProgram(programtest.NewManualClock(), programtest.SleepState(120*time.Second))
+	f, out := effectFixture(t, func(_ int, tc tools.ToolContext) error {
+		recordEdit(tc, "late.go")
+		return nil
+	})
+	parking, effects := newRecordingParking(), &recordedEffects{}
+	f.Runtime.Clock, f.Runtime.Parking, f.Runtime.Effects = waiting.Clock, parking, effects
+	// The program waits as `sleep` would, then runs its statements.
+	f.Runtime.Evaluate = func(ctx context.Context, snapshot commandsurface.ProgramSnapshot, ports commandprogram.EvaluationPorts) (commandprogram.ProgramOutcome, error) {
+		if outcome, err := waiting.Evaluate(ctx, snapshot, ports); err != nil {
+			return outcome, err
+		}
+		return commandprogram.Evaluate(ctx, snapshot, ports)
+	}
+	_, err := f.Call(t, t.Context(), "head")
+	testutil.FailErr(t, "park program", err)
+	recorded := <-parking.parked
+	if len(out.FileEdits) != 0 {
+		t.Fatalf("the parked result holds %+v before the program wrote", out.FileEdits)
+	}
+	waiting.EndWait()
+	settled := <-recorded.settled
+	testutil.FailErr(t, "settle parked program", settled.err)
+	if want := []string{f.Session + "/model-call-1:late.go"}; !slices.Equal(effects.recorded(), want) {
+		t.Fatalf("stored result received %v, want %v", effects.recorded(), want)
+	}
 }

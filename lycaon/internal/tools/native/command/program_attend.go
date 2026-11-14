@@ -165,6 +165,7 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 	go func() {
 		<-ending.done
 		r.recordParkedRun(settleCtx, run)
+		r.recordDetachedEffects(settleCtx, run)
 		parked.Settle(settleCtx, ending.result, ending.err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
@@ -222,6 +223,17 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 		return
 	}
 	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
+}
+
+// recordDetachedEffects hands the file edits a program made after its call
+// returned to that call's stored result. The call took what came before, so
+// each edit is recorded once.
+func (r *ProgramRuntime) recordDetachedEffects(ctx context.Context, run *programRun) {
+	late := run.tc.Effects.Out.TakeCommitted()
+	if r.Effects == nil {
+		return
+	}
+	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, late.FileEdits, late.FileEditsOmitted)
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for
