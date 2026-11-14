@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/briefingstore"
@@ -35,8 +36,8 @@ import (
 	"github.com/lycaon/lycaon/internal/workermessaging"
 	"github.com/lycaon/lycaon/internal/workerops"
 	"github.com/lycaon/lycaon/internal/workerrecords"
-	"github.com/lycaon/lycaon/internal/workerstate"
 	"github.com/lycaon/lycaon/internal/workerroster"
+	"github.com/lycaon/lycaon/internal/workerstate"
 )
 
 // WireGroundingAndFindings wires grounding coordinators, progress, visual, and decision tools.
@@ -275,6 +276,16 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 		r.Snapshot.NamedWorkers = roster.Board
 	}
 	r.deps.Sessions.Manager.SetWorkerResultNotices(roster.ResultNotice)
+	records := r.WorkerRecords
+	session.SetRoundCheckpoints(func(jobID string) (string, bool) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		round, ok, err := records.RoundByJob(ctx, jobID)
+		if err != nil || !ok || round.SettledAt == "" {
+			return "", false
+		}
+		return round.CheckpointID, true
+	})
 	coordinator := func(sessionID string) workerrecords.Actor {
 		return workerrecords.Actor{SessionID: sessionID, Role: workerrecords.RoleCoordinator, PrincipalID: sessionID}
 	}
