@@ -26,3 +26,15 @@ x-paintedwolf-scenarios:
       worker: parser-fix
       tool: promote_overlay
       state: working
+  - id: asking
+    vars:
+      session_role: coordinator
+      worker: parser-fix
+      tool: promote_overlay
+      state: asking
+  - id: delivered
+    vars:
+      session_role: coordinator
+      worker: parser-fix
+      tool: reject_overlay
+      state: delivered

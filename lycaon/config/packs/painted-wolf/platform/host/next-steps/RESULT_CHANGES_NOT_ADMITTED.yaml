@@ -14,3 +14,7 @@ steps:
       worker: "{{ paintedwolf.worker }}"
     say: "The worker is waiting on its question; answer it with {{ call }}."
     otherwise: "The worker is waiting on its question; answer it first."
+  - when: "paintedwolf.state != 'working' && paintedwolf.state != 'asking'"
+    tool: "pack_board"
+    say: "Check the worker's state and its latest result on the roster with {{ call }}; only a delivered result with changes can be previewed, landed, rejected or shelved."
+    otherwise: "Only a delivered result with changes can be previewed, landed, rejected or shelved."

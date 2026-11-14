@@ -42,16 +42,17 @@ func (q *QuietRounds) Check(ctx context.Context) {
 		return
 	}
 	prev := q.lastPass
-	q.lastPass = now
 	after := q.After
 	if after <= 0 {
 		after = spawn.DefaultRoundPolicy().QuietNoticeAfter
 	}
 	jobs, err := q.Jobs(ctx)
 	if err != nil {
+		// The window stays open, so the next pass still sees its crossings.
 		workerPollerLog.Warn("list worker rounds for quiet notices", "error", err)
 		return
 	}
+	q.lastPass = now
 	for i := range jobs {
 		task := &jobs[i]
 		if !q.working(ctx, task) {

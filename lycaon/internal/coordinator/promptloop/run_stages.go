@@ -240,6 +240,7 @@ func (l *PromptLoop) processPromptLoopAssistantTurn(
 	}
 
 	if completion == nil || len(completion.ToolCalls) == 0 {
+		l.Projection.touchProgress(ctx, st)
 		if sess.IsWorkerChild() {
 			st.toollessResponses++
 			if st.toollessResponses >= l.Nudges.toollessResponseBound() {

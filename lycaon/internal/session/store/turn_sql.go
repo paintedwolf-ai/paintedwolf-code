@@ -179,6 +179,13 @@ func resumeTurnTx(
 }
 
 // CheckpointTurn advances one active attempt at a restart-safe boundary.
+// TouchTurnProgress records durable progress of a running turn: a model
+// response or a tool result was accounted.
+func (t *sqlTurns) TouchTurnProgress(ctx context.Context, turnID string) error {
+	_, err := t.core.queries.TouchTurnProgress(ctx, db.TouchTurnProgressParams{ProgressedAt: db.FormatTime(time.Now().UTC()), ID: turnID})
+	return err
+}
+
 func (t *sqlTurns) CheckpointTurn(ctx context.Context, turnID, attemptID string, phase TurnPhase, checkpointJSON string) error {
 	s := t.core
 	if !validTurnPhase(phase) || phase == TurnPhaseComplete {
