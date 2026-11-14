@@ -564,6 +564,74 @@ describe("createTranscriptPaging", () => {
     }
   });
 
+  it("maps after-runway seeks through the geometry's measured densityPxPerOrd", async () => {
+    const appStore = createAppStore();
+    const prepareLanding = vi.fn();
+    // Resident window ends at 2_000px; 400 unloaded after at 25px/ord = 10_000px after-runway (2_000..12_000).
+    // Scroll offset 7_000px is halfway (50%) into the 10_000px after-runway -> ord ~300 -> afterOrd = 250.
+    const { el } = mockStreamHost({
+      scrollTop: 7_000,
+      clientHeight: 500,
+      scrollHeight: () => 5_000,
+    });
+    appStore.actions.installTranscriptBaseline(
+      "s-seek-density",
+      Array.from({ length: 100 }, (_, i) => older(i)),
+      500,
+      {
+        hasMoreBefore: false,
+        hasMoreAfter: true,
+        bounds: { firstOrd: 1, lastOrd: 500 },
+      },
+    );
+    appStore.actions.loadTranscriptPage(
+      { edge: "seek", afterOrd: 0 },
+      {
+        messages: Array.from({ length: 100 }, (_, i) => older(i)),
+        watermark: 500,
+        turn_clocks: {},
+        turn_loads: {},
+        before_cursor: undefined,
+        after_cursor: "newer",
+        ord_bounds: { first_ord: 1, last_ord: 500 },
+      },
+    );
+    const listSessionMessages = vi.fn().mockResolvedValue({
+      messages: Array.from({ length: 100 }, (_, i) => older(250 + i)),
+      turn_clocks: {},
+      turn_loads: {},
+      before_cursor: "older",
+      after_cursor: "newer",
+      ord_bounds: { first_ord: 1, last_ord: 500 },
+    });
+    const stop = createTranscriptPaging(el, {
+      client: () => stubClient({ listSessionMessages }),
+      appStore,
+      sessionId: () => "s-seek-density",
+      geometry: () => ({
+        residentStartPx: 0,
+        residentEndPx: 2_000,
+        densityPxPerOrd: 25,
+        residentSpan: { firstOrd: 1, lastOrd: 100 },
+        unloaded: { before: 0, after: 400 },
+        prepareLanding,
+      }),
+    });
+    try {
+      await vi.waitFor(() => {
+        expect(listSessionMessages).toHaveBeenCalledTimes(1);
+      });
+      expect(prepareLanding).toHaveBeenCalledWith(7_000);
+      expect(listSessionMessages).toHaveBeenCalledWith(
+        "s-seek-density",
+        expect.objectContaining({ afterOrd: 250 }),
+      );
+    } finally {
+      stop.dispose();
+      el.remove();
+    }
+  });
+
   it("does not flip to a newer sweep after a before-runway seek lands at the top of history", async () => {
     const appStore = createAppStore();
     const prepareLanding = vi.fn();

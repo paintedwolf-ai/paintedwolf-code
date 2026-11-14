@@ -163,6 +163,7 @@ export function SessionTranscript(props: Props) {
     rowHeightScope,
     artifactPlacements,
     rowHeightKey,
+    restoredRowEstimate,
     estimatedContentHeight,
   } = useTranscriptProjectionModel({
     layout,
@@ -234,9 +235,11 @@ export function SessionTranscript(props: Props) {
       const insetPx = rowInsetPx(item.key);
       const contentPx = estimatedContentHeight(item);
       if (contentPx !== undefined) return contentPx + insetPx;
-      return insetPx > 0
-        ? transcriptRowEstimatedHeight(item) + insetPx
-        : undefined;
+      return insetPx > 0 ? transcriptRowEstimatedHeight(item) + insetPx : undefined;
+    },
+    restoredRowEstimate: (item) => {
+      const contentPx = restoredRowEstimate(item);
+      return contentPx !== undefined ? contentPx + rowInsetPx(item.key) : undefined;
     },
     // Column measurements refine estimates for unmounted rows.
     estimateBasis: rowGeometry,
