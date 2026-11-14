@@ -735,17 +735,24 @@ describe("line gutter — line facts activation", () => {
     const cardRow = card.appendChild(document.createElement("button"));
     cardRow.className = "files-line-facts__row";
 
-    const baseTargets = [
-      v.dom.querySelector<HTMLElement>('.files-line-gutter__facts[data-line="1"]')!,
-      v.dom.querySelector<HTMLElement>('.files-line-gutter__facts[data-line="3"]')!,
-      folds(v)[0]!,
-      v.dom.querySelector<HTMLElement>('.files-line-gutter__number[data-line="5"]')!,
-      glyphs(v)[0]!,
-      links(v)[0]!,
-      restores(v)[0]!,
-      ...v.contentDOM.querySelectorAll<HTMLElement>(".cm-line"),
-    ];
-    expect(baseTargets.every(Boolean)).toBe(true);
+    expect([
+      v.dom.querySelector('.files-line-gutter__facts[data-line="1"]'),
+      v.dom.querySelector('.files-line-gutter__facts[data-line="3"]'),
+      folds(v)[0],
+      v.dom.querySelector('.files-line-gutter__number[data-line="5"]'),
+      glyphs(v)[0],
+      links(v)[0],
+      restores(v)[0],
+      cuts(v)[0],
+    ].every(Boolean)).toBe(true);
+
+    const liveTargets = (cardOpen: boolean): HTMLElement[] => {
+      const nodes = [
+        ...v.dom.querySelectorAll<HTMLElement>("[data-line-gutter-control], .files-line-gutter__number, .cm-line"),
+      ];
+      if (cardOpen) nodes.push(cardRow);
+      return nodes;
+    };
 
     const events = ["mouseover", "mouseout", "mousemove", "mouseenter", "mouseleave", "focusin", "focusout"] as const;
     let seed = 0x5eed1234;
@@ -759,9 +766,9 @@ describe("line gutter — line facts activation", () => {
       if (cardOpen && !card.isConnected) document.body.appendChild(card);
       if (!cardOpen && card.isConnected) card.remove();
       onDismiss.mockClear();
-      const pool = cardOpen ? [...baseTargets, cardRow] : baseTargets;
       const length = 6 + nextInt(7);
       for (let step = 0; step < length; step++) {
+        const pool = liveTargets(cardOpen);
         const kind = events[nextInt(events.length)]!;
         const target = pool[nextInt(pool.length)]!;
         const related = pool[nextInt(pool.length)]!;
