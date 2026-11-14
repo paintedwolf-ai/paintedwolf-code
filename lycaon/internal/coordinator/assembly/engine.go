@@ -86,6 +86,13 @@ type SelectionSource interface {
 }
 
 // AssemblyDeps wires prompt message assembly for coordinator and worker turns.
+// Deliveries are the pages a request carries that commit only after its
+// response succeeds, so a failed request shows them again.
+type Deliveries struct {
+	SiblingNotes SiblingNoteDeliveryRecorder
+	Messages     MessageDeliveryRecorder
+}
+
 type AssemblyDeps struct {
 	Prompts                 prompts.PromptTemplateEngine
 	Injects                 *prompts.InjectRenderer
@@ -99,7 +106,7 @@ type AssemblyDeps struct {
 	Workflows               WorkflowManifestSource
 	CoordinatorFrame        inject.CoordinatorTurnFrameSource
 	WorkerContext           WorkerContextBuilder
-	SiblingNoteDelivery     SiblingNoteDeliveryRecorder
+	Deliveries              Deliveries
 	PeerReservations        PeerReservationSource
 	WorkflowHints           *guidance.HintConfig
 	GateFeedback            *feedback.GateFeedbackCatalog
@@ -370,15 +377,21 @@ func (e *AssemblyEngine) Cache() *SessionPromptCache {
 	return &e.cache
 }
 
-// CommitWorkerContext advances communication only after a successful response.
-func (e *AssemblyEngine) CommitWorkerContext(ctx context.Context, sessionID, responseID string) error {
-	recorder := e.deps().SiblingNoteDelivery
-	if recorder == nil {
-		return nil
-	}
+// CommitTurnContext advances delivered findings and messages only after a
+// successful response. Each feed keeps its own cursor.
+func (e *AssemblyEngine) CommitTurnContext(ctx context.Context, sessionID, responseID string) error {
+	deps := e.deps()
 	turn := e.cache.LoadTurn(sessionID)
-	if len(turn.PendingSiblingNotes) == 0 && turn.LastSeenSiblingNoteID == 0 {
-		return nil
+	if recorder := deps.Deliveries.SiblingNotes; recorder != nil && (len(turn.PendingSiblingNotes) > 0 || turn.LastSeenSiblingNoteID != 0) {
+		if err := recorder.CommitSiblingNotes(ctx, sessionID, responseID, turn.LastSeenSiblingNoteID, turn.PendingSiblingNotes); err != nil {
+			return err
+		}
 	}
-	return recorder.CommitSiblingNotes(ctx, sessionID, responseID, turn.LastSeenSiblingNoteID, turn.PendingSiblingNotes)
+	if recorder := deps.Deliveries.Messages; recorder != nil && len(turn.PendingMessages.Pages) > 0 {
+		if err := recorder.CommitMessages(ctx, sessionID, turn.PendingMessages); err != nil {
+			return err
+		}
+		turn.PendingMessages = MessageDelivery{}
+	}
+	return nil
 }

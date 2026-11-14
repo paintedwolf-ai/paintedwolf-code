@@ -188,7 +188,7 @@ func recoverPrerequisiteJobs(ctx context.Context, queue WorkerQueue, blocked fun
 			return canceled, nil
 		}
 		for _, id := range ids {
-			result := api.WorkerResult{Status: "canceled", Summary: "A prerequisite worker cannot supply successful output.", HostAssembled: true}
+			result := api.WorkerResult{Status: "canceled", Summary: "A prerequisite worker cannot supply successful output."}
 			if err := queue.Cancel(ctx, id, &result); err != nil {
 				return canceled, err
 			}

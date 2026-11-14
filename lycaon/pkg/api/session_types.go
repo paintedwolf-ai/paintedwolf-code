@@ -800,10 +800,9 @@ const (
 
 // SpawnChildRequest creates an isolated worker child session.
 type SpawnChildRequest struct {
-	AgentType    string   `json:"agent_type"`
-	Prompt       string   `json:"prompt"`
-	Files        []string `json:"files,omitempty"`
-	MaxToolLoops int      `json:"max_tool_loops,omitempty"`
+	AgentType string   `json:"agent_type"`
+	Prompt    string   `json:"prompt"`
+	Files     []string `json:"files,omitempty"`
 	// WorkerJobID identifies the worker run associated with the initial assignment row.
 	WorkerJobID string `json:"-"`
 }

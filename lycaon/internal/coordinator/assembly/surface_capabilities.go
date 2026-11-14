@@ -114,23 +114,6 @@ func (e *promptSurface) mergeVisibleToolCapabilityVars(vars map[string]any) {
 	}
 	capability.MergeVars(vars, capability.Derive(rootCount, visible, nil))
 }
-func (e *promptSurface) workerToolBudget(ctx context.Context, sess *api.Session) spawn.WorkerToolBudget {
-	if deps := e.deps; deps.Limits != nil {
-		return deps.Limits(ctx, sess).WorkerToolBudget()
-	}
-	return spawn.DefaultWorkerToolBudget()
-}
-func (e *promptSurface) applyToolBudgetVars(ctx context.Context, sess *api.Session, coordinator bool, vars map[string]any) {
-	budget := e.workerToolBudget(ctx, sess)
-	if sess.IsWorkerChild() {
-		vars["max_tool_loops"] = budget.Effective(sess.MaxToolLoops)
-	}
-	if coordinator {
-		vars["worker_tool_budget_default"] = budget.Default
-		vars["worker_tool_budget_min"] = budget.Min
-		vars["worker_tool_budget_max"] = budget.Max
-	}
-}
 func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) ([]map[string]any, int, string, bool) {
 	if turn != nil && turn.WorkspaceRootsLoaded {
 		return turn.WorkspaceRoots, turn.WorkspaceRootCount, turn.WorkspaceActivePath, true

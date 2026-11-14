@@ -81,9 +81,13 @@ func (s *AnswerDecisionService) AnswerJob(ctx context.Context, sessionID, jobID,
 			"expected_job_id": dec.WorkerID,
 		})
 	}
-	chosen, ok := resolveDecisionOption(option, dec.Options)
-	if !ok {
-		return AnswerDecisionResult{}, fmt.Errorf("option %q is not one of the offered options: %s", option, strings.Join(dec.Options, " | "))
+	// An open question takes the answer as written.
+	chosen := option
+	if len(dec.Options) > 0 {
+		var ok bool
+		if chosen, ok = resolveDecisionOption(option, dec.Options); !ok {
+			return AnswerDecisionResult{}, fmt.Errorf("option %q is not one of the offered options: %s", option, strings.Join(dec.Options, " | "))
+		}
 	}
 	err = s.Resolver.Resolve(ctx, dec, DecisionAnswerMessage(chosen, resolvedBy))
 	if err != nil {

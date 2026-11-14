@@ -12,7 +12,7 @@ func TestCoordinatorSynthesisSurfaceReadOnlyTools(t *testing.T) {
 	synthesis := surfaces["implement_synthesis"]
 	for _, forbidden := range []string{
 		"write", "edit", "task", "pack_board", "wait",
-		"worker_cancel", "answer_decision", "extend_worker_budget", "decline_worker_budget",
+		"worker_cancel", "answer_decision",
 		"promote_overlay", "reject_overlay", "preview_overlay",
 	} {
 		if contractcheck.ContainsString(synthesis, forbidden) {

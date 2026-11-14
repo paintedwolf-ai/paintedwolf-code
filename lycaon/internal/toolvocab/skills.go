@@ -181,7 +181,7 @@ func (c *Catalog) profileCommandMutates(profileID string) bool {
 // workspace case, where guarded command guidance is visible; ValidateSkills
 // renders the git-less and other root-count states besides these defaults.
 func skillRenderVars(held map[string]bool, coordinator bool) map[string]any {
-	vars := spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget())
+	vars := spawn.PolicyTemplateVars()
 	spawn.RefreshSizingHintVars(vars)
 	for name, ok := range held {
 		if ok && name != ReachCommandMutation && toolschema.ValidToolName(name) {

@@ -32,7 +32,7 @@ func TestKickTemplateIDRoundTrip(t *testing.T) {
 	for _, id := range []anchor.ID{
 		anchor.GateBlocked, anchor.ComposeDone, anchor.LegFinished, anchor.WorkerTaskFinished,
 		anchor.PhaseAdvanced, anchor.WaitTimerFired, anchor.ScanFinished, anchor.ProcessFinished,
-		anchor.WorkerBudgetRequested, anchor.FeedbackPending, anchor.FeedbackReceived,
+		anchor.WorkerRoundNotice, anchor.FeedbackPending, anchor.FeedbackReceived,
 		anchor.OverlayPromoteComplete, anchor.EditFollowUpRepeat,
 	} {
 		if got := anchor.MustAnchor(string(id)); got != id {
@@ -75,9 +75,9 @@ func TestCatalogContainsKickMappedAnchors(t *testing.T) {
 		anchor.ReviewLoopContinue, anchor.ReviewLoopDecide,
 		anchor.FeedbackPending, anchor.FeedbackReceived, anchor.WorkerTaskStarted, anchor.WorkerLegStarted,
 		anchor.WaitTimerFired, anchor.OverlayPromoteComplete, anchor.ScanFinished, anchor.ScanDelta, anchor.ProcessFinished,
-		anchor.WorkerBudgetRequested, anchor.WorkerBudgetRaised, anchor.WorkerBudgetDeclined, anchor.EditFollowUpRepeat, anchor.CoordinatorCloseout,
+		anchor.WorkerRoundNotice, anchor.EditFollowUpRepeat, anchor.CoordinatorCloseout,
 		anchor.CoordinatorCitationGrounding, anchor.CoordinatorReportDocument, anchor.ProjectRootsChanged, anchor.ProjectPostureChanged, anchor.ProjectRootDetachCanceled,
-		anchor.WorkerCloseout, anchor.WorkerIterationsLow, anchor.WorkerCancelCloseout,
+		anchor.WorkerCloseout, anchor.WorkerCancelCloseout,
 		anchor.WorkerCitationGrounding, anchor.LoopWake, anchor.BoardChanged,
 		anchor.ProgressMissing, anchor.ProgressStale, anchor.PhaseExitRequired,
 		anchor.AuthzSealFailed, anchor.TurnCloseout, anchor.TurnIterationsLow,
@@ -198,10 +198,9 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		"progress_open_items": true, "progress_closure_armed": true,
 		"batches": true, "tools": true,
 		"scan_id": true, "scan_status": true, "scan_categories": true, "scan_findings_count": true,
-		"job_id": true, "tool_loops_used": true, "max_tool_loops": true, "remaining": true,
-		"host_max_tool_loops": true, "budget_request_open": true, "requested_max": true,
-		"requested_rounds": true, "remaining_work": true, "at_host_max": true, "request_open": true,
-		"worker_budget_exhausted": true, "child_session_id": true, "suggested_resume_max": true,
+		"job_id": true, "remaining": true, "notice_kind": true, "model_calls": true, "tokens": true,
+		"spend_under_cent": true, "estimated_spend_usd": true, "quiet_minutes": true, "in_flight": true,
+		"tool_calls": true, "tools_done": true, "child_session_id": true,
 		"workspace_path": true, "project_id": true, "config_root": true,
 		"coordinator_brief": true, "pending_feedback": true, "current_phase": true,
 		"folder": true, "roots": true, "active_root": true, "reviews_confined_writes": true, "command_external_changed": true, "command_external_hidden": true, "canceled": true, "root_id": true, "root_label": true,
@@ -224,6 +223,8 @@ func TestKickTemplateVarsSubsetOfEnvelopeKeys(t *testing.T) {
 		// Envelope.Vars keys declared on the post-turn / landing-advisory anchors.
 		"tool": true, "pending": true, "workflow_id": true, "guidance": true, "llm_timeout": true,
 		"held_call_handle": true, "held_call_tool": true, "held_call_outcome": true,
+		// The worker message page counts the messages it carries.
+		"message_count": true,
 	}
 	entries, err := config.List(config.PlatformGuidance)
 	testutil.FailErr(t, "readdir kicks", err)

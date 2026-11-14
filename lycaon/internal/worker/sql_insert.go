@@ -111,7 +111,6 @@ func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) e
 		StartedAt:        db.NullTimePtr(task.StartedAt),
 		CompletedAt:      db.NullTimePtr(task.CompletedAt),
 		OverlayID:        db.NullString(task.OverlayID),
-		MaxToolLoops:     workerJobMaxToolLoops(task.MaxToolLoops),
 		ToolLoopsUsed:    workerJobCount(task.ToolLoopsUsed),
 		ToolCallsUsed:    workerJobCount(task.ToolCallsUsed),
 	})
@@ -124,13 +123,6 @@ func insertTask(ctx context.Context, queries *db.Queries, task api.WorkerTask) e
 		}
 	}
 	return nil
-}
-
-func workerJobMaxToolLoops(n int) sql.NullInt64 {
-	if n <= 0 {
-		return sql.NullInt64{}
-	}
-	return sql.NullInt64{Int64: int64(n), Valid: true}
 }
 
 func workerJobCount(n int) sql.NullInt64 {

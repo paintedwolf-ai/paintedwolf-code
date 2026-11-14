@@ -530,8 +530,6 @@ host_facts:
    type: bool
  - name: paintedwolf.mime
    type: string
- - name: paintedwolf.worker_budget_at_max
-   type: bool
  - name: paintedwolf.search_provider_statuses
    type: list<string>
  - name: paintedwolf.period_max_year
@@ -872,8 +870,6 @@ host_facts:
    type: string
  - name: paintedwolf.count
    type: string
- - name: paintedwolf.current_max
-   type: string
  - name: paintedwolf.cwd
    type: string
  - name: paintedwolf.declared
@@ -954,8 +950,6 @@ host_facts:
    type: string
  - name: paintedwolf.host
    type: string
- - name: paintedwolf.host_max
-   type: string
  - name: paintedwolf.hunk_count
    type: string
  - name: paintedwolf.id
@@ -1011,8 +1005,6 @@ host_facts:
  - name: paintedwolf.max_path_bytes
    type: string
  - name: paintedwolf.max_paths
-   type: string
- - name: paintedwolf.max_tool_loops
    type: string
  - name: paintedwolf.max_uncompressed_bytes
    type: string
@@ -1178,8 +1170,6 @@ host_facts:
    type: string
  - name: paintedwolf.requested
    type: string
- - name: paintedwolf.requested_max
-   type: string
  - name: paintedwolf.resource
    type: string
  - name: paintedwolf.resume_field
@@ -1229,8 +1219,6 @@ host_facts:
  - name: paintedwolf.status
    type: string
  - name: paintedwolf.step_fields
-   type: string
- - name: paintedwolf.suggested_resume_max
    type: string
  - name: paintedwolf.supplied
    type: string

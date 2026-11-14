@@ -17,7 +17,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session"
 	"github.com/lycaon/lycaon/internal/session/workercloseout"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -60,7 +59,6 @@ type WorkerExecutionSessions interface {
 	SpawnChild(context.Context, string, api.SpawnChildRequest) (*api.Session, error)
 	workercloseout.WorkerSummaryFinalizeBounds
 	SessionByID(ctx context.Context, id string) (*api.Session, error)
-	SetWorkerMaxToolLoops(ctx context.Context, childSessionID string, maxToolLoops int) error
 }
 
 type WorkerGracefulCloseout interface {
@@ -183,6 +181,7 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 
 	finalizeOpts := e.workerFinalizeOpts(ctx, task, child, run.ProjectDir)
 	finalizeOpts.Reach = turn.RequestReach()
+	finalizeOpts.SpendLimitReached = turn != nil && turn.Outcome == promptresult.OutcomeSpendLimit
 	if _, reason, pending := e.Graceful.Closeout(child.ID); pending {
 		result, finishErr := e.completeGracefulStop(ctx, task, child, reason, finalizeOpts)
 		e.Graceful.Finish(child.ID)
@@ -212,7 +211,6 @@ func (e *LocalWorkerExecutor) Execute(ctx context.Context, task api.WorkerTask, 
 		HintCode:         outcome.HintCode,
 		PolicyFeedback:   outcome.PolicyFeedback,
 		Grounding:        outcome.Grounding,
-		HostAssembled:    outcome.HostAssembled,
 	}, nil
 }
 
@@ -277,12 +275,6 @@ func (e *LocalWorkerExecutor) resolveChildSession(
 		if strings.TrimSpace(child.ParentSessionID) != parentID {
 			return nil, false, fmt.Errorf("child session %s does not belong to parent %s", childID, parentID)
 		}
-		if task.MaxToolLoops > 0 {
-			if err := e.Sessions.SetWorkerMaxToolLoops(ctx, child.ID, task.MaxToolLoops); err != nil {
-				return nil, false, fmt.Errorf("worker max_tool_loops: %w", err)
-			}
-			child.MaxToolLoops = task.MaxToolLoops
-		}
 		workerExecLog.Debug("worker reusing child session",
 			"job_id", task.ID,
 			"parent_session_id", parentID,
@@ -292,11 +284,10 @@ func (e *LocalWorkerExecutor) resolveChildSession(
 		return child, true, nil
 	}
 	child, err := e.Sessions.SpawnChild(ctx, parentID, api.SpawnChildRequest{
-		AgentType:    agentType,
-		Prompt:       prompt,
-		Files:        task.Files,
-		MaxToolLoops: task.MaxToolLoops,
-		WorkerJobID:  task.ID,
+		AgentType:   agentType,
+		Prompt:      prompt,
+		Files:       task.Files,
+		WorkerJobID: task.ID,
 	})
 	if err != nil {
 		return nil, false, err
@@ -366,9 +357,6 @@ func ApplyEnqueueDefaults(task *api.WorkerTask, scope project.ProjectScope, cfg 
 	}
 	if task.EffectiveScope().IsWrite() && strings.TrimSpace(task.OverlayID) == "" && strings.TrimSpace(task.ID) != "" {
 		task.OverlayID = task.ID
-	}
-	if task.MaxToolLoops <= 0 {
-		task.MaxToolLoops = spawn.DefaultWorkerToolBudget().Default
 	}
 	return nil
 }

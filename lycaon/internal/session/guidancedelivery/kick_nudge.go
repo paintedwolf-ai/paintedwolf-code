@@ -57,13 +57,13 @@ func (m *Service) PendingIDs(ctx context.Context, sessionID string) []string {
 // cleared reports guidance whose obligation cleared while it waited.
 func (m *Service) cleared(ctx context.Context, sessionID string) kick.KickSkip {
 	feedbackPending := anchor.InformRender(anchor.FeedbackPending)
-	budgetRequested := anchor.InformRender(anchor.WorkerBudgetRequested)
+	roundNotice := anchor.InformRender(anchor.WorkerRoundNotice)
 	return func(id, subject string) bool {
 		if anchor.SameInform(id, anchor.ReviewLoopContinue) || anchor.SameInform(id, anchor.ReviewLoopDecide) {
 			return m.workflows != nil && !m.workflows.Policy.ActiveReviewVerdictPending(ctx, sessionID)
 		}
-		if id == budgetRequested {
-			return !m.budgets.BudgetRequestOpen(subject)
+		if id == roundNotice {
+			return !m.rounds.RoundRunning(subject)
 		}
 		if id != feedbackPending {
 			return false

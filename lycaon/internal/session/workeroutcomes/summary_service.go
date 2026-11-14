@@ -9,7 +9,6 @@ import (
 	"github.com/lycaon/lycaon/internal/oar"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/session/workercompletion"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
@@ -25,9 +24,6 @@ type SummaryStore interface {
 }
 type SummaryLimits interface {
 	Compaction(context.Context, *api.Session) compaction.CompactionConfig
-}
-type SummaryBudget interface {
-	BudgetForTask(context.Context, *api.WorkerTask) spawn.WorkerToolBudget
 }
 type SummaryDecisions interface {
 	GetByJob(context.Context, string) (api.WorkerDecisionRequest, bool, error)
@@ -48,7 +44,6 @@ type Summaries struct {
 	store          SummaryStore
 	tasks          TaskReader
 	limits         SummaryLimits
-	budget         SummaryBudget
 	decisions      SummaryDecisions
 	verification   SummaryVerification
 	resources      SummaryResources
@@ -68,7 +63,6 @@ type SummaryPorts struct {
 	Sessions       SummaryStore
 	Tasks          TaskReader
 	Limits         SummaryLimits
-	Budget         SummaryBudget
 	Decisions      SummaryDecisions
 	Verification   SummaryVerification
 	Resources      SummaryResources
@@ -81,7 +75,7 @@ type SummaryPorts struct {
 }
 
 func NewSummaries(p SummaryPorts) *Summaries {
-	return &Summaries{store: p.Sessions, tasks: p.Tasks, limits: p.Limits, budget: p.Budget, decisions: p.Decisions, verification: p.Verification, resources: p.Resources, delivery: p.Delivery, cards: p.Cards, digests: p.Digests, inspectChanges: p.InspectChanges, overlayStatus: p.OverlayStatus, overlayPending: p.OverlayPending}
+	return &Summaries{store: p.Sessions, tasks: p.Tasks, limits: p.Limits, decisions: p.Decisions, verification: p.Verification, resources: p.Resources, delivery: p.Delivery, cards: p.Cards, digests: p.Digests, inspectChanges: p.InspectChanges, overlayStatus: p.OverlayStatus, overlayPending: p.OverlayPending}
 }
 func (m *Summaries) SetTasks(p TaskReader)           { m.tasks = p }
 func (m *Summaries) SetDecisions(p SummaryDecisions) { m.decisions = p }

@@ -9,8 +9,6 @@ function limits(ceiling: number): SettingsLimitsResponse {
     max_tool_result_bytes: 0, coordinator_loop: true, max_coordinator_loop_cycles: 0,
     llm_turn_timeout_ms: 60000, coordinator_host_turn_timeout_ms: 60000,
     coordinator_max_sleep_ms: 60000, await_parent_workers_timeout_ms: 60000,
-    worker_tool_budget_default: 20,
-    worker_tool_budget_min: 2, worker_tool_budget_max: 120,
     session_spend_ceiling_nano_usd: ceiling * NANO_PER_USD, spend_warning_ratio: 0.8,
     spend_ceiling_enabled: true, spend_soft_stop: true, merged_from: ["bundled"],
   };

@@ -249,7 +249,6 @@ describe("WorkersTab", () => {
   it("shows rounds and tool calls as separate chips on a row", () => {
     const busy = {
       ...running,
-      max_tool_loops: 40,
       tool_loops_used: 34,
       tool_calls_used: 128,
       turn_tool_calls: 6,
@@ -258,7 +257,7 @@ describe("WorkersTab", () => {
     const { container } = render(() => (
       <WorkersTab workers={[busy]} selectedId={null} onSelect={noop} onCancel={noop} />
     ));
-    expect(container.querySelector(".den-worker-budget")?.textContent).toBe("34/40");
+    expect(container.querySelector(".den-worker-turns")?.textContent).toBe("34 turns");
     expect(screen.getByTestId("worker-tool-calls").textContent).toBe("128 tools · 2/6");
   });
 });

@@ -15,9 +15,6 @@ const sampleLimits = (): SettingsLimitsResponse => ({
   coordinator_host_turn_timeout_ms: 10800000,
   coordinator_max_sleep_ms: 10800000,
   await_parent_workers_timeout_ms: 10800000,
-  worker_tool_budget_default: 20,
-  worker_tool_budget_min: 2,
-  worker_tool_budget_max: 120,
   session_spend_ceiling_nano_usd: 5000000000,
   spend_ceiling_enabled: true,
   spend_soft_stop: true,
@@ -37,8 +34,8 @@ describe("limits field edits", () => {
     const [limits, setLimits] = createSignal(sampleLimits());
     const draft = createLimitsDraft(limits);
     draft.edit("max_iterations", 600);
-    setLimits({ ...sampleLimits(), worker_tool_budget_default: 30 });
-    expect(draft.value()?.worker_tool_budget_default).toBe(30);
+    setLimits({ ...sampleLimits(), max_tool_result_bytes: 65536 });
+    expect(draft.value()?.max_tool_result_bytes).toBe(65536);
     expect(draft.value()?.max_iterations).toBe(600);
     expect(draft.beginSave()).toEqual({ max_iterations: 600 });
     dispose();

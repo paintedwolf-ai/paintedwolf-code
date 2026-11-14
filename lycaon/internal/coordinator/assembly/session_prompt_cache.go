@@ -16,6 +16,7 @@ type TurnAssemblyScratch struct {
 	PromptTurnSeq              int
 	SurfaceID                  string
 	PendingKickIDs             []string
+	PendingMessages            MessageDelivery
 	StablePrompt               string
 	StablePromptKey            string
 	BoardBlock                 string

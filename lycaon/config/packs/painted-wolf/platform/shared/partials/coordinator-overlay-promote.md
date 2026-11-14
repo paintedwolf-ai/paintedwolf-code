@@ -8,5 +8,5 @@ Each finished write leg is a **revision-bound changeset** (`overlay_id` == `job_
 4. `drop` only accidental/generated material, never to hide failed checks or unfinished work. Suggested task paths do not filter promotion; confinement remains the authority boundary.
 5. `reject_overlay` is terminal: use it only for wrong, superseded, duplicate, or unwanted work. Preserve partial delivery and resume with `task(child_session_id=…)`. Do not redispatch already-delivered work.
 
-Use `preview_overlay` for a closer review; verify the combined result as its behavior requires. Update progress as overlays land. `extend_worker_budget` is for running workers, not terminal legs.
+Use `preview_overlay` for a closer review; verify the combined result as its behavior requires. Update progress as overlays land.
 {% include "partials/coordinator-needs-decision-resume.md" %}

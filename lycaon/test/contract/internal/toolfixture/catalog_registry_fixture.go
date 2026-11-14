@@ -93,6 +93,9 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRecordFindingTool failed", err)
 	}
+	if err := native.RegisterMessageCoordinatorTool(reg, workertools.MessageCoordinatorDeps{}); err != nil {
+		contractcheck.FailErr(t, "native.RegisterMessageCoordinatorTool failed", err)
+	}
 	if err := native.RegisterUpdateProgressTool(reg, progress.NewMemoryStore(), func(_ context.Context, id string) string {
 		return id
 	}, nil); err != nil {
@@ -109,19 +112,6 @@ func registerCatalogToolsOnto(t *testing.T, reg *tools.DefaultRegistry) {
 	}
 	if err := native.RegisterRequestDecisionTool(reg, workertools.RequestDecisionDeps{}); err != nil {
 		contractcheck.FailErr(t, "native.RegisterRequestDecisionTool failed", err)
-	}
-	// Registration only: the budget tools never run against this ledger.
-	budgetQueue, budgetLedger := worker.NewInMemoryQueue(1), worker.NewSQLBudgetLedger(nil, nil)
-	if err := worker.RegisterRequestBudgetTool(reg, worker.RequestBudgetToolDeps{
-		Queue: budgetQueue, Ledger: budgetLedger, Notify: func(context.Context, api.WorkerTask) {},
-	}); err != nil {
-		contractcheck.FailErr(t, "worker.RegisterRequestBudgetTool failed", err)
-	}
-	if err := worker.RegisterExtendWorkerBudgetTool(reg, worker.ExtendBudgetToolDeps{Queue: budgetQueue, Ledger: budgetLedger}); err != nil {
-		contractcheck.FailErr(t, "worker.RegisterExtendWorkerBudgetTool failed", err)
-	}
-	if err := worker.RegisterDeclineWorkerBudgetTool(reg, worker.DeclineBudgetToolDeps{Queue: budgetQueue, Ledger: budgetLedger}); err != nil {
-		contractcheck.FailErr(t, "worker.RegisterDeclineWorkerBudgetTool failed", err)
 	}
 	webRT, err := webresearch.WireRuntime(t.Context())
 	contractcheck.FailErr(t, "webresearch.WireRuntime", err)

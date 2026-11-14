@@ -66,15 +66,6 @@ anchors:
         last_worker_decision_request: { type: object }
         job_id: { type: string }
         child_session_id: { type: string }
-        tool_loops_used: { type: int }
-        max_tool_loops: { type: int }
-        host_max_tool_loops: { type: int }
-        worker_budget_exhausted: { type: bool }
-        suggested_resume_max: { type: int }
-        budget_request_open: { type: bool }
-        requested_max: { type: int }
-        requested_rounds: { type: int }
-        remaining_work: { type: "string[]" }
 
   - id: phase.advanced
     title: Phase advanced
@@ -230,46 +221,34 @@ anchors:
     envelope:
       vars: {}
 
-  - id: worker.budget.requested
-    title: Worker budget requested
-    description: A running worker asked its coordinator for more tool rounds with request_budget.
+  - id: worker.round.notice
+    title: Worker round notice
+    description: A running worker round crossed a consumption or quiet threshold; the notice informs and stops nothing.
     trigger_class: wait_trigger
     surface: coordinator
     planes: [inform]
     envelope:
       vars:
         job_id: { type: string, required: true }
-        tool_loops_used: { type: int, required: true }
-        max_tool_loops: { type: int, required: true }
-        host_max_tool_loops: { type: int, required: true }
-        budget_request_open: { type: bool, required: true }
-        requested_max: { type: int, required: true }
-        requested_rounds: { type: int, required: true }
-        remaining_work: { type: "string[]", required: true }
+        agent_type: { type: string, required: true }
+        notice_kind: { type: string, required: true }
+        model_calls: { type: int, required: true }
+        tokens: { type: int, required: true }
+        spend_under_cent: { type: bool }
+        estimated_spend_usd: { type: string }
+        quiet_minutes: { type: int }
+        in_flight: { type: string }
+        tool_calls: { type: int }
+        tools_done: { type: int }
 
-  - id: worker.budget.raised
-    title: Worker budget raised
-    description: The coordinator raised a running worker's tool-round ceiling.
-    trigger_class: host_api
-    surface: worker
+  - id: worker.message.received
+    title: Worker message received
+    description: A running worker sent its coordinator a message that needs a reply. Non-content Anchor — the message reaches the coordinator through its message page, so there is no inform Binding.
+    trigger_class: wait_trigger
+    surface: coordinator
     planes: [inform]
     envelope:
-      vars:
-        tool_loops_used: { type: int, required: true }
-        max_tool_loops: { type: int, required: true }
-        remaining: { type: int, required: true }
-
-  - id: worker.budget.declined
-    title: Worker budget declined
-    description: The coordinator declined a running worker's open request for more tool rounds.
-    trigger_class: host_api
-    surface: worker
-    planes: [inform]
-    envelope:
-      vars:
-        tool_loops_used: { type: int, required: true }
-        max_tool_loops: { type: int, required: true }
-        remaining: { type: int, required: true }
+      vars: {}
 
   - id: edit.follow_up.repeat
     title: Edit follow-up repeat
@@ -357,19 +336,6 @@ anchors:
     planes: [inform]
     envelope:
       vars: {}
-
-  - id: worker.iterations.low
-    title: Worker iterations low
-    description: Any worker is told once per ceiling when its runway reaches the host threshold.
-    trigger_class: host_api
-    surface: worker
-    planes: [inform]
-    envelope:
-      vars:
-        remaining: { type: int, required: true }
-        max_tool_loops: { type: int, required: true }
-        at_host_max: { type: bool, required: true }
-        request_open: { type: bool, required: true }
 
   - id: worker.cancel.closeout
     title: Worker cancel closeout
@@ -651,6 +617,22 @@ anchors:
         can_wait: { type: "bool", required: true }
         has_command: { type: "bool", required: true }
         has_held: { type: "bool", required: true }
+
+  - id: inject.worker_messages
+    title: Worker messages inject
+    description: >-
+      The oldest undelivered page of messages for this session: what its
+      workers said to the coordinator, or what the coordinator instructed this
+      worker. Delivery commits only after a successful response.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        recipient: { type: string, required: true }
+        message_count: { type: int, required: true }
+        has_needs_reply: { type: bool, required: true }
+        more: { type: bool, required: true }
 
   - id: inject.source_changes
     title: Source change brief inject

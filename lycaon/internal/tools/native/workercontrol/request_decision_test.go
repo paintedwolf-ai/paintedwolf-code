@@ -154,3 +154,16 @@ func TestDecisionAttachmentsCannotDisappearDuringParsing(t *testing.T) {
 		}
 	}
 }
+
+// No options asks an open question; the request records with none.
+func TestRequestDecisionRecordsOpenQuestion(t *testing.T) {
+	reg := tools.NewDefaultRegistry()
+	rec := &fakeDecisionRecorder{}
+	testutil.FailErr(t, "register", native.RegisterRequestDecisionTool(reg, workertools.RequestDecisionDeps{Recorder: rec}))
+	_, err := reg.Run(context.Background(), workertools.RequestDecisionTool, map[string]any{"question": "Which encoding does the caller expect?"},
+		tools.ToolContext{Identity: tools.InvocationIdentity{SessionID: "child-1", ParentSessionID: "parent-1", WorkerJobID: "job-1"}})
+	testutil.FailErr(t, "open question", err)
+	if rec.calls != 1 || len(rec.request.Options) != 0 || rec.request.Question != "Which encoding does the caller expect?" {
+		t.Fatalf("recorded %+v (%d calls)", rec.request, rec.calls)
+	}
+}

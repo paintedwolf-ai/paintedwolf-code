@@ -39,8 +39,8 @@ func TestBranchDeltaEmptyWhenIdentical(t *testing.T) {
 
 func TestExecuteFailureCodeLLMTimeout(t *testing.T) {
 	err := errors.Join(promptloop.ErrLLMTurnTimeout, context.DeadlineExceeded)
-	if got := worker.ExecuteFailureCode(err); got != "worker_closeout_exhausted" {
-		t.Fatalf("ExecuteFailureCode = %q want worker_closeout_exhausted", got)
+	if got := worker.ExecuteFailureCode(err); got != "worker_model_timeout" {
+		t.Fatalf("ExecuteFailureCode = %q want worker_model_timeout", got)
 	}
 }
 

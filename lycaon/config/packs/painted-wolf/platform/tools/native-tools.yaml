@@ -72,7 +72,7 @@ multi_root:
     - record_finding
     - update_progress
     - request_decision
-    - request_budget
+    - message_coordinator
     - handoff_init
     - handoff_reserve
     - handoff_release
@@ -107,8 +107,6 @@ multi_root:
     - secret_list
     - secret_revoke
     - worker_cancel
-    - extend_worker_budget
-    - decline_worker_budget
     - promote_overlay
     - reject_overlay
     - preview_overlay
@@ -343,7 +341,7 @@ bounded_in_process:
 session_scope:
   complete_leg: worker_child
   request_decision: worker_child
-  request_budget: worker_child
+  message_coordinator: worker_child
 
 # Connected servers register these prefixes after boot.
 # Other profile patterns resolve against the registered tool set.
@@ -371,12 +369,10 @@ approval_reversibility:
   complete_leg: reversible
   command_stop: recoverable
   capture_page: recoverable
-  decline_worker_budget: reversible
   delegate_decompose: reversible
   delegate_dispatch: reversible
   delegate_init: reversible
   delegate_status: reversible
-  extend_worker_budget: reversible
   fetch_url: recoverable
   fanout_plan: reversible
   handoff_health: reversible
@@ -399,11 +395,11 @@ approval_reversibility:
   plan_append_review_evidence: reversible
   promote_overlay: reversible
   recall: reversible
+  message_coordinator: reversible
   record_finding: reversible
   reject_overlay: reversible
   render_view: recoverable
   restore_version: reversible
-  request_budget: reversible
   request_decision: reversible
   request_tools: reversible
   secret_generate: reversible
@@ -456,12 +452,10 @@ owner:
   complete_leg: workers
   command_stop: processes
   capture_page: browser
-  decline_worker_budget: workers
   delegate_decompose: delegation
   delegate_dispatch: delegation
   delegate_init: delegation
   delegate_status: delegation
-  extend_worker_budget: workers
   fanout_plan: blueprints
   fetch_url: web_research
   handoff_health: handoff
@@ -484,11 +478,11 @@ owner:
   preview_overlay: worker_merge
   promote_overlay: worker_merge
   recall: sessions
+  message_coordinator: workers
   record_finding: findings
   reject_overlay: worker_merge
   render_view: visual
   restore_version: filesystem
-  request_budget: workers
   request_decision: checkpoints
   request_tools: tool_surface
   secret_generate: secrets
@@ -541,12 +535,10 @@ batch_policy:
   complete_leg: serial
   command_stop: serial
   capture_page: serial
-  decline_worker_budget: serial
   delegate_decompose: serial
   delegate_dispatch: serial
   delegate_init: serial
   delegate_status: shared
-  extend_worker_budget: serial
   fetch_url: same_tool
   fanout_plan: serial
   handoff_health: shared
@@ -569,11 +561,11 @@ batch_policy:
   plan_append_review_evidence: serial
   promote_overlay: serial
   recall: shared
+  message_coordinator: serial
   record_finding: serial
   reject_overlay: serial
   render_view: serial
   restore_version: serial
-  request_budget: serial
   request_decision: serial
   request_tools: serial
   secret_generate: serial
@@ -648,12 +640,10 @@ lifecycle:
   complete_leg: db_transaction
   command_stop: ephemeral_control
   capture_page: effect_attempt
-  decline_worker_budget: db_transaction
   delegate_decompose: db_transaction
   delegate_dispatch: db_transaction
   delegate_init: db_transaction
   delegate_status: read_only
-  extend_worker_budget: db_transaction
   fetch_url: effect_attempt
   fanout_plan: db_transaction
   handoff_health: read_only
@@ -676,11 +666,11 @@ lifecycle:
   plan_append_review_evidence: effect_attempt
   promote_overlay: journaled_mutation
   recall: read_only
+  message_coordinator: db_transaction
   record_finding: db_transaction
   reject_overlay: effect_attempt
   render_view: effect_attempt
   restore_version: effect_attempt
-  request_budget: db_transaction
   request_decision: db_transaction
   request_tools: ephemeral_control
   secret_generate: db_transaction

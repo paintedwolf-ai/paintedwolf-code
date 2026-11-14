@@ -13,11 +13,11 @@ x-paintedwolf-audience:
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:worker_summary
 message: 'Worker ended without an accepted completion report'
-what: 'The worker ended without an accepted structured completion report.'
-cause: 'The host could not obtain a usable completion report after the worker finish path.'
-why: 'The report is missing; that does not establish whether the underlying assignment was completed.'
-fix: 'Inspect the existing worker result and retained observations before deciding on follow-up. Ask for a completion report on a resumed worker report turn; dispatch new work only for a specific unmet requirement, preserving the existing worker and overlay identities.'
-instead: 'Treat the result as partial and state which report or evidence is missing. Do not rerun completed work merely to obtain a report.'
+what: 'The worker round ended without an accepted completion report.'
+cause: 'The worker kept answering without a tool call, or its round ended another way before it reported.'
+why: 'A missing report does not show whether the work was done. What the worker changed is kept with its job.'
+fix: 'Inspect its result and retained observations, and preview what it changed. Resume the worker on its child session and ask for the report; start new work only for a specific unmet requirement.'
+instead: 'State which report or evidence is missing. Do not rerun completed work merely to obtain a report.'
 x-paintedwolf-scenarios:
   - id: default
     vars:

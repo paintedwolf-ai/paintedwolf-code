@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"github.com/lycaon/lycaon/internal/workermessaging"
+	"github.com/lycaon/lycaon/internal/workerrecords"
 
 	"github.com/lycaon/lycaon/internal/briefing"
 	"github.com/lycaon/lycaon/internal/briefingstore"
@@ -88,6 +90,14 @@ func (r *Runtime) wireFindingAndProgressTools() error {
 	r.Findings = findings.NewSQLStore(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.Workers.Notes.SetFindings(r.Findings)
 	r.deps.Sessions.Manager.SetPeerRejectionFeed(workeroutcomes.NewPeerRejectionFeed())
+	r.WorkerRecords = workerrecords.New(r.deps.Storage.Database)
+	r.deps.Sessions.Manager.SetWorkerMessages(&workermessaging.Delivery{Records: r.WorkerRecords})
+	if err := native.RegisterMessageCoordinatorTool(r.deps.Execution.Host.Registry, workertools.MessageCoordinatorDeps{
+		Records:    r.WorkerRecords,
+		NeedsReply: r.deps.Sessions.Manager.Coordinator.Workers.MessageNeedsReply,
+	}); err != nil {
+		return fmt.Errorf("message_coordinator tool: %w", err)
+	}
 	if err := native.RegisterRecordFindingTool(r.deps.Execution.Host.Registry, reporttools.RecordFindingGates{
 		Grounding: r.Grounding,
 	}, r.Findings, r.rootSessionKey); err != nil {
@@ -212,15 +222,6 @@ func (r *Runtime) wireVisualAndRenderTools(ctx context.Context) error {
 func (r *Runtime) wireDecisionAndCallTools() error {
 	r.deps.Sessions.Decisions = decisions.NewSQL(r.deps.Storage.Database)
 	r.deps.Sessions.Manager.SetDecisionStore(r.deps.Sessions.Decisions)
-	r.BudgetLedger = worker.NewSQLBudgetLedger(r.deps.Storage.Sessions, r.deps.Delegations.Queue)
-	if err := worker.RegisterRequestBudgetTool(r.deps.Execution.Host.Registry, worker.RequestBudgetToolDeps{
-		Queue:      r.deps.Delegations.Queue,
-		Ledger:     r.BudgetLedger,
-		ToolBudget: r.deps.Sessions.WorkerToolBudgetFor,
-		Notify:     r.deps.Sessions.Manager.Coordinator.Workers.BudgetRequested,
-	}); err != nil {
-		return fmt.Errorf("request_budget tool: %w", err)
-	}
 	r.AnswerDecision = &worker.AnswerDecisionService{
 		Queue:     r.deps.Delegations.Queue,
 		Decisions: r.deps.Sessions.Decisions,
@@ -251,6 +252,7 @@ func (r *Runtime) wireDecisionAndCallTools() error {
 	r.Snapshot.ActiveReservations = r.deps.Sessions.Manager.Workers.Workspaces.ReservationEntries
 
 	r.deps.Sessions.Manager.SetWorkerQueue(r.deps.Delegations.Queue)
+	r.deps.Sessions.Manager.SetWorkerRounds(r.deps.WorkersCfg.RoundPolicy())
 	r.deps.Sessions.Manager.SetSessionWorkerAbort(r.deps.Delegations.Cancel)
 	r.ParentWaiter = worker.NewParentWorkerWaiter()
 

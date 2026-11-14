@@ -79,7 +79,7 @@ func RenderPromptDump(
 	if err := capability.MergeForTurn(base, profile, rootCount, roster.Effective, true); err != nil {
 		return "", fmt.Errorf("merge fixture capabilities: %w", err)
 	}
-	for key, value := range spawn.PolicyTemplateVars(spawn.DefaultWorkerToolBudget()) {
+	for key, value := range spawn.PolicyTemplateVars() {
 		base[key] = value
 	}
 	if configRoot != "" {

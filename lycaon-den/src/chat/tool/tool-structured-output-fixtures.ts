@@ -425,26 +425,6 @@ export const TOOL_STRUCTURED_OUTPUT_FIXTURES: Record<string, string> = {
     status: "decision_requested",
     options: 2,
   }),
-  extend_worker_budget: JSON.stringify({
-    job_id: "job-1",
-    child_session_id: "child-1",
-    previous_max: 40,
-    new_max: 80,
-    requested_max: 60,
-    tool_loops_used: 32,
-  }),
-  request_budget: JSON.stringify({
-    status: "requested",
-    max_tool_loops: 40,
-    requested_max: 60,
-    tool_loops_used: 32,
-  }),
-  decline_worker_budget: JSON.stringify({
-    job_id: "job-1",
-    max_tool_loops: 40,
-    requested_max: 60,
-    tool_loops_used: 32,
-  }),
   record_finding: JSON.stringify({ status: "appended", kind: "note" }),
   recall: JSON.stringify({
     resolution: "matched",

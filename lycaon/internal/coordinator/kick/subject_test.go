@@ -12,8 +12,8 @@ func TestKicksForDifferentSubjectsQueueSeparately(t *testing.T) {
 	kicks := &KickEngine{}
 	kicks.SetPromptEngine(engine)
 	for _, job := range []string{"job-a", "job-b", "job-a"} {
-		kicks.QueueDeferred("s1", "coordinator-worker-budget-requested",
-			WithSubject(job), WithWorkerBudget(WorkerBudgetFacts{JobID: job}))
+		kicks.QueueDeferred("s1", "coordinator-worker-round-notice",
+			WithSubject(job), WithWorkerRoundNotice(WorkerRoundNoticeFacts{JobID: job}))
 	}
 	var rendered []string
 	for kicks.TakePendingKickID("s1") != "" {
@@ -24,7 +24,7 @@ func TestKicksForDifferentSubjectsQueueSeparately(t *testing.T) {
 		rendered = append(rendered, text)
 		kicks.AckPendingNudge("s1", lease)
 	}
-	want := []string{"coordinator-worker-budget-requested:job-a", "coordinator-worker-budget-requested:job-b"}
+	want := []string{"coordinator-worker-round-notice:job-a", "coordinator-worker-round-notice:job-b"}
 	if !slices.Equal(rendered, want) {
 		t.Fatalf("rendered = %v, want one kick per job in arrival order %v", rendered, want)
 	}

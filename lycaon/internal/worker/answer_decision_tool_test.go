@@ -170,3 +170,19 @@ func TestWorkerSubjectRespectsSessionOwnership(t *testing.T) {
 		}
 	}
 }
+
+// An open question has no options, so the coordinator's words are the answer,
+// including one that looks like an option number.
+func TestAnswerDecisionOpenQuestionTakesFreeText(t *testing.T) {
+	q := &answerStubQueue{task: &api.WorkerTask{ID: "job-1", ParentSessionID: "parent-1", ChildSessionID: "child-1"}}
+	decisions := sessiondecisions.NewMemory()
+	testutil.FailErr(t, "store decision", decisions.Put(context.Background(), api.WorkerDecisionRequest{
+		ChildSessionID: "child-1", WorkerID: "job-1", Question: "Which encoding does the caller expect?", BlockerClass: api.WorkerBlockerDecision,
+	}))
+	svc, resolver := answerDecisionService(t, q, decisions)
+	out, err := svc.AnswerJob(context.Background(), "parent-1", "job-1", "2", "")
+	testutil.FailErr(t, "answer", err)
+	if out.Option != "2" || len(resolver.appended) != 1 || !strings.HasPrefix(resolver.appended[0].Content, DecisionAnswerCoordinator+": 2\n") {
+		t.Fatalf("answer = %+v appended = %+v", out, resolver.appended)
+	}
+}

@@ -23,7 +23,7 @@ schema:
       type: array
       maxItems: 8
       uniqueItems: true
-      description: First satisfied condition resumes the agent. Omit for a pure timer.
+      description: First satisfied condition resumes the agent. A round notice about a waited worker, or its message that needs a reply, also resumes it (outcome notice or message; the worker keeps running). Omit for a pure timer.
       items:
         type: object
         properties:

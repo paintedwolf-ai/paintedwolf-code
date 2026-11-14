@@ -30,4 +30,4 @@ Reconcile against the original item table: every row ends in one of the five sta
 
 The item table with each row's final state, which legs were re-dispatched and why, the combined verification result, and any item still unresolved with its blocker.
 
-Work sequentially instead when items overlap heavily, when one foundational change will invalidate later diagnoses, or when the verification environment cannot run safely in parallel. For wave width and `max_tool_loops` bands, follow the sizing table in `references/orchestrate_a_large_task.md`.
+Work sequentially instead when items overlap heavily, when one foundational change will invalidate later diagnoses, or when the verification environment cannot run safely in parallel. For wave width, follow the sizing table in `references/orchestrate_a_large_task.md`.

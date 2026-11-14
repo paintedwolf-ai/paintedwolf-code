@@ -269,30 +269,6 @@
       ]
     },
     {
-      "tool": "decline_worker_budget",
-      "owner": "workers",
-      "disposition": "retain-domain-structured",
-      "command": "",
-      "lifecycle": "db_transaction",
-      "reuse": "Existing native registration and complete typed operation; preserve owner guidance and history. Test reference is stock catalog-closure evidence only; utility records carry operation/adjacent-test references. No unchanged domain algorithm qualification is claimed.",
-      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/decline_worker_budget.yaml",
-      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
-      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
-      "selected_disposition": "Retain domain capability",
-      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
-      "existing_semantic_difference": "Host-owned workers state and lifecycle; see current description",
-      "implementing_issues": [
-        "P03",
-        "P09",
-        "P10",
-        "P23",
-        "P32",
-        "P33"
-      ],
-      "existing_rejection_code": "",
-      "command_forms": []
-    },
-    {
       "tool": "delegate_decompose",
       "owner": "delegation",
       "disposition": "retain-domain-structured",
@@ -460,30 +436,6 @@
       "command_forms": [
         "edit"
       ]
-    },
-    {
-      "tool": "extend_worker_budget",
-      "owner": "workers",
-      "disposition": "retain-domain-structured",
-      "command": "",
-      "lifecycle": "db_transaction",
-      "reuse": "Existing native registration and complete typed operation; preserve owner guidance and history. Test reference is stock catalog-closure evidence only; utility records carry operation/adjacent-test references. No unchanged domain algorithm qualification is claimed.",
-      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/extend_worker_budget.yaml",
-      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
-      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
-      "selected_disposition": "Retain domain capability",
-      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
-      "existing_semantic_difference": "Host-owned workers state and lifecycle; see current description",
-      "implementing_issues": [
-        "P03",
-        "P09",
-        "P10",
-        "P23",
-        "P32",
-        "P33"
-      ],
-      "existing_rejection_code": "",
-      "command_forms": []
     },
     {
       "tool": "extract_archive",
@@ -693,7 +645,10 @@
         "P33"
       ],
       "existing_rejection_code": "",
-      "command_forms": ["git rev-list", "git merge-base"]
+      "command_forms": [
+        "git rev-list",
+        "git merge-base"
+      ]
     },
     {
       "tool": "git_diff",
@@ -1206,6 +1161,23 @@
         "P32",
         "P33"
       ],
+      "existing_rejection_code": "",
+      "command_forms": []
+    },
+    {
+      "tool": "message_coordinator",
+      "owner": "workers",
+      "disposition": "retain-domain-structured",
+      "command": "",
+      "lifecycle": "db_transaction",
+      "reuse": "Native registration over the worker records store; one typed operation that appends a worker message.",
+      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/message_coordinator.yaml",
+      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
+      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
+      "selected_disposition": "Retain domain capability",
+      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
+      "existing_semantic_difference": "Host-held worker messages; see current description",
+      "implementing_issues": [],
       "existing_rejection_code": "",
       "command_forms": []
     },
@@ -1761,30 +1733,6 @@
       "command_forms": [
         "replace-lines"
       ]
-    },
-    {
-      "tool": "request_budget",
-      "owner": "workers",
-      "disposition": "retain-domain-structured",
-      "command": "",
-      "lifecycle": "db_transaction",
-      "reuse": "Existing native registration and complete typed operation; preserve owner guidance and history. Test reference is stock catalog-closure evidence only; utility records carry operation/adjacent-test references. No unchanged domain algorithm qualification is claimed.",
-      "source": "lycaon/config/packs/painted-wolf/platform/tools/schemas/request_budget.yaml",
-      "test": "lycaon/test/contract/agentcontext/tool_command_equivalence_test.go",
-      "cleanup": "Offered as a structured tool; the name keeps its meaning in receipts and history.",
-      "selected_disposition": "Retain domain capability",
-      "behavior_change_or_retention": "Keep explicit domain contract; language exposure only if it improves a real task",
-      "existing_semantic_difference": "Host-owned workers state and lifecycle; see current description",
-      "implementing_issues": [
-        "P03",
-        "P09",
-        "P10",
-        "P23",
-        "P32",
-        "P33"
-      ],
-      "existing_rejection_code": "",
-      "command_forms": []
     },
     {
       "tool": "request_decision",
