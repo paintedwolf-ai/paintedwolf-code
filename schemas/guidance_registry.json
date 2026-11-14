@@ -1614,6 +1614,24 @@
       "emit": "guard:visual_capture",
       "summary": "querySelectorAll rejected selector {{ paintedwolf.measure_selector }}."
     },
+    "MESSAGE_COORDINATOR_ADDRESSED_SESSION": {
+      "branch_instruction": "Branch on Code MESSAGE_COORDINATOR_ADDRESSED_SESSION; tell the user directly, do not retry here",
+      "category": "recoverable",
+      "emit": "guard:message_coordinator",
+      "summary": "There is no coordinator above this session to message."
+    },
+    "MESSAGE_COORDINATOR_NO_WORKER": {
+      "branch_instruction": "Branch on Code MESSAGE_COORDINATOR_NO_WORKER; put what you wanted to say in your leg report, or ask for a decision if you cannot proceed",
+      "category": "recoverable",
+      "emit": "guard:message_coordinator",
+      "summary": "This leg is not a worker, so it has no message history with the coordinator."
+    },
+    "MESSAGE_COORDINATOR_REPLY_UNKNOWN": {
+      "branch_instruction": "Branch on Code MESSAGE_COORDINATOR_REPLY_UNKNOWN; use the number shown beside the coordinator message, or omit reply_to",
+      "category": "recoverable",
+      "emit": "guard:message_coordinator",
+      "summary": "reply_to names no message in your history with the coordinator."
+    },
     "MID_TURN_NOTE_ARTIFACT_UNKNOWN": {
       "branch_instruction": "Branch on Code MID_TURN_NOTE_ARTIFACT_UNKNOWN; continue from the tool results above and use an observed artifact id or omit the directive",
       "category": "recoverable",
@@ -2265,12 +2283,6 @@
       "emit": "banner",
       "severity": "info",
       "summary": "This view contains no included entries at the requested path and depth. Check scope and filters before concluding that the repository is empty."
-    },
-    "REQUEST_BUDGET_ADDRESSED_SESSION": {
-      "branch_instruction": "Branch on Code REQUEST_BUDGET_ADDRESSED_SESSION; do not retry here",
-      "category": "recoverable",
-      "emit": "guard:request_budget",
-      "summary": "There is no coordinator above this session to grant more tool rounds."
     },
     "REQUEST_DECISION_ADDRESSED_SESSION": {
       "branch_instruction": "Branch on Code REQUEST_DECISION_ADDRESSED_SESSION; ask the user directly, do not retry here",
@@ -3143,12 +3155,6 @@
       "emit": "guard:coordinator",
       "summary": "Child session `{{ paintedwolf.child_session_id }}` still has an unanswered `needs_decision` from job `{{ paintedwolf.job_id }}`."
     },
-    "TASK_MAX_TOOL_LOOPS_INVALID": {
-      "branch_instruction": "Branch on Code; set max_tool_loops within host bounds or omit it",
-      "category": "recoverable",
-      "emit": "guard:task",
-      "summary": "Requested max_tool_loops {{ paintedwolf.max_tool_loops }} falls outside the current host range {{ paintedwolf.min_required }}–{{ paintedwolf.host_max }}."
-    },
     "TASK_REVIEW_FRESH_WORKSPACE_REQUIRED": {
       "branch_instruction": "Start a new reviewer with the registered work ID; retain earlier reviews as evidence.",
       "category": "recoverable",
@@ -3467,60 +3473,6 @@
       "emit": "guard:worker_branch_claim",
       "summary": "Isolating tool **{{ tool }}** could not claim the worker's private view."
     },
-    "WORKER_BUDGET_DECLINE_NO_REQUEST": {
-      "branch_instruction": "Branch on Code; nothing is left to decline for this job",
-      "category": "recoverable",
-      "emit": "guard:decline_worker_budget",
-      "summary": "`decline_worker_budget(job_id)` answers an open budget request on a pending or running worker job"
-    },
-    "WORKER_BUDGET_DECLINE_SESSION_MISMATCH": {
-      "branch_instruction": "Branch on Code; pass a job_id belonging to this session",
-      "category": "recoverable",
-      "emit": "guard:decline_worker_budget",
-      "summary": "decline_worker_budget may only target jobs spawned from the caller session"
-    },
-    "WORKER_BUDGET_EXHAUSTED": {
-      "branch_instruction": "Resume the same child with suggested_resume_max when the host reports the worker finished.",
-      "category": "recoverable",
-      "emit": "guard:worker_summary",
-      "summary": "Worker hit iteration_cap closeout without a verified completion report"
-    },
-    "WORKER_BUDGET_EXTEND_INVALID": {
-      "branch_instruction": "Branch on Code; set max_tool_loops within host bounds",
-      "category": "recoverable",
-      "emit": "guard:extend_worker_budget",
-      "summary": "max_tool_loops must be within host worker budget bounds"
-    },
-    "WORKER_BUDGET_EXTEND_NOT_INCREASE": {
-      "branch_instruction": "Extend only when the current host bounds leave room; otherwise report the remaining work",
-      "category": "recoverable",
-      "emit": "guard:extend_worker_budget",
-      "summary": "extend_worker_budget requires a strictly higher max_tool_loops than the job's effective ceiling"
-    },
-    "WORKER_BUDGET_EXTEND_NOT_RUNNING": {
-      "branch_instruction": "Branch on Code; extend only running/pending jobs or resume on child_session_id",
-      "category": "recoverable",
-      "emit": "guard:extend_worker_budget",
-      "summary": "`extend_worker_budget(job_id, max_tool_loops)` only applies while a worker job is pending or running"
-    },
-    "WORKER_BUDGET_EXTEND_SESSION_MISMATCH": {
-      "branch_instruction": "Branch on Code; pass a job_id belonging to this session",
-      "category": "recoverable",
-      "emit": "guard:extend_worker_budget",
-      "summary": "extend_worker_budget may only target jobs spawned from the caller session"
-    },
-    "WORKER_BUDGET_REQUEST_AT_HOST_MAX": {
-      "branch_instruction": "Report the remaining work; do not repeat request_budget",
-      "category": "recoverable",
-      "emit": "guard:request_budget",
-      "summary": "This leg's ceiling of {{ paintedwolf.max_tool_loops }} tool rounds is already the host maximum."
-    },
-    "WORKER_BUDGET_REQUEST_OPEN": {
-      "branch_instruction": "Continue the leg; do not repeat request_budget",
-      "category": "recoverable",
-      "emit": "guard:request_budget",
-      "summary": "Your earlier budget request is still with the coordinator."
-    },
     "WORKER_CANCEL_NOT_FOUND": {
       "branch_instruction": "Pass a valid job_id from an enqueue result or the pulse roster.",
       "category": "recoverable",
@@ -3540,10 +3492,10 @@
       "summary": "worker_cancel only applies to pending, running, or held jobs"
     },
     "WORKER_COMPLETION_REPORT_MISSING": {
-      "branch_instruction": "Treat the result as partial and state which report or evidence is missing. Do not rerun completed work merely to obtain a report.",
+      "branch_instruction": "State which report or evidence is missing. Do not rerun completed work merely to obtain a report.",
       "category": "recoverable",
       "emit": "guard:worker_summary",
-      "summary": "The worker ended without an accepted structured completion report."
+      "summary": "The worker round ended without an accepted completion report."
     },
     "WORKER_EVIDENCE_HANDLE_UNKNOWN": {
       "branch_instruction": "Fix or drop only the listed citations and keep the rest of the report; leg_status reflects whether the remaining evidence delivers the assignment. Do not repeat a worker assignment solely to replace a bad citation.",
@@ -3593,6 +3545,12 @@
       "category": "recoverable",
       "emit": "guard:worker_summary",
       "summary": "Read scout marked leg complete without a successful source-survey observation."
+    },
+    "WORKER_SPEND_LIMIT_REACHED": {
+      "branch_instruction": "Report what the worker kept and what remains; do not present the round as complete.",
+      "category": "recoverable",
+      "emit": "guard:worker_summary",
+      "summary": "The worker stopped at the armed spend limit before it reported."
     },
     "WORKER_SUMMARY_NO_ARTIFACT": {
       "branch_instruction": "Treat the implementation claim as unverified until the actual artifact evidence or no-change justification is established",
