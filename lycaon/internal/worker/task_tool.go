@@ -162,7 +162,8 @@ func RegisterTaskTool(reg *tools.DefaultRegistry, deps TaskToolDeps) error {
 
 		task.SourceArgsDigest = sourceDigest
 		// The worker exists before its job, so a refused name enqueues nothing.
-		created, err := createTaskWorker(ctx, deps, tctx, task, name, brief.Goal)
+		// The brief keeps the whole charter, which every round's frame shows.
+		created, err := createTaskWorker(ctx, deps, tctx, task, name, formatTaskCharter(brief))
 		if err != nil {
 			return "", err
 		}

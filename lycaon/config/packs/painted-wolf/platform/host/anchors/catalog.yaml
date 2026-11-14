@@ -647,6 +647,24 @@ anchors:
         has_needs_reply: { type: bool, required: true }
         more: { type: bool, required: true }
 
+  - id: inject.worker_round
+    title: Worker round inject
+    description: >-
+      A worker's running round on every request: its standing brief and the
+      instructions the round received, kept after delivery and compaction
+      until the round delivers, and on a later round how its workspace was
+      prepared and what became of its last changes.
+    trigger_class: assembly_inject
+    surface: agent
+    planes: [inform]
+    envelope:
+      vars:
+        round: { type: int, required: true }
+        has_brief: { type: bool, required: true }
+        instruction_count: { type: int, required: true }
+        workspace: { type: string }
+        prior_change: { type: string }
+
   - id: inject.source_changes
     title: Source change brief inject
     description: >-

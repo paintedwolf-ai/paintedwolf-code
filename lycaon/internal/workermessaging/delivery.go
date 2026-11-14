@@ -113,3 +113,22 @@ func (d *Delivery) CommitMessages(ctx context.Context, sessionID string, deliver
 	}
 	return nil
 }
+
+// RoundFrame reads a worker session's running round for its every request.
+func (d *Delivery) RoundFrame(ctx context.Context, sess *api.Session) (inject.WorkerRoundFrame, bool, error) {
+	if d == nil || d.Records == nil || sess == nil || !sess.IsWorkerChild() {
+		return inject.WorkerRoundFrame{}, false, nil
+	}
+	frame, ok, err := d.Records.RoundFrame(ctx, actorFor(sess))
+	if errors.Is(err, workerrecords.ErrWorkerNotFound) {
+		return inject.WorkerRoundFrame{}, false, nil
+	}
+	if err != nil || !ok {
+		return inject.WorkerRoundFrame{}, false, err
+	}
+	out := inject.WorkerRoundFrame{Ordinal: frame.Ordinal, Brief: frame.Brief, Workspace: frame.Workspace, PriorChange: frame.PriorChange}
+	for _, m := range frame.Instructions {
+		out.Instructions = append(out.Instructions, inject.WorkerMessageLine{Seq: m.Seq, ReplyToSeq: m.ReplyToSeq, Body: m.Body, ArtifactRef: m.ArtifactRef})
+	}
+	return out, true, nil
+}

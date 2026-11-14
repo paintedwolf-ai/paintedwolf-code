@@ -117,6 +117,11 @@ func (e *turnContextAssembler) buildTailSystemInjects(
 		}
 	}
 
+	if msg, ok, err := e.workerRoundInject(ctx, sess); err != nil {
+		return tail, err
+	} else if ok {
+		tail = append(tail, msg)
+	}
 	if msg, ok, err := e.workerMessagesInject(ctx, sess, turn); err != nil {
 		return tail, err
 	} else if ok {

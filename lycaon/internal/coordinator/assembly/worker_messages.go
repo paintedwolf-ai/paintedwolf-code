@@ -13,6 +13,9 @@ import (
 type MessageDeliveryRecorder interface {
 	PrepareMessages(ctx context.Context, sess *api.Session) (MessageDelivery, error)
 	CommitMessages(ctx context.Context, sessionID string, delivery MessageDelivery) error
+	// RoundFrame reads a worker session's running round; ok is false for a
+	// coordinator or a worker with no running round.
+	RoundFrame(ctx context.Context, sess *api.Session) (frame inject.WorkerRoundFrame, ok bool, err error)
 }
 
 // MessageDelivery is one request's message page. Pages name the outstanding
@@ -53,5 +56,26 @@ func (e *turnContextAssembler) workerMessagesInject(ctx context.Context, sess *a
 		Role: api.MessageRoleSystem, Content: strings.TrimSpace(block.Header + "\n\n" + block.Messages),
 		Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
 		ContentParts: inject.WorkerMessagesParts(block, delivery.Recipient),
+	}, true, nil
+}
+
+// workerRoundInject renders a worker's standing round frame.
+func (e *turnContextAssembler) workerRoundInject(ctx context.Context, sess *api.Session) (api.Message, bool, error) {
+	recorder := e.deps.Deliveries.Messages
+	if recorder == nil || sess == nil || !sess.IsWorkerChild() {
+		return api.Message{}, false, nil
+	}
+	frame, ok, err := recorder.RoundFrame(ctx, sess)
+	if err != nil || !ok {
+		return api.Message{}, false, err
+	}
+	block := inject.RenderWorkerRoundBlock(ctx, e.deps.Injects, sess.ID, frame)
+	if block.Header == "" {
+		return api.Message{}, false, nil
+	}
+	return api.Message{
+		Role: api.MessageRoleSystem, Content: strings.TrimSpace(block.Header + "\n\n" + block.Messages),
+		Origin: api.MessageOriginHost, Authority: api.ContentAuthorityNone, TrustTier: api.ContentTrustTierTrusted,
+		ContentParts: inject.WorkerRoundParts(block),
 	}, true, nil
 }

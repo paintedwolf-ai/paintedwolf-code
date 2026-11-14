@@ -111,3 +111,35 @@ func TestNamesByJobFollowsTheRound(t *testing.T) {
 		t.Fatalf("job without a round: ok=%v err=%v", ok, err)
 	}
 }
+
+// A later round's frame carries the brief, every instruction the round has
+// received, how its workspace was prepared and what became of its last
+// changes; a first round's frame carries its brief alone.
+func TestRoundFrameCarriesTheRoundsStartingPoint(t *testing.T) {
+	f := newFixture(t)
+	w, child := f.workerWithRound(t, "fixer", "child-1", "job-1")
+	first, ok, err := f.store.RoundFrame(t.Context(), child)
+	testutil.FailErr(t, "first frame", err)
+	if !ok || first.Ordinal != 1 || first.Workspace != "" || len(first.Instructions) != 0 {
+		t.Fatalf("first frame = %+v ok=%v", first, ok)
+	}
+	f.insertResult(t, "result-1", "job-1")
+	f.settle(t, "job-1", "cp-1")
+	_, err = f.store.SetChange(t.Context(), f.coord, op("reject-1"), "result-1", workerrecords.Change{State: workerrecords.ChangeRejected})
+	testutil.FailErr(t, "reject", err)
+	f.insertJob(t, "job-2", coordSession, "child-1", "pending")
+	_, err = f.store.StartRound(t.Context(), f.coord, op("start-2"), w.WorkerID, workerrecords.RoundStart{JobID: "job-2", ExecutionTarget: "local", Instruction: "try the other parser"})
+	testutil.FailErr(t, "start round 2", err)
+	_, err = f.store.RecordPreparation(t.Context(), f.coord, op("prep-2"), w.WorkerID, workerrecords.Preparation{PreparationRef: "/lanes/fixer.2", BindingGeneration: 2})
+	testutil.FailErr(t, "prepare", err)
+	_, err = f.store.AppendMessage(t.Context(), f.coord, op("mid-round"), w.WorkerID, workerrecords.MessageSpec{Body: "keep the old tests"})
+	testutil.FailErr(t, "mid-round instruction", err)
+	frame, ok, err := f.store.RoundFrame(t.Context(), child)
+	testutil.FailErr(t, "second frame", err)
+	if !ok || frame.Ordinal != 2 || frame.PriorChange != workerrecords.ChangeRejected || frame.Workspace != workerrecords.WorkspaceReset {
+		t.Fatalf("second frame = %+v ok=%v", frame, ok)
+	}
+	if len(frame.Instructions) != 2 || frame.Instructions[0].Body != "try the other parser" || frame.Instructions[1].Body != "keep the old tests" {
+		t.Fatalf("instructions = %+v", frame.Instructions)
+	}
+}
