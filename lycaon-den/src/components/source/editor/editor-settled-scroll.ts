@@ -154,6 +154,18 @@ export function keepPositionInView(
   );
 }
 
+/**
+ * The point where the text at the viewport's top-left edge is drawn. The first
+ * line can start below the top edge (the content's padding at the start of the
+ * document), and content scrolled sideways starts left of the viewport.
+ */
+export function topEdgePoint(view: EditorView): { x: number; y: number } {
+  const port = view.scrollDOM.getBoundingClientRect();
+  const content = view.contentDOM.getBoundingClientRect();
+  const block = view.lineBlockAtHeight(port.top - view.documentTop);
+  return { x: Math.max(content.left, port.left) + 1, y: Math.max(port.top, view.documentTop + block.top) + 1 };
+}
+
 /** A position and its distance from the viewport's top and left edges. */
 export type ScrollAnchor = { pos: number; offset: number; left: number };
 
@@ -174,9 +186,7 @@ export function captureScrollAnchor(view: EditorView): ScrollAnchor | null {
   }
   // Only the document start is "at the top"; a long unwrapped line may be scrolled sideways.
   if (view.scrollDOM.scrollTop <= 0 && view.scrollDOM.scrollLeft <= 0) return null;
-  // Content scrolled sideways starts left of the viewport; probe the visible part.
-  const content = view.contentDOM.getBoundingClientRect();
-  const pos = view.posAtCoords({ x: Math.max(content.left, port.left) + 1, y: port.top + 1 }, false);
+  const pos = view.posAtCoords(topEdgePoint(view), false);
   const at = view.coordsAtPos(pos);
   return at ? { pos, offset: at.top - port.top, left: at.left - port.left } : null;
 }
