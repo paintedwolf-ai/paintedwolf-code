@@ -263,7 +263,7 @@ func migrateWorkerDependencies(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, `INSERT OR IGNORE INTO worker_dependencies (worker_id, dependency_key, producer_worker_id, operation_id, created_at)
 		SELECT cr.worker_id, pr.worker_id, pr.worker_id, 'migration:prerequisite:' || p.worker_job_id || ':' || p.prerequisite_id, c.created_at
 		FROM worker_prerequisites p
-		JOIN worker_jobs c ON c.id = p.worker_job_id AND c.status = 'held'
+		JOIN worker_jobs c ON c.id = p.worker_job_id AND c.status IN ('pending', 'held')
 		JOIN worker_rounds cr ON cr.job_id = p.worker_job_id
 		JOIN worker_rounds pr ON pr.job_id = p.prerequisite_id
 		JOIN workers cw ON cw.id = cr.worker_id

@@ -20,5 +20,5 @@ func (p Plan) reviewedRetainedRoute() bool {
 	// The manifest writer bounds its re-derivable memos and maintains target
 	// indexes during insertion. Receipt index rebuilds use the measured receipt tree.
 	return p.steps[0].ID == "source-manifests-and-command-records" &&
-		p.steps[0].Checksum == "484b2df03fe555ddc4c363ec6738c1ec4c4ac97cd37b4c3cad6fe43d5ca1f130"
+		p.steps[0].Checksum == "59f0869ff59fc090f3e94c2a76c0c3b2ceae0e730d1cb6f906fe5997cbe5d40f"
 }

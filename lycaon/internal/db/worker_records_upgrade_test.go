@@ -54,6 +54,9 @@ func TestReleasedJobsBecomeWorkers(t *testing.T) {
 	job("j3", "parent", "child-1", "implementer", "pending", t3, nil, nil)
 	job("j4", "parent", nil, "implementer", "held", t3, nil, nil)
 	exec("insert prerequisite", `INSERT INTO worker_prerequisites (worker_job_id, prerequisite_id) VALUES ('j4', 'j1')`)
+	// Released builds left a consumer waiting on its prerequisite pending.
+	job("j9", "parent", nil, "researcher", "pending", t3, nil, nil)
+	exec("insert pending prerequisite", `INSERT INTO worker_prerequisites (worker_job_id, prerequisite_id) VALUES ('j9', 'j1')`)
 	job("j5", "parent", "foreign-child", "repo-researcher", "complete", t2, t2, nil)
 	job("j6", nil, nil, "implementer", "complete", t1, t1, nil)
 	job("j7", "parent", nil, "  ", "complete", t1, t1, nil)
@@ -87,7 +90,7 @@ func TestReleasedJobsBecomeWorkers(t *testing.T) {
 	}
 	testutil.FailErr(t, "close workers", rows.Close())
 	long := strings.Repeat("é", 62) + "-1"
-	if len(workers) != 5 || workers["implementer-1"] == "" || workers["implementer-2"] == "" || workers["repo-researcher-1"] == "" ||
+	if len(workers) != 6 || workers["implementer-1"] == "" || workers["implementer-2"] == "" || workers["repo-researcher-1"] == "" ||
 		agents["worker-1"] != "worker" || workers[long] == "" {
 		t.Fatalf("workers = %v agents = %v", workers, agents)
 	}
@@ -117,6 +120,11 @@ func TestReleasedJobsBecomeWorkers(t *testing.T) {
 		`SELECT change_state, COALESCE(landed_change_id, ''), accounted_at FROM worker_result_dispositions WHERE result_id = 'r1'`).Scan(&state, &landed, &accounted))
 	if state != "landed" || landed != "l1" || accounted.Valid {
 		t.Fatalf("r1 disposition = %s %s accounted %v", state, landed, accounted)
+	}
+	var dependencies int
+	testutil.FailErr(t, "count all dependencies", reader.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM worker_dependencies`).Scan(&dependencies))
+	if dependencies != 2 {
+		t.Fatalf("dependencies = %d, want the held and the pending consumer's", dependencies)
 	}
 	var dispositions, producers, orphanRounds, receipts int
 	testutil.FailErr(t, "count dispositions", reader.QueryRowContext(t.Context(), `SELECT COUNT(*) FROM worker_result_dispositions`).Scan(&dispositions))
