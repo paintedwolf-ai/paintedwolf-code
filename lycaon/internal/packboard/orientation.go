@@ -151,6 +151,15 @@ func FormatWorkLine(tasks []api.WorkerTask, now time.Time) string {
 	inFlight := inFlightWorkerTasks(tasks)
 	if len(inFlight) > 0 {
 		line := fmt.Sprintf("Work: %d in flight", len(inFlight))
+		agents := make([]string, 0, len(inFlight))
+		for _, t := range inFlight {
+			agent := strings.TrimSpace(t.AgentType)
+			if agent == "" {
+				agent = "worker"
+			}
+			agents = append(agents, agent)
+		}
+		line += " · " + strings.Join(agents, " · ")
 		if labels := outcomes.Labels(); len(labels) > 0 {
 			line += " · " + strings.Join(labels, " · ")
 		}

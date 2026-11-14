@@ -169,8 +169,8 @@ func TestWorkerToolRejections(t *testing.T) {
 	wantReject(t, err, "INSTRUCT_WORKER_ASKING")
 	// The card's next step answers the question it names.
 	var reject *toolrejection.ToolReject
-	if errors.As(err, &reject) && reject.Data["job_id"] != job {
-		t.Fatalf("refusal data = %v, want job_id %s", reject.Data, job)
+	if !errors.As(err, &reject) || reject.Data["worker"] != "surveyor" || reject.Data["job_id"] != nil {
+		t.Fatalf("refusal data = %v, want the worker and no job", reject.Data)
 	}
 }
 
@@ -370,16 +370,17 @@ func TestTaskStartsANamedWorker(t *testing.T) {
 	}))
 	args := map[string]any{"agent_type": "repo-researcher", "name": "scout", "scope": map[string]any{"mode": "read"},
 		"brief": map[string]any{"goal": "Map the parser", "done_when": []any{"Entry points listed"}}}
-	out, err := f.run(t, "task", "call-1", args)
+	out, effects, err := f.runOut(t, "task", "call-1", args)
 	testutil.FailErr(t, "task", err)
 	var started struct {
 		Worker string `json:"worker"`
-		JobID  string `json:"job_id"`
+		JobID  string `json:"-"`
 	}
 	testutil.FailErr(t, "decode", json.Unmarshal([]byte(out), &started))
-	if started.Worker != "scout" || started.JobID == "" {
+	if started.Worker != "scout" || strings.Contains(out, "job_id") || effects.Dispatch == nil {
 		t.Fatalf("task output = %s", out)
 	}
+	started.JobID = effects.Dispatch.WorkerID
 	again, err := f.run(t, "task", "call-1", args)
 	testutil.FailErr(t, "replay", err)
 	if again != out || countJobs(t, f.db) != 1 {

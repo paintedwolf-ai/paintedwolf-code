@@ -493,6 +493,21 @@
       ],
       "paintedwolf.overlap_job_ids": [
         "paintedwolf.overlap_overlay_ids"
+      ],
+      "paintedwolf.prior_job_id": [
+        "paintedwolf.worker"
+      ],
+      "paintedwolf.resume_field": [
+        "paintedwolf.worker"
+      ],
+      "paintedwolf.resume_recorded": [
+        "paintedwolf.worker"
+      ],
+      "paintedwolf.resume_requested": [
+        "paintedwolf.worker"
+      ],
+      "paintedwolf.threshold": [
+        "paintedwolf.conflict_count"
       ]
     },
     "rejection_codes": {

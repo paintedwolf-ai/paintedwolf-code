@@ -249,7 +249,7 @@ type WorkerMergeResult struct {
 	OverlayPromotion *OverlayPromotion `json:"-"`
 	// JobID is host identity; the coordinator addresses the result by handle.
 	JobID        string                    `json:"-"`
-	ResultHandle string                    `json:"result_handle,omitempty"`
+	ResultHandle string                    `json:"result_handle"`
 	Mode         string                    `json:"mode"`
 	Status       WorkerMergeStatus         `json:"merge_status,omitempty"`
 	AgentType    string                    `json:"agent_type,omitempty"`

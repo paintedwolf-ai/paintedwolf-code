@@ -2,7 +2,6 @@ package promptsource
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -21,7 +20,6 @@ import (
 	"github.com/lycaon/lycaon/internal/session/toolpresentation"
 	"github.com/lycaon/lycaon/internal/session/turnguards"
 	"github.com/lycaon/lycaon/internal/session/workeroutcomes"
-	"github.com/lycaon/lycaon/internal/spawn"
 	"github.com/lycaon/lycaon/internal/toolpolicy"
 	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
@@ -53,13 +51,6 @@ func (m *ToolResults) AfterTool(
 		if jobID := strings.TrimSpace(out.Dispatch.WorkerID); jobID != "" {
 			agentType, _ := args["agent_type"].(string)
 			m.Batch.TaskEnqueued(ctx, sess.ID, agentType)
-			var started struct {
-				Worker string `json:"worker"`
-			}
-			_ = json.Unmarshal([]byte(output), &started)
-			out.Facts = out.Facts.WithFeedback("BANNER_TASK_QUEUED", map[string]any{
-				"agent_type": agentType, "worker": started.Worker, "max_in_flight": spawn.MaxInFlightTaskWorkers,
-			}, nil)
 			out.Completion = &api.ToolCompletion{
 				Operation: "worker_dispatch", State: "enqueued", ResourceKind: "worker", ResourceID: jobID,
 			}

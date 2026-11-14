@@ -4,6 +4,9 @@ kind: schema
 on: tool.rejected
 selector:
   tools:
+    - preview_overlay
+    - promote_overlay
+    - reject_overlay
     - shelve_overlay
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "RESULT_HANDLE_UNKNOWN"

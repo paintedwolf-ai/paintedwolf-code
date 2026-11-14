@@ -4,7 +4,10 @@ kind: schema
 on: tool.rejected
 selector:
   tools:
+    - answer_decision
     - instruct_worker
+    - task
+    - worker_cancel
     - worker_history
 requires_facts: [paintedwolf.next_steps, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "WORKER_NAME_UNKNOWN"

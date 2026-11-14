@@ -25,17 +25,18 @@ var names = namer{
 	"job-2": {Worker: "docs"},
 }
 
-// A refusal about a worker's job carries the worker and its result handle;
-// a job with no worker round, a failed lookup, or no job id adds nothing.
+// A refusal about a worker's job carries the worker and its result handle in
+// place of the job; a job with no worker round or a failed lookup carries
+// neither, and data without a job is left as it is.
 func TestRefusalsNameTheJobsWorkerAndResult(t *testing.T) {
 	for _, tc := range []struct {
 		job  string
 		want map[string]any
 	}{
-		{"job-1", map[string]any{"job_id": "job-1", "worker": "parser-fix", "overlay_id": "result-1"}},
-		{"job-2", map[string]any{"job_id": "job-2", "worker": "docs"}},
-		{"job-none", map[string]any{"job_id": "job-none"}},
-		{"broken", map[string]any{"job_id": "broken"}},
+		{"job-1", map[string]any{"worker": "parser-fix", "overlay_id": "result-1"}},
+		{"job-2", map[string]any{"worker": "docs"}},
+		{"job-none", map[string]any{}},
+		{"broken", map[string]any{}},
 	} {
 		got := withResultRef(t.Context(), names, map[string]any{"job_id": tc.job})
 		if len(got) != len(tc.want) {

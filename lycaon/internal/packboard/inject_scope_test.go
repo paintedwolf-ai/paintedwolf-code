@@ -86,9 +86,9 @@ func TestInjectSentinel(t *testing.T) {
 func TestInjectedBoardRetainsPendingWorkerIntegration(t *testing.T) {
 	now := time.Date(2026, 10, 13, 12, 0, 0, 0, time.UTC)
 	snapshot := api.BoardSnapshot{Workers: &api.BoardWorkersSlice{
-		"tasks":              []api.WorkerTask{{ID: "abcd-worker", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending}},
-		"overlay_merge_plan": &api.OverlayMergePlan{PendingCount: 1, PromoteSequence: []string{"abcd-worker"}},
-		"promote_paths":      []api.WorkerPromoteJobPathStatus{{WorkerID: "abcd-worker", Paths: []api.WorkerPromotePathStatus{{Path: "status.py", Status: api.WorkerPromotePathOutcomeConflict, HunkCount: 1}}}},
+		"tasks": []api.WorkerTask{{ID: "abcd-worker", Status: api.WorkerStatusComplete, MergeStatus: api.WorkerMergeStatusPending}},
+		"overlay_merge_plan": &api.OverlayMergePlan{PendingCount: 1, PromoteSequence: []string{"r-fixer"},
+			Entries: []api.OverlayMergePlanEntry{{OverlayID: "r-fixer", Worker: "fixer"}}},
 	}}
 	for _, scope := range []packboard.InjectScope{packboard.InjectScopeFull, packboard.InjectScopePulse} {
 		lines, truncated := packboard.FormatInjectBodyScoped(snapshot, scope, false, now, api.MaxBoardInjectChars)
@@ -96,7 +96,7 @@ func TestInjectedBoardRetainsPendingWorkerIntegration(t *testing.T) {
 		if truncated {
 			t.Fatalf("small worker state was truncated: %s", body)
 		}
-		for _, want := range []string{"Work: 1 ", "Merge: pending abcd", "Overlay plan: 1 pending", "status.py:conflict(1)"} {
+		for _, want := range []string{"Work: 1 ", "Merge: 1 pending", "Overlay plan: 1 pending"} {
 			if !strings.Contains(body, want) {
 				t.Errorf("scope %v omitted %q: %s", scope, want, body)
 			}

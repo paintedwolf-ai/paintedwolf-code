@@ -74,7 +74,7 @@ implement_overlay_promote:
   mode_ref: implement-overlay-promote
   card:
     label: integrate
-    rule: Review pending overlays; resume unfinished workers.
+    rule: Review pending results; instruct workers that need another round.
   exit: none
   publishes_mid_turn_text: true
   # skills_read resolves a described need and opens one procedure.
