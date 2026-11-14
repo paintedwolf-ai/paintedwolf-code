@@ -7,6 +7,6 @@ schema:
       description: "Which catalog map to run: layout_overview, ssot_drift, or api_routes."
     path:
       type: string
-      description: "Root for probes; `.` covers every attached folder, `@label/...` one (default .)"
+      description: "Root for probes; `.` covers every attached folder, bare paths the session folder, `@label/...` one folder (default .)"
   required: [bundle]
   additionalProperties: false

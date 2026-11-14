@@ -14,7 +14,7 @@ schema:
         additionalProperties: false
         properties:
           path:
-            description: "Conflict path, as listed in the overlay's changed paths."
+            description: "Conflict path from the overlay's changed paths (not an addressed path)."
             type: string
           action:
             type: string

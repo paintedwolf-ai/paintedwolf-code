@@ -10,7 +10,7 @@ schema:
       description: Worker job_id from task() or pack_board
     path:
       type: string
-      description: Optional — limit preview to one of the overlay's changed paths
+      description: Optional — one of the overlay's changed paths (not an addressed path)
     detail:
       type: string
       enum: [hunks, full]
