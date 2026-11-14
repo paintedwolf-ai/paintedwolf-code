@@ -208,6 +208,7 @@ func (r *ProgramRuntime) commitSourceDelivery(ctx context.Context, run *programR
 	settlement, commitErr := r.Recorder.CommitProgramSourceDelivery(ctx, delivery, observer, r.sessionResources(run.tc.Identity.SessionID))
 	if commitErr == nil {
 		tagDelivery(run, settlement.SourceOwnerReference, relPath, obs)
+		recordDeliveredRead(run, first.Source, obs)
 	}
 }
 
