@@ -217,11 +217,12 @@ function buildStructuredToolPresentationFresh(
     part.outcome === "rejected" ||
     (part.codes?.length ?? 0) > 0 ||
     (part.feedback?.length ?? 0) > 0;
-  const hasFileEdits = partHasFileEdits(part);
+  // A write tool's receipt and text arguments repeat what its diff shows.
+  const diffShowsResult = part.kind === "write" && partHasFileEdits(part);
   const ioSkip =
     part.kind === "command" ? COMMAND_IO_ARG_KEYS : undefined;
   const skipExtra = new Set([
-    ...(hasFileEdits ? FILE_EDIT_ARG_KEYS : []), ...(ioSkip ?? []),
+    ...(diffShowsResult ? FILE_EDIT_ARG_KEYS : []), ...(ioSkip ?? []),
     ...(isDiscoveryRequest(part.tool, part.args) ? ["need"] : []),
   ]);
   const argsField = part.argsRedaction?.fieldPrefix;
@@ -288,7 +289,7 @@ function buildStructuredToolPresentationFresh(
     (part.kind === "read" || part.kind === "command" || part.kind === "write") &&
     !jsonWire
   ) {
-    if (!hasFileEdits) {
+    if (!diffShowsResult) {
       // Recover content from truncated compaction residue.
       const recovered = compactionBanner ? extractReadableToolBody(null, body) : null;
       const source = part.kind === "read" && pathHint ? { path: pathHint } : undefined;

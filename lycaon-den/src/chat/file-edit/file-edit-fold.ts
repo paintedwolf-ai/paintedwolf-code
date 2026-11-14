@@ -118,6 +118,8 @@ export type SegmentFolds = {
   folds: FileEditFold[];
   /** The folds each call anchors: the files it was first to write this turn. */
   anchorFoldKeysByPartId: Map<string, string[]>;
+  /** Changes each call made past its result's bound. */
+  omittedByPartId: Map<string, number>;
 };
 
 /** Repeated writes to a file share the card anchored at its first write. */
@@ -127,12 +129,14 @@ export function collectSegmentFolds(
   const segments: SegmentFolds[] = [];
   let steps: FileEditStep[] = [];
   let anchorFoldKeysByPartId = new Map<string, string[]>();
+  let omittedByPartId = new Map<string, number>();
   let seenFiles = new Set<string>();
 
   const closeSegment = () => {
-    segments.push({ folds: foldFileEdits(steps), anchorFoldKeysByPartId });
+    segments.push({ folds: foldFileEdits(steps), anchorFoldKeysByPartId, omittedByPartId });
     steps = [];
     anchorFoldKeysByPartId = new Map();
+    omittedByPartId = new Map();
     seenFiles = new Set();
   };
 
@@ -142,6 +146,8 @@ export function collectSegmentFolds(
       continue;
     }
     if (item.kind !== "tool") continue;
+    const omitted = item.part.fileEditsOmitted ?? 0;
+    if (omitted > 0) omittedByPartId.set(item.part.id, omitted);
     for (const step of fileEditStepsFromPart(item.part)) {
       steps.push(step);
       const file = fileEditPathKey(step.snapshot);

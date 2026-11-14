@@ -333,22 +333,25 @@ export function projectActivitySpans(
   const out: DisplayTranscriptItem[] = [];
   let scope: string | null = null;
   let run: ActivityCandidate[] = [];
-  /** First writes in this run that anchor a segment's diff cards. */
-  let runAnchorPartIds: string[] = [];
+  /** Calls in this run that anchor a segment's diff cards, with their result rows. */
+  let runAnchors: { partId: string; messageId: string }[] = [];
   let workerRun: Extract<RawTranscriptItem, { kind: "tool" }>[] = [];
 
   const emitAnchoredFolds = () => {
-    if (runAnchorPartIds.length === 0 || !segment) return;
-    const anchors = segment.anchorFoldKeysByPartId;
-    const anchored = new Set(runAnchorPartIds.flatMap((id) => anchors.get(id) ?? []));
+    const anchor = runAnchors[0];
+    if (!anchor || !segment) return;
+    const { anchorFoldKeysByPartId, omittedByPartId } = segment;
+    const anchored = new Set(runAnchors.flatMap(({ partId }) => anchorFoldKeysByPartId.get(partId) ?? []));
     const folds = segment.folds.filter((fold) => anchored.has(fold.key));
-    if (folds.length === 0) return;
-    const first = folds[0]!;
+    const omitted = runAnchors.reduce((sum, { partId }) => sum + (omittedByPartId.get(partId) ?? 0), 0);
+    if (folds.length === 0 && omitted === 0) return;
+    const first = folds[0];
     out.push({
       kind: "file_edit",
-      key: `file-edit:${first.key}`,
+      key: `file-edit:${first?.key ?? anchor.partId}`,
       folds,
-      anchorMessageId: first.steps[0]?.messageId ?? first.key,
+      ...(omitted > 0 ? { omitted } : {}),
+      anchorMessageId: first?.steps[0]?.messageId ?? anchor.messageId,
     });
   };
 
@@ -363,7 +366,7 @@ export function projectActivitySpans(
     }
     scope = null;
     run = [];
-    runAnchorPartIds = [];
+    runAnchors = [];
   };
 
   const flushWorkerRun = () => {
@@ -400,17 +403,17 @@ export function projectActivitySpans(
     if (
       scope !== null &&
       ((scope !== candidate.scope && !commandRun) ||
-        (runAnchorPartIds.length > 0 && !candidateIsFileEdit(candidate)))
+        (runAnchors.length > 0 && !candidateIsFileEdit(candidate)))
     ) {
       flushRun();
     }
     scope = candidate.scope;
     run.push(candidate);
-    if (
-      candidate.entry.kind === "tool" &&
-      segment?.anchorFoldKeysByPartId.has(candidate.entry.part.id)
-    ) {
-      runAnchorPartIds.push(candidate.entry.part.id);
+    if (candidate.entry.kind === "tool") {
+      const { id, messageId } = candidate.entry.part;
+      if (segment?.anchorFoldKeysByPartId.has(id) || segment?.omittedByPartId.has(id)) {
+        runAnchors.push({ partId: id, messageId });
+      }
     }
   }
   flushRun();

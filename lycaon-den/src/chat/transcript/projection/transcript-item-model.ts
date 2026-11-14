@@ -113,6 +113,8 @@ export type TranscriptItem =
       kind: "file_edit";
       key: string;
       folds: FileEditFold[];
+      /** Changes the turn's calls made past their results' bounds; they have no diff here. */
+      omitted?: number;
       /** Row id of the first write — the item's immutable ord anchor. */
       anchorMessageId: string;
     }
