@@ -117,6 +117,7 @@ func allOverlapJobIDs(assessment PromoteAssessment) []string {
 
 // RejectOverlay closes an overlay and orphans its stacked children.
 func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, reason string) (api.OverlayRejectOutcome, error) {
+	ctx = mergeGit(ctx)
 	overlayID = strings.TrimSpace(overlayID)
 	if overlayID == "" {
 		return api.OverlayRejectOutcome{}, s.reject(OverlayPromoteNotFoundCode, map[string]any{"job_id": overlayID})
@@ -190,6 +191,7 @@ func (s *MergeService) RejectOverlay(ctx context.Context, sessionID, overlayID, 
 
 // RebaseChildren assesses stacked children against the promoted primary.
 func (s *MergeService) RebaseChildren(ctx context.Context, sessionID, parentOverlayID string) ([]api.OverlayRebaseOutcome, error) {
+	ctx = mergeGit(ctx)
 	if s == nil || s.Queue == nil {
 		return nil, fmt.Errorf("merge service not configured")
 	}
