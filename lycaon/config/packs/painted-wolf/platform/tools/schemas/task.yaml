@@ -72,6 +72,9 @@ schema:
             minLength: 1
             maxLength: 240
       required: [goal, done_when]
+    review_of:
+      type: string
+      description: Optional result handle of a delivered worker's result with changes. Starts a reviewer that reads a read-only view of exactly that result, whatever its worker does next. Needs read scope and a read agent; cannot combine with base_overlay_id, after_workers or workflow_work_id. Starting the review accounts for the result.
     name:
       type: string
       minLength: 1

@@ -2284,6 +2284,18 @@
       "emit": "guard:shelve_overlay",
       "summary": "That result handle names no result of this session's workers."
     },
+    "REVIEW_OF_NOT_ADMITTED": {
+      "branch_instruction": "Branch on Code REVIEW_OF_NOT_ADMITTED; do not retry until the worker's state changes",
+      "category": "recoverable",
+      "emit": "guard:task",
+      "summary": "Worker `{{ paintedwolf.worker }}` is {{ paintedwolf.state }}, which does not admit a review of its result now."
+    },
+    "REVIEW_OF_NO_CHANGES": {
+      "branch_instruction": "Branch on Code REVIEW_OF_NO_CHANGES; do not retry the same call",
+      "category": "recoverable",
+      "emit": "guard:task",
+      "summary": "That result changed nothing, so there is nothing to review."
+    },
     "REVIEW_VERDICT_MISSING_BEFORE_CLOSEOUT": {
       "branch_instruction": "If the required review cannot be completed, report the specific blocker through the available decision channel rather than fabricating a terminal verdict.",
       "category": "recoverable",

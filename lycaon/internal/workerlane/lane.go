@@ -85,6 +85,18 @@ func (s *Service) Admit(ctx context.Context, req Request) (Binding, error) {
 		return Binding{}, &HoldError{Reason: sel.Hold}
 	case ActionSource:
 		return Binding{Action: sel.Action}, nil
+	case ActionSubject:
+		// The subject is sealed: a reviewer's view, once prepared, is kept.
+		current, ok, err := s.current(ctx, req.Actor, req.WorkerID)
+		if err != nil {
+			return Binding{}, err
+		}
+		if ok {
+			current.Action = ActionSubject
+			return current, nil
+		}
+		req.SourceResultID = ""
+		return s.switchLane(ctx, req, sel)
 	case ActionKeep:
 		current, ok, err := s.current(ctx, req.Actor, req.WorkerID)
 		if err != nil {

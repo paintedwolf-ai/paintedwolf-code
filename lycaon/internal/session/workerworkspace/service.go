@@ -23,6 +23,8 @@ type Workspace interface {
 type Tasks interface {
 	Get(string) (*api.WorkerTask, bool)
 	ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error)
+	// ReviewsWorker reports a read job that reviews a sealed result.
+	ReviewsWorker(context.Context, *api.WorkerTask) bool
 }
 type Calls interface {
 	Reserve(context.Context, string, []string, string) (*call.ReservationResult, error)

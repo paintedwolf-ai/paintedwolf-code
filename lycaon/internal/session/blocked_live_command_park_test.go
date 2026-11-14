@@ -168,6 +168,8 @@ func (j jobLister) ListBySession(_ context.Context, _, sessionID string, _ ...ap
 }
 func (jobLister) ListPendingOutcomes(context.Context) ([]api.WorkerTask, error) { return nil, nil }
 func (jobLister) Get(string) (*api.WorkerTask, bool)                            { return nil, false }
+func (jobLister) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
+
 func (jobLister) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
 	return nil, nil
 }

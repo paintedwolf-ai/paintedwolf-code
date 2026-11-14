@@ -52,7 +52,7 @@ func (l *WorkerLanes) Prepare(ctx context.Context, task *api.WorkerTask, roots [
 	if err != nil {
 		return "", true, err
 	}
-	source := assignment.SubjectResultID
+	source := ""
 	rounds, err := l.Records.Rounds(ctx, actor, round.WorkerID)
 	if err != nil {
 		return "", true, err

@@ -45,8 +45,7 @@ func (m *Service) Enrich(ctx context.Context, sess *api.Session, tctx tools.Tool
 		return tctx, nil
 	}
 	// A write worker claims its branch; a reviewer its view of the subject.
-	// The claim returns any other read worker as it is.
-	if strings.TrimSpace(task.WorkspaceRoot) == "" {
+	if strings.TrimSpace(task.WorkspaceRoot) == "" && (task.EffectiveScope().IsWrite() || m.tasks.ReviewsWorker(ctx, task)) {
 		claimed, err := m.tasks.ClaimWorkerBranch(ctx, task.ID)
 		if err != nil {
 			return tctx, fmt.Errorf("claim worker branch: %w", err)

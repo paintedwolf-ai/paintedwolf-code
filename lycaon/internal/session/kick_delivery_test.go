@@ -43,6 +43,8 @@ func (j fixedJobs) Get(jobID string) (*api.WorkerTask, bool) {
 	return task, ok
 }
 
+func (fixedJobs) ReviewsWorker(context.Context, *api.WorkerTask) bool { return false }
+
 func (fixedJobs) ClaimWorkerBranch(context.Context, string) (*api.WorkerTask, error) {
 	return nil, nil
 }

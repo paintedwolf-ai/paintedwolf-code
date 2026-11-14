@@ -95,7 +95,7 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 			return nil, ErrWorkerPrerequisitesPending
 		}
 	}
-	if !task.EffectiveScope().IsWrite() && !q.reviews(ctx, task) {
+	if !task.EffectiveScope().IsWrite() && !q.ReviewsWorker(ctx, task) {
 		return task, nil
 	}
 	if strings.TrimSpace(task.WorkspaceRoot) != "" {
@@ -111,9 +111,9 @@ func (q *sqlQueuePromotion) ClaimWorkerBranch(ctx context.Context, jobID string)
 	return task, nil
 }
 
-// reviews reports a read job that reviews a sealed result: it runs in a
-// view of that result, prepared like a lane.
-func (q *sqlQueuePromotion) reviews(ctx context.Context, task *api.WorkerTask) bool {
+// ReviewsWorker reports a read job that reviews a sealed result: it runs in
+// a view of that result, prepared like a lane.
+func (q *sqlQueuePromotion) ReviewsWorker(ctx context.Context, task *api.WorkerTask) bool {
 	q.mu.Lock()
 	lanes := q.lanes
 	q.mu.Unlock()
@@ -124,7 +124,7 @@ func (q *sqlQueuePromotion) provisionWorkerBranch(ctx context.Context, task *api
 	if task == nil || strings.TrimSpace(task.WorkspaceRoot) != "" {
 		return nil
 	}
-	reviewer := q.reviews(ctx, task)
+	reviewer := q.ReviewsWorker(ctx, task)
 	if !task.EffectiveScope().IsWrite() && !reviewer {
 		return nil
 	}
