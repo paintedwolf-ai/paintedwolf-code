@@ -348,7 +348,10 @@ describe("chat content Files pane", () => {
         projectId="proj"
         client={client}
         document={{
+          kind: "tool",
           sessionId: "session",
+          messageId: "m1",
+          toolCallId: "c1",
           pane: "raw",
           title: "app.py",
           path: "src/app.py",
@@ -366,7 +369,10 @@ describe("chat content Files pane", () => {
         projectId="proj"
         client={null}
         document={{
+          kind: "tool",
           sessionId: "session",
+          messageId: "m2",
+          toolCallId: "c2",
           pane: "raw",
           title: "notes.md",
           path: "docs/notes.md",
