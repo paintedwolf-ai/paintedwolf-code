@@ -170,6 +170,21 @@ func TestApplyDelegateDispatchMetadata(t *testing.T) {
 	}
 }
 
+// An instruction that started a round carries the round's dispatch, so the
+// round's completion has a row to land on.
+func TestApplyInstructWorkerDispatchMetadata(t *testing.T) {
+	tr := &api.ToolResult{Content: `{"worker":"fixer","outcome":"started"}`}
+	ApplyTaskDispatchMetadata("instruct_worker", tr, &api.WorkerDispatch{WorkerID: "round-2"})
+	if tr.Tool != "instruct_worker" || tr.Dispatch == nil || tr.Dispatch.WorkerID != "round-2" {
+		t.Fatalf("result = %+v", tr)
+	}
+	other := &api.ToolResult{}
+	ApplyTaskDispatchMetadata("shelve_overlay", other, &api.WorkerDispatch{WorkerID: "x"})
+	if other.Dispatch != nil {
+		t.Fatalf("a tool that starts no round took a dispatch: %+v", other)
+	}
+}
+
 func TestApplyTaskDispatchMetadataIgnoresMissingDispatch(t *testing.T) {
 	tr := &api.ToolResult{Content: "No dispatch"}
 	ApplyTaskDispatchMetadata("task", tr, nil)
