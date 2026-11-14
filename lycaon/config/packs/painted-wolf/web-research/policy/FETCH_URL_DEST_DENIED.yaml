@@ -1,31 +1,24 @@
 # Deprecated rejection identity; raw transfers use portable curl.
-oar: '1.0'
+spec_version: "1.0"
 id: FETCH_URL_DEST_DENIED
 kind: schema
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - fetch_url
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.next_steps
-  - paintedwolf.rejection_code
-  - paintedwolf.path
+  tools:
+    - fetch_url
+requires_facts: [paintedwolf.next_steps, paintedwolf.path, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "FETCH_URL_DEST_DENIED"
 effect: block
-copy:
-  what: fetch_url could not write dest {{ paintedwolf.path }} under project write scope.
-  cause: The requested destination failed the ingest write boundary after the response was fetched.
-  why: The recorded write refusal remains binding; switching tools does not grant access.
-  fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
-  instead: Follow the current schema and access boundaries.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:fetch_url
-x-paintedwolf-message: recorded fetch_url destination was not writable
+message: recorded fetch_url destination was not writable
+what: fetch_url could not write dest {{ paintedwolf.path }} under project write scope.
+cause: The requested destination failed the ingest write boundary after the response was fetched.
+why: The recorded write refusal remains binding; switching tools does not grant access.
+fix: 'The source reader no longer accepts mode or dest. Use its current schema; respect any recorded access refusal. {{ paintedwolf.next_steps }}'
+instead: Follow the current schema and access boundaries.
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    path: .git/objects/pack
-    tool: fetch_url
+  - id: default
+    vars:
+      path: .git/objects/pack
+      tool: fetch_url

@@ -1,50 +1,37 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_WORKTREE_BEHIND_INDEX
 kind: policy
-anchor: tool.post_invoke
+on: tool.post_invoke
 selector:
-  tool:
+  tools:
     - command
     - verify
-requires:
-  profiles:
-    - tool
-  facts:
-    - paintedwolf.confine_applied
-    - paintedwolf.worktree_stale_paths
-    - paintedwolf.worktree_leftover_paths
-    - paintedwolf.worktree_conflict_paths
+requires_facts: [paintedwolf.confine_applied, paintedwolf.worktree_conflict_paths, paintedwolf.worktree_leftover_paths, paintedwolf.worktree_stale_paths]
 when: >-
-  paintedwolf.confine_applied
-  && (size(paintedwolf.worktree_stale_paths) > 0
-  || size(paintedwolf.worktree_leftover_paths) > 0
-  || size(paintedwolf.worktree_conflict_paths) > 0)
-on_error: fail_open
+  paintedwolf.confine_applied && (size(paintedwolf.worktree_stale_paths) > 0 || size(paintedwolf.worktree_leftover_paths) > 0 || size(paintedwolf.worktree_conflict_paths) > 0)
 effect: warn
-copy:
-  what: '`{{ tool }}` changed the Git index for agent-policy files the sandbox kept unchanged in the worktree.'
-  cause: The worktree still holds the earlier content of {% if paintedwolf.worktree_stale_paths %}{{ paintedwolf.worktree_stale_paths }}{% endif %}{% if paintedwolf.worktree_leftover_paths
-    %} {{ paintedwolf.worktree_leftover_paths }} (no longer in the index){% endif %}{% if paintedwolf.worktree_conflict_paths %} {{ paintedwolf.worktree_conflict_paths
-    }} (unmerged, without conflict markers){% endif %}. Git can exit 0 when it cannot update a file.
-  why: Later reads, diffs, and commits would mix the index's new state with the worktree's old one.
-  fix: ''
-  instead: ''
+on_error: fail_open
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:sandbox
-x-paintedwolf-message: Git index changed for agent-policy files the sandbox kept in the worktree
+message: Git index changed for agent-policy files the sandbox kept in the worktree
+what: '`{{ tool }}` changed the Git index for agent-policy files the sandbox kept unchanged in the worktree.'
+cause: The worktree still holds the earlier content of {% if paintedwolf.worktree_stale_paths %}{{ paintedwolf.worktree_stale_paths }}{% endif %}{% if paintedwolf.worktree_leftover_paths %} {{ paintedwolf.worktree_leftover_paths }} (no longer in the index){% endif %}{% if paintedwolf.worktree_conflict_paths %} {{ paintedwolf.worktree_conflict_paths }} (unmerged, without conflict markers){% endif %}. Git can exit 0 when it cannot update a file.
+why: Later reads, diffs, and commits would mix the index's new state with the worktree's old one.
+fix: ''
+instead: ''
 x-paintedwolf-scenarios:
-- id: branch_switch
-  vars:
-    tool: command
-    worktree_stale_paths:
-    - AGENTS.md
-    - lycaon/AGENTS.md
-    worktree_leftover_paths: []
-    worktree_conflict_paths: []
-- id: merge_conflict
-  vars:
-    tool: command
-    worktree_stale_paths: []
-    worktree_leftover_paths: []
-    worktree_conflict_paths:
-    - .paintedwolf/skills/review/SKILL.md
+  - id: branch_switch
+    vars:
+      tool: command
+      worktree_stale_paths:
+        - AGENTS.md
+        - lycaon/AGENTS.md
+      worktree_leftover_paths: []
+      worktree_conflict_paths: []
+  - id: merge_conflict
+    vars:
+      tool: command
+      worktree_stale_paths: []
+      worktree_leftover_paths: []
+      worktree_conflict_paths:
+        - .paintedwolf/skills/review/SKILL.md

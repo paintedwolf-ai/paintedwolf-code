@@ -1,0 +1,29 @@
+{
+  "id": "expr-integer-division-truncates",
+  "title": "Integer division and modulo truncate toward zero",
+  "covers": [
+    "OAR-EXPR-9"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "-7 / 2 == -3 && -7 % 2 == -1 && 7.0 / 2.0 == 3.5"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "applied": [
+      "R:fired"
+    ]
+  }
+}

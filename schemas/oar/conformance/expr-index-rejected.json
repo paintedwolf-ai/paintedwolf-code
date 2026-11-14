@@ -1,0 +1,25 @@
+{
+  "id": "expr-index-rejected",
+  "title": "An index expression is outside the grammar and is rejected at load",
+  "covers": [
+    "OAR-EXPR-1"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool_args[\"path\"] == \"x\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-1"
+  }
+}

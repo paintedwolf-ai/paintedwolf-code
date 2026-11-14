@@ -13,6 +13,7 @@ import (
 
 	"github.com/lycaon/lycaon/internal/blobstore"
 	"github.com/lycaon/lycaon/internal/fseffect"
+	"github.com/lycaon/lycaon/internal/fspath"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/scratch"
 	"github.com/lycaon/lycaon/internal/tools"
@@ -22,8 +23,10 @@ import (
 // OpenOutputView serves the scoped retained body. The pathname is only a view;
 // repairing it never establishes source evidence or makes its inode authoritative.
 func (r *ProgramRuntime) OpenOutputView(ctx context.Context, tc tools.ToolContext, path projectpaths.Resolved) (io.ReadCloser, error) {
-	program, stream, ok := parseOutputSource("disk:"+path.Abs, tc.Host.SessionOutputDir)
-	if !ok || path.Root.ID != projectroot.VirtualOutputLabel {
+	parent := fspath.CanonicalPath(filepath.Dir(path.Abs))
+	relative, pathErr := filepath.Rel(fspath.CanonicalPath(tc.Host.SessionOutputDir), filepath.Join(parent, filepath.Base(path.Abs)))
+	output, ok := scratch.ParseCommandOutput(filepath.ToSlash(relative))
+	if pathErr != nil || !ok || path.Root.ID != projectroot.VirtualOutputLabel {
 		return nil, fmt.Errorf("output view requires the session output path")
 	}
 	outputs, err := r.sessionOutputs(ctx, tc.Identity.SessionID)
@@ -31,8 +34,11 @@ func (r *ProgramRuntime) OpenOutputView(ctx context.Context, tc tools.ToolContex
 		return nil, err
 	}
 	memory := r.sessionResources(tc.Identity.SessionID)
-	reference := "output:program:" + program + ":" + stream
-	body, err := outputs.Open(ctx, tc.Identity.SessionID, program, reference)
+	reference := "output:program:" + output.ProgramID + ":" + output.Stream
+	if output.ExecutionID != "" {
+		reference = "output:" + output.ExecutionID + ":" + output.Stream
+	}
+	body, err := outputs.Open(ctx, tc.Identity.SessionID, output.ProgramID, reference)
 	if err != nil {
 		return nil, err
 	}
@@ -52,15 +58,15 @@ func (r *ProgramRuntime) OpenOutputView(ctx context.Context, tc tools.ToolContex
 		}
 	}()
 	buffer := make([]byte, 64<<10)
-	loc := fseffect.Location{Root: tc.Host.SessionOutputDir, Rel: filepath.Base(path.Abs)}
+	loc := fseffect.Location{Root: tc.Host.SessionOutputDir, Rel: relative}
 	if !outputViewMatches(ctx, loc, body.Blob, buffer) {
 		verified := &outputViewBody{ReadCloser: body.Reader, ctx: ctx, blob: body.Blob, digest: sha256.New()}
-		err = scratch.PublishCommandOutput(tc.Host.SessionOutputDir, program, stream, verified)
+		err = scratch.PublishCommandOutput(tc.Host.SessionOutputDir, output, verified)
 		err = errors.Join(err, verified.Close())
 		if err != nil {
 			return nil, err
 		}
-		body, err = outputs.Open(ctx, tc.Identity.SessionID, program, reference)
+		body, err = outputs.Open(ctx, tc.Identity.SessionID, output.ProgramID, reference)
 		if err != nil {
 			return nil, err
 		}

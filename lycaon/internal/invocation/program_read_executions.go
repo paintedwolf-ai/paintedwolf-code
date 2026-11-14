@@ -57,7 +57,7 @@ func readExecutionOutputs(ctx context.Context, tx *sql.Tx, program string, execu
 }
 
 func readExecutionOutput(ctx context.Context, tx *sql.Tx, program, execution string) ([]api.CommandExecutionOutput, error) {
-	rows, err := tx.QueryContext(ctx, `SELECT o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id=? AND o.stream IN ('stdout','stderr') AND NOT EXISTS (SELECT 1 FROM invocation_program_outputs later WHERE later.program_id=o.program_id AND later.execution_id=o.execution_id AND later.stream=o.stream AND (later.created_at>o.created_at OR (later.created_at=o.created_at AND later.id>o.id))) ORDER BY o.stream`, program, execution)
+	rows, err := tx.QueryContext(ctx, `SELECT o.stream,o.reference,json_extract(o.blob_json,'$.Size'),o.complete,o.redacted,o.preview,o.preview_truncated,o.tail_preview,o.line_count FROM invocation_program_outputs o WHERE o.program_id=? AND o.execution_id=? AND `+latestExecutionOutput+` ORDER BY o.stream`, program, execution)
 	if err != nil {
 		return nil, err
 	}
@@ -65,8 +65,12 @@ func readExecutionOutput(ctx context.Context, tx *sql.Tx, program, execution str
 	var outputs []api.CommandExecutionOutput
 	for rows.Next() {
 		var output api.CommandExecutionOutput
-		if err := rows.Scan(&output.Stream, &output.Ref, &output.SizeBytes, &output.Complete, &output.Redacted, &output.Preview, &output.PreviewTruncated); err != nil {
+		var lines sql.NullInt64
+		if err := rows.Scan(&output.Stream, &output.Ref, &output.SizeBytes, &output.Complete, &output.Redacted, &output.Preview, &output.PreviewTruncated, &output.TailPreview, &lines); err != nil {
 			return nil, err
+		}
+		if lines.Valid {
+			output.LineCount = &lines.Int64
 		}
 		outputs = append(outputs, output)
 	}
@@ -75,3 +79,5 @@ func readExecutionOutput(ctx context.Context, tx *sql.Tx, program, execution str
 	}
 	return outputs, rows.Close()
 }
+
+const latestExecutionOutput = `o.stream IN ('stdout','stderr') AND NOT EXISTS (SELECT 1 FROM invocation_program_outputs later WHERE later.program_id=o.program_id AND later.execution_id=o.execution_id AND later.stream=o.stream AND (later.created_at>o.created_at OR (later.created_at=o.created_at AND later.id>o.id)))`

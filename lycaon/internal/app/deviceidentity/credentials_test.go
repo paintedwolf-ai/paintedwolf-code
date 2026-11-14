@@ -1,10 +1,12 @@
 package deviceidentity
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/lycaon/lycaon/internal/api"
 	"github.com/lycaon/lycaon/internal/configdir"
 	"github.com/lycaon/lycaon/internal/testutil"
 )
@@ -20,13 +22,24 @@ func TestCredentialsPersistHostIdentityAndKeepExplicitToken(t *testing.T) {
 	if first.Token != "explicit-token" || first.Generated || first.Host.HostID != second.Host.HostID || first.Host.EncodedPublicKey() != second.Host.EncodedPublicKey() {
 		t.Fatalf("credentials changed across reload: %+v / %+v", first, second)
 	}
+	legacyPath := filepath.Join(directory, api.LegacyTokenFileName)
+	testutil.FailErr(t, "seed legacy api.token", os.WriteFile(legacyPath, []byte("legacy-token\n"), 0o600))
 	t.Setenv("LYCAON_API_TOKEN", "")
 	generated, err := Load("")
 	testutil.FailErr(t, "generate token", err)
+	if _, err := os.Stat(legacyPath); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy api.token was not unlinked after generated token persistence: %v", err)
+	}
+	if stored, err := api.ReadAPIToken(); err != nil || stored != generated.Token {
+		t.Fatalf("stored vault token = %q (%v), want %q", stored, err, generated.Token)
+	}
 	again, err := Load("")
 	testutil.FailErr(t, "reload generated token", err)
 	if !generated.Generated || generated.Token == "" || generated.Token == again.Token || generated.Host.HostID != first.Host.HostID || generated.Host.EncodedPublicKey() != first.Host.EncodedPublicKey() {
 		t.Fatal("startup token was reused or persistent host identity changed")
+	}
+	if stored, err := api.ReadAPIToken(); err != nil || stored != again.Token {
+		t.Fatalf("updated vault token = %q (%v), want %q", stored, err, again.Token)
 	}
 }
 

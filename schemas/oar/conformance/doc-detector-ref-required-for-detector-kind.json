@@ -1,0 +1,25 @@
+{
+  "id": "doc-detector-ref-required-for-detector-kind",
+  "title": "A detector-kind document without a detector reference is rejected at load",
+  "covers": [
+    "OAR-DOC-17"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "DETECTOR_WITHOUT_REF",
+    "kind": "detector",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "true"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "detector"
+  }
+}

@@ -18,7 +18,7 @@
 {% for line in pending %}- {{ line }}
 {% endfor %}{% endif %}
 ### Reacquire before relying on compacted details
-{% if not recall_available %}Reacquire the needed evidence through available read tools.{% endif %}
+{% if not recall_available %}Reacquire the needed evidence through the reads this surface offers.{% endif %}
 {% for line in reacquire %}- {{ line }}
 {% endfor %}{% for s in compacted_sources %}- {% if s.handles %}`{% for h in s.handles %}{{ h }}{% if not forloop.Last %}`, `{% endif %}{% endfor %}`{% if s.tool %} ({{ s.tool }}){% endif %}{% if recall_available %}{% for h in s.handles %} · `recall(query="handle:{{ h }}")`{% endfor %}{% endif %}{% elif recall_available and through_ord and s.message_id %}{{ s.tool }} · `recall(history={"through_ord":{{ through_ord }},"message_id":"{{ s.message_id }}","format":"record"})`{% else %}{% if s.tool %}{{ s.tool }}, {% endif %}message `{{ s.message_id }}`{% endif %}
 {% endfor %}{% if constraints %}

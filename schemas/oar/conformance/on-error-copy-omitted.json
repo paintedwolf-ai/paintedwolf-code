@@ -1,0 +1,37 @@
+{
+  "title": "An on_error block whose copy cannot render stands without copy",
+  "covers": [
+    "OAR-COPY-10",
+    "OAR-FACT-23"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "1 / size(tool) == 0",
+    "on_error": "fail_closed",
+    "what": "count: {{ example.count }}",
+    "requires_facts": [
+      "example.count"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "",
+      "example.count": "three"
+    },
+    "host_facts": {
+      "example.count": "int"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "R",
+    "copy": null
+  },
+  "id": "on-error-copy-omitted"
+}

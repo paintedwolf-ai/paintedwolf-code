@@ -1,21 +1,19 @@
-oar: '1.0'
+spec_version: "1.0"
 id: PROCESS_UNAVAILABLE
 kind: policy
-anchor: tool.rejected
-requires:
-  facts: [paintedwolf.rejection_code]
-  profiles: [tool]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "PROCESS_UNAVAILABLE"
 effect: block
-copy:
-  what: The operating system could not inspect or signal this process.
-  cause: The host could not complete the structured process operation.
-  why: A process reference identifies one process instance; ordinary operating-system permissions still apply.
-  fix: Inspect the reported operating-system error. Missing metadata does not mean a process exited. For required elevated access, request host_execution on command with passwordless sudo -n.
-  instead: Branch on Code; Inspect the reported operating-system error. Missing metadata does not mean a process exited. For required elevated access, request host_execution on command with passwordless sudo -n.
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:host_process
-x-paintedwolf-message: The operating system could not inspect or signal this process.
+message: The operating system could not inspect or signal this process.
+what: The operating system could not inspect or signal this process.
+cause: The host could not complete the structured process operation.
+why: A process reference identifies one process instance; ordinary operating-system permissions still apply.
+fix: Inspect the reported operating-system error. Missing metadata does not mean a process exited. For required elevated access, request host_execution on command with passwordless sudo -n.
+instead: Branch on Code; Inspect the reported operating-system error. Missing metadata does not mean a process exited. For required elevated access, request host_execution on command with passwordless sudo -n.
 x-paintedwolf-scenarios:
-- id: default
-  vars: {}
+  - id: default
+    vars: {}

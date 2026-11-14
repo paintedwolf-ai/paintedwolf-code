@@ -1,0 +1,37 @@
+{
+  "title": "An int host fact reached through a dotted select compares as an int",
+  "covers": [
+    "OAR-FACT-19",
+    "OAR-COPY-4"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "RETRY_NOTE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "example.attempts >= 3",
+    "requires_facts": [
+      "example.attempts"
+    ],
+    "what": "The call has been attempted {{ example.attempts }} times."
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "example.attempts": 3
+    },
+    "host_facts": {
+      "example.attempts": "int"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "RETRY_NOTE",
+    "copy": {
+      "what": "The call has been attempted 3 times."
+    }
+  },
+  "id": "host-int-fact-compares-as-int"
+}

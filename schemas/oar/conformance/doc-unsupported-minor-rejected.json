@@ -1,0 +1,26 @@
+{
+  "id": "doc-unsupported-minor-rejected",
+  "title": "A spec_version the engine does not support is rejected, not coerced",
+  "covers": [
+    "OAR-DOC-1",
+    "OAR-DOC-3"
+  ],
+  "rule": {
+    "spec_version": "1.1",
+    "id": "UNSUPPORTED_MINOR",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\""
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "1.1"
+  }
+}

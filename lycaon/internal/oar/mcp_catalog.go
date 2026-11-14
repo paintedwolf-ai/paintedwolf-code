@@ -9,6 +9,8 @@ import (
 type MCPCatalogView interface {
 	ProviderConfigured(id string) bool
 	ProviderEnabled(id string) bool
+	ConfiguredProviderIDs() []string
+	EnabledProviderIDs() []string
 	ResolveQualifiedTool(qualified string) (providerID, toolName string, ok bool)
 }
 
@@ -34,10 +36,10 @@ func ObserveMCPStructuralPre(gc *GuardContext, tool string, catalog MCPCatalogVi
 	if !ok {
 		return
 	}
-	gc.MCP.MCPProviderID = providerID
+	gc.MCP.MCPServerID = providerID
 	gc.MCP.MCPToolName = toolName
-	gc.MCP.MCPProviderConfigured = catalog.ProviderConfigured(providerID)
-	gc.MCP.MCPProviderEnabled = catalog.ProviderEnabled(providerID)
+	gc.MCP.MCPServerConfigured = catalog.ProviderConfigured(providerID)
+	gc.MCP.MCPServerEnabled = catalog.ProviderEnabled(providerID)
 }
 
 // ObserveMCPStructuralPost fills the structural MCP facts for tool.post_invoke.
@@ -55,20 +57,20 @@ func ObserveMCPStructuralPost(gc *GuardContext, tool string, catalog MCPCatalogV
 	gc.MCP.MCPFields = nil
 }
 
-// EvalMCPProviderConfigured is the parameterized observation mcp_provider_configured_for(id).
-func EvalMCPProviderConfigured(gc *GuardContext, id string) bool {
-	if gc == nil || id == "" || gc.MCP.MCPCatalog == nil {
-		return false
+// configuredServers is mcp_configured_servers: every catalogue server id.
+func (m *MCPFacts) configuredServers() []string {
+	if m == nil || m.MCPCatalog == nil {
+		return []string{}
 	}
-	return gc.MCP.MCPCatalog.ProviderConfigured(id)
+	return strList(m.MCPCatalog.ConfiguredProviderIDs())
 }
 
-// EvalMCPProviderEnabled is the parameterized observation mcp_provider_enabled_for(id).
-func EvalMCPProviderEnabled(gc *GuardContext, id string) bool {
-	if gc == nil || id == "" || gc.MCP.MCPCatalog == nil {
-		return false
+// enabledServers is mcp_enabled_servers: every enabled catalogue server id.
+func (m *MCPFacts) enabledServers() []string {
+	if m == nil || m.MCPCatalog == nil {
+		return []string{}
 	}
-	return gc.MCP.MCPCatalog.ProviderEnabled(id)
+	return strList(m.MCPCatalog.EnabledProviderIDs())
 }
 
 // MCPMachineErrorCode returns the declared protocol code, or an empty string.

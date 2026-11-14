@@ -1,29 +1,21 @@
-oar: '1.0'
+spec_version: "1.0"
 id: SANDBOX_WRITE_ROOT_DENIED
 kind: policy
-anchor: tool.rejected
-requires:
-  facts:
-  - paintedwolf.rejection_code
-  - paintedwolf.user_guidance
-  - paintedwolf.path
-  profiles:
-  - tool
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.path, paintedwolf.rejection_code, paintedwolf.user_guidance]
 when: paintedwolf.rejection_code == "SANDBOX_WRITE_ROOT_DENIED"
 effect: block
-copy:
-  what: '{{ tool }} was not granted write access to {{ paintedwolf.path }}.'
-  cause: Write authority is not on this invocation.
-  why: Retrying the same write_root request loops on the same refusal.
-  fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction
-    before requesting approval for a corrected action.{% else %}Preserve the intended destination; report any blocked writes.
-    Wait for new user direction before requesting approval again.{% endif %}'
-  instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-category: user-decision
 x-paintedwolf-emit: guard:sandbox_write_root
-x-paintedwolf-message: this command cannot write outside the sandbox write roots
+message: this command cannot write outside the sandbox write roots
+what: '{{ tool }} was not granted write access to {{ paintedwolf.path }}.'
+cause: Write authority is not on this invocation.
+why: Retrying the same write_root request loops on the same refusal.
+fix: '{% if paintedwolf.user_guidance %}User direction: {{ paintedwolf.user_guidance }}. Follow that direction before requesting approval for a corrected action.{% else %}Preserve the intended destination; report any blocked writes. Wait for new user direction before requesting approval again.{% endif %}'
+instead: Respect this rejection; fresh user direction permits a new approval request
 x-paintedwolf-scenarios:
-- id: command_write_root_denied
-  vars:
-    tool: command
-    path: /fixture/protected-output
+  - id: command_write_root_denied
+    vars:
+      tool: command
+      path: /fixture/protected-output

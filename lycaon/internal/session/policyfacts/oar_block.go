@@ -212,6 +212,7 @@ func (m *Service) AfterTool(ctx context.Context, sess *api.Session, tool string,
 		oar.ObserveMCPStructuralPost(gc, tool, m.MCP, raised.Succeeded(), raised.ProviderErrorCode, output)
 	}
 	ObserveConfine(gc, raised.Confine)
+	m.observeSocketResources(ctx, gc, sess.ProjectID)
 	RegisterWorktreeFacts(ctx, gc, raised.IndexWatch)
 	ObserveEditorConfigMismatch(gc, raised)
 	ObserveGitNoRepositoryOnWriteLeg(gc, raised)
@@ -243,40 +244,20 @@ func (m *Service) fruitlessSearchRun(sess *api.Session, tool string, args map[st
 	return m.doomLoop.FruitlessSearchRun(sess.ID, tool, args), pattern
 }
 
-// ContentBlock returns the content decision and any rendered refusal.
-func (m *Service) ContentBlock(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, string, bool, error) {
+// ContentBlock returns the rendered refusal when a content anchor blocks.
+func (m *Service) ContentBlock(ctx context.Context, sess *api.Session, anchor string, observation oar.ContentObservation, tool string, args map[string]any) (*guidance.Refusal, bool, error) {
 	if m == nil || m.Pipeline == nil || !m.Pipeline.AnchorEnforced(anchor) {
-		return nil, false, "", false, nil
+		return nil, false, nil
 	}
 	gc := oar.NewGuardContext()
 	m.FillSessionFacts(ctx, gc, sess, tool, args)
 	gc.SetContentObservation(observation)
 	res, err := m.Pipeline.EvaluateBlock(ctx, anchor, gc)
 	if err != nil {
-		return nil, false, "", false, err
+		return nil, false, err
 	}
-	if res == nil || !res.Enforced {
-		return nil, false, "", false, nil
+	if res == nil || !res.Enforced || res.Decision == nil || res.Decision.Effect != oar.EffectBlock {
+		return nil, false, nil
 	}
-	content := gc.Content.Content
-	if res.ContentSet {
-		content = res.Content
-	}
-	if res.Decision == nil {
-		if res.ContentSet && res.Content != gc.Content.Content {
-			return nil, false, content, true, nil
-		}
-		return nil, false, "", false, nil
-	}
-	if res.Decision.Effect == oar.EffectTransform {
-		return nil, false, content, true, nil
-	}
-	if res.Decision.Effect == oar.EffectWarn || res.Decision.Effect == oar.EffectNudge {
-		return nil, false, "", false, nil
-	}
-	reject, blocked, rerr := m.feedback.RenderResult(ctx, anchor, res)
-	if rerr != nil {
-		return nil, false, "", false, rerr
-	}
-	return reject, blocked, "", false, nil
+	return m.feedback.RenderResult(ctx, anchor, res)
 }

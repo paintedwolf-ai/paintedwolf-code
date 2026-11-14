@@ -1,37 +1,31 @@
-oar: '1.0'
+spec_version: "1.0"
 id: OVERLAY_PROMOTE_CONFLICT
 kind: policy
-anchor: tool.rejected
-requires:
-  profiles:
-  - tool
-  facts: [paintedwolf.rejection_code, paintedwolf.conflict_count, paintedwolf.job_id, paintedwolf.overlap_job_ids, paintedwolf.paths, paintedwolf.next_steps]
+on: tool.rejected
+selector: {}
+requires_facts: [paintedwolf.conflict_count, paintedwolf.job_id, paintedwolf.next_steps, paintedwolf.overlap_job_ids, paintedwolf.paths, paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "OVERLAY_PROMOTE_CONFLICT"
 effect: block
-copy:
-  cause: '{% if paintedwolf.overlap_job_ids %}Pending sibling overlays {{ paintedwolf.overlap_job_ids }} also
-    touch these paths. {% endif %}The current merge assessment requires explicit reconciliation.'
-  why: Blind overwrite would destroy reconciled primary work — inspect hunks and reconcile
-  fix: '{{ paintedwolf.next_steps }} Inspect the actual hunks and preserve intended primary and branch changes; choose only a resolution supported by the current preview. A conflict tier guides inspection but does not establish that a full-file overwrite is correct. Resolve sibling ordering on shared paths before promotion.'
-  instead: Reconcile current conflict paths explicitly and preserve already accepted work
-  what: 'Overlay {{ paintedwolf.job_id }} has {{ paintedwolf.conflict_count }} unresolved path conflict(s):
-    {{ paintedwolf.paths }}.'
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:coordinator
-x-paintedwolf-message: Overlay {{ paintedwolf.job_id }} cannot integrate on {{ paintedwolf.paths }} — {{ paintedwolf.conflict_count
-  }} path(s) with unresolved 3-way hunks
+message: Overlay {{ paintedwolf.job_id }} cannot integrate on {{ paintedwolf.paths }} — {{ paintedwolf.conflict_count }} path(s) with unresolved 3-way hunks
+what: 'Overlay {{ paintedwolf.job_id }} has {{ paintedwolf.conflict_count }} unresolved path conflict(s): {{ paintedwolf.paths }}.'
+cause: '{% if paintedwolf.overlap_job_ids %}Pending sibling overlays {{ paintedwolf.overlap_job_ids }} also touch these paths. {% endif %}The current merge assessment requires explicit reconciliation.'
+why: Blind overwrite would destroy reconciled primary work — inspect hunks and reconcile
+fix: '{{ paintedwolf.next_steps }} Inspect the actual hunks and preserve intended primary and branch changes; choose only a resolution supported by the current preview. A conflict tier guides inspection but does not establish that a full-file overwrite is correct. Resolve sibling ordering on shared paths before promotion.'
+instead: Reconcile current conflict paths explicitly and preserve already accepted work
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    conflict_count: 1
-    job_id: ov-conflict
-    paths:
-    - internal/auth/login.go
-- id: sibling_overlap
-  vars:
-    conflict_count: 1
-    job_id: ov-conflict
-    overlap_job_ids:
-    - ov-sibling
-    paths:
-    - shared.go
+  - id: default
+    vars:
+      conflict_count: 1
+      job_id: ov-conflict
+      paths:
+        - internal/auth/login.go
+  - id: sibling_overlap
+    vars:
+      conflict_count: 1
+      job_id: ov-conflict
+      overlap_job_ids:
+        - ov-sibling
+      paths:
+        - shared.go

@@ -55,13 +55,13 @@ func TestDoc9InstallingDuplicatePolicyIdentityIsRejected(t *testing.T) {
 	author := filepath.Join(t.TempDir(), "duplicate-pack")
 	writePolicyPack(t, author, "acme/duplicate", code, "tool.pre_invoke")
 	owner := extstatetest.Owner(t)
-	if _, err := extstatetest.TryApply(t, owner, extstatetest.DeviceScope(), extensionstate.InstallOp{Source: "path:" + author}); err == nil || !strings.Contains(err.Error(), "OAR-DOC-9") {
-		t.Fatalf("[OAR-DOC-9] duplicate install error = %v", err)
+	if _, err := extstatetest.TryApply(t, owner, extstatetest.DeviceScope(), extensionstate.InstallOp{Source: "path:" + author}); err == nil || !strings.Contains(err.Error(), "OAR-DOC-22") {
+		t.Fatalf("[OAR-DOC-22] duplicate install error = %v", err)
 	}
 	current, err := extpacks.ResolveCatalog(t.Context(), nil, nil)
 	testutil.FailErr(t, "resolve catalog after rejected install", err)
 	if !current.HasLoaded(extpacks.PolicyUnitID(code)) {
-		t.Fatal("[OAR-DOC-9] rejected install displaced stock policy")
+		t.Fatal("[OAR-DOC-22] rejected install displaced stock policy")
 	}
 }
 
@@ -71,10 +71,10 @@ func writePolicyPack(t *testing.T, dir, packID, code, anchor string) {
 		"manifest_version: 1\nid: "+packID+"\nname: test\nversion: 1.0.0\n"+
 			"compatibility:\n  extension_api: \"^1.0.0\"\ndependencies:\n  painted-wolf/platform:\n    version: \"^1.0.0\"\n")
 	mustWriteFile(t, filepath.Join(dir, "policy", code+".yaml"),
-		"oar: '1.0'\nid: "+code+"\nkind: policy\nanchor: "+anchor+"\n"+
-			"requires:\n  profiles:\n    - tool\nwhen: 'false'\neffect: warn\n"+
-			"copy:\n  cause: c\n  why: w\n  fix: f\n  instead: i\n"+
-			"x-paintedwolf-emit: rule:test\nx-paintedwolf-message: m\n")
+		"spec_version: '1.0'\nid: "+code+"\nkind: policy\non: "+anchor+"\n"+
+			"selector: {}\nwhen: 'false'\neffect: warn\n"+
+			"cause: c\nwhy: w\nfix: f\ninstead: i\n"+
+			"x-paintedwolf-emit: rule:test\nmessage: m\n")
 }
 
 func mustWriteFile(t *testing.T, path, body string) {
@@ -91,7 +91,7 @@ func TestDoc1InstalledJSONPolicyReachesRegistry(t *testing.T) {
 	t.Setenv("LYCAON_CONFIG_DIR", t.TempDir())
 	author := filepath.Join(t.TempDir(), "json-policy")
 	writePolicyPack(t, author, "acme/json", "BASE_RULE", "tool.post_invoke")
-	const document = `{"oar":"1.0","namespace":"acme.json","id":"JSON_RULE","kind":"policy","anchor":"model.output","requires":{"profiles":["content"]},"when":"content_length == 12","effect":"transform","transform":{"action":"replace","target":"content","replacement":"Reviewed \ud83d\udc3a"}}`
+	const document = `{"spec_version":"1.0","namespace":"acme.json","id":"JSON_RULE","kind":"policy","on":"model.output","selector":{},"requires_facts":["paintedwolf.content_length"],"when":"paintedwolf.content_length == 12","effect":"nudge","what":"Reviewed \ud83d\udc3a"}`
 	mustWriteFile(t, filepath.Join(author, "policy", "portable.json"), document)
 	extstatetest.InstallPack(t, extstatetest.DeviceScope(), "path:"+author, "", "")
 	cat, err := extpacks.ResolveCatalog(t.Context(), nil, nil)

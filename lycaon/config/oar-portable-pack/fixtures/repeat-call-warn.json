@@ -1,0 +1,68 @@
+{
+  "id": "repeat-call-warn",
+  "title": "A second identical call in a row is flagged",
+  "covers": [
+    "OAR-FIRE-3",
+    "OAR-EVAL-4"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "REPEAT_CALL_BLOCK",
+      "namespace": "example.hygiene",
+      "kind": "invariant",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "when": "same_call_run >= 2",
+      "effect": "block",
+      "on_fire": [
+        "publish_event"
+      ],
+      "profile": "portable",
+      "what": "The same call has been made three times in a row, so it is refused.",
+      "fix": "Inspect the environment or change the call rather than replaying it."
+    },
+    {
+      "spec_version": "1.0",
+      "id": "REPEAT_CALL_WARN",
+      "namespace": "example.hygiene",
+      "kind": "invariant",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "when": "same_call_run >= 1",
+      "effect": "warn",
+      "profile": "portable",
+      "what": "The same call has been made twice in a row.",
+      "fix": "Change the approach instead of replaying the call."
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read",
+      "tool_args": {
+        "path": "build.log"
+      }
+    },
+    "session_id": "pack-session",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "read",
+          "tool_args": {
+            "path": "build.log"
+          }
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "warn",
+    "code": "REPEAT_CALL_WARN",
+    "applied": [
+      "example.hygiene/REPEAT_CALL_BLOCK:passed",
+      "example.hygiene/REPEAT_CALL_WARN:fired"
+    ]
+  }
+}

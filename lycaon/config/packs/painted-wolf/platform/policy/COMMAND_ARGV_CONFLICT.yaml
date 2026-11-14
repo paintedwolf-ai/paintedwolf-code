@@ -1,31 +1,27 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_ARGV_CONFLICT
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
+  tools:
     - command
     - verify
-requires:
-  facts: [paintedwolf.rejection_code]
-  profiles:
-    - tool
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_ARGV_CONFLICT"
 effect: block
-copy:
-  what: '`{{ tool }}()` received conflicting explicit command forms.'
-  cause: The invocation supplies both a command line and a stage array, which are exclusive.
-  why: The host cannot choose which form to run. Reissuing means choosing one form and supplying it again.
-  fix: Supply only one command form, preserving the intended stages and arguments.
-  instead: Retry with one explicit command form, not both
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: command and pipeline are exclusive
+message: command and pipeline are exclusive
+what: '`{{ tool }}()` received conflicting explicit command forms.'
+cause: The invocation supplies both a command line and a stage array, which are exclusive.
+why: The host cannot choose which form to run. Reissuing means choosing one form and supplying it again.
+fix: Supply only one command form, preserving the intended stages and arguments.
+instead: Retry with one explicit command form, not both
 x-paintedwolf-scenarios:
-- id: default
-  vars:
-    tool: command
-- id: verify_forms
-  tool: verify
-  vars:
+  - id: default
+    vars:
+      tool: command
+  - id: verify_forms
     tool: verify
+    vars:
+      tool: verify

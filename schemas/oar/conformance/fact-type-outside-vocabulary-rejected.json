@@ -1,0 +1,31 @@
+{
+  "title": "A host fact declared under a type outside the closed vocabulary is rejected",
+  "covers": [
+    "OAR-FACT-16"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "requires_facts": [
+      "example.score"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "host_facts": {
+      "example.score": "float"
+    }
+  },
+  "expected": {
+    "error": "vocabulary"
+  },
+  "id": "fact-type-outside-vocabulary-rejected"
+}

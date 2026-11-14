@@ -9,6 +9,15 @@ import (
 )
 
 // activation publishes occurrence facts under their rule-visible names.
+// occurrenceIdentityFacts are host facts the occurrence itself establishes —
+// rejection identity, caller, role, profile, posture, anchor, and counters —
+// which occurrence data never replaces.
+var occurrenceIdentityFacts = map[string]bool{
+	"paintedwolf.rejection_code": true, "paintedwolf.principal": true, "paintedwolf.principal_roles": true,
+	"paintedwolf.session_role": true, "paintedwolf.tool_profile": true, "paintedwolf.session_posture": true,
+	"paintedwolf.anchor": true, "paintedwolf.credential_decisions": true,
+}
+
 func activation(gc *GuardContext) map[string]any {
 	bare := bareActivation(gc)
 	tiers := bareFactTiers
@@ -19,7 +28,7 @@ func activation(gc *GuardContext) map[string]any {
 	if gc != nil {
 		for name, value := range oarcopy.FactsFromData(gc.ObservationData) {
 			// Rejection presentation metadata cannot replace canonical protocol observations.
-			if !strings.HasPrefix(name, "paintedwolf.") || name == "paintedwolf.rejection_code" {
+			if !strings.HasPrefix(name, "paintedwolf.") || occurrenceIdentityFacts[name] {
 				continue
 			}
 			// Host presentation fields are declared strings; serialize their structured source at the producer boundary.
@@ -55,8 +64,15 @@ func activation(gc *GuardContext) map[string]any {
 		// Authoritative invocation and diagnostic facts overwrite any untrusted keys in ObservationData or Published.
 		oarcopy.PublishInvocationRecovery(out, gc.Invocation.Tool, gc.Invocation.ToolArgs, gc.Invocation.CapabilityContract)
 		oarcopy.PublishDiagnosticKnowledge(out, gc.ObservationData)
+		// A sandbox refusal names its sockets outside the observation data.
+		if len(gc.Refusals.RefusedSocketPaths) > 0 {
+			oarcopy.PublishSocketReferences(out, gc.Refusals.RefusedSocketPaths)
+		}
 
-		out["fire_count"], out["breaker_count"], out["anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
+		// Occurrence data never replaces the counts the engine maintains.
+		out["fire_count"], out["breaker_count"], out["paintedwolf.anchor"] = gc.Counters.FireCount, gc.Counters.BreakerCount, gc.Anchor
+		out["same_code_reject_run"], out["same_call_run"] = gc.Counters.SameCodeRejectRun, gc.Counters.SameCallRun
+		out["paintedwolf.credential_decisions"] = gc.Counters.CredentialDecisions
 	}
 	return out
 }
@@ -76,7 +92,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"turn_tools":                          strList(gc.Session.TurnTools),
 		"session_posture":                     gc.Session.SessionPosture,
 		"surface":                             gc.Session.Surface,
-		"profile":                             gc.Session.Profile,
+		"session_role":                        gc.Session.Role,
 		"workers_idle":                        gc.Workers.WorkersIdle,
 		"worker_spawn_blocked":                gc.Workers.WorkerSpawnBlocked,
 		"active_worker_count":                 gc.Workers.ActiveWorkerCount,
@@ -101,8 +117,6 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"path_is_worker_branch":               gc.Workers.PathIsWorkerBranch,
 		"verify_has_command":                  gc.Progress.VerifyHasCommand,
 		"verify_declared":                     gc.Progress.VerifyDeclared,
-		"progress_closed_beyond_baseline":     gc.Progress.ProgressClosedBeyondBaseline,
-		"progress_reconciled_since_arm":       gc.Progress.ProgressReconciledSinceArm,
 		"pending_user_input":                  gc.Session.PendingUserInput,
 		"stub_valid":                          gc.Session.StubValid,
 		"pattern_parse_ok":                    gc.Invocation.PatternParseOK,
@@ -126,6 +140,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"refused_terminal_read_paths":         strList(gc.Refusals.RefusedTerminalReadPaths),
 		"refused_terminal_write_paths":        strList(gc.Refusals.RefusedTerminalWritePaths),
 		"refused_socket_paths":                strList(gc.Refusals.RefusedSocketPaths),
+		"refused_socket_host_resources":       strList(gc.Refusals.RefusedSocketHostResources),
 		"refused_connect_ports":               strList(gc.Refusals.RefusedConnectPorts),
 		"refused_listen_ports":                strList(gc.Refusals.RefusedListenPorts),
 		"refused_signals":                     strList(gc.Refusals.RefusedSignals),
@@ -133,7 +148,6 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"worktree_stale_paths":                strList(gc.Source.WorktreeStalePaths),
 		"worktree_leftover_paths":             strList(gc.Source.WorktreeLeftoverPaths),
 		"worktree_conflict_paths":             strList(gc.Source.WorktreeConflictPaths),
-		"tool_args_fingerprint":               gc.Invocation.ToolArgsFingerprint,
 		"tool_is_state":                       gc.Invocation.ToolIsState,
 		"tool_is_delegation":                  gc.Invocation.ToolIsDelegation,
 		"tool_is_task":                        gc.Invocation.ToolIsTask,
@@ -151,6 +165,8 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"fruitless_search_run":                gc.Counters.FruitlessSearchRun,
 		"breaker_count":                       gc.Counters.BreakerCount,
 		"same_code_reject_run":                gc.Counters.SameCodeRejectRun,
+		"same_call_run":                       gc.Counters.SameCallRun,
+		"repeated_rejection_code":             gc.Counters.RepeatedRejectCode,
 		"code_reject_responses":               gc.Counters.CodeRejectResponses,
 		"deferred_unactivated":                gc.Counters.DeferredUnactivated,
 		"worker_attempted_mutation":           gc.Workers.WorkerAttemptedMutation,
@@ -182,11 +198,14 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"jailbreak_score":                     gc.Content.JailbreakScore,
 		"pii_entities":                        mapList(gc.Content.PIIEntities),
 		"secret_matches":                      mapList(gc.Content.SecretMatches),
-		"mcp_provider_id":                     gc.MCP.MCPProviderID,
+		"mcp_server_id":                       gc.MCP.MCPServerID,
 		"mcp_tool_name":                       gc.MCP.MCPToolName,
 		"mcp_qualified_tool":                  gc.MCP.MCPQualifiedTool,
-		"mcp_provider_configured":             gc.MCP.MCPProviderConfigured,
-		"mcp_provider_enabled":                gc.MCP.MCPProviderEnabled,
+		"mcp_server_configured":               gc.MCP.MCPServerConfigured,
+		"mcp_server_enabled":                  gc.MCP.MCPServerEnabled,
+		"mcp_configured_servers":              gc.MCP.configuredServers(),
+		"mcp_enabled_servers":                 gc.MCP.enabledServers(),
+		"mcp_result":                          mapOrEmpty(gc.MCP.MCPFields),
 		"mcp_call_ok":                         gc.MCP.MCPCallOK,
 		"mcp_error_code":                      gc.MCP.MCPErrorCode,
 		"mcp_schema_matched":                  gc.MCP.MCPSchemaMatched,
@@ -198,7 +217,7 @@ func bareActivation(gc *GuardContext) map[string]any {
 		"git_no_repository_on_write_leg":      gc.Source.GitNoRepositoryOnWriteLeg,
 	}
 	maps.Copy(out, rejectObservationActivation(gc))
-	maps.Copy(out, standardActivation(gc))
+	maps.Copy(out, sessionActivation(gc))
 	maps.Copy(out, workflowActivation(gc))
 	return out
 }
@@ -210,6 +229,7 @@ func rejectObservationActivation(gc *GuardContext) map[string]any {
 		"command_not_argv":   gc.Invocation.CommandNotArgv,
 		"is_directory":       gc.Rejection.IsDirectory,
 		"not_found":          gc.Rejection.NotFound,
+		"path_outside_scope": EvalPathOutsideScope(gc, gc.Invocation.Tool),
 		"path_denied":        gc.Rejection.PathDenied,
 		"bulk_denied":        gc.Rejection.BulkDenied,
 		"binary_denied":      gc.Rejection.BinaryDenied,
@@ -248,13 +268,14 @@ func workflowActivation(gc *GuardContext) map[string]any {
 	}
 }
 
-// standardActivation defines core and standard-profile observations, including
-// the portable tool-profile fields copy may bind.
-func standardActivation(gc *GuardContext) map[string]any {
+// sessionActivation projects the core profile, counters, caller identity,
+// content provenance, and argument diagnostics.
+func sessionActivation(gc *GuardContext) map[string]any {
 	return map[string]any{
 		"anchor":                     gc.Anchor,
 		"fire_count":                 gc.Counters.FireCount,
-		"permission_profile":         gc.Session.PermissionProfile,
+		"credential_decisions":       gc.Counters.CredentialDecisions,
+		"tool_profile":               gc.Session.PermissionProfile,
 		"principal":                  gc.Session.Principal,
 		"principal_roles":            strList(gc.Session.PrincipalRoles),
 		"content_length":             gc.Content.ContentLength,

@@ -34,12 +34,12 @@ func runStash(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 		if err == nil && !quiet && sub == "drop" && res.Status == "completed" && strings.TrimSpace(res.Diagnostics) == "" {
 			_, _ = fmt.Fprintf(out, "Dropped %s (%s)\n", id, res.Before.Stash)
 		}
-		return settleOperate(p, res, out, stderr, quiet, err)
+		return settleOperate(ctx, p, res, out, stderr, quiet, err)
 	case "pop":
 		id := firstOrDefault(rest, "stash@{0}")
 		applied, err := mut.Operate(ctx, tc, git.OperationRequest{Kind: "stash", Action: "apply", Ref: id, ReinstateIndex: has(p.Argv, "--index")})
 		if err != nil || applied.Status != "completed" && applied.Status != "no_op" {
-			return settleOperate(p, applied, out, stderr, quiet, err)
+			return settleOperate(ctx, p, applied, out, stderr, quiet, err)
 		}
 		dropped, dropErr := mut.Operate(ctx, tc, git.OperationRequest{Kind: "stash", Action: "drop", Ref: id})
 		if dropErr != nil {
@@ -48,7 +48,7 @@ func runStash(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 		if !quiet && strings.TrimSpace(dropped.Diagnostics) == "" {
 			_, _ = fmt.Fprintf(out, "Dropped %s (%s)\n", id, applied.Before.Stash)
 		}
-		return settleOperate(p, applied, out, stderr, quiet, nil)
+		return settleOperate(ctx, p, applied, out, stderr, quiet, nil)
 	default:
 		includeUntracked := has(p.Argv, "-u")
 		rawPaths := append(append([]string{}, rest...), after...)
@@ -70,7 +70,7 @@ func runStash(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 				_, _ = fmt.Fprintf(out, "Saved working directory and index state (%s)\n", shortSHA(res.After.Stash))
 			}
 		}
-		return settleOperate(p, res, out, stderr, quiet, err)
+		return settleOperate(ctx, p, res, out, stderr, quiet, err)
 	}
 }
 
@@ -124,7 +124,7 @@ func runReset(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 			clearStaged(p.owners, tc.ChatSessionID(), repo.Root)
 		}
 	}
-	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), err)
+	return settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), err)
 }
 
 func runClean(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
@@ -138,7 +138,7 @@ func runClean(ctx context.Context, p Prepared, tc tools.ToolContext, dir string,
 	}
 	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, git.OperationRequest{Kind: "clean", Mode: mode, Paths: paths})
-	return settleOperate(p, res, out, stderr, has(p.Argv, "-q"), err)
+	return settleOperate(ctx, p, res, out, stderr, has(p.Argv, "-q"), err)
 }
 
 func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir string, repo gitrepo.Repo, stderr io.Writer) (toolcontract.ProducerResult, error) {
@@ -158,13 +158,16 @@ func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir stri
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}
-		defer done()
+		failed := true
+		defer func() { done(failed) }()
 		baseRef := ""
 		if len(ops) == 3 {
 			baseRef = ops[2]
 		}
-		if err := p.owners.Git.AddWorktree(ctx, repo.Root, bound.Resolved.Abs, branch, baseRef); err != nil {
-			return settleGitError(err, stderr, toolcontract.NoEffect)
+		addErr := p.owners.Git.AddWorktree(ctx, repo.Root, bound.Resolved.Abs, branch, baseRef)
+		failed = addErr != nil
+		if addErr != nil {
+			return settleGitError(addErr, stderr, toolcontract.NoEffect)
 		}
 	case "remove":
 		target := ops[1]
@@ -179,18 +182,24 @@ func runWorktree(ctx context.Context, p Prepared, tc tools.ToolContext, dir stri
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}
-		defer done()
-		if err := p.owners.Git.RemoveWorktree(ctx, repo.Root, bound.Resolved.Abs); err != nil {
-			return settleGitError(err, stderr, toolcontract.NoEffect)
+		failed := true
+		defer func() { done(failed) }()
+		removeErr := p.owners.Git.RemoveWorktree(ctx, repo.Root, bound.Resolved.Abs)
+		failed = removeErr != nil
+		if removeErr != nil {
+			return settleGitError(removeErr, stderr, toolcontract.NoEffect)
 		}
 	case "prune":
 		ctx, done, err := bindTargetLaunch(ctx, p, tc)
 		if err != nil {
 			return settleMutationError(err, toolcontract.NoEffect)
 		}
-		defer done()
-		if err := p.owners.Git.PruneWorktrees(ctx, repo.Root); err != nil {
-			return settleGitError(err, stderr, toolcontract.NoEffect)
+		failed := true
+		defer func() { done(failed) }()
+		pruneErr := p.owners.Git.PruneWorktrees(ctx, repo.Root)
+		failed = pruneErr != nil
+		if pruneErr != nil {
+			return settleGitError(pruneErr, stderr, toolcontract.NoEffect)
 		}
 	}
 	return toolcontract.ProducerResult{Status: 0, Terminal: toolcontract.ProducerCompleted, Complete: true, PublicationEligible: true, EffectCertainty: toolcontract.EffectCompleted}, nil
@@ -201,7 +210,7 @@ func runSequence(ctx context.Context, p Prepared, tc tools.ToolContext, kind str
 	req := git.OperationRequest{Kind: kind, Action: action, NoCommit: has(p.Argv, "-n"), Refs: p.Argv.Operands().Values()}
 	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, req)
-	return settleOperate(p, res, out, stderr, false, err)
+	return settleOperate(ctx, p, res, out, stderr, false, err)
 }
 
 func runRebase(ctx context.Context, p Prepared, tc tools.ToolContext, out *meteredOutput, stderr io.Writer) (toolcontract.ProducerResult, error) {
@@ -209,5 +218,5 @@ func runRebase(ctx context.Context, p Prepared, tc tools.ToolContext, out *meter
 	req := git.OperationRequest{Kind: "rebase", Action: action, Ref: firstOrEmpty(p.Argv.Operands().Values())}
 	mut := native.GitMutations{Git: p.owners.Git, Boundary: p.owners.Boundary, PrivateGit: p.owners.PrivateGit}
 	res, err := mut.Operate(ctx, tc, req)
-	return settleOperate(p, res, out, stderr, false, err)
+	return settleOperate(ctx, p, res, out, stderr, false, err)
 }

@@ -56,7 +56,7 @@ func nativeReadAdmissionFixture(t *testing.T, inputPath, modelTool string) {
 	// independently of the raw native path handed to the existing read door.
 	var observationRules []*oar.Rule
 	for _, anchor := range []string{oar.AnchorToolPreInvoke, oar.AnchorToolHandler} {
-		observationRules = append(observationRules, &oar.Rule{ID: anchor, Kind: oar.KindPolicy, Anchor: anchor, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool != "` + modelTool + `" || paintedwolf.native_operation != "read" || tool_arg_string("command") != "fixture" || tool_arg_string("path") != ""`})
+		observationRules = append(observationRules, &oar.Rule{ID: anchor, Kind: oar.KindPolicy, Anchor: anchor, Effect: oar.EffectBlock, Enforcement: "enforce", When: `tool != "` + modelTool + `" || paintedwolf.native_operation != "read" || paintedwolf.tool_arg_string("command") != "fixture" || paintedwolf.tool_arg_string("path") != ""`})
 	}
 	pipeline := oar.NewGuardPipeline(oar.NewRuleSet(observationRules), nil, nil)
 	pipeline.EnableAnchor(oar.AnchorToolPreInvoke)

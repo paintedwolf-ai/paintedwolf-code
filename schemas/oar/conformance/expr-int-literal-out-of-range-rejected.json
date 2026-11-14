@@ -1,0 +1,25 @@
+{
+  "id": "expr-int-literal-out-of-range-rejected",
+  "title": "An int literal beyond 64 bits is rejected at load",
+  "covers": [
+    "OAR-EXPR-15"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "R",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "9223372036854775808 > 0"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    }
+  },
+  "expected": {
+    "error": "OAR-EXPR-15"
+  }
+}

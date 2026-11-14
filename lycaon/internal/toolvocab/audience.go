@@ -82,7 +82,7 @@ func Audience(c *Catalog, s Surfaces, rule *oar.Rule) ([]string, error) {
 	case audienceAnyCaller:
 		candidates = c.ProfileIDs()
 	}
-	selected, operations := rule.Selector["tool"], rule.Selector["paintedwolf.operation"]
+	selected, operations := rule.Tools(), rule.Operations()
 	if len(selected) == 0 && len(operations) == 0 {
 		sort.Strings(candidates)
 		return candidates, nil
@@ -152,7 +152,7 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 	}
 	var problems []string
 	for _, rule := range rules.All() {
-		for _, tool := range rule.Selector["tool"] {
+		for _, tool := range rule.Tools() {
 			if c.operations[strings.TrimSpace(tool)] {
 				notes = append(notes, fmt.Sprintf(
 					"rule %q: selector.tool names %q, which no longer exists as a tool, so the clause never matches; use the paintedwolf.operation selector",
@@ -165,7 +165,7 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 					rule.ID, tool))
 			}
 		}
-		for _, operation := range rule.Selector["paintedwolf.operation"] {
+		for _, operation := range rule.Operations() {
 			if !c.KnownPattern(operation) && !c.knownOperationPattern(operation) {
 				problems = append(problems, fmt.Sprintf(
 					"rule %q: selector paintedwolf.operation names %q, which resolves to no tool or operation — the clause can never match",
@@ -174,7 +174,7 @@ func CheckRules(c *Catalog, s Surfaces, rules *oar.RuleSet) (notes []string, err
 		}
 		// A program's post-invoke observation reports command, not what it reached.
 		if rule.Anchor == oar.AnchorToolPost {
-			for _, operation := range rule.Selector["paintedwolf.operation"] {
+			for _, operation := range rule.Operations() {
 				if c.operations[operation] {
 					problems = append(problems, fmt.Sprintf(
 						"rule %q: selector paintedwolf.operation names %q at tool.post_invoke, which reports the operation as command; match the fact its producer raises",
@@ -230,7 +230,7 @@ var copiedName = regexp.MustCompile(`\b[a-z][a-z0-9]*(?:_[a-z0-9]+)+\b`)
 // bypasses next_steps, and a next step that could not be submitted as written.
 func uncheckedCalls(c *Catalog, rule *oar.Rule) []string {
 	subject := map[string]bool{}
-	for _, tool := range append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...) {
+	for _, tool := range append(append([]string(nil), rule.Tools()...), rule.Operations()...) {
 		subject[tool] = true
 	}
 	mentioned := map[string]bool{}
@@ -345,13 +345,13 @@ func unreachableRemedies(c *Catalog, rule *oar.Rule, audience []string) (own, ot
 		return nil, nil
 	}
 	selected := map[string]bool{}
-	for _, tool := range append(append([]string(nil), rule.Selector["tool"]...), rule.Selector["paintedwolf.operation"]...) {
+	for _, tool := range append(append([]string(nil), rule.Tools()...), rule.Operations()...) {
 		selected[tool] = true
 	}
 	for _, field := range []struct {
 		name string
 		text string
-	}{{"fix", rule.Fix}, {"instead", rule.Copy.Instead}} {
+	}{{"fix", rule.Copy.Fix}, {"instead", rule.Copy.Instead}} {
 		for _, tool := range NamedTools(c, field.text) {
 			// The rejected call is the subject of the rule, not a remedy.
 			if selected[tool] {

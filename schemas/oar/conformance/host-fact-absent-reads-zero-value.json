@@ -1,0 +1,38 @@
+{
+  "title": "A declared host fact absent from the occurrence reads as its zero value",
+  "covers": [
+    "OAR-FACT-24",
+    "OAR-FACT-25",
+    "OAR-COPY-3"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "BREAKER_NOTE",
+    "kind": "policy",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "block",
+    "when": "tool == \"read\"",
+    "requires_facts": [
+      "example.breaker_open"
+    ],
+    "fix": "{% if example.breaker_open %}The host's circuit breaker is open; wait for it to reset.{% else %}Change the approach before calling again.{% endif %}"
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "host_facts": {
+      "example.breaker_open": "bool"
+    }
+  },
+  "expected": {
+    "decision": "block",
+    "code": "BREAKER_NOTE",
+    "copy": {
+      "fix": "Change the approach before calling again."
+    }
+  },
+  "id": "host-fact-absent-reads-zero-value"
+}

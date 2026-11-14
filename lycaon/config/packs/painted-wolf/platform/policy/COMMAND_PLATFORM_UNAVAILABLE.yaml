@@ -1,28 +1,23 @@
-oar: '1.0'
+spec_version: "1.0"
 id: COMMAND_PLATFORM_UNAVAILABLE
 kind: policy
-anchor: tool.rejected
+on: tool.rejected
 selector:
-  tool:
-  - command
-  - verify
-requires:
-  profiles:
-  - tool
-  facts:
-  - paintedwolf.rejection_code
+  tools:
+    - command
+    - verify
+requires_facts: [paintedwolf.rejection_code]
 when: paintedwolf.rejection_code == "COMMAND_PLATFORM_UNAVAILABLE"
 effect: block
-copy:
-  what: This native command operation is unavailable on the current platform.
-  cause: The platform adapter cannot provide the required confined path operation.
-  why: ''
-  fix: ''
-  instead: ''
 x-paintedwolf-category: recoverable
 x-paintedwolf-emit: guard:command_composition_redirect
-x-paintedwolf-message: native command operation is unavailable
+message: native command operation is unavailable
+what: This native command operation is unavailable on the current platform.
+cause: The platform adapter cannot provide the required confined path operation.
+why: ''
+fix: ''
+instead: ''
 x-paintedwolf-scenarios:
-- id: unavailable_path_operation
-  vars:
-    tool: command
+  - id: unavailable_path_operation
+    vars:
+      tool: command

@@ -1,0 +1,62 @@
+{
+  "id": "fire-counters-keyed-by-identity",
+  "title": "Rules sharing an id under different namespaces keep separate counters",
+  "covers": [
+    "OAR-FIRE-4",
+    "OAR-DOC-21"
+  ],
+  "rule": [
+    {
+      "spec_version": "1.0",
+      "id": "COUNTED",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "allow",
+      "when": "true",
+      "namespace": "example.a",
+      "on_fire": [
+        "increment_counter"
+      ]
+    },
+    {
+      "spec_version": "1.0",
+      "id": "COUNTED",
+      "kind": "policy",
+      "on": "tool.pre_invoke",
+      "selector": {},
+      "effect": "allow",
+      "when": "tool == \"read\"",
+      "namespace": "example.b",
+      "on_fire": [
+        "increment_counter"
+      ]
+    }
+  ],
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session",
+    "occurrences": [
+      {
+        "anchor": "tool.pre_invoke",
+        "facts": {
+          "tool": "ls"
+        }
+      }
+    ]
+  },
+  "expected": {
+    "decision": "none",
+    "counters": {
+      "example.a/COUNTED": {
+        "fire_count": 2
+      },
+      "example.b/COUNTED": {
+        "fire_count": 1
+      }
+    }
+  }
+}

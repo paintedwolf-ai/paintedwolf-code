@@ -86,8 +86,11 @@ func checkPackAPI(root string, manifest extpacks.Manifest) error {
 			return fmt.Errorf("bundled pack contains symlink %s", rel)
 		}
 		if entry.IsDir() {
-			if rel == "archive" {
+			switch rel {
+			case "archive":
 				return requireAPIEpoch(constraint, "1.1.0", rel)
+			case "policy":
+				return requireAPIEpoch(constraint, policyDocumentsAPI, rel)
 			}
 			return nil
 		}
@@ -113,13 +116,18 @@ func checkPackAPI(root string, manifest extpacks.Manifest) error {
 	})
 }
 
+// policyDocumentsAPI is the first extension API whose policy documents are
+// Open Agent Rules 1.0.
+const policyDocumentsAPI = "1.2.0"
+
 // API epochs name published interpreter contracts, independent of product patches.
 func requireAPIEpoch(constraint *semver.Constraints, required, source string) error {
 	floor, err := semver.StrictNewVersion(required)
 	if err != nil {
 		return err
 	}
-	epochs := map[string]bool{"1.0.0": true, extpacks.ExtensionAPIVersion: true}
+	epochs := map[string]bool{"1.0.0": true, "1.1.0": true, extpacks.ExtensionAPIVersion: true}
+	epochs[policyDocumentsAPI] = true
 	for _, field := range workflowdef.ManifestFieldInventory() {
 		if field.ExtensionAPI != "" {
 			epochs[field.ExtensionAPI] = true

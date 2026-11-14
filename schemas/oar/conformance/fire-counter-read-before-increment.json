@@ -1,0 +1,35 @@
+{
+  "id": "fire-counter-read-before-increment",
+  "title": "A condition reads the counter value from before this occurrence's own increment",
+  "covers": [
+    "OAR-FIRE-5"
+  ],
+  "rule": {
+    "spec_version": "1.0",
+    "id": "FIRST_OFFENCE",
+    "kind": "invariant",
+    "on": "tool.pre_invoke",
+    "selector": {},
+    "effect": "nudge",
+    "when": "breaker_count == 0",
+    "on_fire": [
+      "increment_breaker"
+    ]
+  },
+  "input": {
+    "anchor": "tool.pre_invoke",
+    "facts": {
+      "tool": "read"
+    },
+    "session_id": "fixture-session"
+  },
+  "expected": {
+    "decision": "nudge",
+    "code": "FIRST_OFFENCE",
+    "counters": {
+      "FIRST_OFFENCE": {
+        "breaker_count": 1
+      }
+    }
+  }
+}

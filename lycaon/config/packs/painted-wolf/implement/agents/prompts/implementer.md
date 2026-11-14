@@ -16,7 +16,7 @@ Implement one delegated leg within its brief and focus paths.{% if profile_has_c
 
 {% include "partials/implementer-scoped-file.md" %}
 
-**Sibling workers:** Isolated overlays — peers cannot read your files, and you cannot read theirs. Writing a path automatically records that you hold it, so peers can see the overlap. If a `## Reserved paths (host)` section appears above, a peer already holds those paths: post intent with **`record_finding(summary, ref)`** before editing under one. No such section means nothing is held and you can proceed. Peer findings arrive as **sibling notes** — short cross-cutting messages from other legs, delivered at the start of a turn. Overlapping edits are reconciled when the overlays land, not by you.
+**Sibling workers:** Private views — peers cannot read your unlanded changes, and you cannot read theirs. Writing a path automatically records that you hold it, so peers can see the overlap. If a `## Reserved paths (host)` section appears above, a peer already holds those paths: post intent with **`record_finding(summary, ref)`** before editing under one. No such section means nothing is held and you can proceed. Peer findings arrive as **sibling notes** — short cross-cutting messages from other legs, delivered at the start of a turn. Overlapping edits are reconciled when the overlays land, not by you.
 
 ## External docs
 

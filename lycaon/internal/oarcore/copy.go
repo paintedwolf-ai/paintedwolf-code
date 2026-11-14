@@ -1,6 +1,6 @@
 package oarcore
 
-// Copy-binding language ([OAR-COPY-1]–[OAR-COPY-9]).
+// Copy-binding language ([OAR-COPY-1]–).
 // Parses at load and substitutes after the decision.
 
 import (
@@ -45,7 +45,7 @@ func copyInterpolatable(t FactType) bool {
 	switch t {
 	case TypeString, TypeBool, TypeInt, TypeDouble, TypeListString:
 		return true
-	case TypeMapString, TypeListMap, TypeMap:
+	case TypeListMap, TypeMap:
 	}
 	return false
 }

@@ -3,12 +3,12 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://lycaon.dev/schemas/host/selector.schema.json",
   "title": "AnchorBindingSelector",
-  "description": "Shared Binding selector vocabulary. Machine-state only — no NL heuristics. Empty / omitted clauses are permissive. Consumed by anchor-binding.schema.json and oar.schema.json via $ref.",
+  "description": "Shared Binding selector vocabulary. Machine-state only — no NL heuristics. Empty / omitted clauses are permissive. Consumed by anchor-binding.schema.json via $ref.",
   "type": "object",
   "additionalProperties": false,
   "properties": {
     "surface": {
-      "description": "Emit surface. Shared vocab uses singular; OAR rules may also set profiles[] / surfaces[].",
+      "description": "Emit surface; profiles[] and surfaces[] narrow it further.",
       "type": [
         "string",
         "null"
@@ -39,11 +39,11 @@
         "string",
         "null"
       ],
-      "description": "Singular tool at tool-lifecycle anchors. Prefer tools[] on OAR rules when matching a set."
+      "description": "Singular tool at tool-lifecycle anchors; tools[] matches a set."
     },
     "tools": {
       "type": "array",
-      "description": "OAR multi-tool match (AND with other clauses). All listed tools are eligible; Emit supplies the concrete tool.",
+      "description": "Multi-tool match (AND with other clauses). All listed tools are eligible; Emit supplies the concrete tool.",
       "items": {
         "type": "string",
         "minLength": 1
@@ -52,7 +52,7 @@
     },
     "profiles": {
       "type": "array",
-      "description": "Tool profiles that must match (OAR-heavy).",
+      "description": "Tool profiles that must match.",
       "items": {
         "type": "string",
         "minLength": 1
@@ -61,7 +61,7 @@
     },
     "surfaces": {
       "type": "array",
-      "description": "Session/manifest surfaces (e.g. implement_investigate). Optional OAR extension of singular surface.",
+      "description": "Session/manifest surfaces (e.g. implement_investigate). Narrows singular surface.",
       "items": {
         "type": "string",
         "minLength": 1
@@ -78,7 +78,7 @@
       "uniqueItems": true
     },
     "principal": {
-      "description": "Caller-identity scoping for multi-tenant adopters. Shared vocab enum or OAR string[] of api-key/team/tenant ids.",
+      "description": "Caller-identity scoping for multi-tenant adopters. A shared-vocabulary enum or a string[] of api-key/team/tenant ids.",
       "oneOf": [
         {
           "type": "string",
