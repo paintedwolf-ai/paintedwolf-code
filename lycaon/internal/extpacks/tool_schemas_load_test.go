@@ -37,8 +37,10 @@ func TestLoadEffectiveToolSchemasStockParity(t *testing.T) {
 			t.Errorf("missing tool %q", name)
 		}
 	}
-	if len(want.Tools) < 80 {
-		t.Fatalf("expected stock schema set, got %d", len(want.Tools))
+	files, err := filepath.Glob(filepath.Join(dir, "*.yaml"))
+	testutil.FailErr(t, "list stock schemas", err)
+	if len(files) == 0 || len(want.Tools) != len(files) {
+		t.Fatalf("loaded %d tools from %d stock schema files", len(want.Tools), len(files))
 	}
 }
 
