@@ -10,7 +10,7 @@ schema:
       description: Worker job_id from task() or pack_board
     path:
       type: string
-      description: Optional — scope preview to one repo-relative path
+      description: Optional — scope preview to one session-folder-relative conflict path (a filter over the overlay's changed paths, not an addressed path)
     detail:
       type: string
       enum: [hunks, full]

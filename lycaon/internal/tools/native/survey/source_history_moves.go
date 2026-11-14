@@ -90,7 +90,8 @@ func movedBase(
 	} else if source, moved, err = recordedMoveSource(ctx, tctx, ledger.Files, branch, at); err != nil || !moved {
 		return "", false, err
 	}
-	beforeAt = projectroot.DisplayPath(tctx.Source.Roots, source.rootID, source.rel)
+	// Baseline lookups key on the primary-relative spelling.
+	beforeAt = projectroot.DisplayPath(tctx.Source.Roots, "", source.rootID, source.rel)
 	baseline, err := compareSource(beforeAt)
 	if err != nil {
 		return "", false, err
@@ -117,8 +118,8 @@ func recordedMoves(roots []projectroot.RootRef, effects []sourceledger.Effect) [
 	for i := len(effects) - 1; i >= 0; i-- {
 		if effect := effects[i]; effect.FromPath != "" {
 			moves = append(moves, displayMove{
-				from: projectroot.DisplayPath(roots, effect.FromRootID, effect.FromPath),
-				to:   projectroot.DisplayPath(roots, effect.RootID, effect.Path),
+				from: projectroot.DisplayPath(roots, "", effect.FromRootID, effect.FromPath),
+				to:   projectroot.DisplayPath(roots, "", effect.RootID, effect.Path),
 			})
 		}
 	}

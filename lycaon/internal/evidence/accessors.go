@@ -5,8 +5,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-
-	"github.com/lycaon/lycaon/internal/sandbox"
 )
 
 // ObservedCitation is one ledger token used for citation membership.
@@ -109,24 +107,24 @@ func ObservedURLsSorted(ev Ledger) []string {
 	return out
 }
 
-// NormalizeEvidencePath normalizes token relative to projectDir for evidence indexing.
-func NormalizeEvidencePath(projectDir, token string) string {
-	return normalizedEvidencePath(projectDir, token)
-}
-
-func (rec *Record) touchPath(projectDir, token, tier string) {
+// touchPath records a path token the tool result observed, resolved to its
+// durable (root, scope-relative) identity. The first observed path becomes
+// the record's primary Path/RootID; paths rooted elsewhere are recorded in
+// rooted.owners so assembly can key them independently of the primary.
+func (rec *Record) touchPath(roots CitationRoots, token, tier string) {
 	if rec == nil {
 		return
 	}
 	if tier == "" {
 		tier = FidelityStructured
 	}
-	rel := normalizedEvidencePath(projectDir, token)
-	if rel == "" {
+	id := ResolvePathIdentity(roots, token)
+	if id.ScopeRel == "" {
 		return
 	}
 	if rec.Path == "" {
-		rec.Path = rel
+		rec.Path = id.ScopeRel
+		rec.RootID = id.RootID
 	}
 	if rec.Fidelity == "" {
 		rec.Fidelity = tier
@@ -136,13 +134,19 @@ func (rec *Record) touchPath(projectDir, token, tier string) {
 	if rec.pathTiers == nil {
 		rec.pathTiers = make(map[string]string)
 	}
-	rec.pathTiers[rel] = mergePathFidelity(rec.pathTiers[rel], tier)
+	rec.pathTiers[id.ScopeRel] = mergePathFidelity(rec.pathTiers[id.ScopeRel], tier)
+	if id.RootID != rec.RootID {
+		if rec.rooted.owners == nil {
+			rec.rooted.owners = make(map[string]string)
+		}
+		rec.rooted.owners[id.ScopeRel] = id.RootID
+	}
 	for _, existing := range rec.pathsTouched {
-		if existing == rel {
+		if existing == id.ScopeRel {
 			return
 		}
 	}
-	rec.pathsTouched = append(rec.pathsTouched, rel)
+	rec.pathsTouched = append(rec.pathsTouched, id.ScopeRel)
 }
 
 // touchURL records a URL the tool result named: the first becomes the primary (the
@@ -285,20 +289,6 @@ func pathTrustOnRecord(rec Record, path string) string {
 	return FidelityStructured
 }
 
-func normalizedEvidencePath(projectDir, token string) string {
-	if rel, ok := NormalizeCitationPath(projectDir, token); ok {
-		return rel
-	}
-	if strings.TrimSpace(projectDir) != "" {
-		return ""
-	}
-	rel := NormalizeLedgerPath(token)
-	if rel == "" || sandbox.HasParentTraversal(rel) {
-		return ""
-	}
-	return rel
-}
-
 func IndexedPathsForRecord(rec Record) []string {
 	seen := map[string]struct{}{}
 	var out []string
@@ -323,13 +313,15 @@ func IndexedPathsForRecord(rec Record) []string {
 	return out
 }
 
-// ContentPathsForRecord returns normalized paths whose file contents were
-// exposed in rec (as opposed to directory listings or zero-match searches).
+// ContentPathsForRecord returns the ledger keys of paths whose file contents
+// were exposed in rec (as opposed to directory listings or zero-match
+// searches): session-folder display keys on stamped records, so the same
+// relative path in two folders stays two paths.
 func ContentPathsForRecord(rec Record) []string {
 	switch rec.Kind {
 	case "read":
 		if len(rec.Body) > 0 || len(rec.LineRanges) > 0 || rec.SourceDelivery != nil {
-			return IndexedPathsForRecord(rec)
+			return DisplayPathsForRecord(rec)
 		}
 		return nil
 	case "grep", "summary":
@@ -339,7 +331,7 @@ func ContentPathsForRecord(rec Record) []string {
 			if len(byLine) == 0 {
 				continue
 			}
-			p = NormalizeLedgerPath(p)
+			p = NormalizeLedgerPath(recordDisplayKey(rec, NormalizeLedgerPath(p)))
 			if p == "" {
 				continue
 			}

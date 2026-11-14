@@ -43,6 +43,8 @@ type Props = {
   literalHtml?: boolean;
   /** Project roots for path context menus. */
   rootRefs?: readonly ResolveProjectRoot[];
+  /** Session's active root; bare prose paths resolve against it. */
+  activeRootId?: string;
 };
 
 /** Render sanitized finalized markdown. */
@@ -100,7 +102,7 @@ export function MarkdownBody(props: Props) {
     }
     // Untrusted project paths remain inert.
     if (props.untrusted === true) return;
-    if (onMarkdownProjectPathLinkClick(e, props.projectId)) return;
+    if (onMarkdownProjectPathLinkClick(e, props.projectId, props.activeRootId)) return;
   };
 
   const onContextMenu = (e: MouseEvent) => {
@@ -108,6 +110,7 @@ export function MarkdownBody(props: Props) {
     const next = markdownProjectPathLinkContextMenu(e, {
       projectId: props.projectId,
       rootRefs: props.rootRefs,
+      activeRootId: props.activeRootId,
       chatDestination: chatDestination(),
     });
     if (next) setMenu(next);

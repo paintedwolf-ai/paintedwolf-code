@@ -9,7 +9,7 @@ import (
 
 func TestSummarizeWindowHandleRetainsFullSourceSpan(t *testing.T) {
 	content := `{"anchors":[{"path":"source.go","line":12,"excerpt":"func Route() {"}],"pack":{"substance":[{"path":"source.go","start_line":12,"end_line":14,"body":"12: func Route() {\n13: serve()\n14: }\n"}]}}`
-	records := SummarizeAnchorHighlightRecords("/project", content)
+	records := SummarizeAnchorHighlightRecords(CitationRoots{ProjectDir: "/project"}, content)
 	if len(records) != 1 || records[0].LineRanges[0].End != 14 || !strings.Contains(strings.Join(records[0].Body, "\n"), "serve()") {
 		t.Fatalf("window evidence=%+v", records)
 	}

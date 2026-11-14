@@ -7,31 +7,26 @@ import (
 
 // RecordSourceLocation records a location explicitly represented by a tool result.
 func (c ToolContext) RecordSourceLocation(target api.NavigationTarget) {
-	if c.Effects.Out == nil || target.ProjectID != c.Identity.ProjectID {
+	if c.Effects.Out == nil || target.ProjectID != c.Identity.ProjectID || !sourceref.Valid(target) {
 		return
 	}
-	if c.Effects.Out.SourceContext != nil && c.Effects.Out.SourceContext.Truncated {
+	c.Effects.Out.recordSourceLocation(target)
+}
+
+// RecordSourceIdentity records a location the tool already resolved, so the
+// result carries {RootID, ScopeRel} instead of re-resolving a display string.
+func (c ToolContext) RecordSourceIdentity(rootID, scopeRel string, kind api.NavigationEntryKind) {
+	if c.Effects.Out == nil || c.Identity.ProjectID == "" {
 		return
 	}
-	if !sourceref.Valid(target) {
+	if rootID == "" || scopeRel == "" || scopeRel == "." {
 		return
 	}
-	key := sourceref.Key(target)
-	if c.Effects.Out.sourceLocations == nil {
-		c.Effects.Out.sourceLocations = make(map[string]struct{})
+	target := api.NavigationTarget{ProjectID: c.Identity.ProjectID, RootID: rootID, Path: scopeRel, EntryKind: kind}
+	if c.Source.WorkerBranchRoot != "" {
+		target.WorkerID = c.Identity.WorkerJobID
 	}
-	if _, exists := c.Effects.Out.sourceLocations[key]; exists {
-		return
-	}
-	if c.Effects.Out.SourceContext == nil {
-		c.Effects.Out.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{}}
-	}
-	if len(c.Effects.Out.SourceContext.Locations) >= api.MaxSourceContextLocations {
-		c.Effects.Out.SourceContext.Truncated = true
-		return
-	}
-	c.Effects.Out.sourceLocations[key] = struct{}{}
-	c.Effects.Out.SourceContext.Locations = append(c.Effects.Out.SourceContext.Locations, target)
+	c.RecordSourceLocation(target)
 }
 
 // RecordSourcePath resolves a structured producer path in its workspace.
@@ -62,9 +57,6 @@ func (c ToolContext) RecordSourceContext(context *api.SourceContext) {
 		c.RecordSourceLocation(target)
 	}
 	if context.Truncated {
-		if c.Effects.Out.SourceContext == nil {
-			c.Effects.Out.SourceContext = &api.SourceContext{Locations: []api.NavigationTarget{}}
-		}
-		c.Effects.Out.SourceContext.Truncated = true
+		c.Effects.Out.truncateSourceContext()
 	}
 }

@@ -51,14 +51,14 @@ func TestSummarizePartialSourceDoesNotClaimWholeFileDiagnostics(t *testing.T) {
 	caps.Gather.FileReadBytes = 128
 	caps.Gather.MaxBytes = 256
 	g := testSummarizeGatherer(t, dir, caps)
-	sc, _, ok := g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "large.go"), "large.go")
+	sc, _, ok := g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "large.go"), "large.go", "", "")
 	if !ok || sc.Head == "" || sc.LineCount != 0 || sc.Parses != nil || len(sc.Errors) > 0 || sc.ErrorKind != "" {
 		t.Fatalf("partial observation=%+v ok=%v", sc, ok)
 	}
 	if g.sources.sourceReadBytes != 128 || !g.sources.sourceLimited {
 		t.Fatalf("source bytes=%d limited=%v", g.sources.sourceReadBytes, g.sources.sourceLimited)
 	}
-	_, _, _ = g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "large.go"), "large.go")
+	_, _, _ = g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "large.go"), "large.go", "", "")
 	if g.sources.sourceReadBytes != 128 || g.sources.sourceFiles != 1 {
 		t.Fatalf("memoized source reread: bytes=%d files=%d", g.sources.sourceReadBytes, g.sources.sourceFiles)
 	}
@@ -213,7 +213,7 @@ func TestSummarizeReadBudgetPreservesUTF8Prefix(t *testing.T) {
 			caps.Gather.FileReadBytes = len("# Useful orientation\n") + 4
 			caps.Gather.FileChunkBytes = chunk
 			g := testSummarizeGatherer(t, dir, caps)
-			sc, _, ok := g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "README.md"), "README.md")
+			sc, _, ok := g.sources.structureFromAbs(t.Context(), filepath.Join(dir, "README.md"), "README.md", "", "")
 			if !ok || !strings.Contains(sc.Head, "Useful") || sc.LineCount != 0 {
 				t.Fatalf("truncated UTF-8 observation=%+v ok=%v", sc, ok)
 			}

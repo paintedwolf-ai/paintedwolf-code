@@ -27,14 +27,15 @@ func TestResolveReadAllowsHostDataDir(t *testing.T) {
 		Host:     tools.InvocationHost{HostDataDir: host},
 		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}
-	// Absolute spill leftovers resolve (durable seatbelt); DisplayPath is relative.
+	// Absolute spill leftovers resolve (durable seatbelt); DisplayPath is the
+	// canonical @output spelling shared with the wire form.
 	resolved, err := projectpaths.ResolveRead(context.Background(), nil, tctx, spill)
 	testutil.FailErr(t, "ResolveRead host spill abs", err)
 	if resolved.Abs != filepath.Clean(spill) {
 		t.Fatalf("abs=%q want %q", resolved.Abs, spill)
 	}
-	if resolved.DisplayPath != "tool-output/a.txt" {
-		t.Fatalf("display=%q want tool-output/a.txt", resolved.DisplayPath)
+	if resolved.DisplayPath != "@output/tool-output/a.txt" {
+		t.Fatalf("display=%q want @output/tool-output/a.txt", resolved.DisplayPath)
 	}
 	if !resolved.ToolOutput || !resolved.External {
 		t.Fatal("host observation did not retain its recovery classification")
@@ -46,7 +47,7 @@ func TestResolveReadAllowsHostDataDir(t *testing.T) {
 	if resolvedRel.Abs != filepath.Clean(spill) {
 		t.Fatalf("rel abs=%q want %q", resolvedRel.Abs, spill)
 	}
-	if resolvedRel.DisplayPath != "tool-output/a.txt" {
+	if resolvedRel.DisplayPath != "@output/tool-output/a.txt" {
 		t.Fatalf("rel display=%q", resolvedRel.DisplayPath)
 	}
 }
@@ -146,7 +147,7 @@ func TestResolveMisplacedSpillFindsTheReferencedSpill(t *testing.T) {
 		Identity: tools.InvocationIdentity{Agent: toolprofiles.DefaultToolProfileID},
 	}
 	resolved, ok := projectpaths.ResolveMisplacedSpill(tctx, "@scratch/"+rel)
-	if !ok || resolved.DisplayPath != rel || resolved.Abs != filepath.Join(host, filepath.FromSlash(rel)) {
+	if !ok || resolved.DisplayPath != "@output/"+rel || resolved.Abs != filepath.Join(host, filepath.FromSlash(rel)) {
 		t.Fatalf("resolved = %+v ok=%v", resolved, ok)
 	}
 	if _, ok := projectpaths.ResolveMisplacedSpill(tctx, rel); ok {

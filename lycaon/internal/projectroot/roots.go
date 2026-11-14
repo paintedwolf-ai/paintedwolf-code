@@ -18,18 +18,28 @@ type RootRef struct {
 	Label     string
 	Path      string
 	IsPrimary bool
+	// External marks approved folders outside the attached roots (grants and
+	// host namespaces); they display as canonical absolute paths.
+	External bool
 }
 
 // DisplayPath renders a ledger (root, relative path) pair in the canonical
-// display spelling: bare off the primary root, @label-qualified off any other,
-// and unqualified when the root is unknown.
-func DisplayPath(roots []RootRef, rootID, rel string) string {
+// display spelling for a session: bare off the session's active root,
+// @label-qualified off any other attached root, and unqualified when the root
+// is unknown.
+func DisplayPath(roots []RootRef, activeRootID, rootID, rel string) string {
 	for _, root := range roots {
 		if root.ID != rootID {
 			continue
 		}
-		if root.IsPrimary || root.Label == "" {
+		if rel == "" {
+			rel = "."
+		}
+		if rootID == activeRootIDOf(roots, activeRootID) || root.Label == "" {
 			return rel
+		}
+		if rel == "." {
+			return "@" + root.Label
 		}
 		return "@" + root.Label + "/" + rel
 	}
@@ -231,15 +241,34 @@ func resolveUnderRoot(rootPath, rel string) (string, error) {
 	return full, nil
 }
 
-// Qualify returns the canonical display path for abs under root (primary unprefixed).
-func Qualify(primary, root RootRef, abs string) string {
+// activeRootIDOf returns the session's active root ID, falling back to the
+// primary root when activeRootID is empty or unknown.
+func activeRootIDOf(roots []RootRef, activeRootID string) string {
+	if active, err := ActiveRoot(roots, activeRootID); err == nil {
+		return active.ID
+	}
+	if primary, err := PrimaryRoot(roots); err == nil {
+		return primary.ID
+	}
+	return ""
+}
+
+// Qualify returns the canonical display path for abs under root, keyed on the
+// session's active root: bare off the active root, @label-qualified off any
+// other attached root, and the absolute path when the root is unlabeled or an
+// approved outside-root folder.
+func Qualify(roots []RootRef, activeRootID string, root RootRef, abs string) string {
+	if root.External {
+		return filepath.ToSlash(abs)
+	}
 	rootAbs, err := filepath.Abs(root.Path)
 	if err != nil {
 		return abs
 	}
+	activeID := activeRootIDOf(roots, activeRootID)
 	rel, err := filepath.Rel(rootAbs, abs)
 	if err != nil || rel == "." {
-		if root.IsPrimary || root.ID == primary.ID {
+		if root.ID == activeID {
 			return "."
 		}
 		if root.Label != "" {
@@ -248,7 +277,7 @@ func Qualify(primary, root RootRef, abs string) string {
 		return abs
 	}
 	rel = filepath.ToSlash(rel)
-	if root.IsPrimary || root.ID == primary.ID {
+	if root.ID == activeID {
 		return rel
 	}
 	if root.Label != "" {

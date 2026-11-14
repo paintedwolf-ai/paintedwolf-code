@@ -64,10 +64,13 @@ func TestBranchRelForMultiRootSandbox(t *testing.T) {
 		{ID: "s", Label: "b", Path: "/b", IsPrimary: false},
 	}
 	promote := worker.PromoteRootsForTask(&api.WorkerTask{WorkspaceRoot: "/branch"}, roots)
-	branchRel, display, err := promote.BranchRel("p", "@b/pkg/x.go")
-	testutil.FailErr(t, "BranchRel", err)
 	secondaryDir, err := projectroot.BranchDirForID("s")
 	testutil.FailErr(t, "secondary branch dir", err)
+	branchRel, display, err := projectroot.WorkerBranchRelative(roots, "p", "@b/pkg/x.go")
+	testutil.FailErr(t, "WorkerBranchRelative", err)
+	if promote.BranchRoot != "/branch" {
+		t.Fatalf("BranchRoot=%q", promote.BranchRoot)
+	}
 	if branchRel != filepath.ToSlash(filepath.Join(secondaryDir, "pkg/x.go")) || display != "@b/pkg/x.go" {
 		t.Fatalf("branchRel=%q display=%q", branchRel, display)
 	}

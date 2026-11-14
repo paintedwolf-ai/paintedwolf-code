@@ -40,11 +40,17 @@ func (s *Comparisons) readChatFileEdit(ctx context.Context, sessionID string, re
 	}
 	msg = messageview.RedactMessage(msg)
 	if result := msg.ToolResult; result != nil && result.ToolCallID == ref.ToolCallID {
-		if ref.Index == 0 && result.FileEdit != nil {
-			return *result.FileEdit, nil
+		var edits []wire.FileEditSnapshot
+		switch ref.Source {
+		case wire.FileEditSourceFileEdit:
+			edits = result.FileEdits
+		case wire.FileEditSourceOverlayPromotion:
+			if result.OverlayPromotion != nil {
+				edits = result.OverlayPromotion.Files
+			}
 		}
-		if ref.Index > 0 && result.OverlayPromotion != nil && ref.Index <= len(result.OverlayPromotion.Files) {
-			return result.OverlayPromotion.Files[ref.Index-1], nil
+		if ref.Index >= 0 && ref.Index < len(edits) {
+			return edits[ref.Index], nil
 		}
 	}
 	return wire.FileEditSnapshot{}, errors.New("file edit not found")

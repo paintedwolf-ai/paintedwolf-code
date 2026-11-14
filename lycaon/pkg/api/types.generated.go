@@ -3226,9 +3226,10 @@ type FileEditPreview struct {
 
 // FileEditReference
 type FileEditReference struct {
-	MessageID  string `json:"message_id"`
-	ToolCallID string `json:"tool_call_id"`
-	// Zero for file_edit; one-based index for a promotion file.
+	MessageID  string         `json:"message_id"`
+	ToolCallID string         `json:"tool_call_id"`
+	Source     FileEditSource `json:"source"`
+	// Zero-based position in that list.
 	Index int `json:"index"`
 }
 
@@ -4383,7 +4384,7 @@ type MessageContentPart struct {
 	ArtifactID string `json:"artifact_id,omitempty"`
 	// Stable blob ID for a payload attachment, used to restage Edit/rewind.
 	BlobID string `json:"blob_id,omitempty"`
-	// Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the path relative to `root_id`, qualified with `@label/` when that root is not primary. Absent when the part has no openable body (search_hit, user prose, host notices).
+	// Host-stamped locator the agent can open. Payload attachments use a host-data-relative path (`prompt-attachments/{blob_id}/{name}`). path_file / path_folder retrieval parts use the canonical display path: bare relative to the session's active folder, qualified with `@label/` for any other attached folder. Absent when the part has no openable body (search_hit, user prose, host notices).
 	Path string `json:"path,omitempty"`
 	// Attached root a path_file / path_folder reference resolves under. Absent on payload attachments, search hits, prose, and host notices.
 	RootID string `json:"root_id,omitempty"`
@@ -5482,6 +5483,18 @@ type ReplaceEditorDocumentRetentionRequest struct {
 type ReplaceManagedSecretValueRequest struct {
 	// The new credential. Never echoed back. Named so the host's own request-capture scrubber redacts it by name. It holds the same length floor as minting: a replacement the screen could not recognize would silently retire a protection that worked.
 	SecretValue string `json:"secret_value"`
+}
+
+// ReplaceProjectViewRequest What one window of this person shows of the project right now. Every surface is present; one the window does not show is null, and a window that shows none of them, or is hidden, withdraws its report. Reports expire unless renewed.
+type ReplaceProjectViewRequest struct {
+	ClientID string `json:"client_id"`
+	// The window has keyboard focus.
+	Focused  bool                `json:"focused"`
+	Editor   *ViewReportEditor   `json:"editor"`
+	Diff     *ViewReportPath     `json:"diff"`
+	Folder   *ViewReportPath     `json:"folder"`
+	Search   *ViewReportSearch   `json:"search"`
+	Findings []ViewReportFinding `json:"findings"`
 }
 
 // RepoBrief Project orientation summary — languages detected by content via enry, listed in dominant-bytes order.
@@ -7057,10 +7070,11 @@ type SourceComparisonViewUpdate struct {
 	Intent                 SourceComparisonIntent `json:"intent"`
 }
 
-// SourceContext Host-recorded source locations supplied with this message; independent of evidence and filesystem inventory.
+// SourceContext Host-recorded source context supplied with this message; independent of evidence and filesystem inventory.
 type SourceContext struct {
 	Locations []NavigationTarget `json:"locations"`
 	Truncated bool               `json:"truncated"`
+	View      *ViewContext       `json:"view,omitempty"`
 }
 
 // SourceContributor One author of a change. Identity fields the contribution does not have are omitted.
@@ -8350,10 +8364,14 @@ type ToolResult struct {
 	// Producer-stated asynchronous or lifecycle completion fact.
 	Completion *ToolCompletion `json:"completion,omitempty"`
 	// Report accepted against this worker job's observations and policy.
-	WorkerReport       *WorkerReportAcceptance `json:"worker_report,omitempty"`
-	FileEditPreview    *FileEditPreview        `json:"file_edit_preview,omitempty"`
-	PromotionPreviews  []FileEditPreview       `json:"promotion_previews,omitempty"`
-	FileEdit           *FileEditSnapshot       `json:"file_edit,omitempty"`
+	WorkerReport *WorkerReportAcceptance `json:"worker_report,omitempty"`
+	// Transcript reads carry one summary and reference per recorded file edit, in order, in place of the edits' text.
+	FileEditPreviews  []FileEditPreview `json:"file_edit_previews,omitempty"`
+	PromotionPreviews []FileEditPreview `json:"promotion_previews,omitempty"`
+	// Text changes the call made, one per file, from the text before its first write to the text after its last, in the order the files were first written.
+	FileEdits []FileEditSnapshot `json:"file_edits,omitempty"`
+	// Further text changes the call made that file_edits does not hold because the result reached its bound. Source history holds them.
+	FileEditsOmitted   int                     `json:"file_edits_omitted,omitempty"`
 	OverlayPromotion   *OverlayPromotion       `json:"overlay_promotion,omitempty"`
 	Visual             *VisualArtifact         `json:"visual,omitempty"`
 	CheckpointDecision *CheckpointDecisionMeta `json:"checkpoint_decision,omitempty"`
@@ -8763,6 +8781,98 @@ type VerifySettingsResponse struct {
 type VersionComparisonSource struct {
 	Kind      string `json:"kind"`
 	VersionID string `json:"version_id"`
+}
+
+// ViewContext What the sender had in view when this prompt opened a turn, across their visible windows, most recently focused first. Recorded only when it differs from the last view still in the agent's history; empty lists and no folder or search mean nothing was in view.
+type ViewContext struct {
+	// Files shown in a visible editor, with that editor's selection.
+	Editors []ViewEditor `json:"editors"`
+	// Files shown in a visible diff.
+	Diffs  []ViewPath  `json:"diffs"`
+	Folder *ViewPath   `json:"folder,omitempty"`
+	Search *ViewSearch `json:"search,omitempty"`
+	// Security findings open or selected in a visible security view.
+	Findings []ViewFinding `json:"findings"`
+}
+
+// ViewEditor
+type ViewEditor struct {
+	RootID      string         `json:"root_id"`
+	Path        string         `json:"path"`
+	DisplayPath string         `json:"display_path"`
+	Unsaved     bool           `json:"unsaved"`
+	Selection   *ViewSelection `json:"selection,omitempty"`
+}
+
+// ViewFinding
+type ViewFinding struct {
+	Fingerprint string        `json:"fingerprint"`
+	RuleID      string        `json:"rule_id"`
+	Level       FindingLevel  `json:"level"`
+	Location    *ViewLocation `json:"location,omitempty"`
+}
+
+// ViewLocation
+type ViewLocation struct {
+	RootID      string `json:"root_id"`
+	Path        string `json:"path"`
+	DisplayPath string `json:"display_path"`
+	Line        int    `json:"line,omitempty"`
+}
+
+// ViewPath
+type ViewPath struct {
+	RootID string `json:"root_id"`
+	// Root-relative slash path.
+	Path string `json:"path"`
+	// The path as the agent was shown it, @label-qualified off the primary root.
+	DisplayPath string `json:"display_path"`
+}
+
+// ViewReportEditor The document a visible editor shows; its selection is the window's editor presence.
+type ViewReportEditor struct {
+	DocumentID string `json:"document_id"`
+}
+
+// ViewReportFinding
+type ViewReportFinding struct {
+	Fingerprint string              `json:"fingerprint"`
+	RuleID      string              `json:"rule_id"`
+	Level       FindingLevel        `json:"level"`
+	Location    *ViewReportLocation `json:"location,omitempty"`
+}
+
+// ViewReportLocation
+type ViewReportLocation struct {
+	RootID string `json:"root_id"`
+	Path   string `json:"path"`
+	Line   int    `json:"line,omitempty"`
+}
+
+// ViewReportPath
+type ViewReportPath struct {
+	RootID string `json:"root_id"`
+	Path   string `json:"path"`
+}
+
+// ViewReportSearch
+type ViewReportSearch struct {
+	Query string              `json:"query"`
+	Hit   *ViewReportLocation `json:"hit,omitempty"`
+}
+
+// ViewSearch
+type ViewSearch struct {
+	Query string        `json:"query"`
+	Hit   *ViewLocation `json:"hit,omitempty"`
+}
+
+// ViewSelection The editor's main selection.
+type ViewSelection struct {
+	StartLine int `json:"start_line"`
+	EndLine   int `json:"end_line"`
+	// No text is selected; start_line is the cursor's line.
+	Cursor bool `json:"cursor"`
 }
 
 // VisualArtifact

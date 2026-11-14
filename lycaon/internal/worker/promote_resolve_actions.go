@@ -11,11 +11,13 @@ import (
 	"github.com/lycaon/lycaon/internal/fseffect"
 	"github.com/lycaon/lycaon/internal/projectroot"
 	"github.com/lycaon/lycaon/internal/textfile"
+	"github.com/lycaon/lycaon/internal/tools"
 	"github.com/lycaon/lycaon/pkg/api"
 )
 
 type promoteMutation struct {
 	path           string
+	rootID         string
 	original       []byte
 	originalExists bool
 	originalMode   os.FileMode
@@ -54,12 +56,16 @@ func preparePromoteResolution(promote PromoteRoots, task *api.WorkerTask, res ap
 	if err != nil {
 		return promoteMutation{}, false, err
 	}
+	identity, err := promote.locateIdentity(task, path)
+	if err != nil {
+		return promoteMutation{}, false, err
+	}
 	original, originalExists, originalMode, err := readOptionalPromoteFile(primaryAbs)
 	if err != nil {
 		return promoteMutation{}, false, err
 	}
 	plan := promoteMutation{
-		path: path, original: original, originalExists: originalExists, originalMode: originalMode, targetExists: true,
+		path: path, rootID: identity.RootID, original: original, originalExists: originalExists, originalMode: originalMode, targetExists: true,
 	}
 	action := api.WorkerPromoteResolutionAction(strings.TrimSpace(string(res.Action)))
 	switch action {
@@ -166,6 +172,14 @@ func promoteMutationPaths(plans []promoteMutation) []string {
 		paths = append(paths, plan.path)
 	}
 	return paths
+}
+
+func promoteMutationIdentities(plans []promoteMutation) []tools.PrimaryMutation {
+	identities := make([]tools.PrimaryMutation, 0, len(plans))
+	for _, plan := range plans {
+		identities = append(identities, tools.PrimaryMutation{RootID: plan.rootID, RelPath: plan.path})
+	}
+	return identities
 }
 
 func applyOriginalPromoteMutation(promote PromoteRoots, task *api.WorkerTask, plan promoteMutation, verify func(fseffect.Target) error) error {

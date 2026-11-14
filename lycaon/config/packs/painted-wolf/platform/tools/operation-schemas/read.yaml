@@ -4,7 +4,7 @@ schema:
   properties:
     path:
       type: string
-      description: Project-relative or absolute path; list_dir for directories. Attached roots and default temp/cache/tool data locations are permitted; other paths need approval. Protected paths stay blocked.
+      description: Path relative to the session folder, `@label/path` for any attached folder, `@scratch/path` or `@output/path` for session scratch/output, or absolute; list_dir for directories. Attached roots and default temp/cache/tool data locations are permitted; other paths need approval. Protected paths stay blocked.
     mode:
       type: string
       enum: [content, outline]

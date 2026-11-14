@@ -41,7 +41,7 @@ schema:
                 type: string
                 enum: [read, write]
               paths:
-                description: "Optional repo-relative focus globs; never an access boundary."
+                description: "Optional focus globs resolved in each leg's session (bare = leg session folder, `@label/path` = a leg-attached folder); never an access boundary."
                 type: array
                 items:
                   type: string

@@ -30,7 +30,7 @@ func TestOverlayTreeReadsThePathsPromotionConsiders(t *testing.T) {
 
 	changes, err := OverlayTree{}.TreeChanges(t.Context(), tree)
 	testutil.FailErr(t, "tree changes", err)
-	if fmt.Sprint(changes) != fmt.Sprint([]workspacebaseline.Change{{Path: "gen.txt", Kind: workspacebaseline.ChangeCreated}}) {
+	if fmt.Sprint(changes) != fmt.Sprint([]workspacebaseline.Change{{RootID: "root", ScopeRel: "gen.txt", Path: "gen.txt", Kind: workspacebaseline.ChangeCreated}}) {
 		t.Fatalf("changes = %+v, want gen.txt alone", changes)
 	}
 	compared, err := OverlayTree{}.TreePathChange(t.Context(), tree, "gen.txt")

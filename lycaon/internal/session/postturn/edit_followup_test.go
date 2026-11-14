@@ -18,9 +18,9 @@ func editToolMsg(path string) api.Message {
 	return api.Message{
 		Role: api.MessageRoleTool,
 		ToolResult: &api.ToolResult{
-			Content:  "Edited " + path,
-			Outcome:  api.ToolResultOutcomeCompleted,
-			FileEdit: &api.FileEditSnapshot{Path: path, After: "x"},
+			Content:   "Edited " + path,
+			Outcome:   api.ToolResultOutcomeCompleted,
+			FileEdits: []api.FileEditSnapshot{{Path: path, After: "x"}},
 		},
 	}
 }
@@ -107,5 +107,17 @@ func TestEditFollowUpRepeatIgnoresHostTurnsAsDelimiters(t *testing.T) {
 func TestEditFollowUpRepeatEmptyHistory(t *testing.T) {
 	if EditFollowUpRepeat(nil) {
 		t.Fatal("empty history must not kick")
+	}
+}
+
+// A failed command that already wrote a file changed the workspace.
+func TestEditFollowUpRepeatCountsEditsOfAFailedCommand(t *testing.T) {
+	failed := api.Message{Role: api.MessageRoleTool, ToolResult: &api.ToolResult{
+		Tool: "command", Outcome: api.ToolResultOutcomeError,
+		FileEdits: []api.FileEditSnapshot{{RootID: "r1", Path: "a.go", After: "x"}, {RootID: "r1", Path: "b.go", After: "y"}},
+	}}
+	history := []api.Message{userMsg("add a flag"), failed, assistantMsg("Tests fail."), userMsg("still broken"), failed, assistantMsg("Looking.")}
+	if !EditFollowUpRepeat(history) {
+		t.Fatal("two turns answered with command edits did not count")
 	}
 }

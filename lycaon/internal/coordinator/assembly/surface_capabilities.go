@@ -130,25 +130,37 @@ func (e *promptSurface) applyToolBudgetVars(ctx context.Context, sess *api.Sessi
 		vars["worker_tool_budget_max"] = budget.Max
 	}
 }
-func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) ([]map[string]any, int, string, bool) {
+func (e *promptSurface) workspaceRootsForTurn(ctx context.Context, sess *api.Session, turn *TurnAssemblyScratch) ([]map[string]any, int, string, int, bool) {
 	if turn != nil && turn.WorkspaceRootsLoaded {
-		return turn.WorkspaceRoots, turn.WorkspaceRootCount, turn.WorkspaceActivePath, true
+		return turn.WorkspaceRoots, turn.WorkspaceRootCount, turn.WorkspaceActivePath, turn.WorkspaceRootsOmittedCount, true
 	}
 	load := e.deps.WorkspaceRoots
 	if load == nil {
-		return nil, 0, "", false
+		return nil, 0, "", 0, false
 	}
-	roots, count, activePath := load(ctx, sess)
+	roots, count, activePath, omitted := load(ctx, sess)
 	if count < 0 {
-		return nil, 0, "", false
+		return nil, 0, "", 0, false
 	}
 	if turn != nil {
 		turn.WorkspaceRoots = roots
 		turn.WorkspaceRootCount = count
 		turn.WorkspaceActivePath = activePath
+		turn.WorkspaceRootsOmittedCount = omitted
 		turn.WorkspaceRootsLoaded = true
 	}
-	return roots, count, activePath, true
+	return roots, count, activePath, omitted, true
+}
+
+// mergeWorkspaceRootTurnVars applies the turn's workspace root snapshot to
+// prompt vars for workspace-roots.md and the root-aware surfaces.
+func mergeWorkspaceRootTurnVars(vars map[string]any, roots []map[string]any, rootCount int, activePath string, omittedCount int) {
+	vars["root_count"] = rootCount
+	vars["workspace_roots"] = roots
+	vars["workspace_roots_omitted_count"] = omittedCount
+	if activePath != "" {
+		vars["project_dir"] = activePath
+	}
 }
 func (e *promptSurface) resolveTurnRoster(
 	ctx context.Context,
@@ -158,7 +170,7 @@ func (e *promptSurface) resolveTurnRoster(
 	turn *TurnAssemblyScratch,
 ) *inject.AgentRoster {
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	_, rootCount, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
+	_, rootCount, _, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
 	repoKnownEmpty := false
 	if path := strings.TrimSpace(sess.WorkspacePath); path != "" {
 		repoKnownEmpty = e.repoKnownEmpty(ctx, path)
@@ -175,17 +187,17 @@ func (e *promptSurface) resolveTurnRoster(
 	return &roster
 }
 
-// sourceHistoryOffered answers from the compile the turn's plan starts from: the
+// toolAddressable answers from the compile the turn's plan starts from: the
 // plan freezes after assembly, and nothing later adds a catalog tool the surface
 // leaves out.
-func (e *promptSurface) sourceHistoryOffered(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch) bool {
+func (e *promptSurface) toolAddressable(ctx context.Context, sess *api.Session, frame inject.CoordinatorTurnFrame, history []api.Message, turn *TurnAssemblyScratch, tool string) bool {
 	if e == nil {
 		return false
 	}
 	profile, _ := e.resolveCoordinatorProfile(ctx, sess, frame, history, turn)
-	_, rootCount, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
+	_, rootCount, _, _, _ := e.workspaceRootsForTurn(ctx, sess, turn)
 	plan, err := surface.CompileToolPlan(profile, rootCount)
-	return err == nil && plan.Addressable("source_history")
+	return err == nil && plan.Addressable(tool)
 }
 
 func (e *promptSurface) taskOffered(sess *api.Session, surfaceID string, rootCount int) bool {

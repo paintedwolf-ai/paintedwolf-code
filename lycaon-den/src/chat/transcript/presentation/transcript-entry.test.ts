@@ -142,7 +142,7 @@ describe("transcript entry memory", () => {
           tool_call_id: "c1",
           tool: "write",
           content: "ok",
-          file_edit_preview: fileEditPreviewFixture({ path: "a.go", before: "", after: "x" }),
+          file_edit_previews: [fileEditPreviewFixture({ path: "a.go", before: "", after: "x" })],
         },
         content: "ok",
         created_at: "t",

@@ -180,6 +180,13 @@ export function ChatViewTranscript(options: TranscriptOptions) {
                           )
                         )?.roots ?? []
                       }
+                      activeRootId={
+                        props.appStore.state.currentSession?.id?.trim() ===
+                          props.sessionId.trim()
+                          ? props.appStore.state.currentSession
+                              ?.workspace_root_id?.trim() || undefined
+                          : undefined
+                      }
                       onExploreInSearch={(query) => {
                         void openInSearch(props.projectId, query);
                       }}

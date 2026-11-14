@@ -270,6 +270,7 @@ var (
 	operationReplaceEditorDocumentRetention     = generatedOperation{ID: "replaceEditorDocumentRetention", Method: "PUT", Path: "/v1/projects/{id}/editor-documents/retention", Params: []string{"id"}}
 	operationReplaceProjectManagedSecretValue   = generatedOperation{ID: "replaceProjectManagedSecretValue", Method: "PUT", Path: "/v1/projects/{id}/secrets/{secret_id}/value", Params: []string{"id", "secret_id"}, RecordsPersonAction: true}
 	operationReplaceProjectSource               = generatedOperation{ID: "replaceProjectSource", Method: "PUT", Path: "/v1/projects/{id}/source", Params: []string{"id"}, RecordsPersonAction: true}
+	operationReplaceProjectView                 = generatedOperation{ID: "replaceProjectView", Method: "PUT", Path: "/v1/projects/{id}/view", Params: []string{"id"}}
 	operationReplaceProviderCredential          = generatedOperation{ID: "replaceProviderCredential", Method: "PUT", Path: "/v1/providers/{provider_id}/credential", Params: []string{"provider_id"}, RecordsPersonAction: true}
 	operationReplaceScannerSlot                 = generatedOperation{ID: "replaceScannerSlot", Method: "PUT", Path: "/v1/scanners/slots/{category}", Params: []string{"category"}, RecordsPersonAction: true}
 	operationReplaceSourceViewportInterest      = generatedOperation{ID: "replaceSourceViewportInterest", Method: "PUT", Path: "/v1/projects/{id}/source/views/{view_id}/interests/{interest_id}", Params: []string{"id", "view_id", "interest_id"}}
@@ -609,6 +610,7 @@ var allGeneratedOperations = []generatedOperation{
 	operationReplaceEditorDocumentRetention,
 	operationReplaceProjectManagedSecretValue,
 	operationReplaceProjectSource,
+	operationReplaceProjectView,
 	operationReplaceProviderCredential,
 	operationReplaceScannerSlot,
 	operationReplaceSourceViewportInterest,

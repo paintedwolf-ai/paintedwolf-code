@@ -42,7 +42,7 @@ describe("SessionTranscript workers and synthesis", () => {
       workerTranscripts={{ "job-1": workerTranscriptFixture([{
         id: "overlay-write", ord: 1, role: "tool", origin: "tool", authority: "none",
         trust_tier: "untrusted", content: "", created_at: "t",
-        tool_result: { content: "", file_edit_preview: fileEditPreviewFixture({ path: "new.ts", after: "overlay bytes" }) },
+        tool_result: { content: "", file_edit_previews: [fileEditPreviewFixture({ path: "new.ts", after: "overlay bytes" })] },
       }]) }}
     />);
     expect(container.querySelector('[data-testid="diff-group"]')).toBeNull();

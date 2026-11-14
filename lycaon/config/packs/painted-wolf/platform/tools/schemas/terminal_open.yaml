@@ -8,7 +8,7 @@ schema:
   properties:
     secret_use: {type: object, additionalProperties: false, required: [services], description: "Origins for `{{paintedwolf-secret:…}}`.", properties: {services: {type: array, minItems: 1, maxItems: 8, description: Origin URLs., items: {type: string, maxLength: 1024}}}}
     command: {type: string, description: "One program's argv; no `&&`, `||` or `;`."}
-    cwd: {type: string, description: "Folder path or `@label/...`; the terminal then tracks its own directory."}
+    cwd: {type: string, description: "Session folder path, `@label/...`, or `@scratch/...`; empty = session folder, then the terminal tracks its own directory."}
     winsize: {type: object, additionalProperties: false, required: [cols, rows], description: Dimensions; default 80x24., properties: {cols: {type: integer, minimum: 1, maximum: 240, description: Columns.}, rows: {type: integer, minimum: 1, maximum: 120, description: Rows.}}}
     env: {type: object, additionalProperties: {type: string}, description: Inline env (sanitized).}
     observe: {type: string, enum: [ack, delta, screen], default: screen, description: "Return ack, one output delta, or the settled screen."}

@@ -55,11 +55,11 @@ func readArgsExpressedScope(args map[string]any) bool {
 }
 
 // ReadHighlightRecords builds non-survey highlight records from a read JSON payload.
-func ReadHighlightRecords(projectDir string, content string) []Record {
-	return highlightRecords(projectDir, "read", content)
+func ReadHighlightRecords(roots CitationRoots, content string) []Record {
+	return highlightRecords(roots, "read", content)
 }
 
-func highlightRecords(projectDir, sourceTool, content string) []Record {
+func highlightRecords(roots CitationRoots, sourceTool, content string) []Record {
 	var wire readWireResponse
 	if err := json.Unmarshal([]byte(stripToolHostSuffix(content)), &wire); err != nil {
 		return nil
@@ -86,8 +86,9 @@ func highlightRecords(projectDir, sourceTool, content string) []Record {
 			Body:       []string{excerpt},
 			Fidelity:   FidelityStructured,
 		}
-		if norm, ok := NormalizeCitationPath(projectDir, path); ok {
-			rec.Path = norm
+		if id := ResolvePathIdentity(roots, path); id.ScopeRel != "" {
+			rec.Path = id.ScopeRel
+			rec.RootID = id.RootID
 		}
 		out = append(out, rec)
 	}
@@ -131,18 +132,18 @@ func PatchReadHighlightHandles(content string, handles []string) (string, error)
 }
 
 // ListHighlightRecords builds non-survey highlight records from list_dir JSON.
-func ListHighlightRecords(projectDir string, content string) []Record {
-	return highlightRecords(projectDir, "list_dir", content)
+func ListHighlightRecords(roots CitationRoots, content string) []Record {
+	return highlightRecords(roots, "list_dir", content)
 }
 
 // GrepHighlightRecords builds non-survey highlight records from grep JSON.
-func GrepHighlightRecords(projectDir string, content string) []Record {
-	return highlightRecords(projectDir, "grep", content)
+func GrepHighlightRecords(roots CitationRoots, content string) []Record {
+	return highlightRecords(roots, "grep", content)
 }
 
 // FindHighlightRecords builds non-survey highlight records from find JSON.
-func FindHighlightRecords(projectDir string, content string) []Record {
-	return highlightRecords(projectDir, "find", content)
+func FindHighlightRecords(roots CitationRoots, content string) []Record {
+	return highlightRecords(roots, "find", content)
 }
 
 type summarizeWireAnchor struct {
@@ -159,7 +160,7 @@ type summarizeWireResponse struct {
 
 // SummarizeAnchorHighlightRecords builds one evidence record per summarize anchor,
 // or from pack material when anchors[] is empty.
-func SummarizeAnchorHighlightRecords(projectDir, content string) []Record {
+func SummarizeAnchorHighlightRecords(roots CitationRoots, content string) []Record {
 	obj, ok := jsonToolPayload(content)
 	if !ok {
 		return nil
@@ -173,7 +174,7 @@ func SummarizeAnchorHighlightRecords(projectDir, content string) []Record {
 		return nil
 	}
 	if len(wire.Anchors) == 0 {
-		return SummarizePackHighlightRecords(projectDir, content)
+		return SummarizePackHighlightRecords(roots, content)
 	}
 	binding := ActiveBinding()
 	var out []Record
@@ -195,9 +196,10 @@ func SummarizeAnchorHighlightRecords(projectDir, content string) []Record {
 			Fidelity:   FidelityStructured,
 		}
 		rel := path
-		if norm, ok := NormalizeCitationPath(projectDir, path); ok {
-			rec.Path = norm
-			rel = norm
+		if id := ResolvePathIdentity(roots, path); id.ScopeRel != "" {
+			rec.Path = id.ScopeRel
+			rec.RootID = id.RootID
+			rel = id.ScopeRel
 		}
 		rec.addGrepLine(rel, a.Line, excerpt)
 		for _, window := range wire.Pack.Substance {

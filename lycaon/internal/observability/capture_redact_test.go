@@ -105,10 +105,10 @@ func TestRedactMessagesForCaptureScrubsNestedFields(t *testing.T) {
 		WorkflowBoundary: &api.WorkflowBoundaryMeta{Reason: "reason " + secretValues[0]},
 		ProgressUpdate:   &api.ProgressUpdateMeta{Steps: []api.ProgressStep{{Label: "step " + secretValues[0]}}},
 		ToolResult: &api.ToolResult{
-			Content:  dotEnvToolResult,
-			Feedback: []api.ToolFeedback{{Details: map[string]any{"note": secretValues[0]}}},
-			FileEdit: &api.FileEditSnapshot{Path: "path-" + secretValues[0], Before: &before, After: secretValues[0]},
-			Skill:    &api.SkillActivation{Instructions: "use " + secretValues[0]},
+			Content:   dotEnvToolResult,
+			Feedback:  []api.ToolFeedback{{Details: map[string]any{"note": secretValues[0]}}},
+			FileEdits: []api.FileEditSnapshot{{Path: "path-" + secretValues[0], Before: &before, After: secretValues[0]}},
+			Skill:     &api.SkillActivation{Instructions: "use " + secretValues[0]},
 		},
 		ToolCalls: []api.ToolCall{{
 			Name: "write",

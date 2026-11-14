@@ -107,6 +107,8 @@ func makeListDirEntry(
 		Mode:      sourceview.FormatFileMode(uint32(info.Mode().Perm())),
 		Modified:  info.ModTime().UTC().Format(time.RFC3339),
 		IsSymlink: info.Mode()&os.ModeSymlink != 0,
+		rootID:    root.ID,
+		scopeRel:  projectroot.ScopeRel(root, absPath),
 	}
 	if info.IsDir() {
 		item.Type = "dir"

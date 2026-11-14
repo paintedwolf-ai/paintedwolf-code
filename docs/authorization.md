@@ -206,6 +206,8 @@ Reaching a folder outside the attached folders always has a route to a card, at 
 
 Sensitive and protected targets stay exact even under a broader tree grant. A symlink alias matches only after canonical descriptor-relative resolution proves the same location. Write-root authority expands the subprocess write profile; it does not become an attached root, project label, or evidence path namespace.
 
+When the target of an outside-root read does not exist, the card leads with the host's missing-path fact (`file.exists: false` — "This path doesn't exist") and cites the resolved absolute path the host actually probed. The fact is human-only: it never reaches the model's tool results, rejection payloads, or approval-rationale requests, so a denied approval reads identically to the model whether the path exists or not. A directory-tree grant is never offered for a folder that does not exist; such a card keeps only the exact-path option and denial.
+
 Every rung on a write-root card continues the held write through this chat's runtime write root, the same way a local-service lease carries its permit. The Day rung bounds that runtime root to its 24 hours as well as the durable lease; the Chat, Project, and Device rungs keep the runtime root for the chat, the widest scope they name, and add their durable lease for other chats. Like every chat lease, a bounded runtime root stops carrying authority at its deadline and stays listed in Saved approvals with that deadline until it is revoked.
 
 ---
@@ -346,7 +348,7 @@ Approval-decision detail also retains the checkpoint, immutable plan, action dig
 
 ### Redaction
 
-Authorization detail is redacted by default. Tool name, reject code, effect class, and project-relative paths remain; raw argv and environment require explicit audit opt-in. The ledger and transcript are separate planes: transcript tool output follows commit-boundary secret redaction and local retention; authorization detail follows the audit capture policy.
+Authorization detail is redacted by default. Tool name, reject code, effect class, and canonical display paths remain; raw argv and environment require explicit audit opt-in. The ledger and transcript are separate planes: transcript tool output follows commit-boundary secret redaction and local retention; authorization detail follows the audit capture policy.
 
 ### Retention
 

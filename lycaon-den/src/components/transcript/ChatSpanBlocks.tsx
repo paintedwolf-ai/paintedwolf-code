@@ -29,6 +29,8 @@ type Props = {
   visibleTurnActive: boolean;
   projectId?: string;
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
+  /** Session's active root; bare paths in this transcript resolve against it. */
+  activeRootId?: string;
   onExploreInSearch?: (query: string) => void;
   blueprint?: ChatBlueprintState;
   onBlueprintRevise?: (blueprintPath: string, text: string) => void;
@@ -113,6 +115,7 @@ export function ChatSpanBlocks(props: Props) {
             projectDir={props.projectDir}
             projectId={props.projectId}
             rootRefs={props.rootRefs}
+            activeRootId={props.activeRootId}
             onExploreInSearch={props.onExploreInSearch}
             blueprint={props.blueprint}
             onBlueprintRevise={props.onBlueprintRevise}

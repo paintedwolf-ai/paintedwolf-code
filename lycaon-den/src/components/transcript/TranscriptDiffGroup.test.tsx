@@ -4,7 +4,7 @@ import { fileEditPreviewFixture } from "../../test/file-edit-fixture.ts";
 import { assertNamedControl } from "../../test/controls.ts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@solidjs/testing-library";
-import { TranscriptDiffGroup } from "./TranscriptDiffGroup.tsx";
+import { diffGroupFileLabel, TranscriptDiffGroup } from "./TranscriptDiffGroup.tsx";
 import { foldFileEdits } from "../../chat/file-edit/file-edit-fold.ts";
 import type { FileEditStep } from "../../chat/file-edit/file-edit-fold.ts";
 import { clearTranscriptEntryMemory } from "../../chat/transcript/presentation/transcript-entry.ts";
@@ -64,6 +64,19 @@ function diffToggle(path: string) {
     "button",
   );
 }
+
+describe("diffGroupFileLabel", () => {
+  it.each([
+    [1, 0, "1 file changed"],
+    [3, 0, "3 files changed"],
+    [64, 1, "64 files changed, 1 more change in Review"],
+    [2, 7, "2 files changed, 7 more changes in Review"],
+    [0, 1, "1 change in Review"],
+    [0, 4, "4 changes in Review"],
+  ])("names %s shown files and %s omitted changes", (files, omitted, label) => {
+    expect(diffGroupFileLabel(files, omitted)).toBe(label);
+  });
+});
 
 describe("TranscriptDiffGroup", () => {
   it.each([1, 3])("retains each child choice when a %s-file group remounts", (count) => {

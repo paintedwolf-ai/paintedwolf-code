@@ -89,7 +89,7 @@ func (s *Server) operationLimiter(operation generatedOperation) *rate.Limiter {
 		operationReplaceEditorDocument.ID, operationReplaceEditorDocumentRetention.ID,
 		operationReadEditorDocumentStatuses.ID:
 		return s.rateLimits.editor
-	case operationPublishEditorDocumentPresence.ID:
+	case operationPublishEditorDocumentPresence.ID, operationReplaceProjectView.ID:
 		return s.rateLimits.presence
 	}
 	switch operation.Method {

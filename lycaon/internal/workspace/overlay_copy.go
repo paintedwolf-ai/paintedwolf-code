@@ -76,7 +76,7 @@ func (m *Manager) CreateWorkerWorkspace(ctx context.Context, primaryDir, jobID s
 		return nil, err
 	}
 	roots := []projectroot.RootRef{
-		{ID: "primary", Path: primary, IsPrimary: true},
+		{ID: "primary", Label: filepath.Base(primary), Path: primary, IsPrimary: true},
 	}
 	binding, _, err := m.CreateWorkerWorkspaceFromSources(ctx, roots, roots, "primary", jobID)
 	return binding, err

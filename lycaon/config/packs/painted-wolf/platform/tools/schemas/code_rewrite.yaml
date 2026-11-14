@@ -6,10 +6,10 @@ schema:
     path:
       type: string
       minLength: 1
-      description: Repo-relative file path (single-file mode)
+      description: File path relative to the session folder, `@label/path` for any attached folder, `@scratch/path` for session scratch, or absolute (single-file mode)
     paths:
       type: array
-      description: Focus paths for the codemod; empty array walks the project when recursive
+      description: Focus paths using the same addressing as path; empty array walks the session folder when recursive
       items:
         type: string
     recursive:

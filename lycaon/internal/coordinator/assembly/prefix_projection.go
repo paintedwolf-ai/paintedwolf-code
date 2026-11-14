@@ -19,12 +19,8 @@ func (p *promptSurface) renderSystemPrefix(ctx context.Context, sess *api.Sessio
 		return "", err
 	}
 	vars := map[string]any{"project_dir": sess.WorkspacePath}
-	if roots, count, activePath, ok := p.workspaceRootsForTurn(ctx, sess, turn); ok {
-		vars["root_count"] = count
-		vars["workspace_roots"] = roots
-		if activePath != "" {
-			vars["project_dir"] = activePath
-		}
+	if roots, count, activePath, omitted, ok := p.workspaceRootsForTurn(ctx, sess, turn); ok {
+		mergeWorkspaceRootTurnVars(vars, roots, count, activePath, omitted)
 	}
 	coordinator := surface.IsCoordinatorSession(sess)
 	if coordinator {
@@ -82,6 +78,7 @@ func (e *AssemblyEngine) BuildKnownPrefix(ctx context.Context, sess *api.Session
 	}
 	if coordinator {
 		messages = contextAssembler.interleaveSourceBriefs(ctx, sess, frame, history, turn, messages)
+		messages = contextAssembler.interleaveViewContexts(ctx, sess, frame, history, turn, messages)
 	}
 	messages = contextAssembler.interleaveSkillGuidance(ctx, sess, frame.Machine.ProfileID, messages)
 	// Pending scan guidance is delivered only by a real turn.

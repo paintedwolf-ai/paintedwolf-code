@@ -22,7 +22,7 @@ type fixtureTree struct {
 func plantTrees(t *testing.T, branchRoot, project string, trees []fixtureTree) map[string]string {
 	t.Helper()
 	mgr := workspace.NewManager(branchRoot, t.TempDir())
-	roots := []projectroot.RootRef{{ID: "primary", Path: project, IsPrimary: true}}
+	roots := []projectroot.RootRef{{ID: "primary", Label: "primary", Path: project, IsPrimary: true}}
 	paths := map[string]string{}
 	for _, tree := range trees {
 		testutil.FailErr(t, "seed project", os.WriteFile(filepath.Join(project, "payload.bin"), make([]byte, tree.bytes), 0o644))

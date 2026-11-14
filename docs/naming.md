@@ -96,7 +96,7 @@ Product copy for the context-zone library is **Blueprints**. Manifest seam key i
 
 | Term | What it names | Where it is defined |
 |------|---------------|---------------------|
-| **Draft project** | A project whose single primary root is the host-created scratch root (`RootKindDraft`, root label `Draft`). Wire `is_draft` is computed from that root shape, never stored | [`projects.md`](projects.md#draft-project) |
+| **Draft project** | A project whose single root is the host-created scratch root (`RootKindDraft`, root label `Draft`). Wire `is_draft` is computed from that root shape, never stored | [`projects.md`](projects.md#draft-project) |
 | **Composer draft** | Client-local, unsubmitted chat state on Home. No server project exists yet, and abandoning it leaves nothing behind | [`project-space.md`](project-space.md#chat-first-entry) |
 | **Blueprint draft** | A governing Markdown file whose frontmatter carries `status: draft` — written by the agent, not yet approved by a human | [`workflows.md`](workflows.md#blueprints) |
 

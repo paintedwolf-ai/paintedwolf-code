@@ -550,11 +550,11 @@ webE2e.describe("transcript scale den", () => {
               tool: "write",
               tool_call_id: toolCallId,
               assistant_message_id: assistantId,
-              file_edit: {
+              file_edits: [{
                 path: "src/new-item.ts",
                 before: "",
                 after: "export const value = 1;\n",
-              },
+              }],
             },
             created_at: "2026-08-24T11:01:01Z",
             seq: 42,

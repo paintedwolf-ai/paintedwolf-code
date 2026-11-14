@@ -1,7 +1,7 @@
 import { useNoticesOptional } from "../../notices/notice-reporter.tsx";
 import { For, Show, createMemo, createSignal } from "solid-js";
 import { useTranscriptEntry } from "../../chat/transcript/presentation/transcript-entry.ts";
-import type { HostSecretRedactionMeta, MessageContentPart } from "../../api/types.ts";
+import type { HostSecretRedactionMeta, MessageContentPart, ViewContext } from "../../api/types.ts";
 import { attachmentKindGlyph } from "../../chat/composer/composer-attachments.ts";
 import { REDACTION_FIELD_CONTENT } from "../../chat/transcript/content/redaction-spans.ts";
 import { RedactedText } from "./RedactionMark.tsx";
@@ -16,6 +16,7 @@ import { ContextMenu } from "../ContextMenu.tsx";
 import { Scrollport } from "../primitives/Scrollport.tsx";
 import { MessageActions } from "./MessageActions.tsx";
 import { VisualPresentBlock } from "./VisualPresentBlock.tsx";
+import { ViewContextLine } from "./ViewContextLine.tsx";
 import { messageTimesPref } from "../../settings/chat/chat-prefs.ts";
 import { MessageTime } from "./TranscriptTimeRows.tsx";
 import type { PendingSend } from "../../chat/send/pending-sends.ts";
@@ -39,12 +40,15 @@ export function UserBubble(props: {
   sessionId?: string | null;
   projectId?: string;
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
+  /** Session's active root; bare chip paths resolve against it when the part pins none. */
+  activeRootId?: string;
   entryKey?: string;
   rowId?: string;
   client?: import("../../api/client.ts").LycaonClient | null;
   recovery?: MessageRecoveryHandlers;
   /** Host timestamp, or the local seat instant while pending. */
   ts?: string;
+  viewContext?: ViewContext | null;
 }) {
   const chatDestination = useChatDestinationScope();
   const { bindTranscriptEntry } = useTranscriptEntry(() => ({
@@ -72,6 +76,7 @@ export function UserBubble(props: {
       intent: "permanent",
       projectId,
       rootId: target.rootId,
+      activeRootId: props.activeRootId,
       path: target.path,
       entryKind: target.entryKind,
       line: target.startLine,
@@ -175,6 +180,7 @@ export function UserBubble(props: {
                     onContextMenu={(event) => {
                       const next = markdownProjectPathLinkContextMenu(event, {
                         projectId: props.projectId, rootRefs: props.rootRefs,
+                        activeRootId: props.activeRootId,
                         chatDestination: chatDestination(),
                       });
                       if (next) setPathMenu(next);
@@ -235,6 +241,9 @@ export function UserBubble(props: {
       </Show>
       <Show when={pathMenu()} keyed>{(menu) => <ContextMenu anchor={menu.anchor} items={menu.items} onDismiss={() => setPathMenu(null)} />}</Show>
     </article>
+    <Show when={props.viewContext} keyed>
+      {(view) => <ViewContextLine view={view} projectId={props.projectId} />}
+    </Show>
     <Show when={props.ts && messageTimesPref() === "always" ? props.ts : undefined} keyed>
       {(ts) => <MessageTime ts={ts} placement="below" />}
     </Show>

@@ -199,7 +199,7 @@ func TestAssessPromotePaths3WayDetectsDeletedBranchFile(t *testing.T) {
 	}
 	raw := testbaseline.FromFiles(t, baseline)
 	testutil.FailErr(t, "write metadata", workspace.WriteJobMeta(enginepaths.MetaDirForBranchRoot(branchRoot), workspace.JobMeta{
-		Roots:            []workspace.JobMetaRoot{{ID: "root", Path: primary, IsPrimary: true}},
+		Roots:            []workspace.JobMetaRoot{{ID: "root", Label: "root", Path: primary, IsPrimary: true}},
 		SnapshotComplete: true,
 	}))
 

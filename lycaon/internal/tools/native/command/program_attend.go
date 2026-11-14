@@ -64,7 +64,7 @@ type programEvaluation struct {
 	failureAttempt *commandFailureAttempt
 	release        func()
 	// callTC is the call's own tool context; evaluation writes its effects to
-	// run.tc's private outcome until the result belongs to the call.
+	// run.tc's private outcome, which is merged into the call when it returns.
 	callTC tools.ToolContext
 }
 
@@ -114,12 +114,9 @@ func (r *ProgramRuntime) attend(callCtx context.Context, e *programEvaluation) (
 	}
 	e.call.detach()
 	if out := e.callTC.Effects.Out; out != nil {
-		out.CommandProgram, out.SourceRun = e.run.tc.Effects.Out.CommandProgram, e.run.tc.Effects.Out.SourceRun
-		out.Facts = out.Facts.Merge(e.run.tc.Effects.Out.Facts)
-		if e.run.tc.Effects.Out.ExternalAccess != nil {
-			out.ExternalAccess = e.run.tc.Effects.Out.ExternalAccess
-		}
-		out.SourceDeliveries = append([]tools.SourceDeliveryTag(nil), e.run.tc.Effects.Out.SourceDeliveries...)
+		program := e.run.tc.Effects.Out
+		out.MergeChild(program, tools.MergeProgram)
+		out.CommandProgram, out.SourceRun = program.CommandProgram, program.SourceRun
 	}
 	stateGitNoRepository(e)
 	return ending.result, ending.err
@@ -168,9 +165,11 @@ func (r *ProgramRuntime) parkProgram(callCtx context.Context, e *programEvaluati
 	go func() {
 		<-ending.done
 		r.recordParkedRun(settleCtx, run)
+		r.recordDetachedEffects(settleCtx, run)
 		parked.Settle(settleCtx, ending.result, ending.err)
 	}()
 	if out := e.callTC.Effects.Out; out != nil {
+		out.MergeChild(run.tc.Effects.Out.TakeCommitted(), tools.MergeProgram)
 		if receipt, err := r.Recorder.ActivitySummary(callCtx, run.tc.Identity.SessionID, programID); err == nil {
 			out.CommandProgram = &receipt
 		}
@@ -224,6 +223,17 @@ func (r *ProgramRuntime) recordParkedRun(ctx context.Context, run *programRun) {
 		return
 	}
 	r.SourceRuns.RecordSourceRunEvidence(ctx, sess.ID, sess, run.tool, *capture)
+}
+
+// recordDetachedEffects hands the file edits a program made after its call
+// returned to that call's stored result. The call took what came before, so
+// each edit is recorded once.
+func (r *ProgramRuntime) recordDetachedEffects(ctx context.Context, run *programRun) {
+	late := run.tc.Effects.Out.TakeCommitted()
+	if r.Effects == nil {
+		return
+	}
+	r.Effects.AppendProgramEffects(ctx, run.tc.Identity.SessionID, run.tc.Identity.ToolCallID, late.FileEdits, late.FileEditsOmitted)
 }
 
 // ReceiptResult is a program's result as its durable receipts record it, for

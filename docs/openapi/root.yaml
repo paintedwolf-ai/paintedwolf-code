@@ -247,6 +247,8 @@ paths:
     $ref: paths/projects/secret-ignores.yaml#/paths/~1v1~1projects~1{id}~1secret-ignore-candidates~1{candidate_id}
   /v1/projects/{id}/editor-documents/retention:
     $ref: paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1retention
+  /v1/projects/{id}/view:
+    $ref: paths/projects/view.yaml#/paths/~1v1~1projects~1{id}~1view
   /v1/projects/{id}/editor-documents/status:
     $ref: 'paths/projects/editor-documents.yaml#/paths/~1v1~1projects~1{id}~1editor-documents~1status'
   /v1/projects/{id}/editor-documents/{document_id}:
@@ -1057,6 +1059,32 @@ components:
       $ref: components/schemas/scan/scanners.yaml#/components/schemas/UpdateProjectScannerRequest
     CompactedChunkMeta:
       $ref: components/schemas/session/messages.yaml#/components/schemas/CompactedChunkMeta
+    ViewContext:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/ViewContext
+    ViewPath:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/ViewPath
+    ViewLocation:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/ViewLocation
+    ViewEditor:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/ViewEditor
+    ViewSelection:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/ViewSelection
+    ViewSearch:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/ViewSearch
+    ViewFinding:
+      $ref: components/schemas/session/messages.yaml#/components/schemas/ViewFinding
+    ReplaceProjectViewRequest:
+      $ref: components/schemas/project/view.yaml#/components/schemas/ReplaceProjectViewRequest
+    ViewReportPath:
+      $ref: components/schemas/project/view.yaml#/components/schemas/ViewReportPath
+    ViewReportLocation:
+      $ref: components/schemas/project/view.yaml#/components/schemas/ViewReportLocation
+    ViewReportSearch:
+      $ref: components/schemas/project/view.yaml#/components/schemas/ViewReportSearch
+    ViewReportFinding:
+      $ref: components/schemas/project/view.yaml#/components/schemas/ViewReportFinding
+    ViewReportEditor:
+      $ref: components/schemas/project/view.yaml#/components/schemas/ViewReportEditor
     CreateSessionRequest:
       $ref: components/schemas/session/identity.yaml#/components/schemas/CreateSessionRequest
     Message:

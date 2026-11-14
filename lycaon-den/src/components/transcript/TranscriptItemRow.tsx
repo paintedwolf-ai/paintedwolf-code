@@ -164,6 +164,8 @@ export function TranscriptItemRow(props: {
   checkpointAppStore?: import("../../store/app-state-model.ts").AppStore;
   projectId?: string;
   rootRefs?: readonly import("../../api/project-path.ts").ResolveProjectRoot[];
+  /** Session's active root; bare paths in this row resolve against it. */
+  activeRootId?: string;
   branchJobId?: string;
   projectDir?: string;
   exploreContext?: CitationExploreContext;
@@ -216,6 +218,7 @@ export function TranscriptItemRow(props: {
                 sessionId={props.sessionId}
                 projectId={props.projectId}
                 rootRefs={props.rootRefs}
+                activeRootId={props.activeRootId}
                 streaming={wireRow()?.status === "streaming"}
                 client={props.checkpointClient}
                 appStore={props.checkpointAppStore}
@@ -266,11 +269,13 @@ export function TranscriptItemRow(props: {
               sessionId={props.sessionId}
               projectId={props.projectId}
               rootRefs={props.rootRefs}
+              activeRootId={props.activeRootId}
               entryKey={user().key}
               rowId={wire()?.id ?? user().key}
               client={props.checkpointClient}
               recovery={pending() ? undefined : props.recovery}
               ts={timestamp()}
+              viewContext={wire()?.source_context?.view}
             />
           );
         }}
@@ -282,6 +287,7 @@ export function TranscriptItemRow(props: {
           sessionId={props.sessionId}
           projectId={props.projectId}
           rootRefs={props.rootRefs}
+          activeRootId={props.activeRootId}
         />
       </Match>
       <Match when={layout() === "worker" ? assistantChatItem(item()) : null}>
@@ -296,6 +302,7 @@ export function TranscriptItemRow(props: {
             sessionId={props.sessionId}
             projectId={props.projectId}
             rootRefs={props.rootRefs}
+            activeRootId={props.activeRootId}
           />
         )}
       </Match>
@@ -371,6 +378,7 @@ export function TranscriptItemRow(props: {
         {(editItem) => (
           <FileEditFolds
             folds={editItem().folds}
+            omitted={editItem().omitted}
             layout={props.layout}
             sessionId={props.sessionId}
             projectId={props.projectId}

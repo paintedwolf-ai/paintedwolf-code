@@ -41,7 +41,8 @@ type toolCaptures struct {
 	sourceContext    *api.SourceContext
 	overlayPromotion *api.OverlayPromotion
 	ownerRef         string
-	fileEdit         *tools.FileEditCapture
+	fileEdits        []api.FileEditSnapshot
+	fileEditsOmitted int
 	visual           *tools.VisualCapture
 	externalAccess   *api.ExternalAccess
 	displaySubject   string
@@ -423,7 +424,7 @@ func toolCapturesFrom(out *tools.ToolInvocationOut) toolCaptures {
 		displaySubject:   out.DisplaySubject,
 		overlayPromotion: out.OverlayPromotion,
 		sourceContext:    out.SourceContext,
-		ownerRef:         out.OwnerRef, fileEdit: out.FileEdit, visual: out.Visual,
+		ownerRef:         out.OwnerRef, fileEdits: out.FileEdits, fileEditsOmitted: out.FileEditsOmitted, visual: out.Visual,
 		externalAccess: out.ExternalAccess,
 		skill:          out.Skill, process: out.Process, verdict: out.Verdict,
 		commandProgram:   out.CommandProgram,
@@ -526,13 +527,7 @@ func applyToolResultSidecars(
 		completion := *captures.completion
 		tr.Completion = &completion
 	}
-	if fileEdit := captures.fileEdit; fileEdit != nil {
-		tr.FileEdit = &api.FileEditSnapshot{
-			Path:   fileEdit.Path,
-			Before: fileEdit.Before,
-			After:  fileEdit.After,
-		}
-	}
+	tr.FileEdits, tr.FileEditsOmitted = captures.fileEdits, captures.fileEditsOmitted
 	if captures.externalAccess != nil {
 		tr.ExternalAccess = tools.ExternalAccessFromCapture(captures.externalAccess)
 	}
